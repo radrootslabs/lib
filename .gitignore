@@ -7,3 +7,5 @@ git-diff.txt
 
 .DS_Store
 *.pem
+
+bindings/*.ts

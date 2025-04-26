@@ -1,0 +1,8 @@
+{
+    "name": "@radroots/radroots-common-bindings",
+    "version": "1.0.0",
+    "main": "types.ts",
+    "types": "types.ts",
+    "sideEffects": false,
+    "license": "MIT OR Apache-2.0"
+}
