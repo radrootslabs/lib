@@ -1,0 +1,9 @@
+/target
+justfile
+notes*.txt
+.tmp*
+.vscode
+git-diff.txt
+
+.DS_Store
+*.pem

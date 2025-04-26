@@ -1,0 +1,29 @@
+# »-`-,-
+
+This is the README for `radroots` core libraries, which together constitute a
+composable architecture for coordinating local agricultural networks.
+
+## Getting Rad Roots
+
+The preferred method to download `radroots` source code is to use git.
+
+To download `radroots` do the following:
+
+    git clone https://radroots.dev/git/lib.git
+
+If you have questions about `radroots` or if you wish to be notified of releases,
+you can browse and/or join the `radroots` mailing list:
+
+    https://radroots.dev/lists/listinfo
+
+Rad Roots is built on Love for the Planet and its People.
+
+## Copyright
+
+Except as otherwise noted, all files in the `radroots` distribution are
+
+    Copyright (c) 2025 Tyson Lupul
+
+## License
+
+This repository is licensed under either MIT or Apache-2.0, at your option. See LICENSE-MIT and LICENSE-APACHE.
