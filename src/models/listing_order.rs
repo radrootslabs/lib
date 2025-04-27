@@ -17,6 +17,7 @@ pub struct ListingOrderQuantity {
     pub amount: f64,
     pub unit: String,
     pub label: String,
+    pub count: u32,
 }
 
 #[typeshare]

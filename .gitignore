@@ -1,4 +1,6 @@
 /target
+node_modules
+.turbo
 justfile
 notes*.txt
 .tmp*
@@ -8,4 +10,4 @@ git-diff.txt
 .DS_Store
 *.pem
 
-bindings/*.ts
+bindings/**/*.ts
