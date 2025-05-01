@@ -1,15 +1,28 @@
 {
     "name": "@radroots/radroots-common-bindings",
     "version": "1.0.0",
+    "private": true,
+    "license": "MIT OR Apache-2.0",
+    "type": "module",
+    "module": "index.ts",
     "main": "index.ts",
     "types": "index.ts",
     "sideEffects": false,
-    "license": "MIT OR Apache-2.0",
     "scripts": {
-        "prebuild": "ts-to-zod types.ts schema.ts",
-        "build": "source build.sh && generate"
+        "gen:index": "echo \"// Generated @radroots/radroots-common-bindings\" > index.ts && for f in *.ts; do fn=$(basename \"$f\" .ts); [ \"$fn\" != \"index\" ] && echo \"export * from './$fn';\" >> index.ts; done",
+        "gen:schema": "ts-to-zod types.ts schema.ts",
+        "gen:types": "command -v typeshare >/dev/null && typeshare ../../src --lang=typescript --output-file=types.ts || echo 'Skipping typeshare (not installed)'",
+        "prebuild": "npm run gen:types && npm run gen:schema",
+        "build": "tsc",
+        "postbuild": "npm run gen:index"
     },
     "devDependencies": {
         "ts-to-zod": "^3.15.0"
+    },
+    "dependencies": {
+        "zod": "^3.23.8"
+    },
+    "publishConfig": {
+        "access": "public"
     }
 }

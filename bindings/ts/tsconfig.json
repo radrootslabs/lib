@@ -1,0 +1,25 @@
+{
+    "compilerOptions": {
+        "strict": true,
+        "target": "es2021",
+        "lib": [
+            "es2021",
+            "dom"
+        ],
+        "module": "CommonJS",
+        "outDir": "./dist",
+        "rootDir": ".",
+        "declaration": true,
+        "emitDeclarationOnly": true,
+        "esModuleInterop": true,
+        "skipLibCheck": true
+    },
+    "include": [
+        "index.ts",
+        "schema.ts",
+        "types.ts"
+    ],
+    "exclude": [
+        "node_modules"
+    ],
+}
