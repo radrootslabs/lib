@@ -12,7 +12,7 @@
         "gen:index": "echo \"// Generated @radroots/radroots-common-bindings\" > index.ts && for f in *.ts; do fn=$(basename \"$f\" .ts); [ \"$fn\" != \"index\" ] && echo \"export * from './$fn';\" >> index.ts; done",
         "gen:schema": "ts-to-zod types.ts schema.ts",
         "gen:types": "command -v typeshare >/dev/null && typeshare ../../src --lang=typescript --output-file=types.ts || echo 'Skipping typeshare (not installed)'",
-        "prebuild": "npm run gen:types && npm run gen:schema",
+        "gen": "npm run gen:types && npm run gen:schema && npm run gen:index",
         "build": "tsc",
         "postbuild": "npm run gen:index"
     },
