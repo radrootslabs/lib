@@ -11,7 +11,9 @@
     "scripts": {
         "gen:index": "echo \"// Generated @radroots/radroots-common-bindings\" > index.ts && for f in *.ts; do fn=$(basename \"$f\" .ts); [ \"$fn\" != \"index\" ] && echo \"export * from './$fn';\" >> index.ts; done",
         "gen:schema": "ts-to-zod types.ts schema.ts",
-        "prebuild": "rimraf dist && npm run gen:schema && npm run gen:index",
+        "gen": "npm run gen:schema && npm run gen:index",
+        "prebuild": "npm run clean",
+        "clean": "rimraf dist && rimraf tsconfig.tsbuildinfo",
         "build": "tsc"
     },
     "devDependencies": {
