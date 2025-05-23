@@ -77,3 +77,108 @@ export interface ListingOrderRequest {
 	payload: ListingOrderRequestPayload;
 }
 
+export interface RadrootsNostrEvent {
+	id: string;
+	author: string;
+	created_at: number;
+	kind: number;
+	tags: string[][];
+	content: string;
+	sig: string;
+}
+
+export interface RadrootsNostrEvent0DataMetadata {
+	name: string;
+	display_name?: string;
+	nip05?: string;
+	about?: string;
+}
+
+export interface RadrootsNostrEvent0Data {
+	published_at: number;
+	metadata: RadrootsNostrEvent0DataMetadata;
+}
+
+export interface RadrootsNostrEvent0 {
+	event: RadrootsNostrEvent;
+	data: RadrootsNostrEvent0Data;
+}
+
+export interface RadrootsNostrEventRef {
+	ref_id: string;
+	ref_author: string;
+	ref_kind: number;
+	ref_d_tag?: string;
+}
+
+export interface RadrootsNostrEvent1111Data {
+	published_at: number;
+	root: RadrootsNostrEventRef;
+	parent: RadrootsNostrEventRef;
+	content: string;
+}
+
+export interface RadrootsNostrEvent1111 {
+	event: RadrootsNostrEvent;
+	data: RadrootsNostrEvent1111Data;
+}
+
+export interface RadrootsNostrEvent3DataFollow {
+	published_at: number;
+	pubkey: string;
+	relay_url?: string;
+	petname?: string;
+}
+
+export interface RadrootsNostrEvent3Data {
+	following: RadrootsNostrEvent3DataFollow[];
+}
+
+export interface RadrootsNostrEvent3 {
+	event: RadrootsNostrEvent;
+	data: RadrootsNostrEvent3Data;
+}
+
+export interface RadrootsNostrEvent30402Data {
+	published_at: number;
+	d_tag: string;
+	title: string;
+	summary: string;
+	images: string[];
+	location_address: string;
+	location_city: string;
+	location_region: string;
+	location_country: string;
+	location_lat: string;
+	location_lng: string;
+	location_geohash: string;
+	product_kind: string;
+	product_category: string;
+	product_process: string;
+	product_lot: string;
+	product_profile: string;
+	product_year: string;
+	product_quantity_amt: string;
+	product_quantity_unit: string;
+	product_price_amt: string;
+	product_price_cur: string;
+	product_price_qty_amt: string;
+	product_price_qty_unit: string;
+}
+
+export interface RadrootsNostrEvent30402 {
+	event: RadrootsNostrEvent;
+	data: RadrootsNostrEvent30402Data;
+}
+
+export interface RadrootsNostrEvent7Data {
+	published_at: number;
+	root: RadrootsNostrEventRef;
+	content: string;
+}
+
+export interface RadrootsNostrEvent7 {
+	event: RadrootsNostrEvent;
+	data: RadrootsNostrEvent7Data;
+}
+
