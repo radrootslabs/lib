@@ -3,18 +3,32 @@
     "version": "1.0.0",
     "private": true,
     "license": "MIT OR Apache-2.0",
-    "type": "module",
-    "module": "index.ts",
-    "main": "index.ts",
-    "types": "index.ts",
+    "main": "dist/cjs/index.js",
+    "module": "dist/esm/index.js",
+    "types": "dist/cjs/index.d.ts",
+    "exports": {
+        "require": {
+            "types": "./dist/cjs/index.d.ts",
+            "default": "./dist/cjs/index.js"
+        },
+        "import": {
+            "types": "./dist/cjs/index.d.ts",
+            "default": "./dist/esm/index.js"
+        }
+    },
+    "files": [
+        "dist"
+    ],
     "sideEffects": false,
     "scripts": {
-        "gen:index": "echo \"// Generated @radroots/radroots-common-bindings\" > index.ts && for f in *.ts; do fn=$(basename \"$f\" .ts); [ \"$fn\" != \"index\" ] && echo \"export * from './$fn';\" >> index.ts; done",
-        "gen:schema": "ts-to-zod types.ts schema.ts",
+        "gen:index": "echo \"// Generated @radroots/radroots-common-bindings\" > src/index.ts && for f in src/*.ts; do fn=$(basename \"$f\" .ts); [ \"$fn\" != \"index\" ] && echo \"export * from './$fn';\" >> src/index.ts; done",
+        "gen:schema": "ts-to-zod src/types.ts src/schema.ts",
         "gen": "npm run gen:schema && npm run gen:index",
         "prebuild": "npm run clean",
         "clean": "rimraf dist && rimraf tsconfig.tsbuildinfo",
-        "build": "tsc"
+        "build:cjs": "tsc -p tsconfig.json",
+        "build:esm": "tsc -p tsconfig.esm.json",
+        "build": "npm run build:cjs && npm run build:esm"
     },
     "devDependencies": {
         "rimraf": "^6.0.1",
