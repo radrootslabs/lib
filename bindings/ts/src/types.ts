@@ -87,21 +87,21 @@ export interface RadrootsNostrEvent {
 	sig: string;
 }
 
-export interface RadrootsNostrEvent0DataMetadata {
+export interface RadrootsMetadataEventDataMetadata {
 	name: string;
 	display_name?: string;
 	nip05?: string;
 	about?: string;
 }
 
-export interface RadrootsNostrEvent0Data {
+export interface RadrootsMetadataEventData {
 	published_at: number;
-	metadata: RadrootsNostrEvent0DataMetadata;
+	metadata: RadrootsMetadataEventDataMetadata;
 }
 
-export interface RadrootsNostrEvent0 {
+export interface RadrootsMetadataEvent {
 	event: RadrootsNostrEvent;
-	data: RadrootsNostrEvent0Data;
+	data: RadrootsMetadataEventData;
 }
 
 export interface RadrootsNostrEventRef {

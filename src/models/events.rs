@@ -24,14 +24,14 @@ pub struct RadrootsNostrEventRef {
 
 #[typeshare]
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct RadrootsNostrEvent0 {
+pub struct RadrootsMetadataEvent {
     pub event: RadrootsNostrEvent,
-    pub data: RadrootsNostrEvent0Data,
+    pub data: RadrootsMetadataEventData,
 }
 
 #[typeshare]
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct RadrootsNostrEvent0DataMetadata {
+pub struct RadrootsMetadataEventDataMetadata {
     pub name: String,
     pub display_name: Option<String>,
     pub nip05: Option<String>,
@@ -40,9 +40,9 @@ pub struct RadrootsNostrEvent0DataMetadata {
 
 #[typeshare]
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct RadrootsNostrEvent0Data {
+pub struct RadrootsMetadataEventData {
     pub published_at: u32,
-    pub metadata: RadrootsNostrEvent0DataMetadata,
+    pub metadata: RadrootsMetadataEventDataMetadata,
 }
 
 #[typeshare]
