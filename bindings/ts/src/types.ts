@@ -87,6 +87,59 @@ export interface RadrootsNostrEvent {
 	sig: string;
 }
 
+export interface RadrootsListingEventData {
+	id: string;
+	author: string;
+	published_at: number;
+	d_tag: string;
+	title: string;
+	summary: string;
+	images: string[];
+	location_address: string;
+	location_city: string;
+	location_region: string;
+	location_country: string;
+	location_lat: string;
+	location_lng: string;
+	location_geohash: string;
+	product_kind: string;
+	product_category: string;
+	product_process: string;
+	product_lot: string;
+	product_profile: string;
+	product_year: string;
+	product_quantity_amt: string;
+	product_quantity_unit: string;
+	product_price_amt: string;
+	product_price_cur: string;
+	product_price_qty_amt: string;
+	product_price_qty_unit: string;
+}
+
+export interface RadrootsListingEvent {
+	event: RadrootsNostrEvent;
+	data: RadrootsListingEventData;
+}
+
+export interface RadrootsListingIndexShardMetadata {
+	file: string;
+	count: number;
+	first_id: string;
+	last_id: string;
+	first_published_at: number;
+	last_published_at: number;
+	sha256: string;
+}
+
+export interface RadrootsListingIndexCountryManifest {
+	country: string;
+	total: number;
+	shard_size: number;
+	first_published_at: number;
+	last_published_at: number;
+	shards: RadrootsListingIndexShardMetadata[];
+}
+
 export interface RadrootsMetadataEventDataMetadata {
 	name: string;
 	display_name?: string;
@@ -95,6 +148,8 @@ export interface RadrootsMetadataEventDataMetadata {
 }
 
 export interface RadrootsMetadataEventData {
+	id: string;
+	public_key: string;
 	published_at: number;
 	metadata: RadrootsMetadataEventDataMetadata;
 }
@@ -137,38 +192,6 @@ export interface RadrootsNostrEvent3Data {
 export interface RadrootsNostrEvent3 {
 	event: RadrootsNostrEvent;
 	data: RadrootsNostrEvent3Data;
-}
-
-export interface RadrootsNostrEvent30402Data {
-	published_at: number;
-	d_tag: string;
-	title: string;
-	summary: string;
-	images: string[];
-	location_address: string;
-	location_city: string;
-	location_region: string;
-	location_country: string;
-	location_lat: string;
-	location_lng: string;
-	location_geohash: string;
-	product_kind: string;
-	product_category: string;
-	product_process: string;
-	product_lot: string;
-	product_profile: string;
-	product_year: string;
-	product_quantity_amt: string;
-	product_quantity_unit: string;
-	product_price_amt: string;
-	product_price_cur: string;
-	product_price_qty_amt: string;
-	product_price_qty_unit: string;
-}
-
-export interface RadrootsNostrEvent30402 {
-	event: RadrootsNostrEvent;
-	data: RadrootsNostrEvent30402Data;
 }
 
 export interface RadrootsNostrEvent7Data {

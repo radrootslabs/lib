@@ -41,6 +41,8 @@ pub struct RadrootsMetadataEventDataMetadata {
 #[typeshare]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RadrootsMetadataEventData {
+    pub id: String,
+    pub public_key: String,
     pub published_at: u32,
     pub metadata: RadrootsMetadataEventDataMetadata,
 }
@@ -100,14 +102,16 @@ pub struct RadrootsNostrEvent1111Data {
 
 #[typeshare]
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct RadrootsNostrEvent30402 {
+pub struct RadrootsListingEvent {
     pub event: RadrootsNostrEvent,
-    pub data: RadrootsNostrEvent30402Data,
+    pub data: RadrootsListingEventData,
 }
 
 #[typeshare]
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct RadrootsNostrEvent30402Data {
+pub struct RadrootsListingEventData {
+    pub id: String,
+    pub author: String,
     pub published_at: u32,
     pub d_tag: String,
     pub title: String,

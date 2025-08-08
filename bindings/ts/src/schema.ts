@@ -86,21 +86,76 @@ export const radrootsNostrEventSchema = z.object({
   sig: z.string(),
 });
 
-export const radrootsNostrEvent0DataMetadataSchema = z.object({
+export const radrootsListingEventDataSchema = z.object({
+  id: z.string(),
+  author: z.string(),
+  published_at: z.number(),
+  d_tag: z.string(),
+  title: z.string(),
+  summary: z.string(),
+  images: z.array(z.string()),
+  location_address: z.string(),
+  location_city: z.string(),
+  location_region: z.string(),
+  location_country: z.string(),
+  location_lat: z.string(),
+  location_lng: z.string(),
+  location_geohash: z.string(),
+  product_kind: z.string(),
+  product_category: z.string(),
+  product_process: z.string(),
+  product_lot: z.string(),
+  product_profile: z.string(),
+  product_year: z.string(),
+  product_quantity_amt: z.string(),
+  product_quantity_unit: z.string(),
+  product_price_amt: z.string(),
+  product_price_cur: z.string(),
+  product_price_qty_amt: z.string(),
+  product_price_qty_unit: z.string(),
+});
+
+export const radrootsListingEventSchema = z.object({
+  event: radrootsNostrEventSchema,
+  data: radrootsListingEventDataSchema,
+});
+
+export const radrootsListingIndexShardMetadataSchema = z.object({
+  file: z.string(),
+  count: z.number(),
+  first_id: z.string(),
+  last_id: z.string(),
+  first_published_at: z.number(),
+  last_published_at: z.number(),
+  sha256: z.string(),
+});
+
+export const radrootsListingIndexCountryManifestSchema = z.object({
+  country: z.string(),
+  total: z.number(),
+  shard_size: z.number(),
+  first_published_at: z.number(),
+  last_published_at: z.number(),
+  shards: z.array(radrootsListingIndexShardMetadataSchema),
+});
+
+export const radrootsMetadataEventDataMetadataSchema = z.object({
   name: z.string(),
   display_name: z.string().optional(),
   nip05: z.string().optional(),
   about: z.string().optional(),
 });
 
-export const radrootsNostrEvent0DataSchema = z.object({
+export const radrootsMetadataEventDataSchema = z.object({
+  id: z.string(),
+  public_key: z.string(),
   published_at: z.number(),
-  metadata: radrootsNostrEvent0DataMetadataSchema,
+  metadata: radrootsMetadataEventDataMetadataSchema,
 });
 
-export const radrootsNostrEvent0Schema = z.object({
+export const radrootsMetadataEventSchema = z.object({
   event: radrootsNostrEventSchema,
-  data: radrootsNostrEvent0DataSchema,
+  data: radrootsMetadataEventDataSchema,
 });
 
 export const radrootsNostrEventRefSchema = z.object({
@@ -136,38 +191,6 @@ export const radrootsNostrEvent3DataSchema = z.object({
 export const radrootsNostrEvent3Schema = z.object({
   event: radrootsNostrEventSchema,
   data: radrootsNostrEvent3DataSchema,
-});
-
-export const radrootsNostrEvent30402DataSchema = z.object({
-  published_at: z.number(),
-  d_tag: z.string(),
-  title: z.string(),
-  summary: z.string(),
-  images: z.array(z.string()),
-  location_address: z.string(),
-  location_city: z.string(),
-  location_region: z.string(),
-  location_country: z.string(),
-  location_lat: z.string(),
-  location_lng: z.string(),
-  location_geohash: z.string(),
-  product_kind: z.string(),
-  product_category: z.string(),
-  product_process: z.string(),
-  product_lot: z.string(),
-  product_profile: z.string(),
-  product_year: z.string(),
-  product_quantity_amt: z.string(),
-  product_quantity_unit: z.string(),
-  product_price_amt: z.string(),
-  product_price_cur: z.string(),
-  product_price_qty_amt: z.string(),
-  product_price_qty_unit: z.string(),
-});
-
-export const radrootsNostrEvent30402Schema = z.object({
-  event: radrootsNostrEventSchema,
-  data: radrootsNostrEvent30402DataSchema,
 });
 
 export const radrootsNostrEvent7DataSchema = z.object({

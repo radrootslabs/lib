@@ -23,7 +23,8 @@
     "scripts": {
         "gen:index": "echo \"// Generated @radroots/radroots-common-bindings\" > src/index.ts && for f in src/*.ts; do fn=$(basename \"$f\" .ts); [ \"$fn\" != \"index\" ] && echo \"export * from './$fn';\" >> src/index.ts; done",
         "gen:schema": "ts-to-zod src/types.ts src/schema.ts",
-        "gen": "npm run gen:schema && npm run gen:index",
+        "gen:types": "typeshare --lang typescript --output-file=src/types.ts ../../src",
+        "gen": "npm run gen:types && npm run gen:schema && npm run gen:index",
         "prebuild": "npm run clean",
         "clean": "rimraf dist && rimraf tsconfig.tsbuildinfo",
         "build:cjs": "tsc -p tsconfig.json",
