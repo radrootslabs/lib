@@ -26,7 +26,7 @@
         "gen:types": "typeshare --lang typescript --output-file=src/types.ts ../../src",
         "gen": "npm run gen:types && npm run gen:schema && npm run gen:index",
         "prebuild": "npm run clean",
-        "clean": "rimraf dist && rimraf tsconfig.tsbuildinfo",
+        "clean": "rimraf dist",
         "build:cjs": "tsc -p tsconfig.json",
         "build:esm": "tsc -p tsconfig.esm.json",
         "build": "npm run build:cjs && npm run build:esm"
