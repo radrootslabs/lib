@@ -76,6 +76,25 @@ export const listingOrderRequestSchema = z.object({
   payload: listingOrderRequestPayloadSchema,
 });
 
+export const radrootsIndexShardMetadataSchema = z.object({
+  file: z.string(),
+  count: z.number(),
+  first_id: z.string(),
+  last_id: z.string(),
+  first_published_at: z.number(),
+  last_published_at: z.number(),
+  sha256: z.string(),
+});
+
+export const radrootsIndexManifestSchema = z.object({
+  country: z.string(),
+  total: z.number(),
+  shard_size: z.number(),
+  first_published_at: z.number(),
+  last_published_at: z.number(),
+  shards: z.array(radrootsIndexShardMetadataSchema),
+});
+
 export const radrootsNostrEventSchema = z.object({
   id: z.string(),
   author: z.string(),
@@ -118,25 +137,6 @@ export const radrootsListingEventDataSchema = z.object({
 export const radrootsListingEventSchema = z.object({
   event: radrootsNostrEventSchema,
   data: radrootsListingEventDataSchema,
-});
-
-export const radrootsListingIndexShardMetadataSchema = z.object({
-  file: z.string(),
-  count: z.number(),
-  first_id: z.string(),
-  last_id: z.string(),
-  first_published_at: z.number(),
-  last_published_at: z.number(),
-  sha256: z.string(),
-});
-
-export const radrootsListingIndexCountryManifestSchema = z.object({
-  country: z.string(),
-  total: z.number(),
-  shard_size: z.number(),
-  first_published_at: z.number(),
-  last_published_at: z.number(),
-  shards: z.array(radrootsListingIndexShardMetadataSchema),
 });
 
 export const radrootsMetadataEventDataMetadataSchema = z.object({

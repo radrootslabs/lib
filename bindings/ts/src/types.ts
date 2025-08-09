@@ -77,6 +77,25 @@ export interface ListingOrderRequest {
 	payload: ListingOrderRequestPayload;
 }
 
+export interface RadrootsIndexShardMetadata {
+	file: string;
+	count: number;
+	first_id: string;
+	last_id: string;
+	first_published_at: number;
+	last_published_at: number;
+	sha256: string;
+}
+
+export interface RadrootsIndexManifest {
+	country: string;
+	total: number;
+	shard_size: number;
+	first_published_at: number;
+	last_published_at: number;
+	shards: RadrootsIndexShardMetadata[];
+}
+
 export interface RadrootsNostrEvent {
 	id: string;
 	author: string;
@@ -119,25 +138,6 @@ export interface RadrootsListingEventData {
 export interface RadrootsListingEvent {
 	event: RadrootsNostrEvent;
 	data: RadrootsListingEventData;
-}
-
-export interface RadrootsListingIndexShardMetadata {
-	file: string;
-	count: number;
-	first_id: string;
-	last_id: string;
-	first_published_at: number;
-	last_published_at: number;
-	sha256: string;
-}
-
-export interface RadrootsListingIndexCountryManifest {
-	country: string;
-	total: number;
-	shard_size: number;
-	first_published_at: number;
-	last_published_at: number;
-	shards: RadrootsListingIndexShardMetadata[];
 }
 
 export interface RadrootsMetadataEventDataMetadata {
