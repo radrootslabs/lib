@@ -1,3 +1,3 @@
 // Generated @radroots/radroots-common-bindings
-export * from './schema';
-export * from './types';
+export * from './schema.js';
+export * from './types.js';

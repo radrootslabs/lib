@@ -3,17 +3,15 @@
     "version": "1.0.0",
     "private": true,
     "license": "MIT OR Apache-2.0",
-    "main": "dist/cjs/index.js",
-    "module": "dist/esm/index.js",
-    "types": "dist/cjs/index.d.ts",
+    "type": "module",
+    "main": "./dist/cjs/index.js",
+    "module": "./dist/esm/index.js",
+    "types": "./dist/types/index.d.ts",
     "exports": {
-        "require": {
-            "types": "./dist/cjs/index.d.ts",
-            "default": "./dist/cjs/index.js"
-        },
-        "import": {
-            "types": "./dist/cjs/index.d.ts",
-            "default": "./dist/esm/index.js"
+        ".": {
+            "types": "./dist/types/index.d.ts",
+            "import": "./dist/esm/index.js",
+            "require": "./dist/cjs/index.js"
         }
     },
     "files": [
@@ -21,19 +19,20 @@
     ],
     "sideEffects": false,
     "scripts": {
-        "build:esm": "tsc -p tsconfig.json",
+        "build:esm": "tsc -p tsconfig.esm.json",
         "build:cjs": "tsc -p tsconfig.cjs.json",
         "build": "npm run clean && npm run build:esm && npm run build:cjs",
         "prebuild": "npm run clean",
         "clean": "rimraf dist",
         "dev": "npm run watch",
         "watch": "tsc -w",
-        "gen:index": "echo \"// Generated @radroots/radroots-common-bindings\" > src/index.ts && for f in src/*.ts; do fn=$(basename \"$f\" .ts); [ \"$fn\" != \"index\" ] && echo \"export * from './$fn';\" >> src/index.ts; done",
+        "gen:index": "echo \"// Generated @radroots/radroots-common-bindings\" > src/index.ts && for f in src/*.ts; do fn=$(basename \"$f\" .ts); [ \"$fn\" != \"index\" ] && echo \"export * from './$fn.js';\" >> src/index.ts; done",
         "gen:schema": "ts-to-zod src/types.ts src/schema.ts",
         "gen:types": "typeshare --lang typescript --output-file=src/types.ts ../../src",
         "gen": "npm run gen:types && npm run gen:schema && npm run gen:index"
     },
     "devDependencies": {
+        "@radroots/tsconfig": "*",
         "rimraf": "^6.0.1",
         "ts-to-zod": "^3.15.0"
     },

@@ -1,0 +1,13 @@
+{
+  "extends": "@radroots/tsconfig/tsconfig.esm.json",
+  "compilerOptions": {
+    "moduleResolution": "nodenext",
+    "rootDir": "./src",
+    "outDir": "dist/esm",
+    "declaration": true,
+    "declarationMap": true,
+    "declarationDir": "dist/types"
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "dist"]
+}
