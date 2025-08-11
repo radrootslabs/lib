@@ -3,3 +3,4 @@ pub const KIND_JOB_RESPONSE: u16 = 6300;
 pub const KIND_APPLICATION_HANDLER: u16 = 31990;
 
 pub mod models;
+pub mod events;

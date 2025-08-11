@@ -26,12 +26,12 @@
         "clean": "rimraf dist",
         "dev": "npm run watch",
         "watch": "tsc -w",
-        "gen:index": "echo \"// Generated @radroots/radroots-common-bindings\" > src/index.ts && for f in src/*.ts; do fn=$(basename \"$f\" .ts); [ \"$fn\" != \"index\" ] && echo \"export * from './$fn.js';\" >> src/index.ts; done",
-        "gen:schema": "ts-to-zod src/types.ts src/schema.ts",
         "gen:types": "typeshare --lang typescript --output-file=src/types.ts ../../src",
-        "gen": "npm run gen:types && npm run gen:schema && npm run gen:index"
+        "gen:exports": "gen-package-exports.js --is_module",
+        "gen": "npm run gen:types && npm run gen:exports"
     },
     "devDependencies": {
+        "@radroots/dev": "*",
         "@radroots/tsconfig": "*",
         "rimraf": "^6.0.1",
         "ts-to-zod": "^3.15.0"

@@ -1,0 +1,110 @@
+use serde::{Deserialize, Serialize};
+use typeshare::typeshare;
+use crate::events::RadrootsNostrEvent;
+
+#[typeshare]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RadrootsListingEventIndex {
+    pub event: RadrootsNostrEvent,
+    pub metadata: RadrootsListingEventMetadata,
+}
+
+#[typeshare]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RadrootsListingEventMetadata {
+    pub id: String,
+    pub author: String,
+    pub published_at: u32,
+    pub listing: RadrootsListing,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RadrootsListing {
+    pub d_tag: String,
+    pub product: RadrootsListingProduct,
+    pub quantities: Vec<RadrootsListingQuantity>,
+    pub prices: Vec<RadrootsListingPrice>,
+    pub discounts: Option<Vec<RadrootsListingDiscount>>,
+    pub location: Option<RadrootsListingLocation>,
+    pub images: Option<Vec<RadrootsListingImage>>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RadrootsListingProduct {
+    pub key: String,
+    pub title: String,
+    pub category: String,
+    pub summary: Option<String>,
+    pub process: Option<String>,
+    pub lot: Option<String>,
+    pub location: Option<String>,
+    pub profile: Option<String>,
+    pub year: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RadrootsListingQuantity {
+    pub amt: String,
+    pub unit: String,
+    pub label: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RadrootsListingPrice {
+    pub amt: String,
+    pub currency: String,
+    pub qty_amt: String,
+    pub qty_unit: String,
+    pub qty_key: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum RadrootsListingDiscount {
+    Quantity {
+        ref_quantity: String,
+        threshold: String,
+        value: String,
+        currency: String,
+    },
+    Mass {
+        unit: String,
+        threshold: String,
+        threshold_unit: String,
+        value: String,
+        currency: String,
+    },
+    Subtotal {
+        threshold: String,
+        currency: String,
+        value: String,
+        measure: String,
+    },
+    Total {
+        total_min: String,
+        value: String,
+        measure: String,
+    },
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RadrootsListingLocation {
+    pub primary: String,
+    pub city: Option<String>,
+    pub region: Option<String>,
+    pub country: Option<String>,
+    pub lat: Option<f64>,
+    pub lng: Option<f64>,
+    pub geohash: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RadrootsListingImage {
+    pub url: String,
+    pub size: Option<RadrootsListingImageSize>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RadrootsListingImageSize {
+    pub w: u32,
+    pub h: u32,
+}
