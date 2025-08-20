@@ -10,7 +10,7 @@
     },
     "workspaces": {
         "packages": [
-            "../../global/packages/*",
+            "../packages/*",
             "packages/bindings/*"
         ]
     },
