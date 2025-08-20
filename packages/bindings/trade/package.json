@@ -1,0 +1,44 @@
+{
+    "name": "@radroots/trade-bindings",
+    "version": "1.0.0",
+    "private": true,
+    "license": "MIT OR Apache-2.0",
+    "type": "module",
+    "main": "./dist/cjs/index.js",
+    "module": "./dist/esm/index.js",
+    "types": "./dist/types/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/types/index.d.ts",
+            "import": "./dist/esm/index.js",
+            "require": "./dist/cjs/index.js"
+        }
+    },
+    "files": [
+        "dist"
+    ],
+    "sideEffects": false,
+    "scripts": {
+        "build:esm": "tsc -p tsconfig.esm.json",
+        "build:cjs": "tsc -p tsconfig.cjs.json",
+        "build": "npm run clean && npm run build:esm && npm run build:cjs",
+        "prebuild": "npm run clean",
+        "clean": "rimraf dist",
+        "dev": "npm run watch",
+        "watch": "tsc -w"
+    },
+    "devDependencies": {
+        "@radroots/dev": "*",
+        "@radroots/tsconfig": "*",
+        "rimraf": "^6.0.1",
+        "ts-to-zod": "^3.15.0"
+    },
+    "dependencies": {
+        "@radroots/core-bindings": "*",
+        "@radroots/events-bindings": "*",
+        "zod": "^4.0.5"
+    },
+    "publishConfig": {
+        "access": "public"
+    }
+}
