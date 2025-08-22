@@ -15,7 +15,7 @@ typeshare = ["dep:typeshare"]
 
 [dependencies]
 radroots-core = { workspace = true, default-features = false, features = ["serde"] }
-serde = { workspace = true, optional = true }
+serde = { workspace = true, default-features = false, features = ["alloc", "derive"], optional = true }
 typeshare = { workspace = true, optional = true }
 
 [dev-dependencies]

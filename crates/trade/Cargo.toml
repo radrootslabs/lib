@@ -17,5 +17,5 @@ typeshare = ["dep:typeshare"]
 radroots-core = { workspace = true, default-features = false }
 radroots-events = { workspace = true, default-features = false }
 radroots-events-codec = { workspace = true, default-features = false }
-serde = { workspace = true, optional = true }
+serde = { workspace = true, default-features = false, features = ["alloc", "derive"], optional = true }
 typeshare = { workspace = true, optional = true }
