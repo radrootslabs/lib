@@ -1,10 +1,11 @@
 [package]
 name = "radroots-events-codec"
 description = "Event codec layer for Radroots"
-version = "0.1.0"
+version.workspace = true
+edition.workspace = true
 authors = ["Radroots Authors"]
-license = "MIT OR Apache-2.0"
-edition = "2021"
+rust-version.workspace = true
+license.workspace = true
 
 [features]
 default = ["std"]
@@ -13,7 +14,7 @@ serde = ["dep:serde", "radroots-core/serde", "radroots-events/serde"]
 serde_json = ["serde", "dep:serde_json"]
 
 [dependencies]
-radroots-core = { path = "../core", default-features = false }
-radroots-events = { version = "0.1.0", path = "../events" }
-serde = { version = "1", features = ["derive"], optional = true }
-serde_json = { version = "1", optional = true }
+radroots-core = { workspace = true, default-features = false }
+radroots-events = { workspace = true }
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }

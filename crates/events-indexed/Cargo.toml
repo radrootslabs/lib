@@ -1,10 +1,11 @@
 [package]
 name = "radroots-events-indexed"
 description = "Indexed event model for Radroots"
-version = "0.1.0"
+version.workspace = true
+edition.workspace = true
 authors = ["Radroots Authors"]
-license = "MIT OR Apache-2.0"
-edition = "2021"
+rust-version.workspace = true
+license.workspace = true
 
 [features]
 default = ["serde", "typeshare"]
@@ -13,5 +14,5 @@ typeshare = ["dep:typeshare"]
 std = []
 
 [dependencies]
-serde = { version = "1.0", default-features = false, features = ["alloc", "derive"], optional = true }
-typeshare = { version = "1", optional = true }
+serde = { workspace = true, default-features = false, features = ["alloc", "derive"], optional = true }
+typeshare = { workspace = true, optional = true }

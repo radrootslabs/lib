@@ -3,3 +3,21 @@ members = [
     "crates/*",
 ]
 resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.86.0"
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+radroots-core = { path = "crates/core", version = "0.1.0", default-features = false }
+radroots-events = { path = "crates/events", version = "0.1.0", default-features = false }
+radroots-events-codec = { path = "crates/events-codec", version = "0.1.0", default-features = false }
+radroots-trade = { path = "crates/trade", version = "0.1.0", default-features = false }
+
+serde = { version = "1", default-features = false, features = ["derive"] }
+serde_json = { version = "1" }
+rust_decimal = { version = "1", default-features = false }
+rust_decimal_macros = { version = "1" }
+typeshare = { version = "1" }

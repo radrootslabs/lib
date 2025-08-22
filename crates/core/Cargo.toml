@@ -1,10 +1,11 @@
 [package]
 name = "radroots-core"
 description = "Core value model for Radroots"
-version = "0.1.0"
+version.workspace = true
+edition.workspace = true
 authors = ["Radroots Authors"]
-license = "MIT OR Apache-2.0"
-edition = "2021"
+rust-version.workspace = true
+license.workspace = true
 
 [features]
 default = ["std", "serde", "typeshare"]
@@ -13,7 +14,7 @@ serde = ["dep:serde", "rust_decimal/serde"]
 typeshare = ["dep:typeshare"]
 
 [dependencies]
-rust_decimal = { version = "1", default-features = false }
-rust_decimal_macros = "1"
-serde = { version = "1", default-features = false, features = ["derive"], optional = true }
-typeshare = { version = "1", optional = true }
+rust_decimal = { workspace = true, default-features = false }
+rust_decimal_macros = { workspace = true }
+serde = { workspace = true, optional = true }
+typeshare = { workspace = true, optional = true }
