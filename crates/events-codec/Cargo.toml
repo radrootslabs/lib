@@ -12,9 +12,11 @@ default = ["std"]
 std = []
 serde = ["dep:serde", "radroots-core/serde", "radroots-events/serde"]
 serde_json = ["serde", "dep:serde_json"]
+nostr = ["dep:nostr", "std"]
 
 [dependencies]
 radroots-core = { workspace = true, default-features = false }
 radroots-events = { workspace = true, default-features = false }
 serde = { workspace = true, default-features = false, features = ["alloc"], optional = true }
 serde_json = { workspace = true, default-features = false, features = ["alloc"], optional = true }
+nostr = { workspace = true, optional = true }

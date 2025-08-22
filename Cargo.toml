@@ -18,6 +18,7 @@ radroots-trade = { path = "crates/trade", version = "0.1.0", default-features = 
 
 anyhow = { version = "1" }
 clap = { version = "4" }
+nostr = { version = "0.43.0" }
 serde = { version = "1", default-features = false }
 serde_json = { version = "1", default-features = false }
 rust_decimal = { version = "1", default-features = false }

@@ -22,6 +22,10 @@ pub mod reaction {
     pub mod models;
 }
 
+pub mod relay_document {
+    pub mod models;
+}
+
 use serde::{Deserialize, Serialize};
 
 #[typeshare::typeshare]

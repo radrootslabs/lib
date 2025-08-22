@@ -3,6 +3,7 @@ pub mod cli;
 pub mod config;
 pub mod error;
 pub mod tracing;
+pub mod signals;
 
 #[cfg(feature = "cli")]
 pub use cli::{parse_and_load_path, parse_and_load_path_with_env_overrides};
@@ -15,4 +16,5 @@ pub use error::{RuntimeConfigError, RuntimeError, RuntimeTracingError};
 #[cfg(feature = "cli")]
 pub use error::RuntimeCliError;
 
+pub use signals::{shutdown_signal};
 pub use tracing::{init, init_with};
