@@ -10,7 +10,7 @@ pub fn build_metadata_event(md: &Metadata) -> EventBuilder {
     EventBuilder::metadata(md)
 }
 
-pub async fn set_metadata(
+pub async fn post_metadata_event(
     client: &Client,
     md: &Metadata,
 ) -> Result<Output<EventId>, NostrUtilsError> {
@@ -18,7 +18,7 @@ pub async fn set_metadata(
     Ok(client.send_event_builder(builder).await?)
 }
 
-pub async fn fetch_latest_metadata_for_author(
+pub async fn fetch_metadata_for_author(
     client: &Client,
     author: PublicKey,
     timeout: Duration,

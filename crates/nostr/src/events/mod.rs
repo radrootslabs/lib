@@ -1,4 +1,5 @@
 pub mod jobs;
+pub mod metadata;
 
 extern crate alloc;
 use alloc::{string::String, vec::Vec};
@@ -7,7 +8,7 @@ use nostr::event::{EventBuilder, Kind, Tag, TagKind};
 
 use crate::error::NostrUtilsError;
 
-pub fn nostr_build_events(
+pub fn build_nostr_event(
     kind_u32: u32,
     content: impl Into<String>,
     tag_slices: Vec<Vec<String>>,
