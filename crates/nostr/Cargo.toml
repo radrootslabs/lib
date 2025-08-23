@@ -1,0 +1,25 @@
+[package]
+name = "radroots-nostr"
+description = "Nostr integration layer for Radroots"
+version.workspace = true
+edition.workspace = true
+authors = ["Radroots Authors"]
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+default = ["std", "sdk"]
+std = []
+sdk = ["dep:nostr-sdk"]
+codec = ["dep:radroots-events", "dep:radroots-events-codec"]
+http = ["dep:reqwest"]
+
+[dependencies]
+radroots-events = { workspace = true, optional = true, default-features = false }
+radroots-events-codec = { workspace = true, optional = true, default-features = false }
+nostr = { workspace = true, features = ["nip04"] }
+nostr-sdk = { workspace = true, optional = true }
+reqwest = { workspace = true, optional = true, default-features = false, features = ["json", "rustls-tls"] }
+serde = { workspace = true }
+serde_json = { workspace = true } 
+thiserror = { workspace = true }
