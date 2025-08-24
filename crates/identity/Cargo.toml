@@ -1,0 +1,20 @@
+[package]
+name = "radroots-identity"
+description = "Identity model for Radroots"
+version.workspace = true
+edition.workspace = true
+authors = ["Radroots Authors"]
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+default = ["std"]
+std = []
+
+[dependencies]
+radroots-runtime = { workspace = true }
+nostr = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true, features = ["v4", "serde"] }
+tracing = { workspace = true }

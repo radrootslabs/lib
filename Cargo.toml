@@ -15,7 +15,9 @@ radroots-core = { path = "crates/core", version = "0.1.0", default-features = fa
 radroots-events = { path = "crates/events", version = "0.1.0", default-features = false }
 radroots-events-codec = { path = "crates/events-codec", version = "0.1.0", default-features = false }
 radroots-events-indexed = { path = "crates/events-indexed", version = "0.1.0", default-features = false }
+radroots-identity = { path = "crates/identity", version = "0.1.0", default-features = false }
 radroots-nostr = { path = "crates/nostr", version = "0.1.0", default-features = false }
+radroots-runtime = { path = "crates/runtime", version = "0.1.0", default-features = false }
 radroots-trade = { path = "crates/trade", version = "0.1.0", default-features = false }
 
 anyhow = { version = "1" }
@@ -36,3 +38,4 @@ tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.3" }
 tracing-appender = { version = "0.2" }
 typeshare = { version = "1" }
+uuid = { version = "1.16.0" }
