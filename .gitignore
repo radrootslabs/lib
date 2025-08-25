@@ -1,58 +1,40 @@
-# Dependencies
+# Rust
+/target/
+**/*.rs.bk
+
 node_modules
-.pnp
-.pnp.js
-
-# Local env files
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# Testing
-coverage
-
-# Turbo
-.turbo
-
-# Vercel
-.vercel
-
-# Build Outputs
-.next/
-out/
-build
 dist
-.yarn
-target/
-yarn.lock
 
-# Debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+# Logs
+logs/
+*.log
+
+# Env
+.env
+.env.*
+!.env.example
+!.env.test
+.local*
+justfile
 
 # OS
 .DS_Store
 Thumbs.db
 
-#secrets
+# Secrets
 *.pem
 *.crt
 *.key
 
-# local
-.tmp*
-.archive*
-.dev*
-.local*
-.vscode
+# Editors
+.vscode/
+.idea/
+*.iml
+
+# Notes
 notes*.txt
 notes*.md
 notes*.json
 tree*.txt
-git-diff*.txt
+diff*.txt
 prompt*.txt
-tree*.txt
-justfile
