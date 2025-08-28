@@ -1,0 +1,17 @@
+[package]
+name = "radroots-net-core"
+version.workspace = true
+edition.workspace = true
+authors = ["Radroots Authors"]
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+default = ["std"]
+std = []
+rt = ["std", "dep:tokio"]
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+thiserror = { workspace = true }
+tokio = { workspace = true, optional = true, features = ["rt-multi-thread"] }

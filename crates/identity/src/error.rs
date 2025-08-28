@@ -2,7 +2,6 @@ use radroots_runtime::RuntimeJsonError;
 use std::path::PathBuf;
 use thiserror::Error;
 
-/// Errors when loading or generating an identity.
 #[derive(Debug, Error)]
 pub enum IdentityError {
     #[error(transparent)]

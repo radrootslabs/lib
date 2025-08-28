@@ -1635,6 +1635,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "radroots-net"
+version = "0.1.0"
+dependencies = [
+ "radroots-net-core",
+]
+
+[[package]]
+name = "radroots-net-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "thiserror 1.0.69",
+ "tokio",
+]
+
+[[package]]
 name = "radroots-nostr"
 version = "0.1.0"
 dependencies = [

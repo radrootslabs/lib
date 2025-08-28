@@ -7,29 +7,21 @@ use std::{
 };
 use uuid::Uuid;
 
-/// Trait that identity file types must implement.
 pub trait IdentitySpec: Serialize + DeserializeOwned + Sized {
-    /// The runtime key material type (e.g. `nostr::Keys`).
     type Keys;
 
-    /// Error type when parsing stored material into keys.
     type ParseError: std::error::Error + Send + Sync + 'static;
 
-    /// Create a brand new identity value if the file does not exist.
     fn generate_new() -> Self;
 
-    /// Turn this identity into runtime key material.
     fn to_keys(&self) -> Result<Self::Keys, Self::ParseError>;
 }
 
-/// Convert an identity into its keys, mapped into the shared error type.
 pub fn to_keys<I: IdentitySpec>(id: &I) -> Result<I::Keys, IdentityError> {
     id.to_keys()
         .map_err(|e| IdentityError::Invalid(Box::new(e)))
 }
 
-/// Load an identity file, or generate a new one if allowed.
-/// Defaults to [`DEFAULT_IDENTITY_PATH`] if no path is provided.
 pub fn load_or_generate<I, P>(
     path: Option<P>,
     allow_generate: bool,
@@ -55,7 +47,6 @@ where
     Ok(store)
 }
 
-/// A minimal identity: just a secret key string.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MinimalIdentity {
     pub key: String,

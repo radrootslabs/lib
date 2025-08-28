@@ -18,18 +18,29 @@ radroots-events-indexed = { path = "crates/events-indexed", version = "0.1.0", d
 radroots-identity = { path = "crates/identity", version = "0.1.0", default-features = false }
 radroots-nostr = { path = "crates/nostr", version = "0.1.0", default-features = false }
 radroots-runtime = { path = "crates/runtime", version = "0.1.0", default-features = false }
+radroots-net = { path = "crates/net", version = "0.1.0", default-features = false }
+radroots-net-core = { path = "crates/net-core", version = "0.1.0", default-features = false }
 radroots-trade = { path = "crates/trade", version = "0.1.0", default-features = false }
 
 anyhow = { version = "1" }
+cfg-if = { version = "1" }
+chrono = { version = "0.4" }
 clap = { version = "4" }
 config = { version = "0.14" }
-nostr-sdk = { version = "0.43.0" }
+directories = { version = "6" }
+futures = { version = "0.3" }
+hex = { version = "0.4" }
 nostr = { version = "0.43.0" }
+nostr-relay-pool = { version = "0.43.0" }
+nostr-sdk = { version = "0.43.0" }
+num_cpus = { version = "1.17.0" }
+secrecy = { version = "0.10.3" }
 serde = { version = "1", default-features = false }
 serde_json = { version = "1", default-features = false }
 reqwest = { version = "0.12", default-features = false }
 rust_decimal = { version = "1", default-features = false }
 rust_decimal_macros = { version = "1" }
+sled = { version = "0.34" }
 tempfile = { version = "3" }
 thiserror = { version = "1" }
 tokio = { version = "1" }
@@ -38,4 +49,5 @@ tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.3" }
 tracing-appender = { version = "0.2" }
 typeshare = { version = "1" }
+url  = { version = "2" }
 uuid = { version = "1.16.0" }

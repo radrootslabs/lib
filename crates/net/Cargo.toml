@@ -1,0 +1,17 @@
+[package]
+name = "radroots-net"
+description = "Network layer for Radroots"
+version.workspace = true
+edition.workspace = true
+authors = ["Radroots Authors"]
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+default = ["std"]
+std = ["radroots-net-core/std"]
+rt = ["radroots-net-core/rt"]
+all = ["std", "rt"]
+
+[dependencies]
+radroots-net-core = { workspace = true, optional = false }
