@@ -9,9 +9,11 @@ license.workspace = true
 [features]
 default = ["std"]
 std = []
-rt = ["std", "dep:tokio"]
+rt = ["dep:tokio"]
 
 [dependencies]
+radroots-log = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 tokio = { workspace = true, optional = true, features = ["rt-multi-thread"] }
+tracing = { workspace = true }

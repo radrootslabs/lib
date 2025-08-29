@@ -1635,6 +1635,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "radroots-log"
+version = "0.1.0"
+dependencies = [
+ "thiserror 1.0.69",
+ "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "radroots-net"
 version = "0.1.0"
 dependencies = [
@@ -1645,9 +1655,11 @@ dependencies = [
 name = "radroots-net-core"
 version = "0.1.0"
 dependencies = [
+ "radroots-log",
  "serde",
  "thiserror 1.0.69",
  "tokio",
+ "tracing",
 ]
 
 [[package]]

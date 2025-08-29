@@ -1,3 +1,4 @@
+use alloc::string::String;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -5,7 +6,7 @@ pub enum Error {
     #[error("{0}")]
     Msg(String),
 
-    #[error("mutex lock poisoned!")]
+    #[error("mutex lock poisoned")]
     Poisoned,
 
     #[cfg(feature = "std")]
