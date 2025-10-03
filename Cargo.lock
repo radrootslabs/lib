@@ -1702,6 +1702,7 @@ dependencies = [
  "hex",
  "nostr",
  "nostr-sdk",
+ "radroots-events",
  "radroots-log",
  "secrecy",
  "serde",

@@ -16,7 +16,7 @@ impl Default for LoggingOptions {
     fn default() -> Self {
         Self {
             dir: None,
-            file_name: "radroots.log".into(),
+            file_name: "radroots_net_core.log".into(),
             also_stdout: true,
         }
     }

@@ -14,7 +14,7 @@ serde = ["dep:serde"]
 typeshare = ["dep:typeshare"]
 
 [dependencies]
-radroots-core = { workspace = true, default-features = false, features = ["serde"] }
+radroots-core = { workspace = true, default-features = false, features = ["std", "serde", "typeshare"] }
 serde = { workspace = true, default-features = false, features = ["alloc", "derive"], optional = true }
 typeshare = { workspace = true, optional = true }
 

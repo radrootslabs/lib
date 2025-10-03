@@ -6,6 +6,8 @@ use std::sync::{Arc, Mutex};
 #[cfg(feature = "nostr-client")]
 use nostr_sdk::prelude::*;
 #[cfg(feature = "nostr-client")]
+use radroots_events::profile::models::RadrootsProfile;
+#[cfg(feature = "nostr-client")]
 use tokio::runtime::Handle;
 #[cfg(feature = "nostr-client")]
 use tracing::{error, info};
@@ -133,6 +135,44 @@ impl NostrClientManager {
             connecting,
             last_error,
         }
+    }
+
+    pub async fn fetch_profile_kind0(
+        &self,
+        author: nostr::PublicKey,
+    ) -> Result<Option<RadrootsProfile>, String> {
+        let filter = Filter::new()
+            .authors(vec![author])
+            .kind(Kind::Metadata)
+            .limit(1);
+        let events = self
+            .inner
+            .client
+            .fetch_events(filter, std::time::Duration::from_secs(5))
+            .await
+            .map_err(|e| e.to_string())?;
+        if let Some(ev) = events.into_iter().next() {
+            if let Ok(p) = serde_json::from_str::<RadrootsProfile>(&ev.content) {
+                return Ok(Some(p));
+            }
+            if let Ok(md) = serde_json::from_str::<nostr::Metadata>(&ev.content) {
+                let p = RadrootsProfile {
+                    name: md.name.unwrap_or_default(),
+                    display_name: md.display_name,
+                    nip05: md.nip05,
+                    about: md.about,
+                    website: md.website.map(|u| u.to_string()),
+                    picture: md.picture.map(|u| u.to_string()),
+                    banner: md.banner.map(|u| u.to_string()),
+                    lud06: md.lud06,
+                    lud16: md.lud16,
+                    bot: None,
+                };
+                return Ok(Some(p));
+            }
+            return Err("failed to parse kind:0 metadata content".to_string());
+        }
+        Ok(None)
     }
 
     fn spawn_status_watcher(&self) {

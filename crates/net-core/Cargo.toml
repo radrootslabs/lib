@@ -11,20 +11,23 @@ default = ["std"]
 std = []
 rt = ["dep:tokio"]
 nostr-client = [
-"dep:nostr",
-"dep:nostr-sdk",
-"dep:secrecy",
-"dep:hex",
-"dep:tempfile",
-"dep:serde_json"
+  "dep:radroots-events",
+  "radroots-events/serde",
+  "dep:nostr",
+  "dep:nostr-sdk",
+  "dep:secrecy",
+  "dep:hex",
+  "dep:tempfile",
+  "dep:serde_json"
 ]
 directories = ["dep:directories"]
 fs-persistence = []
 
 [dependencies]
+radroots-events = { workspace = true, optional = true, default-features = true, features = ["std", "serde", "typeshare"] }
 radroots-log = { workspace = true }
 directories = { workspace = true, optional = true }
-hex = { workspace = true, optional = true  }
+hex = { workspace = true, optional = true }
 nostr = { workspace = true, optional = true }
 nostr-sdk = { workspace = true, optional = true }
 secrecy = { workspace = true, optional = true }
