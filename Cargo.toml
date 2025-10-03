@@ -46,7 +46,7 @@ tempfile = { version = "3" }
 thiserror = { version = "1" }
 tokio = { version = "1" }
 toml = { version = "0.8" }
-tracing = { version = "0.1" }
+tracing = { version = "0.1", default-features = false }
 tracing-appender = { version = "0.2" }
 tracing-log = { version = "0.2" }
 tracing-subscriber = { version = "0.3" }

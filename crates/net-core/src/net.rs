@@ -1,7 +1,9 @@
 use serde::Serialize;
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use crate::error::{Error, Result};
+use crate::error::{NetError, Result};
+#[cfg(feature = "nostr-client")]
+use crate::keys::KeysManager;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct BuildInfo {
@@ -26,6 +28,9 @@ pub struct Net {
     pub info: NetInfo,
     pub config: crate::config::NetConfig,
 
+    #[cfg(feature = "nostr-client")]
+    pub keys: KeysManager,
+
     #[cfg(feature = "rt")]
     pub rt: Option<tokio::runtime::Runtime>,
 }
@@ -44,6 +49,8 @@ impl Net {
                 },
             },
             config: cfg,
+            #[cfg(feature = "nostr-client")]
+            keys: KeysManager::default(),
             #[cfg(feature = "rt")]
             rt: None,
         }
@@ -66,7 +73,7 @@ impl Net {
             .worker_threads(threads)
             .enable_all()
             .build()
-            .map_err(|e| Error::msg(format!("failed to build tokio runtime: {e}")))?;
+            .map_err(|e| NetError::msg(format!("failed to build tokio runtime: {e}")))?;
 
         self.rt = Some(rt);
         Ok(())
@@ -82,7 +89,7 @@ impl NetHandle {
     }
 
     pub fn lock(&self) -> Result<MutexGuard<'_, Net>> {
-        self.0.lock().map_err(|_| Error::Poisoned)
+        self.0.lock().map_err(|_| NetError::Poisoned)
     }
 }
 

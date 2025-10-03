@@ -27,7 +27,6 @@ pub fn init_logging(opts: LoggingOptions) -> Result<()> {
     };
 
     let env = EnvFilter::from_default_env().add_directive(Level::INFO.into());
-
     let fmt_layer_file = writer.as_ref().map(|w| fmt::layer().with_writer(w.clone()));
     let fmt_layer_stdout = if opts.also_stdout() {
         Some(fmt::layer())
@@ -60,7 +59,7 @@ pub fn init_logging(opts: LoggingOptions) -> Result<()> {
 pub fn init_stdout() -> Result<()> {
     init_logging(LoggingOptions {
         dir: None,
+        file_name: "radroots.log".into(),
         stdout: true,
-        ..Default::default()
     })
 }

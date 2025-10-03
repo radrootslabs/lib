@@ -11,4 +11,7 @@ pub mod logging;
 pub mod builder;
 pub mod config;
 
+#[cfg(feature = "nostr-client")]
+pub mod keys;
+
 pub use net::{Net, NetHandle, NetInfo};

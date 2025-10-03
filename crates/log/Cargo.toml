@@ -7,8 +7,12 @@ authors = ["Radroots Authors"]
 rust-version.workspace = true
 license.workspace = true
 
+[features]
+default = ["std"]
+std = ["dep:thiserror", "dep:tracing-subscriber", "dep:tracing-appender"]
+
 [dependencies]
-thiserror = { workspace = true }
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true, features = ["fmt", "env-filter"] }
-tracing-appender = { workspace = true }
+tracing = { workspace = true, default-features = false }
+thiserror = { workspace = true, optional = true }
+tracing-subscriber = { workspace = true, optional = true, features = ["fmt", "env-filter"] }
+tracing-appender = { workspace = true, optional = true }

@@ -10,10 +10,21 @@ license.workspace = true
 default = ["std"]
 std = []
 rt = ["dep:tokio"]
+nostr-client = ["dep:nostr", "dep:secrecy", "dep:hex", "dep:tempfile", "dep:serde_json"]
+directories = ["dep:directories"]
+fs-persistence = []
 
 [dependencies]
 radroots-log = { workspace = true }
+directories = { workspace = true, optional = true }
+hex = { workspace = true, optional = true  }
+nostr = { workspace = true, optional = true }
+secrecy = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true, optional = true }
+tempfile = { workspace = true, optional = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, optional = true, features = ["rt-multi-thread"] }
 tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["fmt", "env-filter"] }
+tracing-appender = { workspace = true }
