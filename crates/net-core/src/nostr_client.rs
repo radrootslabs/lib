@@ -71,9 +71,11 @@ impl NostrClientManager {
 
     pub fn connect(&self) {
         let inner = self.inner.clone();
-        inner.rt.spawn(async move {
+        let rt = inner.rt.clone();
+        let inner_for_task = inner.clone();
+        rt.spawn(async move {
             let urls = {
-                let g = inner.relays.lock().ok();
+                let g = inner_for_task.relays.lock().ok();
                 g.map(|v| v.clone()).unwrap_or_default()
             };
             if urls.is_empty() {
@@ -86,21 +88,28 @@ impl NostrClientManager {
             };
 
             for u in &effective {
-                match inner.client.add_relay(u).await {
+                match inner_for_task.client.add_relay(u.as_str()).await {
                     Ok(_) => {}
                     Err(e) => {
-                        *inner.last_error.lock().unwrap() = Some(format!("add_relay {u}: {e}"));
+                        *inner_for_task.last_error.lock().unwrap() =
+                            Some(format!("add_relay {u}: {e}"));
                         error!("add_relay failed for {u}: {e}");
                     }
                 }
             }
 
-            inner.client.connect().await;
+            inner_for_task.client.connect().await;
         });
     }
 
     pub fn snapshot(&self) -> NostrConnectionSnapshot {
-        let map = self.inner.statuses.lock().ok().cloned().unwrap_or_default();
+        let map = self
+            .inner
+            .statuses
+            .lock()
+            .ok()
+            .map(|g| g.clone())
+            .unwrap_or_default();
         let mut connected = 0usize;
         let mut connecting = 0usize;
         for (_url, st) in map.iter() {
@@ -128,17 +137,18 @@ impl NostrClientManager {
 
     fn spawn_status_watcher(&self) {
         let inner = self.inner.clone();
-        inner.rt.spawn(async move {
-            if let Some(m) = inner.client.monitor() {
+        let rt = inner.rt.clone();
+        let inner_for_task = inner.clone();
+        rt.spawn(async move {
+            if let Some(m) = inner_for_task.client.monitor() {
                 let mut rx = m.subscribe();
                 while let Ok(notification) = rx.recv().await {
-                    if let MonitorNotification::StatusChanged { relay_url, status } = notification {
-                        {
-                            let mut map = inner.statuses.lock().unwrap();
-                            map.insert(relay_url.clone(), status);
-                        }
-                        info!("relay status changed {} -> {:?}", relay_url, status);
+                    let MonitorNotification::StatusChanged { relay_url, status } = notification;
+                    {
+                        let mut map = inner_for_task.statuses.lock().unwrap();
+                        map.insert(relay_url.clone(), status);
                     }
+                    info!("relay status changed {} -> {:?}", relay_url, status);
                 }
             }
         });

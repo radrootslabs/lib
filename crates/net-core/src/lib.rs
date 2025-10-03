@@ -15,6 +15,6 @@ pub mod config;
 pub mod keys;
 
 #[cfg(feature = "nostr-client")]
-mod nostr_client;
+pub mod nostr_client;
 
 pub use net::{Net, NetHandle, NetInfo};
