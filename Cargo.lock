@@ -1701,6 +1701,7 @@ dependencies = [
  "directories",
  "hex",
  "nostr",
+ "nostr-sdk",
  "radroots-log",
  "secrecy",
  "serde",

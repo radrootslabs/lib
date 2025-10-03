@@ -10,7 +10,14 @@ license.workspace = true
 default = ["std"]
 std = []
 rt = ["dep:tokio"]
-nostr-client = ["dep:nostr", "dep:secrecy", "dep:hex", "dep:tempfile", "dep:serde_json"]
+nostr-client = [
+"dep:nostr",
+"dep:nostr-sdk",
+"dep:secrecy",
+"dep:hex",
+"dep:tempfile",
+"dep:serde_json"
+]
 directories = ["dep:directories"]
 fs-persistence = []
 
@@ -19,6 +26,7 @@ radroots-log = { workspace = true }
 directories = { workspace = true, optional = true }
 hex = { workspace = true, optional = true  }
 nostr = { workspace = true, optional = true }
+nostr-sdk = { workspace = true, optional = true }
 secrecy = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true, optional = true }

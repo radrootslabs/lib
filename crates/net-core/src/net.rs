@@ -4,6 +4,8 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use crate::error::{NetError, Result};
 #[cfg(feature = "nostr-client")]
 use crate::keys::KeysManager;
+#[cfg(feature = "nostr-client")]
+use crate::nostr_client::{NostrClientManager, NostrConnectionSnapshot};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct BuildInfo {
@@ -31,6 +33,9 @@ pub struct Net {
     #[cfg(feature = "nostr-client")]
     pub keys: KeysManager,
 
+    #[cfg(feature = "nostr-client")]
+    pub nostr: Option<NostrClientManager>,
+
     #[cfg(feature = "rt")]
     pub rt: Option<tokio::runtime::Runtime>,
 }
@@ -51,6 +56,8 @@ impl Net {
             config: cfg,
             #[cfg(feature = "nostr-client")]
             keys: KeysManager::default(),
+            #[cfg(feature = "nostr-client")]
+            nostr: None,
             #[cfg(feature = "rt")]
             rt: None,
         }
@@ -77,6 +84,45 @@ impl Net {
 
         self.rt = Some(rt);
         Ok(())
+    }
+
+    #[cfg(feature = "nostr-client")]
+    pub fn nostr_set_default_relays(&mut self, urls: &[String]) -> Result<()> {
+        if self.nostr.is_none() {
+            let keys = self.keys.require()?;
+            let rt = self
+                .rt
+                .as_ref()
+                .ok_or_else(|| NetError::msg("tokio runtime missing"))?;
+            self.nostr = Some(NostrClientManager::new(keys.clone(), rt.handle().clone()));
+        }
+        if let Some(n) = &self.nostr {
+            n.set_relays(urls);
+        }
+        Ok(())
+    }
+
+    #[cfg(feature = "nostr-client")]
+    pub fn nostr_connect_if_key_present(&mut self) -> Result<()> {
+        if self.keys.state.loaded {
+            let rt = self
+                .rt
+                .as_ref()
+                .ok_or_else(|| NetError::msg("tokio runtime missing"))?;
+            if self.nostr.is_none() {
+                let keys = self.keys.require()?;
+                self.nostr = Some(NostrClientManager::new(keys.clone(), rt.handle().clone()));
+            }
+            if let Some(n) = &self.nostr {
+                n.connect();
+            }
+        }
+        Ok(())
+    }
+
+    #[cfg(feature = "nostr-client")]
+    pub fn nostr_connection_snapshot(&self) -> Option<NostrConnectionSnapshot> {
+        self.nostr.as_ref().map(|n| n.snapshot())
     }
 }
 
