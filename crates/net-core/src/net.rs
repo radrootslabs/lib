@@ -114,7 +114,7 @@ impl Net {
                 self.nostr = Some(NostrClientManager::new(keys.clone(), rt.handle().clone()));
             }
             if let Some(n) = &self.nostr {
-                n.connect();
+                n.connect()?;
             }
         }
         Ok(())

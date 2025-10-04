@@ -1,18 +1,15 @@
-#[cfg(feature = "nostr-client")]
+#![cfg(feature = "nostr-client")]
+
 use std::collections::HashMap;
-#[cfg(feature = "nostr-client")]
 use std::sync::{Arc, Mutex};
 
-#[cfg(feature = "nostr-client")]
 use nostr_sdk::prelude::*;
-#[cfg(feature = "nostr-client")]
 use radroots_events::profile::models::RadrootsProfile;
-#[cfg(feature = "nostr-client")]
 use tokio::runtime::Handle;
-#[cfg(feature = "nostr-client")]
 use tracing::{error, info};
 
-#[cfg(feature = "nostr-client")]
+use crate::error::{NetError, Result};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Light {
     Red,
@@ -20,7 +17,6 @@ pub enum Light {
     Green,
 }
 
-#[cfg(feature = "nostr-client")]
 #[derive(Debug, Clone)]
 pub struct NostrConnectionSnapshot {
     pub light: Light,
@@ -29,13 +25,11 @@ pub struct NostrConnectionSnapshot {
     pub last_error: Option<String>,
 }
 
-#[cfg(feature = "nostr-client")]
 #[derive(Clone)]
 pub struct NostrClientManager {
     inner: Arc<Inner>,
 }
 
-#[cfg(feature = "nostr-client")]
 struct Inner {
     client: Client,
     relays: Arc<Mutex<Vec<String>>>,
@@ -44,7 +38,6 @@ struct Inner {
     rt: Handle,
 }
 
-#[cfg(feature = "nostr-client")]
 impl NostrClientManager {
     pub fn new(keys: nostr::Keys, rt: Handle) -> Self {
         let monitor = Monitor::new(2048);
@@ -71,37 +64,38 @@ impl NostrClientManager {
         }
     }
 
-    pub fn connect(&self) {
+    pub fn connect(&self) -> Result<()> {
         let inner = self.inner.clone();
-        let rt = inner.rt.clone();
-        let inner_for_task = inner.clone();
-        rt.spawn(async move {
-            let urls = {
-                let g = inner_for_task.relays.lock().ok();
-                g.map(|v| v.clone()).unwrap_or_default()
-            };
-            if urls.is_empty() {
-                info!("no relays configured; using default wss://relay.damus.io");
-            }
-            let effective = if urls.is_empty() {
-                vec!["wss://relay.damus.io".to_string()]
-            } else {
-                urls
-            };
+        let urls = {
+            let g = inner.relays.lock().ok();
+            g.map(|v| v.clone()).unwrap_or_default()
+        };
 
-            for u in &effective {
+        if urls.is_empty() {
+            if let Ok(mut e) = inner.last_error.lock() {
+                *e = Some("no relays configured".to_string());
+            }
+            return Err(NetError::Msg("no relays configured".into()));
+        }
+
+        let inner_for_task = inner.clone();
+        let rt = inner.rt.clone();
+        rt.spawn(async move {
+            for u in &urls {
                 match inner_for_task.client.add_relay(u.as_str()).await {
                     Ok(_) => {}
                     Err(e) => {
-                        *inner_for_task.last_error.lock().unwrap() =
-                            Some(format!("add_relay {u}: {e}"));
-                        error!("add_relay failed for {u}: {e}");
+                        if let Ok(mut last) = inner_for_task.last_error.lock() {
+                            *last = Some(format!("add_relay {}: {}", u, e));
+                        }
+                        error!("add_relay failed for {}: {}", u, e);
                     }
                 }
             }
-
             inner_for_task.client.connect().await;
         });
+
+        Ok(())
     }
 
     pub fn snapshot(&self) -> NostrConnectionSnapshot {
@@ -112,6 +106,7 @@ impl NostrClientManager {
             .ok()
             .map(|g| g.clone())
             .unwrap_or_default();
+
         let mut connected = 0usize;
         let mut connecting = 0usize;
         for (_url, st) in map.iter() {
@@ -121,6 +116,7 @@ impl NostrClientManager {
                 _ => {}
             }
         }
+
         let light = if connected > 0 {
             Light::Green
         } else if connecting > 0 {
@@ -128,6 +124,7 @@ impl NostrClientManager {
         } else {
             Light::Red
         };
+
         let last_error = self.inner.last_error.lock().ok().and_then(|e| e.clone());
         NostrConnectionSnapshot {
             light,
@@ -140,17 +137,19 @@ impl NostrClientManager {
     pub async fn fetch_profile_kind0(
         &self,
         author: nostr::PublicKey,
-    ) -> Result<Option<RadrootsProfile>, String> {
+    ) -> Result<Option<RadrootsProfile>> {
         let filter = Filter::new()
             .authors(vec![author])
             .kind(Kind::Metadata)
             .limit(1);
+
         let events = self
             .inner
             .client
             .fetch_events(filter, std::time::Duration::from_secs(5))
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| NetError::Msg(e.to_string()))?;
+
         if let Some(ev) = events.into_iter().next() {
             if let Ok(p) = serde_json::from_str::<RadrootsProfile>(&ev.content) {
                 return Ok(Some(p));
@@ -170,9 +169,87 @@ impl NostrClientManager {
                 };
                 return Ok(Some(p));
             }
-            return Err("failed to parse kind:0 metadata content".to_string());
+            return Err(NetError::Msg(
+                "failed to parse kind:0 metadata content".to_string(),
+            ));
         }
+
         Ok(None)
+    }
+
+    pub fn fetch_profile_kind0_blocking(
+        &self,
+        author: nostr::PublicKey,
+    ) -> Result<Option<RadrootsProfile>> {
+        let rt = self.inner.rt.clone();
+        let inner_for_task = self.inner.clone();
+        rt.block_on(async move {
+            let filter = Filter::new()
+                .authors(vec![author])
+                .kind(Kind::Metadata)
+                .limit(1);
+            let events = inner_for_task
+                .client
+                .fetch_events(filter, std::time::Duration::from_secs(5))
+                .await
+                .map_err(|e| NetError::Msg(e.to_string()))?;
+            if let Some(ev) = events.into_iter().next() {
+                if let Ok(p) = serde_json::from_str::<RadrootsProfile>(&ev.content) {
+                    return Ok(Some(p));
+                }
+                if let Ok(md) = serde_json::from_str::<nostr::Metadata>(&ev.content) {
+                    let p = RadrootsProfile {
+                        name: md.name.unwrap_or_default(),
+                        display_name: md.display_name,
+                        nip05: md.nip05,
+                        about: md.about,
+                        website: md.website.map(|u| u.to_string()),
+                        picture: md.picture.map(|u| u.to_string()),
+                        banner: md.banner.map(|u| u.to_string()),
+                        lud06: md.lud06,
+                        lud16: md.lud16,
+                        bot: None,
+                    };
+                    return Ok(Some(p));
+                }
+                return Err(NetError::Msg(
+                    "failed to parse kind:0 metadata content".to_string(),
+                ));
+            }
+            Ok(None)
+        })
+    }
+
+    pub fn set_profile_kind0_blocking(
+        &self,
+        name: Option<String>,
+        display_name: Option<String>,
+        nip05: Option<String>,
+        about: Option<String>,
+    ) -> Result<String> {
+        let rt = self.inner.rt.clone();
+        let inner_for_task = self.inner.clone();
+        rt.block_on(async move {
+            let mut md = nostr::Metadata::new();
+            if let Some(v) = name {
+                md = md.name(v);
+            }
+            if let Some(v) = display_name {
+                md = md.display_name(v);
+            }
+            if let Some(v) = nip05 {
+                md = md.nip05(v);
+            }
+            if let Some(v) = about {
+                md = md.about(v);
+            }
+            inner_for_task
+                .client
+                .set_metadata(&md)
+                .await
+                .map_err(|e| NetError::Msg(e.to_string()))?;
+            Ok("ok".to_string())
+        })
     }
 
     fn spawn_status_watcher(&self) {
