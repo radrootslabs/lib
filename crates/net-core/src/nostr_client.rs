@@ -252,6 +252,22 @@ impl NostrClientManager {
         })
     }
 
+    pub async fn publish_text_note(&self, content: String) -> Result<String> {
+        let out = self
+            .inner
+            .client
+            .send_event_builder(EventBuilder::text_note(content))
+            .await
+            .map_err(|e| NetError::Msg(e.to_string()))?;
+        Ok(out.val.to_string())
+    }
+
+    pub fn publish_text_note_blocking(&self, content: String) -> Result<String> {
+        let rt = self.inner.rt.clone();
+        let this = self.clone();
+        rt.block_on(async move { this.publish_text_note(content).await })
+    }
+
     fn spawn_status_watcher(&self) {
         let inner = self.inner.clone();
         let rt = inner.rt.clone();
