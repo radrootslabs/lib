@@ -14,6 +14,10 @@ pub mod listing {
     pub mod models;
 }
 
+pub mod post {
+    pub mod models;
+}
+
 pub mod profile {
     pub mod models;
 }
