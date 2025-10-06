@@ -53,3 +53,4 @@ tracing-subscriber = { version = "0.3" }
 typeshare = { version = "1" }
 url  = { version = "2" }
 uuid = { version = "1.16.0" }
+uniffi = { version = "0.29.4" }

@@ -11,7 +11,7 @@ pub fn to_post_event_metadata(e: &Event) -> RadrootsPostEventMetadata {
     RadrootsPostEventMetadata {
         id: e.id.to_string(),
         author: e.pubkey.to_string(),
-        published_at: e.created_at.as_u64() as u32,
+        published_at: e.created_at.as_u64(),
         kind: e.kind.as_u16() as u32,
         post: RadrootsPost {
             content: e.content.clone(),
@@ -25,7 +25,7 @@ pub fn to_profile_event_metadata(e: &Event) -> Option<RadrootsProfileEventMetada
         return Some(RadrootsProfileEventMetadata {
             id: e.id.to_string(),
             author: e.pubkey.to_string(),
-            published_at: e.created_at.as_u64() as u32,
+            published_at: e.created_at.as_u64(),
             kind: e.kind.as_u16() as u32,
             profile: p,
         });
@@ -47,7 +47,7 @@ pub fn to_profile_event_metadata(e: &Event) -> Option<RadrootsProfileEventMetada
         return Some(RadrootsProfileEventMetadata {
             id: e.id.to_string(),
             author: e.pubkey.to_string(),
-            published_at: e.created_at.as_u64() as u32,
+            published_at: e.created_at.as_u64(),
             kind: e.kind.as_u16() as u32,
             profile: p,
         });

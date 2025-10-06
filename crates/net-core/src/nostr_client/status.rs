@@ -14,25 +14,22 @@ impl NostrClientManager {
             if let Some(monitor) = inner_for_task.client.monitor() {
                 let mut rx = monitor.subscribe();
                 while let Ok(notification) = rx.recv().await {
-                    let MonitorNotification::StatusChanged { relay_url, status } = notification
-                    else {
-                        continue;
-                    };
+                    match notification {
+                        MonitorNotification::StatusChanged { relay_url, status } => {
+                            if let Ok(mut map) = inner_for_task.statuses.lock() {
+                                map.insert(relay_url.clone(), status);
+                            } else if let Ok(mut last) = inner_for_task.last_error.lock() {
+                                *last = Some("status watcher: statuses mutex poisoned".to_string());
+                                warn!(
+                                    "status watcher: statuses mutex poisoned; dropping update for {}",
+                                    relay_url
+                                );
+                                continue;
+                            }
 
-                    if let Ok(mut map) = inner_for_task.statuses.lock() {
-                        map.insert(relay_url.clone(), status);
-                    } else {
-                        if let Ok(mut last) = inner_for_task.last_error.lock() {
-                            *last = Some("status watcher: statuses mutex poisoned".to_string());
+                            info!("relay status changed {} -> {:?}", relay_url, status);
                         }
-                        warn!(
-                            "status watcher: statuses mutex poisoned; dropping update for {}",
-                            relay_url
-                        );
-                        continue;
                     }
-
-                    info!("relay status changed {} -> {:?}", relay_url, status);
                 }
             }
         });

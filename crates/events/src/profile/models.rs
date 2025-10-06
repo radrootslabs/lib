@@ -13,7 +13,7 @@ pub struct RadrootsProfileEventIndex {
 pub struct RadrootsProfileEventMetadata {
     pub id: String,
     pub author: String,
-    pub published_at: u32,
+    pub published_at: u64,
     pub kind: u32,
     pub profile: RadrootsProfile,
 }
