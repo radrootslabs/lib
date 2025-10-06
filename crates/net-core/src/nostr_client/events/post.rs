@@ -1,7 +1,7 @@
 use crate::error::{NetError, Result};
 use radroots_events::post::models::RadrootsPostEventMetadata;
 
-use super::manager::NostrClientManager;
+use crate::nostr_client::manager::NostrClientManager;
 
 impl NostrClientManager {
     pub async fn publish_post_event(&self, content: String) -> Result<String> {

@@ -1,7 +1,7 @@
 use crate::error::{NetError, Result};
 use radroots_events::profile::models::RadrootsProfileEventMetadata;
 
-use super::manager::NostrClientManager;
+use crate::nostr_client::manager::NostrClientManager;
 
 impl NostrClientManager {
     pub async fn fetch_profile_event(

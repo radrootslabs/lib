@@ -1,8 +1,10 @@
 mod connection;
 mod inner;
 mod manager;
-mod posts;
-mod profile;
+mod events {
+    mod post;
+    mod profile;
+}
 mod status;
 pub mod types;
 
