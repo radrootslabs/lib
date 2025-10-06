@@ -13,8 +13,8 @@ pub(super) struct Inner {
     pub statuses: Arc<Mutex<HashMap<RelayUrl, RelayStatus>>>,
     pub last_error: Arc<Mutex<Option<String>>>,
     pub rt: Handle,
-    pub posts_tx: broadcast::Sender<RadrootsPostEventMetadata>,
-    pub posts_stream: Arc<Mutex<Option<JoinHandle<()>>>>,
+    pub post_events_tx: broadcast::Sender<RadrootsPostEventMetadata>,
+    pub post_events_stream: Arc<Mutex<Option<JoinHandle<()>>>>,
 }
 
 impl Inner {
@@ -29,8 +29,8 @@ impl Inner {
             statuses: Arc::new(Mutex::new(HashMap::new())),
             last_error: Arc::new(Mutex::new(None)),
             rt,
-            posts_tx: tx,
-            posts_stream: Arc::new(Mutex::new(None)),
+            post_events_tx: tx,
+            post_events_stream: Arc::new(Mutex::new(None)),
         })
     }
 }

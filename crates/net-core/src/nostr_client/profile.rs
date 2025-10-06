@@ -4,7 +4,7 @@ use radroots_events::profile::models::RadrootsProfileEventMetadata;
 use super::manager::NostrClientManager;
 
 impl NostrClientManager {
-    pub async fn fetch_profile_kind0(
+    pub async fn fetch_profile_event(
         &self,
         author: nostr::PublicKey,
     ) -> Result<Option<RadrootsProfileEventMetadata>> {
@@ -26,16 +26,16 @@ impl NostrClientManager {
         Ok(None)
     }
 
-    pub fn fetch_profile_kind0_blocking(
+    pub fn fetch_profile_event_blocking(
         &self,
         author: nostr::PublicKey,
     ) -> Result<Option<RadrootsProfileEventMetadata>> {
         let rt = self.inner.rt.clone();
         let this = self.clone();
-        rt.block_on(async move { this.fetch_profile_kind0(author).await })
+        rt.block_on(async move { this.fetch_profile_event(author).await })
     }
 
-    pub fn set_profile_kind0_blocking(
+    pub fn publish_profile_event_blocking(
         &self,
         name: Option<String>,
         display_name: Option<String>,

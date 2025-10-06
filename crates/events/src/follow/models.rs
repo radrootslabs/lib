@@ -14,6 +14,7 @@ pub struct RadrootsFollowEventMetadata {
     pub id: String,
     pub author: String,
     pub published_at: u32,
+    pub kind: u32,
     pub follow: RadrootsFollow,
 }
 

@@ -9,11 +9,11 @@ use nostr::{
 #[cfg(all(feature = "sdk", feature = "events"))]
 use nostr_sdk::prelude::{Client, Filter, Kind, Timestamp};
 
-pub fn build_text_note(content: impl Into<String>) -> EventBuilder {
+pub fn build_post_event(content: impl Into<String>) -> EventBuilder {
     EventBuilder::text_note(content)
 }
 
-pub fn build_reply(
+pub fn build_post_reply_event(
     parent_event_id_hex: &str,
     parent_author_hex: &str,
     content: impl Into<String>,
@@ -38,7 +38,7 @@ pub fn build_reply(
 }
 
 #[cfg(all(feature = "sdk", feature = "events"))]
-pub async fn fetch_text_notes(
+pub async fn fetch_post_events(
     client: &Client,
     limit: u16,
     since_unix: Option<u64>,

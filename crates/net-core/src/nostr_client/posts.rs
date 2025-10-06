@@ -4,8 +4,8 @@ use radroots_events::post::models::RadrootsPostEventMetadata;
 use super::manager::NostrClientManager;
 
 impl NostrClientManager {
-    pub async fn publish_text_note(&self, content: String) -> Result<String> {
-        let builder = radroots_nostr::events::notes::build_text_note(content);
+    pub async fn publish_post_event(&self, content: String) -> Result<String> {
+        let builder = radroots_nostr::events::post::build_post_event(content);
         let out = self
             .inner
             .client
@@ -15,20 +15,20 @@ impl NostrClientManager {
         Ok(out.val.to_string())
     }
 
-    pub fn publish_text_note_blocking(&self, content: String) -> Result<String> {
+    pub fn publish_post_event_blocking(&self, content: String) -> Result<String> {
         let rt = self.inner.rt.clone();
         let this = self.clone();
-        rt.block_on(async move { this.publish_text_note(content).await })
+        rt.block_on(async move { this.publish_post_event(content).await })
     }
 
-    pub async fn publish_reply_to_event(
+    pub async fn publish_post_reply_event(
         &self,
         parent_event_id_hex: String,
         parent_author_hex: String,
         content: String,
         root_event_id_hex: Option<String>,
     ) -> Result<String> {
-        let builder = radroots_nostr::events::notes::build_reply(
+        let builder = radroots_nostr::events::post::build_post_reply_event(
             &parent_event_id_hex,
             &parent_author_hex,
             content,
@@ -46,7 +46,7 @@ impl NostrClientManager {
         Ok(out.val.to_string())
     }
 
-    pub fn publish_reply_to_event_blocking(
+    pub fn publish_post_reply_event_blocking(
         &self,
         parent_event_id_hex: String,
         parent_author_hex: String,
@@ -56,7 +56,7 @@ impl NostrClientManager {
         let rt = self.inner.rt.clone();
         let this = self.clone();
         rt.block_on(async move {
-            this.publish_reply_to_event(
+            this.publish_post_reply_event(
                 parent_event_id_hex,
                 parent_author_hex,
                 content,
@@ -66,25 +66,25 @@ impl NostrClientManager {
         })
     }
 
-    pub async fn fetch_text_notes(
+    pub async fn fetch_post_events(
         &self,
         limit: u16,
         since_unix: Option<u64>,
     ) -> Result<Vec<RadrootsPostEventMetadata>> {
         let items =
-            radroots_nostr::events::notes::fetch_text_notes(&self.inner.client, limit, since_unix)
+            radroots_nostr::events::post::fetch_post_events(&self.inner.client, limit, since_unix)
                 .await
                 .map_err(|e| NetError::Msg(e.to_string()))?;
         Ok(items)
     }
 
-    pub fn fetch_text_notes_blocking(
+    pub fn fetch_post_events_blocking(
         &self,
         limit: u16,
         since_unix: Option<u64>,
     ) -> Result<Vec<RadrootsPostEventMetadata>> {
         let rt = self.inner.rt.clone();
         let this = self.clone();
-        rt.block_on(async move { this.fetch_text_notes(limit, since_unix).await })
+        rt.block_on(async move { this.fetch_post_events(limit, since_unix).await })
     }
 }

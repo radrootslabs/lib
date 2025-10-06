@@ -34,11 +34,11 @@ pub mod prelude {
     pub use crate::events::{
         jobs::{nostr_build_event_job_feedback, nostr_build_event_job_result},
         metadata::{build_metadata_event, fetch_metadata_for_author, post_metadata_event},
-        notes::{build_reply as build_text_reply, build_text_note},
+        post::{build_post_event, build_post_reply_event},
     };
 
     #[cfg(all(feature = "sdk", feature = "events"))]
-    pub use crate::events::notes::fetch_text_notes;
+    pub use crate::events::post::fetch_post_events;
 
     pub use crate::parse::{parse_pubkey, parse_pubkeys};
     pub use crate::relays::{add_relay, connect, remove_relay};

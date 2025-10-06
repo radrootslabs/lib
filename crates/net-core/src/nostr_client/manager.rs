@@ -20,10 +20,10 @@ impl NostrClientManager {
 }
 
 impl NostrClientManager {
-    pub fn start_textnote_stream(&self, since_unix: Option<u64>) {
+    pub fn start_post_event_stream(&self, since_unix: Option<u64>) {
         if self
             .inner
-            .posts_stream
+            .post_events_stream
             .lock()
             .ok()
             .is_some_and(|h| h.is_some())
@@ -61,29 +61,29 @@ impl NostrClientManager {
                         let meta = radroots_nostr::event_adapters::to_post_event_metadata(&event);
                         let ts = event.created_at.as_u64();
                         since = ts.saturating_add(1);
-                        let _ = inner.posts_tx.send(meta);
+                        let _ = inner.post_events_tx.send(meta);
                     }
                 }
             }
         });
 
-        if let Ok(mut g) = self.inner.posts_stream.lock() {
+        if let Ok(mut g) = self.inner.post_events_stream.lock() {
             *g = Some(handle);
         }
     }
 
-    pub fn stop_textnote_stream(&self) {
-        if let Ok(mut g) = self.inner.posts_stream.lock() {
+    pub fn stop_post_event_stream(&self) {
+        if let Ok(mut g) = self.inner.post_events_stream.lock() {
             if let Some(h) = g.take() {
                 h.abort();
             }
         }
     }
 
-    pub fn subscribe_text_notes(
+    pub fn subscribe_post_events(
         &self,
     ) -> tokio::sync::broadcast::Receiver<radroots_events::post::models::RadrootsPostEventMetadata>
     {
-        self.inner.posts_tx.subscribe()
+        self.inner.post_events_tx.subscribe()
     }
 }

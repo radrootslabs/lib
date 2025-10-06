@@ -1,6 +1,6 @@
 pub mod jobs;
 pub mod metadata;
-pub mod notes;
+pub mod post;
 
 extern crate alloc;
 use alloc::{string::String, vec::Vec};

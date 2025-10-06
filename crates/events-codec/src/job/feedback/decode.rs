@@ -1,11 +1,11 @@
 use radroots_events::{
+    RadrootsNostrEvent, RadrootsNostrEventPtr,
     job::{
+        JobPaymentRequest,
         feedback::models::{
             RadrootsJobFeedback, RadrootsJobFeedbackEventIndex, RadrootsJobFeedbackEventMetadata,
         },
-        JobPaymentRequest,
     },
-    RadrootsNostrEvent, RadrootsNostrEventPtr,
 };
 
 use crate::job::{
@@ -92,6 +92,7 @@ pub fn metadata_from_event(
         id,
         author,
         published_at,
+        kind,
         job_feedback,
     })
 }

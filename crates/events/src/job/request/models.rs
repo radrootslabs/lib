@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-
-use crate::{job::JobInputType, RadrootsNostrEvent};
+use crate::{RadrootsNostrEvent, job::JobInputType};
 
 #[typeshare::typeshare]
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -16,6 +15,7 @@ pub struct RadrootsJobRequestEventMetadata {
     pub id: String,
     pub author: String,
     pub published_at: u32,
+    pub kind: u32,
     pub job_request: RadrootsJobRequest,
 }
 

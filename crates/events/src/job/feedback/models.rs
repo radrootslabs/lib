@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    job::{JobFeedbackStatus, JobPaymentRequest},
     RadrootsNostrEvent, RadrootsNostrEventPtr,
+    job::{JobFeedbackStatus, JobPaymentRequest},
 };
 
 #[typeshare::typeshare]
@@ -18,6 +18,7 @@ pub struct RadrootsJobFeedbackEventMetadata {
     pub id: String,
     pub author: String,
     pub published_at: u32,
+    pub kind: u32,
     pub job_feedback: RadrootsJobFeedback,
 }
 
