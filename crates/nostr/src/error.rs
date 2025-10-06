@@ -18,6 +18,9 @@ pub enum NostrUtilsError {
 
     #[error("Event builder failure: {0}")]
     EventBuildError(#[from] nostr::event::builder::Error),
+
+    #[error("Key error: {0}")]
+    KeyError(#[from] nostr::key::Error),
 }
 
 #[derive(Debug, Error)]

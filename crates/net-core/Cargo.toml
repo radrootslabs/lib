@@ -19,7 +19,8 @@ nostr-client = [
     "dep:secrecy",
     "dep:hex",
     "dep:tempfile",
-    "dep:serde_json"
+    "dep:serde_json",
+    "dep:radroots-nostr"
 ]
 directories = ["std", "dep:directories"]
 fs-persistence = ["std"]
@@ -27,6 +28,7 @@ fs-persistence = ["std"]
 [dependencies]
 radroots-events = { workspace = true, optional = true, default-features = true, features = ["std", "serde", "typeshare"] }
 radroots-log = { workspace = true }
+radroots-nostr = { workspace = true, optional = true, default-features = true, features = ["sdk", "events"] }
 directories = { workspace = true, optional = true }
 hex = { workspace = true, optional = true }
 nostr = { workspace = true, optional = true }

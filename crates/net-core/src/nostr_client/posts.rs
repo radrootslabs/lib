@@ -1,17 +1,15 @@
-use std::time::Duration;
-
 use crate::error::{NetError, Result};
-use radroots_events::post::models::{RadrootsPost, RadrootsPostEventMetadata};
+use radroots_events::post::models::RadrootsPostEventMetadata;
 
 use super::manager::NostrClientManager;
-use nostr_sdk::prelude::*;
 
 impl NostrClientManager {
     pub async fn publish_text_note(&self, content: String) -> Result<String> {
+        let builder = radroots_nostr::events::notes::build_text_note(content);
         let out = self
             .inner
             .client
-            .send_event_builder(EventBuilder::text_note(content))
+            .send_event_builder(builder)
             .await
             .map_err(|e| NetError::Msg(e.to_string()))?;
         Ok(out.val.to_string())
@@ -30,25 +28,14 @@ impl NostrClientManager {
         content: String,
         root_event_id_hex: Option<String>,
     ) -> Result<String> {
-        let parent_id =
-            EventId::from_hex(&parent_event_id_hex).map_err(|_| NetError::InvalidHex32)?;
-        let parent_pubkey =
-            PublicKey::from_hex(&parent_author_hex).map_err(|_| NetError::InvalidHex32)?;
+        let builder = radroots_nostr::events::notes::build_reply(
+            &parent_event_id_hex,
+            &parent_author_hex,
+            content,
+            root_event_id_hex.as_deref(),
+        )
+        .map_err(|e| NetError::Msg(e.to_string()))?;
 
-        let mut tags: Vec<Tag> = Vec::new();
-
-        if let Some(root_hex) = root_event_id_hex {
-            if !root_hex.is_empty() {
-                if let Ok(root_id) = EventId::from_hex(&root_hex) {
-                    tags.push(Tag::event(root_id));
-                }
-            }
-        }
-
-        tags.push(Tag::event(parent_id));
-        tags.push(Tag::public_key(parent_pubkey));
-
-        let builder = EventBuilder::text_note(content).tags(tags);
         let out = self
             .inner
             .client
@@ -84,28 +71,11 @@ impl NostrClientManager {
         limit: u16,
         since_unix: Option<u64>,
     ) -> Result<Vec<RadrootsPostEventMetadata>> {
-        let mut filter = Filter::new().kind(Kind::TextNote).limit(limit.into());
-        if let Some(s) = since_unix {
-            filter = filter.since(Timestamp::from(s));
-        }
-        let events = self
-            .inner
-            .client
-            .fetch_events(filter, Duration::from_secs(10))
-            .await
-            .map_err(|e| NetError::Msg(e.to_string()))?;
-        let out = events
-            .into_iter()
-            .map(|ev| RadrootsPostEventMetadata {
-                id: ev.id.to_string(),
-                author: ev.pubkey.to_string(),
-                published_at: ev.created_at.as_u64() as u32,
-                post: RadrootsPost {
-                    content: ev.content,
-                },
-            })
-            .collect();
-        Ok(out)
+        let items =
+            radroots_nostr::events::notes::fetch_text_notes(&self.inner.client, limit, since_unix)
+                .await
+                .map_err(|e| NetError::Msg(e.to_string()))?;
+        Ok(items)
     }
 
     pub fn fetch_text_notes_blocking(

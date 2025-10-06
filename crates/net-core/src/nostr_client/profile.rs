@@ -1,7 +1,5 @@
-use std::time::Duration;
-
 use crate::error::{NetError, Result};
-use radroots_events::profile::models::{RadrootsProfile, RadrootsProfileEventMetadata};
+use radroots_events::profile::models::RadrootsProfileEventMetadata;
 
 use super::manager::NostrClientManager;
 
@@ -10,54 +8,21 @@ impl NostrClientManager {
         &self,
         author: nostr::PublicKey,
     ) -> Result<Option<RadrootsProfileEventMetadata>> {
-        let filter = nostr_sdk::prelude::Filter::new()
-            .authors(vec![author])
-            .kind(nostr_sdk::prelude::Kind::Metadata)
-            .limit(1);
-
-        let events = self
-            .inner
-            .client
-            .fetch_events(filter, Duration::from_secs(5))
-            .await
-            .map_err(|e| NetError::Msg(e.to_string()))?;
-
-        if let Some(ev) = events.into_iter().next() {
-            if let Ok(p) = serde_json::from_str::<RadrootsProfile>(&ev.content) {
-                let out = RadrootsProfileEventMetadata {
-                    id: ev.id.to_string(),
-                    author: ev.pubkey.to_string(),
-                    published_at: ev.created_at.as_u64() as u32,
-                    profile: p,
-                };
-                return Ok(Some(out));
-            }
-            if let Ok(md) = serde_json::from_str::<nostr::Metadata>(&ev.content) {
-                let p = RadrootsProfile {
-                    name: md.name.unwrap_or_default(),
-                    display_name: md.display_name,
-                    nip05: md.nip05,
-                    about: md.about,
-                    website: md.website.map(|u| u.to_string()),
-                    picture: md.picture.map(|u| u.to_string()),
-                    banner: md.banner.map(|u| u.to_string()),
-                    lud06: md.lud06,
-                    lud16: md.lud16,
-                    bot: None,
-                };
-                let out = RadrootsProfileEventMetadata {
-                    id: ev.id.to_string(),
-                    author: ev.pubkey.to_string(),
-                    published_at: ev.created_at.as_u64() as u32,
-                    profile: p,
-                };
-                return Ok(Some(out));
+        let ev = radroots_nostr::events::metadata::fetch_metadata_for_author(
+            &self.inner.client,
+            author,
+            core::time::Duration::from_secs(5),
+        )
+        .await
+        .map_err(|e| NetError::Msg(e.to_string()))?;
+        if let Some(e) = ev {
+            if let Some(meta) = radroots_nostr::event_adapters::to_profile_event_metadata(&e) {
+                return Ok(Some(meta));
             }
             return Err(NetError::Msg(
                 "failed to parse kind:0 metadata content".to_string(),
             ));
         }
-
         Ok(None)
     }
 
@@ -93,11 +58,10 @@ impl NostrClientManager {
             if let Some(v) = about {
                 md = md.about(v);
             }
-            inner_for_task
-                .client
-                .set_metadata(&md)
-                .await
-                .map_err(|e| NetError::Msg(e.to_string()))?;
+            let _ =
+                radroots_nostr::events::metadata::post_metadata_event(&inner_for_task.client, &md)
+                    .await
+                    .map_err(|e| NetError::Msg(e.to_string()))?;
             Ok::<(), NetError>(())
         })?;
         Ok("ok".to_string())

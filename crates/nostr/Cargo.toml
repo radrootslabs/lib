@@ -12,6 +12,7 @@ default = ["std", "sdk"]
 std = []
 sdk = ["dep:nostr-sdk"]
 codec = ["dep:radroots-events", "dep:radroots-events-codec"]
+events = ["dep:radroots-events"]
 http = ["dep:reqwest"]
 
 [dependencies]
@@ -21,5 +22,5 @@ nostr = { workspace = true, features = ["nip04"] }
 nostr-sdk = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true, default-features = false, features = ["json", "rustls-tls"] }
 serde = { workspace = true }
-serde_json = { workspace = true } 
+serde_json = { workspace = true }
 thiserror = { workspace = true }

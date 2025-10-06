@@ -1704,6 +1704,7 @@ dependencies = [
  "nostr-sdk",
  "radroots-events",
  "radroots-log",
+ "radroots-nostr",
  "secrecy",
  "serde",
  "serde_json",
