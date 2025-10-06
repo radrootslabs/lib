@@ -32,19 +32,14 @@ impl NetBuilder {
         self
     }
 
-    #[allow(unreachable_code)]
     pub fn build(self) -> Result<NetHandle> {
-        let net = Net::new(self.config.clone());
+        let mut _net = Net::new(self.config.clone());
 
         #[cfg(feature = "rt")]
-        {
-            let mut net = net;
-            if self.manage_runtime {
-                net.init_managed_runtime(None)?;
-            }
-            return Ok(NetHandle::from_inner(net));
+        if self.manage_runtime {
+            _net.init_managed_runtime(None)?;
         }
 
-        Ok(NetHandle::from_inner(net))
+        Ok(NetHandle::from_inner(_net))
     }
 }

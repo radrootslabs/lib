@@ -4,7 +4,7 @@ use core::fmt;
 pub enum JobParseError {
     MissingTag(&'static str),
     InvalidTag(&'static str),
-    InvalidNumber(&'static str, std::num::ParseIntError),
+    InvalidNumber(&'static str, core::num::ParseIntError),
     NonWholeSats(&'static str),
     AmountOverflow(&'static str),
     MissingChainTag(&'static str),
