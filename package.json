@@ -1,0 +1,19 @@
+{
+  "name": "rad-roots-crates",
+  "private": true,
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev"
+  },
+  "devDependencies": {
+    "turbo": "2.5.3",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "workspaces": [
+    "*/bindings/ts"
+  ],
+  "packageManager": "yarn@1.22.22"
+}
