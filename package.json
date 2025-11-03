@@ -13,7 +13,9 @@
     "node": ">=18"
   },
   "workspaces": [
-    "*/bindings/ts"
+    "*/bindings/ts",
+    "../packages/dev",
+    "../packages/tsconfig"
   ],
   "packageManager": "yarn@1.22.22"
 }
