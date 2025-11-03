@@ -40,3 +40,6 @@ notes*.json
 tree*.txt
 diff*.txt
 prompt*.txt
+
+# Dev
+.local

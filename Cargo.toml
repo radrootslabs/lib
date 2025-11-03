@@ -1,6 +1,16 @@
 [workspace]
 members = [
-    "crates/*",
+  "core",
+  "events",
+  "events-codec",
+  "events-indexed",
+  "identity",
+  "log",
+  "net",
+  "net-core",
+  "nostr",
+  "runtime",
+  "trade",
 ]
 resolver = "2"
 
@@ -11,17 +21,17 @@ rust-version = "1.86.0"
 license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
-radroots-core = { path = "crates/core", version = "0.1.0", default-features = false }
-radroots-events = { path = "crates/events", version = "0.1.0", default-features = false }
-radroots-events-codec = { path = "crates/events-codec", version = "0.1.0", default-features = false }
-radroots-events-indexed = { path = "crates/events-indexed", version = "0.1.0", default-features = false }
-radroots-identity = { path = "crates/identity", version = "0.1.0", default-features = false }
-radroots-nostr = { path = "crates/nostr", version = "0.1.0", default-features = false }
-radroots-runtime = { path = "crates/runtime", version = "0.1.0", default-features = false }
-radroots-log = { path = "crates/log", version = "0.1.0", default-features = false }
-radroots-net = { path = "crates/net", version = "0.1.0", default-features = false }
-radroots-net-core = { path = "crates/net-core", version = "0.1.0", default-features = false }
-radroots-trade = { path = "crates/trade", version = "0.1.0", default-features = false }
+radroots-core = { path = "core", version = "0.1.0", default-features = false }
+radroots-events = { path = "events", version = "0.1.0", default-features = false }
+radroots-events-codec = { path = "events-codec", version = "0.1.0", default-features = false }
+radroots-events-indexed = { path = "events-indexed", version = "0.1.0", default-features = false }
+radroots-identity = { path = "identity", version = "0.1.0", default-features = false }
+radroots-nostr = { path = "nostr", version = "0.1.0", default-features = false }
+radroots-runtime = { path = "runtime", version = "0.1.0", default-features = false }
+radroots-log = { path = "log", version = "0.1.0", default-features = false }
+radroots-net = { path = "net", version = "0.1.0", default-features = false }
+radroots-net-core = { path = "net-core", version = "0.1.0", default-features = false }
+radroots-trade = { path = "trade", version = "0.1.0", default-features = false }
 
 anyhow = { version = "1" }
 cfg-if = { version = "1" }
