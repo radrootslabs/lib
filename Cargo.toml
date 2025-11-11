@@ -10,7 +10,10 @@ members = [
   "net-core",
   "nostr",
   "runtime",
+  "sql-wasm-bridge",
+  "sql-wasm-core",
   "trade",
+  "types",
 ]
 resolver = "2"
 
@@ -31,7 +34,10 @@ radroots-runtime = { path = "runtime", version = "0.1.0", default-features = fal
 radroots-log = { path = "log", version = "0.1.0", default-features = false }
 radroots-net = { path = "net", version = "0.1.0", default-features = false }
 radroots-net-core = { path = "net-core", version = "0.1.0", default-features = false }
+radroots-sql-wasm-bridge = { path = "sql-wasm-bridge", version = "0.1.0" }
+radroots-sql-wasm-core = { path = "sql-wasm-core", version = "0.1.0" }
 radroots-trade = { path = "trade", version = "0.1.0", default-features = false }
+radroots-types = { path = "types", version = "0.1.0", default-features = false }
 
 anyhow = { version = "1" }
 cfg-if = { version = "1" }
@@ -41,13 +47,15 @@ config = { version = "0.14" }
 directories = { version = "6" }
 futures = { version = "0.3" }
 hex = { version = "0.4" }
+js-sys = { version = "0.3" }
 nostr = { version = "0.43.0" }
 nostr-relay-pool = { version = "0.43.0" }
 nostr-sdk = { version = "0.43.0" }
 num_cpus = { version = "1.17.0" }
 secrecy = { version = "0.10.3" }
-serde = { version = "1", default-features = false }
-serde_json = { version = "1", default-features = false }
+serde = { version = "1", default-features = false, features = ["derive"] }
+serde_json = { version = "1", default-features = false, features = ["alloc"] }
+serde-wasm-bindgen = { version = "0.6" }
 reqwest = { version = "0.12", default-features = false }
 rust_decimal = { version = "1", default-features = false }
 rust_decimal_macros = { version = "1" }
@@ -60,7 +68,10 @@ tracing = { version = "0.1", default-features = false }
 tracing-appender = { version = "0.2" }
 tracing-log = { version = "0.2" }
 tracing-subscriber = { version = "0.3" }
+ts-rs = { version = "11.1" }
 typeshare = { version = "1" }
 url  = { version = "2" }
 uuid = { version = "1.16.0" }
 uniffi = { version = "0.29.4" }
+wasm-bindgen = { version = "0.2" }
+wasm-bindgen-futures = { version = "0.4" }

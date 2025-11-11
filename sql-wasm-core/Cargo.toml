@@ -1,0 +1,25 @@
+[package]
+name = "radroots-sql-wasm-core"
+version.workspace = true
+edition.workspace = true
+authors = ["Radroots Authors"]
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = []
+
+[dependencies]
+radroots-sql-wasm-bridge = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+serde-wasm-bindgen = { workspace = true }
+thiserror = { workspace = true }
+wasm-bindgen = { workspace = true }
+js-sys = { workspace = true }
+ts-rs = { workspace = true }
+uuid = { workspace = true, features = ["v4", "fast-rng", "js"] }
