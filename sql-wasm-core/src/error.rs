@@ -1,5 +1,4 @@
 use thiserror::Error;
-use wasm_bindgen::JsValue;
 
 #[derive(Error, Debug, Clone)]
 pub enum SqlWasmError {
@@ -25,12 +24,15 @@ impl SqlWasmError {
             SqlWasmError::Internal => "ERR_INTERNAL",
         }
     }
+}
 
-    pub fn to_js_value(self) -> JsValue {
+#[cfg(target_arch = "wasm32")]
+impl SqlWasmError {
+    pub fn to_js_value(self) -> wasm_bindgen::JsValue {
         let o = serde_json::json!({
             "code": self.code(),
             "message": self.to_string()
         });
-        JsValue::from_str(&o.to_string())
+        wasm_bindgen::JsValue::from_str(&o.to_string())
     }
 }

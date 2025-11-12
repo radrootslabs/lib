@@ -12,8 +12,9 @@ crate-type = ["rlib"]
 
 [features]
 default = []
+ts-rs = ["dep:ts-rs"]
 
 [dependencies]
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-ts-rs = { workspace = true }
+ts-rs = { workspace = true, optional = true }

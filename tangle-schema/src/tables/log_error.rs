@@ -1,9 +1,10 @@
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+#[cfg(feature = "ts-rs")]
 use ts_rs::TS;
 
-#[derive(Serialize, Deserialize, TS)]
-#[ts(export, export_to = "types.ts")]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[derive(Serialize, Deserialize)]
 pub struct LogError {
     pub id: String,
     pub created_at: String,
@@ -18,8 +19,9 @@ pub struct LogError {
     pub data: Option<String>,
 }
 
-#[derive(Clone, Deserialize, Serialize, TS)]
-#[ts(export, export_to = "types.ts")]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct ILogErrorFields {
     pub error: String,
     pub message: String,
@@ -31,57 +33,60 @@ pub struct ILogErrorFields {
     pub data: Option<String>,
 }
 
-#[derive(Clone, Deserialize, Serialize, TS)]
-#[ts(export, export_to = "types.ts")]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct ILogErrorFieldsPartial {
-    #[ts(optional, type = "string | null")]
-    pub error: Option<Value>,
-    #[ts(optional, type = "string | null")]
-    pub message: Option<Value>,
-    #[ts(optional, type = "string | null")]
-    pub stack_trace: Option<Value>,
-    #[ts(optional, type = "string | null")]
-    pub cause: Option<Value>,
-    #[ts(optional, type = "string | null")]
-    pub app_system: Option<Value>,
-    #[ts(optional, type = "string | null")]
-    pub app_version: Option<Value>,
-    #[ts(optional, type = "string | null")]
-    pub nostr_pubkey: Option<Value>,
-    #[ts(optional, type = "string | null")]
-    pub data: Option<Value>,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
+    pub error: Option<serde_json::Value>,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
+    pub message: Option<serde_json::Value>,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
+    pub stack_trace: Option<serde_json::Value>,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
+    pub cause: Option<serde_json::Value>,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
+    pub app_system: Option<serde_json::Value>,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
+    pub app_version: Option<serde_json::Value>,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
+    pub nostr_pubkey: Option<serde_json::Value>,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
+    pub data: Option<serde_json::Value>,
 }
 
-#[derive(Clone, Deserialize, Serialize, TS)]
-#[ts(export, export_to = "types.ts")]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct ILogErrorFieldsFilter {
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub id: Option<String>,
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub created_at: Option<String>,
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub updated_at: Option<String>,
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub error: Option<String>,
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub message: Option<String>,
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub stack_trace: Option<String>,
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub cause: Option<String>,
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub app_system: Option<String>,
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub app_version: Option<String>,
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub nostr_pubkey: Option<String>,
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub data: Option<String>,
 }
 
-#[derive(Clone, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(untagged)]
-#[ts(export, export_to = "types.ts")]
 pub enum LogErrorQueryBindValues {
     Id { id: String },
     NostrPubkey { nostr_pubkey: String },
