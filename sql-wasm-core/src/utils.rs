@@ -44,7 +44,13 @@ pub fn to_partial_object_map<T: Serialize>(opts: T) -> Result<Map<String, Value>
 
 pub fn to_db_bind_value(value: &Value) -> Value {
     match value {
-        Value::Bool(b) => Value::String(if *b { "1".to_string() } else { "0".to_string() }),
+        Value::Bool(b) => {
+            if *b {
+                Value::from(1)
+            } else {
+                Value::from(0)
+            }
+        }
         Value::Number(n) => {
             if let Some(f) = n.as_f64() {
                 Value::from(f)
