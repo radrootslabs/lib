@@ -1,13 +1,12 @@
 use chrono::{SecondsFormat, Utc};
+use radroots_sql_core::error::SqlError;
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::{Map, Value};
 use uuid::Uuid;
 
-use crate::error::SqlWasmError;
-
-pub fn parse_json<T: for<'de> Deserialize<'de>>(s: &str) -> Result<T, SqlWasmError> {
-    serde_json::from_str::<T>(s).map_err(|e| SqlWasmError::SerializationError(e.to_string()))
+pub fn parse_json<T: for<'de> Deserialize<'de>>(s: &str) -> Result<T, SqlError> {
+    serde_json::from_str::<T>(s).map_err(SqlError::from)
 }
 
 pub fn uuidv4() -> String {
@@ -18,21 +17,19 @@ pub fn time_created_on() -> String {
     Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true)
 }
 
-pub fn to_object_map<T: Serialize>(opts: T) -> Result<Map<String, Value>, SqlWasmError> {
-    let v =
-        serde_json::to_value(opts).map_err(|e| SqlWasmError::SerializationError(e.to_string()))?;
+pub fn to_object_map<T: Serialize>(opts: T) -> Result<Map<String, Value>, SqlError> {
+    let v = serde_json::to_value(opts).map_err(SqlError::from)?;
     let obj = v
         .as_object()
-        .ok_or_else(|| SqlWasmError::SerializationError("Expected an object".to_string()))?;
+        .ok_or_else(|| SqlError::SerializationError("Expected an object".to_string()))?;
     Ok(obj.clone())
 }
 
-pub fn to_partial_object_map<T: Serialize>(opts: T) -> Result<Map<String, Value>, SqlWasmError> {
-    let v =
-        serde_json::to_value(opts).map_err(|e| SqlWasmError::SerializationError(e.to_string()))?;
+pub fn to_partial_object_map<T: Serialize>(opts: T) -> Result<Map<String, Value>, SqlError> {
+    let v = serde_json::to_value(opts).map_err(SqlError::from)?;
     let obj = v
         .as_object()
-        .ok_or_else(|| SqlWasmError::SerializationError("Expected an object".to_string()))?;
+        .ok_or_else(|| SqlError::SerializationError("Expected an object".to_string()))?;
     let mut filtered = Map::new();
     for (k, v) in obj.iter() {
         if !v.is_null() {
@@ -44,13 +41,7 @@ pub fn to_partial_object_map<T: Serialize>(opts: T) -> Result<Map<String, Value>
 
 pub fn to_db_bind_value(value: &Value) -> Value {
     match value {
-        Value::Bool(b) => {
-            if *b {
-                Value::from(1)
-            } else {
-                Value::from(0)
-            }
-        }
+        Value::Bool(b) => Value::from(i64::from(*b)),
         Value::Number(n) => {
             if let Some(f) = n.as_f64() {
                 Value::from(f)
@@ -71,9 +62,7 @@ pub fn to_db_bind_value(value: &Value) -> Value {
     }
 }
 
-pub fn build_where_clause_eq<T: Serialize>(
-    filter: &T,
-) -> Result<(String, Vec<Value>), SqlWasmError> {
+pub fn build_where_clause_eq<T: Serialize>(filter: &T) -> Result<(String, Vec<Value>), SqlError> {
     let obj = to_partial_object_map(filter)?;
     if obj.is_empty() {
         return Ok((String::new(), Vec::new()));

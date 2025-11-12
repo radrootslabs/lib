@@ -1,7 +1,6 @@
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
-pub mod error;
 pub mod utils;
 
 #[cfg(target_arch = "wasm32")]

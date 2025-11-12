@@ -1,0 +1,24 @@
+[package]
+name = "radroots-sql-core"
+description = "SQL support layer for Radroots"
+version.workspace = true
+edition.workspace = true
+authors = ["Radroots Authors"]
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["rlib"]
+
+[features]
+web = ["dep:radroots-sql-wasm-bridge", "dep:serde-wasm-bindgen", "dep:wasm-bindgen"]
+native = ["dep:rusqlite"]
+embedded = []
+
+[dependencies]
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+radroots-sql-wasm-bridge = { workspace = true, optional = true }
+wasm-bindgen = { workspace = true, optional = true }
+serde-wasm-bindgen = { workspace = true, optional = true }
+rusqlite = { workspace = true, features = ["bundled"], optional = true }
