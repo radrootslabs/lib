@@ -1856,6 +1856,7 @@ dependencies = [
 name = "radroots-tangle-schema"
 version = "0.1.0"
 dependencies = [
+ "radroots-types",
  "serde",
  "serde_json",
  "ts-rs",

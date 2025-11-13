@@ -4,6 +4,7 @@
 extern crate alloc;
 
 pub mod error;
+pub mod migrations;
 
 #[cfg(all(feature = "web", target_arch = "wasm32"))]
 mod executor_wasm;

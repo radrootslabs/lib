@@ -1,6 +1,7 @@
 pub use radroots_sql_core::error::SqlError;
 pub use radroots_sql_core::{ExecOutcome, SqlExecutor};
 
+pub mod migrations;
 pub mod tables;
 pub use tables::log_error;
 
@@ -15,6 +16,14 @@ impl<E: SqlExecutor> TangleSql<E> {
 
     pub fn executor(&self) -> &E {
         &self.executor
+    }
+
+    pub fn migrate_up(&self) -> Result<(), SqlError> {
+        crate::migrations::run_all_up(self.executor())
+    }
+
+    pub fn migrate_down(&self) -> Result<(), SqlError> {
+        crate::migrations::run_all_down(self.executor())
     }
 
     pub fn insert_log_error(

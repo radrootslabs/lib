@@ -18,3 +18,4 @@ ts-rs = ["dep:ts-rs"]
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 ts-rs = { workspace = true, optional = true }
+radroots-types = { workspace = true }

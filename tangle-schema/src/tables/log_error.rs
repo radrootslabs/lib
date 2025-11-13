@@ -1,3 +1,4 @@
+use radroots_types::types::{IResult, IResultList};
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
@@ -91,3 +92,130 @@ pub enum LogErrorQueryBindValues {
     Id { id: String },
     NostrPubkey { nostr_pubkey: String },
 }
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(
+    feature = "ts-rs",
+    ts(
+        export,
+        export_to = "types.ts",
+        rename = "ILogErrorCreate",
+        type = "ILogErrorFields"
+    )
+)]
+
+pub struct ILogErrorCreateTs;
+pub type ILogErrorCreate = ILogErrorFields;
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(
+    feature = "ts-rs",
+    ts(
+        export,
+        export_to = "types.ts",
+        rename = "ILogErrorCreateResolve",
+        type = "IResult<string>"
+    )
+)]
+pub struct ILogErrorCreateResolveTs;
+pub type ILogErrorCreateResolve = IResult<String>;
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(
+    feature = "ts-rs",
+    ts(export, export_to = "types.ts", rename = "ILogErrorFindOne")
+)]
+#[derive(Deserialize, Serialize)]
+pub struct ILogErrorFindOneArgs {
+    pub on: LogErrorQueryBindValues,
+}
+pub type ILogErrorFindOne = ILogErrorFindOneArgs;
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(
+    feature = "ts-rs",
+    ts(
+        export,
+        export_to = "types.ts",
+        rename = "ILogErrorFindOneResolve",
+        type = "IResult<LogError>"
+    )
+)]
+pub struct ILogErrorFindOneResolveTs;
+pub type ILogErrorFindOneResolve = IResult<LogError>;
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(
+    feature = "ts-rs",
+    ts(export, export_to = "types.ts", rename = "ILogErrorFindMany")
+)]
+#[derive(Deserialize, Serialize)]
+pub struct ILogErrorFindManyArgs {
+    pub filter: Option<ILogErrorFieldsFilter>,
+}
+pub type ILogErrorFindMany = ILogErrorFindManyArgs;
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(
+    feature = "ts-rs",
+    ts(
+        export,
+        export_to = "types.ts",
+        rename = "ILogErrorFindManyResolve",
+        type = "IResultList<LogError>"
+    )
+)]
+pub struct ILogErrorFindManyResolveTs;
+pub type ILogErrorFindManyResolve = IResultList<LogError>;
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(
+    feature = "ts-rs",
+    ts(
+        export,
+        export_to = "types.ts",
+        rename = "ILogErrorDelete",
+        type = "ILogErrorFindOne"
+    )
+)]
+
+pub struct ILogErrorDeleteTs;
+pub type ILogErrorDelete = ILogErrorFields;
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(
+    feature = "ts-rs",
+    ts(
+        export,
+        export_to = "types.ts",
+        rename = "ILogErrorDeleteResolve",
+        type = "IResult<string>"
+    )
+)]
+pub struct ILogErrorDeleteResolveTs;
+pub type ILogErrorDeleteResolve = IResult<String>;
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(
+    feature = "ts-rs",
+    ts(export, export_to = "types.ts", rename = "ILogErrorUpdate")
+)]
+#[derive(Deserialize, Serialize)]
+pub struct ILogErrorUpdateArgs {
+    pub on: LogErrorQueryBindValues,
+    pub fields: ILogErrorFieldsPartial,
+}
+pub type ILogErrorUpdate = ILogErrorUpdateArgs;
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(
+    feature = "ts-rs",
+    ts(
+        export,
+        export_to = "types.ts",
+        rename = "ILogErrorUpdateResolve",
+        type = "IResult<string>"
+    )
+)]
+pub struct ILogErrorUpdateResolveTs;
+pub type ILogErrorUpdateResolve = IResult<String>;
