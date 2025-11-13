@@ -86,7 +86,7 @@ pub struct ILogErrorFieldsFilter {
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum LogErrorQueryBindValues {
     Id { id: String },
@@ -114,11 +114,11 @@ pub type ILogErrorCreate = ILogErrorFields;
         export,
         export_to = "types.ts",
         rename = "ILogErrorCreateResolve",
-        type = "IResult<string>"
+        type = "IResult<LogError>"
     )
 )]
 pub struct ILogErrorCreateResolveTs;
-pub type ILogErrorCreateResolve = IResult<String>;
+pub type ILogErrorCreateResolve = IResult<LogError>;
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
@@ -138,11 +138,11 @@ pub type ILogErrorFindOne = ILogErrorFindOneArgs;
         export,
         export_to = "types.ts",
         rename = "ILogErrorFindOneResolve",
-        type = "IResult<LogError>"
+        type = "IResult<LogError | undefined>"
     )
 )]
 pub struct ILogErrorFindOneResolveTs;
-pub type ILogErrorFindOneResolve = IResult<LogError>;
+pub type ILogErrorFindOneResolve = IResult<Option<LogError>>;
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
@@ -180,7 +180,7 @@ pub type ILogErrorFindManyResolve = IResultList<LogError>;
 )]
 
 pub struct ILogErrorDeleteTs;
-pub type ILogErrorDelete = ILogErrorFields;
+pub type ILogErrorDelete = ILogErrorFindOneArgs;
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
@@ -214,8 +214,8 @@ pub type ILogErrorUpdate = ILogErrorUpdateArgs;
         export,
         export_to = "types.ts",
         rename = "ILogErrorUpdateResolve",
-        type = "IResult<string>"
+        type = "IResult<LogError>"
     )
 )]
 pub struct ILogErrorUpdateResolveTs;
-pub type ILogErrorUpdateResolve = IResult<String>;
+pub type ILogErrorUpdateResolve = IResult<LogError>;

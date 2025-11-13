@@ -5,6 +5,13 @@ use ts_rs::TS;
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Serialize)]
+pub struct IError<T> {
+    pub error: T,
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[derive(Serialize)]
 pub struct IResult<T> {
     pub result: T,
 }
@@ -21,4 +28,10 @@ pub struct IResultList<T> {
 #[derive(Serialize)]
 pub struct IResultPass {
     pub pass: bool,
+}
+
+impl<T> From<T> for IError<T> {
+    fn from(error: T) -> Self {
+        Self { error }
+    }
 }

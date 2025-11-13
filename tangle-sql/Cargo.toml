@@ -18,4 +18,5 @@ embedded = ["radroots-sql-core/embedded"]
 [dependencies]
 radroots-sql-core = { workspace = true }
 radroots-tangle-schema = { workspace = true }
+radroots-types = { workspace = true }
 serde_json = { workspace = true }

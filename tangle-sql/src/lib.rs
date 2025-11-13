@@ -3,6 +3,7 @@ pub use radroots_sql_core::{ExecOutcome, SqlExecutor};
 
 pub mod migrations;
 pub mod tables;
+use radroots_types::types::IError;
 pub use tables::log_error;
 
 pub struct TangleSql<E: SqlExecutor> {
@@ -26,39 +27,38 @@ impl<E: SqlExecutor> TangleSql<E> {
         crate::migrations::run_all_down(self.executor())
     }
 
-    pub fn insert_log_error(
+    pub fn log_error_create(
         &self,
-        fields: radroots_tangle_schema::log_error::ILogErrorFields,
-    ) -> Result<radroots_tangle_schema::log_error::LogError, SqlError> {
-        tables::log_error::insert(self.executor(), fields)
+        opts: &radroots_tangle_schema::log_error::ILogErrorCreate,
+    ) -> Result<radroots_tangle_schema::log_error::ILogErrorCreateResolve, IError<SqlError>> {
+        tables::log_error::create(self.executor(), opts)
     }
 
-    pub fn find_log_errors(
+    pub fn log_error_find_many(
         &self,
-        filter: Option<&radroots_tangle_schema::log_error::ILogErrorFieldsFilter>,
-    ) -> Result<Vec<radroots_tangle_schema::log_error::LogError>, SqlError> {
-        tables::log_error::find_many(self.executor(), filter)
+        opts: &radroots_tangle_schema::log_error::ILogErrorFindMany,
+    ) -> Result<radroots_tangle_schema::log_error::ILogErrorFindManyResolve, IError<SqlError>> {
+        tables::log_error::find_many(self.executor(), opts)
     }
 
-    pub fn find_log_error(
+    pub fn log_error_find_one(
         &self,
-        bind: &radroots_tangle_schema::log_error::LogErrorQueryBindValues,
-    ) -> Result<Option<radroots_tangle_schema::log_error::LogError>, SqlError> {
-        tables::log_error::find_one(self.executor(), bind)
+        opts: &radroots_tangle_schema::log_error::ILogErrorFindOne,
+    ) -> Result<radroots_tangle_schema::log_error::ILogErrorFindOneResolve, IError<SqlError>> {
+        tables::log_error::find_one(self.executor(), opts)
     }
 
-    pub fn update_log_error(
+    pub fn log_error_update(
         &self,
-        id: &str,
-        fields: radroots_tangle_schema::log_error::ILogErrorFieldsPartial,
-    ) -> Result<ExecOutcome, SqlError> {
-        tables::log_error::update(self.executor(), id, fields)
+        opts: &radroots_tangle_schema::log_error::ILogErrorUpdate,
+    ) -> Result<radroots_tangle_schema::log_error::ILogErrorUpdateResolve, IError<SqlError>> {
+        tables::log_error::update(self.executor(), opts)
     }
 
-    pub fn delete_log_error(
+    pub fn log_error_delete(
         &self,
-        bind: &radroots_tangle_schema::log_error::LogErrorQueryBindValues,
-    ) -> Result<ExecOutcome, SqlError> {
-        tables::log_error::delete(self.executor(), bind)
+        opts: &radroots_tangle_schema::log_error::ILogErrorDelete,
+    ) -> Result<radroots_tangle_schema::log_error::ILogErrorDeleteResolve, IError<SqlError>> {
+        tables::log_error::delete(self.executor(), opts)
     }
 }

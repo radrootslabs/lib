@@ -4,7 +4,7 @@ import type { IResult, IResultList } from "@radroots/types-bindings";
 
 export type ILogErrorCreate = ILogErrorFields;
 
-export type ILogErrorCreateResolve = IResult<string>;
+export type ILogErrorCreateResolve = IResult<LogError>;
 
 export type ILogErrorDelete = ILogErrorFindOne;
 
@@ -22,11 +22,11 @@ export type ILogErrorFindManyResolve = IResultList<LogError>;
 
 export type ILogErrorFindOne = { on: LogErrorQueryBindValues, };
 
-export type ILogErrorFindOneResolve = IResult<LogError>;
+export type ILogErrorFindOneResolve = IResult<LogError | undefined>;
 
 export type ILogErrorUpdate = { on: LogErrorQueryBindValues, fields: ILogErrorFieldsPartial, };
 
-export type ILogErrorUpdateResolve = IResult<string>;
+export type ILogErrorUpdateResolve = IResult<LogError>;
 
 export type LogError = { id: string, created_at: string, updated_at: string, error: string, message: string, stack_trace: string | null, cause: string | null, app_system: string, app_version: string, nostr_pubkey: string, data: string | null, };
 

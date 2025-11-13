@@ -3,12 +3,13 @@
 #[cfg(any(feature = "embedded", target_os = "espidf"))]
 extern crate alloc;
 
+use serde::Serialize;
 use thiserror::Error;
 
 #[cfg(any(feature = "embedded", target_os = "espidf"))]
 use alloc::string::String;
 
-#[derive(Error, Debug, Clone)]
+#[derive(Error, Debug, Clone, Serialize)]
 pub enum SqlError {
     #[error("invalid argument: {0}")]
     InvalidArgument(String),
