@@ -1,0 +1,21 @@
+[package]
+name = "radroots-tangle-sql"
+version.workspace = true
+edition.workspace = true
+authors = ["Radroots Authors"]
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["rlib"]
+
+[features]
+default = []
+web = ["radroots-sql-core/web"]
+native = ["radroots-sql-core/native"]
+embedded = ["radroots-sql-core/embedded"]
+
+[dependencies]
+radroots-sql-core = { workspace = true }
+radroots-tangle-schema = { workspace = true }
+serde_json = { workspace = true }
