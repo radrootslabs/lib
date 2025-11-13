@@ -1,9 +1,9 @@
 use chrono::{SecondsFormat, Utc};
-use radroots_sql_core::error::SqlError;
-use serde::Deserialize;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use uuid::Uuid;
+
+use crate::error::SqlError;
 
 pub fn parse_json<T: for<'de> Deserialize<'de>>(s: &str) -> Result<T, SqlError> {
     serde_json::from_str::<T>(s).map_err(SqlError::from)
@@ -21,7 +21,7 @@ pub fn to_object_map<T: Serialize>(opts: T) -> Result<Map<String, Value>, SqlErr
     let v = serde_json::to_value(opts).map_err(SqlError::from)?;
     let obj = v
         .as_object()
-        .ok_or_else(|| SqlError::SerializationError("Expected an object".to_string()))?;
+        .ok_or_else(|| SqlError::SerializationError(String::from("Expected an object")))?;
     Ok(obj.clone())
 }
 
@@ -29,7 +29,7 @@ pub fn to_partial_object_map<T: Serialize>(opts: T) -> Result<Map<String, Value>
     let v = serde_json::to_value(opts).map_err(SqlError::from)?;
     let obj = v
         .as_object()
-        .ok_or_else(|| SqlError::SerializationError("Expected an object".to_string()))?;
+        .ok_or_else(|| SqlError::SerializationError(String::from("Expected an object")))?;
     let mut filtered = Map::new();
     for (k, v) in obj.iter() {
         if !v.is_null() {
@@ -113,4 +113,43 @@ pub fn build_select_query_with_meta<T: Serialize>(
     };
     let sql = format!("SELECT * FROM {table}{where_clause};");
     (sql, binds)
+}
+
+pub fn parse_query_value(v: &Value) -> Result<Value, SqlError> {
+    Ok(match v {
+        Value::Bool(b) => {
+            if *b {
+                serde_json::json!(1)
+            } else {
+                serde_json::json!(0)
+            }
+        }
+        Value::Null => Value::Null,
+        Value::Number(_) | Value::String(_) => v.clone(),
+        other => {
+            return Err(SqlError::InvalidArgument(other.to_string()));
+        }
+    })
+}
+
+pub fn to_params_json<T: Serialize>(v: T) -> Result<String, SqlError> {
+    serde_json::to_string(&v).map_err(SqlError::from)
+}
+
+pub fn with_transaction<E, F, T>(exec: &E, f: F) -> Result<T, SqlError>
+where
+    E: crate::SqlExecutor,
+    F: FnOnce() -> Result<T, SqlError>,
+{
+    exec.begin()?;
+    match f() {
+        Ok(v) => {
+            exec.commit()?;
+            Ok(v)
+        }
+        Err(e) => {
+            let _ = exec.rollback();
+            Err(e)
+        }
+    }
 }

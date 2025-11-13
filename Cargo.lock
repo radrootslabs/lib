@@ -1816,11 +1816,14 @@ dependencies = [
 name = "radroots-sql-core"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "radroots-sql-wasm-bridge",
  "rusqlite",
+ "serde",
  "serde-wasm-bindgen",
  "serde_json",
  "thiserror 1.0.69",
+ "uuid",
  "wasm-bindgen",
 ]
 

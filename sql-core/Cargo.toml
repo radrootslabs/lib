@@ -22,3 +22,6 @@ radroots-sql-wasm-bridge = { workspace = true, optional = true }
 wasm-bindgen = { workspace = true, optional = true }
 serde-wasm-bindgen = { workspace = true, optional = true }
 rusqlite = { workspace = true, features = ["bundled"], optional = true }
+chrono = { workspace = true }
+serde = { workspace = true }
+uuid = { workspace = true }

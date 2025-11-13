@@ -20,6 +20,9 @@ mod executor_embedded;
 #[cfg(feature = "embedded")]
 pub use executor_embedded::EmbeddedSqlExecutor;
 
+#[cfg(not(any(feature = "embedded", target_os = "espidf")))]
+pub mod utils;
+
 use error::SqlError;
 
 #[derive(Clone, Copy, Debug)]
