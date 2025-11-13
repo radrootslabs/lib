@@ -5,9 +5,9 @@ extern crate alloc;
 
 pub mod error;
 
-#[cfg(feature = "web")]
+#[cfg(all(feature = "web", target_arch = "wasm32"))]
 mod executor_wasm;
-#[cfg(feature = "web")]
+#[cfg(all(feature = "web", target_arch = "wasm32"))]
 pub use executor_wasm::WasmSqlExecutor;
 
 #[cfg(feature = "native")]
@@ -23,7 +23,7 @@ pub use executor_embedded::EmbeddedSqlExecutor;
 #[cfg(not(any(feature = "embedded", target_os = "espidf")))]
 pub mod utils;
 
-use error::SqlError;
+pub use error::SqlError;
 
 #[derive(Clone, Copy, Debug)]
 pub struct ExecOutcome {

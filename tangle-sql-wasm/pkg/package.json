@@ -1,0 +1,16 @@
+{
+    "name": "@radroots/tangle-sql-wasm",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "files": [
+        "dist"
+    ],
+    "exports": {
+        ".": {
+            "types": "./dist/radroots_tangle_sql_wasm.d.ts",
+            "import": "./dist/radroots_tangle_sql_wasm.js"
+        }
+    },
+    "sideEffects": false
+}

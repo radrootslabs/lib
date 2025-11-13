@@ -14,6 +14,8 @@ members = [
     "sql-wasm-core",
     "sql-core",
     "tangle-schema",
+    "tangle-sql",
+    "tangle-sql-wasm",
     "trade",
     "types",
 ]
@@ -40,6 +42,8 @@ radroots-sql-wasm-bridge = { path = "sql-wasm-bridge", version = "0.1.0" }
 radroots-sql-wasm-core = { path = "sql-wasm-core", version = "0.1.0" }
 radroots-sql-core = { path = "sql-core", version = "0.1.0" }
 radroots-tangle-schema = { path = "tangle-schema", version = "0.1.0", default-features = false }
+radroots-tangle-sql = { path = "tangle-sql", version = "0.1.0", default-features = false }
+radroots-tangle-sql-wasm = { path = "tangle-sql-wasm", version = "0.1.0" }
 radroots-trade = { path = "trade", version = "0.1.0", default-features = false }
 radroots-types = { path = "types", version = "0.1.0", default-features = false }
 

@@ -1862,6 +1862,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "radroots-tangle-sql"
+version = "0.1.0"
+dependencies = [
+ "radroots-sql-core",
+ "radroots-tangle-schema",
+ "serde_json",
+]
+
+[[package]]
+name = "radroots-tangle-sql-wasm"
+version = "0.1.0"
+dependencies = [
+ "radroots-sql-core",
+ "radroots-sql-wasm-core",
+ "radroots-tangle-schema",
+ "radroots-tangle-sql",
+ "serde",
+ "serde-wasm-bindgen",
+ "serde_json",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "radroots-trade"
 version = "0.1.0"
 dependencies = [
