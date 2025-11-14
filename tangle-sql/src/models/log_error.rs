@@ -1,9 +1,18 @@
 use radroots_sql_core::error::SqlError;
 use radroots_sql_core::{SqlExecutor, utils};
 use radroots_tangle_schema::log_error::{
-    ILogErrorCreate, ILogErrorCreateResolve, ILogErrorDelete, ILogErrorDeleteResolve,
-    ILogErrorFindMany, ILogErrorFindManyResolve, ILogErrorFindOne, ILogErrorFindOneResolve,
-    ILogErrorUpdate, ILogErrorUpdateResolve, LogError, LogErrorQueryBindValues,
+    LogError,
+    LogErrorQueryBindValues,
+    ILogErrorCreate,
+    ILogErrorCreateResolve,
+    ILogErrorDelete,
+    ILogErrorDeleteResolve,
+    ILogErrorFindMany,
+    ILogErrorFindManyResolve,
+    ILogErrorFindOne,
+    ILogErrorFindOneResolve,
+    ILogErrorUpdate,
+    ILogErrorUpdateResolve,
 };
 use radroots_types::types::{IError, IResult, IResultList};
 use serde_json::Value;
@@ -25,19 +34,13 @@ pub fn create<E: SqlExecutor>(
     let (sql, bind_values) = utils::build_insert_query_with_meta(TABLE_NAME, &meta, &field_map);
     let params_json = utils::to_params_json(bind_values)?;
     let _ = exec.exec(&sql, &params_json)?;
-    let result = LogError {
-        id,
-        created_at: now.clone(),
-        updated_at: now,
-        error: opts.error.clone(),
-        message: opts.message.clone(),
-        stack_trace: opts.stack_trace.clone(),
-        cause: opts.cause.clone(),
-        app_system: opts.app_system.clone(),
-        app_version: opts.app_version.clone(),
-        nostr_pubkey: opts.nostr_pubkey.clone(),
-        data: opts.data.clone(),
+    let args = ILogErrorFindOne {
+        on: LogErrorQueryBindValues::Id { id: id.clone() },
     };
+    let found = find_one(exec, &args)?;
+    let result = found
+        .result
+        .ok_or_else(|| IError::from(SqlError::NotFound(id.clone())))?;
     Ok(IResult { result })
 }
 
@@ -45,12 +48,7 @@ pub fn find_one<E: SqlExecutor>(
     exec: &E,
     opts: &ILogErrorFindOne,
 ) -> Result<ILogErrorFindOneResolve, IError<SqlError>> {
-    let (column, value) = match &opts.on {
-        LogErrorQueryBindValues::Id { id } => ("id", Value::from(id.clone())),
-        LogErrorQueryBindValues::NostrPubkey { nostr_pubkey } => {
-            ("nostr_pubkey", Value::from(nostr_pubkey.clone()))
-        }
-    };
+    let (column, value) = opts.on.to_filter_param();
     let sql = format!("SELECT * FROM {TABLE_NAME} WHERE {column} = ? LIMIT 1;");
     let params_json = utils::to_params_json(vec![value])?;
     let json = exec.query_raw(&sql, &params_json)?;
@@ -79,36 +77,13 @@ fn select_by_id<E: SqlExecutor>(exec: &E, id: &str) -> Result<LogError, IError<S
         .ok_or_else(|| IError::from(SqlError::NotFound(id.to_owned())))
 }
 
-fn resolve_on_bind<E: SqlExecutor>(
-    exec: &E,
-    on: &LogErrorQueryBindValues,
-) -> Result<(&'static str, Value, String), IError<SqlError>> {
-    match on {
-        LogErrorQueryBindValues::Id { id } => Ok(("id", Value::from(id.clone()), id.clone())),
-        LogErrorQueryBindValues::NostrPubkey { nostr_pubkey } => {
-            let args = ILogErrorFindOne {
-                on: LogErrorQueryBindValues::NostrPubkey {
-                    nostr_pubkey: nostr_pubkey.clone(),
-                },
-            };
-            let found = find_one(exec, &args)?;
-            let model = found
-                .result
-                .ok_or_else(|| IError::from(SqlError::NotFound(nostr_pubkey.clone())))?;
-            Ok(("nostr_pubkey", Value::from(nostr_pubkey.clone()), model.id))
-        }
-    }
-}
-
 pub fn update<E: SqlExecutor>(
     exec: &E,
     opts: &ILogErrorUpdate,
 ) -> Result<ILogErrorUpdateResolve, IError<SqlError>> {
     let mut updates = utils::to_partial_object_map(&opts.fields)?;
     if updates.is_empty() {
-        return Err(IError::from(SqlError::InvalidArgument(String::from(
-            "no fields to update",
-        ))));
+        return Err(IError::from(SqlError::InvalidArgument(String::from("no fields to update"))));
     }
     updates.insert(
         String::from("updated_at"),
@@ -120,12 +95,19 @@ pub fn update<E: SqlExecutor>(
         set_parts.push(format!("{column} = ?"));
         bind_values.push(utils::to_db_bind_value(&value));
     }
-    let (where_column, where_value, id_for_lookup) = resolve_on_bind(exec, &opts.on)?;
-    bind_values.push(where_value);
-    let sql = format!(
-        "UPDATE {TABLE_NAME} SET {} WHERE {where_column} = ?;",
-        set_parts.join(", ")
-    );
+    let id_for_lookup = match opts.on.primary_key() {
+        Some(id) => id,
+        None => {
+            let find_opts = ILogErrorFindOne {
+                on: opts.on.clone(),
+            };
+            let found = find_one(exec, &find_opts)?;
+            let model = found.result.ok_or_else(|| IError::from(SqlError::NotFound(opts.on.lookup_key())))?;
+            model.id
+        }
+    };
+    bind_values.push(Value::from(id_for_lookup.clone()));
+    let sql = format!("UPDATE {TABLE_NAME} SET {} WHERE id = ?;", set_parts.join(", "));
     let params_json = utils::to_params_json(bind_values)?;
     let outcome = exec.exec(&sql, &params_json)?;
     if outcome.changes == 0 {
@@ -139,12 +121,22 @@ pub fn delete<E: SqlExecutor>(
     exec: &E,
     opts: &ILogErrorDelete,
 ) -> Result<ILogErrorDeleteResolve, IError<SqlError>> {
-    let (_, _, id) = resolve_on_bind(exec, &opts.on)?;
-    let params_json = utils::to_params_json(vec![Value::from(id.clone())])?;
+    let id_for_lookup = match opts.on.primary_key() {
+        Some(id) => id,
+        None => {
+            let find_opts = ILogErrorFindOne {
+                on: opts.on.clone(),
+            };
+            let found = find_one(exec, &find_opts)?;
+            let model = found.result.ok_or_else(|| IError::from(SqlError::NotFound(opts.on.lookup_key())))?;
+            model.id
+        }
+    };
+    let params_json = utils::to_params_json(vec![Value::from(id_for_lookup.clone())])?;
     let sql = format!("DELETE FROM {TABLE_NAME} WHERE id = ?;");
     let outcome = exec.exec(&sql, &params_json)?;
     if outcome.changes == 0 {
-        return Err(IError::from(SqlError::NotFound(id)));
+        return Err(IError::from(SqlError::NotFound(id_for_lookup.clone())));
     }
-    Ok(IResult { result: id })
+    Ok(IResult { result: id_for_lookup })
 }

@@ -1,5 +1,6 @@
 use radroots_types::types::{IResult, IResultList};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
 
@@ -26,11 +27,14 @@ pub struct LogError {
 pub struct ILogErrorFields {
     pub error: String,
     pub message: String,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub stack_trace: Option<String>,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub cause: Option<String>,
     pub app_system: String,
     pub app_version: String,
     pub nostr_pubkey: String,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub data: Option<String>,
 }
 
@@ -93,6 +97,29 @@ pub enum LogErrorQueryBindValues {
     NostrPubkey { nostr_pubkey: String },
 }
 
+impl LogErrorQueryBindValues {
+    pub fn to_filter_param(&self) -> (&'static str, Value) {
+        match self {
+            Self::Id { id } => ("id", Value::from(id.clone())),
+            Self::NostrPubkey { nostr_pubkey } => ("nostr_pubkey", Value::from(nostr_pubkey.clone())),
+        }
+    }
+
+    pub fn primary_key(&self) -> Option<String> {
+        match self {
+            Self::Id { id } => Some(id.clone()),
+            _ => None,
+        }
+    }
+
+    pub fn lookup_key(&self) -> String {
+        match self {
+            Self::Id { id } => id.clone(),
+            Self::NostrPubkey { nostr_pubkey } => nostr_pubkey.clone(),
+        }
+    }
+}
+
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -103,7 +130,6 @@ pub enum LogErrorQueryBindValues {
         type = "ILogErrorFields"
     )
 )]
-
 pub struct ILogErrorCreateTs;
 pub type ILogErrorCreate = ILogErrorFields;
 
@@ -178,7 +204,6 @@ pub type ILogErrorFindManyResolve = IResultList<LogError>;
         type = "ILogErrorFindOne"
     )
 )]
-
 pub struct ILogErrorDeleteTs;
 pub type ILogErrorDelete = ILogErrorFindOneArgs;
 

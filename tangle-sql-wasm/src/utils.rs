@@ -1,40 +1,25 @@
-use radroots_sql_core::error::SqlError;
+use serde::Serialize;
 use serde::de::DeserializeOwned;
-use serde_json::json;
-use wasm_bindgen::JsValue;
+use wasm_bindgen::prelude::*;
 
-pub fn parse_optional_json<T>(input: &str) -> Result<Option<T>, SqlError>
+use radroots_sql_core::SqlError;
+
+pub fn parse_optional_json<T>(json: &str) -> Result<Option<T>, serde_json::Error>
 where
     T: DeserializeOwned,
 {
-    let trimmed = input.trim();
-    if trimmed.is_empty() || trimmed == "null" {
-        Ok(None)
-    } else {
-        let value = radroots_sql_wasm_core::parse_json::<T>(trimmed)?;
-        Ok(Some(value))
+    if json.trim().is_empty() {
+        return Ok(None);
     }
-}
-
-fn serialize_to_js_value<T>(value: &T) -> Result<JsValue, JsValue>
-where
-    T: serde::Serialize,
-{
-    serde_wasm_bindgen::to_value(value)
-        .map_err(|e| radroots_sql_wasm_core::err_js(SqlError::SerializationError(e.to_string())))
-}
-
-pub fn outcome_to_js(outcome: radroots_sql_core::ExecOutcome) -> Result<JsValue, JsValue> {
-    let payload = json!({
-        "changes": outcome.changes,
-        "last_insert_id": outcome.last_insert_id,
-    });
-    serialize_to_js_value(&payload)
+    let value: Option<T> = serde_json::from_str(json)?;
+    Ok(value)
 }
 
 pub fn value_to_js<T>(value: T) -> Result<JsValue, JsValue>
 where
-    T: serde::Serialize,
+    T: Serialize,
 {
-    serialize_to_js_value(&value)
+    let json = serde_json::to_string(&value)
+        .map_err(|err| radroots_sql_wasm_core::err_js(SqlError::from(err)))?;
+    Ok(JsValue::from_str(&json))
 }

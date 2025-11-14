@@ -1,2 +1,2 @@
-pub mod tables;
-pub use tables::*;
+pub mod models;
+pub use models::*;
