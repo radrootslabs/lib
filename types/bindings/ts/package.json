@@ -22,7 +22,7 @@
         "build:esm": "tsc -p tsconfig.esm.json",
         "build:cjs": "tsc -p tsconfig.cjs.json",
         "build": "npm run clean && npm run build:esm && npm run build:cjs",
-        "prebuild": "npm run clean && generate-package-exports",
+        "prebuild": "npm run clean",
         "clean": "rimraf dist",
         "dev": "npm run watch",
         "watch": "tsc -w"

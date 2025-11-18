@@ -7,7 +7,7 @@ SHELL := /bin/bash
 TS_RS_FEATURE ?= ts-rs
 
 BINDINGS_TARGETS := \
-	bindings-events \
+    bindings-events \
     bindings-tangle-schema \
     bindings-types
 
@@ -35,6 +35,7 @@ help:
 
 bindings-events:
 	@(cd events && cargo test --features $(TS_RS_FEATURE))
+	typeshare --lang typescript --output-file events/bindings/ts/src/typeshare-types.ts events
 	@(cd events/bindings/ts && yarn build)
 
 bindings-tangle-schema:
@@ -46,4 +47,5 @@ bindings-types:
 	@(cd types/bindings/ts && yarn build)
 
 build-tangle-sql-wasm:
-	wasm-pack build tangle-sql-wasm --release --target web --out-dir ../tangle-sql-wasm/pkg/dist --scope radroots
+	wasm-pack build tangle-sql-wasm --release --target web \
+		--out-dir ../tangle-sql-wasm/pkg/dist --scope radroots
