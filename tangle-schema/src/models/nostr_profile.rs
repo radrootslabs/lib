@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Serialize, Deserialize)]
@@ -12,7 +11,7 @@ pub struct NostrProfile {
     pub created_at: String,
     pub updated_at: String,
     pub public_key: String,
-    pub name: Option<String>,
+    pub name: String,
     pub display_name: Option<String>,
     pub about: Option<String>,
     pub website: Option<String>,
@@ -22,14 +21,12 @@ pub struct NostrProfile {
     pub lud06: Option<String>,
     pub lud16: Option<String>,
 }
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Deserialize, Serialize)]
 pub struct INostrProfileFields {
     pub public_key: String,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
-    pub name: Option<String>,
+    pub name: String,
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub display_name: Option<String>,
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
@@ -47,7 +44,6 @@ pub struct INostrProfileFields {
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub lud16: Option<String>,
 }
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Deserialize, Serialize)]
@@ -73,7 +69,6 @@ pub struct INostrProfileFieldsPartial {
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub lud16: Option<serde_json::Value>,
 }
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Deserialize, Serialize)]
@@ -105,7 +100,6 @@ pub struct INostrProfileFieldsFilter {
     #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub lud16: Option<String>,
 }
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Deserialize, Serialize)]
@@ -114,7 +108,6 @@ pub enum NostrProfileQueryBindValues {
     Id { id: String },
     PublicKey { public_key: String },
 }
-
 impl NostrProfileQueryBindValues {
     pub fn to_filter_param(&self) -> (&'static str, Value) {
         match self {
@@ -137,6 +130,22 @@ impl NostrProfileQueryBindValues {
         }
     }
 }
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[derive(Clone, Deserialize, Serialize)]
+pub struct NostrProfileRelayArgs {
+    pub id: String,
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[derive(Clone, Deserialize, Serialize)]
+pub enum NostrProfileFindManyRel {
+    #[serde(rename = "on_relay")]
+    OnRelay(NostrProfileRelayArgs),
+    #[serde(rename = "off_relay")]
+    OffRelay(NostrProfileRelayArgs),
+}
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
@@ -150,7 +159,6 @@ impl NostrProfileQueryBindValues {
 )]
 pub struct INostrProfileCreateTs;
 pub type INostrProfileCreate = INostrProfileFields;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -163,7 +171,6 @@ pub type INostrProfileCreate = INostrProfileFields;
 )]
 pub struct INostrProfileCreateResolveTs;
 pub type INostrProfileCreateResolve = IResult<NostrProfile>;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -174,7 +181,6 @@ pub struct INostrProfileFindOneArgs {
     pub on: NostrProfileQueryBindValues,
 }
 pub type INostrProfileFindOne = INostrProfileFindOneArgs;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -182,23 +188,26 @@ pub type INostrProfileFindOne = INostrProfileFindOneArgs;
         export,
         export_to = "types.ts",
         rename = "INostrProfileFindOneResolve",
-        type = "IResult<NostrProfile | undefined>"
+        type = "IResult<NostrProfile>"
     )
 )]
 pub struct INostrProfileFindOneResolveTs;
 pub type INostrProfileFindOneResolve = IResult<Option<NostrProfile>>;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
     ts(export, export_to = "types.ts", rename = "INostrProfileFindMany")
 )]
 #[derive(Deserialize, Serialize)]
-pub struct INostrProfileFindManyArgs {
-    pub filter: Option<INostrProfileFieldsFilter>,
+#[serde(untagged)]
+pub enum INostrProfileFindMany {
+    Filter {
+        filter: Option<INostrProfileFieldsFilter>,
+    },
+    Rel {
+        rel: NostrProfileFindManyRel,
+    },
 }
-pub type INostrProfileFindMany = INostrProfileFindManyArgs;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -211,7 +220,6 @@ pub type INostrProfileFindMany = INostrProfileFindManyArgs;
 )]
 pub struct INostrProfileFindManyResolveTs;
 pub type INostrProfileFindManyResolve = IResultList<NostrProfile>;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -224,7 +232,6 @@ pub type INostrProfileFindManyResolve = IResultList<NostrProfile>;
 )]
 pub struct INostrProfileDeleteTs;
 pub type INostrProfileDelete = INostrProfileFindOneArgs;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -237,7 +244,6 @@ pub type INostrProfileDelete = INostrProfileFindOneArgs;
 )]
 pub struct INostrProfileDeleteResolveTs;
 pub type INostrProfileDeleteResolve = IResult<String>;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -249,7 +255,6 @@ pub struct INostrProfileUpdateArgs {
     pub fields: INostrProfileFieldsPartial,
 }
 pub type INostrProfileUpdate = INostrProfileUpdateArgs;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",

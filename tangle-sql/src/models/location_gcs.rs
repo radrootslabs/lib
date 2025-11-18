@@ -1,18 +1,20 @@
 use radroots_sql_core::error::SqlError;
 use radroots_sql_core::{SqlExecutor, utils};
 use radroots_tangle_schema::location_gcs::{
-    LocationGcs,
-    LocationGcsQueryBindValues,
     ILocationGcsCreate,
     ILocationGcsCreateResolve,
     ILocationGcsDelete,
     ILocationGcsDeleteResolve,
+    ILocationGcsFieldsFilter,
     ILocationGcsFindMany,
     ILocationGcsFindManyResolve,
     ILocationGcsFindOne,
     ILocationGcsFindOneResolve,
     ILocationGcsUpdate,
     ILocationGcsUpdateResolve,
+    LocationGcs,
+    LocationGcsFindManyRel,
+    LocationGcsQueryBindValues,
 };
 use radroots_types::types::{IError, IResult, IResultList};
 use serde_json::Value;
@@ -61,11 +63,54 @@ pub fn find_many<E: SqlExecutor>(
     exec: &E,
     opts: &ILocationGcsFindMany,
 ) -> Result<ILocationGcsFindManyResolve, IError<SqlError>> {
-    let (sql, bind_values) = utils::build_select_query_with_meta(TABLE_NAME, opts.filter.as_ref());
+    let results = match opts {
+        ILocationGcsFindMany::Filter { filter } => find_many_filter(exec, filter)?,
+        ILocationGcsFindMany::Rel { rel } => find_many_by_rel(exec, rel)?,
+    };
+    Ok(IResultList { results })
+}
+
+fn find_many_filter<E: SqlExecutor>(
+    exec: &E,
+    filter: &Option<ILocationGcsFieldsFilter>,
+) -> Result<Vec<LocationGcs>, IError<SqlError>> {
+    let (sql, bind_values) = utils::build_select_query_with_meta(TABLE_NAME, filter.as_ref());
     let params_json = utils::to_params_json(bind_values)?;
     let json = exec.query_raw(&sql, &params_json)?;
-    let results: Vec<LocationGcs> = utils::parse_json(&json)?;
-    Ok(IResultList { results })
+    let rows: Vec<LocationGcs> = utils::parse_json(&json)?;
+    Ok(rows)
+}
+
+fn find_many_by_rel<E: SqlExecutor>(
+    exec: &E,
+    rel: &LocationGcsFindManyRel,
+) -> Result<Vec<LocationGcs>, IError<SqlError>> {
+    let (sql, bind_values): (String, Vec<Value>) = match rel {
+        LocationGcsFindManyRel::OnTradeProduct(args) => {
+            let sql = String::from("SELECT lg.* FROM location_gcs lg JOIN trade_product_location tp_lg ON lg.id = tp_lg.tb_lg WHERE tp_lg.tb_tp = ?;");
+            let binds = vec![Value::from(args.id.clone())];
+            (sql, binds)
+        }
+        LocationGcsFindManyRel::OffTradeProduct(args) => {
+            let sql = String::from("SELECT lg.* FROM location_gcs lg WHERE NOT EXISTS (SELECT 1 FROM trade_product_location tp_lg WHERE tp_lg.tb_lg = lg.id AND tp_lg.tb_tp = ?);");
+            let binds = vec![Value::from(args.id.clone())];
+            (sql, binds)
+        }
+        LocationGcsFindManyRel::OnFarm(args) => {
+            let sql = String::from("SELECT lg.* FROM location_gcs lg JOIN farm_location farm_lg ON lg.id = farm_lg.tb_lg WHERE farm_lg.tb_farm = ?;");
+            let binds = vec![Value::from(args.id.clone())];
+            (sql, binds)
+        }
+        LocationGcsFindManyRel::OffFarm(args) => {
+            let sql = String::from("SELECT lg.* FROM location_gcs lg WHERE NOT EXISTS (SELECT 1 FROM farm_location farm_lg WHERE farm_lg.tb_lg = lg.id AND farm_lg.tb_farm = ?);");
+            let binds = vec![Value::from(args.id.clone())];
+            (sql, binds)
+        }
+    };
+    let params_json = utils::to_params_json(bind_values)?;
+    let json = exec.query_raw(&sql, &params_json)?;
+    let rows: Vec<LocationGcs> = utils::parse_json(&json)?;
+    Ok(rows)
 }
 
 fn select_by_id<E: SqlExecutor>(exec: &E, id: &str) -> Result<LocationGcs, IError<SqlError>> {

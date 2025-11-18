@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Serialize, Deserialize)]
@@ -20,7 +19,6 @@ pub struct LogError {
     pub nostr_pubkey: String,
     pub data: Option<String>,
 }
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Deserialize, Serialize)]
@@ -37,7 +35,6 @@ pub struct ILogErrorFields {
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub data: Option<String>,
 }
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Deserialize, Serialize)]
@@ -59,7 +56,6 @@ pub struct ILogErrorFieldsPartial {
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub data: Option<serde_json::Value>,
 }
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Deserialize, Serialize)]
@@ -87,7 +83,6 @@ pub struct ILogErrorFieldsFilter {
     #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub data: Option<String>,
 }
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Deserialize, Serialize)]
@@ -96,7 +91,6 @@ pub enum LogErrorQueryBindValues {
     Id { id: String },
     NostrPubkey { nostr_pubkey: String },
 }
-
 impl LogErrorQueryBindValues {
     pub fn to_filter_param(&self) -> (&'static str, Value) {
         match self {
@@ -119,7 +113,6 @@ impl LogErrorQueryBindValues {
         }
     }
 }
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -132,7 +125,6 @@ impl LogErrorQueryBindValues {
 )]
 pub struct ILogErrorCreateTs;
 pub type ILogErrorCreate = ILogErrorFields;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -145,7 +137,6 @@ pub type ILogErrorCreate = ILogErrorFields;
 )]
 pub struct ILogErrorCreateResolveTs;
 pub type ILogErrorCreateResolve = IResult<LogError>;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -156,7 +147,6 @@ pub struct ILogErrorFindOneArgs {
     pub on: LogErrorQueryBindValues,
 }
 pub type ILogErrorFindOne = ILogErrorFindOneArgs;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -164,12 +154,11 @@ pub type ILogErrorFindOne = ILogErrorFindOneArgs;
         export,
         export_to = "types.ts",
         rename = "ILogErrorFindOneResolve",
-        type = "IResult<LogError | undefined>"
+        type = "IResult<LogError>"
     )
 )]
 pub struct ILogErrorFindOneResolveTs;
 pub type ILogErrorFindOneResolve = IResult<Option<LogError>>;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -180,7 +169,6 @@ pub struct ILogErrorFindManyArgs {
     pub filter: Option<ILogErrorFieldsFilter>,
 }
 pub type ILogErrorFindMany = ILogErrorFindManyArgs;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -193,7 +181,6 @@ pub type ILogErrorFindMany = ILogErrorFindManyArgs;
 )]
 pub struct ILogErrorFindManyResolveTs;
 pub type ILogErrorFindManyResolve = IResultList<LogError>;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -206,7 +193,6 @@ pub type ILogErrorFindManyResolve = IResultList<LogError>;
 )]
 pub struct ILogErrorDeleteTs;
 pub type ILogErrorDelete = ILogErrorFindOneArgs;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -219,7 +205,6 @@ pub type ILogErrorDelete = ILogErrorFindOneArgs;
 )]
 pub struct ILogErrorDeleteResolveTs;
 pub type ILogErrorDeleteResolve = IResult<String>;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -231,7 +216,6 @@ pub struct ILogErrorUpdateArgs {
     pub fields: ILogErrorFieldsPartial,
 }
 pub type ILogErrorUpdate = ILogErrorUpdateArgs;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",

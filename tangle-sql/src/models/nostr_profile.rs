@@ -1,18 +1,20 @@
 use radroots_sql_core::error::SqlError;
 use radroots_sql_core::{SqlExecutor, utils};
 use radroots_tangle_schema::nostr_profile::{
-    NostrProfile,
-    NostrProfileQueryBindValues,
     INostrProfileCreate,
     INostrProfileCreateResolve,
     INostrProfileDelete,
     INostrProfileDeleteResolve,
+    INostrProfileFieldsFilter,
     INostrProfileFindMany,
     INostrProfileFindManyResolve,
     INostrProfileFindOne,
     INostrProfileFindOneResolve,
     INostrProfileUpdate,
     INostrProfileUpdateResolve,
+    NostrProfile,
+    NostrProfileFindManyRel,
+    NostrProfileQueryBindValues,
 };
 use radroots_types::types::{IError, IResult, IResultList};
 use serde_json::Value;
@@ -61,11 +63,44 @@ pub fn find_many<E: SqlExecutor>(
     exec: &E,
     opts: &INostrProfileFindMany,
 ) -> Result<INostrProfileFindManyResolve, IError<SqlError>> {
-    let (sql, bind_values) = utils::build_select_query_with_meta(TABLE_NAME, opts.filter.as_ref());
+    let results = match opts {
+        INostrProfileFindMany::Filter { filter } => find_many_filter(exec, filter)?,
+        INostrProfileFindMany::Rel { rel } => find_many_by_rel(exec, rel)?,
+    };
+    Ok(IResultList { results })
+}
+
+fn find_many_filter<E: SqlExecutor>(
+    exec: &E,
+    filter: &Option<INostrProfileFieldsFilter>,
+) -> Result<Vec<NostrProfile>, IError<SqlError>> {
+    let (sql, bind_values) = utils::build_select_query_with_meta(TABLE_NAME, filter.as_ref());
     let params_json = utils::to_params_json(bind_values)?;
     let json = exec.query_raw(&sql, &params_json)?;
-    let results: Vec<NostrProfile> = utils::parse_json(&json)?;
-    Ok(IResultList { results })
+    let rows: Vec<NostrProfile> = utils::parse_json(&json)?;
+    Ok(rows)
+}
+
+fn find_many_by_rel<E: SqlExecutor>(
+    exec: &E,
+    rel: &NostrProfileFindManyRel,
+) -> Result<Vec<NostrProfile>, IError<SqlError>> {
+    let (sql, bind_values): (String, Vec<Value>) = match rel {
+        NostrProfileFindManyRel::OnRelay(args) => {
+            let sql = String::from("SELECT pr.* FROM nostr_profile pr JOIN nostr_profile_relay pr_rl ON pr.id = pr_rl.tb_pr WHERE pr_rl.tb_rl = ?;");
+            let binds = vec![Value::from(args.id.clone())];
+            (sql, binds)
+        }
+        NostrProfileFindManyRel::OffRelay(args) => {
+            let sql = String::from("SELECT pr.* FROM nostr_profile pr WHERE NOT EXISTS (SELECT 1 FROM nostr_profile_relay pr_rl WHERE pr_rl.tb_pr = pr.id AND pr_rl.tb_rl = ?);");
+            let binds = vec![Value::from(args.id.clone())];
+            (sql, binds)
+        }
+    };
+    let params_json = utils::to_params_json(bind_values)?;
+    let json = exec.query_raw(&sql, &params_json)?;
+    let rows: Vec<NostrProfile> = utils::parse_json(&json)?;
+    Ok(rows)
 }
 
 fn select_by_id<E: SqlExecutor>(exec: &E, id: &str) -> Result<NostrProfile, IError<SqlError>> {

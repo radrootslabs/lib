@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Serialize, Deserialize)]
@@ -27,7 +26,6 @@ pub struct LocationGcs {
     pub gc_country_id: Option<String>,
     pub gc_country_name: Option<String>,
 }
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Deserialize, Serialize)]
@@ -60,7 +58,6 @@ pub struct ILocationGcsFields {
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub gc_country_name: Option<String>,
 }
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Deserialize, Serialize)]
@@ -96,7 +93,6 @@ pub struct ILocationGcsFieldsPartial {
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub gc_country_name: Option<serde_json::Value>,
 }
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Deserialize, Serialize)]
@@ -138,7 +134,6 @@ pub struct ILocationGcsFieldsFilter {
     #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub gc_country_name: Option<String>,
 }
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Deserialize, Serialize)]
@@ -147,7 +142,6 @@ pub enum LocationGcsQueryBindValues {
     Id { id: String },
     Geohash { geohash: String },
 }
-
 impl LocationGcsQueryBindValues {
     pub fn to_filter_param(&self) -> (&'static str, Value) {
         match self {
@@ -170,6 +164,26 @@ impl LocationGcsQueryBindValues {
         }
     }
 }
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[derive(Clone, Deserialize, Serialize)]
+pub struct LocationGcsTradeProductArgs {
+    pub id: String,
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[derive(Clone, Deserialize, Serialize)]
+pub enum LocationGcsFindManyRel {
+    #[serde(rename = "on_trade_product")]
+    OnTradeProduct(LocationGcsTradeProductArgs),
+    #[serde(rename = "off_trade_product")]
+    OffTradeProduct(LocationGcsTradeProductArgs),
+    #[serde(rename = "on_farm")]
+    OnFarm(LocationGcsTradeProductArgs),
+    #[serde(rename = "off_farm")]
+    OffFarm(LocationGcsTradeProductArgs),
+}
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
@@ -183,7 +197,6 @@ impl LocationGcsQueryBindValues {
 )]
 pub struct ILocationGcsCreateTs;
 pub type ILocationGcsCreate = ILocationGcsFields;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -196,7 +209,6 @@ pub type ILocationGcsCreate = ILocationGcsFields;
 )]
 pub struct ILocationGcsCreateResolveTs;
 pub type ILocationGcsCreateResolve = IResult<LocationGcs>;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -207,7 +219,6 @@ pub struct ILocationGcsFindOneArgs {
     pub on: LocationGcsQueryBindValues,
 }
 pub type ILocationGcsFindOne = ILocationGcsFindOneArgs;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -215,23 +226,26 @@ pub type ILocationGcsFindOne = ILocationGcsFindOneArgs;
         export,
         export_to = "types.ts",
         rename = "ILocationGcsFindOneResolve",
-        type = "IResult<LocationGcs | undefined>"
+        type = "IResult<LocationGcs>"
     )
 )]
 pub struct ILocationGcsFindOneResolveTs;
 pub type ILocationGcsFindOneResolve = IResult<Option<LocationGcs>>;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
     ts(export, export_to = "types.ts", rename = "ILocationGcsFindMany")
 )]
 #[derive(Deserialize, Serialize)]
-pub struct ILocationGcsFindManyArgs {
-    pub filter: Option<ILocationGcsFieldsFilter>,
+#[serde(untagged)]
+pub enum ILocationGcsFindMany {
+    Filter {
+        filter: Option<ILocationGcsFieldsFilter>,
+    },
+    Rel {
+        rel: LocationGcsFindManyRel,
+    },
 }
-pub type ILocationGcsFindMany = ILocationGcsFindManyArgs;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -244,7 +258,6 @@ pub type ILocationGcsFindMany = ILocationGcsFindManyArgs;
 )]
 pub struct ILocationGcsFindManyResolveTs;
 pub type ILocationGcsFindManyResolve = IResultList<LocationGcs>;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -257,7 +270,6 @@ pub type ILocationGcsFindManyResolve = IResultList<LocationGcs>;
 )]
 pub struct ILocationGcsDeleteTs;
 pub type ILocationGcsDelete = ILocationGcsFindOneArgs;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -270,7 +282,6 @@ pub type ILocationGcsDelete = ILocationGcsFindOneArgs;
 )]
 pub struct ILocationGcsDeleteResolveTs;
 pub type ILocationGcsDeleteResolve = IResult<String>;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -282,7 +293,6 @@ pub struct ILocationGcsUpdateArgs {
     pub fields: ILocationGcsFieldsPartial,
 }
 pub type ILocationGcsUpdate = ILocationGcsUpdateArgs;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",

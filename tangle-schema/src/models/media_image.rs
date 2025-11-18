@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Serialize, Deserialize)]
@@ -18,7 +17,6 @@ pub struct MediaImage {
     pub label: Option<String>,
     pub description: Option<String>,
 }
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Deserialize, Serialize)]
@@ -32,7 +30,6 @@ pub struct IMediaImageFields {
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub description: Option<String>,
 }
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Deserialize, Serialize)]
@@ -50,7 +47,6 @@ pub struct IMediaImageFieldsPartial {
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub description: Option<serde_json::Value>,
 }
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Deserialize, Serialize)]
@@ -74,7 +70,6 @@ pub struct IMediaImageFieldsFilter {
     #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub description: Option<String>,
 }
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Deserialize, Serialize)]
@@ -83,7 +78,6 @@ pub enum MediaImageQueryBindValues {
     Id { id: String },
     FilePath { file_path: String },
 }
-
 impl MediaImageQueryBindValues {
     pub fn to_filter_param(&self) -> (&'static str, Value) {
         match self {
@@ -106,6 +100,22 @@ impl MediaImageQueryBindValues {
         }
     }
 }
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[derive(Clone, Deserialize, Serialize)]
+pub struct MediaImageTradeProductArgs {
+    pub id: String,
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[derive(Clone, Deserialize, Serialize)]
+pub enum MediaImageFindManyRel {
+    #[serde(rename = "on_trade_product")]
+    OnTradeProduct(MediaImageTradeProductArgs),
+    #[serde(rename = "off_trade_product")]
+    OffTradeProduct(MediaImageTradeProductArgs),
+}
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
@@ -119,7 +129,6 @@ impl MediaImageQueryBindValues {
 )]
 pub struct IMediaImageCreateTs;
 pub type IMediaImageCreate = IMediaImageFields;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -132,7 +141,6 @@ pub type IMediaImageCreate = IMediaImageFields;
 )]
 pub struct IMediaImageCreateResolveTs;
 pub type IMediaImageCreateResolve = IResult<MediaImage>;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -143,7 +151,6 @@ pub struct IMediaImageFindOneArgs {
     pub on: MediaImageQueryBindValues,
 }
 pub type IMediaImageFindOne = IMediaImageFindOneArgs;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -151,23 +158,26 @@ pub type IMediaImageFindOne = IMediaImageFindOneArgs;
         export,
         export_to = "types.ts",
         rename = "IMediaImageFindOneResolve",
-        type = "IResult<MediaImage | undefined>"
+        type = "IResult<MediaImage>"
     )
 )]
 pub struct IMediaImageFindOneResolveTs;
 pub type IMediaImageFindOneResolve = IResult<Option<MediaImage>>;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
     ts(export, export_to = "types.ts", rename = "IMediaImageFindMany")
 )]
 #[derive(Deserialize, Serialize)]
-pub struct IMediaImageFindManyArgs {
-    pub filter: Option<IMediaImageFieldsFilter>,
+#[serde(untagged)]
+pub enum IMediaImageFindMany {
+    Filter {
+        filter: Option<IMediaImageFieldsFilter>,
+    },
+    Rel {
+        rel: MediaImageFindManyRel,
+    },
 }
-pub type IMediaImageFindMany = IMediaImageFindManyArgs;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -180,7 +190,6 @@ pub type IMediaImageFindMany = IMediaImageFindManyArgs;
 )]
 pub struct IMediaImageFindManyResolveTs;
 pub type IMediaImageFindManyResolve = IResultList<MediaImage>;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -193,7 +202,6 @@ pub type IMediaImageFindManyResolve = IResultList<MediaImage>;
 )]
 pub struct IMediaImageDeleteTs;
 pub type IMediaImageDelete = IMediaImageFindOneArgs;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -206,7 +214,6 @@ pub type IMediaImageDelete = IMediaImageFindOneArgs;
 )]
 pub struct IMediaImageDeleteResolveTs;
 pub type IMediaImageDeleteResolve = IResult<String>;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -218,7 +225,6 @@ pub struct IMediaImageUpdateArgs {
     pub fields: IMediaImageFieldsPartial,
 }
 pub type IMediaImageUpdate = IMediaImageUpdateArgs;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",

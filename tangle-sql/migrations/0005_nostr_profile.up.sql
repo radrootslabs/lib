@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS nostr_profile (
     created_at DATETIME NOT NULL CHECK(length(created_at) = 24),
     updated_at DATETIME NOT NULL CHECK(length(updated_at) = 24),
     public_key CHAR(64) NOT NULL CHECK(length(public_key) = 64),
-    name TEXT,
+    name TEXT NOT NULL,
     display_name TEXT,
     about TEXT,
     website TEXT,

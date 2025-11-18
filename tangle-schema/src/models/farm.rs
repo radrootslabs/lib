@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Serialize, Deserialize)]
@@ -17,7 +16,6 @@ pub struct Farm {
     pub title: Option<String>,
     pub description: Option<String>,
 }
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Deserialize, Serialize)]
@@ -32,7 +30,6 @@ pub struct IFarmFields {
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub description: Option<String>,
 }
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Deserialize, Serialize)]
@@ -48,7 +45,6 @@ pub struct IFarmFieldsPartial {
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub description: Option<serde_json::Value>,
 }
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Deserialize, Serialize)]
@@ -70,7 +66,6 @@ pub struct IFarmFieldsFilter {
     #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub description: Option<String>,
 }
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Deserialize, Serialize)]
@@ -78,7 +73,6 @@ pub struct IFarmFieldsFilter {
 pub enum FarmQueryBindValues {
     Id { id: String },
 }
-
 impl FarmQueryBindValues {
     pub fn to_filter_param(&self) -> (&'static str, Value) {
         match self {
@@ -98,7 +92,6 @@ impl FarmQueryBindValues {
         }
     }
 }
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -111,7 +104,6 @@ impl FarmQueryBindValues {
 )]
 pub struct IFarmCreateTs;
 pub type IFarmCreate = IFarmFields;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -124,7 +116,6 @@ pub type IFarmCreate = IFarmFields;
 )]
 pub struct IFarmCreateResolveTs;
 pub type IFarmCreateResolve = IResult<Farm>;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -135,7 +126,6 @@ pub struct IFarmFindOneArgs {
     pub on: FarmQueryBindValues,
 }
 pub type IFarmFindOne = IFarmFindOneArgs;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -143,12 +133,11 @@ pub type IFarmFindOne = IFarmFindOneArgs;
         export,
         export_to = "types.ts",
         rename = "IFarmFindOneResolve",
-        type = "IResult<Farm | undefined>"
+        type = "IResult<Farm>"
     )
 )]
 pub struct IFarmFindOneResolveTs;
 pub type IFarmFindOneResolve = IResult<Option<Farm>>;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -159,7 +148,6 @@ pub struct IFarmFindManyArgs {
     pub filter: Option<IFarmFieldsFilter>,
 }
 pub type IFarmFindMany = IFarmFindManyArgs;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -172,7 +160,6 @@ pub type IFarmFindMany = IFarmFindManyArgs;
 )]
 pub struct IFarmFindManyResolveTs;
 pub type IFarmFindManyResolve = IResultList<Farm>;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -185,7 +172,6 @@ pub type IFarmFindManyResolve = IResultList<Farm>;
 )]
 pub struct IFarmDeleteTs;
 pub type IFarmDelete = IFarmFindOneArgs;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -198,7 +184,6 @@ pub type IFarmDelete = IFarmFindOneArgs;
 )]
 pub struct IFarmDeleteResolveTs;
 pub type IFarmDeleteResolve = IResult<String>;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -210,7 +195,6 @@ pub struct IFarmUpdateArgs {
     pub fields: IFarmFieldsPartial,
 }
 pub type IFarmUpdate = IFarmUpdateArgs;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",

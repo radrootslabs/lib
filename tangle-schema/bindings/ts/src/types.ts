@@ -26,7 +26,7 @@ export type IFarmFindManyResolve = IResultList<Farm>;
 
 export type IFarmFindOne = { on: FarmQueryBindValues, };
 
-export type IFarmFindOneResolve = IResult<Farm | undefined>;
+export type IFarmFindOneResolve = IResult<Farm>;
 
 export type IFarmLocationRelation = { farm: FarmQueryBindValues, location_gcs: LocationGcsQueryBindValues, };
 
@@ -50,13 +50,13 @@ export type ILocationGcsFieldsFilter = { id?: string, created_at?: string, updat
 
 export type ILocationGcsFieldsPartial = { lat?: number | null, lng?: number | null, geohash?: string | null, tag_0?: string | null, label?: string | null, area?: number | null, elevation?: number | null, soil?: string | null, climate?: string | null, gc_id?: string | null, gc_name?: string | null, gc_admin1_id?: string | null, gc_admin1_name?: string | null, gc_country_id?: string | null, gc_country_name?: string | null, };
 
-export type ILocationGcsFindMany = { filter: ILocationGcsFieldsFilter | null, };
+export type ILocationGcsFindMany = { filter: ILocationGcsFieldsFilter | null, } | { rel: LocationGcsFindManyRel, };
 
 export type ILocationGcsFindManyResolve = IResultList<LocationGcs>;
 
 export type ILocationGcsFindOne = { on: LocationGcsQueryBindValues, };
 
-export type ILocationGcsFindOneResolve = IResult<LocationGcs | undefined>;
+export type ILocationGcsFindOneResolve = IResult<LocationGcs>;
 
 export type ILocationGcsUpdate = { on: LocationGcsQueryBindValues, fields: ILocationGcsFieldsPartial, };
 
@@ -82,7 +82,7 @@ export type ILogErrorFindManyResolve = IResultList<LogError>;
 
 export type ILogErrorFindOne = { on: LogErrorQueryBindValues, };
 
-export type ILogErrorFindOneResolve = IResult<LogError | undefined>;
+export type ILogErrorFindOneResolve = IResult<LogError>;
 
 export type ILogErrorUpdate = { on: LogErrorQueryBindValues, fields: ILogErrorFieldsPartial, };
 
@@ -102,13 +102,13 @@ export type IMediaImageFieldsFilter = { id?: string, created_at?: string, update
 
 export type IMediaImageFieldsPartial = { file_path?: string | null, mime_type?: string | null, res_base?: string | null, res_path?: string | null, label?: string | null, description?: string | null, };
 
-export type IMediaImageFindMany = { filter: IMediaImageFieldsFilter | null, };
+export type IMediaImageFindMany = { filter: IMediaImageFieldsFilter | null, } | { rel: MediaImageFindManyRel, };
 
 export type IMediaImageFindManyResolve = IResultList<MediaImage>;
 
 export type IMediaImageFindOne = { on: MediaImageQueryBindValues, };
 
-export type IMediaImageFindOneResolve = IResult<MediaImage | undefined>;
+export type IMediaImageFindOneResolve = IResult<MediaImage>;
 
 export type IMediaImageUpdate = { on: MediaImageQueryBindValues, fields: IMediaImageFieldsPartial, };
 
@@ -122,19 +122,19 @@ export type INostrProfileDelete = INostrProfileFindOne;
 
 export type INostrProfileDeleteResolve = IResult<string>;
 
-export type INostrProfileFields = { public_key: string, name?: string | null, display_name?: string | null, about?: string | null, website?: string | null, picture?: string | null, banner?: string | null, nip05?: string | null, lud06?: string | null, lud16?: string | null, };
+export type INostrProfileFields = { public_key: string, name: string, display_name?: string | null, about?: string | null, website?: string | null, picture?: string | null, banner?: string | null, nip05?: string | null, lud06?: string | null, lud16?: string | null, };
 
 export type INostrProfileFieldsFilter = { id?: string, created_at?: string, updated_at?: string, public_key?: string, name?: string, display_name?: string, about?: string, website?: string, picture?: string, banner?: string, nip05?: string, lud06?: string, lud16?: string, };
 
 export type INostrProfileFieldsPartial = { public_key?: string | null, name?: string | null, display_name?: string | null, about?: string | null, website?: string | null, picture?: string | null, banner?: string | null, nip05?: string | null, lud06?: string | null, lud16?: string | null, };
 
-export type INostrProfileFindMany = { filter: INostrProfileFieldsFilter | null, };
+export type INostrProfileFindMany = { filter: INostrProfileFieldsFilter | null, } | { rel: NostrProfileFindManyRel, };
 
 export type INostrProfileFindManyResolve = IResultList<NostrProfile>;
 
 export type INostrProfileFindOne = { on: NostrProfileQueryBindValues, };
 
-export type INostrProfileFindOneResolve = IResult<NostrProfile | undefined>;
+export type INostrProfileFindOneResolve = IResult<NostrProfile>;
 
 export type INostrProfileRelayRelation = { nostr_profile: NostrProfileQueryBindValues, nostr_relay: NostrRelayQueryBindValues, };
 
@@ -158,13 +158,13 @@ export type INostrRelayFieldsFilter = { id?: string, created_at?: string, update
 
 export type INostrRelayFieldsPartial = { url?: string | null, relay_id?: string | null, name?: string | null, description?: string | null, pubkey?: string | null, contact?: string | null, supported_nips?: string | null, software?: string | null, version?: string | null, data?: string | null, };
 
-export type INostrRelayFindMany = { filter: INostrRelayFieldsFilter | null, };
+export type INostrRelayFindMany = { filter: INostrRelayFieldsFilter | null, } | { rel: NostrRelayFindManyRel, };
 
 export type INostrRelayFindManyResolve = IResultList<NostrRelay>;
 
 export type INostrRelayFindOne = { on: NostrRelayQueryBindValues, };
 
-export type INostrRelayFindOneResolve = IResult<NostrRelay | undefined>;
+export type INostrRelayFindOneResolve = IResult<NostrRelay>;
 
 export type INostrRelayUpdate = { on: NostrRelayQueryBindValues, fields: INostrRelayFieldsPartial, };
 
@@ -190,7 +190,7 @@ export type ITradeProductFindManyResolve = IResultList<TradeProduct>;
 
 export type ITradeProductFindOne = { on: TradeProductQueryBindValues, };
 
-export type ITradeProductFindOneResolve = IResult<TradeProduct | undefined>;
+export type ITradeProductFindOneResolve = IResult<TradeProduct>;
 
 export type ITradeProductLocationRelation = { trade_product: TradeProductQueryBindValues, location_gcs: LocationGcsQueryBindValues, };
 
@@ -206,7 +206,11 @@ export type ITradeProductUpdateResolve = IResult<TradeProduct>;
 
 export type LocationGcs = { id: string, created_at: string, updated_at: string, lat: number, lng: number, geohash: string, tag_0: string | null, label: string | null, area: number | null, elevation: number | null, soil: string | null, climate: string | null, gc_id: string | null, gc_name: string | null, gc_admin1_id: string | null, gc_admin1_name: string | null, gc_country_id: string | null, gc_country_name: string | null, };
 
+export type LocationGcsFindManyRel = { "on_trade_product": LocationGcsTradeProductArgs } | { "off_trade_product": LocationGcsTradeProductArgs } | { "on_farm": LocationGcsTradeProductArgs } | { "off_farm": LocationGcsTradeProductArgs };
+
 export type LocationGcsQueryBindValues = { id: string, } | { geohash: string, };
+
+export type LocationGcsTradeProductArgs = { id: string, };
 
 export type LogError = { id: string, created_at: string, updated_at: string, error: string, message: string, stack_trace: string | null, cause: string | null, app_system: string, app_version: string, nostr_pubkey: string, data: string | null, };
 
@@ -214,13 +218,25 @@ export type LogErrorQueryBindValues = { id: string, } | { nostr_pubkey: string, 
 
 export type MediaImage = { id: string, created_at: string, updated_at: string, file_path: string, mime_type: string, res_base: string, res_path: string, label: string | null, description: string | null, };
 
+export type MediaImageFindManyRel = { "on_trade_product": MediaImageTradeProductArgs } | { "off_trade_product": MediaImageTradeProductArgs };
+
 export type MediaImageQueryBindValues = { id: string, } | { file_path: string, };
 
-export type NostrProfile = { id: string, created_at: string, updated_at: string, public_key: string, name: string | null, display_name: string | null, about: string | null, website: string | null, picture: string | null, banner: string | null, nip05: string | null, lud06: string | null, lud16: string | null, };
+export type MediaImageTradeProductArgs = { id: string, };
+
+export type NostrProfile = { id: string, created_at: string, updated_at: string, public_key: string, name: string, display_name: string | null, about: string | null, website: string | null, picture: string | null, banner: string | null, nip05: string | null, lud06: string | null, lud16: string | null, };
+
+export type NostrProfileFindManyRel = { "on_relay": NostrProfileRelayArgs } | { "off_relay": NostrProfileRelayArgs };
 
 export type NostrProfileQueryBindValues = { id: string, } | { public_key: string, };
 
+export type NostrProfileRelayArgs = { id: string, };
+
 export type NostrRelay = { id: string, created_at: string, updated_at: string, url: string, relay_id: string | null, name: string | null, description: string | null, pubkey: string | null, contact: string | null, supported_nips: string | null, software: string | null, version: string | null, data: string | null, };
+
+export type NostrRelayFindManyRel = { "on_profile": NostrRelayProfileArgs } | { "off_profile": NostrRelayProfileArgs };
+
+export type NostrRelayProfileArgs = { public_key: string, };
 
 export type NostrRelayQueryBindValues = { id: string, } | { url: string, };
 

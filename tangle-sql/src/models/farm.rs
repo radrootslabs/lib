@@ -1,18 +1,19 @@
 use radroots_sql_core::error::SqlError;
 use radroots_sql_core::{SqlExecutor, utils};
 use radroots_tangle_schema::farm::{
-    Farm,
-    FarmQueryBindValues,
     IFarmCreate,
     IFarmCreateResolve,
     IFarmDelete,
     IFarmDeleteResolve,
+    IFarmFieldsFilter,
     IFarmFindMany,
     IFarmFindManyResolve,
     IFarmFindOne,
     IFarmFindOneResolve,
     IFarmUpdate,
     IFarmUpdateResolve,
+    Farm,
+    FarmQueryBindValues,
 };
 use radroots_types::types::{IError, IResult, IResultList};
 use serde_json::Value;
@@ -61,11 +62,19 @@ pub fn find_many<E: SqlExecutor>(
     exec: &E,
     opts: &IFarmFindMany,
 ) -> Result<IFarmFindManyResolve, IError<SqlError>> {
-    let (sql, bind_values) = utils::build_select_query_with_meta(TABLE_NAME, opts.filter.as_ref());
+    let results = find_many_filter(exec, &opts.filter)?;
+    Ok(IResultList { results })
+}
+
+fn find_many_filter<E: SqlExecutor>(
+    exec: &E,
+    filter: &Option<IFarmFieldsFilter>,
+) -> Result<Vec<Farm>, IError<SqlError>> {
+    let (sql, bind_values) = utils::build_select_query_with_meta(TABLE_NAME, filter.as_ref());
     let params_json = utils::to_params_json(bind_values)?;
     let json = exec.query_raw(&sql, &params_json)?;
-    let results: Vec<Farm> = utils::parse_json(&json)?;
-    Ok(IResultList { results })
+    let rows: Vec<Farm> = utils::parse_json(&json)?;
+    Ok(rows)
 }
 
 fn select_by_id<E: SqlExecutor>(exec: &E, id: &str) -> Result<Farm, IError<SqlError>> {

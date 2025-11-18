@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Serialize, Deserialize)]
@@ -29,7 +28,6 @@ pub struct TradeProduct {
     pub price_qty_unit: String,
     pub notes: Option<String>,
 }
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Deserialize, Serialize)]
@@ -55,7 +53,6 @@ pub struct ITradeProductFields {
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub notes: Option<String>,
 }
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Deserialize, Serialize)]
@@ -95,7 +92,6 @@ pub struct ITradeProductFieldsPartial {
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub notes: Option<serde_json::Value>,
 }
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Deserialize, Serialize)]
@@ -141,7 +137,6 @@ pub struct ITradeProductFieldsFilter {
     #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub notes: Option<String>,
 }
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Deserialize, Serialize)]
@@ -149,7 +144,6 @@ pub struct ITradeProductFieldsFilter {
 pub enum TradeProductQueryBindValues {
     Id { id: String },
 }
-
 impl TradeProductQueryBindValues {
     pub fn to_filter_param(&self) -> (&'static str, Value) {
         match self {
@@ -169,7 +163,6 @@ impl TradeProductQueryBindValues {
         }
     }
 }
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -182,7 +175,6 @@ impl TradeProductQueryBindValues {
 )]
 pub struct ITradeProductCreateTs;
 pub type ITradeProductCreate = ITradeProductFields;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -195,7 +187,6 @@ pub type ITradeProductCreate = ITradeProductFields;
 )]
 pub struct ITradeProductCreateResolveTs;
 pub type ITradeProductCreateResolve = IResult<TradeProduct>;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -206,7 +197,6 @@ pub struct ITradeProductFindOneArgs {
     pub on: TradeProductQueryBindValues,
 }
 pub type ITradeProductFindOne = ITradeProductFindOneArgs;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -214,12 +204,11 @@ pub type ITradeProductFindOne = ITradeProductFindOneArgs;
         export,
         export_to = "types.ts",
         rename = "ITradeProductFindOneResolve",
-        type = "IResult<TradeProduct | undefined>"
+        type = "IResult<TradeProduct>"
     )
 )]
 pub struct ITradeProductFindOneResolveTs;
 pub type ITradeProductFindOneResolve = IResult<Option<TradeProduct>>;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -230,7 +219,6 @@ pub struct ITradeProductFindManyArgs {
     pub filter: Option<ITradeProductFieldsFilter>,
 }
 pub type ITradeProductFindMany = ITradeProductFindManyArgs;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -243,7 +231,6 @@ pub type ITradeProductFindMany = ITradeProductFindManyArgs;
 )]
 pub struct ITradeProductFindManyResolveTs;
 pub type ITradeProductFindManyResolve = IResultList<TradeProduct>;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -256,7 +243,6 @@ pub type ITradeProductFindManyResolve = IResultList<TradeProduct>;
 )]
 pub struct ITradeProductDeleteTs;
 pub type ITradeProductDelete = ITradeProductFindOneArgs;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -269,7 +255,6 @@ pub type ITradeProductDelete = ITradeProductFindOneArgs;
 )]
 pub struct ITradeProductDeleteResolveTs;
 pub type ITradeProductDeleteResolve = IResult<String>;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -281,7 +266,6 @@ pub struct ITradeProductUpdateArgs {
     pub fields: ITradeProductFieldsPartial,
 }
 pub type ITradeProductUpdate = ITradeProductUpdateArgs;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
