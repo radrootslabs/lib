@@ -3,7 +3,7 @@ use radroots_core::{
     RadrootsCoreDecimal, RadrootsCoreQuantity, RadrootsCoreQuantityPrice,
     RadrootsCoreQuantityPriceOps,
 };
-use radroots_events::listing::models::RadrootsListingQuantity;
+use radroots_events::listing::RadrootsListingQuantity;
 
 pub trait AsCoreQuantityPrice {
     fn as_core_qp(&self) -> RadrootsCoreQuantityPrice;

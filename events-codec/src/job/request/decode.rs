@@ -1,6 +1,6 @@
 use radroots_events::{
     RadrootsNostrEvent,
-    job::request::models::{
+    job_request::{
         RadrootsJobInput, RadrootsJobParam, RadrootsJobRequest, RadrootsJobRequestEventIndex,
         RadrootsJobRequestEventMetadata,
     },

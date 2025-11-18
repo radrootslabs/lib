@@ -1,6 +1,6 @@
-use radroots_events::job::{
-    request::models::{RadrootsJobInput, RadrootsJobParam},
-    JobFeedbackStatus, JobInputType,
+use radroots_events::{
+    job::{JobFeedbackStatus, JobInputType},
+    job_request::{RadrootsJobInput, RadrootsJobParam},
 };
 
 use crate::job::error::JobParseError;

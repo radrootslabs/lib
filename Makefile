@@ -1,5 +1,5 @@
 .PHONY: all bindings clean help \
-        bindings-tangle-schema bindings-types \
+        bindings-events bindings-tangle-schema bindings-types \
         build build-tangle-sql-wasm
 
 SHELL := /bin/bash
@@ -7,6 +7,7 @@ SHELL := /bin/bash
 TS_RS_FEATURE ?= ts-rs
 
 BINDINGS_TARGETS := \
+	bindings-events \
     bindings-tangle-schema \
     bindings-types
 
@@ -31,6 +32,10 @@ help:
 	@echo "  make help"
 	@printf "%s\n" $(BINDINGS_TARGETS)
 	@printf "%s\n" $(BUILD_TARGETS)
+
+bindings-events:
+	@(cd events && cargo test --features $(TS_RS_FEATURE))
+	@(cd events/bindings/ts && yarn build)
 
 bindings-tangle-schema:
 	@(cd tangle-schema && cargo test --features $(TS_RS_FEATURE))

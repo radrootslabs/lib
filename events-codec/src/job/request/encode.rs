@@ -1,6 +1,6 @@
-use radroots_events::job::request::models::RadrootsJobRequest;
+use radroots_events::job_request::RadrootsJobRequest;
 
-use crate::job::encode::{canonicalize_tags, JobEncodeError, WireEventParts};
+use crate::job::encode::{JobEncodeError, WireEventParts, canonicalize_tags};
 use crate::job::util::{job_input_type_tag, push_bid_tag_msat};
 
 pub fn job_request_build_tags(req: &RadrootsJobRequest) -> Vec<Vec<String>> {

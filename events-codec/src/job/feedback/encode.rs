@@ -1,6 +1,6 @@
-use radroots_events::job::feedback::models::RadrootsJobFeedback;
+use radroots_events::job_feedback::RadrootsJobFeedback;
 
-use crate::job::encode::{canonicalize_tags, JobEncodeError, WireEventParts};
+use crate::job::encode::{JobEncodeError, WireEventParts, canonicalize_tags};
 use crate::job::util::{feedback_status_tag, push_amount_tag_msat};
 
 pub fn job_feedback_build_tags(fb: &RadrootsJobFeedback) -> Vec<Vec<String>> {

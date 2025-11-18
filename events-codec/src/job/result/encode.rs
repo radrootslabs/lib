@@ -1,7 +1,7 @@
-use radroots_events::job::result::models::RadrootsJobResult;
+use radroots_events::job_result::RadrootsJobResult;
 
 use crate::job::encode::{
-    assert_no_inputs_when_encrypted, canonicalize_tags, JobEncodeError, WireEventParts,
+    JobEncodeError, WireEventParts, assert_no_inputs_when_encrypted, canonicalize_tags,
 };
 use crate::job::util::{job_input_type_tag, push_amount_tag_msat};
 

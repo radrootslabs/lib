@@ -1,15 +1,19 @@
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "ts-rs")]
+use ts_rs::TS;
 
 use crate::{RadrootsNostrEvent, job::JobInputType};
 
-#[typeshare::typeshare]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RadrootsJobRequestEventIndex {
     pub event: RadrootsNostrEvent,
     pub metadata: RadrootsJobRequestEventMetadata,
 }
 
-#[typeshare::typeshare]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RadrootsJobRequestEventMetadata {
     pub id: String,
@@ -19,29 +23,36 @@ pub struct RadrootsJobRequestEventMetadata {
     pub job_request: RadrootsJobRequest,
 }
 
-#[typeshare::typeshare]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RadrootsJobInput {
     pub data: String,
     pub input_type: JobInputType,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub relay: Option<String>,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub marker: Option<String>,
 }
 
-#[typeshare::typeshare]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RadrootsJobParam {
     pub key: String,
     pub value: String,
 }
 
-#[typeshare::typeshare]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RadrootsJobRequest {
     pub kind: u16,
     pub inputs: Vec<RadrootsJobInput>,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub output: Option<String>,
     pub params: Vec<RadrootsJobParam>,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "number | null"))]
     pub bid_sat: Option<u32>,
     pub relays: Vec<String>,
     pub providers: Vec<String>,

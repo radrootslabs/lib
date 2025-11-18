@@ -1,12 +1,8 @@
 use radroots_events::{
     RadrootsNostrEvent, RadrootsNostrEventPtr,
-    job::{
-        JobPaymentRequest,
-        request::models::RadrootsJobInput,
-        result::models::{
-            RadrootsJobResult, RadrootsJobResultEventIndex, RadrootsJobResultEventMetadata,
-        },
-    },
+    job::JobPaymentRequest,
+    job_request::RadrootsJobInput,
+    job_result::{RadrootsJobResult, RadrootsJobResultEventIndex, RadrootsJobResultEventMetadata},
 };
 
 use crate::job::{

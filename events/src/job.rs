@@ -1,18 +1,9 @@
-pub mod feedback {
-    pub mod models;
-}
-
-pub mod request {
-    pub mod models;
-}
-
-pub mod result {
-    pub mod models;
-}
-
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "ts-rs")]
+use ts_rs::TS;
 
-#[typeshare::typeshare]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Copy)]
 #[serde(rename_all = "snake_case")]
 pub enum JobInputType {
@@ -22,7 +13,8 @@ pub enum JobInputType {
     Text,
 }
 
-#[typeshare::typeshare]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Copy)]
 #[serde(rename_all = "snake_case")]
 pub enum JobFeedbackStatus {
@@ -33,9 +25,11 @@ pub enum JobFeedbackStatus {
     Partial,
 }
 
-#[typeshare::typeshare]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct JobPaymentRequest {
     pub amount_sat: u32,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub bolt11: Option<String>,
 }

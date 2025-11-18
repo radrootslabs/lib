@@ -3,11 +3,10 @@ extern crate alloc;
 
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
-
-use radroots_events::job::{
-    feedback::models::{RadrootsJobFeedbackEventIndex, RadrootsJobFeedbackEventMetadata},
-    request::models::{RadrootsJobRequestEventIndex, RadrootsJobRequestEventMetadata},
-    result::models::{RadrootsJobResultEventIndex, RadrootsJobResultEventMetadata},
+use radroots_events::{
+    job_feedback::{RadrootsJobFeedbackEventIndex, RadrootsJobFeedbackEventMetadata},
+    job_request::{RadrootsJobRequestEventIndex, RadrootsJobRequestEventMetadata},
+    job_result::{RadrootsJobResultEventIndex, RadrootsJobResultEventMetadata},
 };
 
 use crate::job::{

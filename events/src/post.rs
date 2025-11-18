@@ -1,14 +1,18 @@
 use crate::RadrootsNostrEvent;
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "ts-rs")]
+use ts_rs::TS;
 
-#[typeshare::typeshare]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RadrootsPostEventIndex {
     pub event: RadrootsNostrEvent,
     pub metadata: RadrootsPostEventMetadata,
 }
 
-#[typeshare::typeshare]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RadrootsPostEventMetadata {
     pub id: String,
@@ -18,7 +22,8 @@ pub struct RadrootsPostEventMetadata {
     pub post: RadrootsPost,
 }
 
-#[typeshare::typeshare]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RadrootsPost {
     pub content: String,

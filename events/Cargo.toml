@@ -6,16 +6,19 @@ edition.workspace = true
 authors = ["Radroots Authors"]
 rust-version.workspace = true
 license.workspace = true
+build = "build.rs"
 
 [features]
-default = ["std", "serde", "typeshare"]
+default = ["std", "serde", "ts-rs", "typeshare"]
 std = []
 serde = ["dep:serde"]
+ts-rs = ["dep:ts-rs"]
 typeshare = ["dep:typeshare"]
 
 [dependencies]
 radroots-core = { workspace = true, default-features = false, features = ["std", "serde", "typeshare"] }
 serde = { workspace = true, default-features = false, features = ["alloc", "derive"], optional = true }
+ts-rs = { workspace = true, optional = true }
 typeshare = { workspace = true, optional = true }
 
 [dev-dependencies]

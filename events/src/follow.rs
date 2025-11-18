@@ -1,14 +1,18 @@
 use crate::RadrootsNostrEvent;
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "ts-rs")]
+use ts_rs::TS;
 
-#[typeshare::typeshare]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RadrootsFollowEventIndex {
     pub event: RadrootsNostrEvent,
     pub metadata: RadrootsFollowEventMetadata,
 }
 
-#[typeshare::typeshare]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RadrootsFollowEventMetadata {
     pub id: String,
@@ -18,17 +22,21 @@ pub struct RadrootsFollowEventMetadata {
     pub follow: RadrootsFollow,
 }
 
-#[typeshare::typeshare]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RadrootsFollow {
     pub list: Vec<RadrootsFollowProfile>,
 }
 
-#[typeshare::typeshare]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RadrootsFollowProfile {
     pub published_at: u32,
     pub public_key: String,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub relay_url: Option<String>,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub contact_name: Option<String>,
 }

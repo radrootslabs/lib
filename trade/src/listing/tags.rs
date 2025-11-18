@@ -1,7 +1,7 @@
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
 
-use radroots_events::tag::{TAG_D, TAG_E_PREV, TAG_E_ROOT};
+use radroots_events::tags::{TAG_D, TAG_E_PREV, TAG_E_ROOT};
 use radroots_events_codec::job::error::JobParseError;
 
 #[inline]

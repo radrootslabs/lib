@@ -1,10 +1,8 @@
 use radroots_events::{
     RadrootsNostrEvent, RadrootsNostrEventPtr,
-    job::{
-        JobPaymentRequest,
-        feedback::models::{
-            RadrootsJobFeedback, RadrootsJobFeedbackEventIndex, RadrootsJobFeedbackEventMetadata,
-        },
+    job::JobPaymentRequest,
+    job_feedback::{
+        RadrootsJobFeedback, RadrootsJobFeedbackEventIndex, RadrootsJobFeedbackEventMetadata,
     },
 };
 

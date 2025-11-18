@@ -1,7 +1,7 @@
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
 use radroots_core::RadrootsCoreQuantityPrice;
-use radroots_events::listing::models::{RadrootsListingDiscount, RadrootsListingQuantity};
+use radroots_events::listing::{RadrootsListingDiscount, RadrootsListingQuantity};
 
 use crate::listing::model::{RadrootsTradeListingSubtotal, RadrootsTradeListingTotal};
 
