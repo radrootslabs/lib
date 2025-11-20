@@ -1870,6 +1870,7 @@ dependencies = [
  "radroots-sql-core",
  "radroots-tangle-schema",
  "radroots-types",
+ "serde",
  "serde_json",
 ]
 

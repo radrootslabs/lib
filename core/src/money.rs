@@ -1,7 +1,7 @@
 use core::fmt;
-use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
 use rust_decimal::RoundingStrategy;
+use rust_decimal::prelude::ToPrimitive;
 
 #[typeshare::typeshare]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

@@ -2,9 +2,6 @@
 
 use radroots_sql_core::WasmSqlExecutor;
 use radroots_sql_wasm_core::{err_js, parse_json};
-use radroots_tangle_schema::log_error::{
-    ILogErrorCreate, ILogErrorDelete, ILogErrorFindMany, ILogErrorFindOne, ILogErrorUpdate,
-};
 use radroots_tangle_sql::migrations;
 use wasm_bindgen::prelude::*;
 
@@ -22,6 +19,14 @@ use radroots_tangle_schema::location_gcs::{
     ILocationGcsFindMany,
     ILocationGcsFindOne,
     ILocationGcsUpdate,
+};
+
+use radroots_tangle_schema::log_error::{
+    ILogErrorCreate,
+    ILogErrorDelete,
+    ILogErrorFindMany,
+    ILogErrorFindOne,
+    ILogErrorUpdate,
 };
 
 use radroots_tangle_schema::media_image::{
@@ -87,49 +92,17 @@ pub fn tangle_db_reset_database() -> Result<(), JsValue> {
     migrations::run_all_down(&exec).map_err(err_js)
 }
 
-#[wasm_bindgen(js_name = tangle_db_log_error_create)]
-pub fn tangle_db_log_error_create(opts_json: &str) -> Result<JsValue, JsValue> {
-    let opts: ILogErrorCreate = parse_json(opts_json).map_err(err_js)?;
+#[wasm_bindgen(js_name = tangle_db_export_backup)]
+pub fn tangle_db_export_backup() -> Result<JsValue, JsValue> {
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_sql::log_error::create(&exec, &opts).map_err(|e| err_js(e.err))?;
-    value_to_js(out)
+    let dump = radroots_tangle_sql::backup::export_database_backup(&exec).map_err(err_js)?;
+    value_to_js(dump)
 }
 
-#[wasm_bindgen(js_name = tangle_db_log_error_find_one)]
-pub fn tangle_db_log_error_find_one(opts_json: &str) -> Result<JsValue, JsValue> {
-    let opts: ILogErrorFindOne = parse_json(opts_json).map_err(err_js)?;
+#[wasm_bindgen(js_name = tangle_db_import_backup)]
+pub fn tangle_db_import_backup(dump_json: &str) -> Result<(), JsValue> {
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_sql::log_error::find_one(&exec, &opts).map_err(|e| err_js(e.err))?;
-    value_to_js(out)
-}
-
-#[wasm_bindgen(js_name = tangle_db_log_error_find_many)]
-pub fn tangle_db_log_error_find_many(opts_json: &str) -> Result<JsValue, JsValue> {
-    let opts: ILogErrorFindMany = parse_json(opts_json).map_err(err_js)?;
-    let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_sql::log_error::find_many(&exec, &opts).map_err(|e| err_js(e.err))?;
-    value_to_js(out)
-}
-
-#[wasm_bindgen(js_name = tangle_db_log_error_update)]
-pub fn tangle_db_log_error_update(opts_json: &str) -> Result<JsValue, JsValue> {
-    let opts: ILogErrorUpdate = parse_json(opts_json).map_err(err_js)?;
-    let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_sql::log_error::update(&exec, &opts).map_err(|e| err_js(e.err))?;
-    value_to_js(out)
-}
-
-#[wasm_bindgen(js_name = tangle_db_log_error_delete)]
-pub fn tangle_db_log_error_delete(opts_json: &str) -> Result<JsValue, JsValue> {
-    let opts: ILogErrorDelete = parse_json(opts_json).map_err(err_js)?;
-    let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_sql::log_error::delete(&exec, &opts).map_err(|e| err_js(e.err))?;
-    value_to_js(out)
+    radroots_tangle_sql::backup::restore_database_backup_json(&exec, dump_json).map_err(err_js)
 }
 
 #[wasm_bindgen(js_name = tangle_db_farm_create)]
@@ -219,6 +192,51 @@ pub fn tangle_db_location_gcs_delete(opts_json: &str) -> Result<JsValue, JsValue
     let exec = WasmSqlExecutor::new();
     let out =
         radroots_tangle_sql::location_gcs::delete(&exec, &opts).map_err(|e| err_js(e.err))?;
+    value_to_js(out)
+}
+
+#[wasm_bindgen(js_name = tangle_db_log_error_create)]
+pub fn tangle_db_log_error_create(opts_json: &str) -> Result<JsValue, JsValue> {
+    let opts: ILogErrorCreate = parse_json(opts_json).map_err(err_js)?;
+    let exec = WasmSqlExecutor::new();
+    let out =
+        radroots_tangle_sql::log_error::create(&exec, &opts).map_err(|e| err_js(e.err))?;
+    value_to_js(out)
+}
+
+#[wasm_bindgen(js_name = tangle_db_log_error_find_one)]
+pub fn tangle_db_log_error_find_one(opts_json: &str) -> Result<JsValue, JsValue> {
+    let opts: ILogErrorFindOne = parse_json(opts_json).map_err(err_js)?;
+    let exec = WasmSqlExecutor::new();
+    let out =
+        radroots_tangle_sql::log_error::find_one(&exec, &opts).map_err(|e| err_js(e.err))?;
+    value_to_js(out)
+}
+
+#[wasm_bindgen(js_name = tangle_db_log_error_find_many)]
+pub fn tangle_db_log_error_find_many(opts_json: &str) -> Result<JsValue, JsValue> {
+    let opts: ILogErrorFindMany = parse_json(opts_json).map_err(err_js)?;
+    let exec = WasmSqlExecutor::new();
+    let out =
+        radroots_tangle_sql::log_error::find_many(&exec, &opts).map_err(|e| err_js(e.err))?;
+    value_to_js(out)
+}
+
+#[wasm_bindgen(js_name = tangle_db_log_error_update)]
+pub fn tangle_db_log_error_update(opts_json: &str) -> Result<JsValue, JsValue> {
+    let opts: ILogErrorUpdate = parse_json(opts_json).map_err(err_js)?;
+    let exec = WasmSqlExecutor::new();
+    let out =
+        radroots_tangle_sql::log_error::update(&exec, &opts).map_err(|e| err_js(e.err))?;
+    value_to_js(out)
+}
+
+#[wasm_bindgen(js_name = tangle_db_log_error_delete)]
+pub fn tangle_db_log_error_delete(opts_json: &str) -> Result<JsValue, JsValue> {
+    let opts: ILogErrorDelete = parse_json(opts_json).map_err(err_js)?;
+    let exec = WasmSqlExecutor::new();
+    let out =
+        radroots_tangle_sql::log_error::delete(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 

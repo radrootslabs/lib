@@ -1,6 +1,6 @@
 #![cfg(feature = "serde")]
 
-use serde::{de::Error as DeError, Deserialize, Deserializer, Serializer};
+use serde::{Deserialize, Deserializer, Serializer, de::Error as DeError};
 
 pub mod decimal_str {
     use super::*;

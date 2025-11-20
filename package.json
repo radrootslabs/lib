@@ -14,8 +14,8 @@
   },
   "workspaces": [
     "*/bindings/ts",
-    "../packages/dev",
-    "../packages/tsconfig"
+    "../pwa/packages/dev",
+    "../pwa/packages/tsconfig"
   ],
   "packageManager": "yarn@1.22.22"
 }

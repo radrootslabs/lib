@@ -1,8 +1,8 @@
 use core::fmt;
 use core::str::FromStr;
 
-use crate::money::RadrootsCoreMoney;
 use crate::RadrootsCoreDecimal;
+use crate::money::RadrootsCoreMoney;
 
 #[typeshare::typeshare]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

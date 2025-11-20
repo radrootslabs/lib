@@ -2,7 +2,7 @@ use core::fmt;
 use core::str::FromStr;
 
 #[cfg(feature = "serde")]
-use serde::{de::Error as DeError, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as DeError};
 
 #[typeshare::typeshare]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

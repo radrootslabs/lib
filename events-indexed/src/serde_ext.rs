@@ -1,6 +1,6 @@
 #[cfg(feature = "serde")]
 pub mod epoch_seconds {
-    use serde::{de::Error as DeError, Deserialize, Deserializer};
+    use serde::{Deserialize, Deserializer, de::Error as DeError};
 
     pub fn de<'de, D>(de: D) -> Result<u32, D::Error>
     where

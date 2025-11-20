@@ -6,10 +6,13 @@
     "files": [
         "dist"
     ],
+    "main": "./dist/radroots_tangle_sql_wasm.js",
+    "types": "./dist/radroots_tangle_sql_wasm.d.ts",
     "exports": {
         ".": {
             "types": "./dist/radroots_tangle_sql_wasm.d.ts",
-            "import": "./dist/radroots_tangle_sql_wasm.js"
+            "import": "./dist/radroots_tangle_sql_wasm.js",
+            "default": "./dist/radroots_tangle_sql_wasm.js"
         }
     },
     "sideEffects": false

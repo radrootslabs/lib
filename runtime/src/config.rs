@@ -68,12 +68,10 @@ where
         }
     }
 
-    let cfg = builder
-        .build()
-        .map_err(|source| RuntimeConfigError::Load {
-            path: p.to_path_buf(),
-            source,
-        })?;
+    let cfg = builder.build().map_err(|source| RuntimeConfigError::Load {
+        path: p.to_path_buf(),
+        source,
+    })?;
 
     try_deser::<T>(cfg, p)
 }

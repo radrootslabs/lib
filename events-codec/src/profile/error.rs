@@ -3,7 +3,7 @@ use core::fmt;
 #[derive(Debug)]
 pub enum ProfileEncodeError {
     InvalidUrl(&'static str, String),
-    Json, 
+    Json,
 }
 
 impl fmt::Display for ProfileEncodeError {

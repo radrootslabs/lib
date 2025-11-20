@@ -113,8 +113,10 @@ use radroots_tangle_schema::trade_product_media::{
     ITradeProductMediaResolve,
 };
 
+pub mod backup;
 pub mod migrations;
 pub mod models;
+pub use backup::{DatabaseBackup, MigrationBackup, SchemaEntry};
 pub use models::*;
 
 pub struct TangleSql<E: SqlExecutor> {
@@ -136,6 +138,22 @@ impl<E: SqlExecutor> TangleSql<E> {
 
     pub fn migrate_down(&self) -> Result<(), SqlError> {
         crate::migrations::run_all_down(self.executor())
+    }
+
+    pub fn backup_database(&self) -> Result<DatabaseBackup, SqlError> {
+        crate::backup::export_database_backup(self.executor())
+    }
+
+    pub fn backup_database_json(&self) -> Result<String, SqlError> {
+        crate::backup::export_database_backup_json(self.executor())
+    }
+
+    pub fn restore_database(&self, backup: &DatabaseBackup) -> Result<(), SqlError> {
+        crate::backup::restore_database_backup(self.executor(), backup)
+    }
+
+    pub fn restore_database_json(&self, backup_json: &str) -> Result<(), SqlError> {
+        crate::backup::restore_database_backup_json(self.executor(), backup_json)
     }
 
     pub fn farm_create(

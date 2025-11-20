@@ -1,7 +1,7 @@
 use core::fmt;
 
-use crate::unit::RadrootsCoreUnit;
 use crate::RadrootsCoreDecimal;
+use crate::unit::RadrootsCoreUnit;
 
 #[typeshare::typeshare]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

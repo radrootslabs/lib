@@ -9,7 +9,7 @@ pub mod types;
 
 pub use checkpoint::{RadrootsEventsIndexedIndexCheckpoint, RadrootsEventsIndexedShardCheckpoint};
 pub use manifest::{
-    validate_manifest, RadrootsEventsIndexedManifest, RadrootsEventsIndexedManifestError,
-    RadrootsEventsIndexedShardMetadata,
+    RadrootsEventsIndexedManifest, RadrootsEventsIndexedManifestError,
+    RadrootsEventsIndexedShardMetadata, validate_manifest,
 };
 pub use types::{RadrootsEventsIndexedIdRange, RadrootsEventsIndexedShardId};

@@ -3,7 +3,7 @@ use core::str::FromStr;
 use rust_decimal_macros::dec;
 
 #[cfg(feature = "serde")]
-use serde::{de::Error as DeError, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as DeError};
 
 use crate::RadrootsCoreDecimal;
 
