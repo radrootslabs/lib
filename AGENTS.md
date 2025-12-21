@@ -38,3 +38,10 @@
 - Parity: maintain feature parity across native/wasm layers when adding SQL or Tangle APIs.
 - Module layout: keep lib.rs as a module manifest and re-export surface; avoid heavy logic in lib.rs.
 - Testing: add or update unit tests for new behavior and edge cases, especially around parsing, invariants, conversions, and rounding.
+
+## Git Commit Directives
+- Format commits like the latest reference: `<scope>: <imperative summary>` (scope = crate or subsystem, lowercase).
+- Leave a blank line after the summary.
+- Add a bullet list of key changes, each prefixed with `- `, matching the structure of the last commit.
+- Keep the summary concise; use bullets for notable changes, tests run, and compatibility notes.
+- Split unrelated changes into separate commits.
