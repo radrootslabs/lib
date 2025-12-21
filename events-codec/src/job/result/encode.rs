@@ -1,14 +1,25 @@
-use radroots_events::job_result::RadrootsJobResult;
+use radroots_events::{job_result::RadrootsJobResult, kinds::is_result_kind};
 
 use crate::job::encode::{
     JobEncodeError, WireEventParts, assert_no_inputs_when_encrypted, canonicalize_tags,
 };
 use crate::job::util::{job_input_type_tag, push_amount_tag_msat};
 
-pub fn job_result_build_tags(res: &RadrootsJobResult) -> Vec<Vec<String>> {
-    let mut tags: Vec<Vec<String>> = Vec::new();
+#[cfg(not(feature = "std"))]
+use alloc::{string::String, vec::Vec};
 
-    let mut e = vec!["e".to_string(), res.request_event.id.clone()];
+pub fn job_result_build_tags(res: &RadrootsJobResult) -> Vec<Vec<String>> {
+    let mut tags: Vec<Vec<String>> = Vec::with_capacity(
+        2
+            + res.inputs.len()
+            + usize::from(res.customer_pubkey.is_some())
+            + usize::from(res.payment.is_some())
+            + usize::from(res.encrypted),
+    );
+
+    let mut e = Vec::with_capacity(3);
+    e.push("e".to_string());
+    e.push(res.request_event.id.clone());
     if let Some(r) = &res.request_event.relays {
         e.push(r.clone());
     }
@@ -20,7 +31,9 @@ pub fn job_result_build_tags(res: &RadrootsJobResult) -> Vec<Vec<String>> {
 
     if !res.encrypted {
         for i in &res.inputs {
-            let mut t = vec!["i".to_string(), i.data.clone()];
+            let mut t = Vec::with_capacity(5);
+            t.push("i".to_string());
+            t.push(i.data.clone());
             t.push(job_input_type_tag(i.input_type).to_string());
             if let Some(relay) = &i.relay {
                 t.push(relay.clone());
@@ -52,7 +65,7 @@ pub fn to_wire_parts(
     content: &str,
 ) -> Result<WireEventParts, JobEncodeError> {
     let kind = res.kind as u32;
-    if !(6000..=6999).contains(&kind) {
+    if !is_result_kind(kind) {
         return Err(JobEncodeError::InvalidKind(kind));
     }
 

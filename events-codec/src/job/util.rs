@@ -1,3 +1,6 @@
+#[cfg(not(feature = "std"))]
+use alloc::{string::String, vec::Vec};
+
 use radroots_events::{
     job::{JobFeedbackStatus, JobInputType},
     job_request::{RadrootsJobInput, RadrootsJobParam},
@@ -7,23 +10,27 @@ use crate::job::error::JobParseError;
 
 fn looks_like_hex_id(s: &str) -> bool {
     let n = s.len();
-    (n == 32 || n == 64) && s.chars().all(|c| c.is_ascii_hexdigit())
+    (n == 32 || n == 64) && s.as_bytes().iter().all(|c| c.is_ascii_hexdigit())
+}
+
+fn starts_with_ignore_ascii_case(s: &str, prefix: &str) -> bool {
+    s.get(..prefix.len())
+        .map(|head| head.eq_ignore_ascii_case(prefix))
+        .unwrap_or(false)
 }
 
 fn looks_like_url_or_nostr(s: &str) -> bool {
-    let ls = s.to_ascii_lowercase();
-    ls.starts_with("http://")
-        || ls.starts_with("https://")
-        || ls.starts_with("nostr:")
-        || ls.starts_with("note")
-        || ls.starts_with("nevent")
-        || ls.starts_with("naddr")
+    starts_with_ignore_ascii_case(s, "http://")
+        || starts_with_ignore_ascii_case(s, "https://")
+        || starts_with_ignore_ascii_case(s, "nostr:")
+        || starts_with_ignore_ascii_case(s, "note")
+        || starts_with_ignore_ascii_case(s, "nevent")
+        || starts_with_ignore_ascii_case(s, "naddr")
         || looks_like_hex_id(s)
 }
 
 fn looks_like_ws_relay(s: &str) -> bool {
-    let ls = s.to_ascii_lowercase();
-    ls.starts_with("ws://") || ls.starts_with("wss://")
+    starts_with_ignore_ascii_case(s, "ws://") || starts_with_ignore_ascii_case(s, "wss://")
 }
 
 pub fn parse_bool_encrypted(tags: &[Vec<String>]) -> bool {
@@ -95,8 +102,9 @@ pub fn parse_i_tags(tags: &[Vec<String>]) -> Vec<RadrootsJobInput> {
                 let v = &t[1];
                 if looks_like_url_or_nostr(v) {
                     data = v.clone();
-                    let lv = v.to_ascii_lowercase();
-                    input_type = if lv.starts_with("http://") || lv.starts_with("https://") {
+                    let is_url = starts_with_ignore_ascii_case(v, "http://")
+                        || starts_with_ignore_ascii_case(v, "https://");
+                    input_type = if is_url {
                         JobInputType::Url
                     } else {
                         JobInputType::Event

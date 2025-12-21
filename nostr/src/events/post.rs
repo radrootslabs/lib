@@ -42,7 +42,7 @@ pub async fn fetch_post_events(
     client: &Client,
     limit: u16,
     since_unix: Option<u64>,
-) -> Result<Vec<radroots_events::post::models::RadrootsPostEventMetadata>, NostrUtilsError> {
+) -> Result<Vec<radroots_events::post::RadrootsPostEventMetadata>, NostrUtilsError> {
     let mut filter = Filter::new().kind(Kind::TextNote).limit(limit.into());
 
     if let Some(s) = since_unix {

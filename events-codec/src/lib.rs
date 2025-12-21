@@ -1,6 +1,21 @@
 #![cfg_attr(not(feature = "std"), no_std)]
+#![forbid(unsafe_code)]
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
+pub mod error;
+pub mod event_ref;
 pub mod job;
 pub mod profile;
+pub mod wire;
+
+pub mod comment;
+pub mod follow;
+pub mod post;
+pub mod reaction;
+
+#[cfg(feature = "serde_json")]
+pub mod listing;
+
+#[cfg(feature = "serde_json")]
+pub mod relay_document;

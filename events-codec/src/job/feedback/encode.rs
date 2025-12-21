@@ -1,21 +1,30 @@
-use radroots_events::job_feedback::RadrootsJobFeedback;
+use radroots_events::{job_feedback::RadrootsJobFeedback, kinds::KIND_JOB_FEEDBACK};
 
 use crate::job::encode::{JobEncodeError, WireEventParts, canonicalize_tags};
 use crate::job::util::{feedback_status_tag, push_amount_tag_msat};
 
-pub fn job_feedback_build_tags(fb: &RadrootsJobFeedback) -> Vec<Vec<String>> {
-    let mut tags: Vec<Vec<String>> = Vec::new();
+#[cfg(not(feature = "std"))]
+use alloc::{string::String, vec::Vec};
 
-    let mut st = vec![
-        "status".to_string(),
-        feedback_status_tag(fb.status).to_string(),
-    ];
+pub fn job_feedback_build_tags(fb: &RadrootsJobFeedback) -> Vec<Vec<String>> {
+    let mut tags: Vec<Vec<String>> = Vec::with_capacity(
+        2
+            + usize::from(fb.customer_pubkey.is_some())
+            + usize::from(fb.payment.is_some())
+            + usize::from(fb.encrypted),
+    );
+
+    let mut st = Vec::with_capacity(3);
+    st.push("status".to_string());
+    st.push(feedback_status_tag(fb.status).to_string());
     if let Some(info) = &fb.extra_info {
         st.push(info.clone());
     }
     tags.push(st);
 
-    let mut e = vec!["e".to_string(), fb.request_event.id.clone()];
+    let mut e = Vec::with_capacity(3);
+    e.push("e".to_string());
+    e.push(fb.request_event.id.clone());
     if let Some(r) = &fb.request_event.relays {
         e.push(r.clone());
     }
@@ -41,7 +50,7 @@ pub fn to_wire_parts(
     content: &str,
 ) -> Result<WireEventParts, JobEncodeError> {
     let kind = fb.kind as u32;
-    if kind != 7000 {
+    if kind != KIND_JOB_FEEDBACK {
         return Err(JobEncodeError::InvalidKind(kind));
     }
 

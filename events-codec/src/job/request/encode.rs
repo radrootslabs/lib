@@ -1,13 +1,27 @@
-use radroots_events::job_request::RadrootsJobRequest;
+use radroots_events::{job_request::RadrootsJobRequest, kinds::is_request_kind};
 
 use crate::job::encode::{JobEncodeError, WireEventParts, canonicalize_tags};
 use crate::job::util::{job_input_type_tag, push_bid_tag_msat};
 
+#[cfg(not(feature = "std"))]
+use alloc::{string::String, vec::Vec};
+
 pub fn job_request_build_tags(req: &RadrootsJobRequest) -> Vec<Vec<String>> {
-    let mut tags: Vec<Vec<String>> = Vec::new();
+    let mut tags: Vec<Vec<String>> = Vec::with_capacity(
+        req.inputs.len()
+            + req.params.len()
+            + req.relays.len()
+            + req.providers.len()
+            + req.topics.len()
+            + usize::from(req.output.is_some())
+            + usize::from(req.bid_sat.is_some())
+            + usize::from(req.encrypted),
+    );
 
     for i in &req.inputs {
-        let mut t = vec!["i".to_string(), i.data.clone()];
+        let mut t = Vec::with_capacity(5);
+        t.push("i".to_string());
+        t.push(i.data.clone());
         t.push(job_input_type_tag(i.input_type).to_string());
         if let Some(relay) = &i.relay {
             t.push(relay.clone());
@@ -54,7 +68,7 @@ pub fn to_wire_parts(
     content: &str,
 ) -> Result<WireEventParts, JobEncodeError> {
     let kind = req.kind as u32;
-    if !(5000..=5999).contains(&kind) {
+    if !is_request_kind(kind) {
         return Err(JobEncodeError::InvalidKind(kind));
     }
     if req.encrypted && req.providers.is_empty() {

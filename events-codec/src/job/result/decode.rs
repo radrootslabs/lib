@@ -3,7 +3,11 @@ use radroots_events::{
     job::JobPaymentRequest,
     job_request::RadrootsJobInput,
     job_result::{RadrootsJobResult, RadrootsJobResultEventIndex, RadrootsJobResultEventMetadata},
+    kinds::is_result_kind,
 };
+
+#[cfg(not(feature = "std"))]
+use alloc::{string::String, vec::Vec};
 
 use crate::job::{
     error::JobParseError,
@@ -63,10 +67,6 @@ pub fn job_result_from_tags(
         },
         encrypted,
     })
-}
-
-fn is_result_kind(kind: u32) -> bool {
-    (6000..=6999).contains(&kind)
 }
 
 pub fn metadata_from_event(

@@ -1,11 +1,14 @@
 use crate::profile::error::ProfileEncodeError;
-use radroots_events::profile::models::RadrootsProfile;
+use radroots_events::profile::RadrootsProfile;
 
 use nostr::Metadata;
 use nostr::prelude::Url;
 
 #[cfg(feature = "serde_json")]
-use crate::job::encode::WireEventParts;
+use crate::wire::WireEventParts;
+
+#[cfg(all(feature = "serde_json", not(feature = "std")))]
+use alloc::{string::String, vec::Vec};
 
 pub fn to_metadata(p: &RadrootsProfile) -> Result<Metadata, ProfileEncodeError> {
     let mut md = Metadata::new().name(p.name.clone());

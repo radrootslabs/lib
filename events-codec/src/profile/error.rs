@@ -1,5 +1,8 @@
 use core::fmt;
 
+#[cfg(not(feature = "std"))]
+use alloc::string::String;
+
 #[derive(Debug)]
 pub enum ProfileEncodeError {
     InvalidUrl(&'static str, String),

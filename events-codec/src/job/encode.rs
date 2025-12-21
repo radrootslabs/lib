@@ -1,11 +1,9 @@
 use core::fmt;
 
-#[derive(Debug, Clone)]
-pub struct WireEventParts {
-    pub kind: u32,
-    pub content: String,
-    pub tags: Vec<Vec<String>>,
-}
+#[cfg(not(feature = "std"))]
+use alloc::{string::String, vec::Vec};
+
+pub use crate::wire::{canonicalize_tags, empty_content, to_draft, EventDraft, WireEventParts};
 
 #[derive(Debug)]
 pub enum JobEncodeError {
@@ -29,43 +27,9 @@ impl fmt::Display for JobEncodeError {
 #[cfg(feature = "std")]
 impl std::error::Error for JobEncodeError {}
 
-pub fn canonicalize_tags(tags: &mut Vec<Vec<String>>) {
-    tags.retain(|t| t.first().map(|s| !s.trim().is_empty()).unwrap_or(false));
-    for t in tags.iter_mut() {
-        for s in t.iter_mut() {
-            *s = s.trim().to_string();
-        }
-    }
-    tags.sort_by(|a, b| a.first().cmp(&b.first()).then_with(|| a.cmp(b)));
-    tags.dedup();
-}
-
-pub fn empty_content() -> String {
-    String::new()
-}
-
 #[cfg(feature = "serde_json")]
 pub fn json_content<T: serde::Serialize>(value: &T) -> Result<String, JobEncodeError> {
     serde_json::to_string(value).map_err(|_| JobEncodeError::EmptyRequiredField("content-json"))
-}
-
-#[derive(Debug, Clone)]
-pub struct EventDraft {
-    pub kind: u32,
-    pub created_at: u32,
-    pub author: String,
-    pub content: String,
-    pub tags: Vec<Vec<String>>,
-}
-
-pub fn to_draft(parts: WireEventParts, author: impl Into<String>, created_at: u32) -> EventDraft {
-    EventDraft {
-        kind: parts.kind,
-        created_at,
-        author: author.into(),
-        content: parts.content,
-        tags: parts.tags,
-    }
 }
 
 pub fn push_status_tag(tags: &mut Vec<Vec<String>>, status: &str, extra: Option<&str>) {

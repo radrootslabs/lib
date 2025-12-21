@@ -1,5 +1,5 @@
 use crate::error::{NetError, Result};
-use radroots_events::post::models::RadrootsPostEventMetadata;
+use radroots_events::post::RadrootsPostEventMetadata;
 
 use crate::nostr_client::manager::NostrClientManager;
 

@@ -1,5 +1,5 @@
 #[cfg(all(feature = "http", feature = "codec"))]
-use radroots_events::relay_document::models::RadrootsRelayDocument;
+use radroots_events::relay_document::RadrootsRelayDocument;
 
 #[cfg(all(feature = "http", feature = "codec"))]
 use crate::util::ws_to_http;

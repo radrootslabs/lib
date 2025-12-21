@@ -5,3 +5,6 @@ pub mod error;
 
 #[cfg(feature = "nostr")]
 pub mod encode;
+
+#[cfg(feature = "serde_json")]
+pub mod decode;

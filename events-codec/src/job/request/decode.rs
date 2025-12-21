@@ -4,7 +4,11 @@ use radroots_events::{
         RadrootsJobInput, RadrootsJobParam, RadrootsJobRequest, RadrootsJobRequestEventIndex,
         RadrootsJobRequestEventMetadata,
     },
+    kinds::is_request_kind,
 };
+
+#[cfg(not(feature = "std"))]
+use alloc::{string::String, vec::Vec};
 
 use crate::job::{
     error::JobParseError,
@@ -61,10 +65,6 @@ pub fn job_request_from_tags(
         topics,
         encrypted,
     })
-}
-
-fn is_request_kind(kind: u32) -> bool {
-    (5000..=5999).contains(&kind)
 }
 
 pub fn metadata_from_event(

@@ -1,7 +1,7 @@
 #[cfg(feature = "events")]
-use radroots_events::post::models::{RadrootsPost, RadrootsPostEventMetadata};
+use radroots_events::post::{RadrootsPost, RadrootsPostEventMetadata};
 #[cfg(feature = "events")]
-use radroots_events::profile::models::{RadrootsProfile, RadrootsProfileEventMetadata};
+use radroots_events::profile::{RadrootsProfile, RadrootsProfileEventMetadata};
 
 #[cfg(feature = "events")]
 use nostr::event::Event;

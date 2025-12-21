@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use nostr_sdk::prelude::*;
-use radroots_events::post::models::RadrootsPostEventMetadata;
+use radroots_events::post::RadrootsPostEventMetadata;
 use tokio::runtime::Handle;
 use tokio::sync::broadcast;
 use tokio::task::JoinHandle;

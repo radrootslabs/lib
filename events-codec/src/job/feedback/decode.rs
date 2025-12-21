@@ -4,7 +4,11 @@ use radroots_events::{
     job_feedback::{
         RadrootsJobFeedback, RadrootsJobFeedbackEventIndex, RadrootsJobFeedbackEventMetadata,
     },
+    kinds::KIND_JOB_FEEDBACK,
 };
+
+#[cfg(not(feature = "std"))]
+use alloc::{string::String, vec::Vec};
 
 use crate::job::{
     error::JobParseError,
@@ -70,10 +74,6 @@ pub fn job_feedback_from_tags(
     })
 }
 
-fn is_feedback_kind(kind: u32) -> bool {
-    kind == 7000
-}
-
 pub fn metadata_from_event(
     id: String,
     author: String,
@@ -82,7 +82,7 @@ pub fn metadata_from_event(
     content: String,
     tags: Vec<Vec<String>>,
 ) -> Result<RadrootsJobFeedbackEventMetadata, JobParseError> {
-    if !is_feedback_kind(kind) {
+    if kind != KIND_JOB_FEEDBACK {
         return Err(JobParseError::InvalidTag("kind (expected 7000)"));
     }
     let job_feedback = job_feedback_from_tags(kind, &tags, &content)?;
