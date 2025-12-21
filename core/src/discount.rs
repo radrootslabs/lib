@@ -1,16 +1,21 @@
-#[typeshare::typeshare]
+#[cfg(feature = "std")]
+use std::string::String;
+#[cfg(not(feature = "std"))]
+use alloc::string::String;
+
+#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[serde(rename_all = "snake_case", tag = "kind", content = "amount")]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case", tag = "kind", content = "amount"))]
 pub enum RadrootsCoreDiscountValue {
     Money(crate::RadrootsCoreMoney),
     Percent(crate::RadrootsCorePercent),
 }
 
-#[typeshare::typeshare]
+#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[serde(rename_all = "snake_case", tag = "kind", content = "amount")]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case", tag = "kind", content = "amount"))]
 pub enum RadrootsCoreDiscount {
     QuantityThreshold {
         ref_key: Option<String>,

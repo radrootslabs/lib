@@ -7,7 +7,7 @@ use rust_decimal::prelude::ToPrimitive;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as DeError};
 
-#[typeshare::typeshare]
+#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct RadrootsCoreDecimal(pub Decimal);
 
@@ -48,8 +48,8 @@ impl RadrootsCoreDecimal {
         Decimal::from_str(&s).map(Self)
     }
     #[inline]
-    pub fn to_f64_lossy(&self) -> f64 {
-        self.normalize().to_string().parse::<f64>().unwrap_or(0.0)
+    pub fn to_f64_lossy(&self) -> Option<f64> {
+        self.0.to_f64()
     }
 
     #[inline]

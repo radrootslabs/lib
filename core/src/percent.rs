@@ -4,7 +4,7 @@ use core::str::FromStr;
 use crate::RadrootsCoreDecimal;
 use crate::money::RadrootsCoreMoney;
 
-#[typeshare::typeshare]
+#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsCorePercent {

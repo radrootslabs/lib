@@ -2,16 +2,33 @@ use core::fmt;
 use core::str::FromStr;
 
 #[cfg(feature = "serde")]
+#[cfg(feature = "std")]
+use std::string::String;
+#[cfg(all(feature = "serde", not(feature = "std")))]
+use alloc::string::String;
+
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as DeError};
 
-#[typeshare::typeshare]
+#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RadrootsCoreCurrency([u8; 3]);
 
 impl RadrootsCoreCurrency {
     #[inline]
-    pub const fn from_const(bytes: [u8; 3]) -> Self {
-        Self(bytes)
+    pub const fn from_const(bytes: [u8; 3]) -> Result<Self, RadrootsCoreCurrencyParseError> {
+        if Self::is_ascii_upper(bytes[0])
+            && Self::is_ascii_upper(bytes[1])
+            && Self::is_ascii_upper(bytes[2])
+        {
+            Ok(Self(bytes))
+        } else {
+            Err(RadrootsCoreCurrencyParseError::InvalidFormat)
+        }
+    }
+
+    const fn is_ascii_upper(byte: u8) -> bool {
+        byte >= b'A' && byte <= b'Z'
     }
 
     #[inline]
@@ -25,7 +42,7 @@ impl RadrootsCoreCurrency {
 
     #[inline]
     pub fn as_str(&self) -> &str {
-        core::str::from_utf8(&self.0).expect("currency bytes are validated on construction")
+        core::str::from_utf8(&self.0).unwrap_or("???")
     }
 
     pub const USD: RadrootsCoreCurrency = RadrootsCoreCurrency(*b"USD");

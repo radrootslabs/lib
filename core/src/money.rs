@@ -3,7 +3,7 @@ use rust_decimal::Decimal;
 use rust_decimal::RoundingStrategy;
 use rust_decimal::prelude::ToPrimitive;
 
-#[typeshare::typeshare]
+#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsCoreMoney {
@@ -132,11 +132,7 @@ impl RadrootsCoreMoney {
     #[inline]
     pub fn to_minor_units_u64_exact(&self) -> Result<u64, RadrootsCoreMoneyInvariantError> {
         let e = self.currency.minor_unit_exponent();
-        let scaled = self
-            .amount
-            .0
-            .round_dp_with_strategy(e, RoundingStrategy::MidpointAwayFromZero);
-        let as_minor = scaled * Self::pow10(e);
+        let as_minor = self.amount.0 * Self::pow10(e);
 
         if !as_minor.fract().is_zero() {
             return Err(RadrootsCoreMoneyInvariantError::NotWholeMinorUnits);
@@ -184,31 +180,7 @@ impl fmt::Display for RadrootsCoreMoney {
     }
 }
 
-use core::ops::{Add, Div, Mul, Sub};
-
-impl Add for RadrootsCoreMoney {
-    type Output = Self;
-    fn add(self, rhs: Self) -> Self {
-        assert_eq!(
-            self.currency, rhs.currency,
-            "money currency mismatch: {} vs {}",
-            self.currency, rhs.currency
-        );
-        Self::new(self.amount + rhs.amount, self.currency)
-    }
-}
-
-impl Sub for RadrootsCoreMoney {
-    type Output = Self;
-    fn sub(self, rhs: Self) -> Self {
-        assert_eq!(
-            self.currency, rhs.currency,
-            "money currency mismatch: {} vs {}",
-            self.currency, rhs.currency
-        );
-        Self::new(self.amount - rhs.amount, self.currency)
-    }
-}
+use core::ops::{Div, Mul};
 
 impl Mul<crate::RadrootsCoreDecimal> for RadrootsCoreMoney {
     type Output = Self;

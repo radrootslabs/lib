@@ -18,3 +18,7 @@ rust_decimal = { workspace = true, default-features = false }
 rust_decimal_macros = { workspace = true }
 serde = { workspace = true, default-features = false, features = ["alloc", "derive"], optional = true }
 typeshare = { workspace = true, optional = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+rust_decimal = { workspace = true }

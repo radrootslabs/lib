@@ -1,6 +1,6 @@
 use crate::{RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity, RadrootsCoreUnit};
 
-#[typeshare::typeshare]
+#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsCoreQuantityPrice {
@@ -62,13 +62,13 @@ impl RadrootsCoreQuantityPrice {
 
         let normalized = if unit == target {
             amount
-        } else if unit.is_mass() && target.is_mass() {
-            convert_mass_decimal(amount, unit, target)
         } else {
-            return Err(RadrootsCoreQuantityPriceError::NonConvertibleUnits {
-                from: unit,
-                to: target,
-            });
+            convert_mass_decimal(amount, unit, target).map_err(|_| {
+                RadrootsCoreQuantityPriceError::NonConvertibleUnits {
+                    from: unit,
+                    to: target,
+                }
+            })?
         };
 
         let qty = RadrootsCoreQuantity::new(normalized, target);
@@ -83,6 +83,9 @@ impl RadrootsCoreQuantityPriceOps for RadrootsCoreQuantityPrice {
             return RadrootsCoreMoney::zero(self.amount.currency);
         }
         if self.quantity.amount.is_zero() {
+            return RadrootsCoreMoney::zero(self.amount.currency);
+        }
+        if qty.unit != self.quantity.unit {
             return RadrootsCoreMoney::zero(self.amount.currency);
         }
 
@@ -101,6 +104,9 @@ impl RadrootsCoreQuantityPriceOps for RadrootsCoreQuantityPrice {
             return RadrootsCoreMoney::zero(self.amount.currency);
         }
         if self.quantity.amount.is_zero() {
+            return RadrootsCoreMoney::zero(self.amount.currency);
+        }
+        if qty.unit != self.quantity.unit {
             return RadrootsCoreMoney::zero(self.amount.currency);
         }
         let unit_price_q = self.amount.clone().quantize_to_currency();

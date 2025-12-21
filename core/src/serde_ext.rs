@@ -1,5 +1,10 @@
 #![cfg(feature = "serde")]
 
+#[cfg(feature = "std")]
+use std::string::String;
+#[cfg(not(feature = "std"))]
+use alloc::string::String;
+
 use serde::{Deserialize, Deserializer, Serializer, de::Error as DeError};
 
 pub mod decimal_str {

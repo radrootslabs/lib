@@ -3,11 +3,17 @@ use core::str::FromStr;
 use rust_decimal_macros::dec;
 
 #[cfg(feature = "serde")]
+#[cfg(feature = "std")]
+use std::string::String;
+#[cfg(all(feature = "serde", not(feature = "std")))]
+use alloc::string::String;
+
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as DeError};
 
 use crate::RadrootsCoreDecimal;
 
-#[typeshare::typeshare]
+#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum RadrootsCoreUnit {
     Each,
@@ -94,6 +100,27 @@ impl fmt::Display for RadrootsCoreUnitParseError {
 #[cfg(feature = "std")]
 impl std::error::Error for RadrootsCoreUnitParseError {}
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RadrootsCoreUnitConvertError {
+    NotMassUnit {
+        from: RadrootsCoreUnit,
+        to: RadrootsCoreUnit,
+    },
+}
+
+impl fmt::Display for RadrootsCoreUnitConvertError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            RadrootsCoreUnitConvertError::NotMassUnit { from, to } => {
+                write!(f, "unit conversion requires mass units: {from} -> {to}")
+            }
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for RadrootsCoreUnitConvertError {}
+
 impl FromStr for RadrootsCoreUnit {
     type Err = RadrootsCoreUnitParseError;
 
@@ -155,7 +182,10 @@ pub fn convert_mass_decimal(
     amount: RadrootsCoreDecimal,
     from: RadrootsCoreUnit,
     to: RadrootsCoreUnit,
-) -> RadrootsCoreDecimal {
+) -> Result<RadrootsCoreDecimal, RadrootsCoreUnitConvertError> {
+    if !from.is_mass() || !to.is_mass() {
+        return Err(RadrootsCoreUnitConvertError::NotMassUnit { from, to });
+    }
     let amount_g = amount * grams_factor_decimal(from);
-    amount_g / grams_factor_decimal(to)
+    Ok(amount_g / grams_factor_decimal(to))
 }

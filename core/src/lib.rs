@@ -20,5 +20,10 @@ pub use discount::{RadrootsCoreDiscount, RadrootsCoreDiscountValue};
 pub use money::{RadrootsCoreMoney, RadrootsCoreMoneyInvariantError};
 pub use percent::{RadrootsCorePercent, RadrootsCorePercentParseError};
 pub use quantity::{RadrootsCoreQuantity, RadrootsCoreQuantityInvariantError};
-pub use quantity_price::{RadrootsCoreQuantityPrice, RadrootsCoreQuantityPriceOps};
-pub use unit::{RadrootsCoreUnit, RadrootsCoreUnitParseError};
+pub use quantity_price::{
+    RadrootsCoreQuantityPrice, RadrootsCoreQuantityPriceError, RadrootsCoreQuantityPriceOps,
+};
+pub use unit::{
+    convert_mass_decimal, parse_mass_unit, RadrootsCoreUnit, RadrootsCoreUnitConvertError,
+    RadrootsCoreUnitParseError,
+};

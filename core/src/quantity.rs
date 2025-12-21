@@ -3,7 +3,12 @@ use core::fmt;
 use crate::RadrootsCoreDecimal;
 use crate::unit::RadrootsCoreUnit;
 
-#[typeshare::typeshare]
+#[cfg(feature = "std")]
+use std::string::String;
+#[cfg(not(feature = "std"))]
+use alloc::string::String;
+
+#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsCoreQuantity {
@@ -176,41 +181,7 @@ impl fmt::Display for RadrootsCoreQuantityInvariantError {
 #[cfg(feature = "std")]
 impl std::error::Error for RadrootsCoreQuantityInvariantError {}
 
-use core::ops::{Add, Div, Mul, Sub};
-
-impl Add for RadrootsCoreQuantity {
-    type Output = RadrootsCoreQuantity;
-    fn add(self, rhs: RadrootsCoreQuantity) -> RadrootsCoreQuantity {
-        assert!(
-            self.unit == rhs.unit,
-            "quantity unit mismatch: {} vs {}",
-            self.unit,
-            rhs.unit
-        );
-        RadrootsCoreQuantity {
-            amount: self.amount + rhs.amount,
-            unit: self.unit,
-            label: self.label,
-        }
-    }
-}
-
-impl Sub for RadrootsCoreQuantity {
-    type Output = RadrootsCoreQuantity;
-    fn sub(self, rhs: RadrootsCoreQuantity) -> RadrootsCoreQuantity {
-        assert!(
-            self.unit == rhs.unit,
-            "quantity unit mismatch: {} vs {}",
-            self.unit,
-            rhs.unit
-        );
-        RadrootsCoreQuantity {
-            amount: self.amount - rhs.amount,
-            unit: self.unit,
-            label: self.label,
-        }
-    }
-}
+use core::ops::{Div, Mul};
 
 impl Mul<RadrootsCoreDecimal> for RadrootsCoreQuantity {
     type Output = RadrootsCoreQuantity;
