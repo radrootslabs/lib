@@ -30,26 +30,22 @@
         },
         "@radroots/core-bindings#build": {
             "dependsOn": [
-                "@radroots/dev#build",
                 "@radroots/tsconfig#build"
             ]
         },
         "@radroots/events-bindings#build": {
             "dependsOn": [
-                "@radroots/dev#build",
                 "@radroots/tsconfig#build",
                 "@radroots/core-bindings#build"
             ]
         },
         "@radroots/events-indexed-bindings#build": {
             "dependsOn": [
-                "@radroots/dev#build",
                 "@radroots/tsconfig#build"
             ]
         },
         "@radroots/trade-bindings#build": {
             "dependsOn": [
-                "@radroots/dev#build",
                 "@radroots/tsconfig#build",
                 "@radroots/core-bindings#build",
                 "@radroots/events-bindings#build"

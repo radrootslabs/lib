@@ -10,12 +10,7 @@
     "typescript": "^5.8.3"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
-  "workspaces": [
-    "*/bindings/ts",
-    "../pwa/packages/dev",
-    "../pwa/packages/tsconfig"
-  ],
-  "packageManager": "yarn@1.22.22"
+  "packageManager": "pnpm@10.25.0"
 }

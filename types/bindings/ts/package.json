@@ -28,8 +28,7 @@
         "watch": "tsc -w"
     },
     "devDependencies": {
-        "@radroots/dev": "*",
-        "@radroots/tsconfig": "*",
+        "@radroots/tsconfig": "workspace:*",
         "rimraf": "^6.0.1"
     },
     "dependencies": {},

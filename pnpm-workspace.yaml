@@ -1,0 +1,3 @@
+packages:
+  - "*/bindings/ts"
+  - "../pwa/packages/tsconfig"

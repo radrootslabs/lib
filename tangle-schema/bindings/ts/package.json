@@ -29,12 +29,11 @@
         "watch": "tsc -w"
     },
     "devDependencies": {
-        "@radroots/dev": "*",
-        "@radroots/tsconfig": "*",
+        "@radroots/tsconfig": "workspace:*",
         "rimraf": "^6.0.1"
     },
     "dependencies": {
-        "@radroots/types-bindings": "*"
+        "@radroots/types-bindings": "workspace:*"
     },
     "publishConfig": {
         "access": "public"
