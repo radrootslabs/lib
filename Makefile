@@ -1,5 +1,5 @@
 .PHONY: all bindings clean help \
-        bindings-events bindings-tangle-schema bindings-types \
+        bindings-events bindings-tangle-schema bindings-trade bindings-types \
         build build-tangle-sql-wasm
 
 SHELL := /bin/bash
@@ -9,6 +9,7 @@ TS_RS_FEATURE ?= ts-rs
 BINDINGS_TARGETS := \
     bindings-events \
     bindings-tangle-schema \
+    bindings-trade \
     bindings-types
 
 BUILD_TARGETS := \
@@ -36,15 +37,19 @@ help:
 bindings-events:
 	@(cd events && cargo test --features $(TS_RS_FEATURE))
 	typeshare --lang typescript --output-file events/bindings/ts/src/typeshare-types.ts events
-	@(cd events/bindings/ts && yarn build)
+	@(cd events/bindings/ts && npm run build)
 
 bindings-tangle-schema:
 	@(cd tangle-schema && cargo test --features $(TS_RS_FEATURE))
-	@(cd tangle-schema/bindings/ts && yarn build)
+	@(cd tangle-schema/bindings/ts && npm run build)
+
+bindings-trade:
+	@(cd trade && cargo test --features $(TS_RS_FEATURE))
+	@(cd trade/bindings/ts && npm run build)
 
 bindings-types:
 	@(cd types && cargo test --features $(TS_RS_FEATURE))
-	@(cd types/bindings/ts && yarn build)
+	@(cd types/bindings/ts && npm run build)
 
 build-tangle-sql-wasm:
 	wasm-pack build tangle-sql-wasm --release --target web \

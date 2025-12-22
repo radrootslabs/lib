@@ -7,7 +7,7 @@ use radroots_events::{
 };
 
 #[cfg(not(feature = "std"))]
-use alloc::{string::String, vec::Vec};
+use alloc::{string::{String, ToString}, vec::Vec};
 
 use crate::job::{
     error::JobParseError,

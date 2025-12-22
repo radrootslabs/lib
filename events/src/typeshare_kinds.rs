@@ -1,5 +1,3 @@
-// Typeshare-only view for kind constants; this file is not part of the crate module tree.
-
 #[typeshare::typeshare]
 pub const KIND_APPLICATION_HANDLER: u32 = 31990;
 

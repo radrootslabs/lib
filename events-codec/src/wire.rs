@@ -1,5 +1,5 @@
 #[cfg(not(feature = "std"))]
-use alloc::{string::String, vec::Vec};
+use alloc::{string::{String, ToString}, vec::Vec};
 
 #[derive(Debug, Clone)]
 pub struct WireEventParts {

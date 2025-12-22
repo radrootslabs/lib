@@ -1,47 +1,65 @@
-#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
+#[cfg(feature = "ts-rs")]
+use ts_rs::TS;
+
 pub const KIND_TRADE_LISTING_ORDER_REQ: u16 = 5301;
-#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 pub const KIND_TRADE_LISTING_ORDER_RES: u16 = 6301;
 
-#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 pub const KIND_TRADE_LISTING_ACCEPT_REQ: u16 = 5302;
-#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 pub const KIND_TRADE_LISTING_ACCEPT_RES: u16 = 6302;
 
-#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 pub const KIND_TRADE_LISTING_CONVEYANCE_REQ: u16 = 5303;
-#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 pub const KIND_TRADE_LISTING_CONVEYANCE_RES: u16 = 6303;
 
-#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 pub const KIND_TRADE_LISTING_INVOICE_REQ: u16 = 5304;
-#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 pub const KIND_TRADE_LISTING_INVOICE_RES: u16 = 6304;
 
-#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 pub const KIND_TRADE_LISTING_PAYMENT_REQ: u16 = 5305;
-#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 pub const KIND_TRADE_LISTING_PAYMENT_RES: u16 = 6305;
 
-#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 pub const KIND_TRADE_LISTING_FULFILL_REQ: u16 = 5306;
-#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 pub const KIND_TRADE_LISTING_FULFILL_RES: u16 = 6306;
 
-#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 pub const KIND_TRADE_LISTING_RECEIPT_REQ: u16 = 5307;
-#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 pub const KIND_TRADE_LISTING_RECEIPT_RES: u16 = 6307;
 
-#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 pub const KIND_TRADE_LISTING_CANCEL_REQ: u16 = 5309;
-#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 pub const KIND_TRADE_LISTING_CANCEL_RES: u16 = 6309;
 
-#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 pub const KIND_TRADE_LISTING_REFUND_REQ: u16 = 5310;
-#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 pub const KIND_TRADE_LISTING_REFUND_RES: u16 = 6310;
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(
+    feature = "ts-rs",
+    ts(
+        export,
+        export_to = "types.ts",
+        rename_all = "SCREAMING_SNAKE_CASE",
+        repr(enum)
+    )
+)]
+#[repr(u16)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum TradeListingKind {
+    KindTradeListingOrderReq = KIND_TRADE_LISTING_ORDER_REQ,
+    KindTradeListingOrderRes = KIND_TRADE_LISTING_ORDER_RES,
+    KindTradeListingAcceptReq = KIND_TRADE_LISTING_ACCEPT_REQ,
+    KindTradeListingAcceptRes = KIND_TRADE_LISTING_ACCEPT_RES,
+    KindTradeListingConveyanceReq = KIND_TRADE_LISTING_CONVEYANCE_REQ,
+    KindTradeListingConveyanceRes = KIND_TRADE_LISTING_CONVEYANCE_RES,
+    KindTradeListingInvoiceReq = KIND_TRADE_LISTING_INVOICE_REQ,
+    KindTradeListingInvoiceRes = KIND_TRADE_LISTING_INVOICE_RES,
+    KindTradeListingPaymentReq = KIND_TRADE_LISTING_PAYMENT_REQ,
+    KindTradeListingPaymentRes = KIND_TRADE_LISTING_PAYMENT_RES,
+    KindTradeListingFulfillReq = KIND_TRADE_LISTING_FULFILL_REQ,
+    KindTradeListingFulfillRes = KIND_TRADE_LISTING_FULFILL_RES,
+    KindTradeListingReceiptReq = KIND_TRADE_LISTING_RECEIPT_REQ,
+    KindTradeListingReceiptRes = KIND_TRADE_LISTING_RECEIPT_RES,
+    KindTradeListingCancelReq = KIND_TRADE_LISTING_CANCEL_REQ,
+    KindTradeListingCancelRes = KIND_TRADE_LISTING_CANCEL_RES,
+    KindTradeListingRefundReq = KIND_TRADE_LISTING_REFUND_REQ,
+    KindTradeListingRefundRes = KIND_TRADE_LISTING_REFUND_RES,
+}
 
 #[inline]
 pub const fn is_trade_listing_request_kind(kind: u16) -> bool {
@@ -120,10 +138,22 @@ mod tests {
                 KIND_TRADE_LISTING_CONVEYANCE_REQ,
                 KIND_TRADE_LISTING_CONVEYANCE_RES,
             ),
-            (KIND_TRADE_LISTING_INVOICE_REQ, KIND_TRADE_LISTING_INVOICE_RES),
-            (KIND_TRADE_LISTING_PAYMENT_REQ, KIND_TRADE_LISTING_PAYMENT_RES),
-            (KIND_TRADE_LISTING_FULFILL_REQ, KIND_TRADE_LISTING_FULFILL_RES),
-            (KIND_TRADE_LISTING_RECEIPT_REQ, KIND_TRADE_LISTING_RECEIPT_RES),
+            (
+                KIND_TRADE_LISTING_INVOICE_REQ,
+                KIND_TRADE_LISTING_INVOICE_RES,
+            ),
+            (
+                KIND_TRADE_LISTING_PAYMENT_REQ,
+                KIND_TRADE_LISTING_PAYMENT_RES,
+            ),
+            (
+                KIND_TRADE_LISTING_FULFILL_REQ,
+                KIND_TRADE_LISTING_FULFILL_RES,
+            ),
+            (
+                KIND_TRADE_LISTING_RECEIPT_REQ,
+                KIND_TRADE_LISTING_RECEIPT_RES,
+            ),
             (KIND_TRADE_LISTING_CANCEL_REQ, KIND_TRADE_LISTING_CANCEL_RES),
             (KIND_TRADE_LISTING_REFUND_REQ, KIND_TRADE_LISTING_REFUND_RES),
         ];

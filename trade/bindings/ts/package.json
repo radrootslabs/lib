@@ -21,8 +21,9 @@
     "scripts": {
         "build:esm": "tsc -p tsconfig.esm.json",
         "build:cjs": "tsc -p tsconfig.cjs.json",
-        "build": "npm run clean && npm run build:esm && npm run build:cjs",
-        "prebuild": "npm run clean",
+        "build": "npm run build:esm && npm run build:cjs",
+        "prebuild": "npm run clean && npm run prepend-imports",
+        "prepend-imports": "bash -c 'f=./src/types.ts; line=\"import type { RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantityPrice, RadrootsCoreUnit } from \\\"@radroots/core-bindings\\\";\"; grep -qxF \"$line\" \"$f\" || (echo -e \"$line\\n\\n$(cat $f)\" > \"$f\")' && bash -c 'f=./src/types.ts; line=\"import type { RadrootsListingDiscount, RadrootsListingQuantity, RadrootsNostrEventPtr } from \\\"@radroots/events-bindings\\\";\"; grep -qxF \"$line\" \"$f\" || (echo -e \"$line\\n\\n$(cat $f)\" > \"$f\")'",
         "clean": "rimraf dist",
         "dev": "npm run watch",
         "watch": "tsc -w"

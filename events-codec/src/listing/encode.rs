@@ -1,7 +1,7 @@
 #![cfg(feature = "serde_json")]
 
 #[cfg(not(feature = "std"))]
-use alloc::{string::String, vec::Vec};
+use alloc::{string::{String, ToString}, vec, vec::Vec};
 
 use radroots_events::{listing::RadrootsListing, tags::TAG_D};
 

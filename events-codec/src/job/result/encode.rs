@@ -6,7 +6,7 @@ use crate::job::encode::{
 use crate::job::util::{job_input_type_tag, push_amount_tag_msat};
 
 #[cfg(not(feature = "std"))]
-use alloc::{string::String, vec::Vec};
+use alloc::{string::{String, ToString}, vec, vec::Vec};
 
 pub fn job_result_build_tags(res: &RadrootsJobResult) -> Vec<Vec<String>> {
     let mut tags: Vec<Vec<String>> = Vec::with_capacity(

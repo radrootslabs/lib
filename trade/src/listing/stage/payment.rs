@@ -1,7 +1,10 @@
 #[cfg(not(feature = "std"))]
 use alloc::string::String;
+#[cfg(feature = "ts-rs")]
+use ts_rs::TS;
 
-#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 #[cfg_attr(
@@ -15,7 +18,8 @@ pub enum TradeListingPaymentProof {
     ExternalRef { provider: String, ref_id: String },
 }
 
-#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct TradeListingPaymentProofRequest {
@@ -23,10 +27,12 @@ pub struct TradeListingPaymentProofRequest {
     pub proof: TradeListingPaymentProof,
 }
 
-#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct TradeListingPaymentResult {
     pub verified: bool,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub message: Option<String>,
 }

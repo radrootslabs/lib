@@ -1,7 +1,7 @@
 use core::fmt;
 
 #[cfg(not(feature = "std"))]
-use alloc::{string::String, vec::Vec};
+use alloc::{string::String, vec, vec::Vec};
 
 pub use crate::wire::{canonicalize_tags, empty_content, to_draft, EventDraft, WireEventParts};
 

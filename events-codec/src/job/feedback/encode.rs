@@ -4,7 +4,7 @@ use crate::job::encode::{JobEncodeError, WireEventParts, canonicalize_tags};
 use crate::job::util::{feedback_status_tag, push_amount_tag_msat};
 
 #[cfg(not(feature = "std"))]
-use alloc::{string::String, vec::Vec};
+use alloc::{string::{String, ToString}, vec, vec::Vec};
 
 pub fn job_feedback_build_tags(fb: &RadrootsJobFeedback) -> Vec<Vec<String>> {
     let mut tags: Vec<Vec<String>> = Vec::with_capacity(

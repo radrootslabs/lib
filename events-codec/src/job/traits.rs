@@ -2,7 +2,7 @@
 extern crate alloc;
 
 #[cfg(not(feature = "std"))]
-use alloc::{string::String, vec::Vec};
+use alloc::{borrow::ToOwned, string::String, vec::Vec};
 use radroots_events::{
     job_feedback::{RadrootsJobFeedbackEventIndex, RadrootsJobFeedbackEventMetadata},
     job_request::{RadrootsJobRequestEventIndex, RadrootsJobRequestEventMetadata},

@@ -1897,7 +1897,7 @@ dependencies = [
  "radroots-events",
  "radroots-events-codec",
  "serde",
- "typeshare",
+ "ts-rs",
 ]
 
 [[package]]
