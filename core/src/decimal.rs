@@ -4,6 +4,11 @@ use core::str::FromStr;
 use rust_decimal::Decimal;
 use rust_decimal::prelude::ToPrimitive;
 
+#[cfg(not(feature = "std"))]
+use alloc::{format, string::ToString};
+#[cfg(all(feature = "serde", not(feature = "std")))]
+use alloc::string::String;
+
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as DeError};
 

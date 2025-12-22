@@ -3,7 +3,7 @@
 #[cfg(feature = "std")]
 use std::string::String;
 #[cfg(not(feature = "std"))]
-use alloc::string::String;
+use alloc::string::{String, ToString};
 
 use serde::{Deserialize, Deserializer, Serializer, de::Error as DeError};
 
