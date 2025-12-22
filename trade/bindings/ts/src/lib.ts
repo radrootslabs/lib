@@ -1,7 +1,13 @@
 export const MARKER_LISTING = "listing";
 export const MARKER_PAYLOAD = "payload";
 export const MARKER_PREVIOUS = "previous";
+export const MARKER_ORDER_RESULT = "order_result";
 export const MARKER_ACCEPT_RESULT = "accept_result";
+export const MARKER_CONVEYANCE_RESULT = "conveyance_result";
 export const MARKER_INVOICE_RESULT = "invoice_result";
+export const MARKER_PAYMENT_RESULT = "payment_result";
 export const MARKER_FULFILLMENT_RESULT = "fulfillment_result";
+export const MARKER_RECEIPT_RESULT = "receipt_result";
+export const MARKER_CANCEL_RESULT = "cancel_result";
+export const MARKER_REFUND_RESULT = "refund_result";
 export const MARKER_PROOF = "proof";
