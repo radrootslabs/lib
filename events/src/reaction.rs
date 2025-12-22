@@ -1,11 +1,14 @@
 use crate::{RadrootsNostrEvent, RadrootsNostrEventRef};
-use serde::{Deserialize, Serialize};
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
 
+#[cfg(not(feature = "std"))]
+use alloc::string::String;
+
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug)]
 pub struct RadrootsReactionEventIndex {
     pub event: RadrootsNostrEvent,
     pub metadata: RadrootsReactionEventMetadata,
@@ -13,7 +16,8 @@ pub struct RadrootsReactionEventIndex {
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug)]
 pub struct RadrootsReactionEventMetadata {
     pub id: String,
     pub author: String,
@@ -24,7 +28,8 @@ pub struct RadrootsReactionEventMetadata {
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug)]
 pub struct RadrootsReaction {
     pub root: RadrootsNostrEventRef,
     pub content: String,

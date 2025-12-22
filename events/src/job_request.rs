@@ -1,12 +1,15 @@
-use serde::{Deserialize, Serialize};
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
 
 use crate::{RadrootsNostrEvent, job::JobInputType};
 
+#[cfg(not(feature = "std"))]
+use alloc::{string::String, vec::Vec};
+
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug)]
 pub struct RadrootsJobRequestEventIndex {
     pub event: RadrootsNostrEvent,
     pub metadata: RadrootsJobRequestEventMetadata,
@@ -14,7 +17,8 @@ pub struct RadrootsJobRequestEventIndex {
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug)]
 pub struct RadrootsJobRequestEventMetadata {
     pub id: String,
     pub author: String,
@@ -25,7 +29,8 @@ pub struct RadrootsJobRequestEventMetadata {
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsJobInput {
     pub data: String,
     pub input_type: JobInputType,
@@ -37,7 +42,8 @@ pub struct RadrootsJobInput {
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsJobParam {
     pub key: String,
     pub value: String,
@@ -45,7 +51,8 @@ pub struct RadrootsJobParam {
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsJobRequest {
     pub kind: u16,
     pub inputs: Vec<RadrootsJobInput>,

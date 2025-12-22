@@ -1,11 +1,14 @@
 use crate::RadrootsNostrEvent;
-use serde::{Deserialize, Serialize};
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
 
+#[cfg(not(feature = "std"))]
+use alloc::{string::String, vec::Vec};
+
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug)]
 pub struct RadrootsFollowEventIndex {
     pub event: RadrootsNostrEvent,
     pub metadata: RadrootsFollowEventMetadata,
@@ -13,7 +16,8 @@ pub struct RadrootsFollowEventIndex {
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug)]
 pub struct RadrootsFollowEventMetadata {
     pub id: String,
     pub author: String,
@@ -24,14 +28,16 @@ pub struct RadrootsFollowEventMetadata {
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug)]
 pub struct RadrootsFollow {
     pub list: Vec<RadrootsFollowProfile>,
 }
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug)]
 pub struct RadrootsFollowProfile {
     pub published_at: u32,
     pub public_key: String,

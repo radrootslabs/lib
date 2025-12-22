@@ -1,3 +1,14 @@
+#![cfg_attr(not(feature = "std"), no_std)]
+#![forbid(unsafe_code)]
+#[cfg(not(feature = "std"))]
+extern crate alloc;
+
+#[cfg(feature = "ts-rs")]
+use ts_rs::TS;
+
+#[cfg(not(feature = "std"))]
+use alloc::{string::String, vec::Vec};
+
 pub mod comment;
 pub mod follow;
 pub mod job;
@@ -12,13 +23,10 @@ pub mod reaction;
 pub mod relay_document;
 pub mod tags;
 
-use serde::{Deserialize, Serialize};
-#[cfg(feature = "ts-rs")]
-use ts_rs::TS;
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug)]
 pub struct RadrootsNostrEvent {
     pub id: String,
     pub author: String,
@@ -31,7 +39,8 @@ pub struct RadrootsNostrEvent {
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug)]
 pub struct RadrootsNostrEventRef {
     pub id: String,
     pub author: String,
@@ -44,7 +53,8 @@ pub struct RadrootsNostrEventRef {
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsNostrEventPtr {
     pub id: String,
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]

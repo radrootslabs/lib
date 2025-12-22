@@ -12,7 +12,7 @@ default = ["std", "sdk"]
 std = []
 sdk = ["dep:nostr-sdk"]
 codec = ["dep:radroots-events", "dep:radroots-events-codec"]
-events = ["dep:radroots-events"]
+events = ["dep:radroots-events", "radroots-events/std", "radroots-events/serde"]
 http = ["dep:reqwest"]
 
 [dependencies]

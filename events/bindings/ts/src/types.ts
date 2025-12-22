@@ -72,13 +72,13 @@ export type RadrootsPost = { content: string, };
 
 export type RadrootsPostEventIndex = { event: RadrootsNostrEvent, metadata: RadrootsPostEventMetadata, };
 
-export type RadrootsPostEventMetadata = { id: string, author: string, published_at: bigint, kind: number, post: RadrootsPost, };
+export type RadrootsPostEventMetadata = { id: string, author: string, published_at: number, kind: number, post: RadrootsPost, };
 
 export type RadrootsProfile = { name: string, display_name?: string | null, nip05?: string | null, about?: string | null, website?: string | null, picture?: string | null, banner?: string | null, lud06?: string | null, lud16?: string | null, bot?: string | null, };
 
 export type RadrootsProfileEventIndex = { event: RadrootsNostrEvent, metadata: RadrootsProfileEventMetadata, };
 
-export type RadrootsProfileEventMetadata = { id: string, author: string, published_at: bigint, kind: number, profile: RadrootsProfile, };
+export type RadrootsProfileEventMetadata = { id: string, author: string, published_at: number, kind: number, profile: RadrootsProfile, };
 
 export type RadrootsReaction = { root: RadrootsNostrEventRef, content: string, };
 

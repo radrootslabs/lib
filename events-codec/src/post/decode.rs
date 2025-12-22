@@ -37,7 +37,7 @@ pub fn metadata_from_event(
     Ok(RadrootsPostEventMetadata {
         id,
         author,
-        published_at: published_at as u64,
+        published_at,
         kind,
         post,
     })

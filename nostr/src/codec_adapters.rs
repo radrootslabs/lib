@@ -7,6 +7,7 @@ use radroots_events_codec::job::{
     error::JobParseError, feedback::decode as fb_decode, request::decode as req_decode,
     result::decode as res_decode,
 };
+use crate::util::created_at_u32_saturating;
 
 fn event_id(e: &Event) -> String {
     e.id.to_hex()
@@ -17,7 +18,7 @@ fn author(e: &Event) -> String {
 }
 
 fn published_at(e: &Event) -> u32 {
-    e.created_at.as_u64() as u32
+    created_at_u32_saturating(e.created_at)
 }
 
 fn kind_u32(e: &Event) -> u32 {
