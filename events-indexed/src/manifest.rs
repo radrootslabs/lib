@@ -3,7 +3,7 @@
 use alloc::{string::String, vec::Vec};
 use core::fmt;
 
-#[typeshare::typeshare]
+#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsEventsIndexedShardMetadata {
@@ -16,7 +16,7 @@ pub struct RadrootsEventsIndexedShardMetadata {
     pub sha256: String,
 }
 
-#[typeshare::typeshare]
+#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsEventsIndexedManifest {
@@ -77,8 +77,117 @@ pub fn validate_manifest(
         }
         sum += s.count as u64;
     }
-    if sum as u32 != m.total {
+    if sum > u32::MAX as u64 || sum != m.total as u64 {
         return Err(RadrootsEventsIndexedManifestError::InconsistentTotals);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        validate_manifest, RadrootsEventsIndexedManifest, RadrootsEventsIndexedManifestError,
+        RadrootsEventsIndexedShardMetadata,
+    };
+    #[cfg(not(feature = "std"))]
+    use alloc::{string::String, vec, vec::Vec};
+    #[cfg(feature = "std")]
+    use std::{string::String, vec::Vec};
+
+    fn shard(file: &str, count: u32, sha256: &str) -> RadrootsEventsIndexedShardMetadata {
+        RadrootsEventsIndexedShardMetadata {
+            file: String::from(file),
+            count,
+            first_id: String::from("a"),
+            last_id: String::from("b"),
+            first_published_at: 0,
+            last_published_at: 0,
+            sha256: String::from(sha256),
+        }
+    }
+
+    fn base_manifest() -> RadrootsEventsIndexedManifest {
+        RadrootsEventsIndexedManifest {
+            country: String::from("us"),
+            total: 1,
+            shard_size: 1,
+            first_published_at: 0,
+            last_published_at: 0,
+            shards: vec![shard(
+                "a.json",
+                1,
+                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            )],
+        }
+    }
+
+    #[test]
+    fn validate_manifest_rejects_empty_country() {
+        let mut m = base_manifest();
+        m.country = String::from(" ");
+        let err = validate_manifest(&m).unwrap_err();
+        assert_eq!(err, RadrootsEventsIndexedManifestError::EmptyCountry);
+    }
+
+    #[test]
+    fn validate_manifest_rejects_empty_shards() {
+        let mut m = base_manifest();
+        m.shards = Vec::new();
+        let err = validate_manifest(&m).unwrap_err();
+        assert_eq!(err, RadrootsEventsIndexedManifestError::EmptyShards);
+    }
+
+    #[test]
+    fn validate_manifest_rejects_empty_file() {
+        let mut m = base_manifest();
+        m.shards[0].file = String::from("");
+        let err = validate_manifest(&m).unwrap_err();
+        assert_eq!(err, RadrootsEventsIndexedManifestError::EmptyFile(0));
+    }
+
+    #[test]
+    fn validate_manifest_rejects_invalid_sha256() {
+        let mut m = base_manifest();
+        m.shards[0].sha256 = String::from("zz");
+        let err = validate_manifest(&m).unwrap_err();
+        assert_eq!(err, RadrootsEventsIndexedManifestError::InvalidSha256(0));
+    }
+
+    #[test]
+    fn validate_manifest_rejects_total_overflow() {
+        let m = RadrootsEventsIndexedManifest {
+            country: String::from("us"),
+            total: 1,
+            shard_size: 1,
+            first_published_at: 0,
+            last_published_at: 0,
+            shards: vec![
+                RadrootsEventsIndexedShardMetadata {
+                    file: String::from("a.json"),
+                    count: u32::MAX,
+                    first_id: String::from("a"),
+                    last_id: String::from("b"),
+                    first_published_at: 0,
+                    last_published_at: 0,
+                    sha256: String::from(
+                        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                    ),
+                },
+                RadrootsEventsIndexedShardMetadata {
+                    file: String::from("b.json"),
+                    count: 1,
+                    first_id: String::from("c"),
+                    last_id: String::from("d"),
+                    first_published_at: 0,
+                    last_published_at: 0,
+                    sha256: String::from(
+                        "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+                    ),
+                },
+            ],
+        };
+
+        let err = validate_manifest(&m).unwrap_err();
+        assert_eq!(err, RadrootsEventsIndexedManifestError::InconsistentTotals);
+    }
 }

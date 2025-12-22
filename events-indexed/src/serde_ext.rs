@@ -15,3 +15,28 @@ pub mod epoch_seconds {
         Ok(v as u32)
     }
 }
+
+#[cfg(all(test, feature = "serde"))]
+mod tests {
+    use super::epoch_seconds;
+    use serde::de::value::{Error as DeError, U64Deserializer};
+    #[cfg(not(feature = "std"))]
+    use alloc::string::ToString;
+    #[cfg(feature = "std")]
+    use std::string::ToString;
+
+    #[test]
+    fn epoch_seconds_accepts_u32_max() {
+        let de = U64Deserializer::<DeError>::new(u32::MAX as u64);
+        let val = epoch_seconds::de(de).unwrap();
+        assert_eq!(val, u32::MAX);
+    }
+
+    #[test]
+    fn epoch_seconds_rejects_overflow() {
+        let de = U64Deserializer::<DeError>::new(u32::MAX as u64 + 1);
+        let err = epoch_seconds::de(de).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("epoch **seconds**"));
+    }
+}
