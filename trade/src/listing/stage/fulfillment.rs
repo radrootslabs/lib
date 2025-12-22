@@ -1,14 +1,14 @@
 #[cfg(not(feature = "std"))]
 use alloc::string::String;
 
-#[typeshare::typeshare]
+#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct TradeListingFulfillmentRequest {
     pub payment_result_event_id: String,
 }
 
-#[typeshare::typeshare]
+#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 #[cfg_attr(
@@ -23,7 +23,7 @@ pub enum TradeListingFulfillmentState {
     Canceled,
 }
 
-#[typeshare::typeshare]
+#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct TradeListingFulfillmentResult {

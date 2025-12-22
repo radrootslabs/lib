@@ -1,7 +1,4 @@
-#[cfg(not(feature = "std"))]
-use alloc::{string::String, vec::Vec};
-
-#[typeshare::typeshare]
+#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsTradeListingSubtotal {
@@ -11,7 +8,7 @@ pub struct RadrootsTradeListingSubtotal {
     pub quantity_unit: radroots_core::RadrootsCoreUnit,
 }
 
-#[typeshare::typeshare]
+#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsTradeListingTotal {

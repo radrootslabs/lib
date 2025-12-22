@@ -1,12 +1,13 @@
-#![cfg_attr(not(feature = "serde"), allow(unused_attributes))]
-
 #[cfg(not(feature = "std"))]
 use alloc::string::String;
 
-#[typeshare::typeshare]
+#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
-#[serde(rename_all = "snake_case", tag = "kind", content = "amount")]
+#[cfg_attr(
+    feature = "serde",
+    serde(rename_all = "snake_case", tag = "kind", content = "amount")
+)]
 pub enum TradeListingPaymentProof {
     ZapEvent { id: String },
     Preimage { hex: String },
@@ -14,7 +15,7 @@ pub enum TradeListingPaymentProof {
     ExternalRef { provider: String, ref_id: String },
 }
 
-#[typeshare::typeshare]
+#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct TradeListingPaymentProofRequest {
@@ -22,7 +23,7 @@ pub struct TradeListingPaymentProofRequest {
     pub proof: TradeListingPaymentProof,
 }
 
-#[typeshare::typeshare]
+#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct TradeListingPaymentResult {

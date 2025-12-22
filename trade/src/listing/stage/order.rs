@@ -1,11 +1,11 @@
 #[cfg(not(feature = "std"))]
-use alloc::{string::String, vec::Vec};
+use alloc::vec::Vec;
 use radroots_core::RadrootsCoreQuantityPrice;
 use radroots_events::listing::{RadrootsListingDiscount, RadrootsListingQuantity};
 
 use crate::listing::model::{RadrootsTradeListingSubtotal, RadrootsTradeListingTotal};
 
-#[typeshare::typeshare]
+#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct TradeListingOrderRequestPayload {
@@ -13,7 +13,7 @@ pub struct TradeListingOrderRequestPayload {
     pub quantity: RadrootsListingQuantity,
 }
 
-#[typeshare::typeshare]
+#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct TradeListingOrderRequest {
@@ -21,7 +21,7 @@ pub struct TradeListingOrderRequest {
     pub payload: TradeListingOrderRequestPayload,
 }
 
-#[typeshare::typeshare]
+#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct TradeListingOrderResult {
