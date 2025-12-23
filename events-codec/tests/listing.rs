@@ -39,6 +39,9 @@ fn sample_listing(d_tag: &str) -> RadrootsListing {
         }],
         prices: vec![price],
         discounts: None,
+        inventory_available: None,
+        availability: None,
+        delivery_method: None,
         location: None,
         images: None,
     }

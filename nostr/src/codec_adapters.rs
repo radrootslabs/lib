@@ -39,7 +39,7 @@ fn sig_hex(e: &Event) -> String {
 
 pub fn to_job_request_metadata(
     e: &Event,
-) -> Result<radroots_events::job::request::models::RadrootsJobRequestEventMetadata, JobParseError> {
+) -> Result<radroots_events::job_request::RadrootsJobRequestEventMetadata, JobParseError> {
     req_decode::metadata_from_event(
         event_id(e),
         author(e),
@@ -51,7 +51,7 @@ pub fn to_job_request_metadata(
 
 pub fn to_job_result_metadata(
     e: &Event,
-) -> Result<radroots_events::job::result::models::RadrootsJobResultEventMetadata, JobParseError> {
+) -> Result<radroots_events::job_result::RadrootsJobResultEventMetadata, JobParseError> {
     res_decode::metadata_from_event(
         event_id(e),
         author(e),
@@ -64,7 +64,7 @@ pub fn to_job_result_metadata(
 
 pub fn to_job_feedback_metadata(
     e: &Event,
-) -> Result<radroots_events::job::feedback::models::RadrootsJobFeedbackEventMetadata, JobParseError>
+) -> Result<radroots_events::job_feedback::RadrootsJobFeedbackEventMetadata, JobParseError>
 {
     fb_decode::metadata_from_event(
         event_id(e),
@@ -78,7 +78,7 @@ pub fn to_job_feedback_metadata(
 
 pub fn to_job_request_index(
     e: &Event,
-) -> Result<radroots_events::job::request::models::RadrootsJobRequestEventIndex, JobParseError> {
+) -> Result<radroots_events::job_request::RadrootsJobRequestEventIndex, JobParseError> {
     req_decode::index_from_event(
         event_id(e),
         author(e),
@@ -92,7 +92,7 @@ pub fn to_job_request_index(
 
 pub fn to_job_result_index(
     e: &Event,
-) -> Result<radroots_events::job::result::models::RadrootsJobResultEventIndex, JobParseError> {
+) -> Result<radroots_events::job_result::RadrootsJobResultEventIndex, JobParseError> {
     res_decode::index_from_event(
         event_id(e),
         author(e),
@@ -106,7 +106,7 @@ pub fn to_job_result_index(
 
 pub fn to_job_feedback_index(
     e: &Event,
-) -> Result<radroots_events::job::feedback::models::RadrootsJobFeedbackEventIndex, JobParseError> {
+) -> Result<radroots_events::job_feedback::RadrootsJobFeedbackEventIndex, JobParseError> {
     fb_decode::index_from_event(
         event_id(e),
         author(e),

@@ -9,9 +9,10 @@ license.workspace = true
 build = "build.rs"
 
 [features]
-default = ["std", "serde", "ts-rs"]
+default = ["std", "serde", "serde_json", "ts-rs"]
 std = []
 serde = ["dep:serde", "radroots-core/serde", "radroots-events/serde", "radroots-events-codec/serde"]
+serde_json = ["serde", "dep:serde_json"]
 ts-rs = ["dep:ts-rs"]
 
 [dependencies]
@@ -19,4 +20,5 @@ radroots-core = { workspace = true, default-features = false }
 radroots-events = { workspace = true, default-features = false }
 radroots-events-codec = { workspace = true, default-features = false }
 serde = { workspace = true, default-features = false, features = ["alloc", "derive"], optional = true }
+serde_json = { workspace = true, default-features = false, features = ["alloc"], optional = true }
 ts-rs = { workspace = true, optional = true }

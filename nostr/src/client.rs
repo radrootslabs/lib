@@ -11,7 +11,7 @@ pub async fn nostr_send_event(
     Ok(client.send_event_builder(event).await?)
 }
 
-pub async fn nostr_fetch_event_by_id(client: Client, id: &str) -> Result<Event, NostrUtilsError> {
+pub async fn nostr_fetch_event_by_id(client: &Client, id: &str) -> Result<Event, NostrUtilsError> {
     let event_id = EventId::parse(id)?;
     let filter = Filter::new().id(event_id);
     let events = client.fetch_events(filter, Duration::from_secs(10)).await?;

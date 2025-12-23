@@ -16,11 +16,17 @@ pub mod util;
 #[cfg(feature = "codec")]
 pub mod codec_adapters;
 
+#[cfg(feature = "codec")]
+pub mod job_adapter;
+
 #[cfg(feature = "http")]
 pub mod nip11;
 
 #[cfg(feature = "events")]
 pub mod event_adapters;
+
+#[cfg(feature = "events")]
+pub mod event_convert;
 
 pub mod prelude {
     pub use crate::events::build_nostr_event;
@@ -50,4 +56,10 @@ pub mod prelude {
 
     #[cfg(feature = "events")]
     pub use crate::event_adapters::{to_post_event_metadata, to_profile_event_metadata};
+
+    #[cfg(feature = "events")]
+    pub use crate::event_convert::{radroots_event_from_nostr, radroots_event_ptr_from_nostr};
+
+    #[cfg(feature = "codec")]
+    pub use crate::job_adapter::NostrEventAdapter;
 }

@@ -1,6 +1,6 @@
 use radroots_core::{
-    RadrootsCoreDiscountValue, RadrootsCoreMoney, RadrootsCorePercent, RadrootsCoreQuantity,
-    RadrootsCoreQuantityPrice,
+    RadrootsCoreDecimal, RadrootsCoreDiscountValue, RadrootsCoreMoney, RadrootsCorePercent,
+    RadrootsCoreQuantity, RadrootsCoreQuantityPrice,
 };
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
@@ -34,6 +34,50 @@ pub struct RadrootsListingEventMetadata {
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case", tag = "kind", content = "amount"))]
+#[derive(Clone, Debug)]
+pub enum RadrootsListingAvailability {
+    Window {
+        #[cfg_attr(feature = "ts-rs", ts(optional, type = "number | null"))]
+        start: Option<u64>,
+        #[cfg_attr(feature = "ts-rs", ts(optional, type = "number | null"))]
+        end: Option<u64>,
+    },
+    Status {
+        status: RadrootsListingStatus,
+    },
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case", tag = "kind", content = "amount"))]
+#[derive(Clone, Debug)]
+pub enum RadrootsListingStatus {
+    Active,
+    Sold,
+    Other {
+        value: String,
+    },
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case", tag = "kind", content = "amount"))]
+#[derive(Clone, Debug)]
+pub enum RadrootsListingDeliveryMethod {
+    Pickup,
+    LocalDelivery,
+    Shipping,
+    Other {
+        method: String,
+    },
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsListing {
     pub d_tag: String,
@@ -46,6 +90,21 @@ pub struct RadrootsListing {
         ts(optional, type = "RadrootsListingDiscount[] | null")
     )]
     pub discounts: Option<Vec<RadrootsListingDiscount>>,
+    #[cfg_attr(
+        feature = "ts-rs",
+        ts(optional, type = "RadrootsCoreDecimal | null")
+    )]
+    pub inventory_available: Option<RadrootsCoreDecimal>,
+    #[cfg_attr(
+        feature = "ts-rs",
+        ts(optional, type = "RadrootsListingAvailability | null")
+    )]
+    pub availability: Option<RadrootsListingAvailability>,
+    #[cfg_attr(
+        feature = "ts-rs",
+        ts(optional, type = "RadrootsListingDeliveryMethod | null")
+    )]
+    pub delivery_method: Option<RadrootsListingDeliveryMethod>,
     #[cfg_attr(
         feature = "ts-rs",
         ts(optional, type = "RadrootsListingLocation | null")
