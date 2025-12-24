@@ -3,10 +3,16 @@
 
 use radroots_events::comment::RadrootsComment;
 use radroots_events::follow::RadrootsFollow;
+use radroots_events::job_feedback::RadrootsJobFeedback;
+use radroots_events::job_request::RadrootsJobRequest;
+use radroots_events::job_result::RadrootsJobResult;
 use radroots_events::listing::RadrootsListing;
 use radroots_events::reaction::RadrootsReaction;
 use radroots_events_codec::comment::encode::comment_build_tags;
 use radroots_events_codec::follow::encode::follow_build_tags;
+use radroots_events_codec::job::feedback::encode::job_feedback_build_tags;
+use radroots_events_codec::job::request::encode::job_request_build_tags;
+use radroots_events_codec::job::result::encode::job_result_build_tags;
 use radroots_events_codec::reaction::encode::reaction_build_tags;
 use radroots_events_codec::listing::tags::{
     listing_tags as listing_tags_impl,
@@ -28,6 +34,18 @@ fn parse_comment(comment_json: &str) -> Result<RadrootsComment, JsValue> {
 
 fn parse_follow(follow_json: &str) -> Result<RadrootsFollow, JsValue> {
     serde_json::from_str(follow_json).map_err(err_js)
+}
+
+fn parse_job_request(job_json: &str) -> Result<RadrootsJobRequest, JsValue> {
+    serde_json::from_str(job_json).map_err(err_js)
+}
+
+fn parse_job_result(job_json: &str) -> Result<RadrootsJobResult, JsValue> {
+    serde_json::from_str(job_json).map_err(err_js)
+}
+
+fn parse_job_feedback(job_json: &str) -> Result<RadrootsJobFeedback, JsValue> {
+    serde_json::from_str(job_json).map_err(err_js)
 }
 
 fn parse_reaction(reaction_json: &str) -> Result<RadrootsReaction, JsValue> {
@@ -63,6 +81,27 @@ pub fn comment_tags(comment_json: &str) -> Result<String, JsValue> {
 pub fn follow_tags(follow_json: &str) -> Result<String, JsValue> {
     let follow = parse_follow(follow_json)?;
     let tags = follow_build_tags(&follow).map_err(err_js)?;
+    tags_to_json(tags)
+}
+
+#[wasm_bindgen(js_name = job_request_tags)]
+pub fn job_request_tags(job_json: &str) -> Result<String, JsValue> {
+    let job = parse_job_request(job_json)?;
+    let tags = job_request_build_tags(&job);
+    tags_to_json(tags)
+}
+
+#[wasm_bindgen(js_name = job_result_tags)]
+pub fn job_result_tags(job_json: &str) -> Result<String, JsValue> {
+    let job = parse_job_result(job_json)?;
+    let tags = job_result_build_tags(&job);
+    tags_to_json(tags)
+}
+
+#[wasm_bindgen(js_name = job_feedback_tags)]
+pub fn job_feedback_tags(job_json: &str) -> Result<String, JsValue> {
+    let job = parse_job_feedback(job_json)?;
+    let tags = job_feedback_build_tags(&job);
     tags_to_json(tags)
 }
 
