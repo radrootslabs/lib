@@ -4,13 +4,13 @@ use radroots_events::post::{RadrootsPost, RadrootsPostEventMetadata};
 use radroots_events::profile::{RadrootsProfile, RadrootsProfileEventMetadata};
 
 #[cfg(feature = "events")]
-use nostr::event::Event;
+use crate::types::{RadrootsNostrEvent, RadrootsNostrMetadata};
 
 #[cfg(feature = "events")]
 use crate::util::created_at_u32_saturating;
 
 #[cfg(feature = "events")]
-pub fn to_post_event_metadata(e: &Event) -> RadrootsPostEventMetadata {
+pub fn to_post_event_metadata(e: &RadrootsNostrEvent) -> RadrootsPostEventMetadata {
     RadrootsPostEventMetadata {
         id: e.id.to_string(),
         author: e.pubkey.to_string(),
@@ -23,7 +23,7 @@ pub fn to_post_event_metadata(e: &Event) -> RadrootsPostEventMetadata {
 }
 
 #[cfg(feature = "events")]
-pub fn to_profile_event_metadata(e: &Event) -> Option<RadrootsProfileEventMetadata> {
+pub fn to_profile_event_metadata(e: &RadrootsNostrEvent) -> Option<RadrootsProfileEventMetadata> {
     if let Ok(p) = serde_json::from_str::<RadrootsProfile>(&e.content) {
         return Some(RadrootsProfileEventMetadata {
             id: e.id.to_string(),
@@ -34,7 +34,7 @@ pub fn to_profile_event_metadata(e: &Event) -> Option<RadrootsProfileEventMetada
         });
     }
 
-    if let Ok(md) = serde_json::from_str::<nostr::Metadata>(&e.content) {
+    if let Ok(md) = serde_json::from_str::<RadrootsNostrMetadata>(&e.content) {
         let p = RadrootsProfile {
             name: md.name.unwrap_or_default(),
             display_name: md.display_name,

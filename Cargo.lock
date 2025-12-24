@@ -1737,9 +1737,10 @@ dependencies = [
  "nostr",
  "radroots-runtime",
  "serde",
+ "serde_json",
+ "tempfile",
  "thiserror 1.0.69",
  "tracing",
- "uuid",
 ]
 
 [[package]]
@@ -1766,8 +1767,6 @@ dependencies = [
  "directories",
  "futures",
  "hex",
- "nostr",
- "nostr-sdk",
  "radroots-events",
  "radroots-log",
  "radroots-nostr",
@@ -1790,6 +1789,7 @@ dependencies = [
  "nostr-sdk",
  "radroots-events",
  "radroots-events-codec",
+ "radroots-identity",
  "reqwest",
  "serde",
  "serde_json",
@@ -2964,7 +2964,6 @@ dependencies = [
  "getrandom 0.3.3",
  "js-sys",
  "rand 0.9.2",
- "serde",
  "wasm-bindgen",
 ]
 

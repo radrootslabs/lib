@@ -1,7 +1,14 @@
+#![cfg_attr(not(feature = "std"), no_std)]
+#![forbid(unsafe_code)]
+
+#[cfg(not(feature = "std"))]
+extern crate alloc;
+
 pub mod error;
-pub mod spec;
+pub mod identity;
 
 pub use error::IdentityError;
-pub use spec::{ExtendedIdentity, IdentitySpec, MinimalIdentity, load_or_generate, to_keys};
-
-pub const DEFAULT_IDENTITY_PATH: &str = "identity.json";
+pub use identity::{
+    RadrootsIdentity, RadrootsIdentityFile, RadrootsIdentityProfile,
+    RadrootsIdentitySecretKeyFormat, DEFAULT_IDENTITY_PATH,
+};

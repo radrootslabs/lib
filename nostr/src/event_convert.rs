@@ -1,11 +1,11 @@
 #![forbid(unsafe_code)]
 
-use nostr::event::Event;
+use crate::types::RadrootsNostrEvent as RadrootsNostrRawEvent;
 use radroots_events::{RadrootsNostrEvent, RadrootsNostrEventPtr};
 
 use crate::util::event_created_at_u32_saturating;
 
-pub fn radroots_event_from_nostr(event: &Event) -> RadrootsNostrEvent {
+pub fn radroots_event_from_nostr(event: &RadrootsNostrRawEvent) -> RadrootsNostrEvent {
     RadrootsNostrEvent {
         id: event.id.to_string(),
         author: event.pubkey.to_string(),
@@ -17,7 +17,7 @@ pub fn radroots_event_from_nostr(event: &Event) -> RadrootsNostrEvent {
     }
 }
 
-pub fn radroots_event_ptr_from_nostr(event: &Event) -> RadrootsNostrEventPtr {
+pub fn radroots_event_ptr_from_nostr(event: &RadrootsNostrRawEvent) -> RadrootsNostrEventPtr {
     RadrootsNostrEventPtr {
         id: event.id.to_string(),
         relays: None,

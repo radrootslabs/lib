@@ -14,7 +14,7 @@ use radroots_events::{
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
 
-use crate::listing::codec::{listing_from_event_parts, TradeListingParseError};
+use crate::listing::codec::{TradeListingParseError, listing_from_event_parts};
 use crate::listing::dvm::TradeListingAddress;
 
 const LISTING_KIND: u32 = 30402;
@@ -45,7 +45,10 @@ pub struct RadrootsTradeListing {
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "snake_case", tag = "kind", content = "amount"))]
+#[cfg_attr(
+    feature = "serde",
+    serde(rename_all = "snake_case", tag = "kind", content = "amount")
+)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TradeListingValidationError {
     InvalidKind { kind: u32 },
@@ -164,12 +167,11 @@ pub fn validate_listing_event(
         return Err(TradeListingValidationError::InvalidPrice);
     }
 
-    let inventory_available =
-        listing
-            .inventory_available
-            .clone()
-            .or_else(|| derive_inventory(&listing))
-            .ok_or(TradeListingValidationError::MissingInventory)?;
+    let inventory_available = listing
+        .inventory_available
+        .clone()
+        .or_else(|| derive_inventory(&listing))
+        .ok_or(TradeListingValidationError::MissingInventory)?;
     if inventory_available.is_sign_negative() {
         return Err(TradeListingValidationError::InvalidInventory);
     }
@@ -205,18 +207,18 @@ pub fn validate_listing_event(
 }
 
 fn derive_inventory(listing: &RadrootsListing) -> Option<RadrootsCoreDecimal> {
-    listing
-        .quantities
-        .iter()
-        .find_map(|qty| qty.count.map(|count| qty.value.amount * RadrootsCoreDecimal::from(count)))
+    listing.quantities.iter().find_map(|qty| {
+        qty.count
+            .map(|count| qty.value.amount * RadrootsCoreDecimal::from(count))
+    })
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{validate_listing_event, TradeListingValidationError};
+    use super::{TradeListingValidationError, validate_listing_event};
     use radroots_core::{
-        RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity, RadrootsCoreQuantityPrice,
-        RadrootsCoreUnit,
+        RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
+        RadrootsCoreQuantityPrice, RadrootsCoreUnit,
     };
     use radroots_events::{
         RadrootsNostrEvent,
@@ -302,7 +304,10 @@ mod tests {
         let mut event = base_event(&listing);
         event.tags.clear();
         let err = validate_listing_event(&event).unwrap_err();
-        assert!(matches!(err, TradeListingValidationError::ParseError { .. }));
+        assert!(matches!(
+            err,
+            TradeListingValidationError::ParseError { .. }
+        ));
     }
 
     #[test]
@@ -315,14 +320,34 @@ mod tests {
             vec!["title".into(), "Coffee".into()],
             vec!["category".into(), "coffee".into()],
             vec!["summary".into(), "Single origin".into()],
-            vec!["quantity".into(), "1".into(), "lb".into(), "bag".into(), "5".into()],
-            vec!["price".into(), "20".into(), "US".into(), "1".into(), "lb".into()],
-            vec!["location".into(), "Farm".into(), "Town".into(), "Region".into()],
+            vec![
+                "quantity".into(),
+                "1".into(),
+                "lb".into(),
+                "bag".into(),
+                "5".into(),
+            ],
+            vec![
+                "price".into(),
+                "20".into(),
+                "US".into(),
+                "1".into(),
+                "lb".into(),
+            ],
+            vec![
+                "location".into(),
+                "Farm".into(),
+                "Town".into(),
+                "Region".into(),
+            ],
             vec!["status".into(), "active".into()],
             vec!["delivery".into(), "pickup".into()],
         ];
         let err = validate_listing_event(&event).unwrap_err();
-        assert!(matches!(err, TradeListingValidationError::ParseError { .. }));
+        assert!(matches!(
+            err,
+            TradeListingValidationError::ParseError { .. }
+        ));
     }
 
     #[test]
@@ -331,9 +356,6 @@ mod tests {
         listing.quantities[0].count = None;
         let event = base_event(&listing);
         let err = validate_listing_event(&event).unwrap_err();
-        assert!(matches!(
-            err,
-            TradeListingValidationError::MissingInventory
-        ));
+        assert!(matches!(err, TradeListingValidationError::MissingInventory));
     }
 }

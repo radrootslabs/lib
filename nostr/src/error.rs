@@ -1,12 +1,12 @@
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-pub enum NostrUtilsError {
-    #[cfg(feature = "sdk")]
+pub enum RadrootsNostrError {
+    #[cfg(feature = "client")]
     #[error("Client error: {0}")]
     ClientError(#[from] nostr_sdk::client::Error),
 
-    #[cfg(feature = "sdk")]
+    #[cfg(feature = "client")]
     #[error("Database error: {0}")]
     DatabaseError(#[from] nostr_sdk::prelude::DatabaseError),
 
@@ -24,7 +24,7 @@ pub enum NostrUtilsError {
 }
 
 #[derive(Debug, Error)]
-pub enum NostrTagsResolveError {
+pub enum RadrootsNostrTagsResolveError {
     #[error("Missing public key 'p' tag in encrypted event: {0:?}")]
     MissingPTag(nostr::Event),
 

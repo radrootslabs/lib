@@ -1,18 +1,18 @@
 #![forbid(unsafe_code)]
 
-use nostr::event::Event;
 use radroots_events_codec::job::traits::{JobEventBorrow, JobEventLike};
+use crate::types::{RadrootsNostrEvent, RadrootsNostrKind};
 
 #[derive(Clone, Debug)]
-pub struct NostrEventAdapter<'a> {
-    evt: &'a Event,
+pub struct RadrootsNostrEventAdapter<'a> {
+    evt: &'a RadrootsNostrEvent,
     id_hex: String,
     author_hex: String,
 }
 
-impl<'a> NostrEventAdapter<'a> {
+impl<'a> RadrootsNostrEventAdapter<'a> {
     #[inline]
-    pub fn new(evt: &'a Event) -> Self {
+    pub fn new(evt: &'a RadrootsNostrEvent) -> Self {
         Self {
             evt,
             id_hex: evt.id.to_hex(),
@@ -30,7 +30,7 @@ impl<'a> NostrEventAdapter<'a> {
     }
 }
 
-impl<'a> JobEventBorrow<'a> for NostrEventAdapter<'a> {
+impl<'a> JobEventBorrow<'a> for RadrootsNostrEventAdapter<'a> {
     #[inline]
     fn raw_id(&'a self) -> &'a str {
         &self.id_hex
@@ -46,13 +46,13 @@ impl<'a> JobEventBorrow<'a> for NostrEventAdapter<'a> {
     #[inline]
     fn raw_kind(&'a self) -> u32 {
         match self.evt.kind {
-            nostr::event::Kind::Custom(v) => v as u32,
+            RadrootsNostrKind::Custom(v) => v as u32,
             _ => 0,
         }
     }
 }
 
-impl JobEventLike for NostrEventAdapter<'_> {
+impl JobEventLike for RadrootsNostrEventAdapter<'_> {
     fn raw_id(&self) -> String {
         self.id_hex.clone()
     }
@@ -64,7 +64,7 @@ impl JobEventLike for NostrEventAdapter<'_> {
     }
     fn raw_kind(&self) -> u32 {
         match self.evt.kind {
-            nostr::event::Kind::Custom(v) => v as u32,
+            RadrootsNostrKind::Custom(v) => v as u32,
             _ => 0,
         }
     }

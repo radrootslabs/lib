@@ -13,7 +13,7 @@ default = ["std", "serde", "serde_json", "ts-rs"]
 std = []
 serde = ["dep:serde", "radroots-core/serde", "radroots-events/serde", "radroots-events-codec/serde"]
 serde_json = ["serde", "dep:serde_json"]
-ts-rs = ["dep:ts-rs"]
+ts-rs = ["dep:ts-rs", "radroots-events/ts-rs", "radroots-events/std"]
 
 [dependencies]
 radroots-core = { workspace = true, default-features = false }

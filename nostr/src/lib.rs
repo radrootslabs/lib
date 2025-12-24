@@ -2,14 +2,16 @@
 
 extern crate alloc;
 
-#[cfg(feature = "sdk")]
+#[cfg(feature = "client")]
 pub mod client;
 
 pub mod error;
 pub mod events;
 pub mod filter;
 pub mod parse;
+#[cfg(feature = "client")]
 pub mod relays;
+pub mod types;
 pub mod tags;
 pub mod util;
 
@@ -29,27 +31,84 @@ pub mod event_adapters;
 pub mod event_convert;
 
 pub mod prelude {
-    pub use crate::events::build_nostr_event;
+    pub use crate::events::radroots_nostr_build_event;
 
-    #[cfg(feature = "sdk")]
-    pub use crate::client::{nostr_fetch_event_by_id, nostr_send_event};
-
-    pub use crate::error::{NostrTagsResolveError, NostrUtilsError};
-    pub use crate::filter::{nostr_filter_kind, nostr_filter_new_events, nostr_kind};
-
-    pub use crate::events::{
-        jobs::{nostr_build_event_job_feedback, nostr_build_event_job_result},
-        metadata::{build_metadata_event, fetch_metadata_for_author, post_metadata_event},
-        post::{build_post_event, build_post_reply_event},
+    #[cfg(feature = "client")]
+    pub use crate::client::{
+        radroots_nostr_fetch_event_by_id,
+        radroots_nostr_send_event,
+        RadrootsNostrClient,
     };
 
-    #[cfg(all(feature = "sdk", feature = "events"))]
-    pub use crate::events::post::fetch_post_events;
+    pub use crate::error::{RadrootsNostrError, RadrootsNostrTagsResolveError};
+    pub use crate::filter::{
+        radroots_nostr_filter_kind,
+        radroots_nostr_filter_new_events,
+        radroots_nostr_kind,
+    };
 
-    pub use crate::parse::{parse_pubkey, parse_pubkeys};
-    pub use crate::relays::{add_relay, connect, remove_relay};
+    pub use crate::events::{
+        jobs::{
+            radroots_nostr_build_event_job_feedback,
+            radroots_nostr_build_event_job_result,
+        },
+        metadata::radroots_nostr_build_metadata_event,
+        post::{
+            radroots_nostr_build_post_event,
+            radroots_nostr_build_post_reply_event,
+        },
+    };
+
+    #[cfg(feature = "client")]
+    pub use crate::events::metadata::{
+        radroots_nostr_fetch_metadata_for_author,
+        radroots_nostr_post_metadata_event,
+    };
+
+    #[cfg(all(feature = "client", feature = "events"))]
+    pub use crate::events::post::radroots_nostr_fetch_post_events;
+
+    pub use crate::parse::{radroots_nostr_parse_pubkey, radroots_nostr_parse_pubkeys};
+    #[cfg(feature = "client")]
+    pub use crate::relays::{
+        radroots_nostr_add_relay,
+        radroots_nostr_connect,
+        radroots_nostr_remove_relay,
+    };
     pub use crate::tags::*;
-    pub use crate::util::npub_string;
+    pub use crate::types::{
+        RadrootsNostrCoordinate,
+        RadrootsNostrEvent,
+        RadrootsNostrEventBuilder,
+        RadrootsNostrEventId,
+        RadrootsNostrFilter,
+        RadrootsNostrFromBech32,
+        RadrootsNostrKind,
+        RadrootsNostrKeys,
+        RadrootsNostrMetadata,
+        RadrootsNostrPublicKey,
+        RadrootsNostrRelayUrl,
+        RadrootsNostrSecretKey,
+        RadrootsNostrSecp256k1SecretKey,
+        RadrootsNostrSubscriptionId,
+        RadrootsNostrTag,
+        RadrootsNostrTagKind,
+        RadrootsNostrTagStandard,
+        RadrootsNostrTimestamp,
+        RadrootsNostrToBech32,
+        RadrootsNostrUrl,
+    };
+    #[cfg(feature = "client")]
+    pub use crate::types::{
+        RadrootsNostrMonitor,
+        RadrootsNostrMonitorNotification,
+        RadrootsNostrOutput,
+        RadrootsNostrRelay,
+        RadrootsNostrRelayPoolNotification,
+        RadrootsNostrRelayStatus,
+        RadrootsNostrSubscribeAutoCloseOptions,
+    };
+    pub use crate::util::radroots_nostr_npub_string;
 
     #[cfg(feature = "http")]
     pub use crate::nip11::fetch_nip11;
@@ -61,5 +120,5 @@ pub mod prelude {
     pub use crate::event_convert::{radroots_event_from_nostr, radroots_event_ptr_from_nostr};
 
     #[cfg(feature = "codec")]
-    pub use crate::job_adapter::NostrEventAdapter;
+    pub use crate::job_adapter::RadrootsNostrEventAdapter;
 }

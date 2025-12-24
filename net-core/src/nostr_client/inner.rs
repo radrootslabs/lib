@@ -1,16 +1,22 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use nostr_sdk::prelude::*;
 use radroots_events::post::RadrootsPostEventMetadata;
+use radroots_nostr::prelude::{
+    RadrootsNostrClient,
+    RadrootsNostrKeys,
+    RadrootsNostrMonitor,
+    RadrootsNostrRelayStatus,
+    RadrootsNostrRelayUrl,
+};
 use tokio::runtime::Handle;
 use tokio::sync::broadcast;
 use tokio::task::JoinHandle;
 
 pub(super) struct Inner {
-    pub client: Client,
+    pub client: RadrootsNostrClient,
     pub relays: Arc<Mutex<Vec<String>>>,
-    pub statuses: Arc<Mutex<HashMap<RelayUrl, RelayStatus>>>,
+    pub statuses: Arc<Mutex<HashMap<RadrootsNostrRelayUrl, RadrootsNostrRelayStatus>>>,
     pub last_error: Arc<Mutex<Option<String>>>,
     pub rt: Handle,
     pub post_events_tx: broadcast::Sender<RadrootsPostEventMetadata>,
@@ -18,9 +24,9 @@ pub(super) struct Inner {
 }
 
 impl Inner {
-    pub fn new(keys: nostr::Keys, rt: Handle) -> Arc<Self> {
-        let monitor = Monitor::new(2048);
-        let client = Client::builder().signer(keys).monitor(monitor).build();
+    pub fn new(keys: RadrootsNostrKeys, rt: Handle) -> Arc<Self> {
+        let monitor = RadrootsNostrMonitor::new(2048);
+        let client = RadrootsNostrClient::new_with_monitor(keys, monitor);
         let (tx, _) = broadcast::channel(2048);
 
         Arc::new(Self {

@@ -2,6 +2,12 @@ use std::sync::Arc;
 use tokio::runtime::Handle;
 
 use super::inner::Inner;
+use radroots_nostr::prelude::{
+    RadrootsNostrFilter,
+    RadrootsNostrKind,
+    RadrootsNostrKeys,
+    RadrootsNostrTimestamp,
+};
 
 #[derive(Clone)]
 pub struct NostrClientManager {
@@ -9,7 +15,7 @@ pub struct NostrClientManager {
 }
 
 impl NostrClientManager {
-    pub fn new(keys: nostr::Keys, rt: Handle) -> Self {
+    pub fn new(keys: RadrootsNostrKeys, rt: Handle) -> Self {
         let inner = Inner::new(keys, rt);
         let this = Self {
             inner: inner.clone(),
@@ -37,13 +43,12 @@ impl NostrClientManager {
             let inner = inner.clone();
             async move {
                 use futures::StreamExt;
-                use nostr_sdk::prelude::*;
 
-                let mut since = since_unix.unwrap_or_else(|| Timestamp::now().as_u64());
+                let mut since = since_unix.unwrap_or_else(|| RadrootsNostrTimestamp::now().as_u64());
                 loop {
-                    let filter = Filter::new()
-                        .kind(Kind::TextNote)
-                        .since(Timestamp::from(since));
+                    let filter = RadrootsNostrFilter::new()
+                        .kind(RadrootsNostrKind::TextNote)
+                        .since(RadrootsNostrTimestamp::from(since));
 
                     let mut stream = match inner
                         .client
@@ -57,7 +62,11 @@ impl NostrClientManager {
                         }
                     };
 
-                    while let Some(event) = stream.next().await {
+                    while let Some((_, event)) = stream.next().await {
+                        let event = match event {
+                            Ok(ev) => ev,
+                            Err(_) => continue,
+                        };
                         let meta = radroots_nostr::event_adapters::to_post_event_metadata(&event);
                         let ts = event.created_at.as_u64();
                         since = ts.saturating_add(1);

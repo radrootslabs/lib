@@ -1,35 +1,49 @@
-use crate::error::NostrUtilsError;
-use core::time::Duration;
-use nostr::{
-    Kind, Metadata, event::Event, event::EventBuilder, event::EventId, filter::Filter,
-    key::PublicKey,
-};
-use nostr_sdk::{Client, prelude::Output};
+use crate::types::{RadrootsNostrEventBuilder, RadrootsNostrMetadata};
 
-pub fn build_metadata_event(md: &Metadata) -> EventBuilder {
-    EventBuilder::metadata(md)
+#[cfg(feature = "client")]
+use core::time::Duration;
+#[cfg(feature = "client")]
+use crate::client::RadrootsNostrClient;
+#[cfg(feature = "client")]
+use crate::error::RadrootsNostrError;
+#[cfg(feature = "client")]
+use crate::types::{
+    RadrootsNostrEvent,
+    RadrootsNostrEventId,
+    RadrootsNostrFilter,
+    RadrootsNostrKind,
+    RadrootsNostrOutput,
+    RadrootsNostrPublicKey,
+};
+
+pub fn radroots_nostr_build_metadata_event(md: &RadrootsNostrMetadata) -> RadrootsNostrEventBuilder {
+    RadrootsNostrEventBuilder::metadata(md)
 }
 
-pub async fn post_metadata_event(
-    client: &Client,
-    md: &Metadata,
-) -> Result<Output<EventId>, NostrUtilsError> {
-    let builder = build_metadata_event(md);
+#[cfg(feature = "client")]
+pub async fn radroots_nostr_post_metadata_event(
+    client: &RadrootsNostrClient,
+    md: &RadrootsNostrMetadata,
+) -> Result<RadrootsNostrOutput<RadrootsNostrEventId>, RadrootsNostrError> {
+    let builder = radroots_nostr_build_metadata_event(md);
     Ok(client.send_event_builder(builder).await?)
 }
 
-pub async fn fetch_metadata_for_author(
-    client: &Client,
-    author: PublicKey,
+#[cfg(feature = "client")]
+pub async fn radroots_nostr_fetch_metadata_for_author(
+    client: &RadrootsNostrClient,
+    author: RadrootsNostrPublicKey,
     timeout: Duration,
-) -> Result<Option<Event>, NostrUtilsError> {
-    let filter = Filter::new().authors(vec![author]).kind(Kind::Metadata);
+) -> Result<Option<RadrootsNostrEvent>, RadrootsNostrError> {
+    let filter = RadrootsNostrFilter::new()
+        .authors(vec![author])
+        .kind(RadrootsNostrKind::Metadata);
     let stored = client.database().query(filter.clone()).await?;
     let fetched = client.fetch_events(filter, timeout).await?;
 
-    let mut latest: Option<Event> = None;
+    let mut latest: Option<RadrootsNostrEvent> = None;
     for ev in stored.into_iter().chain(fetched.into_iter()) {
-        if ev.kind != Kind::Metadata {
+        if ev.kind != RadrootsNostrKind::Metadata {
             continue;
         }
         match &latest {

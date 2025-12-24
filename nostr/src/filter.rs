@@ -1,13 +1,13 @@
-use nostr::{event::Kind, filter::Filter, types::Timestamp};
+use crate::types::{RadrootsNostrFilter, RadrootsNostrKind, RadrootsNostrTimestamp};
 
-pub fn nostr_kind(kind: u16) -> Kind {
-    Kind::Custom(kind)
+pub fn radroots_nostr_kind(kind: u16) -> RadrootsNostrKind {
+    RadrootsNostrKind::Custom(kind)
 }
 
-pub fn nostr_filter_kind(kind: u16) -> Filter {
-    Filter::new().kind(Kind::Custom(kind))
+pub fn radroots_nostr_filter_kind(kind: u16) -> RadrootsNostrFilter {
+    RadrootsNostrFilter::new().kind(RadrootsNostrKind::Custom(kind))
 }
 
-pub fn nostr_filter_new_events(filter: Filter) -> Filter {
-    filter.since(Timestamp::now())
+pub fn radroots_nostr_filter_new_events(filter: RadrootsNostrFilter) -> RadrootsNostrFilter {
+    filter.since(RadrootsNostrTimestamp::now())
 }

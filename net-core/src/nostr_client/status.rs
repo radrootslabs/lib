@@ -1,4 +1,7 @@
-use nostr_sdk::prelude::MonitorNotification;
+use radroots_nostr::prelude::{
+    RadrootsNostrMonitorNotification,
+    RadrootsNostrRelayStatus,
+};
 use tracing::{info, warn};
 
 use super::manager::NostrClientManager;
@@ -15,7 +18,7 @@ impl NostrClientManager {
                 let mut rx = monitor.subscribe();
                 while let Ok(notification) = rx.recv().await {
                     match notification {
-                        MonitorNotification::StatusChanged { relay_url, status } => {
+                        RadrootsNostrMonitorNotification::StatusChanged { relay_url, status } => {
                             if let Ok(mut map) = inner_for_task.statuses.lock() {
                                 map.insert(relay_url.clone(), status);
                             } else if let Ok(mut last) = inner_for_task.last_error.lock() {
@@ -49,8 +52,8 @@ impl NostrClientManager {
 
         for (_url, st) in map.iter() {
             match st {
-                nostr_sdk::prelude::RelayStatus::Connected => connected += 1,
-                nostr_sdk::prelude::RelayStatus::Connecting => connecting += 1,
+                RadrootsNostrRelayStatus::Connected => connected += 1,
+                RadrootsNostrRelayStatus::Connecting => connecting += 1,
                 _ => {}
             }
         }
