@@ -1,6 +1,6 @@
 .PHONY: all bindings clean help \
         bindings-events bindings-tangle-schema bindings-trade bindings-types \
-        build build-tangle-sql-wasm
+        build build-events-codec-wasm build-tangle-sql-wasm
 
 SHELL := /bin/bash
 .SHELLFLAGS := -e -o pipefail -c
@@ -13,6 +13,7 @@ BINDINGS_TARGETS := \
     bindings-types
 
 BUILD_TARGETS := \
+    build-events-codec-wasm \
     build-tangle-sql-wasm
 
 all: bindings build
@@ -54,3 +55,7 @@ bindings-types:
 build-tangle-sql-wasm:
 	wasm-pack build tangle-sql-wasm --release --target web \
 		--out-dir ../tangle-sql-wasm/pkg/dist --scope radroots
+
+build-events-codec-wasm:
+	wasm-pack build events-codec-wasm --release --target web \
+		--out-dir ../events-codec-wasm/pkg/dist --scope radroots

@@ -3,6 +3,7 @@ members = [
     "core",
     "events",
     "events-codec",
+    "events-codec-wasm",
     "events-indexed",
     "identity",
     "log",
