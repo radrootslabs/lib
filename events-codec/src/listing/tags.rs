@@ -11,8 +11,9 @@ use radroots_core::{
     RadrootsCoreDiscountValue, RadrootsCoreMoney, RadrootsCorePercent, RadrootsCoreQuantity,
 };
 use radroots_events::listing::{
-    RadrootsListing, RadrootsListingDiscount, RadrootsListingImage, RadrootsListingLocation,
-    RadrootsListingQuantity,
+    RadrootsListing, RadrootsListingAvailability, RadrootsListingDeliveryMethod,
+    RadrootsListingDiscount, RadrootsListingImage, RadrootsListingLocation, RadrootsListingQuantity,
+    RadrootsListingStatus,
 };
 use radroots_events::tags::TAG_D;
 
@@ -29,6 +30,11 @@ const TAG_LABEL_NS: &str = "L";
 const TAG_DD: &str = "dd";
 const TAG_DD_LAT: &str = "dd.lat";
 const TAG_DD_LON: &str = "dd.lon";
+const TAG_INVENTORY: &str = "inventory";
+const TAG_DELIVERY: &str = "delivery";
+const TAG_PUBLISHED_AT: &str = "published_at";
+const TAG_STATUS: &str = "status";
+const TAG_EXPIRES_AT: &str = "expires_at";
 
 const GEOHASH_PRECISION_DEFAULT: usize = 9;
 const DD_MAX_RESOLUTION_DEFAULT: u32 = 9;
@@ -41,6 +47,9 @@ pub struct ListingTagOptions {
     pub dd_max_resolution: u32,
     pub include_geohash: bool,
     pub include_gps: bool,
+    pub include_inventory: bool,
+    pub include_availability: bool,
+    pub include_delivery: bool,
 }
 
 impl Default for ListingTagOptions {
@@ -50,12 +59,30 @@ impl Default for ListingTagOptions {
             dd_max_resolution: DD_MAX_RESOLUTION_DEFAULT,
             include_geohash: true,
             include_gps: true,
+            include_inventory: false,
+            include_availability: false,
+            include_delivery: false,
+        }
+    }
+}
+
+impl ListingTagOptions {
+    pub fn with_trade_fields() -> Self {
+        Self {
+            include_inventory: true,
+            include_availability: true,
+            include_delivery: true,
+            ..Self::default()
         }
     }
 }
 
 pub fn listing_tags(listing: &RadrootsListing) -> Result<Vec<Vec<String>>, EventEncodeError> {
     listing_tags_with_options(listing, ListingTagOptions::default())
+}
+
+pub fn listing_tags_full(listing: &RadrootsListing) -> Result<Vec<Vec<String>>, EventEncodeError> {
+    listing_tags_with_options(listing, ListingTagOptions::with_trade_fields())
 }
 
 pub fn listing_tags_with_options(
@@ -105,6 +132,47 @@ pub fn listing_tags_with_options(
         for discount in discounts {
             let (kind, payload) = discount_tag_parts(discount)?;
             tags.push(vec![format!("{TAG_PRICE_DISCOUNT_PREFIX}{kind}"), payload]);
+        }
+    }
+
+    if options.include_inventory {
+        if let Some(inventory) = &listing.inventory_available {
+            tags.push(vec![TAG_INVENTORY.to_string(), inventory.to_string()]);
+        }
+    }
+
+    if options.include_availability {
+        if let Some(availability) = &listing.availability {
+            match availability {
+                RadrootsListingAvailability::Status { status } => {
+                    tags.push(vec![TAG_STATUS.to_string(), status_as_str(status).to_string()]);
+                }
+                RadrootsListingAvailability::Window { start, end } => {
+                    if let Some(start) = start {
+                        tags.push(vec![TAG_PUBLISHED_AT.to_string(), start.to_string()]);
+                    }
+                    if let Some(end) = end {
+                        tags.push(vec![TAG_EXPIRES_AT.to_string(), end.to_string()]);
+                    }
+                }
+            }
+        }
+    }
+
+    if options.include_delivery {
+        if let Some(method) = &listing.delivery_method {
+            let mut tag = Vec::with_capacity(3);
+            tag.push(TAG_DELIVERY.to_string());
+            match method {
+                RadrootsListingDeliveryMethod::Pickup => tag.push("pickup".into()),
+                RadrootsListingDeliveryMethod::LocalDelivery => tag.push("local_delivery".into()),
+                RadrootsListingDeliveryMethod::Shipping => tag.push("shipping".into()),
+                RadrootsListingDeliveryMethod::Other { method } => {
+                    tag.push("other".into());
+                    tag.push(method.clone());
+                }
+            }
+            tags.push(tag);
         }
     }
 
@@ -426,6 +494,14 @@ fn discount_tag_parts(
     {
         let _ = discount;
         Err(EventEncodeError::Json)
+    }
+}
+
+fn status_as_str(status: &RadrootsListingStatus) -> &str {
+    match status {
+        RadrootsListingStatus::Active => "active",
+        RadrootsListingStatus::Sold => "sold",
+        RadrootsListingStatus::Other { value } => value.as_str(),
     }
 }
 

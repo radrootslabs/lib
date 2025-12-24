@@ -27,7 +27,7 @@
 - trade: trade/listing domain models and tags.
 
 ## Rust Code Directives
-- Toolchain: Rust 1.86, edition 2024; use workspace versions from the root Cargo.toml.
+- Toolchain: Rust 1.88, edition 2024; use workspace versions from the root Cargo.toml.
 - Portability: preserve no_std patterns; gate std usage with cfg(feature = "std") and use alloc when needed.
 - Safety: avoid unsafe; prefer safe, explicit APIs. Add #![forbid(unsafe_code)] on new crates/modules.
 - Public API: keep Radroots* prefix; avoid hidden panics; return Result/Option for fallible ops; use precise error enums (thiserror where appropriate).

@@ -11,7 +11,7 @@ use radroots_events::listing::{
 };
 use radroots_events::tags::TAG_D;
 use radroots_events_codec::error::EventEncodeError;
-use radroots_events_codec::listing::tags::listing_tags;
+use radroots_events_codec::listing::tags::{listing_tags_with_options, ListingTagOptions};
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
 
@@ -115,77 +115,8 @@ pub fn listing_from_event_parts(
 }
 
 pub fn listing_tags_build(listing: &RadrootsListing) -> Result<Vec<Vec<String>>, TradeListingParseError> {
-    let mut tags = listing_tags(listing).map_err(map_listing_tags_error)?;
-    if let Some(inventory) = &listing.inventory_available {
-        tags.push(vec![TAG_INVENTORY.to_string(), inventory.to_string()]);
-    }
-
-    if let Some(availability) = &listing.availability {
-        match availability {
-            RadrootsListingAvailability::Status { status } => {
-                tags.push(vec![TAG_STATUS.to_string(), status_as_str(status).to_string()]);
-            }
-            RadrootsListingAvailability::Window { start, end } => {
-                if let Some(start) = start {
-                    tags.push(vec![TAG_PUBLISHED_AT.to_string(), start.to_string()]);
-                }
-                if let Some(end) = end {
-                    tags.push(vec![TAG_EXPIRES_AT.to_string(), end.to_string()]);
-                }
-            }
-        }
-    }
-
-    if let Some(method) = &listing.delivery_method {
-        let mut tag = Vec::with_capacity(3);
-        tag.push(TAG_DELIVERY.to_string());
-        match method {
-            RadrootsListingDeliveryMethod::Pickup => tag.push("pickup".into()),
-            RadrootsListingDeliveryMethod::LocalDelivery => tag.push("local_delivery".into()),
-            RadrootsListingDeliveryMethod::Shipping => tag.push("shipping".into()),
-            RadrootsListingDeliveryMethod::Other { method } => {
-                tag.push("other".into());
-                tag.push(method.clone());
-            }
-        }
-        tags.push(tag);
-    }
-
-    if let Some(location) = &listing.location {
-        let mut tag = Vec::with_capacity(5);
-        tag.push(TAG_LOCATION.to_string());
-        tag.push(location.primary.clone());
-        if let Some(city) = location.city.as_ref().and_then(|v| clean_value(v)) {
-            tag.push(city);
-        }
-        if let Some(region) = location.region.as_ref().and_then(|v| clean_value(v)) {
-            tag.push(region);
-        }
-        if let Some(country) = location.country.as_ref().and_then(|v| clean_value(v)) {
-            tag.push(country);
-        }
-        tags.push(tag);
-        if let Some(geohash) = location.geohash.as_ref().and_then(|v| clean_value(v)) {
-            tags.push(vec![TAG_GEOHASH.to_string(), geohash]);
-        }
-    }
-
-    if let Some(images) = &listing.images {
-        for image in images {
-            if image.url.trim().is_empty() {
-                continue;
-            }
-            let mut tag = Vec::with_capacity(3);
-            tag.push(TAG_IMAGE.to_string());
-            tag.push(image.url.clone());
-            if let Some(size) = &image.size {
-                tag.push(format!("{}x{}", size.w, size.h));
-            }
-            tags.push(tag);
-        }
-    }
-
-    Ok(tags)
+    let options = ListingTagOptions::with_trade_fields();
+    listing_tags_with_options(listing, options).map_err(map_listing_tags_error)
 }
 
 fn map_listing_tags_error(err: EventEncodeError) -> TradeListingParseError {
@@ -441,14 +372,6 @@ fn parse_status(value: &str) -> RadrootsListingStatus {
         other => RadrootsListingStatus::Other {
             value: other.to_string(),
         },
-    }
-}
-
-fn status_as_str(status: &RadrootsListingStatus) -> &str {
-    match status {
-        RadrootsListingStatus::Active => "active",
-        RadrootsListingStatus::Sold => "sold",
-        RadrootsListingStatus::Other { value } => value.as_str(),
     }
 }
 

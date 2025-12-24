@@ -5,13 +5,16 @@ use radroots_core::{
     RadrootsCoreQuantityPrice, RadrootsCoreUnit,
 };
 use radroots_events::listing::{
-    RadrootsListing, RadrootsListingDiscount, RadrootsListingImage, RadrootsListingImageSize,
+    RadrootsListing, RadrootsListingAvailability, RadrootsListingDeliveryMethod,
+    RadrootsListingDiscount, RadrootsListingImage, RadrootsListingImageSize,
     RadrootsListingLocation, RadrootsListingProduct, RadrootsListingQuantity,
+    RadrootsListingStatus,
 };
 use radroots_events::tags::TAG_D;
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
 use radroots_events_codec::listing::decode::listing_from_event;
 use radroots_events_codec::listing::encode::{listing_build_tags, to_wire_parts};
+use radroots_events_codec::listing::tags::listing_tags_full;
 use std::str::FromStr;
 
 fn sample_listing(d_tag: &str) -> RadrootsListing {
@@ -243,5 +246,52 @@ fn listing_build_tags_includes_listing_fields() {
         t.get(0).map(|s| s.as_str()) == Some("image")
             && t.get(1).map(|s| s.as_str()) == Some("http://example.com/widget.jpg")
             && t.get(2).map(|s| s.as_str()) == Some("1200x800")
+    }));
+}
+
+#[test]
+fn listing_tags_full_includes_trade_fields() {
+    let mut listing = sample_listing("listing-1");
+    let inventory = RadrootsCoreDecimal::from_str("12.5").unwrap();
+    let inventory_value = inventory.to_string();
+    listing.inventory_available = Some(inventory);
+    listing.availability = Some(RadrootsListingAvailability::Window {
+        start: Some(1730000000),
+        end: Some(1731000000),
+    });
+    listing.delivery_method = Some(RadrootsListingDeliveryMethod::Shipping);
+
+    let tags = listing_tags_full(&listing).unwrap();
+
+    assert!(tags.iter().any(|t| {
+        t.get(0).map(|s| s.as_str()) == Some("inventory")
+            && t.get(1).map(|s| s.as_str()) == Some(inventory_value.as_str())
+    }));
+    assert!(tags.iter().any(|t| {
+        t.get(0).map(|s| s.as_str()) == Some("published_at")
+            && t.get(1).map(|s| s.as_str()) == Some("1730000000")
+    }));
+    assert!(tags.iter().any(|t| {
+        t.get(0).map(|s| s.as_str()) == Some("expires_at")
+            && t.get(1).map(|s| s.as_str()) == Some("1731000000")
+    }));
+    assert!(tags.iter().any(|t| {
+        t.get(0).map(|s| s.as_str()) == Some("delivery")
+            && t.get(1).map(|s| s.as_str()) == Some("shipping")
+    }));
+}
+
+#[test]
+fn listing_tags_full_includes_status_tag() {
+    let mut listing = sample_listing("listing-1");
+    listing.availability = Some(RadrootsListingAvailability::Status {
+        status: RadrootsListingStatus::Active,
+    });
+
+    let tags = listing_tags_full(&listing).unwrap();
+
+    assert!(tags.iter().any(|t| {
+        t.get(0).map(|s| s.as_str()) == Some("status")
+            && t.get(1).map(|s| s.as_str()) == Some("active")
     }));
 }
