@@ -76,3 +76,36 @@ fn load_or_generate_missing_allowed_creates_json() {
     let loaded = RadrootsIdentity::load_from_path_auto(&path).unwrap();
     assert_eq!(loaded.public_key(), identity.public_key());
 }
+
+#[test]
+fn load_from_json_file_public_key_npub() {
+    let keys = nostr::Keys::generate();
+    let identity = RadrootsIdentity::new(keys.clone());
+    let mut file = identity.to_file();
+    file.public_key = Some(identity.public_key_npub());
+    let json = serde_json::to_string(&file).unwrap();
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("identity.json");
+    std::fs::write(&path, json).unwrap();
+
+    let loaded = RadrootsIdentity::load_from_path_auto(&path).unwrap();
+    assert_eq!(loaded.public_key(), keys.public_key());
+}
+
+#[test]
+fn load_from_json_file_public_key_mismatch() {
+    let keys = nostr::Keys::generate();
+    let identity = RadrootsIdentity::new(keys);
+    let other_keys = nostr::Keys::generate();
+    let mut file = identity.to_file();
+    file.public_key = Some(other_keys.public_key().to_hex());
+    let json = serde_json::to_string(&file).unwrap();
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("identity.json");
+    std::fs::write(&path, json).unwrap();
+
+    let err = RadrootsIdentity::load_from_path_auto(&path).unwrap_err();
+    assert!(matches!(err, IdentityError::PublicKeyMismatch));
+}

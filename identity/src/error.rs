@@ -1,5 +1,8 @@
 use thiserror::Error;
 
+#[cfg(not(feature = "std"))]
+use alloc::string::String;
+
 #[cfg(feature = "std")]
 use radroots_runtime::RuntimeJsonError;
 #[cfg(feature = "std")]
@@ -27,6 +30,12 @@ pub enum IdentityError {
 
     #[error("invalid secret key: {0}")]
     InvalidSecretKey(#[from] nostr::key::Error),
+
+    #[error("invalid public key: {0}")]
+    InvalidPublicKey(String),
+
+    #[error("public key does not match secret key")]
+    PublicKeyMismatch,
 
     #[error("unsupported identity file format")]
     InvalidIdentityFormat,

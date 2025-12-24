@@ -35,6 +35,8 @@ pub struct RadrootsIdentityProfile {
 pub struct RadrootsIdentityFile {
     pub secret_key: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub public_key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub identifier: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<nostr::Event>,
@@ -157,6 +159,7 @@ impl RadrootsIdentity {
         };
         RadrootsIdentityFile {
             secret_key,
+            public_key: Some(self.public_key_hex()),
             identifier,
             metadata,
             application_handler,
@@ -224,6 +227,7 @@ impl TryFrom<RadrootsIdentityFile> for RadrootsIdentity {
 
     fn try_from(file: RadrootsIdentityFile) -> Result<Self, Self::Error> {
         let keys = Keys::parse(&file.secret_key)?;
+        validate_public_key(&keys, file.public_key.as_deref())?;
         let profile = RadrootsIdentityProfile {
             identifier: file.identifier,
             metadata: file.metadata,
@@ -270,6 +274,27 @@ fn parse_identity_bytes(bytes: &[u8]) -> Result<RadrootsIdentity, IdentityError>
         return RadrootsIdentity::from_file(file);
     }
     RadrootsIdentity::from_secret_key_str(trimmed)
+}
+
+fn validate_public_key(keys: &Keys, public_key: Option<&str>) -> Result<(), IdentityError> {
+    let Some(public_key) = public_key else {
+        return Ok(());
+    };
+    let parsed = parse_public_key(public_key)?;
+    if parsed != keys.public_key() {
+        return Err(IdentityError::PublicKeyMismatch);
+    }
+    Ok(())
+}
+
+fn parse_public_key(value: &str) -> Result<nostr::PublicKey, IdentityError> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(IdentityError::InvalidPublicKey(value.to_string()));
+    }
+    nostr::PublicKey::parse(trimmed)
+        .or_else(|_| nostr::PublicKey::from_hex(trimmed))
+        .map_err(|_| IdentityError::InvalidPublicKey(value.to_string()))
 }
 
 fn infallible_to_string(value: Result<String, Infallible>) -> String {
