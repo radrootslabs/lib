@@ -3,10 +3,9 @@ use tokio::runtime::Handle;
 
 use super::inner::Inner;
 use radroots_nostr::prelude::{
-    RadrootsNostrFilter,
-    RadrootsNostrKind,
     RadrootsNostrKeys,
     RadrootsNostrTimestamp,
+    radroots_nostr_post_events_filter,
 };
 
 #[derive(Clone)]
@@ -44,11 +43,9 @@ impl NostrClientManager {
             async move {
                 use futures::StreamExt;
 
-                let mut since = since_unix.unwrap_or_else(|| RadrootsNostrTimestamp::now().as_u64());
+                    let mut since = since_unix.unwrap_or_else(|| RadrootsNostrTimestamp::now().as_u64());
                 loop {
-                    let filter = RadrootsNostrFilter::new()
-                        .kind(RadrootsNostrKind::TextNote)
-                        .since(RadrootsNostrTimestamp::from(since));
+                    let filter = radroots_nostr_post_events_filter(None, Some(since));
 
                     let mut stream = match inner
                         .client

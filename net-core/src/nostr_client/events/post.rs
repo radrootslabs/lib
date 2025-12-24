@@ -4,6 +4,7 @@ use radroots_nostr::prelude::{
     radroots_nostr_build_post_event,
     radroots_nostr_build_post_reply_event,
     radroots_nostr_fetch_post_events,
+    radroots_nostr_send_event,
 };
 
 use crate::nostr_client::manager::NostrClientManager;
@@ -11,10 +12,7 @@ use crate::nostr_client::manager::NostrClientManager;
 impl NostrClientManager {
     pub async fn publish_post_event(&self, content: String) -> Result<String> {
         let builder = radroots_nostr_build_post_event(content);
-        let out = self
-            .inner
-            .client
-            .send_event_builder(builder)
+        let out = radroots_nostr_send_event(&self.inner.client, builder)
             .await
             .map_err(|e| NetError::Msg(e.to_string()))?;
         Ok(out.val.to_string())
@@ -41,10 +39,7 @@ impl NostrClientManager {
         )
         .map_err(|e| NetError::Msg(e.to_string()))?;
 
-        let out = self
-            .inner
-            .client
-            .send_event_builder(builder)
+        let out = radroots_nostr_send_event(&self.inner.client, builder)
             .await
             .map_err(|e| NetError::Msg(e.to_string()))?;
 

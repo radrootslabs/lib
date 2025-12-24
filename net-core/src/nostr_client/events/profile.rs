@@ -50,7 +50,7 @@ impl NostrClientManager {
     ) -> Result<String> {
         let rt = self.inner.rt.clone();
         let inner_for_task = self.inner.clone();
-        rt.block_on(async move {
+        let event_id = rt.block_on(async move {
             let mut md = RadrootsNostrMetadata::new();
             if let Some(v) = name {
                 md = md.name(v);
@@ -64,11 +64,11 @@ impl NostrClientManager {
             if let Some(v) = about {
                 md = md.about(v);
             }
-            let _ = radroots_nostr_post_metadata_event(&inner_for_task.client, &md)
+            let out = radroots_nostr_post_metadata_event(&inner_for_task.client, &md)
                 .await
                 .map_err(|e| NetError::Msg(e.to_string()))?;
-            Ok::<(), NetError>(())
+            Ok::<String, NetError>(out.val.to_string())
         })?;
-        Ok("ok".to_string())
+        Ok(event_id)
     }
 }

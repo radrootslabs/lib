@@ -2,19 +2,34 @@ use crate::error::RadrootsNostrError;
 use crate::types::{
     RadrootsNostrEventBuilder,
     RadrootsNostrEventId,
+    RadrootsNostrFilter,
+    RadrootsNostrKind,
     RadrootsNostrPublicKey,
     RadrootsNostrTag,
+    RadrootsNostrTimestamp,
 };
 
 #[cfg(all(feature = "client", feature = "events"))]
 use core::time::Duration;
 #[cfg(all(feature = "client", feature = "events"))]
 use crate::client::RadrootsNostrClient;
-#[cfg(all(feature = "client", feature = "events"))]
-use crate::types::{RadrootsNostrFilter, RadrootsNostrKind, RadrootsNostrTimestamp};
 
 pub fn radroots_nostr_build_post_event(content: impl Into<String>) -> RadrootsNostrEventBuilder {
     RadrootsNostrEventBuilder::text_note(content)
+}
+
+pub fn radroots_nostr_post_events_filter(
+    limit: Option<u16>,
+    since_unix: Option<u64>,
+) -> RadrootsNostrFilter {
+    let mut filter = RadrootsNostrFilter::new().kind(RadrootsNostrKind::TextNote);
+    if let Some(limit) = limit {
+        filter = filter.limit(limit.into());
+    }
+    if let Some(since) = since_unix {
+        filter = filter.since(RadrootsNostrTimestamp::from(since));
+    }
+    filter
 }
 
 pub fn radroots_nostr_build_post_reply_event(
@@ -47,13 +62,7 @@ pub async fn radroots_nostr_fetch_post_events(
     limit: u16,
     since_unix: Option<u64>,
 ) -> Result<Vec<radroots_events::post::RadrootsPostEventMetadata>, RadrootsNostrError> {
-    let mut filter = RadrootsNostrFilter::new()
-        .kind(RadrootsNostrKind::TextNote)
-        .limit(limit.into());
-
-    if let Some(s) = since_unix {
-        filter = filter.since(RadrootsNostrTimestamp::from(s));
-    }
+    let filter = radroots_nostr_post_events_filter(Some(limit), since_unix);
 
     let events = client.fetch_events(filter, Duration::from_secs(10)).await?;
     let out = events

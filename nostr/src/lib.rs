@@ -56,6 +56,7 @@ pub mod prelude {
         post::{
             radroots_nostr_build_post_event,
             radroots_nostr_build_post_reply_event,
+            radroots_nostr_post_events_filter,
         },
     };
 
