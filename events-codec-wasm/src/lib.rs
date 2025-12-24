@@ -1,9 +1,11 @@
 #![cfg(target_arch = "wasm32")]
 #![forbid(unsafe_code)]
 
+use radroots_events::comment::RadrootsComment;
 use radroots_events::follow::RadrootsFollow;
 use radroots_events::listing::RadrootsListing;
 use radroots_events::reaction::RadrootsReaction;
+use radroots_events_codec::comment::encode::comment_build_tags;
 use radroots_events_codec::follow::encode::follow_build_tags;
 use radroots_events_codec::reaction::encode::reaction_build_tags;
 use radroots_events_codec::listing::tags::{
@@ -18,6 +20,10 @@ fn err_js<E: ToString>(err: E) -> JsValue {
 
 fn parse_listing(listing_json: &str) -> Result<RadrootsListing, JsValue> {
     serde_json::from_str(listing_json).map_err(err_js)
+}
+
+fn parse_comment(comment_json: &str) -> Result<RadrootsComment, JsValue> {
+    serde_json::from_str(comment_json).map_err(err_js)
 }
 
 fn parse_follow(follow_json: &str) -> Result<RadrootsFollow, JsValue> {
@@ -43,6 +49,13 @@ pub fn listing_tags(listing_json: &str) -> Result<String, JsValue> {
 pub fn listing_tags_full(listing_json: &str) -> Result<String, JsValue> {
     let listing = parse_listing(listing_json)?;
     let tags = listing_tags_full_impl(&listing).map_err(err_js)?;
+    tags_to_json(tags)
+}
+
+#[wasm_bindgen(js_name = comment_tags)]
+pub fn comment_tags(comment_json: &str) -> Result<String, JsValue> {
+    let comment = parse_comment(comment_json)?;
+    let tags = comment_build_tags(&comment).map_err(err_js)?;
     tags_to_json(tags)
 }
 
