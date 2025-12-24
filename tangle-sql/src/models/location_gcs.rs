@@ -36,7 +36,7 @@ pub fn create<E: SqlExecutor>(
     let (sql, bind_values) = utils::build_insert_query_with_meta(TABLE_NAME, &meta, &field_map);
     let params_json = utils::to_params_json(bind_values)?;
     let _ = exec.exec(&sql, &params_json)?;
-    let args = ILocationGcsFindOne {
+    let args = ILocationGcsFindOne::On {
         on: LocationGcsQueryBindValues::Id { id: id.clone() },
     };
     let found = find_one(exec, &args)?;
@@ -50,12 +50,17 @@ pub fn find_one<E: SqlExecutor>(
     exec: &E,
     opts: &ILocationGcsFindOne,
 ) -> Result<ILocationGcsFindOneResolve, IError<SqlError>> {
-    let (column, value) = opts.on.to_filter_param();
-    let sql = format!("SELECT * FROM {TABLE_NAME} WHERE {column} = ? LIMIT 1;");
-    let params_json = utils::to_params_json(vec![value])?;
-    let json = exec.query_raw(&sql, &params_json)?;
-    let mut rows: Vec<LocationGcs> = utils::parse_json(&json)?;
-    let result = rows.pop();
+    let result = match opts {
+        ILocationGcsFindOne::On { on } => {
+            let (column, value) = on.to_filter_param();
+            let sql = format!("SELECT * FROM {TABLE_NAME} WHERE {column} = ? LIMIT 1;");
+            let params_json = utils::to_params_json(vec![value])?;
+            let json = exec.query_raw(&sql, &params_json)?;
+            let mut rows: Vec<LocationGcs> = utils::parse_json(&json)?;
+            rows.pop()
+        }
+        ILocationGcsFindOne::Rel { rel } => find_one_by_rel(exec, rel)?,
+    };
     Ok(IResult { result })
 }
 
@@ -81,33 +86,46 @@ fn find_many_filter<E: SqlExecutor>(
     Ok(rows)
 }
 
+fn rel_query(rel: &LocationGcsFindManyRel) -> (&'static str, Vec<Value>) {
+    match rel {
+        LocationGcsFindManyRel::OnTradeProduct(args) => (
+            "SELECT lg.* FROM location_gcs lg JOIN trade_product_location tp_lg ON lg.id = tp_lg.tb_lg WHERE tp_lg.tb_tp = ?",
+            vec![Value::from(args.id.clone())],
+        ),
+        LocationGcsFindManyRel::OffTradeProduct(args) => (
+            "SELECT lg.* FROM location_gcs lg WHERE NOT EXISTS (SELECT 1 FROM trade_product_location tp_lg WHERE tp_lg.tb_lg = lg.id AND tp_lg.tb_tp = ?)",
+            vec![Value::from(args.id.clone())],
+        ),
+        LocationGcsFindManyRel::OnFarm(args) => (
+            "SELECT lg.* FROM location_gcs lg JOIN farm_location farm_lg ON lg.id = farm_lg.tb_lg WHERE farm_lg.tb_farm = ?",
+            vec![Value::from(args.id.clone())],
+        ),
+        LocationGcsFindManyRel::OffFarm(args) => (
+            "SELECT lg.* FROM location_gcs lg WHERE NOT EXISTS (SELECT 1 FROM farm_location farm_lg WHERE farm_lg.tb_lg = lg.id AND farm_lg.tb_farm = ?)",
+            vec![Value::from(args.id.clone())],
+        ),
+    }
+}
+
+fn find_one_by_rel<E: SqlExecutor>(
+    exec: &E,
+    rel: &LocationGcsFindManyRel,
+) -> Result<Option<LocationGcs>, IError<SqlError>> {
+    let (sql, bind_values) = rel_query(rel);
+    let params_json = utils::to_params_json(bind_values)?;
+    let sql = format!("{sql} LIMIT 1;");
+    let json = exec.query_raw(&sql, &params_json)?;
+    let mut rows: Vec<LocationGcs> = utils::parse_json(&json)?;
+    Ok(rows.pop())
+}
+
 fn find_many_by_rel<E: SqlExecutor>(
     exec: &E,
     rel: &LocationGcsFindManyRel,
 ) -> Result<Vec<LocationGcs>, IError<SqlError>> {
-    let (sql, bind_values): (String, Vec<Value>) = match rel {
-        LocationGcsFindManyRel::OnTradeProduct(args) => {
-            let sql = String::from("SELECT lg.* FROM location_gcs lg JOIN trade_product_location tp_lg ON lg.id = tp_lg.tb_lg WHERE tp_lg.tb_tp = ?;");
-            let binds = vec![Value::from(args.id.clone())];
-            (sql, binds)
-        }
-        LocationGcsFindManyRel::OffTradeProduct(args) => {
-            let sql = String::from("SELECT lg.* FROM location_gcs lg WHERE NOT EXISTS (SELECT 1 FROM trade_product_location tp_lg WHERE tp_lg.tb_lg = lg.id AND tp_lg.tb_tp = ?);");
-            let binds = vec![Value::from(args.id.clone())];
-            (sql, binds)
-        }
-        LocationGcsFindManyRel::OnFarm(args) => {
-            let sql = String::from("SELECT lg.* FROM location_gcs lg JOIN farm_location farm_lg ON lg.id = farm_lg.tb_lg WHERE farm_lg.tb_farm = ?;");
-            let binds = vec![Value::from(args.id.clone())];
-            (sql, binds)
-        }
-        LocationGcsFindManyRel::OffFarm(args) => {
-            let sql = String::from("SELECT lg.* FROM location_gcs lg WHERE NOT EXISTS (SELECT 1 FROM farm_location farm_lg WHERE farm_lg.tb_lg = lg.id AND farm_lg.tb_farm = ?);");
-            let binds = vec![Value::from(args.id.clone())];
-            (sql, binds)
-        }
-    };
+    let (sql, bind_values) = rel_query(rel);
     let params_json = utils::to_params_json(bind_values)?;
+    let sql = format!("{sql};");
     let json = exec.query_raw(&sql, &params_json)?;
     let rows: Vec<LocationGcs> = utils::parse_json(&json)?;
     Ok(rows)
@@ -143,7 +161,7 @@ pub fn update<E: SqlExecutor>(
     let id_for_lookup = match opts.on.primary_key() {
         Some(id) => id,
         None => {
-            let find_opts = ILocationGcsFindOne {
+            let find_opts = ILocationGcsFindOne::On {
                 on: opts.on.clone(),
             };
             let found = find_one(exec, &find_opts)?;
@@ -166,14 +184,21 @@ pub fn delete<E: SqlExecutor>(
     exec: &E,
     opts: &ILocationGcsDelete,
 ) -> Result<ILocationGcsDeleteResolve, IError<SqlError>> {
-    let id_for_lookup = match opts.on.primary_key() {
-        Some(id) => id,
-        None => {
-            let find_opts = ILocationGcsFindOne {
-                on: opts.on.clone(),
-            };
-            let found = find_one(exec, &find_opts)?;
-            let model = found.result.ok_or_else(|| IError::from(SqlError::NotFound(opts.on.lookup_key())))?;
+    let id_for_lookup = match opts {
+        ILocationGcsDelete::On { on } => match on.primary_key() {
+            Some(id) => id,
+            None => {
+                let find_opts = ILocationGcsFindOne::On { on: on.clone() };
+                let found = find_one(exec, &find_opts)?;
+                let model = found
+                    .result
+                    .ok_or_else(|| IError::from(SqlError::NotFound(on.lookup_key())))?;
+                model.id
+            }
+        },
+        ILocationGcsDelete::Rel { rel } => {
+            let found = find_one_by_rel(exec, rel)?;
+            let model = found.ok_or_else(|| IError::from(SqlError::NotFound(rel_lookup_key(rel))))?;
             model.id
         }
     };
@@ -184,4 +209,13 @@ pub fn delete<E: SqlExecutor>(
         return Err(IError::from(SqlError::NotFound(id_for_lookup.clone())));
     }
     Ok(IResult { result: id_for_lookup })
+}
+
+fn rel_lookup_key(rel: &LocationGcsFindManyRel) -> String {
+    match rel {
+        LocationGcsFindManyRel::OnTradeProduct(args) => format!("on_trade_product:{}", args.id.as_str()),
+        LocationGcsFindManyRel::OffTradeProduct(args) => format!("off_trade_product:{}", args.id.as_str()),
+        LocationGcsFindManyRel::OnFarm(args) => format!("on_farm:{}", args.id.as_str()),
+        LocationGcsFindManyRel::OffFarm(args) => format!("off_farm:{}", args.id.as_str()),
+    }
 }

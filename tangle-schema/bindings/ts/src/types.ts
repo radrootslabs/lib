@@ -54,7 +54,7 @@ export type ILocationGcsFindMany = { filter: ILocationGcsFieldsFilter | null, } 
 
 export type ILocationGcsFindManyResolve = IResultList<LocationGcs>;
 
-export type ILocationGcsFindOne = { on: LocationGcsQueryBindValues, };
+export type ILocationGcsFindOne = { on: LocationGcsQueryBindValues, } | { rel: LocationGcsFindManyRel, };
 
 export type ILocationGcsFindOneResolve = IResult<LocationGcs>;
 

@@ -13,6 +13,26 @@ fn push_tag(tags: &mut Vec<Vec<String>>, name: &'static str, value: impl Into<St
 }
 
 #[inline]
+pub fn trade_listing_dvm_tags<P, A, D>(
+    recipient_pubkey: P,
+    listing_addr: A,
+    order_id: Option<D>,
+) -> Vec<Vec<String>>
+where
+    P: Into<String>,
+    A: Into<String>,
+    D: Into<String>,
+{
+    let mut tags = Vec::with_capacity(2 + usize::from(order_id.is_some()));
+    push_tag(&mut tags, "p", recipient_pubkey);
+    push_tag(&mut tags, "a", listing_addr);
+    if let Some(order_id) = order_id {
+        push_tag(&mut tags, TAG_D, order_id);
+    }
+    tags
+}
+
+#[inline]
 pub fn push_trade_listing_chain_tags(
     tags: &mut Vec<Vec<String>>,
     e_root_id: impl Into<String>,
@@ -81,7 +101,7 @@ pub fn validate_trade_listing_chain(tags: &[Vec<String>]) -> Result<(), JobParse
 
 #[cfg(test)]
 mod tests {
-    use super::validate_trade_listing_chain;
+    use super::{trade_listing_dvm_tags, validate_trade_listing_chain};
     use radroots_events::tags::{TAG_D, TAG_E_ROOT};
     use radroots_events_codec::job::error::JobParseError;
 
@@ -117,5 +137,26 @@ mod tests {
             }
             other => panic!("expected invalid root tag, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn trade_listing_dvm_tags_builds_expected_tags() {
+        let tags = trade_listing_dvm_tags("pubkey", "30402:pubkey:listing", Some("order-1"));
+        let expected: Vec<Vec<String>> = vec![
+            vec![String::from("p"), String::from("pubkey")],
+            vec![String::from("a"), String::from("30402:pubkey:listing")],
+            vec![String::from(TAG_D), String::from("order-1")],
+        ];
+        assert_eq!(tags, expected);
+    }
+
+    #[test]
+    fn trade_listing_dvm_tags_omit_order_id_when_missing() {
+        let tags = trade_listing_dvm_tags("pubkey", "30402:pubkey:listing", None::<String>);
+        let expected: Vec<Vec<String>> = vec![
+            vec![String::from("p"), String::from("pubkey")],
+            vec![String::from("a"), String::from("30402:pubkey:listing")],
+        ];
+        assert_eq!(tags, expected);
     }
 }
