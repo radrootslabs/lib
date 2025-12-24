@@ -8,7 +8,7 @@ use radroots_events::{
 };
 
 use crate::error::EventParseError;
-use crate::event_ref::{find_event_ref_tag, parse_event_ref_tag};
+use crate::event_ref::{find_event_ref_tag, parse_event_ref_tag, parse_nip10_ref_tags};
 
 const DEFAULT_KIND: u32 = 7;
 
@@ -26,9 +26,13 @@ pub fn reaction_from_tags(
     if content.trim().is_empty() {
         return Err(EventParseError::InvalidTag("content"));
     }
-    let root_tag = find_event_ref_tag(tags, TAG_E_ROOT)
-        .ok_or(EventParseError::MissingTag(TAG_E_ROOT))?;
-    let root = parse_event_ref_tag(root_tag, TAG_E_ROOT)?;
+    let root = if find_event_ref_tag(tags, "e").is_some() {
+        parse_nip10_ref_tags(tags, "e", "p", "k", "a")?
+    } else if let Some(root_tag) = find_event_ref_tag(tags, TAG_E_ROOT) {
+        parse_event_ref_tag(root_tag, TAG_E_ROOT)?
+    } else {
+        return Err(EventParseError::MissingTag("e"));
+    };
     Ok(RadrootsReaction {
         root,
         content: content.to_string(),

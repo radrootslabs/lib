@@ -3,12 +3,11 @@ use alloc::{string::String, vec::Vec};
 
 use radroots_events::{
     reaction::RadrootsReaction,
-    tags::TAG_E_ROOT,
     RadrootsNostrEventRef,
 };
 
 use crate::error::EventEncodeError;
-use crate::event_ref::build_event_ref_tag;
+use crate::event_ref::push_nip10_ref_tags;
 use crate::wire::WireEventParts;
 
 const DEFAULT_KIND: u32 = 7;
@@ -27,8 +26,13 @@ pub fn reaction_build_tags(
     reaction: &RadrootsReaction,
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
     validate_ref(&reaction.root)?;
-    let mut tags = Vec::with_capacity(1);
-    tags.push(build_event_ref_tag(TAG_E_ROOT, &reaction.root));
+    let has_addr = reaction
+        .root
+        .d_tag
+        .as_deref()
+        .map_or(false, |v| !v.is_empty());
+    let mut tags = Vec::with_capacity(3 + usize::from(has_addr));
+    push_nip10_ref_tags(&mut tags, &reaction.root, "e", "p", "k", "a");
     Ok(tags)
 }
 

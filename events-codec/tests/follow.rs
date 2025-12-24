@@ -25,7 +25,6 @@ fn follow_to_wire_parts_builds_p_tags() {
     assert_eq!(tag[1], "pubkey");
     assert_eq!(tag[2], "wss://relay");
     assert_eq!(tag[3], "alice");
-    assert_eq!(tag[4], "42");
 }
 
 #[test]
@@ -56,6 +55,21 @@ fn follow_from_tags_defaults_published_at() {
     assert_eq!(follow.list[0].public_key, "pubkey");
     assert!(follow.list[0].relay_url.is_none());
     assert!(follow.list[0].contact_name.is_none());
+}
+
+#[test]
+fn follow_from_tags_accepts_contact_without_relay() {
+    let tags = vec![vec![
+        "p".to_string(),
+        "pubkey".to_string(),
+        "alice".to_string(),
+    ]];
+
+    let follow = follow_from_tags(3, &tags, 123).unwrap();
+    assert_eq!(follow.list[0].published_at, 123);
+    assert_eq!(follow.list[0].public_key, "pubkey");
+    assert!(follow.list[0].relay_url.is_none());
+    assert_eq!(follow.list[0].contact_name.as_deref(), Some("alice"));
 }
 
 #[test]

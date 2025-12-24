@@ -12,12 +12,17 @@ fn follow_tag(profile: &RadrootsFollowProfile) -> Result<Vec<String>, EventEncod
     if profile.public_key.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("follow.public_key"));
     }
-    let mut tag = Vec::with_capacity(5);
+    let relay = profile.relay_url.as_ref().filter(|v| !v.is_empty());
+    let name = profile.contact_name.as_ref().filter(|v| !v.is_empty());
+    let mut tag = Vec::with_capacity(2 + usize::from(relay.is_some()) + usize::from(name.is_some()));
     tag.push("p".to_string());
     tag.push(profile.public_key.clone());
-    tag.push(profile.relay_url.clone().unwrap_or_default());
-    tag.push(profile.contact_name.clone().unwrap_or_default());
-    tag.push(profile.published_at.to_string());
+    if let Some(relay) = relay {
+        tag.push(relay.clone());
+    }
+    if let Some(name) = name {
+        tag.push(name.clone());
+    }
     Ok(tag)
 }
 

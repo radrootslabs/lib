@@ -10,6 +10,10 @@ use crate::error::EventParseError;
 
 const DEFAULT_KIND: u32 = 3;
 
+fn looks_like_ws_relay(s: &str) -> bool {
+    s.starts_with("ws://") || s.starts_with("wss://")
+}
+
 fn parse_follow_tag(
     tag: &[String],
     published_at: u32,
@@ -18,8 +22,15 @@ fn parse_follow_tag(
         return Err(EventParseError::InvalidTag("p"));
     }
     let public_key = tag.get(1).ok_or(EventParseError::InvalidTag("p"))?;
-    let relay_url = tag.get(2).filter(|s| !s.is_empty()).cloned();
-    let contact_name = tag.get(3).filter(|s| !s.is_empty()).cloned();
+    let (relay_url, contact_name) = match tag.get(2).filter(|s| !s.is_empty()) {
+        Some(value) if looks_like_ws_relay(value) => (
+            Some(value.clone()),
+            tag.get(3).filter(|s| !s.is_empty()).cloned(),
+        ),
+        Some(value) => (None, Some(value.clone())),
+        None => (None, tag.get(3).filter(|s| !s.is_empty()).cloned()),
+    };
+
     let published_at = match tag.get(4) {
         Some(v) => v
             .parse()

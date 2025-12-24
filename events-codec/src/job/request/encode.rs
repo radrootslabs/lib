@@ -1,7 +1,7 @@
 use radroots_events::{job_request::RadrootsJobRequest, kinds::is_request_kind};
 
 use crate::job::encode::{JobEncodeError, WireEventParts, canonicalize_tags};
-use crate::job::util::{job_input_type_tag, push_bid_tag_msat};
+use crate::job::util::{job_input_type_tag, push_bid_tag_sat};
 
 #[cfg(not(feature = "std"))]
 use alloc::{string::{String, ToString}, vec, vec::Vec};
@@ -41,7 +41,7 @@ pub fn job_request_build_tags(req: &RadrootsJobRequest) -> Vec<Vec<String>> {
     }
 
     if let Some(bid_sat) = req.bid_sat {
-        push_bid_tag_msat(&mut tags, bid_sat);
+        push_bid_tag_sat(&mut tags, bid_sat);
     }
 
     for r in &req.relays {

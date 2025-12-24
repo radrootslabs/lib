@@ -3,7 +3,7 @@ use radroots_events_codec::job::error::JobParseError;
 use radroots_events_codec::job::util::{
     feedback_status_from_tag, feedback_status_tag, job_input_type_from_tag, job_input_type_tag,
     parse_amount_tag_sat, parse_bid_tag_sat, parse_bool_encrypted, parse_i_tags, parse_params,
-    push_amount_tag_msat, push_bid_tag_msat,
+    push_amount_tag_msat, push_bid_tag_sat,
 };
 
 #[test]
@@ -110,22 +110,30 @@ fn push_amount_tag_msat_writes_msat() {
 }
 
 #[test]
-fn parse_bid_tag_sat_accepts_msat() {
-    let tags = vec![vec!["bid".to_string(), "2000".to_string()]];
+fn parse_bid_tag_sat_accepts_sat() {
+    let tags = vec![vec!["bid".to_string(), "2".to_string()]];
     let bid = parse_bid_tag_sat(&tags).unwrap().unwrap();
     assert_eq!(bid, 2);
 }
 
 #[test]
-fn parse_bid_tag_sat_rejects_non_whole_sats() {
-    let tags = vec![vec!["bid".to_string(), "2500".to_string()]];
+fn parse_bid_tag_sat_rejects_non_numeric() {
+    let tags = vec![vec!["bid".to_string(), "not-a-number".to_string()]];
     let err = parse_bid_tag_sat(&tags).unwrap_err();
-    assert!(matches!(err, JobParseError::NonWholeSats("bid")));
+    assert!(matches!(err, JobParseError::InvalidNumber("bid", _)));
 }
 
 #[test]
-fn push_bid_tag_msat_writes_msat() {
+fn parse_bid_tag_sat_rejects_overflow() {
+    let overflow = (u32::MAX as u64) + 1;
+    let tags = vec![vec!["bid".to_string(), overflow.to_string()]];
+    let err = parse_bid_tag_sat(&tags).unwrap_err();
+    assert!(matches!(err, JobParseError::AmountOverflow("bid")));
+}
+
+#[test]
+fn push_bid_tag_sat_writes_sat() {
     let mut tags = Vec::new();
-    push_bid_tag_msat(&mut tags, 7);
-    assert_eq!(tags[0], vec!["bid".to_string(), "7000".to_string()]);
+    push_bid_tag_sat(&mut tags, 7);
+    assert_eq!(tags[0], vec!["bid".to_string(), "7".to_string()]);
 }

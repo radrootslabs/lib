@@ -139,6 +139,29 @@ pub struct RadrootsListingProduct {
     pub year: Option<String>,
 }
 
+pub const RADROOTS_LISTING_PRODUCT_TAG_KEYS: [&str; 9] = [
+    "key",
+    "title",
+    "category",
+    "summary",
+    "process",
+    "lot",
+    "location",
+    "profile",
+    "year",
+];
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(
+    feature = "ts-rs",
+    ts(
+        export,
+        export_to = "types.ts",
+        type = "readonly [\"key\", \"title\", \"category\", \"summary\", \"process\", \"lot\", \"location\", \"profile\", \"year\"]"
+    )
+)]
+pub struct RadrootsListingProductTagKeys;
+
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -225,4 +248,38 @@ pub struct RadrootsListingImage {
 pub struct RadrootsListingImageSize {
     pub w: u32,
     pub h: u32,
+}
+
+#[cfg(all(test, feature = "ts-rs", feature = "std"))]
+mod constants_tests {
+    use super::RADROOTS_LISTING_PRODUCT_TAG_KEYS;
+    use std::{env, fs, path::Path};
+
+    fn listing_product_tag_keys_literal() -> String {
+        let mut out = String::from("[");
+        for (idx, key) in RADROOTS_LISTING_PRODUCT_TAG_KEYS.iter().enumerate() {
+            if idx > 0 {
+                out.push_str(", ");
+            }
+            out.push('"');
+            out.push_str(key);
+            out.push('"');
+        }
+        out.push(']');
+        out
+    }
+
+    #[test]
+    fn export_listing_product_tag_keys_const() {
+        let out_dir = env::var("TS_RS_EXPORT_DIR").unwrap_or_else(|_| "./bindings".to_string());
+        let path = Path::new(&out_dir).join("constants.ts");
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("create ts export dir");
+        }
+        let keys = listing_product_tag_keys_literal();
+        let content = format!(
+            "import type {{ RadrootsListingProductTagKeys }} from \"./types.js\";\n\nexport const RADROOTS_LISTING_PRODUCT_TAG_KEYS: RadrootsListingProductTagKeys = {keys};\n"
+        );
+        fs::write(&path, content).expect("write constants");
+    }
 }

@@ -22,6 +22,10 @@ pub fn job_feedback_build_tags(fb: &RadrootsJobFeedback) -> Vec<Vec<String>> {
     }
     tags.push(st);
 
+    if let Some(pay) = &fb.payment {
+        push_amount_tag_msat(&mut tags, pay.amount_sat, pay.bolt11.clone());
+    }
+
     let mut e = Vec::with_capacity(3);
     e.push("e".to_string());
     e.push(fb.request_event.id.clone());
@@ -32,10 +36,6 @@ pub fn job_feedback_build_tags(fb: &RadrootsJobFeedback) -> Vec<Vec<String>> {
 
     if let Some(p) = &fb.customer_pubkey {
         tags.push(vec!["p".into(), p.clone()]);
-    }
-
-    if let Some(pay) = &fb.payment {
-        push_amount_tag_msat(&mut tags, pay.amount_sat, pay.bolt11.clone());
     }
 
     if fb.encrypted {

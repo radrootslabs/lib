@@ -3,12 +3,11 @@ use alloc::{string::String, vec::Vec};
 
 use radroots_events::{
     comment::RadrootsComment,
-    tags::{TAG_E_PREV, TAG_E_ROOT},
     RadrootsNostrEventRef,
 };
 
 use crate::error::EventEncodeError;
-use crate::event_ref::build_event_ref_tag;
+use crate::event_ref::push_nip10_ref_tags;
 use crate::wire::WireEventParts;
 
 const DEFAULT_KIND: u32 = 1;
@@ -31,9 +30,19 @@ pub fn comment_build_tags(comment: &RadrootsComment) -> Result<Vec<Vec<String>>,
     validate_ref(&comment.root, "root.id", "root.author")?;
     validate_ref(&comment.parent, "parent.id", "parent.author")?;
 
-    let mut tags = Vec::with_capacity(2);
-    tags.push(build_event_ref_tag(TAG_E_ROOT, &comment.root));
-    tags.push(build_event_ref_tag(TAG_E_PREV, &comment.parent));
+    let root_has_addr = comment
+        .root
+        .d_tag
+        .as_deref()
+        .map_or(false, |v| !v.is_empty());
+    let parent_has_addr = comment
+        .parent
+        .d_tag
+        .as_deref()
+        .map_or(false, |v| !v.is_empty());
+    let mut tags = Vec::with_capacity(6 + usize::from(root_has_addr) + usize::from(parent_has_addr));
+    push_nip10_ref_tags(&mut tags, &comment.root, "E", "P", "K", "A");
+    push_nip10_ref_tags(&mut tags, &comment.parent, "e", "p", "k", "a");
     Ok(tags)
 }
 

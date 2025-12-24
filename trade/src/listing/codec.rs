@@ -10,6 +10,8 @@ use radroots_events::listing::{
     RadrootsListingProduct, RadrootsListingQuantity, RadrootsListingStatus,
 };
 use radroots_events::tags::TAG_D;
+use radroots_events_codec::error::EventEncodeError;
+use radroots_events_codec::listing::tags::listing_tags;
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
 
@@ -113,68 +115,7 @@ pub fn listing_from_event_parts(
 }
 
 pub fn listing_tags_build(listing: &RadrootsListing) -> Result<Vec<Vec<String>>, TradeListingParseError> {
-    let d_tag = listing.d_tag.trim();
-    if d_tag.is_empty() {
-        return Err(TradeListingParseError::MissingTag(TAG_D.to_string()));
-    }
-
-    let mut tags: Vec<Vec<String>> = Vec::new();
-    tags.push(vec![TAG_D.to_string(), d_tag.to_string()]);
-
-    let product = &listing.product;
-    push_tag_value(&mut tags, "key", &product.key);
-    push_tag_value(&mut tags, "title", &product.title);
-    push_tag_value(&mut tags, "category", &product.category);
-    if let Some(summary) = &product.summary {
-        push_tag_value(&mut tags, "summary", summary);
-    }
-    if let Some(process) = &product.process {
-        push_tag_value(&mut tags, "process", process);
-    }
-    if let Some(lot) = &product.lot {
-        push_tag_value(&mut tags, "lot", lot);
-    }
-    if let Some(profile) = &product.profile {
-        push_tag_value(&mut tags, "profile", profile);
-    }
-    if let Some(year) = &product.year {
-        push_tag_value(&mut tags, "year", year);
-    }
-
-    for quantity in &listing.quantities {
-        let mut tag = Vec::with_capacity(5);
-        tag.push(TAG_QUANTITY.to_string());
-        tag.push(quantity.value.amount.to_string());
-        tag.push(quantity.value.unit.code().to_string());
-        if let Some(label) = quantity.label.as_ref().and_then(|v| clean_value(v)) {
-            tag.push(label);
-        }
-        if let Some(count) = quantity.count {
-            tag.push(count.to_string());
-        }
-        tags.push(tag);
-    }
-
-    for price in &listing.prices {
-        let mut tag = Vec::with_capacity(6);
-        tag.push(TAG_PRICE.to_string());
-        tag.push(price.amount.amount.to_string());
-        tag.push(price.amount.currency.to_string().to_ascii_lowercase());
-        tag.push(price.quantity.amount.to_string());
-        tag.push(price.quantity.unit.code().to_string());
-        if let Some(label) = price.quantity.label.as_ref().and_then(|v| clean_value(v)) {
-            tag.push(label);
-        }
-        tags.push(tag);
-    }
-
-    if let Some(discounts) = &listing.discounts {
-        for discount in discounts {
-            let (kind, payload) = discount_to_tag_parts(discount)?;
-            tags.push(vec![format!("{TAG_PRICE_DISCOUNT_PREFIX}{kind}"), payload]);
-        }
-    }
-
+    let mut tags = listing_tags(listing).map_err(map_listing_tags_error)?;
     if let Some(inventory) = &listing.inventory_available {
         tags.push(vec![TAG_INVENTORY.to_string(), inventory.to_string()]);
     }
@@ -245,6 +186,16 @@ pub fn listing_tags_build(listing: &RadrootsListing) -> Result<Vec<Vec<String>>,
     }
 
     Ok(tags)
+}
+
+fn map_listing_tags_error(err: EventEncodeError) -> TradeListingParseError {
+    match err {
+        EventEncodeError::EmptyRequiredField(field) => {
+            TradeListingParseError::MissingTag(field.to_string())
+        }
+        EventEncodeError::Json => TradeListingParseError::InvalidJson("discount".to_string()),
+        EventEncodeError::InvalidKind(_) => TradeListingParseError::InvalidTag("kind".to_string()),
+    }
 }
 
 fn listing_from_tags(
@@ -458,12 +409,6 @@ fn listing_from_tags(
     })
 }
 
-fn push_tag_value(tags: &mut Vec<Vec<String>>, key: &str, value: &str) {
-    if let Some(cleaned) = clean_value(value) {
-        tags.push(vec![key.to_string(), cleaned]);
-    }
-}
-
 fn clean_value(value: &str) -> Option<String> {
     let trimmed = value.trim();
     if trimmed.is_empty() {
@@ -512,45 +457,6 @@ fn parse_image_size(value: &str) -> Option<RadrootsListingImageSize> {
     let w = parts.next()?.parse::<u32>().ok()?;
     let h = parts.next()?.parse::<u32>().ok()?;
     Some(RadrootsListingImageSize { w, h })
-}
-
-fn discount_to_tag_parts(
-    discount: &RadrootsListingDiscount,
-) -> Result<(&'static str, String), TradeListingParseError> {
-    #[cfg(feature = "serde_json")]
-    {
-        let (kind, payload) = match discount {
-            RadrootsListingDiscount::Quantity {
-                ref_quantity,
-                threshold,
-                value,
-            } => ("quantity", serde_json::to_string(&QuantityDiscountPayload {
-                ref_quantity: ref_quantity.clone(),
-                threshold: threshold.clone(),
-                value: value.clone(),
-            })),
-            RadrootsListingDiscount::Mass { threshold, value } => ("mass", serde_json::to_string(&MassDiscountPayload {
-                threshold: threshold.clone(),
-                value: value.clone(),
-            })),
-            RadrootsListingDiscount::Subtotal { threshold, value } => ("subtotal", serde_json::to_string(&SubtotalDiscountPayload {
-                threshold: threshold.clone(),
-                value: value.clone(),
-            })),
-            RadrootsListingDiscount::Total { total_min, value } => ("total", serde_json::to_string(&TotalDiscountPayload {
-                total_min: total_min.clone(),
-                value: value.clone(),
-            })),
-        };
-        let payload =
-            payload.map_err(|_| TradeListingParseError::InvalidJson("discount".to_string()))?;
-        return Ok((kind, payload));
-    }
-    #[cfg(not(feature = "serde_json"))]
-    {
-        let _ = discount;
-        Err(TradeListingParseError::InvalidJson("discount".to_string()))
-    }
 }
 
 fn parse_discount(

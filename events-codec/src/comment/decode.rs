@@ -8,7 +8,7 @@ use radroots_events::{
 };
 
 use crate::error::EventParseError;
-use crate::event_ref::{find_event_ref_tag, parse_event_ref_tag};
+use crate::event_ref::{find_event_ref_tag, parse_event_ref_tag, parse_nip10_ref_tags};
 
 const DEFAULT_KIND: u32 = 1;
 
@@ -27,13 +27,20 @@ pub fn comment_from_tags(
         return Err(EventParseError::InvalidTag("content"));
     }
 
-    let root_tag = find_event_ref_tag(tags, TAG_E_ROOT)
-        .ok_or(EventParseError::MissingTag(TAG_E_ROOT))?;
-    let root = parse_event_ref_tag(root_tag, TAG_E_ROOT)?;
+    let root = if find_event_ref_tag(tags, "E").is_some() {
+        parse_nip10_ref_tags(tags, "E", "P", "K", "A")?
+    } else if let Some(root_tag) = find_event_ref_tag(tags, TAG_E_ROOT) {
+        parse_event_ref_tag(root_tag, TAG_E_ROOT)?
+    } else {
+        return Err(EventParseError::MissingTag("E"));
+    };
 
-    let parent = match find_event_ref_tag(tags, TAG_E_PREV) {
-        Some(tag) => parse_event_ref_tag(tag, TAG_E_PREV)?,
-        None => root.clone(),
+    let parent = if find_event_ref_tag(tags, "e").is_some() {
+        parse_nip10_ref_tags(tags, "e", "p", "k", "a")?
+    } else if let Some(tag) = find_event_ref_tag(tags, TAG_E_PREV) {
+        parse_event_ref_tag(tag, TAG_E_PREV)?
+    } else {
+        root.clone()
     };
 
     Ok(RadrootsComment {

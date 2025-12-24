@@ -64,6 +64,8 @@ export type RadrootsListingLocation = { primary: string, city?: string | null, r
 
 export type RadrootsListingProduct = { key: string, title: string, category: string, summary?: string | null, process?: string | null, lot?: string | null, location?: string | null, profile?: string | null, year?: string | null, };
 
+export type RadrootsListingProductTagKeys = readonly ["key", "title", "category", "summary", "process", "lot", "location", "profile", "year"];
+
 export type RadrootsListingQuantity = { value: RadrootsCoreQuantity, label?: string | null, count?: number | null, };
 
 export type RadrootsListingStatus = { "kind": "active" } | { "kind": "sold" } | { "kind": "other", "amount": { value: string, } };

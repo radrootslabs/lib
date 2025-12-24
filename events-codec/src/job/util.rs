@@ -221,21 +221,16 @@ pub fn parse_bid_tag_sat(tags: &[Vec<String>]) -> Result<Option<u32>, JobParseEr
         Some(b) => b,
         None => return Ok(None),
     };
-    let msat_s = bid.get(1).ok_or(JobParseError::InvalidTag("bid"))?;
-    let msat_u64: u64 = msat_s
+    let sat_s = bid.get(1).ok_or(JobParseError::InvalidTag("bid"))?;
+    let sat_u64: u64 = sat_s
         .parse()
         .map_err(|e| JobParseError::InvalidNumber("bid", e))?;
-    if msat_u64 % 1000 != 0 {
-        return Err(JobParseError::NonWholeSats("bid"));
-    }
-    let sat_u64 = msat_u64 / 1000;
     if sat_u64 > (u32::MAX as u64) {
         return Err(JobParseError::AmountOverflow("bid"));
     }
     Ok(Some(sat_u64 as u32))
 }
 
-pub fn push_bid_tag_msat(tags: &mut Vec<Vec<String>>, bid_sat: u32) {
-    let msat = (bid_sat as u64) * 1000;
-    tags.push(vec!["bid".into(), msat.to_string()]);
+pub fn push_bid_tag_sat(tags: &mut Vec<Vec<String>>, bid_sat: u32) {
+    tags.push(vec!["bid".into(), bid_sat.to_string()]);
 }
