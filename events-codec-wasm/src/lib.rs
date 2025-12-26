@@ -7,12 +7,14 @@ use radroots_events::job_feedback::RadrootsJobFeedback;
 use radroots_events::job_request::RadrootsJobRequest;
 use radroots_events::job_result::RadrootsJobResult;
 use radroots_events::listing::RadrootsListing;
+use radroots_events::message::RadrootsMessage;
 use radroots_events::reaction::RadrootsReaction;
 use radroots_events_codec::comment::encode::comment_build_tags;
 use radroots_events_codec::follow::encode::follow_build_tags;
 use radroots_events_codec::job::feedback::encode::job_feedback_build_tags;
 use radroots_events_codec::job::request::encode::job_request_build_tags;
 use radroots_events_codec::job::result::encode::job_result_build_tags;
+use radroots_events_codec::message::encode::message_build_tags;
 use radroots_events_codec::reaction::encode::reaction_build_tags;
 use radroots_events_codec::listing::tags::{
     listing_tags as listing_tags_impl,
@@ -50,6 +52,10 @@ fn parse_job_feedback(job_json: &str) -> Result<RadrootsJobFeedback, JsValue> {
 
 fn parse_reaction(reaction_json: &str) -> Result<RadrootsReaction, JsValue> {
     serde_json::from_str(reaction_json).map_err(err_js)
+}
+
+fn parse_message(message_json: &str) -> Result<RadrootsMessage, JsValue> {
+    serde_json::from_str(message_json).map_err(err_js)
 }
 
 fn tags_to_json(tags: Vec<Vec<String>>) -> Result<String, JsValue> {
@@ -109,5 +115,12 @@ pub fn job_feedback_tags(job_json: &str) -> Result<String, JsValue> {
 pub fn reaction_tags(reaction_json: &str) -> Result<String, JsValue> {
     let reaction = parse_reaction(reaction_json)?;
     let tags = reaction_build_tags(&reaction).map_err(err_js)?;
+    tags_to_json(tags)
+}
+
+#[wasm_bindgen(js_name = message_tags)]
+pub fn message_tags(message_json: &str) -> Result<String, JsValue> {
+    let message = parse_message(message_json)?;
+    let tags = message_build_tags(&message).map_err(err_js)?;
     tags_to_json(tags)
 }

@@ -107,6 +107,23 @@ export const radroots_reaction_schema = z.object({
     content: z.string()
 });
 
+export const radroots_nostr_event_ptr_schema = z.object({
+    id: z.string(),
+    relays: z.string().optional()
+});
+
+export const radroots_message_recipient_schema = z.object({
+    public_key: z.string(),
+    relay_url: z.string().optional()
+});
+
+export const radroots_message_schema = z.object({
+    recipients: z.array(radroots_message_recipient_schema),
+    content: z.string(),
+    reply_to: radroots_nostr_event_ptr_schema.optional(),
+    subject: z.string().optional()
+});
+
 export const radroots_follow_profile_schema = z.object({
     published_at: z.number(),
     public_key: z.string(),
