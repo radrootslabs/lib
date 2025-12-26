@@ -12,6 +12,7 @@ pub mod wire;
 
 pub mod comment;
 pub mod follow;
+pub mod message;
 pub mod post;
 pub mod reaction;
 

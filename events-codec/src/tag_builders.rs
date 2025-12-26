@@ -12,6 +12,7 @@ use radroots_events::{
     job_request::RadrootsJobRequest,
     job_result::RadrootsJobResult,
     listing::RadrootsListing,
+    message::RadrootsMessage,
     post::RadrootsPost,
     profile::RadrootsProfile,
     reaction::RadrootsReaction,
@@ -25,6 +26,7 @@ use crate::job::feedback::encode::job_feedback_build_tags;
 use crate::job::request::encode::job_request_build_tags;
 use crate::job::result::encode::job_result_build_tags;
 use crate::listing::tags::listing_tags;
+use crate::message::encode::message_build_tags;
 use crate::reaction::encode::reaction_build_tags;
 
 pub trait RadrootsEventTagBuilder {
@@ -53,6 +55,14 @@ impl RadrootsEventTagBuilder for RadrootsReaction {
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
         reaction_build_tags(self)
+    }
+}
+
+impl RadrootsEventTagBuilder for RadrootsMessage {
+    type Error = EventEncodeError;
+
+    fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
+        message_build_tags(self)
     }
 }
 

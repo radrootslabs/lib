@@ -76,6 +76,14 @@ export type RadrootsListingQuantity = { value: RadrootsCoreQuantity, label?: str
 
 export type RadrootsListingStatus = { "kind": "active" } | { "kind": "sold" } | { "kind": "other", "amount": { value: string, } };
 
+export type RadrootsMessage = { recipients: Array<RadrootsMessageRecipient>, content: string, reply_to?: RadrootsNostrEventPtr | null, subject?: string | null, };
+
+export type RadrootsMessageEventIndex = { event: RadrootsNostrEvent, metadata: RadrootsMessageEventMetadata, };
+
+export type RadrootsMessageEventMetadata = { id: string, author: string, published_at: number, kind: number, message: RadrootsMessage, };
+
+export type RadrootsMessageRecipient = { public_key: string, relay_url?: string | null, };
+
 export type RadrootsNostrEvent = { id: string, author: string, created_at: number, kind: number, tags: Array<Array<string>>, content: string, sig: string, };
 
 export type RadrootsNostrEventPtr = { id: string, relays?: string | null, };
