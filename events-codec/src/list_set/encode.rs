@@ -7,6 +7,8 @@ use radroots_events::{
 };
 
 use crate::error::EventEncodeError;
+#[cfg(feature = "serde_json")]
+use crate::list::encode::list_entries_to_tags;
 use crate::wire::WireEventParts;
 
 const TAG_D: &str = "d";
@@ -68,4 +70,12 @@ pub fn to_wire_parts_with_kind(
         content: list.content.clone(),
         tags,
     })
+}
+
+#[cfg(feature = "serde_json")]
+pub fn list_set_private_entries_json(
+    entries: &[radroots_events::list::RadrootsListEntry],
+) -> Result<String, EventEncodeError> {
+    let tags = list_entries_to_tags(entries)?;
+    serde_json::to_string(&tags).map_err(|_| EventEncodeError::Json)
 }

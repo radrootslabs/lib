@@ -8,6 +8,8 @@ export type JobInputType = "url" | "event" | "job" | "text";
 
 export type JobPaymentRequest = { amount_sat: number, bolt11?: string | null, };
 
+export type RadrootsActorType = "person" | "farm";
+
 export type RadrootsAppData = { d_tag: string, content: string, };
 
 export type RadrootsAppDataEventIndex = { event: RadrootsNostrEvent, metadata: RadrootsAppDataEventMetadata, };
@@ -19,6 +21,16 @@ export type RadrootsComment = { root: RadrootsNostrEventRef, parent: RadrootsNos
 export type RadrootsCommentEventIndex = { event: RadrootsNostrEvent, metadata: RadrootsCommentEventMetadata, };
 
 export type RadrootsCommentEventMetadata = { id: string, author: string, published_at: number, kind: number, comment: RadrootsComment, };
+
+export type RadrootsFarm = { d_tag: string, name: string, about?: string | null, website?: string | null, picture?: string | null, banner?: string | null, location?: RadrootsFarmLocation | null, tags?: string[] | null, };
+
+export type RadrootsFarmEventIndex = { event: RadrootsNostrEvent, metadata: RadrootsFarmEventMetadata, };
+
+export type RadrootsFarmEventMetadata = { id: string, author: string, published_at: number, kind: number, farm: RadrootsFarm, };
+
+export type RadrootsFarmLocation = { primary: string, city?: string | null, region?: string | null, country?: string | null, lat?: number | null, lng?: number | null, geohash?: string | null, };
+
+export type RadrootsFarmRef = { pubkey: string, d_tag: string, };
 
 export type RadrootsFollow = { list: Array<RadrootsFollowProfile>, };
 
@@ -120,6 +132,14 @@ export type RadrootsNostrEventPtr = { id: string, relays?: string | null, };
 
 export type RadrootsNostrEventRef = { id: string, author: string, kind: number, d_tag?: string | null, relays?: string[] | null, };
 
+export type RadrootsPlot = { d_tag: string, farm: RadrootsFarmRef, name: string, about?: string | null, location?: RadrootsPlotLocation | null, geometry?: string | null, tags?: string[] | null, };
+
+export type RadrootsPlotEventIndex = { event: RadrootsNostrEvent, metadata: RadrootsPlotEventMetadata, };
+
+export type RadrootsPlotEventMetadata = { id: string, author: string, published_at: number, kind: number, plot: RadrootsPlot, };
+
+export type RadrootsPlotLocation = { primary: string, city?: string | null, region?: string | null, country?: string | null, lat?: number | null, lng?: number | null, geohash?: string | null, };
+
 export type RadrootsPost = { content: string, };
 
 export type RadrootsPostEventIndex = { event: RadrootsNostrEvent, metadata: RadrootsPostEventMetadata, };
@@ -130,7 +150,7 @@ export type RadrootsProfile = { name: string, display_name?: string | null, nip0
 
 export type RadrootsProfileEventIndex = { event: RadrootsNostrEvent, metadata: RadrootsProfileEventMetadata, };
 
-export type RadrootsProfileEventMetadata = { id: string, author: string, published_at: number, kind: number, profile: RadrootsProfile, };
+export type RadrootsProfileEventMetadata = { id: string, author: string, published_at: number, kind: number, actor?: RadrootsActorType | null, profile: RadrootsProfile, };
 
 export type RadrootsReaction = { root: RadrootsNostrEventRef, content: string, };
 

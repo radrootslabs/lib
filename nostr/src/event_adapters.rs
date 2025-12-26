@@ -1,7 +1,12 @@
 #[cfg(feature = "events")]
 use radroots_events::post::{RadrootsPost, RadrootsPostEventMetadata};
 #[cfg(feature = "events")]
-use radroots_events::profile::{RadrootsProfile, RadrootsProfileEventMetadata};
+use radroots_events::profile::{
+    RadrootsProfile,
+    RadrootsProfileEventMetadata,
+    RADROOTS_ACTOR_TAG_KEY,
+    radroots_actor_type_from_tag_value,
+};
 
 #[cfg(feature = "events")]
 use crate::types::{RadrootsNostrEvent, RadrootsNostrMetadata};
@@ -24,12 +29,25 @@ pub fn to_post_event_metadata(e: &RadrootsNostrEvent) -> RadrootsPostEventMetada
 
 #[cfg(feature = "events")]
 pub fn to_profile_event_metadata(e: &RadrootsNostrEvent) -> Option<RadrootsProfileEventMetadata> {
+    let actor = e
+        .tags
+        .iter()
+        .filter_map(|tag| {
+            let values = tag.as_slice();
+            if values.get(0).map(|v| v.as_str()) != Some(RADROOTS_ACTOR_TAG_KEY) {
+                return None;
+            }
+            values.get(1).and_then(|value| radroots_actor_type_from_tag_value(value))
+        })
+        .next();
+
     if let Ok(p) = serde_json::from_str::<RadrootsProfile>(&e.content) {
         return Some(RadrootsProfileEventMetadata {
             id: e.id.to_string(),
             author: e.pubkey.to_string(),
             published_at: created_at_u32_saturating(e.created_at),
             kind: e.kind.as_u16() as u32,
+            actor,
             profile: p,
         });
     }
@@ -52,6 +70,7 @@ pub fn to_profile_event_metadata(e: &RadrootsNostrEvent) -> Option<RadrootsProfi
             author: e.pubkey.to_string(),
             published_at: created_at_u32_saturating(e.created_at),
             kind: e.kind.as_u16() as u32,
+            actor,
             profile: p,
         });
     }

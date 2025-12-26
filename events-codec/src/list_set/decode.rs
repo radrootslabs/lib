@@ -9,6 +9,8 @@ use radroots_events::{
 };
 
 use crate::error::EventParseError;
+#[cfg(feature = "serde_json")]
+use crate::list::decode::list_entries_from_tags;
 
 const TAG_D: &str = "d";
 const TAG_TITLE: &str = "title";
@@ -147,4 +149,13 @@ pub fn index_from_event(
         },
         metadata,
     })
+}
+
+#[cfg(feature = "serde_json")]
+pub fn list_set_private_entries_from_json(
+    content: &str,
+) -> Result<Vec<RadrootsListEntry>, EventParseError> {
+    let tags: Vec<Vec<String>> =
+        serde_json::from_str(content).map_err(|_| EventParseError::InvalidJson("content"))?;
+    list_entries_from_tags(&tags)
 }

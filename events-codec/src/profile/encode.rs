@@ -1,15 +1,40 @@
 use crate::profile::error::ProfileEncodeError;
-use radroots_events::profile::RadrootsProfile;
+use radroots_events::profile::{
+    RadrootsActorType,
+    RadrootsProfile,
+    RADROOTS_ACTOR_TAG_KEY,
+    radroots_actor_tag_value,
+};
 use radroots_events::kinds::KIND_PROFILE;
 
 use nostr::Metadata;
 use nostr::prelude::Url;
 
+#[cfg(not(feature = "std"))]
+use alloc::{string::String, vec::Vec};
+
 #[cfg(feature = "serde_json")]
 use crate::wire::WireEventParts;
 
-#[cfg(all(feature = "serde_json", not(feature = "std")))]
-use alloc::{string::String, vec::Vec};
+fn push_tag(tags: &mut Vec<Vec<String>>, key: &str, value: &str) {
+    let mut tag = Vec::with_capacity(2);
+    tag.push(key.to_string());
+    tag.push(value.to_string());
+    tags.push(tag);
+}
+
+pub fn profile_actor_tags(actor: RadrootsActorType) -> Vec<Vec<String>> {
+    let mut tags = Vec::with_capacity(1);
+    push_tag(&mut tags, RADROOTS_ACTOR_TAG_KEY, radroots_actor_tag_value(actor));
+    tags
+}
+
+pub fn profile_build_tags(actor: Option<RadrootsActorType>) -> Vec<Vec<String>> {
+    match actor {
+        Some(value) => profile_actor_tags(value),
+        None => Vec::new(),
+    }
+}
 
 pub fn to_metadata(p: &RadrootsProfile) -> Result<Metadata, ProfileEncodeError> {
     let mut md = Metadata::new().name(p.name.clone());
@@ -47,11 +72,20 @@ pub fn to_metadata(p: &RadrootsProfile) -> Result<Metadata, ProfileEncodeError> 
 
 #[cfg(feature = "serde_json")]
 pub fn to_wire_parts(p: &RadrootsProfile) -> Result<WireEventParts, ProfileEncodeError> {
+    to_wire_parts_with_actor(p, None)
+}
+
+#[cfg(feature = "serde_json")]
+pub fn to_wire_parts_with_actor(
+    p: &RadrootsProfile,
+    actor: Option<RadrootsActorType>,
+) -> Result<WireEventParts, ProfileEncodeError> {
     let md = to_metadata(p)?;
     let content = serde_json::to_string(&md).map_err(|_| ProfileEncodeError::Json)?;
+    let tags = profile_build_tags(actor);
     Ok(WireEventParts {
         kind: KIND_PROFILE,
         content,
-        tags: Vec::new(),
+        tags,
     })
 }

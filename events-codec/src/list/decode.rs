@@ -24,6 +24,16 @@ fn entry_from_tag(tag: &[String]) -> Result<RadrootsListEntry, EventParseError> 
     })
 }
 
+pub fn list_entries_from_tags(
+    tags: &[Vec<String>],
+) -> Result<Vec<RadrootsListEntry>, EventParseError> {
+    let mut entries = Vec::with_capacity(tags.len());
+    for tag in tags.iter().filter(|t| t.len() >= 2) {
+        entries.push(entry_from_tag(tag)?);
+    }
+    Ok(entries)
+}
+
 pub fn list_from_tags(
     kind: u32,
     content: String,
@@ -35,10 +45,7 @@ pub fn list_from_tags(
             got: kind,
         });
     }
-    let mut entries = Vec::new();
-    for tag in tags.iter().filter(|t| t.len() >= 2) {
-        entries.push(entry_from_tag(tag)?);
-    }
+    let entries = list_entries_from_tags(tags)?;
     Ok(RadrootsList { content, entries })
 }
 
@@ -89,4 +96,13 @@ pub fn index_from_event(
         },
         metadata,
     })
+}
+
+#[cfg(feature = "serde_json")]
+pub fn list_private_entries_from_json(
+    content: &str,
+) -> Result<Vec<RadrootsListEntry>, EventParseError> {
+    let tags: Vec<Vec<String>> =
+        serde_json::from_str(content).map_err(|_| EventParseError::InvalidJson("content"))?;
+    list_entries_from_tags(&tags)
 }

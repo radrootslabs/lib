@@ -26,12 +26,18 @@ fn entry_tag(entry: &RadrootsListEntry) -> Result<Vec<String>, EventEncodeError>
     Ok(tag)
 }
 
-pub fn list_build_tags(list: &RadrootsList) -> Result<Vec<Vec<String>>, EventEncodeError> {
-    let mut tags = Vec::with_capacity(list.entries.len());
-    for entry in &list.entries {
+pub fn list_entries_to_tags(
+    entries: &[RadrootsListEntry],
+) -> Result<Vec<Vec<String>>, EventEncodeError> {
+    let mut tags = Vec::with_capacity(entries.len());
+    for entry in entries {
         tags.push(entry_tag(entry)?);
     }
     Ok(tags)
+}
+
+pub fn list_build_tags(list: &RadrootsList) -> Result<Vec<Vec<String>>, EventEncodeError> {
+    list_entries_to_tags(&list.entries)
 }
 
 pub fn to_wire_parts_with_kind(
@@ -47,4 +53,12 @@ pub fn to_wire_parts_with_kind(
         content: list.content.clone(),
         tags,
     })
+}
+
+#[cfg(feature = "serde_json")]
+pub fn list_private_entries_json(
+    entries: &[RadrootsListEntry],
+) -> Result<String, EventEncodeError> {
+    let tags = list_entries_to_tags(entries)?;
+    serde_json::to_string(&tags).map_err(|_| EventEncodeError::Json)
 }

@@ -79,6 +79,10 @@ pub const KIND_LIST_SET_STARTER_PACK: u32 = 39089;
 #[typeshare::typeshare]
 pub const KIND_LIST_SET_MEDIA_STARTER_PACK: u32 = 39092;
 #[typeshare::typeshare]
+pub const KIND_FARM: u32 = 30340;
+#[typeshare::typeshare]
+pub const KIND_PLOT: u32 = 30350;
+#[typeshare::typeshare]
 pub const KIND_APP_DATA: u32 = 30078;
 #[typeshare::typeshare]
 pub const KIND_LISTING: u32 = 30402;

@@ -9,6 +9,7 @@ use radroots_events::{
     app_data::RadrootsAppData,
     comment::RadrootsComment,
     follow::RadrootsFollow,
+    farm::RadrootsFarm,
     gift_wrap::RadrootsGiftWrap,
     job_feedback::RadrootsJobFeedback,
     job_request::RadrootsJobRequest,
@@ -18,6 +19,7 @@ use radroots_events::{
     list_set::RadrootsListSet,
     message::RadrootsMessage,
     message_file::RadrootsMessageFile,
+    plot::RadrootsPlot,
     post::RadrootsPost,
     profile::RadrootsProfile,
     reaction::RadrootsReaction,
@@ -28,6 +30,7 @@ use crate::comment::encode::comment_build_tags;
 use crate::error::EventEncodeError;
 use crate::app_data::encode::app_data_build_tags;
 use crate::follow::encode::follow_build_tags;
+use crate::farm::encode::farm_build_tags;
 use crate::job::encode::JobEncodeError;
 use crate::job::feedback::encode::job_feedback_build_tags;
 use crate::job::request::encode::job_request_build_tags;
@@ -37,6 +40,7 @@ use crate::list::encode::list_build_tags;
 use crate::list_set::encode::list_set_build_tags;
 use crate::message::encode::message_build_tags;
 use crate::message_file::encode::message_file_build_tags;
+use crate::plot::encode::plot_build_tags;
 use crate::reaction::encode::reaction_build_tags;
 use crate::gift_wrap::encode::gift_wrap_build_tags;
 use crate::seal::encode::seal_build_tags;
@@ -102,6 +106,14 @@ impl RadrootsEventTagBuilder for RadrootsFollow {
     }
 }
 
+impl RadrootsEventTagBuilder for RadrootsFarm {
+    type Error = EventEncodeError;
+
+    fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
+        farm_build_tags(self)
+    }
+}
+
 impl RadrootsEventTagBuilder for RadrootsList {
     type Error = EventEncodeError;
 
@@ -115,6 +127,14 @@ impl RadrootsEventTagBuilder for RadrootsListSet {
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
         list_set_build_tags(self)
+    }
+}
+
+impl RadrootsEventTagBuilder for RadrootsPlot {
+    type Error = EventEncodeError;
+
+    fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
+        plot_build_tags(self)
     }
 }
 

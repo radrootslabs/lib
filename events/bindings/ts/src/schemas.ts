@@ -134,3 +134,70 @@ export const radroots_follow_profile_schema = z.object({
 export const radroots_follow_schema = z.object({
     list: z.array(radroots_follow_profile_schema)
 });
+
+export const radroots_list_entry_schema = z.object({
+    tag: z.string(),
+    values: z.array(z.string())
+});
+
+export const radroots_list_schema = z.object({
+    content: z.string(),
+    entries: z.array(radroots_list_entry_schema)
+});
+
+export const radroots_list_set_schema = z.object({
+    d_tag: z.string(),
+    content: z.string(),
+    entries: z.array(radroots_list_entry_schema),
+    title: z.string().optional(),
+    description: z.string().optional(),
+    image: z.string().optional()
+});
+
+export const radroots_farm_location_schema = z.object({
+    primary: z.string(),
+    city: z.string().optional(),
+    region: z.string().optional(),
+    country: z.string().optional(),
+    lat: z.number().optional(),
+    lng: z.number().optional(),
+    geohash: z.string().optional()
+});
+
+export const radroots_farm_schema = z.object({
+    d_tag: z.string(),
+    name: z.string(),
+    about: z.string().optional(),
+    website: z.string().optional(),
+    picture: z.string().optional(),
+    banner: z.string().optional(),
+    location: radroots_farm_location_schema.optional(),
+    tags: z.array(z.string()).optional()
+});
+
+export const radroots_farm_ref_schema = z.object({
+    pubkey: z.string(),
+    d_tag: z.string()
+});
+
+export const radroots_plot_location_schema = z.object({
+    primary: z.string(),
+    city: z.string().optional(),
+    region: z.string().optional(),
+    country: z.string().optional(),
+    lat: z.number().optional(),
+    lng: z.number().optional(),
+    geohash: z.string().optional()
+});
+
+export const radroots_plot_schema = z.object({
+    d_tag: z.string(),
+    farm: radroots_farm_ref_schema,
+    name: z.string(),
+    about: z.string().optional(),
+    location: radroots_plot_location_schema.optional(),
+    geometry: z.string().optional(),
+    tags: z.array(z.string()).optional()
+});
+
+export const radroots_plot_farm_ref_schema = radroots_farm_ref_schema;

@@ -1,6 +1,9 @@
 #![cfg(feature = "serde_json")]
 
-use radroots_events::kinds::KIND_POST;
+use radroots_events::{
+    kinds::KIND_POST,
+    profile::{RadrootsActorType, RADROOTS_ACTOR_TAG_FARM, RADROOTS_ACTOR_TAG_KEY},
+};
 use radroots_events_codec::error::EventParseError;
 use radroots_events_codec::profile::decode::profile_from_content;
 
@@ -54,4 +57,19 @@ fn profile_metadata_rejects_wrong_kind() {
             got: KIND_POST
         }
     ));
+}
+
+#[test]
+fn profile_metadata_reads_actor_tag() {
+    let metadata = radroots_events_codec::profile::decode::metadata_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        1,
+        0,
+        "{\"name\":\"alice\"}".to_string(),
+        vec![vec![RADROOTS_ACTOR_TAG_KEY.to_string(), RADROOTS_ACTOR_TAG_FARM.to_string()]],
+    )
+    .expect("metadata");
+
+    assert_eq!(metadata.actor, Some(RadrootsActorType::Farm));
 }

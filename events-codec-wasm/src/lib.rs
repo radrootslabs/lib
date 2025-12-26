@@ -3,6 +3,7 @@
 
 use radroots_events::comment::RadrootsComment;
 use radroots_events::follow::RadrootsFollow;
+use radroots_events::farm::RadrootsFarm;
 use radroots_events::job_feedback::RadrootsJobFeedback;
 use radroots_events::job_request::RadrootsJobRequest;
 use radroots_events::job_result::RadrootsJobResult;
@@ -11,11 +12,13 @@ use radroots_events::list::RadrootsList;
 use radroots_events::list_set::RadrootsListSet;
 use radroots_events::message::RadrootsMessage;
 use radroots_events::message_file::RadrootsMessageFile;
+use radroots_events::plot::RadrootsPlot;
 use radroots_events::reaction::RadrootsReaction;
 use radroots_events::gift_wrap::RadrootsGiftWrap;
 use radroots_events::seal::RadrootsSeal;
 use radroots_events_codec::comment::encode::comment_build_tags;
 use radroots_events_codec::follow::encode::follow_build_tags;
+use radroots_events_codec::farm::encode::farm_build_tags;
 use radroots_events_codec::gift_wrap::encode::gift_wrap_build_tags;
 use radroots_events_codec::job::feedback::encode::job_feedback_build_tags;
 use radroots_events_codec::job::request::encode::job_request_build_tags;
@@ -24,6 +27,7 @@ use radroots_events_codec::list::encode::list_build_tags;
 use radroots_events_codec::list_set::encode::list_set_build_tags;
 use radroots_events_codec::message::encode::message_build_tags;
 use radroots_events_codec::message_file::encode::message_file_build_tags;
+use radroots_events_codec::plot::encode::plot_build_tags;
 use radroots_events_codec::reaction::encode::reaction_build_tags;
 use radroots_events_codec::seal::encode::seal_build_tags;
 use radroots_events_codec::listing::tags::{
@@ -48,6 +52,10 @@ fn parse_follow(follow_json: &str) -> Result<RadrootsFollow, JsValue> {
     serde_json::from_str(follow_json).map_err(err_js)
 }
 
+fn parse_farm(farm_json: &str) -> Result<RadrootsFarm, JsValue> {
+    serde_json::from_str(farm_json).map_err(err_js)
+}
+
 fn parse_job_request(job_json: &str) -> Result<RadrootsJobRequest, JsValue> {
     serde_json::from_str(job_json).map_err(err_js)
 }
@@ -70,6 +78,10 @@ fn parse_message(message_json: &str) -> Result<RadrootsMessage, JsValue> {
 
 fn parse_message_file(message_json: &str) -> Result<RadrootsMessageFile, JsValue> {
     serde_json::from_str(message_json).map_err(err_js)
+}
+
+fn parse_plot(plot_json: &str) -> Result<RadrootsPlot, JsValue> {
+    serde_json::from_str(plot_json).map_err(err_js)
 }
 
 fn parse_gift_wrap(gift_wrap_json: &str) -> Result<RadrootsGiftWrap, JsValue> {
@@ -120,6 +132,13 @@ pub fn follow_tags(follow_json: &str) -> Result<String, JsValue> {
     tags_to_json(tags)
 }
 
+#[wasm_bindgen(js_name = farm_tags)]
+pub fn farm_tags(farm_json: &str) -> Result<String, JsValue> {
+    let farm = parse_farm(farm_json)?;
+    let tags = farm_build_tags(&farm).map_err(err_js)?;
+    tags_to_json(tags)
+}
+
 #[wasm_bindgen(js_name = list_tags)]
 pub fn list_tags(list_json: &str) -> Result<String, JsValue> {
     let list = parse_list(list_json)?;
@@ -131,6 +150,13 @@ pub fn list_tags(list_json: &str) -> Result<String, JsValue> {
 pub fn list_set_tags(list_json: &str) -> Result<String, JsValue> {
     let list = parse_list_set(list_json)?;
     let tags = list_set_build_tags(&list).map_err(err_js)?;
+    tags_to_json(tags)
+}
+
+#[wasm_bindgen(js_name = plot_tags)]
+pub fn plot_tags(plot_json: &str) -> Result<String, JsValue> {
+    let plot = parse_plot(plot_json)?;
+    let tags = plot_build_tags(&plot).map_err(err_js)?;
     tags_to_json(tags)
 }
 

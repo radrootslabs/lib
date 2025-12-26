@@ -5,7 +5,14 @@ use alloc::{string::{String, ToString}, vec::Vec};
 
 use radroots_events::{
     RadrootsNostrEvent,
-    profile::{RadrootsProfile, RadrootsProfileEventIndex, RadrootsProfileEventMetadata},
+    profile::{
+        RadrootsActorType,
+        RadrootsProfile,
+        RadrootsProfileEventIndex,
+        RadrootsProfileEventMetadata,
+        RADROOTS_ACTOR_TAG_KEY,
+        radroots_actor_type_from_tag_value,
+    },
     kinds::KIND_PROFILE,
 };
 
@@ -24,6 +31,13 @@ fn parse_bot(value: &Value) -> Option<String> {
         Some(v) if v.is_boolean() => v.as_bool().map(|b| b.to_string()),
         _ => None,
     }
+}
+
+fn profile_actor_from_tags(tags: &[Vec<String>]) -> Option<RadrootsActorType> {
+    tags.iter()
+        .filter(|tag| tag.get(0).map(|v| v.as_str()) == Some(RADROOTS_ACTOR_TAG_KEY))
+        .filter_map(|tag| tag.get(1))
+        .find_map(|value| radroots_actor_type_from_tag_value(value))
 }
 
 pub fn profile_from_content(content: &str) -> Result<RadrootsProfile, EventParseError> {
@@ -57,7 +71,7 @@ pub fn metadata_from_event(
     published_at: u32,
     kind: u32,
     content: String,
-    _tags: Vec<Vec<String>>,
+    tags: Vec<Vec<String>>,
 ) -> Result<RadrootsProfileEventMetadata, EventParseError> {
     if kind != PROFILE_KIND {
         return Err(EventParseError::InvalidKind {
@@ -66,11 +80,13 @@ pub fn metadata_from_event(
         });
     }
     let profile = profile_from_content(&content)?;
+    let actor = profile_actor_from_tags(&tags);
     Ok(RadrootsProfileEventMetadata {
         id,
         author,
         published_at,
         kind,
+        actor,
         profile,
     })
 }
