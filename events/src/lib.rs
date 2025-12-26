@@ -17,6 +17,7 @@ pub mod job_request;
 pub mod job_result;
 pub mod kinds;
 pub mod listing;
+pub mod app_data;
 pub mod post;
 pub mod profile;
 pub mod reaction;

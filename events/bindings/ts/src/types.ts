@@ -8,6 +8,12 @@ export type JobInputType = "url" | "event" | "job" | "text";
 
 export type JobPaymentRequest = { amount_sat: number, bolt11?: string | null, };
 
+export type RadrootsAppData = { d_tag: string, content: string, };
+
+export type RadrootsAppDataEventIndex = { event: RadrootsNostrEvent, metadata: RadrootsAppDataEventMetadata, };
+
+export type RadrootsAppDataEventMetadata = { id: string, author: string, published_at: number, kind: number, app_data: RadrootsAppData, };
+
 export type RadrootsComment = { root: RadrootsNostrEventRef, parent: RadrootsNostrEventRef, content: string, };
 
 export type RadrootsCommentEventIndex = { event: RadrootsNostrEvent, metadata: RadrootsCommentEventMetadata, };
