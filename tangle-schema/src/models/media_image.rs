@@ -142,15 +142,31 @@ pub type IMediaImageCreate = IMediaImageFields;
 pub struct IMediaImageCreateResolveTs;
 pub type IMediaImageCreateResolve = IResult<MediaImage>;
 #[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[derive(Deserialize, Serialize)]
+pub struct IMediaImageFindOneArgs {
+    pub on: MediaImageQueryBindValues,
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[derive(Deserialize, Serialize)]
+pub struct IMediaImageFindOneRelArgs {
+    pub rel: MediaImageFindManyRel,
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
     ts(export, export_to = "types.ts", rename = "IMediaImageFindOne")
 )]
 #[derive(Deserialize, Serialize)]
-pub struct IMediaImageFindOneArgs {
-    pub on: MediaImageQueryBindValues,
+#[serde(untagged)]
+pub enum IMediaImageFindOne {
+    On(IMediaImageFindOneArgs),
+    Rel(IMediaImageFindOneRelArgs),
 }
-pub type IMediaImageFindOne = IMediaImageFindOneArgs;
+
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -201,7 +217,7 @@ pub type IMediaImageFindManyResolve = IResultList<MediaImage>;
     )
 )]
 pub struct IMediaImageDeleteTs;
-pub type IMediaImageDelete = IMediaImageFindOneArgs;
+pub type IMediaImageDelete = IMediaImageFindOne;
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",

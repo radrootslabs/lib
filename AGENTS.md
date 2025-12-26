@@ -32,6 +32,7 @@
 - Safety: avoid unsafe; prefer safe, explicit APIs. Add #![forbid(unsafe_code)] on new crates/modules.
 - Public API: keep Radroots* prefix; avoid hidden panics; return Result/Option for fallible ops; use precise error enums (thiserror where appropriate).
 - Features: keep serde/typeshare/ts-rs derives behind existing feature gates and in the current style; ensure feature combinations compile (no_std, std, wasm).
+- Events modules: in `crates/events`, each `.rs` file must map to a single Nostr kind (or a single NIP-defined kind range), and a kind must not be defined in multiple modules.
 - Generated outputs: treat */bindings/ts/src/types.ts as generated; do not hand-edit.
 - Performance: borrow over clone, avoid intermediate allocations, preallocate when sizes are known, and prefer iterators over indexing loops.
 - DRY: consolidate shared logic into core/types/events-codec or dedicated helpers.

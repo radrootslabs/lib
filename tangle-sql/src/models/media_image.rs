@@ -36,12 +36,8 @@ pub fn create<E: SqlExecutor>(
     let (sql, bind_values) = utils::build_insert_query_with_meta(TABLE_NAME, &meta, &field_map);
     let params_json = utils::to_params_json(bind_values)?;
     let _ = exec.exec(&sql, &params_json)?;
-    let args = IMediaImageFindOne {
-        on: MediaImageQueryBindValues::Id { id: id.clone() },
-    };
-    let found = find_one(exec, &args)?;
-    let result = found
-        .result
+    let on = MediaImageQueryBindValues::Id { id: id.clone() };
+    let result = find_one_by_on(exec, &on)?
         .ok_or_else(|| IError::from(SqlError::NotFound(id.clone())))?;
     Ok(IResult { result })
 }
@@ -50,12 +46,10 @@ pub fn find_one<E: SqlExecutor>(
     exec: &E,
     opts: &IMediaImageFindOne,
 ) -> Result<IMediaImageFindOneResolve, IError<SqlError>> {
-    let (column, value) = opts.on.to_filter_param();
-    let sql = format!("SELECT * FROM {TABLE_NAME} WHERE {column} = ? LIMIT 1;");
-    let params_json = utils::to_params_json(vec![value])?;
-    let json = exec.query_raw(&sql, &params_json)?;
-    let mut rows: Vec<MediaImage> = utils::parse_json(&json)?;
-    let result = rows.pop();
+    let result = match opts {
+        IMediaImageFindOne::On(args) => find_one_by_on(exec, &args.on)?,
+        IMediaImageFindOne::Rel(args) => find_one_by_rel(exec, &args.rel)?,
+    };
     Ok(IResult { result })
 }
 
@@ -81,23 +75,50 @@ fn find_many_filter<E: SqlExecutor>(
     Ok(rows)
 }
 
+fn find_one_by_on<E: SqlExecutor>(
+    exec: &E,
+    on: &MediaImageQueryBindValues,
+) -> Result<Option<MediaImage>, IError<SqlError>> {
+    let (column, value) = on.to_filter_param();
+    let sql = format!("SELECT * FROM {TABLE_NAME} WHERE {column} = ? LIMIT 1;");
+    let params_json = utils::to_params_json(vec![value])?;
+    let json = exec.query_raw(&sql, &params_json)?;
+    let mut rows: Vec<MediaImage> = utils::parse_json(&json)?;
+    Ok(rows.pop())
+}
+
+fn rel_query(rel: &MediaImageFindManyRel) -> (&'static str, Vec<Value>) {
+    match rel {
+        MediaImageFindManyRel::OnTradeProduct(args) => (
+            "SELECT mu.* FROM media_image mu JOIN trade_product_media tp_lg ON mu.id = tp_lg.tb_mu WHERE tp_lg.tb_tp = ?",
+            vec![Value::from(args.id.clone())],
+        ),
+        MediaImageFindManyRel::OffTradeProduct(args) => (
+            "SELECT mu.* FROM media_image mu WHERE NOT EXISTS (SELECT 1 FROM trade_product_media tp_lg WHERE tp_lg.tb_mu = mu.id AND tp_lg.tb_tp = ?)",
+            vec![Value::from(args.id.clone())],
+        ),
+    }
+}
+
+fn find_one_by_rel<E: SqlExecutor>(
+    exec: &E,
+    rel: &MediaImageFindManyRel,
+) -> Result<Option<MediaImage>, IError<SqlError>> {
+    let (sql, bind_values) = rel_query(rel);
+    let params_json = utils::to_params_json(bind_values)?;
+    let sql = format!("{sql} LIMIT 1;");
+    let json = exec.query_raw(&sql, &params_json)?;
+    let mut rows: Vec<MediaImage> = utils::parse_json(&json)?;
+    Ok(rows.pop())
+}
+
 fn find_many_by_rel<E: SqlExecutor>(
     exec: &E,
     rel: &MediaImageFindManyRel,
 ) -> Result<Vec<MediaImage>, IError<SqlError>> {
-    let (sql, bind_values): (String, Vec<Value>) = match rel {
-        MediaImageFindManyRel::OnTradeProduct(args) => {
-            let sql = String::from("SELECT mu.* FROM media_image mu JOIN trade_product_media tp_lg ON mu.id = tp_lg.tb_mu WHERE tp_lg.tb_tp = ?;");
-            let binds = vec![Value::from(args.id.clone())];
-            (sql, binds)
-        }
-        MediaImageFindManyRel::OffTradeProduct(args) => {
-            let sql = String::from("SELECT mu.* FROM media_image mu WHERE NOT EXISTS (SELECT 1 FROM trade_product_media tp_lg WHERE tp_lg.tb_mu = mu.id AND tp_lg.tb_tp = ?);");
-            let binds = vec![Value::from(args.id.clone())];
-            (sql, binds)
-        }
-    };
+    let (sql, bind_values) = rel_query(rel);
     let params_json = utils::to_params_json(bind_values)?;
+    let sql = format!("{sql};");
     let json = exec.query_raw(&sql, &params_json)?;
     let rows: Vec<MediaImage> = utils::parse_json(&json)?;
     Ok(rows)
@@ -133,11 +154,8 @@ pub fn update<E: SqlExecutor>(
     let id_for_lookup = match opts.on.primary_key() {
         Some(id) => id,
         None => {
-            let find_opts = IMediaImageFindOne {
-                on: opts.on.clone(),
-            };
-            let found = find_one(exec, &find_opts)?;
-            let model = found.result.ok_or_else(|| IError::from(SqlError::NotFound(opts.on.lookup_key())))?;
+            let found = find_one_by_on(exec, &opts.on)?;
+            let model = found.ok_or_else(|| IError::from(SqlError::NotFound(opts.on.lookup_key())))?;
             model.id
         }
     };
@@ -156,14 +174,18 @@ pub fn delete<E: SqlExecutor>(
     exec: &E,
     opts: &IMediaImageDelete,
 ) -> Result<IMediaImageDeleteResolve, IError<SqlError>> {
-    let id_for_lookup = match opts.on.primary_key() {
-        Some(id) => id,
-        None => {
-            let find_opts = IMediaImageFindOne {
-                on: opts.on.clone(),
-            };
-            let found = find_one(exec, &find_opts)?;
-            let model = found.result.ok_or_else(|| IError::from(SqlError::NotFound(opts.on.lookup_key())))?;
+    let id_for_lookup = match opts {
+        IMediaImageDelete::On(args) => match args.on.primary_key() {
+            Some(id) => id,
+            None => {
+                let found = find_one_by_on(exec, &args.on)?;
+                let model = found.ok_or_else(|| IError::from(SqlError::NotFound(args.on.lookup_key())))?;
+                model.id
+            }
+        },
+        IMediaImageDelete::Rel(args) => {
+            let found = find_one_by_rel(exec, &args.rel)?;
+            let model = found.ok_or_else(|| IError::from(SqlError::NotFound(rel_lookup_key(&args.rel))))?;
             model.id
         }
     };
@@ -174,4 +196,11 @@ pub fn delete<E: SqlExecutor>(
         return Err(IError::from(SqlError::NotFound(id_for_lookup.clone())));
     }
     Ok(IResult { result: id_for_lookup })
+}
+
+fn rel_lookup_key(rel: &MediaImageFindManyRel) -> String {
+    match rel {
+        MediaImageFindManyRel::OnTradeProduct(args) => format!("on_trade_product:{}", args.id.as_str()),
+        MediaImageFindManyRel::OffTradeProduct(args) => format!("off_trade_product:{}", args.id.as_str()),
+    }
 }

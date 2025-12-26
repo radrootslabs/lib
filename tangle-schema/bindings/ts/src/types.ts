@@ -4,6 +4,8 @@ import type { IResult, IResultList, IResultPass } from "@radroots/types-bindings
 
 export type Farm = { id: string, created_at: string, updated_at: string, name: string, area: string | null, area_unit: string | null, title: string | null, description: string | null, };
 
+export type FarmFindManyRel = never;
+
 export type FarmQueryBindValues = { id: string, };
 
 export type IFarmCreate = IFarmFields;
@@ -24,7 +26,11 @@ export type IFarmFindMany = { filter: IFarmFieldsFilter | null, };
 
 export type IFarmFindManyResolve = IResultList<Farm>;
 
-export type IFarmFindOne = { on: FarmQueryBindValues, };
+export type IFarmFindOne = IFarmFindOneArgs | IFarmFindOneRelArgs;
+
+export type IFarmFindOneArgs = { on: FarmQueryBindValues, };
+
+export type IFarmFindOneRelArgs = { rel: FarmFindManyRel, };
 
 export type IFarmFindOneResolve = IResult<Farm>;
 
@@ -54,7 +60,11 @@ export type ILocationGcsFindMany = { filter: ILocationGcsFieldsFilter | null, } 
 
 export type ILocationGcsFindManyResolve = IResultList<LocationGcs>;
 
-export type ILocationGcsFindOne = { on: LocationGcsQueryBindValues, } | { rel: LocationGcsFindManyRel, };
+export type ILocationGcsFindOne = ILocationGcsFindOneArgs | ILocationGcsFindOneRelArgs;
+
+export type ILocationGcsFindOneArgs = { on: LocationGcsQueryBindValues, };
+
+export type ILocationGcsFindOneRelArgs = { rel: LocationGcsFindManyRel, };
 
 export type ILocationGcsFindOneResolve = IResult<LocationGcs>;
 
@@ -80,7 +90,11 @@ export type ILogErrorFindMany = { filter: ILogErrorFieldsFilter | null, };
 
 export type ILogErrorFindManyResolve = IResultList<LogError>;
 
-export type ILogErrorFindOne = { on: LogErrorQueryBindValues, };
+export type ILogErrorFindOne = ILogErrorFindOneArgs | ILogErrorFindOneRelArgs;
+
+export type ILogErrorFindOneArgs = { on: LogErrorQueryBindValues, };
+
+export type ILogErrorFindOneRelArgs = { rel: LogErrorFindManyRel, };
 
 export type ILogErrorFindOneResolve = IResult<LogError>;
 
@@ -106,7 +120,11 @@ export type IMediaImageFindMany = { filter: IMediaImageFieldsFilter | null, } | 
 
 export type IMediaImageFindManyResolve = IResultList<MediaImage>;
 
-export type IMediaImageFindOne = { on: MediaImageQueryBindValues, };
+export type IMediaImageFindOne = IMediaImageFindOneArgs | IMediaImageFindOneRelArgs;
+
+export type IMediaImageFindOneArgs = { on: MediaImageQueryBindValues, };
+
+export type IMediaImageFindOneRelArgs = { rel: MediaImageFindManyRel, };
 
 export type IMediaImageFindOneResolve = IResult<MediaImage>;
 
@@ -132,7 +150,11 @@ export type INostrProfileFindMany = { filter: INostrProfileFieldsFilter | null, 
 
 export type INostrProfileFindManyResolve = IResultList<NostrProfile>;
 
-export type INostrProfileFindOne = { on: NostrProfileQueryBindValues, };
+export type INostrProfileFindOne = INostrProfileFindOneArgs | INostrProfileFindOneRelArgs;
+
+export type INostrProfileFindOneArgs = { on: NostrProfileQueryBindValues, };
+
+export type INostrProfileFindOneRelArgs = { rel: NostrProfileFindManyRel, };
 
 export type INostrProfileFindOneResolve = IResult<NostrProfile>;
 
@@ -162,7 +184,11 @@ export type INostrRelayFindMany = { filter: INostrRelayFieldsFilter | null, } | 
 
 export type INostrRelayFindManyResolve = IResultList<NostrRelay>;
 
-export type INostrRelayFindOne = { on: NostrRelayQueryBindValues, };
+export type INostrRelayFindOne = INostrRelayFindOneArgs | INostrRelayFindOneRelArgs;
+
+export type INostrRelayFindOneArgs = { on: NostrRelayQueryBindValues, };
+
+export type INostrRelayFindOneRelArgs = { rel: NostrRelayFindManyRel, };
 
 export type INostrRelayFindOneResolve = IResult<NostrRelay>;
 
@@ -188,7 +214,11 @@ export type ITradeProductFindMany = { filter: ITradeProductFieldsFilter | null, 
 
 export type ITradeProductFindManyResolve = IResultList<TradeProduct>;
 
-export type ITradeProductFindOne = { on: TradeProductQueryBindValues, };
+export type ITradeProductFindOne = ITradeProductFindOneArgs | ITradeProductFindOneRelArgs;
+
+export type ITradeProductFindOneArgs = { on: TradeProductQueryBindValues, };
+
+export type ITradeProductFindOneRelArgs = { rel: TradeProductFindManyRel, };
 
 export type ITradeProductFindOneResolve = IResult<TradeProduct>;
 
@@ -213,6 +243,8 @@ export type LocationGcsQueryBindValues = { id: string, } | { geohash: string, };
 export type LocationGcsTradeProductArgs = { id: string, };
 
 export type LogError = { id: string, created_at: string, updated_at: string, error: string, message: string, stack_trace: string | null, cause: string | null, app_system: string, app_version: string, nostr_pubkey: string, data: string | null, };
+
+export type LogErrorFindManyRel = never;
 
 export type LogErrorQueryBindValues = { id: string, } | { nostr_pubkey: string, };
 
@@ -241,5 +273,7 @@ export type NostrRelayProfileArgs = { public_key: string, };
 export type NostrRelayQueryBindValues = { id: string, } | { url: string, };
 
 export type TradeProduct = { id: string, created_at: string, updated_at: string, key: string, category: string, title: string, summary: string, process: string, lot: string, profile: string, year: bigint, qty_amt: bigint, qty_unit: string, qty_label: string | null, qty_avail: bigint | null, price_amt: number, price_currency: string, price_qty_amt: number, price_qty_unit: string, notes: string | null, };
+
+export type TradeProductFindManyRel = never;
 
 export type TradeProductQueryBindValues = { id: string, };

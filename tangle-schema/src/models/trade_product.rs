@@ -164,6 +164,13 @@ impl TradeProductQueryBindValues {
     }
 }
 #[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[derive(Clone, Deserialize, Serialize)]
+pub enum TradeProductFindManyRel {
+
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
     ts(
@@ -188,15 +195,31 @@ pub type ITradeProductCreate = ITradeProductFields;
 pub struct ITradeProductCreateResolveTs;
 pub type ITradeProductCreateResolve = IResult<TradeProduct>;
 #[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[derive(Deserialize, Serialize)]
+pub struct ITradeProductFindOneArgs {
+    pub on: TradeProductQueryBindValues,
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[derive(Deserialize, Serialize)]
+pub struct ITradeProductFindOneRelArgs {
+    pub rel: TradeProductFindManyRel,
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
     ts(export, export_to = "types.ts", rename = "ITradeProductFindOne")
 )]
 #[derive(Deserialize, Serialize)]
-pub struct ITradeProductFindOneArgs {
-    pub on: TradeProductQueryBindValues,
+#[serde(untagged)]
+pub enum ITradeProductFindOne {
+    On(ITradeProductFindOneArgs),
+    Rel(ITradeProductFindOneRelArgs),
 }
-pub type ITradeProductFindOne = ITradeProductFindOneArgs;
+
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -242,7 +265,7 @@ pub type ITradeProductFindManyResolve = IResultList<TradeProduct>;
     )
 )]
 pub struct ITradeProductDeleteTs;
-pub type ITradeProductDelete = ITradeProductFindOneArgs;
+pub type ITradeProductDelete = ITradeProductFindOne;
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",

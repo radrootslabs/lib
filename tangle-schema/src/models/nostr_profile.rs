@@ -172,15 +172,31 @@ pub type INostrProfileCreate = INostrProfileFields;
 pub struct INostrProfileCreateResolveTs;
 pub type INostrProfileCreateResolve = IResult<NostrProfile>;
 #[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[derive(Deserialize, Serialize)]
+pub struct INostrProfileFindOneArgs {
+    pub on: NostrProfileQueryBindValues,
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[derive(Deserialize, Serialize)]
+pub struct INostrProfileFindOneRelArgs {
+    pub rel: NostrProfileFindManyRel,
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
     ts(export, export_to = "types.ts", rename = "INostrProfileFindOne")
 )]
 #[derive(Deserialize, Serialize)]
-pub struct INostrProfileFindOneArgs {
-    pub on: NostrProfileQueryBindValues,
+#[serde(untagged)]
+pub enum INostrProfileFindOne {
+    On(INostrProfileFindOneArgs),
+    Rel(INostrProfileFindOneRelArgs),
 }
-pub type INostrProfileFindOne = INostrProfileFindOneArgs;
+
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -231,7 +247,7 @@ pub type INostrProfileFindManyResolve = IResultList<NostrProfile>;
     )
 )]
 pub struct INostrProfileDeleteTs;
-pub type INostrProfileDelete = INostrProfileFindOneArgs;
+pub type INostrProfileDelete = INostrProfileFindOne;
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",

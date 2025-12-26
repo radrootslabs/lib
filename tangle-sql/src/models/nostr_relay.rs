@@ -36,12 +36,8 @@ pub fn create<E: SqlExecutor>(
     let (sql, bind_values) = utils::build_insert_query_with_meta(TABLE_NAME, &meta, &field_map);
     let params_json = utils::to_params_json(bind_values)?;
     let _ = exec.exec(&sql, &params_json)?;
-    let args = INostrRelayFindOne {
-        on: NostrRelayQueryBindValues::Id { id: id.clone() },
-    };
-    let found = find_one(exec, &args)?;
-    let result = found
-        .result
+    let on = NostrRelayQueryBindValues::Id { id: id.clone() };
+    let result = find_one_by_on(exec, &on)?
         .ok_or_else(|| IError::from(SqlError::NotFound(id.clone())))?;
     Ok(IResult { result })
 }
@@ -50,12 +46,10 @@ pub fn find_one<E: SqlExecutor>(
     exec: &E,
     opts: &INostrRelayFindOne,
 ) -> Result<INostrRelayFindOneResolve, IError<SqlError>> {
-    let (column, value) = opts.on.to_filter_param();
-    let sql = format!("SELECT * FROM {TABLE_NAME} WHERE {column} = ? LIMIT 1;");
-    let params_json = utils::to_params_json(vec![value])?;
-    let json = exec.query_raw(&sql, &params_json)?;
-    let mut rows: Vec<NostrRelay> = utils::parse_json(&json)?;
-    let result = rows.pop();
+    let result = match opts {
+        INostrRelayFindOne::On(args) => find_one_by_on(exec, &args.on)?,
+        INostrRelayFindOne::Rel(args) => find_one_by_rel(exec, &args.rel)?,
+    };
     Ok(IResult { result })
 }
 
@@ -81,23 +75,50 @@ fn find_many_filter<E: SqlExecutor>(
     Ok(rows)
 }
 
+fn find_one_by_on<E: SqlExecutor>(
+    exec: &E,
+    on: &NostrRelayQueryBindValues,
+) -> Result<Option<NostrRelay>, IError<SqlError>> {
+    let (column, value) = on.to_filter_param();
+    let sql = format!("SELECT * FROM {TABLE_NAME} WHERE {column} = ? LIMIT 1;");
+    let params_json = utils::to_params_json(vec![value])?;
+    let json = exec.query_raw(&sql, &params_json)?;
+    let mut rows: Vec<NostrRelay> = utils::parse_json(&json)?;
+    Ok(rows.pop())
+}
+
+fn rel_query(rel: &NostrRelayFindManyRel) -> (&'static str, Vec<Value>) {
+    match rel {
+        NostrRelayFindManyRel::OnProfile(args) => (
+            "SELECT rl.* FROM nostr_relay rl JOIN nostr_profile_relay pr_rl ON rl.id = pr_rl.tb_rl JOIN nostr_profile pr ON pr.id = pr_rl.tb_pr WHERE pr.public_key = ?",
+            vec![Value::from(args.public_key.clone())],
+        ),
+        NostrRelayFindManyRel::OffProfile(args) => (
+            "SELECT rl.* FROM nostr_relay rl LEFT JOIN nostr_profile_relay pr_rl ON rl.id = pr_rl.tb_rl LEFT JOIN nostr_profile pr ON pr.id = pr_rl.tb_pr WHERE pr.public_key <> ?",
+            vec![Value::from(args.public_key.clone())],
+        ),
+    }
+}
+
+fn find_one_by_rel<E: SqlExecutor>(
+    exec: &E,
+    rel: &NostrRelayFindManyRel,
+) -> Result<Option<NostrRelay>, IError<SqlError>> {
+    let (sql, bind_values) = rel_query(rel);
+    let params_json = utils::to_params_json(bind_values)?;
+    let sql = format!("{sql} LIMIT 1;");
+    let json = exec.query_raw(&sql, &params_json)?;
+    let mut rows: Vec<NostrRelay> = utils::parse_json(&json)?;
+    Ok(rows.pop())
+}
+
 fn find_many_by_rel<E: SqlExecutor>(
     exec: &E,
     rel: &NostrRelayFindManyRel,
 ) -> Result<Vec<NostrRelay>, IError<SqlError>> {
-    let (sql, bind_values): (String, Vec<Value>) = match rel {
-        NostrRelayFindManyRel::OnProfile(args) => {
-            let sql = String::from("SELECT rl.* FROM nostr_relay rl JOIN nostr_profile_relay pr_rl ON rl.id = pr_rl.tb_rl JOIN nostr_profile pr ON pr.id = pr_rl.tb_pr WHERE pr.public_key = ?;");
-            let binds = vec![Value::from(args.public_key.clone())];
-            (sql, binds)
-        }
-        NostrRelayFindManyRel::OffProfile(args) => {
-            let sql = String::from("SELECT rl.* FROM nostr_relay rl LEFT JOIN nostr_profile_relay pr_rl ON rl.id = pr_rl.tb_rl LEFT JOIN nostr_profile pr ON pr.id = pr_rl.tb_pr WHERE pr.public_key <> ?;");
-            let binds = vec![Value::from(args.public_key.clone())];
-            (sql, binds)
-        }
-    };
+    let (sql, bind_values) = rel_query(rel);
     let params_json = utils::to_params_json(bind_values)?;
+    let sql = format!("{sql};");
     let json = exec.query_raw(&sql, &params_json)?;
     let rows: Vec<NostrRelay> = utils::parse_json(&json)?;
     Ok(rows)
@@ -133,11 +154,8 @@ pub fn update<E: SqlExecutor>(
     let id_for_lookup = match opts.on.primary_key() {
         Some(id) => id,
         None => {
-            let find_opts = INostrRelayFindOne {
-                on: opts.on.clone(),
-            };
-            let found = find_one(exec, &find_opts)?;
-            let model = found.result.ok_or_else(|| IError::from(SqlError::NotFound(opts.on.lookup_key())))?;
+            let found = find_one_by_on(exec, &opts.on)?;
+            let model = found.ok_or_else(|| IError::from(SqlError::NotFound(opts.on.lookup_key())))?;
             model.id
         }
     };
@@ -156,14 +174,18 @@ pub fn delete<E: SqlExecutor>(
     exec: &E,
     opts: &INostrRelayDelete,
 ) -> Result<INostrRelayDeleteResolve, IError<SqlError>> {
-    let id_for_lookup = match opts.on.primary_key() {
-        Some(id) => id,
-        None => {
-            let find_opts = INostrRelayFindOne {
-                on: opts.on.clone(),
-            };
-            let found = find_one(exec, &find_opts)?;
-            let model = found.result.ok_or_else(|| IError::from(SqlError::NotFound(opts.on.lookup_key())))?;
+    let id_for_lookup = match opts {
+        INostrRelayDelete::On(args) => match args.on.primary_key() {
+            Some(id) => id,
+            None => {
+                let found = find_one_by_on(exec, &args.on)?;
+                let model = found.ok_or_else(|| IError::from(SqlError::NotFound(args.on.lookup_key())))?;
+                model.id
+            }
+        },
+        INostrRelayDelete::Rel(args) => {
+            let found = find_one_by_rel(exec, &args.rel)?;
+            let model = found.ok_or_else(|| IError::from(SqlError::NotFound(rel_lookup_key(&args.rel))))?;
             model.id
         }
     };
@@ -174,4 +196,11 @@ pub fn delete<E: SqlExecutor>(
         return Err(IError::from(SqlError::NotFound(id_for_lookup.clone())));
     }
     Ok(IResult { result: id_for_lookup })
+}
+
+fn rel_lookup_key(rel: &NostrRelayFindManyRel) -> String {
+    match rel {
+        NostrRelayFindManyRel::OnProfile(args) => format!("on_profile:{}", args.public_key.as_str()),
+        NostrRelayFindManyRel::OffProfile(args) => format!("off_profile:{}", args.public_key.as_str()),
+    }
 }

@@ -36,12 +36,8 @@ pub fn create<E: SqlExecutor>(
     let (sql, bind_values) = utils::build_insert_query_with_meta(TABLE_NAME, &meta, &field_map);
     let params_json = utils::to_params_json(bind_values)?;
     let _ = exec.exec(&sql, &params_json)?;
-    let args = ILocationGcsFindOne::On {
-        on: LocationGcsQueryBindValues::Id { id: id.clone() },
-    };
-    let found = find_one(exec, &args)?;
-    let result = found
-        .result
+    let on = LocationGcsQueryBindValues::Id { id: id.clone() };
+    let result = find_one_by_on(exec, &on)?
         .ok_or_else(|| IError::from(SqlError::NotFound(id.clone())))?;
     Ok(IResult { result })
 }
@@ -51,15 +47,8 @@ pub fn find_one<E: SqlExecutor>(
     opts: &ILocationGcsFindOne,
 ) -> Result<ILocationGcsFindOneResolve, IError<SqlError>> {
     let result = match opts {
-        ILocationGcsFindOne::On { on } => {
-            let (column, value) = on.to_filter_param();
-            let sql = format!("SELECT * FROM {TABLE_NAME} WHERE {column} = ? LIMIT 1;");
-            let params_json = utils::to_params_json(vec![value])?;
-            let json = exec.query_raw(&sql, &params_json)?;
-            let mut rows: Vec<LocationGcs> = utils::parse_json(&json)?;
-            rows.pop()
-        }
-        ILocationGcsFindOne::Rel { rel } => find_one_by_rel(exec, rel)?,
+        ILocationGcsFindOne::On(args) => find_one_by_on(exec, &args.on)?,
+        ILocationGcsFindOne::Rel(args) => find_one_by_rel(exec, &args.rel)?,
     };
     Ok(IResult { result })
 }
@@ -84,6 +73,18 @@ fn find_many_filter<E: SqlExecutor>(
     let json = exec.query_raw(&sql, &params_json)?;
     let rows: Vec<LocationGcs> = utils::parse_json(&json)?;
     Ok(rows)
+}
+
+fn find_one_by_on<E: SqlExecutor>(
+    exec: &E,
+    on: &LocationGcsQueryBindValues,
+) -> Result<Option<LocationGcs>, IError<SqlError>> {
+    let (column, value) = on.to_filter_param();
+    let sql = format!("SELECT * FROM {TABLE_NAME} WHERE {column} = ? LIMIT 1;");
+    let params_json = utils::to_params_json(vec![value])?;
+    let json = exec.query_raw(&sql, &params_json)?;
+    let mut rows: Vec<LocationGcs> = utils::parse_json(&json)?;
+    Ok(rows.pop())
 }
 
 fn rel_query(rel: &LocationGcsFindManyRel) -> (&'static str, Vec<Value>) {
@@ -161,11 +162,8 @@ pub fn update<E: SqlExecutor>(
     let id_for_lookup = match opts.on.primary_key() {
         Some(id) => id,
         None => {
-            let find_opts = ILocationGcsFindOne::On {
-                on: opts.on.clone(),
-            };
-            let found = find_one(exec, &find_opts)?;
-            let model = found.result.ok_or_else(|| IError::from(SqlError::NotFound(opts.on.lookup_key())))?;
+            let found = find_one_by_on(exec, &opts.on)?;
+            let model = found.ok_or_else(|| IError::from(SqlError::NotFound(opts.on.lookup_key())))?;
             model.id
         }
     };
@@ -185,20 +183,17 @@ pub fn delete<E: SqlExecutor>(
     opts: &ILocationGcsDelete,
 ) -> Result<ILocationGcsDeleteResolve, IError<SqlError>> {
     let id_for_lookup = match opts {
-        ILocationGcsDelete::On { on } => match on.primary_key() {
+        ILocationGcsDelete::On(args) => match args.on.primary_key() {
             Some(id) => id,
             None => {
-                let find_opts = ILocationGcsFindOne::On { on: on.clone() };
-                let found = find_one(exec, &find_opts)?;
-                let model = found
-                    .result
-                    .ok_or_else(|| IError::from(SqlError::NotFound(on.lookup_key())))?;
+                let found = find_one_by_on(exec, &args.on)?;
+                let model = found.ok_or_else(|| IError::from(SqlError::NotFound(args.on.lookup_key())))?;
                 model.id
             }
         },
-        ILocationGcsDelete::Rel { rel } => {
-            let found = find_one_by_rel(exec, rel)?;
-            let model = found.ok_or_else(|| IError::from(SqlError::NotFound(rel_lookup_key(rel))))?;
+        ILocationGcsDelete::Rel(args) => {
+            let found = find_one_by_rel(exec, &args.rel)?;
+            let model = found.ok_or_else(|| IError::from(SqlError::NotFound(rel_lookup_key(&args.rel))))?;
             model.id
         }
     };

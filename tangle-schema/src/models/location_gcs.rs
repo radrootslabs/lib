@@ -209,10 +209,20 @@ pub type ILocationGcsCreate = ILocationGcsFields;
 )]
 pub struct ILocationGcsCreateResolveTs;
 pub type ILocationGcsCreateResolve = IResult<LocationGcs>;
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Deserialize, Serialize)]
 pub struct ILocationGcsFindOneArgs {
     pub on: LocationGcsQueryBindValues,
 }
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[derive(Deserialize, Serialize)]
+pub struct ILocationGcsFindOneRelArgs {
+    pub rel: LocationGcsFindManyRel,
+}
+
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -221,13 +231,10 @@ pub struct ILocationGcsFindOneArgs {
 #[derive(Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum ILocationGcsFindOne {
-    On {
-        on: LocationGcsQueryBindValues,
-    },
-    Rel {
-        rel: LocationGcsFindManyRel,
-    },
+    On(ILocationGcsFindOneArgs),
+    Rel(ILocationGcsFindOneRelArgs),
 }
+
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",

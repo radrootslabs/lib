@@ -114,6 +114,13 @@ impl LogErrorQueryBindValues {
     }
 }
 #[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[derive(Clone, Deserialize, Serialize)]
+pub enum LogErrorFindManyRel {
+
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
     ts(
@@ -138,15 +145,31 @@ pub type ILogErrorCreate = ILogErrorFields;
 pub struct ILogErrorCreateResolveTs;
 pub type ILogErrorCreateResolve = IResult<LogError>;
 #[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[derive(Deserialize, Serialize)]
+pub struct ILogErrorFindOneArgs {
+    pub on: LogErrorQueryBindValues,
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[derive(Deserialize, Serialize)]
+pub struct ILogErrorFindOneRelArgs {
+    pub rel: LogErrorFindManyRel,
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
     ts(export, export_to = "types.ts", rename = "ILogErrorFindOne")
 )]
 #[derive(Deserialize, Serialize)]
-pub struct ILogErrorFindOneArgs {
-    pub on: LogErrorQueryBindValues,
+#[serde(untagged)]
+pub enum ILogErrorFindOne {
+    On(ILogErrorFindOneArgs),
+    Rel(ILogErrorFindOneRelArgs),
 }
-pub type ILogErrorFindOne = ILogErrorFindOneArgs;
+
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -192,7 +215,7 @@ pub type ILogErrorFindManyResolve = IResultList<LogError>;
     )
 )]
 pub struct ILogErrorDeleteTs;
-pub type ILogErrorDelete = ILogErrorFindOneArgs;
+pub type ILogErrorDelete = ILogErrorFindOne;
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",

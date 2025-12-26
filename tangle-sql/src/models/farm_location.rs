@@ -13,7 +13,7 @@ pub fn set<E: SqlExecutor>(
     exec: &E,
     opts: &IFarmLocationRelation,
 ) -> Result<IFarmLocationResolve, IError<SqlError>> {
-    let mut query_vals: Vec<Value> = Vec::new();
+    let mut query_vals: Vec<Value> = Vec::with_capacity(2);
     let (farm_column, farm_value) = opts.farm.to_filter_param();
     query_vals.push(farm_value);
     let (location_gcs_column, location_gcs_value) = opts.location_gcs.to_filter_param();
@@ -28,7 +28,7 @@ pub fn unset<E: SqlExecutor>(
     exec: &E,
     opts: &IFarmLocationRelation,
 ) -> Result<IFarmLocationResolve, IError<SqlError>> {
-    let mut query_vals: Vec<Value> = Vec::new();
+    let mut query_vals: Vec<Value> = Vec::with_capacity(2);
     let (farm_column, farm_value) = opts.farm.to_filter_param();
     query_vals.push(farm_value);
     let (location_gcs_column, location_gcs_value) = opts.location_gcs.to_filter_param();

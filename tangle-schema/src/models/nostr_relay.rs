@@ -173,15 +173,31 @@ pub type INostrRelayCreate = INostrRelayFields;
 pub struct INostrRelayCreateResolveTs;
 pub type INostrRelayCreateResolve = IResult<NostrRelay>;
 #[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[derive(Deserialize, Serialize)]
+pub struct INostrRelayFindOneArgs {
+    pub on: NostrRelayQueryBindValues,
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[derive(Deserialize, Serialize)]
+pub struct INostrRelayFindOneRelArgs {
+    pub rel: NostrRelayFindManyRel,
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
     ts(export, export_to = "types.ts", rename = "INostrRelayFindOne")
 )]
 #[derive(Deserialize, Serialize)]
-pub struct INostrRelayFindOneArgs {
-    pub on: NostrRelayQueryBindValues,
+#[serde(untagged)]
+pub enum INostrRelayFindOne {
+    On(INostrRelayFindOneArgs),
+    Rel(INostrRelayFindOneRelArgs),
 }
-pub type INostrRelayFindOne = INostrRelayFindOneArgs;
+
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -232,7 +248,7 @@ pub type INostrRelayFindManyResolve = IResultList<NostrRelay>;
     )
 )]
 pub struct INostrRelayDeleteTs;
-pub type INostrRelayDelete = INostrRelayFindOneArgs;
+pub type INostrRelayDelete = INostrRelayFindOne;
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",

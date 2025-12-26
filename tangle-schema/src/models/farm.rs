@@ -93,6 +93,13 @@ impl FarmQueryBindValues {
     }
 }
 #[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[derive(Clone, Deserialize, Serialize)]
+pub enum FarmFindManyRel {
+
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
     ts(
@@ -117,15 +124,31 @@ pub type IFarmCreate = IFarmFields;
 pub struct IFarmCreateResolveTs;
 pub type IFarmCreateResolve = IResult<Farm>;
 #[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[derive(Deserialize, Serialize)]
+pub struct IFarmFindOneArgs {
+    pub on: FarmQueryBindValues,
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[derive(Deserialize, Serialize)]
+pub struct IFarmFindOneRelArgs {
+    pub rel: FarmFindManyRel,
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
     ts(export, export_to = "types.ts", rename = "IFarmFindOne")
 )]
 #[derive(Deserialize, Serialize)]
-pub struct IFarmFindOneArgs {
-    pub on: FarmQueryBindValues,
+#[serde(untagged)]
+pub enum IFarmFindOne {
+    On(IFarmFindOneArgs),
+    Rel(IFarmFindOneRelArgs),
 }
-pub type IFarmFindOne = IFarmFindOneArgs;
+
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
@@ -171,7 +194,7 @@ pub type IFarmFindManyResolve = IResultList<Farm>;
     )
 )]
 pub struct IFarmDeleteTs;
-pub type IFarmDelete = IFarmFindOneArgs;
+pub type IFarmDelete = IFarmFindOne;
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",

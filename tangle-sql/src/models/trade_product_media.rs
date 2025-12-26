@@ -13,7 +13,7 @@ pub fn set<E: SqlExecutor>(
     exec: &E,
     opts: &ITradeProductMediaRelation,
 ) -> Result<ITradeProductMediaResolve, IError<SqlError>> {
-    let mut query_vals: Vec<Value> = Vec::new();
+    let mut query_vals: Vec<Value> = Vec::with_capacity(2);
     let (trade_product_column, trade_product_value) = opts.trade_product.to_filter_param();
     query_vals.push(trade_product_value);
     let (media_image_column, media_image_value) = opts.media_image.to_filter_param();
@@ -28,7 +28,7 @@ pub fn unset<E: SqlExecutor>(
     exec: &E,
     opts: &ITradeProductMediaRelation,
 ) -> Result<ITradeProductMediaResolve, IError<SqlError>> {
-    let mut query_vals: Vec<Value> = Vec::new();
+    let mut query_vals: Vec<Value> = Vec::with_capacity(2);
     let (trade_product_column, trade_product_value) = opts.trade_product.to_filter_param();
     query_vals.push(trade_product_value);
     let (media_image_column, media_image_value) = opts.media_image.to_filter_param();

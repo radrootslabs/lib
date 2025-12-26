@@ -13,7 +13,7 @@ pub fn set<E: SqlExecutor>(
     exec: &E,
     opts: &INostrProfileRelayRelation,
 ) -> Result<INostrProfileRelayResolve, IError<SqlError>> {
-    let mut query_vals: Vec<Value> = Vec::new();
+    let mut query_vals: Vec<Value> = Vec::with_capacity(2);
     let (nostr_profile_column, nostr_profile_value) = opts.nostr_profile.to_filter_param();
     query_vals.push(nostr_profile_value);
     let (nostr_relay_column, nostr_relay_value) = opts.nostr_relay.to_filter_param();
@@ -28,7 +28,7 @@ pub fn unset<E: SqlExecutor>(
     exec: &E,
     opts: &INostrProfileRelayRelation,
 ) -> Result<INostrProfileRelayResolve, IError<SqlError>> {
-    let mut query_vals: Vec<Value> = Vec::new();
+    let mut query_vals: Vec<Value> = Vec::with_capacity(2);
     let (nostr_profile_column, nostr_profile_value) = opts.nostr_profile.to_filter_param();
     query_vals.push(nostr_profile_value);
     let (nostr_relay_column, nostr_relay_value) = opts.nostr_relay.to_filter_param();
