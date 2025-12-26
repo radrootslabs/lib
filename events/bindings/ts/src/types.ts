@@ -28,6 +28,14 @@ export type RadrootsFollowEventMetadata = { id: string, author: string, publishe
 
 export type RadrootsFollowProfile = { published_at: number, public_key: string, relay_url?: string | null, contact_name?: string | null, };
 
+export type RadrootsGiftWrap = { recipient: RadrootsGiftWrapRecipient, content: string, expiration?: number | null, };
+
+export type RadrootsGiftWrapEventIndex = { event: RadrootsNostrEvent, metadata: RadrootsGiftWrapEventMetadata, };
+
+export type RadrootsGiftWrapEventMetadata = { id: string, author: string, published_at: number, kind: number, gift_wrap: RadrootsGiftWrap, };
+
+export type RadrootsGiftWrapRecipient = { public_key: string, relay_url?: string | null, };
+
 export type RadrootsJobFeedback = { kind: number, status: JobFeedbackStatus, extra_info?: string | null, request_event: RadrootsNostrEventPtr, customer_pubkey?: string | null, payment?: JobPaymentRequest | null, content?: string | null, encrypted: boolean, };
 
 export type RadrootsJobFeedbackEventIndex = { event: RadrootsNostrEvent, metadata: RadrootsJobFeedbackEventMetadata, };
@@ -96,6 +104,14 @@ export type RadrootsMessageEventIndex = { event: RadrootsNostrEvent, metadata: R
 
 export type RadrootsMessageEventMetadata = { id: string, author: string, published_at: number, kind: number, message: RadrootsMessage, };
 
+export type RadrootsMessageFile = { recipients: Array<RadrootsMessageRecipient>, file_url: string, reply_to?: RadrootsNostrEventPtr | null, subject?: string | null, file_type: string, encryption_algorithm: string, decryption_key: string, decryption_nonce: string, encrypted_hash: string, original_hash?: string | null, size?: number | null, dimensions?: RadrootsMessageFileDimensions | null, blurhash?: string | null, thumb?: string | null, fallbacks: Array<string>, };
+
+export type RadrootsMessageFileDimensions = { w: number, h: number, };
+
+export type RadrootsMessageFileEventIndex = { event: RadrootsNostrEvent, metadata: RadrootsMessageFileEventMetadata, };
+
+export type RadrootsMessageFileEventMetadata = { id: string, author: string, published_at: number, kind: number, message_file: RadrootsMessageFile, };
+
 export type RadrootsMessageRecipient = { public_key: string, relay_url?: string | null, };
 
 export type RadrootsNostrEvent = { id: string, author: string, created_at: number, kind: number, tags: Array<Array<string>>, content: string, sig: string, };
@@ -123,3 +139,9 @@ export type RadrootsReactionEventIndex = { event: RadrootsNostrEvent, metadata: 
 export type RadrootsReactionEventMetadata = { id: string, author: string, published_at: number, kind: number, reaction: RadrootsReaction, };
 
 export type RadrootsRelayDocument = { name?: string | null, description?: string | null, pubkey?: string | null, contact?: string | null, supported_nips?: number[] | null, software?: string | null, version?: string | null, };
+
+export type RadrootsSeal = { content: string, };
+
+export type RadrootsSealEventIndex = { event: RadrootsNostrEvent, metadata: RadrootsSealEventMetadata, };
+
+export type RadrootsSealEventMetadata = { id: string, author: string, published_at: number, kind: number, seal: RadrootsSeal, };

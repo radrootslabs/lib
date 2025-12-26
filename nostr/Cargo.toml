@@ -14,6 +14,7 @@ client = ["std", "dep:nostr-sdk", "dep:radroots-identity"]
 codec = ["dep:radroots-events", "dep:radroots-events-codec"]
 events = ["dep:radroots-events", "radroots-events/std", "radroots-events/serde"]
 http = ["dep:reqwest"]
+nip17 = ["std", "codec", "nostr/nip44", "nostr/nip59", "nostr/os-rng"]
 
 [dependencies]
 radroots-events = { workspace = true, optional = true, default-features = false }
@@ -25,3 +26,6 @@ reqwest = { workspace = true, optional = true, default-features = false, feature
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

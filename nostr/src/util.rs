@@ -10,7 +10,7 @@ pub fn radroots_nostr_npub_string(pk: &RadrootsNostrPublicKey) -> Option<String>
 }
 
 pub fn created_at_u32_saturating(ts: RadrootsNostrTimestamp) -> u32 {
-    u32::try_from(ts.as_u64()).unwrap_or(u32::MAX)
+    u32::try_from(ts.as_secs()).unwrap_or(u32::MAX)
 }
 
 pub fn event_created_at_u32_saturating(event: &RadrootsNostrEvent) -> u32 {

@@ -10,16 +10,22 @@ use radroots_events::listing::RadrootsListing;
 use radroots_events::list::RadrootsList;
 use radroots_events::list_set::RadrootsListSet;
 use radroots_events::message::RadrootsMessage;
+use radroots_events::message_file::RadrootsMessageFile;
 use radroots_events::reaction::RadrootsReaction;
+use radroots_events::gift_wrap::RadrootsGiftWrap;
+use radroots_events::seal::RadrootsSeal;
 use radroots_events_codec::comment::encode::comment_build_tags;
 use radroots_events_codec::follow::encode::follow_build_tags;
+use radroots_events_codec::gift_wrap::encode::gift_wrap_build_tags;
 use radroots_events_codec::job::feedback::encode::job_feedback_build_tags;
 use radroots_events_codec::job::request::encode::job_request_build_tags;
 use radroots_events_codec::job::result::encode::job_result_build_tags;
 use radroots_events_codec::list::encode::list_build_tags;
 use radroots_events_codec::list_set::encode::list_set_build_tags;
 use radroots_events_codec::message::encode::message_build_tags;
+use radroots_events_codec::message_file::encode::message_file_build_tags;
 use radroots_events_codec::reaction::encode::reaction_build_tags;
+use radroots_events_codec::seal::encode::seal_build_tags;
 use radroots_events_codec::listing::tags::{
     listing_tags as listing_tags_impl,
     listing_tags_full as listing_tags_full_impl,
@@ -60,6 +66,18 @@ fn parse_reaction(reaction_json: &str) -> Result<RadrootsReaction, JsValue> {
 
 fn parse_message(message_json: &str) -> Result<RadrootsMessage, JsValue> {
     serde_json::from_str(message_json).map_err(err_js)
+}
+
+fn parse_message_file(message_json: &str) -> Result<RadrootsMessageFile, JsValue> {
+    serde_json::from_str(message_json).map_err(err_js)
+}
+
+fn parse_gift_wrap(gift_wrap_json: &str) -> Result<RadrootsGiftWrap, JsValue> {
+    serde_json::from_str(gift_wrap_json).map_err(err_js)
+}
+
+fn parse_seal(seal_json: &str) -> Result<RadrootsSeal, JsValue> {
+    serde_json::from_str(seal_json).map_err(err_js)
 }
 
 fn parse_list(list_json: &str) -> Result<RadrootsList, JsValue> {
@@ -148,5 +166,26 @@ pub fn reaction_tags(reaction_json: &str) -> Result<String, JsValue> {
 pub fn message_tags(message_json: &str) -> Result<String, JsValue> {
     let message = parse_message(message_json)?;
     let tags = message_build_tags(&message).map_err(err_js)?;
+    tags_to_json(tags)
+}
+
+#[wasm_bindgen(js_name = message_file_tags)]
+pub fn message_file_tags(message_json: &str) -> Result<String, JsValue> {
+    let message = parse_message_file(message_json)?;
+    let tags = message_file_build_tags(&message).map_err(err_js)?;
+    tags_to_json(tags)
+}
+
+#[wasm_bindgen(js_name = seal_tags)]
+pub fn seal_tags(seal_json: &str) -> Result<String, JsValue> {
+    let seal = parse_seal(seal_json)?;
+    let tags = seal_build_tags(&seal).map_err(err_js)?;
+    tags_to_json(tags)
+}
+
+#[wasm_bindgen(js_name = gift_wrap_tags)]
+pub fn gift_wrap_tags(gift_wrap_json: &str) -> Result<String, JsValue> {
+    let gift_wrap = parse_gift_wrap(gift_wrap_json)?;
+    let tags = gift_wrap_build_tags(&gift_wrap).map_err(err_js)?;
     tags_to_json(tags)
 }

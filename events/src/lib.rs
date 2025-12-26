@@ -11,6 +11,7 @@ use alloc::{string::String, vec::Vec};
 
 pub mod comment;
 pub mod follow;
+pub mod gift_wrap;
 pub mod job;
 pub mod job_feedback;
 pub mod job_request;
@@ -21,10 +22,12 @@ pub mod list;
 pub mod list_set;
 pub mod app_data;
 pub mod message;
+pub mod message_file;
 pub mod post;
 pub mod profile;
 pub mod reaction;
 pub mod relay_document;
+pub mod seal;
 pub mod tags;
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]

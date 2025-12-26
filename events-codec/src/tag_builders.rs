@@ -9,6 +9,7 @@ use radroots_events::{
     app_data::RadrootsAppData,
     comment::RadrootsComment,
     follow::RadrootsFollow,
+    gift_wrap::RadrootsGiftWrap,
     job_feedback::RadrootsJobFeedback,
     job_request::RadrootsJobRequest,
     job_result::RadrootsJobResult,
@@ -16,9 +17,11 @@ use radroots_events::{
     list::RadrootsList,
     list_set::RadrootsListSet,
     message::RadrootsMessage,
+    message_file::RadrootsMessageFile,
     post::RadrootsPost,
     profile::RadrootsProfile,
     reaction::RadrootsReaction,
+    seal::RadrootsSeal,
 };
 
 use crate::comment::encode::comment_build_tags;
@@ -33,7 +36,10 @@ use crate::listing::tags::listing_tags;
 use crate::list::encode::list_build_tags;
 use crate::list_set::encode::list_set_build_tags;
 use crate::message::encode::message_build_tags;
+use crate::message_file::encode::message_file_build_tags;
 use crate::reaction::encode::reaction_build_tags;
+use crate::gift_wrap::encode::gift_wrap_build_tags;
+use crate::seal::encode::seal_build_tags;
 
 pub trait RadrootsEventTagBuilder {
     type Error;
@@ -77,6 +83,14 @@ impl RadrootsEventTagBuilder for RadrootsMessage {
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
         message_build_tags(self)
+    }
+}
+
+impl RadrootsEventTagBuilder for RadrootsMessageFile {
+    type Error = EventEncodeError;
+
+    fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
+        message_file_build_tags(self)
     }
 }
 
@@ -128,6 +142,22 @@ impl RadrootsEventTagBuilder for RadrootsJobFeedback {
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
         Ok(job_feedback_build_tags(self))
+    }
+}
+
+impl RadrootsEventTagBuilder for RadrootsSeal {
+    type Error = EventEncodeError;
+
+    fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
+        seal_build_tags(self)
+    }
+}
+
+impl RadrootsEventTagBuilder for RadrootsGiftWrap {
+    type Error = EventEncodeError;
+
+    fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
+        gift_wrap_build_tags(self)
     }
 }
 

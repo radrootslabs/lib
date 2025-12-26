@@ -13,7 +13,7 @@ std = ["dep:radroots-runtime"]
 
 [dependencies]
 radroots-runtime = { workspace = true, optional = true }
-nostr = { workspace = true }
+nostr = { workspace = true, features = ["os-rng"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

@@ -7,7 +7,13 @@ pub const KIND_FOLLOW: u32 = 3;
 #[typeshare::typeshare]
 pub const KIND_REACTION: u32 = 7;
 #[typeshare::typeshare]
+pub const KIND_SEAL: u32 = 13;
+#[typeshare::typeshare]
 pub const KIND_MESSAGE: u32 = 14;
+#[typeshare::typeshare]
+pub const KIND_MESSAGE_FILE: u32 = 15;
+#[typeshare::typeshare]
+pub const KIND_GIFT_WRAP: u32 = 1059;
 #[typeshare::typeshare]
 pub const KIND_COMMENT: u32 = 1111;
 #[typeshare::typeshare]

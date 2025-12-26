@@ -3,43 +3,33 @@ use alloc::{string::{String, ToString}, vec::Vec};
 
 use radroots_events::{
     RadrootsNostrEvent,
-    message::{
-        RadrootsMessage, RadrootsMessageEventIndex, RadrootsMessageEventMetadata,
-    },
-    kinds::KIND_MESSAGE,
+    kinds::KIND_SEAL,
+    seal::{RadrootsSeal, RadrootsSealEventIndex, RadrootsSealEventMetadata},
 };
 
 use crate::error::EventParseError;
-use crate::message::tags::{parse_recipients, parse_reply_tag, parse_subject_tag};
 
-const DEFAULT_KIND: u32 = KIND_MESSAGE;
+const DEFAULT_KIND: u32 = KIND_SEAL;
 
-pub fn message_from_tags(
+pub fn seal_from_parts(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsMessage, EventParseError> {
+) -> Result<RadrootsSeal, EventParseError> {
     if kind != DEFAULT_KIND {
         return Err(EventParseError::InvalidKind {
-            expected: "14",
+            expected: "13",
             got: kind,
         });
+    }
+    if !tags.is_empty() {
+        return Err(EventParseError::InvalidTag("tags"));
     }
     if content.trim().is_empty() {
         return Err(EventParseError::InvalidTag("content"));
     }
-
-    let recipients = parse_recipients(tags)?;
-
-    let reply_to = parse_reply_tag(tags)?;
-
-    let subject = parse_subject_tag(tags)?;
-
-    Ok(RadrootsMessage {
-        recipients,
+    Ok(RadrootsSeal {
         content: content.to_string(),
-        reply_to,
-        subject,
     })
 }
 
@@ -50,14 +40,14 @@ pub fn metadata_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsMessageEventMetadata, EventParseError> {
-    let message = message_from_tags(kind, &tags, &content)?;
-    Ok(RadrootsMessageEventMetadata {
+) -> Result<RadrootsSealEventMetadata, EventParseError> {
+    let seal = seal_from_parts(kind, &tags, &content)?;
+    Ok(RadrootsSealEventMetadata {
         id,
         author,
         published_at,
         kind,
-        message,
+        seal,
     })
 }
 
@@ -69,7 +59,7 @@ pub fn index_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsMessageEventIndex, EventParseError> {
+) -> Result<RadrootsSealEventIndex, EventParseError> {
     let metadata = metadata_from_event(
         id.clone(),
         author.clone(),
@@ -78,7 +68,7 @@ pub fn index_from_event(
         content.clone(),
         tags.clone(),
     )?;
-    Ok(RadrootsMessageEventIndex {
+    Ok(RadrootsSealEventIndex {
         event: RadrootsNostrEvent {
             id,
             author,

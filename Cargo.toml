@@ -57,9 +57,9 @@ directories = { version = "6" }
 futures = { version = "0.3" }
 hex = { version = "0.4" }
 js-sys = { version = "0.3" }
-nostr = { version = "0.43.0" }
-nostr-relay-pool = { version = "0.43.0" }
-nostr-sdk = { version = "0.43.0" }
+nostr = { version = "0.44.1", path = "../refs/rust-nostr/crates/nostr" }
+nostr-relay-pool = { version = "0.44.0", path = "../refs/rust-nostr/crates/nostr-relay-pool" }
+nostr-sdk = { version = "0.44.1", path = "../refs/rust-nostr/crates/nostr-sdk" }
 num_cpus = { version = "1.17.0" }
 secrecy = { version = "0.10.3" }
 serde = { version = "1", default-features = false, features = ["derive"] }

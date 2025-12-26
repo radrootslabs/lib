@@ -21,6 +21,9 @@ pub mod codec_adapters;
 #[cfg(feature = "codec")]
 pub mod job_adapter;
 
+#[cfg(feature = "nip17")]
+pub mod nip17;
+
 #[cfg(feature = "http")]
 pub mod nip11;
 
@@ -110,6 +113,16 @@ pub mod prelude {
         RadrootsNostrSubscribeAutoCloseOptions,
     };
     pub use crate::util::radroots_nostr_npub_string;
+
+    #[cfg(feature = "nip17")]
+    pub use crate::nip17::{
+        radroots_nostr_unwrap_gift_wrap,
+        radroots_nostr_wrap_message,
+        radroots_nostr_wrap_message_file,
+        RadrootsNip17Error,
+        RadrootsNip17Rumor,
+        RadrootsNip17WrapOptions,
+    };
 
     #[cfg(feature = "http")]
     pub use crate::nip11::fetch_nip11;
