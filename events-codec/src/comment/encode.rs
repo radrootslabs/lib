@@ -9,8 +9,9 @@ use radroots_events::{
 use crate::error::EventEncodeError;
 use crate::event_ref::push_nip10_ref_tags;
 use crate::wire::WireEventParts;
+use radroots_events::kinds::KIND_COMMENT;
 
-const DEFAULT_KIND: u32 = 1;
+const DEFAULT_KIND: u32 = KIND_COMMENT;
 
 fn validate_ref(
     event: &RadrootsNostrEventRef,

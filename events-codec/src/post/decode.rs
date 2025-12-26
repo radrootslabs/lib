@@ -4,11 +4,12 @@ use alloc::{string::{String, ToString}, vec::Vec};
 use radroots_events::{
     RadrootsNostrEvent,
     post::{RadrootsPost, RadrootsPostEventIndex, RadrootsPostEventMetadata},
+    kinds::KIND_POST,
 };
 
 use crate::error::EventParseError;
 
-const DEFAULT_KIND: u32 = 1;
+const DEFAULT_KIND: u32 = KIND_POST;
 
 pub fn post_from_content(kind: u32, content: &str) -> Result<RadrootsPost, EventParseError> {
     if kind != DEFAULT_KIND {

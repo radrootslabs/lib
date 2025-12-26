@@ -3,7 +3,7 @@
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
 
-use radroots_events::RadrootsNostrEventPtr;
+use radroots_events::{RadrootsNostrEventPtr, kinds::KIND_PROFILE};
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
 
@@ -220,7 +220,10 @@ impl TradeListingAddress {
         if parts.next().is_some() {
             return Err(TradeListingAddressError::InvalidFormat);
         }
-        if kind == 0 || seller_pubkey.trim().is_empty() || listing_id.trim().is_empty() {
+        if kind == KIND_PROFILE as u16
+            || seller_pubkey.trim().is_empty()
+            || listing_id.trim().is_empty()
+        {
             return Err(TradeListingAddressError::InvalidFormat);
         }
         Ok(Self {
@@ -332,6 +335,7 @@ mod tests {
         TradeListingEnvelope, TradeListingEnvelopeError, TradeListingMessageType,
         TradeListingValidateRequest,
     };
+    use radroots_events::kinds::KIND_LISTING;
 
     #[test]
     fn envelope_requires_listing_addr() {
@@ -351,7 +355,7 @@ mod tests {
     fn envelope_requires_order_id_for_order_scoped() {
         let env = TradeListingEnvelope::new(
             TradeListingMessageType::OrderRequest,
-            "30402:pubkey:listing",
+            format!("{KIND_LISTING}:pubkey:listing"),
             None,
             TradeListingValidateRequest { listing_event: None },
         );

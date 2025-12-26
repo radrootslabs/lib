@@ -6,12 +6,13 @@ use alloc::{string::{String, ToString}, vec::Vec};
 use radroots_events::{
     RadrootsNostrEvent,
     profile::{RadrootsProfile, RadrootsProfileEventIndex, RadrootsProfileEventMetadata},
+    kinds::KIND_PROFILE,
 };
 
 use crate::error::EventParseError;
 use serde_json::Value;
 
-const PROFILE_KIND: u32 = 0;
+const PROFILE_KIND: u32 = KIND_PROFILE;
 
 fn parse_optional_string(value: &Value, key: &'static str) -> Option<String> {
     value.get(key).and_then(|v| v.as_str()).map(|s| s.to_string())

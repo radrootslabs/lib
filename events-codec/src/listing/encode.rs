@@ -4,6 +4,8 @@ use alloc::vec::Vec;
 use alloc::string::String;
 
 use radroots_events::listing::RadrootsListing;
+#[cfg(feature = "serde_json")]
+use radroots_events::kinds::KIND_LISTING;
 
 use crate::error::EventEncodeError;
 use crate::listing::tags::listing_tags;
@@ -11,7 +13,7 @@ use crate::listing::tags::listing_tags;
 use crate::wire::WireEventParts;
 
 #[cfg(feature = "serde_json")]
-const DEFAULT_KIND: u32 = 30402;
+const DEFAULT_KIND: u32 = KIND_LISTING;
 
 pub fn listing_build_tags(listing: &RadrootsListing) -> Result<Vec<Vec<String>>, EventEncodeError> {
     listing_tags(listing)

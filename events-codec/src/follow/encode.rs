@@ -5,8 +5,9 @@ use radroots_events::follow::{RadrootsFollow, RadrootsFollowProfile};
 
 use crate::error::EventEncodeError;
 use crate::wire::WireEventParts;
+use radroots_events::kinds::KIND_FOLLOW;
 
-const DEFAULT_KIND: u32 = 3;
+const DEFAULT_KIND: u32 = KIND_FOLLOW;
 
 fn follow_tag(profile: &RadrootsFollowProfile) -> Result<Vec<String>, EventEncodeError> {
     if profile.public_key.trim().is_empty() {

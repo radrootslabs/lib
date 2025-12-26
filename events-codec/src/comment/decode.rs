@@ -4,13 +4,14 @@ use alloc::{string::{String, ToString}, vec::Vec};
 use radroots_events::{
     RadrootsNostrEvent,
     comment::{RadrootsComment, RadrootsCommentEventIndex, RadrootsCommentEventMetadata},
+    kinds::KIND_COMMENT,
     tags::{TAG_E_PREV, TAG_E_ROOT},
 };
 
 use crate::error::EventParseError;
 use crate::event_ref::{find_event_ref_tag, parse_event_ref_tag, parse_nip10_ref_tags};
 
-const DEFAULT_KIND: u32 = 1;
+const DEFAULT_KIND: u32 = KIND_COMMENT;
 
 pub fn comment_from_tags(
     kind: u32,
@@ -19,7 +20,7 @@ pub fn comment_from_tags(
 ) -> Result<RadrootsComment, EventParseError> {
     if kind != DEFAULT_KIND {
         return Err(EventParseError::InvalidKind {
-            expected: "1",
+            expected: "1111",
             got: kind,
         });
     }

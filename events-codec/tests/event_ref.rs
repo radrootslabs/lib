@@ -1,5 +1,6 @@
 mod common;
 
+use radroots_events::kinds::KIND_POST;
 use radroots_events_codec::error::EventParseError;
 use radroots_events_codec::event_ref::{build_event_ref_tag, find_event_ref_tag, parse_event_ref_tag};
 
@@ -25,7 +26,7 @@ fn build_and_parse_roundtrip_with_d_tag_and_relays() {
 
 #[test]
 fn build_and_parse_roundtrip_without_d_tag_or_relays() {
-    let event = common::event_ref("id", "author", 1);
+    let event = common::event_ref("id", "author", KIND_POST);
     let tag = build_event_ref_tag("e", &event);
 
     assert_eq!(tag.len(), 5);
@@ -45,7 +46,7 @@ fn parse_event_ref_tag_allows_relay_only_fifth_entry() {
         "e".to_string(),
         "id".to_string(),
         "author".to_string(),
-        "1".to_string(),
+        KIND_POST.to_string(),
         "wss://relay".to_string(),
     ];
 
@@ -69,7 +70,7 @@ fn parse_event_ref_tag_rejects_invalid_kind() {
 
 #[test]
 fn find_event_ref_tag_locates_first_match() {
-    let event = common::event_ref("id", "author", 1);
+    let event = common::event_ref("id", "author", KIND_POST);
     let tags = vec![
         vec!["p".to_string(), "pubkey".to_string()],
         build_event_ref_tag("e", &event),

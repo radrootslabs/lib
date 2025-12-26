@@ -1,5 +1,6 @@
 use crate::profile::error::ProfileEncodeError;
 use radroots_events::profile::RadrootsProfile;
+use radroots_events::kinds::KIND_PROFILE;
 
 use nostr::Metadata;
 use nostr::prelude::Url;
@@ -49,7 +50,7 @@ pub fn to_wire_parts(p: &RadrootsProfile) -> Result<WireEventParts, ProfileEncod
     let md = to_metadata(p)?;
     let content = serde_json::to_string(&md).map_err(|_| ProfileEncodeError::Json)?;
     Ok(WireEventParts {
-        kind: 0,
+        kind: KIND_PROFILE,
         content,
         tags: Vec::new(),
     })

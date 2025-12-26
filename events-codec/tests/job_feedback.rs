@@ -2,7 +2,7 @@ mod common;
 
 use radroots_events::job::{JobFeedbackStatus, JobPaymentRequest};
 use radroots_events::job_feedback::RadrootsJobFeedback;
-use radroots_events::kinds::KIND_JOB_FEEDBACK;
+use radroots_events::kinds::{KIND_JOB_FEEDBACK, KIND_JOB_RESULT_MIN, KIND_JOB_REQUEST_MIN};
 use radroots_events_codec::job::encode::JobEncodeError;
 use radroots_events_codec::job::error::JobParseError;
 use radroots_events_codec::job::feedback::decode::job_feedback_from_tags;
@@ -37,10 +37,13 @@ fn job_feedback_roundtrip_from_tags() {
 #[test]
 fn job_feedback_requires_valid_kind() {
     let mut fb = sample_feedback();
-    fb.kind = 7001;
+    fb.kind = KIND_JOB_RESULT_MIN as u16;
 
     let err = to_wire_parts(&fb, "payload").unwrap_err();
-    assert!(matches!(err, JobEncodeError::InvalidKind(7001)));
+    assert!(matches!(
+        err,
+        JobEncodeError::InvalidKind(KIND_JOB_RESULT_MIN)
+    ));
 }
 
 #[test]
@@ -66,7 +69,7 @@ fn job_feedback_metadata_rejects_wrong_kind() {
         "id".to_string(),
         "author".to_string(),
         1,
-        1000,
+        KIND_JOB_REQUEST_MIN,
         "payload".to_string(),
         Vec::new(),
     )

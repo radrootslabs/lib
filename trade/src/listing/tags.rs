@@ -102,6 +102,7 @@ pub fn validate_trade_listing_chain(tags: &[Vec<String>]) -> Result<(), JobParse
 #[cfg(test)]
 mod tests {
     use super::{trade_listing_dvm_tags, validate_trade_listing_chain};
+    use radroots_events::kinds::KIND_LISTING;
     use radroots_events::tags::{TAG_D, TAG_E_ROOT};
     use radroots_events_codec::job::error::JobParseError;
 
@@ -141,10 +142,11 @@ mod tests {
 
     #[test]
     fn trade_listing_dvm_tags_builds_expected_tags() {
-        let tags = trade_listing_dvm_tags("pubkey", "30402:pubkey:listing", Some("order-1"));
+        let listing_addr = format!("{KIND_LISTING}:pubkey:listing");
+        let tags = trade_listing_dvm_tags("pubkey", &listing_addr, Some("order-1"));
         let expected: Vec<Vec<String>> = vec![
             vec![String::from("p"), String::from("pubkey")],
-            vec![String::from("a"), String::from("30402:pubkey:listing")],
+            vec![String::from("a"), listing_addr.clone()],
             vec![String::from(TAG_D), String::from("order-1")],
         ];
         assert_eq!(tags, expected);
@@ -152,10 +154,11 @@ mod tests {
 
     #[test]
     fn trade_listing_dvm_tags_omit_order_id_when_missing() {
-        let tags = trade_listing_dvm_tags("pubkey", "30402:pubkey:listing", None::<String>);
+        let listing_addr = format!("{KIND_LISTING}:pubkey:listing");
+        let tags = trade_listing_dvm_tags("pubkey", &listing_addr, None::<String>);
         let expected: Vec<Vec<String>> = vec![
             vec![String::from("p"), String::from("pubkey")],
-            vec![String::from("a"), String::from("30402:pubkey:listing")],
+            vec![String::from("a"), listing_addr.clone()],
         ];
         assert_eq!(tags, expected);
     }

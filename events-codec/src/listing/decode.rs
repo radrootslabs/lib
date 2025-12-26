@@ -5,13 +5,14 @@ use alloc::{string::{String, ToString}, vec::Vec};
 
 use radroots_events::{
     RadrootsNostrEvent,
+    kinds::KIND_LISTING,
     listing::{RadrootsListing, RadrootsListingEventIndex, RadrootsListingEventMetadata},
     tags::TAG_D,
 };
 
 use crate::error::EventParseError;
 
-const DEFAULT_KIND: u32 = 30402;
+const DEFAULT_KIND: u32 = KIND_LISTING;
 
 fn parse_d_tag(tags: &[Vec<String>]) -> Result<String, EventParseError> {
     let tag = tags

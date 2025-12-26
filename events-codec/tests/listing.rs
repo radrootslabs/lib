@@ -4,11 +4,14 @@ use radroots_core::{
     RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
     RadrootsCoreQuantityPrice, RadrootsCoreUnit,
 };
-use radroots_events::listing::{
-    RadrootsListing, RadrootsListingAvailability, RadrootsListingDeliveryMethod,
-    RadrootsListingDiscount, RadrootsListingImage, RadrootsListingImageSize,
-    RadrootsListingLocation, RadrootsListingProduct, RadrootsListingQuantity,
-    RadrootsListingStatus,
+use radroots_events::{
+    kinds::{KIND_LISTING, KIND_POST},
+    listing::{
+        RadrootsListing, RadrootsListingAvailability, RadrootsListingDeliveryMethod,
+        RadrootsListingDiscount, RadrootsListingImage, RadrootsListingImageSize,
+        RadrootsListingLocation, RadrootsListingProduct, RadrootsListingQuantity,
+        RadrootsListingStatus,
+    },
 };
 use radroots_events::tags::TAG_D;
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
@@ -137,7 +140,7 @@ fn listing_from_event_fills_missing_d_tag() {
     let content = serde_json::to_string(&listing).unwrap();
     let tags = vec![vec![TAG_D.to_string(), "filled".to_string()]];
 
-    let decoded = listing_from_event(30402, &tags, &content).unwrap();
+    let decoded = listing_from_event(KIND_LISTING, &tags, &content).unwrap();
     assert_eq!(decoded.d_tag, "filled");
 }
 
@@ -147,7 +150,7 @@ fn listing_from_event_rejects_mismatched_d_tag() {
     let content = serde_json::to_string(&listing).unwrap();
     let tags = vec![vec![TAG_D.to_string(), "b".to_string()]];
 
-    let err = listing_from_event(30402, &tags, &content).unwrap_err();
+    let err = listing_from_event(KIND_LISTING, &tags, &content).unwrap_err();
     assert!(matches!(err, EventParseError::InvalidTag(TAG_D)));
 }
 
@@ -157,12 +160,12 @@ fn listing_from_event_rejects_wrong_kind() {
     let content = serde_json::to_string(&listing).unwrap();
     let tags = vec![vec![TAG_D.to_string(), "listing-1".to_string()]];
 
-    let err = listing_from_event(1, &tags, &content).unwrap_err();
+    let err = listing_from_event(KIND_POST, &tags, &content).unwrap_err();
     assert!(matches!(
         err,
         EventParseError::InvalidKind {
             expected: "30402",
-            got: 1
+            got: KIND_POST
         }
     ));
 }

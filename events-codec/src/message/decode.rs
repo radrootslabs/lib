@@ -7,11 +7,12 @@ use radroots_events::{
         RadrootsMessage, RadrootsMessageEventIndex, RadrootsMessageEventMetadata,
         RadrootsMessageRecipient,
     },
+    kinds::KIND_MESSAGE,
 };
 
 use crate::error::EventParseError;
 
-const DEFAULT_KIND: u32 = 14;
+const DEFAULT_KIND: u32 = KIND_MESSAGE;
 
 fn parse_recipient_tag(tag: &[String]) -> Result<RadrootsMessageRecipient, EventParseError> {
     if tag.get(0).map(|s| s.as_str()) != Some("p") {

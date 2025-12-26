@@ -1,5 +1,6 @@
 use radroots_events::{
     RadrootsNostrEventPtr,
+    kinds::{KIND_MESSAGE, KIND_POST},
     message::{RadrootsMessage, RadrootsMessageRecipient},
 };
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
@@ -82,7 +83,7 @@ fn message_to_wire_parts_sets_tags() {
     };
 
     let parts = to_wire_parts(&message).unwrap();
-    assert_eq!(parts.kind, 14);
+    assert_eq!(parts.kind, KIND_MESSAGE);
     assert_eq!(parts.content, "hello");
     assert_eq!(
         parts.tags,
@@ -106,16 +107,19 @@ fn message_to_wire_parts_sets_tags() {
 #[test]
 fn message_from_tags_requires_kind_content_and_recipients() {
     let tags = vec![vec!["p".to_string(), "pub".to_string()]];
-    let err = message_from_tags(1, &tags, "hello").unwrap_err();
+    let err = message_from_tags(KIND_POST, &tags, "hello").unwrap_err();
     assert!(matches!(
         err,
-        EventParseError::InvalidKind { expected: "14", got: 1 }
+        EventParseError::InvalidKind {
+            expected: "14",
+            got: KIND_POST
+        }
     ));
 
-    let err = message_from_tags(14, &tags, "  ").unwrap_err();
+    let err = message_from_tags(KIND_MESSAGE, &tags, "  ").unwrap_err();
     assert!(matches!(err, EventParseError::InvalidTag("content")));
 
-    let err = message_from_tags(14, &[], "hello").unwrap_err();
+    let err = message_from_tags(KIND_MESSAGE, &[], "hello").unwrap_err();
     assert!(matches!(err, EventParseError::MissingTag("p")));
 }
 
@@ -136,7 +140,7 @@ fn message_roundtrip_from_tags() {
         vec!["subject".to_string(), "topic".to_string()],
     ];
 
-    let message = message_from_tags(14, &tags, "hello").unwrap();
+    let message = message_from_tags(KIND_MESSAGE, &tags, "hello").unwrap();
 
     assert_eq!(message.recipients.len(), 2);
     assert_eq!(message.recipients[0].public_key, "pub1");

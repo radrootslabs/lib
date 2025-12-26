@@ -4,11 +4,12 @@ use alloc::{string::String, vec::Vec};
 use radroots_events::{
     RadrootsNostrEvent,
     follow::{RadrootsFollow, RadrootsFollowEventIndex, RadrootsFollowEventMetadata, RadrootsFollowProfile},
+    kinds::KIND_FOLLOW,
 };
 
 use crate::error::EventParseError;
 
-const DEFAULT_KIND: u32 = 3;
+const DEFAULT_KIND: u32 = KIND_FOLLOW;
 
 fn looks_like_ws_relay(s: &str) -> bool {
     s.starts_with("ws://") || s.starts_with("wss://")

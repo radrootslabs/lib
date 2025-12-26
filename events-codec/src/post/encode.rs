@@ -5,8 +5,9 @@ use radroots_events::post::RadrootsPost;
 
 use crate::error::EventEncodeError;
 use crate::wire::WireEventParts;
+use radroots_events::kinds::KIND_POST;
 
-const DEFAULT_KIND: u32 = 1;
+const DEFAULT_KIND: u32 = KIND_POST;
 
 pub fn to_wire_parts(post: &RadrootsPost) -> Result<WireEventParts, EventEncodeError> {
     to_wire_parts_with_kind(post, DEFAULT_KIND)

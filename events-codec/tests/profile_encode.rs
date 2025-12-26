@@ -1,6 +1,6 @@
 #![cfg(all(feature = "nostr", feature = "serde_json"))]
 
-use radroots_events::profile::RadrootsProfile;
+use radroots_events::{kinds::KIND_PROFILE, profile::RadrootsProfile};
 use radroots_events_codec::profile::encode::{to_metadata, to_wire_parts};
 use radroots_events_codec::profile::error::ProfileEncodeError;
 use serde_json::Value;
@@ -43,7 +43,7 @@ fn profile_to_wire_parts_writes_json_content() {
     };
 
     let parts = to_wire_parts(&profile).unwrap();
-    assert_eq!(parts.kind, 0);
+    assert_eq!(parts.kind, KIND_PROFILE);
 
     let value: Value = serde_json::from_str(&parts.content).unwrap();
     assert_eq!(value.get("name").and_then(|v| v.as_str()), Some("alice"));

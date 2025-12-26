@@ -1,5 +1,6 @@
 #![cfg(feature = "serde_json")]
 
+use radroots_events::kinds::KIND_POST;
 use radroots_events_codec::error::EventParseError;
 use radroots_events_codec::profile::decode::profile_from_content;
 
@@ -48,6 +49,9 @@ fn profile_metadata_rejects_wrong_kind() {
 
     assert!(matches!(
         err,
-        EventParseError::InvalidKind { expected: "0", got: 1 }
+        EventParseError::InvalidKind {
+            expected: "0",
+            got: KIND_POST
+        }
     ));
 }

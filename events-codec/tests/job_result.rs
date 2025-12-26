@@ -1,6 +1,7 @@
 mod common;
 
 use radroots_events::job::{JobInputType, JobPaymentRequest};
+use radroots_events::kinds::{KIND_JOB_REQUEST_MIN, KIND_JOB_RESULT_MIN};
 use radroots_events::job_request::RadrootsJobInput;
 use radroots_events::job_result::RadrootsJobResult;
 use radroots_events_codec::job::encode::JobEncodeError;
@@ -10,7 +11,7 @@ use radroots_events_codec::job::result::encode::to_wire_parts;
 
 fn sample_result() -> RadrootsJobResult {
     RadrootsJobResult {
-        kind: 6001,
+        kind: (KIND_JOB_RESULT_MIN + 1) as u16,
         request_event: common::event_ptr("req", Some("wss://relay")),
         request_json: Some("{\"foo\":\"bar\"}".to_string()),
         inputs: vec![RadrootsJobInput {
@@ -42,16 +43,19 @@ fn job_result_roundtrip_from_tags() {
 #[test]
 fn job_result_requires_valid_kind() {
     let mut res = sample_result();
-    res.kind = 5000;
+    res.kind = KIND_JOB_REQUEST_MIN as u16;
 
     let err = to_wire_parts(&res, "payload").unwrap_err();
-    assert!(matches!(err, JobEncodeError::InvalidKind(5000)));
+    assert!(matches!(
+        err,
+        JobEncodeError::InvalidKind(KIND_JOB_REQUEST_MIN)
+    ));
 }
 
 #[test]
 fn job_result_requires_request_event_tag() {
     let tags = vec![vec!["p".to_string(), "customer".to_string()]];
-    let err = job_result_from_tags(6001, &tags, "payload").unwrap_err();
+    let err = job_result_from_tags(KIND_JOB_RESULT_MIN + 1, &tags, "payload").unwrap_err();
     assert!(matches!(err, JobParseError::MissingTag("e")));
 }
 
@@ -61,7 +65,7 @@ fn job_result_metadata_rejects_wrong_kind() {
         "id".to_string(),
         "author".to_string(),
         1,
-        1000,
+        KIND_JOB_REQUEST_MIN,
         "payload".to_string(),
         Vec::new(),
     )

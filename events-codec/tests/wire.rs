@@ -1,3 +1,4 @@
+use radroots_events::kinds::KIND_POST;
 use radroots_events_codec::wire::{canonicalize_tags, empty_content, to_draft, WireEventParts};
 
 #[test]
@@ -24,14 +25,14 @@ fn canonicalize_tags_trims_sorts_and_dedups() {
 #[test]
 fn to_draft_copies_fields() {
     let parts = WireEventParts {
-        kind: 42,
+        kind: KIND_POST,
         content: "hello".to_string(),
         tags: vec![vec!["t".to_string(), "a".to_string()]],
     };
 
     let draft = to_draft(parts, "author", 99);
 
-    assert_eq!(draft.kind, 42);
+    assert_eq!(draft.kind, KIND_POST);
     assert_eq!(draft.created_at, 99);
     assert_eq!(draft.author, "author");
     assert_eq!(draft.content, "hello");

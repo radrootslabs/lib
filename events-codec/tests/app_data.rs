@@ -1,4 +1,7 @@
-use radroots_events::app_data::{RadrootsAppData, KIND_APP_DATA};
+use radroots_events::{
+    app_data::{RadrootsAppData, KIND_APP_DATA},
+    kinds::KIND_POST,
+};
 use radroots_events_codec::app_data::decode::app_data_from_tags;
 use radroots_events_codec::app_data::encode::{app_data_build_tags, to_wire_parts};
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
@@ -33,12 +36,12 @@ fn app_data_to_wire_parts_sets_kind_tags_content() {
 #[test]
 fn app_data_from_tags_requires_kind() {
     let tags = vec![vec!["d".to_string(), "radroots.app".to_string()]];
-    let err = app_data_from_tags(1, &tags, "payload").unwrap_err();
+    let err = app_data_from_tags(KIND_POST, &tags, "payload").unwrap_err();
     assert!(matches!(
         err,
         EventParseError::InvalidKind {
             expected: "30078",
-            got: 1
+            got: KIND_POST
         }
     ));
 }

@@ -1,4 +1,5 @@
 use radroots_events::job::JobInputType;
+use radroots_events::kinds::{KIND_JOB_FEEDBACK, KIND_JOB_REQUEST_MIN, KIND_JOB_RESULT_MIN};
 use radroots_events::job_request::{RadrootsJobInput, RadrootsJobParam, RadrootsJobRequest};
 use radroots_events_codec::job::encode::JobEncodeError;
 use radroots_events_codec::job::error::JobParseError;
@@ -7,7 +8,7 @@ use radroots_events_codec::job::request::encode::to_wire_parts;
 
 fn sample_request() -> RadrootsJobRequest {
     RadrootsJobRequest {
-        kind: 5001,
+        kind: (KIND_JOB_REQUEST_MIN + 1) as u16,
         inputs: vec![RadrootsJobInput {
             data: "https://example.com".to_string(),
             input_type: JobInputType::Url,
@@ -39,10 +40,13 @@ fn job_request_roundtrip_from_tags() {
 #[test]
 fn job_request_requires_valid_kind() {
     let mut req = sample_request();
-    req.kind = 7000;
+    req.kind = KIND_JOB_FEEDBACK as u16;
 
     let err = to_wire_parts(&req, "payload").unwrap_err();
-    assert!(matches!(err, JobEncodeError::InvalidKind(7000)));
+    assert!(matches!(
+        err,
+        JobEncodeError::InvalidKind(KIND_JOB_FEEDBACK)
+    ));
 }
 
 #[test]
@@ -55,7 +59,7 @@ fn job_request_requires_providers_when_encrypted() {
     assert!(matches!(err, JobEncodeError::MissingProvidersForEncrypted));
 
     let tags = vec![vec!["encrypted".to_string()]];
-    let err = job_request_from_tags(5001, &tags).unwrap_err();
+    let err = job_request_from_tags(KIND_JOB_REQUEST_MIN + 1, &tags).unwrap_err();
     assert!(matches!(err, JobParseError::MissingTag("p")));
 }
 
@@ -65,7 +69,7 @@ fn job_request_metadata_rejects_wrong_kind() {
         "id".to_string(),
         "author".to_string(),
         1,
-        1000,
+        KIND_JOB_RESULT_MIN,
         Vec::new(),
     )
     .unwrap_err();

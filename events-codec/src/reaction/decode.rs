@@ -4,13 +4,14 @@ use alloc::{string::{String, ToString}, vec::Vec};
 use radroots_events::{
     RadrootsNostrEvent,
     reaction::{RadrootsReaction, RadrootsReactionEventIndex, RadrootsReactionEventMetadata},
+    kinds::KIND_REACTION,
     tags::TAG_E_ROOT,
 };
 
 use crate::error::EventParseError;
 use crate::event_ref::{find_event_ref_tag, parse_event_ref_tag, parse_nip10_ref_tags};
 
-const DEFAULT_KIND: u32 = 7;
+const DEFAULT_KIND: u32 = KIND_REACTION;
 
 pub fn reaction_from_tags(
     kind: u32,

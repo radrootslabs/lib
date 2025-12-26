@@ -6,6 +6,7 @@ use alloc::{string::String, vec::Vec};
 use radroots_core::{RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreUnit};
 use radroots_events::{
     RadrootsNostrEvent,
+    kinds::KIND_LISTING,
     listing::{
         RadrootsListing, RadrootsListingAvailability, RadrootsListingDeliveryMethod,
         RadrootsListingLocation,
@@ -16,8 +17,6 @@ use ts_rs::TS;
 
 use crate::listing::codec::{TradeListingParseError, listing_from_event_parts};
 use crate::listing::dvm::TradeListingAddress;
-
-const LISTING_KIND: u32 = 30402;
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
@@ -116,7 +115,7 @@ impl std::error::Error for TradeListingValidationError {}
 pub fn validate_listing_event(
     event: &RadrootsNostrEvent,
 ) -> Result<RadrootsTradeListing, TradeListingValidationError> {
-    if event.kind != LISTING_KIND {
+    if event.kind != KIND_LISTING {
         return Err(TradeListingValidationError::InvalidKind { kind: event.kind });
     }
 
@@ -129,7 +128,7 @@ pub fn validate_listing_event(
 
     let seller_pubkey = event.author.clone();
     let listing_addr = TradeListingAddress {
-        kind: LISTING_KIND as u16,
+        kind: KIND_LISTING as u16,
         seller_pubkey: seller_pubkey.clone(),
         listing_id: listing_id.clone(),
     }
@@ -222,6 +221,7 @@ mod tests {
     };
     use radroots_events::{
         RadrootsNostrEvent,
+        kinds::KIND_LISTING,
         listing::{
             RadrootsListing, RadrootsListingAvailability, RadrootsListingDeliveryMethod,
             RadrootsListingLocation, RadrootsListingProduct, RadrootsListingQuantity,
@@ -284,7 +284,7 @@ mod tests {
             id: "evt".into(),
             author: "seller".into(),
             created_at: 0,
-            kind: 30402,
+            kind: KIND_LISTING,
             tags: vec![vec!["d".into(), listing.d_tag.clone()]],
             content: serde_json::to_string(listing).unwrap(),
             sig: "sig".into(),

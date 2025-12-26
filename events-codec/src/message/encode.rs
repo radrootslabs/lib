@@ -2,11 +2,12 @@
 use alloc::{string::{String, ToString}, vec::Vec};
 
 use radroots_events::message::{RadrootsMessage, RadrootsMessageRecipient};
+use radroots_events::kinds::KIND_MESSAGE;
 
 use crate::error::EventEncodeError;
 use crate::wire::WireEventParts;
 
-const DEFAULT_KIND: u32 = 14;
+const DEFAULT_KIND: u32 = KIND_MESSAGE;
 
 fn validate_recipient(recipient: &RadrootsMessageRecipient) -> Result<(), EventEncodeError> {
     if recipient.public_key.trim().is_empty() {
