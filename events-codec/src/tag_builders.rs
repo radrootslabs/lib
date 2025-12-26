@@ -6,6 +6,7 @@ use alloc::{string::String, vec::Vec};
 use core::convert::Infallible;
 
 use radroots_events::{
+    app_data::RadrootsAppData,
     comment::RadrootsComment,
     follow::RadrootsFollow,
     job_feedback::RadrootsJobFeedback,
@@ -20,6 +21,7 @@ use radroots_events::{
 
 use crate::comment::encode::comment_build_tags;
 use crate::error::EventEncodeError;
+use crate::app_data::encode::app_data_build_tags;
 use crate::follow::encode::follow_build_tags;
 use crate::job::encode::JobEncodeError;
 use crate::job::feedback::encode::job_feedback_build_tags;
@@ -39,6 +41,14 @@ impl RadrootsEventTagBuilder for RadrootsListing {
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
         listing_tags(self)
+    }
+}
+
+impl RadrootsEventTagBuilder for RadrootsAppData {
+    type Error = EventEncodeError;
+
+    fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
+        app_data_build_tags(self)
     }
 }
 
