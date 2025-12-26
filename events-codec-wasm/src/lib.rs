@@ -7,6 +7,8 @@ use radroots_events::job_feedback::RadrootsJobFeedback;
 use radroots_events::job_request::RadrootsJobRequest;
 use radroots_events::job_result::RadrootsJobResult;
 use radroots_events::listing::RadrootsListing;
+use radroots_events::list::RadrootsList;
+use radroots_events::list_set::RadrootsListSet;
 use radroots_events::message::RadrootsMessage;
 use radroots_events::reaction::RadrootsReaction;
 use radroots_events_codec::comment::encode::comment_build_tags;
@@ -14,6 +16,8 @@ use radroots_events_codec::follow::encode::follow_build_tags;
 use radroots_events_codec::job::feedback::encode::job_feedback_build_tags;
 use radroots_events_codec::job::request::encode::job_request_build_tags;
 use radroots_events_codec::job::result::encode::job_result_build_tags;
+use radroots_events_codec::list::encode::list_build_tags;
+use radroots_events_codec::list_set::encode::list_set_build_tags;
 use radroots_events_codec::message::encode::message_build_tags;
 use radroots_events_codec::reaction::encode::reaction_build_tags;
 use radroots_events_codec::listing::tags::{
@@ -58,6 +62,14 @@ fn parse_message(message_json: &str) -> Result<RadrootsMessage, JsValue> {
     serde_json::from_str(message_json).map_err(err_js)
 }
 
+fn parse_list(list_json: &str) -> Result<RadrootsList, JsValue> {
+    serde_json::from_str(list_json).map_err(err_js)
+}
+
+fn parse_list_set(list_json: &str) -> Result<RadrootsListSet, JsValue> {
+    serde_json::from_str(list_json).map_err(err_js)
+}
+
 fn tags_to_json(tags: Vec<Vec<String>>) -> Result<String, JsValue> {
     serde_json::to_string(&tags).map_err(err_js)
 }
@@ -87,6 +99,20 @@ pub fn comment_tags(comment_json: &str) -> Result<String, JsValue> {
 pub fn follow_tags(follow_json: &str) -> Result<String, JsValue> {
     let follow = parse_follow(follow_json)?;
     let tags = follow_build_tags(&follow).map_err(err_js)?;
+    tags_to_json(tags)
+}
+
+#[wasm_bindgen(js_name = list_tags)]
+pub fn list_tags(list_json: &str) -> Result<String, JsValue> {
+    let list = parse_list(list_json)?;
+    let tags = list_build_tags(&list).map_err(err_js)?;
+    tags_to_json(tags)
+}
+
+#[wasm_bindgen(js_name = list_set_tags)]
+pub fn list_set_tags(list_json: &str) -> Result<String, JsValue> {
+    let list = parse_list_set(list_json)?;
+    let tags = list_set_build_tags(&list).map_err(err_js)?;
     tags_to_json(tags)
 }
 

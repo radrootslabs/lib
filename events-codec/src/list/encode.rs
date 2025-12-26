@@ -1,0 +1,50 @@
+#[cfg(not(feature = "std"))]
+use alloc::{string::String, vec::Vec};
+
+use radroots_events::{
+    kinds::is_nip51_standard_list_kind,
+    list::{RadrootsList, RadrootsListEntry},
+};
+
+use crate::error::EventEncodeError;
+use crate::wire::WireEventParts;
+
+fn entry_tag(entry: &RadrootsListEntry) -> Result<Vec<String>, EventEncodeError> {
+    if entry.tag.trim().is_empty() {
+        return Err(EventEncodeError::EmptyRequiredField("entry.tag"));
+    }
+    let first = entry
+        .values
+        .get(0)
+        .ok_or(EventEncodeError::EmptyRequiredField("entry.values"))?;
+    if first.trim().is_empty() {
+        return Err(EventEncodeError::EmptyRequiredField("entry.values"));
+    }
+    let mut tag = Vec::with_capacity(1 + entry.values.len());
+    tag.push(entry.tag.clone());
+    tag.extend(entry.values.iter().cloned());
+    Ok(tag)
+}
+
+pub fn list_build_tags(list: &RadrootsList) -> Result<Vec<Vec<String>>, EventEncodeError> {
+    let mut tags = Vec::with_capacity(list.entries.len());
+    for entry in &list.entries {
+        tags.push(entry_tag(entry)?);
+    }
+    Ok(tags)
+}
+
+pub fn to_wire_parts_with_kind(
+    list: &RadrootsList,
+    kind: u32,
+) -> Result<WireEventParts, EventEncodeError> {
+    if !is_nip51_standard_list_kind(kind) {
+        return Err(EventEncodeError::InvalidKind(kind));
+    }
+    let tags = list_build_tags(list)?;
+    Ok(WireEventParts {
+        kind,
+        content: list.content.clone(),
+        tags,
+    })
+}

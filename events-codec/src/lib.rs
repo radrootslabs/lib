@@ -18,6 +18,8 @@ pub mod post;
 pub mod reaction;
 
 pub mod listing;
+pub mod list;
+pub mod list_set;
 
 #[cfg(feature = "serde_json")]
 pub mod relay_document;

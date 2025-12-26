@@ -50,6 +50,20 @@ export type RadrootsJobResultEventIndex = { event: RadrootsNostrEvent, metadata:
 
 export type RadrootsJobResultEventMetadata = { id: string, author: string, published_at: number, kind: number, job_result: RadrootsJobResult, };
 
+export type RadrootsList = { content: string, entries: Array<RadrootsListEntry>, };
+
+export type RadrootsListEntry = { tag: string, values: Array<string>, };
+
+export type RadrootsListEventIndex = { event: RadrootsNostrEvent, metadata: RadrootsListEventMetadata, };
+
+export type RadrootsListEventMetadata = { id: string, author: string, published_at: number, kind: number, list: RadrootsList, };
+
+export type RadrootsListSet = { d_tag: string, content: string, entries: Array<RadrootsListEntry>, title?: string | null, description?: string | null, image?: string | null, };
+
+export type RadrootsListSetEventIndex = { event: RadrootsNostrEvent, metadata: RadrootsListSetEventMetadata, };
+
+export type RadrootsListSetEventMetadata = { id: string, author: string, published_at: number, kind: number, list_set: RadrootsListSet, };
+
 export type RadrootsListing = { d_tag: string, product: RadrootsListingProduct, quantities: Array<RadrootsListingQuantity>, prices: RadrootsCoreQuantityPrice[], discounts?: RadrootsListingDiscount[] | null, inventory_available?: RadrootsCoreDecimal | null, availability?: RadrootsListingAvailability | null, delivery_method?: RadrootsListingDeliveryMethod | null, location?: RadrootsListingLocation | null, images?: RadrootsListingImage[] | null, };
 
 export type RadrootsListingAvailability = { "kind": "window", "amount": { start?: number | null, end?: number | null, } } | { "kind": "status", "amount": { status: RadrootsListingStatus, } };
