@@ -37,7 +37,6 @@ help:
 
 bindings-events:
 	@(cd events && cargo test --features $(TS_RS_FEATURE))
-	typeshare --lang typescript --output-file events/bindings/ts/src/typeshare-types.ts events
 	@(cd events/bindings/ts && npm run build)
 
 bindings-tangle-schema:
