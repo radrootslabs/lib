@@ -1,9 +1,9 @@
 use crate::profile::error::ProfileEncodeError;
 use radroots_events::profile::{
-    RadrootsActorType,
+    RadrootsProfileType,
     RadrootsProfile,
-    RADROOTS_ACTOR_TAG_KEY,
-    radroots_actor_tag_value,
+    RADROOTS_PROFILE_TYPE_TAG_KEY,
+    radroots_profile_type_tag_value,
 };
 use radroots_events::kinds::KIND_PROFILE;
 
@@ -23,15 +23,19 @@ fn push_tag(tags: &mut Vec<Vec<String>>, key: &str, value: &str) {
     tags.push(tag);
 }
 
-pub fn profile_actor_tags(actor: RadrootsActorType) -> Vec<Vec<String>> {
+pub fn profile_type_tags(profile_type: RadrootsProfileType) -> Vec<Vec<String>> {
     let mut tags = Vec::with_capacity(1);
-    push_tag(&mut tags, RADROOTS_ACTOR_TAG_KEY, radroots_actor_tag_value(actor));
+    push_tag(
+        &mut tags,
+        RADROOTS_PROFILE_TYPE_TAG_KEY,
+        radroots_profile_type_tag_value(profile_type),
+    );
     tags
 }
 
-pub fn profile_build_tags(actor: Option<RadrootsActorType>) -> Vec<Vec<String>> {
-    match actor {
-        Some(value) => profile_actor_tags(value),
+pub fn profile_build_tags(profile_type: Option<RadrootsProfileType>) -> Vec<Vec<String>> {
+    match profile_type {
+        Some(value) => profile_type_tags(value),
         None => Vec::new(),
     }
 }
@@ -72,17 +76,17 @@ pub fn to_metadata(p: &RadrootsProfile) -> Result<Metadata, ProfileEncodeError> 
 
 #[cfg(feature = "serde_json")]
 pub fn to_wire_parts(p: &RadrootsProfile) -> Result<WireEventParts, ProfileEncodeError> {
-    to_wire_parts_with_actor(p, None)
+    to_wire_parts_with_profile_type(p, None)
 }
 
 #[cfg(feature = "serde_json")]
-pub fn to_wire_parts_with_actor(
+pub fn to_wire_parts_with_profile_type(
     p: &RadrootsProfile,
-    actor: Option<RadrootsActorType>,
+    profile_type: Option<RadrootsProfileType>,
 ) -> Result<WireEventParts, ProfileEncodeError> {
     let md = to_metadata(p)?;
     let content = serde_json::to_string(&md).map_err(|_| ProfileEncodeError::Json)?;
-    let tags = profile_build_tags(actor);
+    let tags = profile_build_tags(profile_type);
     Ok(WireEventParts {
         kind: KIND_PROFILE,
         content,

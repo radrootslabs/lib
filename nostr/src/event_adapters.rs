@@ -4,8 +4,8 @@ use radroots_events::post::{RadrootsPost, RadrootsPostEventMetadata};
 use radroots_events::profile::{
     RadrootsProfile,
     RadrootsProfileEventMetadata,
-    RADROOTS_ACTOR_TAG_KEY,
-    radroots_actor_type_from_tag_value,
+    RADROOTS_PROFILE_TYPE_TAG_KEY,
+    radroots_profile_type_from_tag_value,
 };
 
 #[cfg(feature = "events")]
@@ -29,15 +29,17 @@ pub fn to_post_event_metadata(e: &RadrootsNostrEvent) -> RadrootsPostEventMetada
 
 #[cfg(feature = "events")]
 pub fn to_profile_event_metadata(e: &RadrootsNostrEvent) -> Option<RadrootsProfileEventMetadata> {
-    let actor = e
+    let profile_type = e
         .tags
         .iter()
         .filter_map(|tag| {
             let values = tag.as_slice();
-            if values.get(0).map(|v| v.as_str()) != Some(RADROOTS_ACTOR_TAG_KEY) {
+            if values.get(0).map(|v| v.as_str()) != Some(RADROOTS_PROFILE_TYPE_TAG_KEY) {
                 return None;
             }
-            values.get(1).and_then(|value| radroots_actor_type_from_tag_value(value))
+            values
+                .get(1)
+                .and_then(|value| radroots_profile_type_from_tag_value(value))
         })
         .next();
 
@@ -47,7 +49,7 @@ pub fn to_profile_event_metadata(e: &RadrootsNostrEvent) -> Option<RadrootsProfi
             author: e.pubkey.to_string(),
             published_at: created_at_u32_saturating(e.created_at),
             kind: e.kind.as_u16() as u32,
-            actor,
+            profile_type,
             profile: p,
         });
     }
@@ -70,7 +72,7 @@ pub fn to_profile_event_metadata(e: &RadrootsNostrEvent) -> Option<RadrootsProfi
             author: e.pubkey.to_string(),
             published_at: created_at_u32_saturating(e.created_at),
             kind: e.kind.as_u16() as u32,
-            actor,
+            profile_type,
             profile: p,
         });
     }

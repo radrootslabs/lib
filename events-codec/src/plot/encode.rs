@@ -3,13 +3,10 @@ use alloc::{string::{String, ToString}, vec::Vec};
 
 use radroots_events::{
     farm::RadrootsFarmRef,
-    kinds::KIND_FARM,
+    kinds::{KIND_FARM, KIND_PLOT},
     plot::RadrootsPlot,
     tags::TAG_D,
 };
-
-#[cfg(feature = "serde_json")]
-use radroots_events::kinds::KIND_PLOT;
 
 use crate::error::EventEncodeError;
 
@@ -36,6 +33,24 @@ fn farm_address(farm: &RadrootsFarmRef) -> String {
     value.push(':');
     value.push_str(&farm.d_tag);
     value
+}
+
+pub fn plot_address(author_pubkey: &str, plot_id: &str) -> Result<String, EventEncodeError> {
+    let author_pubkey = author_pubkey.trim();
+    if author_pubkey.is_empty() {
+        return Err(EventEncodeError::EmptyRequiredField("plot.author_pubkey"));
+    }
+    let plot_id = plot_id.trim();
+    if plot_id.is_empty() {
+        return Err(EventEncodeError::EmptyRequiredField("plot.d_tag"));
+    }
+    let mut value = String::new();
+    value.push_str(&KIND_PLOT.to_string());
+    value.push(':');
+    value.push_str(author_pubkey);
+    value.push(':');
+    value.push_str(plot_id);
+    Ok(value)
 }
 
 pub fn plot_build_tags(plot: &RadrootsPlot) -> Result<Vec<Vec<String>>, EventEncodeError> {

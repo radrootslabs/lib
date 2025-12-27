@@ -6,12 +6,12 @@ use alloc::{string::{String, ToString}, vec::Vec};
 use radroots_events::{
     RadrootsNostrEvent,
     profile::{
-        RadrootsActorType,
+        RadrootsProfileType,
         RadrootsProfile,
         RadrootsProfileEventIndex,
         RadrootsProfileEventMetadata,
-        RADROOTS_ACTOR_TAG_KEY,
-        radroots_actor_type_from_tag_value,
+        RADROOTS_PROFILE_TYPE_TAG_KEY,
+        radroots_profile_type_from_tag_value,
     },
     kinds::KIND_PROFILE,
 };
@@ -33,11 +33,11 @@ fn parse_bot(value: &Value) -> Option<String> {
     }
 }
 
-fn profile_actor_from_tags(tags: &[Vec<String>]) -> Option<RadrootsActorType> {
+fn profile_type_from_tags(tags: &[Vec<String>]) -> Option<RadrootsProfileType> {
     tags.iter()
-        .filter(|tag| tag.get(0).map(|v| v.as_str()) == Some(RADROOTS_ACTOR_TAG_KEY))
+        .filter(|tag| tag.get(0).map(|v| v.as_str()) == Some(RADROOTS_PROFILE_TYPE_TAG_KEY))
         .filter_map(|tag| tag.get(1))
-        .find_map(|value| radroots_actor_type_from_tag_value(value))
+        .find_map(|value| radroots_profile_type_from_tag_value(value))
 }
 
 pub fn profile_from_content(content: &str) -> Result<RadrootsProfile, EventParseError> {
@@ -80,13 +80,13 @@ pub fn metadata_from_event(
         });
     }
     let profile = profile_from_content(&content)?;
-    let actor = profile_actor_from_tags(&tags);
+    let profile_type = profile_type_from_tags(&tags);
     Ok(RadrootsProfileEventMetadata {
         id,
         author,
         published_at,
         kind,
-        actor,
+        profile_type,
         profile,
     })
 }

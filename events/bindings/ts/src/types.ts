@@ -8,8 +8,6 @@ export type JobInputType = "url" | "event" | "job" | "text";
 
 export type JobPaymentRequest = { amount_sat: number, bolt11?: string | null, };
 
-export type RadrootsActorType = "person" | "farm";
-
 export type RadrootsAppData = { d_tag: string, content: string, };
 
 export type RadrootsAppDataEventIndex = { event: RadrootsNostrEvent, metadata: RadrootsAppDataEventMetadata, };
@@ -150,7 +148,9 @@ export type RadrootsProfile = { name: string, display_name?: string | null, nip0
 
 export type RadrootsProfileEventIndex = { event: RadrootsNostrEvent, metadata: RadrootsProfileEventMetadata, };
 
-export type RadrootsProfileEventMetadata = { id: string, author: string, published_at: number, kind: number, actor?: RadrootsActorType | null, profile: RadrootsProfile, };
+export type RadrootsProfileEventMetadata = { id: string, author: string, published_at: number, kind: number, profile_type?: RadrootsProfileType | null, profile: RadrootsProfile, };
+
+export type RadrootsProfileType = "individual" | "farm";
 
 export type RadrootsReaction = { root: RadrootsNostrEventRef, content: string, };
 
