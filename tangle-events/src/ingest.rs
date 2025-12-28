@@ -20,6 +20,7 @@ use radroots_events_codec::list_set::decode as list_set_decode;
 use radroots_events_codec::plot::decode as plot_decode;
 use radroots_events_codec::profile::decode as profile_decode;
 use radroots_sql_core::SqlExecutor;
+use radroots_sql_core::error::SqlError;
 use radroots_tangle_db_schema::farm::{
     FarmQueryBindValues,
     IFarmFields,
@@ -597,12 +598,19 @@ fn upsert_farm_tags<E: SqlExecutor>(
         },
     )?;
     for row in existing.results {
-        let _ = farm_tag::delete(
+        match farm_tag::delete(
             exec,
             &IFarmTagDelete::On(IFarmTagFindOneArgs {
                 on: FarmTagQueryBindValues::Id { id: row.id },
             }),
-        )?;
+        ) {
+            Ok(_) => {}
+            Err(err) => {
+                if !matches!(err.err, SqlError::NotFound(_)) {
+                    return Err(err.into());
+                }
+            }
+        }
     }
 
     let mut tags = tags.unwrap_or_default();
@@ -639,12 +647,19 @@ fn upsert_plot_tags<E: SqlExecutor>(
         },
     )?;
     for row in existing.results {
-        let _ = plot_tag::delete(
+        match plot_tag::delete(
             exec,
             &IPlotTagDelete::On(IPlotTagFindOneArgs {
                 on: PlotTagQueryBindValues::Id { id: row.id },
             }),
-        )?;
+        ) {
+            Ok(_) => {}
+            Err(err) => {
+                if !matches!(err.err, SqlError::NotFound(_)) {
+                    return Err(err.into());
+                }
+            }
+        }
     }
 
     let mut tags = tags.unwrap_or_default();
@@ -719,12 +734,19 @@ fn clear_farm_locations<E: SqlExecutor>(
         },
     )?;
     for row in existing.results {
-        let _ = farm_gcs_location::delete(
+        match farm_gcs_location::delete(
             exec,
             &IFarmGcsLocationDelete::On(IFarmGcsLocationFindOneArgs {
                 on: FarmGcsLocationQueryBindValues::Id { id: row.id },
             }),
-        )?;
+        ) {
+            Ok(_) => {}
+            Err(err) => {
+                if !matches!(err.err, SqlError::NotFound(_)) {
+                    return Err(err.into());
+                }
+            }
+        }
     }
     Ok(())
 }
@@ -747,12 +769,19 @@ fn clear_plot_locations<E: SqlExecutor>(
         },
     )?;
     for row in existing.results {
-        let _ = plot_gcs_location::delete(
+        match plot_gcs_location::delete(
             exec,
             &IPlotGcsLocationDelete::On(IPlotGcsLocationFindOneArgs {
                 on: PlotGcsLocationQueryBindValues::Id { id: row.id },
             }),
-        )?;
+        ) {
+            Ok(_) => {}
+            Err(err) => {
+                if !matches!(err.err, SqlError::NotFound(_)) {
+                    return Err(err.into());
+                }
+            }
+        }
     }
     Ok(())
 }
@@ -820,12 +849,19 @@ fn upsert_farm_members<E: SqlExecutor>(
         },
     )?;
     for row in existing.results {
-        let _ = farm_member::delete(
+        match farm_member::delete(
             exec,
             &IFarmMemberDelete::On(IFarmMemberFindOneArgs {
                 on: FarmMemberQueryBindValues::Id { id: row.id },
             }),
-        )?;
+        ) {
+            Ok(_) => {}
+            Err(err) => {
+                if !matches!(err.err, SqlError::NotFound(_)) {
+                    return Err(err.into());
+                }
+            }
+        }
     }
 
     let mut entries = list_set
@@ -867,12 +903,19 @@ fn upsert_member_claims<E: SqlExecutor>(
         },
     )?;
     for row in existing.results {
-        let _ = farm_member_claim::delete(
+        match farm_member_claim::delete(
             exec,
             &IFarmMemberClaimDelete::On(IFarmMemberClaimFindOneArgs {
                 on: FarmMemberClaimQueryBindValues::Id { id: row.id },
             }),
-        )?;
+        ) {
+            Ok(_) => {}
+            Err(err) => {
+                if !matches!(err.err, SqlError::NotFound(_)) {
+                    return Err(err.into());
+                }
+            }
+        }
     }
 
     let mut entries = list_set

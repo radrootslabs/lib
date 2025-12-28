@@ -162,10 +162,7 @@ pub fn update<E: SqlExecutor>(
     bind_values.push(Value::from(id_for_lookup.clone()));
     let sql = format!("UPDATE {TABLE_NAME} SET {} WHERE id = ?;", set_parts.join(", "));
     let params_json = utils::to_params_json(bind_values)?;
-    let outcome = exec.exec(&sql, &params_json)?;
-    if outcome.changes == 0 {
-        return Err(IError::from(SqlError::NotFound(id_for_lookup.clone())));
-    }
+    let _ = exec.exec(&sql, &params_json)?;
     let updated = select_by_id(exec, &id_for_lookup)?;
     Ok(IResult { result: updated })
 }

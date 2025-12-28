@@ -654,7 +654,7 @@ fn profile_event(
     profile: radroots_tangle_db_schema::nostr_profile::NostrProfile,
 ) -> Result<RadrootsTangleEventDraft, RadrootsTangleEventsError> {
     let profile_type = match profile.profile_type.as_str() {
-        "individual" => Some(RadrootsProfileType::Individual),
+        "individual" | "farmer" => Some(RadrootsProfileType::Individual),
         "farm" => Some(RadrootsProfileType::Farm),
         other => radroots_profile_type_from_tag_value(other),
     };

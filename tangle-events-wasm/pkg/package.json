@@ -1,0 +1,19 @@
+{
+    "name": "@radroots/tangle-events-wasm",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "files": [
+        "dist"
+    ],
+    "main": "./dist/radroots_tangle_events_wasm.js",
+    "types": "./dist/radroots_tangle_events_wasm.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/radroots_tangle_events_wasm.d.ts",
+            "import": "./dist/radroots_tangle_events_wasm.js",
+            "default": "./dist/radroots_tangle_events_wasm.js"
+        }
+    },
+    "sideEffects": false
+}
