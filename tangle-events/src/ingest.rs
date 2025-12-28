@@ -1,5 +1,5 @@
 #[cfg(not(feature = "std"))]
-use alloc::{string::String, vec::Vec};
+use alloc::{format, string::{String, ToString}, vec::Vec};
 
 #[cfg(feature = "std")]
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
