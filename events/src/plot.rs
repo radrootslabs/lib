@@ -1,4 +1,4 @@
-use crate::{RadrootsNostrEvent, farm::RadrootsFarmRef};
+use crate::{RadrootsNostrEvent, farm::{RadrootsFarmRef, RadrootsGcsLocation}};
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
 
@@ -38,8 +38,6 @@ pub struct RadrootsPlot {
     pub about: Option<String>,
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "RadrootsPlotLocation | null"))]
     pub location: Option<RadrootsPlotLocation>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
-    pub geometry: Option<String>,
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "string[] | null"))]
     pub tags: Option<Vec<String>>,
 }
@@ -49,17 +47,13 @@ pub struct RadrootsPlot {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsPlotLocation {
-    pub primary: String,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
+    pub primary: Option<String>,
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub city: Option<String>,
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub region: Option<String>,
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub country: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "number | null"))]
-    pub lat: Option<f64>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "number | null"))]
-    pub lng: Option<f64>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
-    pub geohash: Option<String>,
+    pub gcs: RadrootsGcsLocation,
 }

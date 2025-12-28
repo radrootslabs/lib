@@ -1873,7 +1873,18 @@ dependencies = [
 ]
 
 [[package]]
-name = "radroots-tangle-schema"
+name = "radroots-tangle-db"
+version = "0.1.0"
+dependencies = [
+ "radroots-sql-core",
+ "radroots-tangle-db-schema",
+ "radroots-types",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "radroots-tangle-db-schema"
 version = "0.1.0"
 dependencies = [
  "radroots-types",
@@ -1883,24 +1894,45 @@ dependencies = [
 ]
 
 [[package]]
-name = "radroots-tangle-sql"
-version = "0.1.0"
-dependencies = [
- "radroots-sql-core",
- "radroots-tangle-schema",
- "radroots-types",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "radroots-tangle-sql-wasm"
+name = "radroots-tangle-db-wasm"
 version = "0.1.0"
 dependencies = [
  "radroots-sql-core",
  "radroots-sql-wasm-core",
- "radroots-tangle-schema",
- "radroots-tangle-sql",
+ "radroots-tangle-db",
+ "radroots-tangle-db-schema",
+ "serde",
+ "serde-wasm-bindgen",
+ "serde_json",
+ "wasm-bindgen",
+]
+
+[[package]]
+name = "radroots-tangle-events"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "hex",
+ "radroots-events",
+ "radroots-events-codec",
+ "radroots-sql-core",
+ "radroots-tangle-db",
+ "radroots-tangle-db-schema",
+ "radroots-types",
+ "serde",
+ "serde_json",
+ "sha2",
+ "uuid",
+]
+
+[[package]]
+name = "radroots-tangle-events-wasm"
+version = "0.1.0"
+dependencies = [
+ "radroots-events",
+ "radroots-sql-core",
+ "radroots-sql-wasm-core",
+ "radroots-tangle-events",
  "serde",
  "serde-wasm-bindgen",
  "serde_json",

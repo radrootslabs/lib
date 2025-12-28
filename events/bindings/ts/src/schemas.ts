@@ -154,14 +154,44 @@ export const radroots_list_set_schema = z.object({
     image: z.string().optional()
 });
 
+export const radroots_geojson_point_schema = z.object({
+    type: z.string(),
+    coordinates: z.tuple([z.number(), z.number()])
+});
+
+export const radroots_geojson_polygon_schema = z.object({
+    type: z.string(),
+    coordinates: z.array(z.array(z.tuple([z.number(), z.number()])))
+});
+
+export const radroots_gcs_location_schema = z.object({
+    lat: z.number(),
+    lng: z.number(),
+    geohash: z.string(),
+    point: radroots_geojson_point_schema,
+    polygon: radroots_geojson_polygon_schema,
+    accuracy: z.number().optional(),
+    altitude: z.number().optional(),
+    tag_0: z.string().optional(),
+    label: z.string().optional(),
+    area: z.number().optional(),
+    elevation: z.number().optional(),
+    soil: z.string().optional(),
+    climate: z.string().optional(),
+    gc_id: z.string().optional(),
+    gc_name: z.string().optional(),
+    gc_admin1_id: z.string().optional(),
+    gc_admin1_name: z.string().optional(),
+    gc_country_id: z.string().optional(),
+    gc_country_name: z.string().optional()
+});
+
 export const radroots_farm_location_schema = z.object({
-    primary: z.string(),
+    primary: z.string().optional(),
     city: z.string().optional(),
     region: z.string().optional(),
     country: z.string().optional(),
-    lat: z.number().optional(),
-    lng: z.number().optional(),
-    geohash: z.string().optional()
+    gcs: radroots_gcs_location_schema
 });
 
 export const radroots_farm_schema = z.object({
@@ -181,13 +211,11 @@ export const radroots_farm_ref_schema = z.object({
 });
 
 export const radroots_plot_location_schema = z.object({
-    primary: z.string(),
+    primary: z.string().optional(),
     city: z.string().optional(),
     region: z.string().optional(),
     country: z.string().optional(),
-    lat: z.number().optional(),
-    lng: z.number().optional(),
-    geohash: z.string().optional()
+    gcs: radroots_gcs_location_schema
 });
 
 export const radroots_plot_schema = z.object({
@@ -196,7 +224,6 @@ export const radroots_plot_schema = z.object({
     name: z.string(),
     about: z.string().optional(),
     location: radroots_plot_location_schema.optional(),
-    geometry: z.string().optional(),
     tags: z.array(z.string()).optional()
 });
 

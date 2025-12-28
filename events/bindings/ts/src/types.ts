@@ -26,7 +26,7 @@ export type RadrootsFarmEventIndex = { event: RadrootsNostrEvent, metadata: Radr
 
 export type RadrootsFarmEventMetadata = { id: string, author: string, published_at: number, kind: number, farm: RadrootsFarm, };
 
-export type RadrootsFarmLocation = { primary: string, city?: string | null, region?: string | null, country?: string | null, lat?: number | null, lng?: number | null, geohash?: string | null, };
+export type RadrootsFarmLocation = { primary?: string | null, city?: string | null, region?: string | null, country?: string | null, gcs: RadrootsGcsLocation, };
 
 export type RadrootsFarmRef = { pubkey: string, d_tag: string, };
 
@@ -37,6 +37,12 @@ export type RadrootsFollowEventIndex = { event: RadrootsNostrEvent, metadata: Ra
 export type RadrootsFollowEventMetadata = { id: string, author: string, published_at: number, kind: number, follow: RadrootsFollow, };
 
 export type RadrootsFollowProfile = { published_at: number, public_key: string, relay_url?: string | null, contact_name?: string | null, };
+
+export type RadrootsGcsLocation = { lat: number, lng: number, geohash: string, point: RadrootsGeoJsonPoint, polygon: RadrootsGeoJsonPolygon, accuracy?: number | null, altitude?: number | null, tag_0?: string | null, label?: string | null, area?: number | null, elevation?: number | null, soil?: string | null, climate?: string | null, gc_id?: string | null, gc_name?: string | null, gc_admin1_id?: string | null, gc_admin1_name?: string | null, gc_country_id?: string | null, gc_country_name?: string | null, };
+
+export type RadrootsGeoJsonPoint = { type: string, coordinates: [number, number], };
+
+export type RadrootsGeoJsonPolygon = { type: string, coordinates: Array<Array<[number, number]>>, };
 
 export type RadrootsGiftWrap = { recipient: RadrootsGiftWrapRecipient, content: string, expiration?: number | null, };
 
@@ -130,13 +136,13 @@ export type RadrootsNostrEventPtr = { id: string, relays?: string | null, };
 
 export type RadrootsNostrEventRef = { id: string, author: string, kind: number, d_tag?: string | null, relays?: string[] | null, };
 
-export type RadrootsPlot = { d_tag: string, farm: RadrootsFarmRef, name: string, about?: string | null, location?: RadrootsPlotLocation | null, geometry?: string | null, tags?: string[] | null, };
+export type RadrootsPlot = { d_tag: string, farm: RadrootsFarmRef, name: string, about?: string | null, location?: RadrootsPlotLocation | null, tags?: string[] | null, };
 
 export type RadrootsPlotEventIndex = { event: RadrootsNostrEvent, metadata: RadrootsPlotEventMetadata, };
 
 export type RadrootsPlotEventMetadata = { id: string, author: string, published_at: number, kind: number, plot: RadrootsPlot, };
 
-export type RadrootsPlotLocation = { primary: string, city?: string | null, region?: string | null, country?: string | null, lat?: number | null, lng?: number | null, geohash?: string | null, };
+export type RadrootsPlotLocation = { primary?: string | null, city?: string | null, region?: string | null, country?: string | null, gcs: RadrootsGcsLocation, };
 
 export type RadrootsPost = { content: string, };
 

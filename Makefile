@@ -1,6 +1,6 @@
 .PHONY: all bindings clean help \
-        bindings-events bindings-tangle-schema bindings-trade bindings-types \
-        build build-events-codec-wasm build-tangle-sql-wasm
+        bindings-events bindings-tangle-db-schema bindings-trade bindings-types \
+        build build-events-codec-wasm build-tangle-db-wasm
 
 SHELL := /bin/bash
 .SHELLFLAGS := -e -o pipefail -c
@@ -8,13 +8,13 @@ TS_RS_FEATURE ?= ts-rs
 
 BINDINGS_TARGETS := \
     bindings-events \
-    bindings-tangle-schema \
+    bindings-tangle-db-schema \
     bindings-trade \
     bindings-types
 
 BUILD_TARGETS := \
     build-events-codec-wasm \
-    build-tangle-sql-wasm
+    build-tangle-db-wasm
 
 all: bindings build
 
@@ -39,9 +39,9 @@ bindings-events:
 	@(cd events && cargo test --features $(TS_RS_FEATURE))
 	@(cd events/bindings/ts && npm run build)
 
-bindings-tangle-schema:
-	@(cd tangle-schema && cargo test --features $(TS_RS_FEATURE))
-	@(cd tangle-schema/bindings/ts && npm run build)
+bindings-tangle-db-schema:
+	@(cd tangle-db-schema && cargo test --features $(TS_RS_FEATURE))
+	@(cd tangle-db-schema/bindings/ts && npm run build)
 
 bindings-trade:
 	@(cd trade && cargo test --features $(TS_RS_FEATURE))
@@ -51,9 +51,9 @@ bindings-types:
 	@(cd types && cargo test --features $(TS_RS_FEATURE))
 	@(cd types/bindings/ts && npm run build)
 
-build-tangle-sql-wasm:
-	wasm-pack build tangle-sql-wasm --release --target web \
-		--out-dir ../tangle-sql-wasm/pkg/dist --scope radroots
+build-tangle-db-wasm:
+	wasm-pack build tangle-db-wasm --release --target web \
+		--out-dir ../tangle-db-wasm/pkg/dist --scope radroots
 
 build-events-codec-wasm:
 	wasm-pack build events-codec-wasm --release --target web \

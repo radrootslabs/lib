@@ -81,7 +81,7 @@ impl SqliteExecutor {
 impl SqlExecutor for SqliteExecutor {
     fn exec(&self, sql: &str, params_json: &str) -> Result<ExecOutcome, SqlError> {
         let binds = self.parse_params(params_json)?;
-        let mut conn = self.conn.lock().map_err(|_| SqlError::Internal)?;
+        let conn = self.conn.lock().map_err(|_| SqlError::Internal)?;
         let n = conn
             .execute(sql, params_from_iter(binds.into_iter()))
             .map_err(SqlError::from)?;

@@ -21,9 +21,9 @@
 - sql-core: SQL executor trait + migrations for native/web/embedded targets.
 - sql-wasm-bridge: wasm JS bridge for exec/query and savepoint transactions.
 - sql-wasm-core: wasm-bindgen exports + error marshaling for SQL.
-- tangle-schema: Tangle schema models and relation types (ts-rs bindings).
-- tangle-sql: SQL access layer for Tangle schema, migrations, backup/restore.
-- tangle-sql-wasm: wasm-bindgen exports for Tangle SQL operations.
+- tangle-db-schema: Tangle schema models and relation types (ts-rs bindings).
+- tangle-db: SQL access layer for Tangle schema, migrations, backup/restore.
+- tangle-db-wasm: wasm-bindgen exports for Tangle SQL operations.
 - trade: trade/listing domain models and tags.
 
 ## Rust Code Directives

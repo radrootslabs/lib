@@ -60,18 +60,74 @@ pub struct RadrootsFarmRef {
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
+pub struct RadrootsGeoJsonPoint {
+    #[cfg_attr(feature = "serde", serde(rename = "type"))]
+    pub r#type: String,
+    pub coordinates: [f64; 2],
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug)]
+pub struct RadrootsGeoJsonPolygon {
+    #[cfg_attr(feature = "serde", serde(rename = "type"))]
+    pub r#type: String,
+    pub coordinates: Vec<Vec<[f64; 2]>>,
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug)]
+pub struct RadrootsGcsLocation {
+    pub lat: f64,
+    pub lng: f64,
+    pub geohash: String,
+    pub point: RadrootsGeoJsonPoint,
+    pub polygon: RadrootsGeoJsonPolygon,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "number | null"))]
+    pub accuracy: Option<f64>,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "number | null"))]
+    pub altitude: Option<f64>,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
+    pub tag_0: Option<String>,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
+    pub label: Option<String>,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "number | null"))]
+    pub area: Option<f64>,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "number | null"))]
+    pub elevation: Option<u32>,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
+    pub soil: Option<String>,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
+    pub climate: Option<String>,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
+    pub gc_id: Option<String>,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
+    pub gc_name: Option<String>,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
+    pub gc_admin1_id: Option<String>,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
+    pub gc_admin1_name: Option<String>,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
+    pub gc_country_id: Option<String>,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
+    pub gc_country_name: Option<String>,
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug)]
 pub struct RadrootsFarmLocation {
-    pub primary: String,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
+    pub primary: Option<String>,
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub city: Option<String>,
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub region: Option<String>,
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub country: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "number | null"))]
-    pub lat: Option<f64>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "number | null"))]
-    pub lng: Option<f64>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
-    pub geohash: Option<String>,
+    pub gcs: RadrootsGcsLocation,
 }

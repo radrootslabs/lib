@@ -4,7 +4,14 @@ pub mod list_sets;
 
 #[cfg(test)]
 mod tests {
-    use radroots_events::farm::{RadrootsFarm, RadrootsFarmLocation, RadrootsFarmRef};
+    use radroots_events::farm::{
+        RadrootsFarm,
+        RadrootsFarmLocation,
+        RadrootsFarmRef,
+        RadrootsGcsLocation,
+        RadrootsGeoJsonPoint,
+        RadrootsGeoJsonPolygon,
+    };
     use radroots_events::plot::RadrootsPlot;
     use crate::farm::encode::{farm_build_tags, farm_ref_tags};
     use crate::farm::list_sets::{
@@ -23,13 +30,42 @@ mod tests {
             picture: None,
             banner: None,
             location: Some(RadrootsFarmLocation {
-                primary: "Somewhere".to_string(),
+                primary: None,
                 city: None,
                 region: None,
                 country: None,
-                lat: None,
-                lng: None,
-                geohash: Some("9q8yy".to_string()),
+                gcs: RadrootsGcsLocation {
+                    lat: 37.0,
+                    lng: -122.0,
+                    geohash: "9q8yy".to_string(),
+                    point: RadrootsGeoJsonPoint {
+                        r#type: "Point".to_string(),
+                        coordinates: [-122.0, 37.0],
+                    },
+                    polygon: RadrootsGeoJsonPolygon {
+                        r#type: "Polygon".to_string(),
+                        coordinates: vec![vec![
+                            [-122.0, 37.0],
+                            [-122.0, 37.0001],
+                            [-122.0001, 37.0001],
+                            [-122.0, 37.0],
+                        ]],
+                    },
+                    accuracy: None,
+                    altitude: None,
+                    tag_0: None,
+                    label: None,
+                    area: None,
+                    elevation: None,
+                    soil: None,
+                    climate: None,
+                    gc_id: None,
+                    gc_name: None,
+                    gc_admin1_id: None,
+                    gc_admin1_name: None,
+                    gc_country_id: None,
+                    gc_country_name: None,
+                },
             }),
             tags: Some(vec!["orchard".to_string()]),
         };
@@ -78,7 +114,6 @@ mod tests {
             name: "Plot 1".to_string(),
             about: None,
             location: None,
-            geometry: None,
             tags: None,
         }];
 
