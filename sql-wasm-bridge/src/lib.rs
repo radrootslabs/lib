@@ -10,6 +10,9 @@ extern "C" {
 
     #[wasm_bindgen(js_name = __radroots_sql_wasm_query)]
     fn js_query(sql: &str, params_json: &str) -> JsValue;
+
+    #[wasm_bindgen(js_name = __radroots_sql_wasm_export_bytes)]
+    fn js_export_bytes() -> JsValue;
 }
 
 const SAVEPOINT: &str = "radroots_schema_tx";
@@ -20,6 +23,10 @@ pub fn exec(sql: &str, params_json: &str) -> JsValue {
 
 pub fn query(sql: &str, params_json: &str) -> JsValue {
     js_query(sql, params_json)
+}
+
+pub fn export_bytes() -> JsValue {
+    js_export_bytes()
 }
 
 pub fn begin_tx() {

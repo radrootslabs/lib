@@ -1,5 +1,7 @@
 #[cfg(not(feature = "std"))]
-use alloc::{format, string::{String, ToString}, vec::Vec};
+use alloc::format;
+#[cfg(not(feature = "std"))]
+use alloc::{string::{String, ToString}, vec::Vec};
 
 #[cfg(feature = "std")]
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -115,9 +117,9 @@ use radroots_tangle_db::{
     plot_tag,
 };
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 
 use crate::error::RadrootsTangleEventsError;
+use crate::event_state::{event_content_hash, event_state_key};
 const ROLE_PRIMARY: &str = "primary";
 const ROLE_MEMBER: &str = "member";
 const ROLE_OWNER: &str = "owner";
@@ -527,7 +529,7 @@ fn event_state_decision<E: SqlExecutor>(
     d_tag: &str,
 ) -> Result<EventStateDecision, RadrootsTangleEventsError> {
     let key = event_state_key(event.kind, &event.author, d_tag);
-    let content_hash = hash_content(&event.content, &event.tags)?;
+    let content_hash = event_content_hash(&event.content, &event.tags)?;
     let existing = nostr_event_state::find_one(
         exec,
         &INostrEventStateFindOne::On(INostrEventStateFindOneArgs {
@@ -546,19 +548,6 @@ fn event_state_decision<E: SqlExecutor>(
     }
 
     Ok(EventStateDecision { apply: true, content_hash })
-}
-
-fn event_state_key(kind: u32, pubkey: &str, d_tag: &str) -> String {
-    format!("{kind}:{pubkey}:{d_tag}")
-}
-
-fn hash_content(content: &str, tags: &[Vec<String>]) -> Result<String, RadrootsTangleEventsError> {
-    let tags_json = serde_json::to_string(tags)
-        .map_err(|_| RadrootsTangleEventsError::InvalidData("tags serialization failed".to_string()))?;
-    let mut hasher = Sha256::new();
-    hasher.update(content.as_bytes());
-    hasher.update(tags_json.as_bytes());
-    Ok(hex::encode(hasher.finalize()))
 }
 
 fn find_farm_by_ref<E: SqlExecutor>(

@@ -1,8 +1,16 @@
 #![cfg(target_arch = "wasm32")]
 
-use radroots_sql_core::WasmSqlExecutor;
+use radroots_sql_core::{
+    WasmSqlExecutor,
+    export_lock_begin,
+    export_lock_end,
+    with_export_lock_bypass,
+};
 use radroots_sql_wasm_core::{err_js, parse_json};
 use radroots_tangle_db::migrations;
+use radroots_tangle_db::{export_manifest, TangleDbExportManifestRs};
+use radroots_tangle_events::radroots_tangle_sync_status;
+use wasm_bindgen::JsValue;
 use wasm_bindgen::prelude::*;
 
 use radroots_tangle_db_schema::farm::{
@@ -152,17 +160,101 @@ pub fn tangle_db_reset_database() -> Result<(), JsValue> {
     migrations::run_all_down(&exec).map_err(err_js)
 }
 
-#[wasm_bindgen(js_name = tangle_db_export_backup)]
-pub fn tangle_db_export_backup() -> Result<JsValue, JsValue> {
+#[wasm_bindgen(js_name = tangle_db_export_json)]
+pub fn tangle_db_export_json() -> Result<JsValue, JsValue> {
     let exec = WasmSqlExecutor::new();
     let dump = radroots_tangle_db::backup::export_database_backup(&exec).map_err(err_js)?;
     value_to_js(dump)
 }
 
-#[wasm_bindgen(js_name = tangle_db_import_backup)]
-pub fn tangle_db_import_backup(dump_json: &str) -> Result<(), JsValue> {
+#[wasm_bindgen(js_name = tangle_db_import_json)]
+pub fn tangle_db_import_json(dump_json: &str) -> Result<(), JsValue> {
     let exec = WasmSqlExecutor::new();
     radroots_tangle_db::backup::restore_database_backup_json(&exec, dump_json).map_err(err_js)
+}
+
+#[wasm_bindgen(js_name = tangle_db_export_begin)]
+pub fn tangle_db_export_begin() -> Result<JsValue, JsValue> {
+    export_lock_begin().map_err(err_js)?;
+    let exec = WasmSqlExecutor::new();
+    let result = with_export_lock_bypass(|| export_snapshot(&exec));
+    match result {
+        Ok(value) => Ok(value),
+        Err(err) => {
+            export_lock_end();
+            Err(err)
+        }
+    }
+}
+
+#[wasm_bindgen(js_name = tangle_db_export_finish)]
+pub fn tangle_db_export_finish() -> Result<(), JsValue> {
+    export_lock_end();
+    Ok(())
+}
+
+fn export_snapshot(exec: &WasmSqlExecutor) -> Result<JsValue, JsValue> {
+    let status = radroots_tangle_sync_status(exec).map_err(|err| {
+        err_js(radroots_sql_core::SqlError::InvalidArgument(err.to_string()))
+    })?;
+    if status.pending_count > 0 {
+        return Err(err_js(radroots_sql_core::SqlError::InvalidArgument(
+            format!(
+                "tangle db export requires synced state (pending {}/{})",
+                status.pending_count, status.expected_count
+            ),
+        )));
+    }
+    let manifest = export_manifest(exec).map_err(err_js)?;
+    export_snapshot_value(manifest)
+}
+
+fn export_snapshot_value(manifest: TangleDbExportManifestRs) -> Result<JsValue, JsValue> {
+    let bytes_js = radroots_sql_wasm_core::export_bytes();
+    export_snapshot_value_with_bytes(manifest, bytes_js)
+}
+
+fn export_snapshot_value_with_bytes(
+    manifest: TangleDbExportManifestRs,
+    bytes_js: JsValue,
+) -> Result<JsValue, JsValue> {
+    let manifest_js = serde_wasm_bindgen::to_value(&manifest)
+        .map_err(|err| err_js(radroots_sql_core::SqlError::SerializationError(err.to_string())))?;
+    let obj = js_sys::Object::new();
+    js_sys::Reflect::set(&obj, &JsValue::from_str("manifest_rs"), &manifest_js)
+        .map_err(|_| err_js(radroots_sql_core::SqlError::Internal))?;
+    js_sys::Reflect::set(&obj, &JsValue::from_str("db_bytes"), &bytes_js)
+        .map_err(|_| err_js(radroots_sql_core::SqlError::Internal))?;
+    Ok(JsValue::from(obj))
+}
+
+#[cfg(all(test, target_arch = "wasm32"))]
+mod tests {
+    use super::export_snapshot_value_with_bytes;
+    use js_sys::{Reflect, Uint8Array};
+    use wasm_bindgen::JsValue;
+
+    #[wasm_bindgen_test::wasm_bindgen_test]
+    fn export_snapshot_value_includes_fields() {
+        let manifest = radroots_tangle_db::TangleDbExportManifestRs {
+            export_version: "1".to_string(),
+            tangle_db_version: "0.0.0".to_string(),
+            backup_format_version: "0.0.0".to_string(),
+            schema_hash: "hash".to_string(),
+            schema: Vec::new(),
+            migrations: Vec::new(),
+            table_counts: Vec::new(),
+        };
+        let bytes = Uint8Array::new_with_length(2);
+        let js = export_snapshot_value_with_bytes(manifest, JsValue::from(bytes))
+            .expect("snapshot");
+        let manifest_rs = Reflect::get(&js, &JsValue::from_str("manifest_rs"))
+            .expect("manifest_rs");
+        let db_bytes = Reflect::get(&js, &JsValue::from_str("db_bytes"))
+            .expect("db_bytes");
+        assert!(manifest_rs.is_object());
+        assert!(db_bytes.is_object());
+    }
 }
 
 #[wasm_bindgen(js_name = tangle_db_farm_create)]

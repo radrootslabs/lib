@@ -213,9 +213,11 @@ use radroots_tangle_db_schema::trade_product_media::{
 };
 
 pub mod backup;
+pub mod export;
 pub mod migrations;
 pub mod models;
 pub use backup::{DatabaseBackup, MigrationBackup, SchemaEntry};
+pub use export::{TANGLE_DB_EXPORT_VERSION, TableCount, TangleDbExportManifestRs, export_manifest};
 pub use models::*;
 
 pub struct TangleSql<E: SqlExecutor> {

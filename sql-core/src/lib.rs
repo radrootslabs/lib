@@ -10,6 +10,8 @@ pub mod migrations;
 mod executor_wasm;
 #[cfg(all(feature = "web", target_arch = "wasm32"))]
 pub use executor_wasm::WasmSqlExecutor;
+#[cfg(all(feature = "web", target_arch = "wasm32"))]
+pub use executor_wasm::{export_lock_active, export_lock_begin, export_lock_end, with_export_lock_bypass};
 
 #[cfg(feature = "native")]
 mod executor_sqlite;

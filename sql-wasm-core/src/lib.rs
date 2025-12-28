@@ -39,6 +39,11 @@ pub fn query_sql(sql: &str, params_json: &str) -> JsValue {
 }
 
 #[cfg(target_arch = "wasm32")]
+pub fn export_bytes() -> JsValue {
+    radroots_sql_wasm_bridge::export_bytes()
+}
+
+#[cfg(target_arch = "wasm32")]
 #[wasm_bindgen(js_name = begin_tx)]
 pub fn begin_tx() {
     radroots_sql_wasm_bridge::begin_tx()

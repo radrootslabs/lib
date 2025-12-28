@@ -6,9 +6,11 @@ extern crate alloc;
 
 pub mod error;
 mod canonical;
+mod event_state;
 mod geo;
 pub mod emit;
 pub mod ingest;
+pub mod sync_state;
 pub mod types;
 
 pub use error::RadrootsTangleEventsError;
@@ -27,6 +29,7 @@ pub use ingest::{
     RadrootsTangleIngestOutcome,
     RadrootsTangleIdFactory,
 };
+pub use sync_state::{radroots_tangle_sync_status, RadrootsTangleSyncStatus};
 pub use types::{
     RADROOTS_TANGLE_TRANSFER_VERSION,
     RadrootsTangleEventDraft,

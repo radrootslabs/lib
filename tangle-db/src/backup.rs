@@ -41,14 +41,7 @@ pub struct DatabaseBackup {
 pub fn export_database_backup<E: SqlExecutor>(executor: &E) -> Result<DatabaseBackup, SqlError> {
     let schema = load_schema(executor)?;
     let data = read_tables_for_backup(executor, &schema)?;
-    let migrations = crate::migrations::MIGRATIONS
-        .iter()
-        .map(|m| MigrationBackup {
-            name: m.name.to_string(),
-            up_sql: m.up_sql.to_string(),
-            down_sql: m.down_sql.to_string(),
-        })
-        .collect();
+    let migrations = export_migrations();
     Ok(DatabaseBackup {
         format_version: DATABASE_BACKUP_VERSION.to_string(),
         tangle_db_version: TANGLE_DB_VERSION.to_string(),
@@ -214,7 +207,7 @@ fn insert_row<E: SqlExecutor>(
     Ok(())
 }
 
-fn load_schema<E: SqlExecutor>(executor: &E) -> Result<Vec<SchemaEntry>, SqlError> {
+pub(crate) fn load_schema<E: SqlExecutor>(executor: &E) -> Result<Vec<SchemaEntry>, SqlError> {
     let json = executor.query_raw(
         "select type, name, tbl_name as table_name, sql from sqlite_master where name not like 'sqlite_%' order by type, name",
         "[]",
@@ -243,6 +236,17 @@ fn load_schema<E: SqlExecutor>(executor: &E) -> Result<Vec<SchemaEntry>, SqlErro
         .collect())
 }
 
+pub(crate) fn export_migrations() -> Vec<MigrationBackup> {
+    crate::migrations::MIGRATIONS
+        .iter()
+        .map(|m| MigrationBackup {
+            name: m.name.to_string(),
+            up_sql: m.up_sql.to_string(),
+            down_sql: m.down_sql.to_string(),
+        })
+        .collect()
+}
+
 fn read_tables_for_backup<E: SqlExecutor>(
     executor: &E,
     schema: &[SchemaEntry],
@@ -260,7 +264,7 @@ fn read_tables_for_backup<E: SqlExecutor>(
     Ok(data)
 }
 
-fn escape_identifier(name: &str) -> String {
+pub(crate) fn escape_identifier(name: &str) -> String {
     let mut escaped = String::with_capacity(name.len() + 2);
     escaped.push('"');
     for c in name.chars() {
