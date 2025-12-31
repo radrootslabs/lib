@@ -6,6 +6,8 @@ use alloc::{format, string::{String, ToString}, vec, vec::Vec};
 use radroots_events::list::RadrootsListEntry;
 use radroots_events::list_set::RadrootsListSet;
 use radroots_events::plot::RadrootsPlot;
+use radroots_events::listing::RadrootsListing;
+use radroots_events::kinds::KIND_LISTING;
 
 use crate::error::EventEncodeError;
 use crate::plot::encode::plot_address;
@@ -122,6 +124,57 @@ where
         description: None,
         image: None,
     })
+}
+
+pub fn farm_listings_list_set<I, S>(
+    farm_id: &str,
+    farm_pubkey: &str,
+    listing_ids: I,
+) -> Result<RadrootsListSet, EventEncodeError>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    let mut entries = Vec::new();
+    for listing_id in listing_ids {
+        let listing_id = listing_id.as_ref().trim();
+        if listing_id.is_empty() {
+            return Err(EventEncodeError::EmptyRequiredField("listing_id"));
+        }
+        let mut address = String::new();
+        address.push_str(&KIND_LISTING.to_string());
+        address.push(':');
+        address.push_str(farm_pubkey);
+        address.push(':');
+        address.push_str(listing_id);
+        entries.push(RadrootsListEntry {
+            tag: "a".to_string(),
+            values: vec![address],
+        });
+    }
+    Ok(RadrootsListSet {
+        d_tag: farm_list_set_id(farm_id, "listings")?,
+        content: String::new(),
+        entries,
+        title: None,
+        description: None,
+        image: None,
+    })
+}
+
+pub fn farm_listings_list_set_from_listings<'a, I>(
+    farm_id: &str,
+    farm_pubkey: &str,
+    listings: I,
+) -> Result<RadrootsListSet, EventEncodeError>
+where
+    I: IntoIterator<Item = &'a RadrootsListing>,
+{
+    farm_listings_list_set(
+        farm_id,
+        farm_pubkey,
+        listings.into_iter().map(|listing| listing.d_tag.as_str()),
+    )
 }
 
 pub fn farm_plots_list_set_from_plots<'a, I>(

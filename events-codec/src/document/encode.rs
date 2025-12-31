@@ -5,11 +5,13 @@ use alloc::{string::{String, ToString}, vec::Vec};
 
 use radroots_events::{
     document::RadrootsDocument,
-    kinds::KIND_DOCUMENT,
     tags::TAG_D,
 };
 
 use crate::error::EventEncodeError;
+
+#[cfg(feature = "serde_json")]
+use radroots_events::kinds::KIND_DOCUMENT;
 
 #[cfg(feature = "serde_json")]
 use crate::wire::WireEventParts;

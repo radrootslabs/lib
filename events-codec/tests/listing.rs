@@ -8,9 +8,9 @@ use radroots_events::{
     kinds::{KIND_LISTING, KIND_POST},
     listing::{
         RadrootsListing, RadrootsListingAvailability, RadrootsListingDeliveryMethod,
-        RadrootsListingDiscount, RadrootsListingImage, RadrootsListingImageSize,
-        RadrootsListingLocation, RadrootsListingProduct, RadrootsListingQuantity,
-        RadrootsListingStatus,
+        RadrootsListingDiscount, RadrootsListingFarmRef, RadrootsListingImage,
+        RadrootsListingImageSize, RadrootsListingLocation, RadrootsListingProduct,
+        RadrootsListingQuantity, RadrootsListingStatus,
     },
 };
 use radroots_events::tags::TAG_D;
@@ -29,6 +29,10 @@ fn sample_listing(d_tag: &str) -> RadrootsListing {
 
     RadrootsListing {
         d_tag: d_tag.to_string(),
+        farm: RadrootsListingFarmRef {
+            pubkey: "farm_pubkey".to_string(),
+            d_tag: "farm-1".to_string(),
+        },
         product: RadrootsListingProduct {
             key: "sku".to_string(),
             title: "Widget".to_string(),
@@ -67,6 +71,10 @@ fn sample_listing_full(d_tag: &str) -> RadrootsListing {
 
     RadrootsListing {
         d_tag: d_tag.to_string(),
+        farm: RadrootsListingFarmRef {
+            pubkey: "farm_pubkey".to_string(),
+            d_tag: "farm-1".to_string(),
+        },
         product: RadrootsListingProduct {
             key: "sku".to_string(),
             title: "Widget".to_string(),
@@ -138,7 +146,11 @@ fn listing_roundtrip_from_event() {
 fn listing_from_event_fills_missing_d_tag() {
     let listing = sample_listing("");
     let content = serde_json::to_string(&listing).unwrap();
-    let tags = vec![vec![TAG_D.to_string(), "filled".to_string()]];
+    let tags = vec![
+        vec![TAG_D.to_string(), "filled".to_string()],
+        vec!["p".to_string(), "farm_pubkey".to_string()],
+        vec!["a".to_string(), "30340:farm_pubkey:farm-1".to_string()],
+    ];
 
     let decoded = listing_from_event(KIND_LISTING, &tags, &content).unwrap();
     assert_eq!(decoded.d_tag, "filled");
@@ -148,7 +160,11 @@ fn listing_from_event_fills_missing_d_tag() {
 fn listing_from_event_rejects_mismatched_d_tag() {
     let listing = sample_listing("a");
     let content = serde_json::to_string(&listing).unwrap();
-    let tags = vec![vec![TAG_D.to_string(), "b".to_string()]];
+    let tags = vec![
+        vec![TAG_D.to_string(), "b".to_string()],
+        vec!["p".to_string(), "farm_pubkey".to_string()],
+        vec!["a".to_string(), "30340:farm_pubkey:farm-1".to_string()],
+    ];
 
     let err = listing_from_event(KIND_LISTING, &tags, &content).unwrap_err();
     assert!(matches!(err, EventParseError::InvalidTag(TAG_D)));
@@ -158,7 +174,11 @@ fn listing_from_event_rejects_mismatched_d_tag() {
 fn listing_from_event_rejects_wrong_kind() {
     let listing = sample_listing("listing-1");
     let content = serde_json::to_string(&listing).unwrap();
-    let tags = vec![vec![TAG_D.to_string(), "listing-1".to_string()]];
+    let tags = vec![
+        vec![TAG_D.to_string(), "listing-1".to_string()],
+        vec!["p".to_string(), "farm_pubkey".to_string()],
+        vec!["a".to_string(), "30340:farm_pubkey:farm-1".to_string()],
+    ];
 
     let err = listing_from_event(KIND_POST, &tags, &content).unwrap_err();
     assert!(matches!(
@@ -178,6 +198,14 @@ fn listing_build_tags_includes_listing_fields() {
     assert!(tags.iter().any(|t| {
         t.get(0).map(|s| s.as_str()) == Some(TAG_D)
             && t.get(1).map(|s| s.as_str()) == Some("listing-1")
+    }));
+    assert!(tags.iter().any(|t| {
+        t.get(0).map(|s| s.as_str()) == Some("p")
+            && t.get(1).map(|s| s.as_str()) == Some("farm_pubkey")
+    }));
+    assert!(tags.iter().any(|t| {
+        t.get(0).map(|s| s.as_str()) == Some("a")
+            && t.get(1).map(|s| s.as_str()) == Some("30340:farm_pubkey:farm-1")
     }));
     assert!(tags.iter().any(|t| {
         t.get(0).map(|s| s.as_str()) == Some("key")

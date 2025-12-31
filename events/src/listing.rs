@@ -81,6 +81,8 @@ pub enum RadrootsListingDeliveryMethod {
 #[derive(Clone, Debug)]
 pub struct RadrootsListing {
     pub d_tag: String,
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub farm: RadrootsListingFarmRef,
     pub product: RadrootsListingProduct,
     pub quantities: Vec<RadrootsListingQuantity>,
     #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreQuantityPrice[]"))]
@@ -115,6 +117,24 @@ pub struct RadrootsListing {
         ts(optional, type = "RadrootsListingImage[] | null")
     )]
     pub images: Option<Vec<RadrootsListingImage>>,
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug)]
+pub struct RadrootsListingFarmRef {
+    pub pubkey: String,
+    pub d_tag: String,
+}
+
+impl Default for RadrootsListingFarmRef {
+    fn default() -> Self {
+        Self {
+            pubkey: String::new(),
+            d_tag: String::new(),
+        }
+    }
 }
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]

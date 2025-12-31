@@ -11,10 +11,11 @@ use radroots_core::{
     RadrootsCoreDiscountValue, RadrootsCoreMoney, RadrootsCorePercent, RadrootsCoreQuantity,
 };
 use radroots_events::listing::{
-    RadrootsListing, RadrootsListingAvailability, RadrootsListingDeliveryMethod,
+    RadrootsListing, RadrootsListingAvailability, RadrootsListingDeliveryMethod, RadrootsListingFarmRef,
     RadrootsListingDiscount, RadrootsListingImage, RadrootsListingLocation, RadrootsListingQuantity,
     RadrootsListingStatus,
 };
+use radroots_events::kinds::KIND_FARM;
 use radroots_events::tags::TAG_D;
 
 use crate::error::EventEncodeError;
@@ -35,6 +36,8 @@ const TAG_DELIVERY: &str = "delivery";
 const TAG_PUBLISHED_AT: &str = "published_at";
 const TAG_STATUS: &str = "status";
 const TAG_EXPIRES_AT: &str = "expires_at";
+const TAG_P: &str = "p";
+const TAG_A: &str = "a";
 
 const GEOHASH_PRECISION_DEFAULT: usize = 9;
 const DD_MAX_RESOLUTION_DEFAULT: u32 = 9;
@@ -96,6 +99,7 @@ pub fn listing_tags_with_options(
 
     let mut tags: Vec<Vec<String>> = Vec::new();
     tags.push(vec![TAG_D.to_string(), d_tag.to_string()]);
+    push_farm_tags(&mut tags, &listing.farm)?;
 
     let product = &listing.product;
     push_tag_value(&mut tags, "key", &product.key);
@@ -206,6 +210,27 @@ pub fn listing_tags_with_options(
     }
 
     Ok(tags)
+}
+
+fn push_farm_tags(
+    tags: &mut Vec<Vec<String>>,
+    farm: &RadrootsListingFarmRef,
+) -> Result<(), EventEncodeError> {
+    if farm.pubkey.trim().is_empty() {
+        return Err(EventEncodeError::EmptyRequiredField("farm.pubkey"));
+    }
+    if farm.d_tag.trim().is_empty() {
+        return Err(EventEncodeError::EmptyRequiredField("farm.d_tag"));
+    }
+    let mut address = String::new();
+    address.push_str(&KIND_FARM.to_string());
+    address.push(':');
+    address.push_str(&farm.pubkey);
+    address.push(':');
+    address.push_str(&farm.d_tag);
+    tags.push(vec![TAG_P.to_string(), farm.pubkey.clone()]);
+    tags.push(vec![TAG_A.to_string(), address]);
+    Ok(())
 }
 
 fn tag_listing_quantity(quantity: &RadrootsListingQuantity) -> Vec<String> {

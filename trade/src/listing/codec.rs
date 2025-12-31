@@ -6,9 +6,11 @@ use alloc::{string::String, vec::Vec};
 use radroots_core::{RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity, RadrootsCoreQuantityPrice, RadrootsCoreUnit};
 use radroots_events::listing::{
     RadrootsListing, RadrootsListingAvailability, RadrootsListingDeliveryMethod,
-    RadrootsListingDiscount, RadrootsListingImage, RadrootsListingImageSize, RadrootsListingLocation,
-    RadrootsListingProduct, RadrootsListingQuantity, RadrootsListingStatus,
+    RadrootsListingDiscount, RadrootsListingFarmRef, RadrootsListingImage,
+    RadrootsListingImageSize, RadrootsListingLocation, RadrootsListingProduct,
+    RadrootsListingQuantity, RadrootsListingStatus,
 };
+use radroots_events::kinds::KIND_FARM;
 use radroots_events::tags::TAG_D;
 use radroots_events_codec::error::EventEncodeError;
 use radroots_events_codec::listing::tags::{listing_tags_with_options, ListingTagOptions};
@@ -26,6 +28,8 @@ const TAG_DELIVERY: &str = "delivery";
 const TAG_PUBLISHED_AT: &str = "published_at";
 const TAG_STATUS: &str = "status";
 const TAG_EXPIRES_AT: &str = "expires_at";
+const TAG_P: &str = "p";
+const TAG_A: &str = "a";
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
@@ -96,6 +100,8 @@ pub fn listing_from_event_parts(
     content: &str,
 ) -> Result<RadrootsListing, TradeListingParseError> {
     let d_tag = parse_d_tag(tags)?;
+    let farm_ref = parse_farm_ref(tags)?;
+    let farm_pubkey = parse_farm_pubkey(tags)?;
 
     if !content.trim().is_empty() {
         #[cfg(feature = "serde_json")]
@@ -106,12 +112,22 @@ pub fn listing_from_event_parts(
                 } else if listing.d_tag != d_tag {
                     return Err(TradeListingParseError::InvalidTag(TAG_D.to_string()));
                 }
+                if listing.farm.pubkey.trim().is_empty() || listing.farm.d_tag.trim().is_empty() {
+                    listing.farm = farm_ref;
+                } else if listing.farm.pubkey != farm_ref.pubkey
+                    || listing.farm.d_tag != farm_ref.d_tag
+                {
+                    return Err(TradeListingParseError::InvalidTag(TAG_A.to_string()));
+                }
+                if listing.farm.pubkey != farm_pubkey {
+                    return Err(TradeListingParseError::InvalidTag(TAG_P.to_string()));
+                }
                 return Ok(listing);
             }
         }
     }
 
-    listing_from_tags(tags, d_tag)
+    listing_from_tags(tags, d_tag, farm_ref, farm_pubkey)
 }
 
 pub fn listing_tags_build(listing: &RadrootsListing) -> Result<Vec<Vec<String>>, TradeListingParseError> {
@@ -132,6 +148,8 @@ fn map_listing_tags_error(err: EventEncodeError) -> TradeListingParseError {
 fn listing_from_tags(
     tags: &[Vec<String>],
     d_tag: String,
+    farm_ref: RadrootsListingFarmRef,
+    farm_pubkey: String,
 ) -> Result<RadrootsListing, TradeListingParseError> {
     let mut product = RadrootsListingProduct {
         key: String::new(),
@@ -326,8 +344,13 @@ fn listing_from_tags(
         loc
     });
 
+    if farm_pubkey != farm_ref.pubkey {
+        return Err(TradeListingParseError::InvalidTag(TAG_P.to_string()));
+    }
+
     Ok(RadrootsListing {
         d_tag,
+        farm: farm_ref,
         product,
         quantities,
         prices,
@@ -338,6 +361,52 @@ fn listing_from_tags(
         location,
         images: if images.is_empty() { None } else { Some(images) },
     })
+}
+
+fn parse_farm_ref(tags: &[Vec<String>]) -> Result<RadrootsListingFarmRef, TradeListingParseError> {
+    let tag = tags
+        .iter()
+        .find(|t| t.get(0).map(|s| s.as_str()) == Some(TAG_A))
+        .ok_or_else(|| TradeListingParseError::MissingTag(TAG_A.to_string()))?;
+    let value = tag
+        .get(1)
+        .map(|s| s.to_string())
+        .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_A.to_string()))?;
+    let mut parts = value.splitn(3, ':');
+    let kind = parts
+        .next()
+        .and_then(|v| v.parse::<u32>().ok())
+        .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_A.to_string()))?;
+    if kind != KIND_FARM {
+        return Err(TradeListingParseError::InvalidTag(TAG_A.to_string()));
+    }
+    let pubkey = parts
+        .next()
+        .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_A.to_string()))?
+        .to_string();
+    let d_tag = parts
+        .next()
+        .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_A.to_string()))?
+        .to_string();
+    if pubkey.trim().is_empty() || d_tag.trim().is_empty() {
+        return Err(TradeListingParseError::InvalidTag(TAG_A.to_string()));
+    }
+    Ok(RadrootsListingFarmRef { pubkey, d_tag })
+}
+
+fn parse_farm_pubkey(tags: &[Vec<String>]) -> Result<String, TradeListingParseError> {
+    let tag = tags
+        .iter()
+        .find(|t| t.get(0).map(|s| s.as_str()) == Some(TAG_P))
+        .ok_or_else(|| TradeListingParseError::MissingTag(TAG_P.to_string()))?;
+    let value = tag
+        .get(1)
+        .map(|s| s.to_string())
+        .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_P.to_string()))?;
+    if value.trim().is_empty() {
+        return Err(TradeListingParseError::InvalidTag(TAG_P.to_string()));
+    }
+    Ok(value)
 }
 
 fn clean_value(value: &str) -> Option<String> {

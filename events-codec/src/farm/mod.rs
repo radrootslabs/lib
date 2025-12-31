@@ -16,9 +16,11 @@ mod tests {
     use crate::farm::encode::{farm_build_tags, farm_ref_tags};
     use crate::farm::list_sets::{
         farm_members_list_set,
+        farm_listings_list_set_from_listings,
         farm_plots_list_set_from_plots,
         member_of_farms_list_set,
     };
+    use radroots_events::listing::{RadrootsListing, RadrootsListingFarmRef, RadrootsListingProduct};
 
     #[test]
     fn farm_tags_include_required_fields() {
@@ -125,6 +127,46 @@ mod tests {
         assert_eq!(
             plots_list.entries[0].values[0],
             "30350:farm_pubkey:plot-1"
+        );
+    }
+
+    #[test]
+    fn farm_listings_list_set_uses_listing_addresses() {
+        let listings = vec![RadrootsListing {
+            d_tag: "listing-1".to_string(),
+            farm: RadrootsListingFarmRef {
+                pubkey: "farm_pubkey".to_string(),
+                d_tag: "farm-1".to_string(),
+            },
+            product: RadrootsListingProduct {
+                key: "coffee".to_string(),
+                title: "Coffee".to_string(),
+                category: "coffee".to_string(),
+                summary: None,
+                process: None,
+                lot: None,
+                location: None,
+                profile: None,
+                year: None,
+            },
+            quantities: vec![],
+            prices: vec![],
+            discounts: None,
+            inventory_available: None,
+            availability: None,
+            delivery_method: None,
+            location: None,
+            images: None,
+        }];
+
+        let listings_list = farm_listings_list_set_from_listings("farm-1", "farm_pubkey", &listings)
+            .expect("listings list");
+        assert_eq!(listings_list.d_tag, "farm:farm-1:listings");
+        assert_eq!(listings_list.entries.len(), 1);
+        assert_eq!(listings_list.entries[0].tag, "a");
+        assert_eq!(
+            listings_list.entries[0].values[0],
+            "30402:farm_pubkey:listing-1"
         );
     }
 }

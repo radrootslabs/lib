@@ -55,6 +55,9 @@ pub enum TradeListingValidationError {
     ListingEventNotFound { listing_addr: String },
     ListingEventFetchFailed { listing_addr: String },
     ParseError { error: TradeListingParseError },
+    InvalidSeller,
+    MissingFarmProfile,
+    MissingFarmRecord,
     MissingTitle,
     MissingDescription,
     MissingProductType,
@@ -82,6 +85,15 @@ impl core::fmt::Display for TradeListingValidationError {
             }
             TradeListingValidationError::ParseError { error } => {
                 write!(f, "invalid listing data: {error}")
+            }
+            TradeListingValidationError::InvalidSeller => {
+                write!(f, "listing author does not match farm pubkey")
+            }
+            TradeListingValidationError::MissingFarmProfile => {
+                write!(f, "missing farm profile")
+            }
+            TradeListingValidationError::MissingFarmRecord => {
+                write!(f, "missing farm record")
             }
             TradeListingValidationError::MissingTitle => write!(f, "missing listing title"),
             TradeListingValidationError::MissingDescription => {
@@ -127,6 +139,9 @@ pub fn validate_listing_event(
     }
 
     let seller_pubkey = event.author.clone();
+    if listing.farm.pubkey != seller_pubkey {
+        return Err(TradeListingValidationError::InvalidSeller);
+    }
     let listing_addr = TradeListingAddress {
         kind: KIND_LISTING as u16,
         seller_pubkey: seller_pubkey.clone(),
@@ -224,13 +239,18 @@ mod tests {
         kinds::KIND_LISTING,
         listing::{
             RadrootsListing, RadrootsListingAvailability, RadrootsListingDeliveryMethod,
-            RadrootsListingLocation, RadrootsListingProduct, RadrootsListingQuantity,
+            RadrootsListingFarmRef, RadrootsListingLocation, RadrootsListingProduct,
+            RadrootsListingQuantity,
         },
     };
 
     fn base_listing() -> RadrootsListing {
         RadrootsListing {
             d_tag: "listing-1".into(),
+            farm: RadrootsListingFarmRef {
+                pubkey: "seller".into(),
+                d_tag: "farm-1".into(),
+            },
             product: RadrootsListingProduct {
                 key: "coffee".into(),
                 title: "Coffee".into(),
@@ -285,7 +305,14 @@ mod tests {
             author: "seller".into(),
             created_at: 0,
             kind: KIND_LISTING,
-            tags: vec![vec!["d".into(), listing.d_tag.clone()]],
+            tags: vec![
+                vec!["d".into(), listing.d_tag.clone()],
+                vec!["p".into(), listing.farm.pubkey.clone()],
+                vec![
+                    "a".into(),
+                    format!("30340:{}:{}", listing.farm.pubkey, listing.farm.d_tag),
+                ],
+            ],
             content: serde_json::to_string(listing).unwrap(),
             sig: "sig".into(),
         }
@@ -316,6 +343,8 @@ mod tests {
         event.content = String::new();
         event.tags = vec![
             vec!["d".into(), "listing-1".into()],
+            vec!["p".into(), "seller".into()],
+            vec!["a".into(), "30340:seller:farm-1".into()],
             vec!["key".into(), "coffee".into()],
             vec!["title".into(), "Coffee".into()],
             vec!["category".into(), "coffee".into()],
@@ -348,6 +377,15 @@ mod tests {
             err,
             TradeListingValidationError::ParseError { .. }
         ));
+    }
+
+    #[test]
+    fn validate_listing_rejects_mismatched_seller() {
+        let listing = base_listing();
+        let mut event = base_event(&listing);
+        event.author = "other".into();
+        let err = validate_listing_event(&event).unwrap_err();
+        assert!(matches!(err, TradeListingValidationError::InvalidSeller));
     }
 
     #[test]
