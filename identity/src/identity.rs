@@ -1,6 +1,7 @@
 use crate::error::IdentityError;
 use core::convert::Infallible;
 use nostr::{Keys, SecretKey};
+use radroots_events::profile::RadrootsProfile;
 use serde::{Deserialize, Serialize};
 
 #[cfg(not(feature = "std"))]
@@ -29,6 +30,8 @@ pub struct RadrootsIdentityProfile {
     pub metadata: Option<nostr::Event>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub application_handler: Option<nostr::Event>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profile: Option<RadrootsProfile>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,6 +45,8 @@ pub struct RadrootsIdentityFile {
     pub metadata: Option<nostr::Event>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub application_handler: Option<nostr::Event>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profile: Option<RadrootsProfile>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -52,7 +57,10 @@ pub enum RadrootsIdentitySecretKeyFormat {
 
 impl RadrootsIdentityProfile {
     pub fn is_empty(&self) -> bool {
-        self.identifier.is_none() && self.metadata.is_none() && self.application_handler.is_none()
+        self.identifier.is_none()
+            && self.metadata.is_none()
+            && self.application_handler.is_none()
+            && self.profile.is_none()
     }
 }
 
@@ -149,13 +157,14 @@ impl RadrootsIdentity {
             RadrootsIdentitySecretKeyFormat::Hex => self.secret_key_hex(),
             RadrootsIdentitySecretKeyFormat::Nsec => self.secret_key_nsec(),
         };
-        let (identifier, metadata, application_handler) = match &self.profile {
+        let (identifier, metadata, application_handler, profile) = match &self.profile {
             Some(profile) => (
                 profile.identifier.clone(),
                 profile.metadata.clone(),
                 profile.application_handler.clone(),
+                profile.profile.clone(),
             ),
-            None => (None, None, None),
+            None => (None, None, None, None),
         };
         RadrootsIdentityFile {
             secret_key,
@@ -163,6 +172,7 @@ impl RadrootsIdentity {
             identifier,
             metadata,
             application_handler,
+            profile,
         }
     }
 
@@ -232,6 +242,7 @@ impl TryFrom<RadrootsIdentityFile> for RadrootsIdentity {
             identifier: file.identifier,
             metadata: file.metadata,
             application_handler: file.application_handler,
+            profile: file.profile,
         };
         if profile.is_empty() {
             Ok(Self::new(keys))

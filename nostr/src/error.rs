@@ -21,6 +21,10 @@ pub enum RadrootsNostrError {
 
     #[error("Key error: {0}")]
     KeyError(#[from] nostr::key::Error),
+
+    #[cfg(feature = "codec")]
+    #[error("Profile encode error: {0}")]
+    ProfileEncodeError(#[from] radroots_events_codec::profile::error::ProfileEncodeError),
 }
 
 #[derive(Debug, Error)]

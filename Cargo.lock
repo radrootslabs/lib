@@ -1762,6 +1762,7 @@ name = "radroots-identity"
 version = "0.1.0"
 dependencies = [
  "nostr",
+ "radroots-events",
  "radroots-runtime",
  "serde",
  "serde_json",

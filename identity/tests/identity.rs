@@ -1,4 +1,5 @@
-use radroots_identity::{IdentityError, RadrootsIdentity};
+use radroots_events::profile::RadrootsProfile;
+use radroots_identity::{IdentityError, RadrootsIdentity, RadrootsIdentityProfile};
 
 #[test]
 fn load_from_json_file_hex() {
@@ -12,6 +13,39 @@ fn load_from_json_file_hex() {
 
     let loaded = RadrootsIdentity::load_from_path_auto(&path).unwrap();
     assert_eq!(loaded.public_key(), keys.public_key());
+}
+
+#[test]
+fn load_from_json_file_profile() {
+    let keys = nostr::Keys::generate();
+    let mut identity = RadrootsIdentity::new(keys.clone());
+    let profile = RadrootsProfile {
+        name: "relay-agent".to_string(),
+        display_name: Some("Relay Agent".to_string()),
+        nip05: None,
+        about: Some("hello".to_string()),
+        website: None,
+        picture: None,
+        banner: None,
+        lud06: None,
+        lud16: None,
+        bot: None,
+    };
+    identity.set_profile(RadrootsIdentityProfile {
+        profile: Some(profile),
+        ..Default::default()
+    });
+    let json = serde_json::to_string(&identity.to_file()).unwrap();
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("identity.json");
+    std::fs::write(&path, json).unwrap();
+
+    let loaded = RadrootsIdentity::load_from_path_auto(&path).unwrap();
+    let loaded_profile = loaded.profile().and_then(|p| p.profile.as_ref()).unwrap();
+    assert_eq!(loaded_profile.name, "relay-agent");
+    assert_eq!(loaded_profile.display_name.as_deref(), Some("Relay Agent"));
+    assert_eq!(loaded_profile.about.as_deref(), Some("hello"));
 }
 
 #[test]

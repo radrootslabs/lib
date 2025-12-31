@@ -5,6 +5,7 @@ use radroots_events::profile::{
     RADROOTS_PROFILE_TYPE_TAG_KEY,
     radroots_profile_type_tag_value,
 };
+#[cfg(feature = "serde_json")]
 use radroots_events::kinds::KIND_PROFILE;
 
 use nostr::Metadata;

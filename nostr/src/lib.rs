@@ -33,6 +33,9 @@ pub mod event_adapters;
 #[cfg(feature = "events")]
 pub mod event_convert;
 
+#[cfg(all(feature = "client", feature = "codec"))]
+pub mod identity_profile;
+
 pub mod prelude {
     pub use crate::events::radroots_nostr_build_event;
 
@@ -68,6 +71,9 @@ pub mod prelude {
         radroots_nostr_fetch_metadata_for_author,
         radroots_nostr_post_metadata_event,
     };
+
+    #[cfg(all(feature = "client", feature = "codec"))]
+    pub use crate::identity_profile::radroots_nostr_publish_identity_profile;
 
     #[cfg(all(feature = "client", feature = "events"))]
     pub use crate::events::post::radroots_nostr_fetch_post_events;
