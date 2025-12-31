@@ -13,6 +13,8 @@ pub mod wire;
 pub mod comment;
 pub mod follow;
 pub mod app_data;
+pub mod document;
+pub mod coop;
 pub mod farm;
 pub mod gift_wrap;
 pub mod message;

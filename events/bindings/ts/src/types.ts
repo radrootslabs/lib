@@ -20,6 +20,24 @@ export type RadrootsCommentEventIndex = { event: RadrootsNostrEvent, metadata: R
 
 export type RadrootsCommentEventMetadata = { id: string, author: string, published_at: number, kind: number, comment: RadrootsComment, };
 
+export type RadrootsCoop = { d_tag: string, name: string, about?: string | null, website?: string | null, picture?: string | null, banner?: string | null, location?: RadrootsCoopLocation | null, tags?: string[] | null, };
+
+export type RadrootsCoopEventIndex = { event: RadrootsNostrEvent, metadata: RadrootsCoopEventMetadata, };
+
+export type RadrootsCoopEventMetadata = { id: string, author: string, published_at: number, kind: number, coop: RadrootsCoop, };
+
+export type RadrootsCoopLocation = { primary?: string | null, city?: string | null, region?: string | null, country?: string | null, gcs: RadrootsGcsLocation, };
+
+export type RadrootsCoopRef = { pubkey: string, d_tag: string, };
+
+export type RadrootsDocument = { d_tag: string, doc_type: string, title: string, version: string, summary?: string | null, effective_at?: number | null, body_markdown?: string | null, subject: RadrootsDocumentSubject, tags?: string[] | null, };
+
+export type RadrootsDocumentEventIndex = { event: RadrootsNostrEvent, metadata: RadrootsDocumentEventMetadata, };
+
+export type RadrootsDocumentEventMetadata = { id: string, author: string, published_at: number, kind: number, document: RadrootsDocument, };
+
+export type RadrootsDocumentSubject = { pubkey: string, address?: string | null, };
+
 export type RadrootsFarm = { d_tag: string, name: string, about?: string | null, website?: string | null, picture?: string | null, banner?: string | null, location?: RadrootsFarmLocation | null, tags?: string[] | null, };
 
 export type RadrootsFarmEventIndex = { event: RadrootsNostrEvent, metadata: RadrootsFarmEventMetadata, };
@@ -156,7 +174,7 @@ export type RadrootsProfileEventIndex = { event: RadrootsNostrEvent, metadata: R
 
 export type RadrootsProfileEventMetadata = { id: string, author: string, published_at: number, kind: number, profile_type?: RadrootsProfileType | null, profile: RadrootsProfile, };
 
-export type RadrootsProfileType = "individual" | "farm";
+export type RadrootsProfileType = "individual" | "farm" | "coop";
 
 export type RadrootsReaction = { root: RadrootsNostrEventRef, content: string, };
 

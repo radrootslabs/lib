@@ -8,6 +8,8 @@ use core::convert::Infallible;
 use radroots_events::{
     app_data::RadrootsAppData,
     comment::RadrootsComment,
+    document::RadrootsDocument,
+    coop::RadrootsCoop,
     follow::RadrootsFollow,
     farm::RadrootsFarm,
     gift_wrap::RadrootsGiftWrap,
@@ -29,6 +31,8 @@ use radroots_events::{
 use crate::comment::encode::comment_build_tags;
 use crate::error::EventEncodeError;
 use crate::app_data::encode::app_data_build_tags;
+use crate::document::encode::document_build_tags;
+use crate::coop::encode::coop_build_tags;
 use crate::follow::encode::follow_build_tags;
 use crate::farm::encode::farm_build_tags;
 use crate::job::encode::JobEncodeError;
@@ -111,6 +115,22 @@ impl RadrootsEventTagBuilder for RadrootsFarm {
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
         farm_build_tags(self)
+    }
+}
+
+impl RadrootsEventTagBuilder for RadrootsCoop {
+    type Error = EventEncodeError;
+
+    fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
+        coop_build_tags(self)
+    }
+}
+
+impl RadrootsEventTagBuilder for RadrootsDocument {
+    type Error = EventEncodeError;
+
+    fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
+        document_build_tags(self)
     }
 }
 

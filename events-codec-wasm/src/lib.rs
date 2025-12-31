@@ -3,6 +3,8 @@
 
 use radroots_events::comment::RadrootsComment;
 use radroots_events::follow::RadrootsFollow;
+use radroots_events::document::RadrootsDocument;
+use radroots_events::coop::RadrootsCoop;
 use radroots_events::farm::RadrootsFarm;
 use radroots_events::job_feedback::RadrootsJobFeedback;
 use radroots_events::job_request::RadrootsJobRequest;
@@ -18,6 +20,8 @@ use radroots_events::gift_wrap::RadrootsGiftWrap;
 use radroots_events::seal::RadrootsSeal;
 use radroots_events_codec::comment::encode::comment_build_tags;
 use radroots_events_codec::follow::encode::follow_build_tags;
+use radroots_events_codec::document::encode::document_build_tags;
+use radroots_events_codec::coop::encode::coop_build_tags;
 use radroots_events_codec::farm::encode::farm_build_tags;
 use radroots_events_codec::gift_wrap::encode::gift_wrap_build_tags;
 use radroots_events_codec::job::feedback::encode::job_feedback_build_tags;
@@ -50,6 +54,14 @@ fn parse_comment(comment_json: &str) -> Result<RadrootsComment, JsValue> {
 
 fn parse_follow(follow_json: &str) -> Result<RadrootsFollow, JsValue> {
     serde_json::from_str(follow_json).map_err(err_js)
+}
+
+fn parse_document(document_json: &str) -> Result<RadrootsDocument, JsValue> {
+    serde_json::from_str(document_json).map_err(err_js)
+}
+
+fn parse_coop(coop_json: &str) -> Result<RadrootsCoop, JsValue> {
+    serde_json::from_str(coop_json).map_err(err_js)
 }
 
 fn parse_farm(farm_json: &str) -> Result<RadrootsFarm, JsValue> {
@@ -129,6 +141,20 @@ pub fn comment_tags(comment_json: &str) -> Result<String, JsValue> {
 pub fn follow_tags(follow_json: &str) -> Result<String, JsValue> {
     let follow = parse_follow(follow_json)?;
     let tags = follow_build_tags(&follow).map_err(err_js)?;
+    tags_to_json(tags)
+}
+
+#[wasm_bindgen(js_name = document_tags)]
+pub fn document_tags(document_json: &str) -> Result<String, JsValue> {
+    let document = parse_document(document_json)?;
+    let tags = document_build_tags(&document).map_err(err_js)?;
+    tags_to_json(tags)
+}
+
+#[wasm_bindgen(js_name = coop_tags)]
+pub fn coop_tags(coop_json: &str) -> Result<String, JsValue> {
+    let coop = parse_coop(coop_json)?;
+    let tags = coop_build_tags(&coop).map_err(err_js)?;
     tags_to_json(tags)
 }
 

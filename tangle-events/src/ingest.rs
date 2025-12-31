@@ -219,6 +219,7 @@ fn ingest_profile_event<E: SqlExecutor>(
     let profile_type = match profile_type {
         radroots_events::profile::RadrootsProfileType::Individual => "individual",
         radroots_events::profile::RadrootsProfileType::Farm => "farm",
+        radroots_events::profile::RadrootsProfileType::Coop => "coop",
     };
 
     let existing = nostr_profile::find_one(
