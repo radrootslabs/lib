@@ -19,15 +19,8 @@ pub enum RuntimeCliError {
 
 #[derive(Debug, Error)]
 pub enum RuntimeTracingError {
-    #[error("failed to initialize tracing subscriber: {0}")]
-    Init(#[from] tracing_subscriber::util::TryInitError),
-
-    #[error("failed to create logs directory at {path}: {source}")]
-    CreateLogsDir {
-        path: std::path::PathBuf,
-        #[source]
-        source: std::io::Error,
-    },
+    #[error(transparent)]
+    Log(#[from] radroots_log::Error),
 }
 
 #[derive(Debug, Error)]

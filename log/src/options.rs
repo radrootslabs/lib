@@ -5,6 +5,7 @@ pub struct LoggingOptions {
     pub dir: Option<PathBuf>,
     pub file_name: String,
     pub stdout: bool,
+    pub default_level: Option<String>,
 }
 
 impl LoggingOptions {
@@ -19,6 +20,7 @@ impl Default for LoggingOptions {
             dir: None,
             file_name: "radroots.log".into(),
             stdout: true,
+            default_level: None,
         }
     }
 }

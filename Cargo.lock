@@ -1805,8 +1805,6 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tracing",
- "tracing-appender",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -1832,6 +1830,7 @@ dependencies = [
  "anyhow",
  "clap",
  "config",
+ "radroots-log",
  "serde",
  "serde_json",
  "tempfile",
@@ -1839,8 +1838,6 @@ dependencies = [
  "tokio",
  "toml",
  "tracing",
- "tracing-appender",
- "tracing-subscriber",
 ]
 
 [[package]]

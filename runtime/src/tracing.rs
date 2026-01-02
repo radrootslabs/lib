@@ -1,8 +1,5 @@
-use std::fs;
 use std::path::{Path, PathBuf};
-use tracing_appender::rolling;
-use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::{EnvFilter, Registry, fmt, prelude::*};
+use radroots_log::LoggingOptions;
 
 use crate::error::RuntimeTracingError;
 
@@ -15,37 +12,53 @@ pub fn init_with(
     default_level: Option<&str>,
 ) -> Result<(), RuntimeTracingError> {
     let logs_dir = logs_dir.as_ref();
-    ensure_dir(logs_dir)?;
-
-    let file_appender = rolling::daily(logs_dir, concat!(env!("CARGO_PKG_NAME"), ".log"));
-    let (file_writer, guard) = tracing_appender::non_blocking(file_appender);
-    std::mem::forget(guard);
-
-    let stdout_layer = fmt::layer().with_writer(std::io::stdout).with_target(false);
-
-    let file_layer = fmt::layer()
-        .with_writer(file_writer)
-        .with_ansi(false)
-        .with_target(false);
-
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(default_level.unwrap_or("info")));
-
-    Registry::default()
-        .with(filter)
-        .with(stdout_layer)
-        .with(file_layer)
-        .try_init()?;
-
+    let env_dir = std::env::var("RADROOTS_LOG_DIR")
+        .ok()
+        .and_then(|value| {
+            let trimmed = value.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(PathBuf::from(trimmed))
+            }
+        });
+    let env_file = std::env::var("RADROOTS_LOG_FILE")
+        .ok()
+        .and_then(|value| {
+            let trimmed = value.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        });
+    let dir = env_dir.or_else(|| {
+        if logs_dir.as_os_str().is_empty() {
+            None
+        } else {
+            Some(logs_dir.to_path_buf())
+        }
+    });
+    let opts = LoggingOptions {
+        dir,
+        file_name: env_file.unwrap_or_else(default_log_file_name),
+        stdout: true,
+        default_level: default_level.map(str::to_string),
+    };
+    radroots_log::init_logging(opts)?;
     Ok(())
 }
 
-fn ensure_dir(dir: &Path) -> Result<(), RuntimeTracingError> {
-    if dir.exists() {
-        return Ok(());
+fn default_log_file_name() -> String {
+    log_name_from_exe().unwrap_or_else(|| format!("{}.log", env!("CARGO_PKG_NAME")))
+}
+
+fn log_name_from_exe() -> Option<String> {
+    let exe = std::env::current_exe().ok()?;
+    let name = exe.file_stem()?.to_string_lossy();
+    if name.is_empty() {
+        None
+    } else {
+        Some(format!("{name}.log"))
     }
-    fs::create_dir_all(dir).map_err(|source| RuntimeTracingError::CreateLogsDir {
-        path: PathBuf::from(dir),
-        source,
-    })
 }
