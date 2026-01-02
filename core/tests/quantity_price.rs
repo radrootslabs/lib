@@ -76,6 +76,18 @@ fn try_cost_for_amount_in_converts_mass_units() {
 }
 
 #[test]
+fn try_cost_for_amount_in_converts_volume_units() {
+    let price = RadrootsCoreQuantityPrice::new(
+        common::money("10", "USD"),
+        common::qty("1", RadrootsCoreUnit::VolumeL),
+    );
+    let cost = price
+        .try_cost_for_amount_in(common::dec("500"), RadrootsCoreUnit::VolumeMl)
+        .unwrap();
+    assert_eq!(cost.amount, common::dec("5"));
+}
+
+#[test]
 fn try_cost_for_amount_in_rejects_non_convertible_units() {
     let price = RadrootsCoreQuantityPrice::new(
         common::money("10", "USD"),
@@ -88,4 +100,32 @@ fn try_cost_for_amount_in_rejects_non_convertible_units() {
             to: RadrootsCoreUnit::MassKg
         })
     );
+}
+
+#[test]
+fn try_to_canonical_unit_price_converts_units() {
+    let price = RadrootsCoreQuantityPrice::new(
+        common::money("6.99", "USD"),
+        common::qty("1", RadrootsCoreUnit::MassLb),
+    );
+    let canonical = price.try_to_canonical_unit_price().unwrap();
+    assert_eq!(canonical.quantity.unit, RadrootsCoreUnit::MassG);
+    assert_eq!(canonical.quantity.amount, common::dec("1"));
+    let expected = common::dec("6.99") / common::dec("453.59237");
+    assert_eq!(canonical.amount.amount, expected);
+}
+
+#[test]
+fn is_price_per_canonical_unit_detects_canonical() {
+    let price = RadrootsCoreQuantityPrice::new(
+        common::money("1.00", "USD"),
+        common::qty("1", RadrootsCoreUnit::MassG),
+    );
+    assert!(price.is_price_per_canonical_unit());
+
+    let price = RadrootsCoreQuantityPrice::new(
+        common::money("1.00", "USD"),
+        common::qty("1", RadrootsCoreUnit::MassKg),
+    );
+    assert!(!price.is_price_per_canonical_unit());
 }

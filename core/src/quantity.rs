@@ -1,7 +1,7 @@
 use core::fmt;
 
 use crate::RadrootsCoreDecimal;
-use crate::unit::RadrootsCoreUnit;
+use crate::unit::{convert_unit_decimal, RadrootsCoreUnit, RadrootsCoreUnitConvertError};
 
 #[cfg(feature = "std")]
 use std::string::String;
@@ -59,6 +59,37 @@ impl RadrootsCoreQuantity {
     #[inline]
     pub fn is_zero(&self) -> bool {
         self.amount.is_zero()
+    }
+
+    #[inline]
+    pub fn is_canonical(&self) -> bool {
+        self.unit == self.unit.canonical_unit()
+    }
+
+    #[inline]
+    pub fn canonical_unit(&self) -> RadrootsCoreUnit {
+        self.unit.canonical_unit()
+    }
+
+    #[inline]
+    pub fn try_convert_to(
+        &self,
+        unit: RadrootsCoreUnit,
+    ) -> Result<RadrootsCoreQuantity, RadrootsCoreUnitConvertError> {
+        if self.unit == unit {
+            return Ok(self.clone());
+        }
+        let amount = convert_unit_decimal(self.amount, self.unit, unit)?;
+        Ok(RadrootsCoreQuantity {
+            amount,
+            unit,
+            label: self.label.clone(),
+        })
+    }
+
+    #[inline]
+    pub fn to_canonical(&self) -> Result<RadrootsCoreQuantity, RadrootsCoreUnitConvertError> {
+        self.try_convert_to(self.unit.canonical_unit())
     }
 
     #[inline]

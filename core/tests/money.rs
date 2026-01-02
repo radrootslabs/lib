@@ -33,6 +33,17 @@ fn quantize_to_currency_rounds_midpoint_away_from_zero() {
 }
 
 #[test]
+fn quantize_to_currency_with_strategy_uses_strategy() {
+    let usd = RadrootsCoreCurrency::USD;
+    let a = RadrootsCoreMoney::new(common::dec("1.235"), usd)
+        .quantize_to_currency_with_strategy(RoundingStrategy::MidpointTowardZero);
+    let b = RadrootsCoreMoney::new(common::dec("-1.235"), usd)
+        .quantize_to_currency_with_strategy(RoundingStrategy::MidpointTowardZero);
+    assert_eq!(a.amount, common::dec("1.23"));
+    assert_eq!(b.amount, common::dec("-1.23"));
+}
+
+#[test]
 fn checked_add_and_sub_require_currency_match() {
     let usd = RadrootsCoreCurrency::USD;
     let eur = RadrootsCoreCurrency::EUR;

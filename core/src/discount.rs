@@ -6,56 +6,50 @@ use alloc::string::String;
 #[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", serde(rename_all = "snake_case", tag = "kind", content = "amount"))]
-pub enum RadrootsCoreDiscountValue {
-    Money(crate::RadrootsCoreMoney),
-    Percent(crate::RadrootsCorePercent),
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+pub enum RadrootsCoreDiscountScope {
+    Bin,
+    OrderTotal,
 }
 
 #[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case", tag = "kind", content = "amount"))]
-pub enum RadrootsCoreDiscount {
-    QuantityThreshold {
-        ref_key: Option<String>,
-        threshold: crate::RadrootsCoreQuantity,
-        value: crate::RadrootsCoreMoney,
-    },
-    MassThreshold {
-        threshold: crate::RadrootsCoreQuantity,
-        value: crate::RadrootsCoreMoney,
-    },
-    SubtotalThreshold {
-        threshold: crate::RadrootsCoreMoney,
-        value: RadrootsCoreDiscountValue,
-    },
-    TotalThreshold {
-        total_min: crate::RadrootsCoreMoney,
-        value: crate::RadrootsCorePercent,
-    },
+pub enum RadrootsCoreDiscountThreshold {
+    BinCount { bin_id: String, min: u32 },
+    OrderQuantity { min: crate::RadrootsCoreQuantity },
+}
+
+#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case", tag = "kind", content = "amount"))]
+pub enum RadrootsCoreDiscountValue {
+    MoneyPerBin(crate::RadrootsCoreMoney),
+    Percent(crate::RadrootsCorePercent),
+}
+
+#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+pub struct RadrootsCoreDiscount {
+    pub scope: RadrootsCoreDiscountScope,
+    pub threshold: RadrootsCoreDiscountThreshold,
+    pub value: RadrootsCoreDiscountValue,
 }
 
 impl RadrootsCoreDiscount {
     pub fn is_non_negative(&self) -> bool {
-        match self {
-            RadrootsCoreDiscount::QuantityThreshold {
-                threshold, value, ..
-            } => !threshold.amount.is_sign_negative() && !value.amount.is_sign_negative(),
-            RadrootsCoreDiscount::MassThreshold { threshold, value } => {
-                !threshold.amount.is_sign_negative() && !value.amount.is_sign_negative()
-            }
-            RadrootsCoreDiscount::SubtotalThreshold { threshold, value } => {
-                let money_ok = !threshold.amount.is_sign_negative();
-                let val_ok = match value {
-                    RadrootsCoreDiscountValue::Money(m) => !m.amount.is_sign_negative(),
-                    RadrootsCoreDiscountValue::Percent(p) => !p.value.is_sign_negative(),
-                };
-                money_ok && val_ok
-            }
-            RadrootsCoreDiscount::TotalThreshold { total_min, value } => {
-                !total_min.amount.is_sign_negative() && !value.value.is_sign_negative()
-            }
-        }
+        let threshold_ok = match &self.threshold {
+            RadrootsCoreDiscountThreshold::BinCount { .. } => true,
+            RadrootsCoreDiscountThreshold::OrderQuantity { min } => !min.amount.is_sign_negative(),
+        };
+        let value_ok = match &self.value {
+            RadrootsCoreDiscountValue::MoneyPerBin(m) => !m.amount.is_sign_negative(),
+            RadrootsCoreDiscountValue::Percent(p) => !p.value.is_sign_negative(),
+        };
+        threshold_ok && value_ok
     }
 }

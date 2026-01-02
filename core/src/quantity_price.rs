@@ -56,14 +56,14 @@ impl RadrootsCoreQuantityPrice {
         amount: RadrootsCoreDecimal,
         unit: RadrootsCoreUnit,
     ) -> Result<RadrootsCoreMoney, RadrootsCoreQuantityPriceError> {
-        use crate::unit::convert_mass_decimal;
+        use crate::unit::convert_unit_decimal;
 
         let target = self.quantity.unit;
 
         let normalized = if unit == target {
             amount
         } else {
-            convert_mass_decimal(amount, unit, target).map_err(|_| {
+            convert_unit_decimal(amount, unit, target).map_err(|_| {
                 RadrootsCoreQuantityPriceError::NonConvertibleUnits {
                     from: unit,
                     to: target,
@@ -73,6 +73,60 @@ impl RadrootsCoreQuantityPrice {
 
         let qty = RadrootsCoreQuantity::new(normalized, target);
         self.try_cost_for_rounded(&qty)
+    }
+
+    #[inline]
+    pub fn try_cost_for_quantity_in(
+        &self,
+        qty: &RadrootsCoreQuantity,
+    ) -> Result<RadrootsCoreMoney, RadrootsCoreQuantityPriceError> {
+        self.try_cost_for_amount_in(qty.amount, qty.unit)
+    }
+
+    #[inline]
+    pub fn is_price_per_canonical_unit(&self) -> bool {
+        self.quantity.unit == self.quantity.unit.canonical_unit()
+            && self.quantity.amount == RadrootsCoreDecimal::ONE
+    }
+
+    #[inline]
+    pub fn try_to_unit_price(
+        &self,
+        unit: RadrootsCoreUnit,
+    ) -> Result<RadrootsCoreQuantityPrice, RadrootsCoreQuantityPriceError> {
+        use crate::unit::convert_unit_decimal;
+
+        if self.quantity.amount.is_zero() {
+            return Err(RadrootsCoreQuantityPriceError::PerQuantityZero);
+        }
+
+        let normalized = if self.quantity.unit == unit {
+            self.quantity.amount
+        } else {
+            convert_unit_decimal(self.quantity.amount, self.quantity.unit, unit).map_err(|_| {
+                RadrootsCoreQuantityPriceError::NonConvertibleUnits {
+                    from: self.quantity.unit,
+                    to: unit,
+                }
+            })?
+        };
+
+        if normalized.is_zero() {
+            return Err(RadrootsCoreQuantityPriceError::PerQuantityZero);
+        }
+
+        let amount = self.amount.div_decimal(normalized);
+        Ok(RadrootsCoreQuantityPrice {
+            amount,
+            quantity: RadrootsCoreQuantity::new(RadrootsCoreDecimal::ONE, unit),
+        })
+    }
+
+    #[inline]
+    pub fn try_to_canonical_unit_price(
+        &self,
+    ) -> Result<RadrootsCoreQuantityPrice, RadrootsCoreQuantityPriceError> {
+        self.try_to_unit_price(self.quantity.unit.canonical_unit())
     }
 }
 

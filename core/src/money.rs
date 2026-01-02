@@ -62,12 +62,14 @@ impl RadrootsCoreMoney {
     }
 
     #[inline]
-    pub fn quantize_to_currency(mut self) -> Self {
+    pub fn quantize_to_currency(self) -> Self {
+        self.quantize_to_currency_with_strategy(RoundingStrategy::MidpointAwayFromZero)
+    }
+
+    #[inline]
+    pub fn quantize_to_currency_with_strategy(mut self, strategy: RoundingStrategy) -> Self {
         let e = self.currency.minor_unit_exponent();
-        self.amount.0 = self
-            .amount
-            .0
-            .round_dp_with_strategy(e, RoundingStrategy::MidpointAwayFromZero);
+        self.amount.0 = self.amount.0.round_dp_with_strategy(e, strategy);
         self
     }
 

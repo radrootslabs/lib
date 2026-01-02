@@ -73,3 +73,32 @@ fn display_includes_label_when_present() {
     let q = common::qty("1.5", RadrootsCoreUnit::Each).with_label("bag");
     assert_eq!(q.to_string(), "1.5 each (bag)");
 }
+
+#[test]
+fn try_convert_to_changes_unit_and_amount() {
+    let q = common::qty("1", RadrootsCoreUnit::MassKg);
+    let converted = q.try_convert_to(RadrootsCoreUnit::MassG).unwrap();
+    assert_eq!(converted.amount, common::dec("1000"));
+    assert_eq!(converted.unit, RadrootsCoreUnit::MassG);
+}
+
+#[test]
+fn to_canonical_converts_mass_and_volume() {
+    let q = common::qty("2", RadrootsCoreUnit::VolumeL);
+    let canonical = q.to_canonical().unwrap();
+    assert_eq!(canonical.unit, RadrootsCoreUnit::VolumeMl);
+    assert_eq!(canonical.amount, common::dec("2000"));
+}
+
+#[test]
+fn try_convert_to_rejects_mismatched_dimensions() {
+    let q = common::qty("1", RadrootsCoreUnit::Each);
+    let err = q.try_convert_to(RadrootsCoreUnit::MassG).unwrap_err();
+    assert_eq!(
+        err,
+        radroots_core::RadrootsCoreUnitConvertError::NotConvertibleUnits {
+            from: RadrootsCoreUnit::Each,
+            to: RadrootsCoreUnit::MassG
+        }
+    );
+}
