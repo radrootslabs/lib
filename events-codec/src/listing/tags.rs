@@ -129,6 +129,7 @@ pub fn listing_tags_with_options(
     }
 
     for price in &listing.prices {
+        tags.push(tag_listing_price_generic(price));
         tags.push(tag_listing_price(price));
     }
 
@@ -267,6 +268,14 @@ fn tag_listing_price(price: &RadrootsCoreQuantityPrice) -> Vec<String> {
     {
         tag.push(label);
     }
+    tag
+}
+
+fn tag_listing_price_generic(price: &RadrootsCoreQuantityPrice) -> Vec<String> {
+    let mut tag = Vec::with_capacity(4);
+    tag.push(TAG_PRICE.to_string());
+    tag.push(price.amount.amount.to_string());
+    tag.push(price.amount.currency.as_str().to_ascii_lowercase());
     tag
 }
 

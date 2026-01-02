@@ -164,7 +164,8 @@ fn listing_from_tags(
     };
 
     let mut quantities: Vec<RadrootsListingQuantity> = Vec::new();
-    let mut prices: Vec<RadrootsCoreQuantityPrice> = Vec::new();
+    let mut prices_extended: Vec<RadrootsCoreQuantityPrice> = Vec::new();
+    let mut prices_generic: Vec<RadrootsCoreQuantityPrice> = Vec::new();
     let mut discounts: Vec<RadrootsListingDiscount> = Vec::new();
     let mut location: Option<RadrootsListingLocation> = None;
     let mut inventory_available: Option<RadrootsCoreDecimal> = None;
@@ -250,7 +251,7 @@ fn listing_from_tags(
                     let unit = parse_unit(unit)?;
                     let label = tag.get(5).and_then(|v| clean_value(v));
                     let quantity = RadrootsCoreQuantity::new(quantity_amount, unit).with_optional_label(label);
-                    prices.push(RadrootsCoreQuantityPrice {
+                    prices_extended.push(RadrootsCoreQuantityPrice {
                         amount: RadrootsCoreMoney::new(amount, currency),
                         quantity,
                     });
@@ -258,7 +259,7 @@ fn listing_from_tags(
                     let amount = parse_decimal(amount, TAG_PRICE)?;
                     let currency = parse_currency(currency)?;
                     let quantity = RadrootsCoreQuantity::new(RadrootsCoreDecimal::from(1u32), RadrootsCoreUnit::Each);
-                    prices.push(RadrootsCoreQuantityPrice {
+                    prices_generic.push(RadrootsCoreQuantityPrice {
                         amount: RadrootsCoreMoney::new(amount, currency),
                         quantity,
                     });
@@ -337,6 +338,12 @@ fn listing_from_tags(
         },
     };
 
+    let prices = if prices_extended.is_empty() {
+        prices_generic
+    } else {
+        prices_extended
+    };
+
     let location = location.map(|mut loc| {
         if loc.geohash.is_none() {
             loc.geohash = geohash;
@@ -407,6 +414,63 @@ fn parse_farm_pubkey(tags: &[Vec<String>]) -> Result<String, TradeListingParseEr
         return Err(TradeListingParseError::InvalidTag(TAG_P.to_string()));
     }
     Ok(value)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use radroots_core::RadrootsCoreUnit;
+    use radroots_events::listing::RadrootsListingFarmRef;
+
+    fn farm_ref() -> RadrootsListingFarmRef {
+        RadrootsListingFarmRef {
+            pubkey: "seller".to_string(),
+            d_tag: "farm-1".to_string(),
+        }
+    }
+
+    #[test]
+    fn listing_prefers_extended_price_tags() {
+        let tags = vec![
+            vec!["key".into(), "coffee".into()],
+            vec!["title".into(), "Coffee".into()],
+            vec!["category".into(), "coffee".into()],
+            vec!["price".into(), "20".into(), "usd".into()],
+            vec!["price".into(), "20".into(), "usd".into(), "1".into(), "lb".into()],
+        ];
+
+        let listing = listing_from_tags(
+            &tags,
+            "listing-1".to_string(),
+            farm_ref(),
+            "seller".to_string(),
+        )
+        .expect("listing");
+
+        assert_eq!(listing.prices.len(), 1);
+        assert_eq!(listing.prices[0].quantity.unit, RadrootsCoreUnit::MassLb);
+    }
+
+    #[test]
+    fn listing_accepts_generic_price_tags() {
+        let tags = vec![
+            vec!["key".into(), "coffee".into()],
+            vec!["title".into(), "Coffee".into()],
+            vec!["category".into(), "coffee".into()],
+            vec!["price".into(), "20".into(), "usd".into()],
+        ];
+
+        let listing = listing_from_tags(
+            &tags,
+            "listing-1".to_string(),
+            farm_ref(),
+            "seller".to_string(),
+        )
+        .expect("listing");
+
+        assert_eq!(listing.prices.len(), 1);
+        assert_eq!(listing.prices[0].quantity.unit, RadrootsCoreUnit::Each);
+    }
 }
 
 fn clean_value(value: &str) -> Option<String> {
