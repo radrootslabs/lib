@@ -1,6 +1,6 @@
 use radroots_core::{
-    RadrootsCoreDecimal, RadrootsCoreDiscountValue, RadrootsCoreMoney, RadrootsCorePercent,
-    RadrootsCoreQuantity, RadrootsCoreQuantityPrice,
+    RadrootsCoreDecimal, RadrootsCoreDiscount, RadrootsCoreMoney, RadrootsCoreQuantity,
+    RadrootsCoreQuantityPrice, RadrootsCoreUnit,
 };
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
@@ -84,14 +84,13 @@ pub struct RadrootsListing {
     #[cfg_attr(feature = "serde", serde(default))]
     pub farm: RadrootsListingFarmRef,
     pub product: RadrootsListingProduct,
-    pub quantities: Vec<RadrootsListingQuantity>,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreQuantityPrice[]"))]
-    pub prices: Vec<RadrootsCoreQuantityPrice>,
+    pub primary_bin_id: String,
+    pub bins: Vec<RadrootsListingBin>,
     #[cfg_attr(
         feature = "ts-rs",
-        ts(optional, type = "RadrootsListingDiscount[] | null")
+        ts(optional, type = "RadrootsCoreDiscount[] | null")
     )]
-    pub discounts: Option<Vec<RadrootsListingDiscount>>,
+    pub discounts: Option<Vec<RadrootsCoreDiscount>>,
     #[cfg_attr(
         feature = "ts-rs",
         ts(optional, type = "RadrootsCoreDecimal | null")
@@ -186,46 +185,22 @@ pub struct RadrootsListingProductTagKeys;
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
-pub struct RadrootsListingQuantity {
+pub struct RadrootsListingBin {
+    pub bin_id: String,
     #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreQuantity"))]
-    pub value: RadrootsCoreQuantity,
+    pub quantity: RadrootsCoreQuantity,
+    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreQuantityPrice"))]
+    pub price_per_canonical_unit: RadrootsCoreQuantityPrice,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "RadrootsCoreDecimal | null"))]
+    pub display_amount: Option<RadrootsCoreDecimal>,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "RadrootsCoreUnit | null"))]
+    pub display_unit: Option<RadrootsCoreUnit>,
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
-    pub label: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "number | null"))]
-    pub count: Option<u32>,
-}
-
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "snake_case", tag = "kind", content = "amount"))]
-#[derive(Clone, Debug)]
-pub enum RadrootsListingDiscount {
-    Quantity {
-        ref_quantity: String,
-        #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreQuantity"))]
-        threshold: RadrootsCoreQuantity,
-        #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreMoney"))]
-        value: RadrootsCoreMoney,
-    },
-    Mass {
-        #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreQuantity"))]
-        threshold: RadrootsCoreQuantity,
-        #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreMoney"))]
-        value: RadrootsCoreMoney,
-    },
-    Subtotal {
-        #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreMoney"))]
-        threshold: RadrootsCoreMoney,
-        #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreDiscountValue"))]
-        value: RadrootsCoreDiscountValue,
-    },
-    Total {
-        #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreMoney"))]
-        total_min: RadrootsCoreMoney,
-        #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCorePercent"))]
-        value: RadrootsCorePercent,
-    },
+    pub display_label: Option<String>,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "RadrootsCoreMoney | null"))]
+    pub display_price: Option<RadrootsCoreMoney>,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "RadrootsCoreUnit | null"))]
+    pub display_price_unit: Option<RadrootsCoreUnit>,
 }
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
