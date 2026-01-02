@@ -5,14 +5,10 @@ use alloc::{format, string::{String, ToString}, vec, vec::Vec};
 
 use core::cmp;
 
-use radroots_core::RadrootsCoreQuantityPrice;
-#[cfg(feature = "serde_json")]
-use radroots_core::{
-    RadrootsCoreDiscountValue, RadrootsCoreMoney, RadrootsCorePercent, RadrootsCoreQuantity,
-};
+use radroots_core::{RadrootsCoreDiscount, RadrootsCoreMoney};
 use radroots_events::listing::{
     RadrootsListing, RadrootsListingAvailability, RadrootsListingDeliveryMethod, RadrootsListingFarmRef,
-    RadrootsListingDiscount, RadrootsListingImage, RadrootsListingLocation, RadrootsListingQuantity,
+    RadrootsListingBin, RadrootsListingImage, RadrootsListingLocation,
     RadrootsListingStatus,
 };
 use radroots_events::kinds::KIND_FARM;
@@ -20,9 +16,11 @@ use radroots_events::tags::TAG_D;
 
 use crate::error::EventEncodeError;
 
-const TAG_QUANTITY: &str = "quantity";
 const TAG_PRICE: &str = "price";
-const TAG_PRICE_DISCOUNT_PREFIX: &str = "price-discount-";
+const TAG_RADROOTS_BIN: &str = "radroots:bin";
+const TAG_RADROOTS_PRICE: &str = "radroots:price";
+const TAG_RADROOTS_DISCOUNT: &str = "radroots:discount";
+const TAG_RADROOTS_PRIMARY_BIN: &str = "radroots:primary_bin";
 const TAG_LOCATION: &str = "location";
 const TAG_IMAGE: &str = "image";
 const TAG_GEOHASH: &str = "g";
@@ -96,6 +94,12 @@ pub fn listing_tags_with_options(
     if d_tag.is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("d"));
     }
+    if listing.primary_bin_id.trim().is_empty() {
+        return Err(EventEncodeError::EmptyRequiredField("primary_bin_id"));
+    }
+    if listing.bins.is_empty() {
+        return Err(EventEncodeError::EmptyRequiredField("bins"));
+    }
 
     let mut tags: Vec<Vec<String>> = Vec::new();
     tags.push(vec![TAG_D.to_string(), d_tag.to_string()]);
@@ -124,19 +128,25 @@ pub fn listing_tags_with_options(
         push_tag_value(&mut tags, "year", year);
     }
 
-    for quantity in &listing.quantities {
-        tags.push(tag_listing_quantity(quantity));
+    tags.push(vec![TAG_RADROOTS_PRIMARY_BIN.to_string(), listing.primary_bin_id.clone()]);
+
+    let mut bins: Vec<&RadrootsListingBin> = listing.bins.iter().collect();
+    if let Some(pos) = bins.iter().position(|bin| bin.bin_id == listing.primary_bin_id) {
+        let primary = bins.remove(pos);
+        bins.insert(0, primary);
     }
 
-    for price in &listing.prices {
-        tags.push(tag_listing_price_generic(price));
-        tags.push(tag_listing_price(price));
+    for bin in bins {
+        tags.push(tag_listing_bin(bin)?);
+        tags.push(tag_listing_price(bin)?);
+        let total = bin_total_price(bin)?;
+        tags.push(tag_listing_price_generic(&total));
     }
 
     if let Some(discounts) = &listing.discounts {
         for discount in discounts {
-            let (kind, payload) = discount_tag_parts(discount)?;
-            tags.push(vec![format!("{TAG_PRICE_DISCOUNT_PREFIX}{kind}"), payload]);
+            let payload = discount_tag_payload(discount)?;
+            tags.push(vec![TAG_RADROOTS_DISCOUNT.to_string(), payload]);
         }
     }
 
@@ -234,48 +244,86 @@ fn push_farm_tags(
     Ok(())
 }
 
-fn tag_listing_quantity(quantity: &RadrootsListingQuantity) -> Vec<String> {
-    let mut tag = Vec::with_capacity(5);
-    tag.push(TAG_QUANTITY.to_string());
-    tag.push(quantity.value.amount.to_string());
-    tag.push(quantity.value.unit.code().to_string());
-    let label = quantity
-        .label
-        .as_deref()
-        .and_then(clean_value)
-        .or_else(|| quantity.value.label.as_deref().and_then(clean_value));
-    if let Some(label) = label {
-        tag.push(label);
+fn tag_listing_bin(bin: &RadrootsListingBin) -> Result<Vec<String>, EventEncodeError> {
+    if bin.bin_id.trim().is_empty() {
+        return Err(EventEncodeError::EmptyRequiredField("bin_id"));
     }
-    if let Some(count) = quantity.count {
-        tag.push(count.to_string());
+    let unit = bin.quantity.unit;
+    if unit != unit.canonical_unit() {
+        return Err(EventEncodeError::EmptyRequiredField("bin.quantity"));
     }
-    tag
+    let mut tag = Vec::with_capacity(7);
+    tag.push(TAG_RADROOTS_BIN.to_string());
+    tag.push(bin.bin_id.clone());
+    tag.push(bin.quantity.amount.to_string());
+    tag.push(unit.code().to_string());
+    match (bin.display_amount.as_ref(), bin.display_unit) {
+        (Some(amount), Some(unit)) => {
+            tag.push(amount.to_string());
+            tag.push(unit.code().to_string());
+            if let Some(label) = bin
+                .display_label
+                .as_deref()
+                .and_then(clean_value)
+                .or_else(|| bin.quantity.label.as_deref().and_then(clean_value))
+            {
+                tag.push(label);
+            }
+        }
+        (None, None) => {}
+        (None, Some(_)) => {
+            return Err(EventEncodeError::EmptyRequiredField("bin.display_amount"));
+        }
+        (Some(_), None) => {
+            return Err(EventEncodeError::EmptyRequiredField("bin.display_unit"));
+        }
+    }
+    Ok(tag)
 }
 
-fn tag_listing_price(price: &RadrootsCoreQuantityPrice) -> Vec<String> {
-    let mut tag = Vec::with_capacity(6);
-    tag.push(TAG_PRICE.to_string());
+fn tag_listing_price(bin: &RadrootsListingBin) -> Result<Vec<String>, EventEncodeError> {
+    if bin.bin_id.trim().is_empty() {
+        return Err(EventEncodeError::EmptyRequiredField("bin_id"));
+    }
+    let price = &bin.price_per_canonical_unit;
+    if !price.is_price_per_canonical_unit() {
+        return Err(EventEncodeError::EmptyRequiredField("bin.price_per_canonical_unit"));
+    }
+    let mut tag = Vec::with_capacity(8);
+    tag.push(TAG_RADROOTS_PRICE.to_string());
+    tag.push(bin.bin_id.clone());
     tag.push(price.amount.amount.to_string());
-    tag.push(price.amount.currency.as_str().to_ascii_lowercase());
+    tag.push(price.amount.currency.as_str().to_string());
     tag.push(price.quantity.amount.to_string());
     tag.push(price.quantity.unit.code().to_string());
-    if let Some(label) = price
-        .quantity
-        .label
-        .as_deref()
-        .and_then(clean_value)
-    {
-        tag.push(label);
+    match (&bin.display_price, bin.display_price_unit) {
+        (Some(price_display), Some(unit)) => {
+            if price_display.currency != price.amount.currency {
+                return Err(EventEncodeError::EmptyRequiredField("bin.display_price"));
+            }
+            tag.push(price_display.amount.to_string());
+            tag.push(unit.code().to_string());
+        }
+        (None, None) => {}
+        (None, Some(_)) => return Err(EventEncodeError::EmptyRequiredField("bin.display_price")),
+        (Some(_), None) => {
+            return Err(EventEncodeError::EmptyRequiredField("bin.display_price_unit"));
+        }
     }
-    tag
+    Ok(tag)
 }
 
-fn tag_listing_price_generic(price: &RadrootsCoreQuantityPrice) -> Vec<String> {
+fn bin_total_price(bin: &RadrootsListingBin) -> Result<RadrootsCoreMoney, EventEncodeError> {
+    bin.price_per_canonical_unit
+        .try_cost_for_quantity_in(&bin.quantity)
+        .map_err(|_| EventEncodeError::EmptyRequiredField("bin.price_per_canonical_unit"))
+}
+
+fn tag_listing_price_generic(price: &RadrootsCoreMoney) -> Vec<String> {
     let mut tag = Vec::with_capacity(4);
     tag.push(TAG_PRICE.to_string());
-    tag.push(price.amount.amount.to_string());
-    tag.push(price.amount.currency.as_str().to_ascii_lowercase());
+    tag.push(price.amount.to_string());
+    tag.push(price.currency.as_str().to_string());
     tag
 }
 
@@ -481,48 +529,10 @@ fn clean_value(value: &str) -> Option<String> {
     }
 }
 
-fn discount_tag_parts(
-    discount: &RadrootsListingDiscount,
-) -> Result<(&'static str, String), EventEncodeError> {
+fn discount_tag_payload(discount: &RadrootsCoreDiscount) -> Result<String, EventEncodeError> {
     #[cfg(feature = "serde_json")]
     {
-        let (kind, payload) = match discount {
-            RadrootsListingDiscount::Quantity {
-                ref_quantity,
-                threshold,
-                value,
-            } => (
-                "quantity",
-                serde_json::to_string(&QuantityDiscountPayload {
-                    ref_quantity: ref_quantity.clone(),
-                    threshold: threshold.clone(),
-                    value: value.clone(),
-                }),
-            ),
-            RadrootsListingDiscount::Mass { threshold, value } => (
-                "mass",
-                serde_json::to_string(&MassDiscountPayload {
-                    threshold: threshold.clone(),
-                    value: value.clone(),
-                }),
-            ),
-            RadrootsListingDiscount::Subtotal { threshold, value } => (
-                "subtotal",
-                serde_json::to_string(&SubtotalDiscountPayload {
-                    threshold: threshold.clone(),
-                    value: value.clone(),
-                }),
-            ),
-            RadrootsListingDiscount::Total { total_min, value } => (
-                "total",
-                serde_json::to_string(&TotalDiscountPayload {
-                    total_min: total_min.clone(),
-                    value: value.clone(),
-                }),
-            ),
-        };
-        let payload = payload.map_err(|_| EventEncodeError::Json)?;
-        return Ok((kind, payload));
+        return serde_json::to_string(discount).map_err(|_| EventEncodeError::Json);
     }
     #[cfg(not(feature = "serde_json"))]
     {
@@ -537,33 +547,4 @@ fn status_as_str(status: &RadrootsListingStatus) -> &str {
         RadrootsListingStatus::Sold => "sold",
         RadrootsListingStatus::Other { value } => value.as_str(),
     }
-}
-
-#[cfg(feature = "serde_json")]
-#[derive(serde::Serialize, Clone)]
-struct QuantityDiscountPayload {
-    ref_quantity: String,
-    threshold: RadrootsCoreQuantity,
-    value: RadrootsCoreMoney,
-}
-
-#[cfg(feature = "serde_json")]
-#[derive(serde::Serialize, Clone)]
-struct MassDiscountPayload {
-    threshold: RadrootsCoreQuantity,
-    value: RadrootsCoreMoney,
-}
-
-#[cfg(feature = "serde_json")]
-#[derive(serde::Serialize, Clone)]
-struct SubtotalDiscountPayload {
-    threshold: RadrootsCoreMoney,
-    value: RadrootsCoreDiscountValue,
-}
-
-#[cfg(feature = "serde_json")]
-#[derive(serde::Serialize, Clone)]
-struct TotalDiscountPayload {
-    total_min: RadrootsCoreMoney,
-    value: RadrootsCorePercent,
 }

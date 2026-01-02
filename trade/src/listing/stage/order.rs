@@ -1,7 +1,6 @@
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
-use radroots_core::RadrootsCoreQuantityPrice;
-use radroots_events::listing::{RadrootsListingDiscount, RadrootsListingQuantity};
+use radroots_core::{RadrootsCoreDiscount, RadrootsCoreQuantityPrice};
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
 
@@ -12,10 +11,8 @@ use crate::listing::model::{RadrootsTradeListingSubtotal, RadrootsTradeListingTo
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct TradeListingOrderRequestPayload {
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreQuantityPrice"))]
-    pub price: RadrootsCoreQuantityPrice,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsListingQuantity"))]
-    pub quantity: RadrootsListingQuantity,
+    pub bin_id: String,
+    pub bin_count: u32,
 }
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
@@ -33,12 +30,12 @@ pub struct TradeListingOrderRequest {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct TradeListingOrderResult {
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsListingQuantity"))]
-    pub quantity: RadrootsListingQuantity,
+    pub bin_id: String,
+    pub bin_count: u32,
     #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreQuantityPrice"))]
     pub price: RadrootsCoreQuantityPrice,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsListingDiscount[]"))]
-    pub discounts: Vec<RadrootsListingDiscount>,
+    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreDiscount[]"))]
+    pub discounts: Vec<RadrootsCoreDiscount>,
     pub subtotal: RadrootsTradeListingSubtotal,
     pub total: RadrootsTradeListingTotal,
 }

@@ -20,7 +20,13 @@ mod tests {
         farm_plots_list_set_from_plots,
         member_of_farms_list_set,
     };
-    use radroots_events::listing::{RadrootsListing, RadrootsListingFarmRef, RadrootsListingProduct};
+    use radroots_core::{
+        RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
+        RadrootsCoreQuantityPrice, RadrootsCoreUnit,
+    };
+    use radroots_events::listing::{
+        RadrootsListing, RadrootsListingBin, RadrootsListingFarmRef, RadrootsListingProduct,
+    };
 
     #[test]
     fn farm_tags_include_required_fields() {
@@ -149,8 +155,29 @@ mod tests {
                 profile: None,
                 year: None,
             },
-            quantities: vec![],
-            prices: vec![],
+            primary_bin_id: "bin-1".to_string(),
+            bins: vec![RadrootsListingBin {
+                bin_id: "bin-1".to_string(),
+                quantity: RadrootsCoreQuantity::new(
+                    RadrootsCoreDecimal::from(1u32),
+                    RadrootsCoreUnit::Each,
+                ),
+                price_per_canonical_unit: RadrootsCoreQuantityPrice::new(
+                    RadrootsCoreMoney::new(
+                        RadrootsCoreDecimal::from(10u32),
+                        RadrootsCoreCurrency::USD,
+                    ),
+                    RadrootsCoreQuantity::new(
+                        RadrootsCoreDecimal::from(1u32),
+                        RadrootsCoreUnit::Each,
+                    ),
+                ),
+                display_amount: None,
+                display_unit: None,
+                display_label: None,
+                display_price: None,
+                display_price_unit: None,
+            }],
             discounts: None,
             inventory_available: None,
             availability: None,

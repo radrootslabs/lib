@@ -3,12 +3,15 @@
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
 
-use radroots_core::{RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity, RadrootsCoreQuantityPrice, RadrootsCoreUnit};
+use radroots_core::{
+    RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreDiscount, RadrootsCoreMoney,
+    RadrootsCoreQuantity, RadrootsCoreQuantityPrice, RadrootsCoreUnit,
+};
 use radroots_events::listing::{
-    RadrootsListing, RadrootsListingAvailability, RadrootsListingDeliveryMethod,
-    RadrootsListingDiscount, RadrootsListingFarmRef, RadrootsListingImage,
+    RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
+    RadrootsListingDeliveryMethod, RadrootsListingFarmRef, RadrootsListingImage,
     RadrootsListingImageSize, RadrootsListingLocation, RadrootsListingProduct,
-    RadrootsListingQuantity, RadrootsListingStatus,
+    RadrootsListingStatus,
 };
 use radroots_events::kinds::KIND_FARM;
 use radroots_events::tags::TAG_D;
@@ -17,9 +20,11 @@ use radroots_events_codec::listing::tags::{listing_tags_with_options, ListingTag
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
 
-const TAG_QUANTITY: &str = "quantity";
 const TAG_PRICE: &str = "price";
-const TAG_PRICE_DISCOUNT_PREFIX: &str = "price-discount-";
+const TAG_RADROOTS_BIN: &str = "radroots:bin";
+const TAG_RADROOTS_PRICE: &str = "radroots:price";
+const TAG_RADROOTS_DISCOUNT: &str = "radroots:discount";
+const TAG_RADROOTS_PRIMARY_BIN: &str = "radroots:primary_bin";
 const TAG_LOCATION: &str = "location";
 const TAG_IMAGE: &str = "image";
 const TAG_GEOHASH: &str = "g";
@@ -163,10 +168,10 @@ fn listing_from_tags(
         year: None,
     };
 
-    let mut quantities: Vec<RadrootsListingQuantity> = Vec::new();
-    let mut prices_extended: Vec<RadrootsCoreQuantityPrice> = Vec::new();
-    let mut prices_generic: Vec<RadrootsCoreQuantityPrice> = Vec::new();
-    let mut discounts: Vec<RadrootsListingDiscount> = Vec::new();
+    let mut primary_bin_id: Option<String> = None;
+    let mut bin_drafts: Vec<BinDraft> = Vec::new();
+    let mut bin_order = 0usize;
+    let mut discounts: Vec<RadrootsCoreDiscount> = Vec::new();
     let mut location: Option<RadrootsListingLocation> = None;
     let mut inventory_available: Option<RadrootsCoreDecimal> = None;
     let mut availability_status: Option<RadrootsListingStatus> = None;
@@ -226,44 +231,130 @@ fn listing_from_tags(
             }
             "profile" => set_optional(&mut product.profile, tag.get(1)),
             "year" => set_optional(&mut product.year, tag.get(1)),
-            TAG_QUANTITY => {
-                let amount = tag.get(1).ok_or_else(|| TradeListingParseError::InvalidTag(TAG_QUANTITY.to_string()))?;
-                let unit = tag.get(2).ok_or_else(|| TradeListingParseError::InvalidTag(TAG_QUANTITY.to_string()))?;
-                let amount = parse_decimal(amount, TAG_QUANTITY)?;
-                let unit = parse_unit(unit)?;
-                let label = tag.get(3).and_then(|v| clean_value(v));
-                let count = tag.get(4).and_then(|v| v.parse::<u32>().ok());
-                quantities.push(RadrootsListingQuantity {
-                    value: RadrootsCoreQuantity::new(amount, unit),
-                    label,
-                    count,
-                });
-            }
             TAG_PRICE => {
-                let amount = tag.get(1).ok_or_else(|| TradeListingParseError::InvalidTag(TAG_PRICE.to_string()))?;
-                let currency = tag.get(2).ok_or_else(|| TradeListingParseError::InvalidTag(TAG_PRICE.to_string()))?;
-                if tag.len() >= 5 {
-                    let quantity_amount = tag.get(3).ok_or_else(|| TradeListingParseError::InvalidTag(TAG_PRICE.to_string()))?;
-                    let unit = tag.get(4).ok_or_else(|| TradeListingParseError::InvalidTag(TAG_PRICE.to_string()))?;
-                    let amount = parse_decimal(amount, TAG_PRICE)?;
-                    let currency = parse_currency(currency)?;
-                    let quantity_amount = parse_decimal(quantity_amount, TAG_PRICE)?;
-                    let unit = parse_unit(unit)?;
-                    let label = tag.get(5).and_then(|v| clean_value(v));
-                    let quantity = RadrootsCoreQuantity::new(quantity_amount, unit).with_optional_label(label);
-                    prices_extended.push(RadrootsCoreQuantityPrice {
-                        amount: RadrootsCoreMoney::new(amount, currency),
-                        quantity,
-                    });
+                let _ = tag;
+            }
+            TAG_RADROOTS_PRIMARY_BIN => {
+                let value = tag
+                    .get(1)
+                    .and_then(|v| clean_value(v))
+                    .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_RADROOTS_PRIMARY_BIN.to_string()))?;
+                if let Some(existing) = primary_bin_id.as_ref() {
+                    if existing != &value {
+                        return Err(TradeListingParseError::InvalidTag(
+                            TAG_RADROOTS_PRIMARY_BIN.to_string(),
+                        ));
+                    }
                 } else {
-                    let amount = parse_decimal(amount, TAG_PRICE)?;
-                    let currency = parse_currency(currency)?;
-                    let quantity = RadrootsCoreQuantity::new(RadrootsCoreDecimal::from(1u32), RadrootsCoreUnit::Each);
-                    prices_generic.push(RadrootsCoreQuantityPrice {
-                        amount: RadrootsCoreMoney::new(amount, currency),
-                        quantity,
-                    });
+                    primary_bin_id = Some(value);
                 }
+            }
+            TAG_RADROOTS_BIN => {
+                if tag.len() < 4 {
+                    return Err(TradeListingParseError::InvalidTag(TAG_RADROOTS_BIN.to_string()));
+                }
+                if tag.len() > 7 {
+                    return Err(TradeListingParseError::InvalidTag(TAG_RADROOTS_BIN.to_string()));
+                }
+                let bin_id = tag
+                    .get(1)
+                    .and_then(|v| clean_value(v))
+                    .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_RADROOTS_BIN.to_string()))?;
+                let amount = tag
+                    .get(2)
+                    .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_RADROOTS_BIN.to_string()))?;
+                let unit = tag
+                    .get(3)
+                    .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_RADROOTS_BIN.to_string()))?;
+                let amount = parse_decimal(amount, TAG_RADROOTS_BIN)?;
+                let unit = parse_unit(unit)?;
+                if unit != unit.canonical_unit() {
+                    return Err(TradeListingParseError::InvalidTag(TAG_RADROOTS_BIN.to_string()));
+                }
+                let bin = upsert_bin(&mut bin_drafts, &bin_id, &mut bin_order);
+                if bin.quantity.is_some() {
+                    return Err(TradeListingParseError::InvalidTag(TAG_RADROOTS_BIN.to_string()));
+                }
+                bin.quantity = Some(RadrootsCoreQuantity::new(amount, unit));
+
+                if tag.len() >= 5 {
+                    let display_amount = tag.get(4).ok_or_else(|| {
+                        TradeListingParseError::InvalidTag(TAG_RADROOTS_BIN.to_string())
+                    })?;
+                    let display_amount = parse_decimal(display_amount, TAG_RADROOTS_BIN)?;
+                    let display_unit = tag.get(5).ok_or_else(|| {
+                        TradeListingParseError::InvalidTag(TAG_RADROOTS_BIN.to_string())
+                    })?;
+                    let display_unit = parse_unit(display_unit)?;
+                    bin.display_amount = Some(display_amount);
+                    bin.display_unit = Some(display_unit);
+                    if tag.len() == 7 {
+                        bin.display_label = tag.get(6).and_then(|v| clean_value(v));
+                    }
+                }
+            }
+            TAG_RADROOTS_PRICE => {
+                if tag.len() < 6 {
+                    return Err(TradeListingParseError::InvalidTag(TAG_RADROOTS_PRICE.to_string()));
+                }
+                if tag.len() > 8 {
+                    return Err(TradeListingParseError::InvalidTag(TAG_RADROOTS_PRICE.to_string()));
+                }
+                let bin_id = tag
+                    .get(1)
+                    .and_then(|v| clean_value(v))
+                    .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_RADROOTS_PRICE.to_string()))?;
+                let amount = tag
+                    .get(2)
+                    .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_RADROOTS_PRICE.to_string()))?;
+                let currency = tag
+                    .get(3)
+                    .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_RADROOTS_PRICE.to_string()))?;
+                let per_amount = tag
+                    .get(4)
+                    .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_RADROOTS_PRICE.to_string()))?;
+                let per_unit = tag
+                    .get(5)
+                    .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_RADROOTS_PRICE.to_string()))?;
+                let amount = parse_decimal(amount, TAG_RADROOTS_PRICE)?;
+                let currency = parse_currency(currency)?;
+                let per_amount = parse_decimal(per_amount, TAG_RADROOTS_PRICE)?;
+                let per_unit = parse_unit(per_unit)?;
+                let price_per_canonical_unit = RadrootsCoreQuantityPrice::new(
+                    RadrootsCoreMoney::new(amount, currency),
+                    RadrootsCoreQuantity::new(per_amount, per_unit),
+                );
+                if !price_per_canonical_unit.is_price_per_canonical_unit() {
+                    return Err(TradeListingParseError::InvalidTag(TAG_RADROOTS_PRICE.to_string()));
+                }
+                let bin = upsert_bin(&mut bin_drafts, &bin_id, &mut bin_order);
+                if bin.price_per_canonical_unit.is_some() {
+                    return Err(TradeListingParseError::InvalidTag(TAG_RADROOTS_PRICE.to_string()));
+                }
+                bin.price_per_canonical_unit = Some(price_per_canonical_unit);
+
+                if tag.len() == 7 {
+                    return Err(TradeListingParseError::InvalidTag(TAG_RADROOTS_PRICE.to_string()));
+                }
+                if tag.len() == 8 {
+                    let display_price = tag.get(6).ok_or_else(|| {
+                        TradeListingParseError::InvalidTag(TAG_RADROOTS_PRICE.to_string())
+                    })?;
+                    let display_unit = tag.get(7).ok_or_else(|| {
+                        TradeListingParseError::InvalidTag(TAG_RADROOTS_PRICE.to_string())
+                    })?;
+                    let display_price = parse_decimal(display_price, TAG_RADROOTS_PRICE)?;
+                    let display_unit = parse_unit(display_unit)?;
+                    bin.display_price = Some(RadrootsCoreMoney::new(display_price, currency));
+                    bin.display_price_unit = Some(display_unit);
+                }
+            }
+            TAG_RADROOTS_DISCOUNT => {
+                let payload = tag
+                    .get(1)
+                    .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_RADROOTS_DISCOUNT.to_string()))?;
+                let discount = parse_discount(payload)?;
+                discounts.push(discount);
             }
             TAG_GEOHASH => {
                 if let Some(value) = tag.get(1).and_then(|v| clean_value(v)) {
@@ -320,12 +411,6 @@ fn listing_from_tags(
                     size,
                 });
             }
-            _ if key.starts_with(TAG_PRICE_DISCOUNT_PREFIX) => {
-                let kind = key.trim_start_matches(TAG_PRICE_DISCOUNT_PREFIX);
-                let payload = tag.get(1).ok_or_else(|| TradeListingParseError::InvalidDiscount(kind.to_string()))?;
-                let discount = parse_discount(kind, payload)?;
-                discounts.push(discount);
-            }
             _ => {}
         }
     }
@@ -336,12 +421,6 @@ fn listing_from_tags(
             (None, None) => None,
             (start, end) => Some(RadrootsListingAvailability::Window { start, end }),
         },
-    };
-
-    let prices = if prices_extended.is_empty() {
-        prices_generic
-    } else {
-        prices_extended
     };
 
     let location = location.map(|mut loc| {
@@ -355,12 +434,22 @@ fn listing_from_tags(
         return Err(TradeListingParseError::InvalidTag(TAG_P.to_string()));
     }
 
+    let primary_bin_id = primary_bin_id
+        .and_then(|v| clean_value(&v))
+        .ok_or_else(|| TradeListingParseError::MissingTag(TAG_RADROOTS_PRIMARY_BIN.to_string()))?;
+    let bins = build_bins(bin_drafts)?;
+    if !bins.iter().any(|bin| bin.bin_id == primary_bin_id) {
+        return Err(TradeListingParseError::InvalidTag(
+            TAG_RADROOTS_PRIMARY_BIN.to_string(),
+        ));
+    }
+
     Ok(RadrootsListing {
         d_tag,
         farm: farm_ref,
         product,
-        quantities,
-        prices,
+        primary_bin_id,
+        bins,
         discounts: if discounts.is_empty() { None } else { Some(discounts) },
         inventory_available,
         availability,
@@ -430,13 +519,31 @@ mod tests {
     }
 
     #[test]
-    fn listing_prefers_extended_price_tags() {
+    fn listing_parses_radroots_bins() {
         let tags = vec![
             vec!["key".into(), "coffee".into()],
             vec!["title".into(), "Coffee".into()],
             vec!["category".into(), "coffee".into()],
-            vec!["price".into(), "20".into(), "usd".into()],
-            vec!["price".into(), "20".into(), "usd".into(), "1".into(), "lb".into()],
+            vec!["radroots:primary_bin".into(), "bin-1".into()],
+            vec![
+                "radroots:bin".into(),
+                "bin-1".into(),
+                "1000".into(),
+                "g".into(),
+                "1".into(),
+                "kg".into(),
+                "bag".into(),
+            ],
+            vec![
+                "radroots:price".into(),
+                "bin-1".into(),
+                "0.01".into(),
+                "USD".into(),
+                "1".into(),
+                "g".into(),
+                "10".into(),
+                "kg".into(),
+            ],
         ];
 
         let listing = listing_from_tags(
@@ -447,29 +554,20 @@ mod tests {
         )
         .expect("listing");
 
-        assert_eq!(listing.prices.len(), 1);
-        assert_eq!(listing.prices[0].quantity.unit, RadrootsCoreUnit::MassLb);
-    }
-
-    #[test]
-    fn listing_accepts_generic_price_tags() {
-        let tags = vec![
-            vec!["key".into(), "coffee".into()],
-            vec!["title".into(), "Coffee".into()],
-            vec!["category".into(), "coffee".into()],
-            vec!["price".into(), "20".into(), "usd".into()],
-        ];
-
-        let listing = listing_from_tags(
-            &tags,
-            "listing-1".to_string(),
-            farm_ref(),
-            "seller".to_string(),
-        )
-        .expect("listing");
-
-        assert_eq!(listing.prices.len(), 1);
-        assert_eq!(listing.prices[0].quantity.unit, RadrootsCoreUnit::Each);
+        assert_eq!(listing.primary_bin_id, "bin-1");
+        assert_eq!(listing.bins.len(), 1);
+        assert_eq!(listing.bins[0].quantity.unit, RadrootsCoreUnit::MassG);
+        assert_eq!(
+            listing.bins[0].price_per_canonical_unit.quantity.unit,
+            RadrootsCoreUnit::MassG
+        );
+        assert_eq!(
+            listing.bins[0]
+                .display_unit
+                .expect("display unit")
+                .code(),
+            "kg"
+        );
     }
 }
 
@@ -515,81 +613,81 @@ fn parse_image_size(value: &str) -> Option<RadrootsListingImageSize> {
     Some(RadrootsListingImageSize { w, h })
 }
 
-fn parse_discount(
-    kind: &str,
-    payload: &str,
-) -> Result<RadrootsListingDiscount, TradeListingParseError> {
+fn parse_discount(payload: &str) -> Result<RadrootsCoreDiscount, TradeListingParseError> {
     #[cfg(feature = "serde_json")]
     {
-        match kind {
-            "quantity" => {
-                let data: QuantityDiscountPayload =
-                    serde_json::from_str(payload).map_err(|_| TradeListingParseError::InvalidDiscount(kind.to_string()))?;
-                Ok(RadrootsListingDiscount::Quantity {
-                    ref_quantity: data.ref_quantity,
-                    threshold: data.threshold,
-                    value: data.value,
-                })
-            }
-            "mass" => {
-                let data: MassDiscountPayload =
-                    serde_json::from_str(payload).map_err(|_| TradeListingParseError::InvalidDiscount(kind.to_string()))?;
-                Ok(RadrootsListingDiscount::Mass {
-                    threshold: data.threshold,
-                    value: data.value,
-                })
-            }
-            "subtotal" => {
-                let data: SubtotalDiscountPayload =
-                    serde_json::from_str(payload).map_err(|_| TradeListingParseError::InvalidDiscount(kind.to_string()))?;
-                Ok(RadrootsListingDiscount::Subtotal {
-                    threshold: data.threshold,
-                    value: data.value,
-                })
-            }
-            "total" => {
-                let data: TotalDiscountPayload =
-                    serde_json::from_str(payload).map_err(|_| TradeListingParseError::InvalidDiscount(kind.to_string()))?;
-                Ok(RadrootsListingDiscount::Total {
-                    total_min: data.total_min,
-                    value: data.value,
-                })
-            }
-            _ => Err(TradeListingParseError::InvalidDiscount(kind.to_string())),
-        }
+        serde_json::from_str(payload)
+            .map_err(|_| TradeListingParseError::InvalidDiscount(TAG_RADROOTS_DISCOUNT.to_string()))
     }
     #[cfg(not(feature = "serde_json"))]
     {
-        let _ = (kind, payload);
+        let _ = payload;
         Err(TradeListingParseError::InvalidJson("discount".to_string()))
     }
 }
 
-#[cfg(feature = "serde_json")]
-#[derive(serde::Deserialize, serde::Serialize, Clone)]
-struct QuantityDiscountPayload {
-    ref_quantity: String,
-    threshold: RadrootsCoreQuantity,
-    value: RadrootsCoreMoney,
+#[derive(Clone, Debug)]
+struct BinDraft {
+    bin_id: String,
+    order_index: usize,
+    quantity: Option<RadrootsCoreQuantity>,
+    display_amount: Option<RadrootsCoreDecimal>,
+    display_unit: Option<RadrootsCoreUnit>,
+    display_label: Option<String>,
+    price_per_canonical_unit: Option<RadrootsCoreQuantityPrice>,
+    display_price: Option<RadrootsCoreMoney>,
+    display_price_unit: Option<RadrootsCoreUnit>,
 }
 
-#[cfg(feature = "serde_json")]
-#[derive(serde::Deserialize, serde::Serialize, Clone)]
-struct MassDiscountPayload {
-    threshold: RadrootsCoreQuantity,
-    value: RadrootsCoreMoney,
+fn upsert_bin<'a>(
+    bins: &'a mut Vec<BinDraft>,
+    bin_id: &str,
+    order_index: &mut usize,
+) -> &'a mut BinDraft {
+    if let Some(pos) = bins.iter().position(|bin| bin.bin_id == bin_id) {
+        return &mut bins[pos];
+    }
+    let draft = BinDraft {
+        bin_id: bin_id.to_string(),
+        order_index: *order_index,
+        quantity: None,
+        display_amount: None,
+        display_unit: None,
+        display_label: None,
+        price_per_canonical_unit: None,
+        display_price: None,
+        display_price_unit: None,
+    };
+    bins.push(draft);
+    *order_index += 1;
+    let idx = bins.len() - 1;
+    &mut bins[idx]
 }
 
-#[cfg(feature = "serde_json")]
-#[derive(serde::Deserialize, serde::Serialize, Clone)]
-struct SubtotalDiscountPayload {
-    threshold: RadrootsCoreMoney,
-    value: radroots_core::RadrootsCoreDiscountValue,
-}
-
-#[cfg(feature = "serde_json")]
-#[derive(serde::Deserialize, serde::Serialize, Clone)]
-struct TotalDiscountPayload {
-    total_min: RadrootsCoreMoney,
-    value: radroots_core::RadrootsCorePercent,
+fn build_bins(mut drafts: Vec<BinDraft>) -> Result<Vec<RadrootsListingBin>, TradeListingParseError> {
+    drafts.sort_by_key(|draft| draft.order_index);
+    let mut bins = Vec::with_capacity(drafts.len());
+    for draft in drafts {
+        let quantity = draft
+            .quantity
+            .ok_or_else(|| TradeListingParseError::MissingTag(TAG_RADROOTS_BIN.to_string()))?;
+        let price = draft.price_per_canonical_unit.ok_or_else(|| {
+            TradeListingParseError::MissingTag(TAG_RADROOTS_PRICE.to_string())
+        })?;
+        if quantity.unit != price.quantity.unit {
+            return Err(TradeListingParseError::InvalidTag(TAG_RADROOTS_PRICE.to_string()));
+        }
+        let bin = RadrootsListingBin {
+            bin_id: draft.bin_id,
+            quantity,
+            price_per_canonical_unit: price,
+            display_amount: draft.display_amount,
+            display_unit: draft.display_unit,
+            display_label: draft.display_label,
+            display_price: draft.display_price,
+            display_price_unit: draft.display_price_unit,
+        };
+        bins.push(bin);
+    }
+    Ok(bins)
 }

@@ -23,7 +23,7 @@
         "build:cjs": "tsc -p tsconfig.cjs.json",
         "build": "npm run build:esm && npm run build:cjs",
         "prebuild": "npm run clean && npm run prepend-imports",
-        "prepend-imports": "bash -c 'f=./src/types.ts; line=\"import type { RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreDiscountValue, RadrootsCoreMoney, RadrootsCoreQuantity, RadrootsCoreQuantityPrice, RadrootsCoreUnit } from \\\"@radroots/core-bindings\\\";\"; grep -qxF \"$line\" \"$f\" || (echo -e \"$line\\n\\n$(cat $f)\" > \"$f\")' && bash -c 'f=./src/types.ts; line=\"import type { RadrootsListingDiscount, RadrootsListingImage, RadrootsNostrEventPtr } from \\\"@radroots/events-bindings\\\";\"; grep -qxF \"$line\" \"$f\" || (echo -e \"$line\\n\\n$(cat $f)\" > \"$f\")'",
+        "prepend-imports": "bash -c 'f=./src/types.ts; line=\"import type { RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreDiscount, RadrootsCoreDiscountValue, RadrootsCoreMoney, RadrootsCoreQuantity, RadrootsCoreQuantityPrice, RadrootsCoreUnit } from \\\"@radroots/core-bindings\\\";\"; grep -qxF \"$line\" \"$f\" || (echo -e \"$line\\n\\n$(cat $f)\" > \"$f\")' && bash -c 'f=./src/types.ts; old=\"import type { RadrootsListingDiscount, RadrootsListingImage, RadrootsNostrEventPtr } from \\\"@radroots/events-bindings\\\";\"; if grep -qxF \"$old\" \"$f\"; then grep -vxF \"$old\" \"$f\" > \"$f.tmp\" && mv \"$f.tmp\" \"$f\"; fi; line=\"import type { RadrootsListingImage, RadrootsNostrEventPtr } from \\\"@radroots/events-bindings\\\";\"; grep -qxF \"$line\" \"$f\" || (echo -e \"$line\\n\\n$(cat $f)\" > \"$f\")'",
         "clean": "rimraf dist",
         "dev": "npm run watch",
         "watch": "tsc -w"

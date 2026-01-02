@@ -3,7 +3,7 @@
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
 
-use radroots_core::{RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreUnit};
+use radroots_core::{RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity, RadrootsCoreUnit};
 use radroots_events::{
     RadrootsNostrEvent,
     kinds::KIND_LISTING,
@@ -29,6 +29,9 @@ pub struct RadrootsTradeListing {
     pub title: String,
     pub description: String,
     pub product_type: String,
+    pub primary_bin_id: String,
+    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreQuantity"))]
+    pub bin_quantity: RadrootsCoreQuantity,
     #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreUnit"))]
     pub unit: RadrootsCoreUnit,
     #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreMoney"))]
@@ -61,6 +64,9 @@ pub enum TradeListingValidationError {
     MissingTitle,
     MissingDescription,
     MissingProductType,
+    MissingBins,
+    MissingPrimaryBin,
+    InvalidBin,
     MissingPrice,
     InvalidPrice,
     MissingInventory,
@@ -102,6 +108,11 @@ impl core::fmt::Display for TradeListingValidationError {
             TradeListingValidationError::MissingProductType => {
                 write!(f, "missing listing product type")
             }
+            TradeListingValidationError::MissingBins => write!(f, "missing listing bins"),
+            TradeListingValidationError::MissingPrimaryBin => {
+                write!(f, "missing primary listing bin")
+            }
+            TradeListingValidationError::InvalidBin => write!(f, "invalid listing bin"),
             TradeListingValidationError::MissingPrice => write!(f, "missing listing price"),
             TradeListingValidationError::InvalidPrice => write!(f, "invalid listing price"),
             TradeListingValidationError::MissingInventory => {
@@ -173,18 +184,46 @@ pub fn validate_listing_event(
         return Err(TradeListingValidationError::MissingProductType);
     }
 
-    let price = listing
-        .prices
-        .first()
-        .ok_or(TradeListingValidationError::MissingPrice)?;
-    if price.amount.amount.is_sign_negative() {
+    if listing.bins.is_empty() {
+        return Err(TradeListingValidationError::MissingBins);
+    }
+    let primary_bin_id = listing.primary_bin_id.trim().to_string();
+    if primary_bin_id.is_empty() {
+        return Err(TradeListingValidationError::MissingPrimaryBin);
+    }
+    let primary_bin = listing
+        .bins
+        .iter()
+        .find(|bin| bin.bin_id == primary_bin_id)
+        .ok_or(TradeListingValidationError::MissingPrimaryBin)?;
+
+    if primary_bin.quantity.amount.is_sign_negative() {
+        return Err(TradeListingValidationError::InvalidBin);
+    }
+    if !primary_bin.quantity.is_canonical() {
+        return Err(TradeListingValidationError::InvalidBin);
+    }
+    if !primary_bin
+        .price_per_canonical_unit
+        .is_price_per_canonical_unit()
+    {
+        return Err(TradeListingValidationError::InvalidPrice);
+    }
+    if primary_bin
+        .price_per_canonical_unit
+        .amount
+        .amount
+        .is_sign_negative()
+    {
+        return Err(TradeListingValidationError::InvalidPrice);
+    }
+    if primary_bin.price_per_canonical_unit.quantity.unit != primary_bin.quantity.unit {
         return Err(TradeListingValidationError::InvalidPrice);
     }
 
     let inventory_available = listing
         .inventory_available
         .clone()
-        .or_else(|| derive_inventory(&listing))
         .ok_or(TradeListingValidationError::MissingInventory)?;
     if inventory_available.is_sign_negative() {
         return Err(TradeListingValidationError::InvalidInventory);
@@ -210,20 +249,15 @@ pub fn validate_listing_event(
         title,
         description,
         product_type,
-        unit: price.quantity.unit,
-        unit_price: price.amount.clone(),
+        primary_bin_id: primary_bin_id.clone(),
+        bin_quantity: primary_bin.quantity.clone(),
+        unit: primary_bin.quantity.unit,
+        unit_price: primary_bin.price_per_canonical_unit.amount.clone(),
         inventory_available,
         availability,
         location,
         delivery_method,
         listing,
-    })
-}
-
-fn derive_inventory(listing: &RadrootsListing) -> Option<RadrootsCoreDecimal> {
-    listing.quantities.iter().find_map(|qty| {
-        qty.count
-            .map(|count| qty.value.amount * RadrootsCoreDecimal::from(count))
     })
 }
 
@@ -239,8 +273,8 @@ mod tests {
         kinds::KIND_LISTING,
         listing::{
             RadrootsListing, RadrootsListingAvailability, RadrootsListingDeliveryMethod,
-            RadrootsListingFarmRef, RadrootsListingLocation, RadrootsListingProduct,
-            RadrootsListingQuantity,
+            RadrootsListingBin, RadrootsListingFarmRef, RadrootsListingLocation,
+            RadrootsListingProduct,
         },
     };
 
@@ -262,26 +296,31 @@ mod tests {
                 profile: None,
                 year: None,
             },
-            quantities: vec![RadrootsListingQuantity {
-                value: RadrootsCoreQuantity::new(
-                    RadrootsCoreDecimal::from(1u32),
-                    RadrootsCoreUnit::MassLb,
-                ),
-                label: None,
-                count: Some(5),
-            }],
-            prices: vec![RadrootsCoreQuantityPrice {
-                amount: RadrootsCoreMoney::new(
-                    RadrootsCoreDecimal::from(20u32),
-                    RadrootsCoreCurrency::USD,
-                ),
+            primary_bin_id: "bin-1".into(),
+            bins: vec![RadrootsListingBin {
+                bin_id: "bin-1".into(),
                 quantity: RadrootsCoreQuantity::new(
-                    RadrootsCoreDecimal::from(1u32),
-                    RadrootsCoreUnit::MassLb,
+                    RadrootsCoreDecimal::from(1000u32),
+                    RadrootsCoreUnit::MassG,
                 ),
+                price_per_canonical_unit: RadrootsCoreQuantityPrice {
+                    amount: RadrootsCoreMoney::new(
+                        RadrootsCoreDecimal::from(20u32),
+                        RadrootsCoreCurrency::USD,
+                    ),
+                    quantity: RadrootsCoreQuantity::new(
+                        RadrootsCoreDecimal::from(1u32),
+                        RadrootsCoreUnit::MassG,
+                    ),
+                },
+                display_amount: None,
+                display_unit: None,
+                display_label: None,
+                display_price: None,
+                display_price_unit: None,
             }],
             discounts: None,
-            inventory_available: None,
+            inventory_available: Some(RadrootsCoreDecimal::from(5u32)),
             availability: Some(RadrootsListingAvailability::Status {
                 status: radroots_events::listing::RadrootsListingStatus::Active,
             }),
@@ -391,7 +430,7 @@ mod tests {
     #[test]
     fn validate_listing_rejects_missing_inventory() {
         let mut listing = base_listing();
-        listing.quantities[0].count = None;
+        listing.inventory_available = None;
         let event = base_event(&listing);
         let err = validate_listing_event(&event).unwrap_err();
         assert!(matches!(err, TradeListingValidationError::MissingInventory));

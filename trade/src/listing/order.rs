@@ -3,7 +3,7 @@
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
 
-use radroots_core::{RadrootsCoreDiscountValue, RadrootsCoreMoney, RadrootsCoreQuantity};
+use radroots_core::RadrootsCoreDiscountValue;
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
 
@@ -12,10 +12,8 @@ use ts_rs::TS;
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TradeOrderItem {
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreQuantity"))]
-    pub quantity: RadrootsCoreQuantity,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreMoney"))]
-    pub unit_price: RadrootsCoreMoney,
+    pub bin_id: String,
+    pub bin_count: u32,
 }
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
@@ -24,15 +22,9 @@ pub struct TradeOrderItem {
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case", tag = "kind", content = "amount"))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TradeOrderChange {
-    Quantity {
+    BinCount {
         item_index: u32,
-        #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreQuantity"))]
-        quantity: RadrootsCoreQuantity,
-    },
-    Price {
-        item_index: u32,
-        #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreMoney"))]
-        unit_price: RadrootsCoreMoney,
+        bin_count: u32,
     },
     ItemAdd {
         item: TradeOrderItem,

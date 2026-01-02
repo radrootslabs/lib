@@ -1,16 +1,17 @@
 #![cfg(feature = "serde_json")]
 
 use radroots_core::{
-    RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
-    RadrootsCoreQuantityPrice, RadrootsCoreUnit,
+    RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreDiscount,
+    RadrootsCoreDiscountScope, RadrootsCoreDiscountThreshold, RadrootsCoreDiscountValue,
+    RadrootsCoreMoney, RadrootsCoreQuantity, RadrootsCoreQuantityPrice, RadrootsCoreUnit,
 };
 use radroots_events::{
     kinds::{KIND_LISTING, KIND_POST},
     listing::{
         RadrootsListing, RadrootsListingAvailability, RadrootsListingDeliveryMethod,
-        RadrootsListingDiscount, RadrootsListingFarmRef, RadrootsListingImage,
+        RadrootsListingBin, RadrootsListingFarmRef, RadrootsListingImage,
         RadrootsListingImageSize, RadrootsListingLocation, RadrootsListingProduct,
-        RadrootsListingQuantity, RadrootsListingStatus,
+        RadrootsListingStatus,
     },
 };
 use radroots_events::tags::TAG_D;
@@ -44,12 +45,17 @@ fn sample_listing(d_tag: &str) -> RadrootsListing {
             profile: None,
             year: None,
         },
-        quantities: vec![RadrootsListingQuantity {
-            value: quantity,
-            label: None,
-            count: Some(1),
+        primary_bin_id: "bin-1".to_string(),
+        bins: vec![RadrootsListingBin {
+            bin_id: "bin-1".to_string(),
+            quantity,
+            price_per_canonical_unit: price,
+            display_amount: None,
+            display_unit: None,
+            display_label: None,
+            display_price: None,
+            display_price_unit: None,
         }],
-        prices: vec![price],
         discounts: None,
         inventory_available: None,
         availability: None,
@@ -60,14 +66,10 @@ fn sample_listing(d_tag: &str) -> RadrootsListing {
 }
 
 fn sample_listing_full(d_tag: &str) -> RadrootsListing {
-    let qty_amount = RadrootsCoreDecimal::from_str("1").unwrap();
-    let price_amount = RadrootsCoreDecimal::from_str("24.50").unwrap();
-    let discount_threshold = RadrootsCoreDecimal::from_str("10").unwrap();
-    let discount_amount = RadrootsCoreDecimal::from_str("20").unwrap();
-
-    let quantity = RadrootsCoreQuantity::new(qty_amount, RadrootsCoreUnit::MassLb).with_label("bag");
-    let price_quantity =
-        RadrootsCoreQuantity::new(qty_amount, RadrootsCoreUnit::MassLb).with_label("bag");
+    let qty_amount = RadrootsCoreDecimal::from_str("1000").unwrap();
+    let price_amount = RadrootsCoreDecimal::from_str("0.01").unwrap();
+    let display_qty = RadrootsCoreDecimal::from_str("1").unwrap();
+    let display_price = RadrootsCoreDecimal::from_str("10").unwrap();
 
     RadrootsListing {
         d_tag: d_tag.to_string(),
@@ -86,19 +88,33 @@ fn sample_listing_full(d_tag: &str) -> RadrootsListing {
             profile: Some("standard".to_string()),
             year: Some("2024".to_string()),
         },
-        quantities: vec![RadrootsListingQuantity {
-            value: quantity,
-            label: None,
-            count: Some(120),
+        primary_bin_id: "bin-1".to_string(),
+        bins: vec![RadrootsListingBin {
+            bin_id: "bin-1".to_string(),
+            quantity: RadrootsCoreQuantity::new(qty_amount, RadrootsCoreUnit::MassG),
+            price_per_canonical_unit: RadrootsCoreQuantityPrice::new(
+                RadrootsCoreMoney::new(price_amount, RadrootsCoreCurrency::USD),
+                RadrootsCoreQuantity::new(RadrootsCoreDecimal::from(1u32), RadrootsCoreUnit::MassG),
+            ),
+            display_amount: Some(display_qty),
+            display_unit: Some(RadrootsCoreUnit::MassKg),
+            display_label: Some("bag".to_string()),
+            display_price: Some(RadrootsCoreMoney::new(
+                display_price,
+                RadrootsCoreCurrency::USD,
+            )),
+            display_price_unit: Some(RadrootsCoreUnit::MassKg),
         }],
-        prices: vec![RadrootsCoreQuantityPrice::new(
-            RadrootsCoreMoney::new(price_amount, RadrootsCoreCurrency::USD),
-            price_quantity,
-        )],
-        discounts: Some(vec![RadrootsListingDiscount::Quantity {
-            ref_quantity: "bag".to_string(),
-            threshold: RadrootsCoreQuantity::new(discount_threshold, RadrootsCoreUnit::MassLb),
-            value: RadrootsCoreMoney::new(discount_amount, RadrootsCoreCurrency::USD),
+        discounts: Some(vec![RadrootsCoreDiscount {
+            scope: RadrootsCoreDiscountScope::Bin,
+            threshold: RadrootsCoreDiscountThreshold::BinCount {
+                bin_id: "bin-1".to_string(),
+                min: 5,
+            },
+            value: RadrootsCoreDiscountValue::MoneyPerBin(RadrootsCoreMoney::new(
+                RadrootsCoreDecimal::from_str("2").unwrap(),
+                RadrootsCoreCurrency::USD,
+            )),
         }]),
         inventory_available: None,
         availability: None,
@@ -138,8 +154,8 @@ fn listing_roundtrip_from_event() {
     assert_eq!(decoded.d_tag, listing.d_tag);
     assert_eq!(decoded.product.key, listing.product.key);
     assert_eq!(decoded.product.title, listing.product.title);
-    assert_eq!(decoded.quantities.len(), listing.quantities.len());
-    assert_eq!(decoded.prices.len(), listing.prices.len());
+    assert_eq!(decoded.primary_bin_id, listing.primary_bin_id);
+    assert_eq!(decoded.bins.len(), listing.bins.len());
 }
 
 #[test]
@@ -216,29 +232,51 @@ fn listing_build_tags_includes_listing_fields() {
             && t.get(1).map(|s| s.as_str()) == Some("Widget")
     }));
 
-    let qty_tag = tags
+    let primary_tag = tags
         .iter()
-        .find(|t| t.get(0).map(|s| s.as_str()) == Some("quantity"))
-        .expect("quantity tag");
-    assert_eq!(qty_tag.get(2).map(|s| s.as_str()), Some("lb"));
-    assert_eq!(qty_tag.get(3).map(|s| s.as_str()), Some("bag"));
-    assert_eq!(qty_tag.get(4).map(|s| s.as_str()), Some("120"));
+        .find(|t| t.get(0).map(|s| s.as_str()) == Some("radroots:primary_bin"))
+        .expect("primary bin tag");
+    assert_eq!(primary_tag.get(1).map(|s| s.as_str()), Some("bin-1"));
+
+    let bin_tag = tags
+        .iter()
+        .find(|t| t.get(0).map(|s| s.as_str()) == Some("radroots:bin"))
+        .expect("bin tag");
+    assert_eq!(bin_tag.get(1).map(|s| s.as_str()), Some("bin-1"));
+    assert_eq!(bin_tag.get(2).map(|s| s.as_str()), Some("1000"));
+    assert_eq!(bin_tag.get(3).map(|s| s.as_str()), Some("g"));
+    assert_eq!(bin_tag.get(4).map(|s| s.as_str()), Some("1"));
+    assert_eq!(bin_tag.get(5).map(|s| s.as_str()), Some("kg"));
+    assert_eq!(bin_tag.get(6).map(|s| s.as_str()), Some("bag"));
 
     let price_tag = tags
         .iter()
-        .find(|t| t.get(0).map(|s| s.as_str()) == Some("price"))
-        .expect("price tag");
-    assert_eq!(price_tag.get(2).map(|s| s.as_str()), Some("usd"));
-    assert_eq!(price_tag.get(4).map(|s| s.as_str()), Some("lb"));
-    assert_eq!(price_tag.get(5).map(|s| s.as_str()), Some("bag"));
+        .find(|t| t.get(0).map(|s| s.as_str()) == Some("radroots:price"))
+        .expect("radroots price tag");
+    assert_eq!(price_tag.get(1).map(|s| s.as_str()), Some("bin-1"));
+    assert_eq!(price_tag.get(2).map(|s| s.as_str()), Some("0.01"));
+    assert_eq!(price_tag.get(3).map(|s| s.as_str()), Some("USD"));
+    assert_eq!(price_tag.get(4).map(|s| s.as_str()), Some("1"));
+    assert_eq!(price_tag.get(5).map(|s| s.as_str()), Some("g"));
+    assert_eq!(price_tag.get(6).map(|s| s.as_str()), Some("10"));
+    assert_eq!(price_tag.get(7).map(|s| s.as_str()), Some("kg"));
+
+    let generic_price_tag = tags
+        .iter()
+        .find(|t| {
+            t.get(0).map(|s| s.as_str()) == Some("price")
+                && t.get(1).map(|s| s.as_str()) == Some("10")
+        })
+        .expect("generic price tag");
+    assert_eq!(generic_price_tag.get(2).map(|s| s.as_str()), Some("USD"));
 
     let discount_tag = tags
         .iter()
-        .find(|t| t.get(0).map(|s| s.as_str()) == Some("price-discount-quantity"))
+        .find(|t| t.get(0).map(|s| s.as_str()) == Some("radroots:discount"))
         .expect("discount tag");
     assert!(discount_tag
         .get(1)
-        .map(|s| s.contains("\"ref_quantity\":\"bag\""))
+        .map(|s| s.contains("\"scope\":\"bin\""))
         .unwrap_or(false));
 
     assert!(tags.iter().any(|t| {
