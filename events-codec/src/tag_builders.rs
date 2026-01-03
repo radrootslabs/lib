@@ -12,6 +12,8 @@ use radroots_events::{
     coop::RadrootsCoop,
     follow::RadrootsFollow,
     farm::RadrootsFarm,
+    resource_area::RadrootsResourceArea,
+    resource_cap::RadrootsResourceHarvestCap,
     gift_wrap::RadrootsGiftWrap,
     job_feedback::RadrootsJobFeedback,
     job_request::RadrootsJobRequest,
@@ -35,6 +37,8 @@ use crate::document::encode::document_build_tags;
 use crate::coop::encode::coop_build_tags;
 use crate::follow::encode::follow_build_tags;
 use crate::farm::encode::farm_build_tags;
+use crate::resource_area::encode::resource_area_build_tags;
+use crate::resource_cap::encode::resource_harvest_cap_build_tags;
 use crate::job::encode::JobEncodeError;
 use crate::job::feedback::encode::job_feedback_build_tags;
 use crate::job::request::encode::job_request_build_tags;
@@ -115,6 +119,22 @@ impl RadrootsEventTagBuilder for RadrootsFarm {
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
         farm_build_tags(self)
+    }
+}
+
+impl RadrootsEventTagBuilder for RadrootsResourceArea {
+    type Error = EventEncodeError;
+
+    fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
+        resource_area_build_tags(self)
+    }
+}
+
+impl RadrootsEventTagBuilder for RadrootsResourceHarvestCap {
+    type Error = EventEncodeError;
+
+    fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
+        resource_harvest_cap_build_tags(self)
     }
 }
 

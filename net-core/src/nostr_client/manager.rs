@@ -43,7 +43,7 @@ impl NostrClientManager {
             async move {
                 use futures::StreamExt;
 
-                let mut since = since_unix.unwrap_or_else(|| RadrootsNostrTimestamp::now().as_u64());
+                let mut since = since_unix.unwrap_or_else(|| RadrootsNostrTimestamp::now().as_secs());
                 loop {
                     let filter = radroots_nostr_post_events_filter(None, Some(since));
 
@@ -59,9 +59,13 @@ impl NostrClientManager {
                         }
                     };
 
-                    while let Some(event) = stream.next().await {
+                    while let Some((_, event)) = stream.next().await {
+                        let event = match event {
+                            Ok(event) => event,
+                            Err(_) => continue,
+                        };
                         let meta = radroots_nostr::event_adapters::to_post_event_metadata(&event);
-                        let ts = event.created_at.as_u64();
+                        let ts = event.created_at.as_secs();
                         since = ts.saturating_add(1);
                         let _ = inner.post_events_tx.send(meta);
                     }

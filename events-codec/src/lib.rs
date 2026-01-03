@@ -16,6 +16,8 @@ pub mod app_data;
 pub mod document;
 pub mod coop;
 pub mod farm;
+pub mod resource_area;
+pub mod resource_cap;
 pub mod gift_wrap;
 pub mod message;
 pub mod message_file;

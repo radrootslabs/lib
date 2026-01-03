@@ -56,6 +56,8 @@ fn sample_listing(d_tag: &str) -> RadrootsListing {
             display_price: None,
             display_price_unit: None,
         }],
+        resource_area: None,
+        plot: None,
         discounts: None,
         inventory_available: None,
         availability: None,
@@ -105,6 +107,8 @@ fn sample_listing_full(d_tag: &str) -> RadrootsListing {
             )),
             display_price_unit: Some(RadrootsCoreUnit::MassKg),
         }],
+        resource_area: None,
+        plot: None,
         discounts: Some(vec![RadrootsCoreDiscount {
             scope: RadrootsCoreDiscountScope::Bin,
             threshold: RadrootsCoreDiscountThreshold::BinCount {

@@ -13,7 +13,9 @@ use radroots_events::listing::{
     RadrootsListingImageSize, RadrootsListingLocation, RadrootsListingProduct,
     RadrootsListingStatus,
 };
-use radroots_events::kinds::KIND_FARM;
+use radroots_events::kinds::{KIND_FARM, KIND_PLOT, KIND_RESOURCE_AREA};
+use radroots_events::plot::RadrootsPlotRef;
+use radroots_events::resource_area::RadrootsResourceAreaRef;
 use radroots_events::tags::TAG_D;
 use radroots_events_codec::error::EventEncodeError;
 use radroots_events_codec::listing::tags::{listing_tags_with_options, ListingTagOptions};
@@ -25,6 +27,8 @@ const TAG_RADROOTS_BIN: &str = "radroots:bin";
 const TAG_RADROOTS_PRICE: &str = "radroots:price";
 const TAG_RADROOTS_DISCOUNT: &str = "radroots:discount";
 const TAG_RADROOTS_PRIMARY_BIN: &str = "radroots:primary_bin";
+const TAG_RADROOTS_RESOURCE_AREA: &str = "radroots:resource_area";
+const TAG_RADROOTS_PLOT: &str = "radroots:plot";
 const TAG_LOCATION: &str = "location";
 const TAG_IMAGE: &str = "image";
 const TAG_GEOHASH: &str = "g";
@@ -107,6 +111,8 @@ pub fn listing_from_event_parts(
     let d_tag = parse_d_tag(tags)?;
     let farm_ref = parse_farm_ref(tags)?;
     let farm_pubkey = parse_farm_pubkey(tags)?;
+    let resource_area = parse_resource_area(tags)?;
+    let plot = parse_plot_ref(tags)?;
 
     if !content.trim().is_empty() {
         #[cfg(feature = "serde_json")]
@@ -127,12 +133,36 @@ pub fn listing_from_event_parts(
                 if listing.farm.pubkey != farm_pubkey {
                     return Err(TradeListingParseError::InvalidTag(TAG_P.to_string()));
                 }
+                if let Some(tag_area) = resource_area {
+                    match listing.resource_area.as_ref() {
+                        None => listing.resource_area = Some(tag_area),
+                        Some(area) => {
+                            if area.pubkey != tag_area.pubkey || area.d_tag != tag_area.d_tag {
+                                return Err(TradeListingParseError::InvalidTag(
+                                    TAG_RADROOTS_RESOURCE_AREA.to_string(),
+                                ));
+                            }
+                        }
+                    }
+                }
+                if let Some(tag_plot) = plot {
+                    match listing.plot.as_ref() {
+                        None => listing.plot = Some(tag_plot),
+                        Some(existing) => {
+                            if existing.pubkey != tag_plot.pubkey || existing.d_tag != tag_plot.d_tag {
+                                return Err(TradeListingParseError::InvalidTag(
+                                    TAG_RADROOTS_PLOT.to_string(),
+                                ));
+                            }
+                        }
+                    }
+                }
                 return Ok(listing);
             }
         }
     }
 
-    listing_from_tags(tags, d_tag, farm_ref, farm_pubkey)
+    listing_from_tags(tags, d_tag, farm_ref, farm_pubkey, resource_area, plot)
 }
 
 pub fn listing_tags_build(listing: &RadrootsListing) -> Result<Vec<Vec<String>>, TradeListingParseError> {
@@ -155,6 +185,8 @@ fn listing_from_tags(
     d_tag: String,
     farm_ref: RadrootsListingFarmRef,
     farm_pubkey: String,
+    resource_area: Option<RadrootsResourceAreaRef>,
+    plot: Option<RadrootsPlotRef>,
 ) -> Result<RadrootsListing, TradeListingParseError> {
     let mut product = RadrootsListingProduct {
         key: String::new(),
@@ -450,6 +482,8 @@ fn listing_from_tags(
         product,
         primary_bin_id,
         bins,
+        resource_area,
+        plot,
         discounts: if discounts.is_empty() { None } else { Some(discounts) },
         inventory_available,
         availability,
@@ -460,34 +494,33 @@ fn listing_from_tags(
 }
 
 fn parse_farm_ref(tags: &[Vec<String>]) -> Result<RadrootsListingFarmRef, TradeListingParseError> {
-    let tag = tags
-        .iter()
-        .find(|t| t.get(0).map(|s| s.as_str()) == Some(TAG_A))
-        .ok_or_else(|| TradeListingParseError::MissingTag(TAG_A.to_string()))?;
-    let value = tag
-        .get(1)
-        .map(|s| s.to_string())
-        .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_A.to_string()))?;
-    let mut parts = value.splitn(3, ':');
-    let kind = parts
-        .next()
-        .and_then(|v| v.parse::<u32>().ok())
-        .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_A.to_string()))?;
-    if kind != KIND_FARM {
-        return Err(TradeListingParseError::InvalidTag(TAG_A.to_string()));
+    for tag in tags.iter().filter(|t| t.get(0).map(|s| s.as_str()) == Some(TAG_A)) {
+        let value = tag
+            .get(1)
+            .map(|s| s.to_string())
+            .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_A.to_string()))?;
+        let mut parts = value.splitn(3, ':');
+        let kind = parts
+            .next()
+            .and_then(|v| v.parse::<u32>().ok())
+            .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_A.to_string()))?;
+        if kind != KIND_FARM {
+            continue;
+        }
+        let pubkey = parts
+            .next()
+            .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_A.to_string()))?
+            .to_string();
+        let d_tag = parts
+            .next()
+            .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_A.to_string()))?
+            .to_string();
+        if pubkey.trim().is_empty() || d_tag.trim().is_empty() {
+            return Err(TradeListingParseError::InvalidTag(TAG_A.to_string()));
+        }
+        return Ok(RadrootsListingFarmRef { pubkey, d_tag });
     }
-    let pubkey = parts
-        .next()
-        .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_A.to_string()))?
-        .to_string();
-    let d_tag = parts
-        .next()
-        .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_A.to_string()))?
-        .to_string();
-    if pubkey.trim().is_empty() || d_tag.trim().is_empty() {
-        return Err(TradeListingParseError::InvalidTag(TAG_A.to_string()));
-    }
-    Ok(RadrootsListingFarmRef { pubkey, d_tag })
+    Err(TradeListingParseError::MissingTag(TAG_A.to_string()))
 }
 
 fn parse_farm_pubkey(tags: &[Vec<String>]) -> Result<String, TradeListingParseError> {
@@ -503,6 +536,78 @@ fn parse_farm_pubkey(tags: &[Vec<String>]) -> Result<String, TradeListingParseEr
         return Err(TradeListingParseError::InvalidTag(TAG_P.to_string()));
     }
     Ok(value)
+}
+
+fn parse_resource_area(
+    tags: &[Vec<String>],
+) -> Result<Option<RadrootsResourceAreaRef>, TradeListingParseError> {
+    let tag = tags
+        .iter()
+        .find(|t| t.get(0).map(|s| s.as_str()) == Some(TAG_RADROOTS_RESOURCE_AREA));
+    let Some(tag) = tag else {
+        return Ok(None);
+    };
+    let value = tag
+        .get(1)
+        .map(|s| s.to_string())
+        .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_RADROOTS_RESOURCE_AREA.to_string()))?;
+    let mut parts = value.splitn(3, ':');
+    let kind = parts
+        .next()
+        .and_then(|v| v.parse::<u32>().ok())
+        .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_RADROOTS_RESOURCE_AREA.to_string()))?;
+    if kind != KIND_RESOURCE_AREA {
+        return Err(TradeListingParseError::InvalidTag(
+            TAG_RADROOTS_RESOURCE_AREA.to_string(),
+        ));
+    }
+    let pubkey = parts
+        .next()
+        .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_RADROOTS_RESOURCE_AREA.to_string()))?
+        .to_string();
+    let d_tag = parts
+        .next()
+        .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_RADROOTS_RESOURCE_AREA.to_string()))?
+        .to_string();
+    if pubkey.trim().is_empty() || d_tag.trim().is_empty() {
+        return Err(TradeListingParseError::InvalidTag(
+            TAG_RADROOTS_RESOURCE_AREA.to_string(),
+        ));
+    }
+    Ok(Some(RadrootsResourceAreaRef { pubkey, d_tag }))
+}
+
+fn parse_plot_ref(tags: &[Vec<String>]) -> Result<Option<RadrootsPlotRef>, TradeListingParseError> {
+    let tag = tags
+        .iter()
+        .find(|t| t.get(0).map(|s| s.as_str()) == Some(TAG_RADROOTS_PLOT));
+    let Some(tag) = tag else {
+        return Ok(None);
+    };
+    let value = tag
+        .get(1)
+        .map(|s| s.to_string())
+        .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_RADROOTS_PLOT.to_string()))?;
+    let mut parts = value.splitn(3, ':');
+    let kind = parts
+        .next()
+        .and_then(|v| v.parse::<u32>().ok())
+        .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_RADROOTS_PLOT.to_string()))?;
+    if kind != KIND_PLOT {
+        return Err(TradeListingParseError::InvalidTag(TAG_RADROOTS_PLOT.to_string()));
+    }
+    let pubkey = parts
+        .next()
+        .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_RADROOTS_PLOT.to_string()))?
+        .to_string();
+    let d_tag = parts
+        .next()
+        .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_RADROOTS_PLOT.to_string()))?
+        .to_string();
+    if pubkey.trim().is_empty() || d_tag.trim().is_empty() {
+        return Err(TradeListingParseError::InvalidTag(TAG_RADROOTS_PLOT.to_string()));
+    }
+    Ok(Some(RadrootsPlotRef { pubkey, d_tag }))
 }
 
 #[cfg(test)]
@@ -551,6 +656,8 @@ mod tests {
             "listing-1".to_string(),
             farm_ref(),
             "seller".to_string(),
+            None,
+            None,
         )
         .expect("listing");
 

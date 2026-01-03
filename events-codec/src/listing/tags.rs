@@ -11,7 +11,9 @@ use radroots_events::listing::{
     RadrootsListingBin, RadrootsListingImage, RadrootsListingLocation,
     RadrootsListingStatus,
 };
-use radroots_events::kinds::KIND_FARM;
+use radroots_events::plot::RadrootsPlotRef;
+use radroots_events::resource_area::RadrootsResourceAreaRef;
+use radroots_events::kinds::{KIND_FARM, KIND_PLOT, KIND_RESOURCE_AREA};
 use radroots_events::tags::TAG_D;
 
 use crate::error::EventEncodeError;
@@ -21,6 +23,8 @@ const TAG_RADROOTS_BIN: &str = "radroots:bin";
 const TAG_RADROOTS_PRICE: &str = "radroots:price";
 const TAG_RADROOTS_DISCOUNT: &str = "radroots:discount";
 const TAG_RADROOTS_PRIMARY_BIN: &str = "radroots:primary_bin";
+const TAG_RADROOTS_RESOURCE_AREA: &str = "radroots:resource_area";
+const TAG_RADROOTS_PLOT: &str = "radroots:plot";
 const TAG_LOCATION: &str = "location";
 const TAG_IMAGE: &str = "image";
 const TAG_GEOHASH: &str = "g";
@@ -104,6 +108,12 @@ pub fn listing_tags_with_options(
     let mut tags: Vec<Vec<String>> = Vec::new();
     tags.push(vec![TAG_D.to_string(), d_tag.to_string()]);
     push_farm_tags(&mut tags, &listing.farm)?;
+    if let Some(resource_area) = listing.resource_area.as_ref() {
+        tags.push(tag_listing_resource_area(resource_area)?);
+    }
+    if let Some(plot) = listing.plot.as_ref() {
+        tags.push(tag_listing_plot(plot)?);
+    }
 
     let product = &listing.product;
     push_tag_value(&mut tags, "key", &product.key);
@@ -242,6 +252,40 @@ fn push_farm_tags(
     tags.push(vec![TAG_P.to_string(), farm.pubkey.clone()]);
     tags.push(vec![TAG_A.to_string(), address]);
     Ok(())
+}
+
+fn tag_listing_resource_area(
+    area: &RadrootsResourceAreaRef,
+) -> Result<Vec<String>, EventEncodeError> {
+    if area.pubkey.trim().is_empty() {
+        return Err(EventEncodeError::EmptyRequiredField("resource_area.pubkey"));
+    }
+    if area.d_tag.trim().is_empty() {
+        return Err(EventEncodeError::EmptyRequiredField("resource_area.d_tag"));
+    }
+    let mut address = String::new();
+    address.push_str(&KIND_RESOURCE_AREA.to_string());
+    address.push(':');
+    address.push_str(&area.pubkey);
+    address.push(':');
+    address.push_str(&area.d_tag);
+    Ok(vec![TAG_RADROOTS_RESOURCE_AREA.to_string(), address])
+}
+
+fn tag_listing_plot(plot: &RadrootsPlotRef) -> Result<Vec<String>, EventEncodeError> {
+    if plot.pubkey.trim().is_empty() {
+        return Err(EventEncodeError::EmptyRequiredField("plot.pubkey"));
+    }
+    if plot.d_tag.trim().is_empty() {
+        return Err(EventEncodeError::EmptyRequiredField("plot.d_tag"));
+    }
+    let mut address = String::new();
+    address.push_str(&KIND_PLOT.to_string());
+    address.push(':');
+    address.push_str(&plot.pubkey);
+    address.push(':');
+    address.push_str(&plot.d_tag);
+    Ok(vec![TAG_RADROOTS_PLOT.to_string(), address])
 }
 
 fn tag_listing_bin(bin: &RadrootsListingBin) -> Result<Vec<String>, EventEncodeError> {

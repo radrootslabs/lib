@@ -5,9 +5,11 @@ use alloc::{string::{String, ToString}, vec::Vec};
 
 use radroots_events::{
     RadrootsNostrEvent,
-    kinds::KIND_FARM,
+    kinds::{KIND_FARM, KIND_PLOT, KIND_RESOURCE_AREA},
     kinds::KIND_LISTING,
     listing::{RadrootsListing, RadrootsListingEventIndex, RadrootsListingEventMetadata, RadrootsListingFarmRef},
+    plot::RadrootsPlotRef,
+    resource_area::RadrootsResourceAreaRef,
     tags::TAG_D,
 };
 
@@ -16,6 +18,8 @@ use crate::error::EventParseError;
 const DEFAULT_KIND: u32 = KIND_LISTING;
 const TAG_A: &str = "a";
 const TAG_P: &str = "p";
+const TAG_RADROOTS_RESOURCE_AREA: &str = "radroots:resource_area";
+const TAG_RADROOTS_PLOT: &str = "radroots:plot";
 
 fn parse_d_tag(tags: &[Vec<String>]) -> Result<String, EventParseError> {
     let tag = tags
@@ -33,34 +37,33 @@ fn parse_d_tag(tags: &[Vec<String>]) -> Result<String, EventParseError> {
 }
 
 fn parse_farm_ref(tags: &[Vec<String>]) -> Result<RadrootsListingFarmRef, EventParseError> {
-    let tag = tags
-        .iter()
-        .find(|t| t.get(0).map(|s| s.as_str()) == Some(TAG_A))
-        .ok_or(EventParseError::MissingTag(TAG_A))?;
-    let value = tag
-        .get(1)
-        .map(|s| s.to_string())
-        .ok_or(EventParseError::InvalidTag(TAG_A))?;
-    let mut parts = value.splitn(3, ':');
-    let kind = parts
-        .next()
-        .and_then(|v| v.parse::<u32>().ok())
-        .ok_or(EventParseError::InvalidTag(TAG_A))?;
-    if kind != KIND_FARM {
-        return Err(EventParseError::InvalidTag(TAG_A));
+    for tag in tags.iter().filter(|t| t.get(0).map(|s| s.as_str()) == Some(TAG_A)) {
+        let value = tag
+            .get(1)
+            .map(|s| s.to_string())
+            .ok_or(EventParseError::InvalidTag(TAG_A))?;
+        let mut parts = value.splitn(3, ':');
+        let kind = parts
+            .next()
+            .and_then(|v| v.parse::<u32>().ok())
+            .ok_or(EventParseError::InvalidTag(TAG_A))?;
+        if kind != KIND_FARM {
+            continue;
+        }
+        let pubkey = parts
+            .next()
+            .ok_or(EventParseError::InvalidTag(TAG_A))?
+            .to_string();
+        let d_tag = parts
+            .next()
+            .ok_or(EventParseError::InvalidTag(TAG_A))?
+            .to_string();
+        if pubkey.trim().is_empty() || d_tag.trim().is_empty() {
+            return Err(EventParseError::InvalidTag(TAG_A));
+        }
+        return Ok(RadrootsListingFarmRef { pubkey, d_tag });
     }
-    let pubkey = parts
-        .next()
-        .ok_or(EventParseError::InvalidTag(TAG_A))?
-        .to_string();
-    let d_tag = parts
-        .next()
-        .ok_or(EventParseError::InvalidTag(TAG_A))?
-        .to_string();
-    if pubkey.trim().is_empty() || d_tag.trim().is_empty() {
-        return Err(EventParseError::InvalidTag(TAG_A));
-    }
-    Ok(RadrootsListingFarmRef { pubkey, d_tag })
+    Err(EventParseError::MissingTag(TAG_A))
 }
 
 fn parse_farm_pubkey(tags: &[Vec<String>]) -> Result<String, EventParseError> {
@@ -76,6 +79,72 @@ fn parse_farm_pubkey(tags: &[Vec<String>]) -> Result<String, EventParseError> {
         return Err(EventParseError::InvalidTag(TAG_P));
     }
     Ok(value)
+}
+
+fn parse_resource_area(tags: &[Vec<String>]) -> Result<Option<RadrootsResourceAreaRef>, EventParseError> {
+    let tag = tags
+        .iter()
+        .find(|t| t.get(0).map(|s| s.as_str()) == Some(TAG_RADROOTS_RESOURCE_AREA));
+    let Some(tag) = tag else {
+        return Ok(None);
+    };
+    let value = tag
+        .get(1)
+        .map(|s| s.to_string())
+        .ok_or(EventParseError::InvalidTag(TAG_RADROOTS_RESOURCE_AREA))?;
+    let mut parts = value.splitn(3, ':');
+    let kind = parts
+        .next()
+        .and_then(|v| v.parse::<u32>().ok())
+        .ok_or(EventParseError::InvalidTag(TAG_RADROOTS_RESOURCE_AREA))?;
+    if kind != KIND_RESOURCE_AREA {
+        return Err(EventParseError::InvalidTag(TAG_RADROOTS_RESOURCE_AREA));
+    }
+    let pubkey = parts
+        .next()
+        .ok_or(EventParseError::InvalidTag(TAG_RADROOTS_RESOURCE_AREA))?
+        .to_string();
+    let d_tag = parts
+        .next()
+        .ok_or(EventParseError::InvalidTag(TAG_RADROOTS_RESOURCE_AREA))?
+        .to_string();
+    if pubkey.trim().is_empty() || d_tag.trim().is_empty() {
+        return Err(EventParseError::InvalidTag(TAG_RADROOTS_RESOURCE_AREA));
+    }
+    Ok(Some(RadrootsResourceAreaRef { pubkey, d_tag }))
+}
+
+fn parse_plot_ref(tags: &[Vec<String>]) -> Result<Option<RadrootsPlotRef>, EventParseError> {
+    let tag = tags
+        .iter()
+        .find(|t| t.get(0).map(|s| s.as_str()) == Some(TAG_RADROOTS_PLOT));
+    let Some(tag) = tag else {
+        return Ok(None);
+    };
+    let value = tag
+        .get(1)
+        .map(|s| s.to_string())
+        .ok_or(EventParseError::InvalidTag(TAG_RADROOTS_PLOT))?;
+    let mut parts = value.splitn(3, ':');
+    let kind = parts
+        .next()
+        .and_then(|v| v.parse::<u32>().ok())
+        .ok_or(EventParseError::InvalidTag(TAG_RADROOTS_PLOT))?;
+    if kind != KIND_PLOT {
+        return Err(EventParseError::InvalidTag(TAG_RADROOTS_PLOT));
+    }
+    let pubkey = parts
+        .next()
+        .ok_or(EventParseError::InvalidTag(TAG_RADROOTS_PLOT))?
+        .to_string();
+    let d_tag = parts
+        .next()
+        .ok_or(EventParseError::InvalidTag(TAG_RADROOTS_PLOT))?
+        .to_string();
+    if pubkey.trim().is_empty() || d_tag.trim().is_empty() {
+        return Err(EventParseError::InvalidTag(TAG_RADROOTS_PLOT));
+    }
+    Ok(Some(RadrootsPlotRef { pubkey, d_tag }))
 }
 
 pub fn listing_from_event(
@@ -95,6 +164,8 @@ pub fn listing_from_event(
     let d_tag = parse_d_tag(tags)?;
     let farm_ref = parse_farm_ref(tags)?;
     let farm_pubkey = parse_farm_pubkey(tags)?;
+    let resource_area = parse_resource_area(tags)?;
+    let plot = parse_plot_ref(tags)?;
     let mut listing: RadrootsListing =
         serde_json::from_str(content).map_err(|_| EventParseError::InvalidJson("content"))?;
 
@@ -111,6 +182,28 @@ pub fn listing_from_event(
     }
     if listing.farm.pubkey != farm_pubkey {
         return Err(EventParseError::InvalidTag(TAG_P));
+    }
+
+    if let Some(tag_area) = resource_area {
+        match listing.resource_area.as_ref() {
+            None => listing.resource_area = Some(tag_area),
+            Some(area) => {
+                if area.pubkey != tag_area.pubkey || area.d_tag != tag_area.d_tag {
+                    return Err(EventParseError::InvalidTag(TAG_RADROOTS_RESOURCE_AREA));
+                }
+            }
+        }
+    }
+
+    if let Some(tag_plot) = plot {
+        match listing.plot.as_ref() {
+            None => listing.plot = Some(tag_plot),
+            Some(existing) => {
+                if existing.pubkey != tag_plot.pubkey || existing.d_tag != tag_plot.d_tag {
+                    return Err(EventParseError::InvalidTag(TAG_RADROOTS_PLOT));
+                }
+            }
+        }
     }
 
     Ok(listing)

@@ -178,6 +178,8 @@ mod tests {
                 display_price: None,
                 display_price_unit: None,
             }],
+            resource_area: None,
+            plot: None,
             discounts: None,
             inventory_available: None,
             availability: None,

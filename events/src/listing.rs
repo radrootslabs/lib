@@ -6,6 +6,8 @@ use radroots_core::{
 use ts_rs::TS;
 
 use crate::RadrootsNostrEvent;
+use crate::plot::RadrootsPlotRef;
+use crate::resource_area::RadrootsResourceAreaRef;
 
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
@@ -86,6 +88,16 @@ pub struct RadrootsListing {
     pub product: RadrootsListingProduct,
     pub primary_bin_id: String,
     pub bins: Vec<RadrootsListingBin>,
+    #[cfg_attr(
+        feature = "ts-rs",
+        ts(optional, type = "RadrootsResourceAreaRef | null")
+    )]
+    pub resource_area: Option<RadrootsResourceAreaRef>,
+    #[cfg_attr(
+        feature = "ts-rs",
+        ts(optional, type = "RadrootsPlotRef | null")
+    )]
+    pub plot: Option<RadrootsPlotRef>,
     #[cfg_attr(
         feature = "ts-rs",
         ts(optional, type = "RadrootsCoreDiscount[] | null")

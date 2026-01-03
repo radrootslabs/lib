@@ -106,7 +106,7 @@ export type RadrootsListSetEventIndex = { event: RadrootsNostrEvent, metadata: R
 
 export type RadrootsListSetEventMetadata = { id: string, author: string, published_at: number, kind: number, list_set: RadrootsListSet, };
 
-export type RadrootsListing = { d_tag: string, farm: RadrootsListingFarmRef, product: RadrootsListingProduct, primary_bin_id: string, bins: Array<RadrootsListingBin>, discounts?: RadrootsCoreDiscount[] | null, inventory_available?: RadrootsCoreDecimal | null, availability?: RadrootsListingAvailability | null, delivery_method?: RadrootsListingDeliveryMethod | null, location?: RadrootsListingLocation | null, images?: RadrootsListingImage[] | null, };
+export type RadrootsListing = { d_tag: string, farm: RadrootsListingFarmRef, product: RadrootsListingProduct, primary_bin_id: string, bins: Array<RadrootsListingBin>, resource_area?: RadrootsResourceAreaRef | null, plot?: RadrootsPlotRef | null, discounts?: RadrootsCoreDiscount[] | null, inventory_available?: RadrootsCoreDecimal | null, availability?: RadrootsListingAvailability | null, delivery_method?: RadrootsListingDeliveryMethod | null, location?: RadrootsListingLocation | null, images?: RadrootsListingImage[] | null, };
 
 export type RadrootsListingAvailability = { "kind": "window", "amount": { start?: number | null, end?: number | null, } } | { "kind": "status", "amount": { status: RadrootsListingStatus, } };
 
@@ -162,6 +162,8 @@ export type RadrootsPlotEventMetadata = { id: string, author: string, published_
 
 export type RadrootsPlotLocation = { primary?: string | null, city?: string | null, region?: string | null, country?: string | null, gcs: RadrootsGcsLocation, };
 
+export type RadrootsPlotRef = { pubkey: string, d_tag: string, };
+
 export type RadrootsPost = { content: string, };
 
 export type RadrootsPostEventIndex = { event: RadrootsNostrEvent, metadata: RadrootsPostEventMetadata, };
@@ -183,6 +185,24 @@ export type RadrootsReactionEventIndex = { event: RadrootsNostrEvent, metadata: 
 export type RadrootsReactionEventMetadata = { id: string, author: string, published_at: number, kind: number, reaction: RadrootsReaction, };
 
 export type RadrootsRelayDocument = { name?: string | null, description?: string | null, pubkey?: string | null, contact?: string | null, supported_nips?: number[] | null, software?: string | null, version?: string | null, };
+
+export type RadrootsResourceArea = { d_tag: string, name: string, about?: string | null, location: RadrootsResourceAreaLocation, tags?: string[] | null, };
+
+export type RadrootsResourceAreaEventIndex = { event: RadrootsNostrEvent, metadata: RadrootsResourceAreaEventMetadata, };
+
+export type RadrootsResourceAreaEventMetadata = { id: string, author: string, published_at: number, kind: number, area: RadrootsResourceArea, };
+
+export type RadrootsResourceAreaLocation = { primary?: string | null, city?: string | null, region?: string | null, country?: string | null, gcs: RadrootsGcsLocation, };
+
+export type RadrootsResourceAreaRef = { pubkey: string, d_tag: string, };
+
+export type RadrootsResourceHarvestCap = { d_tag: string, resource_area: RadrootsResourceAreaRef, product: RadrootsResourceHarvestProduct, start: bigint, end: bigint, cap_quantity: RadrootsCoreQuantity, display_amount?: RadrootsCoreDecimal | null, display_unit?: RadrootsCoreUnit | null, display_label?: string | null, tags?: string[] | null, };
+
+export type RadrootsResourceHarvestCapEventIndex = { event: RadrootsNostrEvent, metadata: RadrootsResourceHarvestCapEventMetadata, };
+
+export type RadrootsResourceHarvestCapEventMetadata = { id: string, author: string, published_at: number, kind: number, cap: RadrootsResourceHarvestCap, };
+
+export type RadrootsResourceHarvestProduct = { key: string, category?: string | null, };
 
 export type RadrootsSeal = { content: string, };
 

@@ -18,37 +18,7 @@ export const radroots_listing_location_schema = z.object({
     geohash: z.string().optional()
 });
 
-export const radroots_listing_discount_schema = z.union([
-    z.object({
-        kind: z.literal("quantity"),
-        amount: z.object({
-                    ref_quantity: z.string(),
-                    threshold: z.any(),
-                    value: z.any()
-                })
-    }),
-    z.object({
-        kind: z.literal("mass"),
-        amount: z.object({
-                    threshold: z.any(),
-                    value: z.any()
-                })
-    }),
-    z.object({
-        kind: z.literal("subtotal"),
-        amount: z.object({
-                    threshold: z.any(),
-                    value: z.any()
-                })
-    }),
-    z.object({
-        kind: z.literal("total"),
-        amount: z.object({
-                    total_min: z.any(),
-                    value: z.any()
-                })
-    })
-]);
+export const radroots_listing_discount_schema = z.any();
 
 export const radroots_listing_price_schema = z.object({
     amount: z.any(),
@@ -56,9 +26,20 @@ export const radroots_listing_price_schema = z.object({
 });
 
 export const radroots_listing_quantity_schema = z.object({
-    value: z.any(),
-    label: z.string().optional(),
-    count: z.number().optional()
+    amount: z.any(),
+    unit: z.any(),
+    label: z.string().optional()
+});
+
+export const radroots_listing_bin_schema = z.object({
+    bin_id: z.string(),
+    quantity: z.any(),
+    price_per_canonical_unit: z.any(),
+    display_amount: z.number().optional(),
+    display_unit: z.any().optional(),
+    display_label: z.string().optional(),
+    display_price: z.any().optional(),
+    display_price_unit: z.any().optional()
 });
 
 export const radroots_listing_product_schema = z.object({
@@ -76,9 +57,12 @@ export const radroots_listing_product_schema = z.object({
 export const radroots_listing_schema = z.object({
     d_tag: z.string(),
     product: radroots_listing_product_schema,
-    quantities: z.array(radroots_listing_quantity_schema),
-    prices: z.array(radroots_listing_price_schema),
+    primary_bin_id: z.string(),
+    bins: z.array(radroots_listing_bin_schema),
     discounts: z.array(radroots_listing_discount_schema).optional(),
+    inventory_available: z.number().optional(),
+    availability: z.any().optional(),
+    delivery_method: z.any().optional(),
     location: radroots_listing_location_schema.optional(),
     images: z.array(radroots_listing_image_schema).optional()
 });

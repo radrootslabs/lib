@@ -24,6 +24,8 @@ pub mod list_set;
 pub mod app_data;
 pub mod coop;
 pub mod farm;
+pub mod resource_area;
+pub mod resource_cap;
 pub mod message;
 pub mod plot;
 pub mod message_file;
