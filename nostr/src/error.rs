@@ -10,6 +10,10 @@ pub enum RadrootsNostrError {
     #[error("Database error: {0}")]
     DatabaseError(#[from] nostr_sdk::prelude::DatabaseError),
 
+    #[cfg(feature = "client")]
+    #[error("Client configuration error: {0}")]
+    ClientConfigError(String),
+
     #[error("Event error: {0}")]
     EventError(#[from] nostr::event::Error),
 
@@ -21,6 +25,9 @@ pub enum RadrootsNostrError {
 
     #[error("Key error: {0}")]
     KeyError(#[from] nostr::key::Error),
+
+    #[error("Filter tag error: {0}")]
+    FilterTagError(String),
 
     #[cfg(feature = "codec")]
     #[error("Profile encode error: {0}")]

@@ -10,6 +10,7 @@ license.workspace = true
 [features]
 default = ["std"]
 std = []
+os-rng = ["nostr/os-rng"]
 client = ["std", "dep:nostr-sdk", "dep:radroots-identity"]
 codec = ["dep:radroots-events", "dep:radroots-events-codec", "radroots-events-codec/nostr"]
 events = ["dep:radroots-events", "radroots-events/std", "radroots-events/serde"]

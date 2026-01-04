@@ -43,6 +43,7 @@ pub mod prelude {
     pub use crate::client::{
         radroots_nostr_fetch_event_by_id,
         radroots_nostr_send_event,
+        RadrootsNostrClientOptions,
         RadrootsNostrClient,
     };
 
@@ -50,6 +51,7 @@ pub mod prelude {
     pub use crate::filter::{
         radroots_nostr_filter_kind,
         radroots_nostr_filter_new_events,
+        radroots_nostr_filter_tag,
         radroots_nostr_kind,
     };
 
