@@ -221,6 +221,7 @@ fn ingest_profile_event<E: SqlExecutor>(
         radroots_events::profile::RadrootsProfileType::Farm => "farm",
         radroots_events::profile::RadrootsProfileType::Coop => "coop",
         radroots_events::profile::RadrootsProfileType::Any => "any",
+        radroots_events::profile::RadrootsProfileType::Radrootsd => "radrootsd",
     };
 
     let existing = nostr_profile::find_one(
