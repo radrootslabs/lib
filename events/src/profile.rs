@@ -9,6 +9,7 @@ pub const RADROOTS_PROFILE_TYPE_TAG_KEY: &str = "t";
 pub const RADROOTS_PROFILE_TYPE_TAG_INDIVIDUAL: &str = "radroots:type:individual";
 pub const RADROOTS_PROFILE_TYPE_TAG_FARM: &str = "radroots:type:farm";
 pub const RADROOTS_PROFILE_TYPE_TAG_COOP: &str = "radroots:type:coop";
+pub const RADROOTS_PROFILE_TYPE_TAG_ANY: &str = "radroots:type:any";
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
@@ -19,6 +20,7 @@ pub enum RadrootsProfileType {
     Individual,
     Farm,
     Coop,
+    Any,
 }
 
 pub fn radroots_profile_type_tag_value(profile_type: RadrootsProfileType) -> &'static str {
@@ -26,6 +28,7 @@ pub fn radroots_profile_type_tag_value(profile_type: RadrootsProfileType) -> &'s
         RadrootsProfileType::Individual => RADROOTS_PROFILE_TYPE_TAG_INDIVIDUAL,
         RadrootsProfileType::Farm => RADROOTS_PROFILE_TYPE_TAG_FARM,
         RadrootsProfileType::Coop => RADROOTS_PROFILE_TYPE_TAG_COOP,
+        RadrootsProfileType::Any => RADROOTS_PROFILE_TYPE_TAG_ANY,
     }
 }
 
@@ -34,6 +37,7 @@ pub fn radroots_profile_type_from_tag_value(value: &str) -> Option<RadrootsProfi
         RADROOTS_PROFILE_TYPE_TAG_INDIVIDUAL => Some(RadrootsProfileType::Individual),
         RADROOTS_PROFILE_TYPE_TAG_FARM => Some(RadrootsProfileType::Farm),
         RADROOTS_PROFILE_TYPE_TAG_COOP => Some(RadrootsProfileType::Coop),
+        RADROOTS_PROFILE_TYPE_TAG_ANY => Some(RadrootsProfileType::Any),
         _ => None,
     }
 }

@@ -657,6 +657,7 @@ fn profile_event(
         "individual" | "farmer" => Some(RadrootsProfileType::Individual),
         "farm" => Some(RadrootsProfileType::Farm),
         "coop" => Some(RadrootsProfileType::Coop),
+        "any" => Some(RadrootsProfileType::Any),
         other => radroots_profile_type_from_tag_value(other),
     };
     let profile_event = RadrootsProfile {
