@@ -75,7 +75,9 @@ impl RadrootsNostrClientOptions {
     pub fn proxy_str(mut self, addr: &str) -> Result<Self, RadrootsNostrError> {
         let parsed: SocketAddr = addr
             .parse()
-            .map_err(|err| RadrootsNostrError::ClientConfigError(err.to_string()))?;
+            .map_err(|err: std::net::AddrParseError| {
+                RadrootsNostrError::ClientConfigError(err.to_string())
+            })?;
         self.proxy = Some(parsed);
         Ok(self)
     }
