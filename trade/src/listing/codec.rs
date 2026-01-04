@@ -680,7 +680,7 @@ mod tests {
 
 fn clean_value(value: &str) -> Option<String> {
     let trimmed = value.trim();
-    if trimmed.is_empty() {
+    if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("null") {
         None
     } else {
         Some(trimmed.to_string())

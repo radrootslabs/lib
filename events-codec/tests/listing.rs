@@ -368,3 +368,32 @@ fn listing_tags_full_includes_status_tag() {
             && t.get(1).map(|s| s.as_str()) == Some("active")
     }));
 }
+
+#[test]
+fn listing_build_tags_ignores_null_strings() {
+    let mut listing = sample_listing_full("listing-1");
+    listing.product.summary = Some("null".to_string());
+    listing.product.process = Some("null".to_string());
+    listing.product.lot = Some("null".to_string());
+    listing.product.location = Some("null".to_string());
+    listing.product.profile = Some("null".to_string());
+    listing.product.year = Some("null".to_string());
+    listing.location = Some(RadrootsListingLocation {
+        primary: "Moyobamba".to_string(),
+        city: Some("null".to_string()),
+        region: Some("San Martin".to_string()),
+        country: Some("null".to_string()),
+        lat: Some(-6.0346),
+        lng: Some(-76.9714),
+        geohash: None,
+    });
+    listing.images = Some(vec![RadrootsListingImage {
+        url: "null".to_string(),
+        size: None,
+    }]);
+
+    let tags = listing_build_tags(&listing).unwrap();
+    assert!(!tags
+        .iter()
+        .any(|tag| tag.iter().any(|value| value == "null")));
+}
