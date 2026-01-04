@@ -75,7 +75,10 @@ pub mod prelude {
     };
 
     #[cfg(all(feature = "client", feature = "codec"))]
-    pub use crate::identity_profile::radroots_nostr_publish_identity_profile;
+    pub use crate::identity_profile::{
+        radroots_nostr_publish_identity_profile,
+        radroots_nostr_publish_identity_profile_with_type,
+    };
 
     #[cfg(all(feature = "client", feature = "events"))]
     pub use crate::events::post::radroots_nostr_fetch_post_events;

@@ -7,6 +7,7 @@ use radroots_events::{
         RADROOTS_PROFILE_TYPE_TAG_ANY,
         RADROOTS_PROFILE_TYPE_TAG_FARM,
         RADROOTS_PROFILE_TYPE_TAG_KEY,
+        RADROOTS_PROFILE_TYPE_TAG_RADROOTSD,
     },
 };
 use radroots_events_codec::error::EventParseError;
@@ -98,4 +99,22 @@ fn profile_metadata_reads_profile_type_any_tag() {
     .expect("metadata");
 
     assert_eq!(metadata.profile_type, Some(RadrootsProfileType::Any));
+}
+
+#[test]
+fn profile_metadata_reads_profile_type_radrootsd_tag() {
+    let metadata = radroots_events_codec::profile::decode::metadata_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        1,
+        0,
+        "{\"name\":\"alice\"}".to_string(),
+        vec![vec![
+            RADROOTS_PROFILE_TYPE_TAG_KEY.to_string(),
+            RADROOTS_PROFILE_TYPE_TAG_RADROOTSD.to_string(),
+        ]],
+    )
+    .expect("metadata");
+
+    assert_eq!(metadata.profile_type, Some(RadrootsProfileType::Radrootsd));
 }
