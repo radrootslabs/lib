@@ -6,10 +6,12 @@ edition.workspace = true
 authors = ["Radroots Authors"]
 rust-version.workspace = true
 license.workspace = true
+build = "build.rs"
 
 [features]
 default = ["std"]
 std = ["dep:radroots-runtime"]
+ts-rs = ["dep:ts-rs"]
 
 [dependencies]
 radroots-runtime = { workspace = true, optional = true }
@@ -19,6 +21,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+ts-rs = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

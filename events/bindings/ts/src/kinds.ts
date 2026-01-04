@@ -44,6 +44,7 @@ export const KIND_COOP = 30360;
 export const KIND_DOCUMENT = 30361;
 export const KIND_RESOURCE_AREA = 30370;
 export const KIND_RESOURCE_HARVEST_CAP = 30371;
+export const KIND_ACCOUNT_CLAIM = 30380;
 export const KIND_APP_DATA = 30078;
 export const KIND_LISTING = 30402;
 export const KIND_APPLICATION_HANDLER = 31990;

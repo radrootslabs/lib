@@ -10,6 +10,7 @@ use ts_rs::TS;
 use alloc::{string::String, vec::Vec};
 
 pub mod comment;
+pub mod account;
 pub mod follow;
 pub mod gift_wrap;
 pub mod job;
