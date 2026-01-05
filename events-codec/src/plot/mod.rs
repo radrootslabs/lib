@@ -12,10 +12,10 @@ mod tests {
     #[test]
     fn plot_tags_include_farm_address() {
         let plot = RadrootsPlot {
-            d_tag: "plot-1".to_string(),
+            d_tag: "AAAAAAAAAAAAAAAAAAAAAQ".to_string(),
             farm: RadrootsFarmRef {
                 pubkey: "farm_pubkey".to_string(),
-                d_tag: "farm-1".to_string(),
+                d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
             },
             name: "Orchard".to_string(),
             about: None,

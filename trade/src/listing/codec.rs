@@ -640,7 +640,7 @@ mod tests {
     fn farm_ref() -> RadrootsListingFarmRef {
         RadrootsListingFarmRef {
             pubkey: "seller".to_string(),
-            d_tag: "farm-1".to_string(),
+            d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
         }
     }
 
@@ -674,7 +674,7 @@ mod tests {
 
         let listing = listing_from_tags(
             &tags,
-            "listing-1".to_string(),
+            "AAAAAAAAAAAAAAAAAAAAAg".to_string(),
             farm_ref(),
             "seller".to_string(),
             None,

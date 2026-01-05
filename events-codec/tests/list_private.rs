@@ -15,7 +15,7 @@ fn list_private_entries_roundtrip() {
         },
         RadrootsListEntry {
             tag: "a".to_string(),
-            values: vec!["30340:pubkey:farm-1".to_string()],
+            values: vec!["30340:pubkey:AAAAAAAAAAAAAAAAAAAAAA".to_string()],
         },
     ];
 
@@ -23,7 +23,7 @@ fn list_private_entries_roundtrip() {
     let parsed = list_private_entries_from_json(&json).expect("parsed");
     assert_eq!(parsed.len(), entries.len());
     assert_eq!(parsed[0].tag, "p");
-    assert_eq!(parsed[1].values[0], "30340:pubkey:farm-1");
+    assert_eq!(parsed[1].values[0], "30340:pubkey:AAAAAAAAAAAAAAAAAAAAAA");
 }
 
 #[test]

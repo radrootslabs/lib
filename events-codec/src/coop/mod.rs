@@ -19,7 +19,7 @@ mod tests {
     #[test]
     fn coop_tags_include_required_fields() {
         let coop = RadrootsCoop {
-            d_tag: "coop-1".to_string(),
+            d_tag: "BAAAAAAAAAAAAAAAAAAAAA".to_string(),
             name: "Test Coop".to_string(),
             about: None,
             website: None,
@@ -76,7 +76,7 @@ mod tests {
     fn coop_ref_tags_include_p_and_a() {
         let coop = RadrootsCoopRef {
             pubkey: "coop_pubkey".to_string(),
-            d_tag: "coop-1".to_string(),
+            d_tag: "BAAAAAAAAAAAAAAAAAAAAA".to_string(),
         };
 
         let tags = coop_ref_tags(&coop).expect("coop ref tags");
@@ -88,26 +88,26 @@ mod tests {
 
     #[test]
     fn coop_list_sets_include_expected_tags() {
-        let members = coop_members_list_set("coop-1", ["member_pubkey"]).expect("members list");
-        assert_eq!(members.d_tag, "coop:coop-1:members");
+        let members = coop_members_list_set("BAAAAAAAAAAAAAAAAAAAAA", ["member_pubkey"]).expect("members list");
+        assert_eq!(members.d_tag, "coop:BAAAAAAAAAAAAAAAAAAAAA:members");
         assert_eq!(members.entries.len(), 1);
         assert_eq!(members.entries[0].tag, "p");
 
         let farm_members = coop_members_farms_list_set(
-            "coop-1",
+            "BAAAAAAAAAAAAAAAAAAAAA",
             [RadrootsFarmRef {
                 pubkey: "farm_pubkey".to_string(),
-                d_tag: "farm-1".to_string(),
+                d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
             }],
         )
         .expect("farm members list");
-        assert_eq!(farm_members.d_tag, "coop:coop-1:members.farms");
+        assert_eq!(farm_members.d_tag, "coop:BAAAAAAAAAAAAAAAAAAAAA:members.farms");
         assert!(farm_members.entries.iter().any(|entry| entry.tag == "a"));
         assert!(farm_members.entries.iter().any(|entry| entry.tag == "p"));
 
-        let items = coop_items_list_set("coop-1", ["30361:coop_pubkey:charter-1"])
+        let items = coop_items_list_set("BAAAAAAAAAAAAAAAAAAAAA", ["30361:coop_pubkey:FAAAAAAAAAAAAAAAAAAAAA"])
             .expect("items list");
-        assert_eq!(items.d_tag, "coop:coop-1:items");
+        assert_eq!(items.d_tag, "coop:BAAAAAAAAAAAAAAAAAAAAA:items");
         assert_eq!(items.entries.len(), 1);
         assert_eq!(items.entries[0].tag, "a");
 

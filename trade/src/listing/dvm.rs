@@ -355,7 +355,7 @@ mod tests {
     fn envelope_requires_order_id_for_order_scoped() {
         let env = TradeListingEnvelope::new(
             TradeListingMessageType::OrderRequest,
-            format!("{KIND_LISTING}:pubkey:listing"),
+            format!("{KIND_LISTING}:pubkey:AAAAAAAAAAAAAAAAAAAAAg"),
             None,
             TradeListingValidateRequest { listing_event: None },
         );

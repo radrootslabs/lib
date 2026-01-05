@@ -280,10 +280,10 @@ mod tests {
 
     fn base_listing() -> RadrootsListing {
         RadrootsListing {
-            d_tag: "listing-1".into(),
+            d_tag: "AAAAAAAAAAAAAAAAAAAAAg".into(),
             farm: RadrootsListingFarmRef {
                 pubkey: "seller".into(),
-                d_tag: "farm-1".into(),
+                d_tag: "AAAAAAAAAAAAAAAAAAAAAA".into(),
             },
             product: RadrootsListingProduct {
                 key: "coffee".into(),
@@ -383,9 +383,9 @@ mod tests {
         let mut event = base_event(&base_listing());
         event.content = String::new();
         event.tags = vec![
-            vec!["d".into(), "listing-1".into()],
+            vec!["d".into(), "AAAAAAAAAAAAAAAAAAAAAg".into()],
             vec!["p".into(), "seller".into()],
-            vec!["a".into(), "30340:seller:farm-1".into()],
+            vec!["a".into(), "30340:seller:AAAAAAAAAAAAAAAAAAAAAA".into()],
             vec!["key".into(), "coffee".into()],
             vec!["title".into(), "Coffee".into()],
             vec!["category".into(), "coffee".into()],

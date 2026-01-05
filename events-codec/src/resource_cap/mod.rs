@@ -13,10 +13,10 @@ mod tests {
     #[test]
     fn resource_harvest_cap_tags_include_required_fields() {
         let cap = RadrootsResourceHarvestCap {
-            d_tag: "cap-2025".to_string(),
+            d_tag: "DAAAAAAAAAAAAAAAAAAAAA".to_string(),
             resource_area: RadrootsResourceAreaRef {
                 pubkey: "area_pubkey".to_string(),
-                d_tag: "area-1".to_string(),
+                d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
             },
             product: RadrootsResourceHarvestProduct {
                 key: "nutmeg".to_string(),

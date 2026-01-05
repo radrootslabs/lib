@@ -11,7 +11,7 @@ mod tests {
     #[test]
     fn document_tags_include_required_fields() {
         let document = RadrootsDocument {
-            d_tag: "doc-1".to_string(),
+            d_tag: "EAAAAAAAAAAAAAAAAAAAAA".to_string(),
             doc_type: "charter".to_string(),
             title: "Sierra Co-op Charter".to_string(),
             version: "1.0.0".to_string(),
@@ -20,7 +20,7 @@ mod tests {
             body_markdown: None,
             subject: RadrootsDocumentSubject {
                 pubkey: "coop_pubkey".to_string(),
-                address: Some("30360:coop_pubkey:coop-1".to_string()),
+                address: Some("30360:coop_pubkey:BAAAAAAAAAAAAAAAAAAAAA".to_string()),
             },
             tags: Some(vec!["charter".to_string()]),
         };

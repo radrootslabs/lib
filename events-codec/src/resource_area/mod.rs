@@ -61,7 +61,7 @@ mod tests {
     #[test]
     fn resource_area_tags_include_required_fields() {
         let area = RadrootsResourceArea {
-            d_tag: "area-1".to_string(),
+            d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
             name: "Banda Grove".to_string(),
             about: None,
             location: sample_location(),
@@ -78,7 +78,7 @@ mod tests {
     fn resource_area_ref_tags_include_p_and_a() {
         let area_ref = RadrootsResourceAreaRef {
             pubkey: "area_pubkey".to_string(),
-            d_tag: "area-1".to_string(),
+            d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
         };
 
         let tags = resource_area_ref_tags(&area_ref).expect("ref tags");
@@ -89,32 +89,32 @@ mod tests {
     #[test]
     fn resource_area_list_sets_include_expected_tags() {
         let farms = resource_area_members_farms_list_set(
-            "area-1",
+            "AAAAAAAAAAAAAAAAAAAAAw",
             [RadrootsFarmRef {
                 pubkey: "farm_pubkey".to_string(),
-                d_tag: "farm-1".to_string(),
+                d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
             }],
         )
         .expect("farm members");
-        assert_eq!(farms.d_tag, "resource:area-1:members.farms");
+        assert_eq!(farms.d_tag, "resource:AAAAAAAAAAAAAAAAAAAAAw:members.farms");
         assert!(farms.entries.iter().any(|entry| entry.tag == "a"));
         assert!(farms.entries.iter().any(|entry| entry.tag == "p"));
 
         let plots = resource_area_members_plots_list_set(
-            "area-1",
+            "AAAAAAAAAAAAAAAAAAAAAw",
             [RadrootsPlotRef {
                 pubkey: "farm_pubkey".to_string(),
-                d_tag: "plot-1".to_string(),
+                d_tag: "AAAAAAAAAAAAAAAAAAAAAQ".to_string(),
             }],
         )
         .expect("plot members");
-        assert_eq!(plots.d_tag, "resource:area-1:members.plots");
+        assert_eq!(plots.d_tag, "resource:AAAAAAAAAAAAAAAAAAAAAw:members.plots");
         assert!(plots.entries.iter().any(|entry| entry.tag == "a"));
         assert!(plots.entries.iter().any(|entry| entry.tag == "p"));
 
-        let stewards = resource_area_stewards_list_set("area-1", ["steward_pubkey"])
+        let stewards = resource_area_stewards_list_set("AAAAAAAAAAAAAAAAAAAAAw", ["steward_pubkey"])
             .expect("stewards");
-        assert_eq!(stewards.d_tag, "resource:area-1:members.stewards");
+        assert_eq!(stewards.d_tag, "resource:AAAAAAAAAAAAAAAAAAAAAw:members.stewards");
         assert!(stewards.entries.iter().any(|entry| entry.tag == "p"));
     }
 }

@@ -32,7 +32,7 @@ mod tests {
     #[test]
     fn farm_tags_include_required_fields() {
         let farm = RadrootsFarm {
-            d_tag: "farm-1".to_string(),
+            d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
             name: "Test Farm".to_string(),
             about: None,
             website: None,
@@ -106,7 +106,7 @@ mod tests {
     fn farm_ref_tags_include_p_and_a() {
         let farm = RadrootsFarmRef {
             pubkey: "farm_pubkey".to_string(),
-            d_tag: "farm-1".to_string(),
+            d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
         };
 
         let tags = farm_ref_tags(&farm).expect("farm ref tags");
@@ -118,8 +118,8 @@ mod tests {
 
     #[test]
     fn farm_list_sets_include_expected_tags() {
-        let members = farm_members_list_set("farm-1", ["owner_pubkey"]).expect("members list");
-        assert_eq!(members.d_tag, "farm:farm-1:members");
+        let members = farm_members_list_set("AAAAAAAAAAAAAAAAAAAAAA", ["owner_pubkey"]).expect("members list");
+        assert_eq!(members.d_tag, "farm:AAAAAAAAAAAAAAAAAAAAAA:members");
         assert_eq!(members.entries.len(), 1);
         assert_eq!(members.entries[0].tag, "p");
 
@@ -132,10 +132,10 @@ mod tests {
     #[test]
     fn farm_plots_list_set_uses_plot_addresses() {
         let plots = vec![RadrootsPlot {
-            d_tag: "plot-1".to_string(),
+            d_tag: "AAAAAAAAAAAAAAAAAAAAAQ".to_string(),
             farm: RadrootsFarmRef {
                 pubkey: "farm_pubkey".to_string(),
-                d_tag: "farm-1".to_string(),
+                d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
             },
             name: "Plot 1".to_string(),
             about: None,
@@ -143,24 +143,24 @@ mod tests {
             tags: None,
         }];
 
-        let plots_list = farm_plots_list_set_from_plots("farm-1", "farm_pubkey", &plots)
+        let plots_list = farm_plots_list_set_from_plots("AAAAAAAAAAAAAAAAAAAAAA", "farm_pubkey", &plots)
             .expect("plots list");
-        assert_eq!(plots_list.d_tag, "farm:farm-1:plots");
+        assert_eq!(plots_list.d_tag, "farm:AAAAAAAAAAAAAAAAAAAAAA:plots");
         assert_eq!(plots_list.entries.len(), 1);
         assert_eq!(plots_list.entries[0].tag, "a");
         assert_eq!(
             plots_list.entries[0].values[0],
-            "30350:farm_pubkey:plot-1"
+            "30350:farm_pubkey:AAAAAAAAAAAAAAAAAAAAAQ"
         );
     }
 
     #[test]
     fn farm_listings_list_set_uses_listing_addresses() {
         let listings = vec![RadrootsListing {
-            d_tag: "listing-1".to_string(),
+            d_tag: "AAAAAAAAAAAAAAAAAAAAAg".to_string(),
             farm: RadrootsListingFarmRef {
                 pubkey: "farm_pubkey".to_string(),
-                d_tag: "farm-1".to_string(),
+                d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
             },
             product: RadrootsListingProduct {
                 key: "coffee".to_string(),
@@ -206,14 +206,14 @@ mod tests {
             images: None,
         }];
 
-        let listings_list = farm_listings_list_set_from_listings("farm-1", "farm_pubkey", &listings)
+        let listings_list = farm_listings_list_set_from_listings("AAAAAAAAAAAAAAAAAAAAAA", "farm_pubkey", &listings)
             .expect("listings list");
-        assert_eq!(listings_list.d_tag, "farm:farm-1:listings");
+        assert_eq!(listings_list.d_tag, "farm:AAAAAAAAAAAAAAAAAAAAAA:listings");
         assert_eq!(listings_list.entries.len(), 1);
         assert_eq!(listings_list.entries[0].tag, "a");
         assert_eq!(
             listings_list.entries[0].values[0],
-            "30402:farm_pubkey:listing-1"
+            "30402:farm_pubkey:AAAAAAAAAAAAAAAAAAAAAg"
         );
     }
 }

@@ -142,7 +142,7 @@ mod tests {
 
     #[test]
     fn trade_listing_dvm_tags_builds_expected_tags() {
-        let listing_addr = format!("{KIND_LISTING}:pubkey:listing");
+        let listing_addr = format!("{KIND_LISTING}:pubkey:AAAAAAAAAAAAAAAAAAAAAg");
         let tags = trade_listing_dvm_tags("pubkey", &listing_addr, Some("order-1"));
         let expected: Vec<Vec<String>> = vec![
             vec![String::from("p"), String::from("pubkey")],
@@ -154,7 +154,7 @@ mod tests {
 
     #[test]
     fn trade_listing_dvm_tags_omit_order_id_when_missing() {
-        let listing_addr = format!("{KIND_LISTING}:pubkey:listing");
+        let listing_addr = format!("{KIND_LISTING}:pubkey:AAAAAAAAAAAAAAAAAAAAAg");
         let tags = trade_listing_dvm_tags("pubkey", &listing_addr, None::<String>);
         let expected: Vec<Vec<String>> = vec![
             vec![String::from("p"), String::from("pubkey")],
