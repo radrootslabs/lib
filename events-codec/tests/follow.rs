@@ -5,7 +5,7 @@ use radroots_events::{
 
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
 use radroots_events_codec::follow::decode::follow_from_tags;
-use radroots_events_codec::follow::encode::to_wire_parts;
+use radroots_events_codec::follow::encode::{follow_apply, FollowMutation, to_wire_parts};
 
 #[test]
 fn follow_to_wire_parts_builds_p_tags() {
@@ -99,5 +99,134 @@ fn follow_from_tags_rejects_wrong_kind() {
             expected: "3",
             got: KIND_POST
         }
+    ));
+}
+
+#[test]
+fn follow_apply_adds_and_updates_entries() {
+    let follow = RadrootsFollow {
+        list: vec![
+            RadrootsFollowProfile {
+                published_at: 1,
+                public_key: "pubkey-a".to_string(),
+                relay_url: None,
+                contact_name: Some("alice".to_string()),
+            },
+            RadrootsFollowProfile {
+                published_at: 1,
+                public_key: "pubkey-b".to_string(),
+                relay_url: None,
+                contact_name: Some("bob".to_string()),
+            },
+        ],
+    };
+
+    let updated = follow_apply(
+        &follow,
+        FollowMutation::Follow {
+            public_key: "pubkey-a".to_string(),
+            relay_url: Some("wss://relay".to_string()),
+            contact_name: Some("alice-updated".to_string()),
+        },
+    )
+    .unwrap();
+    assert_eq!(updated.list.len(), 2);
+    assert_eq!(updated.list[0].public_key, "pubkey-a");
+    assert_eq!(updated.list[0].relay_url.as_deref(), Some("wss://relay"));
+    assert_eq!(updated.list[0].contact_name.as_deref(), Some("alice-updated"));
+
+    let added = follow_apply(
+        &follow,
+        FollowMutation::Follow {
+            public_key: "pubkey-c".to_string(),
+            relay_url: None,
+            contact_name: Some("cara".to_string()),
+        },
+    )
+    .unwrap();
+    assert_eq!(added.list.len(), 3);
+    assert_eq!(added.list[2].public_key, "pubkey-c");
+}
+
+#[test]
+fn follow_apply_unfollow_removes_entries() {
+    let follow = RadrootsFollow {
+        list: vec![
+            RadrootsFollowProfile {
+                published_at: 1,
+                public_key: "pubkey-a".to_string(),
+                relay_url: None,
+                contact_name: None,
+            },
+            RadrootsFollowProfile {
+                published_at: 1,
+                public_key: "pubkey-b".to_string(),
+                relay_url: None,
+                contact_name: None,
+            },
+        ],
+    };
+
+    let removed = follow_apply(
+        &follow,
+        FollowMutation::Unfollow {
+            public_key: "pubkey-b".to_string(),
+        },
+    )
+    .unwrap();
+    assert_eq!(removed.list.len(), 1);
+    assert_eq!(removed.list[0].public_key, "pubkey-a");
+}
+
+#[test]
+fn follow_apply_toggle_adds_or_removes() {
+    let follow = RadrootsFollow {
+        list: vec![RadrootsFollowProfile {
+            published_at: 1,
+            public_key: "pubkey-a".to_string(),
+            relay_url: None,
+            contact_name: None,
+        }],
+    };
+
+    let removed = follow_apply(
+        &follow,
+        FollowMutation::Toggle {
+            public_key: "pubkey-a".to_string(),
+            relay_url: None,
+            contact_name: None,
+        },
+    )
+    .unwrap();
+    assert!(removed.list.is_empty());
+
+    let added = follow_apply(
+        &follow,
+        FollowMutation::Toggle {
+            public_key: "pubkey-b".to_string(),
+            relay_url: None,
+            contact_name: Some("bob".to_string()),
+        },
+    )
+    .unwrap();
+    assert_eq!(added.list.len(), 2);
+    assert_eq!(added.list[1].public_key, "pubkey-b");
+}
+
+#[test]
+fn follow_apply_rejects_empty_pubkey() {
+    let follow = RadrootsFollow { list: Vec::new() };
+    let err = follow_apply(
+        &follow,
+        FollowMutation::Follow {
+            public_key: "  ".to_string(),
+            relay_url: None,
+            contact_name: None,
+        },
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("follow.public_key")
     ));
 }
