@@ -92,6 +92,9 @@ pub fn list_set_from_tags(
     }
 
     let d_tag = d_tag.ok_or(EventParseError::MissingTag("d"))?;
+    if !super::list_set_base64_id_is_valid(&d_tag) {
+        return Err(EventParseError::InvalidTag("d"));
+    }
     Ok(RadrootsListSet {
         d_tag,
         content,

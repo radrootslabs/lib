@@ -27,6 +27,9 @@ pub fn list_set_build_tags(list: &RadrootsListSet) -> Result<Vec<Vec<String>>, E
     if list.d_tag.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("d_tag"));
     }
+    if !super::list_set_base64_id_is_valid(&list.d_tag) {
+        return Err(EventEncodeError::InvalidField("d_tag"));
+    }
     let mut tags = Vec::with_capacity(1 + list.entries.len() + 3);
     push_tag(&mut tags, TAG_D, &list.d_tag);
     if let Some(title) = list.title.as_ref().filter(|v| !v.trim().is_empty()) {
