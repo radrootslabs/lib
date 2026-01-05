@@ -7,6 +7,7 @@ use radroots_events::{
     tags::TAG_D,
 };
 
+use crate::d_tag::validate_d_tag;
 use crate::error::EventEncodeError;
 
 #[cfg(feature = "serde_json")]
@@ -26,6 +27,7 @@ pub fn farm_build_tags(farm: &RadrootsFarm) -> Result<Vec<Vec<String>>, EventEnc
     if farm.d_tag.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("d_tag"));
     }
+    validate_d_tag(&farm.d_tag, "d_tag")?;
     if farm.name.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("name"));
     }
@@ -53,6 +55,7 @@ pub fn farm_ref_tags(farm: &RadrootsFarmRef) -> Result<Vec<Vec<String>>, EventEn
     if farm.d_tag.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("farm.d_tag"));
     }
+    validate_d_tag(&farm.d_tag, "farm.d_tag")?;
     let mut addr = String::new();
     addr.push_str(&KIND_FARM.to_string());
     addr.push(':');

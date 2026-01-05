@@ -9,6 +9,7 @@ use radroots_events::list::RadrootsListEntry;
 use radroots_events::list_set::RadrootsListSet;
 use radroots_events::plot::RadrootsPlotRef;
 
+use crate::d_tag::validate_d_tag;
 use crate::error::EventEncodeError;
 
 fn resource_list_set_id(area_id: &str, suffix: &str) -> Result<String, EventEncodeError> {
@@ -16,6 +17,7 @@ fn resource_list_set_id(area_id: &str, suffix: &str) -> Result<String, EventEnco
     if area_id.is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("area_id"));
     }
+    validate_d_tag(area_id, "area_id")?;
     if suffix.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("list_set_suffix"));
     }
@@ -48,6 +50,7 @@ fn farm_address(farm: &RadrootsFarmRef) -> Result<String, EventEncodeError> {
     if farm.d_tag.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("farm.d_tag"));
     }
+    validate_d_tag(&farm.d_tag, "farm.d_tag")?;
     let mut addr = String::new();
     addr.push_str(&KIND_FARM.to_string());
     addr.push(':');
@@ -64,6 +67,7 @@ fn plot_address(plot: &RadrootsPlotRef) -> Result<String, EventEncodeError> {
     if plot.d_tag.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("plot.d_tag"));
     }
+    validate_d_tag(&plot.d_tag, "plot.d_tag")?;
     let mut addr = String::new();
     addr.push_str(&KIND_PLOT.to_string());
     addr.push(':');

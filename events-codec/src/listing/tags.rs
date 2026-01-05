@@ -16,6 +16,7 @@ use radroots_events::resource_area::RadrootsResourceAreaRef;
 use radroots_events::kinds::{KIND_FARM, KIND_PLOT, KIND_RESOURCE_AREA};
 use radroots_events::tags::TAG_D;
 
+use crate::d_tag::validate_d_tag;
 use crate::error::EventEncodeError;
 
 const TAG_PRICE: &str = "price";
@@ -94,10 +95,11 @@ pub fn listing_tags_with_options(
     listing: &RadrootsListing,
     options: ListingTagOptions,
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
-    let d_tag = listing.d_tag.trim();
-    if d_tag.is_empty() {
+    let d_tag = listing.d_tag.as_str();
+    if d_tag.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("d"));
     }
+    validate_d_tag(d_tag, "d")?;
     if listing.primary_bin_id.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("primary_bin_id"));
     }
@@ -243,6 +245,7 @@ fn push_farm_tags(
     if farm.d_tag.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("farm.d_tag"));
     }
+    validate_d_tag(&farm.d_tag, "farm.d_tag")?;
     let mut address = String::new();
     address.push_str(&KIND_FARM.to_string());
     address.push(':');
@@ -263,6 +266,7 @@ fn tag_listing_resource_area(
     if area.d_tag.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("resource_area.d_tag"));
     }
+    validate_d_tag(&area.d_tag, "resource_area.d_tag")?;
     let mut address = String::new();
     address.push_str(&KIND_RESOURCE_AREA.to_string());
     address.push(':');
@@ -279,6 +283,7 @@ fn tag_listing_plot(plot: &RadrootsPlotRef) -> Result<Vec<String>, EventEncodeEr
     if plot.d_tag.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("plot.d_tag"));
     }
+    validate_d_tag(&plot.d_tag, "plot.d_tag")?;
     let mut address = String::new();
     address.push_str(&KIND_PLOT.to_string());
     address.push(':');

@@ -13,6 +13,7 @@ mod tests {
         RadrootsGeoJsonPolygon,
     };
     use radroots_events::plot::RadrootsPlot;
+    use crate::error::EventEncodeError;
     use crate::farm::encode::{farm_build_tags, farm_ref_tags};
     use crate::farm::list_sets::{
         farm_members_list_set,
@@ -82,6 +83,23 @@ mod tests {
         assert!(tags.iter().any(|tag| tag.get(0) == Some(&"d".to_string())));
         assert!(tags.iter().any(|tag| tag.get(0) == Some(&"t".to_string())));
         assert!(tags.iter().any(|tag| tag.get(0) == Some(&"g".to_string())));
+    }
+
+    #[test]
+    fn farm_build_tags_rejects_invalid_d_tag() {
+        let farm = RadrootsFarm {
+            d_tag: "farm:invalid".to_string(),
+            name: "Test Farm".to_string(),
+            about: None,
+            website: None,
+            picture: None,
+            banner: None,
+            location: None,
+            tags: None,
+        };
+
+        let err = farm_build_tags(&farm).expect_err("expected invalid d_tag");
+        assert!(matches!(err, EventEncodeError::InvalidField("d_tag")));
     }
 
     #[test]

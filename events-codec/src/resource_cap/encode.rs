@@ -7,6 +7,7 @@ use radroots_events::{
     tags::TAG_D,
 };
 
+use crate::d_tag::validate_d_tag;
 use crate::error::EventEncodeError;
 
 #[cfg(feature = "serde_json")]
@@ -37,6 +38,7 @@ fn resource_area_address(cap: &RadrootsResourceHarvestCap) -> Result<String, Eve
     if area.d_tag.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("resource_area.d_tag"));
     }
+    validate_d_tag(&area.d_tag, "resource_area.d_tag")?;
     let mut addr = String::new();
     addr.push_str(&KIND_RESOURCE_AREA.to_string());
     addr.push(':');
@@ -52,6 +54,7 @@ pub fn resource_harvest_cap_build_tags(
     if cap.d_tag.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("d_tag"));
     }
+    validate_d_tag(&cap.d_tag, "d_tag")?;
     if cap.product.key.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("product.key"));
     }

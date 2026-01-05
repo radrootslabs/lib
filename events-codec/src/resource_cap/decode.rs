@@ -10,6 +10,7 @@ use radroots_events::{
     tags::TAG_D,
 };
 
+use crate::d_tag::validate_d_tag_tag;
 use crate::error::EventParseError;
 
 const DEFAULT_KIND: u32 = KIND_RESOURCE_HARVEST_CAP;
@@ -26,6 +27,7 @@ fn parse_d_tag(tags: &[Vec<String>]) -> Result<String, EventParseError> {
     if value.trim().is_empty() {
         return Err(EventParseError::InvalidTag(TAG_D));
     }
+    validate_d_tag_tag(&value, TAG_D)?;
     Ok(value)
 }
 

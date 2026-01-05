@@ -8,6 +8,7 @@ use radroots_events::kinds::KIND_FARM;
 use radroots_events::list::RadrootsListEntry;
 use radroots_events::list_set::RadrootsListSet;
 
+use crate::d_tag::validate_d_tag;
 use crate::error::EventEncodeError;
 
 const MEMBER_OF_COOPS: &str = "member_of.coops";
@@ -17,6 +18,7 @@ fn coop_list_set_id(coop_id: &str, suffix: &str) -> Result<String, EventEncodeEr
     if coop_id.is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("coop_id"));
     }
+    validate_d_tag(coop_id, "coop_id")?;
     if suffix.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("list_set_suffix"));
     }
@@ -49,6 +51,7 @@ fn farm_address(farm: &RadrootsFarmRef) -> Result<String, EventEncodeError> {
     if farm.d_tag.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("farm.d_tag"));
     }
+    validate_d_tag(&farm.d_tag, "farm.d_tag")?;
     let mut addr = String::new();
     addr.push_str(&KIND_FARM.to_string());
     addr.push(':');

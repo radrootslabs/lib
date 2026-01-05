@@ -13,6 +13,7 @@ use radroots_events::{
     tags::TAG_D,
 };
 
+use crate::d_tag::validate_d_tag_tag;
 use crate::error::EventParseError;
 
 const DEFAULT_KIND: u32 = KIND_LISTING;
@@ -33,6 +34,7 @@ fn parse_d_tag(tags: &[Vec<String>]) -> Result<String, EventParseError> {
     if value.trim().is_empty() {
         return Err(EventParseError::InvalidTag(TAG_D));
     }
+    validate_d_tag_tag(&value, TAG_D)?;
     Ok(value)
 }
 
@@ -61,6 +63,7 @@ fn parse_farm_ref(tags: &[Vec<String>]) -> Result<RadrootsListingFarmRef, EventP
         if pubkey.trim().is_empty() || d_tag.trim().is_empty() {
             return Err(EventParseError::InvalidTag(TAG_A));
         }
+        validate_d_tag_tag(&d_tag, TAG_A)?;
         return Ok(RadrootsListingFarmRef { pubkey, d_tag });
     }
     Err(EventParseError::MissingTag(TAG_A))
@@ -111,6 +114,7 @@ fn parse_resource_area(tags: &[Vec<String>]) -> Result<Option<RadrootsResourceAr
     if pubkey.trim().is_empty() || d_tag.trim().is_empty() {
         return Err(EventParseError::InvalidTag(TAG_RADROOTS_RESOURCE_AREA));
     }
+    validate_d_tag_tag(&d_tag, TAG_RADROOTS_RESOURCE_AREA)?;
     Ok(Some(RadrootsResourceAreaRef { pubkey, d_tag }))
 }
 
@@ -144,6 +148,7 @@ fn parse_plot_ref(tags: &[Vec<String>]) -> Result<Option<RadrootsPlotRef>, Event
     if pubkey.trim().is_empty() || d_tag.trim().is_empty() {
         return Err(EventParseError::InvalidTag(TAG_RADROOTS_PLOT));
     }
+    validate_d_tag_tag(&d_tag, TAG_RADROOTS_PLOT)?;
     Ok(Some(RadrootsPlotRef { pubkey, d_tag }))
 }
 

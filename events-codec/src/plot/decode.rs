@@ -11,6 +11,7 @@ use radroots_events::{
     tags::TAG_D,
 };
 
+use crate::d_tag::validate_d_tag_tag;
 use crate::error::EventParseError;
 
 const TAG_A: &str = "a";
@@ -29,6 +30,7 @@ fn parse_d_tag(tags: &[Vec<String>]) -> Result<String, EventParseError> {
     if value.trim().is_empty() {
         return Err(EventParseError::InvalidTag(TAG_D));
     }
+    validate_d_tag_tag(&value, TAG_D)?;
     Ok(value)
 }
 
@@ -60,6 +62,7 @@ fn parse_farm_ref(tags: &[Vec<String>]) -> Result<RadrootsFarmRef, EventParseErr
     if pubkey.trim().is_empty() || d_tag.trim().is_empty() {
         return Err(EventParseError::InvalidTag(TAG_A));
     }
+    validate_d_tag_tag(&d_tag, TAG_A)?;
     Ok(RadrootsFarmRef { pubkey, d_tag })
 }
 

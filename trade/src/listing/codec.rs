@@ -17,6 +17,7 @@ use radroots_events::kinds::{KIND_FARM, KIND_PLOT, KIND_RESOURCE_AREA};
 use radroots_events::plot::RadrootsPlotRef;
 use radroots_events::resource_area::RadrootsResourceAreaRef;
 use radroots_events::tags::TAG_D;
+use radroots_events_codec::d_tag::is_d_tag_base64url;
 use radroots_events_codec::error::EventEncodeError;
 use radroots_events_codec::listing::tags::{listing_tags_with_options, ListingTagOptions};
 #[cfg(feature = "ts-rs")]
@@ -101,6 +102,9 @@ fn parse_d_tag(tags: &[Vec<String>]) -> Result<String, TradeListingParseError> {
     if value.trim().is_empty() {
         return Err(TradeListingParseError::InvalidTag(TAG_D.to_string()));
     }
+    if !is_d_tag_base64url(&value) {
+        return Err(TradeListingParseError::InvalidTag(TAG_D.to_string()));
+    }
     Ok(value)
 }
 
@@ -175,6 +179,9 @@ fn map_listing_tags_error(err: EventEncodeError) -> TradeListingParseError {
         EventEncodeError::EmptyRequiredField(field) => {
             TradeListingParseError::MissingTag(field.to_string())
         }
+        EventEncodeError::InvalidField(field) => {
+            TradeListingParseError::InvalidTag(field.to_string())
+        }
         EventEncodeError::Json => TradeListingParseError::InvalidJson("discount".to_string()),
         EventEncodeError::InvalidKind(_) => TradeListingParseError::InvalidTag("kind".to_string()),
     }
@@ -188,6 +195,9 @@ fn listing_from_tags(
     resource_area: Option<RadrootsResourceAreaRef>,
     plot: Option<RadrootsPlotRef>,
 ) -> Result<RadrootsListing, TradeListingParseError> {
+    if !is_d_tag_base64url(&d_tag) {
+        return Err(TradeListingParseError::InvalidTag(TAG_D.to_string()));
+    }
     let mut product = RadrootsListingProduct {
         key: String::new(),
         title: String::new(),
@@ -518,6 +528,9 @@ fn parse_farm_ref(tags: &[Vec<String>]) -> Result<RadrootsListingFarmRef, TradeL
         if pubkey.trim().is_empty() || d_tag.trim().is_empty() {
             return Err(TradeListingParseError::InvalidTag(TAG_A.to_string()));
         }
+        if !is_d_tag_base64url(&d_tag) {
+            return Err(TradeListingParseError::InvalidTag(TAG_A.to_string()));
+        }
         return Ok(RadrootsListingFarmRef { pubkey, d_tag });
     }
     Err(TradeListingParseError::MissingTag(TAG_A.to_string()))
@@ -574,6 +587,11 @@ fn parse_resource_area(
             TAG_RADROOTS_RESOURCE_AREA.to_string(),
         ));
     }
+    if !is_d_tag_base64url(&d_tag) {
+        return Err(TradeListingParseError::InvalidTag(
+            TAG_RADROOTS_RESOURCE_AREA.to_string(),
+        ));
+    }
     Ok(Some(RadrootsResourceAreaRef { pubkey, d_tag }))
 }
 
@@ -605,6 +623,9 @@ fn parse_plot_ref(tags: &[Vec<String>]) -> Result<Option<RadrootsPlotRef>, Trade
         .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_RADROOTS_PLOT.to_string()))?
         .to_string();
     if pubkey.trim().is_empty() || d_tag.trim().is_empty() {
+        return Err(TradeListingParseError::InvalidTag(TAG_RADROOTS_PLOT.to_string()));
+    }
+    if !is_d_tag_base64url(&d_tag) {
         return Err(TradeListingParseError::InvalidTag(TAG_RADROOTS_PLOT.to_string()));
     }
     Ok(Some(RadrootsPlotRef { pubkey, d_tag }))
@@ -675,6 +696,50 @@ mod tests {
                 .code(),
             "kg"
         );
+    }
+
+    #[test]
+    fn listing_from_tags_rejects_invalid_d_tag() {
+        let tags = vec![
+            vec!["key".into(), "coffee".into()],
+            vec!["title".into(), "Coffee".into()],
+            vec!["category".into(), "coffee".into()],
+            vec!["radroots:primary_bin".into(), "bin-1".into()],
+            vec![
+                "radroots:bin".into(),
+                "bin-1".into(),
+                "1000".into(),
+                "g".into(),
+                "1".into(),
+                "kg".into(),
+                "bag".into(),
+            ],
+            vec![
+                "radroots:price".into(),
+                "bin-1".into(),
+                "0.01".into(),
+                "USD".into(),
+                "1".into(),
+                "g".into(),
+                "10".into(),
+                "kg".into(),
+            ],
+        ];
+
+        let err = listing_from_tags(
+            &tags,
+            "invalid:tag".to_string(),
+            farm_ref(),
+            "seller".to_string(),
+            None,
+            None,
+        )
+        .unwrap_err();
+
+        assert!(matches!(
+            err,
+            TradeListingParseError::InvalidTag(tag) if tag == TAG_D
+        ));
     }
 }
 

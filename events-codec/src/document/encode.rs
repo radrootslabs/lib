@@ -8,6 +8,7 @@ use radroots_events::{
     tags::TAG_D,
 };
 
+use crate::d_tag::validate_d_tag;
 use crate::error::EventEncodeError;
 
 #[cfg(feature = "serde_json")]
@@ -31,6 +32,7 @@ pub fn document_build_tags(document: &RadrootsDocument) -> Result<Vec<Vec<String
     if document.d_tag.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("d_tag"));
     }
+    validate_d_tag(&document.d_tag, "d_tag")?;
     if document.doc_type.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("doc_type"));
     }

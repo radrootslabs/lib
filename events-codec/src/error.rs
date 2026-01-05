@@ -37,6 +37,7 @@ impl std::error::Error for EventParseError {
 pub enum EventEncodeError {
     InvalidKind(u32),
     EmptyRequiredField(&'static str),
+    InvalidField(&'static str),
     Json,
 }
 
@@ -47,6 +48,7 @@ impl fmt::Display for EventEncodeError {
             EventEncodeError::EmptyRequiredField(field) => {
                 write!(f, "empty required field: {}", field)
             }
+            EventEncodeError::InvalidField(field) => write!(f, "invalid field: {}", field),
             EventEncodeError::Json => write!(f, "failed to serialize JSON"),
         }
     }

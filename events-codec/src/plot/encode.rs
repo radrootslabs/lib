@@ -8,6 +8,7 @@ use radroots_events::{
     tags::TAG_D,
 };
 
+use crate::d_tag::validate_d_tag;
 use crate::error::EventEncodeError;
 
 #[cfg(feature = "serde_json")]
@@ -44,6 +45,7 @@ pub fn plot_address(author_pubkey: &str, plot_id: &str) -> Result<String, EventE
     if plot_id.is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("plot.d_tag"));
     }
+    validate_d_tag(plot_id, "plot.d_tag")?;
     let mut value = String::new();
     value.push_str(&KIND_PLOT.to_string());
     value.push(':');
@@ -57,6 +59,7 @@ pub fn plot_build_tags(plot: &RadrootsPlot) -> Result<Vec<Vec<String>>, EventEnc
     if plot.d_tag.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("d_tag"));
     }
+    validate_d_tag(&plot.d_tag, "d_tag")?;
     if plot.name.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("name"));
     }
@@ -66,6 +69,7 @@ pub fn plot_build_tags(plot: &RadrootsPlot) -> Result<Vec<Vec<String>>, EventEnc
     if plot.farm.d_tag.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("farm.d_tag"));
     }
+    validate_d_tag(&plot.farm.d_tag, "farm.d_tag")?;
     let mut tags = Vec::new();
     push_tag(&mut tags, TAG_D, &plot.d_tag);
     push_tag(&mut tags, TAG_A, &farm_address(&plot.farm));

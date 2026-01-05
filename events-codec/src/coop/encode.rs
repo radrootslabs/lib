@@ -9,6 +9,7 @@ use radroots_events::{
     tags::TAG_D,
 };
 
+use crate::d_tag::validate_d_tag;
 use crate::error::EventEncodeError;
 
 #[cfg(feature = "serde_json")]
@@ -28,6 +29,7 @@ pub fn coop_build_tags(coop: &RadrootsCoop) -> Result<Vec<Vec<String>>, EventEnc
     if coop.d_tag.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("d_tag"));
     }
+    validate_d_tag(&coop.d_tag, "d_tag")?;
     if coop.name.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("name"));
     }
@@ -55,6 +57,7 @@ pub fn coop_ref_tags(coop: &RadrootsCoopRef) -> Result<Vec<Vec<String>>, EventEn
     if coop.d_tag.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("coop.d_tag"));
     }
+    validate_d_tag(&coop.d_tag, "coop.d_tag")?;
     let mut addr = String::new();
     addr.push_str(&KIND_COOP.to_string());
     addr.push(':');

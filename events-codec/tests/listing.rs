@@ -150,6 +150,13 @@ fn listing_build_tags_requires_d_tag() {
 }
 
 #[test]
+fn listing_build_tags_rejects_invalid_d_tag() {
+    let listing = sample_listing("invalid:tag");
+    let err = listing_build_tags(&listing).unwrap_err();
+    assert!(matches!(err, EventEncodeError::InvalidField("d")));
+}
+
+#[test]
 fn listing_roundtrip_from_event() {
     let listing = sample_listing("listing-1");
     let parts = to_wire_parts(&listing).unwrap();

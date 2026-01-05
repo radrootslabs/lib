@@ -4,6 +4,7 @@
 extern crate alloc;
 
 pub mod error;
+pub mod d_tag;
 pub mod event_ref;
 pub mod job;
 pub mod profile;

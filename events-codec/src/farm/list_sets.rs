@@ -9,6 +9,7 @@ use radroots_events::plot::RadrootsPlot;
 use radroots_events::listing::RadrootsListing;
 use radroots_events::kinds::KIND_LISTING;
 
+use crate::d_tag::validate_d_tag;
 use crate::error::EventEncodeError;
 use crate::plot::encode::plot_address;
 
@@ -19,6 +20,7 @@ fn farm_list_set_id(farm_id: &str, suffix: &str) -> Result<String, EventEncodeEr
     if farm_id.is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("farm_id"));
     }
+    validate_d_tag(farm_id, "farm_id")?;
     if suffix.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("list_set_suffix"));
     }
@@ -141,6 +143,7 @@ where
         if listing_id.is_empty() {
             return Err(EventEncodeError::EmptyRequiredField("listing_id"));
         }
+        validate_d_tag(listing_id, "listing_id")?;
         let mut address = String::new();
         address.push_str(&KIND_LISTING.to_string());
         address.push(':');
