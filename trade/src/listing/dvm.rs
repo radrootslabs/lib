@@ -4,6 +4,7 @@
 use alloc::{string::String, vec::Vec};
 
 use radroots_events::{RadrootsNostrEventPtr, kinds::KIND_PROFILE};
+use radroots_events_codec::d_tag::is_d_tag_base64url;
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
 
@@ -223,6 +224,7 @@ impl TradeListingAddress {
         if kind == KIND_PROFILE as u16
             || seller_pubkey.trim().is_empty()
             || listing_id.trim().is_empty()
+            || !is_d_tag_base64url(&listing_id)
         {
             return Err(TradeListingAddressError::InvalidFormat);
         }
