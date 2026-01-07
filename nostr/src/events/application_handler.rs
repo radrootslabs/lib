@@ -15,6 +15,8 @@ pub struct RadrootsNostrApplicationHandlerSpec {
     pub identifier: Option<String>,
     pub metadata: Option<RadrootsNostrMetadata>,
     pub extra_tags: Vec<Vec<String>>,
+    pub relays: Vec<String>,
+    pub nostrconnect_url: Option<String>,
 }
 
 impl RadrootsNostrApplicationHandlerSpec {
@@ -24,6 +26,8 @@ impl RadrootsNostrApplicationHandlerSpec {
             identifier: None,
             metadata: None,
             extra_tags: Vec::new(),
+            relays: Vec::new(),
+            nostrconnect_url: None,
         }
     }
 }
@@ -53,6 +57,19 @@ pub fn radroots_nostr_build_application_handler_event(
     tags.push(vec!["d".to_string(), identifier]);
     for kind in &spec.kinds {
         tags.push(vec!["k".to_string(), kind.to_string()]);
+    }
+    for relay in &spec.relays {
+        let relay = relay.trim();
+        if relay.is_empty() {
+            continue;
+        }
+        tags.push(vec!["relay".to_string(), relay.to_string()]);
+    }
+    if let Some(url) = spec.nostrconnect_url.as_ref() {
+        let url = url.trim();
+        if !url.is_empty() {
+            tags.push(vec!["nostrconnect_url".to_string(), url.to_string()]);
+        }
     }
     for tag in &spec.extra_tags {
         if tag.is_empty() {
