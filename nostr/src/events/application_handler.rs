@@ -6,8 +6,16 @@ use alloc::{string::String, vec::Vec};
 
 use crate::error::RadrootsNostrError;
 use crate::events::radroots_nostr_build_event;
+#[cfg(feature = "client")]
+use crate::filter::radroots_nostr_filter_tag;
+#[cfg(feature = "client")]
+use crate::tags::radroots_nostr_tag_first_value;
+#[cfg(feature = "client")]
+use crate::types::{RadrootsNostrEvent, RadrootsNostrFilter, RadrootsNostrKind};
 use crate::types::{RadrootsNostrEventBuilder, RadrootsNostrMetadata};
 use radroots_events::kinds::KIND_APPLICATION_HANDLER;
+#[cfg(feature = "client")]
+use core::time::Duration;
 
 #[derive(Debug, Clone)]
 pub struct RadrootsNostrApplicationHandlerSpec {
@@ -100,6 +108,40 @@ pub async fn radroots_nostr_publish_application_handler(
     spec: &RadrootsNostrApplicationHandlerSpec,
 ) -> Result<crate::types::RadrootsNostrOutput<crate::types::RadrootsNostrEventId>, RadrootsNostrError>
 {
-    let builder = radroots_nostr_build_application_handler_event(spec)?;
+    let mut spec = spec.clone();
+    if spec.identifier.is_none() {
+        if let Some(existing) = fetch_existing_identifier(client, &spec).await? {
+            spec.identifier = Some(existing);
+        }
+    }
+    let builder = radroots_nostr_build_application_handler_event(&spec)?;
     crate::client::radroots_nostr_send_event(client, builder).await
+}
+
+#[cfg(feature = "client")]
+async fn fetch_existing_identifier(
+    client: &crate::client::RadrootsNostrClient,
+    spec: &RadrootsNostrApplicationHandlerSpec,
+) -> Result<Option<String>, RadrootsNostrError> {
+    let first_kind = spec
+        .kinds
+        .first()
+        .ok_or_else(|| RadrootsNostrError::FilterTagError("kinds are empty".to_string()))?;
+    let author = client.public_key().await?;
+    let filter = RadrootsNostrFilter::new()
+        .author(author)
+        .kind(RadrootsNostrKind::Custom(KIND_APPLICATION_HANDLER as u16));
+    let filter = radroots_nostr_filter_tag(filter, "k", vec![first_kind.to_string()])?;
+    let mut events = client.fetch_events(filter, Duration::from_secs(5)).await?;
+    events.sort_by_key(|event| event.created_at.as_secs());
+    let event = events.pop();
+    Ok(event.and_then(|event| tag_value(&event, "d")))
+}
+
+#[cfg(feature = "client")]
+fn tag_value(event: &RadrootsNostrEvent, key: &str) -> Option<String> {
+    event
+        .tags
+        .iter()
+        .find_map(|tag| radroots_nostr_tag_first_value(tag, key))
 }
