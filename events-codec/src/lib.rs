@@ -20,6 +20,7 @@ pub mod farm;
 pub mod resource_area;
 pub mod resource_cap;
 pub mod gift_wrap;
+pub mod geochat;
 pub mod message;
 pub mod message_file;
 pub mod post;

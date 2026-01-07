@@ -64,6 +64,12 @@ export type RadrootsFollowProfile = { published_at: number, public_key: string, 
 
 export type RadrootsGcsLocation = { lat: number, lng: number, geohash: string, point: RadrootsGeoJsonPoint, polygon: RadrootsGeoJsonPolygon, accuracy?: number | null, altitude?: number | null, tag_0?: string | null, label?: string | null, area?: number | null, elevation?: number | null, soil?: string | null, climate?: string | null, gc_id?: string | null, gc_name?: string | null, gc_admin1_id?: string | null, gc_admin1_name?: string | null, gc_country_id?: string | null, gc_country_name?: string | null, };
 
+export type RadrootsGeoChat = { geohash: string, content: string, nickname?: string | null, teleported: boolean, };
+
+export type RadrootsGeoChatEventIndex = { event: RadrootsNostrEvent, metadata: RadrootsGeoChatEventMetadata, };
+
+export type RadrootsGeoChatEventMetadata = { id: string, author: string, published_at: number, kind: number, geochat: RadrootsGeoChat, };
+
 export type RadrootsGeoJsonPoint = { type: string, coordinates: [number, number], };
 
 export type RadrootsGeoJsonPolygon = { type: string, coordinates: Array<Array<[number, number]>>, };

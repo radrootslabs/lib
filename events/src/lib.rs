@@ -13,6 +13,7 @@ pub mod comment;
 pub mod account;
 pub mod follow;
 pub mod gift_wrap;
+pub mod geochat;
 pub mod job;
 pub mod job_feedback;
 pub mod job_request;

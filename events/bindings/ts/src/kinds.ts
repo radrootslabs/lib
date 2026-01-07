@@ -7,6 +7,7 @@ export const KIND_MESSAGE = 14;
 export const KIND_MESSAGE_FILE = 15;
 export const KIND_GIFT_WRAP = 1059;
 export const KIND_COMMENT = 1111;
+export const KIND_GEOCHAT = 20000;
 export const KIND_LIST_MUTE = 10000;
 export const KIND_LIST_PINNED_NOTES = 10001;
 export const KIND_LIST_READ_WRITE_RELAYS = 10002;

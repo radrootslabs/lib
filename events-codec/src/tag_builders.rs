@@ -12,6 +12,7 @@ use radroots_events::{
     coop::RadrootsCoop,
     follow::RadrootsFollow,
     farm::RadrootsFarm,
+    geochat::RadrootsGeoChat,
     resource_area::RadrootsResourceArea,
     resource_cap::RadrootsResourceHarvestCap,
     gift_wrap::RadrootsGiftWrap,
@@ -37,6 +38,7 @@ use crate::document::encode::document_build_tags;
 use crate::coop::encode::coop_build_tags;
 use crate::follow::encode::follow_build_tags;
 use crate::farm::encode::farm_build_tags;
+use crate::geochat::encode::geochat_build_tags;
 use crate::resource_area::encode::resource_area_build_tags;
 use crate::resource_cap::encode::resource_harvest_cap_build_tags;
 use crate::job::encode::JobEncodeError;
@@ -103,6 +105,14 @@ impl RadrootsEventTagBuilder for RadrootsMessageFile {
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
         message_file_build_tags(self)
+    }
+}
+
+impl RadrootsEventTagBuilder for RadrootsGeoChat {
+    type Error = EventEncodeError;
+
+    fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
+        geochat_build_tags(self)
     }
 }
 
