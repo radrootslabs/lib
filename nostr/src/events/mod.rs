@@ -1,6 +1,8 @@
 pub mod jobs;
 pub mod metadata;
 pub mod post;
+#[cfg(feature = "events")]
+pub mod application_handler;
 
 extern crate alloc;
 use alloc::{string::String, vec::Vec};

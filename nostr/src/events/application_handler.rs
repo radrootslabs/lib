@@ -1,0 +1,88 @@
+#![forbid(unsafe_code)]
+
+extern crate alloc;
+
+use alloc::{string::String, vec::Vec};
+
+use crate::error::RadrootsNostrError;
+use crate::events::radroots_nostr_build_event;
+use crate::types::{RadrootsNostrEventBuilder, RadrootsNostrMetadata};
+use radroots_events::kinds::KIND_APPLICATION_HANDLER;
+
+#[derive(Debug, Clone)]
+pub struct RadrootsNostrApplicationHandlerSpec {
+    pub kinds: Vec<u32>,
+    pub identifier: Option<String>,
+    pub metadata: Option<RadrootsNostrMetadata>,
+    pub extra_tags: Vec<Vec<String>>,
+}
+
+impl RadrootsNostrApplicationHandlerSpec {
+    pub fn new(kinds: Vec<u32>) -> Self {
+        Self {
+            kinds,
+            identifier: None,
+            metadata: None,
+            extra_tags: Vec::new(),
+        }
+    }
+}
+
+pub fn radroots_nostr_build_application_handler_event(
+    spec: &RadrootsNostrApplicationHandlerSpec,
+) -> Result<RadrootsNostrEventBuilder, RadrootsNostrError> {
+    if spec.kinds.is_empty() {
+        return Err(RadrootsNostrError::FilterTagError(
+            "application handler kinds are empty".to_string(),
+        ));
+    }
+
+    let identifier = spec
+        .identifier
+        .clone()
+        .unwrap_or_else(|| spec.kinds[0].to_string());
+
+    let mut content = String::new();
+    if let Some(md) = spec.metadata.as_ref() {
+        if metadata_has_fields(md) {
+            content = serde_json::to_string(md).unwrap_or_default();
+        }
+    }
+
+    let mut tags = Vec::new();
+    tags.push(vec!["d".to_string(), identifier]);
+    for kind in &spec.kinds {
+        tags.push(vec!["k".to_string(), kind.to_string()]);
+    }
+    for tag in &spec.extra_tags {
+        if tag.is_empty() {
+            continue;
+        }
+        tags.push(tag.clone());
+    }
+
+    radroots_nostr_build_event(KIND_APPLICATION_HANDLER, content, tags)
+}
+
+fn metadata_has_fields(md: &RadrootsNostrMetadata) -> bool {
+    md.name.is_some()
+        || md.display_name.is_some()
+        || md.about.is_some()
+        || md.website.is_some()
+        || md.picture.is_some()
+        || md.banner.is_some()
+        || md.nip05.is_some()
+        || md.lud06.is_some()
+        || md.lud16.is_some()
+        || !md.custom.is_empty()
+}
+
+#[cfg(feature = "client")]
+pub async fn radroots_nostr_publish_application_handler(
+    client: &crate::client::RadrootsNostrClient,
+    spec: &RadrootsNostrApplicationHandlerSpec,
+) -> Result<crate::types::RadrootsNostrOutput<crate::types::RadrootsNostrEventId>, RadrootsNostrError>
+{
+    let builder = radroots_nostr_build_application_handler_event(spec)?;
+    crate::client::radroots_nostr_send_event(client, builder).await
+}

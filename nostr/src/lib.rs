@@ -68,6 +68,15 @@ pub mod prelude {
         },
     };
 
+    #[cfg(feature = "events")]
+    pub use crate::events::application_handler::{
+        radroots_nostr_build_application_handler_event,
+        RadrootsNostrApplicationHandlerSpec,
+    };
+
+    #[cfg(all(feature = "client", feature = "events"))]
+    pub use crate::events::application_handler::radroots_nostr_publish_application_handler;
+
     #[cfg(feature = "client")]
     pub use crate::events::metadata::{
         radroots_nostr_fetch_metadata_for_author,
