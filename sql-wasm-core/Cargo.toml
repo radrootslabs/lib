@@ -10,11 +10,13 @@ license.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [features]
-default = []
+default = ["bridge"]
+bridge = ["dep:radroots-sql-wasm-bridge"]
+embedded = []
 
 [dependencies]
 radroots-sql-core = { workspace = true }
-radroots-sql-wasm-bridge = { workspace = true }
+radroots-sql-wasm-bridge = { workspace = true, optional = true }
 chrono = { workspace = true, features = ["serde"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
