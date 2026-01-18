@@ -47,7 +47,7 @@ fn sync_all_emits_expected_order() {
 
     let farm_pubkey = "f".repeat(64);
     let farm_fields = IFarmFields {
-        d_tag: "farm_d".to_string(),
+        d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
         pubkey: farm_pubkey.clone(),
         name: "Green Farm".to_string(),
         about: Some("About".to_string()),
@@ -75,7 +75,7 @@ fn sync_all_emits_expected_order() {
         ]],
     };
     let gcs_fields = IGcsLocationFields {
-        d_tag: "gcs_d".to_string(),
+        d_tag: "AAAAAAAAAAAAAAAAAAAAAQ".to_string(),
         lat: 37.7,
         lng: -122.4,
         geohash: "9q8yy".to_string(),
@@ -109,7 +109,7 @@ fn sync_all_emits_expected_order() {
     );
 
     let plot_fields = IPlotFields {
-        d_tag: "plot_d".to_string(),
+        d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
         farm_id: farm_row.id.clone(),
         name: "Plot A".to_string(),
         about: None,
