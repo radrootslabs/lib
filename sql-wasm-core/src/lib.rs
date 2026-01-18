@@ -37,7 +37,7 @@ pub fn err_js(err: SqlError) -> JsValue {
 }
 
 #[cfg(all(feature = "embedded", target_arch = "wasm32"))]
-fn embedded_engine() -> Result<&'static EmbeddedSqlEngine, SqlError> {
+pub fn embedded_engine() -> Result<&'static EmbeddedSqlEngine, SqlError> {
     static ENGINE: OnceLock<EmbeddedSqlEngine> = OnceLock::new();
     if let Some(engine) = ENGINE.get() {
         return Ok(engine);
