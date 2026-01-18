@@ -68,7 +68,7 @@ importers:
         specifier: ^3.15.0
         version: 3.15.0
 
-  tangle-schema/bindings/ts:
+  tangle-db-schema/bindings/ts:
     dependencies:
       '@radroots/types-bindings':
         specifier: workspace:*

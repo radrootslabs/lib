@@ -16,7 +16,7 @@ ts-rs = ["dep:ts-rs"]
 [dependencies]
 radroots-runtime = { workspace = true, optional = true }
 radroots-events = { workspace = true, default-features = false, features = ["serde"] }
-nostr = { workspace = true, features = ["os-rng"] }
+nostr = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

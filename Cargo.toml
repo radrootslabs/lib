@@ -27,7 +27,7 @@ resolver = "2"
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.88.0"
+rust-version = "1.92.0"
 license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
@@ -62,9 +62,9 @@ directories = { version = "6" }
 futures = { version = "0.3" }
 hex = { version = "0.4" }
 js-sys = { version = "0.3" }
-nostr = { version = "0.44.1", path = "../refs/rust-nostr/crates/nostr" }
-nostr-relay-pool = { version = "0.44.0", path = "../refs/rust-nostr/crates/nostr-relay-pool" }
-nostr-sdk = { version = "0.44.1", path = "../refs/rust-nostr/crates/nostr-sdk" }
+nostr = { version = "0.44.2" }
+nostr-relay-pool = { version = "0.44.0" }
+nostr-sdk = { version = "0.44.1" }
 num_cpus = { version = "1.17.0" }
 secrecy = { version = "0.10.3" }
 serde = { version = "1", default-features = false, features = ["derive"] }
