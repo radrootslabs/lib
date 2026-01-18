@@ -1878,6 +1878,7 @@ dependencies = [
  "js-sys",
  "radroots-sql-core",
  "radroots-sql-wasm-bridge",
+ "rusqlite",
  "serde",
  "serde-wasm-bindgen",
  "serde_json",

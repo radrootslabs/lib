@@ -17,6 +17,8 @@ pub use executor_wasm::{export_lock_active, export_lock_begin, export_lock_end, 
 mod executor_sqlite;
 #[cfg(feature = "native")]
 pub use executor_sqlite::SqliteExecutor;
+#[cfg(feature = "native")]
+pub mod sqlite_util;
 
 #[cfg(feature = "embedded")]
 mod executor_embedded;

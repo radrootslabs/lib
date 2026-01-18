@@ -12,11 +12,12 @@ crate-type = ["cdylib", "rlib"]
 [features]
 default = ["bridge"]
 bridge = ["dep:radroots-sql-wasm-bridge"]
-embedded = []
+embedded = ["dep:rusqlite", "radroots-sql-core/native"]
 
 [dependencies]
 radroots-sql-core = { workspace = true }
 radroots-sql-wasm-bridge = { workspace = true, optional = true }
+rusqlite = { workspace = true, features = ["bundled", "serialize"], optional = true }
 chrono = { workspace = true, features = ["serde"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
