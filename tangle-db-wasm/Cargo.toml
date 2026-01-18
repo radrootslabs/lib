@@ -10,8 +10,8 @@ license.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-radroots-sql-core = { workspace = true, features = ["web"] }
-radroots-sql-wasm-core = { workspace = true }
+radroots-sql-core = { workspace = true, features = ["bridge"] }
+radroots-sql-wasm-core = { workspace = true, default-features = false, features = ["bridge"] }
 radroots-tangle-db = { workspace = true }
 radroots-tangle-db-schema = { workspace = true }
 radroots-tangle-events = { workspace = true }

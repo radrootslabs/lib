@@ -11,7 +11,8 @@ license.workspace = true
 crate-type = ["rlib"]
 
 [features]
-web = ["dep:radroots-sql-wasm-bridge", "dep:serde-wasm-bindgen", "dep:wasm-bindgen"]
+web = []
+bridge = ["web", "dep:radroots-sql-wasm-bridge", "dep:serde-wasm-bindgen", "dep:wasm-bindgen"]
 native = ["dep:rusqlite"]
 embedded = []
 

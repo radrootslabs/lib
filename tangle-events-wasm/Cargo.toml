@@ -12,8 +12,8 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 base64 = { workspace = true }
 radroots-events = { workspace = true, default-features = false, features = ["serde"] }
-radroots-sql-core = { workspace = true, features = ["web"] }
-radroots-sql-wasm-core = { workspace = true }
+radroots-sql-core = { workspace = true, features = ["bridge"] }
+radroots-sql-wasm-core = { workspace = true, default-features = false, features = ["bridge"] }
 radroots-tangle-events = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }

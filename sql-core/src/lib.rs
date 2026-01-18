@@ -7,11 +7,14 @@ pub mod error;
 pub mod migrations;
 
 #[cfg(all(feature = "web", target_arch = "wasm32"))]
+mod export_lock;
+#[cfg(all(feature = "web", target_arch = "wasm32"))]
+pub use export_lock::{export_lock_active, export_lock_begin, export_lock_end, with_export_lock_bypass};
+
+#[cfg(all(feature = "bridge", target_arch = "wasm32"))]
 mod executor_wasm;
-#[cfg(all(feature = "web", target_arch = "wasm32"))]
+#[cfg(all(feature = "bridge", target_arch = "wasm32"))]
 pub use executor_wasm::WasmSqlExecutor;
-#[cfg(all(feature = "web", target_arch = "wasm32"))]
-pub use executor_wasm::{export_lock_active, export_lock_begin, export_lock_end, with_export_lock_bypass};
 
 #[cfg(feature = "native")]
 mod executor_sqlite;
