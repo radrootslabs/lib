@@ -56,7 +56,7 @@ pub fn radroots_nostr_build_application_handler_event(
 
     let mut content = String::new();
     if let Some(md) = spec.metadata.as_ref() {
-        if metadata_has_fields(md) {
+        if radroots_nostr_metadata_has_fields(md) {
             content = serde_json::to_string(md).unwrap_or_default();
         }
     }
@@ -89,7 +89,7 @@ pub fn radroots_nostr_build_application_handler_event(
     radroots_nostr_build_event(KIND_APPLICATION_HANDLER, content, tags)
 }
 
-fn metadata_has_fields(md: &RadrootsNostrMetadata) -> bool {
+pub fn radroots_nostr_metadata_has_fields(md: &RadrootsNostrMetadata) -> bool {
     md.name.is_some()
         || md.display_name.is_some()
         || md.about.is_some()
@@ -144,4 +144,24 @@ fn tag_value(event: &RadrootsNostrEvent, key: &str) -> Option<String> {
         .tags
         .iter()
         .find_map(|tag| radroots_nostr_tag_first_value(tag, key))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::radroots_nostr_metadata_has_fields;
+    use crate::types::RadrootsNostrMetadata;
+
+    #[test]
+    fn metadata_has_fields_false_when_empty() {
+        assert!(!radroots_nostr_metadata_has_fields(
+            &RadrootsNostrMetadata::default()
+        ));
+    }
+
+    #[test]
+    fn metadata_has_fields_true_when_about_is_set() {
+        let mut metadata = RadrootsNostrMetadata::default();
+        metadata.about = Some("ready".to_string());
+        assert!(radroots_nostr_metadata_has_fields(&metadata));
+    }
 }

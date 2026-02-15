@@ -63,6 +63,7 @@ pub mod prelude {
     #[cfg(feature = "events")]
     pub use crate::events::application_handler::{
         RadrootsNostrApplicationHandlerSpec, radroots_nostr_build_application_handler_event,
+        radroots_nostr_metadata_has_fields,
     };
 
     #[cfg(all(feature = "client", feature = "events"))]
@@ -77,6 +78,9 @@ pub mod prelude {
     pub use crate::identity_profile::{
         radroots_nostr_publish_identity_profile, radroots_nostr_publish_identity_profile_with_type,
     };
+
+    #[cfg(all(feature = "client", feature = "codec", feature = "events"))]
+    pub use crate::identity_profile::radroots_nostr_bootstrap_service_presence;
 
     #[cfg(all(feature = "client", feature = "events"))]
     pub use crate::events::post::radroots_nostr_fetch_post_events;
