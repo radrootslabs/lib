@@ -1,6 +1,6 @@
+pub mod backoff;
 #[cfg(feature = "cli")]
 pub mod cli;
-pub mod backoff;
 pub mod config;
 pub mod error;
 pub mod json;

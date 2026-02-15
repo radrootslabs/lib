@@ -70,8 +70,11 @@ where
     FO: Fn(&Args) -> Option<Map<String, Value>>,
     FL: Fn(&C) -> &str,
 {
-    let (args, cfg) =
-        parse_and_load_path_with_env_overrides::<Args, C, FP, FO>(path_of, env_prefix, overrides_of)?;
+    let (args, cfg) = parse_and_load_path_with_env_overrides::<Args, C, FP, FO>(
+        path_of,
+        env_prefix,
+        overrides_of,
+    )?;
     crate::tracing::init_with(logs_dir_of(&cfg), default_level)?;
     Ok((args, cfg))
 }

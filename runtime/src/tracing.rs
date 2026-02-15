@@ -1,5 +1,5 @@
-use std::path::{Path, PathBuf};
 use radroots_log::LoggingOptions;
+use std::path::{Path, PathBuf};
 
 use crate::error::RuntimeTracingError;
 
@@ -12,26 +12,22 @@ pub fn init_with(
     default_level: Option<&str>,
 ) -> Result<(), RuntimeTracingError> {
     let logs_dir = logs_dir.as_ref();
-    let env_dir = std::env::var("RADROOTS_LOG_DIR")
-        .ok()
-        .and_then(|value| {
-            let trimmed = value.trim();
-            if trimmed.is_empty() {
-                None
-            } else {
-                Some(PathBuf::from(trimmed))
-            }
-        });
-    let env_file = std::env::var("RADROOTS_LOG_FILE")
-        .ok()
-        .and_then(|value| {
-            let trimmed = value.trim();
-            if trimmed.is_empty() {
-                None
-            } else {
-                Some(trimmed.to_string())
-            }
-        });
+    let env_dir = std::env::var("RADROOTS_LOG_DIR").ok().and_then(|value| {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(PathBuf::from(trimmed))
+        }
+    });
+    let env_file = std::env::var("RADROOTS_LOG_FILE").ok().and_then(|value| {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    });
     let dir = env_dir.or_else(|| {
         if logs_dir.as_os_str().is_empty() {
             None
