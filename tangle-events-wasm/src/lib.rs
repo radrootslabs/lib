@@ -1,17 +1,14 @@
 #![cfg(target_arch = "wasm32")]
 #![forbid(unsafe_code)]
 
+use base64::Engine;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use radroots_events::RadrootsNostrEvent;
 use radroots_sql_core::WasmSqlExecutor;
 use radroots_tangle_events::{
-    radroots_tangle_ingest_event_with_factory,
-    radroots_tangle_sync_all,
-    RadrootsTangleIdFactory,
-    RadrootsTangleIngestOutcome,
-    RadrootsTangleSyncRequest,
+    RadrootsTangleIdFactory, RadrootsTangleIngestOutcome, RadrootsTangleSyncRequest,
+    radroots_tangle_ingest_event_with_factory, radroots_tangle_sync_all,
 };
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use base64::Engine;
 use serde::Deserialize;
 use uuid::Uuid;
 use wasm_bindgen::prelude::*;
@@ -81,7 +78,8 @@ pub fn tangle_events_ingest_event(event_json: &str) -> Result<JsValue, JsValue> 
     let event = parse_event(event_json)?;
     let exec = WasmSqlExecutor::new();
     let factory = WasmIdFactory;
-    let outcome = radroots_tangle_ingest_event_with_factory(&exec, &event, &factory).map_err(err_js)?;
+    let outcome =
+        radroots_tangle_ingest_event_with_factory(&exec, &event, &factory).map_err(err_js)?;
     let value = match outcome {
         RadrootsTangleIngestOutcome::Applied => "applied",
         RadrootsTangleIngestOutcome::Skipped => "skipped",
