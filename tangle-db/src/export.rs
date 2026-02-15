@@ -3,13 +3,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::backup::{
-    DATABASE_BACKUP_VERSION,
-    TANGLE_DB_VERSION,
-    MigrationBackup,
-    SchemaEntry,
-    escape_identifier,
-    export_migrations,
-    load_schema,
+    DATABASE_BACKUP_VERSION, MigrationBackup, SchemaEntry, TANGLE_DB_VERSION, escape_identifier,
+    export_migrations, load_schema,
 };
 
 pub const TANGLE_DB_EXPORT_VERSION: &str = "1";

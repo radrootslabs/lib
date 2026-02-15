@@ -1,20 +1,9 @@
 use radroots_sql_core::error::SqlError;
 use radroots_sql_core::{SqlExecutor, utils};
 use radroots_tangle_db_schema::farm::{
-    IFarmCreate,
-    IFarmCreateResolve,
-    IFarmDelete,
-    IFarmDeleteResolve,
-    IFarmFieldsFilter,
-    IFarmFindMany,
-    IFarmFindManyResolve,
-    IFarmFindOne,
-    IFarmFindOneResolve,
-    IFarmUpdate,
-    IFarmUpdateResolve,
-    Farm,
-    FarmFindManyRel,
-    FarmQueryBindValues,
+    Farm, FarmFindManyRel, FarmQueryBindValues, IFarmCreate, IFarmCreateResolve, IFarmDelete,
+    IFarmDeleteResolve, IFarmFieldsFilter, IFarmFindMany, IFarmFindManyResolve, IFarmFindOne,
+    IFarmFindOneResolve, IFarmUpdate, IFarmUpdateResolve,
 };
 use radroots_types::types::{IError, IResult, IResultList};
 use serde_json::Value;
@@ -37,8 +26,8 @@ pub fn create<E: SqlExecutor>(
     let params_json = utils::to_params_json(bind_values)?;
     let _ = exec.exec(&sql, &params_json)?;
     let on = FarmQueryBindValues::Id { id: id.clone() };
-    let result = find_one_by_on(exec, &on)?
-        .ok_or_else(|| IError::from(SqlError::NotFound(id.clone())))?;
+    let result =
+        find_one_by_on(exec, &on)?.ok_or_else(|| IError::from(SqlError::NotFound(id.clone())))?;
     Ok(IResult { result })
 }
 
@@ -115,7 +104,9 @@ pub fn update<E: SqlExecutor>(
 ) -> Result<IFarmUpdateResolve, IError<SqlError>> {
     let mut updates = utils::to_partial_object_map(&opts.fields)?;
     if updates.is_empty() {
-        return Err(IError::from(SqlError::InvalidArgument(String::from("no fields to update"))));
+        return Err(IError::from(SqlError::InvalidArgument(String::from(
+            "no fields to update",
+        ))));
     }
     updates.insert(
         String::from("updated_at"),
@@ -131,12 +122,16 @@ pub fn update<E: SqlExecutor>(
         Some(id) => id,
         None => {
             let found = find_one_by_on(exec, &opts.on)?;
-            let model = found.ok_or_else(|| IError::from(SqlError::NotFound(opts.on.lookup_key())))?;
+            let model =
+                found.ok_or_else(|| IError::from(SqlError::NotFound(opts.on.lookup_key())))?;
             model.id
         }
     };
     bind_values.push(Value::from(id_for_lookup.clone()));
-    let sql = format!("UPDATE {TABLE_NAME} SET {} WHERE id = ?;", set_parts.join(", "));
+    let sql = format!(
+        "UPDATE {TABLE_NAME} SET {} WHERE id = ?;",
+        set_parts.join(", ")
+    );
     let params_json = utils::to_params_json(bind_values)?;
     let _ = exec.exec(&sql, &params_json)?;
     let updated = select_by_id(exec, &id_for_lookup)?;
@@ -152,13 +147,15 @@ pub fn delete<E: SqlExecutor>(
             Some(id) => id,
             None => {
                 let found = find_one_by_on(exec, &args.on)?;
-                let model = found.ok_or_else(|| IError::from(SqlError::NotFound(args.on.lookup_key())))?;
+                let model =
+                    found.ok_or_else(|| IError::from(SqlError::NotFound(args.on.lookup_key())))?;
                 model.id
             }
         },
         IFarmDelete::Rel(args) => {
             let found = find_one_by_rel(exec, &args.rel)?;
-            let model = found.ok_or_else(|| IError::from(SqlError::NotFound(rel_lookup_key(&args.rel))))?;
+            let model =
+                found.ok_or_else(|| IError::from(SqlError::NotFound(rel_lookup_key(&args.rel))))?;
             model.id
         }
     };
@@ -168,7 +165,9 @@ pub fn delete<E: SqlExecutor>(
     if outcome.changes == 0 {
         return Err(IError::from(SqlError::NotFound(id_for_lookup.clone())));
     }
-    Ok(IResult { result: id_for_lookup })
+    Ok(IResult {
+        result: id_for_lookup,
+    })
 }
 
 fn rel_lookup_key(rel: &FarmFindManyRel) -> String {

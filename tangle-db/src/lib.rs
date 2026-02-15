@@ -3,213 +3,109 @@ pub use radroots_sql_core::{ExecOutcome, SqlExecutor};
 use radroots_types::types::IError;
 
 use radroots_tangle_db_schema::farm::{
-    IFarmCreate,
-    IFarmCreateResolve,
-    IFarmDelete,
-    IFarmDeleteResolve,
-    IFarmFindMany,
-    IFarmFindManyResolve,
-    IFarmFindOne,
-    IFarmFindOneResolve,
-    IFarmUpdate,
-    IFarmUpdateResolve,
+    IFarmCreate, IFarmCreateResolve, IFarmDelete, IFarmDeleteResolve, IFarmFindMany,
+    IFarmFindManyResolve, IFarmFindOne, IFarmFindOneResolve, IFarmUpdate, IFarmUpdateResolve,
 };
 
 use radroots_tangle_db_schema::farm_gcs_location::{
-    IFarmGcsLocationCreate,
-    IFarmGcsLocationCreateResolve,
-    IFarmGcsLocationDelete,
-    IFarmGcsLocationDeleteResolve,
-    IFarmGcsLocationFindMany,
-    IFarmGcsLocationFindManyResolve,
-    IFarmGcsLocationFindOne,
-    IFarmGcsLocationFindOneResolve,
-    IFarmGcsLocationUpdate,
+    IFarmGcsLocationCreate, IFarmGcsLocationCreateResolve, IFarmGcsLocationDelete,
+    IFarmGcsLocationDeleteResolve, IFarmGcsLocationFindMany, IFarmGcsLocationFindManyResolve,
+    IFarmGcsLocationFindOne, IFarmGcsLocationFindOneResolve, IFarmGcsLocationUpdate,
     IFarmGcsLocationUpdateResolve,
 };
 
 use radroots_tangle_db_schema::farm_member::{
-    IFarmMemberCreate,
-    IFarmMemberCreateResolve,
-    IFarmMemberDelete,
-    IFarmMemberDeleteResolve,
-    IFarmMemberFindMany,
-    IFarmMemberFindManyResolve,
-    IFarmMemberFindOne,
-    IFarmMemberFindOneResolve,
-    IFarmMemberUpdate,
-    IFarmMemberUpdateResolve,
+    IFarmMemberCreate, IFarmMemberCreateResolve, IFarmMemberDelete, IFarmMemberDeleteResolve,
+    IFarmMemberFindMany, IFarmMemberFindManyResolve, IFarmMemberFindOne, IFarmMemberFindOneResolve,
+    IFarmMemberUpdate, IFarmMemberUpdateResolve,
 };
 
 use radroots_tangle_db_schema::farm_member_claim::{
-    IFarmMemberClaimCreate,
-    IFarmMemberClaimCreateResolve,
-    IFarmMemberClaimDelete,
-    IFarmMemberClaimDeleteResolve,
-    IFarmMemberClaimFindMany,
-    IFarmMemberClaimFindManyResolve,
-    IFarmMemberClaimFindOne,
-    IFarmMemberClaimFindOneResolve,
-    IFarmMemberClaimUpdate,
+    IFarmMemberClaimCreate, IFarmMemberClaimCreateResolve, IFarmMemberClaimDelete,
+    IFarmMemberClaimDeleteResolve, IFarmMemberClaimFindMany, IFarmMemberClaimFindManyResolve,
+    IFarmMemberClaimFindOne, IFarmMemberClaimFindOneResolve, IFarmMemberClaimUpdate,
     IFarmMemberClaimUpdateResolve,
 };
 
 use radroots_tangle_db_schema::farm_tag::{
-    IFarmTagCreate,
-    IFarmTagCreateResolve,
-    IFarmTagDelete,
-    IFarmTagDeleteResolve,
-    IFarmTagFindMany,
-    IFarmTagFindManyResolve,
-    IFarmTagFindOne,
-    IFarmTagFindOneResolve,
-    IFarmTagUpdate,
+    IFarmTagCreate, IFarmTagCreateResolve, IFarmTagDelete, IFarmTagDeleteResolve, IFarmTagFindMany,
+    IFarmTagFindManyResolve, IFarmTagFindOne, IFarmTagFindOneResolve, IFarmTagUpdate,
     IFarmTagUpdateResolve,
 };
 
 use radroots_tangle_db_schema::gcs_location::{
-    IGcsLocationCreate,
-    IGcsLocationCreateResolve,
-    IGcsLocationDelete,
-    IGcsLocationDeleteResolve,
-    IGcsLocationFindMany,
-    IGcsLocationFindManyResolve,
-    IGcsLocationFindOne,
-    IGcsLocationFindOneResolve,
-    IGcsLocationUpdate,
-    IGcsLocationUpdateResolve,
+    IGcsLocationCreate, IGcsLocationCreateResolve, IGcsLocationDelete, IGcsLocationDeleteResolve,
+    IGcsLocationFindMany, IGcsLocationFindManyResolve, IGcsLocationFindOne,
+    IGcsLocationFindOneResolve, IGcsLocationUpdate, IGcsLocationUpdateResolve,
 };
 
 use radroots_tangle_db_schema::log_error::{
-    ILogErrorCreate,
-    ILogErrorCreateResolve,
-    ILogErrorDelete,
-    ILogErrorDeleteResolve,
-    ILogErrorFindMany,
-    ILogErrorFindManyResolve,
-    ILogErrorFindOne,
-    ILogErrorFindOneResolve,
-    ILogErrorUpdate,
-    ILogErrorUpdateResolve,
+    ILogErrorCreate, ILogErrorCreateResolve, ILogErrorDelete, ILogErrorDeleteResolve,
+    ILogErrorFindMany, ILogErrorFindManyResolve, ILogErrorFindOne, ILogErrorFindOneResolve,
+    ILogErrorUpdate, ILogErrorUpdateResolve,
 };
 
 use radroots_tangle_db_schema::media_image::{
-    IMediaImageCreate,
-    IMediaImageCreateResolve,
-    IMediaImageDelete,
-    IMediaImageDeleteResolve,
-    IMediaImageFindMany,
-    IMediaImageFindManyResolve,
-    IMediaImageFindOne,
-    IMediaImageFindOneResolve,
-    IMediaImageUpdate,
-    IMediaImageUpdateResolve,
+    IMediaImageCreate, IMediaImageCreateResolve, IMediaImageDelete, IMediaImageDeleteResolve,
+    IMediaImageFindMany, IMediaImageFindManyResolve, IMediaImageFindOne, IMediaImageFindOneResolve,
+    IMediaImageUpdate, IMediaImageUpdateResolve,
 };
 
 use radroots_tangle_db_schema::nostr_profile::{
-    INostrProfileCreate,
-    INostrProfileCreateResolve,
-    INostrProfileDelete,
-    INostrProfileDeleteResolve,
-    INostrProfileFindMany,
-    INostrProfileFindManyResolve,
-    INostrProfileFindOne,
-    INostrProfileFindOneResolve,
-    INostrProfileUpdate,
+    INostrProfileCreate, INostrProfileCreateResolve, INostrProfileDelete,
+    INostrProfileDeleteResolve, INostrProfileFindMany, INostrProfileFindManyResolve,
+    INostrProfileFindOne, INostrProfileFindOneResolve, INostrProfileUpdate,
     INostrProfileUpdateResolve,
 };
 
 use radroots_tangle_db_schema::nostr_event_state::{
-    INostrEventStateCreate,
-    INostrEventStateCreateResolve,
-    INostrEventStateDelete,
-    INostrEventStateDeleteResolve,
-    INostrEventStateFindMany,
-    INostrEventStateFindManyResolve,
-    INostrEventStateFindOne,
-    INostrEventStateFindOneResolve,
-    INostrEventStateUpdate,
+    INostrEventStateCreate, INostrEventStateCreateResolve, INostrEventStateDelete,
+    INostrEventStateDeleteResolve, INostrEventStateFindMany, INostrEventStateFindManyResolve,
+    INostrEventStateFindOne, INostrEventStateFindOneResolve, INostrEventStateUpdate,
     INostrEventStateUpdateResolve,
 };
 
 use radroots_tangle_db_schema::nostr_relay::{
-    INostrRelayCreate,
-    INostrRelayCreateResolve,
-    INostrRelayDelete,
-    INostrRelayDeleteResolve,
-    INostrRelayFindMany,
-    INostrRelayFindManyResolve,
-    INostrRelayFindOne,
-    INostrRelayFindOneResolve,
-    INostrRelayUpdate,
-    INostrRelayUpdateResolve,
+    INostrRelayCreate, INostrRelayCreateResolve, INostrRelayDelete, INostrRelayDeleteResolve,
+    INostrRelayFindMany, INostrRelayFindManyResolve, INostrRelayFindOne, INostrRelayFindOneResolve,
+    INostrRelayUpdate, INostrRelayUpdateResolve,
 };
 
 use radroots_tangle_db_schema::trade_product::{
-    ITradeProductCreate,
-    ITradeProductCreateResolve,
-    ITradeProductDelete,
-    ITradeProductDeleteResolve,
-    ITradeProductFindMany,
-    ITradeProductFindManyResolve,
-    ITradeProductFindOne,
-    ITradeProductFindOneResolve,
-    ITradeProductUpdate,
+    ITradeProductCreate, ITradeProductCreateResolve, ITradeProductDelete,
+    ITradeProductDeleteResolve, ITradeProductFindMany, ITradeProductFindManyResolve,
+    ITradeProductFindOne, ITradeProductFindOneResolve, ITradeProductUpdate,
     ITradeProductUpdateResolve,
 };
 
 use radroots_tangle_db_schema::plot::{
-    IPlotCreate,
-    IPlotCreateResolve,
-    IPlotDelete,
-    IPlotDeleteResolve,
-    IPlotFindMany,
-    IPlotFindManyResolve,
-    IPlotFindOne,
-    IPlotFindOneResolve,
-    IPlotUpdate,
-    IPlotUpdateResolve,
+    IPlotCreate, IPlotCreateResolve, IPlotDelete, IPlotDeleteResolve, IPlotFindMany,
+    IPlotFindManyResolve, IPlotFindOne, IPlotFindOneResolve, IPlotUpdate, IPlotUpdateResolve,
 };
 
 use radroots_tangle_db_schema::plot_gcs_location::{
-    IPlotGcsLocationCreate,
-    IPlotGcsLocationCreateResolve,
-    IPlotGcsLocationDelete,
-    IPlotGcsLocationDeleteResolve,
-    IPlotGcsLocationFindMany,
-    IPlotGcsLocationFindManyResolve,
-    IPlotGcsLocationFindOne,
-    IPlotGcsLocationFindOneResolve,
-    IPlotGcsLocationUpdate,
+    IPlotGcsLocationCreate, IPlotGcsLocationCreateResolve, IPlotGcsLocationDelete,
+    IPlotGcsLocationDeleteResolve, IPlotGcsLocationFindMany, IPlotGcsLocationFindManyResolve,
+    IPlotGcsLocationFindOne, IPlotGcsLocationFindOneResolve, IPlotGcsLocationUpdate,
     IPlotGcsLocationUpdateResolve,
 };
 
 use radroots_tangle_db_schema::plot_tag::{
-    IPlotTagCreate,
-    IPlotTagCreateResolve,
-    IPlotTagDelete,
-    IPlotTagDeleteResolve,
-    IPlotTagFindMany,
-    IPlotTagFindManyResolve,
-    IPlotTagFindOne,
-    IPlotTagFindOneResolve,
-    IPlotTagUpdate,
+    IPlotTagCreate, IPlotTagCreateResolve, IPlotTagDelete, IPlotTagDeleteResolve, IPlotTagFindMany,
+    IPlotTagFindManyResolve, IPlotTagFindOne, IPlotTagFindOneResolve, IPlotTagUpdate,
     IPlotTagUpdateResolve,
 };
 
 use radroots_tangle_db_schema::nostr_profile_relay::{
-    INostrProfileRelayRelation,
-    INostrProfileRelayResolve,
+    INostrProfileRelayRelation, INostrProfileRelayResolve,
 };
 
 use radroots_tangle_db_schema::trade_product_location::{
-    ITradeProductLocationRelation,
-    ITradeProductLocationResolve,
+    ITradeProductLocationRelation, ITradeProductLocationResolve,
 };
 
 use radroots_tangle_db_schema::trade_product_media::{
-    ITradeProductMediaRelation,
-    ITradeProductMediaResolve,
+    ITradeProductMediaRelation, ITradeProductMediaResolve,
 };
 
 pub mod backup;
@@ -257,10 +153,7 @@ impl<E: SqlExecutor> TangleSql<E> {
         crate::backup::restore_database_backup_json(self.executor(), backup_json)
     }
 
-    pub fn farm_create(
-        &self,
-        opts: &IFarmCreate,
-    ) -> Result<IFarmCreateResolve, IError<SqlError>> {
+    pub fn farm_create(&self, opts: &IFarmCreate) -> Result<IFarmCreateResolve, IError<SqlError>> {
         models::farm::create(self.executor(), opts)
     }
 
@@ -278,24 +171,15 @@ impl<E: SqlExecutor> TangleSql<E> {
         models::farm::find_one(self.executor(), opts)
     }
 
-    pub fn farm_update(
-        &self,
-        opts: &IFarmUpdate,
-    ) -> Result<IFarmUpdateResolve, IError<SqlError>> {
+    pub fn farm_update(&self, opts: &IFarmUpdate) -> Result<IFarmUpdateResolve, IError<SqlError>> {
         models::farm::update(self.executor(), opts)
     }
 
-    pub fn farm_delete(
-        &self,
-        opts: &IFarmDelete,
-    ) -> Result<IFarmDeleteResolve, IError<SqlError>> {
+    pub fn farm_delete(&self, opts: &IFarmDelete) -> Result<IFarmDeleteResolve, IError<SqlError>> {
         models::farm::delete(self.executor(), opts)
     }
 
-    pub fn plot_create(
-        &self,
-        opts: &IPlotCreate,
-    ) -> Result<IPlotCreateResolve, IError<SqlError>> {
+    pub fn plot_create(&self, opts: &IPlotCreate) -> Result<IPlotCreateResolve, IError<SqlError>> {
         models::plot::create(self.executor(), opts)
     }
 
@@ -313,17 +197,11 @@ impl<E: SqlExecutor> TangleSql<E> {
         models::plot::find_one(self.executor(), opts)
     }
 
-    pub fn plot_update(
-        &self,
-        opts: &IPlotUpdate,
-    ) -> Result<IPlotUpdateResolve, IError<SqlError>> {
+    pub fn plot_update(&self, opts: &IPlotUpdate) -> Result<IPlotUpdateResolve, IError<SqlError>> {
         models::plot::update(self.executor(), opts)
     }
 
-    pub fn plot_delete(
-        &self,
-        opts: &IPlotDelete,
-    ) -> Result<IPlotDeleteResolve, IError<SqlError>> {
+    pub fn plot_delete(&self, opts: &IPlotDelete) -> Result<IPlotDeleteResolve, IError<SqlError>> {
         models::plot::delete(self.executor(), opts)
     }
 
@@ -823,5 +701,4 @@ impl<E: SqlExecutor> TangleSql<E> {
     ) -> Result<ITradeProductMediaResolve, IError<SqlError>> {
         models::trade_product_media::unset(self.executor(), opts)
     }
-
 }
