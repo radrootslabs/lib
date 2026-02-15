@@ -1,5 +1,5 @@
-use crate::{ExecOutcome, SqlExecutor, error::SqlError};
 use crate::sqlite_util;
+use crate::{ExecOutcome, SqlExecutor, error::SqlError};
 use rusqlite::{Connection, params_from_iter};
 use serde_json::Value;
 use std::path::Path;
@@ -23,7 +23,6 @@ impl SqliteExecutor {
             conn: Arc::new(Mutex::new(conn)),
         })
     }
-
 }
 
 impl SqlExecutor for SqliteExecutor {

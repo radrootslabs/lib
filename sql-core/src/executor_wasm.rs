@@ -1,5 +1,5 @@
-use crate::{ExecOutcome, SqlExecutor, error::SqlError};
 use crate::export_lock::{EXPORT_LOCK_ERR, export_lock_blocked};
+use crate::{ExecOutcome, SqlExecutor, error::SqlError};
 
 pub struct WasmSqlExecutor;
 
