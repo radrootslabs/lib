@@ -2,42 +2,41 @@
 #![forbid(unsafe_code)]
 
 use radroots_events::comment::RadrootsComment;
-use radroots_events::follow::RadrootsFollow;
-use radroots_events::document::RadrootsDocument;
 use radroots_events::coop::RadrootsCoop;
+use radroots_events::document::RadrootsDocument;
 use radroots_events::farm::RadrootsFarm;
+use radroots_events::follow::RadrootsFollow;
+use radroots_events::gift_wrap::RadrootsGiftWrap;
 use radroots_events::job_feedback::RadrootsJobFeedback;
 use radroots_events::job_request::RadrootsJobRequest;
 use radroots_events::job_result::RadrootsJobResult;
-use radroots_events::listing::RadrootsListing;
 use radroots_events::list::RadrootsList;
 use radroots_events::list_set::RadrootsListSet;
+use radroots_events::listing::RadrootsListing;
 use radroots_events::message::RadrootsMessage;
 use radroots_events::message_file::RadrootsMessageFile;
 use radroots_events::plot::RadrootsPlot;
 use radroots_events::reaction::RadrootsReaction;
-use radroots_events::gift_wrap::RadrootsGiftWrap;
 use radroots_events::seal::RadrootsSeal;
 use radroots_events_codec::comment::encode::comment_build_tags;
-use radroots_events_codec::follow::encode::follow_build_tags;
-use radroots_events_codec::document::encode::document_build_tags;
 use radroots_events_codec::coop::encode::coop_build_tags;
+use radroots_events_codec::document::encode::document_build_tags;
 use radroots_events_codec::farm::encode::farm_build_tags;
+use radroots_events_codec::follow::encode::follow_build_tags;
 use radroots_events_codec::gift_wrap::encode::gift_wrap_build_tags;
 use radroots_events_codec::job::feedback::encode::job_feedback_build_tags;
 use radroots_events_codec::job::request::encode::job_request_build_tags;
 use radroots_events_codec::job::result::encode::job_result_build_tags;
 use radroots_events_codec::list::encode::list_build_tags;
 use radroots_events_codec::list_set::encode::list_set_build_tags;
+use radroots_events_codec::listing::tags::{
+    listing_tags as listing_tags_impl, listing_tags_full as listing_tags_full_impl,
+};
 use radroots_events_codec::message::encode::message_build_tags;
 use radroots_events_codec::message_file::encode::message_file_build_tags;
 use radroots_events_codec::plot::encode::plot_build_tags;
 use radroots_events_codec::reaction::encode::reaction_build_tags;
 use radroots_events_codec::seal::encode::seal_build_tags;
-use radroots_events_codec::listing::tags::{
-    listing_tags as listing_tags_impl,
-    listing_tags_full as listing_tags_full_impl,
-};
 use wasm_bindgen::prelude::*;
 
 fn err_js<E: ToString>(err: E) -> JsValue {
