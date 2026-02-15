@@ -2,10 +2,7 @@ use crate::client::RadrootsNostrClient;
 use crate::error::RadrootsNostrError;
 use crate::events::metadata::radroots_nostr_build_metadata_event;
 use crate::types::{
-    RadrootsNostrEventId,
-    RadrootsNostrOutput,
-    RadrootsNostrTag,
-    RadrootsNostrTagKind,
+    RadrootsNostrEventId, RadrootsNostrOutput, RadrootsNostrTag, RadrootsNostrTagKind,
 };
 use radroots_events::profile::RadrootsProfileType;
 use radroots_events_codec::profile::encode::profile_build_tags;

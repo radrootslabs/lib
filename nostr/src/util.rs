@@ -1,8 +1,5 @@
 use crate::types::{
-    RadrootsNostrEvent,
-    RadrootsNostrPublicKey,
-    RadrootsNostrTimestamp,
-    RadrootsNostrToBech32,
+    RadrootsNostrEvent, RadrootsNostrPublicKey, RadrootsNostrTimestamp, RadrootsNostrToBech32,
 };
 
 pub fn radroots_nostr_npub_string(pk: &RadrootsNostrPublicKey) -> Option<String> {

@@ -19,8 +19,7 @@ pub type RadrootsNostrTimestamp = nostr::Timestamp;
 pub type RadrootsNostrUrl = nostr::Url;
 
 pub use nostr::nips::nip19::{
-    FromBech32 as RadrootsNostrFromBech32,
-    ToBech32 as RadrootsNostrToBech32,
+    FromBech32 as RadrootsNostrFromBech32, ToBech32 as RadrootsNostrToBech32,
 };
 pub use nostr::secp256k1::SecretKey as RadrootsNostrSecp256k1SecretKey;
 

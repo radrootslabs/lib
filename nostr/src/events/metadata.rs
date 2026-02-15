@@ -1,22 +1,20 @@
 use crate::types::{RadrootsNostrEventBuilder, RadrootsNostrMetadata};
 
 #[cfg(feature = "client")]
-use core::time::Duration;
-#[cfg(feature = "client")]
 use crate::client::RadrootsNostrClient;
 #[cfg(feature = "client")]
 use crate::error::RadrootsNostrError;
 #[cfg(feature = "client")]
 use crate::types::{
-    RadrootsNostrEvent,
-    RadrootsNostrEventId,
-    RadrootsNostrFilter,
-    RadrootsNostrKind,
-    RadrootsNostrOutput,
-    RadrootsNostrPublicKey,
+    RadrootsNostrEvent, RadrootsNostrEventId, RadrootsNostrFilter, RadrootsNostrKind,
+    RadrootsNostrOutput, RadrootsNostrPublicKey,
 };
+#[cfg(feature = "client")]
+use core::time::Duration;
 
-pub fn radroots_nostr_build_metadata_event(md: &RadrootsNostrMetadata) -> RadrootsNostrEventBuilder {
+pub fn radroots_nostr_build_metadata_event(
+    md: &RadrootsNostrMetadata,
+) -> RadrootsNostrEventBuilder {
     RadrootsNostrEventBuilder::metadata(md)
 }
 

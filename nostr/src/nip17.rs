@@ -4,18 +4,10 @@ extern crate alloc;
 
 use alloc::{string::String, vec::Vec};
 
-use nostr::{
-    Event,
-    EventBuilder,
-    Kind,
-    NostrSigner,
-    PublicKey,
-    Tag,
-    TagKind,
-    Timestamp,
-    UnsignedEvent,
-};
 use nostr::nips::nip59;
+use nostr::{
+    Event, EventBuilder, Kind, NostrSigner, PublicKey, Tag, TagKind, Timestamp, UnsignedEvent,
+};
 use thiserror::Error;
 
 use radroots_events::kinds::{KIND_MESSAGE, KIND_MESSAGE_FILE};
@@ -105,7 +97,9 @@ fn rumor_from_parts(
     rumor
 }
 
-fn parse_recipients(recipients: &[radroots_events::message::RadrootsMessageRecipient]) -> Result<Vec<PublicKey>, RadrootsNip17Error> {
+fn parse_recipients(
+    recipients: &[radroots_events::message::RadrootsMessageRecipient],
+) -> Result<Vec<PublicKey>, RadrootsNip17Error> {
     let mut out = Vec::with_capacity(recipients.len());
     for recipient in recipients {
         out.push(recipient.public_key.parse::<PublicKey>()?);
@@ -137,8 +131,8 @@ where
 
     let mut out = Vec::with_capacity(recipients.len());
     for recipient in recipients {
-        let event = EventBuilder::gift_wrap(signer, &recipient, rumor.clone(), extra_tags.clone())
-            .await?;
+        let event =
+            EventBuilder::gift_wrap(signer, &recipient, rumor.clone(), extra_tags.clone()).await?;
         out.push(event);
     }
     Ok(out)
@@ -197,14 +191,8 @@ where
 
     match kind {
         KIND_MESSAGE => {
-            let metadata = message_decode::metadata_from_event(
-                id,
-                author,
-                published_at,
-                kind,
-                content,
-                tags,
-            )?;
+            let metadata =
+                message_decode::metadata_from_event(id, author, published_at, kind, content, tags)?;
             Ok(RadrootsNip17Rumor::Message(metadata))
         }
         KIND_MESSAGE_FILE => {
@@ -230,13 +218,11 @@ mod tests {
     use radroots_events::message_file::{RadrootsMessageFile, RadrootsMessageFileDimensions};
 
     fn sender_keys() -> Keys {
-        Keys::parse("6b911fd37cdf5c81d4c0adb1ab7fa822ed253ab0ad9aa18d77257c88b29b718e")
-            .unwrap()
+        Keys::parse("6b911fd37cdf5c81d4c0adb1ab7fa822ed253ab0ad9aa18d77257c88b29b718e").unwrap()
     }
 
     fn receiver_keys() -> Keys {
-        Keys::parse("7b911fd37cdf5c81d4c0adb1ab7fa822ed253ab0ad9aa18d77257c88b29b718e")
-            .unwrap()
+        Keys::parse("7b911fd37cdf5c81d4c0adb1ab7fa822ed253ab0ad9aa18d77257c88b29b718e").unwrap()
     }
 
     #[tokio::test]

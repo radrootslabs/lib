@@ -10,20 +10,12 @@ use nostr_sdk::{Client, ClientBuilder, ClientOptions};
 use radroots_identity::RadrootsIdentity;
 
 use crate::error::RadrootsNostrError;
-use crate::types::{
-    RadrootsNostrEvent,
-    RadrootsNostrEventBuilder,
-    RadrootsNostrEventId,
-    RadrootsNostrFilter,
-    RadrootsNostrKeys,
-    RadrootsNostrMonitor,
-    RadrootsNostrOutput,
-    RadrootsNostrRelay,
-    RadrootsNostrRelayUrl,
-    RadrootsNostrSubscribeAutoCloseOptions,
-    RadrootsNostrSubscriptionId,
-};
 use crate::types::RadrootsNostrMetadata;
+use crate::types::{
+    RadrootsNostrEvent, RadrootsNostrEventBuilder, RadrootsNostrEventId, RadrootsNostrFilter,
+    RadrootsNostrKeys, RadrootsNostrMonitor, RadrootsNostrOutput, RadrootsNostrRelay,
+    RadrootsNostrRelayUrl, RadrootsNostrSubscribeAutoCloseOptions, RadrootsNostrSubscriptionId,
+};
 
 #[derive(Clone)]
 pub struct RadrootsNostrClient {
@@ -73,11 +65,9 @@ impl RadrootsNostrClientOptions {
 
     #[cfg(not(target_arch = "wasm32"))]
     pub fn proxy_str(mut self, addr: &str) -> Result<Self, RadrootsNostrError> {
-        let parsed: SocketAddr = addr
-            .parse()
-            .map_err(|err: std::net::AddrParseError| {
-                RadrootsNostrError::ClientConfigError(err.to_string())
-            })?;
+        let parsed: SocketAddr = addr.parse().map_err(|err: std::net::AddrParseError| {
+            RadrootsNostrError::ClientConfigError(err.to_string())
+        })?;
         self.proxy = Some(parsed);
         Ok(self)
     }

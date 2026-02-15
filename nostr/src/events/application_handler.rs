@@ -13,9 +13,9 @@ use crate::tags::radroots_nostr_tag_first_value;
 #[cfg(feature = "client")]
 use crate::types::{RadrootsNostrEvent, RadrootsNostrFilter, RadrootsNostrKind};
 use crate::types::{RadrootsNostrEventBuilder, RadrootsNostrMetadata};
-use radroots_events::kinds::KIND_APPLICATION_HANDLER;
 #[cfg(feature = "client")]
 use core::time::Duration;
+use radroots_events::kinds::KIND_APPLICATION_HANDLER;
 
 #[derive(Debug, Clone)]
 pub struct RadrootsNostrApplicationHandlerSpec {

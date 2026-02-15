@@ -1,18 +1,13 @@
 use crate::error::RadrootsNostrError;
 use crate::types::{
-    RadrootsNostrEventBuilder,
-    RadrootsNostrEventId,
-    RadrootsNostrFilter,
-    RadrootsNostrKind,
-    RadrootsNostrPublicKey,
-    RadrootsNostrTag,
-    RadrootsNostrTimestamp,
+    RadrootsNostrEventBuilder, RadrootsNostrEventId, RadrootsNostrFilter, RadrootsNostrKind,
+    RadrootsNostrPublicKey, RadrootsNostrTag, RadrootsNostrTimestamp,
 };
 
 #[cfg(all(feature = "client", feature = "events"))]
-use core::time::Duration;
-#[cfg(all(feature = "client", feature = "events"))]
 use crate::client::RadrootsNostrClient;
+#[cfg(all(feature = "client", feature = "events"))]
+use core::time::Duration;
 
 pub fn radroots_nostr_build_post_event(content: impl Into<String>) -> RadrootsNostrEventBuilder {
     RadrootsNostrEventBuilder::text_note(content)

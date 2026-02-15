@@ -3,11 +3,11 @@ use alloc::{string::String, vec::Vec};
 
 use crate::types::RadrootsNostrEvent;
 
+use crate::util::created_at_u32_saturating;
 use radroots_events_codec::job::{
     error::JobParseError, feedback::decode as fb_decode, request::decode as req_decode,
     result::decode as res_decode,
 };
-use crate::util::created_at_u32_saturating;
 
 fn event_id(e: &RadrootsNostrEvent) -> String {
     e.id.to_hex()
@@ -64,8 +64,7 @@ pub fn to_job_result_metadata(
 
 pub fn to_job_feedback_metadata(
     e: &RadrootsNostrEvent,
-) -> Result<radroots_events::job_feedback::RadrootsJobFeedbackEventMetadata, JobParseError>
-{
+) -> Result<radroots_events::job_feedback::RadrootsJobFeedbackEventMetadata, JobParseError> {
     fb_decode::metadata_from_event(
         event_id(e),
         author(e),

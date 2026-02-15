@@ -2,9 +2,7 @@
 use radroots_events::post::{RadrootsPost, RadrootsPostEventMetadata};
 #[cfg(feature = "events")]
 use radroots_events::profile::{
-    RadrootsProfile,
-    RadrootsProfileEventMetadata,
-    RADROOTS_PROFILE_TYPE_TAG_KEY,
+    RADROOTS_PROFILE_TYPE_TAG_KEY, RadrootsProfile, RadrootsProfileEventMetadata,
     radroots_profile_type_from_tag_value,
 };
 

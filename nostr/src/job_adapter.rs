@@ -1,8 +1,8 @@
 #![forbid(unsafe_code)]
 
+use crate::types::{RadrootsNostrEvent, RadrootsNostrKind};
 use radroots_events::kinds::KIND_PROFILE;
 use radroots_events_codec::job::traits::{JobEventBorrow, JobEventLike};
-use crate::types::{RadrootsNostrEvent, RadrootsNostrKind};
 
 #[derive(Clone, Debug)]
 pub struct RadrootsNostrEventAdapter<'a> {

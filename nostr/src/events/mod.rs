@@ -1,18 +1,15 @@
+#[cfg(feature = "events")]
+pub mod application_handler;
 pub mod jobs;
 pub mod metadata;
 pub mod post;
-#[cfg(feature = "events")]
-pub mod application_handler;
 
 extern crate alloc;
 use alloc::{string::String, vec::Vec};
 
 use crate::error::RadrootsNostrError;
 use crate::types::{
-    RadrootsNostrEventBuilder,
-    RadrootsNostrKind,
-    RadrootsNostrTag,
-    RadrootsNostrTagKind,
+    RadrootsNostrEventBuilder, RadrootsNostrKind, RadrootsNostrTag, RadrootsNostrTagKind,
 };
 
 pub fn radroots_nostr_build_event(

@@ -5,13 +5,8 @@ use nostr::nips::nip04;
 
 use crate::error::RadrootsNostrTagsResolveError;
 use crate::types::{
-    RadrootsNostrEvent,
-    RadrootsNostrKeys,
-    RadrootsNostrPublicKey,
-    RadrootsNostrRelayUrl,
-    RadrootsNostrTag,
-    RadrootsNostrTagKind,
-    RadrootsNostrTagStandard,
+    RadrootsNostrEvent, RadrootsNostrKeys, RadrootsNostrPublicKey, RadrootsNostrRelayUrl,
+    RadrootsNostrTag, RadrootsNostrTagKind, RadrootsNostrTagStandard,
 };
 
 pub fn radroots_nostr_tag_first_value(tag: &RadrootsNostrTag, key: &str) -> Option<String> {
@@ -39,9 +34,7 @@ pub fn radroots_nostr_tag_relays_parse(
     }
 }
 
-pub fn radroots_nostr_tags_match<'a>(
-    tag: &'a RadrootsNostrTag,
-) -> Option<(&'a str, &'a [String])> {
+pub fn radroots_nostr_tags_match<'a>(tag: &'a RadrootsNostrTag) -> Option<(&'a str, &'a [String])> {
     if let RadrootsNostrTagKind::Custom(Cow::Borrowed(key)) = tag.kind() {
         Some((key, &tag.as_slice()[1..]))
     } else {
@@ -59,9 +52,7 @@ pub fn radroots_nostr_tag_match_l(tag: &RadrootsNostrTag) -> Option<(&str, f64)>
     None
 }
 
-pub fn radroots_nostr_tag_match_location(
-    tag: &RadrootsNostrTag,
-) -> Option<(&str, &str, &str)> {
+pub fn radroots_nostr_tag_match_location(tag: &RadrootsNostrTag) -> Option<(&str, &str, &str)> {
     let values = tag.as_slice();
     if values.len() >= 4 && values[0] == "location" {
         Some((values[1].as_str(), values[2].as_str(), values[3].as_str()))

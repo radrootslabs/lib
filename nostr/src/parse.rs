@@ -15,5 +15,8 @@ pub fn radroots_nostr_parse_pubkey(s: &str) -> Result<RadrootsNostrPublicKey, Pa
 pub fn radroots_nostr_parse_pubkeys(
     input: &[String],
 ) -> Result<Vec<RadrootsNostrPublicKey>, ParseError> {
-    input.iter().map(|s| radroots_nostr_parse_pubkey(s)).collect()
+    input
+        .iter()
+        .map(|s| radroots_nostr_parse_pubkey(s))
+        .collect()
 }
