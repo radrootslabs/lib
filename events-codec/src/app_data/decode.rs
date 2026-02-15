@@ -1,9 +1,14 @@
 #[cfg(not(feature = "std"))]
-use alloc::{string::{String, ToString}, vec::Vec};
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
+};
 
 use radroots_events::{
     RadrootsNostrEvent,
-    app_data::{RadrootsAppData, RadrootsAppDataEventIndex, RadrootsAppDataEventMetadata, KIND_APP_DATA},
+    app_data::{
+        KIND_APP_DATA, RadrootsAppData, RadrootsAppDataEventIndex, RadrootsAppDataEventMetadata,
+    },
     tags::TAG_D,
 };
 

@@ -1,7 +1,10 @@
 #![forbid(unsafe_code)]
 
 #[cfg(not(feature = "std"))]
-use alloc::{string::{String, ToString}, vec::Vec};
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
+};
 
 use radroots_events::{
     coop::{RadrootsCoop, RadrootsCoopRef},
@@ -85,5 +88,9 @@ pub fn to_wire_parts_with_kind(
     }
     let tags = coop_build_tags(coop)?;
     let content = serde_json::to_string(coop).map_err(|_| EventEncodeError::Json)?;
-    Ok(WireEventParts { kind, content, tags })
+    Ok(WireEventParts {
+        kind,
+        content,
+        tags,
+    })
 }

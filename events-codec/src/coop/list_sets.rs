@@ -1,7 +1,12 @@
 #![forbid(unsafe_code)]
 
 #[cfg(not(feature = "std"))]
-use alloc::{format, string::{String, ToString}, vec, vec::Vec};
+use alloc::{
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 
 use radroots_events::farm::RadrootsFarmRef;
 use radroots_events::kinds::KIND_FARM;
@@ -162,9 +167,7 @@ where
     })
 }
 
-pub fn member_of_coops_list_set<I, S>(
-    coop_pubkeys: I,
-) -> Result<RadrootsListSet, EventEncodeError>
+pub fn member_of_coops_list_set<I, S>(coop_pubkeys: I) -> Result<RadrootsListSet, EventEncodeError>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<str>,

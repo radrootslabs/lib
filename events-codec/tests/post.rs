@@ -1,4 +1,7 @@
-use radroots_events::{kinds::{KIND_COMMENT, KIND_POST}, post::RadrootsPost};
+use radroots_events::{
+    kinds::{KIND_COMMENT, KIND_POST},
+    post::RadrootsPost,
+};
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
 use radroots_events_codec::post::decode::post_from_content;
 use radroots_events_codec::post::encode::to_wire_parts;

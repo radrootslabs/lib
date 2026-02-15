@@ -23,9 +23,7 @@ mod tests {
     use super::{decode::list_set_from_tags, encode::list_set_build_tags};
     use crate::error::{EventEncodeError, EventParseError};
     use radroots_events::{
-        kinds::KIND_LIST_SET_FOLLOW,
-        list::{RadrootsListEntry},
-        list_set::RadrootsListSet,
+        kinds::KIND_LIST_SET_FOLLOW, list::RadrootsListEntry, list_set::RadrootsListSet,
     };
 
     #[test]

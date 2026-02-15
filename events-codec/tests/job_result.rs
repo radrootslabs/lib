@@ -1,9 +1,9 @@
 mod common;
 
 use radroots_events::job::{JobInputType, JobPaymentRequest};
-use radroots_events::kinds::{KIND_JOB_REQUEST_MIN, KIND_JOB_RESULT_MIN};
 use radroots_events::job_request::RadrootsJobInput;
 use radroots_events::job_result::RadrootsJobResult;
+use radroots_events::kinds::{KIND_JOB_REQUEST_MIN, KIND_JOB_RESULT_MIN};
 use radroots_events_codec::job::encode::JobEncodeError;
 use radroots_events_codec::job::error::JobParseError;
 use radroots_events_codec::job::result::decode::job_result_from_tags;

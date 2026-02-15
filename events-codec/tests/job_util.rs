@@ -23,7 +23,10 @@ fn input_type_tag_roundtrip() {
 #[test]
 fn feedback_status_tag_roundtrip() {
     let t = feedback_status_tag(JobFeedbackStatus::Processing);
-    assert_eq!(feedback_status_from_tag(t), Some(JobFeedbackStatus::Processing));
+    assert_eq!(
+        feedback_status_from_tag(t),
+        Some(JobFeedbackStatus::Processing)
+    );
     assert_eq!(feedback_status_from_tag("unknown"), None);
 }
 
@@ -105,7 +108,11 @@ fn push_amount_tag_msat_writes_msat() {
     push_amount_tag_msat(&mut tags, 12, Some("bolt".to_string()));
     assert_eq!(
         tags[0],
-        vec!["amount".to_string(), "12000".to_string(), "bolt".to_string()]
+        vec![
+            "amount".to_string(),
+            "12000".to_string(),
+            "bolt".to_string()
+        ]
     );
 }
 

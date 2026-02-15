@@ -1,19 +1,18 @@
 #![cfg(feature = "serde_json")]
 
 #[cfg(not(feature = "std"))]
-use alloc::{string::{String, ToString}, vec::Vec};
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
+};
 
 use radroots_events::{
     RadrootsNostrEvent,
-    profile::{
-        RadrootsProfileType,
-        RadrootsProfile,
-        RadrootsProfileEventIndex,
-        RadrootsProfileEventMetadata,
-        RADROOTS_PROFILE_TYPE_TAG_KEY,
-        radroots_profile_type_from_tag_value,
-    },
     kinds::KIND_PROFILE,
+    profile::{
+        RADROOTS_PROFILE_TYPE_TAG_KEY, RadrootsProfile, RadrootsProfileEventIndex,
+        RadrootsProfileEventMetadata, RadrootsProfileType, radroots_profile_type_from_tag_value,
+    },
 };
 
 use crate::error::EventParseError;
@@ -22,7 +21,10 @@ use serde_json::Value;
 const PROFILE_KIND: u32 = KIND_PROFILE;
 
 fn parse_optional_string(value: &Value, key: &'static str) -> Option<String> {
-    value.get(key).and_then(|v| v.as_str()).map(|s| s.to_string())
+    value
+        .get(key)
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
 }
 
 fn parse_bot(value: &Value) -> Option<String> {

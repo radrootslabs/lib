@@ -1,12 +1,12 @@
 #![forbid(unsafe_code)]
 
 #[cfg(not(feature = "std"))]
-use alloc::{string::{String, ToString}, vec::Vec};
-
-use radroots_events::{
-    document::RadrootsDocument,
-    tags::TAG_D,
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
 };
+
+use radroots_events::{document::RadrootsDocument, tags::TAG_D};
 
 use crate::d_tag::validate_d_tag;
 use crate::error::EventEncodeError;
@@ -28,7 +28,9 @@ fn push_tag(tags: &mut Vec<Vec<String>>, key: &str, value: &str) {
     tags.push(tag);
 }
 
-pub fn document_build_tags(document: &RadrootsDocument) -> Result<Vec<Vec<String>>, EventEncodeError> {
+pub fn document_build_tags(
+    document: &RadrootsDocument,
+) -> Result<Vec<Vec<String>>, EventEncodeError> {
     if document.d_tag.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("d_tag"));
     }
@@ -78,5 +80,9 @@ pub fn to_wire_parts_with_kind(
     }
     let tags = document_build_tags(document)?;
     let content = serde_json::to_string(document).map_err(|_| EventEncodeError::Json)?;
-    Ok(WireEventParts { kind, content, tags })
+    Ok(WireEventParts {
+        kind,
+        content,
+        tags,
+    })
 }

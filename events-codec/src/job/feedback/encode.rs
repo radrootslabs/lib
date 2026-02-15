@@ -4,12 +4,15 @@ use crate::job::encode::{JobEncodeError, WireEventParts, canonicalize_tags};
 use crate::job::util::{feedback_status_tag, push_amount_tag_msat};
 
 #[cfg(not(feature = "std"))]
-use alloc::{string::{String, ToString}, vec, vec::Vec};
+use alloc::{
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 
 pub fn job_feedback_build_tags(fb: &RadrootsJobFeedback) -> Vec<Vec<String>> {
     let mut tags: Vec<Vec<String>> = Vec::with_capacity(
-        2
-            + usize::from(fb.customer_pubkey.is_some())
+        2 + usize::from(fb.customer_pubkey.is_some())
             + usize::from(fb.payment.is_some())
             + usize::from(fb.encrypted),
     );

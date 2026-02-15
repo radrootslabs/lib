@@ -1,10 +1,7 @@
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
 
-use radroots_events::{
-    comment::RadrootsComment,
-    RadrootsNostrEventRef,
-};
+use radroots_events::{RadrootsNostrEventRef, comment::RadrootsComment};
 
 use crate::error::EventEncodeError;
 use crate::event_ref::push_nip10_ref_tags;
@@ -41,7 +38,8 @@ pub fn comment_build_tags(comment: &RadrootsComment) -> Result<Vec<Vec<String>>,
         .d_tag
         .as_deref()
         .map_or(false, |v| !v.is_empty());
-    let mut tags = Vec::with_capacity(6 + usize::from(root_has_addr) + usize::from(parent_has_addr));
+    let mut tags =
+        Vec::with_capacity(6 + usize::from(root_has_addr) + usize::from(parent_has_addr));
     push_nip10_ref_tags(&mut tags, &comment.root, "E", "P", "K", "A");
     push_nip10_ref_tags(&mut tags, &comment.parent, "e", "p", "k", "a");
     Ok(tags)

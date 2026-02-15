@@ -1,12 +1,10 @@
 use crate::profile::error::ProfileEncodeError;
-use radroots_events::profile::{
-    RadrootsProfileType,
-    RadrootsProfile,
-    RADROOTS_PROFILE_TYPE_TAG_KEY,
-    radroots_profile_type_tag_value,
-};
 #[cfg(feature = "serde_json")]
 use radroots_events::kinds::KIND_PROFILE;
+use radroots_events::profile::{
+    RADROOTS_PROFILE_TYPE_TAG_KEY, RadrootsProfile, RadrootsProfileType,
+    radroots_profile_type_tag_value,
+};
 
 use nostr::Metadata;
 use nostr::prelude::Url;

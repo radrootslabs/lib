@@ -5,7 +5,7 @@ use radroots_events::{
 
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
 use radroots_events_codec::follow::decode::follow_from_tags;
-use radroots_events_codec::follow::encode::{follow_apply, FollowMutation, to_wire_parts};
+use radroots_events_codec::follow::encode::{FollowMutation, follow_apply, to_wire_parts};
 
 #[test]
 fn follow_to_wire_parts_builds_p_tags() {
@@ -133,7 +133,10 @@ fn follow_apply_adds_and_updates_entries() {
     assert_eq!(updated.list.len(), 2);
     assert_eq!(updated.list[0].public_key, "pubkey-a");
     assert_eq!(updated.list[0].relay_url.as_deref(), Some("wss://relay"));
-    assert_eq!(updated.list[0].contact_name.as_deref(), Some("alice-updated"));
+    assert_eq!(
+        updated.list[0].contact_name.as_deref(),
+        Some("alice-updated")
+    );
 
     let added = follow_apply(
         &follow,

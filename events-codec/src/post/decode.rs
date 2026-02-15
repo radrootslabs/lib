@@ -1,10 +1,13 @@
 #[cfg(not(feature = "std"))]
-use alloc::{string::{String, ToString}, vec::Vec};
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
+};
 
 use radroots_events::{
     RadrootsNostrEvent,
-    post::{RadrootsPost, RadrootsPostEventIndex, RadrootsPostEventMetadata},
     kinds::KIND_POST,
+    post::{RadrootsPost, RadrootsPostEventIndex, RadrootsPostEventMetadata},
 };
 
 use crate::error::EventParseError;

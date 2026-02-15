@@ -18,5 +18,8 @@ fn relay_document_roundtrip_json() {
 #[test]
 fn relay_document_rejects_invalid_json() {
     let err = from_json("{").unwrap_err();
-    assert!(matches!(err, EventParseError::InvalidJson("relay_document")));
+    assert!(matches!(
+        err,
+        EventParseError::InvalidJson("relay_document")
+    ));
 }

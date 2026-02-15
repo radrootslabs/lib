@@ -1,5 +1,8 @@
 #[cfg(not(feature = "std"))]
-use alloc::{string::{String, ToString}, vec::Vec};
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
+};
 
 use radroots_events::{
     farm::RadrootsFarmRef,
@@ -104,5 +107,9 @@ pub fn to_wire_parts_with_kind(
     }
     let tags = plot_build_tags(plot)?;
     let content = serde_json::to_string(plot).map_err(|_| EventEncodeError::Json)?;
-    Ok(WireEventParts { kind, content, tags })
+    Ok(WireEventParts {
+        kind,
+        content,
+        tags,
+    })
 }

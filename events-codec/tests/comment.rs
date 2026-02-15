@@ -1,10 +1,10 @@
 mod common;
 
+use radroots_events::tags::{TAG_E_PREV, TAG_E_ROOT};
 use radroots_events::{
     comment::RadrootsComment,
     kinds::{KIND_COMMENT, KIND_POST},
 };
-use radroots_events::tags::{TAG_E_PREV, TAG_E_ROOT};
 
 use radroots_events_codec::comment::decode::comment_from_tags;
 use radroots_events_codec::comment::encode::{comment_build_tags, to_wire_parts};

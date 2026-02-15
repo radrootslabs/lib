@@ -1,13 +1,18 @@
 #![forbid(unsafe_code)]
 
 #[cfg(not(feature = "std"))]
-use alloc::{format, string::{String, ToString}, vec, vec::Vec};
+use alloc::{
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 
+use radroots_events::kinds::KIND_LISTING;
 use radroots_events::list::RadrootsListEntry;
 use radroots_events::list_set::RadrootsListSet;
-use radroots_events::plot::RadrootsPlot;
 use radroots_events::listing::RadrootsListing;
-use radroots_events::kinds::KIND_LISTING;
+use radroots_events::plot::RadrootsPlot;
 
 use crate::d_tag::validate_d_tag;
 use crate::error::EventEncodeError;
@@ -195,9 +200,7 @@ where
     )
 }
 
-pub fn member_of_farms_list_set<I, S>(
-    farm_pubkeys: I,
-) -> Result<RadrootsListSet, EventEncodeError>
+pub fn member_of_farms_list_set<I, S>(farm_pubkeys: I) -> Result<RadrootsListSet, EventEncodeError>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<str>,

@@ -1,7 +1,10 @@
 #[cfg(not(feature = "std"))]
-use alloc::{string::{String, ToString}, vec::Vec};
-#[cfg(not(feature = "std"))]
 use alloc::vec;
+#[cfg(not(feature = "std"))]
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
+};
 
 use radroots_events::{RadrootsNostrEventPtr, message::RadrootsMessageRecipient};
 
@@ -9,7 +12,9 @@ use crate::error::{EventEncodeError, EventParseError};
 
 fn validate_recipient(recipient: &RadrootsMessageRecipient) -> Result<(), EventEncodeError> {
     if recipient.public_key.trim().is_empty() {
-        return Err(EventEncodeError::EmptyRequiredField("recipients.public_key"));
+        return Err(EventEncodeError::EmptyRequiredField(
+            "recipients.public_key",
+        ));
     }
     if let Some(relay_url) = &recipient.relay_url {
         if relay_url.trim().is_empty() {
@@ -98,7 +103,10 @@ pub(crate) fn parse_recipients(
     tags: &[Vec<String>],
 ) -> Result<Vec<RadrootsMessageRecipient>, EventParseError> {
     let mut recipients = Vec::new();
-    for tag in tags.iter().filter(|t| t.get(0).map(|s| s.as_str()) == Some("p")) {
+    for tag in tags
+        .iter()
+        .filter(|t| t.get(0).map(|s| s.as_str()) == Some("p"))
+    {
         recipients.push(parse_recipient_tag(tag)?);
     }
     if recipients.is_empty() {
@@ -135,9 +143,7 @@ pub(crate) fn parse_reply_tag(
     }))
 }
 
-pub(crate) fn parse_subject_tag(
-    tags: &[Vec<String>],
-) -> Result<Option<String>, EventParseError> {
+pub(crate) fn parse_subject_tag(tags: &[Vec<String>]) -> Result<Option<String>, EventParseError> {
     let tag = match tags
         .iter()
         .find(|t| t.get(0).map(|s| s.as_str()) == Some("subject"))

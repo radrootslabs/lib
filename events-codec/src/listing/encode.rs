@@ -1,11 +1,11 @@
 #[cfg(not(feature = "std"))]
-use alloc::vec::Vec;
-#[cfg(not(feature = "std"))]
 use alloc::string::String;
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
 
-use radroots_events::listing::RadrootsListing;
 #[cfg(feature = "serde_json")]
 use radroots_events::kinds::KIND_LISTING;
+use radroots_events::listing::RadrootsListing;
 
 use crate::error::EventEncodeError;
 use crate::listing::tags::listing_tags;
@@ -31,5 +31,9 @@ pub fn to_wire_parts_with_kind(
 ) -> Result<WireEventParts, EventEncodeError> {
     let tags = listing_build_tags(listing)?;
     let content = serde_json::to_string(listing).map_err(|_| EventEncodeError::Json)?;
-    Ok(WireEventParts { kind, content, tags })
+    Ok(WireEventParts {
+        kind,
+        content,
+        tags,
+    })
 }

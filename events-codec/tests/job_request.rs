@@ -1,6 +1,6 @@
 use radroots_events::job::JobInputType;
-use radroots_events::kinds::{KIND_JOB_FEEDBACK, KIND_JOB_REQUEST_MIN, KIND_JOB_RESULT_MIN};
 use radroots_events::job_request::{RadrootsJobInput, RadrootsJobParam, RadrootsJobRequest};
+use radroots_events::kinds::{KIND_JOB_FEEDBACK, KIND_JOB_REQUEST_MIN, KIND_JOB_RESULT_MIN};
 use radroots_events_codec::job::encode::JobEncodeError;
 use radroots_events_codec::job::error::JobParseError;
 use radroots_events_codec::job::request::decode::job_request_from_tags;

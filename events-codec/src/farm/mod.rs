@@ -4,30 +4,24 @@ pub mod list_sets;
 
 #[cfg(test)]
 mod tests {
-    use radroots_events::farm::{
-        RadrootsFarm,
-        RadrootsFarmLocation,
-        RadrootsFarmRef,
-        RadrootsGcsLocation,
-        RadrootsGeoJsonPoint,
-        RadrootsGeoJsonPolygon,
-    };
-    use radroots_events::plot::RadrootsPlot;
     use crate::error::EventEncodeError;
     use crate::farm::encode::{farm_build_tags, farm_ref_tags};
     use crate::farm::list_sets::{
-        farm_members_list_set,
-        farm_listings_list_set_from_listings,
-        farm_plots_list_set_from_plots,
-        member_of_farms_list_set,
+        farm_listings_list_set_from_listings, farm_members_list_set,
+        farm_plots_list_set_from_plots, member_of_farms_list_set,
     };
     use radroots_core::{
         RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
         RadrootsCoreQuantityPrice, RadrootsCoreUnit,
     };
+    use radroots_events::farm::{
+        RadrootsFarm, RadrootsFarmLocation, RadrootsFarmRef, RadrootsGcsLocation,
+        RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon,
+    };
     use radroots_events::listing::{
         RadrootsListing, RadrootsListingBin, RadrootsListingFarmRef, RadrootsListingProduct,
     };
+    use radroots_events::plot::RadrootsPlot;
 
     #[test]
     fn farm_tags_include_required_fields() {
@@ -110,15 +104,20 @@ mod tests {
         };
 
         let tags = farm_ref_tags(&farm).expect("farm ref tags");
-        let has_a = tags.iter().any(|tag| tag.get(0).map(|v| v.as_str()) == Some("a"));
-        let has_p = tags.iter().any(|tag| tag.get(0).map(|v| v.as_str()) == Some("p"));
+        let has_a = tags
+            .iter()
+            .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("a"));
+        let has_p = tags
+            .iter()
+            .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("p"));
         assert!(has_a);
         assert!(has_p);
     }
 
     #[test]
     fn farm_list_sets_include_expected_tags() {
-        let members = farm_members_list_set("AAAAAAAAAAAAAAAAAAAAAA", ["owner_pubkey"]).expect("members list");
+        let members = farm_members_list_set("AAAAAAAAAAAAAAAAAAAAAA", ["owner_pubkey"])
+            .expect("members list");
         assert_eq!(members.d_tag, "farm:AAAAAAAAAAAAAAAAAAAAAA:members");
         assert_eq!(members.entries.len(), 1);
         assert_eq!(members.entries[0].tag, "p");
@@ -143,8 +142,9 @@ mod tests {
             tags: None,
         }];
 
-        let plots_list = farm_plots_list_set_from_plots("AAAAAAAAAAAAAAAAAAAAAA", "farm_pubkey", &plots)
-            .expect("plots list");
+        let plots_list =
+            farm_plots_list_set_from_plots("AAAAAAAAAAAAAAAAAAAAAA", "farm_pubkey", &plots)
+                .expect("plots list");
         assert_eq!(plots_list.d_tag, "farm:AAAAAAAAAAAAAAAAAAAAAA:plots");
         assert_eq!(plots_list.entries.len(), 1);
         assert_eq!(plots_list.entries[0].tag, "a");
@@ -206,8 +206,12 @@ mod tests {
             images: None,
         }];
 
-        let listings_list = farm_listings_list_set_from_listings("AAAAAAAAAAAAAAAAAAAAAA", "farm_pubkey", &listings)
-            .expect("listings list");
+        let listings_list = farm_listings_list_set_from_listings(
+            "AAAAAAAAAAAAAAAAAAAAAA",
+            "farm_pubkey",
+            &listings,
+        )
+        .expect("listings list");
         assert_eq!(listings_list.d_tag, "farm:AAAAAAAAAAAAAAAAAAAAAA:listings");
         assert_eq!(listings_list.entries.len(), 1);
         assert_eq!(listings_list.entries[0].tag, "a");

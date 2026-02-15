@@ -6,14 +6,14 @@ pub mod list_sets;
 
 #[cfg(test)]
 mod tests {
-    use radroots_events::coop::{RadrootsCoop, RadrootsCoopLocation, RadrootsCoopRef};
-    use radroots_events::farm::{RadrootsFarmRef, RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon};
     use crate::coop::encode::{coop_build_tags, coop_ref_tags};
     use crate::coop::list_sets::{
-        coop_items_list_set,
-        coop_members_farms_list_set,
-        coop_members_list_set,
+        coop_items_list_set, coop_members_farms_list_set, coop_members_list_set,
         member_of_coops_list_set,
+    };
+    use radroots_events::coop::{RadrootsCoop, RadrootsCoopLocation, RadrootsCoopRef};
+    use radroots_events::farm::{
+        RadrootsFarmRef, RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon,
     };
 
     #[test]
@@ -80,15 +80,20 @@ mod tests {
         };
 
         let tags = coop_ref_tags(&coop).expect("coop ref tags");
-        let has_a = tags.iter().any(|tag| tag.get(0).map(|v| v.as_str()) == Some("a"));
-        let has_p = tags.iter().any(|tag| tag.get(0).map(|v| v.as_str()) == Some("p"));
+        let has_a = tags
+            .iter()
+            .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("a"));
+        let has_p = tags
+            .iter()
+            .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("p"));
         assert!(has_a);
         assert!(has_p);
     }
 
     #[test]
     fn coop_list_sets_include_expected_tags() {
-        let members = coop_members_list_set("BAAAAAAAAAAAAAAAAAAAAA", ["member_pubkey"]).expect("members list");
+        let members = coop_members_list_set("BAAAAAAAAAAAAAAAAAAAAA", ["member_pubkey"])
+            .expect("members list");
         assert_eq!(members.d_tag, "coop:BAAAAAAAAAAAAAAAAAAAAA:members");
         assert_eq!(members.entries.len(), 1);
         assert_eq!(members.entries[0].tag, "p");
@@ -101,12 +106,18 @@ mod tests {
             }],
         )
         .expect("farm members list");
-        assert_eq!(farm_members.d_tag, "coop:BAAAAAAAAAAAAAAAAAAAAA:members.farms");
+        assert_eq!(
+            farm_members.d_tag,
+            "coop:BAAAAAAAAAAAAAAAAAAAAA:members.farms"
+        );
         assert!(farm_members.entries.iter().any(|entry| entry.tag == "a"));
         assert!(farm_members.entries.iter().any(|entry| entry.tag == "p"));
 
-        let items = coop_items_list_set("BAAAAAAAAAAAAAAAAAAAAA", ["30361:coop_pubkey:FAAAAAAAAAAAAAAAAAAAAA"])
-            .expect("items list");
+        let items = coop_items_list_set(
+            "BAAAAAAAAAAAAAAAAAAAAA",
+            ["30361:coop_pubkey:FAAAAAAAAAAAAAAAAAAAAA"],
+        )
+        .expect("items list");
         assert_eq!(items.d_tag, "coop:BAAAAAAAAAAAAAAAAAAAAA:items");
         assert_eq!(items.entries.len(), 1);
         assert_eq!(items.entries[0].tag, "a");

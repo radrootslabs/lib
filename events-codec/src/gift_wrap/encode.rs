@@ -1,7 +1,10 @@
 #[cfg(not(feature = "std"))]
-use alloc::{string::{String, ToString}, vec::Vec};
-#[cfg(not(feature = "std"))]
 use alloc::vec;
+#[cfg(not(feature = "std"))]
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
+};
 
 use radroots_events::gift_wrap::{RadrootsGiftWrap, RadrootsGiftWrapRecipient};
 use radroots_events::kinds::KIND_GIFT_WRAP;

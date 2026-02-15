@@ -1,7 +1,10 @@
 #[cfg(not(feature = "std"))]
-use alloc::{string::{String, ToString}, vec::Vec};
-#[cfg(not(feature = "std"))]
 use alloc::vec;
+#[cfg(not(feature = "std"))]
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
+};
 
 use radroots_events::geochat::RadrootsGeoChat;
 use radroots_events::kinds::KIND_GEOCHAT;
@@ -19,9 +22,7 @@ fn push_tag(tags: &mut Vec<Vec<String>>, key: &str, value: &str) {
     tags.push(vec![key.to_string(), value.to_string()]);
 }
 
-pub fn geochat_build_tags(
-    geochat: &RadrootsGeoChat,
-) -> Result<Vec<Vec<String>>, EventEncodeError> {
+pub fn geochat_build_tags(geochat: &RadrootsGeoChat) -> Result<Vec<Vec<String>>, EventEncodeError> {
     let geohash = geochat.geohash.trim();
     if geohash.is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("geohash"));

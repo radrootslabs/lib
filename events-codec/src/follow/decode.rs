@@ -3,7 +3,10 @@ use alloc::{string::String, vec::Vec};
 
 use radroots_events::{
     RadrootsNostrEvent,
-    follow::{RadrootsFollow, RadrootsFollowEventIndex, RadrootsFollowEventMetadata, RadrootsFollowProfile},
+    follow::{
+        RadrootsFollow, RadrootsFollowEventIndex, RadrootsFollowEventMetadata,
+        RadrootsFollowProfile,
+    },
     kinds::KIND_FOLLOW,
 };
 
@@ -59,7 +62,10 @@ pub fn follow_from_tags(
         });
     }
     let mut list = Vec::new();
-    for tag in tags.iter().filter(|t| t.get(0).map(|s| s.as_str()) == Some("p")) {
+    for tag in tags
+        .iter()
+        .filter(|t| t.get(0).map(|s| s.as_str()) == Some("p"))
+    {
         list.push(parse_follow_tag(tag, published_at)?);
     }
     Ok(RadrootsFollow { list })

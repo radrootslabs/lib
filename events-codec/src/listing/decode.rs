@@ -1,13 +1,19 @@
 #![cfg(feature = "serde_json")]
 
 #[cfg(not(feature = "std"))]
-use alloc::{string::{String, ToString}, vec::Vec};
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
+};
 
 use radroots_events::{
     RadrootsNostrEvent,
-    kinds::{KIND_FARM, KIND_PLOT, KIND_RESOURCE_AREA},
     kinds::KIND_LISTING,
-    listing::{RadrootsListing, RadrootsListingEventIndex, RadrootsListingEventMetadata, RadrootsListingFarmRef},
+    kinds::{KIND_FARM, KIND_PLOT, KIND_RESOURCE_AREA},
+    listing::{
+        RadrootsListing, RadrootsListingEventIndex, RadrootsListingEventMetadata,
+        RadrootsListingFarmRef,
+    },
     plot::RadrootsPlotRef,
     resource_area::RadrootsResourceAreaRef,
     tags::TAG_D,
@@ -39,7 +45,10 @@ fn parse_d_tag(tags: &[Vec<String>]) -> Result<String, EventParseError> {
 }
 
 fn parse_farm_ref(tags: &[Vec<String>]) -> Result<RadrootsListingFarmRef, EventParseError> {
-    for tag in tags.iter().filter(|t| t.get(0).map(|s| s.as_str()) == Some(TAG_A)) {
+    for tag in tags
+        .iter()
+        .filter(|t| t.get(0).map(|s| s.as_str()) == Some(TAG_A))
+    {
         let value = tag
             .get(1)
             .map(|s| s.to_string())
@@ -84,7 +93,9 @@ fn parse_farm_pubkey(tags: &[Vec<String>]) -> Result<String, EventParseError> {
     Ok(value)
 }
 
-fn parse_resource_area(tags: &[Vec<String>]) -> Result<Option<RadrootsResourceAreaRef>, EventParseError> {
+fn parse_resource_area(
+    tags: &[Vec<String>],
+) -> Result<Option<RadrootsResourceAreaRef>, EventParseError> {
     let tag = tags
         .iter()
         .find(|t| t.get(0).map(|s| s.as_str()) == Some(TAG_RADROOTS_RESOURCE_AREA));

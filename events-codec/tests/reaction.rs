@@ -1,10 +1,10 @@
 mod common;
 
+use radroots_events::tags::TAG_E_ROOT;
 use radroots_events::{
     kinds::{KIND_POST, KIND_REACTION},
     reaction::RadrootsReaction,
 };
-use radroots_events::tags::TAG_E_ROOT;
 
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
 use radroots_events_codec::event_ref::{build_event_ref_tag, push_nip10_ref_tags};

@@ -2,7 +2,9 @@ mod common;
 
 use radroots_events::kinds::KIND_POST;
 use radroots_events_codec::error::EventParseError;
-use radroots_events_codec::event_ref::{build_event_ref_tag, find_event_ref_tag, parse_event_ref_tag};
+use radroots_events_codec::event_ref::{
+    build_event_ref_tag, find_event_ref_tag, parse_event_ref_tag,
+};
 
 #[test]
 fn build_and_parse_roundtrip_with_d_tag_and_relays() {

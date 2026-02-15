@@ -1,5 +1,8 @@
 #[cfg(not(feature = "std"))]
-use alloc::{string::{String, ToString}, vec::Vec};
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
+};
 
 use radroots_events::{
     kinds::KIND_RESOURCE_AREA,
@@ -92,5 +95,9 @@ pub fn to_wire_parts_with_kind(
     }
     let tags = resource_area_build_tags(area)?;
     let content = serde_json::to_string(area).map_err(|_| EventEncodeError::Json)?;
-    Ok(WireEventParts { kind, content, tags })
+    Ok(WireEventParts {
+        kind,
+        content,
+        tags,
+    })
 }

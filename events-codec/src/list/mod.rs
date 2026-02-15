@@ -25,8 +25,8 @@ mod tests {
             ],
         };
         let tags = list_build_tags(&list).expect("build tags");
-        let parsed = list_from_tags(KIND_LIST_MUTE, list.content.clone(), &tags)
-            .expect("parse list");
+        let parsed =
+            list_from_tags(KIND_LIST_MUTE, list.content.clone(), &tags).expect("parse list");
         assert_eq!(parsed.content, list.content);
         assert_eq!(parsed.entries.len(), list.entries.len());
         assert_eq!(parsed.entries[0].tag, "p");

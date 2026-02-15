@@ -1,10 +1,11 @@
 #[cfg(not(feature = "std"))]
-use alloc::{string::{String, ToString}, vec::Vec};
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
+};
 
 use radroots_events::{
-    kinds::KIND_RESOURCE_AREA,
-    resource_cap::RadrootsResourceHarvestCap,
-    tags::TAG_D,
+    kinds::KIND_RESOURCE_AREA, resource_cap::RadrootsResourceHarvestCap, tags::TAG_D,
 };
 
 use crate::d_tag::validate_d_tag;
@@ -80,9 +81,7 @@ pub fn resource_harvest_cap_build_tags(
 }
 
 #[cfg(feature = "serde_json")]
-pub fn to_wire_parts(
-    cap: &RadrootsResourceHarvestCap,
-) -> Result<WireEventParts, EventEncodeError> {
+pub fn to_wire_parts(cap: &RadrootsResourceHarvestCap) -> Result<WireEventParts, EventEncodeError> {
     to_wire_parts_with_kind(cap, KIND_RESOURCE_HARVEST_CAP)
 }
 
@@ -96,5 +95,9 @@ pub fn to_wire_parts_with_kind(
     }
     let tags = resource_harvest_cap_build_tags(cap)?;
     let content = serde_json::to_string(cap).map_err(|_| EventEncodeError::Json)?;
-    Ok(WireEventParts { kind, content, tags })
+    Ok(WireEventParts {
+        kind,
+        content,
+        tags,
+    })
 }

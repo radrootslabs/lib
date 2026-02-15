@@ -1,21 +1,24 @@
 #![forbid(unsafe_code)]
 
-pub mod encode;
 pub mod decode;
+pub mod encode;
 pub mod list_sets;
 
 #[cfg(test)]
 mod tests {
-    use radroots_events::farm::{RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon};
-    use radroots_events::resource_area::{RadrootsResourceArea, RadrootsResourceAreaLocation, RadrootsResourceAreaRef};
     use crate::resource_area::encode::{resource_area_build_tags, resource_area_ref_tags};
     use crate::resource_area::list_sets::{
-        resource_area_members_farms_list_set,
-        resource_area_members_plots_list_set,
+        resource_area_members_farms_list_set, resource_area_members_plots_list_set,
         resource_area_stewards_list_set,
     };
     use radroots_events::farm::RadrootsFarmRef;
+    use radroots_events::farm::{
+        RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon,
+    };
     use radroots_events::plot::RadrootsPlotRef;
+    use radroots_events::resource_area::{
+        RadrootsResourceArea, RadrootsResourceAreaLocation, RadrootsResourceAreaRef,
+    };
 
     fn sample_location() -> RadrootsResourceAreaLocation {
         RadrootsResourceAreaLocation {
@@ -69,9 +72,18 @@ mod tests {
         };
 
         let tags = resource_area_build_tags(&area).expect("tags");
-        assert!(tags.iter().any(|tag| tag.get(0).map(|v| v.as_str()) == Some("d")));
-        assert!(tags.iter().any(|tag| tag.get(0).map(|v| v.as_str()) == Some("g")));
-        assert!(tags.iter().any(|tag| tag.get(0).map(|v| v.as_str()) == Some("t")));
+        assert!(
+            tags.iter()
+                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("d"))
+        );
+        assert!(
+            tags.iter()
+                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("g"))
+        );
+        assert!(
+            tags.iter()
+                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("t"))
+        );
     }
 
     #[test]
@@ -82,8 +94,14 @@ mod tests {
         };
 
         let tags = resource_area_ref_tags(&area_ref).expect("ref tags");
-        assert!(tags.iter().any(|tag| tag.get(0).map(|v| v.as_str()) == Some("p")));
-        assert!(tags.iter().any(|tag| tag.get(0).map(|v| v.as_str()) == Some("a")));
+        assert!(
+            tags.iter()
+                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("p"))
+        );
+        assert!(
+            tags.iter()
+                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("a"))
+        );
     }
 
     #[test]
@@ -112,9 +130,13 @@ mod tests {
         assert!(plots.entries.iter().any(|entry| entry.tag == "a"));
         assert!(plots.entries.iter().any(|entry| entry.tag == "p"));
 
-        let stewards = resource_area_stewards_list_set("AAAAAAAAAAAAAAAAAAAAAw", ["steward_pubkey"])
-            .expect("stewards");
-        assert_eq!(stewards.d_tag, "resource:AAAAAAAAAAAAAAAAAAAAAw:members.stewards");
+        let stewards =
+            resource_area_stewards_list_set("AAAAAAAAAAAAAAAAAAAAAw", ["steward_pubkey"])
+                .expect("stewards");
+        assert_eq!(
+            stewards.d_tag,
+            "resource:AAAAAAAAAAAAAAAAAAAAAw:members.stewards"
+        );
         assert!(stewards.entries.iter().any(|entry| entry.tag == "p"));
     }
 }

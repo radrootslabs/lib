@@ -1,7 +1,7 @@
+use radroots_events::RadrootsNostrEventPtr;
 use radroots_events::kinds::{KIND_MESSAGE, KIND_MESSAGE_FILE};
 use radroots_events::message::RadrootsMessageRecipient;
 use radroots_events::message_file::{RadrootsMessageFile, RadrootsMessageFileDimensions};
-use radroots_events::RadrootsNostrEventPtr;
 
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
 use radroots_events_codec::message_file::decode::message_file_from_tags;
@@ -109,7 +109,10 @@ fn message_file_to_wire_parts_sets_kind_content_and_tags() {
             vec!["size".to_string(), "1200".to_string()],
             vec!["dim".to_string(), "1200x800".to_string()],
             vec!["blurhash".to_string(), "blurhash".to_string()],
-            vec!["thumb".to_string(), "https://files.example/thumb.bin".to_string()],
+            vec![
+                "thumb".to_string(),
+                "https://files.example/thumb.bin".to_string()
+            ],
             vec![
                 "fallback".to_string(),
                 "https://files.example/fallback-1.bin".to_string()

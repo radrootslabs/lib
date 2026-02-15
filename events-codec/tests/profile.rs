@@ -3,11 +3,8 @@
 use radroots_events::{
     kinds::KIND_POST,
     profile::{
-        RadrootsProfileType,
-        RADROOTS_PROFILE_TYPE_TAG_ANY,
-        RADROOTS_PROFILE_TYPE_TAG_FARM,
-        RADROOTS_PROFILE_TYPE_TAG_KEY,
-        RADROOTS_PROFILE_TYPE_TAG_RADROOTSD,
+        RADROOTS_PROFILE_TYPE_TAG_ANY, RADROOTS_PROFILE_TYPE_TAG_FARM,
+        RADROOTS_PROFILE_TYPE_TAG_KEY, RADROOTS_PROFILE_TYPE_TAG_RADROOTSD, RadrootsProfileType,
     },
 };
 use radroots_events_codec::error::EventParseError;

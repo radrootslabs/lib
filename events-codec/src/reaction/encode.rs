@@ -1,10 +1,7 @@
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
 
-use radroots_events::{
-    reaction::RadrootsReaction,
-    RadrootsNostrEventRef,
-};
+use radroots_events::{RadrootsNostrEventRef, reaction::RadrootsReaction};
 
 use crate::error::EventEncodeError;
 use crate::event_ref::push_nip10_ref_tags;

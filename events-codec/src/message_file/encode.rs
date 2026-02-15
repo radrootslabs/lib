@@ -1,7 +1,11 @@
 #[cfg(not(feature = "std"))]
-use alloc::{format, string::{String, ToString}, vec::Vec};
-#[cfg(not(feature = "std"))]
 use alloc::vec;
+#[cfg(not(feature = "std"))]
+use alloc::{
+    format,
+    string::{String, ToString},
+    vec::Vec,
+};
 
 use radroots_events::kinds::KIND_MESSAGE_FILE;
 use radroots_events::message_file::{RadrootsMessageFile, RadrootsMessageFileDimensions};
@@ -59,12 +63,7 @@ pub fn message_file_build_tags(
         tags.push(tag);
     }
 
-    push_required_tag(
-        &mut tags,
-        "file-type",
-        &message.file_type,
-        "file_type",
-    )?;
+    push_required_tag(&mut tags, "file-type", &message.file_type, "file_type")?;
     push_required_tag(
         &mut tags,
         "encryption-algorithm",

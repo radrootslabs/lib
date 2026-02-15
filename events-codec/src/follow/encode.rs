@@ -1,5 +1,8 @@
 #[cfg(not(feature = "std"))]
-use alloc::{string::{String, ToString}, vec::Vec};
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
+};
 
 use radroots_events::follow::{RadrootsFollow, RadrootsFollowProfile};
 
@@ -15,7 +18,8 @@ fn follow_tag(profile: &RadrootsFollowProfile) -> Result<Vec<String>, EventEncod
     }
     let relay = profile.relay_url.as_ref().filter(|v| !v.is_empty());
     let name = profile.contact_name.as_ref().filter(|v| !v.is_empty());
-    let mut tag = Vec::with_capacity(2 + usize::from(relay.is_some()) + usize::from(name.is_some()));
+    let mut tag =
+        Vec::with_capacity(2 + usize::from(relay.is_some()) + usize::from(name.is_some()));
     tag.push("p".to_string());
     tag.push(profile.public_key.clone());
     if let Some(relay) = relay {

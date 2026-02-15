@@ -3,16 +3,12 @@
 use radroots_events::{
     kinds::KIND_PROFILE,
     profile::{
-        RadrootsProfile,
+        RADROOTS_PROFILE_TYPE_TAG_FARM, RADROOTS_PROFILE_TYPE_TAG_KEY, RadrootsProfile,
         RadrootsProfileType,
-        RADROOTS_PROFILE_TYPE_TAG_FARM,
-        RADROOTS_PROFILE_TYPE_TAG_KEY,
     },
 };
 use radroots_events_codec::profile::encode::{
-    to_metadata,
-    to_wire_parts,
-    to_wire_parts_with_profile_type,
+    to_metadata, to_wire_parts, to_wire_parts_with_profile_type,
 };
 use radroots_events_codec::profile::error::ProfileEncodeError;
 use serde_json::Value;
@@ -33,10 +29,7 @@ fn profile_to_metadata_rejects_invalid_url() {
     };
 
     let err = to_metadata(&profile).unwrap_err();
-    assert!(matches!(
-        err,
-        ProfileEncodeError::InvalidUrl("website", _)
-    ));
+    assert!(matches!(err, ProfileEncodeError::InvalidUrl("website", _)));
 }
 
 #[test]
@@ -77,9 +70,7 @@ fn profile_to_wire_parts_with_profile_type_sets_tag() {
     };
 
     let parts = to_wire_parts_with_profile_type(&profile, Some(RadrootsProfileType::Farm)).unwrap();
-    assert!(parts
-        .tags
-        .iter()
-        .any(|tag| tag.get(0).map(|v| v.as_str()) == Some(RADROOTS_PROFILE_TYPE_TAG_KEY)
-            && tag.get(1).map(|v| v.as_str()) == Some(RADROOTS_PROFILE_TYPE_TAG_FARM)));
+    assert!(parts.tags.iter().any(|tag| tag.get(0).map(|v| v.as_str())
+        == Some(RADROOTS_PROFILE_TYPE_TAG_KEY)
+        && tag.get(1).map(|v| v.as_str()) == Some(RADROOTS_PROFILE_TYPE_TAG_FARM)));
 }

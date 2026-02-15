@@ -44,7 +44,11 @@ fn seal_from_parts_rejects_wrong_kind() {
 
 #[test]
 fn seal_from_parts_requires_empty_tags() {
-    let err = seal_from_parts(KIND_SEAL, &[vec!["p".to_string(), "x".to_string()]], "payload")
-        .unwrap_err();
+    let err = seal_from_parts(
+        KIND_SEAL,
+        &[vec!["p".to_string(), "x".to_string()]],
+        "payload",
+    )
+    .unwrap_err();
     assert!(matches!(err, EventParseError::InvalidTag("tags")));
 }

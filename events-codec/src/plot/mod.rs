@@ -3,11 +3,13 @@ pub mod encode;
 
 #[cfg(test)]
 mod tests {
+    use crate::plot::encode::plot_build_tags;
     use radroots_events::{
-        farm::{RadrootsFarmRef, RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon},
+        farm::{
+            RadrootsFarmRef, RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon,
+        },
         plot::{RadrootsPlot, RadrootsPlotLocation},
     };
-    use crate::plot::encode::plot_build_tags;
 
     #[test]
     fn plot_tags_include_farm_address() {
@@ -61,8 +63,12 @@ mod tests {
         };
 
         let tags = plot_build_tags(&plot).expect("tags");
-        let has_a = tags.iter().any(|tag| tag.get(0).map(|v| v.as_str()) == Some("a"));
-        let has_p = tags.iter().any(|tag| tag.get(0).map(|v| v.as_str()) == Some("p"));
+        let has_a = tags
+            .iter()
+            .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("a"));
+        let has_p = tags
+            .iter()
+            .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("p"));
         assert!(has_a);
         assert!(has_p);
     }

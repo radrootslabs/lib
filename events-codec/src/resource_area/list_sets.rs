@@ -1,7 +1,12 @@
 #![forbid(unsafe_code)]
 
 #[cfg(not(feature = "std"))]
-use alloc::{format, string::{String, ToString}, vec, vec::Vec};
+use alloc::{
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 
 use radroots_events::farm::RadrootsFarmRef;
 use radroots_events::kinds::{KIND_FARM, KIND_PLOT};

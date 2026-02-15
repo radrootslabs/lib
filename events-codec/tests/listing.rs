@@ -1,20 +1,20 @@
 #![cfg(feature = "serde_json")]
 
 use radroots_core::{
-    RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreDiscount,
-    RadrootsCoreDiscountScope, RadrootsCoreDiscountThreshold, RadrootsCoreDiscountValue,
-    RadrootsCoreMoney, RadrootsCoreQuantity, RadrootsCoreQuantityPrice, RadrootsCoreUnit,
+    RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreDiscount, RadrootsCoreDiscountScope,
+    RadrootsCoreDiscountThreshold, RadrootsCoreDiscountValue, RadrootsCoreMoney,
+    RadrootsCoreQuantity, RadrootsCoreQuantityPrice, RadrootsCoreUnit,
 };
+use radroots_events::tags::TAG_D;
 use radroots_events::{
     kinds::{KIND_LISTING, KIND_POST},
     listing::{
-        RadrootsListing, RadrootsListingAvailability, RadrootsListingDeliveryMethod,
-        RadrootsListingBin, RadrootsListingFarmRef, RadrootsListingImage,
+        RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
+        RadrootsListingDeliveryMethod, RadrootsListingFarmRef, RadrootsListingImage,
         RadrootsListingImageSize, RadrootsListingLocation, RadrootsListingProduct,
         RadrootsListingStatus,
     },
 };
-use radroots_events::tags::TAG_D;
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
 use radroots_events_codec::listing::decode::listing_from_event;
 use radroots_events_codec::listing::encode::{listing_build_tags, to_wire_parts};
@@ -22,7 +22,8 @@ use radroots_events_codec::listing::tags::listing_tags_full;
 use std::str::FromStr;
 
 fn sample_listing(d_tag: &str) -> RadrootsListing {
-    let quantity = RadrootsCoreQuantity::new(RadrootsCoreDecimal::from(1u32), RadrootsCoreUnit::Each);
+    let quantity =
+        RadrootsCoreQuantity::new(RadrootsCoreDecimal::from(1u32), RadrootsCoreUnit::Each);
     let price = RadrootsCoreQuantityPrice::new(
         RadrootsCoreMoney::new(RadrootsCoreDecimal::from(10u32), RadrootsCoreCurrency::USD),
         quantity.clone(),
@@ -143,10 +144,7 @@ fn sample_listing_full(d_tag: &str) -> RadrootsListing {
 fn listing_build_tags_requires_d_tag() {
     let listing = sample_listing("");
     let err = listing_build_tags(&listing).unwrap_err();
-    assert!(matches!(
-        err,
-        EventEncodeError::EmptyRequiredField("d")
-    ));
+    assert!(matches!(err, EventEncodeError::EmptyRequiredField("d")));
 }
 
 #[test]
@@ -176,7 +174,10 @@ fn listing_from_event_fills_missing_d_tag() {
     let tags = vec![
         vec![TAG_D.to_string(), "FAAAAAAAAAAAAAAAAAAAAA".to_string()],
         vec!["p".to_string(), "farm_pubkey".to_string()],
-        vec!["a".to_string(), "30340:farm_pubkey:AAAAAAAAAAAAAAAAAAAAAA".to_string()],
+        vec![
+            "a".to_string(),
+            "30340:farm_pubkey:AAAAAAAAAAAAAAAAAAAAAA".to_string(),
+        ],
     ];
 
     let decoded = listing_from_event(KIND_LISTING, &tags, &content).unwrap();
@@ -190,7 +191,10 @@ fn listing_from_event_rejects_mismatched_d_tag() {
     let tags = vec![
         vec![TAG_D.to_string(), "AAAAAAAAAAAAAAAAAAAAAQ".to_string()],
         vec!["p".to_string(), "farm_pubkey".to_string()],
-        vec!["a".to_string(), "30340:farm_pubkey:AAAAAAAAAAAAAAAAAAAAAA".to_string()],
+        vec![
+            "a".to_string(),
+            "30340:farm_pubkey:AAAAAAAAAAAAAAAAAAAAAA".to_string(),
+        ],
     ];
 
     let err = listing_from_event(KIND_LISTING, &tags, &content).unwrap_err();
@@ -204,7 +208,10 @@ fn listing_from_event_rejects_wrong_kind() {
     let tags = vec![
         vec![TAG_D.to_string(), "AAAAAAAAAAAAAAAAAAAAAg".to_string()],
         vec!["p".to_string(), "farm_pubkey".to_string()],
-        vec!["a".to_string(), "30340:farm_pubkey:AAAAAAAAAAAAAAAAAAAAAA".to_string()],
+        vec![
+            "a".to_string(),
+            "30340:farm_pubkey:AAAAAAAAAAAAAAAAAAAAAA".to_string(),
+        ],
     ];
 
     let err = listing_from_event(KIND_POST, &tags, &content).unwrap_err();
@@ -235,8 +242,7 @@ fn listing_build_tags_includes_listing_fields() {
             && t.get(1).map(|s| s.as_str()) == Some("30340:farm_pubkey:AAAAAAAAAAAAAAAAAAAAAA")
     }));
     assert!(tags.iter().any(|t| {
-        t.get(0).map(|s| s.as_str()) == Some("key")
-            && t.get(1).map(|s| s.as_str()) == Some("sku")
+        t.get(0).map(|s| s.as_str()) == Some("key") && t.get(1).map(|s| s.as_str()) == Some("sku")
     }));
     assert!(tags.iter().any(|t| {
         t.get(0).map(|s| s.as_str()) == Some("title")
@@ -285,10 +291,12 @@ fn listing_build_tags_includes_listing_fields() {
         .iter()
         .find(|t| t.get(0).map(|s| s.as_str()) == Some("radroots:discount"))
         .expect("discount tag");
-    assert!(discount_tag
-        .get(1)
-        .map(|s| s.contains("\"scope\":\"bin\""))
-        .unwrap_or(false));
+    assert!(
+        discount_tag
+            .get(1)
+            .map(|s| s.contains("\"scope\":\"bin\""))
+            .unwrap_or(false)
+    );
 
     assert!(tags.iter().any(|t| {
         t.get(0).map(|s| s.as_str()) == Some("location")
@@ -306,20 +314,16 @@ fn listing_build_tags_includes_listing_fields() {
         assert_eq!(tag[1].len(), full_len - idx);
     }
     assert!(tags.iter().any(|t| {
-        t.get(0).map(|s| s.as_str()) == Some("L")
-            && t.get(1).map(|s| s.as_str()) == Some("dd.lat")
+        t.get(0).map(|s| s.as_str()) == Some("L") && t.get(1).map(|s| s.as_str()) == Some("dd.lat")
     }));
     assert!(tags.iter().any(|t| {
-        t.get(0).map(|s| s.as_str()) == Some("L")
-            && t.get(1).map(|s| s.as_str()) == Some("dd.lon")
+        t.get(0).map(|s| s.as_str()) == Some("L") && t.get(1).map(|s| s.as_str()) == Some("dd.lon")
     }));
     assert!(tags.iter().any(|t| {
-        t.get(0).map(|s| s.as_str()) == Some("l")
-            && t.get(2).map(|s| s.as_str()) == Some("dd.lat")
+        t.get(0).map(|s| s.as_str()) == Some("l") && t.get(2).map(|s| s.as_str()) == Some("dd.lat")
     }));
     assert!(tags.iter().any(|t| {
-        t.get(0).map(|s| s.as_str()) == Some("l")
-            && t.get(2).map(|s| s.as_str()) == Some("dd.lon")
+        t.get(0).map(|s| s.as_str()) == Some("l") && t.get(2).map(|s| s.as_str()) == Some("dd.lon")
     }));
 
     assert!(tags.iter().any(|t| {
@@ -400,7 +404,9 @@ fn listing_build_tags_ignores_null_strings() {
     }]);
 
     let tags = listing_build_tags(&listing).unwrap();
-    assert!(!tags
-        .iter()
-        .any(|tag| tag.iter().any(|value| value == "null")));
+    assert!(
+        !tags
+            .iter()
+            .any(|tag| tag.iter().any(|value| value == "null"))
+    );
 }

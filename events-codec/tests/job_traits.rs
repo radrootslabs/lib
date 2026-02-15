@@ -1,7 +1,7 @@
+use radroots_events::RadrootsNostrEvent;
 use radroots_events::job::JobInputType;
 use radroots_events::job_request::{RadrootsJobInput, RadrootsJobParam, RadrootsJobRequest};
 use radroots_events::kinds::KIND_JOB_REQUEST_MIN;
-use radroots_events::RadrootsNostrEvent;
 use radroots_events_codec::job::request::encode::to_wire_parts;
 use radroots_events_codec::job::traits::{BorrowedEventAdapter, JobEventLike};
 

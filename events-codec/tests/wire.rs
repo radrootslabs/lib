@@ -1,5 +1,5 @@
 use radroots_events::kinds::KIND_POST;
-use radroots_events_codec::wire::{canonicalize_tags, empty_content, to_draft, WireEventParts};
+use radroots_events_codec::wire::{WireEventParts, canonicalize_tags, empty_content, to_draft};
 
 #[test]
 fn canonicalize_tags_trims_sorts_and_dedups() {

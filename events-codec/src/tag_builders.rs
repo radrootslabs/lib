@@ -6,53 +6,38 @@ use alloc::{string::String, vec::Vec};
 use core::convert::Infallible;
 
 use radroots_events::{
-    app_data::RadrootsAppData,
-    comment::RadrootsComment,
-    document::RadrootsDocument,
-    coop::RadrootsCoop,
-    follow::RadrootsFollow,
-    farm::RadrootsFarm,
-    geochat::RadrootsGeoChat,
-    resource_area::RadrootsResourceArea,
-    resource_cap::RadrootsResourceHarvestCap,
-    gift_wrap::RadrootsGiftWrap,
-    job_feedback::RadrootsJobFeedback,
-    job_request::RadrootsJobRequest,
-    job_result::RadrootsJobResult,
-    listing::RadrootsListing,
-    list::RadrootsList,
-    list_set::RadrootsListSet,
-    message::RadrootsMessage,
-    message_file::RadrootsMessageFile,
-    plot::RadrootsPlot,
-    post::RadrootsPost,
-    profile::RadrootsProfile,
-    reaction::RadrootsReaction,
-    seal::RadrootsSeal,
+    app_data::RadrootsAppData, comment::RadrootsComment, coop::RadrootsCoop,
+    document::RadrootsDocument, farm::RadrootsFarm, follow::RadrootsFollow,
+    geochat::RadrootsGeoChat, gift_wrap::RadrootsGiftWrap, job_feedback::RadrootsJobFeedback,
+    job_request::RadrootsJobRequest, job_result::RadrootsJobResult, list::RadrootsList,
+    list_set::RadrootsListSet, listing::RadrootsListing, message::RadrootsMessage,
+    message_file::RadrootsMessageFile, plot::RadrootsPlot, post::RadrootsPost,
+    profile::RadrootsProfile, reaction::RadrootsReaction, resource_area::RadrootsResourceArea,
+    resource_cap::RadrootsResourceHarvestCap, seal::RadrootsSeal,
 };
 
-use crate::comment::encode::comment_build_tags;
-use crate::error::EventEncodeError;
 use crate::app_data::encode::app_data_build_tags;
-use crate::document::encode::document_build_tags;
+use crate::comment::encode::comment_build_tags;
 use crate::coop::encode::coop_build_tags;
-use crate::follow::encode::follow_build_tags;
+use crate::document::encode::document_build_tags;
+use crate::error::EventEncodeError;
 use crate::farm::encode::farm_build_tags;
+use crate::follow::encode::follow_build_tags;
 use crate::geochat::encode::geochat_build_tags;
-use crate::resource_area::encode::resource_area_build_tags;
-use crate::resource_cap::encode::resource_harvest_cap_build_tags;
+use crate::gift_wrap::encode::gift_wrap_build_tags;
 use crate::job::encode::JobEncodeError;
 use crate::job::feedback::encode::job_feedback_build_tags;
 use crate::job::request::encode::job_request_build_tags;
 use crate::job::result::encode::job_result_build_tags;
-use crate::listing::tags::listing_tags;
 use crate::list::encode::list_build_tags;
 use crate::list_set::encode::list_set_build_tags;
+use crate::listing::tags::listing_tags;
 use crate::message::encode::message_build_tags;
 use crate::message_file::encode::message_file_build_tags;
 use crate::plot::encode::plot_build_tags;
 use crate::reaction::encode::reaction_build_tags;
-use crate::gift_wrap::encode::gift_wrap_build_tags;
+use crate::resource_area::encode::resource_area_build_tags;
+use crate::resource_cap::encode::resource_harvest_cap_build_tags;
 use crate::seal::encode::seal_build_tags;
 
 pub trait RadrootsEventTagBuilder {

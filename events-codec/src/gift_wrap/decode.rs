@@ -1,9 +1,15 @@
 #[cfg(not(feature = "std"))]
-use alloc::{string::{String, ToString}, vec::Vec};
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
+};
 
 use radroots_events::{
     RadrootsNostrEvent,
-    gift_wrap::{RadrootsGiftWrap, RadrootsGiftWrapEventIndex, RadrootsGiftWrapEventMetadata, RadrootsGiftWrapRecipient},
+    gift_wrap::{
+        RadrootsGiftWrap, RadrootsGiftWrapEventIndex, RadrootsGiftWrapEventMetadata,
+        RadrootsGiftWrapRecipient,
+    },
     kinds::KIND_GIFT_WRAP,
 };
 
@@ -36,7 +42,9 @@ fn parse_expiration(tags: &[Vec<String>]) -> Result<Option<u32>, EventParseError
         .iter()
         .find(|t| t.get(0).map(|s| s.as_str()) == Some("expiration"))
         .and_then(|t| t.get(1));
-    let Some(value) = value else { return Ok(None); };
+    let Some(value) = value else {
+        return Ok(None);
+    };
     if value.trim().is_empty() {
         return Err(EventParseError::InvalidTag("expiration"));
     }

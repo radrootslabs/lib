@@ -151,7 +151,10 @@ fn message_roundtrip_from_tags() {
         Some("wss://relay.example".to_string())
     );
     assert_eq!(message.content, "hello");
-    assert_eq!(message.reply_to.as_ref().map(|r| r.id.as_str()), Some("reply"));
+    assert_eq!(
+        message.reply_to.as_ref().map(|r| r.id.as_str()),
+        Some("reply")
+    );
     assert_eq!(
         message.reply_to.as_ref().and_then(|r| r.relays.as_deref()),
         Some("wss://reply.example")

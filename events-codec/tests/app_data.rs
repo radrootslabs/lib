@@ -1,5 +1,5 @@
 use radroots_events::{
-    app_data::{RadrootsAppData, KIND_APP_DATA},
+    app_data::{KIND_APP_DATA, RadrootsAppData},
     kinds::KIND_POST,
 };
 use radroots_events_codec::app_data::decode::app_data_from_tags;

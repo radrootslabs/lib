@@ -4,7 +4,7 @@ use alloc::{string::String, vec::Vec};
 use radroots_events::{
     RadrootsNostrEvent,
     kinds::is_nip51_list_set_kind,
-    list::{RadrootsListEntry},
+    list::RadrootsListEntry,
     list_set::{RadrootsListSet, RadrootsListSetEventIndex, RadrootsListSetEventMetadata},
 };
 
@@ -33,9 +33,7 @@ fn entry_from_tag(tag: &[String]) -> Result<RadrootsListEntry, EventParseError> 
 }
 
 fn take_first_non_empty(tag: &[String]) -> Option<String> {
-    tag.get(1)
-        .filter(|v| !v.trim().is_empty())
-        .cloned()
+    tag.get(1).filter(|v| !v.trim().is_empty()).cloned()
 }
 
 pub fn list_set_from_tags(

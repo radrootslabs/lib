@@ -1,19 +1,24 @@
 #![forbid(unsafe_code)]
 
 #[cfg(not(feature = "std"))]
-use alloc::{format, string::{String, ToString}, vec, vec::Vec};
+use alloc::{
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 
 use core::cmp;
 
 use radroots_core::{RadrootsCoreDiscount, RadrootsCoreMoney};
+use radroots_events::kinds::{KIND_FARM, KIND_PLOT, KIND_RESOURCE_AREA};
 use radroots_events::listing::{
-    RadrootsListing, RadrootsListingAvailability, RadrootsListingDeliveryMethod, RadrootsListingFarmRef,
-    RadrootsListingBin, RadrootsListingImage, RadrootsListingLocation,
-    RadrootsListingStatus,
+    RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
+    RadrootsListingDeliveryMethod, RadrootsListingFarmRef, RadrootsListingImage,
+    RadrootsListingLocation, RadrootsListingStatus,
 };
 use radroots_events::plot::RadrootsPlotRef;
 use radroots_events::resource_area::RadrootsResourceAreaRef;
-use radroots_events::kinds::{KIND_FARM, KIND_PLOT, KIND_RESOURCE_AREA};
 use radroots_events::tags::TAG_D;
 
 use crate::d_tag::validate_d_tag;
@@ -140,10 +145,16 @@ pub fn listing_tags_with_options(
         push_tag_value(&mut tags, "year", year);
     }
 
-    tags.push(vec![TAG_RADROOTS_PRIMARY_BIN.to_string(), listing.primary_bin_id.clone()]);
+    tags.push(vec![
+        TAG_RADROOTS_PRIMARY_BIN.to_string(),
+        listing.primary_bin_id.clone(),
+    ]);
 
     let mut bins: Vec<&RadrootsListingBin> = listing.bins.iter().collect();
-    if let Some(pos) = bins.iter().position(|bin| bin.bin_id == listing.primary_bin_id) {
+    if let Some(pos) = bins
+        .iter()
+        .position(|bin| bin.bin_id == listing.primary_bin_id)
+    {
         let primary = bins.remove(pos);
         bins.insert(0, primary);
     }
@@ -172,7 +183,10 @@ pub fn listing_tags_with_options(
         if let Some(availability) = &listing.availability {
             match availability {
                 RadrootsListingAvailability::Status { status } => {
-                    tags.push(vec![TAG_STATUS.to_string(), status_as_str(status).to_string()]);
+                    tags.push(vec![
+                        TAG_STATUS.to_string(),
+                        status_as_str(status).to_string(),
+                    ]);
                 }
                 RadrootsListingAvailability::Window { start, end } => {
                     if let Some(start) = start {
@@ -336,7 +350,9 @@ fn tag_listing_price(bin: &RadrootsListingBin) -> Result<Vec<String>, EventEncod
     }
     let price = &bin.price_per_canonical_unit;
     if !price.is_price_per_canonical_unit() {
-        return Err(EventEncodeError::EmptyRequiredField("bin.price_per_canonical_unit"));
+        return Err(EventEncodeError::EmptyRequiredField(
+            "bin.price_per_canonical_unit",
+        ));
     }
     let mut tag = Vec::with_capacity(8);
     tag.push(TAG_RADROOTS_PRICE.to_string());
@@ -356,7 +372,9 @@ fn tag_listing_price(bin: &RadrootsListingBin) -> Result<Vec<String>, EventEncod
         (None, None) => {}
         (None, Some(_)) => return Err(EventEncodeError::EmptyRequiredField("bin.display_price")),
         (Some(_), None) => {
-            return Err(EventEncodeError::EmptyRequiredField("bin.display_price_unit"));
+            return Err(EventEncodeError::EmptyRequiredField(
+                "bin.display_price_unit",
+            ));
         }
     }
     Ok(tag)
@@ -458,11 +476,7 @@ fn calculate_resolution(value: f64, max: u32) -> u32 {
         return 1;
     }
     let s = value.to_string();
-    let decimals = s
-        .split('.')
-        .nth(1)
-        .map(|v| v.len() as u32)
-        .unwrap_or(0);
+    let decimals = s.split('.').nth(1).map(|v| v.len() as u32).unwrap_or(0);
     let bounded = cmp::min(decimals, max);
     if bounded == 0 { 1 } else { bounded }
 }

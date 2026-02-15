@@ -1,14 +1,16 @@
 #![forbid(unsafe_code)]
 
-pub mod encode;
 pub mod decode;
+pub mod encode;
 
 #[cfg(test)]
 mod tests {
+    use crate::resource_cap::encode::resource_harvest_cap_build_tags;
     use radroots_core::{RadrootsCoreDecimal, RadrootsCoreQuantity, RadrootsCoreUnit};
     use radroots_events::resource_area::RadrootsResourceAreaRef;
-    use radroots_events::resource_cap::{RadrootsResourceHarvestCap, RadrootsResourceHarvestProduct};
-    use crate::resource_cap::encode::resource_harvest_cap_build_tags;
+    use radroots_events::resource_cap::{
+        RadrootsResourceHarvestCap, RadrootsResourceHarvestProduct,
+    };
 
     #[test]
     fn resource_harvest_cap_tags_include_required_fields() {
@@ -35,10 +37,25 @@ mod tests {
         };
 
         let tags = resource_harvest_cap_build_tags(&cap).expect("tags");
-        assert!(tags.iter().any(|tag| tag.get(0).map(|v| v.as_str()) == Some("d")));
-        assert!(tags.iter().any(|tag| tag.get(0).map(|v| v.as_str()) == Some("a")));
-        assert!(tags.iter().any(|tag| tag.get(0).map(|v| v.as_str()) == Some("key")));
-        assert!(tags.iter().any(|tag| tag.get(0).map(|v| v.as_str()) == Some("start")));
-        assert!(tags.iter().any(|tag| tag.get(0).map(|v| v.as_str()) == Some("end")));
+        assert!(
+            tags.iter()
+                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("d"))
+        );
+        assert!(
+            tags.iter()
+                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("a"))
+        );
+        assert!(
+            tags.iter()
+                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("key"))
+        );
+        assert!(
+            tags.iter()
+                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("start"))
+        );
+        assert!(
+            tags.iter()
+                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("end"))
+        );
     }
 }

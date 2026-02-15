@@ -1,5 +1,8 @@
 #[cfg(not(feature = "std"))]
-use alloc::{string::{String, ToString}, vec::Vec};
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
+};
 
 use radroots_events::{
     RadrootsNostrEvent,
@@ -27,7 +30,10 @@ fn required_tag_value(tags: &[Vec<String>], key: &'static str) -> Result<String,
     Ok(value.clone())
 }
 
-fn optional_tag_value(tags: &[Vec<String>], key: &'static str) -> Result<Option<String>, EventParseError> {
+fn optional_tag_value(
+    tags: &[Vec<String>],
+    key: &'static str,
+) -> Result<Option<String>, EventParseError> {
     let value = tags
         .iter()
         .find(|t| t.get(0).map(|s| s.as_str()) == Some(key))
@@ -40,9 +46,15 @@ fn optional_tag_value(tags: &[Vec<String>], key: &'static str) -> Result<Option<
 }
 
 fn parse_dimensions(value: &str) -> Result<RadrootsMessageFileDimensions, EventParseError> {
-    let (w, h) = value.split_once('x').ok_or(EventParseError::InvalidTag("dim"))?;
-    let w = w.parse::<u32>().map_err(|_| EventParseError::InvalidTag("dim"))?;
-    let h = h.parse::<u32>().map_err(|_| EventParseError::InvalidTag("dim"))?;
+    let (w, h) = value
+        .split_once('x')
+        .ok_or(EventParseError::InvalidTag("dim"))?;
+    let w = w
+        .parse::<u32>()
+        .map_err(|_| EventParseError::InvalidTag("dim"))?;
+    let h = h
+        .parse::<u32>()
+        .map_err(|_| EventParseError::InvalidTag("dim"))?;
     Ok(RadrootsMessageFileDimensions { w, h })
 }
 
@@ -51,7 +63,9 @@ fn parse_size(tags: &[Vec<String>]) -> Result<Option<u64>, EventParseError> {
         .iter()
         .find(|t| t.get(0).map(|s| s.as_str()) == Some("size"))
         .and_then(|t| t.get(1));
-    let Some(value) = value else { return Ok(None); };
+    let Some(value) = value else {
+        return Ok(None);
+    };
     if value.trim().is_empty() {
         return Err(EventParseError::InvalidTag("size"));
     }
@@ -61,12 +75,16 @@ fn parse_size(tags: &[Vec<String>]) -> Result<Option<u64>, EventParseError> {
     Ok(Some(size))
 }
 
-fn parse_dimensions_tag(tags: &[Vec<String>]) -> Result<Option<RadrootsMessageFileDimensions>, EventParseError> {
+fn parse_dimensions_tag(
+    tags: &[Vec<String>],
+) -> Result<Option<RadrootsMessageFileDimensions>, EventParseError> {
     let value = tags
         .iter()
         .find(|t| t.get(0).map(|s| s.as_str()) == Some("dim"))
         .and_then(|t| t.get(1));
-    let Some(value) = value else { return Ok(None); };
+    let Some(value) = value else {
+        return Ok(None);
+    };
     if value.trim().is_empty() {
         return Err(EventParseError::InvalidTag("dim"));
     }
@@ -75,7 +93,10 @@ fn parse_dimensions_tag(tags: &[Vec<String>]) -> Result<Option<RadrootsMessageFi
 
 fn parse_fallbacks(tags: &[Vec<String>]) -> Result<Vec<String>, EventParseError> {
     let mut fallbacks = Vec::new();
-    for tag in tags.iter().filter(|t| t.get(0).map(|s| s.as_str()) == Some("fallback")) {
+    for tag in tags
+        .iter()
+        .filter(|t| t.get(0).map(|s| s.as_str()) == Some("fallback"))
+    {
         let value = tag.get(1).ok_or(EventParseError::InvalidTag("fallback"))?;
         if value.trim().is_empty() {
             return Err(EventParseError::InvalidTag("fallback"));

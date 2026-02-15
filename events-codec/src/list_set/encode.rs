@@ -1,10 +1,10 @@
 #[cfg(not(feature = "std"))]
-use alloc::{string::{String, ToString}, vec::Vec};
-
-use radroots_events::{
-    kinds::is_nip51_list_set_kind,
-    list_set::RadrootsListSet,
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
 };
+
+use radroots_events::{kinds::is_nip51_list_set_kind, list_set::RadrootsListSet};
 
 use crate::error::EventEncodeError;
 #[cfg(feature = "serde_json")]
