@@ -42,7 +42,10 @@ impl EmbeddedSqlEngine {
         let rows = {
             let conn = self.conn.lock().map_err(|_| SqlError::Internal)?;
             let mut stmt = conn.prepare(sql).map_err(map_rusqlite)?;
-            let mapped = stmt.query_map(params_from_iter(binds.into_iter()), sqlite_util::row_to_json)?;
+            let mapped = stmt.query_map(
+                params_from_iter(binds.into_iter()),
+                sqlite_util::row_to_json,
+            )?;
             mapped
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(map_rusqlite)?
@@ -119,15 +122,9 @@ mod tests {
             "CREATE TABLE test_items (id INTEGER PRIMARY KEY, name TEXT)",
             "[]",
         )?;
-        let outcome = engine.exec(
-            "INSERT INTO test_items (name) VALUES (?)",
-            "[\"rad\"]",
-        )?;
+        let outcome = engine.exec("INSERT INTO test_items (name) VALUES (?)", "[\"rad\"]")?;
         assert_eq!(outcome.changes, 1);
-        let rows = engine.query_rows(
-            "SELECT name FROM test_items WHERE id = ?",
-            "[1]",
-        )?;
+        let rows = engine.query_rows("SELECT name FROM test_items WHERE id = ?", "[1]")?;
         let name = rows
             .first()
             .and_then(|row| row.get("name"))
@@ -145,10 +142,7 @@ mod tests {
             "[]",
         )?;
         engine.begin_tx()?;
-        engine.exec(
-            "INSERT INTO test_items (name) VALUES (?)",
-            "[\"rad\"]",
-        )?;
+        engine.exec("INSERT INTO test_items (name) VALUES (?)", "[\"rad\"]")?;
         engine.rollback_tx()?;
         let rows = engine.query_rows("SELECT name FROM test_items", "[]")?;
         assert!(rows.is_empty());
@@ -162,10 +156,7 @@ mod tests {
             "CREATE TABLE test_items (id INTEGER PRIMARY KEY, name TEXT)",
             "[]",
         )?;
-        engine.exec(
-            "INSERT INTO test_items (name) VALUES (?)",
-            "[\"rad\"]",
-        )?;
+        engine.exec("INSERT INTO test_items (name) VALUES (?)", "[\"rad\"]")?;
         let bytes = engine.export_bytes()?;
         assert!(!bytes.is_empty());
         Ok(())
