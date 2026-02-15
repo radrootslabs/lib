@@ -1,5 +1,8 @@
 #[cfg(not(feature = "std"))]
-use alloc::{collections::BTreeMap, string::{String, ToString}};
+use alloc::{
+    collections::BTreeMap,
+    string::{String, ToString},
+};
 #[cfg(feature = "std")]
 use std::collections::BTreeMap;
 
@@ -21,8 +24,7 @@ pub struct RadrootsTangleSyncStatus {
 pub fn radroots_tangle_sync_status<E: SqlExecutor>(
     exec: &E,
 ) -> Result<RadrootsTangleSyncStatus, RadrootsTangleEventsError> {
-    let farms = radroots_tangle_db::farm::find_many(exec, &IFarmFindMany { filter: None })?
-        .results;
+    let farms = radroots_tangle_db::farm::find_many(exec, &IFarmFindMany { filter: None })?.results;
     let mut expected: BTreeMap<String, String> = BTreeMap::new();
 
     for farm in farms {

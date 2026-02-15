@@ -1,14 +1,15 @@
+use crate::{
+    RADROOTS_TANGLE_TRANSFER_VERSION, RadrootsTangleFarmSelector, RadrootsTangleSyncRequest,
+    radroots_tangle_sync_all,
+};
 use radroots_events::farm::{RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon};
 use radroots_events::kinds::{KIND_FARM, KIND_LIST_SET_GENERIC, KIND_PLOT, KIND_PROFILE};
 use radroots_sql_core::SqliteExecutor;
 use radroots_sql_core::error::SqlError;
-use crate::{
-    radroots_tangle_sync_all,
-    RadrootsTangleFarmSelector,
-    RadrootsTangleSyncRequest,
-    RADROOTS_TANGLE_TRANSFER_VERSION,
+use radroots_tangle_db::{
+    farm, farm_gcs_location, farm_member, farm_member_claim, farm_tag, gcs_location, migrations,
+    nostr_profile, plot, plot_gcs_location, plot_tag,
 };
-use radroots_types::types::IError;
 use radroots_tangle_db_schema::farm::IFarmFields;
 use radroots_tangle_db_schema::farm_gcs_location::IFarmGcsLocationFields;
 use radroots_tangle_db_schema::farm_member::IFarmMemberFields;
@@ -19,19 +20,7 @@ use radroots_tangle_db_schema::nostr_profile::INostrProfileFields;
 use radroots_tangle_db_schema::plot::IPlotFields;
 use radroots_tangle_db_schema::plot_gcs_location::IPlotGcsLocationFields;
 use radroots_tangle_db_schema::plot_tag::IPlotTagFields;
-use radroots_tangle_db::{
-    farm,
-    farm_gcs_location,
-    farm_member,
-    farm_member_claim,
-    farm_tag,
-    gcs_location,
-    migrations,
-    nostr_profile,
-    plot,
-    plot_gcs_location,
-    plot_tag,
-};
+use radroots_types::types::IError;
 
 fn unwrap_sql<T>(result: Result<T, IError<SqlError>>, label: &str) -> T {
     match result {
@@ -228,11 +217,19 @@ fn sync_all_emits_expected_order() {
 
     assert_eq!(bundle.version, RADROOTS_TANGLE_TRANSFER_VERSION);
     assert_eq!(bundle.events.len(), 9);
-    let kinds = bundle.events.iter().map(|event| event.kind).collect::<Vec<_>>();
+    let kinds = bundle
+        .events
+        .iter()
+        .map(|event| event.kind)
+        .collect::<Vec<_>>();
     assert_eq!(kinds[0], KIND_PROFILE);
     assert_eq!(kinds[1], KIND_PROFILE);
     assert_eq!(kinds[2], KIND_FARM);
     assert_eq!(kinds[3], KIND_PLOT);
-    assert!(kinds[4..8].iter().all(|kind| *kind == KIND_LIST_SET_GENERIC));
+    assert!(
+        kinds[4..8]
+            .iter()
+            .all(|kind| *kind == KIND_LIST_SET_GENERIC)
+    );
     assert_eq!(kinds[8], KIND_LIST_SET_GENERIC);
 }

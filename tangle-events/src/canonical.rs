@@ -1,14 +1,15 @@
 #[cfg(not(feature = "std"))]
-use alloc::{string::{String, ToString}, vec::Vec};
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
+};
 
 use serde::Serialize;
 use serde_json::{Map, Value};
 
 use crate::error::RadrootsTangleEventsError;
 
-pub fn canonical_json_string<T: Serialize>(
-    value: &T,
-) -> Result<String, RadrootsTangleEventsError> {
+pub fn canonical_json_string<T: Serialize>(value: &T) -> Result<String, RadrootsTangleEventsError> {
     let value = serde_json::to_value(value).map_err(|_| {
         RadrootsTangleEventsError::InvalidData("canonical json serialization failed".to_string())
     })?;

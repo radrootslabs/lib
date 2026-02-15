@@ -1,7 +1,7 @@
 #[cfg(not(feature = "std"))]
-use alloc::{string::String, vec::Vec};
-#[cfg(not(feature = "std"))]
 use alloc::vec;
+#[cfg(not(feature = "std"))]
+use alloc::{string::String, vec::Vec};
 
 use radroots_events::farm::{RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon};
 

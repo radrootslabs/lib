@@ -1,26 +1,23 @@
 #[cfg(not(feature = "std"))]
 use alloc::format;
 #[cfg(not(feature = "std"))]
-use alloc::{collections::BTreeMap, string::{String, ToString}, vec::Vec};
+use alloc::{
+    collections::BTreeMap,
+    string::{String, ToString},
+    vec::Vec,
+};
 #[cfg(feature = "std")]
 use std::collections::BTreeMap;
 
 use radroots_events::farm::{
-    RadrootsFarm,
-    RadrootsFarmLocation,
-    RadrootsFarmRef,
-    RadrootsGcsLocation,
-    RadrootsGeoJsonPoint,
+    RadrootsFarm, RadrootsFarmLocation, RadrootsFarmRef, RadrootsGcsLocation, RadrootsGeoJsonPoint,
     RadrootsGeoJsonPolygon,
 };
 use radroots_events::kinds::{KIND_FARM, KIND_LIST_SET_GENERIC, KIND_PLOT};
 use radroots_events::plot::RadrootsPlot;
 use radroots_events::profile::{
-    radroots_profile_type_from_tag_value,
-    radroots_profile_type_tag_value,
-    RadrootsProfile,
-    RadrootsProfileType,
-    RADROOTS_PROFILE_TYPE_TAG_KEY,
+    RADROOTS_PROFILE_TYPE_TAG_KEY, RadrootsProfile, RadrootsProfileType,
+    radroots_profile_type_from_tag_value, radroots_profile_type_tag_value,
 };
 use radroots_events_codec::farm::encode as farm_encode;
 use radroots_events_codec::farm::list_sets as farm_list_sets;
@@ -28,71 +25,42 @@ use radroots_events_codec::list_set::encode as list_set_encode;
 use radroots_events_codec::plot::encode as plot_encode;
 use radroots_events_codec::wire::WireEventParts;
 use radroots_sql_core::SqlExecutor;
+use radroots_tangle_db::{
+    farm, farm_gcs_location, farm_member, farm_member_claim, farm_tag, gcs_location, nostr_profile,
+    plot, plot_gcs_location, plot_tag,
+};
 use radroots_tangle_db_schema::farm::{
-    Farm,
-    IFarmFindMany,
-    IFarmFindOne,
-    IFarmFindOneArgs,
-    IFarmFieldsFilter,
+    Farm, IFarmFieldsFilter, IFarmFindMany, IFarmFindOne, IFarmFindOneArgs,
 };
 use radroots_tangle_db_schema::farm_gcs_location::{
-    FarmGcsLocation,
-    IFarmGcsLocationFindMany,
-    IFarmGcsLocationFieldsFilter,
+    FarmGcsLocation, IFarmGcsLocationFieldsFilter, IFarmGcsLocationFindMany,
 };
 use radroots_tangle_db_schema::farm_member::{
-    FarmMember,
-    IFarmMemberFindMany,
-    IFarmMemberFieldsFilter,
+    FarmMember, IFarmMemberFieldsFilter, IFarmMemberFindMany,
 };
 use radroots_tangle_db_schema::farm_member_claim::{
-    FarmMemberClaim,
-    IFarmMemberClaimFindMany,
-    IFarmMemberClaimFieldsFilter,
+    FarmMemberClaim, IFarmMemberClaimFieldsFilter, IFarmMemberClaimFindMany,
 };
-use radroots_tangle_db_schema::farm_tag::{IFarmTagFindMany, IFarmTagFieldsFilter};
+use radroots_tangle_db_schema::farm_tag::{IFarmTagFieldsFilter, IFarmTagFindMany};
 use radroots_tangle_db_schema::gcs_location::{
-    GcsLocation,
-    IGcsLocationFindOne,
-    IGcsLocationFindOneArgs,
-    GcsLocationQueryBindValues,
+    GcsLocation, GcsLocationQueryBindValues, IGcsLocationFindOne, IGcsLocationFindOneArgs,
 };
 use radroots_tangle_db_schema::nostr_profile::{
-    INostrProfileFindOne,
-    INostrProfileFindOneArgs,
-    NostrProfileQueryBindValues,
+    INostrProfileFindOne, INostrProfileFindOneArgs, NostrProfileQueryBindValues,
 };
-use radroots_tangle_db_schema::plot::{Plot, IPlotFindMany, IPlotFieldsFilter};
+use radroots_tangle_db_schema::plot::{IPlotFieldsFilter, IPlotFindMany, Plot};
 use radroots_tangle_db_schema::plot_gcs_location::{
-    PlotGcsLocation,
-    IPlotGcsLocationFindMany,
-    IPlotGcsLocationFieldsFilter,
+    IPlotGcsLocationFieldsFilter, IPlotGcsLocationFindMany, PlotGcsLocation,
 };
-use radroots_tangle_db_schema::plot_tag::{IPlotTagFindMany, IPlotTagFieldsFilter};
-use radroots_tangle_db::{
-    farm,
-    farm_gcs_location,
-    farm_member,
-    farm_member_claim,
-    farm_tag,
-    gcs_location,
-    nostr_profile,
-    plot,
-    plot_gcs_location,
-    plot_tag,
-};
+use radroots_tangle_db_schema::plot_tag::{IPlotTagFieldsFilter, IPlotTagFindMany};
 use serde_json::Value;
 
-use crate::error::RadrootsTangleEventsError;
 use crate::canonical::canonical_json_string;
+use crate::error::RadrootsTangleEventsError;
 use crate::geo::{geojson_point_from_lat_lng, geojson_polygon_circle_wgs84};
 use crate::types::{
-    RADROOTS_TANGLE_TRANSFER_VERSION,
-    RadrootsTangleEventDraft,
-    RadrootsTangleFarmSelector,
-    RadrootsTangleSyncBundle,
-    RadrootsTangleSyncOptions,
-    RadrootsTangleSyncRequest,
+    RADROOTS_TANGLE_TRANSFER_VERSION, RadrootsTangleEventDraft, RadrootsTangleFarmSelector,
+    RadrootsTangleSyncBundle, RadrootsTangleSyncOptions, RadrootsTangleSyncRequest,
 };
 
 const ROLE_PRIMARY: &str = "primary";
@@ -113,9 +81,7 @@ pub fn radroots_tangle_sync_all_with_options<E: SqlExecutor>(
     options: Option<&RadrootsTangleSyncOptions>,
 ) -> Result<RadrootsTangleSyncBundle, RadrootsTangleEventsError> {
     let farm = resolve_farm(exec, farm_selector)?;
-    let include_profiles = options
-        .and_then(|opt| opt.include_profiles)
-        .unwrap_or(true);
+    let include_profiles = options.and_then(|opt| opt.include_profiles).unwrap_or(true);
     let include_list_sets = options
         .and_then(|opt| opt.include_list_sets)
         .unwrap_or(true);
@@ -233,25 +199,15 @@ pub fn radroots_tangle_list_set_events<E: SqlExecutor>(
     let members = load_farm_members(exec, &farm.id)?;
     let plots = load_plots(exec, &farm.id)?;
 
-    let members_list = farm_list_sets::farm_members_list_set(
-        &farm.d_tag,
-        role_pubkeys(&members, ROLE_MEMBER),
-    )?;
-    let owners_list = farm_list_sets::farm_owners_list_set(
-        &farm.d_tag,
-        role_pubkeys(&members, ROLE_OWNER),
-    )?;
-    let workers_list = farm_list_sets::farm_workers_list_set(
-        &farm.d_tag,
-        role_pubkeys(&members, ROLE_WORKER),
-    )?;
+    let members_list =
+        farm_list_sets::farm_members_list_set(&farm.d_tag, role_pubkeys(&members, ROLE_MEMBER))?;
+    let owners_list =
+        farm_list_sets::farm_owners_list_set(&farm.d_tag, role_pubkeys(&members, ROLE_OWNER))?;
+    let workers_list =
+        farm_list_sets::farm_workers_list_set(&farm.d_tag, role_pubkeys(&members, ROLE_WORKER))?;
 
     let plot_ids = sorted_plot_ids(&plots);
-    let plots_list = farm_list_sets::farm_plots_list_set(
-        &farm.d_tag,
-        &farm.pubkey,
-        plot_ids,
-    )?;
+    let plots_list = farm_list_sets::farm_plots_list_set(&farm.d_tag, &farm.pubkey, plot_ids)?;
 
     let list_sets = [members_list, owners_list, workers_list, plots_list];
     let mut events = Vec::new();
@@ -303,20 +259,28 @@ fn resolve_farm<E: SqlExecutor>(
                 on: radroots_tangle_db_schema::farm::FarmQueryBindValues::Id { id: id.clone() },
             }),
         )?;
-        return result
-            .result
-            .ok_or_else(|| RadrootsTangleEventsError::InvalidSelector(format!("farm not found: {id}")));
+        return result.result.ok_or_else(|| {
+            RadrootsTangleEventsError::InvalidSelector(format!("farm not found: {id}"))
+        });
     }
 
-    let d_tag = selector.d_tag.as_ref().map(|v| v.trim()).filter(|v| !v.is_empty());
-    let pubkey = selector.pubkey.as_ref().map(|v| v.trim()).filter(|v| !v.is_empty());
+    let d_tag = selector
+        .d_tag
+        .as_ref()
+        .map(|v| v.trim())
+        .filter(|v| !v.is_empty());
+    let pubkey = selector
+        .pubkey
+        .as_ref()
+        .map(|v| v.trim())
+        .filter(|v| !v.is_empty());
 
     let (d_tag, pubkey) = match (d_tag, pubkey) {
         (Some(d_tag), Some(pubkey)) => (d_tag, pubkey),
         _ => {
             return Err(RadrootsTangleEventsError::InvalidSelector(
                 "farm selector requires id or (d_tag + pubkey)".to_string(),
-            ))
+            ));
         }
     };
 
@@ -336,7 +300,12 @@ fn resolve_farm<E: SqlExecutor>(
         location_region: None,
         location_country: None,
     };
-    let result = farm::find_many(exec, &IFarmFindMany { filter: Some(filter) })?;
+    let result = farm::find_many(
+        exec,
+        &IFarmFindMany {
+            filter: Some(filter),
+        },
+    )?;
     if result.results.len() == 1 {
         return Ok(result.results.into_iter().next().expect("farm result"));
     }
@@ -356,8 +325,17 @@ fn collect_farm_tags<E: SqlExecutor>(
         farm_id: Some(farm_id.to_string()),
         tag: None,
     };
-    let result = farm_tag::find_many(exec, &IFarmTagFindMany { filter: Some(filter) })?;
-    let mut tags = result.results.into_iter().map(|row| row.tag).collect::<Vec<_>>();
+    let result = farm_tag::find_many(
+        exec,
+        &IFarmTagFindMany {
+            filter: Some(filter),
+        },
+    )?;
+    let mut tags = result
+        .results
+        .into_iter()
+        .map(|row| row.tag)
+        .collect::<Vec<_>>();
     tags.sort();
     tags.dedup();
     Ok(tags)
@@ -374,8 +352,17 @@ fn collect_plot_tags<E: SqlExecutor>(
         plot_id: Some(plot_id.to_string()),
         tag: None,
     };
-    let result = plot_tag::find_many(exec, &IPlotTagFindMany { filter: Some(filter) })?;
-    let mut tags = result.results.into_iter().map(|row| row.tag).collect::<Vec<_>>();
+    let result = plot_tag::find_many(
+        exec,
+        &IPlotTagFindMany {
+            filter: Some(filter),
+        },
+    )?;
+    let mut tags = result
+        .results
+        .into_iter()
+        .map(|row| row.tag)
+        .collect::<Vec<_>>();
     tags.sort();
     tags.dedup();
     Ok(tags)
@@ -393,7 +380,12 @@ fn load_farm_members<E: SqlExecutor>(
         member_pubkey: None,
         role: None,
     };
-    let result = farm_member::find_many(exec, &IFarmMemberFindMany { filter: Some(filter) })?;
+    let result = farm_member::find_many(
+        exec,
+        &IFarmMemberFindMany {
+            filter: Some(filter),
+        },
+    )?;
     Ok(result.results)
 }
 
@@ -409,13 +401,19 @@ fn role_pubkeys(members: &[FarmMember], role: &str) -> Vec<String> {
 }
 
 fn sorted_plot_ids(plots: &[Plot]) -> Vec<String> {
-    let mut ids = plots.iter().map(|plot| plot.d_tag.clone()).collect::<Vec<_>>();
+    let mut ids = plots
+        .iter()
+        .map(|plot| plot.d_tag.clone())
+        .collect::<Vec<_>>();
     ids.sort();
     ids.dedup();
     ids
 }
 
-fn load_plots<E: SqlExecutor>(exec: &E, farm_id: &str) -> Result<Vec<Plot>, RadrootsTangleEventsError> {
+fn load_plots<E: SqlExecutor>(
+    exec: &E,
+    farm_id: &str,
+) -> Result<Vec<Plot>, RadrootsTangleEventsError> {
     let filter = IPlotFieldsFilter {
         id: None,
         created_at: None,
@@ -429,7 +427,12 @@ fn load_plots<E: SqlExecutor>(exec: &E, farm_id: &str) -> Result<Vec<Plot>, Radr
         location_region: None,
         location_country: None,
     };
-    let result = plot::find_many(exec, &IPlotFindMany { filter: Some(filter) })?;
+    let result = plot::find_many(
+        exec,
+        &IPlotFindMany {
+            filter: Some(filter),
+        },
+    )?;
     let mut plots = result.results;
     plots.sort_by(|a, b| a.d_tag.cmp(&b.d_tag));
     Ok(plots)
@@ -454,25 +457,22 @@ fn load_plot_location<E: SqlExecutor>(
     plot: &Plot,
 ) -> Result<Option<radroots_events::plot::RadrootsPlotLocation>, RadrootsTangleEventsError> {
     let location = load_gcs_location_for_plot(exec, &plot.id)?;
-    Ok(location.map(|gcs| radroots_events::plot::RadrootsPlotLocation {
-        primary: plot.location_primary.clone(),
-        city: plot.location_city.clone(),
-        region: plot.location_region.clone(),
-        country: plot.location_country.clone(),
-        gcs,
-    }))
+    Ok(
+        location.map(|gcs| radroots_events::plot::RadrootsPlotLocation {
+            primary: plot.location_primary.clone(),
+            city: plot.location_city.clone(),
+            region: plot.location_region.clone(),
+            country: plot.location_country.clone(),
+            gcs,
+        }),
+    )
 }
 
 fn load_gcs_location_for_farm<E: SqlExecutor>(
     exec: &E,
     farm_id: &str,
 ) -> Result<Option<RadrootsGcsLocation>, RadrootsTangleEventsError> {
-    let primary = load_relation_by_role(
-        exec,
-        farm_id,
-        ROLE_PRIMARY,
-        RelationType::Farm,
-    )?;
+    let primary = load_relation_by_role(exec, farm_id, ROLE_PRIMARY, RelationType::Farm)?;
     match primary {
         Some(gcs) => Ok(Some(gcs)),
         None => load_relation_by_role(exec, farm_id, "", RelationType::Farm),
@@ -483,12 +483,7 @@ fn load_gcs_location_for_plot<E: SqlExecutor>(
     exec: &E,
     plot_id: &str,
 ) -> Result<Option<RadrootsGcsLocation>, RadrootsTangleEventsError> {
-    let primary = load_relation_by_role(
-        exec,
-        plot_id,
-        ROLE_PRIMARY,
-        RelationType::Plot,
-    )?;
+    let primary = load_relation_by_role(exec, plot_id, ROLE_PRIMARY, RelationType::Plot)?;
     match primary {
         Some(gcs) => Ok(Some(gcs)),
         None => load_relation_by_role(exec, plot_id, "", RelationType::Plot),
@@ -514,13 +509,23 @@ fn load_relation_by_role<E: SqlExecutor>(
                 updated_at: None,
                 farm_id: Some(id.to_string()),
                 gcs_location_id: None,
-                role: if role.is_empty() { None } else { Some(role.to_string()) },
+                role: if role.is_empty() {
+                    None
+                } else {
+                    Some(role.to_string())
+                },
             };
             let result = farm_gcs_location::find_many(
                 exec,
-                &IFarmGcsLocationFindMany { filter: Some(filter) },
+                &IFarmGcsLocationFindMany {
+                    filter: Some(filter),
+                },
             )?;
-            result.results.into_iter().map(RelationRow::Farm).collect::<Vec<_>>()
+            result
+                .results
+                .into_iter()
+                .map(RelationRow::Farm)
+                .collect::<Vec<_>>()
         }
         RelationType::Plot => {
             let filter = IPlotGcsLocationFieldsFilter {
@@ -529,13 +534,23 @@ fn load_relation_by_role<E: SqlExecutor>(
                 updated_at: None,
                 plot_id: Some(id.to_string()),
                 gcs_location_id: None,
-                role: if role.is_empty() { None } else { Some(role.to_string()) },
+                role: if role.is_empty() {
+                    None
+                } else {
+                    Some(role.to_string())
+                },
             };
             let result = plot_gcs_location::find_many(
                 exec,
-                &IPlotGcsLocationFindMany { filter: Some(filter) },
+                &IPlotGcsLocationFindMany {
+                    filter: Some(filter),
+                },
             )?;
-            result.results.into_iter().map(RelationRow::Plot).collect::<Vec<_>>()
+            result
+                .results
+                .into_iter()
+                .map(RelationRow::Plot)
+                .collect::<Vec<_>>()
         }
     };
 
@@ -581,14 +596,12 @@ impl RelationRow {
 }
 
 fn location_role_rank(role: &str) -> u8 {
-    if role == ROLE_PRIMARY {
-        0
-    } else {
-        1
-    }
+    if role == ROLE_PRIMARY { 0 } else { 1 }
 }
 
-fn gcs_location_to_event(gcs: &GcsLocation) -> Result<RadrootsGcsLocation, RadrootsTangleEventsError> {
+fn gcs_location_to_event(
+    gcs: &GcsLocation,
+) -> Result<RadrootsGcsLocation, RadrootsTangleEventsError> {
     let point = parse_point(&gcs.point, gcs.lat, gcs.lng);
     let polygon = parse_polygon(&gcs.polygon, gcs.lat, gcs.lng);
     Ok(RadrootsGcsLocation {
@@ -637,7 +650,8 @@ fn parse_polygon(value: &str, lat: f64, lng: f64) -> RadrootsGeoJsonPolygon {
 fn load_profile<E: SqlExecutor>(
     exec: &E,
     pubkey: &str,
-) -> Result<Option<radroots_tangle_db_schema::nostr_profile::NostrProfile>, RadrootsTangleEventsError> {
+) -> Result<Option<radroots_tangle_db_schema::nostr_profile::NostrProfile>, RadrootsTangleEventsError>
+{
     let result = nostr_profile::find_one(
         exec,
         &INostrProfileFindOne::On(INostrProfileFindOneArgs {
@@ -688,7 +702,9 @@ fn profile_event(
     })
 }
 
-fn serialize_profile_content(profile: &RadrootsProfile) -> Result<String, RadrootsTangleEventsError> {
+fn serialize_profile_content(
+    profile: &RadrootsProfile,
+) -> Result<String, RadrootsTangleEventsError> {
     let mut obj = serde_json::Map::new();
     obj.insert("name".to_string(), Value::from(profile.name.clone()));
     if let Some(value) = profile.display_name.as_ref() {
@@ -723,7 +739,10 @@ fn collect_member_pubkeys<E: SqlExecutor>(
     farm_id: &str,
 ) -> Result<Vec<String>, RadrootsTangleEventsError> {
     let members = load_farm_members(exec, farm_id)?;
-    let mut pubkeys = members.into_iter().map(|row| row.member_pubkey).collect::<Vec<_>>();
+    let mut pubkeys = members
+        .into_iter()
+        .map(|row| row.member_pubkey)
+        .collect::<Vec<_>>();
     pubkeys.sort();
     pubkeys.dedup();
     Ok(pubkeys)
@@ -751,7 +770,12 @@ fn load_member_claims<E: SqlExecutor>(
         member_pubkey: None,
         farm_pubkey: Some(farm_pubkey.to_string()),
     };
-    let result = farm_member_claim::find_many(exec, &IFarmMemberClaimFindMany { filter: Some(filter) })?;
+    let result = farm_member_claim::find_many(
+        exec,
+        &IFarmMemberClaimFindMany {
+            filter: Some(filter),
+        },
+    )?;
     Ok(result.results)
 }
 
@@ -766,7 +790,12 @@ fn load_member_claims_for_member<E: SqlExecutor>(
         member_pubkey: Some(member_pubkey.to_string()),
         farm_pubkey: None,
     };
-    let result = farm_member_claim::find_many(exec, &IFarmMemberClaimFindMany { filter: Some(filter) })?;
+    let result = farm_member_claim::find_many(
+        exec,
+        &IFarmMemberClaimFindMany {
+            filter: Some(filter),
+        },
+    )?;
     Ok(result.results)
 }
 

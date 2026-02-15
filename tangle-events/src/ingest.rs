@@ -1,121 +1,68 @@
 #[cfg(not(feature = "std"))]
 use alloc::format;
 #[cfg(not(feature = "std"))]
-use alloc::{string::{String, ToString}, vec::Vec};
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
+};
 
-#[cfg(feature = "std")]
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 #[cfg(feature = "std")]
 use base64::Engine;
+#[cfg(feature = "std")]
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 
-use radroots_events::kinds::{
-    is_nip51_list_set_kind,
-    KIND_FARM,
-    KIND_PLOT,
-    KIND_PROFILE,
-};
 use radroots_events::RadrootsNostrEvent;
+use radroots_events::kinds::{KIND_FARM, KIND_PLOT, KIND_PROFILE, is_nip51_list_set_kind};
 use radroots_events_codec::farm::decode as farm_decode;
 use radroots_events_codec::list_set::decode as list_set_decode;
 use radroots_events_codec::plot::decode as plot_decode;
 use radroots_events_codec::profile::decode as profile_decode;
 use radroots_sql_core::SqlExecutor;
 use radroots_sql_core::error::SqlError;
+use radroots_tangle_db::{
+    farm, farm_gcs_location, farm_member, farm_member_claim, farm_tag, gcs_location,
+    nostr_event_state, nostr_profile, plot, plot_gcs_location, plot_tag,
+};
 use radroots_tangle_db_schema::farm::{
-    FarmQueryBindValues,
-    IFarmFields,
-    IFarmFieldsFilter,
-    IFarmFindMany,
+    FarmQueryBindValues, IFarmFields, IFarmFieldsFilter, IFarmFieldsPartial, IFarmFindMany,
     IFarmUpdate,
-    IFarmFieldsPartial,
 };
 use radroots_tangle_db_schema::farm_gcs_location::{
-    IFarmGcsLocationFields,
-    IFarmGcsLocationFindMany,
-    IFarmGcsLocationFieldsFilter,
-    IFarmGcsLocationDelete,
-    IFarmGcsLocationFindOneArgs,
-    FarmGcsLocationQueryBindValues,
+    FarmGcsLocationQueryBindValues, IFarmGcsLocationDelete, IFarmGcsLocationFields,
+    IFarmGcsLocationFieldsFilter, IFarmGcsLocationFindMany, IFarmGcsLocationFindOneArgs,
 };
 use radroots_tangle_db_schema::farm_member::{
-    IFarmMemberFields,
-    IFarmMemberFindMany,
-    IFarmMemberFieldsFilter,
-    IFarmMemberDelete,
-    IFarmMemberFindOneArgs,
-    FarmMemberQueryBindValues,
+    FarmMemberQueryBindValues, IFarmMemberDelete, IFarmMemberFields, IFarmMemberFieldsFilter,
+    IFarmMemberFindMany, IFarmMemberFindOneArgs,
 };
 use radroots_tangle_db_schema::farm_member_claim::{
-    IFarmMemberClaimFields,
-    IFarmMemberClaimFindMany,
-    IFarmMemberClaimFieldsFilter,
-    IFarmMemberClaimDelete,
-    IFarmMemberClaimFindOneArgs,
-    FarmMemberClaimQueryBindValues,
+    FarmMemberClaimQueryBindValues, IFarmMemberClaimDelete, IFarmMemberClaimFields,
+    IFarmMemberClaimFieldsFilter, IFarmMemberClaimFindMany, IFarmMemberClaimFindOneArgs,
 };
 use radroots_tangle_db_schema::farm_tag::{
-    IFarmTagFields,
-    IFarmTagFindMany,
-    IFarmTagFieldsFilter,
-    IFarmTagDelete,
+    FarmTagQueryBindValues, IFarmTagDelete, IFarmTagFields, IFarmTagFieldsFilter, IFarmTagFindMany,
     IFarmTagFindOneArgs,
-    FarmTagQueryBindValues,
 };
-use radroots_tangle_db_schema::gcs_location::{
-    IGcsLocationFields,
-};
+use radroots_tangle_db_schema::gcs_location::IGcsLocationFields;
 use radroots_tangle_db_schema::nostr_event_state::{
-    INostrEventStateFields,
-    INostrEventStateFindOne,
-    INostrEventStateFindOneArgs,
-    INostrEventStateUpdate,
-    INostrEventStateFieldsPartial,
-    NostrEventStateQueryBindValues,
+    INostrEventStateFields, INostrEventStateFieldsPartial, INostrEventStateFindOne,
+    INostrEventStateFindOneArgs, INostrEventStateUpdate, NostrEventStateQueryBindValues,
 };
 use radroots_tangle_db_schema::nostr_profile::{
-    INostrProfileFields,
-    INostrProfileFindOne,
-    INostrProfileFindOneArgs,
-    INostrProfileUpdate,
-    INostrProfileFieldsPartial,
-    NostrProfileQueryBindValues,
+    INostrProfileFields, INostrProfileFieldsPartial, INostrProfileFindOne,
+    INostrProfileFindOneArgs, INostrProfileUpdate, NostrProfileQueryBindValues,
 };
 use radroots_tangle_db_schema::plot::{
-    IPlotFields,
-    IPlotFieldsFilter,
-    IPlotFindMany,
-    IPlotUpdate,
+    IPlotFields, IPlotFieldsFilter, IPlotFieldsPartial, IPlotFindMany, IPlotUpdate,
     PlotQueryBindValues,
-    IPlotFieldsPartial,
 };
 use radroots_tangle_db_schema::plot_gcs_location::{
-    IPlotGcsLocationFields,
-    IPlotGcsLocationFindMany,
-    IPlotGcsLocationFieldsFilter,
-    IPlotGcsLocationDelete,
-    IPlotGcsLocationFindOneArgs,
-    PlotGcsLocationQueryBindValues,
+    IPlotGcsLocationDelete, IPlotGcsLocationFields, IPlotGcsLocationFieldsFilter,
+    IPlotGcsLocationFindMany, IPlotGcsLocationFindOneArgs, PlotGcsLocationQueryBindValues,
 };
 use radroots_tangle_db_schema::plot_tag::{
-    IPlotTagFields,
-    IPlotTagFindMany,
-    IPlotTagFieldsFilter,
-    IPlotTagDelete,
-    IPlotTagFindOneArgs,
+    IPlotTagDelete, IPlotTagFields, IPlotTagFieldsFilter, IPlotTagFindMany, IPlotTagFindOneArgs,
     PlotTagQueryBindValues,
-};
-use radroots_tangle_db::{
-    farm,
-    farm_gcs_location,
-    farm_member,
-    farm_member_claim,
-    farm_tag,
-    gcs_location,
-    nostr_event_state,
-    nostr_profile,
-    plot,
-    plot_gcs_location,
-    plot_tag,
 };
 use serde_json::Value;
 
@@ -161,11 +108,14 @@ pub fn radroots_tangle_ingest_event_with_factory<E: SqlExecutor, F: RadrootsTang
     event: &RadrootsNostrEvent,
     factory: &F,
 ) -> Result<RadrootsTangleIngestOutcome, RadrootsTangleEventsError> {
-    exec.begin().map_err(|e| RadrootsTangleEventsError::from(radroots_types::types::IError::from(e)))?;
+    exec.begin()
+        .map_err(|e| RadrootsTangleEventsError::from(radroots_types::types::IError::from(e)))?;
 
     let outcome = match ingest_event_inner(exec, event, factory) {
         Ok(outcome) => {
-            exec.commit().map_err(|e| RadrootsTangleEventsError::from(radroots_types::types::IError::from(e)))?;
+            exec.commit().map_err(|e| {
+                RadrootsTangleEventsError::from(radroots_types::types::IError::from(e))
+            })?;
             Ok(outcome)
         }
         Err(err) => {
@@ -206,9 +156,9 @@ fn ingest_profile_event<E: SqlExecutor>(
         event.content.clone(),
         event.tags.clone(),
     )?;
-    let profile_type = metadata
-        .profile_type
-        .ok_or_else(|| RadrootsTangleEventsError::InvalidData("profile_type required".to_string()))?;
+    let profile_type = metadata.profile_type.ok_or_else(|| {
+        RadrootsTangleEventsError::InvalidData("profile_type required".to_string())
+    })?;
 
     let d_tag = "".to_string();
     let decision = event_state_decision(exec, event, &d_tag)?;
@@ -306,7 +256,12 @@ fn ingest_farm_event<E: SqlExecutor, F: RadrootsTangleIdFactory>(
         location_region: None,
         location_country: None,
     };
-    let existing = farm::find_many(exec, &IFarmFindMany { filter: Some(filter) })?;
+    let existing = farm::find_many(
+        exec,
+        &IFarmFindMany {
+            filter: Some(filter),
+        },
+    )?;
     let location = farm.location.clone();
     let (location_primary, location_city, location_region, location_country) =
         unpack_farm_location_strings(location.as_ref());
@@ -381,7 +336,12 @@ fn ingest_plot_event<E: SqlExecutor, F: RadrootsTangleIdFactory>(
         location_region: None,
         location_country: None,
     };
-    let existing = plot::find_many(exec, &IPlotFindMany { filter: Some(filter) })?;
+    let existing = plot::find_many(
+        exec,
+        &IPlotFindMany {
+            filter: Some(filter),
+        },
+    )?;
     let location = plot.location.clone();
     let (location_primary, location_city, location_region, location_country) =
         unpack_plot_location_strings(location.as_ref());
@@ -432,7 +392,8 @@ fn ingest_list_set_event<E: SqlExecutor>(
     if event.kind != radroots_events::kinds::KIND_LIST_SET_GENERIC {
         return Ok(RadrootsTangleIngestOutcome::Skipped);
     }
-    let list_set = list_set_decode::list_set_from_tags(event.kind, event.content.clone(), &event.tags)?;
+    let list_set =
+        list_set_decode::list_set_from_tags(event.kind, event.content.clone(), &event.tags)?;
 
     if list_set.title.is_some() || list_set.description.is_some() || list_set.image.is_some() {
         return Err(RadrootsTangleEventsError::InvalidData(
@@ -544,14 +505,23 @@ fn event_state_decision<E: SqlExecutor>(
 
     if let Some(state) = existing {
         if event.created_at < state.last_created_at {
-            return Ok(EventStateDecision { apply: false, content_hash });
+            return Ok(EventStateDecision {
+                apply: false,
+                content_hash,
+            });
         }
         if event.created_at == state.last_created_at && content_hash == state.content_hash {
-            return Ok(EventStateDecision { apply: false, content_hash });
+            return Ok(EventStateDecision {
+                apply: false,
+                content_hash,
+            });
         }
     }
 
-    Ok(EventStateDecision { apply: true, content_hash })
+    Ok(EventStateDecision {
+        apply: true,
+        content_hash,
+    })
 }
 
 fn find_farm_by_ref<E: SqlExecutor>(
@@ -575,7 +545,12 @@ fn find_farm_by_ref<E: SqlExecutor>(
         location_region: None,
         location_country: None,
     };
-    let result = farm::find_many(exec, &IFarmFindMany { filter: Some(filter) })?;
+    let result = farm::find_many(
+        exec,
+        &IFarmFindMany {
+            filter: Some(filter),
+        },
+    )?;
     result
         .results
         .into_iter()
@@ -951,7 +926,12 @@ enum ListSetRole {
 
 fn unpack_farm_location_strings(
     location: Option<&radroots_events::farm::RadrootsFarmLocation>,
-) -> (Option<String>, Option<String>, Option<String>, Option<String>) {
+) -> (
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+) {
     match location {
         Some(location) => (
             location.primary.clone(),
@@ -965,7 +945,12 @@ fn unpack_farm_location_strings(
 
 fn unpack_plot_location_strings(
     location: Option<&radroots_events::plot::RadrootsPlotLocation>,
-) -> (Option<String>, Option<String>, Option<String>, Option<String>) {
+) -> (
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+) {
     match location {
         Some(location) => (
             location.primary.clone(),
@@ -988,7 +973,12 @@ fn ensure_list_set_entries_tag(
                 "domain:farm list set {label} must only include {expected} tags"
             )));
         }
-        if entry.values.get(0).map(|v| v.trim().is_empty()).unwrap_or(true) {
+        if entry
+            .values
+            .get(0)
+            .map(|v| v.trim().is_empty())
+            .unwrap_or(true)
+        {
             return Err(RadrootsTangleEventsError::InvalidData(format!(
                 "domain:farm list set {label} contains empty entries"
             )));

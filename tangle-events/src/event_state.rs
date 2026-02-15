@@ -1,7 +1,10 @@
 #[cfg(not(feature = "std"))]
 use alloc::format;
 #[cfg(not(feature = "std"))]
-use alloc::{string::{String, ToString}, vec::Vec};
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
+};
 #[cfg(feature = "std")]
 use std::{string::String, vec::Vec};
 
@@ -17,8 +20,9 @@ pub fn event_content_hash(
     content: &str,
     tags: &[Vec<String>],
 ) -> Result<String, RadrootsTangleEventsError> {
-    let tags_json = serde_json::to_string(tags)
-        .map_err(|_| RadrootsTangleEventsError::InvalidData("tags serialization failed".to_string()))?;
+    let tags_json = serde_json::to_string(tags).map_err(|_| {
+        RadrootsTangleEventsError::InvalidData("tags serialization failed".to_string())
+    })?;
     let mut hasher = Sha256::new();
     hasher.update(content.as_bytes());
     hasher.update(tags_json.as_bytes());
