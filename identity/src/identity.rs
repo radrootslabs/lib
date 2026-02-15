@@ -73,7 +73,11 @@ impl RadrootsIdentity {
     }
 
     pub fn with_profile(keys: Keys, profile: RadrootsIdentityProfile) -> Self {
-        let profile = if profile.is_empty() { None } else { Some(profile) };
+        let profile = if profile.is_empty() {
+            None
+        } else {
+            Some(profile)
+        };
         Self { keys, profile }
     }
 
@@ -138,7 +142,11 @@ impl RadrootsIdentity {
     }
 
     pub fn set_profile(&mut self, profile: RadrootsIdentityProfile) {
-        self.profile = if profile.is_empty() { None } else { Some(profile) };
+        self.profile = if profile.is_empty() {
+            None
+        } else {
+            Some(profile)
+        };
     }
 
     pub fn clear_profile(&mut self) {

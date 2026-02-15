@@ -10,10 +10,10 @@ pub mod username;
 
 pub use error::IdentityError;
 pub use identity::{
-    RadrootsIdentity, RadrootsIdentityFile, RadrootsIdentityProfile,
-    RadrootsIdentitySecretKeyFormat, DEFAULT_IDENTITY_PATH,
+    DEFAULT_IDENTITY_PATH, RadrootsIdentity, RadrootsIdentityFile, RadrootsIdentityProfile,
+    RadrootsIdentitySecretKeyFormat,
 };
 pub use username::{
-    radroots_username_is_valid, radroots_username_normalize, RADROOTS_USERNAME_MAX_LEN,
-    RADROOTS_USERNAME_MIN_LEN, RADROOTS_USERNAME_REGEX,
+    RADROOTS_USERNAME_MAX_LEN, RADROOTS_USERNAME_MIN_LEN, RADROOTS_USERNAME_REGEX,
+    radroots_username_is_valid, radroots_username_normalize,
 };

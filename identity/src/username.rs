@@ -5,8 +5,7 @@ use alloc::string::String;
 
 pub const RADROOTS_USERNAME_MIN_LEN: usize = 3;
 pub const RADROOTS_USERNAME_MAX_LEN: usize = 30;
-pub const RADROOTS_USERNAME_REGEX: &str =
-    r"^(?!.*\.\.)(?!\.)(?!.*\.$)[a-z0-9._-]{3,30}$";
+pub const RADROOTS_USERNAME_REGEX: &str = r"^(?!.*\.\.)(?!\.)(?!.*\.$)[a-z0-9._-]{3,30}$";
 
 pub fn radroots_username_is_valid(username: &str) -> bool {
     if !username.is_ascii() {
