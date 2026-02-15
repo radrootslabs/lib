@@ -1,149 +1,90 @@
 #![cfg(target_arch = "wasm32")]
 
 use radroots_sql_core::{
-    WasmSqlExecutor,
-    export_lock_begin,
-    export_lock_end,
-    with_export_lock_bypass,
+    WasmSqlExecutor, export_lock_begin, export_lock_end, with_export_lock_bypass,
 };
 use radroots_sql_wasm_core::{err_js, parse_json};
 use radroots_tangle_db::migrations;
-use radroots_tangle_db::{export_manifest, TangleDbExportManifestRs};
+use radroots_tangle_db::{TangleDbExportManifestRs, export_manifest};
 use radroots_tangle_events::radroots_tangle_sync_status;
 use wasm_bindgen::JsValue;
 use wasm_bindgen::prelude::*;
 
 use radroots_tangle_db_schema::farm::{
-    IFarmCreate,
-    IFarmDelete,
-    IFarmFindMany,
-    IFarmFindOne,
-    IFarmUpdate,
+    IFarmCreate, IFarmDelete, IFarmFindMany, IFarmFindOne, IFarmUpdate,
 };
 
 use radroots_tangle_db_schema::farm_gcs_location::{
-    IFarmGcsLocationCreate,
-    IFarmGcsLocationDelete,
-    IFarmGcsLocationFindMany,
-    IFarmGcsLocationFindOne,
-    IFarmGcsLocationUpdate,
+    IFarmGcsLocationCreate, IFarmGcsLocationDelete, IFarmGcsLocationFindMany,
+    IFarmGcsLocationFindOne, IFarmGcsLocationUpdate,
 };
 
 use radroots_tangle_db_schema::farm_member::{
-    IFarmMemberCreate,
-    IFarmMemberDelete,
-    IFarmMemberFindMany,
-    IFarmMemberFindOne,
+    IFarmMemberCreate, IFarmMemberDelete, IFarmMemberFindMany, IFarmMemberFindOne,
     IFarmMemberUpdate,
 };
 
 use radroots_tangle_db_schema::farm_member_claim::{
-    IFarmMemberClaimCreate,
-    IFarmMemberClaimDelete,
-    IFarmMemberClaimFindMany,
-    IFarmMemberClaimFindOne,
-    IFarmMemberClaimUpdate,
+    IFarmMemberClaimCreate, IFarmMemberClaimDelete, IFarmMemberClaimFindMany,
+    IFarmMemberClaimFindOne, IFarmMemberClaimUpdate,
 };
 
 use radroots_tangle_db_schema::farm_tag::{
-    IFarmTagCreate,
-    IFarmTagDelete,
-    IFarmTagFindMany,
-    IFarmTagFindOne,
-    IFarmTagUpdate,
+    IFarmTagCreate, IFarmTagDelete, IFarmTagFindMany, IFarmTagFindOne, IFarmTagUpdate,
 };
 
 use radroots_tangle_db_schema::gcs_location::{
-    IGcsLocationCreate,
-    IGcsLocationDelete,
-    IGcsLocationFindMany,
-    IGcsLocationFindOne,
+    IGcsLocationCreate, IGcsLocationDelete, IGcsLocationFindMany, IGcsLocationFindOne,
     IGcsLocationUpdate,
 };
 
 use radroots_tangle_db_schema::log_error::{
-    ILogErrorCreate,
-    ILogErrorDelete,
-    ILogErrorFindMany,
-    ILogErrorFindOne,
-    ILogErrorUpdate,
+    ILogErrorCreate, ILogErrorDelete, ILogErrorFindMany, ILogErrorFindOne, ILogErrorUpdate,
 };
 
 use radroots_tangle_db_schema::media_image::{
-    IMediaImageCreate,
-    IMediaImageDelete,
-    IMediaImageFindMany,
-    IMediaImageFindOne,
+    IMediaImageCreate, IMediaImageDelete, IMediaImageFindMany, IMediaImageFindOne,
     IMediaImageUpdate,
 };
 
 use radroots_tangle_db_schema::nostr_profile::{
-    INostrProfileCreate,
-    INostrProfileDelete,
-    INostrProfileFindMany,
-    INostrProfileFindOne,
+    INostrProfileCreate, INostrProfileDelete, INostrProfileFindMany, INostrProfileFindOne,
     INostrProfileUpdate,
 };
 
 use radroots_tangle_db_schema::nostr_event_state::{
-    INostrEventStateCreate,
-    INostrEventStateDelete,
-    INostrEventStateFindMany,
-    INostrEventStateFindOne,
-    INostrEventStateUpdate,
+    INostrEventStateCreate, INostrEventStateDelete, INostrEventStateFindMany,
+    INostrEventStateFindOne, INostrEventStateUpdate,
 };
 
 use radroots_tangle_db_schema::nostr_relay::{
-    INostrRelayCreate,
-    INostrRelayDelete,
-    INostrRelayFindMany,
-    INostrRelayFindOne,
+    INostrRelayCreate, INostrRelayDelete, INostrRelayFindMany, INostrRelayFindOne,
     INostrRelayUpdate,
 };
 
 use radroots_tangle_db_schema::trade_product::{
-    ITradeProductCreate,
-    ITradeProductDelete,
-    ITradeProductFindMany,
-    ITradeProductFindOne,
+    ITradeProductCreate, ITradeProductDelete, ITradeProductFindMany, ITradeProductFindOne,
     ITradeProductUpdate,
 };
 
 use radroots_tangle_db_schema::plot::{
-    IPlotCreate,
-    IPlotDelete,
-    IPlotFindMany,
-    IPlotFindOne,
-    IPlotUpdate,
+    IPlotCreate, IPlotDelete, IPlotFindMany, IPlotFindOne, IPlotUpdate,
 };
 
 use radroots_tangle_db_schema::plot_gcs_location::{
-    IPlotGcsLocationCreate,
-    IPlotGcsLocationDelete,
-    IPlotGcsLocationFindMany,
-    IPlotGcsLocationFindOne,
-    IPlotGcsLocationUpdate,
+    IPlotGcsLocationCreate, IPlotGcsLocationDelete, IPlotGcsLocationFindMany,
+    IPlotGcsLocationFindOne, IPlotGcsLocationUpdate,
 };
 
 use radroots_tangle_db_schema::plot_tag::{
-    IPlotTagCreate,
-    IPlotTagDelete,
-    IPlotTagFindMany,
-    IPlotTagFindOne,
-    IPlotTagUpdate,
+    IPlotTagCreate, IPlotTagDelete, IPlotTagFindMany, IPlotTagFindOne, IPlotTagUpdate,
 };
 
-use radroots_tangle_db_schema::nostr_profile_relay::{
-    INostrProfileRelayRelation,
-};
+use radroots_tangle_db_schema::nostr_profile_relay::INostrProfileRelayRelation;
 
-use radroots_tangle_db_schema::trade_product_location::{
-    ITradeProductLocationRelation,
-};
+use radroots_tangle_db_schema::trade_product_location::ITradeProductLocationRelation;
 
-use radroots_tangle_db_schema::trade_product_media::{
-    ITradeProductMediaRelation,
-};
+use radroots_tangle_db_schema::trade_product_media::ITradeProductMediaRelation;
 
 pub mod utils;
 pub use utils::*;
@@ -195,7 +136,9 @@ pub fn tangle_db_export_finish() -> Result<(), JsValue> {
 
 fn export_snapshot(exec: &WasmSqlExecutor) -> Result<JsValue, JsValue> {
     let status = radroots_tangle_sync_status(exec).map_err(|err| {
-        err_js(radroots_sql_core::SqlError::InvalidArgument(err.to_string()))
+        err_js(radroots_sql_core::SqlError::InvalidArgument(
+            err.to_string(),
+        ))
     })?;
     if status.pending_count > 0 {
         return Err(err_js(radroots_sql_core::SqlError::InvalidArgument(
@@ -218,8 +161,11 @@ fn export_snapshot_value_with_bytes(
     manifest: TangleDbExportManifestRs,
     bytes_js: JsValue,
 ) -> Result<JsValue, JsValue> {
-    let manifest_js = serde_wasm_bindgen::to_value(&manifest)
-        .map_err(|err| err_js(radroots_sql_core::SqlError::SerializationError(err.to_string())))?;
+    let manifest_js = serde_wasm_bindgen::to_value(&manifest).map_err(|err| {
+        err_js(radroots_sql_core::SqlError::SerializationError(
+            err.to_string(),
+        ))
+    })?;
     let obj = js_sys::Object::new();
     js_sys::Reflect::set(&obj, &JsValue::from_str("manifest_rs"), &manifest_js)
         .map_err(|_| err_js(radroots_sql_core::SqlError::Internal))?;
@@ -246,12 +192,11 @@ mod tests {
             table_counts: Vec::new(),
         };
         let bytes = Uint8Array::new_with_length(2);
-        let js = export_snapshot_value_with_bytes(manifest, JsValue::from(bytes))
-            .expect("snapshot");
-        let manifest_rs = Reflect::get(&js, &JsValue::from_str("manifest_rs"))
-            .expect("manifest_rs");
-        let db_bytes = Reflect::get(&js, &JsValue::from_str("db_bytes"))
-            .expect("db_bytes");
+        let js =
+            export_snapshot_value_with_bytes(manifest, JsValue::from(bytes)).expect("snapshot");
+        let manifest_rs =
+            Reflect::get(&js, &JsValue::from_str("manifest_rs")).expect("manifest_rs");
+        let db_bytes = Reflect::get(&js, &JsValue::from_str("db_bytes")).expect("db_bytes");
         assert!(manifest_rs.is_object());
         assert!(db_bytes.is_object());
     }
@@ -261,8 +206,7 @@ mod tests {
 pub fn tangle_db_farm_create(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: IFarmCreate = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::farm::create(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::farm::create(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -270,8 +214,7 @@ pub fn tangle_db_farm_create(opts_json: &str) -> Result<JsValue, JsValue> {
 pub fn tangle_db_farm_find_one(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: IFarmFindOne = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::farm::find_one(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::farm::find_one(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -279,8 +222,7 @@ pub fn tangle_db_farm_find_one(opts_json: &str) -> Result<JsValue, JsValue> {
 pub fn tangle_db_farm_find_many(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: IFarmFindMany = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::farm::find_many(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::farm::find_many(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -288,8 +230,7 @@ pub fn tangle_db_farm_find_many(opts_json: &str) -> Result<JsValue, JsValue> {
 pub fn tangle_db_farm_update(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: IFarmUpdate = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::farm::update(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::farm::update(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -297,8 +238,7 @@ pub fn tangle_db_farm_update(opts_json: &str) -> Result<JsValue, JsValue> {
 pub fn tangle_db_farm_delete(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: IFarmDelete = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::farm::delete(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::farm::delete(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -306,8 +246,7 @@ pub fn tangle_db_farm_delete(opts_json: &str) -> Result<JsValue, JsValue> {
 pub fn tangle_db_plot_create(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: IPlotCreate = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::plot::create(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::plot::create(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -315,8 +254,7 @@ pub fn tangle_db_plot_create(opts_json: &str) -> Result<JsValue, JsValue> {
 pub fn tangle_db_plot_find_one(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: IPlotFindOne = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::plot::find_one(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::plot::find_one(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -324,8 +262,7 @@ pub fn tangle_db_plot_find_one(opts_json: &str) -> Result<JsValue, JsValue> {
 pub fn tangle_db_plot_find_many(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: IPlotFindMany = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::plot::find_many(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::plot::find_many(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -333,8 +270,7 @@ pub fn tangle_db_plot_find_many(opts_json: &str) -> Result<JsValue, JsValue> {
 pub fn tangle_db_plot_update(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: IPlotUpdate = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::plot::update(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::plot::update(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -342,8 +278,7 @@ pub fn tangle_db_plot_update(opts_json: &str) -> Result<JsValue, JsValue> {
 pub fn tangle_db_plot_delete(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: IPlotDelete = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::plot::delete(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::plot::delete(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -351,8 +286,7 @@ pub fn tangle_db_plot_delete(opts_json: &str) -> Result<JsValue, JsValue> {
 pub fn tangle_db_gcs_location_create(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: IGcsLocationCreate = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::gcs_location::create(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::gcs_location::create(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -378,8 +312,7 @@ pub fn tangle_db_gcs_location_find_many(opts_json: &str) -> Result<JsValue, JsVa
 pub fn tangle_db_gcs_location_update(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: IGcsLocationUpdate = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::gcs_location::update(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::gcs_location::update(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -387,8 +320,7 @@ pub fn tangle_db_gcs_location_update(opts_json: &str) -> Result<JsValue, JsValue
 pub fn tangle_db_gcs_location_delete(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: IGcsLocationDelete = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::gcs_location::delete(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::gcs_location::delete(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -414,8 +346,8 @@ pub fn tangle_db_farm_gcs_location_find_one(opts_json: &str) -> Result<JsValue, 
 pub fn tangle_db_farm_gcs_location_find_many(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: IFarmGcsLocationFindMany = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::farm_gcs_location::find_many(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::farm_gcs_location::find_many(&exec, &opts)
+        .map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -459,8 +391,8 @@ pub fn tangle_db_plot_gcs_location_find_one(opts_json: &str) -> Result<JsValue, 
 pub fn tangle_db_plot_gcs_location_find_many(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: IPlotGcsLocationFindMany = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::plot_gcs_location::find_many(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::plot_gcs_location::find_many(&exec, &opts)
+        .map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -486,8 +418,7 @@ pub fn tangle_db_plot_gcs_location_delete(opts_json: &str) -> Result<JsValue, Js
 pub fn tangle_db_farm_tag_create(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: IFarmTagCreate = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::farm_tag::create(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::farm_tag::create(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -495,8 +426,7 @@ pub fn tangle_db_farm_tag_create(opts_json: &str) -> Result<JsValue, JsValue> {
 pub fn tangle_db_farm_tag_find_one(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: IFarmTagFindOne = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::farm_tag::find_one(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::farm_tag::find_one(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -504,8 +434,7 @@ pub fn tangle_db_farm_tag_find_one(opts_json: &str) -> Result<JsValue, JsValue> 
 pub fn tangle_db_farm_tag_find_many(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: IFarmTagFindMany = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::farm_tag::find_many(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::farm_tag::find_many(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -513,8 +442,7 @@ pub fn tangle_db_farm_tag_find_many(opts_json: &str) -> Result<JsValue, JsValue>
 pub fn tangle_db_farm_tag_update(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: IFarmTagUpdate = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::farm_tag::update(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::farm_tag::update(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -522,8 +450,7 @@ pub fn tangle_db_farm_tag_update(opts_json: &str) -> Result<JsValue, JsValue> {
 pub fn tangle_db_farm_tag_delete(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: IFarmTagDelete = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::farm_tag::delete(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::farm_tag::delete(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -531,8 +458,7 @@ pub fn tangle_db_farm_tag_delete(opts_json: &str) -> Result<JsValue, JsValue> {
 pub fn tangle_db_plot_tag_create(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: IPlotTagCreate = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::plot_tag::create(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::plot_tag::create(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -540,8 +466,7 @@ pub fn tangle_db_plot_tag_create(opts_json: &str) -> Result<JsValue, JsValue> {
 pub fn tangle_db_plot_tag_find_one(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: IPlotTagFindOne = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::plot_tag::find_one(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::plot_tag::find_one(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -549,8 +474,7 @@ pub fn tangle_db_plot_tag_find_one(opts_json: &str) -> Result<JsValue, JsValue> 
 pub fn tangle_db_plot_tag_find_many(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: IPlotTagFindMany = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::plot_tag::find_many(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::plot_tag::find_many(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -558,8 +482,7 @@ pub fn tangle_db_plot_tag_find_many(opts_json: &str) -> Result<JsValue, JsValue>
 pub fn tangle_db_plot_tag_update(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: IPlotTagUpdate = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::plot_tag::update(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::plot_tag::update(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -567,8 +490,7 @@ pub fn tangle_db_plot_tag_update(opts_json: &str) -> Result<JsValue, JsValue> {
 pub fn tangle_db_plot_tag_delete(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: IPlotTagDelete = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::plot_tag::delete(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::plot_tag::delete(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -576,8 +498,7 @@ pub fn tangle_db_plot_tag_delete(opts_json: &str) -> Result<JsValue, JsValue> {
 pub fn tangle_db_farm_member_create(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: IFarmMemberCreate = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::farm_member::create(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::farm_member::create(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -585,8 +506,7 @@ pub fn tangle_db_farm_member_create(opts_json: &str) -> Result<JsValue, JsValue>
 pub fn tangle_db_farm_member_find_one(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: IFarmMemberFindOne = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::farm_member::find_one(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::farm_member::find_one(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -603,8 +523,7 @@ pub fn tangle_db_farm_member_find_many(opts_json: &str) -> Result<JsValue, JsVal
 pub fn tangle_db_farm_member_update(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: IFarmMemberUpdate = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::farm_member::update(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::farm_member::update(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -612,8 +531,7 @@ pub fn tangle_db_farm_member_update(opts_json: &str) -> Result<JsValue, JsValue>
 pub fn tangle_db_farm_member_delete(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: IFarmMemberDelete = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::farm_member::delete(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::farm_member::delete(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -639,8 +557,8 @@ pub fn tangle_db_farm_member_claim_find_one(opts_json: &str) -> Result<JsValue, 
 pub fn tangle_db_farm_member_claim_find_many(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: IFarmMemberClaimFindMany = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::farm_member_claim::find_many(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::farm_member_claim::find_many(&exec, &opts)
+        .map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -666,8 +584,7 @@ pub fn tangle_db_farm_member_claim_delete(opts_json: &str) -> Result<JsValue, Js
 pub fn tangle_db_log_error_create(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: ILogErrorCreate = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::log_error::create(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::log_error::create(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -675,8 +592,7 @@ pub fn tangle_db_log_error_create(opts_json: &str) -> Result<JsValue, JsValue> {
 pub fn tangle_db_log_error_find_one(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: ILogErrorFindOne = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::log_error::find_one(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::log_error::find_one(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -684,8 +600,7 @@ pub fn tangle_db_log_error_find_one(opts_json: &str) -> Result<JsValue, JsValue>
 pub fn tangle_db_log_error_find_many(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: ILogErrorFindMany = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::log_error::find_many(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::log_error::find_many(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -693,8 +608,7 @@ pub fn tangle_db_log_error_find_many(opts_json: &str) -> Result<JsValue, JsValue
 pub fn tangle_db_log_error_update(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: ILogErrorUpdate = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::log_error::update(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::log_error::update(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -702,8 +616,7 @@ pub fn tangle_db_log_error_update(opts_json: &str) -> Result<JsValue, JsValue> {
 pub fn tangle_db_log_error_delete(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: ILogErrorDelete = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::log_error::delete(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::log_error::delete(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -711,8 +624,7 @@ pub fn tangle_db_log_error_delete(opts_json: &str) -> Result<JsValue, JsValue> {
 pub fn tangle_db_media_image_create(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: IMediaImageCreate = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::media_image::create(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::media_image::create(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -720,8 +632,7 @@ pub fn tangle_db_media_image_create(opts_json: &str) -> Result<JsValue, JsValue>
 pub fn tangle_db_media_image_find_one(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: IMediaImageFindOne = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::media_image::find_one(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::media_image::find_one(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -738,8 +649,7 @@ pub fn tangle_db_media_image_find_many(opts_json: &str) -> Result<JsValue, JsVal
 pub fn tangle_db_media_image_update(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: IMediaImageUpdate = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::media_image::update(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::media_image::update(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -747,8 +657,7 @@ pub fn tangle_db_media_image_update(opts_json: &str) -> Result<JsValue, JsValue>
 pub fn tangle_db_media_image_delete(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: IMediaImageDelete = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::media_image::delete(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::media_image::delete(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -756,8 +665,7 @@ pub fn tangle_db_media_image_delete(opts_json: &str) -> Result<JsValue, JsValue>
 pub fn tangle_db_nostr_profile_create(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: INostrProfileCreate = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::nostr_profile::create(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::nostr_profile::create(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -783,8 +691,7 @@ pub fn tangle_db_nostr_profile_find_many(opts_json: &str) -> Result<JsValue, JsV
 pub fn tangle_db_nostr_profile_update(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: INostrProfileUpdate = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::nostr_profile::update(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::nostr_profile::update(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -792,8 +699,7 @@ pub fn tangle_db_nostr_profile_update(opts_json: &str) -> Result<JsValue, JsValu
 pub fn tangle_db_nostr_profile_delete(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: INostrProfileDelete = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::nostr_profile::delete(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::nostr_profile::delete(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -819,8 +725,8 @@ pub fn tangle_db_nostr_event_state_find_one(opts_json: &str) -> Result<JsValue, 
 pub fn tangle_db_nostr_event_state_find_many(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: INostrEventStateFindMany = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::nostr_event_state::find_many(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::nostr_event_state::find_many(&exec, &opts)
+        .map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -846,8 +752,7 @@ pub fn tangle_db_nostr_event_state_delete(opts_json: &str) -> Result<JsValue, Js
 pub fn tangle_db_nostr_relay_create(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: INostrRelayCreate = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::nostr_relay::create(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::nostr_relay::create(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -855,8 +760,7 @@ pub fn tangle_db_nostr_relay_create(opts_json: &str) -> Result<JsValue, JsValue>
 pub fn tangle_db_nostr_relay_find_one(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: INostrRelayFindOne = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::nostr_relay::find_one(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::nostr_relay::find_one(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -873,8 +777,7 @@ pub fn tangle_db_nostr_relay_find_many(opts_json: &str) -> Result<JsValue, JsVal
 pub fn tangle_db_nostr_relay_update(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: INostrRelayUpdate = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::nostr_relay::update(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::nostr_relay::update(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -882,8 +785,7 @@ pub fn tangle_db_nostr_relay_update(opts_json: &str) -> Result<JsValue, JsValue>
 pub fn tangle_db_nostr_relay_delete(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: INostrRelayDelete = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::nostr_relay::delete(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::nostr_relay::delete(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -891,8 +793,7 @@ pub fn tangle_db_nostr_relay_delete(opts_json: &str) -> Result<JsValue, JsValue>
 pub fn tangle_db_trade_product_create(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: ITradeProductCreate = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::trade_product::create(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::trade_product::create(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -918,8 +819,7 @@ pub fn tangle_db_trade_product_find_many(opts_json: &str) -> Result<JsValue, JsV
 pub fn tangle_db_trade_product_update(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: ITradeProductUpdate = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::trade_product::update(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::trade_product::update(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -927,8 +827,7 @@ pub fn tangle_db_trade_product_update(opts_json: &str) -> Result<JsValue, JsValu
 pub fn tangle_db_trade_product_delete(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: ITradeProductDelete = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::trade_product::delete(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::trade_product::delete(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -963,8 +862,8 @@ pub fn tangle_db_trade_product_location_set(opts_json: &str) -> Result<JsValue, 
 pub fn tangle_db_trade_product_location_unset(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: ITradeProductLocationRelation = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_tangle_db::trade_product_location::unset(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_tangle_db::trade_product_location::unset(&exec, &opts)
+        .map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
