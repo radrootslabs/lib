@@ -22,6 +22,8 @@ use crate::listing::order::{
     TradeAnswer, TradeDiscountDecision, TradeDiscountOffer, TradeDiscountRequest,
     TradeFulfillmentUpdate, TradeOrder, TradeOrderRevision, TradeQuestion, TradeReceipt,
 };
+#[cfg(feature = "serde_json")]
+use crate::listing::tags::trade_listing_dvm_tags;
 use crate::listing::validation::TradeListingValidationError;
 
 pub const TRADE_LISTING_DOMAIN: &str = "trade:listing";
@@ -167,6 +169,38 @@ impl<T> TradeListingEnvelope<T> {
         }
         Ok(())
     }
+}
+
+#[cfg(feature = "serde_json")]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TradeListingEnvelopeEvent {
+    pub kind: u16,
+    pub content: String,
+    pub tags: Vec<Vec<String>>,
+}
+
+#[cfg(feature = "serde_json")]
+pub fn trade_listing_envelope_event_build<T: serde::Serialize + Clone>(
+    recipient_pubkey: impl Into<String>,
+    message_type: TradeListingMessageType,
+    listing_addr: impl Into<String>,
+    order_id: Option<String>,
+    payload: &T,
+) -> Result<TradeListingEnvelopeEvent, serde_json::Error> {
+    let listing_addr = listing_addr.into();
+    let envelope = TradeListingEnvelope::new(
+        message_type,
+        listing_addr.clone(),
+        order_id.clone(),
+        payload.clone(),
+    );
+    let content = serde_json::to_string(&envelope)?;
+    let tags = trade_listing_dvm_tags(recipient_pubkey, &listing_addr, order_id.as_deref());
+    Ok(TradeListingEnvelopeEvent {
+        kind: message_type.kind(),
+        content,
+        tags,
+    })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -375,5 +409,58 @@ mod tests {
             env.validate().unwrap_err(),
             TradeListingEnvelopeError::MissingOrderId
         );
+    }
+
+    #[cfg(feature = "serde_json")]
+    #[test]
+    fn envelope_event_build_includes_order_tag() {
+        let listing_addr = format!("{KIND_LISTING}:pubkey:AAAAAAAAAAAAAAAAAAAAAg");
+        let payload = TradeListingValidateRequest {
+            listing_event: None,
+        };
+        let built = super::trade_listing_envelope_event_build(
+            "pubkey",
+            TradeListingMessageType::OrderRequest,
+            listing_addr.clone(),
+            Some(String::from("order-1")),
+            &payload,
+        )
+        .unwrap();
+
+        assert_eq!(built.kind, TradeListingMessageType::OrderRequest.kind());
+
+        let envelope: TradeListingEnvelope<TradeListingValidateRequest> =
+            serde_json::from_str(&built.content).unwrap();
+        assert_eq!(envelope.listing_addr, listing_addr.clone());
+        assert_eq!(envelope.order_id.as_deref(), Some("order-1"));
+        assert_eq!(built.tags.len(), 3);
+    }
+
+    #[cfg(feature = "serde_json")]
+    #[test]
+    fn envelope_event_build_omits_order_tag_when_missing() {
+        let listing_addr = format!("{KIND_LISTING}:pubkey:AAAAAAAAAAAAAAAAAAAAAg");
+        let payload = TradeListingValidateRequest {
+            listing_event: None,
+        };
+        let built = super::trade_listing_envelope_event_build(
+            "pubkey",
+            TradeListingMessageType::ListingValidateRequest,
+            listing_addr.clone(),
+            None,
+            &payload,
+        )
+        .unwrap();
+
+        assert_eq!(
+            built.kind,
+            TradeListingMessageType::ListingValidateRequest.kind()
+        );
+
+        let envelope: TradeListingEnvelope<TradeListingValidateRequest> =
+            serde_json::from_str(&built.content).unwrap();
+        assert_eq!(envelope.listing_addr, listing_addr);
+        assert!(envelope.order_id.is_none());
+        assert_eq!(built.tags.len(), 2);
     }
 }
