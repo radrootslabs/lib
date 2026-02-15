@@ -1,11 +1,11 @@
 use core::fmt;
 use core::str::FromStr;
 
+#[cfg(all(feature = "serde", not(feature = "std")))]
+use alloc::string::String;
 #[cfg(feature = "serde")]
 #[cfg(feature = "std")]
 use std::string::String;
-#[cfg(all(feature = "serde", not(feature = "std")))]
-use alloc::string::String;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as DeError};

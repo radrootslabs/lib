@@ -1,7 +1,7 @@
-#[cfg(feature = "std")]
-use std::string::String;
 #[cfg(not(feature = "std"))]
 use alloc::string::String;
+#[cfg(feature = "std")]
+use std::string::String;
 
 #[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -15,7 +15,10 @@ pub enum RadrootsCoreDiscountScope {
 #[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", serde(rename_all = "snake_case", tag = "kind", content = "amount"))]
+#[cfg_attr(
+    feature = "serde",
+    serde(rename_all = "snake_case", tag = "kind", content = "amount")
+)]
 pub enum RadrootsCoreDiscountThreshold {
     BinCount { bin_id: String, min: u32 },
     OrderQuantity { min: crate::RadrootsCoreQuantity },
@@ -24,7 +27,10 @@ pub enum RadrootsCoreDiscountThreshold {
 #[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", serde(rename_all = "snake_case", tag = "kind", content = "amount"))]
+#[cfg_attr(
+    feature = "serde",
+    serde(rename_all = "snake_case", tag = "kind", content = "amount")
+)]
 pub enum RadrootsCoreDiscountValue {
     MoneyPerBin(crate::RadrootsCoreMoney),
     Percent(crate::RadrootsCorePercent),

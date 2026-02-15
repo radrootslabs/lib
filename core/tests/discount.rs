@@ -36,7 +36,9 @@ fn is_non_negative_validates_discount_shapes() {
 
     let d = RadrootsCoreDiscount {
         scope: RadrootsCoreDiscountScope::OrderTotal,
-        threshold: RadrootsCoreDiscountThreshold::OrderQuantity { min: qty_pos.clone() },
+        threshold: RadrootsCoreDiscountThreshold::OrderQuantity {
+            min: qty_pos.clone(),
+        },
         value: RadrootsCoreDiscountValue::Percent(pct_pos.clone()),
     };
     assert!(d.is_non_negative());

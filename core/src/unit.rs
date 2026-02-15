@@ -2,11 +2,11 @@ use core::fmt;
 use core::str::FromStr;
 use rust_decimal_macros::dec;
 
+#[cfg(all(feature = "serde", not(feature = "std")))]
+use alloc::string::String;
 #[cfg(feature = "serde")]
 #[cfg(feature = "std")]
 use std::string::String;
-#[cfg(all(feature = "serde", not(feature = "std")))]
-use alloc::string::String;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as DeError};
@@ -142,7 +142,10 @@ impl fmt::Display for RadrootsCoreUnitConvertError {
                 write!(f, "unit conversion requires volume units: {from} -> {to}")
             }
             RadrootsCoreUnitConvertError::NotConvertibleUnits { from, to } => {
-                write!(f, "unit conversion requires matching dimensions: {from} -> {to}")
+                write!(
+                    f,
+                    "unit conversion requires matching dimensions: {from} -> {to}"
+                )
             }
         }
     }

@@ -1,12 +1,12 @@
 use core::fmt;
 
 use crate::RadrootsCoreDecimal;
-use crate::unit::{convert_unit_decimal, RadrootsCoreUnit, RadrootsCoreUnitConvertError};
+use crate::unit::{RadrootsCoreUnit, RadrootsCoreUnitConvertError, convert_unit_decimal};
 
-#[cfg(feature = "std")]
-use std::string::String;
 #[cfg(not(feature = "std"))]
 use alloc::string::String;
+#[cfg(feature = "std")]
+use std::string::String;
 
 #[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
