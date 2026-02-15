@@ -5,8 +5,8 @@ use tracing::info;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{EnvFilter, fmt};
 
-use crate::options::LoggingOptions;
 use crate::Result;
+use crate::options::LoggingOptions;
 
 static GUARD: OnceLock<tracing_appender::non_blocking::WorkerGuard> = OnceLock::new();
 static INIT: OnceLock<()> = OnceLock::new();
@@ -28,9 +28,12 @@ pub fn init_logging(opts: LoggingOptions) -> Result<()> {
 
     let env = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new(opts.default_level.as_deref().unwrap_or("info")));
-    let fmt_layer_file = writer
-        .as_ref()
-        .map(|w| fmt::layer().with_writer(w.clone()).with_ansi(false).with_target(false));
+    let fmt_layer_file = writer.as_ref().map(|w| {
+        fmt::layer()
+            .with_writer(w.clone())
+            .with_ansi(false)
+            .with_target(false)
+    });
     let fmt_layer_stdout = if opts.also_stdout() {
         Some(fmt::layer().with_writer(std::io::stdout).with_target(false))
     } else {
