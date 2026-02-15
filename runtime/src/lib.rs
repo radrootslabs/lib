@@ -4,6 +4,7 @@ pub mod cli;
 pub mod config;
 pub mod error;
 pub mod json;
+pub mod service;
 pub mod signals;
 pub mod tracing;
 
@@ -23,5 +24,8 @@ pub use error::RuntimeCliError;
 pub use error::{RuntimeConfigError, RuntimeError, RuntimeTracingError};
 
 pub use json::{JsonFile, JsonWriteOptions, RuntimeJsonError};
+pub use service::RadrootsNostrServiceConfig;
+#[cfg(feature = "cli")]
+pub use service::RadrootsServiceCliArgs;
 pub use signals::shutdown_signal;
 pub use tracing::{init, init_with};
