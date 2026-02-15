@@ -94,9 +94,7 @@ impl PlotGcsLocationQueryBindValues {
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Deserialize, Serialize)]
-pub enum PlotGcsLocationFindManyRel {
-
-}
+pub enum PlotGcsLocationFindManyRel {}
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
@@ -207,7 +205,10 @@ pub type IPlotGcsLocationDelete = IPlotGcsLocationFindOne;
 pub struct IPlotGcsLocationDeleteResolveTs;
 pub type IPlotGcsLocationDeleteResolve = IResult<String>;
 #[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts", rename = "IPlotGcsLocationUpdate"))]
+#[cfg_attr(
+    feature = "ts-rs",
+    ts(export, export_to = "types.ts", rename = "IPlotGcsLocationUpdate")
+)]
 #[derive(Deserialize, Serialize)]
 pub struct IPlotGcsLocationUpdateArgs {
     pub on: PlotGcsLocationQueryBindValues,

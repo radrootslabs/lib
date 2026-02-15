@@ -94,9 +94,7 @@ impl FarmMemberQueryBindValues {
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Deserialize, Serialize)]
-pub enum FarmMemberFindManyRel {
-
-}
+pub enum FarmMemberFindManyRel {}
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
@@ -207,7 +205,10 @@ pub type IFarmMemberDelete = IFarmMemberFindOne;
 pub struct IFarmMemberDeleteResolveTs;
 pub type IFarmMemberDeleteResolve = IResult<String>;
 #[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts", rename = "IFarmMemberUpdate"))]
+#[cfg_attr(
+    feature = "ts-rs",
+    ts(export, export_to = "types.ts", rename = "IFarmMemberUpdate")
+)]
 #[derive(Deserialize, Serialize)]
 pub struct IFarmMemberUpdateArgs {
     pub on: FarmMemberQueryBindValues,

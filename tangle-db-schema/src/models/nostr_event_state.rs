@@ -113,9 +113,7 @@ impl NostrEventStateQueryBindValues {
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Deserialize, Serialize)]
-pub enum NostrEventStateFindManyRel {
-
-}
+pub enum NostrEventStateFindManyRel {}
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
@@ -226,7 +224,10 @@ pub type INostrEventStateDelete = INostrEventStateFindOne;
 pub struct INostrEventStateDeleteResolveTs;
 pub type INostrEventStateDeleteResolve = IResult<String>;
 #[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts", rename = "INostrEventStateUpdate"))]
+#[cfg_attr(
+    feature = "ts-rs",
+    ts(export, export_to = "types.ts", rename = "INostrEventStateUpdate")
+)]
 #[derive(Deserialize, Serialize)]
 pub struct INostrEventStateUpdateArgs {
     pub on: NostrEventStateQueryBindValues,

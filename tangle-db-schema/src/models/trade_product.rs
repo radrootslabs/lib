@@ -166,9 +166,7 @@ impl TradeProductQueryBindValues {
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Deserialize, Serialize)]
-pub enum TradeProductFindManyRel {
-
-}
+pub enum TradeProductFindManyRel {}
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(

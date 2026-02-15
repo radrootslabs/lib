@@ -95,7 +95,9 @@ impl LogErrorQueryBindValues {
     pub fn to_filter_param(&self) -> (&'static str, Value) {
         match self {
             Self::Id { id } => ("id", Value::from(id.clone())),
-            Self::NostrPubkey { nostr_pubkey } => ("nostr_pubkey", Value::from(nostr_pubkey.clone())),
+            Self::NostrPubkey { nostr_pubkey } => {
+                ("nostr_pubkey", Value::from(nostr_pubkey.clone()))
+            }
         }
     }
 
@@ -116,9 +118,7 @@ impl LogErrorQueryBindValues {
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Deserialize, Serialize)]
-pub enum LogErrorFindManyRel {
-
-}
+pub enum LogErrorFindManyRel {}
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(

@@ -127,9 +127,7 @@ impl PlotQueryBindValues {
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Deserialize, Serialize)]
-pub enum PlotFindManyRel {
-
-}
+pub enum PlotFindManyRel {}
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
@@ -240,7 +238,10 @@ pub type IPlotDelete = IPlotFindOne;
 pub struct IPlotDeleteResolveTs;
 pub type IPlotDeleteResolve = IResult<String>;
 #[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts", rename = "IPlotUpdate"))]
+#[cfg_attr(
+    feature = "ts-rs",
+    ts(export, export_to = "types.ts", rename = "IPlotUpdate")
+)]
 #[derive(Deserialize, Serialize)]
 pub struct IPlotUpdateArgs {
     pub on: PlotQueryBindValues,

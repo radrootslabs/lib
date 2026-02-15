@@ -94,9 +94,7 @@ impl FarmGcsLocationQueryBindValues {
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Deserialize, Serialize)]
-pub enum FarmGcsLocationFindManyRel {
-
-}
+pub enum FarmGcsLocationFindManyRel {}
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
@@ -207,7 +205,10 @@ pub type IFarmGcsLocationDelete = IFarmGcsLocationFindOne;
 pub struct IFarmGcsLocationDeleteResolveTs;
 pub type IFarmGcsLocationDeleteResolve = IResult<String>;
 #[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts", rename = "IFarmGcsLocationUpdate"))]
+#[cfg_attr(
+    feature = "ts-rs",
+    ts(export, export_to = "types.ts", rename = "IFarmGcsLocationUpdate")
+)]
 #[derive(Deserialize, Serialize)]
 pub struct IFarmGcsLocationUpdateArgs {
     pub on: FarmGcsLocationQueryBindValues,

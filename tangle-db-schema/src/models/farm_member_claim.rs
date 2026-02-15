@@ -65,9 +65,7 @@ impl FarmMemberClaimQueryBindValues {
             Self::MemberPubkey { member_pubkey } => {
                 ("member_pubkey", Value::from(member_pubkey.clone()))
             }
-            Self::FarmPubkey { farm_pubkey } => {
-                ("farm_pubkey", Value::from(farm_pubkey.clone()))
-            }
+            Self::FarmPubkey { farm_pubkey } => ("farm_pubkey", Value::from(farm_pubkey.clone())),
         }
     }
 
@@ -90,9 +88,7 @@ impl FarmMemberClaimQueryBindValues {
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Deserialize, Serialize)]
-pub enum FarmMemberClaimFindManyRel {
-
-}
+pub enum FarmMemberClaimFindManyRel {}
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
@@ -203,7 +199,10 @@ pub type IFarmMemberClaimDelete = IFarmMemberClaimFindOne;
 pub struct IFarmMemberClaimDeleteResolveTs;
 pub type IFarmMemberClaimDeleteResolve = IResult<String>;
 #[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts", rename = "IFarmMemberClaimUpdate"))]
+#[cfg_attr(
+    feature = "ts-rs",
+    ts(export, export_to = "types.ts", rename = "IFarmMemberClaimUpdate")
+)]
 #[derive(Deserialize, Serialize)]
 pub struct IFarmMemberClaimUpdateArgs {
     pub on: FarmMemberClaimQueryBindValues,

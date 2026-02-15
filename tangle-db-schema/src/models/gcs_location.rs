@@ -358,7 +358,10 @@ pub type IGcsLocationDelete = IGcsLocationFindOne;
 pub struct IGcsLocationDeleteResolveTs;
 pub type IGcsLocationDeleteResolve = IResult<String>;
 #[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts", rename = "IGcsLocationUpdate"))]
+#[cfg_attr(
+    feature = "ts-rs",
+    ts(export, export_to = "types.ts", rename = "IGcsLocationUpdate")
+)]
 #[derive(Deserialize, Serialize)]
 pub struct IGcsLocationUpdateArgs {
     pub on: GcsLocationQueryBindValues,
