@@ -4,9 +4,7 @@ use crate::config::{KeyFormat, KeyPersistenceConfig};
 use crate::error::{NetError, Result};
 #[cfg(feature = "nostr-client")]
 use radroots_nostr::prelude::{
-    RadrootsNostrKeys,
-    RadrootsNostrSecretKey,
-    RadrootsNostrSecp256k1SecretKey,
+    RadrootsNostrKeys, RadrootsNostrSecp256k1SecretKey, RadrootsNostrSecretKey,
     RadrootsNostrToBech32,
 };
 #[cfg(feature = "nostr-client")]
@@ -67,8 +65,8 @@ impl KeysManager {
     }
 
     pub fn load_from_secret_bytes(&mut self, sk: &[u8; 32]) -> Result<()> {
-        let secp =
-            RadrootsNostrSecp256k1SecretKey::from_slice(&sk[..]).map_err(|_| NetError::InvalidHex32)?;
+        let secp = RadrootsNostrSecp256k1SecretKey::from_slice(&sk[..])
+            .map_err(|_| NetError::InvalidHex32)?;
         let nostr_sk = RadrootsNostrSecretKey::from(secp);
         let keys = RadrootsNostrKeys::new(nostr_sk);
         self.set_keys(keys);
@@ -88,8 +86,8 @@ impl KeysManager {
     pub fn load_from_nsec(&mut self, nsec: &str) -> Result<()> {
         use secrecy::{ExposeSecret, SecretString};
         let secret = SecretString::new(nsec.to_owned().into());
-        let keys =
-            RadrootsNostrKeys::parse(secret.expose_secret()).map_err(|_| NetError::InvalidBech32)?;
+        let keys = RadrootsNostrKeys::parse(secret.expose_secret())
+            .map_err(|_| NetError::InvalidBech32)?;
         self.set_keys(keys);
         Ok(())
     }

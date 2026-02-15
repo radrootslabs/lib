@@ -1,10 +1,8 @@
 use crate::error::{NetError, Result};
 use radroots_events::profile::RadrootsProfileEventMetadata;
 use radroots_nostr::prelude::{
-    radroots_nostr_fetch_metadata_for_author,
+    RadrootsNostrMetadata, RadrootsNostrPublicKey, radroots_nostr_fetch_metadata_for_author,
     radroots_nostr_post_metadata_event,
-    RadrootsNostrMetadata,
-    RadrootsNostrPublicKey,
 };
 
 use crate::nostr_client::manager::NostrClientManager;

@@ -2,10 +2,7 @@
 
 use crate::error::{NetError, Result};
 use radroots_nostr::prelude::{
-    radroots_nostr_build_event,
-    radroots_nostr_send_event,
-    RadrootsNostrEvent,
-    RadrootsNostrFilter,
+    RadrootsNostrEvent, RadrootsNostrFilter, radroots_nostr_build_event, radroots_nostr_send_event,
 };
 
 use crate::nostr_client::manager::NostrClientManager;

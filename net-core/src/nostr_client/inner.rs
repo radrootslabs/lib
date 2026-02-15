@@ -3,10 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use radroots_events::post::RadrootsPostEventMetadata;
 use radroots_nostr::prelude::{
-    RadrootsNostrClient,
-    RadrootsNostrKeys,
-    RadrootsNostrMonitor,
-    RadrootsNostrRelayStatus,
+    RadrootsNostrClient, RadrootsNostrKeys, RadrootsNostrMonitor, RadrootsNostrRelayStatus,
     RadrootsNostrRelayUrl,
 };
 use tokio::runtime::Handle;

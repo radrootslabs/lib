@@ -1,10 +1,8 @@
 use crate::error::{NetError, Result};
 use radroots_events::post::RadrootsPostEventMetadata;
 use radroots_nostr::prelude::{
-    radroots_nostr_build_post_event,
-    radroots_nostr_build_post_reply_event,
-    radroots_nostr_fetch_post_events,
-    radroots_nostr_send_event,
+    radroots_nostr_build_post_event, radroots_nostr_build_post_reply_event,
+    radroots_nostr_fetch_post_events, radroots_nostr_send_event,
 };
 
 use crate::nostr_client::manager::NostrClientManager;
