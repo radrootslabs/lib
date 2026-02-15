@@ -3,7 +3,9 @@
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
 
-use radroots_core::{RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity, RadrootsCoreUnit};
+use radroots_core::{
+    RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity, RadrootsCoreUnit,
+};
 use radroots_events::{
     RadrootsNostrEvent,
     kinds::KIND_LISTING,
@@ -272,8 +274,8 @@ mod tests {
         RadrootsNostrEvent,
         kinds::KIND_LISTING,
         listing::{
-            RadrootsListing, RadrootsListingAvailability, RadrootsListingDeliveryMethod,
-            RadrootsListingBin, RadrootsListingFarmRef, RadrootsListingLocation,
+            RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
+            RadrootsListingDeliveryMethod, RadrootsListingFarmRef, RadrootsListingLocation,
             RadrootsListingProduct,
         },
     };

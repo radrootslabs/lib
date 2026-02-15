@@ -106,10 +106,7 @@ mod tests {
             ),
             price_per_canonical_unit: RadrootsCoreQuantityPrice::new(
                 RadrootsCoreMoney::new(RadrootsCoreDecimal::from(10u32), RadrootsCoreCurrency::USD),
-                RadrootsCoreQuantity::new(
-                    RadrootsCoreDecimal::from(1u32),
-                    RadrootsCoreUnit::Each,
-                ),
+                RadrootsCoreQuantity::new(RadrootsCoreDecimal::from(1u32), RadrootsCoreUnit::Each),
             ),
             display_amount: None,
             display_unit: None,

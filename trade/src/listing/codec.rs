@@ -7,19 +7,19 @@ use radroots_core::{
     RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreDiscount, RadrootsCoreMoney,
     RadrootsCoreQuantity, RadrootsCoreQuantityPrice, RadrootsCoreUnit,
 };
+use radroots_events::kinds::{KIND_FARM, KIND_PLOT, KIND_RESOURCE_AREA};
 use radroots_events::listing::{
     RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
     RadrootsListingDeliveryMethod, RadrootsListingFarmRef, RadrootsListingImage,
     RadrootsListingImageSize, RadrootsListingLocation, RadrootsListingProduct,
     RadrootsListingStatus,
 };
-use radroots_events::kinds::{KIND_FARM, KIND_PLOT, KIND_RESOURCE_AREA};
 use radroots_events::plot::RadrootsPlotRef;
 use radroots_events::resource_area::RadrootsResourceAreaRef;
 use radroots_events::tags::TAG_D;
 use radroots_events_codec::d_tag::is_d_tag_base64url;
 use radroots_events_codec::error::EventEncodeError;
-use radroots_events_codec::listing::tags::{listing_tags_with_options, ListingTagOptions};
+use radroots_events_codec::listing::tags::{ListingTagOptions, listing_tags_with_options};
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
 
@@ -153,7 +153,9 @@ pub fn listing_from_event_parts(
                     match listing.plot.as_ref() {
                         None => listing.plot = Some(tag_plot),
                         Some(existing) => {
-                            if existing.pubkey != tag_plot.pubkey || existing.d_tag != tag_plot.d_tag {
+                            if existing.pubkey != tag_plot.pubkey
+                                || existing.d_tag != tag_plot.d_tag
+                            {
                                 return Err(TradeListingParseError::InvalidTag(
                                     TAG_RADROOTS_PLOT.to_string(),
                                 ));
@@ -169,7 +171,9 @@ pub fn listing_from_event_parts(
     listing_from_tags(tags, d_tag, farm_ref, farm_pubkey, resource_area, plot)
 }
 
-pub fn listing_tags_build(listing: &RadrootsListing) -> Result<Vec<Vec<String>>, TradeListingParseError> {
+pub fn listing_tags_build(
+    listing: &RadrootsListing,
+) -> Result<Vec<Vec<String>>, TradeListingParseError> {
     let options = ListingTagOptions::with_trade_fields();
     listing_tags_with_options(listing, options).map_err(map_listing_tags_error)
 }
@@ -223,9 +227,9 @@ fn listing_from_tags(
     let mut images: Vec<RadrootsListingImage> = Vec::new();
     let mut geohash: Option<String> = None;
 
-    let has_structured_location = tags.iter().any(|tag| {
-        tag.get(0).map(|k| k.as_str()) == Some(TAG_LOCATION) && tag.len() >= 3
-    });
+    let has_structured_location = tags
+        .iter()
+        .any(|tag| tag.get(0).map(|k| k.as_str()) == Some(TAG_LOCATION) && tag.len() >= 3);
 
     for tag in tags {
         if tag.is_empty() {
@@ -243,8 +247,9 @@ fn listing_from_tags(
                 if tag.len() >= 3
                     || (!has_structured_location && location.is_none() && tag.len() >= 2)
                 {
-                    let primary =
-                        tag.get(1).ok_or_else(|| TradeListingParseError::InvalidTag(TAG_LOCATION.to_string()))?;
+                    let primary = tag.get(1).ok_or_else(|| {
+                        TradeListingParseError::InvalidTag(TAG_LOCATION.to_string())
+                    })?;
                     if primary.trim().is_empty() {
                         return Err(TradeListingParseError::InvalidTag(TAG_LOCATION.to_string()));
                     }
@@ -277,10 +282,9 @@ fn listing_from_tags(
                 let _ = tag;
             }
             TAG_RADROOTS_PRIMARY_BIN => {
-                let value = tag
-                    .get(1)
-                    .and_then(|v| clean_value(v))
-                    .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_RADROOTS_PRIMARY_BIN.to_string()))?;
+                let value = tag.get(1).and_then(|v| clean_value(v)).ok_or_else(|| {
+                    TradeListingParseError::InvalidTag(TAG_RADROOTS_PRIMARY_BIN.to_string())
+                })?;
                 if let Some(existing) = primary_bin_id.as_ref() {
                     if existing != &value {
                         return Err(TradeListingParseError::InvalidTag(
@@ -293,29 +297,36 @@ fn listing_from_tags(
             }
             TAG_RADROOTS_BIN => {
                 if tag.len() < 4 {
-                    return Err(TradeListingParseError::InvalidTag(TAG_RADROOTS_BIN.to_string()));
+                    return Err(TradeListingParseError::InvalidTag(
+                        TAG_RADROOTS_BIN.to_string(),
+                    ));
                 }
                 if tag.len() > 7 {
-                    return Err(TradeListingParseError::InvalidTag(TAG_RADROOTS_BIN.to_string()));
+                    return Err(TradeListingParseError::InvalidTag(
+                        TAG_RADROOTS_BIN.to_string(),
+                    ));
                 }
-                let bin_id = tag
-                    .get(1)
-                    .and_then(|v| clean_value(v))
-                    .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_RADROOTS_BIN.to_string()))?;
-                let amount = tag
-                    .get(2)
-                    .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_RADROOTS_BIN.to_string()))?;
-                let unit = tag
-                    .get(3)
-                    .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_RADROOTS_BIN.to_string()))?;
+                let bin_id = tag.get(1).and_then(|v| clean_value(v)).ok_or_else(|| {
+                    TradeListingParseError::InvalidTag(TAG_RADROOTS_BIN.to_string())
+                })?;
+                let amount = tag.get(2).ok_or_else(|| {
+                    TradeListingParseError::InvalidTag(TAG_RADROOTS_BIN.to_string())
+                })?;
+                let unit = tag.get(3).ok_or_else(|| {
+                    TradeListingParseError::InvalidTag(TAG_RADROOTS_BIN.to_string())
+                })?;
                 let amount = parse_decimal(amount, TAG_RADROOTS_BIN)?;
                 let unit = parse_unit(unit)?;
                 if unit != unit.canonical_unit() {
-                    return Err(TradeListingParseError::InvalidTag(TAG_RADROOTS_BIN.to_string()));
+                    return Err(TradeListingParseError::InvalidTag(
+                        TAG_RADROOTS_BIN.to_string(),
+                    ));
                 }
                 let bin = upsert_bin(&mut bin_drafts, &bin_id, &mut bin_order);
                 if bin.quantity.is_some() {
-                    return Err(TradeListingParseError::InvalidTag(TAG_RADROOTS_BIN.to_string()));
+                    return Err(TradeListingParseError::InvalidTag(
+                        TAG_RADROOTS_BIN.to_string(),
+                    ));
                 }
                 bin.quantity = Some(RadrootsCoreQuantity::new(amount, unit));
 
@@ -337,27 +348,30 @@ fn listing_from_tags(
             }
             TAG_RADROOTS_PRICE => {
                 if tag.len() < 6 {
-                    return Err(TradeListingParseError::InvalidTag(TAG_RADROOTS_PRICE.to_string()));
+                    return Err(TradeListingParseError::InvalidTag(
+                        TAG_RADROOTS_PRICE.to_string(),
+                    ));
                 }
                 if tag.len() > 8 {
-                    return Err(TradeListingParseError::InvalidTag(TAG_RADROOTS_PRICE.to_string()));
+                    return Err(TradeListingParseError::InvalidTag(
+                        TAG_RADROOTS_PRICE.to_string(),
+                    ));
                 }
-                let bin_id = tag
-                    .get(1)
-                    .and_then(|v| clean_value(v))
-                    .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_RADROOTS_PRICE.to_string()))?;
-                let amount = tag
-                    .get(2)
-                    .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_RADROOTS_PRICE.to_string()))?;
-                let currency = tag
-                    .get(3)
-                    .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_RADROOTS_PRICE.to_string()))?;
-                let per_amount = tag
-                    .get(4)
-                    .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_RADROOTS_PRICE.to_string()))?;
-                let per_unit = tag
-                    .get(5)
-                    .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_RADROOTS_PRICE.to_string()))?;
+                let bin_id = tag.get(1).and_then(|v| clean_value(v)).ok_or_else(|| {
+                    TradeListingParseError::InvalidTag(TAG_RADROOTS_PRICE.to_string())
+                })?;
+                let amount = tag.get(2).ok_or_else(|| {
+                    TradeListingParseError::InvalidTag(TAG_RADROOTS_PRICE.to_string())
+                })?;
+                let currency = tag.get(3).ok_or_else(|| {
+                    TradeListingParseError::InvalidTag(TAG_RADROOTS_PRICE.to_string())
+                })?;
+                let per_amount = tag.get(4).ok_or_else(|| {
+                    TradeListingParseError::InvalidTag(TAG_RADROOTS_PRICE.to_string())
+                })?;
+                let per_unit = tag.get(5).ok_or_else(|| {
+                    TradeListingParseError::InvalidTag(TAG_RADROOTS_PRICE.to_string())
+                })?;
                 let amount = parse_decimal(amount, TAG_RADROOTS_PRICE)?;
                 let currency = parse_currency(currency)?;
                 let per_amount = parse_decimal(per_amount, TAG_RADROOTS_PRICE)?;
@@ -367,16 +381,22 @@ fn listing_from_tags(
                     RadrootsCoreQuantity::new(per_amount, per_unit),
                 );
                 if !price_per_canonical_unit.is_price_per_canonical_unit() {
-                    return Err(TradeListingParseError::InvalidTag(TAG_RADROOTS_PRICE.to_string()));
+                    return Err(TradeListingParseError::InvalidTag(
+                        TAG_RADROOTS_PRICE.to_string(),
+                    ));
                 }
                 let bin = upsert_bin(&mut bin_drafts, &bin_id, &mut bin_order);
                 if bin.price_per_canonical_unit.is_some() {
-                    return Err(TradeListingParseError::InvalidTag(TAG_RADROOTS_PRICE.to_string()));
+                    return Err(TradeListingParseError::InvalidTag(
+                        TAG_RADROOTS_PRICE.to_string(),
+                    ));
                 }
                 bin.price_per_canonical_unit = Some(price_per_canonical_unit);
 
                 if tag.len() == 7 {
-                    return Err(TradeListingParseError::InvalidTag(TAG_RADROOTS_PRICE.to_string()));
+                    return Err(TradeListingParseError::InvalidTag(
+                        TAG_RADROOTS_PRICE.to_string(),
+                    ));
                 }
                 if tag.len() == 8 {
                     let display_price = tag.get(6).ok_or_else(|| {
@@ -392,9 +412,9 @@ fn listing_from_tags(
                 }
             }
             TAG_RADROOTS_DISCOUNT => {
-                let payload = tag
-                    .get(1)
-                    .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_RADROOTS_DISCOUNT.to_string()))?;
+                let payload = tag.get(1).ok_or_else(|| {
+                    TradeListingParseError::InvalidTag(TAG_RADROOTS_DISCOUNT.to_string())
+                })?;
                 let discount = parse_discount(payload)?;
                 discounts.push(discount);
             }
@@ -404,24 +424,26 @@ fn listing_from_tags(
                 }
             }
             TAG_INVENTORY => {
-                let value = tag.get(1).ok_or_else(|| TradeListingParseError::InvalidTag(TAG_INVENTORY.to_string()))?;
+                let value = tag
+                    .get(1)
+                    .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_INVENTORY.to_string()))?;
                 inventory_available = Some(parse_decimal(value, TAG_INVENTORY)?);
             }
             TAG_PUBLISHED_AT => {
-                let value = tag.get(1).ok_or_else(|| TradeListingParseError::InvalidTag(TAG_PUBLISHED_AT.to_string()))?;
-                availability_start = Some(
-                    value
-                        .parse::<u64>()
-                        .map_err(|_| TradeListingParseError::InvalidNumber(TAG_PUBLISHED_AT.to_string()))?,
-                );
+                let value = tag.get(1).ok_or_else(|| {
+                    TradeListingParseError::InvalidTag(TAG_PUBLISHED_AT.to_string())
+                })?;
+                availability_start = Some(value.parse::<u64>().map_err(|_| {
+                    TradeListingParseError::InvalidNumber(TAG_PUBLISHED_AT.to_string())
+                })?);
             }
             TAG_EXPIRES_AT => {
-                let value = tag.get(1).ok_or_else(|| TradeListingParseError::InvalidTag(TAG_EXPIRES_AT.to_string()))?;
-                availability_end = Some(
-                    value
-                        .parse::<u64>()
-                        .map_err(|_| TradeListingParseError::InvalidNumber(TAG_EXPIRES_AT.to_string()))?,
-                );
+                let value = tag.get(1).ok_or_else(|| {
+                    TradeListingParseError::InvalidTag(TAG_EXPIRES_AT.to_string())
+                })?;
+                availability_end = Some(value.parse::<u64>().map_err(|_| {
+                    TradeListingParseError::InvalidNumber(TAG_EXPIRES_AT.to_string())
+                })?);
             }
             TAG_STATUS => {
                 let status = tag.get(1).and_then(|v| clean_value(v)).unwrap_or_default();
@@ -443,7 +465,9 @@ fn listing_from_tags(
                 });
             }
             TAG_IMAGE => {
-                let url = tag.get(1).ok_or_else(|| TradeListingParseError::InvalidTag(TAG_IMAGE.to_string()))?;
+                let url = tag
+                    .get(1)
+                    .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_IMAGE.to_string()))?;
                 if url.trim().is_empty() {
                     continue;
                 }
@@ -494,17 +518,28 @@ fn listing_from_tags(
         bins,
         resource_area,
         plot,
-        discounts: if discounts.is_empty() { None } else { Some(discounts) },
+        discounts: if discounts.is_empty() {
+            None
+        } else {
+            Some(discounts)
+        },
         inventory_available,
         availability,
         delivery_method,
         location,
-        images: if images.is_empty() { None } else { Some(images) },
+        images: if images.is_empty() {
+            None
+        } else {
+            Some(images)
+        },
     })
 }
 
 fn parse_farm_ref(tags: &[Vec<String>]) -> Result<RadrootsListingFarmRef, TradeListingParseError> {
-    for tag in tags.iter().filter(|t| t.get(0).map(|s| s.as_str()) == Some(TAG_A)) {
+    for tag in tags
+        .iter()
+        .filter(|t| t.get(0).map(|s| s.as_str()) == Some(TAG_A))
+    {
         let value = tag
             .get(1)
             .map(|s| s.to_string())
@@ -560,15 +595,16 @@ fn parse_resource_area(
     let Some(tag) = tag else {
         return Ok(None);
     };
-    let value = tag
-        .get(1)
-        .map(|s| s.to_string())
-        .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_RADROOTS_RESOURCE_AREA.to_string()))?;
+    let value = tag.get(1).map(|s| s.to_string()).ok_or_else(|| {
+        TradeListingParseError::InvalidTag(TAG_RADROOTS_RESOURCE_AREA.to_string())
+    })?;
     let mut parts = value.splitn(3, ':');
     let kind = parts
         .next()
         .and_then(|v| v.parse::<u32>().ok())
-        .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_RADROOTS_RESOURCE_AREA.to_string()))?;
+        .ok_or_else(|| {
+            TradeListingParseError::InvalidTag(TAG_RADROOTS_RESOURCE_AREA.to_string())
+        })?;
     if kind != KIND_RESOURCE_AREA {
         return Err(TradeListingParseError::InvalidTag(
             TAG_RADROOTS_RESOURCE_AREA.to_string(),
@@ -612,7 +648,9 @@ fn parse_plot_ref(tags: &[Vec<String>]) -> Result<Option<RadrootsPlotRef>, Trade
         .and_then(|v| v.parse::<u32>().ok())
         .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_RADROOTS_PLOT.to_string()))?;
     if kind != KIND_PLOT {
-        return Err(TradeListingParseError::InvalidTag(TAG_RADROOTS_PLOT.to_string()));
+        return Err(TradeListingParseError::InvalidTag(
+            TAG_RADROOTS_PLOT.to_string(),
+        ));
     }
     let pubkey = parts
         .next()
@@ -623,10 +661,14 @@ fn parse_plot_ref(tags: &[Vec<String>]) -> Result<Option<RadrootsPlotRef>, Trade
         .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_RADROOTS_PLOT.to_string()))?
         .to_string();
     if pubkey.trim().is_empty() || d_tag.trim().is_empty() {
-        return Err(TradeListingParseError::InvalidTag(TAG_RADROOTS_PLOT.to_string()));
+        return Err(TradeListingParseError::InvalidTag(
+            TAG_RADROOTS_PLOT.to_string(),
+        ));
     }
     if !is_d_tag_base64url(&d_tag) {
-        return Err(TradeListingParseError::InvalidTag(TAG_RADROOTS_PLOT.to_string()));
+        return Err(TradeListingParseError::InvalidTag(
+            TAG_RADROOTS_PLOT.to_string(),
+        ));
     }
     Ok(Some(RadrootsPlotRef { pubkey, d_tag }))
 }
@@ -690,10 +732,7 @@ mod tests {
             RadrootsCoreUnit::MassG
         );
         assert_eq!(
-            listing.bins[0]
-                .display_unit
-                .expect("display unit")
-                .code(),
+            listing.bins[0].display_unit.expect("display unit").code(),
             "kg"
         );
     }
@@ -836,18 +875,22 @@ fn upsert_bin<'a>(
     &mut bins[idx]
 }
 
-fn build_bins(mut drafts: Vec<BinDraft>) -> Result<Vec<RadrootsListingBin>, TradeListingParseError> {
+fn build_bins(
+    mut drafts: Vec<BinDraft>,
+) -> Result<Vec<RadrootsListingBin>, TradeListingParseError> {
     drafts.sort_by_key(|draft| draft.order_index);
     let mut bins = Vec::with_capacity(drafts.len());
     for draft in drafts {
         let quantity = draft
             .quantity
             .ok_or_else(|| TradeListingParseError::MissingTag(TAG_RADROOTS_BIN.to_string()))?;
-        let price = draft.price_per_canonical_unit.ok_or_else(|| {
-            TradeListingParseError::MissingTag(TAG_RADROOTS_PRICE.to_string())
-        })?;
+        let price = draft
+            .price_per_canonical_unit
+            .ok_or_else(|| TradeListingParseError::MissingTag(TAG_RADROOTS_PRICE.to_string()))?;
         if quantity.unit != price.quantity.unit {
-            return Err(TradeListingParseError::InvalidTag(TAG_RADROOTS_PRICE.to_string()));
+            return Err(TradeListingParseError::InvalidTag(
+                TAG_RADROOTS_PRICE.to_string(),
+            ));
         }
         let bin = RadrootsListingBin {
             bin_id: draft.bin_id,

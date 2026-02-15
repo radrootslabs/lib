@@ -19,19 +19,15 @@ pub struct TradeOrderItem {
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "snake_case", tag = "kind", content = "amount"))]
+#[cfg_attr(
+    feature = "serde",
+    serde(rename_all = "snake_case", tag = "kind", content = "amount")
+)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TradeOrderChange {
-    BinCount {
-        item_index: u32,
-        bin_count: u32,
-    },
-    ItemAdd {
-        item: TradeOrderItem,
-    },
-    ItemRemove {
-        item_index: u32,
-    },
+    BinCount { item_index: u32, bin_count: u32 },
+    ItemAdd { item: TradeOrderItem },
+    ItemRemove { item_index: u32 },
 }
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
@@ -139,7 +135,10 @@ pub struct TradeDiscountOffer {
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "snake_case", tag = "kind", content = "amount"))]
+#[cfg_attr(
+    feature = "serde",
+    serde(rename_all = "snake_case", tag = "kind", content = "amount")
+)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TradeDiscountDecision {
     Accept {
@@ -155,7 +154,10 @@ pub enum TradeDiscountDecision {
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "snake_case", tag = "kind", content = "amount"))]
+#[cfg_attr(
+    feature = "serde",
+    serde(rename_all = "snake_case", tag = "kind", content = "amount")
+)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TradeFulfillmentStatus {
     Preparing,

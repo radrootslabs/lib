@@ -19,8 +19,8 @@ use crate::listing::dvm_kinds::{
     KIND_TRADE_LISTING_VALIDATE_RES,
 };
 use crate::listing::order::{
-    TradeAnswer, TradeDiscountDecision, TradeDiscountOffer, TradeDiscountRequest, TradeFulfillmentUpdate,
-    TradeOrder, TradeOrderRevision, TradeQuestion, TradeReceipt,
+    TradeAnswer, TradeDiscountDecision, TradeDiscountOffer, TradeDiscountRequest,
+    TradeFulfillmentUpdate, TradeOrder, TradeOrderRevision, TradeQuestion, TradeReceipt,
 };
 use crate::listing::validation::TradeListingValidationError;
 
@@ -180,7 +180,10 @@ impl core::fmt::Display for TradeListingEnvelopeError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             TradeListingEnvelopeError::InvalidVersion { expected, got } => {
-                write!(f, "invalid envelope version: expected {expected}, got {got}")
+                write!(
+                    f,
+                    "invalid envelope version: expected {expected}, got {got}"
+                )
             }
             TradeListingEnvelopeError::MissingOrderId => {
                 write!(f, "missing order_id for order-scoped message")
@@ -310,7 +313,10 @@ pub struct TradeListingCancel {
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "snake_case", tag = "kind", content = "amount"))]
+#[cfg_attr(
+    feature = "serde",
+    serde(rename_all = "snake_case", tag = "kind", content = "amount")
+)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TradeListingMessagePayload {
     ListingValidateRequest(TradeListingValidateRequest),
@@ -345,7 +351,9 @@ mod tests {
             TradeListingMessageType::ListingValidateRequest,
             "",
             None,
-            TradeListingValidateRequest { listing_event: None },
+            TradeListingValidateRequest {
+                listing_event: None,
+            },
         );
         assert_eq!(
             env.validate().unwrap_err(),
@@ -359,7 +367,9 @@ mod tests {
             TradeListingMessageType::OrderRequest,
             format!("{KIND_LISTING}:pubkey:AAAAAAAAAAAAAAAAAAAAAg"),
             None,
-            TradeListingValidateRequest { listing_event: None },
+            TradeListingValidateRequest {
+                listing_event: None,
+            },
         );
         assert_eq!(
             env.validate().unwrap_err(),
