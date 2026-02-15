@@ -19,9 +19,9 @@ pub mod epoch_seconds {
 #[cfg(all(test, feature = "serde"))]
 mod tests {
     use super::epoch_seconds;
-    use serde::de::value::{Error as DeError, U64Deserializer};
     #[cfg(not(feature = "std"))]
     use alloc::string::ToString;
+    use serde::de::value::{Error as DeError, U64Deserializer};
     #[cfg(feature = "std")]
     use std::string::ToString;
 

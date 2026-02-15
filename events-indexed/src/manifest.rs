@@ -86,8 +86,8 @@ pub fn validate_manifest(
 #[cfg(test)]
 mod tests {
     use super::{
-        validate_manifest, RadrootsEventsIndexedManifest, RadrootsEventsIndexedManifestError,
-        RadrootsEventsIndexedShardMetadata,
+        RadrootsEventsIndexedManifest, RadrootsEventsIndexedManifestError,
+        RadrootsEventsIndexedShardMetadata, validate_manifest,
     };
     #[cfg(not(feature = "std"))]
     use alloc::{string::String, vec, vec::Vec};

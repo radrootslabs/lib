@@ -22,10 +22,7 @@ impl RadrootsEventsIndexedIdRange {
         if self.start.len() != self.end.len() {
             return false;
         }
-        if !self
-            .start
-            .chars()
-            .all(|c| c.is_ascii_hexdigit())
+        if !self.start.chars().all(|c| c.is_ascii_hexdigit())
             || !self.end.chars().all(|c| c.is_ascii_hexdigit())
         {
             return false;
