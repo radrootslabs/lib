@@ -36,7 +36,10 @@ pub struct RadrootsListingEventMetadata {
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "snake_case", tag = "kind", content = "amount"))]
+#[cfg_attr(
+    feature = "serde",
+    serde(rename_all = "snake_case", tag = "kind", content = "amount")
+)]
 #[derive(Clone, Debug)]
 pub enum RadrootsListingAvailability {
     Window {
@@ -53,28 +56,30 @@ pub enum RadrootsListingAvailability {
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "snake_case", tag = "kind", content = "amount"))]
+#[cfg_attr(
+    feature = "serde",
+    serde(rename_all = "snake_case", tag = "kind", content = "amount")
+)]
 #[derive(Clone, Debug)]
 pub enum RadrootsListingStatus {
     Active,
     Sold,
-    Other {
-        value: String,
-    },
+    Other { value: String },
 }
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "snake_case", tag = "kind", content = "amount"))]
+#[cfg_attr(
+    feature = "serde",
+    serde(rename_all = "snake_case", tag = "kind", content = "amount")
+)]
 #[derive(Clone, Debug)]
 pub enum RadrootsListingDeliveryMethod {
     Pickup,
     LocalDelivery,
     Shipping,
-    Other {
-        method: String,
-    },
+    Other { method: String },
 }
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
@@ -93,20 +98,14 @@ pub struct RadrootsListing {
         ts(optional, type = "RadrootsResourceAreaRef | null")
     )]
     pub resource_area: Option<RadrootsResourceAreaRef>,
-    #[cfg_attr(
-        feature = "ts-rs",
-        ts(optional, type = "RadrootsPlotRef | null")
-    )]
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "RadrootsPlotRef | null"))]
     pub plot: Option<RadrootsPlotRef>,
     #[cfg_attr(
         feature = "ts-rs",
         ts(optional, type = "RadrootsCoreDiscount[] | null")
     )]
     pub discounts: Option<Vec<RadrootsCoreDiscount>>,
-    #[cfg_attr(
-        feature = "ts-rs",
-        ts(optional, type = "RadrootsCoreDecimal | null")
-    )]
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "RadrootsCoreDecimal | null"))]
     pub inventory_available: Option<RadrootsCoreDecimal>,
     #[cfg_attr(
         feature = "ts-rs",
@@ -171,15 +170,7 @@ pub struct RadrootsListingProduct {
 }
 
 pub const RADROOTS_LISTING_PRODUCT_TAG_KEYS: [&str; 9] = [
-    "key",
-    "title",
-    "category",
-    "summary",
-    "process",
-    "lot",
-    "location",
-    "profile",
-    "year",
+    "key", "title", "category", "summary", "process", "lot", "location", "profile", "year",
 ];
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]

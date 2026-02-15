@@ -1,4 +1,7 @@
-use crate::{RadrootsNostrEvent, farm::{RadrootsFarmRef, RadrootsGcsLocation}};
+use crate::{
+    RadrootsNostrEvent,
+    farm::{RadrootsFarmRef, RadrootsGcsLocation},
+};
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
 

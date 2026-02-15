@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
-use crate::{RadrootsNostrEvent, RadrootsNostrEventPtr};
 use crate::message::RadrootsMessageRecipient;
+use crate::{RadrootsNostrEvent, RadrootsNostrEventPtr};
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
 
@@ -49,7 +49,10 @@ pub struct RadrootsMessageFile {
     pub original_hash: Option<String>,
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "number | null"))]
     pub size: Option<u64>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "RadrootsMessageFileDimensions | null"))]
+    #[cfg_attr(
+        feature = "ts-rs",
+        ts(optional, type = "RadrootsMessageFileDimensions | null")
+    )]
     pub dimensions: Option<RadrootsMessageFileDimensions>,
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub blurhash: Option<String>,

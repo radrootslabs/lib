@@ -1,4 +1,4 @@
-use crate::{kinds::KIND_ACCOUNT_CLAIM as KIND_ACCOUNT_CLAIM_EVENT, RadrootsNostrEvent};
+use crate::{RadrootsNostrEvent, kinds::KIND_ACCOUNT_CLAIM as KIND_ACCOUNT_CLAIM_EVENT};
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
 
