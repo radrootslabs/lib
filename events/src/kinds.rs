@@ -128,7 +128,7 @@ pub const fn request_kind_for_result_kind(kind: u32) -> Option<u32> {
 #[cfg(all(test, feature = "ts-rs", feature = "std"))]
 mod kinds_constants_tests {
     use super::*;
-    use std::{env, fs, path::Path};
+    use std::{fs, path::Path};
 
     const KIND_EXPORTS: &[(&str, u32)] = &[
         ("KIND_PROFILE", KIND_PROFILE),
@@ -197,8 +197,7 @@ mod kinds_constants_tests {
 
     #[test]
     fn export_kind_constants() {
-        let out_dir = env::var("TS_RS_EXPORT_DIR").unwrap_or_else(|_| "./bindings".to_string());
-        let path = Path::new(&out_dir).join("kinds.ts");
+        let path = Path::new("./bindings").join("kinds.ts");
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).expect("create ts export dir");
         }

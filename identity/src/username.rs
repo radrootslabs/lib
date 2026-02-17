@@ -90,12 +90,11 @@ mod tests {
 #[cfg(all(test, feature = "ts-rs", feature = "std"))]
 mod constants_tests {
     use super::*;
-    use std::{env, fs, path::Path};
+    use std::{fs, path::Path};
 
     #[test]
     fn export_username_constants() {
-        let out_dir = env::var("TS_RS_EXPORT_DIR").unwrap_or_else(|_| "./bindings".to_string());
-        let path = Path::new(&out_dir).join("constants.ts");
+        let path = Path::new("./bindings").join("constants.ts");
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).expect("create ts export dir");
         }

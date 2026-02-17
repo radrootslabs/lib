@@ -251,7 +251,7 @@ pub struct RadrootsListingImageSize {
 #[cfg(all(test, feature = "ts-rs", feature = "std"))]
 mod constants_tests {
     use super::RADROOTS_LISTING_PRODUCT_TAG_KEYS;
-    use std::{env, fs, path::Path};
+    use std::{fs, path::Path};
 
     fn listing_product_tag_keys_literal() -> String {
         let mut out = String::from("[");
@@ -269,8 +269,7 @@ mod constants_tests {
 
     #[test]
     fn export_listing_product_tag_keys_const() {
-        let out_dir = env::var("TS_RS_EXPORT_DIR").unwrap_or_else(|_| "./bindings".to_string());
-        let path = Path::new(&out_dir).join("constants.ts");
+        let path = Path::new("./bindings").join("constants.ts");
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).expect("create ts export dir");
         }

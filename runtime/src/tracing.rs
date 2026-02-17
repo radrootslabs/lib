@@ -47,7 +47,10 @@ fn log_name_from_exe() -> Option<String> {
 }
 
 fn env_value(key: &str) -> Option<String> {
-    let value = std::env::var(key).ok()?;
+    let value = match std::env::var(key) {
+        Ok(value) => value,
+        Err(_) => return None,
+    };
     let trimmed = value.trim();
     if trimmed.is_empty() {
         None
