@@ -12,22 +12,9 @@ pub fn init_with(
     default_level: Option<&str>,
 ) -> Result<(), RuntimeTracingError> {
     let logs_dir = logs_dir.as_ref();
-    let env_dir = std::env::var("RADROOTS_LOG_DIR").ok().and_then(|value| {
-        let trimmed = value.trim();
-        if trimmed.is_empty() {
-            None
-        } else {
-            Some(PathBuf::from(trimmed))
-        }
-    });
-    let env_file = std::env::var("RADROOTS_LOG_FILE").ok().and_then(|value| {
-        let trimmed = value.trim();
-        if trimmed.is_empty() {
-            None
-        } else {
-            Some(trimmed.to_string())
-        }
-    });
+    let env_dir = env_path("LOG_DIR").or_else(|| env_path("RADROOTS_LOG_DIR"));
+    let env_file = env_value("LOG_FILE").or_else(|| env_value("RADROOTS_LOG_FILE"));
+    let env_level = env_value("LOG_LEVEL").or_else(|| env_value("RUST_LOG"));
     let dir = env_dir.or_else(|| {
         if logs_dir.as_os_str().is_empty() {
             None
@@ -39,7 +26,7 @@ pub fn init_with(
         dir,
         file_name: env_file.unwrap_or_else(default_log_file_name),
         stdout: true,
-        default_level: default_level.map(str::to_string),
+        default_level: env_level.or_else(|| default_level.map(str::to_string)),
     };
     radroots_log::init_logging(opts)?;
     Ok(())
@@ -57,4 +44,18 @@ fn log_name_from_exe() -> Option<String> {
     } else {
         Some(format!("{name}.log"))
     }
+}
+
+fn env_value(key: &str) -> Option<String> {
+    let value = std::env::var(key).ok()?;
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn env_path(key: &str) -> Option<PathBuf> {
+    env_value(key).map(PathBuf::from)
 }
