@@ -5,9 +5,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-env-changed=SOURCE_DATE_EPOCH");
+    println!("cargo:rerun-if-env-changed=CARGO_MANIFEST_DIR");
+    println!("cargo:rerun-if-env-changed=RUSTC");
+    println!("cargo:rerun-if-env-changed=PROFILE");
 
-    let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".into());
+    let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("missing required env var CARGO_MANIFEST_DIR");
 
     let mut dir = PathBuf::from(&manifest_dir);
     let git_dir = loop {
@@ -28,18 +30,13 @@ fn main() {
         println!("cargo:rerun-if-changed={}", git_dir.join("index").display());
     }
 
-    let build_time_unix = env::var("SOURCE_DATE_EPOCH")
-        .ok()
-        .and_then(|v| v.parse::<u64>().ok())
-        .unwrap_or_else(|| {
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map(|d| d.as_secs())
-                .unwrap_or(0)
-        });
+    let build_time_unix = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .expect("system time before unix epoch");
     println!("cargo:rustc-env=BUILD_TIME_UNIX={}", build_time_unix);
 
-    let rustc_bin = env::var("RUSTC").unwrap_or_else(|_| "rustc".into());
+    let rustc_bin = env::var("RUSTC").expect("missing required env var RUSTC");
     if let Ok(out) = Command::new(rustc_bin).arg("--version").output() {
         if out.status.success() {
             if let Ok(ver) = String::from_utf8(out.stdout) {
@@ -75,7 +72,6 @@ fn main() {
         println!("cargo:rustc-env=GIT_HASH={}", h);
     }
 
-    if let Ok(profile) = env::var("PROFILE") {
-        println!("cargo:rustc-env=PROFILE={}", profile);
-    }
+    let profile = env::var("PROFILE").expect("missing required env var PROFILE");
+    println!("cargo:rustc-env=PROFILE={}", profile);
 }
