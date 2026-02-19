@@ -10,12 +10,16 @@ extern crate alloc;
 pub mod config;
 pub mod error;
 #[cfg(feature = "ndb")]
+pub mod ingest;
+#[cfg(feature = "ndb")]
 pub mod ndb;
 
 pub mod prelude {
     #[cfg(feature = "ndb")]
     pub use crate::config::RadrootsNostrNdbConfig;
     pub use crate::error::RadrootsNostrNdbError;
+    #[cfg(feature = "ndb")]
+    pub use crate::ingest::RadrootsNostrNdbIngestSource;
     #[cfg(feature = "ndb")]
     pub use crate::ndb::RadrootsNostrNdb;
 }

@@ -1,5 +1,7 @@
 use crate::config::RadrootsNostrNdbConfig;
 use crate::error::RadrootsNostrNdbError;
+use crate::ingest::RadrootsNostrNdbIngestSource;
+use radroots_nostr::prelude::RadrootsNostrEvent;
 use std::path::Path;
 
 #[derive(Debug, Clone)]
@@ -29,14 +31,36 @@ impl RadrootsNostrNdb {
         &self.db_dir
     }
 
-    pub(crate) fn inner(&self) -> &nostrdb::Ndb {
-        &self.inner
+    pub fn ingest_event_json_with_source(
+        &self,
+        json: &str,
+        source: RadrootsNostrNdbIngestSource,
+    ) -> Result<(), RadrootsNostrNdbError> {
+        let metadata = source.to_ndb_metadata();
+        self.inner.process_event_with(json, metadata)?;
+        Ok(())
+    }
+
+    pub fn ingest_event_json(&self, json: &str) -> Result<(), RadrootsNostrNdbError> {
+        self.ingest_event_json_with_source(json, RadrootsNostrNdbIngestSource::default())
+    }
+
+    pub fn ingest_event(
+        &self,
+        event: &RadrootsNostrEvent,
+        source: RadrootsNostrNdbIngestSource,
+    ) -> Result<(), RadrootsNostrNdbError> {
+        let json = serde_json::to_string(event)
+            .map_err(|source| RadrootsNostrNdbError::EventJsonEncode(source.to_string()))?;
+        self.ingest_event_json_with_source(json.as_str(), source)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ingest::RadrootsNostrNdbIngestSource;
+    use radroots_nostr::prelude::{RadrootsNostrEventBuilder, RadrootsNostrKeys};
     use tempfile::TempDir;
 
     #[test]
@@ -62,5 +86,39 @@ mod tests {
         let ndb = RadrootsNostrNdb::open(config).expect("database should open");
         assert_eq!(ndb.db_dir(), db_dir.as_path());
         assert!(db_dir.exists());
+    }
+
+    #[test]
+    fn ingest_source_builders_track_origin() {
+        assert_eq!(
+            RadrootsNostrNdbIngestSource::default(),
+            RadrootsNostrNdbIngestSource::client()
+        );
+        assert_eq!(
+            RadrootsNostrNdbIngestSource::relay("wss://relay.radroots.org"),
+            RadrootsNostrNdbIngestSource::Relay {
+                relay_url: Some("wss://relay.radroots.org".into())
+            }
+        );
+        assert_eq!(
+            RadrootsNostrNdbIngestSource::relay_unknown(),
+            RadrootsNostrNdbIngestSource::Relay { relay_url: None }
+        );
+    }
+
+    #[test]
+    fn ingest_event_accepts_signed_note() {
+        let tmp_dir = TempDir::new().expect("tempdir should open");
+        let db_dir = tmp_dir.path().join("ndb");
+        let config = RadrootsNostrNdbConfig::new(&db_dir);
+        let ndb = RadrootsNostrNdb::open(config).expect("database should open");
+
+        let keys = RadrootsNostrKeys::generate();
+        let event = RadrootsNostrEventBuilder::text_note("hello from ndb")
+            .sign_with_keys(&keys)
+            .expect("event should sign");
+
+        ndb.ingest_event(&event, RadrootsNostrNdbIngestSource::client())
+            .expect("ingest should succeed");
     }
 }
