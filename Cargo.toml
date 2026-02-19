@@ -13,6 +13,7 @@ members = [
     "net",
     "net-core",
     "nostr",
+    "nostr-ndb",
     "nostr-runtime",
     "runtime",
     "sql-wasm-bridge",
@@ -44,6 +45,7 @@ radroots-events-codec = { path = "events-codec", version = "0.1.0", default-feat
 radroots-events-indexed = { path = "events-indexed", version = "0.1.0", default-features = false }
 radroots-identity = { path = "identity", version = "0.1.0", default-features = false }
 radroots-nostr = { path = "nostr", version = "0.1.0", default-features = false }
+radroots-nostr-ndb = { path = "nostr-ndb", version = "0.1.0", default-features = false }
 radroots-runtime = { path = "runtime", version = "0.1.0", default-features = false }
 radroots-log = { path = "log", version = "0.1.0", default-features = false }
 radroots-net = { path = "net", version = "0.1.0", default-features = false }
