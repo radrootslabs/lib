@@ -408,6 +408,97 @@ mod tests {
         assert_eq!(profile.lud16.as_deref(), Some("alice@example.com"));
     }
 
+    #[test]
+    fn subscribe_rejects_invalid_author_hex() {
+        let tmp_dir = TempDir::new().expect("tempdir should open");
+        let db_dir = tmp_dir.path().join("ndb");
+        let config = RadrootsNostrNdbConfig::new(&db_dir);
+        let ndb = RadrootsNostrNdb::open(config).expect("database should open");
+
+        let spec = RadrootsNostrNdbSubscriptionSpec::single(
+            RadrootsNostrNdbFilterSpec::new().with_author_hex("not-hex"),
+        );
+        let err = ndb.subscribe(&spec).expect_err("subscribe should fail");
+        assert!(matches!(
+            err,
+            RadrootsNostrNdbError::InvalidHex {
+                field: "author",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn profile_lookup_rejects_invalid_pubkey_length() {
+        let tmp_dir = TempDir::new().expect("tempdir should open");
+        let db_dir = tmp_dir.path().join("ndb");
+        let config = RadrootsNostrNdbConfig::new(&db_dir);
+        let ndb = RadrootsNostrNdb::open(config).expect("database should open");
+
+        let err = ndb
+            .get_profile_by_pubkey_hex("abcd")
+            .expect_err("lookup should fail");
+        assert!(matches!(
+            err,
+            RadrootsNostrNdbError::InvalidHexLength {
+                field: "pubkey",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn concurrent_ingest_handles_parallel_writers() {
+        let tmp_dir = TempDir::new().expect("tempdir should open");
+        let db_dir = tmp_dir.path().join("ndb");
+        let config = RadrootsNostrNdbConfig::new(&db_dir);
+        let ndb = RadrootsNostrNdb::open(config).expect("database should open");
+
+        let worker_count = 4usize;
+        let notes_per_worker = 20usize;
+        let mut handles = Vec::new();
+
+        for worker in 0..worker_count {
+            let db = ndb.clone();
+            handles.push(std::thread::spawn(move || {
+                let keys = RadrootsNostrKeys::generate();
+                for idx in 0..notes_per_worker {
+                    let content = format!("parallel-{worker}-{idx}");
+                    let event = RadrootsNostrEventBuilder::text_note(content.as_str())
+                        .sign_with_keys(&keys)
+                        .expect("event should sign");
+                    db.ingest_event(&event, RadrootsNostrNdbIngestSource::client())
+                        .expect("ingest should succeed");
+                }
+            }));
+        }
+
+        for handle in handles {
+            handle.join().expect("worker should complete");
+        }
+
+        let query_spec = RadrootsNostrNdbQuerySpec::text_notes(Some(512), None, 512);
+        let expected = worker_count * notes_per_worker;
+        let mut observed = 0usize;
+
+        for _ in 0..80 {
+            let notes = ndb.query_notes(&query_spec).expect("query should succeed");
+            observed = notes
+                .iter()
+                .filter(|note| note.content.starts_with("parallel-"))
+                .count();
+            if observed >= expected {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(25));
+        }
+
+        assert!(
+            observed >= expected,
+            "expected at least {expected} parallel notes, got {observed}"
+        );
+    }
+
     #[cfg(feature = "giftwrap")]
     #[test]
     fn giftwrap_secret_key_hex_validates_length() {
