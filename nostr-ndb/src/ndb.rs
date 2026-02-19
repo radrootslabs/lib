@@ -1,6 +1,8 @@
 use crate::config::RadrootsNostrNdbConfig;
 use crate::error::RadrootsNostrNdbError;
+use crate::filter::parse_hex_32;
 use crate::ingest::RadrootsNostrNdbIngestSource;
+use crate::query::{RadrootsNostrNdbNote, RadrootsNostrNdbProfile, RadrootsNostrNdbQuerySpec};
 use crate::subscription::{
     RadrootsNostrNdbNoteKey, RadrootsNostrNdbSubscriptionHandle, RadrootsNostrNdbSubscriptionSpec,
     RadrootsNostrNdbSubscriptionStream,
@@ -120,6 +122,75 @@ impl RadrootsNostrNdb {
             .notes_per_await(notes_per_await.max(1));
         RadrootsNostrNdbSubscriptionStream { inner: stream }
     }
+
+    pub fn query_notes(
+        &self,
+        spec: &RadrootsNostrNdbQuerySpec,
+    ) -> Result<Vec<RadrootsNostrNdbNote>, RadrootsNostrNdbError> {
+        if spec.filters().is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let filters = spec
+            .filters()
+            .iter()
+            .map(|filter_spec| filter_spec.to_ndb_filter())
+            .collect::<Result<Vec<_>, _>>()?;
+        let txn = nostrdb::Transaction::new(&self.inner)?;
+        let query_results =
+            self.inner
+                .query(&txn, filters.as_slice(), spec.max_results() as i32)?;
+
+        query_results
+            .into_iter()
+            .map(|query_result| {
+                let note = query_result.note;
+                let json = note.json()?;
+                Ok(RadrootsNostrNdbNote {
+                    note_key: query_result.note_key.as_u64(),
+                    id_hex: hex::encode(note.id()),
+                    author_hex: hex::encode(note.pubkey()),
+                    kind: note.kind(),
+                    created_at_unix: note.created_at(),
+                    content: note.content().to_owned(),
+                    json,
+                })
+            })
+            .collect::<Result<Vec<_>, nostrdb::Error>>()
+            .map_err(Into::into)
+    }
+
+    pub fn get_profile_by_pubkey_hex(
+        &self,
+        pubkey_hex: &str,
+    ) -> Result<Option<RadrootsNostrNdbProfile>, RadrootsNostrNdbError> {
+        let pubkey = parse_hex_32(pubkey_hex, "pubkey")?;
+        let txn = nostrdb::Transaction::new(&self.inner)?;
+
+        let profile_record = match self.inner.get_profile_by_pubkey(&txn, &pubkey) {
+            Ok(profile_record) => profile_record,
+            Err(nostrdb::Error::NotFound) => return Ok(None),
+            Err(source) => return Err(source.into()),
+        };
+
+        let profile = match profile_record.record().profile() {
+            Some(profile) => profile,
+            None => return Ok(None),
+        };
+
+        Ok(Some(RadrootsNostrNdbProfile {
+            profile_key: profile_record.key().map(|profile_key| profile_key.as_u64()),
+            pubkey_hex: pubkey_hex.to_owned(),
+            name: profile.name().map(ToOwned::to_owned),
+            display_name: profile.display_name().map(ToOwned::to_owned),
+            about: profile.about().map(ToOwned::to_owned),
+            picture: profile.picture().map(ToOwned::to_owned),
+            banner: profile.banner().map(ToOwned::to_owned),
+            website: profile.website().map(ToOwned::to_owned),
+            nip05: profile.nip05().map(ToOwned::to_owned),
+            lud16: profile.lud16().map(ToOwned::to_owned),
+        }))
+    }
 }
 
 #[cfg(test)]
@@ -127,7 +198,9 @@ mod tests {
     use super::*;
     use crate::filter::RadrootsNostrNdbFilterSpec;
     use crate::ingest::RadrootsNostrNdbIngestSource;
+    use crate::query::RadrootsNostrNdbQuerySpec;
     use radroots_nostr::prelude::{RadrootsNostrEventBuilder, RadrootsNostrKeys};
+    use radroots_nostr::prelude::{RadrootsNostrMetadata, radroots_nostr_build_metadata_event};
     use std::time::Duration;
     use tempfile::TempDir;
 
@@ -244,5 +317,73 @@ mod tests {
             .await
             .expect("wait should succeed");
         assert!(!notes.is_empty());
+    }
+
+    #[test]
+    fn query_notes_returns_ingested_results() {
+        let tmp_dir = TempDir::new().expect("tempdir should open");
+        let db_dir = tmp_dir.path().join("ndb");
+        let config = RadrootsNostrNdbConfig::new(&db_dir);
+        let ndb = RadrootsNostrNdb::open(config).expect("database should open");
+
+        let keys = RadrootsNostrKeys::generate();
+        let event = RadrootsNostrEventBuilder::text_note("query note")
+            .sign_with_keys(&keys)
+            .expect("event should sign");
+        ndb.ingest_event(&event, RadrootsNostrNdbIngestSource::client())
+            .expect("ingest should succeed");
+
+        let query_spec = RadrootsNostrNdbQuerySpec::text_notes(Some(50), None, 50);
+        let mut notes = Vec::new();
+        for _ in 0..40 {
+            notes = ndb.query_notes(&query_spec).expect("query should succeed");
+            if !notes.is_empty() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(25));
+        }
+        assert!(!notes.is_empty());
+        assert!(
+            notes
+                .iter()
+                .any(|note| note.id_hex == event.id.to_hex() && note.content == "query note")
+        );
+    }
+
+    #[test]
+    fn profile_lookup_returns_metadata_fields() {
+        let tmp_dir = TempDir::new().expect("tempdir should open");
+        let db_dir = tmp_dir.path().join("ndb");
+        let config = RadrootsNostrNdbConfig::new(&db_dir);
+        let ndb = RadrootsNostrNdb::open(config).expect("database should open");
+
+        let keys = RadrootsNostrKeys::generate();
+        let pubkey_hex = keys.public_key().to_hex();
+        let metadata = RadrootsNostrMetadata::new()
+            .name("alice")
+            .display_name("Alice")
+            .about("coffee operator")
+            .lud16("alice@example.com");
+        let metadata_event = radroots_nostr_build_metadata_event(&metadata)
+            .sign_with_keys(&keys)
+            .expect("metadata event should sign");
+        ndb.ingest_event(&metadata_event, RadrootsNostrNdbIngestSource::client())
+            .expect("ingest should succeed");
+
+        let mut profile = None;
+        for _ in 0..40 {
+            profile = ndb
+                .get_profile_by_pubkey_hex(pubkey_hex.as_str())
+                .expect("profile lookup should succeed");
+            if profile.is_some() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(25));
+        }
+        let profile = profile.expect("profile should exist");
+        assert_eq!(profile.pubkey_hex, pubkey_hex);
+        assert_eq!(profile.name.as_deref(), Some("alice"));
+        assert_eq!(profile.display_name.as_deref(), Some("Alice"));
+        assert_eq!(profile.lud16.as_deref(), Some("alice@example.com"));
     }
 }

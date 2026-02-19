@@ -135,7 +135,10 @@ impl RadrootsNostrNdbFilterSpec {
     }
 }
 
-fn parse_hex_32(value: &str, field: &'static str) -> Result<[u8; 32], RadrootsNostrNdbError> {
+pub(crate) fn parse_hex_32(
+    value: &str,
+    field: &'static str,
+) -> Result<[u8; 32], RadrootsNostrNdbError> {
     let bytes = hex::decode(value).map_err(|source| RadrootsNostrNdbError::InvalidHex {
         field,
         reason: source.to_string(),

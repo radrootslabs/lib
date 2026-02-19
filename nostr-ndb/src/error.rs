@@ -6,10 +6,7 @@ pub enum RadrootsNostrNdbError {
     NonUtf8Path,
 
     #[error("invalid hex for {field}: {reason}")]
-    InvalidHex {
-        field: &'static str,
-        reason: String,
-    },
+    InvalidHex { field: &'static str, reason: String },
 
     #[error("invalid hex length for {field}: expected {expected} bytes, got {actual}")]
     InvalidHexLength {
