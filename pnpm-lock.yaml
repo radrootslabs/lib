@@ -70,7 +70,7 @@ importers:
 
   tangle-db-schema/bindings/ts:
     dependencies:
-      '@radroots/types-bindings':
+      '@radroots/types':
         specifier: workspace:*
         version: link:../../../types/bindings/ts
     devDependencies:
