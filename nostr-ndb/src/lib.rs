@@ -13,6 +13,8 @@ pub mod error;
 pub mod ingest;
 #[cfg(feature = "ndb")]
 pub mod ndb;
+#[cfg(all(feature = "ndb", feature = "runtime-adapter"))]
+pub mod runtime_adapter;
 
 pub mod prelude {
     #[cfg(feature = "ndb")]
@@ -22,4 +24,6 @@ pub mod prelude {
     pub use crate::ingest::RadrootsNostrNdbIngestSource;
     #[cfg(feature = "ndb")]
     pub use crate::ndb::RadrootsNostrNdb;
+    #[cfg(all(feature = "ndb", feature = "runtime-adapter"))]
+    pub use crate::runtime_adapter::RadrootsNostrNdbEventStoreAdapter;
 }
