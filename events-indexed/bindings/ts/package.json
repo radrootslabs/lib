@@ -1,5 +1,5 @@
 {
-    "name": "@radroots/events-indexed-bindings",
+    "name": "@radroots/events-indexed",
     "version": "1.0.0",
     "private": true,
     "license": "MIT OR Apache-2.0",

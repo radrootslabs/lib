@@ -39,7 +39,7 @@
                 "@radroots/core#build"
             ]
         },
-        "@radroots/events-indexed-bindings#build": {
+        "@radroots/events-indexed#build": {
             "dependsOn": [
                 "@radroots/tsconfig#build"
             ]
