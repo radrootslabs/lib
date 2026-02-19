@@ -51,7 +51,7 @@ importers:
 
   events/bindings/ts:
     dependencies:
-      '@radroots/core-bindings':
+      '@radroots/core':
         specifier: workspace:*
         version: link:../../../core/bindings/ts
       zod:
@@ -83,7 +83,7 @@ importers:
 
   trade/bindings/ts:
     dependencies:
-      '@radroots/core-bindings':
+      '@radroots/core':
         specifier: workspace:*
         version: link:../../../core/bindings/ts
       '@radroots/events-bindings':
