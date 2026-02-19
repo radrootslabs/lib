@@ -1,5 +1,5 @@
 {
-    "name": "@radroots/events-bindings",
+    "name": "@radroots/events",
     "version": "1.0.0",
     "private": true,
     "license": "MIT OR Apache-2.0",

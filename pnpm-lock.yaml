@@ -86,7 +86,7 @@ importers:
       '@radroots/core':
         specifier: workspace:*
         version: link:../../../core/bindings/ts
-      '@radroots/events-bindings':
+      '@radroots/events':
         specifier: workspace:*
         version: link:../../../events/bindings/ts
       zod:
