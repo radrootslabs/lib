@@ -1,25 +1,15 @@
-.PHONY: all bindings clean help \
-        bindings-events bindings-tangle-db-schema bindings-trade bindings-types \
-        build build-events-codec-wasm build-tangle-db-wasm build-tangle-events-wasm
+.PHONY: all build clean help \
+	build-events-codec-wasm build-tangle-db-wasm build-tangle-events-wasm
 
 SHELL := /bin/bash
 .SHELLFLAGS := -e -o pipefail -c
-TS_RS_FEATURE ?= ts-rs
-
-BINDINGS_TARGETS := \
-    bindings-events \
-    bindings-tangle-db-schema \
-    bindings-trade \
-    bindings-types
 
 BUILD_TARGETS := \
-    build-events-codec-wasm \
-    build-tangle-db-wasm \
-    build-tangle-events-wasm
+	build-events-codec-wasm \
+	build-tangle-db-wasm \
+	build-tangle-events-wasm
 
-all: bindings build
-
-bindings: $(BINDINGS_TARGETS)
+all: build
 
 build: $(BUILD_TARGETS)
 
@@ -29,28 +19,10 @@ clean:
 help:
 	@echo "Commands:"
 	@echo "  make all"
-	@echo "  make bindings"
 	@echo "  make build"
 	@echo "  make clean"
 	@echo "  make help"
-	@printf "%s\n" $(BINDINGS_TARGETS)
 	@printf "%s\n" $(BUILD_TARGETS)
-
-bindings-events:
-	@(cd events && cargo test --features $(TS_RS_FEATURE))
-	@(cd events/bindings/ts && npm run build)
-
-bindings-tangle-db-schema:
-	@(cd tangle-db-schema && cargo test --features $(TS_RS_FEATURE))
-	@(cd tangle-db-schema/bindings/ts && npm run build)
-
-bindings-trade:
-	@(cd trade && cargo test --features $(TS_RS_FEATURE))
-	@(cd trade/bindings/ts && npm run build)
-
-bindings-types:
-	@(cd types && cargo test --features $(TS_RS_FEATURE))
-	@(cd types/bindings/ts && npm run build)
 
 build-tangle-db-wasm:
 	wasm-pack build tangle-db-wasm --release --target web \
