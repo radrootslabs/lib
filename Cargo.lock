@@ -1983,6 +1983,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "radroots-nostr-runtime"
+version = "0.1.0"
+dependencies = [
+ "radroots-nostr",
+ "thiserror 1.0.69",
+ "tokio",
+]
+
+[[package]]
 name = "radroots-runtime"
 version = "0.1.0"
 dependencies = [

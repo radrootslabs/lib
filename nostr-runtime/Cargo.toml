@@ -1,0 +1,20 @@
+[package]
+name = "radroots-nostr-runtime"
+description = "Nostr runtime layer for Radroots"
+version.workspace = true
+edition.workspace = true
+authors = ["Radroots Authors"]
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+default = ["std", "nostr-client", "rt"]
+std = []
+rt = ["std", "dep:tokio"]
+nostr-client = ["std", "dep:radroots-nostr"]
+nostr-ndb = ["nostr-client"]
+
+[dependencies]
+radroots-nostr = { workspace = true, optional = true, default-features = true, features = ["client"] }
+thiserror = { workspace = true }
+tokio = { workspace = true, optional = true, features = ["rt", "sync", "time"] }
