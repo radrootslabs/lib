@@ -61,6 +61,27 @@ impl RadrootsNostrNdb {
         self.ingest_event_json_with_source(json.as_str(), source)
     }
 
+    #[cfg(feature = "giftwrap")]
+    pub fn add_giftwrap_secret_key(&self, secret_key: [u8; 32]) -> bool {
+        self.inner.add_key(&secret_key)
+    }
+
+    #[cfg(feature = "giftwrap")]
+    pub fn add_giftwrap_secret_key_hex(
+        &self,
+        secret_key_hex: &str,
+    ) -> Result<bool, RadrootsNostrNdbError> {
+        let secret_key = parse_hex_32(secret_key_hex, "secret_key")?;
+        Ok(self.add_giftwrap_secret_key(secret_key))
+    }
+
+    #[cfg(feature = "giftwrap")]
+    pub fn process_giftwraps(&self) -> Result<(), RadrootsNostrNdbError> {
+        let txn = nostrdb::Transaction::new(&self.inner)?;
+        self.inner.process_giftwraps(&txn);
+        Ok(())
+    }
+
     pub fn subscribe(
         &self,
         spec: &RadrootsNostrNdbSubscriptionSpec,
@@ -385,5 +406,37 @@ mod tests {
         assert_eq!(profile.name.as_deref(), Some("alice"));
         assert_eq!(profile.display_name.as_deref(), Some("Alice"));
         assert_eq!(profile.lud16.as_deref(), Some("alice@example.com"));
+    }
+
+    #[cfg(feature = "giftwrap")]
+    #[test]
+    fn giftwrap_secret_key_hex_validates_length() {
+        let tmp_dir = TempDir::new().expect("tempdir should open");
+        let db_dir = tmp_dir.path().join("ndb");
+        let config = RadrootsNostrNdbConfig::new(&db_dir);
+        let ndb = RadrootsNostrNdb::open(config).expect("database should open");
+
+        let result = ndb.add_giftwrap_secret_key_hex("abcd");
+        assert!(matches!(
+            result,
+            Err(RadrootsNostrNdbError::InvalidHexLength {
+                field: "secret_key",
+                ..
+            })
+        ));
+    }
+
+    #[cfg(feature = "giftwrap")]
+    #[test]
+    fn giftwrap_process_flow_executes() {
+        let tmp_dir = TempDir::new().expect("tempdir should open");
+        let db_dir = tmp_dir.path().join("ndb");
+        let config = RadrootsNostrNdbConfig::new(&db_dir);
+        let ndb = RadrootsNostrNdb::open(config).expect("database should open");
+
+        let secret_key = [7u8; 32];
+        let _ = ndb.add_giftwrap_secret_key(secret_key);
+        ndb.process_giftwraps()
+            .expect("giftwrap processing should run");
     }
 }
