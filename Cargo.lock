@@ -1986,6 +1986,7 @@ dependencies = [
 name = "radroots-nostr-runtime"
 version = "0.1.0"
 dependencies = [
+ "futures",
  "radroots-nostr",
  "thiserror 1.0.69",
  "tokio",
