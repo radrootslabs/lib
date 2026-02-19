@@ -6,8 +6,16 @@ compile_error!("radroots-nostr-ndb requires the std feature");
 
 extern crate alloc;
 
+#[cfg(feature = "ndb")]
+pub mod config;
 pub mod error;
+#[cfg(feature = "ndb")]
+pub mod ndb;
 
 pub mod prelude {
+    #[cfg(feature = "ndb")]
+    pub use crate::config::RadrootsNostrNdbConfig;
     pub use crate::error::RadrootsNostrNdbError;
+    #[cfg(feature = "ndb")]
+    pub use crate::ndb::RadrootsNostrNdb;
 }
