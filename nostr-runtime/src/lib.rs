@@ -8,11 +8,15 @@ pub mod types;
 
 #[cfg(all(feature = "nostr-client", feature = "rt"))]
 pub mod runtime;
+#[cfg(all(feature = "nostr-client", feature = "rt"))]
+pub mod store;
 
 pub mod prelude {
     pub use crate::error::RadrootsNostrRuntimeError;
     #[cfg(all(feature = "nostr-client", feature = "rt"))]
     pub use crate::runtime::{RadrootsNostrRuntime, RadrootsNostrRuntimeBuilder};
+    #[cfg(all(feature = "nostr-client", feature = "rt"))]
+    pub use crate::store::{RadrootsNostrEventStore, RadrootsNostrInMemoryEventStore};
     pub use crate::types::{
         RadrootsNostrConnectionSnapshot, RadrootsNostrRuntimeEvent,
         RadrootsNostrSubscriptionHandle, RadrootsNostrSubscriptionPolicy,

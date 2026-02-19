@@ -1,4 +1,5 @@
 use crate::error::RadrootsNostrRuntimeError;
+use crate::store::RadrootsNostrEventStore;
 use crate::types::{
     RadrootsNostrConnectionSnapshot, RadrootsNostrRuntimeEvent, RadrootsNostrSubscriptionHandle,
     RadrootsNostrSubscriptionPolicy, RadrootsNostrSubscriptionSpec, RadrootsNostrTrafficLight,
@@ -18,12 +19,13 @@ use std::sync::Mutex;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct RadrootsNostrRuntimeBuilder {
     keys: Option<RadrootsNostrKeys>,
     relays: Vec<String>,
     queue_capacity: usize,
     monitor_capacity: usize,
+    event_store: Option<Arc<dyn RadrootsNostrEventStore>>,
 }
 
 impl RadrootsNostrRuntimeBuilder {
@@ -36,6 +38,7 @@ impl RadrootsNostrRuntimeBuilder {
             relays: Vec::new(),
             queue_capacity: Self::DEFAULT_QUEUE_CAPACITY,
             monitor_capacity: Self::DEFAULT_MONITOR_CAPACITY,
+            event_store: None,
         }
     }
 
@@ -61,6 +64,11 @@ impl RadrootsNostrRuntimeBuilder {
 
     pub fn monitor_capacity(mut self, capacity: usize) -> Self {
         self.monitor_capacity = capacity;
+        self
+    }
+
+    pub fn event_store(mut self, store: Arc<dyn RadrootsNostrEventStore>) -> Self {
+        self.event_store = Some(store);
         self
     }
 
@@ -94,6 +102,7 @@ impl RadrootsNostrRuntimeBuilder {
             started: AtomicBool::new(false),
             shutting_down: AtomicBool::new(false),
             next_subscription_id: AtomicU64::new(1),
+            event_store: self.event_store,
         });
 
         Ok(RadrootsNostrRuntime { inner })
@@ -123,6 +132,7 @@ struct RadrootsNostrRuntimeInner {
     started: AtomicBool,
     shutting_down: AtomicBool,
     next_subscription_id: AtomicU64,
+    event_store: Option<Arc<dyn RadrootsNostrEventStore>>,
 }
 
 impl RadrootsNostrRuntime {
@@ -403,6 +413,18 @@ fn spawn_subscription_worker(
                 let kind = event.kind.as_u16();
                 since_unix = Some(event.created_at.as_secs().saturating_add(1));
 
+                if let Some(store) = inner.event_store.as_ref() {
+                    if let Err(message) = store.ingest_event(&event) {
+                        if let Ok(mut guard) = inner.last_error.lock() {
+                            *guard = Some(message.clone());
+                        }
+                        let _ = inner
+                            .queue_tx
+                            .send(RadrootsNostrRuntimeEvent::Error { message })
+                            .await;
+                    }
+                }
+
                 let _ = inner
                     .queue_tx
                     .send(RadrootsNostrRuntimeEvent::Note {
@@ -436,6 +458,8 @@ fn spawn_subscription_worker(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::store::RadrootsNostrInMemoryEventStore;
+    use alloc::sync::Arc;
     use radroots_nostr::prelude::RadrootsNostrFilter;
 
     fn sample_runtime() -> RadrootsNostrRuntime {
@@ -492,6 +516,17 @@ mod tests {
             result,
             Err(RadrootsNostrRuntimeError::InvalidConfig("monitor_capacity"))
         ));
+    }
+
+    #[test]
+    fn build_accepts_event_store() {
+        let store = Arc::new(RadrootsNostrInMemoryEventStore::new());
+        let result = RadrootsNostrRuntimeBuilder::new()
+            .keys(RadrootsNostrKeys::generate())
+            .add_relay("wss://relay.example.com")
+            .event_store(store)
+            .build();
+        assert!(result.is_ok());
     }
 
     #[test]
