@@ -44,7 +44,7 @@
                 "@radroots/tsconfig#build"
             ]
         },
-        "@radroots/trade-bindings#build": {
+        "@radroots/trade#build": {
             "dependsOn": [
                 "@radroots/tsconfig#build",
                 "@radroots/core#build",
