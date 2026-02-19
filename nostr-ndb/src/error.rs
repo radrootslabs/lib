@@ -5,6 +5,19 @@ pub enum RadrootsNostrNdbError {
     #[error("database path must be utf-8")]
     NonUtf8Path,
 
+    #[error("invalid hex for {field}: {reason}")]
+    InvalidHex {
+        field: &'static str,
+        reason: String,
+    },
+
+    #[error("invalid hex length for {field}: expected {expected} bytes, got {actual}")]
+    InvalidHexLength {
+        field: &'static str,
+        expected: usize,
+        actual: usize,
+    },
+
     #[error("event json encode failed: {0}")]
     EventJsonEncode(String),
 

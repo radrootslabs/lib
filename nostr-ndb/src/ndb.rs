@@ -1,6 +1,10 @@
 use crate::config::RadrootsNostrNdbConfig;
 use crate::error::RadrootsNostrNdbError;
 use crate::ingest::RadrootsNostrNdbIngestSource;
+use crate::subscription::{
+    RadrootsNostrNdbNoteKey, RadrootsNostrNdbSubscriptionHandle, RadrootsNostrNdbSubscriptionSpec,
+    RadrootsNostrNdbSubscriptionStream,
+};
 use radroots_nostr::prelude::RadrootsNostrEvent;
 use std::path::Path;
 
@@ -54,13 +58,77 @@ impl RadrootsNostrNdb {
             .map_err(|source| RadrootsNostrNdbError::EventJsonEncode(source.to_string()))?;
         self.ingest_event_json_with_source(json.as_str(), source)
     }
+
+    pub fn subscribe(
+        &self,
+        spec: &RadrootsNostrNdbSubscriptionSpec,
+    ) -> Result<RadrootsNostrNdbSubscriptionHandle, RadrootsNostrNdbError> {
+        let filters = spec
+            .filters()
+            .iter()
+            .map(|filter_spec| filter_spec.to_ndb_filter())
+            .collect::<Result<Vec<_>, _>>()?;
+        let subscription = self.inner.subscribe(filters.as_slice())?;
+        Ok(RadrootsNostrNdbSubscriptionHandle::new(subscription.id()))
+    }
+
+    pub fn unsubscribe(
+        &self,
+        handle: RadrootsNostrNdbSubscriptionHandle,
+    ) -> Result<(), RadrootsNostrNdbError> {
+        let mut inner = self.inner.clone();
+        inner.unsubscribe(nostrdb::Subscription::new(handle.id()))?;
+        Ok(())
+    }
+
+    pub fn poll_for_note_keys(
+        &self,
+        handle: RadrootsNostrNdbSubscriptionHandle,
+        max_notes: u32,
+    ) -> Vec<RadrootsNostrNdbNoteKey> {
+        self.inner
+            .poll_for_notes(nostrdb::Subscription::new(handle.id()), max_notes)
+            .into_iter()
+            .map(|note_key| RadrootsNostrNdbNoteKey::new(note_key.as_u64()))
+            .collect()
+    }
+
+    #[cfg(feature = "rt")]
+    pub async fn wait_for_note_keys(
+        &self,
+        handle: RadrootsNostrNdbSubscriptionHandle,
+        max_notes: u32,
+    ) -> Result<Vec<RadrootsNostrNdbNoteKey>, RadrootsNostrNdbError> {
+        let note_keys = self
+            .inner
+            .wait_for_notes(nostrdb::Subscription::new(handle.id()), max_notes)
+            .await?;
+        Ok(note_keys
+            .into_iter()
+            .map(|note_key| RadrootsNostrNdbNoteKey::new(note_key.as_u64()))
+            .collect())
+    }
+
+    #[cfg(feature = "rt")]
+    pub fn subscription_stream(
+        &self,
+        handle: RadrootsNostrNdbSubscriptionHandle,
+        notes_per_await: u32,
+    ) -> RadrootsNostrNdbSubscriptionStream {
+        let stream = nostrdb::Subscription::new(handle.id())
+            .stream(&self.inner)
+            .notes_per_await(notes_per_await.max(1));
+        RadrootsNostrNdbSubscriptionStream { inner: stream }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::filter::RadrootsNostrNdbFilterSpec;
     use crate::ingest::RadrootsNostrNdbIngestSource;
     use radroots_nostr::prelude::{RadrootsNostrEventBuilder, RadrootsNostrKeys};
+    use std::time::Duration;
     use tempfile::TempDir;
 
     #[test]
@@ -120,5 +188,61 @@ mod tests {
 
         ndb.ingest_event(&event, RadrootsNostrNdbIngestSource::client())
             .expect("ingest should succeed");
+    }
+
+    #[test]
+    fn subscribe_poll_and_unsubscribe_round_trip() {
+        let tmp_dir = TempDir::new().expect("tempdir should open");
+        let db_dir = tmp_dir.path().join("ndb");
+        let config = RadrootsNostrNdbConfig::new(&db_dir);
+        let ndb = RadrootsNostrNdb::open(config).expect("database should open");
+        let spec = RadrootsNostrNdbSubscriptionSpec::single(
+            RadrootsNostrNdbFilterSpec::new()
+                .with_kind(1)
+                .with_limit(10),
+        );
+        let handle = ndb.subscribe(&spec).expect("subscribe should succeed");
+
+        let keys = RadrootsNostrKeys::generate();
+        let event = RadrootsNostrEventBuilder::text_note("subscription test")
+            .sign_with_keys(&keys)
+            .expect("event should sign");
+        ndb.ingest_event(&event, RadrootsNostrNdbIngestSource::relay_unknown())
+            .expect("ingest should succeed");
+
+        let mut notes = Vec::new();
+        for _ in 0..40 {
+            notes = ndb.poll_for_note_keys(handle, 32);
+            if !notes.is_empty() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(25));
+        }
+
+        assert!(!notes.is_empty());
+        ndb.unsubscribe(handle).expect("unsubscribe should succeed");
+    }
+
+    #[tokio::test]
+    async fn wait_for_note_keys_yields_results() {
+        let tmp_dir = TempDir::new().expect("tempdir should open");
+        let db_dir = tmp_dir.path().join("ndb");
+        let config = RadrootsNostrNdbConfig::new(&db_dir);
+        let ndb = RadrootsNostrNdb::open(config).expect("database should open");
+        let spec = RadrootsNostrNdbSubscriptionSpec::text_notes(Some(10), None);
+        let handle = ndb.subscribe(&spec).expect("subscribe should succeed");
+
+        let keys = RadrootsNostrKeys::generate();
+        let event = RadrootsNostrEventBuilder::text_note("wait test")
+            .sign_with_keys(&keys)
+            .expect("event should sign");
+        ndb.ingest_event(&event, RadrootsNostrNdbIngestSource::relay_unknown())
+            .expect("ingest should succeed");
+
+        let notes = ndb
+            .wait_for_note_keys(handle, 32)
+            .await
+            .expect("wait should succeed");
+        assert!(!notes.is_empty());
     }
 }
