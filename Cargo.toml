@@ -24,7 +24,7 @@ members = [
     "crates/tangle-events-wasm",
     "crates/tangle-db",
     "crates/tangle-db-wasm",
-    "trade",
+    "crates/trade",
     "types",
 ]
 resolver = "2"
@@ -59,7 +59,7 @@ radroots-tangle-events = { path = "crates/tangle-events", version = "0.1.0", def
 radroots-tangle-db = { path = "crates/tangle-db", version = "0.1.0", default-features = false }
 radroots-tangle-db-wasm = { path = "crates/tangle-db-wasm", version = "0.1.0" }
 radroots-tangle-events-wasm = { path = "crates/tangle-events-wasm", version = "0.1.0" }
-radroots-trade = { path = "trade", version = "0.1.0", default-features = false }
+radroots-trade = { path = "crates/trade", version = "0.1.0", default-features = false }
 radroots-types = { path = "types", version = "0.1.0", default-features = false }
 
 anyhow = { version = "1" }
