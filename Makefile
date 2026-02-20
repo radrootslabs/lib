@@ -33,5 +33,5 @@ build-events-codec-wasm:
 		--out-dir ../events-codec-wasm/pkg/dist --scope radroots
 
 build-tangle-events-wasm:
-	wasm-pack build tangle-events-wasm --release --target web \
+	wasm-pack build crates/tangle-events-wasm --release --target web \
 		--out-dir ../tangle-events-wasm/pkg/dist --scope radroots
