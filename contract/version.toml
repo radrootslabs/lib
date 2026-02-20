@@ -1,0 +1,30 @@
+[contract]
+version = "0.1.0"
+stability = "draft"
+
+[semver]
+major_on = [
+  "remove_exported_type",
+  "remove_exported_field",
+  "change_exported_field_type",
+  "change_exported_enum_variant",
+  "change_exported_algorithm_behavior",
+  "change_wasm_function_signature",
+]
+minor_on = [
+  "add_exported_type",
+  "add_optional_field",
+  "add_enum_variant",
+  "add_wasm_function",
+  "add_conformance_vector",
+]
+patch_on = [
+  "fix_docs",
+  "fix_non_behavioral_codegen",
+  "fix_packaging_metadata",
+]
+
+[compatibility]
+requires_conformance_pass = true
+requires_export_manifest_diff = true
+requires_release_notes = true
