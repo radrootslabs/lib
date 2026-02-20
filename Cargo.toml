@@ -7,7 +7,7 @@ members = [
     "crates/events",
     "crates/events-codec",
     "crates/events-codec-wasm",
-    "events-indexed",
+    "crates/events-indexed",
     "identity",
     "log",
     "net",
@@ -42,7 +42,7 @@ radroots-app-wasm = { path = "crates/app-wasm", version = "0.1.0", default-featu
 radroots-core = { path = "crates/core", version = "0.1.0", default-features = false }
 radroots-events = { path = "crates/events", version = "0.1.0", default-features = false }
 radroots-events-codec = { path = "crates/events-codec", version = "0.1.0", default-features = false }
-radroots-events-indexed = { path = "events-indexed", version = "0.1.0", default-features = false }
+radroots-events-indexed = { path = "crates/events-indexed", version = "0.1.0", default-features = false }
 radroots-identity = { path = "identity", version = "0.1.0", default-features = false }
 radroots-nostr = { path = "nostr", version = "0.1.0", default-features = false }
 radroots-nostr-ndb = { path = "nostr-ndb", version = "0.1.0", default-features = false }
