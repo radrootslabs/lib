@@ -1,6 +1,9 @@
 #![forbid(unsafe_code)]
 
+mod contract;
+
 use std::env;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 fn usage() {
@@ -9,10 +12,33 @@ fn usage() {
     eprintln!("  cargo xtask sdk validate");
 }
 
+fn workspace_root() -> Result<PathBuf, String> {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let Some(crates_dir) = manifest_dir.parent() else {
+        return Err("failed to resolve crates dir".to_string());
+    };
+    let Some(root) = crates_dir.parent() else {
+        return Err("failed to resolve workspace root".to_string());
+    };
+    Ok(root.to_path_buf())
+}
+
+fn validate_contract() -> Result<(), String> {
+    let root = workspace_root()?;
+    let bundle = contract::load_contract_bundle(&root)?;
+    contract::validate_contract_bundle(&bundle)?;
+    eprintln!(
+        "validated contract {} {}",
+        bundle.manifest.contract.name, bundle.manifest.contract.version
+    );
+    eprintln!("contract root: {}", bundle.root.display());
+    Ok(())
+}
+
 fn run_sdk(args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
         Some("export-ts") => Ok(()),
-        Some("validate") => Ok(()),
+        Some("validate") => validate_contract(),
         _ => Err("unknown sdk subcommand".to_string()),
     }
 }
