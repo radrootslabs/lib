@@ -25,7 +25,7 @@ help:
 	@printf "%s\n" $(BUILD_TARGETS)
 
 build-tangle-db-wasm:
-	wasm-pack build tangle-db-wasm --release --target web \
+	wasm-pack build crates/tangle-db-wasm --release --target web \
 		--out-dir ../tangle-db-wasm/pkg/dist --scope radroots
 
 build-events-codec-wasm:
