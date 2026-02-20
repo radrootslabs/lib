@@ -15,7 +15,7 @@ members = [
     "crates/nostr",
     "crates/nostr-ndb",
     "crates/nostr-runtime",
-    "runtime",
+    "crates/runtime",
     "sql-wasm-bridge",
     "sql-wasm-core",
     "sql-core",
@@ -46,7 +46,7 @@ radroots-events-indexed = { path = "crates/events-indexed", version = "0.1.0", d
 radroots-identity = { path = "crates/identity", version = "0.1.0", default-features = false }
 radroots-nostr = { path = "crates/nostr", version = "0.1.0", default-features = false }
 radroots-nostr-ndb = { path = "crates/nostr-ndb", version = "0.1.0", default-features = false }
-radroots-runtime = { path = "runtime", version = "0.1.0", default-features = false }
+radroots-runtime = { path = "crates/runtime", version = "0.1.0", default-features = false }
 radroots-log = { path = "crates/log", version = "0.1.0", default-features = false }
 radroots-net = { path = "crates/net", version = "0.1.0", default-features = false }
 radroots-net-core = { path = "crates/net-core", version = "0.1.0", default-features = false }
