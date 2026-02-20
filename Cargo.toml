@@ -27,6 +27,7 @@ members = [
     "crates/tangle-db-wasm",
     "crates/trade",
     "crates/types",
+    "crates/xtask",
 ]
 resolver = "2"
 
