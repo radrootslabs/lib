@@ -3,7 +3,7 @@ members = [
     "app-core",
     "app-ffi-swift",
     "app-wasm",
-    "core",
+    "crates/core",
     "events",
     "events-codec",
     "events-codec-wasm",
@@ -39,7 +39,7 @@ license = "MIT OR Apache-2.0"
 radroots-app-core = { path = "app-core", version = "0.1.0", default-features = false }
 radroots-app-ffi-swift = { path = "app-ffi-swift", version = "0.1.0", default-features = false }
 radroots-app-wasm = { path = "app-wasm", version = "0.1.0", default-features = false }
-radroots-core = { path = "core", version = "0.1.0", default-features = false }
+radroots-core = { path = "crates/core", version = "0.1.0", default-features = false }
 radroots-events = { path = "events", version = "0.1.0", default-features = false }
 radroots-events-codec = { path = "events-codec", version = "0.1.0", default-features = false }
 radroots-events-indexed = { path = "events-indexed", version = "0.1.0", default-features = false }
