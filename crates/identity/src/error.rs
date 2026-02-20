@@ -3,7 +3,7 @@ use thiserror::Error;
 #[cfg(not(feature = "std"))]
 use alloc::string::String;
 
-#[cfg(feature = "std")]
+#[cfg(all(feature = "std", feature = "json-file"))]
 use radroots_runtime::RuntimeJsonError;
 #[cfg(feature = "std")]
 use std::{io, path::PathBuf};
@@ -40,7 +40,7 @@ pub enum IdentityError {
     #[error("unsupported identity file format")]
     InvalidIdentityFormat,
 
-    #[cfg(feature = "std")]
+    #[cfg(all(feature = "std", feature = "json-file"))]
     #[error(transparent)]
     Store(#[from] RuntimeJsonError),
 }

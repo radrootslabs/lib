@@ -1,5 +1,7 @@
 use radroots_events::profile::RadrootsProfile;
-use radroots_identity::{IdentityError, RadrootsIdentity, RadrootsIdentityProfile};
+use radroots_identity::{
+    IdentityError, RadrootsIdentity, RadrootsIdentityId, RadrootsIdentityProfile,
+};
 
 #[test]
 fn load_from_json_file_hex() {
@@ -142,4 +144,64 @@ fn load_from_json_file_public_key_mismatch() {
 
     let err = RadrootsIdentity::load_from_path_auto(&path).unwrap_err();
     assert!(matches!(err, IdentityError::PublicKeyMismatch));
+}
+
+#[test]
+fn identity_id_matches_public_key_hex() {
+    let keys = nostr::Keys::generate();
+    let identity = RadrootsIdentity::new(keys.clone());
+
+    let id = identity.id();
+    assert_eq!(id.as_str(), keys.public_key().to_hex());
+}
+
+#[test]
+fn identity_id_parses_hex_and_npub() {
+    use nostr::nips::nip19::ToBech32;
+
+    let keys = nostr::Keys::generate();
+    let public_key = keys.public_key();
+    let hex = public_key.to_hex();
+    let npub = public_key.to_bech32().unwrap();
+
+    let from_hex = RadrootsIdentityId::parse(hex.as_str()).unwrap();
+    let from_npub = RadrootsIdentityId::parse(npub.as_str()).unwrap();
+    assert_eq!(from_hex.as_str(), hex);
+    assert_eq!(from_npub.as_str(), hex);
+}
+
+#[test]
+fn to_public_projection_excludes_secret_key_fields() {
+    let keys = nostr::Keys::generate();
+    let identity = RadrootsIdentity::new(keys.clone());
+    let public = identity.to_public();
+
+    assert_eq!(public.id.as_str(), keys.public_key().to_hex());
+    assert_eq!(public.public_key_hex, keys.public_key().to_hex());
+    assert!(public.profile.is_none());
+
+    let json = serde_json::to_string(&public).unwrap();
+    assert!(!json.contains("secret_key"));
+    assert!(!json.contains(&identity.secret_key_hex()));
+}
+
+#[cfg(feature = "secrecy")]
+#[test]
+fn secret_key_hex_secret_returns_secret_string() {
+    use secrecy::ExposeSecret;
+
+    let keys = nostr::Keys::generate();
+    let identity = RadrootsIdentity::new(keys);
+    let secret = identity.secret_key_hex_secret();
+    assert_eq!(secret.expose_secret(), &identity.secret_key_hex());
+}
+
+#[cfg(feature = "zeroize")]
+#[test]
+fn secret_key_zeroizing_bytes_matches_raw_secret() {
+    let keys = nostr::Keys::generate();
+    let identity = RadrootsIdentity::new(keys);
+    let raw = identity.secret_key_bytes();
+    let protected = identity.secret_key_bytes_zeroizing();
+    assert_eq!(&*protected, &raw);
 }

@@ -9,19 +9,25 @@ license.workspace = true
 build = "build.rs"
 
 [features]
-default = ["std"]
-std = ["dep:radroots-runtime"]
+default = ["std", "profile", "json-file"]
+std = []
+profile = ["dep:radroots-events"]
+json-file = ["std", "dep:radroots-runtime"]
+secrecy = ["dep:secrecy"]
+zeroize = ["dep:zeroize"]
 ts-rs = ["dep:ts-rs"]
 
 [dependencies]
 radroots-runtime = { workspace = true, optional = true }
-radroots-events = { workspace = true, default-features = false, features = ["serde"] }
+radroots-events = { workspace = true, optional = true, default-features = false, features = ["serde"] }
 nostr = { workspace = true }
+secrecy = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 ts-rs = { workspace = true, optional = true }
+zeroize = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

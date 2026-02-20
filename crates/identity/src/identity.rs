@@ -1,25 +1,38 @@
 use crate::error::IdentityError;
 use core::convert::Infallible;
+use core::fmt;
 use nostr::{Keys, SecretKey};
-use radroots_events::profile::RadrootsProfile;
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "profile")]
+use radroots_events::profile::RadrootsProfile;
 
 #[cfg(not(feature = "std"))]
 use alloc::string::String;
-#[cfg(feature = "std")]
+#[cfg(all(feature = "std", feature = "json-file"))]
 use radroots_runtime::JsonFile;
 #[cfg(feature = "std")]
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+use std::{fs, path::Path};
+#[cfg(all(feature = "std", feature = "json-file"))]
+use std::path::PathBuf;
 
 pub const DEFAULT_IDENTITY_PATH: &str = "identity.json";
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct RadrootsIdentityId(String);
 
 #[derive(Debug, Clone)]
 pub struct RadrootsIdentity {
     keys: Keys,
     profile: Option<RadrootsIdentityProfile>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RadrootsIdentityPublic {
+    pub id: RadrootsIdentityId,
+    pub public_key_hex: String,
+    pub public_key_npub: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profile: Option<RadrootsIdentityProfile>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -30,6 +43,7 @@ pub struct RadrootsIdentityProfile {
     pub metadata: Option<nostr::Event>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub application_handler: Option<nostr::Event>,
+    #[cfg(feature = "profile")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub profile: Option<RadrootsProfile>,
 }
@@ -45,6 +59,7 @@ pub struct RadrootsIdentityFile {
     pub metadata: Option<nostr::Event>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub application_handler: Option<nostr::Event>,
+    #[cfg(feature = "profile")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub profile: Option<RadrootsProfile>,
 }
@@ -55,12 +70,85 @@ pub enum RadrootsIdentitySecretKeyFormat {
     Nsec,
 }
 
+impl RadrootsIdentityId {
+    pub fn from_public_key(public_key: nostr::PublicKey) -> Self {
+        Self(public_key.to_hex())
+    }
+
+    pub fn parse(value: &str) -> Result<Self, IdentityError> {
+        let public_key = parse_public_key(value)?;
+        Ok(Self::from_public_key(public_key))
+    }
+
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+
+    pub fn into_string(self) -> String {
+        self.0
+    }
+}
+
+impl From<nostr::PublicKey> for RadrootsIdentityId {
+    fn from(value: nostr::PublicKey) -> Self {
+        Self::from_public_key(value)
+    }
+}
+
+impl TryFrom<&str> for RadrootsIdentityId {
+    type Error = IdentityError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Self::parse(value)
+    }
+}
+
+impl AsRef<str> for RadrootsIdentityId {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl fmt::Display for RadrootsIdentityId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.0.as_str())
+    }
+}
+
+impl RadrootsIdentityPublic {
+    pub fn new(public_key: nostr::PublicKey) -> Self {
+        let id = RadrootsIdentityId::from_public_key(public_key);
+        use nostr::nips::nip19::ToBech32;
+        let public_key_npub = infallible_to_string(public_key.to_bech32());
+        Self {
+            id,
+            public_key_hex: public_key.to_hex(),
+            public_key_npub,
+            profile: None,
+        }
+    }
+
+    pub fn with_profile(mut self, profile: RadrootsIdentityProfile) -> Self {
+        self.profile = if profile.is_empty() {
+            None
+        } else {
+            Some(profile)
+        };
+        self
+    }
+}
+
 impl RadrootsIdentityProfile {
     pub fn is_empty(&self) -> bool {
+        #[cfg(feature = "profile")]
+        let profile_empty = self.profile.is_none();
+        #[cfg(not(feature = "profile"))]
+        let profile_empty = true;
+
         self.identifier.is_none()
             && self.metadata.is_none()
             && self.application_handler.is_none()
-            && self.profile.is_none()
+            && profile_empty
     }
 }
 
@@ -103,6 +191,10 @@ impl RadrootsIdentity {
         self.keys.public_key()
     }
 
+    pub fn id(&self) -> RadrootsIdentityId {
+        RadrootsIdentityId::from_public_key(self.keys.public_key())
+    }
+
     pub fn public_key_hex(&self) -> String {
         self.keys.public_key().to_hex()
     }
@@ -133,6 +225,17 @@ impl RadrootsIdentity {
         self.keys.secret_key().to_secret_bytes()
     }
 
+    #[cfg(feature = "secrecy")]
+    pub fn secret_key_hex_secret(&self) -> secrecy::SecretString {
+        use secrecy::SecretString;
+        SecretString::new(self.secret_key_hex().into())
+    }
+
+    #[cfg(feature = "zeroize")]
+    pub fn secret_key_bytes_zeroizing(&self) -> zeroize::Zeroizing<[u8; SecretKey::LEN]> {
+        zeroize::Zeroizing::new(self.secret_key_bytes())
+    }
+
     pub fn profile(&self) -> Option<&RadrootsIdentityProfile> {
         self.profile.as_ref()
     }
@@ -153,6 +256,14 @@ impl RadrootsIdentity {
         self.profile = None;
     }
 
+    pub fn to_public(&self) -> RadrootsIdentityPublic {
+        let mut public = RadrootsIdentityPublic::new(self.keys.public_key());
+        if let Some(profile) = &self.profile {
+            public.profile = Some(profile.clone());
+        }
+        public
+    }
+
     pub fn to_file(&self) -> RadrootsIdentityFile {
         self.to_file_with_secret_format(RadrootsIdentitySecretKeyFormat::Hex)
     }
@@ -165,6 +276,7 @@ impl RadrootsIdentity {
             RadrootsIdentitySecretKeyFormat::Hex => self.secret_key_hex(),
             RadrootsIdentitySecretKeyFormat::Nsec => self.secret_key_nsec(),
         };
+        #[cfg(feature = "profile")]
         let (identifier, metadata, application_handler, profile) = match &self.profile {
             Some(profile) => (
                 profile.identifier.clone(),
@@ -174,13 +286,35 @@ impl RadrootsIdentity {
             ),
             None => (None, None, None, None),
         };
-        RadrootsIdentityFile {
-            secret_key,
-            public_key: Some(self.public_key_hex()),
-            identifier,
-            metadata,
-            application_handler,
-            profile,
+        #[cfg(not(feature = "profile"))]
+        let (identifier, metadata, application_handler) = match &self.profile {
+            Some(profile) => (
+                profile.identifier.clone(),
+                profile.metadata.clone(),
+                profile.application_handler.clone(),
+            ),
+            None => (None, None, None),
+        };
+        #[cfg(feature = "profile")]
+        {
+            return RadrootsIdentityFile {
+                secret_key,
+                public_key: Some(self.public_key_hex()),
+                identifier,
+                metadata,
+                application_handler,
+                profile,
+            };
+        }
+        #[cfg(not(feature = "profile"))]
+        {
+            RadrootsIdentityFile {
+                secret_key,
+                public_key: Some(self.public_key_hex()),
+                identifier,
+                metadata,
+                application_handler,
+            }
         }
     }
 
@@ -210,7 +344,7 @@ impl RadrootsIdentity {
         parse_identity_bytes(&bytes)
     }
 
-    #[cfg(feature = "std")]
+    #[cfg(all(feature = "std", feature = "json-file"))]
     pub fn load_or_generate<P: AsRef<Path>>(
         path: Option<P>,
         allow_generate: bool,
@@ -229,7 +363,7 @@ impl RadrootsIdentity {
         Ok(identity)
     }
 
-    #[cfg(feature = "std")]
+    #[cfg(all(feature = "std", feature = "json-file"))]
     pub fn save_json(&self, path: impl AsRef<Path>) -> Result<(), IdentityError> {
         let payload = self.to_file();
         let mut store = JsonFile::load_or_create_with(path.as_ref(), || payload.clone())?;
@@ -246,11 +380,18 @@ impl TryFrom<RadrootsIdentityFile> for RadrootsIdentity {
     fn try_from(file: RadrootsIdentityFile) -> Result<Self, Self::Error> {
         let keys = Keys::parse(&file.secret_key)?;
         validate_public_key(&keys, file.public_key.as_deref())?;
+        #[cfg(feature = "profile")]
         let profile = RadrootsIdentityProfile {
             identifier: file.identifier,
             metadata: file.metadata,
             application_handler: file.application_handler,
             profile: file.profile,
+        };
+        #[cfg(not(feature = "profile"))]
+        let profile = RadrootsIdentityProfile {
+            identifier: file.identifier,
+            metadata: file.metadata,
+            application_handler: file.application_handler,
         };
         if profile.is_empty() {
             Ok(Self::new(keys))
