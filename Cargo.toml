@@ -19,7 +19,7 @@ members = [
     "crates/sql-wasm-bridge",
     "crates/sql-wasm-core",
     "crates/sql-core",
-    "tangle-db-schema",
+    "crates/tangle-db-schema",
     "tangle-events",
     "tangle-events-wasm",
     "tangle-db",
@@ -54,7 +54,7 @@ radroots-nostr-runtime = { path = "crates/nostr-runtime", version = "0.1.0", def
 radroots-sql-wasm-bridge = { path = "crates/sql-wasm-bridge", version = "0.1.0" }
 radroots-sql-wasm-core = { path = "crates/sql-wasm-core", version = "0.1.0", default-features = false }
 radroots-sql-core = { path = "crates/sql-core", version = "0.1.0" }
-radroots-tangle-db-schema = { path = "tangle-db-schema", version = "0.1.0", default-features = false }
+radroots-tangle-db-schema = { path = "crates/tangle-db-schema", version = "0.1.0", default-features = false }
 radroots-tangle-events = { path = "tangle-events", version = "0.1.0", default-features = false }
 radroots-tangle-db = { path = "tangle-db", version = "0.1.0", default-features = false }
 radroots-tangle-db-wasm = { path = "tangle-db-wasm", version = "0.1.0" }
