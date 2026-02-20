@@ -5,6 +5,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 #[derive(Serialize)]
 struct ExportManifest {
@@ -47,6 +48,19 @@ fn required_artifact_value<'a>(value: &'a Option<String>, field: &str) -> Result
         .as_deref()
         .filter(|item| !item.trim().is_empty())
         .ok_or_else(|| format!("missing ts artifacts.{field}"))
+}
+
+fn crate_supports_ts_rs(workspace_root: &Path, crate_dir: &str) -> Result<bool, String> {
+    let manifest = workspace_root
+        .join("crates")
+        .join(crate_dir)
+        .join("Cargo.toml");
+    if !manifest.exists() {
+        return Ok(false);
+    }
+    let raw =
+        fs::read_to_string(&manifest).map_err(|e| format!("read {}: {e}", manifest.display()))?;
+    Ok(raw.contains("ts-rs"))
 }
 
 fn copy_if_exists(src: &Path, dst: &Path) -> Result<bool, String> {
@@ -250,4 +264,60 @@ pub fn write_ts_export_manifest(workspace_root: &Path, out_dir: &Path) -> Result
     fs::write(&manifest_path, bytes)
         .map_err(|e| format!("write {}: {e}", manifest_path.display()))?;
     Ok(manifest_path)
+}
+
+pub fn generate_ts_rs_sources(workspace_root: &Path) -> Result<PathBuf, String> {
+    let bundle = contract::load_contract_bundle(workspace_root)?;
+    contract::validate_contract_bundle(&bundle)?;
+    let ts_export = ts_export_mapping(&bundle)?;
+    let source_root = workspace_root.join("target").join("ts-rs");
+    if source_root.exists() {
+        fs::remove_dir_all(&source_root)
+            .map_err(|e| format!("remove {}: {e}", source_root.display()))?;
+    }
+    fs::create_dir_all(&source_root)
+        .map_err(|e| format!("create {}: {e}", source_root.display()))?;
+    let mut generated = 0usize;
+    for (crate_name, package_name) in &ts_export.packages {
+        if crate_name.ends_with("-wasm") {
+            continue;
+        }
+        let crate_dir = crate_name.strip_prefix("radroots-").unwrap_or(crate_name);
+        if !crate_supports_ts_rs(workspace_root, crate_dir)? {
+            continue;
+        }
+        let package_dir = package_name
+            .strip_prefix("@radroots/")
+            .unwrap_or(package_name);
+        let export_dir = source_root.join(package_dir);
+        fs::create_dir_all(&export_dir)
+            .map_err(|e| format!("create {}: {e}", export_dir.display()))?;
+        let status = Command::new("cargo")
+            .arg("test")
+            .arg("-q")
+            .arg("-p")
+            .arg(crate_name)
+            .arg("--features")
+            .arg("ts-rs")
+            .env("RADROOTS_TS_RS_EXPORT_DIR", &export_dir)
+            .current_dir(workspace_root)
+            .status()
+            .map_err(|e| format!("run cargo test for {crate_name}: {e}"))?;
+        if !status.success() {
+            return Err(format!("cargo test failed for {crate_name}"));
+        }
+        generated += 1;
+    }
+    if generated == 0 {
+        return Err("no ts-rs model sources were generated".to_string());
+    }
+    Ok(source_root)
+}
+
+pub fn export_ts_bundle(workspace_root: &Path, out_dir: &Path) -> Result<PathBuf, String> {
+    generate_ts_rs_sources(workspace_root)?;
+    export_ts_models(workspace_root, out_dir)?;
+    export_ts_constants(workspace_root, out_dir)?;
+    export_ts_wasm_artifacts(workspace_root, out_dir)?;
+    write_ts_export_manifest(workspace_root, out_dir)
 }

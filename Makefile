@@ -26,7 +26,7 @@ help:
 	@printf "%s\n" $(BUILD_TARGETS)
 
 export-ts-sdk-bindings:
-	./scripts/export-ts-sdk-bindings.sh
+	cargo run -q -p xtask -- sdk export-ts
 
 build-tangle-db-wasm:
 	wasm-pack build crates/tangle-db-wasm --release --target web \
