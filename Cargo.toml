@@ -5,7 +5,7 @@ members = [
     "crates/app-wasm",
     "crates/core",
     "crates/events",
-    "events-codec",
+    "crates/events-codec",
     "events-codec-wasm",
     "events-indexed",
     "identity",
@@ -41,7 +41,7 @@ radroots-app-ffi-swift = { path = "crates/app-ffi-swift", version = "0.1.0", def
 radroots-app-wasm = { path = "crates/app-wasm", version = "0.1.0", default-features = false }
 radroots-core = { path = "crates/core", version = "0.1.0", default-features = false }
 radroots-events = { path = "crates/events", version = "0.1.0", default-features = false }
-radroots-events-codec = { path = "events-codec", version = "0.1.0", default-features = false }
+radroots-events-codec = { path = "crates/events-codec", version = "0.1.0", default-features = false }
 radroots-events-indexed = { path = "events-indexed", version = "0.1.0", default-features = false }
 radroots-identity = { path = "identity", version = "0.1.0", default-features = false }
 radroots-nostr = { path = "nostr", version = "0.1.0", default-features = false }
