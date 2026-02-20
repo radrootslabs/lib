@@ -1,0 +1,34 @@
+[contract]
+name = "radroots-sdk-contract"
+version = "0.1.0"
+source = "rust"
+
+[surface]
+model_crates = [
+  "radroots-core",
+  "radroots-types",
+  "radroots-events",
+  "radroots-trade",
+  "radroots-identity",
+]
+algorithm_crates = [
+  "radroots-events-codec",
+]
+wasm_crates = [
+  "radroots-events-codec-wasm",
+]
+
+[export.ts]
+packages = [
+  "@radroots/core",
+  "@radroots/types",
+  "@radroots/events",
+  "@radroots/trade",
+  "@radroots/identity",
+  "@radroots/events-codec-wasm",
+]
+
+[policy]
+exclude_internal_workspace_crates = true
+require_reproducible_exports = true
+require_conformance_vectors = true
