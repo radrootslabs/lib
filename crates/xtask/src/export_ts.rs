@@ -22,6 +22,34 @@ fn copy_if_exists(src: &Path, dst: &Path) -> Result<bool, String> {
     Ok(true)
 }
 
+fn copy_dir_contents(src: &Path, dst: &Path) -> Result<usize, String> {
+    if !src.exists() {
+        return Ok(0);
+    }
+    fs::create_dir_all(dst).map_err(|e| format!("create {}: {e}", dst.display()))?;
+    let mut copied = 0usize;
+    let mut entries = fs::read_dir(src)
+        .map_err(|e| format!("read dir {}: {e}", src.display()))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("read dir entries {}: {e}", src.display()))?;
+    entries.sort_by_key(|entry| entry.file_name());
+    for entry in entries {
+        let path = entry.path();
+        let target = dst.join(entry.file_name());
+        let file_type = entry
+            .file_type()
+            .map_err(|e| format!("read type {}: {e}", path.display()))?;
+        if file_type.is_dir() {
+            copied += copy_dir_contents(&path, &target)?;
+        } else if file_type.is_file() {
+            fs::copy(&path, &target)
+                .map_err(|e| format!("copy {} -> {}: {e}", path.display(), target.display()))?;
+            copied += 1;
+        }
+    }
+    Ok(copied)
+}
+
 pub fn export_ts_models(workspace_root: &Path, out_dir: &Path) -> Result<(), String> {
     let bundle = contract::load_contract_bundle(workspace_root)?;
     contract::validate_contract_bundle(&bundle)?;
@@ -88,6 +116,35 @@ pub fn export_ts_constants(workspace_root: &Path, out_dir: &Path) -> Result<(), 
                 .join(filename);
             copy_if_exists(&src, &dst)?;
         }
+    }
+    Ok(())
+}
+
+pub fn export_ts_wasm_artifacts(workspace_root: &Path, out_dir: &Path) -> Result<(), String> {
+    let bundle = contract::load_contract_bundle(workspace_root)?;
+    contract::validate_contract_bundle(&bundle)?;
+    let ts_export = bundle
+        .exports
+        .iter()
+        .find(|mapping| mapping.language.id == "ts")
+        .ok_or_else(|| "missing ts export mapping".to_string())?;
+    let ts_out_root = out_dir.join("ts").join("packages");
+    let mut copied = 0usize;
+    for (crate_name, package_name) in &ts_export.packages {
+        if !crate_name.ends_with("-wasm") {
+            continue;
+        }
+        let crate_dir = crate_name.strip_prefix("radroots-").unwrap_or(crate_name);
+        let source_root = workspace_root
+            .join("crates")
+            .join(crate_dir)
+            .join("pkg")
+            .join("dist");
+        let target_root = to_package_dir(&ts_out_root, package_name).join("dist");
+        copied += copy_dir_contents(&source_root, &target_root)?;
+    }
+    if copied == 0 {
+        return Err("no ts wasm files were exported".to_string());
     }
     Ok(())
 }
