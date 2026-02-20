@@ -128,7 +128,30 @@ pub const fn request_kind_for_result_kind(kind: u32) -> Option<u32> {
 #[cfg(all(test, feature = "ts-rs", feature = "std"))]
 mod kinds_constants_tests {
     use super::*;
-    use std::{fs, path::Path};
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+    };
+
+    fn workspace_root(manifest_dir: &Path) -> PathBuf {
+        let parent = manifest_dir.parent().unwrap_or(manifest_dir);
+        if parent.file_name().and_then(|name| name.to_str()) == Some("crates") {
+            parent.parent().unwrap_or(parent).to_path_buf()
+        } else {
+            parent.to_path_buf()
+        }
+    }
+
+    fn ts_export_dir() -> PathBuf {
+        if let Some(export_dir) = option_env!("TS_RS_EXPORT_DIR") {
+            return PathBuf::from(export_dir);
+        }
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        workspace_root(&manifest_dir)
+            .join("target")
+            .join("ts-rs")
+            .join("events")
+    }
 
     const KIND_EXPORTS: &[(&str, u32)] = &[
         ("KIND_PROFILE", KIND_PROFILE),
@@ -197,7 +220,7 @@ mod kinds_constants_tests {
 
     #[test]
     fn export_kind_constants() {
-        let path = Path::new("./bindings").join("kinds.ts");
+        let path = ts_export_dir().join("kinds.ts");
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).expect("create ts export dir");
         }

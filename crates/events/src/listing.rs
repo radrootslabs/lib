@@ -251,7 +251,30 @@ pub struct RadrootsListingImageSize {
 #[cfg(all(test, feature = "ts-rs", feature = "std"))]
 mod constants_tests {
     use super::RADROOTS_LISTING_PRODUCT_TAG_KEYS;
-    use std::{fs, path::Path};
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+    };
+
+    fn workspace_root(manifest_dir: &Path) -> PathBuf {
+        let parent = manifest_dir.parent().unwrap_or(manifest_dir);
+        if parent.file_name().and_then(|name| name.to_str()) == Some("crates") {
+            parent.parent().unwrap_or(parent).to_path_buf()
+        } else {
+            parent.to_path_buf()
+        }
+    }
+
+    fn ts_export_dir() -> PathBuf {
+        if let Some(export_dir) = option_env!("TS_RS_EXPORT_DIR") {
+            return PathBuf::from(export_dir);
+        }
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        workspace_root(&manifest_dir)
+            .join("target")
+            .join("ts-rs")
+            .join("events")
+    }
 
     fn listing_product_tag_keys_literal() -> String {
         let mut out = String::from("[");
@@ -269,7 +292,7 @@ mod constants_tests {
 
     #[test]
     fn export_listing_product_tag_keys_const() {
-        let path = Path::new("./bindings").join("constants.ts");
+        let path = ts_export_dir().join("constants.ts");
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).expect("create ts export dir");
         }
