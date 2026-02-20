@@ -22,7 +22,7 @@ members = [
     "crates/tangle-db-schema",
     "crates/tangle-events",
     "crates/tangle-events-wasm",
-    "tangle-db",
+    "crates/tangle-db",
     "tangle-db-wasm",
     "trade",
     "types",
@@ -56,7 +56,7 @@ radroots-sql-wasm-core = { path = "crates/sql-wasm-core", version = "0.1.0", def
 radroots-sql-core = { path = "crates/sql-core", version = "0.1.0" }
 radroots-tangle-db-schema = { path = "crates/tangle-db-schema", version = "0.1.0", default-features = false }
 radroots-tangle-events = { path = "crates/tangle-events", version = "0.1.0", default-features = false }
-radroots-tangle-db = { path = "tangle-db", version = "0.1.0", default-features = false }
+radroots-tangle-db = { path = "crates/tangle-db", version = "0.1.0", default-features = false }
 radroots-tangle-db-wasm = { path = "tangle-db-wasm", version = "0.1.0" }
 radroots-tangle-events-wasm = { path = "crates/tangle-events-wasm", version = "0.1.0" }
 radroots-trade = { path = "trade", version = "0.1.0", default-features = false }
