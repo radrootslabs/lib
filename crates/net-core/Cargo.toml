@@ -8,12 +8,13 @@ license.workspace = true
 
 [features]
 default = ["std"]
-std = []
+std = ["serde/std"]
 rt = ["std", "dep:tokio"]
 nostr-client = [
     "std",
     "dep:radroots-events",
     "radroots-events/serde",
+    "dep:radroots-nostr-accounts",
     "dep:secrecy",
     "dep:hex",
     "dep:tempfile",
@@ -26,6 +27,7 @@ fs-persistence = ["std"]
 [dependencies]
 radroots-events = { workspace = true, optional = true, default-features = true, features = ["std", "serde", "typeshare"] }
 radroots-log = { workspace = true, features = ["std"] }
+radroots-nostr-accounts = { workspace = true, optional = true, default-features = true }
 radroots-nostr = { workspace = true, optional = true, default-features = true, features = ["client", "events"] }
 directories = { workspace = true, optional = true }
 hex = { workspace = true, optional = true }

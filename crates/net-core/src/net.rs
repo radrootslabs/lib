@@ -3,9 +3,9 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::error::{NetError, Result};
 #[cfg(feature = "nostr-client")]
-use crate::keys::KeysManager;
-#[cfg(feature = "nostr-client")]
 use crate::nostr_client::{NostrClientManager, NostrConnectionSnapshot};
+#[cfg(feature = "nostr-client")]
+use radroots_nostr_accounts::prelude::RadrootsNostrAccountsManager;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct BuildInfo {
@@ -31,7 +31,7 @@ pub struct Net {
     pub config: crate::config::NetConfig,
 
     #[cfg(feature = "nostr-client")]
-    pub keys: KeysManager,
+    pub accounts: RadrootsNostrAccountsManager,
 
     #[cfg(feature = "nostr-client")]
     pub nostr: Option<NostrClientManager>,
@@ -55,7 +55,7 @@ impl Net {
             },
             config: cfg,
             #[cfg(feature = "nostr-client")]
-            keys: KeysManager::default(),
+            accounts: RadrootsNostrAccountsManager::new_in_memory(),
             #[cfg(feature = "nostr-client")]
             nostr: None,
             #[cfg(feature = "rt")]
@@ -89,12 +89,14 @@ impl Net {
     #[cfg(feature = "nostr-client")]
     pub fn nostr_set_default_relays(&mut self, urls: &[String]) -> Result<()> {
         if self.nostr.is_none() {
-            let keys = self.keys.require()?;
+            let keys = self
+                .selected_nostr_keys()
+                .ok_or(NetError::MissingKey)?;
             let rt = self
                 .rt
                 .as_ref()
                 .ok_or_else(|| NetError::msg("tokio runtime missing"))?;
-            self.nostr = Some(NostrClientManager::new(keys.clone(), rt.handle().clone()));
+            self.nostr = Some(NostrClientManager::new(keys, rt.handle().clone()));
         }
         if let Some(n) = &self.nostr {
             n.set_relays(urls);
@@ -104,18 +106,18 @@ impl Net {
 
     #[cfg(feature = "nostr-client")]
     pub fn nostr_connect_if_key_present(&mut self) -> Result<()> {
-        if self.keys.state.loaded {
-            let rt = self
-                .rt
-                .as_ref()
-                .ok_or_else(|| NetError::msg("tokio runtime missing"))?;
-            if self.nostr.is_none() {
-                let keys = self.keys.require()?;
-                self.nostr = Some(NostrClientManager::new(keys.clone(), rt.handle().clone()));
-            }
-            if let Some(n) = &self.nostr {
-                n.connect()?;
-            }
+        let Some(keys) = self.selected_nostr_keys() else {
+            return Ok(());
+        };
+        let rt = self
+            .rt
+            .as_ref()
+            .ok_or_else(|| NetError::msg("tokio runtime missing"))?;
+        if self.nostr.is_none() {
+            self.nostr = Some(NostrClientManager::new(keys, rt.handle().clone()));
+        }
+        if let Some(n) = &self.nostr {
+            n.connect()?;
         }
         Ok(())
     }
@@ -123,6 +125,15 @@ impl Net {
     #[cfg(feature = "nostr-client")]
     pub fn nostr_connection_snapshot(&self) -> Option<NostrConnectionSnapshot> {
         self.nostr.as_ref().map(|n| n.snapshot())
+    }
+
+    #[cfg(feature = "nostr-client")]
+    pub fn selected_nostr_keys(&self) -> Option<radroots_nostr::prelude::RadrootsNostrKeys> {
+        self.accounts
+            .selected_signing_identity()
+            .ok()
+            .flatten()
+            .map(|identity| identity.into_keys())
     }
 }
 
@@ -170,5 +181,18 @@ mod tests {
 
         let rt_present = handle.lock().unwrap().rt.is_some();
         assert!(rt_present);
+    }
+
+    #[cfg(feature = "nostr-client")]
+    #[test]
+    fn selected_nostr_keys_reflects_selected_signing_account() {
+        let cfg = crate::config::NetConfig::default();
+        let net = crate::Net::new(cfg);
+        assert!(net.selected_nostr_keys().is_none());
+
+        net.accounts
+            .generate_identity(Some("primary".into()), true)
+            .expect("generate account");
+        assert!(net.selected_nostr_keys().is_some());
     }
 }
