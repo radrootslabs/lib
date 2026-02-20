@@ -1,4 +1,4 @@
-.PHONY: all build clean help \
+.PHONY: all build clean help export-ts-sdk-bindings \
 	build-events-codec-wasm build-tangle-db-wasm build-tangle-events-wasm
 
 SHELL := /bin/bash
@@ -21,8 +21,12 @@ help:
 	@echo "  make all"
 	@echo "  make build"
 	@echo "  make clean"
+	@echo "  make export-ts-sdk-bindings"
 	@echo "  make help"
 	@printf "%s\n" $(BUILD_TARGETS)
+
+export-ts-sdk-bindings:
+	./scripts/export-ts-sdk-bindings.sh
 
 build-tangle-db-wasm:
 	wasm-pack build crates/tangle-db-wasm --release --target web \
