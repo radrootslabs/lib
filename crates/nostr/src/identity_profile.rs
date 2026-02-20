@@ -80,6 +80,7 @@ pub async fn radroots_nostr_bootstrap_service_presence(
     Ok(())
 }
 
+#[cfg(feature = "events")]
 fn profile_type_tags(profile_type: Option<RadrootsProfileType>) -> Vec<RadrootsNostrTag> {
     let mut tag_list: Vec<RadrootsNostrTag> = Vec::new();
     for mut tag in profile_build_tags(profile_type) {
