@@ -1,0 +1,27 @@
+{
+  "suite": "events",
+  "contract_version": "0.1.0",
+  "vectors": [
+    {
+      "id": "listing_tags_full_minimal_001",
+      "kind": "listing_tags_full",
+      "input": {
+        "d_tag": "listing-001",
+        "farm": {
+          "pubkey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "d_tag": "farm-001"
+        },
+        "product": {
+          "key": "coffee.green",
+          "title": "green coffee lot",
+          "category": "coffee"
+        },
+        "primary_bin_id": "bin-a",
+        "bins": []
+      },
+      "expected": {
+        "tags": []
+      }
+    }
+  ]
+}
