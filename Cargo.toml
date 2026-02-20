@@ -17,7 +17,7 @@ members = [
     "crates/nostr-runtime",
     "crates/runtime",
     "crates/sql-wasm-bridge",
-    "sql-wasm-core",
+    "crates/sql-wasm-core",
     "crates/sql-core",
     "tangle-db-schema",
     "tangle-events",
@@ -52,7 +52,7 @@ radroots-net = { path = "crates/net", version = "0.1.0", default-features = fals
 radroots-net-core = { path = "crates/net-core", version = "0.1.0", default-features = false }
 radroots-nostr-runtime = { path = "crates/nostr-runtime", version = "0.1.0", default-features = false }
 radroots-sql-wasm-bridge = { path = "crates/sql-wasm-bridge", version = "0.1.0" }
-radroots-sql-wasm-core = { path = "sql-wasm-core", version = "0.1.0", default-features = false }
+radroots-sql-wasm-core = { path = "crates/sql-wasm-core", version = "0.1.0", default-features = false }
 radroots-sql-core = { path = "crates/sql-core", version = "0.1.0" }
 radroots-tangle-db-schema = { path = "tangle-db-schema", version = "0.1.0", default-features = false }
 radroots-tangle-events = { path = "tangle-events", version = "0.1.0", default-features = false }
