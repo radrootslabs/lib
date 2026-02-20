@@ -1,10 +1,28 @@
-use std::{env, fs, path::PathBuf};
+use std::{
+    env, fs,
+    path::{Path, PathBuf},
+};
+
+fn workspace_root(manifest_dir: &Path) -> PathBuf {
+    let parent = manifest_dir.parent().unwrap_or(manifest_dir);
+    if parent.file_name().and_then(|name| name.to_str()) == Some("crates") {
+        parent.parent().unwrap_or(parent).to_path_buf()
+    } else {
+        parent.to_path_buf()
+    }
+}
 
 fn export_dir(crate_name: &str) -> PathBuf {
     if let Some(export_dir) = env::var_os("RADROOTS_TS_RS_EXPORT_DIR") {
         return PathBuf::from(export_dir);
     }
-    PathBuf::from(format!("../target/ts-rs/{crate_name}"))
+    let manifest_dir = PathBuf::from(
+        env::var("CARGO_MANIFEST_DIR").expect("missing required env var CARGO_MANIFEST_DIR"),
+    );
+    workspace_root(&manifest_dir)
+        .join("target")
+        .join("ts-rs")
+        .join(crate_name)
 }
 
 fn main() {

@@ -44,3 +44,7 @@ prompt*.txt
 
 # Dev
 .local
+
+# temporary guard: test-generated ts artifacts
+**/bindings/constants.ts
+**/bindings/kinds.ts
