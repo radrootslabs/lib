@@ -1,14 +1,52 @@
 #![forbid(unsafe_code)]
 
 use crate::contract;
+use serde::Serialize;
+use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
+
+#[derive(Serialize)]
+struct ExportManifest {
+    language: String,
+    files: Vec<ExportManifestEntry>,
+}
+
+#[derive(Serialize)]
+struct ExportManifestEntry {
+    path: String,
+    sha256: String,
+}
 
 fn to_package_dir(base: &Path, package_name: &str) -> PathBuf {
     let stripped = package_name
         .strip_prefix("@radroots/")
         .unwrap_or(package_name);
     base.join(stripped)
+}
+
+fn ts_export_mapping(
+    bundle: &contract::ContractBundle,
+) -> Result<&contract::ExportMapping, String> {
+    bundle
+        .exports
+        .iter()
+        .find(|mapping| mapping.language.id == "ts")
+        .ok_or_else(|| "missing ts export mapping".to_string())
+}
+
+fn ts_artifacts(mapping: &contract::ExportMapping) -> Result<&contract::ExportArtifacts, String> {
+    mapping
+        .artifacts
+        .as_ref()
+        .ok_or_else(|| "missing ts artifacts mapping".to_string())
+}
+
+fn required_artifact_value<'a>(value: &'a Option<String>, field: &str) -> Result<&'a str, String> {
+    value
+        .as_deref()
+        .filter(|item| !item.trim().is_empty())
+        .ok_or_else(|| format!("missing ts artifacts.{field}"))
 }
 
 fn copy_if_exists(src: &Path, dst: &Path) -> Result<bool, String> {
@@ -50,14 +88,56 @@ fn copy_dir_contents(src: &Path, dst: &Path) -> Result<usize, String> {
     Ok(copied)
 }
 
+fn collect_manifest_entries(
+    root: &Path,
+    current: &Path,
+    skip_path: &Path,
+    entries: &mut Vec<ExportManifestEntry>,
+) -> Result<(), String> {
+    if !current.exists() {
+        return Ok(());
+    }
+    let mut dir_entries = fs::read_dir(current)
+        .map_err(|e| format!("read dir {}: {e}", current.display()))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("read dir entries {}: {e}", current.display()))?;
+    dir_entries.sort_by_key(|entry| entry.file_name());
+    for entry in dir_entries {
+        let path = entry.path();
+        if path == skip_path {
+            continue;
+        }
+        let file_type = entry
+            .file_type()
+            .map_err(|e| format!("read type {}: {e}", path.display()))?;
+        if file_type.is_dir() {
+            collect_manifest_entries(root, &path, skip_path, entries)?;
+            continue;
+        }
+        if !file_type.is_file() {
+            continue;
+        }
+        let bytes = fs::read(&path).map_err(|e| format!("read {}: {e}", path.display()))?;
+        let digest = Sha256::digest(&bytes);
+        let relative = path
+            .strip_prefix(root)
+            .map_err(|e| format!("strip prefix {}: {e}", path.display()))?
+            .to_string_lossy()
+            .replace('\\', "/");
+        entries.push(ExportManifestEntry {
+            path: relative,
+            sha256: hex::encode(digest),
+        });
+    }
+    Ok(())
+}
+
 pub fn export_ts_models(workspace_root: &Path, out_dir: &Path) -> Result<(), String> {
     let bundle = contract::load_contract_bundle(workspace_root)?;
     contract::validate_contract_bundle(&bundle)?;
-    let ts_export = bundle
-        .exports
-        .iter()
-        .find(|mapping| mapping.language.id == "ts")
-        .ok_or_else(|| "missing ts export mapping".to_string())?;
+    let ts_export = ts_export_mapping(&bundle)?;
+    let artifacts = ts_artifacts(ts_export)?;
+    let models_dir = required_artifact_value(&artifacts.models_dir, "models_dir")?;
     let source_root = workspace_root.join("target").join("ts-rs");
     if !source_root.exists() {
         return Err(format!(
@@ -71,8 +151,7 @@ pub fn export_ts_models(workspace_root: &Path, out_dir: &Path) -> Result<(), Str
         let crate_dir = crate_name.strip_prefix("radroots-").unwrap_or(crate_name);
         let src = source_root.join(crate_dir).join("types.ts");
         let dst = to_package_dir(&ts_out_root, package_name)
-            .join("src")
-            .join("generated")
+            .join(models_dir)
             .join("types.ts");
         if copy_if_exists(&src, &dst)? {
             copied += 1;
@@ -87,11 +166,9 @@ pub fn export_ts_models(workspace_root: &Path, out_dir: &Path) -> Result<(), Str
 pub fn export_ts_constants(workspace_root: &Path, out_dir: &Path) -> Result<(), String> {
     let bundle = contract::load_contract_bundle(workspace_root)?;
     contract::validate_contract_bundle(&bundle)?;
-    let ts_export = bundle
-        .exports
-        .iter()
-        .find(|mapping| mapping.language.id == "ts")
-        .ok_or_else(|| "missing ts export mapping".to_string())?;
+    let ts_export = ts_export_mapping(&bundle)?;
+    let artifacts = ts_artifacts(ts_export)?;
+    let constants_dir = required_artifact_value(&artifacts.constants_dir, "constants_dir")?;
     let ts_out_root = out_dir.join("ts").join("packages");
     for (crate_name, package_name) in &ts_export.packages {
         let crate_dir = crate_name.strip_prefix("radroots-").unwrap_or(crate_name);
@@ -111,8 +188,7 @@ pub fn export_ts_constants(workspace_root: &Path, out_dir: &Path) -> Result<(), 
                 .cloned()
                 .unwrap_or_else(|| candidates[0].clone());
             let dst = to_package_dir(&ts_out_root, package_name)
-                .join("src")
-                .join("generated")
+                .join(constants_dir)
                 .join(filename);
             copy_if_exists(&src, &dst)?;
         }
@@ -123,11 +199,9 @@ pub fn export_ts_constants(workspace_root: &Path, out_dir: &Path) -> Result<(), 
 pub fn export_ts_wasm_artifacts(workspace_root: &Path, out_dir: &Path) -> Result<(), String> {
     let bundle = contract::load_contract_bundle(workspace_root)?;
     contract::validate_contract_bundle(&bundle)?;
-    let ts_export = bundle
-        .exports
-        .iter()
-        .find(|mapping| mapping.language.id == "ts")
-        .ok_or_else(|| "missing ts export mapping".to_string())?;
+    let ts_export = ts_export_mapping(&bundle)?;
+    let artifacts = ts_artifacts(ts_export)?;
+    let wasm_dist_dir = required_artifact_value(&artifacts.wasm_dist_dir, "wasm_dist_dir")?;
     let ts_out_root = out_dir.join("ts").join("packages");
     let mut copied = 0usize;
     for (crate_name, package_name) in &ts_export.packages {
@@ -140,11 +214,40 @@ pub fn export_ts_wasm_artifacts(workspace_root: &Path, out_dir: &Path) -> Result
             .join(crate_dir)
             .join("pkg")
             .join("dist");
-        let target_root = to_package_dir(&ts_out_root, package_name).join("dist");
+        let target_root = to_package_dir(&ts_out_root, package_name).join(wasm_dist_dir);
         copied += copy_dir_contents(&source_root, &target_root)?;
     }
     if copied == 0 {
         return Err("no ts wasm files were exported".to_string());
     }
     Ok(())
+}
+
+pub fn write_ts_export_manifest(workspace_root: &Path, out_dir: &Path) -> Result<PathBuf, String> {
+    let bundle = contract::load_contract_bundle(workspace_root)?;
+    contract::validate_contract_bundle(&bundle)?;
+    let ts_export = ts_export_mapping(&bundle)?;
+    let artifacts = ts_artifacts(ts_export)?;
+    let manifest_file = required_artifact_value(&artifacts.manifest_file, "manifest_file")?;
+    let ts_root = out_dir.join("ts");
+    let manifest_path = ts_root.join(manifest_file);
+    let mut files = Vec::new();
+    collect_manifest_entries(
+        &ts_root,
+        &ts_root.join("packages"),
+        &manifest_path,
+        &mut files,
+    )?;
+    let manifest = ExportManifest {
+        language: ts_export.language.id.clone(),
+        files,
+    };
+    if let Some(parent) = manifest_path.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("create {}: {e}", parent.display()))?;
+    }
+    let bytes = serde_json::to_vec_pretty(&manifest)
+        .map_err(|e| format!("serialize manifest {}: {e}", manifest_path.display()))?;
+    fs::write(&manifest_path, bytes)
+        .map_err(|e| format!("write {}: {e}", manifest_path.display()))?;
+    Ok(manifest_path)
 }

@@ -64,12 +64,21 @@ pub struct CompatibilityRules {
 pub struct ExportMapping {
     pub language: ExportLanguage,
     pub packages: BTreeMap<String, String>,
+    pub artifacts: Option<ExportArtifacts>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct ExportLanguage {
     pub id: String,
     pub repository: String,
+}
+
+#[derive(Debug, Deserialize, Default)]
+pub struct ExportArtifacts {
+    pub models_dir: Option<String>,
+    pub constants_dir: Option<String>,
+    pub wasm_dist_dir: Option<String>,
+    pub manifest_file: Option<String>,
 }
 
 #[derive(Debug)]
@@ -128,6 +137,12 @@ pub fn validate_contract_bundle(bundle: &ContractBundle) -> Result<(), String> {
     if bundle.manifest.surface.model_crates.is_empty() {
         return Err("contract surface.model_crates must not be empty".to_string());
     }
+    if bundle.manifest.surface.algorithm_crates.is_empty() {
+        return Err("contract surface.algorithm_crates must not be empty".to_string());
+    }
+    if bundle.manifest.surface.wasm_crates.is_empty() {
+        return Err("contract surface.wasm_crates must not be empty".to_string());
+    }
     if bundle.exports.is_empty() {
         return Err("at least one language export mapping is required".to_string());
     }
@@ -136,10 +151,41 @@ pub fn validate_contract_bundle(bundle: &ContractBundle) -> Result<(), String> {
             return Err("language.id is required".to_string());
         }
         if mapping.language.repository.trim().is_empty() {
-            return Err(format!("language.repository is required for {}", mapping.language.id));
+            return Err(format!(
+                "language.repository is required for {}",
+                mapping.language.id
+            ));
         }
         if mapping.packages.is_empty() {
-            return Err(format!("packages map is required for {}", mapping.language.id));
+            return Err(format!(
+                "packages map is required for {}",
+                mapping.language.id
+            ));
+        }
+        if mapping.language.id == "ts" {
+            let artifacts = mapping
+                .artifacts
+                .as_ref()
+                .ok_or_else(|| "artifacts map is required for ts".to_string())?;
+            if artifacts
+                .models_dir
+                .as_deref()
+                .is_none_or(|value| value.trim().is_empty())
+                || artifacts
+                    .constants_dir
+                    .as_deref()
+                    .is_none_or(|value| value.trim().is_empty())
+                || artifacts
+                    .wasm_dist_dir
+                    .as_deref()
+                    .is_none_or(|value| value.trim().is_empty())
+                || artifacts
+                    .manifest_file
+                    .as_deref()
+                    .is_none_or(|value| value.trim().is_empty())
+            {
+                return Err("artifacts fields must be non-empty for ts".to_string());
+            }
         }
     }
     if bundle.version.contract.version.trim().is_empty() {
