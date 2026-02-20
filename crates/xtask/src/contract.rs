@@ -217,3 +217,83 @@ pub fn validate_contract_bundle(bundle: &ContractBundle) -> Result<(), String> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeSet;
+    use std::path::PathBuf;
+
+    fn workspace_root() -> PathBuf {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        manifest_dir
+            .join("../..")
+            .canonicalize()
+            .expect("canonical workspace root")
+    }
+
+    #[test]
+    fn validate_current_contract_bundle() {
+        let root = workspace_root();
+        let bundle = load_contract_bundle(&root).expect("load contract");
+        validate_contract_bundle(&bundle).expect("validate contract");
+    }
+
+    #[test]
+    fn ts_export_mapping_covers_model_and_wasm_surface() {
+        let root = workspace_root();
+        let bundle = load_contract_bundle(&root).expect("load contract");
+        let ts = bundle
+            .exports
+            .iter()
+            .find(|mapping| mapping.language.id == "ts")
+            .expect("ts export mapping");
+        let expected = bundle
+            .manifest
+            .surface
+            .model_crates
+            .iter()
+            .chain(bundle.manifest.surface.wasm_crates.iter())
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        let mapped = ts.packages.keys().cloned().collect::<BTreeSet<_>>();
+        assert_eq!(mapped, expected);
+    }
+
+    #[test]
+    fn exports_follow_package_scope_rules() {
+        let root = workspace_root();
+        let bundle = load_contract_bundle(&root).expect("load contract");
+        for mapping in &bundle.exports {
+            if mapping.language.id == "ts" {
+                for package in mapping.packages.values() {
+                    assert!(package.starts_with("@radroots/"));
+                }
+            } else {
+                for package in mapping.packages.values() {
+                    assert!(!package.trim().is_empty());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn non_ts_exports_only_include_model_surface() {
+        let root = workspace_root();
+        let bundle = load_contract_bundle(&root).expect("load contract");
+        let expected = bundle
+            .manifest
+            .surface
+            .model_crates
+            .iter()
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        for mapping in &bundle.exports {
+            if mapping.language.id == "ts" {
+                continue;
+            }
+            let mapped = mapping.packages.keys().cloned().collect::<BTreeSet<_>>();
+            assert_eq!(mapped, expected);
+        }
+    }
+}
