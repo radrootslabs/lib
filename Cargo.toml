@@ -1,8 +1,8 @@
 [workspace]
 members = [
-    "app-core",
-    "app-ffi-swift",
-    "app-wasm",
+    "crates/app-core",
+    "crates/app-ffi-swift",
+    "crates/app-wasm",
     "crates/core",
     "events",
     "events-codec",
@@ -36,9 +36,9 @@ rust-version = "1.92.0"
 license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
-radroots-app-core = { path = "app-core", version = "0.1.0", default-features = false }
-radroots-app-ffi-swift = { path = "app-ffi-swift", version = "0.1.0", default-features = false }
-radroots-app-wasm = { path = "app-wasm", version = "0.1.0", default-features = false }
+radroots-app-core = { path = "crates/app-core", version = "0.1.0", default-features = false }
+radroots-app-ffi-swift = { path = "crates/app-ffi-swift", version = "0.1.0", default-features = false }
+radroots-app-wasm = { path = "crates/app-wasm", version = "0.1.0", default-features = false }
 radroots-core = { path = "crates/core", version = "0.1.0", default-features = false }
 radroots-events = { path = "events", version = "0.1.0", default-features = false }
 radroots-events-codec = { path = "events-codec", version = "0.1.0", default-features = false }
