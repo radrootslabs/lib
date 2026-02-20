@@ -5,7 +5,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 fn to_package_dir(base: &Path, package_name: &str) -> PathBuf {
-    let stripped = package_name.strip_prefix("@radroots/").unwrap_or(package_name);
+    let stripped = package_name
+        .strip_prefix("@radroots/")
+        .unwrap_or(package_name);
     base.join(stripped)
 }
 
@@ -30,7 +32,10 @@ pub fn export_ts_models(workspace_root: &Path, out_dir: &Path) -> Result<(), Str
         .ok_or_else(|| "missing ts export mapping".to_string())?;
     let source_root = workspace_root.join("target").join("ts-rs");
     if !source_root.exists() {
-        return Err(format!("missing ts-rs source root {}", source_root.display()));
+        return Err(format!(
+            "missing ts-rs source root {}",
+            source_root.display()
+        ));
     }
     let ts_out_root = out_dir.join("ts").join("packages");
     let mut copied = 0usize;
@@ -47,6 +52,42 @@ pub fn export_ts_models(workspace_root: &Path, out_dir: &Path) -> Result<(), Str
     }
     if copied == 0 {
         return Err("no ts model files were exported".to_string());
+    }
+    Ok(())
+}
+
+pub fn export_ts_constants(workspace_root: &Path, out_dir: &Path) -> Result<(), String> {
+    let bundle = contract::load_contract_bundle(workspace_root)?;
+    contract::validate_contract_bundle(&bundle)?;
+    let ts_export = bundle
+        .exports
+        .iter()
+        .find(|mapping| mapping.language.id == "ts")
+        .ok_or_else(|| "missing ts export mapping".to_string())?;
+    let ts_out_root = out_dir.join("ts").join("packages");
+    for (crate_name, package_name) in &ts_export.packages {
+        let crate_dir = crate_name.strip_prefix("radroots-").unwrap_or(crate_name);
+        let crate_root = workspace_root.join("crates").join(crate_dir);
+        for filename in ["constants.ts", "kinds.ts"] {
+            let candidates = [
+                crate_root.join("bindings").join(filename),
+                crate_root
+                    .join("bindings")
+                    .join("ts")
+                    .join("src")
+                    .join(filename),
+            ];
+            let src = candidates
+                .iter()
+                .find(|path| path.exists())
+                .cloned()
+                .unwrap_or_else(|| candidates[0].clone());
+            let dst = to_package_dir(&ts_out_root, package_name)
+                .join("src")
+                .join("generated")
+                .join(filename);
+            copy_if_exists(&src, &dst)?;
+        }
     }
     Ok(())
 }

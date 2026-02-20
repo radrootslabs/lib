@@ -10,6 +10,7 @@ use std::process::ExitCode;
 fn usage() {
     eprintln!("usage:");
     eprintln!("  cargo xtask sdk export-ts-models [--out <dir>]");
+    eprintln!("  cargo xtask sdk export-ts-constants [--out <dir>]");
     eprintln!("  cargo xtask sdk validate");
 }
 
@@ -42,6 +43,14 @@ fn export_ts_models(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+fn export_ts_constants(args: &[String]) -> Result<(), String> {
+    let root = workspace_root()?;
+    let out_dir = parse_out_dir(args, &root)?;
+    export_ts::export_ts_constants(&root, &out_dir)?;
+    eprintln!("exported ts constants to {}", out_dir.display());
+    Ok(())
+}
+
 fn validate_contract() -> Result<(), String> {
     let root = workspace_root()?;
     let bundle = contract::load_contract_bundle(&root)?;
@@ -57,6 +66,7 @@ fn validate_contract() -> Result<(), String> {
 fn run_sdk(args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
         Some("export-ts-models") => export_ts_models(&args[1..]),
+        Some("export-ts-constants") => export_ts_constants(&args[1..]),
         Some("validate") => validate_contract(),
         _ => Err("unknown sdk subcommand".to_string()),
     }
