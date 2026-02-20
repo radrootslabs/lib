@@ -6,7 +6,7 @@ members = [
     "crates/core",
     "crates/events",
     "crates/events-codec",
-    "events-codec-wasm",
+    "crates/events-codec-wasm",
     "events-indexed",
     "identity",
     "log",

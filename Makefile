@@ -29,7 +29,7 @@ build-tangle-db-wasm:
 		--out-dir ../tangle-db-wasm/pkg/dist --scope radroots
 
 build-events-codec-wasm:
-	wasm-pack build events-codec-wasm --release --target web \
+	wasm-pack build crates/events-codec-wasm --release --target web \
 		--out-dir ../events-codec-wasm/pkg/dist --scope radroots
 
 build-tangle-events-wasm:
