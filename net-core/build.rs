@@ -9,7 +9,8 @@ fn main() {
     println!("cargo:rerun-if-env-changed=RUSTC");
     println!("cargo:rerun-if-env-changed=PROFILE");
 
-    let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("missing required env var CARGO_MANIFEST_DIR");
+    let manifest_dir =
+        env::var("CARGO_MANIFEST_DIR").expect("missing required env var CARGO_MANIFEST_DIR");
 
     let mut dir = PathBuf::from(&manifest_dir);
     let git_dir = loop {
