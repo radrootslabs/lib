@@ -1,0 +1,17 @@
+[package]
+name = "radroots-nostr-accounts"
+description = "Nostr account model for Radroots"
+version.workspace = true
+edition.workspace = true
+authors = ["Radroots Authors"]
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+default = ["std"]
+std = []
+
+[dependencies]
+thiserror = { workspace = true }
+
+[dev-dependencies]

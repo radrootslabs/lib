@@ -13,6 +13,7 @@ members = [
     "crates/net",
     "crates/net-core",
     "crates/nostr",
+    "crates/nostr-accounts",
     "crates/nostr-ndb",
     "crates/nostr-runtime",
     "crates/runtime",
@@ -45,6 +46,7 @@ radroots-events-codec = { path = "crates/events-codec", version = "0.1.0", defau
 radroots-events-indexed = { path = "crates/events-indexed", version = "0.1.0", default-features = false }
 radroots-identity = { path = "crates/identity", version = "0.1.0", default-features = false }
 radroots-nostr = { path = "crates/nostr", version = "0.1.0", default-features = false }
+radroots-nostr-accounts = { path = "crates/nostr-accounts", version = "0.1.0", default-features = false }
 radroots-nostr-ndb = { path = "crates/nostr-ndb", version = "0.1.0", default-features = false }
 radroots-runtime = { path = "crates/runtime", version = "0.1.0", default-features = false }
 radroots-log = { path = "crates/log", version = "0.1.0", default-features = false }
