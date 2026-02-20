@@ -1,0 +1,20 @@
+[language]
+id = "kotlin"
+repository = "sdk-kotlin"
+
+[packages]
+"radroots-core" = "radroots.core"
+"radroots-types" = "radroots.types"
+"radroots-events" = "radroots.events"
+"radroots-trade" = "radroots.trade"
+"radroots-identity" = "radroots.identity"
+
+[artifacts]
+models_dir = "src/generated"
+constants_dir = "src/generated"
+manifest_file = "export-manifest.json"
+
+[runtime]
+networking = "native"
+signing = "native"
+deterministic_codec = "native_or_wasm"

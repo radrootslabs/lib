@@ -1,0 +1,20 @@
+[language]
+id = "swift"
+repository = "sdk-swift"
+
+[packages]
+"radroots-core" = "RadrootsCore"
+"radroots-types" = "RadrootsTypes"
+"radroots-events" = "RadrootsEvents"
+"radroots-trade" = "RadrootsTrade"
+"radroots-identity" = "RadrootsIdentity"
+
+[artifacts]
+models_dir = "Sources/Generated"
+constants_dir = "Sources/Generated"
+manifest_file = "export-manifest.json"
+
+[runtime]
+networking = "native"
+signing = "native"
+deterministic_codec = "native_or_wasm"

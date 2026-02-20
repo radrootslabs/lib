@@ -1,0 +1,20 @@
+[language]
+id = "py"
+repository = "sdk-python"
+
+[packages]
+"radroots-core" = "radroots_core"
+"radroots-types" = "radroots_types"
+"radroots-events" = "radroots_events"
+"radroots-trade" = "radroots_trade"
+"radroots-identity" = "radroots_identity"
+
+[artifacts]
+models_dir = "src/generated"
+constants_dir = "src/generated"
+manifest_file = "export-manifest.json"
+
+[runtime]
+networking = "native"
+signing = "native"
+deterministic_codec = "native_or_wasm"

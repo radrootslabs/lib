@@ -1,0 +1,22 @@
+[language]
+id = "ts"
+repository = "sdk-typescript"
+
+[packages]
+"radroots-core" = "@radroots/core"
+"radroots-types" = "@radroots/types"
+"radroots-events" = "@radroots/events"
+"radroots-trade" = "@radroots/trade"
+"radroots-identity" = "@radroots/identity"
+"radroots-events-codec-wasm" = "@radroots/events-codec-wasm"
+
+[artifacts]
+models_dir = "src/generated"
+constants_dir = "src/generated"
+wasm_dist_dir = "dist"
+manifest_file = "export-manifest.json"
+
+[runtime]
+networking = "native"
+signing = "native"
+deterministic_codec = "wasm"
