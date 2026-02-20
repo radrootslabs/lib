@@ -2611,6 +2611,7 @@ dependencies = [
  "radroots-core",
  "radroots-events",
  "radroots-events-codec",
+ "radroots-identity",
  "radroots-log",
  "radroots-net-core",
  "radroots-nostr",
