@@ -98,6 +98,88 @@ fn contract_root(workspace_root: &Path) -> PathBuf {
     workspace_root.join("contract")
 }
 
+const CORE_UNIT_DIMENSION_ENUM: &str = "RadrootsCoreUnitDimension";
+const CORE_UNIT_DIMENSION_ORDER: [&str; 3] = ["Count", "Mass", "Volume"];
+
+fn extract_enum_body<'a>(source: &'a str, enum_name: &str) -> Result<&'a str, String> {
+    let marker = format!("pub enum {enum_name}");
+    let enum_start = source
+        .find(&marker)
+        .ok_or_else(|| format!("missing enum {enum_name}"))?;
+    let after_start = &source[enum_start..];
+    let open_rel = after_start
+        .find('{')
+        .ok_or_else(|| format!("missing opening brace for enum {enum_name}"))?;
+    let open_idx = enum_start + open_rel;
+    let mut depth = 0usize;
+    for (offset, ch) in source[open_idx..].char_indices() {
+        if ch == '{' {
+            depth += 1;
+            continue;
+        }
+        if ch != '}' {
+            continue;
+        }
+        depth = depth.saturating_sub(1);
+        if depth == 0 {
+            let close_idx = open_idx + offset;
+            return Ok(&source[(open_idx + 1)..close_idx]);
+        }
+    }
+    Err(format!("missing closing brace for enum {enum_name}"))
+}
+
+fn parse_enum_variants(enum_body: &str) -> Vec<String> {
+    enum_body
+        .lines()
+        .filter_map(|line| {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with("//") {
+                return None;
+            }
+            let before_comma = trimmed.split_once(',').map_or(trimmed, |(head, _)| head).trim();
+            if before_comma.is_empty() {
+                return None;
+            }
+            let before_discriminant = before_comma
+                .split_once('=')
+                .map_or(before_comma, |(head, _)| head)
+                .trim();
+            if before_discriminant.is_empty() {
+                return None;
+            }
+            let ident = before_discriminant
+                .split_whitespace()
+                .next()
+                .unwrap_or_default();
+            if ident.is_empty() {
+                return None;
+            }
+            Some(ident.to_string())
+        })
+        .collect()
+}
+
+fn validate_core_unit_dimension_variant_order(workspace_root: &Path) -> Result<(), String> {
+    let source_path = workspace_root.join("crates").join("core").join("src").join("unit.rs");
+    let source =
+        fs::read_to_string(&source_path).map_err(|e| format!("read {}: {e}", source_path.display()))?;
+    let enum_body = extract_enum_body(&source, CORE_UNIT_DIMENSION_ENUM)?;
+    let variants = parse_enum_variants(enum_body);
+    let expected = CORE_UNIT_DIMENSION_ORDER
+        .iter()
+        .map(|item| (*item).to_string())
+        .collect::<Vec<_>>();
+    if variants != expected {
+        return Err(format!(
+            "core unit dimension variant order must be {} but was {}",
+            CORE_UNIT_DIMENSION_ORDER.join(", "),
+            variants.join(", ")
+        ));
+    }
+    Ok(())
+}
+
 pub fn load_contract_bundle(workspace_root: &Path) -> Result<ContractBundle, String> {
     let root = contract_root(workspace_root);
     let manifest = parse_toml::<ContractManifest>(&root.join("manifest.toml"))?;
@@ -215,6 +297,11 @@ pub fn validate_contract_bundle(bundle: &ContractBundle) -> Result<(), String> {
     {
         return Err("contract policy flags must all be true".to_string());
     }
+    let workspace_root = bundle
+        .root
+        .parent()
+        .ok_or_else(|| "failed to resolve workspace root from contract root".to_string())?;
+    validate_core_unit_dimension_variant_order(workspace_root)?;
     Ok(())
 }
 
@@ -295,5 +382,37 @@ mod tests {
             let mapped = mapping.packages.keys().cloned().collect::<BTreeSet<_>>();
             assert_eq!(mapped, expected);
         }
+    }
+
+    #[test]
+    fn parses_enum_variants_in_declared_order() {
+        let source = r#"
+pub enum RadrootsCoreUnitDimension {
+    Count,
+    Mass,
+    Volume,
+}
+"#;
+        let enum_body = extract_enum_body(source, "RadrootsCoreUnitDimension").expect("enum body");
+        let variants = parse_enum_variants(enum_body);
+        assert_eq!(variants, vec!["Count", "Mass", "Volume"]);
+    }
+
+    #[test]
+    fn fails_when_enum_order_does_not_match_contract() {
+        let source = r#"
+pub enum RadrootsCoreUnitDimension {
+    Mass,
+    Count,
+    Volume,
+}
+"#;
+        let enum_body = extract_enum_body(source, "RadrootsCoreUnitDimension").expect("enum body");
+        let variants = parse_enum_variants(enum_body);
+        let expected = CORE_UNIT_DIMENSION_ORDER
+            .iter()
+            .map(|item| (*item).to_string())
+            .collect::<Vec<_>>();
+        assert_ne!(variants, expected);
     }
 }
