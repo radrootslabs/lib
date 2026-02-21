@@ -1,0 +1,75 @@
+name: sdk-core-sync-pr
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - "crates/core/**"
+      - "crates/xtask/**"
+      - "contract/**"
+      - ".github/workflows/sdk-core-sync-pr.yml"
+
+jobs:
+  sync-core:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: ensure sync token is configured
+        run: test -n "${{ secrets.RADROOTS_SDK_SYNC_TOKEN }}"
+
+      - name: install rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.92.0
+
+      - name: export ts sdk artifacts
+        run: cargo run -q -p xtask -- sdk export-ts --out "${{ runner.temp }}/sdk-export"
+
+      - name: check core export artifact
+        run: test -f "${{ runner.temp }}/sdk-export/ts/packages/core/src/generated/types.ts"
+
+      - name: checkout sdk-typescript
+        uses: actions/checkout@v4
+        with:
+          repository: radrootslabs/sdk-typescript
+          ref: master
+          token: ${{ secrets.RADROOTS_SDK_SYNC_TOKEN }}
+          path: sdk-typescript
+          fetch-depth: 0
+
+      - name: apply core generated types
+        run: |
+          install -d sdk-typescript/packages/core/src/generated
+          cp \
+            "${{ runner.temp }}/sdk-export/ts/packages/core/src/generated/types.ts" \
+            sdk-typescript/packages/core/src/generated/types.ts
+
+      - name: setup bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.9
+
+      - name: validate sdk-typescript
+        working-directory: sdk-typescript
+        run: |
+          bun install --frozen-lockfile
+          bun run typecheck
+          bun run build
+          bun run test
+
+      - name: create pull request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.RADROOTS_SDK_SYNC_TOKEN }}
+          path: sdk-typescript
+          commit-message: core: sync generated types from rust sdk contract
+          branch: sync/core-${{ github.run_id }}-${{ github.run_attempt }}
+          delete-branch: true
+          title: core: sync generated types from rust sdk contract
+          body: |
+            - sync @radroots/core generated types from rust export
+            - source revision: ${{ github.sha }}
