@@ -1,0 +1,70 @@
+name: sdk-coverage-ci
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/sdk-coverage-ci.yml"
+      - "crates/xtask/**"
+      - "crates/core/**"
+      - "crates/types/**"
+      - "crates/events/**"
+      - "crates/trade/**"
+      - "crates/identity/**"
+      - "crates/tangle-db-schema/**"
+      - "crates/events-codec/**"
+      - "crates/events-codec-wasm/**"
+
+jobs:
+  coverage-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: install rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.92.0
+
+      - name: install nightly rust toolchain
+        run: rustup toolchain install nightly --profile minimal
+
+      - name: install cargo llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: run sdk coverage report set
+        run: |
+          set -euo pipefail
+          crates=(
+            xtask
+            radroots-core
+            radroots-types
+            radroots-events
+            radroots-trade
+            radroots-identity
+            radroots-tangle-db-schema
+            radroots-events-codec
+            radroots-events-codec-wasm
+          )
+          for crate in "${crates[@]}"; do
+            safe_crate="${crate//-/_}"
+            run_dir="target/sdk-coverage/${safe_crate}"
+            cargo run -q -p xtask -- sdk coverage run-crate --crate "${crate}" --out "${run_dir}" --test-threads 1
+            cargo run -q -p xtask -- sdk coverage report \
+              --scope "${crate}" \
+              --summary "${run_dir}/coverage-summary.json" \
+              --lcov "${run_dir}/coverage-lcov.info" \
+              --out "${run_dir}/coverage-gate-summary.json" \
+              --fail-under-exec-lines 0 \
+              --fail-under-functions 0 \
+              --fail-under-branches 0
+          done
+
+      - name: upload sdk coverage reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdk-coverage-reports
+          path: target/sdk-coverage/**/coverage-gate-summary.json
