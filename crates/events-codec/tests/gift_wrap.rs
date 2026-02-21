@@ -5,7 +5,9 @@ use radroots_events_codec::error::{EventEncodeError, EventParseError};
 use radroots_events_codec::gift_wrap::decode::{
     gift_wrap_from_tags, index_from_event, metadata_from_event,
 };
-use radroots_events_codec::gift_wrap::encode::{gift_wrap_build_tags, to_wire_parts};
+use radroots_events_codec::gift_wrap::encode::{
+    gift_wrap_build_tags, to_wire_parts, to_wire_parts_with_kind,
+};
 
 fn sample_gift_wrap() -> RadrootsGiftWrap {
     RadrootsGiftWrap {
@@ -156,4 +158,33 @@ fn gift_wrap_metadata_and_index_from_event_roundtrip() {
     assert_eq!(index.event.kind, KIND_GIFT_WRAP);
     assert_eq!(index.event.sig, "sig");
     assert_eq!(index.metadata.gift_wrap.recipient.public_key, "pubkey");
+}
+
+#[test]
+fn gift_wrap_build_tags_handles_optional_expiration_and_invalid_relay() {
+    let mut gift_wrap = sample_gift_wrap();
+    gift_wrap.expiration = None;
+    let tags = gift_wrap_build_tags(&gift_wrap).unwrap();
+    assert_eq!(
+        tags,
+        vec![vec![
+            "p".to_string(),
+            "pubkey".to_string(),
+            "wss://relay.example".to_string()
+        ]]
+    );
+
+    let mut gift_wrap = sample_gift_wrap();
+    gift_wrap.recipient.relay_url = Some(" ".to_string());
+    let err = gift_wrap_build_tags(&gift_wrap).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("recipient.relay_url")
+    ));
+}
+
+#[test]
+fn gift_wrap_to_wire_parts_with_kind_rejects_wrong_kind() {
+    let err = to_wire_parts_with_kind(&sample_gift_wrap(), KIND_MESSAGE).unwrap_err();
+    assert!(matches!(err, EventEncodeError::InvalidKind(KIND_MESSAGE)));
 }

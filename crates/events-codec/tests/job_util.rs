@@ -62,6 +62,60 @@ fn parse_i_tags_handles_multiple_shapes() {
 }
 
 #[test]
+fn parse_i_tags_covers_marker_and_fallback_shapes() {
+    let tags = vec![
+        vec!["i".to_string()],
+        vec!["i".to_string(), "marker-only".to_string()],
+        vec![
+            "i".to_string(),
+            "event-id".to_string(),
+            "marker".to_string(),
+        ],
+        vec![
+            "i".to_string(),
+            "event-id".to_string(),
+            "event".to_string(),
+            "marker-4".to_string(),
+        ],
+        vec![
+            "i".to_string(),
+            "event-id".to_string(),
+            "event".to_string(),
+            "wss://relay.example.com".to_string(),
+        ],
+        vec![
+            "i".to_string(),
+            "event-id".to_string(),
+            "event".to_string(),
+            "marker-5".to_string(),
+            "fallback-marker".to_string(),
+        ],
+        vec![
+            "i".to_string(),
+            "event-id".to_string(),
+            "event".to_string(),
+            "wss://relay.example.com".to_string(),
+            "final-marker".to_string(),
+        ],
+    ];
+
+    let inputs = parse_i_tags(&tags);
+    assert_eq!(inputs.len(), 6);
+    assert_eq!(inputs[0].marker.as_deref(), Some("marker-only"));
+    assert_eq!(inputs[0].data, "");
+    assert_eq!(inputs[1].marker.as_deref(), Some("marker"));
+    assert_eq!(inputs[1].data, "event-id");
+    assert_eq!(inputs[2].marker.as_deref(), Some("marker-4"));
+    assert_eq!(inputs[2].relay, None);
+    assert_eq!(inputs[3].relay.as_deref(), Some("wss://relay.example.com"));
+    assert_eq!(inputs[3].marker, None);
+    assert_eq!(inputs[4].marker.as_deref(), Some("marker-5"));
+    assert_eq!(inputs[4].relay, None);
+    assert_eq!(inputs[5].relay.as_deref(), Some("wss://relay.example.com"));
+    assert_eq!(inputs[5].marker.as_deref(), Some("final-marker"));
+}
+
+#[test]
 fn parse_params_extracts_key_value_pairs() {
     let tags = vec![
         vec!["param".to_string(), "k".to_string(), "v".to_string()],
@@ -85,6 +139,17 @@ fn parse_amount_tag_sat_accepts_msat_and_bolt11() {
     let parsed = parse_amount_tag_sat(&tags).unwrap().unwrap();
     assert_eq!(parsed.0, 1);
     assert_eq!(parsed.1.as_deref(), Some("bolt11"));
+}
+
+#[test]
+fn parse_amount_tag_sat_handles_none_and_invalid_shapes() {
+    assert!(parse_amount_tag_sat(&[]).unwrap().is_none());
+
+    let err = parse_amount_tag_sat(&[vec!["amount".to_string()]]).unwrap_err();
+    assert!(matches!(err, JobParseError::InvalidTag("amount")));
+
+    let err = parse_amount_tag_sat(&[vec!["amount".to_string(), "abc".to_string()]]).unwrap_err();
+    assert!(matches!(err, JobParseError::InvalidNumber("amount", _)));
 }
 
 #[test]
@@ -121,6 +186,14 @@ fn parse_bid_tag_sat_accepts_sat() {
     let tags = vec![vec!["bid".to_string(), "2".to_string()]];
     let bid = parse_bid_tag_sat(&tags).unwrap().unwrap();
     assert_eq!(bid, 2);
+}
+
+#[test]
+fn parse_bid_tag_sat_handles_none_and_invalid_shape() {
+    assert!(parse_bid_tag_sat(&[]).unwrap().is_none());
+
+    let err = parse_bid_tag_sat(&[vec!["bid".to_string()]]).unwrap_err();
+    assert!(matches!(err, JobParseError::InvalidTag("bid")));
 }
 
 #[test]

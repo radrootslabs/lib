@@ -125,3 +125,16 @@ fn reaction_metadata_and_index_from_event_roundtrip() {
     assert_eq!(index.event.sig, "sig");
     assert_eq!(index.metadata.reaction.content, "+");
 }
+
+#[test]
+fn reaction_build_tags_supports_root_without_d_tag() {
+    let reaction = RadrootsReaction {
+        root: common::event_ref("root", "author", KIND_POST),
+        content: "+".to_string(),
+    };
+    let tags = reaction_build_tags(&reaction).unwrap();
+    assert_eq!(tags.len(), 3);
+    assert_eq!(tags[0][0], "e");
+    assert_eq!(tags[1][0], "p");
+    assert_eq!(tags[2][0], "k");
+}

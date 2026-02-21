@@ -211,3 +211,90 @@ fn message_metadata_and_index_from_event_roundtrip() {
     assert_eq!(index.event.sig, "sig");
     assert_eq!(index.metadata.message.recipients.len(), 2);
 }
+
+#[test]
+fn message_build_tags_rejects_invalid_optional_fields() {
+    let message = RadrootsMessage {
+        recipients: vec![RadrootsMessageRecipient {
+            public_key: "pub".to_string(),
+            relay_url: Some(" ".to_string()),
+        }],
+        content: "hello".to_string(),
+        reply_to: None,
+        subject: None,
+    };
+    let err = message_build_tags(&message).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("recipients.relay_url")
+    ));
+
+    let message = RadrootsMessage {
+        recipients: vec![RadrootsMessageRecipient {
+            public_key: "pub".to_string(),
+            relay_url: None,
+        }],
+        content: "hello".to_string(),
+        reply_to: Some(RadrootsNostrEventPtr {
+            id: " ".to_string(),
+            relays: None,
+        }),
+        subject: None,
+    };
+    let err = message_build_tags(&message).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("reply_to.id")
+    ));
+
+    let message = RadrootsMessage {
+        recipients: vec![RadrootsMessageRecipient {
+            public_key: "pub".to_string(),
+            relay_url: None,
+        }],
+        content: "hello".to_string(),
+        reply_to: None,
+        subject: Some(" ".to_string()),
+    };
+    let err = message_build_tags(&message).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("subject")
+    ));
+}
+
+#[test]
+fn message_from_tags_rejects_invalid_optional_tags() {
+    let err = message_from_tags(
+        KIND_MESSAGE,
+        &[
+            vec!["p".to_string(), "pub".to_string(), " ".to_string()],
+            vec!["e".to_string(), "reply".to_string()],
+        ],
+        "hello",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("p")));
+
+    let err = message_from_tags(
+        KIND_MESSAGE,
+        &[
+            vec!["p".to_string(), "pub".to_string()],
+            vec!["e".to_string(), " ".to_string()],
+        ],
+        "hello",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("e")));
+
+    let err = message_from_tags(
+        KIND_MESSAGE,
+        &[
+            vec!["p".to_string(), "pub".to_string()],
+            vec!["subject".to_string(), " ".to_string()],
+        ],
+        "hello",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("subject")));
+}

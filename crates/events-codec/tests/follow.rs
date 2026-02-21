@@ -7,7 +7,10 @@ use radroots_events_codec::error::{EventEncodeError, EventParseError};
 use radroots_events_codec::follow::decode::{
     follow_from_tags, index_from_event, metadata_from_event,
 };
-use radroots_events_codec::follow::encode::{follow_apply, to_wire_parts, FollowMutation};
+use radroots_events_codec::follow::encode::{
+    follow_apply, follow_to_wire_parts_after, to_wire_parts, to_wire_parts_with_kind,
+    FollowMutation,
+};
 
 #[test]
 fn follow_to_wire_parts_builds_p_tags() {
@@ -296,4 +299,47 @@ fn follow_apply_rejects_empty_pubkey() {
         err,
         EventEncodeError::EmptyRequiredField("follow.public_key")
     ));
+}
+
+#[test]
+fn follow_build_tags_normalizes_empty_optional_values() {
+    let follow = RadrootsFollow {
+        list: vec![RadrootsFollowProfile {
+            published_at: 1,
+            public_key: "pubkey".to_string(),
+            relay_url: Some("".to_string()),
+            contact_name: Some(" ".to_string()),
+        }],
+    };
+    let parts = to_wire_parts(&follow).unwrap();
+    assert_eq!(
+        parts.tags,
+        vec![vec!["p".to_string(), "pubkey".to_string(), " ".to_string()]]
+    );
+}
+
+#[test]
+fn follow_to_wire_parts_with_kind_and_after_mutation_work() {
+    let follow = RadrootsFollow {
+        list: vec![RadrootsFollowProfile {
+            published_at: 1,
+            public_key: "pubkey-a".to_string(),
+            relay_url: None,
+            contact_name: None,
+        }],
+    };
+    let parts = to_wire_parts_with_kind(&follow, KIND_POST).unwrap();
+    assert_eq!(parts.kind, KIND_POST);
+
+    let toggled = follow_to_wire_parts_after(
+        &follow,
+        FollowMutation::Toggle {
+            public_key: "pubkey-b".to_string(),
+            relay_url: Some("wss://relay.example.com".to_string()),
+            contact_name: Some("alice".to_string()),
+        },
+    )
+    .unwrap();
+    assert_eq!(toggled.kind, KIND_FOLLOW);
+    assert_eq!(toggled.tags.len(), 2);
 }

@@ -3,7 +3,9 @@ use radroots_events::seal::RadrootsSeal;
 
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
 use radroots_events_codec::seal::decode::{index_from_event, metadata_from_event, seal_from_parts};
-use radroots_events_codec::seal::encode::to_wire_parts;
+use radroots_events_codec::seal::encode::{
+    seal_build_tags, to_wire_parts, to_wire_parts_with_kind,
+};
 
 #[test]
 fn seal_to_wire_parts_requires_content() {
@@ -89,4 +91,15 @@ fn seal_metadata_and_index_from_event_roundtrip() {
     assert_eq!(index.event.kind, KIND_SEAL);
     assert_eq!(index.event.sig, "sig");
     assert_eq!(index.metadata.seal.content, "payload");
+}
+
+#[test]
+fn seal_build_tags_and_kind_validation_cover_paths() {
+    let seal = RadrootsSeal {
+        content: "payload".to_string(),
+    };
+    assert!(seal_build_tags(&seal).unwrap().is_empty());
+
+    let err = to_wire_parts_with_kind(&seal, KIND_MESSAGE).unwrap_err();
+    assert!(matches!(err, EventEncodeError::InvalidKind(KIND_MESSAGE)));
 }
