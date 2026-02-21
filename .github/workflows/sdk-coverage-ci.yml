@@ -119,6 +119,20 @@ jobs:
             --fail-under-branches 100 \
             --require-branches
 
+      - name: enforce blocking trade coverage gate
+        run: |
+          set -euo pipefail
+          trade_dir="target/sdk-coverage/radroots_trade"
+          cargo run -q -p xtask -- sdk coverage report \
+            --scope "radroots-trade-blocking" \
+            --summary "${trade_dir}/coverage-summary.json" \
+            --lcov "${trade_dir}/coverage-lcov.info" \
+            --out "${trade_dir}/coverage-gate-blocking.json" \
+            --fail-under-exec-lines 100 \
+            --fail-under-functions 100 \
+            --fail-under-branches 100 \
+            --require-branches
+
       - name: upload sdk coverage reports
         uses: actions/upload-artifact@v4
         with:
@@ -129,3 +143,4 @@ jobs:
             target/sdk-coverage/radroots_types/coverage-gate-blocking.json
             target/sdk-coverage/radroots_events/coverage-gate-blocking.json
             target/sdk-coverage/radroots_identity/coverage-gate-blocking.json
+            target/sdk-coverage/radroots_trade/coverage-gate-blocking.json
