@@ -5,9 +5,9 @@ use radroots_core::{
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
 
-use crate::RadrootsNostrEvent;
 use crate::plot::RadrootsPlotRef;
 use crate::resource_area::RadrootsResourceAreaRef;
+use crate::RadrootsNostrEvent;
 
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
@@ -250,7 +250,7 @@ pub struct RadrootsListingImageSize {
 
 #[cfg(all(test, feature = "ts-rs", feature = "std"))]
 mod constants_tests {
-    use super::RADROOTS_LISTING_PRODUCT_TAG_KEYS;
+    use super::{RadrootsListingFarmRef, RADROOTS_LISTING_PRODUCT_TAG_KEYS};
     use std::{
         fs,
         path::{Path, PathBuf},
@@ -265,8 +265,8 @@ mod constants_tests {
         }
     }
 
-    fn ts_export_dir() -> PathBuf {
-        if let Some(export_dir) = option_env!("TS_RS_EXPORT_DIR") {
+    fn ts_export_dir_from(export_dir: Option<&str>) -> PathBuf {
+        if let Some(export_dir) = export_dir {
             return PathBuf::from(export_dir);
         }
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -274,6 +274,10 @@ mod constants_tests {
             .join("target")
             .join("ts-rs")
             .join("events")
+    }
+
+    fn ts_export_dir() -> PathBuf {
+        ts_export_dir_from(option_env!("TS_RS_EXPORT_DIR"))
     }
 
     fn listing_product_tag_keys_literal() -> String {
@@ -293,13 +297,45 @@ mod constants_tests {
     #[test]
     fn export_listing_product_tag_keys_const() {
         let path = ts_export_dir().join("constants.ts");
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).expect("create ts export dir");
-        }
+        let parent = path.parent().expect("listing export path has parent");
+        fs::create_dir_all(parent).expect("create ts export dir");
         let keys = listing_product_tag_keys_literal();
         let content = format!(
             "import type {{ RadrootsListingProductTagKeys }} from \"./types.js\";\n\nexport const RADROOTS_LISTING_PRODUCT_TAG_KEYS: RadrootsListingProductTagKeys = {keys};\n"
         );
         fs::write(&path, content).expect("write constants");
+    }
+
+    #[test]
+    fn defaults_listing_farm_ref_to_empty_values() {
+        let farm_ref = RadrootsListingFarmRef::default();
+        assert!(farm_ref.pubkey.is_empty());
+        assert!(farm_ref.d_tag.is_empty());
+    }
+
+    #[test]
+    fn resolves_workspace_root_for_crates_and_non_crates_paths() {
+        let inside_crates = PathBuf::from("/tmp/radroots/crates/events");
+        let non_crates = PathBuf::from("/tmp/radroots/events");
+        assert_eq!(
+            workspace_root(&inside_crates),
+            PathBuf::from("/tmp/radroots")
+        );
+        assert_eq!(workspace_root(&non_crates), PathBuf::from("/tmp/radroots"));
+    }
+
+    #[test]
+    fn resolves_export_dir_for_override_and_fallback() {
+        let override_dir = PathBuf::from("/tmp/radroots-events-ts-export");
+        assert_eq!(
+            ts_export_dir_from(Some("/tmp/radroots-events-ts-export")),
+            override_dir
+        );
+
+        let expected = workspace_root(Path::new(env!("CARGO_MANIFEST_DIR")))
+            .join("target")
+            .join("ts-rs")
+            .join("events");
+        assert_eq!(ts_export_dir_from(None), expected);
     }
 }

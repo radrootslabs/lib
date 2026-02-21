@@ -94,3 +94,57 @@ pub struct RadrootsProfile {
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub bot: Option<String>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn maps_profile_type_to_tag_value() {
+        assert_eq!(
+            radroots_profile_type_tag_value(RadrootsProfileType::Individual),
+            RADROOTS_PROFILE_TYPE_TAG_INDIVIDUAL
+        );
+        assert_eq!(
+            radroots_profile_type_tag_value(RadrootsProfileType::Farm),
+            RADROOTS_PROFILE_TYPE_TAG_FARM
+        );
+        assert_eq!(
+            radroots_profile_type_tag_value(RadrootsProfileType::Coop),
+            RADROOTS_PROFILE_TYPE_TAG_COOP
+        );
+        assert_eq!(
+            radroots_profile_type_tag_value(RadrootsProfileType::Any),
+            RADROOTS_PROFILE_TYPE_TAG_ANY
+        );
+        assert_eq!(
+            radroots_profile_type_tag_value(RadrootsProfileType::Radrootsd),
+            RADROOTS_PROFILE_TYPE_TAG_RADROOTSD
+        );
+    }
+
+    #[test]
+    fn maps_tag_value_to_profile_type() {
+        assert_eq!(
+            radroots_profile_type_from_tag_value(RADROOTS_PROFILE_TYPE_TAG_INDIVIDUAL),
+            Some(RadrootsProfileType::Individual)
+        );
+        assert_eq!(
+            radroots_profile_type_from_tag_value(RADROOTS_PROFILE_TYPE_TAG_FARM),
+            Some(RadrootsProfileType::Farm)
+        );
+        assert_eq!(
+            radroots_profile_type_from_tag_value(RADROOTS_PROFILE_TYPE_TAG_COOP),
+            Some(RadrootsProfileType::Coop)
+        );
+        assert_eq!(
+            radroots_profile_type_from_tag_value(RADROOTS_PROFILE_TYPE_TAG_ANY),
+            Some(RadrootsProfileType::Any)
+        );
+        assert_eq!(
+            radroots_profile_type_from_tag_value(RADROOTS_PROFILE_TYPE_TAG_RADROOTSD),
+            Some(RadrootsProfileType::Radrootsd)
+        );
+        assert_eq!(radroots_profile_type_from_tag_value("unknown"), None);
+    }
+}

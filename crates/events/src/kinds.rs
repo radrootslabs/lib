@@ -142,8 +142,8 @@ mod kinds_constants_tests {
         }
     }
 
-    fn ts_export_dir() -> PathBuf {
-        if let Some(export_dir) = option_env!("TS_RS_EXPORT_DIR") {
+    fn ts_export_dir_from(export_dir: Option<&str>) -> PathBuf {
+        if let Some(export_dir) = export_dir {
             return PathBuf::from(export_dir);
         }
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -151,6 +151,10 @@ mod kinds_constants_tests {
             .join("target")
             .join("ts-rs")
             .join("events")
+    }
+
+    fn ts_export_dir() -> PathBuf {
+        ts_export_dir_from(option_env!("TS_RS_EXPORT_DIR"))
     }
 
     const KIND_EXPORTS: &[(&str, u32)] = &[
@@ -221,13 +225,76 @@ mod kinds_constants_tests {
     #[test]
     fn export_kind_constants() {
         let path = ts_export_dir().join("kinds.ts");
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).expect("create ts export dir");
-        }
+        let parent = path.parent().expect("kinds export path has parent");
+        fs::create_dir_all(parent).expect("create ts export dir");
         let mut content = String::new();
         for (name, value) in KIND_EXPORTS {
             content.push_str(&format!("export const {name} = {value};\n"));
         }
         fs::write(&path, content).expect("write kinds");
+    }
+
+    #[test]
+    fn classifies_standard_list_kinds() {
+        assert!(is_nip51_standard_list_kind(KIND_LIST_MUTE));
+        assert!(is_nip51_standard_list_kind(KIND_LIST_GOOD_WIKI_RELAYS));
+        assert!(!is_nip51_standard_list_kind(KIND_PROFILE));
+    }
+
+    #[test]
+    fn classifies_list_set_kinds() {
+        assert!(is_nip51_list_set_kind(KIND_LIST_SET_FOLLOW));
+        assert!(is_nip51_list_set_kind(KIND_LIST_SET_MEDIA_STARTER_PACK));
+        assert!(!is_nip51_list_set_kind(KIND_LIST_MUTE));
+    }
+
+    #[test]
+    fn maps_job_request_and_result_kinds() {
+        assert!(is_request_kind(KIND_JOB_REQUEST_MIN));
+        assert!(is_request_kind(KIND_JOB_REQUEST_MAX));
+        assert!(!is_request_kind(KIND_JOB_REQUEST_MIN - 1));
+        assert!(!is_request_kind(KIND_JOB_REQUEST_MAX + 1));
+
+        assert!(is_result_kind(KIND_JOB_RESULT_MIN));
+        assert!(is_result_kind(KIND_JOB_RESULT_MAX));
+        assert!(!is_result_kind(KIND_JOB_RESULT_MIN - 1));
+        assert!(!is_result_kind(KIND_JOB_RESULT_MAX + 1));
+
+        assert_eq!(
+            result_kind_for_request_kind(KIND_JOB_REQUEST_MIN),
+            Some(KIND_JOB_RESULT_MIN)
+        );
+        assert_eq!(result_kind_for_request_kind(KIND_JOB_RESULT_MIN), None);
+        assert_eq!(
+            request_kind_for_result_kind(KIND_JOB_RESULT_MIN),
+            Some(KIND_JOB_REQUEST_MIN)
+        );
+        assert_eq!(request_kind_for_result_kind(KIND_JOB_REQUEST_MIN), None);
+    }
+
+    #[test]
+    fn resolves_workspace_root_for_crates_and_non_crates_paths() {
+        let inside_crates = PathBuf::from("/tmp/radroots/crates/events");
+        let non_crates = PathBuf::from("/tmp/radroots/events");
+        assert_eq!(
+            workspace_root(&inside_crates),
+            PathBuf::from("/tmp/radroots")
+        );
+        assert_eq!(workspace_root(&non_crates), PathBuf::from("/tmp/radroots"));
+    }
+
+    #[test]
+    fn resolves_export_dir_for_override_and_fallback() {
+        let override_dir = PathBuf::from("/tmp/radroots-ts-export");
+        assert_eq!(
+            ts_export_dir_from(Some("/tmp/radroots-ts-export")),
+            override_dir
+        );
+
+        let expected = workspace_root(Path::new(env!("CARGO_MANIFEST_DIR")))
+            .join("target")
+            .join("ts-rs")
+            .join("events");
+        assert_eq!(ts_export_dir_from(None), expected);
     }
 }
