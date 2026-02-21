@@ -37,3 +37,13 @@ fn of_money_and_quantized() {
     let rounded = pct.of_money_quantized(&tiny);
     assert_eq!(rounded.amount, common::dec("0.01"));
 }
+
+#[test]
+fn display_and_parse_error_display_paths_are_exercised() {
+    let pct = RadrootsCorePercent::from_str("12.5%").unwrap();
+    assert_eq!(pct.to_string(), "12.5%");
+    assert_eq!(
+        RadrootsCorePercentParseError::InvalidNumber.to_string(),
+        "invalid percent string"
+    );
+}
