@@ -80,3 +80,47 @@ fn job_feedback_metadata_rejects_wrong_kind() {
         JobParseError::InvalidTag("kind (expected 7000)")
     ));
 }
+
+#[test]
+fn job_feedback_build_tags_cover_optional_paths() {
+    let mut fb = sample_feedback();
+    fb.extra_info = None;
+    fb.payment = None;
+    fb.request_event.relays = None;
+    fb.customer_pubkey = None;
+    fb.encrypted = true;
+    let parts = to_wire_parts(&fb, "payload").unwrap();
+
+    let status = parts
+        .tags
+        .iter()
+        .find(|tag| tag.first().map(|v| v.as_str()) == Some("status"))
+        .expect("status tag");
+    assert_eq!(status.len(), 2);
+
+    let request = parts
+        .tags
+        .iter()
+        .find(|tag| tag.first().map(|v| v.as_str()) == Some("e"))
+        .expect("request tag");
+    assert_eq!(request.len(), 2);
+
+    assert!(
+        !parts
+            .tags
+            .iter()
+            .any(|tag| tag.first().map(|v| v.as_str()) == Some("amount"))
+    );
+    assert!(
+        !parts
+            .tags
+            .iter()
+            .any(|tag| tag.first().map(|v| v.as_str()) == Some("p"))
+    );
+    assert!(
+        parts
+            .tags
+            .iter()
+            .any(|tag| tag.first().map(|v| v.as_str()) == Some("encrypted"))
+    );
+}

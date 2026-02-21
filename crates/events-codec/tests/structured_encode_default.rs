@@ -332,6 +332,263 @@ fn structured_build_tags_cover_optional_and_error_paths() {
 }
 
 #[test]
+fn structured_build_tags_cover_required_field_errors() {
+    let document = RadrootsDocument {
+        d_tag: "AAAAAAAAAAAAAAAAAAAAAg".to_string(),
+        doc_type: "charter".to_string(),
+        title: "Charter".to_string(),
+        version: "1.0.0".to_string(),
+        summary: None,
+        effective_at: None,
+        body_markdown: None,
+        subject: RadrootsDocumentSubject {
+            pubkey: TEST_PUBKEY_HEX.to_string(),
+            address: Some(
+                "30340:58e318557257f2ab58a415d21bb57082b4824cf667a1d64e72bcbc5acc018c62:AAAAAAAAAAAAAAAAAAAAAA"
+                    .to_string(),
+            ),
+        },
+        tags: None,
+    };
+    let document_tags = document_build_tags(&document).unwrap();
+    assert!(document_tags.iter().any(|tag| tag[0] == "a"));
+
+    let mut invalid_document = document.clone();
+    invalid_document.d_tag = " ".to_string();
+    let err = document_build_tags(&invalid_document).unwrap_err();
+    assert!(matches!(err, EventEncodeError::EmptyRequiredField("d_tag")));
+    invalid_document = document.clone();
+    invalid_document.doc_type = " ".to_string();
+    let err = document_build_tags(&invalid_document).unwrap_err();
+    assert!(matches!(err, EventEncodeError::EmptyRequiredField("doc_type")));
+    invalid_document = document.clone();
+    invalid_document.title = " ".to_string();
+    let err = document_build_tags(&invalid_document).unwrap_err();
+    assert!(matches!(err, EventEncodeError::EmptyRequiredField("title")));
+    invalid_document = document.clone();
+    invalid_document.version = " ".to_string();
+    let err = document_build_tags(&invalid_document).unwrap_err();
+    assert!(matches!(err, EventEncodeError::EmptyRequiredField("version")));
+    invalid_document = document.clone();
+    invalid_document.subject.pubkey = " ".to_string();
+    let err = document_build_tags(&invalid_document).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("subject.pubkey")
+    ));
+
+    let farm = RadrootsFarm {
+        d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
+        name: "Farm".to_string(),
+        about: None,
+        website: None,
+        picture: None,
+        banner: None,
+        location: None,
+        tags: None,
+    };
+    let mut invalid_farm = farm.clone();
+    invalid_farm.d_tag = " ".to_string();
+    let err = farm_build_tags(&invalid_farm).unwrap_err();
+    assert!(matches!(err, EventEncodeError::EmptyRequiredField("d_tag")));
+    invalid_farm = farm.clone();
+    invalid_farm.name = " ".to_string();
+    let err = farm_build_tags(&invalid_farm).unwrap_err();
+    assert!(matches!(err, EventEncodeError::EmptyRequiredField("name")));
+    let err = farm_ref_tags(&RadrootsFarmRef {
+        pubkey: " ".to_string(),
+        d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
+    })
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("farm.pubkey")
+    ));
+    let err = farm_ref_tags(&RadrootsFarmRef {
+        pubkey: TEST_PUBKEY_HEX.to_string(),
+        d_tag: " ".to_string(),
+    })
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("farm.d_tag")
+    ));
+
+    let coop = RadrootsCoop {
+        d_tag: "AAAAAAAAAAAAAAAAAAAAAQ".to_string(),
+        name: "Coop".to_string(),
+        about: None,
+        website: None,
+        picture: None,
+        banner: None,
+        location: None,
+        tags: None,
+    };
+    let mut invalid_coop = coop.clone();
+    invalid_coop.d_tag = " ".to_string();
+    let err = coop_build_tags(&invalid_coop).unwrap_err();
+    assert!(matches!(err, EventEncodeError::EmptyRequiredField("d_tag")));
+    invalid_coop = coop.clone();
+    invalid_coop.name = " ".to_string();
+    let err = coop_build_tags(&invalid_coop).unwrap_err();
+    assert!(matches!(err, EventEncodeError::EmptyRequiredField("name")));
+    invalid_coop = coop.clone();
+    invalid_coop.location = Some(RadrootsCoopLocation {
+        primary: None,
+        city: None,
+        region: None,
+        country: None,
+        gcs: RadrootsGcsLocation {
+            geohash: " ".to_string(),
+            ..sample_gcs()
+        },
+    });
+    let err = coop_build_tags(&invalid_coop).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("location.gcs.geohash")
+    ));
+    let err = coop_ref_tags(&RadrootsCoopRef {
+        pubkey: " ".to_string(),
+        d_tag: "AAAAAAAAAAAAAAAAAAAAAQ".to_string(),
+    })
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("coop.pubkey")
+    ));
+    let err = coop_ref_tags(&RadrootsCoopRef {
+        pubkey: TEST_PUBKEY_HEX.to_string(),
+        d_tag: " ".to_string(),
+    })
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("coop.d_tag")
+    ));
+
+    let plot = RadrootsPlot {
+        d_tag: "AAAAAAAAAAAAAAAAAAAABQ".to_string(),
+        farm: RadrootsFarmRef {
+            pubkey: TEST_PUBKEY_HEX.to_string(),
+            d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
+        },
+        name: "Plot".to_string(),
+        about: None,
+        location: None,
+        tags: None,
+    };
+    let mut invalid_plot = plot.clone();
+    invalid_plot.d_tag = " ".to_string();
+    let err = plot_build_tags(&invalid_plot).unwrap_err();
+    assert!(matches!(err, EventEncodeError::EmptyRequiredField("d_tag")));
+    invalid_plot = plot.clone();
+    invalid_plot.name = " ".to_string();
+    let err = plot_build_tags(&invalid_plot).unwrap_err();
+    assert!(matches!(err, EventEncodeError::EmptyRequiredField("name")));
+    invalid_plot = plot.clone();
+    invalid_plot.farm.pubkey = " ".to_string();
+    let err = plot_build_tags(&invalid_plot).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("farm.pubkey")
+    ));
+    invalid_plot = plot.clone();
+    invalid_plot.farm.d_tag = " ".to_string();
+    let err = plot_build_tags(&invalid_plot).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("farm.d_tag")
+    ));
+    let err = plot_address(TEST_PUBKEY_HEX, " ").unwrap_err();
+    assert!(matches!(err, EventEncodeError::EmptyRequiredField("plot.d_tag")));
+
+    let area = RadrootsResourceArea {
+        d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
+        name: "Area".to_string(),
+        about: None,
+        location: RadrootsResourceAreaLocation {
+            primary: None,
+            city: None,
+            region: None,
+            country: None,
+            gcs: sample_gcs(),
+        },
+        tags: None,
+    };
+    let mut invalid_area = area.clone();
+    invalid_area.d_tag = " ".to_string();
+    let err = resource_area_build_tags(&invalid_area).unwrap_err();
+    assert!(matches!(err, EventEncodeError::EmptyRequiredField("d_tag")));
+    invalid_area = area.clone();
+    invalid_area.name = " ".to_string();
+    let err = resource_area_build_tags(&invalid_area).unwrap_err();
+    assert!(matches!(err, EventEncodeError::EmptyRequiredField("name")));
+    let err = resource_area_ref_tags(&RadrootsResourceAreaRef {
+        pubkey: " ".to_string(),
+        d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
+    })
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("resource_area.pubkey")
+    ));
+    let err = resource_area_ref_tags(&RadrootsResourceAreaRef {
+        pubkey: TEST_PUBKEY_HEX.to_string(),
+        d_tag: " ".to_string(),
+    })
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("resource_area.d_tag")
+    ));
+
+    let cap = RadrootsResourceHarvestCap {
+        d_tag: "AAAAAAAAAAAAAAAAAAAABA".to_string(),
+        resource_area: RadrootsResourceAreaRef {
+            pubkey: TEST_PUBKEY_HEX.to_string(),
+            d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
+        },
+        product: RadrootsResourceHarvestProduct {
+            key: "nutmeg".to_string(),
+            category: Some("spice".to_string()),
+        },
+        start: 1,
+        end: 2,
+        cap_quantity: RadrootsCoreQuantity::new(
+            RadrootsCoreDecimal::from(1000u32),
+            RadrootsCoreUnit::MassG,
+        ),
+        display_amount: None,
+        display_unit: None,
+        display_label: None,
+        tags: None,
+    };
+    let mut invalid_cap = cap.clone();
+    invalid_cap.d_tag = " ".to_string();
+    let err = resource_harvest_cap_build_tags(&invalid_cap).unwrap_err();
+    assert!(matches!(err, EventEncodeError::EmptyRequiredField("d_tag")));
+    invalid_cap = cap.clone();
+    invalid_cap.resource_area.pubkey = " ".to_string();
+    let err = resource_harvest_cap_build_tags(&invalid_cap).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("resource_area.pubkey")
+    ));
+    invalid_cap = cap.clone();
+    invalid_cap.resource_area.d_tag = " ".to_string();
+    let err = resource_harvest_cap_build_tags(&invalid_cap).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("resource_area.d_tag")
+    ));
+    let mut no_category = cap.clone();
+    no_category.product.category = Some(" ".to_string());
+    let tags = resource_harvest_cap_build_tags(&no_category).unwrap();
+    assert!(!tags.iter().any(|tag| tag[0] == "category"));
+}
+
+#[test]
 fn structured_list_sets_cover_success_and_error_paths() {
     let farm_id = "AAAAAAAAAAAAAAAAAAAAAA";
     let members = farm_members_list_set(farm_id, [TEST_PUBKEY_HEX]).unwrap();

@@ -207,6 +207,85 @@ fn message_file_from_tags_rejects_invalid_optional_tags() {
     )
     .unwrap_err();
     assert!(matches!(err, EventParseError::InvalidTag("fallback")));
+
+    let err = message_file_from_tags(
+        KIND_MESSAGE_FILE,
+        &[
+            vec!["p".to_string(), "pub1".to_string()],
+            vec!["file-type".to_string(), " ".to_string()],
+            vec!["encryption-algorithm".to_string(), "aes-gcm".to_string()],
+            vec!["decryption-key".to_string(), "key".to_string()],
+            vec!["decryption-nonce".to_string(), "nonce".to_string()],
+            vec!["x".to_string(), "hash".to_string()],
+        ],
+        "https://files.example/encrypted.bin",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("file-type")));
+
+    let err = message_file_from_tags(
+        KIND_MESSAGE_FILE,
+        &[
+            vec!["p".to_string(), "pub1".to_string()],
+            vec!["file-type".to_string(), "image/jpeg".to_string()],
+            vec!["encryption-algorithm".to_string(), "aes-gcm".to_string()],
+            vec!["decryption-key".to_string(), "key".to_string()],
+            vec!["decryption-nonce".to_string(), "nonce".to_string()],
+            vec!["x".to_string(), "hash".to_string()],
+            vec!["size".to_string(), " ".to_string()],
+        ],
+        "https://files.example/encrypted.bin",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("size")));
+
+    let err = message_file_from_tags(
+        KIND_MESSAGE_FILE,
+        &[
+            vec!["p".to_string(), "pub1".to_string()],
+            vec!["file-type".to_string(), "image/jpeg".to_string()],
+            vec!["encryption-algorithm".to_string(), "aes-gcm".to_string()],
+            vec!["decryption-key".to_string(), "key".to_string()],
+            vec!["decryption-nonce".to_string(), "nonce".to_string()],
+            vec!["x".to_string(), "hash".to_string()],
+            vec!["dim".to_string(), " ".to_string()],
+        ],
+        "https://files.example/encrypted.bin",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("dim")));
+
+    let err = message_file_from_tags(
+        KIND_MESSAGE_FILE,
+        &[
+            vec!["p".to_string(), "pub1".to_string()],
+            vec!["file-type".to_string(), "image/jpeg".to_string()],
+            vec!["encryption-algorithm".to_string(), "aes-gcm".to_string()],
+            vec!["decryption-key".to_string(), "key".to_string()],
+            vec!["decryption-nonce".to_string(), "nonce".to_string()],
+            vec!["x".to_string(), "hash".to_string()],
+            vec!["thumb".to_string(), " ".to_string()],
+        ],
+        "https://files.example/encrypted.bin",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("thumb")));
+
+    let err = message_file_from_tags(
+        KIND_MESSAGE_FILE,
+        &[
+            vec!["p".to_string(), "pub1".to_string()],
+            vec!["file-type".to_string(), "image/jpeg".to_string()],
+            vec!["encryption-algorithm".to_string(), "aes-gcm".to_string()],
+            vec!["decryption-key".to_string(), "key".to_string()],
+            vec!["decryption-nonce".to_string(), "nonce".to_string()],
+            vec!["x".to_string(), "hash".to_string()],
+            vec!["fallback".to_string(), " ".to_string()],
+        ],
+        "https://files.example/encrypted.bin",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("fallback")));
 }
 
 #[test]
@@ -242,4 +321,22 @@ fn message_file_metadata_and_index_from_event_roundtrip() {
     assert_eq!(index.event.kind, KIND_MESSAGE_FILE);
     assert_eq!(index.event.sig, "sig");
     assert_eq!(index.metadata.message_file.file_type, "image/jpeg");
+}
+
+#[test]
+fn message_file_from_tags_rejects_empty_content() {
+    let err = message_file_from_tags(
+        KIND_MESSAGE_FILE,
+        &[
+            vec!["p".to_string(), "pub1".to_string()],
+            vec!["file-type".to_string(), "image/jpeg".to_string()],
+            vec!["encryption-algorithm".to_string(), "aes-gcm".to_string()],
+            vec!["decryption-key".to_string(), "key".to_string()],
+            vec!["decryption-nonce".to_string(), "nonce".to_string()],
+            vec!["x".to_string(), "hash".to_string()],
+        ],
+        " ",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("content")));
 }

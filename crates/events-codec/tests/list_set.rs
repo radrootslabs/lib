@@ -81,6 +81,30 @@ fn list_set_encode_and_decode_reject_invalid_inputs() {
             got: KIND_POST
         }
     ));
+
+    let mut invalid_entry_tag = sample_list_set();
+    invalid_entry_tag.entries[0].tag = " ".to_string();
+    let err = list_set_build_tags(&invalid_entry_tag).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("entry.tag")
+    ));
+
+    let mut invalid_entry_values = sample_list_set();
+    invalid_entry_values.entries[0].values.clear();
+    let err = list_set_build_tags(&invalid_entry_values).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("entry.values")
+    ));
+
+    let mut invalid_entry_first = sample_list_set();
+    invalid_entry_first.entries[0].values = vec![" ".to_string()];
+    let err = list_set_build_tags(&invalid_entry_first).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("entry.values")
+    ));
 }
 
 #[test]
@@ -100,6 +124,17 @@ fn list_set_decode_rejects_invalid_tag_shapes() {
         KIND_LIST_SET_FOLLOW,
         "".to_string(),
         &[vec!["".to_string(), "value".to_string()]],
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("tag")));
+
+    let err = list_set_from_tags(
+        KIND_LIST_SET_FOLLOW,
+        "".to_string(),
+        &[
+            vec!["d".to_string(), "members.owners".to_string()],
+            vec!["p".to_string(), " ".to_string()],
+        ],
     )
     .unwrap_err();
     assert!(matches!(err, EventParseError::InvalidTag("tag")));
@@ -156,4 +191,15 @@ fn list_set_decode_keeps_first_optional_display_tags() {
     assert_eq!(decoded.title.as_deref(), Some("owners"));
     assert_eq!(decoded.description.as_deref(), Some("team"));
     assert_eq!(decoded.image.as_deref(), Some("https://example.com/a.png"));
+}
+
+#[test]
+fn list_set_decode_keeps_first_d_tag() {
+    let tags = vec![
+        vec!["d".to_string(), "members.owners".to_string()],
+        vec!["d".to_string(), "members.ignore".to_string()],
+        vec!["p".to_string(), "owner".to_string()],
+    ];
+    let decoded = list_set_from_tags(KIND_LIST_SET_FOLLOW, "private".to_string(), &tags).unwrap();
+    assert_eq!(decoded.d_tag, "members.owners");
 }

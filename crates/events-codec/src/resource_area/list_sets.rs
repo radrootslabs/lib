@@ -157,3 +157,50 @@ where
         image: None,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resource_list_set_id_validates_suffix() {
+        let err = resource_list_set_id("AAAAAAAAAAAAAAAAAAAAAw", " ")
+            .expect_err("expected empty suffix error");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("list_set_suffix")
+        ));
+    }
+
+    #[test]
+    fn list_entries_rejects_empty_values() {
+        let err = list_entries("p", [" "]).expect_err("expected empty entry error");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("entry.values")
+        ));
+    }
+
+    #[test]
+    fn farm_and_plot_address_helpers_reject_empty_d_tags() {
+        let err = farm_address(&RadrootsFarmRef {
+            pubkey: "farm_pubkey".to_string(),
+            d_tag: " ".to_string(),
+        })
+        .expect_err("expected farm d_tag error");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("farm.d_tag")
+        ));
+
+        let err = plot_address(&RadrootsPlotRef {
+            pubkey: "plot_pubkey".to_string(),
+            d_tag: " ".to_string(),
+        })
+        .expect_err("expected plot d_tag error");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("plot.d_tag")
+        ));
+    }
+}

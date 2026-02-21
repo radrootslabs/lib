@@ -343,3 +343,66 @@ fn follow_to_wire_parts_with_kind_and_after_mutation_work() {
     assert_eq!(toggled.kind, KIND_FOLLOW);
     assert_eq!(toggled.tags.len(), 2);
 }
+
+#[test]
+fn follow_apply_normalizes_optional_fields_and_deduplicates_existing_list() {
+    let follow = RadrootsFollow {
+        list: vec![
+            RadrootsFollowProfile {
+                published_at: 1,
+                public_key: " pubkey-a ".to_string(),
+                relay_url: Some(" ".to_string()),
+                contact_name: Some(" ".to_string()),
+            },
+            RadrootsFollowProfile {
+                published_at: 2,
+                public_key: "pubkey-a".to_string(),
+                relay_url: Some("wss://duplicate.example.com".to_string()),
+                contact_name: Some("duplicate".to_string()),
+            },
+        ],
+    };
+
+    let updated = follow_apply(
+        &follow,
+        FollowMutation::Follow {
+            public_key: "pubkey-a".to_string(),
+            relay_url: Some(" ".to_string()),
+            contact_name: Some(" ".to_string()),
+        },
+    )
+    .unwrap();
+
+    assert_eq!(updated.list.len(), 1);
+    assert_eq!(updated.list[0].public_key, "pubkey-a");
+    assert!(updated.list[0].relay_url.is_none());
+    assert!(updated.list[0].contact_name.is_none());
+}
+
+#[test]
+fn follow_apply_follow_with_none_preserves_existing_values() {
+    let follow = RadrootsFollow {
+        list: vec![RadrootsFollowProfile {
+            published_at: 1,
+            public_key: "pubkey-a".to_string(),
+            relay_url: Some("wss://relay.example.com".to_string()),
+            contact_name: Some("alice".to_string()),
+        }],
+    };
+
+    let updated = follow_apply(
+        &follow,
+        FollowMutation::Follow {
+            public_key: "pubkey-a".to_string(),
+            relay_url: None,
+            contact_name: None,
+        },
+    )
+    .unwrap();
+    assert_eq!(updated.list.len(), 1);
+    assert_eq!(
+        updated.list[0].relay_url.as_deref(),
+        Some("wss://relay.example.com")
+    );
+    assert_eq!(updated.list[0].contact_name.as_deref(), Some("alice"));
+}
