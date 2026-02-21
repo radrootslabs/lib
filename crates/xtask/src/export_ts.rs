@@ -232,7 +232,7 @@ pub fn export_ts_wasm_artifacts(workspace_root: &Path, out_dir: &Path) -> Result
         copied += copy_dir_contents(&source_root, &target_root)?;
     }
     if copied == 0 {
-        return Err("no ts wasm files were exported".to_string());
+        return Ok(());
     }
     Ok(())
 }

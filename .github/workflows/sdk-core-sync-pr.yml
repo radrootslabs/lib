@@ -12,14 +12,19 @@ on:
       - ".github/workflows/sdk-core-sync-pr.yml"
 
 jobs:
+  sync-disabled:
+    if: ${{ secrets.RADROOTS_SDK_SYNC_TOKEN == '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: skip sync when token is unavailable
+        run: echo "radroots_sdk_sync_token is not configured; skipping sdk sync workflow"
+
   sync-models:
+    if: ${{ secrets.RADROOTS_SDK_SYNC_TOKEN != '' }}
     runs-on: ubuntu-latest
     steps:
       - name: checkout
         uses: actions/checkout@v4
-
-      - name: ensure sync token is configured
-        run: test -n "${{ secrets.RADROOTS_SDK_SYNC_TOKEN }}"
 
       - name: install rust toolchain
         uses: dtolnay/rust-toolchain@stable
