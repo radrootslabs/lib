@@ -2,8 +2,11 @@
 
 use std::fs;
 use std::path::Path;
+use std::path::PathBuf;
+use std::process::Command;
 
 use serde::Deserialize;
+use serde::Serialize;
 
 #[derive(Debug, Clone)]
 pub struct CoverageSummary {
@@ -42,6 +45,52 @@ pub struct CoverageThresholds {
 pub struct CoverageGateResult {
     pub pass: bool,
     pub fail_reasons: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct CoverageGateReport {
+    scope: String,
+    thresholds: CoverageGateReportThresholds,
+    measured: CoverageGateReportMeasured,
+    counts: CoverageGateReportCounts,
+    result: CoverageGateReportResult,
+}
+
+#[derive(Debug, Serialize)]
+struct CoverageGateReportThresholds {
+    executable_lines: f64,
+    functions: f64,
+    branches: f64,
+    branches_required: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct CoverageGateReportMeasured {
+    executable_lines_percent: f64,
+    executable_lines_source: String,
+    functions_percent: f64,
+    branches_percent: Option<f64>,
+    branches_available: bool,
+    summary_lines_percent: f64,
+    summary_regions_percent: f64,
+}
+
+#[derive(Debug, Serialize)]
+struct CoverageGateReportCounts {
+    executable_lines: CoverageCount,
+    branches: CoverageCount,
+}
+
+#[derive(Debug, Serialize)]
+struct CoverageCount {
+    covered: u64,
+    total: u64,
+}
+
+#[derive(Debug, Serialize)]
+struct CoverageGateReportResult {
+    pass: bool,
+    fail_reasons: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -218,9 +267,271 @@ pub fn evaluate_gate(
     CoverageGateResult { pass, fail_reasons }
 }
 
+fn executable_source_label(source: ExecutableSource) -> &'static str {
+    match source {
+        ExecutableSource::Da => "da",
+        ExecutableSource::LfLh => "lf_lh",
+    }
+}
+
+fn parse_string_arg(args: &[String], name: &str) -> Result<String, String> {
+    let flag = format!("--{name}");
+    let mut index = 0usize;
+    while index < args.len() {
+        if args[index] == flag {
+            let Some(value) = args.get(index + 1) else {
+                return Err(format!("missing value for --{name}"));
+            };
+            return Ok(value.clone());
+        }
+        index += 1;
+    }
+    Err(format!("missing --{name}"))
+}
+
+fn parse_optional_string_arg(args: &[String], name: &str) -> Option<String> {
+    let flag = format!("--{name}");
+    let mut index = 0usize;
+    while index < args.len() {
+        if args[index] == flag {
+            return args.get(index + 1).cloned();
+        }
+        index += 1;
+    }
+    None
+}
+
+fn parse_f64_arg(args: &[String], name: &str, default: f64) -> Result<f64, String> {
+    if let Some(raw) = parse_optional_string_arg(args, name) {
+        return raw
+            .parse::<f64>()
+            .map_err(|err| format!("invalid --{name} value `{raw}`: {err}"));
+    }
+    Ok(default)
+}
+
+fn parse_u32_arg(args: &[String], name: &str, default: u32) -> Result<u32, String> {
+    if let Some(raw) = parse_optional_string_arg(args, name) {
+        return raw
+            .parse::<u32>()
+            .map_err(|err| format!("invalid --{name} value `{raw}`: {err}"));
+    }
+    Ok(default)
+}
+
+fn parse_bool_flag(args: &[String], name: &str) -> bool {
+    let flag = format!("--{name}");
+    args.iter().any(|arg| arg == &flag)
+}
+
+fn workspace_root() -> Result<PathBuf, String> {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let Some(crates_dir) = manifest_dir.parent() else {
+        return Err("failed to resolve crates dir".to_string());
+    };
+    let Some(root) = crates_dir.parent() else {
+        return Err("failed to resolve workspace root".to_string());
+    };
+    Ok(root.to_path_buf())
+}
+
+fn run_command(mut command: Command, name: &str) -> Result<(), String> {
+    let status = command
+        .status()
+        .map_err(|err| format!("failed to run {name}: {err}"))?;
+    if !status.success() {
+        return Err(format!("{name} failed with status {status}"));
+    }
+    Ok(())
+}
+
+fn run_crate(args: &[String]) -> Result<(), String> {
+    let crate_name = parse_string_arg(args, "crate")?;
+    let workspace_root = workspace_root()?;
+    let out_dir = if let Some(raw) = parse_optional_string_arg(args, "out") {
+        PathBuf::from(raw)
+    } else {
+        workspace_root
+            .join("target")
+            .join("coverage")
+            .join(crate_name.replace('-', "_"))
+    };
+    let test_threads = parse_u32_arg(args, "test-threads", 1)?;
+
+    fs::create_dir_all(&out_dir)
+        .map_err(|err| format!("failed to create {}: {err}", out_dir.display()))?;
+
+    run_command(
+        {
+            let mut cmd = Command::new("rustup");
+            cmd.arg("run")
+                .arg("nightly")
+                .arg("cargo")
+                .arg("llvm-cov")
+                .arg("clean")
+                .arg("--workspace")
+                .current_dir(&workspace_root);
+            cmd
+        },
+        "cargo llvm-cov clean --workspace",
+    )?;
+
+    run_command(
+        {
+            let mut cmd = Command::new("rustup");
+            cmd.arg("run")
+                .arg("nightly")
+                .arg("cargo")
+                .arg("llvm-cov")
+                .arg("-p")
+                .arg(&crate_name)
+                .arg("--no-report")
+                .arg("--branch")
+                .arg("--")
+                .arg(format!("--test-threads={test_threads}"))
+                .current_dir(&workspace_root);
+            cmd
+        },
+        "cargo llvm-cov --no-report",
+    )?;
+
+    let summary_path = out_dir.join("coverage-summary.json");
+    run_command(
+        {
+            let mut cmd = Command::new("rustup");
+            cmd.arg("run")
+                .arg("nightly")
+                .arg("cargo")
+                .arg("llvm-cov")
+                .arg("report")
+                .arg("-p")
+                .arg(&crate_name)
+                .arg("--json")
+                .arg("--summary-only")
+                .arg("--branch")
+                .arg("--output-path")
+                .arg(&summary_path)
+                .current_dir(&workspace_root);
+            cmd
+        },
+        "cargo llvm-cov report --json --summary-only",
+    )?;
+
+    let lcov_path = out_dir.join("coverage-lcov.info");
+    run_command(
+        {
+            let mut cmd = Command::new("rustup");
+            cmd.arg("run")
+                .arg("nightly")
+                .arg("cargo")
+                .arg("llvm-cov")
+                .arg("report")
+                .arg("-p")
+                .arg(&crate_name)
+                .arg("--lcov")
+                .arg("--branch")
+                .arg("--output-path")
+                .arg(&lcov_path)
+                .current_dir(&workspace_root);
+            cmd
+        },
+        "cargo llvm-cov report --lcov",
+    )?;
+
+    eprintln!("coverage summary: {}", summary_path.display());
+    eprintln!("coverage lcov: {}", lcov_path.display());
+    Ok(())
+}
+
+fn report_gate(args: &[String]) -> Result<(), String> {
+    let scope = parse_string_arg(args, "scope")?;
+    let summary_path = PathBuf::from(parse_string_arg(args, "summary")?);
+    let lcov_path = PathBuf::from(parse_string_arg(args, "lcov")?);
+    let out_path = PathBuf::from(parse_string_arg(args, "out")?);
+    let thresholds = CoverageThresholds {
+        fail_under_exec_lines: parse_f64_arg(args, "fail-under-exec-lines", 100.0)?,
+        fail_under_functions: parse_f64_arg(args, "fail-under-functions", 100.0)?,
+        fail_under_branches: parse_f64_arg(args, "fail-under-branches", 100.0)?,
+        require_branches: parse_bool_flag(args, "require-branches"),
+    };
+
+    let summary = read_summary(&summary_path)?;
+    let lcov = read_lcov(&lcov_path)?;
+    let gate = evaluate_gate(&summary, &lcov, thresholds);
+
+    let report = CoverageGateReport {
+        scope: scope.clone(),
+        thresholds: CoverageGateReportThresholds {
+            executable_lines: thresholds.fail_under_exec_lines,
+            functions: thresholds.fail_under_functions,
+            branches: thresholds.fail_under_branches,
+            branches_required: thresholds.require_branches,
+        },
+        measured: CoverageGateReportMeasured {
+            executable_lines_percent: lcov.executable_percent,
+            executable_lines_source: executable_source_label(lcov.executable_source).to_string(),
+            functions_percent: summary.functions_percent,
+            branches_percent: lcov.branch_percent,
+            branches_available: lcov.branches_available,
+            summary_lines_percent: summary.summary_lines_percent,
+            summary_regions_percent: summary.summary_regions_percent,
+        },
+        counts: CoverageGateReportCounts {
+            executable_lines: CoverageCount {
+                covered: lcov.executable_covered,
+                total: lcov.executable_total,
+            },
+            branches: CoverageCount {
+                covered: lcov.branch_covered,
+                total: lcov.branch_total,
+            },
+        },
+        result: CoverageGateReportResult {
+            pass: gate.pass,
+            fail_reasons: gate.fail_reasons.clone(),
+        },
+    };
+
+    let json = serde_json::to_string_pretty(&report)
+        .map_err(|err| format!("failed to encode coverage report json: {err}"))?;
+    fs::write(&out_path, format!("{json}\n"))
+        .map_err(|err| format!("failed to write {}: {err}", out_path.display()))?;
+
+    if lcov.branches_available {
+        eprintln!(
+            "{} coverage: executable_lines={:.6} functions={:.6} branches={:.6}",
+            scope,
+            lcov.executable_percent,
+            summary.functions_percent,
+            lcov.branch_percent.unwrap_or(0.0)
+        );
+    } else {
+        eprintln!(
+            "{} coverage: executable_lines={:.6} functions={:.6} branches=unavailable",
+            scope, lcov.executable_percent, summary.functions_percent
+        );
+    }
+
+    eprintln!(
+        "{} summary (informational): lines={:.6} regions={:.6}",
+        scope, summary.summary_lines_percent, summary.summary_regions_percent
+    );
+
+    if !gate.pass {
+        for reason in &gate.fail_reasons {
+            eprintln!("{scope} gate fail: {reason}");
+        }
+        return Err("coverage gate failed".to_string());
+    }
+
+    Ok(())
+}
+
 pub fn run(args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
         Some("help") => Ok(()),
+        Some("run-crate") => run_crate(&args[1..]),
+        Some("report") => report_gate(&args[1..]),
         Some(_) => Err("unknown sdk coverage subcommand".to_string()),
         None => Err("missing sdk coverage subcommand".to_string()),
     }
