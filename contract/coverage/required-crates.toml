@@ -1,0 +1,8 @@
+[required]
+crates = [
+  "radroots-core",
+]
+
+[policy]
+mode = "blocking"
+threshold_profile = "strict_100"

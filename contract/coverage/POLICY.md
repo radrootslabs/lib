@@ -29,6 +29,7 @@ All three thresholds are release-blocking.
 - start with `radroots-core` as the first required crate
 - expand required coverage crate-by-crate
 - full workspace required coverage is only enabled after every required crate is green
+- required blocking crate list is tracked in `contract/coverage/required-crates.toml`
 
 ## local override policy
 
