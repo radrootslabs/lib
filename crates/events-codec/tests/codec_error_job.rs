@@ -5,7 +5,9 @@ use radroots_events_codec::job::encode::{
     assert_no_inputs_when_encrypted, push_provider_tag, push_relay_tag, push_status_tag,
     JobEncodeError,
 };
+#[cfg(feature = "serde_json")]
 use serde::ser::{Error as _, Serializer};
+#[cfg(feature = "serde_json")]
 use serde::Serialize;
 
 #[test]
