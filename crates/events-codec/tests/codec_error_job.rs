@@ -5,6 +5,8 @@ use radroots_events_codec::job::encode::{
     assert_no_inputs_when_encrypted, push_provider_tag, push_relay_tag, push_status_tag,
     JobEncodeError,
 };
+use radroots_events_codec::job::error::JobParseError;
+use radroots_events_codec::profile::error::ProfileEncodeError;
 #[cfg(feature = "serde_json")]
 use serde::ser::{Error as _, Serializer};
 #[cfg(feature = "serde_json")]
@@ -132,4 +134,45 @@ fn job_encode_error_display_covers_variants() {
         JobEncodeError::EmptyRequiredField("content").to_string(),
         "empty required field: content"
     );
+}
+
+#[test]
+fn job_parse_error_display_and_source_covers_variants() {
+    let missing = JobParseError::MissingTag("e");
+    assert_eq!(missing.to_string(), "missing tag: e");
+    assert!(missing.source().is_none());
+
+    let invalid = JobParseError::InvalidTag("status");
+    assert_eq!(invalid.to_string(), "invalid tag structure for 'status'");
+    assert!(invalid.source().is_none());
+
+    let invalid_number = JobParseError::InvalidNumber("amount", "x".parse::<u32>().unwrap_err());
+    assert!(invalid_number
+        .to_string()
+        .contains("invalid number in 'amount'"));
+    assert!(invalid_number.source().is_some());
+
+    let non_whole = JobParseError::NonWholeSats("amount");
+    assert!(non_whole.to_string().contains("whole number of sats"));
+    assert!(non_whole.source().is_none());
+
+    let overflow = JobParseError::AmountOverflow("amount");
+    assert!(overflow.to_string().contains("does not fit u32 sat"));
+    assert!(overflow.source().is_none());
+
+    let missing_chain = JobParseError::MissingChainTag("e");
+    assert_eq!(missing_chain.to_string(), "missing required chain tag: e");
+    assert!(missing_chain.source().is_none());
+}
+
+#[test]
+fn profile_encode_error_display_covers_variants() {
+    let invalid = ProfileEncodeError::InvalidUrl("website", "ftp://example.com".to_string());
+    assert_eq!(
+        invalid.to_string(),
+        "invalid URL for website: ftp://example.com"
+    );
+
+    let json = ProfileEncodeError::Json;
+    assert_eq!(json.to_string(), "failed to serialize metadata JSON");
 }
