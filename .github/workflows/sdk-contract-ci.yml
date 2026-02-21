@@ -1,0 +1,57 @@
+name: sdk-contract-ci
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: install rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.92.0
+
+      - name: cargo check
+        run: |
+          cargo check -q \
+            -p xtask \
+            -p radroots-core \
+            -p radroots-types \
+            -p radroots-events \
+            -p radroots-trade \
+            -p radroots-identity \
+            -p radroots-tangle-db-schema \
+            -p radroots-events-codec \
+            -p radroots-events-codec-wasm
+
+      - name: cargo test
+        run: |
+          cargo test -q \
+            -p xtask \
+            -p radroots-core \
+            -p radroots-types \
+            -p radroots-events \
+            -p radroots-trade \
+            -p radroots-identity \
+            -p radroots-tangle-db-schema \
+            -p radroots-events-codec \
+            -p radroots-events-codec-wasm
+
+      - name: validate sdk contract
+        run: cargo run -q -p xtask -- sdk validate
+
+      - name: export ts sdk artifacts
+        run: cargo run -q -p xtask -- sdk export-ts --out target/sdk-export-ci
+
+      - name: upload export manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdk-export-manifest
+          path: target/sdk-export-ci/ts/export-manifest.json
