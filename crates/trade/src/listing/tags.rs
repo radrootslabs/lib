@@ -84,27 +84,24 @@ pub fn validate_trade_listing_chain(tags: &[Vec<String>]) -> Result<(), JobParse
             }
             _ => {}
         }
-
-        if has_root && has_d {
-            return Ok(());
-        }
     }
 
     if !has_root {
-        return Err(JobParseError::MissingChainTag(TAG_E_ROOT));
+        Err(JobParseError::MissingChainTag(TAG_E_ROOT))
+    } else if !has_d {
+        Err(JobParseError::MissingChainTag(TAG_D))
+    } else {
+        Ok(())
     }
-    if !has_d {
-        return Err(JobParseError::MissingChainTag(TAG_D));
-    }
-    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{trade_listing_dvm_tags, validate_trade_listing_chain};
+    use super::{
+        push_trade_listing_chain_tags, trade_listing_dvm_tags, validate_trade_listing_chain,
+    };
     use radroots_events::kinds::KIND_LISTING;
-    use radroots_events::tags::{TAG_D, TAG_E_ROOT};
-    use radroots_events_codec::job::error::JobParseError;
+    use radroots_events::tags::{TAG_D, TAG_E_PREV, TAG_E_ROOT};
 
     #[test]
     fn validate_trade_listing_chain_ok() {
@@ -118,12 +115,11 @@ mod tests {
     #[test]
     fn validate_trade_listing_chain_rejects_missing_root() {
         let tags = vec![vec![TAG_D.into(), "trade".into()]];
-        match validate_trade_listing_chain(&tags) {
-            Err(JobParseError::MissingChainTag(tag)) => {
-                assert_eq!(tag, TAG_E_ROOT);
-            }
-            other => panic!("expected missing root tag, got {other:?}"),
-        }
+        let err = validate_trade_listing_chain(&tags).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            format!("missing required chain tag: {TAG_E_ROOT}")
+        );
     }
 
     #[test]
@@ -132,12 +128,74 @@ mod tests {
             vec![TAG_E_ROOT.into(), " ".into()],
             vec![TAG_D.into(), "trade".into()],
         ];
-        match validate_trade_listing_chain(&tags) {
-            Err(JobParseError::InvalidTag(tag)) => {
-                assert_eq!(tag, TAG_E_ROOT);
-            }
-            other => panic!("expected invalid root tag, got {other:?}"),
-        }
+        let err = validate_trade_listing_chain(&tags).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            format!("invalid tag structure for '{TAG_E_ROOT}'")
+        );
+    }
+
+    #[test]
+    fn validate_trade_listing_chain_rejects_root_without_value() {
+        let tags = vec![vec![TAG_E_ROOT.into()], vec![TAG_D.into(), "trade".into()]];
+        let err = validate_trade_listing_chain(&tags).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            format!("invalid tag structure for '{TAG_E_ROOT}'")
+        );
+    }
+
+    #[test]
+    fn validate_trade_listing_chain_rejects_missing_trade_id() {
+        let tags = vec![vec![TAG_E_ROOT.into(), "root".into()]];
+        let err = validate_trade_listing_chain(&tags).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            format!("missing required chain tag: {TAG_D}")
+        );
+    }
+
+    #[test]
+    fn validate_trade_listing_chain_rejects_empty_trade_id() {
+        let tags = vec![
+            vec![TAG_E_ROOT.into(), "root".into()],
+            vec![TAG_D.into(), " ".into()],
+        ];
+        let err = validate_trade_listing_chain(&tags).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            format!("invalid tag structure for '{TAG_D}'")
+        );
+    }
+
+    #[test]
+    fn validate_trade_listing_chain_rejects_trade_id_without_value() {
+        let tags = vec![vec![TAG_E_ROOT.into(), "root".into()], vec![TAG_D.into()]];
+        let err = validate_trade_listing_chain(&tags).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            format!("invalid tag structure for '{TAG_D}'")
+        );
+    }
+
+    #[test]
+    fn validate_trade_listing_chain_accepts_trade_id_before_root() {
+        let tags = vec![
+            vec![TAG_D.into(), "trade".into()],
+            vec!["x".into(), "ignore".into()],
+            vec![TAG_E_ROOT.into(), "root".into()],
+        ];
+        assert!(validate_trade_listing_chain(&tags).is_ok());
+    }
+
+    #[test]
+    fn validate_trade_listing_chain_ignores_unknown_single_key_tag() {
+        let tags = vec![
+            vec!["x".into()],
+            vec![TAG_E_ROOT.into(), "root".into()],
+            vec![TAG_D.into(), "trade".into()],
+        ];
+        assert!(validate_trade_listing_chain(&tags).is_ok());
     }
 
     #[test]
@@ -161,5 +219,42 @@ mod tests {
             vec![String::from("a"), listing_addr.clone()],
         ];
         assert_eq!(tags, expected);
+    }
+
+    #[test]
+    fn push_trade_listing_chain_tags_appends_optional_fields() {
+        let mut tags = vec![vec![String::from("x"), String::from("seed")]];
+        push_trade_listing_chain_tags(
+            &mut tags,
+            "root-id",
+            Some("prev-id".to_string()),
+            Some("trade-id".to_string()),
+        );
+
+        assert_eq!(
+            tags,
+            vec![
+                vec![String::from("x"), String::from("seed")],
+                vec![String::from(TAG_E_ROOT), String::from("root-id")],
+                vec![String::from(TAG_E_PREV), String::from("prev-id")],
+                vec![String::from(TAG_D), String::from("trade-id")],
+            ]
+        );
+    }
+
+    #[test]
+    fn push_trade_listing_chain_tags_skips_missing_optional_fields() {
+        let mut tags = Vec::new();
+        push_trade_listing_chain_tags(
+            &mut tags,
+            "root-id",
+            Option::<String>::None,
+            Option::<String>::None,
+        );
+
+        assert_eq!(
+            tags,
+            vec![vec![String::from(TAG_E_ROOT), String::from("root-id")]]
+        );
     }
 }

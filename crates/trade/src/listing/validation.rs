@@ -147,9 +147,6 @@ pub fn validate_listing_event(
     let listing = listing_from_event_parts(&event.tags, &event.content)
         .map_err(|error| TradeListingValidationError::ParseError { error })?;
     let listing_id = listing.d_tag.trim().to_string();
-    if listing_id.is_empty() {
-        return Err(TradeListingValidationError::MissingListingId);
-    }
 
     let seller_pubkey = event.author.clone();
     if listing.farm.pubkey != seller_pubkey {
@@ -361,6 +358,12 @@ mod tests {
         }
     }
 
+    fn assert_validation_err(listing: RadrootsListing, expected: TradeListingValidationError) {
+        let event = base_event(&listing);
+        let err = validate_listing_event(&event).unwrap_err();
+        assert_eq!(format!("{err}"), format!("{expected}"));
+    }
+
     #[test]
     fn validate_listing_ok() {
         let listing = base_listing();
@@ -438,5 +441,159 @@ mod tests {
         let event = base_event(&listing);
         let err = validate_listing_event(&event).unwrap_err();
         assert!(matches!(err, TradeListingValidationError::MissingInventory));
+    }
+
+    #[test]
+    fn validate_listing_rejects_invalid_kind() {
+        let listing = base_listing();
+        let mut event = base_event(&listing);
+        event.kind = 0;
+        let err = validate_listing_event(&event).unwrap_err();
+        assert!(matches!(
+            err,
+            TradeListingValidationError::InvalidKind { kind: 0 }
+        ));
+    }
+
+    #[test]
+    fn validate_listing_rejects_missing_title() {
+        let mut listing = base_listing();
+        listing.product.title = " ".into();
+        assert_validation_err(listing, TradeListingValidationError::MissingTitle);
+    }
+
+    #[test]
+    fn validate_listing_rejects_missing_description() {
+        let mut listing = base_listing();
+        listing.product.summary = Some(" ".into());
+        assert_validation_err(listing, TradeListingValidationError::MissingDescription);
+    }
+
+    #[test]
+    fn validate_listing_rejects_missing_product_type() {
+        let mut listing = base_listing();
+        listing.product.category = " ".into();
+        listing.product.key = " ".into();
+        assert_validation_err(listing, TradeListingValidationError::MissingProductType);
+    }
+
+    #[test]
+    fn validate_listing_rejects_missing_bins() {
+        let mut listing = base_listing();
+        listing.bins.clear();
+        assert_validation_err(listing, TradeListingValidationError::MissingBins);
+    }
+
+    #[test]
+    fn validate_listing_rejects_missing_primary_bin_id() {
+        let mut listing = base_listing();
+        listing.primary_bin_id = " ".into();
+        assert_validation_err(listing, TradeListingValidationError::MissingPrimaryBin);
+    }
+
+    #[test]
+    fn validate_listing_rejects_primary_bin_not_found() {
+        let mut listing = base_listing();
+        listing.primary_bin_id = "missing".into();
+        assert_validation_err(listing, TradeListingValidationError::MissingPrimaryBin);
+    }
+
+    #[test]
+    fn validate_listing_rejects_negative_quantity() {
+        let mut listing = base_listing();
+        listing.bins[0].quantity.amount = "-1".parse().unwrap();
+        assert_validation_err(listing, TradeListingValidationError::InvalidBin);
+    }
+
+    #[test]
+    fn validate_listing_rejects_non_canonical_quantity() {
+        let mut listing = base_listing();
+        listing.bins[0].quantity.unit = RadrootsCoreUnit::MassKg;
+        assert_validation_err(listing, TradeListingValidationError::InvalidBin);
+    }
+
+    #[test]
+    fn validate_listing_rejects_non_canonical_price_quantity() {
+        let mut listing = base_listing();
+        listing.bins[0].price_per_canonical_unit.quantity.unit = RadrootsCoreUnit::MassKg;
+        assert_validation_err(listing, TradeListingValidationError::InvalidPrice);
+    }
+
+    #[test]
+    fn validate_listing_rejects_negative_price_amount() {
+        let mut listing = base_listing();
+        listing.bins[0].price_per_canonical_unit.amount.amount = "-1".parse().unwrap();
+        assert_validation_err(listing, TradeListingValidationError::InvalidPrice);
+    }
+
+    #[test]
+    fn validate_listing_rejects_price_unit_mismatch() {
+        let mut listing = base_listing();
+        listing.bins[0].price_per_canonical_unit.quantity.unit = RadrootsCoreUnit::Each;
+        assert_validation_err(listing, TradeListingValidationError::InvalidPrice);
+    }
+
+    #[test]
+    fn validate_listing_rejects_negative_inventory() {
+        let mut listing = base_listing();
+        listing.inventory_available = Some("-1".parse().unwrap());
+        assert_validation_err(listing, TradeListingValidationError::InvalidInventory);
+    }
+
+    #[test]
+    fn validate_listing_rejects_missing_availability() {
+        let mut listing = base_listing();
+        listing.availability = None;
+        assert_validation_err(listing, TradeListingValidationError::MissingAvailability);
+    }
+
+    #[test]
+    fn validate_listing_rejects_missing_location() {
+        let mut listing = base_listing();
+        listing.location = None;
+        assert_validation_err(listing, TradeListingValidationError::MissingLocation);
+    }
+
+    #[test]
+    fn validate_listing_rejects_missing_delivery_method() {
+        let mut listing = base_listing();
+        listing.delivery_method = None;
+        assert_validation_err(listing, TradeListingValidationError::MissingDeliveryMethod);
+    }
+
+    #[test]
+    fn validation_error_display_covers_all_variants() {
+        let errors = vec![
+            TradeListingValidationError::InvalidKind { kind: 9 },
+            TradeListingValidationError::MissingListingId,
+            TradeListingValidationError::ListingEventNotFound {
+                listing_addr: "addr".into(),
+            },
+            TradeListingValidationError::ListingEventFetchFailed {
+                listing_addr: "addr".into(),
+            },
+            TradeListingValidationError::ParseError {
+                error: crate::listing::codec::TradeListingParseError::InvalidTag("d".into()),
+            },
+            TradeListingValidationError::InvalidSeller,
+            TradeListingValidationError::MissingFarmProfile,
+            TradeListingValidationError::MissingFarmRecord,
+            TradeListingValidationError::MissingTitle,
+            TradeListingValidationError::MissingDescription,
+            TradeListingValidationError::MissingProductType,
+            TradeListingValidationError::MissingBins,
+            TradeListingValidationError::MissingPrimaryBin,
+            TradeListingValidationError::InvalidBin,
+            TradeListingValidationError::MissingPrice,
+            TradeListingValidationError::InvalidPrice,
+            TradeListingValidationError::MissingInventory,
+            TradeListingValidationError::InvalidInventory,
+            TradeListingValidationError::MissingAvailability,
+            TradeListingValidationError::MissingLocation,
+            TradeListingValidationError::MissingDeliveryMethod,
+        ];
+        for error in errors {
+            assert!(!error.to_string().trim().is_empty());
+        }
     }
 }

@@ -258,9 +258,11 @@ impl FromStr for TradeListingStage {
 #[cfg(test)]
 mod tests {
     use super::{
-        MARKER_CONVEYANCE_RESULT, MARKER_FULFILLMENT_RESULT, MARKER_INVOICE_RESULT, MARKER_LISTING,
-        MARKER_ORDER_RESULT, MARKER_PAYLOAD, MARKER_PAYMENT_RESULT, MARKER_PROOF,
-        MARKER_RECEIPT_RESULT, TradeListingStage, TradeListingStageParseError,
+        MARKER_ACCEPT_RESULT, MARKER_CANCEL_RESULT, MARKER_CONVEYANCE_RESULT,
+        MARKER_FULFILLMENT_RESULT, MARKER_INVOICE_RESULT, MARKER_LISTING, MARKER_ORDER_RESULT,
+        MARKER_PAYLOAD, MARKER_PAYMENT_RESULT, MARKER_PREVIOUS, MARKER_PROOF,
+        MARKER_RECEIPT_RESULT, MARKER_REFUND_RESULT, TradeListingStage,
+        TradeListingStageParseError,
     };
 
     #[test]
@@ -354,6 +356,97 @@ mod tests {
         assert_eq!(
             TradeListingStage::Receipt.result_marker(),
             MARKER_RECEIPT_RESULT
+        );
+    }
+
+    #[test]
+    fn marker_as_str_covers_all_variants() {
+        let cases = [
+            (super::TradeListingMarker::Listing, "listing"),
+            (super::TradeListingMarker::Payload, "payload"),
+            (super::TradeListingMarker::Previous, "previous"),
+            (super::TradeListingMarker::OrderResult, "order_result"),
+            (super::TradeListingMarker::AcceptResult, "accept_result"),
+            (
+                super::TradeListingMarker::ConveyanceResult,
+                "conveyance_result",
+            ),
+            (super::TradeListingMarker::InvoiceResult, "invoice_result"),
+            (super::TradeListingMarker::PaymentResult, "payment_result"),
+            (
+                super::TradeListingMarker::FulfillmentResult,
+                "fulfillment_result",
+            ),
+            (super::TradeListingMarker::ReceiptResult, "receipt_result"),
+            (super::TradeListingMarker::CancelResult, "cancel_result"),
+            (super::TradeListingMarker::RefundResult, "refund_result"),
+            (super::TradeListingMarker::Proof, "proof"),
+        ];
+        for (marker, name) in cases {
+            assert_eq!(marker.as_str(), name);
+        }
+    }
+
+    #[test]
+    fn marker_constants_match_marker_strings() {
+        assert_eq!(MARKER_LISTING, super::TradeListingMarker::Listing.as_str());
+        assert_eq!(MARKER_PAYLOAD, super::TradeListingMarker::Payload.as_str());
+        assert_eq!(
+            MARKER_PREVIOUS,
+            super::TradeListingMarker::Previous.as_str()
+        );
+        assert_eq!(
+            MARKER_ACCEPT_RESULT,
+            super::TradeListingMarker::AcceptResult.as_str()
+        );
+        assert_eq!(
+            MARKER_CANCEL_RESULT,
+            super::TradeListingMarker::CancelResult.as_str()
+        );
+        assert_eq!(
+            MARKER_REFUND_RESULT,
+            super::TradeListingMarker::RefundResult.as_str()
+        );
+    }
+
+    #[test]
+    fn stage_marker_tables_cover_all_variants_and_unknown_kinds() {
+        let request_cases = [
+            (
+                TradeListingStage::Conveyance,
+                vec![MARKER_ACCEPT_RESULT, MARKER_PAYLOAD],
+            ),
+            (TradeListingStage::Invoice, vec![MARKER_ACCEPT_RESULT]),
+            (
+                TradeListingStage::Cancel,
+                vec![MARKER_PREVIOUS, MARKER_PAYLOAD],
+            ),
+        ];
+        for (stage, expected) in request_cases {
+            assert_eq!(stage.request_markers(), expected.as_slice());
+        }
+
+        let result_cases = [
+            (TradeListingStage::Accept, MARKER_ACCEPT_RESULT),
+            (TradeListingStage::Invoice, MARKER_INVOICE_RESULT),
+            (TradeListingStage::Payment, MARKER_PAYMENT_RESULT),
+            (TradeListingStage::Fulfillment, MARKER_FULFILLMENT_RESULT),
+            (TradeListingStage::Cancel, MARKER_CANCEL_RESULT),
+            (TradeListingStage::Refund, MARKER_REFUND_RESULT),
+        ];
+        for (stage, expected) in result_cases {
+            assert_eq!(stage.result_marker(), expected);
+        }
+
+        assert_eq!(TradeListingStage::from_request_kind(0), None);
+        assert_eq!(TradeListingStage::from_result_kind(0), None);
+    }
+
+    #[test]
+    fn stage_parse_error_display_is_stable() {
+        assert_eq!(
+            TradeListingStageParseError::UnknownStage.to_string(),
+            "unknown trade listing stage"
         );
     }
 }

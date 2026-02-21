@@ -89,12 +89,31 @@ impl BinPricingTryExt for RadrootsListingBin {
 
 #[cfg(test)]
 mod tests {
-    use super::BinPricingTryExt;
+    use super::{BinPricingExt, BinPricingTryExt};
     use radroots_core::{
         RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
         RadrootsCoreQuantityPrice, RadrootsCoreQuantityPriceError, RadrootsCoreUnit,
     };
     use radroots_events::listing::RadrootsListingBin;
+
+    fn valid_bin() -> RadrootsListingBin {
+        RadrootsListingBin {
+            bin_id: "bin-1".into(),
+            quantity: RadrootsCoreQuantity::new(
+                RadrootsCoreDecimal::from(2u32),
+                RadrootsCoreUnit::MassG,
+            ),
+            price_per_canonical_unit: RadrootsCoreQuantityPrice::new(
+                RadrootsCoreMoney::new(RadrootsCoreDecimal::from(5u32), RadrootsCoreCurrency::USD),
+                RadrootsCoreQuantity::new(RadrootsCoreDecimal::from(1u32), RadrootsCoreUnit::MassG),
+            ),
+            display_amount: None,
+            display_unit: None,
+            display_label: None,
+            display_price: None,
+            display_price_unit: None,
+        }
+    }
 
     #[test]
     fn try_subtotal_for_rejects_unit_mismatch() {
@@ -123,5 +142,40 @@ mod tests {
                 want: RadrootsCoreUnit::Each,
             }
         );
+    }
+
+    #[test]
+    fn subtotal_and_total_for_count_follow_effective_quantity() {
+        let bin = valid_bin();
+        let subtotal = bin.subtotal_for_count(3);
+        let total = bin.total_for_count(3);
+
+        assert_eq!(subtotal.quantity_amount, RadrootsCoreDecimal::from(6u32));
+        assert_eq!(subtotal.quantity_unit, RadrootsCoreUnit::MassG);
+        assert_eq!(
+            subtotal.price_amount.amount,
+            RadrootsCoreDecimal::from(30u32)
+        );
+        assert_eq!(subtotal.price_currency, RadrootsCoreCurrency::USD);
+
+        assert_eq!(total.quantity_amount, subtotal.quantity_amount);
+        assert_eq!(total.quantity_unit, subtotal.quantity_unit);
+        assert_eq!(total.price_amount, subtotal.price_amount);
+        assert_eq!(total.price_currency, subtotal.price_currency);
+    }
+
+    #[test]
+    fn try_subtotal_and_try_total_match_non_fallible_paths() {
+        let bin = valid_bin();
+        let subtotal = bin.try_subtotal_for_count(4).expect("subtotal");
+        let total = bin.try_total_for_count(4).expect("total");
+
+        assert_eq!(subtotal.quantity_amount, RadrootsCoreDecimal::from(8u32));
+        assert_eq!(
+            subtotal.price_amount.amount,
+            RadrootsCoreDecimal::from(40u32)
+        );
+        assert_eq!(total.quantity_amount, subtotal.quantity_amount);
+        assert_eq!(total.price_amount, subtotal.price_amount);
     }
 }

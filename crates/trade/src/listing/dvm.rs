@@ -374,8 +374,8 @@ pub enum TradeListingMessagePayload {
 #[cfg(test)]
 mod tests {
     use super::{
-        TradeListingEnvelope, TradeListingEnvelopeError, TradeListingMessageType,
-        TradeListingValidateRequest,
+        TradeListingAddress, TradeListingAddressError, TradeListingEnvelope,
+        TradeListingEnvelopeError, TradeListingMessageType, TradeListingValidateRequest,
     };
     use radroots_events::kinds::KIND_LISTING;
 
@@ -408,6 +408,166 @@ mod tests {
         assert_eq!(
             env.validate().unwrap_err(),
             TradeListingEnvelopeError::MissingOrderId
+        );
+    }
+
+    #[test]
+    fn envelope_accepts_non_empty_order_id_for_order_scoped() {
+        let env = TradeListingEnvelope::new(
+            TradeListingMessageType::OrderRequest,
+            format!("{KIND_LISTING}:pubkey:AAAAAAAAAAAAAAAAAAAAAg"),
+            Some("order-1".to_string()),
+            TradeListingValidateRequest {
+                listing_event: None,
+            },
+        );
+        assert!(env.validate().is_ok());
+    }
+
+    #[test]
+    fn envelope_rejects_blank_order_id_for_order_scoped() {
+        let env = TradeListingEnvelope::new(
+            TradeListingMessageType::OrderRequest,
+            format!("{KIND_LISTING}:pubkey:AAAAAAAAAAAAAAAAAAAAAg"),
+            Some(" ".to_string()),
+            TradeListingValidateRequest {
+                listing_event: None,
+            },
+        );
+        assert_eq!(
+            env.validate().unwrap_err(),
+            TradeListingEnvelopeError::MissingOrderId
+        );
+    }
+
+    #[test]
+    fn envelope_accepts_non_order_message_without_order_id() {
+        let env = TradeListingEnvelope::new(
+            TradeListingMessageType::ListingValidateResult,
+            format!("{KIND_LISTING}:pubkey:AAAAAAAAAAAAAAAAAAAAAg"),
+            None,
+            TradeListingValidateRequest {
+                listing_event: None,
+            },
+        );
+        assert!(env.validate().is_ok());
+    }
+
+    #[test]
+    fn message_type_kind_and_request_flags_cover_all_variants() {
+        let cases = [
+            (TradeListingMessageType::ListingValidateRequest, true, false),
+            (TradeListingMessageType::ListingValidateResult, false, true),
+            (TradeListingMessageType::OrderRequest, true, false),
+            (TradeListingMessageType::OrderResponse, false, true),
+            (TradeListingMessageType::OrderRevision, true, false),
+            (TradeListingMessageType::OrderRevisionAccept, false, true),
+            (TradeListingMessageType::OrderRevisionDecline, false, true),
+            (TradeListingMessageType::Question, true, false),
+            (TradeListingMessageType::Answer, false, true),
+            (TradeListingMessageType::DiscountRequest, true, false),
+            (TradeListingMessageType::DiscountOffer, false, true),
+            (TradeListingMessageType::DiscountAccept, true, false),
+            (TradeListingMessageType::DiscountDecline, true, false),
+            (TradeListingMessageType::Cancel, true, false),
+            (TradeListingMessageType::FulfillmentUpdate, true, false),
+            (TradeListingMessageType::Receipt, true, false),
+        ];
+
+        for (message_type, is_request, is_result) in cases {
+            assert_eq!(message_type.is_request(), is_request);
+            assert_eq!(message_type.is_result(), is_result);
+            assert!(message_type.kind() > 0);
+        }
+    }
+
+    #[test]
+    fn envelope_validate_rejects_invalid_version() {
+        let mut env = TradeListingEnvelope::new(
+            TradeListingMessageType::ListingValidateRequest,
+            format!("{KIND_LISTING}:pubkey:AAAAAAAAAAAAAAAAAAAAAg"),
+            None,
+            TradeListingValidateRequest {
+                listing_event: None,
+            },
+        );
+        env.version = 9;
+        assert_eq!(
+            env.validate().unwrap_err(),
+            TradeListingEnvelopeError::InvalidVersion {
+                expected: super::TRADE_LISTING_ENVELOPE_VERSION,
+                got: 9
+            }
+        );
+    }
+
+    #[test]
+    fn envelope_error_display_messages_are_stable() {
+        assert_eq!(
+            TradeListingEnvelopeError::MissingOrderId.to_string(),
+            "missing order_id for order-scoped message"
+        );
+        assert_eq!(
+            TradeListingEnvelopeError::MissingListingAddr.to_string(),
+            "missing listing_addr"
+        );
+        assert!(
+            TradeListingEnvelopeError::InvalidVersion {
+                expected: 1,
+                got: 2
+            }
+            .to_string()
+            .contains("expected 1, got 2")
+        );
+    }
+
+    #[test]
+    fn trade_listing_address_parse_and_render_roundtrip() {
+        let addr_raw = format!("{KIND_LISTING}:seller:AAAAAAAAAAAAAAAAAAAAAg");
+        let parsed = TradeListingAddress::parse(&addr_raw).expect("valid address");
+        assert_eq!(parsed.kind, KIND_LISTING as u16);
+        assert_eq!(parsed.seller_pubkey, "seller");
+        assert_eq!(parsed.listing_id, "AAAAAAAAAAAAAAAAAAAAAg");
+        assert_eq!(parsed.as_str(), addr_raw);
+    }
+
+    #[test]
+    fn trade_listing_address_parse_rejects_invalid_shapes() {
+        assert_eq!(
+            TradeListingAddress::parse("not-a-kind:seller:AAAAAAAAAAAAAAAAAAAAAg").unwrap_err(),
+            TradeListingAddressError::InvalidFormat
+        );
+        assert_eq!(
+            TradeListingAddress::parse("30340:seller").unwrap_err(),
+            TradeListingAddressError::InvalidFormat
+        );
+        assert_eq!(
+            TradeListingAddress::parse("30340:seller:AAAAAAAAAAAAAAAAAAAAAg:extra").unwrap_err(),
+            TradeListingAddressError::InvalidFormat
+        );
+        assert_eq!(
+            TradeListingAddress::parse("0:seller:AAAAAAAAAAAAAAAAAAAAAg").unwrap_err(),
+            TradeListingAddressError::InvalidFormat
+        );
+        assert_eq!(
+            TradeListingAddress::parse("30340: :AAAAAAAAAAAAAAAAAAAAAg").unwrap_err(),
+            TradeListingAddressError::InvalidFormat
+        );
+        assert_eq!(
+            TradeListingAddress::parse("30340:seller: ").unwrap_err(),
+            TradeListingAddressError::InvalidFormat
+        );
+        assert_eq!(
+            TradeListingAddress::parse("30340:seller:not-base64").unwrap_err(),
+            TradeListingAddressError::InvalidFormat
+        );
+    }
+
+    #[test]
+    fn trade_listing_address_error_display_message_is_stable() {
+        assert_eq!(
+            TradeListingAddressError::InvalidFormat.to_string(),
+            "invalid listing address format"
         );
     }
 

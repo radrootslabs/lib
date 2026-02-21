@@ -106,3 +106,57 @@ pub const fn is_trade_listing_dvm_result_kind(kind: u16) -> bool {
 pub const fn is_trade_listing_dvm_kind(kind: u16) -> bool {
     is_trade_listing_dvm_request_kind(kind) || is_trade_listing_dvm_result_kind(kind)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn classifies_request_and_result_kinds() {
+        for kind in [
+            KIND_TRADE_LISTING_VALIDATE_REQ,
+            KIND_TRADE_LISTING_ORDER_REQ,
+            KIND_TRADE_LISTING_ORDER_REVISION_REQ,
+            KIND_TRADE_LISTING_QUESTION_REQ,
+            KIND_TRADE_LISTING_DISCOUNT_REQ,
+            KIND_TRADE_LISTING_DISCOUNT_ACCEPT_REQ,
+            KIND_TRADE_LISTING_DISCOUNT_DECLINE_REQ,
+            KIND_TRADE_LISTING_CANCEL_REQ,
+            KIND_TRADE_LISTING_FULFILLMENT_UPDATE_REQ,
+            KIND_TRADE_LISTING_RECEIPT_REQ,
+        ] {
+            assert!(is_trade_listing_dvm_request_kind(kind));
+            assert!(is_trade_listing_dvm_kind(kind));
+            assert!(!is_trade_listing_dvm_result_kind(kind));
+        }
+
+        for kind in [
+            KIND_TRADE_LISTING_VALIDATE_RES,
+            KIND_TRADE_LISTING_ORDER_RES,
+            KIND_TRADE_LISTING_ORDER_REVISION_RES,
+            KIND_TRADE_LISTING_ANSWER_RES,
+            KIND_TRADE_LISTING_DISCOUNT_OFFER_RES,
+        ] {
+            assert!(is_trade_listing_dvm_result_kind(kind));
+            assert!(is_trade_listing_dvm_kind(kind));
+            assert!(!is_trade_listing_dvm_request_kind(kind));
+        }
+    }
+
+    #[test]
+    fn rejects_non_trade_dvm_kind() {
+        assert!(!is_trade_listing_dvm_kind(5000));
+        assert!(!is_trade_listing_dvm_request_kind(5000));
+        assert!(!is_trade_listing_dvm_result_kind(5000));
+    }
+
+    #[test]
+    fn dvm_kind_array_contains_expected_kind_values() {
+        assert_eq!(TRADE_LISTING_DVM_KINDS.len(), 15);
+        assert!(TRADE_LISTING_DVM_KINDS.contains(&KIND_TRADE_LISTING_VALIDATE_REQ));
+        assert!(TRADE_LISTING_DVM_KINDS.contains(&KIND_TRADE_LISTING_VALIDATE_RES));
+        assert!(TRADE_LISTING_DVM_KINDS.contains(&KIND_TRADE_LISTING_ORDER_REQ));
+        assert!(TRADE_LISTING_DVM_KINDS.contains(&KIND_TRADE_LISTING_ORDER_RES));
+        assert!(TRADE_LISTING_DVM_KINDS.contains(&KIND_TRADE_LISTING_RECEIPT_REQ));
+    }
+}
