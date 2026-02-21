@@ -2,6 +2,7 @@
 crates = [
   "radroots-core",
   "radroots-types",
+  "radroots-events",
 ]
 
 [policy]

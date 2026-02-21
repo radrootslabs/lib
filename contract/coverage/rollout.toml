@@ -20,7 +20,7 @@ order = 2
 
 [[rollout.crates]]
 name = "radroots-events"
-status = "planned"
+status = "required"
 order = 3
 
 [[rollout.crates]]
