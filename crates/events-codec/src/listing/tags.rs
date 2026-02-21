@@ -478,7 +478,11 @@ fn calculate_resolution(value: f64, max: u32) -> u32 {
     let s = value.to_string();
     let decimals = s.split('.').nth(1).map(|v| v.len() as u32).unwrap_or(0);
     let bounded = cmp::min(decimals, max);
-    if bounded == 0 { 1 } else { bounded }
+    if bounded == 0 {
+        1
+    } else {
+        bounded
+    }
 }
 
 fn truncate_to_resolution(value: f64, resolution: u32) -> f64 {
@@ -609,5 +613,616 @@ fn status_as_str(status: &RadrootsListingStatus) -> &str {
         RadrootsListingStatus::Active => "active",
         RadrootsListingStatus::Sold => "sold",
         RadrootsListingStatus::Other { value } => value.as_str(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use core::str::FromStr;
+
+    use radroots_core::{
+        RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreDiscountScope,
+        RadrootsCoreDiscountThreshold, RadrootsCoreDiscountValue, RadrootsCoreQuantity,
+        RadrootsCoreQuantityPrice, RadrootsCoreUnit,
+    };
+    use radroots_events::listing::{
+        RadrootsListingImageSize, RadrootsListingProduct, RadrootsListingStatus,
+    };
+
+    const TEST_NPUB: &str = "npub1tr33s4tj2le2kk9yzhfphdtss26gyn8kv7savnnjhj794nqp333q8e7grr";
+    const TEST_PUBKEY_HEX: &str =
+        "58e318557257f2ab58a415d21bb57082b4824cf667a1d64e72bcbc5acc018c62";
+    const TEST_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAg";
+    const TEST_FARM_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAA";
+
+    fn decimal(value: &str) -> RadrootsCoreDecimal {
+        RadrootsCoreDecimal::from_str(value).expect("valid decimal")
+    }
+
+    fn base_product() -> RadrootsListingProduct {
+        RadrootsListingProduct {
+            key: "coffee".to_string(),
+            title: "Coffee".to_string(),
+            category: "agri".to_string(),
+            summary: Some("summary".to_string()),
+            process: Some("washed".to_string()),
+            lot: Some("lot-1".to_string()),
+            location: Some("null".to_string()),
+            profile: Some("null".to_string()),
+            year: Some("2024".to_string()),
+        }
+    }
+
+    fn base_bin() -> RadrootsListingBin {
+        RadrootsListingBin {
+            bin_id: "bin-1".to_string(),
+            quantity: RadrootsCoreQuantity::new(decimal("1000"), RadrootsCoreUnit::MassG)
+                .with_label("bag"),
+            price_per_canonical_unit: RadrootsCoreQuantityPrice::new(
+                RadrootsCoreMoney::new(decimal("0.01"), RadrootsCoreCurrency::USD),
+                RadrootsCoreQuantity::new(RadrootsCoreDecimal::ONE, RadrootsCoreUnit::MassG),
+            ),
+            display_amount: Some(decimal("1")),
+            display_unit: Some(RadrootsCoreUnit::MassKg),
+            display_label: Some("kilobag".to_string()),
+            display_price: Some(RadrootsCoreMoney::new(
+                decimal("10"),
+                RadrootsCoreCurrency::USD,
+            )),
+            display_price_unit: Some(RadrootsCoreUnit::MassKg),
+        }
+    }
+
+    fn base_listing() -> RadrootsListing {
+        RadrootsListing {
+            d_tag: TEST_D_TAG.to_string(),
+            farm: RadrootsListingFarmRef {
+                pubkey: TEST_PUBKEY_HEX.to_string(),
+                d_tag: TEST_FARM_D_TAG.to_string(),
+            },
+            product: base_product(),
+            primary_bin_id: "bin-1".to_string(),
+            bins: vec![base_bin()],
+            resource_area: Some(RadrootsResourceAreaRef {
+                pubkey: TEST_PUBKEY_HEX.to_string(),
+                d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
+            }),
+            plot: Some(RadrootsPlotRef {
+                pubkey: TEST_PUBKEY_HEX.to_string(),
+                d_tag: "AAAAAAAAAAAAAAAAAAAAAQ".to_string(),
+            }),
+            discounts: None,
+            inventory_available: Some(decimal("2")),
+            availability: Some(RadrootsListingAvailability::Window {
+                start: Some(10),
+                end: Some(20),
+            }),
+            delivery_method: Some(RadrootsListingDeliveryMethod::Pickup),
+            location: Some(RadrootsListingLocation {
+                primary: "Moyobamba".to_string(),
+                city: Some("Moyobamba".to_string()),
+                region: Some("San Martin".to_string()),
+                country: Some("PE".to_string()),
+                lat: Some(-6.0346),
+                lng: Some(-76.9714),
+                geohash: None,
+            }),
+            images: Some(vec![
+                RadrootsListingImage {
+                    url: "https://example.com/a.jpg".to_string(),
+                    size: Some(RadrootsListingImageSize { w: 1200, h: 800 }),
+                },
+                RadrootsListingImage {
+                    url: "  ".to_string(),
+                    size: None,
+                },
+            ]),
+        }
+    }
+
+    fn find_tag<'a>(tags: &'a [Vec<String>], key: &str) -> Option<&'a Vec<String>> {
+        tags.iter()
+            .find(|tag| tag.first().map(|v| v.as_str()) == Some(key))
+    }
+
+    #[test]
+    fn options_defaults_and_trade_fields() {
+        let defaults = ListingTagOptions::default();
+        assert!(defaults.include_geohash);
+        assert!(defaults.include_gps);
+        assert!(!defaults.include_inventory);
+        assert!(!defaults.include_availability);
+        assert!(!defaults.include_delivery);
+        assert_eq!(defaults.geohash_precision, GEOHASH_PRECISION_DEFAULT);
+        assert_eq!(defaults.dd_max_resolution, DD_MAX_RESOLUTION_DEFAULT);
+
+        let trade = ListingTagOptions::with_trade_fields();
+        assert!(trade.include_inventory);
+        assert!(trade.include_availability);
+        assert!(trade.include_delivery);
+    }
+
+    #[test]
+    fn clean_value_and_push_tag_value_cover_null_paths() {
+        assert_eq!(clean_value(" value "), Some("value".to_string()));
+        assert_eq!(clean_value(""), None);
+        assert_eq!(clean_value(" null "), None);
+
+        let mut tags = Vec::new();
+        push_tag_value(&mut tags, "k", "value");
+        push_tag_value(&mut tags, "k", "null");
+        push_tag_value(&mut tags, "k", "");
+        assert_eq!(tags.len(), 1);
+        assert_eq!(tags[0], vec!["k".to_string(), "value".to_string()]);
+    }
+
+    #[test]
+    fn base32_and_geohash_helpers_cover_branches() {
+        assert_eq!(base32_value(b'0'), Some(0));
+        assert_eq!(base32_value(b'B'), Some(10));
+        assert_eq!(base32_value(b'?'), None);
+
+        assert_eq!(geohash_encode(1.0, 1.0, 0), "");
+        let geohash = geohash_encode(-6.0346, -76.9714, 9);
+        assert_eq!(geohash.len(), 9);
+        let decoded = geohash_decode(&geohash).expect("decode geohash");
+        assert!(decoded.0.is_finite());
+        assert!(decoded.1.is_finite());
+        assert!(geohash_decode_bbox(&geohash).is_some());
+        assert!(geohash_decode("invalid*").is_none());
+    }
+
+    #[test]
+    fn calculate_and_truncate_resolution_cover_integer_and_fractional() {
+        assert_eq!(calculate_resolution(10.0, 9), 1);
+        assert_eq!(calculate_resolution(1.23456, 3), 3);
+        assert_eq!(calculate_resolution(1.2, 0), 1);
+        assert_eq!(truncate_to_resolution(12.9876, 2), 12.98);
+    }
+
+    #[test]
+    fn location_geotags_cover_lat_lon_and_geohash_decode_paths() {
+        let mut tags = Vec::new();
+        let location = RadrootsListingLocation {
+            primary: "Test".to_string(),
+            city: None,
+            region: None,
+            country: None,
+            lat: Some(-6.0346),
+            lng: Some(-76.9714),
+            geohash: None,
+        };
+        push_location_geotags(&mut tags, &location, ListingTagOptions::default());
+        assert!(tags
+            .iter()
+            .any(|tag| tag.first().map(|v| v.as_str()) == Some("g")));
+        assert!(tags.iter().any(|tag| {
+            tag.first().map(|v| v.as_str()) == Some("L")
+                && tag.get(1).map(|v| v.as_str()) == Some("dd.lat")
+        }));
+        assert!(tags.iter().any(|tag| {
+            tag.first().map(|v| v.as_str()) == Some("L")
+                && tag.get(1).map(|v| v.as_str()) == Some("dd.lon")
+        }));
+
+        let mut decoded_tags = Vec::new();
+        let location_with_geohash = RadrootsListingLocation {
+            primary: "Test".to_string(),
+            city: None,
+            region: None,
+            country: None,
+            lat: None,
+            lng: None,
+            geohash: Some("6gkzwgjzn".to_string()),
+        };
+        push_location_geotags(
+            &mut decoded_tags,
+            &location_with_geohash,
+            ListingTagOptions {
+                include_geohash: false,
+                include_gps: true,
+                ..ListingTagOptions::default()
+            },
+        );
+        assert!(decoded_tags.iter().any(|tag| {
+            tag.first().map(|v| v.as_str()) == Some("l")
+                && tag.get(2).map(|v| v.as_str()) == Some("dd")
+        }));
+
+        let mut invalid_tags = Vec::new();
+        let invalid_geohash = RadrootsListingLocation {
+            primary: "Test".to_string(),
+            city: None,
+            region: None,
+            country: None,
+            lat: None,
+            lng: None,
+            geohash: Some("???".to_string()),
+        };
+        push_location_geotags(
+            &mut invalid_tags,
+            &invalid_geohash,
+            ListingTagOptions {
+                include_geohash: false,
+                include_gps: true,
+                ..ListingTagOptions::default()
+            },
+        );
+        assert!(!invalid_tags.iter().any(|tag| {
+            tag.first().map(|v| v.as_str()) == Some("l")
+                && tag.get(2).map(|v| v.as_str()) == Some("dd")
+        }));
+    }
+
+    #[test]
+    fn image_and_status_helpers_cover_variants() {
+        let with_size = tag_listing_image(&RadrootsListingImage {
+            url: " https://example.com/a.jpg ".to_string(),
+            size: Some(RadrootsListingImageSize { w: 10, h: 20 }),
+        })
+        .expect("image tag");
+        assert_eq!(with_size[0], "image");
+        assert_eq!(with_size[2], "10x20");
+
+        let without_size = tag_listing_image(&RadrootsListingImage {
+            url: "https://example.com/b.jpg".to_string(),
+            size: None,
+        })
+        .expect("image tag");
+        assert_eq!(without_size.len(), 2);
+
+        assert!(tag_listing_image(&RadrootsListingImage {
+            url: "null".to_string(),
+            size: None,
+        })
+        .is_none());
+
+        assert_eq!(status_as_str(&RadrootsListingStatus::Active), "active");
+        assert_eq!(status_as_str(&RadrootsListingStatus::Sold), "sold");
+        assert_eq!(
+            status_as_str(&RadrootsListingStatus::Other {
+                value: "paused".to_string()
+            }),
+            "paused"
+        );
+    }
+
+    #[test]
+    fn discount_payload_without_serde_json_errors() {
+        let discount = RadrootsCoreDiscount {
+            scope: RadrootsCoreDiscountScope::Bin,
+            threshold: RadrootsCoreDiscountThreshold::BinCount {
+                bin_id: "bin-1".to_string(),
+                min: 2,
+            },
+            value: RadrootsCoreDiscountValue::MoneyPerBin(RadrootsCoreMoney::new(
+                decimal("1"),
+                RadrootsCoreCurrency::USD,
+            )),
+        };
+        let err = discount_tag_payload(&discount).expect_err("missing serde_json");
+        assert!(matches!(err, EventEncodeError::Json));
+    }
+
+    #[test]
+    fn farm_and_reference_tag_helpers_cover_errors_and_success() {
+        let mut tags = Vec::new();
+        push_farm_tags(
+            &mut tags,
+            &RadrootsListingFarmRef {
+                pubkey: TEST_PUBKEY_HEX.to_string(),
+                d_tag: TEST_FARM_D_TAG.to_string(),
+            },
+        )
+        .expect("farm tags");
+        assert!(find_tag(&tags, "p").is_some());
+        assert!(find_tag(&tags, "a").is_some());
+
+        let err = push_farm_tags(
+            &mut Vec::new(),
+            &RadrootsListingFarmRef {
+                pubkey: "".to_string(),
+                d_tag: TEST_FARM_D_TAG.to_string(),
+            },
+        )
+        .expect_err("empty farm pubkey");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("farm.pubkey")
+        ));
+
+        let err = push_farm_tags(
+            &mut Vec::new(),
+            &RadrootsListingFarmRef {
+                pubkey: TEST_PUBKEY_HEX.to_string(),
+                d_tag: "".to_string(),
+            },
+        )
+        .expect_err("empty farm d_tag");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("farm.d_tag")
+        ));
+
+        let err = push_farm_tags(
+            &mut Vec::new(),
+            &RadrootsListingFarmRef {
+                pubkey: TEST_PUBKEY_HEX.to_string(),
+                d_tag: "farm:invalid".to_string(),
+            },
+        )
+        .expect_err("invalid farm d_tag");
+        assert!(matches!(err, EventEncodeError::InvalidField("farm.d_tag")));
+
+        let area = tag_listing_resource_area(&RadrootsResourceAreaRef {
+            pubkey: TEST_PUBKEY_HEX.to_string(),
+            d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
+        })
+        .expect("resource area");
+        assert_eq!(area[0], "radroots:resource_area");
+
+        let plot = tag_listing_plot(&RadrootsPlotRef {
+            pubkey: TEST_PUBKEY_HEX.to_string(),
+            d_tag: "AAAAAAAAAAAAAAAAAAAAAQ".to_string(),
+        })
+        .expect("plot");
+        assert_eq!(plot[0], "radroots:plot");
+    }
+
+    #[test]
+    fn bin_tag_and_price_helpers_cover_error_and_success_paths() {
+        let bin = base_bin();
+        let bin_tag = tag_listing_bin(&bin).expect("bin tag");
+        assert_eq!(bin_tag[0], "radroots:bin");
+        let price_tag = tag_listing_price(&bin).expect("price tag");
+        assert_eq!(price_tag[0], "radroots:price");
+        let total = bin_total_price(&bin).expect("total price");
+        let generic_tag = tag_listing_price_generic(&total);
+        assert_eq!(generic_tag[0], "price");
+
+        let mut bad_bin = base_bin();
+        bad_bin.bin_id = "".to_string();
+        let err = tag_listing_bin(&bad_bin).expect_err("empty bin_id");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("bin_id")
+        ));
+
+        let mut non_canonical = base_bin();
+        non_canonical.quantity = RadrootsCoreQuantity::new(decimal("1"), RadrootsCoreUnit::MassKg);
+        let err = tag_listing_bin(&non_canonical).expect_err("non canonical quantity");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("bin.quantity")
+        ));
+
+        let mut missing_display_amount = base_bin();
+        missing_display_amount.display_amount = None;
+        let err = tag_listing_bin(&missing_display_amount).expect_err("missing display amount");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("bin.display_amount")
+        ));
+
+        let mut missing_display_unit = base_bin();
+        missing_display_unit.display_unit = None;
+        let err = tag_listing_bin(&missing_display_unit).expect_err("missing display unit");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("bin.display_unit")
+        ));
+
+        let mut invalid_unit_price = base_bin();
+        invalid_unit_price.price_per_canonical_unit = RadrootsCoreQuantityPrice::new(
+            RadrootsCoreMoney::new(decimal("10"), RadrootsCoreCurrency::USD),
+            RadrootsCoreQuantity::new(decimal("2"), RadrootsCoreUnit::MassG),
+        );
+        let err = tag_listing_price(&invalid_unit_price).expect_err("not unit price");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("bin.price_per_canonical_unit")
+        ));
+
+        let mut mismatch_display_currency = base_bin();
+        mismatch_display_currency.display_price = Some(RadrootsCoreMoney::new(
+            decimal("10"),
+            RadrootsCoreCurrency::EUR,
+        ));
+        let err = tag_listing_price(&mismatch_display_currency).expect_err("currency mismatch");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("bin.display_price")
+        ));
+
+        let mut missing_display_price = base_bin();
+        missing_display_price.display_price = None;
+        let err = tag_listing_price(&missing_display_price).expect_err("missing display price");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("bin.display_price")
+        ));
+
+        let mut missing_display_price_unit = base_bin();
+        missing_display_price_unit.display_price_unit = None;
+        let err = tag_listing_price(&missing_display_price_unit).expect_err("missing unit");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("bin.display_price_unit")
+        ));
+
+        let mut invalid_cost = base_bin();
+        invalid_cost.price_per_canonical_unit = RadrootsCoreQuantityPrice::new(
+            RadrootsCoreMoney::new(decimal("10"), RadrootsCoreCurrency::USD),
+            RadrootsCoreQuantity::new(RadrootsCoreDecimal::ONE, RadrootsCoreUnit::Each),
+        );
+        let err = bin_total_price(&invalid_cost).expect_err("invalid cost conversion");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("bin.price_per_canonical_unit")
+        ));
+    }
+
+    #[test]
+    fn listing_tags_required_errors_and_success_paths() {
+        let mut listing_with_discount = base_listing();
+        listing_with_discount.discounts = Some(vec![RadrootsCoreDiscount {
+            scope: RadrootsCoreDiscountScope::Bin,
+            threshold: RadrootsCoreDiscountThreshold::BinCount {
+                bin_id: "bin-1".to_string(),
+                min: 2,
+            },
+            value: RadrootsCoreDiscountValue::MoneyPerBin(RadrootsCoreMoney::new(
+                decimal("1"),
+                RadrootsCoreCurrency::USD,
+            )),
+        }]);
+        let err = listing_tags_with_options(&listing_with_discount, ListingTagOptions::default())
+            .expect_err("discount serialization requires serde_json");
+        assert!(matches!(err, EventEncodeError::Json));
+
+        let mut listing = base_listing();
+        listing.discounts = None;
+        let tags = listing_tags_with_options(&listing, ListingTagOptions::with_trade_fields())
+            .expect("listing tags");
+        assert!(find_tag(&tags, "d").is_some());
+        assert!(find_tag(&tags, "p").is_some());
+        assert!(find_tag(&tags, "a").is_some());
+        assert!(find_tag(&tags, "radroots:primary_bin").is_some());
+        assert!(find_tag(&tags, "radroots:bin").is_some());
+        assert!(find_tag(&tags, "radroots:price").is_some());
+        assert!(find_tag(&tags, "price").is_some());
+        assert!(find_tag(&tags, "inventory").is_some());
+        assert!(find_tag(&tags, "published_at").is_some());
+        assert!(find_tag(&tags, "expires_at").is_some());
+        assert!(find_tag(&tags, "delivery").is_some());
+        assert!(find_tag(&tags, "location").is_some());
+        assert!(find_tag(&tags, "image").is_some());
+
+        let mut status_listing = base_listing();
+        status_listing.discounts = None;
+        status_listing.availability = Some(RadrootsListingAvailability::Status {
+            status: RadrootsListingStatus::Other {
+                value: "paused".to_string(),
+            },
+        });
+        let status_tags = listing_tags_full(&status_listing).expect("status tags");
+        assert!(status_tags.iter().any(|tag| {
+            tag.first().map(|v| v.as_str()) == Some("status")
+                && tag.get(1).map(|v| v.as_str()) == Some("paused")
+        }));
+
+        for method in [
+            RadrootsListingDeliveryMethod::Pickup,
+            RadrootsListingDeliveryMethod::LocalDelivery,
+            RadrootsListingDeliveryMethod::Shipping,
+            RadrootsListingDeliveryMethod::Other {
+                method: "scheduled".to_string(),
+            },
+        ] {
+            let mut delivery_listing = base_listing();
+            delivery_listing.discounts = None;
+            delivery_listing.delivery_method = Some(method);
+            let method_tags = listing_tags_full(&delivery_listing).expect("delivery tags");
+            assert!(find_tag(&method_tags, "delivery").is_some());
+        }
+    }
+
+    #[test]
+    fn listing_tags_required_field_errors() {
+        let mut listing = base_listing();
+
+        listing.d_tag = "".to_string();
+        let err = listing_tags(&listing).expect_err("missing d");
+        assert!(matches!(err, EventEncodeError::EmptyRequiredField("d")));
+
+        listing = base_listing();
+        listing.d_tag = "listing:invalid".to_string();
+        let err = listing_tags(&listing).expect_err("invalid d");
+        assert!(matches!(err, EventEncodeError::InvalidField("d")));
+
+        listing = base_listing();
+        listing.primary_bin_id = "".to_string();
+        let err = listing_tags(&listing).expect_err("missing primary bin");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("primary_bin_id")
+        ));
+
+        listing = base_listing();
+        listing.bins.clear();
+        let err = listing_tags(&listing).expect_err("missing bins");
+        assert!(matches!(err, EventEncodeError::EmptyRequiredField("bins")));
+
+        listing = base_listing();
+        listing.farm.pubkey = "".to_string();
+        let err = listing_tags(&listing).expect_err("missing farm pubkey");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("farm.pubkey")
+        ));
+
+        listing = base_listing();
+        listing.resource_area = Some(RadrootsResourceAreaRef {
+            pubkey: "".to_string(),
+            d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
+        });
+        let err = listing_tags(&listing).expect_err("missing resource_area pubkey");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("resource_area.pubkey")
+        ));
+
+        listing = base_listing();
+        listing.plot = Some(RadrootsPlotRef {
+            pubkey: TEST_PUBKEY_HEX.to_string(),
+            d_tag: "plot:invalid".to_string(),
+        });
+        let err = listing_tags(&listing).expect_err("invalid plot d_tag");
+        assert!(matches!(err, EventEncodeError::InvalidField("plot.d_tag")));
+    }
+
+    #[test]
+    fn listing_tags_location_and_product_cleaning_paths() {
+        let mut listing = base_listing();
+        listing.discounts = None;
+        listing.product.location = Some(" null ".to_string());
+        listing.product.profile = Some(" ".to_string());
+        listing.location = Some(RadrootsListingLocation {
+            primary: "null".to_string(),
+            city: Some("city".to_string()),
+            region: Some("region".to_string()),
+            country: Some("country".to_string()),
+            lat: Some(-6.0),
+            lng: Some(-77.0),
+            geohash: None,
+        });
+        listing.images = Some(vec![RadrootsListingImage {
+            url: "null".to_string(),
+            size: None,
+        }]);
+        let tags = listing_tags_full(&listing).expect("cleaning path tags");
+        assert!(find_tag(&tags, "location").is_none());
+        assert!(!tags.iter().any(|tag| {
+            tag.first().map(|v| v.as_str()) == Some("profile")
+                && tag.get(1).map(|v| v.as_str()) == Some("null")
+        }));
+        assert!(!tags.iter().any(|tag| {
+            tag.first().map(|v| v.as_str()) == Some("location")
+                && tag.get(1).map(|v| v.as_str()) == Some("null")
+        }));
+        assert!(find_tag(&tags, "image").is_none());
+    }
+
+    #[test]
+    fn listing_tags_supports_npub_farm_pubkey() {
+        let mut listing = base_listing();
+        listing.discounts = None;
+        listing.farm.pubkey = TEST_NPUB.to_string();
+        let tags = listing_tags(&listing).expect("npub farm tags");
+        assert!(tags.iter().any(|tag| {
+            tag.first().map(|v| v.as_str()) == Some("p")
+                && tag.get(1).map(|v| v.as_str()) == Some(TEST_NPUB)
+        }));
     }
 }
