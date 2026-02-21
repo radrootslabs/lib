@@ -30,6 +30,20 @@ pub struct LcovCoverage {
     pub branch_percent: Option<f64>,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct CoverageThresholds {
+    pub fail_under_exec_lines: f64,
+    pub fail_under_functions: f64,
+    pub fail_under_branches: f64,
+    pub require_branches: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct CoverageGateResult {
+    pub pass: bool,
+    pub fail_reasons: Vec<String>,
+}
+
 #[derive(Debug, Deserialize)]
 struct LlvmCovSummaryRoot {
     data: Vec<LlvmCovSummaryData>,
@@ -153,6 +167,55 @@ pub fn read_lcov(path: &Path) -> Result<LcovCoverage, String> {
         branches_available,
         branch_percent,
     })
+}
+
+pub fn evaluate_gate(
+    summary: &CoverageSummary,
+    lcov: &LcovCoverage,
+    thresholds: CoverageThresholds,
+) -> CoverageGateResult {
+    let exec_ok = lcov.executable_percent >= thresholds.fail_under_exec_lines;
+    let functions_ok = summary.functions_percent >= thresholds.fail_under_functions;
+    let branch_presence_ok = !thresholds.require_branches || lcov.branches_available;
+
+    let mut branch_ok = true;
+    if lcov.branches_available {
+        if let Some(branch_percent) = lcov.branch_percent {
+            branch_ok = branch_percent >= thresholds.fail_under_branches;
+        }
+    }
+
+    let pass = exec_ok && functions_ok && branch_presence_ok && branch_ok;
+    let mut fail_reasons: Vec<String> = Vec::new();
+
+    if !exec_ok {
+        fail_reasons.push(format!(
+            "executable_lines={:.6} < {:.6}",
+            lcov.executable_percent, thresholds.fail_under_exec_lines
+        ));
+    }
+
+    if !functions_ok {
+        fail_reasons.push(format!(
+            "functions={:.6} < {:.6}",
+            summary.functions_percent, thresholds.fail_under_functions
+        ));
+    }
+
+    if thresholds.require_branches && !lcov.branches_available {
+        fail_reasons.push("branches=unavailable".to_string());
+    }
+
+    if lcov.branches_available && !branch_ok {
+        if let Some(branch_percent) = lcov.branch_percent {
+            fail_reasons.push(format!(
+                "branches={:.6} < {:.6}",
+                branch_percent, thresholds.fail_under_branches
+            ));
+        }
+    }
+
+    CoverageGateResult { pass, fail_reasons }
 }
 
 pub fn run(args: &[String]) -> Result<(), String> {
