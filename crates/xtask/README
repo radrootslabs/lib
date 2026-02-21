@@ -30,3 +30,15 @@ cargo run -q -p xtask -- sdk export-manifest
 ```
 
 Use `--out <dir>` with any export command to write artifacts to a custom directory.
+
+## sdk core sync automation
+
+The workflow `.github/workflows/sdk-core-sync-pr.yml` uses `sdk export-ts` and copies:
+
+- `ts/packages/core/src/generated/types.ts`
+
+from the export output into the `sdk-typescript` repository at:
+
+- `packages/core/src/generated/types.ts`
+
+The workflow requires a `RADROOTS_SDK_SYNC_TOKEN` secret with permissions to push branches and open pull requests in `radrootslabs/sdk-typescript`.
