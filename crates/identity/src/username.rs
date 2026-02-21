@@ -72,6 +72,8 @@ mod tests {
             "radroots..test",
             "radroots!",
             "RADROOTS",
+            "rädroots",
+            "radroots-radroots-radroots-radroots",
         ] {
             assert!(!radroots_username_is_valid(name));
         }
@@ -84,6 +86,7 @@ mod tests {
             Some("radroots".to_string())
         );
         assert_eq!(radroots_username_normalize("ra"), None);
+        assert_eq!(radroots_username_normalize("   "), None);
     }
 }
 
