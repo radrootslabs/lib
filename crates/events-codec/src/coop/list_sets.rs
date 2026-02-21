@@ -181,3 +181,53 @@ where
         image: None,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn coop_list_set_id_validates_suffix_and_coop_id() {
+        let err = coop_list_set_id("AAAAAAAAAAAAAAAAAAAAAQ", " ")
+            .expect_err("expected suffix validation error");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("list_set_suffix")
+        ));
+
+        let err = coop_list_set_id(" ", "members").expect_err("expected coop_id validation error");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("coop_id")
+        ));
+    }
+
+    #[test]
+    fn list_entries_rejects_blank_values() {
+        let err = list_entries("p", [" "]).expect_err("expected blank entry error");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("entry.values")
+        ));
+    }
+
+    #[test]
+    fn farm_address_rejects_empty_and_invalid_d_tag() {
+        let err = farm_address(&RadrootsFarmRef {
+            pubkey: "58e318557257f2ab58a415d21bb57082b4824cf667a1d64e72bcbc5acc018c62".to_string(),
+            d_tag: " ".to_string(),
+        })
+        .expect_err("expected empty d_tag error");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("farm.d_tag")
+        ));
+
+        let err = farm_address(&RadrootsFarmRef {
+            pubkey: "58e318557257f2ab58a415d21bb57082b4824cf667a1d64e72bcbc5acc018c62".to_string(),
+            d_tag: "invalid".to_string(),
+        })
+        .expect_err("expected invalid d_tag error");
+        assert!(matches!(err, EventEncodeError::InvalidField("farm.d_tag")));
+    }
+}

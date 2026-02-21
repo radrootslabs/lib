@@ -81,4 +81,48 @@ mod tests {
             .expect_err("expected invalid d_tag");
         assert!(matches!(err, EventParseError::InvalidTag("d")));
     }
+
+    #[test]
+    fn list_set_accepts_resource_base64_d_tag() {
+        let list = RadrootsListSet {
+            d_tag: "resource:AAAAAAAAAAAAAAAAAAAAAA:members".to_string(),
+            content: "".to_string(),
+            entries: vec![RadrootsListEntry {
+                tag: "p".to_string(),
+                values: vec!["pubkey".to_string()],
+            }],
+            title: None,
+            description: None,
+            image: None,
+        };
+        let tags = list_set_build_tags(&list).expect("build tags");
+        let parsed = list_set_from_tags(KIND_LIST_SET_FOLLOW, list.content.clone(), &tags)
+            .expect("parse list set");
+        assert_eq!(parsed.d_tag, list.d_tag);
+    }
+
+    #[test]
+    fn list_set_rejects_empty_prefixed_id_or_suffix() {
+        let list = RadrootsListSet {
+            d_tag: "farm::members".to_string(),
+            content: "".to_string(),
+            entries: vec![RadrootsListEntry {
+                tag: "p".to_string(),
+                values: vec!["pubkey".to_string()],
+            }],
+            title: None,
+            description: None,
+            image: None,
+        };
+        let err = list_set_build_tags(&list).expect_err("expected invalid d_tag");
+        assert!(matches!(err, EventEncodeError::InvalidField("d_tag")));
+
+        let tags = vec![
+            vec!["d".to_string(), "coop:AAAAAAAAAAAAAAAAAAAAAA:".to_string()],
+            vec!["p".to_string(), "pubkey".to_string()],
+        ];
+        let err = list_set_from_tags(KIND_LIST_SET_FOLLOW, "".to_string(), &tags)
+            .expect_err("expected invalid d_tag");
+        assert!(matches!(err, EventParseError::InvalidTag("d")));
+    }
 }

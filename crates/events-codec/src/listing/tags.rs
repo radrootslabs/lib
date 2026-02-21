@@ -10,7 +10,9 @@ use alloc::{
 
 use core::cmp;
 
-use radroots_core::{RadrootsCoreDiscount, RadrootsCoreMoney};
+#[cfg(any(feature = "serde_json", test))]
+use radroots_core::RadrootsCoreDiscount;
+use radroots_core::RadrootsCoreMoney;
 use radroots_events::kinds::{KIND_FARM, KIND_PLOT, KIND_RESOURCE_AREA};
 use radroots_events::listing::{
     RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
@@ -27,6 +29,7 @@ use crate::error::EventEncodeError;
 const TAG_PRICE: &str = "price";
 const TAG_RADROOTS_BIN: &str = "radroots:bin";
 const TAG_RADROOTS_PRICE: &str = "radroots:price";
+#[cfg(feature = "serde_json")]
 const TAG_RADROOTS_DISCOUNT: &str = "radroots:discount";
 const TAG_RADROOTS_PRIMARY_BIN: &str = "radroots:primary_bin";
 const TAG_RADROOTS_RESOURCE_AREA: &str = "radroots:resource_area";
@@ -601,6 +604,7 @@ fn clean_value(value: &str) -> Option<String> {
     }
 }
 
+#[cfg(any(feature = "serde_json", test))]
 fn discount_tag_payload(discount: &RadrootsCoreDiscount) -> Result<String, EventEncodeError> {
     #[cfg(feature = "serde_json")]
     {
@@ -888,11 +892,30 @@ mod tests {
             },
         );
         assert!(find_tag(&invalid_with_geohash_enabled, "g").is_some());
-        assert!(
-            !invalid_with_geohash_enabled
-                .iter()
-                .any(|tag| tag.first().map(|v| v.as_str()) == Some("l"))
+        assert!(!invalid_with_geohash_enabled
+            .iter()
+            .any(|tag| tag.first().map(|v| v.as_str()) == Some("l")));
+
+        let mut no_coordinate_tags = Vec::new();
+        let no_coordinate_location = RadrootsListingLocation {
+            primary: "Test".to_string(),
+            city: None,
+            region: None,
+            country: None,
+            lat: None,
+            lng: None,
+            geohash: None,
+        };
+        push_location_geotags(
+            &mut no_coordinate_tags,
+            &no_coordinate_location,
+            ListingTagOptions {
+                include_geohash: false,
+                include_gps: true,
+                ..ListingTagOptions::default()
+            },
         );
+        assert!(find_tag(&no_coordinate_tags, "l").is_none());
     }
 
     #[test]
@@ -1132,14 +1155,16 @@ mod tests {
         }]);
         #[cfg(feature = "serde_json")]
         {
-            let tags = listing_tags_with_options(&listing_with_discount, ListingTagOptions::default())
-                .expect("discount serialization works");
+            let tags =
+                listing_tags_with_options(&listing_with_discount, ListingTagOptions::default())
+                    .expect("discount serialization works");
             assert!(find_tag(&tags, "radroots:discount").is_some());
         }
         #[cfg(not(feature = "serde_json"))]
         {
-            let err = listing_tags_with_options(&listing_with_discount, ListingTagOptions::default())
-                .expect_err("discount serialization requires serde_json");
+            let err =
+                listing_tags_with_options(&listing_with_discount, ListingTagOptions::default())
+                    .expect_err("discount serialization requires serde_json");
             assert!(matches!(err, EventEncodeError::Json));
         }
 
@@ -1203,6 +1228,23 @@ mod tests {
         assert!(find_tag(&no_availability_tags, "status").is_none());
         assert!(find_tag(&no_availability_tags, "published_at").is_none());
         assert!(find_tag(&no_availability_tags, "expires_at").is_none());
+
+        let mut empty_window_availability = base_listing();
+        empty_window_availability.discounts = None;
+        empty_window_availability.availability = Some(RadrootsListingAvailability::Window {
+            start: None,
+            end: None,
+        });
+        let empty_window_tags = listing_tags_with_options(
+            &empty_window_availability,
+            ListingTagOptions {
+                include_availability: true,
+                ..ListingTagOptions::default()
+            },
+        )
+        .expect("availability window without bounds");
+        assert!(find_tag(&empty_window_tags, "published_at").is_none());
+        assert!(find_tag(&empty_window_tags, "expires_at").is_none());
 
         let mut no_delivery = base_listing();
         no_delivery.discounts = None;
@@ -1403,6 +1445,25 @@ mod tests {
             .expect("first bin tag");
         assert_eq!(first_bin.get(1).map(|v| v.as_str()), Some("bin-1"));
         assert_eq!(first_bin.get(6).map(|v| v.as_str()), Some("fallback-label"));
+
+        let mut listing_without_primary_match = base_listing();
+        listing_without_primary_match.discounts = None;
+        let mut first = base_bin();
+        first.bin_id = "bin-2".to_string();
+        first.display_label = None;
+        first.quantity = RadrootsCoreQuantity::new(decimal("1000"), RadrootsCoreUnit::MassG);
+        let mut second = base_bin();
+        second.bin_id = "bin-1".to_string();
+        listing_without_primary_match.primary_bin_id = "bin-missing".to_string();
+        listing_without_primary_match.bins = vec![first, second];
+
+        let tags = listing_tags(&listing_without_primary_match).expect("listing tags");
+        let first_bin = tags
+            .iter()
+            .find(|tag| tag.first().map(|v| v.as_str()) == Some("radroots:bin"))
+            .expect("first bin tag");
+        assert_eq!(first_bin.get(1).map(|v| v.as_str()), Some("bin-2"));
+        assert_eq!(first_bin.len(), 6);
     }
 
     #[test]
@@ -1425,6 +1486,22 @@ mod tests {
         assert_eq!(location.get(1).map(|v| v.as_str()), Some("Moyobamba"));
         assert_eq!(location.get(2).map(|v| v.as_str()), Some("San Martin"));
         assert_eq!(location.len(), 3);
+
+        listing.location = Some(RadrootsListingLocation {
+            primary: "Moyobamba".to_string(),
+            city: Some("Moyobamba".to_string()),
+            region: Some(" ".to_string()),
+            country: Some("PE".to_string()),
+            lat: Some(-6.03),
+            lng: Some(-76.97),
+            geohash: None,
+        });
+        let tags = listing_tags(&listing).expect("listing tags");
+        let location = find_tag(&tags, "location").expect("location tag");
+        assert_eq!(location.get(1).map(|v| v.as_str()), Some("Moyobamba"));
+        assert_eq!(location.get(2).map(|v| v.as_str()), Some("Moyobamba"));
+        assert_eq!(location.get(3).map(|v| v.as_str()), Some("PE"));
+        assert_eq!(location.len(), 4);
     }
 
     #[test]
