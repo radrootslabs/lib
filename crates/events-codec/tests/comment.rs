@@ -8,7 +8,9 @@ use radroots_events::{
 
 use radroots_events_codec::comment::decode::comment_from_tags;
 use radroots_events_codec::comment::decode::{index_from_event, metadata_from_event};
-use radroots_events_codec::comment::encode::{comment_build_tags, to_wire_parts};
+use radroots_events_codec::comment::encode::{
+    comment_build_tags, to_wire_parts, to_wire_parts_with_kind,
+};
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
 use radroots_events_codec::event_ref::{build_event_ref_tag, push_nip10_ref_tags};
 
@@ -66,6 +68,24 @@ fn comment_to_wire_parts_requires_content() {
         err,
         EventEncodeError::EmptyRequiredField("content")
     ));
+}
+
+#[test]
+fn comment_to_wire_parts_sets_kind_content_and_tags() {
+    let comment = RadrootsComment {
+        root: common::event_ref("root", "author", KIND_POST),
+        parent: common::event_ref("parent", "author", KIND_POST),
+        content: "hello".to_string(),
+    };
+    let parts = to_wire_parts(&comment).unwrap();
+    assert_eq!(parts.kind, KIND_COMMENT);
+    assert_eq!(parts.content, "hello");
+    assert_eq!(parts.tags.len(), 6);
+
+    let custom_parts = to_wire_parts_with_kind(&comment, KIND_POST).unwrap();
+    assert_eq!(custom_parts.kind, KIND_POST);
+    assert_eq!(custom_parts.content, "hello");
+    assert_eq!(custom_parts.tags.len(), 6);
 }
 
 #[test]

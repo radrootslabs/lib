@@ -184,7 +184,78 @@ fn gift_wrap_build_tags_handles_optional_expiration_and_invalid_relay() {
 }
 
 #[test]
+fn gift_wrap_to_wire_parts_requires_content_and_accepts_default_kind() {
+    let mut gift_wrap = sample_gift_wrap();
+    gift_wrap.content = " ".to_string();
+    let err = to_wire_parts(&gift_wrap).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("content")
+    ));
+
+    let parts = to_wire_parts_with_kind(&sample_gift_wrap(), KIND_GIFT_WRAP).unwrap();
+    assert_eq!(parts.kind, KIND_GIFT_WRAP);
+    assert_eq!(parts.content, "encrypted");
+}
+
+#[test]
 fn gift_wrap_to_wire_parts_with_kind_rejects_wrong_kind() {
     let err = to_wire_parts_with_kind(&sample_gift_wrap(), KIND_MESSAGE).unwrap_err();
     assert!(matches!(err, EventEncodeError::InvalidKind(KIND_MESSAGE)));
+}
+
+#[test]
+fn gift_wrap_from_tags_handles_missing_expiration_and_rejects_empty_fields() {
+    let parsed = gift_wrap_from_tags(
+        KIND_GIFT_WRAP,
+        &[vec!["p".to_string(), "pubkey".to_string()]],
+        "payload",
+    )
+    .unwrap();
+    assert_eq!(parsed.recipient.public_key, "pubkey");
+    assert!(parsed.recipient.relay_url.is_none());
+    assert!(parsed.expiration.is_none());
+
+    let err = gift_wrap_from_tags(
+        KIND_GIFT_WRAP,
+        &[vec!["p".to_string(), " ".to_string()]],
+        "payload",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("p")));
+
+    let err = gift_wrap_from_tags(
+        KIND_GIFT_WRAP,
+        &[vec!["p".to_string(), "pubkey".to_string()]],
+        " ",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("content")));
+}
+
+#[test]
+fn gift_wrap_metadata_and_index_propagate_parse_errors() {
+    let tags = vec![vec!["p".to_string(), "pubkey".to_string()]];
+    let err = metadata_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        11,
+        KIND_GIFT_WRAP,
+        " ".to_string(),
+        tags.clone(),
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("content")));
+
+    let err = index_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        11,
+        KIND_GIFT_WRAP,
+        " ".to_string(),
+        tags,
+        "sig".to_string(),
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("content")));
 }

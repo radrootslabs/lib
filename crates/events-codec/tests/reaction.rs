@@ -11,7 +11,9 @@ use radroots_events_codec::event_ref::{build_event_ref_tag, push_nip10_ref_tags}
 use radroots_events_codec::reaction::decode::{
     index_from_event, metadata_from_event, reaction_from_tags,
 };
-use radroots_events_codec::reaction::encode::{reaction_build_tags, to_wire_parts};
+use radroots_events_codec::reaction::encode::{
+    reaction_build_tags, to_wire_parts, to_wire_parts_with_kind,
+};
 
 #[test]
 fn reaction_build_tags_requires_root_fields() {
@@ -24,6 +26,20 @@ fn reaction_build_tags_requires_root_fields() {
     assert!(matches!(
         err,
         EventEncodeError::EmptyRequiredField("root.id")
+    ));
+}
+
+#[test]
+fn reaction_build_tags_requires_root_author() {
+    let reaction = RadrootsReaction {
+        root: common::event_ref("root", "", KIND_POST),
+        content: "like".to_string(),
+    };
+
+    let err = reaction_build_tags(&reaction).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("root.author")
     ));
 }
 
@@ -42,10 +58,44 @@ fn reaction_to_wire_parts_requires_content() {
 }
 
 #[test]
+fn reaction_to_wire_parts_with_kind_keeps_requested_kind() {
+    let reaction = RadrootsReaction {
+        root: common::event_ref("root", "author", KIND_POST),
+        content: "+".to_string(),
+    };
+    let parts = to_wire_parts_with_kind(&reaction, KIND_POST).unwrap();
+    assert_eq!(parts.kind, KIND_POST);
+    assert_eq!(parts.content, "+");
+    assert_eq!(parts.tags.len(), 3);
+
+    let default_parts = to_wire_parts(&reaction).unwrap();
+    assert_eq!(default_parts.kind, KIND_REACTION);
+}
+
+#[test]
 fn reaction_from_tags_requires_root_tag() {
     let tags = vec![vec!["p".to_string(), "x".to_string()]];
     let err = reaction_from_tags(KIND_REACTION, &tags, "+").unwrap_err();
     assert!(matches!(err, EventParseError::MissingTag("e")));
+}
+
+#[test]
+fn reaction_from_tags_rejects_invalid_kind_and_content() {
+    let root = common::event_ref("root", "author", KIND_POST);
+    let mut tags = Vec::new();
+    push_nip10_ref_tags(&mut tags, &root, "e", "p", "k", "a");
+
+    let err = reaction_from_tags(KIND_POST, &tags, "+").unwrap_err();
+    assert!(matches!(
+        err,
+        EventParseError::InvalidKind {
+            expected: "7",
+            got: KIND_POST
+        }
+    ));
+
+    let err = reaction_from_tags(KIND_REACTION, &tags, "   ").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("content")));
 }
 
 #[test]
@@ -124,6 +174,39 @@ fn reaction_metadata_and_index_from_event_roundtrip() {
     assert_eq!(index.event.kind, KIND_REACTION);
     assert_eq!(index.event.sig, "sig");
     assert_eq!(index.metadata.reaction.content, "+");
+}
+
+#[test]
+fn reaction_metadata_and_index_propagate_parse_errors() {
+    let tags = vec![vec!["e".to_string(), "root".to_string()]];
+    let err = metadata_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        99,
+        KIND_POST,
+        "+".to_string(),
+        tags.clone(),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        EventParseError::InvalidKind {
+            expected: "7",
+            got: KIND_POST
+        }
+    ));
+
+    let err = index_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        99,
+        KIND_REACTION,
+        "   ".to_string(),
+        tags,
+        "sig".to_string(),
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("content")));
 }
 
 #[test]

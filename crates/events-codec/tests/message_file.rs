@@ -1,13 +1,15 @@
+use radroots_events::RadrootsNostrEventPtr;
 use radroots_events::kinds::{KIND_MESSAGE, KIND_MESSAGE_FILE};
 use radroots_events::message::RadrootsMessageRecipient;
 use radroots_events::message_file::{RadrootsMessageFile, RadrootsMessageFileDimensions};
-use radroots_events::RadrootsNostrEventPtr;
 
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
 use radroots_events_codec::message_file::decode::{
     index_from_event, message_file_from_tags, metadata_from_event,
 };
-use radroots_events_codec::message_file::encode::{message_file_build_tags, to_wire_parts};
+use radroots_events_codec::message_file::encode::{
+    message_file_build_tags, to_wire_parts, to_wire_parts_with_kind,
+};
 
 fn sample_message_file() -> RadrootsMessageFile {
     RadrootsMessageFile {
@@ -78,6 +80,43 @@ fn message_file_build_tags_requires_file_type() {
         err,
         EventEncodeError::EmptyRequiredField("file_type")
     ));
+}
+
+#[test]
+fn message_file_build_tags_requires_crypto_fields() {
+    let mut message = sample_message_file();
+    message.encryption_algorithm = " ".to_string();
+    let err = message_file_build_tags(&message).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("encryption_algorithm")
+    ));
+
+    let mut message = sample_message_file();
+    message.decryption_key = " ".to_string();
+    let err = message_file_build_tags(&message).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("decryption_key")
+    ));
+
+    let mut message = sample_message_file();
+    message.decryption_nonce = " ".to_string();
+    let err = message_file_build_tags(&message).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("decryption_nonce")
+    ));
+}
+
+#[test]
+fn message_file_to_wire_parts_with_kind_enforces_kind() {
+    let message = sample_message_file();
+    let parts = to_wire_parts_with_kind(&message, KIND_MESSAGE_FILE).unwrap();
+    assert_eq!(parts.kind, KIND_MESSAGE_FILE);
+
+    let err = to_wire_parts_with_kind(&message, KIND_MESSAGE).unwrap_err();
+    assert!(matches!(err, EventEncodeError::InvalidKind(KIND_MESSAGE)));
 }
 
 #[test]
