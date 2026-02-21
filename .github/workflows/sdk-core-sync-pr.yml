@@ -12,29 +12,37 @@ on:
       - ".github/workflows/sdk-core-sync-pr.yml"
 
 jobs:
-  sync-disabled:
-    if: ${{ secrets.RADROOTS_SDK_SYNC_TOKEN == '' }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: skip sync when token is unavailable
-        run: echo "radroots_sdk_sync_token is not configured; skipping sdk sync workflow"
-
   sync-models:
-    if: ${{ secrets.RADROOTS_SDK_SYNC_TOKEN != '' }}
     runs-on: ubuntu-latest
     steps:
       - name: checkout
         uses: actions/checkout@v4
 
+      - name: detect sync token
+        id: sync_token
+        run: |
+          if test -n "${{ secrets.RADROOTS_SDK_SYNC_TOKEN }}"; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: skip sync when token is unavailable
+        if: steps.sync_token.outputs.configured != 'true'
+        run: echo "radroots_sdk_sync_token is not configured; skipping sdk sync workflow"
+
       - name: install rust toolchain
+        if: steps.sync_token.outputs.configured == 'true'
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.92.0
 
       - name: export ts sdk artifacts
+        if: steps.sync_token.outputs.configured == 'true'
         run: cargo run -q -p xtask -- sdk export-ts --out "${{ runner.temp }}/sdk-export"
 
       - name: check required export artifacts
+        if: steps.sync_token.outputs.configured == 'true'
         run: |
           test -f "${{ runner.temp }}/sdk-export/ts/packages/core/src/generated/types.ts"
           test -f "${{ runner.temp }}/sdk-export/ts/packages/types/src/generated/types.ts"
@@ -42,6 +50,7 @@ jobs:
           test -f "${{ runner.temp }}/sdk-export/ts/packages/trade/src/generated/types.ts"
 
       - name: checkout sdk-typescript
+        if: steps.sync_token.outputs.configured == 'true'
         uses: actions/checkout@v4
         with:
           repository: radrootslabs/sdk-typescript
@@ -51,6 +60,7 @@ jobs:
           fetch-depth: 0
 
       - name: apply generated model artifacts
+        if: steps.sync_token.outputs.configured == 'true'
         run: |
           for package in core types events trade; do
             install -d "sdk-typescript/packages/${package}/src/generated"
@@ -76,11 +86,13 @@ jobs:
           fi
 
       - name: setup bun
+        if: steps.sync_token.outputs.configured == 'true'
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.9
 
       - name: validate sdk-typescript
+        if: steps.sync_token.outputs.configured == 'true'
         working-directory: sdk-typescript
         run: |
           bun install --frozen-lockfile
@@ -89,6 +101,7 @@ jobs:
           bun run test
 
       - name: create pull request
+        if: steps.sync_token.outputs.configured == 'true'
         uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.RADROOTS_SDK_SYNC_TOKEN }}
