@@ -72,6 +72,23 @@ fn parse_event_ref_tag_rejects_invalid_kind() {
 }
 
 #[test]
+fn parse_event_ref_tag_rejects_wrong_tag_name_and_missing_fields() {
+    let tag = vec!["p".to_string(), "id".to_string()];
+    let err = parse_event_ref_tag(&tag, "e").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("e")));
+
+    let tag = vec![
+        "e".to_string(),
+        "id".to_string(),
+        "author".to_string(),
+        KIND_POST.to_string(),
+    ];
+    let parsed = parse_event_ref_tag(&tag, "e").unwrap();
+    assert!(parsed.d_tag.is_none());
+    assert!(parsed.relays.is_none());
+}
+
+#[test]
 fn find_event_ref_tag_locates_first_match() {
     let event = common::event_ref("id", "author", KIND_POST);
     let tags = vec![
@@ -179,5 +196,37 @@ fn parse_nip10_ref_tags_prefers_e_relays_and_can_fall_back_to_a_relays() {
     assert_eq!(
         parsed.relays,
         Some(vec!["wss://relay.e.example.com".to_string()])
+    );
+}
+
+#[test]
+fn parse_nip10_ref_tags_skips_invalid_a_tags_until_match() {
+    let tags = vec![
+        vec!["e".to_string(), "id".to_string()],
+        vec!["p".to_string(), "author".to_string()],
+        vec!["k".to_string(), KIND_POST.to_string()],
+        vec!["a".to_string()],
+        vec![
+            "a".to_string(),
+            format!("{}:{}:{}", KIND_POST + 1, "author", "AAAAAAAAAAAAAAAAAAAAAA"),
+            "wss://relay.bad-kind.example.com".to_string(),
+        ],
+        vec![
+            "a".to_string(),
+            format!("{}:{}:{}", KIND_POST, "other-author", "AAAAAAAAAAAAAAAAAAAAAA"),
+            "wss://relay.bad-author.example.com".to_string(),
+        ],
+        vec![
+            "a".to_string(),
+            format!("{}:{}:", KIND_POST, "author"),
+            "wss://relay.empty-d.example.com".to_string(),
+        ],
+    ];
+
+    let parsed = parse_nip10_ref_tags(&tags, "e", "p", "k", "a").unwrap();
+    assert!(parsed.d_tag.is_none());
+    assert_eq!(
+        parsed.relays,
+        Some(vec!["wss://relay.empty-d.example.com".to_string()])
     );
 }

@@ -21,6 +21,16 @@ fn input_type_tag_roundtrip() {
 }
 
 #[test]
+fn input_type_tag_covers_all_variants() {
+    assert_eq!(job_input_type_tag(JobInputType::Event), "event");
+    assert_eq!(job_input_type_tag(JobInputType::Job), "job");
+    assert_eq!(job_input_type_tag(JobInputType::Text), "text");
+    assert_eq!(job_input_type_from_tag("event"), Some(JobInputType::Event));
+    assert_eq!(job_input_type_from_tag("job"), Some(JobInputType::Job));
+    assert_eq!(job_input_type_from_tag("text"), Some(JobInputType::Text));
+}
+
+#[test]
 fn feedback_status_tag_roundtrip() {
     let t = feedback_status_tag(JobFeedbackStatus::Processing);
     assert_eq!(
@@ -31,10 +41,38 @@ fn feedback_status_tag_roundtrip() {
 }
 
 #[test]
+fn feedback_status_tag_covers_all_variants() {
+    assert_eq!(
+        feedback_status_tag(JobFeedbackStatus::PaymentRequired),
+        "payment-required"
+    );
+    assert_eq!(feedback_status_tag(JobFeedbackStatus::Error), "error");
+    assert_eq!(feedback_status_tag(JobFeedbackStatus::Success), "success");
+    assert_eq!(feedback_status_tag(JobFeedbackStatus::Partial), "partial");
+    assert_eq!(
+        feedback_status_from_tag("payment-required"),
+        Some(JobFeedbackStatus::PaymentRequired)
+    );
+    assert_eq!(feedback_status_from_tag("error"), Some(JobFeedbackStatus::Error));
+    assert_eq!(
+        feedback_status_from_tag("success"),
+        Some(JobFeedbackStatus::Success)
+    );
+    assert_eq!(
+        feedback_status_from_tag("partial"),
+        Some(JobFeedbackStatus::Partial)
+    );
+}
+
+#[test]
 fn parse_i_tags_handles_multiple_shapes() {
     let tags = vec![
         vec!["i".to_string(), "https://example.com".to_string()],
         vec!["i".to_string(), "note1abcdef".to_string()],
+        vec![
+            "i".to_string(),
+            "0123456789abcdef0123456789abcdef".to_string(),
+        ],
         vec![
             "i".to_string(),
             "job-id".to_string(),
@@ -45,7 +83,7 @@ fn parse_i_tags_handles_multiple_shapes() {
     ];
 
     let inputs = parse_i_tags(&tags);
-    assert_eq!(inputs.len(), 3);
+    assert_eq!(inputs.len(), 4);
 
     assert_eq!(inputs[0].data, "https://example.com");
     assert_eq!(inputs[0].input_type, JobInputType::Url);
@@ -55,10 +93,15 @@ fn parse_i_tags_handles_multiple_shapes() {
     assert_eq!(inputs[1].data, "note1abcdef");
     assert_eq!(inputs[1].input_type, JobInputType::Event);
 
-    assert_eq!(inputs[2].data, "job-id");
-    assert_eq!(inputs[2].input_type, JobInputType::Job);
-    assert_eq!(inputs[2].relay.as_deref(), Some("wss://relay"));
-    assert_eq!(inputs[2].marker.as_deref(), Some("marker"));
+    assert_eq!(inputs[2].data, "0123456789abcdef0123456789abcdef");
+    assert_eq!(inputs[2].input_type, JobInputType::Event);
+    assert!(inputs[2].relay.is_none());
+    assert!(inputs[2].marker.is_none());
+
+    assert_eq!(inputs[3].data, "job-id");
+    assert_eq!(inputs[3].input_type, JobInputType::Job);
+    assert_eq!(inputs[3].relay.as_deref(), Some("wss://relay"));
+    assert_eq!(inputs[3].marker.as_deref(), Some("marker"));
 }
 
 #[test]
@@ -97,10 +140,20 @@ fn parse_i_tags_covers_marker_and_fallback_shapes() {
             "wss://relay.example.com".to_string(),
             "final-marker".to_string(),
         ],
+        vec!["i".to_string(), "nostr:note1abcdef".to_string()],
+        vec!["i".to_string(), "nevent1abcdef".to_string()],
+        vec!["i".to_string(), "naddr1abcdef".to_string()],
+        vec![
+            "i".to_string(),
+            "text-input".to_string(),
+            "text".to_string(),
+            "ws://relay.example.com".to_string(),
+            "marker-text".to_string(),
+        ],
     ];
 
     let inputs = parse_i_tags(&tags);
-    assert_eq!(inputs.len(), 6);
+    assert_eq!(inputs.len(), 10);
     assert_eq!(inputs[0].marker.as_deref(), Some("marker-only"));
     assert_eq!(inputs[0].data, "");
     assert_eq!(inputs[1].marker.as_deref(), Some("marker"));
@@ -113,6 +166,12 @@ fn parse_i_tags_covers_marker_and_fallback_shapes() {
     assert_eq!(inputs[4].relay, None);
     assert_eq!(inputs[5].relay.as_deref(), Some("wss://relay.example.com"));
     assert_eq!(inputs[5].marker.as_deref(), Some("final-marker"));
+    assert_eq!(inputs[6].input_type, JobInputType::Event);
+    assert_eq!(inputs[7].input_type, JobInputType::Event);
+    assert_eq!(inputs[8].input_type, JobInputType::Event);
+    assert_eq!(inputs[9].input_type, JobInputType::Text);
+    assert_eq!(inputs[9].relay.as_deref(), Some("ws://relay.example.com"));
+    assert_eq!(inputs[9].marker.as_deref(), Some("marker-text"));
 }
 
 #[test]

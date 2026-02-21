@@ -849,10 +849,28 @@ mod tests {
                 ..ListingTagOptions::default()
             },
         );
-        assert!(!invalid_tags.iter().any(|tag| {
-            tag.first().map(|v| v.as_str()) == Some("l")
-                && tag.get(2).map(|v| v.as_str()) == Some("dd")
-        }));
+        assert!(find_tag(&invalid_tags, "l").is_none());
+
+        let mut geohash_only_tags = Vec::new();
+        let geohash_only_location = RadrootsListingLocation {
+            primary: "Test".to_string(),
+            city: None,
+            region: None,
+            country: None,
+            lat: None,
+            lng: None,
+            geohash: Some("6gkzwgjzn".to_string()),
+        };
+        push_location_geotags(
+            &mut geohash_only_tags,
+            &geohash_only_location,
+            ListingTagOptions {
+                include_geohash: true,
+                include_gps: false,
+                ..ListingTagOptions::default()
+            },
+        );
+        assert!(find_tag(&geohash_only_tags, "g").is_some());
     }
 
     #[test]
@@ -901,8 +919,16 @@ mod tests {
                 RadrootsCoreCurrency::USD,
             )),
         };
-        let err = discount_tag_payload(&discount).expect_err("missing serde_json");
-        assert!(matches!(err, EventEncodeError::Json));
+        #[cfg(feature = "serde_json")]
+        {
+            let payload = discount_tag_payload(&discount).expect("serde_json payload");
+            assert!(payload.contains("\"scope\":\"bin\""));
+        }
+        #[cfg(not(feature = "serde_json"))]
+        {
+            let err = discount_tag_payload(&discount).expect_err("missing serde_json");
+            assert!(matches!(err, EventEncodeError::Json));
+        }
     }
 
     #[test]
@@ -984,6 +1010,11 @@ mod tests {
         let mut bad_bin = base_bin();
         bad_bin.bin_id = "".to_string();
         let err = tag_listing_bin(&bad_bin).expect_err("empty bin_id");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("bin_id")
+        ));
+        let err = tag_listing_price(&bad_bin).expect_err("empty bin_id");
         assert!(matches!(
             err,
             EventEncodeError::EmptyRequiredField("bin_id")
@@ -1077,9 +1108,18 @@ mod tests {
                 RadrootsCoreCurrency::USD,
             )),
         }]);
-        let err = listing_tags_with_options(&listing_with_discount, ListingTagOptions::default())
-            .expect_err("discount serialization requires serde_json");
-        assert!(matches!(err, EventEncodeError::Json));
+        #[cfg(feature = "serde_json")]
+        {
+            let tags = listing_tags_with_options(&listing_with_discount, ListingTagOptions::default())
+                .expect("discount serialization works");
+            assert!(find_tag(&tags, "radroots:discount").is_some());
+        }
+        #[cfg(not(feature = "serde_json"))]
+        {
+            let err = listing_tags_with_options(&listing_with_discount, ListingTagOptions::default())
+                .expect_err("discount serialization requires serde_json");
+            assert!(matches!(err, EventEncodeError::Json));
+        }
 
         let mut listing = base_listing();
         listing.discounts = None;
@@ -1126,6 +1166,34 @@ mod tests {
             let method_tags = listing_tags_full(&delivery_listing).expect("delivery tags");
             assert!(find_tag(&method_tags, "delivery").is_some());
         }
+
+        let mut no_availability = base_listing();
+        no_availability.discounts = None;
+        no_availability.availability = None;
+        let no_availability_tags = listing_tags_with_options(
+            &no_availability,
+            ListingTagOptions {
+                include_availability: true,
+                ..ListingTagOptions::default()
+            },
+        )
+        .expect("availability option without value");
+        assert!(find_tag(&no_availability_tags, "status").is_none());
+        assert!(find_tag(&no_availability_tags, "published_at").is_none());
+        assert!(find_tag(&no_availability_tags, "expires_at").is_none());
+
+        let mut no_delivery = base_listing();
+        no_delivery.discounts = None;
+        no_delivery.delivery_method = None;
+        let no_delivery_tags = listing_tags_with_options(
+            &no_delivery,
+            ListingTagOptions {
+                include_delivery: true,
+                ..ListingTagOptions::default()
+            },
+        )
+        .expect("delivery option without value");
+        assert!(find_tag(&no_delivery_tags, "delivery").is_none());
     }
 
     #[test]
@@ -1174,6 +1242,39 @@ mod tests {
         ));
 
         listing = base_listing();
+        listing.resource_area = Some(RadrootsResourceAreaRef {
+            pubkey: TEST_PUBKEY_HEX.to_string(),
+            d_tag: "".to_string(),
+        });
+        let err = listing_tags(&listing).expect_err("missing resource_area d_tag");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("resource_area.d_tag")
+        ));
+
+        listing = base_listing();
+        listing.plot = Some(RadrootsPlotRef {
+            pubkey: "".to_string(),
+            d_tag: "AAAAAAAAAAAAAAAAAAAAAQ".to_string(),
+        });
+        let err = listing_tags(&listing).expect_err("missing plot pubkey");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("plot.pubkey")
+        ));
+
+        listing = base_listing();
+        listing.plot = Some(RadrootsPlotRef {
+            pubkey: TEST_PUBKEY_HEX.to_string(),
+            d_tag: "".to_string(),
+        });
+        let err = listing_tags(&listing).expect_err("missing plot d_tag");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("plot.d_tag")
+        ));
+
+        listing = base_listing();
         listing.plot = Some(RadrootsPlotRef {
             pubkey: TEST_PUBKEY_HEX.to_string(),
             d_tag: "plot:invalid".to_string(),
@@ -1203,14 +1304,30 @@ mod tests {
         }]);
         let tags = listing_tags_full(&listing).expect("cleaning path tags");
         assert!(find_tag(&tags, "location").is_none());
-        assert!(!tags.iter().any(|tag| {
-            tag.first().map(|v| v.as_str()) == Some("profile")
-                && tag.get(1).map(|v| v.as_str()) == Some("null")
-        }));
-        assert!(!tags.iter().any(|tag| {
-            tag.first().map(|v| v.as_str()) == Some("location")
-                && tag.get(1).map(|v| v.as_str()) == Some("null")
-        }));
+        assert!(find_tag(&tags, "profile").is_none());
+        assert!(find_tag(&tags, "image").is_none());
+    }
+
+    #[test]
+    fn listing_tags_preserve_location_fields_when_present() {
+        let mut listing = base_listing();
+        listing.discounts = None;
+        listing.images = None;
+        listing.location = Some(RadrootsListingLocation {
+            primary: "Moyobamba".to_string(),
+            city: Some("Moyobamba".to_string()),
+            region: Some("San Martin".to_string()),
+            country: Some("PE".to_string()),
+            lat: None,
+            lng: None,
+            geohash: Some("6gkzwgjzn".to_string()),
+        });
+        let tags = listing_tags_full(&listing).expect("location tags");
+        let location = find_tag(&tags, "location").expect("location tag");
+        assert_eq!(location.get(1).map(|v| v.as_str()), Some("Moyobamba"));
+        assert_eq!(location.get(2).map(|v| v.as_str()), Some("Moyobamba"));
+        assert_eq!(location.get(3).map(|v| v.as_str()), Some("San Martin"));
+        assert_eq!(location.get(4).map(|v| v.as_str()), Some("PE"));
         assert!(find_tag(&tags, "image").is_none());
     }
 

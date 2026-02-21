@@ -253,6 +253,24 @@ fn message_build_tags_rejects_invalid_optional_fields() {
             relay_url: None,
         }],
         content: "hello".to_string(),
+        reply_to: Some(RadrootsNostrEventPtr {
+            id: "reply".to_string(),
+            relays: Some(" ".to_string()),
+        }),
+        subject: None,
+    };
+    let err = message_build_tags(&message).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("reply_to.relays")
+    ));
+
+    let message = RadrootsMessage {
+        recipients: vec![RadrootsMessageRecipient {
+            public_key: "pub".to_string(),
+            relay_url: None,
+        }],
+        content: "hello".to_string(),
         reply_to: None,
         subject: Some(" ".to_string()),
     };
@@ -291,7 +309,44 @@ fn message_from_tags_rejects_invalid_optional_tags() {
         KIND_MESSAGE,
         &[
             vec!["p".to_string(), "pub".to_string()],
+            vec![
+                "e".to_string(),
+                "reply".to_string(),
+                "   ".to_string(),
+            ],
+        ],
+        "hello",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("e")));
+
+    let err = message_from_tags(
+        KIND_MESSAGE,
+        &[
+            vec!["p".to_string(), "pub".to_string()],
             vec!["subject".to_string(), " ".to_string()],
+        ],
+        "hello",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("subject")));
+
+    let err = message_from_tags(
+        KIND_MESSAGE,
+        &[
+            vec!["p".to_string(), "".to_string()],
+            vec!["subject".to_string(), "topic".to_string()],
+        ],
+        "hello",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("p")));
+
+    let err = message_from_tags(
+        KIND_MESSAGE,
+        &[
+            vec!["p".to_string(), "pub".to_string()],
+            vec!["subject".to_string()],
         ],
         "hello",
     )

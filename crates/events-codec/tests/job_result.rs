@@ -41,6 +41,21 @@ fn job_result_roundtrip_from_tags() {
 }
 
 #[test]
+fn job_result_roundtrip_preserves_input_relay_and_marker() {
+    let mut res = sample_result();
+    res.inputs = vec![RadrootsJobInput {
+        data: "note1payload".to_string(),
+        input_type: JobInputType::Event,
+        relay: Some("wss://relay.input.example.com".to_string()),
+        marker: Some("root".to_string()),
+    }];
+    let content = res.content.clone().unwrap();
+    let parts = to_wire_parts(&res, &content).unwrap();
+    let decoded = job_result_from_tags(parts.kind, &parts.tags, &content).unwrap();
+    assert_eq!(decoded, res);
+}
+
+#[test]
 fn job_result_requires_valid_kind() {
     let mut res = sample_result();
     res.kind = KIND_JOB_REQUEST_MIN as u16;
@@ -49,6 +64,35 @@ fn job_result_requires_valid_kind() {
     assert!(matches!(
         err,
         JobEncodeError::InvalidKind(KIND_JOB_REQUEST_MIN)
+    ));
+}
+
+#[test]
+fn job_result_encrypted_adds_flag_and_rejects_inputs() {
+    let mut encrypted = sample_result();
+    encrypted.encrypted = true;
+    encrypted.inputs.clear();
+    let content = encrypted.content.clone().unwrap();
+    let parts = to_wire_parts(&encrypted, &content).unwrap();
+    assert!(
+        parts
+            .tags
+            .iter()
+            .any(|tag| tag.first().map(|v| v.as_str()) == Some("encrypted"))
+    );
+    assert!(
+        !parts
+            .tags
+            .iter()
+            .any(|tag| tag.first().map(|v| v.as_str()) == Some("i"))
+    );
+
+    let mut invalid = sample_result();
+    invalid.encrypted = true;
+    let err = to_wire_parts(&invalid, "payload").unwrap_err();
+    assert!(matches!(
+        err,
+        JobEncodeError::EmptyRequiredField("inputs-when-encrypted")
     ));
 }
 

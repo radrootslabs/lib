@@ -1,8 +1,6 @@
 use radroots_events::{job_result::RadrootsJobResult, kinds::is_result_kind};
 
-use crate::job::encode::{
-    JobEncodeError, WireEventParts, assert_no_inputs_when_encrypted, canonicalize_tags,
-};
+use crate::job::encode::{JobEncodeError, WireEventParts, canonicalize_tags};
 use crate::job::util::{job_input_type_tag, push_amount_tag_msat};
 
 #[cfg(not(feature = "std"))]
@@ -71,12 +69,11 @@ pub fn to_wire_parts(
     if !is_result_kind(kind) {
         return Err(JobEncodeError::InvalidKind(kind));
     }
-
-    let mut tags = job_result_build_tags(res);
-
-    if res.encrypted && !assert_no_inputs_when_encrypted(&tags) {
+    if res.encrypted && !res.inputs.is_empty() {
         return Err(JobEncodeError::EmptyRequiredField("inputs-when-encrypted"));
     }
+
+    let mut tags = job_result_build_tags(res);
 
     canonicalize_tags(&mut tags);
 
