@@ -38,6 +38,12 @@ fn ensure_non_negative_rejects_negative_amount() {
 }
 
 #[test]
+fn ensure_non_negative_accepts_non_negative_amount() {
+    let q = common::qty("0", RadrootsCoreUnit::Each);
+    assert_eq!(q.ensure_non_negative(), Ok(()));
+}
+
+#[test]
 fn try_add_and_try_sub_require_matching_units() {
     let a = common::qty("1", RadrootsCoreUnit::Each).with_label("lhs");
     let b = common::qty("2", RadrootsCoreUnit::Each);
@@ -55,6 +61,15 @@ fn try_add_and_try_sub_require_matching_units() {
         b.try_sub(&c),
         Err(RadrootsCoreQuantityInvariantError::UnitMismatch)
     );
+}
+
+#[test]
+fn try_sub_success_path_is_exercised() {
+    let a = common::qty("4", RadrootsCoreUnit::Each).with_label("lhs");
+    let b = common::qty("1", RadrootsCoreUnit::Each);
+    let out = a.try_sub(&b).expect("sub result");
+    assert_eq!(out.amount, common::dec("3"));
+    assert_eq!(out.label.as_deref(), Some("lhs"));
 }
 
 #[test]

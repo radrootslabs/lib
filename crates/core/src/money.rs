@@ -158,9 +158,7 @@ impl RadrootsCoreMoney {
         let e = self.currency.minor_unit_exponent();
         let scaled = self.amount.0.round_dp_with_strategy(e, strategy);
         let as_minor = scaled * Self::pow10(e);
-        if !as_minor.fract().is_zero() {
-            return Err(RadrootsCoreMoneyInvariantError::NotWholeMinorUnits);
-        }
+        debug_assert!(as_minor.fract().is_zero());
         as_minor
             .to_u64()
             .ok_or(RadrootsCoreMoneyInvariantError::AmountOverflow)
@@ -201,5 +199,19 @@ impl Div<crate::RadrootsCoreDecimal> for RadrootsCoreMoney {
     type Output = Self;
     fn div(self, rhs: crate::RadrootsCoreDecimal) -> Self {
         self.div_decimal(rhs)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pow10_internal_paths_cover_fallback_branches() {
+        assert_eq!(RadrootsCoreMoney::pow10(0), Decimal::ONE);
+        assert_eq!(RadrootsCoreMoney::pow10(1), Decimal::from(10u32));
+        assert_eq!(RadrootsCoreMoney::pow10(2), Decimal::from(100u32));
+        assert_eq!(RadrootsCoreMoney::pow10(3), Decimal::from(1_000u32));
+        assert_eq!(RadrootsCoreMoney::pow10(6), Decimal::from(1_000_000u32));
     }
 }

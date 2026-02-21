@@ -31,6 +31,15 @@ fn quantity_uses_decimal_str_and_omits_empty_label() {
 }
 
 #[test]
+fn quantity_deserializes_decimal_str_via_serde_ext() {
+    let raw = r#"{"amount":"1.2300","unit":"kg","label":"bag"}"#;
+    let q: RadrootsCoreQuantity = serde_json::from_str(raw).unwrap();
+    assert_eq!(q.amount, common::dec("1.23"));
+    assert_eq!(q.unit, RadrootsCoreUnit::MassKg);
+    assert_eq!(q.label.as_deref(), Some("bag"));
+}
+
+#[test]
 fn money_and_percent_roundtrip_with_strings() {
     let money = RadrootsCoreMoney::new(common::dec("2.50"), RadrootsCoreCurrency::USD);
     let value = serde_json::to_value(&money).unwrap();

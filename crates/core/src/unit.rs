@@ -277,17 +277,29 @@ pub fn convert_unit_decimal(
     from: RadrootsCoreUnit,
     to: RadrootsCoreUnit,
 ) -> Result<RadrootsCoreDecimal, RadrootsCoreUnitConvertError> {
-    if from == to {
-        return Ok(amount);
-    }
     if !RadrootsCoreUnit::same_dimension(from, to) {
         return Err(RadrootsCoreUnitConvertError::NotConvertibleUnits { from, to });
     }
-    if from.is_mass() {
-        return convert_mass_decimal(amount, from, to);
+    match from.dimension() {
+        RadrootsCoreUnitDimension::Count => Ok(amount),
+        RadrootsCoreUnitDimension::Mass => convert_mass_decimal(amount, from, to),
+        RadrootsCoreUnitDimension::Volume => convert_volume_decimal(amount, from, to),
     }
-    if from.is_volume() {
-        return convert_volume_decimal(amount, from, to);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn helper_factor_fallback_paths_are_exercised() {
+        assert_eq!(
+            grams_factor_decimal(RadrootsCoreUnit::Each),
+            RadrootsCoreDecimal::ONE
+        );
+        assert_eq!(
+            milliliters_factor_decimal(RadrootsCoreUnit::Each),
+            RadrootsCoreDecimal::ONE
+        );
     }
-    Err(RadrootsCoreUnitConvertError::NotConvertibleUnits { from, to })
 }

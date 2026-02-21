@@ -137,6 +137,13 @@ fn from_minor_units_u32_and_u32_rounded_paths_are_exercised() {
 }
 
 #[test]
+fn with_scale_path_is_exercised() {
+    let usd = RadrootsCoreCurrency::USD;
+    let m = RadrootsCoreMoney::new(common::dec("1.2300"), usd).with_scale(1);
+    assert_eq!(m.amount, common::dec("1.2"));
+}
+
+#[test]
 fn from_minor_units_roundtrips() {
     let usd = RadrootsCoreCurrency::USD;
     let money = RadrootsCoreMoney::from_minor_units_u64(12345, usd);

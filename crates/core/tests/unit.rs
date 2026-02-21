@@ -103,10 +103,12 @@ fn convert_mass_decimal_converts_between_mass_units() {
     let kg_to_g = convert_mass_decimal(common::dec("1"), MassKg, MassG).unwrap();
     let g_to_kg = convert_mass_decimal(common::dec("1000"), MassG, MassKg).unwrap();
     let lb_to_g = convert_mass_decimal(common::dec("1"), MassLb, MassG).unwrap();
+    let oz_to_g = convert_mass_decimal(common::dec("1"), MassOz, MassG).unwrap();
 
     assert_eq!(kg_to_g, common::dec("1000"));
     assert_eq!(g_to_kg, common::dec("1"));
     assert_eq!(lb_to_g, common::dec("453.59237"));
+    assert_eq!(oz_to_g, common::dec("28.349523125"));
 }
 
 #[test]
@@ -122,6 +124,20 @@ fn convert_mass_decimal_rejects_non_mass_units() {
         RadrootsCoreUnitConvertError::NotMassUnit {
             from: RadrootsCoreUnit::Each,
             to: RadrootsCoreUnit::MassG
+        }
+    );
+
+    let err = convert_mass_decimal(
+        common::dec("1"),
+        RadrootsCoreUnit::MassKg,
+        RadrootsCoreUnit::Each,
+    )
+    .unwrap_err();
+    assert_eq!(
+        err,
+        RadrootsCoreUnitConvertError::NotMassUnit {
+            from: RadrootsCoreUnit::MassKg,
+            to: RadrootsCoreUnit::Each
         }
     );
 }
@@ -148,6 +164,20 @@ fn convert_volume_decimal_rejects_non_volume_units() {
         RadrootsCoreUnitConvertError::NotVolumeUnit {
             from: RadrootsCoreUnit::Each,
             to: RadrootsCoreUnit::VolumeMl
+        }
+    );
+
+    let err = convert_volume_decimal(
+        common::dec("1"),
+        RadrootsCoreUnit::VolumeMl,
+        RadrootsCoreUnit::Each,
+    )
+    .unwrap_err();
+    assert_eq!(
+        err,
+        RadrootsCoreUnitConvertError::NotVolumeUnit {
+            from: RadrootsCoreUnit::VolumeMl,
+            to: RadrootsCoreUnit::Each
         }
     );
 }
