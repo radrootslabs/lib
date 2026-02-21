@@ -132,27 +132,19 @@ pub fn parse_i_tags(tags: &[Vec<String>]) -> Vec<RadrootsJobInput> {
                 let v = &t[3];
                 if looks_like_ws_relay(v) {
                     relay = Some(v.clone());
-                } else if marker.is_none() {
+                } else {
                     marker = Some(v.clone());
                 }
             }
             _ => {
                 data = t[1].clone();
                 input_type = job_input_type_from_tag(t[2].as_str()).unwrap_or(JobInputType::Text);
-                if let Some(v) = t.get(3) {
-                    if looks_like_ws_relay(v) {
-                        relay = Some(v.clone());
-                        if let Some(m) = t.get(4) {
-                            marker = Some(m.clone());
-                        }
-                    } else {
-                        marker = Some(v.clone());
-                    }
-                }
-                if marker.is_none() {
-                    if let Some(m) = t.get(4) {
-                        marker = Some(m.clone());
-                    }
+                let relay_or_marker = &t[3];
+                if looks_like_ws_relay(relay_or_marker) {
+                    relay = Some(relay_or_marker.clone());
+                    marker = Some(t[4].clone());
+                } else {
+                    marker = Some(relay_or_marker.clone());
                 }
             }
         }

@@ -184,6 +184,16 @@ mod tests {
     #[test]
     fn farm_and_plot_address_helpers_reject_empty_d_tags() {
         let err = farm_address(&RadrootsFarmRef {
+            pubkey: " ".to_string(),
+            d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
+        })
+        .expect_err("expected farm pubkey error");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("farm.pubkey")
+        ));
+
+        let err = farm_address(&RadrootsFarmRef {
             pubkey: "farm_pubkey".to_string(),
             d_tag: " ".to_string(),
         })

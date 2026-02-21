@@ -125,9 +125,6 @@ pub(crate) fn parse_reply_tag(
         Some(tag) => tag,
         None => return Ok(None),
     };
-    if tag.get(0).map(|s| s.as_str()) != Some("e") {
-        return Err(EventParseError::InvalidTag("e"));
-    }
     let id = tag.get(1).ok_or(EventParseError::InvalidTag("e"))?;
     if id.trim().is_empty() {
         return Err(EventParseError::InvalidTag("e"));
@@ -151,12 +148,21 @@ pub(crate) fn parse_subject_tag(tags: &[Vec<String>]) -> Result<Option<String>, 
         Some(tag) => tag,
         None => return Ok(None),
     };
-    if tag.get(0).map(|s| s.as_str()) != Some("subject") {
-        return Err(EventParseError::InvalidTag("subject"));
-    }
     let subject = tag.get(1).ok_or(EventParseError::InvalidTag("subject"))?;
     if subject.trim().is_empty() {
         return Err(EventParseError::InvalidTag("subject"));
     }
     Ok(Some(subject.clone()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_recipient_tag_rejects_non_p_tag() {
+        let err = parse_recipient_tag(&["x".to_string(), "pub".to_string()])
+            .expect_err("expected invalid tag");
+        assert!(matches!(err, EventParseError::InvalidTag("p")));
+    }
 }

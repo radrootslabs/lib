@@ -203,3 +203,15 @@ fn list_set_decode_keeps_first_d_tag() {
     let decoded = list_set_from_tags(KIND_LIST_SET_FOLLOW, "private".to_string(), &tags).unwrap();
     assert_eq!(decoded.d_tag, "members.owners");
 }
+
+#[test]
+fn list_set_build_tags_omits_blank_optional_metadata() {
+    let mut list_set = sample_list_set();
+    list_set.title = Some(" ".to_string());
+    list_set.description = Some(" ".to_string());
+    list_set.image = Some(" ".to_string());
+    let tags = list_set_build_tags(&list_set).unwrap();
+    assert!(!tags.iter().any(|tag| tag[0] == "title"));
+    assert!(!tags.iter().any(|tag| tag[0] == "description"));
+    assert!(!tags.iter().any(|tag| tag[0] == "image"));
+}

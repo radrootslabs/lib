@@ -56,6 +56,17 @@ fn parse_event_ref_tag_allows_relay_only_fifth_entry() {
     let parsed = parse_event_ref_tag(&tag, "e").unwrap();
     assert!(parsed.d_tag.is_none());
     assert_eq!(parsed.relays, Some(vec!["wss://relay".to_string()]));
+
+    let ws_tag = vec![
+        "e".to_string(),
+        "id".to_string(),
+        "author".to_string(),
+        KIND_POST.to_string(),
+        "ws://relay".to_string(),
+    ];
+    let parsed = parse_event_ref_tag(&ws_tag, "e").unwrap();
+    assert!(parsed.d_tag.is_none());
+    assert_eq!(parsed.relays, Some(vec!["ws://relay".to_string()]));
 }
 
 #[test]
@@ -229,4 +240,14 @@ fn parse_nip10_ref_tags_skips_invalid_a_tags_until_match() {
         parsed.relays,
         Some(vec!["wss://relay.empty-d.example.com".to_string()])
     );
+
+    let tags = vec![
+        vec!["e".to_string(), "id".to_string()],
+        vec!["p".to_string(), "author".to_string()],
+        vec!["k".to_string(), KIND_POST.to_string()],
+        vec!["a".to_string(), format!("{}:{}", KIND_POST, "author")],
+    ];
+    let parsed = parse_nip10_ref_tags(&tags, "e", "p", "k", "a").unwrap();
+    assert!(parsed.d_tag.is_none());
+    assert!(parsed.relays.is_none());
 }

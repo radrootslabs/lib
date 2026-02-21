@@ -97,6 +97,46 @@ fn job_result_encrypted_adds_flag_and_rejects_inputs() {
 }
 
 #[test]
+fn job_result_build_tags_supports_minimal_optional_fields() {
+    let mut res = sample_result();
+    res.request_json = None;
+    res.inputs.clear();
+    res.customer_pubkey = None;
+    res.payment = None;
+    let parts = to_wire_parts(&res, "payload").unwrap();
+    assert!(
+        parts
+            .tags
+            .iter()
+            .any(|tag| tag.first().map(|v| v.as_str()) == Some("e"))
+    );
+    assert!(
+        !parts
+            .tags
+            .iter()
+            .any(|tag| tag.first().map(|v| v.as_str()) == Some("request"))
+    );
+    assert!(
+        !parts
+            .tags
+            .iter()
+            .any(|tag| tag.first().map(|v| v.as_str()) == Some("i"))
+    );
+    assert!(
+        !parts
+            .tags
+            .iter()
+            .any(|tag| tag.first().map(|v| v.as_str()) == Some("p"))
+    );
+    assert!(
+        !parts
+            .tags
+            .iter()
+            .any(|tag| tag.first().map(|v| v.as_str()) == Some("amount"))
+    );
+}
+
+#[test]
 fn job_result_requires_request_event_tag() {
     let tags = vec![vec!["p".to_string(), "customer".to_string()]];
     let err = job_result_from_tags(KIND_JOB_RESULT_MIN + 1, &tags, "payload").unwrap_err();

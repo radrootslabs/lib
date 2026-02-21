@@ -75,6 +75,10 @@ fn parse_i_tags_handles_multiple_shapes() {
         ],
         vec![
             "i".to_string(),
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string(),
+        ],
+        vec![
+            "i".to_string(),
             "job-id".to_string(),
             "job".to_string(),
             "wss://relay".to_string(),
@@ -83,7 +87,7 @@ fn parse_i_tags_handles_multiple_shapes() {
     ];
 
     let inputs = parse_i_tags(&tags);
-    assert_eq!(inputs.len(), 4);
+    assert_eq!(inputs.len(), 5);
 
     assert_eq!(inputs[0].data, "https://example.com");
     assert_eq!(inputs[0].input_type, JobInputType::Url);
@@ -98,10 +102,18 @@ fn parse_i_tags_handles_multiple_shapes() {
     assert!(inputs[2].relay.is_none());
     assert!(inputs[2].marker.is_none());
 
-    assert_eq!(inputs[3].data, "job-id");
-    assert_eq!(inputs[3].input_type, JobInputType::Job);
-    assert_eq!(inputs[3].relay.as_deref(), Some("wss://relay"));
-    assert_eq!(inputs[3].marker.as_deref(), Some("marker"));
+    assert_eq!(
+        inputs[3].data,
+        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    );
+    assert_eq!(inputs[3].input_type, JobInputType::Event);
+    assert!(inputs[3].relay.is_none());
+    assert!(inputs[3].marker.is_none());
+
+    assert_eq!(inputs[4].data, "job-id");
+    assert_eq!(inputs[4].input_type, JobInputType::Job);
+    assert_eq!(inputs[4].relay.as_deref(), Some("wss://relay"));
+    assert_eq!(inputs[4].marker.as_deref(), Some("marker"));
 }
 
 #[test]

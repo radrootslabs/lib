@@ -166,11 +166,16 @@ pub fn listing_tags_with_options(
         tags.push(tag_listing_price_generic(&total));
     }
 
+    #[cfg(feature = "serde_json")]
     if let Some(discounts) = &listing.discounts {
         for discount in discounts {
             let payload = discount_tag_payload(discount)?;
             tags.push(vec![TAG_RADROOTS_DISCOUNT.to_string(), payload]);
         }
+    }
+    #[cfg(not(feature = "serde_json"))]
+    if listing.discounts.as_ref().is_some() {
+        return Err(EventEncodeError::Json);
     }
 
     if options.include_inventory {
@@ -871,6 +876,23 @@ mod tests {
             },
         );
         assert!(find_tag(&geohash_only_tags, "g").is_some());
+
+        let mut invalid_with_geohash_enabled = Vec::new();
+        push_location_geotags(
+            &mut invalid_with_geohash_enabled,
+            &invalid_geohash,
+            ListingTagOptions {
+                include_geohash: true,
+                include_gps: true,
+                ..ListingTagOptions::default()
+            },
+        );
+        assert!(find_tag(&invalid_with_geohash_enabled, "g").is_some());
+        assert!(
+            !invalid_with_geohash_enabled
+                .iter()
+                .any(|tag| tag.first().map(|v| v.as_str()) == Some("l"))
+        );
     }
 
     #[test]
@@ -1194,6 +1216,34 @@ mod tests {
         )
         .expect("delivery option without value");
         assert!(find_tag(&no_delivery_tags, "delivery").is_none());
+
+        let mut no_inventory = base_listing();
+        no_inventory.discounts = None;
+        no_inventory.inventory_available = None;
+        let no_inventory_tags = listing_tags_with_options(
+            &no_inventory,
+            ListingTagOptions {
+                include_inventory: true,
+                ..ListingTagOptions::default()
+            },
+        )
+        .expect("inventory option without value");
+        assert!(find_tag(&no_inventory_tags, "inventory").is_none());
+
+        let mut no_geo = base_listing();
+        no_geo.discounts = None;
+        let no_geo_tags = listing_tags_with_options(
+            &no_geo,
+            ListingTagOptions {
+                include_geohash: false,
+                include_gps: false,
+                ..ListingTagOptions::default()
+            },
+        )
+        .expect("location without geotags");
+        assert!(find_tag(&no_geo_tags, "location").is_some());
+        assert!(find_tag(&no_geo_tags, "g").is_none());
+        assert!(find_tag(&no_geo_tags, "l").is_none());
     }
 
     #[test]
@@ -1329,6 +1379,52 @@ mod tests {
         assert_eq!(location.get(3).map(|v| v.as_str()), Some("San Martin"));
         assert_eq!(location.get(4).map(|v| v.as_str()), Some("PE"));
         assert!(find_tag(&tags, "image").is_none());
+    }
+
+    #[test]
+    fn listing_tags_reorders_primary_bin_and_falls_back_to_quantity_label() {
+        let mut listing = base_listing();
+        listing.discounts = None;
+
+        let mut primary = base_bin();
+        primary.bin_id = "bin-1".to_string();
+        primary.display_label = None;
+        primary.quantity = primary.quantity.clone().with_label("fallback-label");
+
+        let mut secondary = base_bin();
+        secondary.bin_id = "bin-2".to_string();
+        listing.primary_bin_id = "bin-1".to_string();
+        listing.bins = vec![secondary, primary];
+
+        let tags = listing_tags(&listing).expect("listing tags");
+        let first_bin = tags
+            .iter()
+            .find(|tag| tag.first().map(|v| v.as_str()) == Some("radroots:bin"))
+            .expect("first bin tag");
+        assert_eq!(first_bin.get(1).map(|v| v.as_str()), Some("bin-1"));
+        assert_eq!(first_bin.get(6).map(|v| v.as_str()), Some("fallback-label"));
+    }
+
+    #[test]
+    fn listing_tags_location_handles_partial_optional_components() {
+        let mut listing = base_listing();
+        listing.discounts = None;
+        listing.location = Some(RadrootsListingLocation {
+            primary: "Moyobamba".to_string(),
+            city: Some(" ".to_string()),
+            region: Some("San Martin".to_string()),
+            country: Some(" ".to_string()),
+            lat: Some(-6.03),
+            lng: Some(-76.97),
+            geohash: None,
+        });
+
+        let tags = listing_tags(&listing).expect("listing tags");
+        let location = find_tag(&tags, "location").expect("location tag");
+        assert_eq!(location.get(0).map(|v| v.as_str()), Some("location"));
+        assert_eq!(location.get(1).map(|v| v.as_str()), Some("Moyobamba"));
+        assert_eq!(location.get(2).map(|v| v.as_str()), Some("San Martin"));
+        assert_eq!(location.len(), 3);
     }
 
     #[test]
