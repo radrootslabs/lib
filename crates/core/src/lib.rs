@@ -34,7 +34,7 @@ pub use unit::{
 
 #[cfg(all(test, feature = "ts-rs", feature = "std"))]
 mod ts_export_tests {
-    use crate::RadrootsCoreDiscount;
+    use crate::{RadrootsCoreDiscount, RadrootsCoreUnitDimension};
     use std::{
         fs,
         path::{Path, PathBuf},
@@ -63,6 +63,7 @@ mod ts_export_tests {
 
     fn export_types() {
         RadrootsCoreDiscount::export_all().expect("export core ts-rs definitions");
+        RadrootsCoreUnitDimension::export_all().expect("export core unit dimension definition");
     }
 
     #[test]
