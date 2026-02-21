@@ -30,7 +30,7 @@ order = 4
 
 [[rollout.crates]]
 name = "radroots-trade"
-status = "planned"
+status = "required"
 order = 5
 
 [[rollout.crates]]
