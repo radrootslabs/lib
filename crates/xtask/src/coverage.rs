@@ -536,3 +536,97 @@ pub fn run(args: &[String]) -> Result<(), String> {
         None => Err("missing sdk coverage subcommand".to_string()),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_file_path(prefix: &str) -> PathBuf {
+        let ns = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time")
+            .as_nanos();
+        std::env::temp_dir().join(format!("radroots_xtask_coverage_{prefix}_{ns}.tmp"))
+    }
+
+    #[test]
+    fn reads_summary_totals_from_llvm_cov_json() {
+        let path = temp_file_path("summary");
+        fs::write(
+            &path,
+            r#"{
+  "data": [
+    {
+      "totals": {
+        "functions": {"percent": 91.25},
+        "lines": {"percent": 88.5},
+        "regions": {"percent": 86.75}
+      }
+    }
+  ]
+}"#,
+        )
+        .expect("write summary");
+
+        let summary = read_summary(&path).expect("parse summary");
+        assert_eq!(summary.functions_percent, 91.25);
+        assert_eq!(summary.summary_lines_percent, 88.5);
+        assert_eq!(summary.summary_regions_percent, 86.75);
+
+        fs::remove_file(path).expect("remove summary");
+    }
+
+    #[test]
+    fn reads_lcov_da_and_branch_metrics() {
+        let path = temp_file_path("lcov");
+        fs::write(
+            &path,
+            "DA:1,1\nDA:2,0\nDA:3,1\nBRF:4\nBRH:3\n",
+        )
+        .expect("write lcov");
+
+        let lcov = read_lcov(&path).expect("parse lcov");
+        assert_eq!(lcov.executable_total, 3);
+        assert_eq!(lcov.executable_covered, 2);
+        assert!(lcov.branches_available);
+        assert_eq!(lcov.branch_total, 4);
+        assert_eq!(lcov.branch_covered, 3);
+        assert_eq!(lcov.branch_percent, Some(75.0));
+
+        fs::remove_file(path).expect("remove lcov");
+    }
+
+    #[test]
+    fn gate_fails_when_branch_data_is_required_but_missing() {
+        let summary = CoverageSummary {
+            functions_percent: 100.0,
+            summary_lines_percent: 100.0,
+            summary_regions_percent: 100.0,
+        };
+        let lcov = LcovCoverage {
+            executable_total: 10,
+            executable_covered: 10,
+            executable_percent: 100.0,
+            executable_source: ExecutableSource::Da,
+            branch_total: 0,
+            branch_covered: 0,
+            branches_available: false,
+            branch_percent: None,
+        };
+        let thresholds = CoverageThresholds {
+            fail_under_exec_lines: 100.0,
+            fail_under_functions: 100.0,
+            fail_under_branches: 100.0,
+            require_branches: true,
+        };
+
+        let gate = evaluate_gate(&summary, &lcov, thresholds);
+        assert!(!gate.pass);
+        assert!(
+            gate.fail_reasons
+                .iter()
+                .any(|reason| reason == "branches=unavailable")
+        );
+    }
+}
