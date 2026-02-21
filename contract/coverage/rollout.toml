@@ -15,7 +15,7 @@ order = 1
 
 [[rollout.crates]]
 name = "radroots-types"
-status = "planned"
+status = "required"
 order = 2
 
 [[rollout.crates]]

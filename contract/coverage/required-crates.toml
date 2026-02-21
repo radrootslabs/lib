@@ -1,6 +1,7 @@
 [required]
 crates = [
   "radroots-core",
+  "radroots-types",
 ]
 
 [policy]
