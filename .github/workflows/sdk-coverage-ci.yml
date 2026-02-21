@@ -77,6 +77,20 @@ jobs:
             --fail-under-branches 100 \
             --require-branches
 
+      - name: enforce blocking types coverage gate
+        run: |
+          set -euo pipefail
+          types_dir="target/sdk-coverage/radroots_types"
+          cargo run -q -p xtask -- sdk coverage report \
+            --scope "radroots-types-blocking" \
+            --summary "${types_dir}/coverage-summary.json" \
+            --lcov "${types_dir}/coverage-lcov.info" \
+            --out "${types_dir}/coverage-gate-blocking.json" \
+            --fail-under-exec-lines 100 \
+            --fail-under-functions 100 \
+            --fail-under-branches 100 \
+            --require-branches
+
       - name: upload sdk coverage reports
         uses: actions/upload-artifact@v4
         with:
@@ -84,3 +98,4 @@ jobs:
           path: |
             target/sdk-coverage/**/coverage-gate-summary.json
             target/sdk-coverage/radroots_core/coverage-gate-blocking.json
+            target/sdk-coverage/radroots_types/coverage-gate-blocking.json
