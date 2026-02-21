@@ -1,0 +1,54 @@
+[policy]
+fail_under_exec_lines = 100.0
+fail_under_functions = 100.0
+fail_under_branches = 100.0
+require_branches = true
+
+[rollout]
+strategy = "crate-by-crate"
+entry_crate = "radroots-core"
+
+[[rollout.crates]]
+name = "radroots-core"
+status = "required"
+order = 1
+
+[[rollout.crates]]
+name = "radroots-types"
+status = "planned"
+order = 2
+
+[[rollout.crates]]
+name = "radroots-events"
+status = "planned"
+order = 3
+
+[[rollout.crates]]
+name = "radroots-identity"
+status = "planned"
+order = 4
+
+[[rollout.crates]]
+name = "radroots-trade"
+status = "planned"
+order = 5
+
+[[rollout.crates]]
+name = "radroots-events-codec"
+status = "planned"
+order = 6
+
+[[rollout.crates]]
+name = "radroots-events-codec-wasm"
+status = "planned"
+order = 7
+
+[[rollout.crates]]
+name = "radroots-tangle-db-schema"
+status = "planned"
+order = 8
+
+[[rollout.crates]]
+name = "xtask"
+status = "planned"
+order = 9
