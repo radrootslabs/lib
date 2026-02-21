@@ -10,10 +10,14 @@ use std::string::String;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as DeError};
+#[cfg(feature = "ts-rs")]
+use ts_rs::TS;
 
 use crate::RadrootsCoreDecimal;
 
 #[cfg_attr(feature = "typeshare", typeshare::typeshare)]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum RadrootsCoreUnitDimension {
     Count,
@@ -22,6 +26,8 @@ pub enum RadrootsCoreUnitDimension {
 }
 
 #[cfg_attr(feature = "typeshare", typeshare::typeshare)]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum RadrootsCoreUnit {
     Each,

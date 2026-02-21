@@ -9,8 +9,12 @@ use std::string::String;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as DeError};
+#[cfg(feature = "ts-rs")]
+use ts_rs::TS;
 
 #[cfg_attr(feature = "typeshare", typeshare::typeshare)]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts", type = "string"))]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RadrootsCoreCurrency([u8; 3]);
 

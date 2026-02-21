@@ -2,12 +2,18 @@ use core::fmt;
 use rust_decimal::Decimal;
 use rust_decimal::RoundingStrategy;
 use rust_decimal::prelude::ToPrimitive;
+#[cfg(feature = "ts-rs")]
+use ts_rs::TS;
 
 #[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsCoreMoney {
+    #[cfg_attr(feature = "ts-rs", ts(type = "string"))]
     pub amount: crate::RadrootsCoreDecimal,
+    #[cfg_attr(feature = "ts-rs", ts(type = "string"))]
     pub currency: crate::RadrootsCoreCurrency,
 }
 

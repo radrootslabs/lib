@@ -3,11 +3,16 @@ use core::str::FromStr;
 
 use crate::RadrootsCoreDecimal;
 use crate::money::RadrootsCoreMoney;
+#[cfg(feature = "ts-rs")]
+use ts_rs::TS;
 
 #[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsCorePercent {
+    #[cfg_attr(feature = "ts-rs", ts(type = "string"))]
     #[cfg_attr(feature = "serde", serde(with = "crate::serde_ext::decimal_str"))]
     pub value: RadrootsCoreDecimal,
 }
