@@ -17,7 +17,10 @@ use crate::RadrootsCoreDecimal;
 
 #[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 #[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(
+    feature = "ts-rs",
+    ts(export, export_to = "types.ts", rename_all = "snake_case")
+)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum RadrootsCoreUnitDimension {
     Count,
@@ -30,12 +33,19 @@ pub enum RadrootsCoreUnitDimension {
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum RadrootsCoreUnit {
+    #[cfg_attr(feature = "ts-rs", ts(rename = "each"))]
     Each,
+    #[cfg_attr(feature = "ts-rs", ts(rename = "kg"))]
     MassKg,
+    #[cfg_attr(feature = "ts-rs", ts(rename = "g"))]
     MassG,
+    #[cfg_attr(feature = "ts-rs", ts(rename = "oz"))]
     MassOz,
+    #[cfg_attr(feature = "ts-rs", ts(rename = "lb"))]
     MassLb,
+    #[cfg_attr(feature = "ts-rs", ts(rename = "l"))]
     VolumeL,
+    #[cfg_attr(feature = "ts-rs", ts(rename = "ml"))]
     VolumeMl,
 }
 
