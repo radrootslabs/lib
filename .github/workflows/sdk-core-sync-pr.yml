@@ -88,10 +88,10 @@ jobs:
         with:
           token: ${{ secrets.RADROOTS_SDK_SYNC_TOKEN }}
           path: sdk-typescript
-          commit-message: sdk: sync generated models from rust sdk contract
+          commit-message: "sdk: sync generated models from rust sdk contract"
           branch: sync/models-${{ github.run_id }}-${{ github.run_attempt }}
           delete-branch: true
-          title: sdk: sync generated models from rust sdk contract
+          title: "sdk: sync generated models from rust sdk contract"
           body: |
             - sync generated model types for @radroots/core, @radroots/types, @radroots/events, and @radroots/trade
             - sync @radroots/identity generated types when present in rust export output
