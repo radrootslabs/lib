@@ -2,7 +2,7 @@ use radroots_events::kinds::{KIND_MESSAGE, KIND_SEAL};
 use radroots_events::seal::RadrootsSeal;
 
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
-use radroots_events_codec::seal::decode::seal_from_parts;
+use radroots_events_codec::seal::decode::{index_from_event, metadata_from_event, seal_from_parts};
 use radroots_events_codec::seal::encode::to_wire_parts;
 
 #[test]
@@ -51,4 +51,42 @@ fn seal_from_parts_requires_empty_tags() {
     )
     .unwrap_err();
     assert!(matches!(err, EventParseError::InvalidTag("tags")));
+}
+
+#[test]
+fn seal_from_parts_requires_content() {
+    let err = seal_from_parts(KIND_SEAL, &[], " ").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("content")));
+}
+
+#[test]
+fn seal_metadata_and_index_from_event_roundtrip() {
+    let metadata = metadata_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        14,
+        KIND_SEAL,
+        "payload".to_string(),
+        Vec::new(),
+    )
+    .unwrap();
+    assert_eq!(metadata.id, "id");
+    assert_eq!(metadata.author, "author");
+    assert_eq!(metadata.published_at, 14);
+    assert_eq!(metadata.kind, KIND_SEAL);
+    assert_eq!(metadata.seal.content, "payload");
+
+    let index = index_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        14,
+        KIND_SEAL,
+        "payload".to_string(),
+        Vec::new(),
+        "sig".to_string(),
+    )
+    .unwrap();
+    assert_eq!(index.event.kind, KIND_SEAL);
+    assert_eq!(index.event.sig, "sig");
+    assert_eq!(index.metadata.seal.content, "payload");
 }

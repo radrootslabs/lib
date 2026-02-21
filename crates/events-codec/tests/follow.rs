@@ -4,8 +4,10 @@ use radroots_events::{
 };
 
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
-use radroots_events_codec::follow::decode::follow_from_tags;
-use radroots_events_codec::follow::encode::{FollowMutation, follow_apply, to_wire_parts};
+use radroots_events_codec::follow::decode::{
+    follow_from_tags, index_from_event, metadata_from_event,
+};
+use radroots_events_codec::follow::encode::{follow_apply, to_wire_parts, FollowMutation};
 
 #[test]
 fn follow_to_wire_parts_builds_p_tags() {
@@ -100,6 +102,68 @@ fn follow_from_tags_rejects_wrong_kind() {
             got: KIND_POST
         }
     ));
+}
+
+#[test]
+fn follow_from_tags_rejects_invalid_published_at_number() {
+    let tags = vec![vec![
+        "p".to_string(),
+        "pubkey".to_string(),
+        "".to_string(),
+        "".to_string(),
+        "not-a-number".to_string(),
+    ]];
+    let err = follow_from_tags(KIND_FOLLOW, &tags, 123).unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidNumber("p", _)));
+}
+
+#[test]
+fn follow_metadata_and_index_from_event_roundtrip() {
+    let tags = vec![vec![
+        "p".to_string(),
+        "pubkey".to_string(),
+        "wss://relay.example.com".to_string(),
+        "alice".to_string(),
+        "88".to_string(),
+    ]];
+    let metadata = metadata_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        50,
+        KIND_FOLLOW,
+        "".to_string(),
+        tags.clone(),
+    )
+    .unwrap();
+    assert_eq!(metadata.id, "id");
+    assert_eq!(metadata.author, "author");
+    assert_eq!(metadata.published_at, 50);
+    assert_eq!(metadata.kind, KIND_FOLLOW);
+    assert_eq!(metadata.follow.list.len(), 1);
+    assert_eq!(metadata.follow.list[0].published_at, 88);
+    assert_eq!(metadata.follow.list[0].public_key, "pubkey");
+    assert_eq!(
+        metadata.follow.list[0].relay_url.as_deref(),
+        Some("wss://relay.example.com")
+    );
+    assert_eq!(
+        metadata.follow.list[0].contact_name.as_deref(),
+        Some("alice")
+    );
+
+    let index = index_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        50,
+        KIND_FOLLOW,
+        "".to_string(),
+        tags,
+        "sig".to_string(),
+    )
+    .unwrap();
+    assert_eq!(index.event.kind, KIND_FOLLOW);
+    assert_eq!(index.event.sig, "sig");
+    assert_eq!(index.metadata.follow.list.len(), 1);
 }
 
 #[test]

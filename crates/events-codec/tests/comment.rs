@@ -7,6 +7,7 @@ use radroots_events::{
 };
 
 use radroots_events_codec::comment::decode::comment_from_tags;
+use radroots_events_codec::comment::decode::{index_from_event, metadata_from_event};
 use radroots_events_codec::comment::encode::{comment_build_tags, to_wire_parts};
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
 use radroots_events_codec::event_ref::{build_event_ref_tag, push_nip10_ref_tags};
@@ -142,4 +143,57 @@ fn comment_from_tags_rejects_wrong_kind() {
             got: KIND_POST
         }
     ));
+}
+
+#[test]
+fn comment_metadata_and_index_from_event_roundtrip() {
+    let root = common::event_ref_with_d(
+        "root",
+        "author",
+        KIND_POST,
+        "root-d",
+        Some(vec!["wss://relay".to_string()]),
+    );
+    let parent = common::event_ref_with_d(
+        "parent",
+        "author",
+        KIND_POST,
+        "parent-d",
+        Some(vec!["wss://relay-2".to_string()]),
+    );
+
+    let mut tags = Vec::new();
+    push_nip10_ref_tags(&mut tags, &root, "E", "P", "K", "A");
+    push_nip10_ref_tags(&mut tags, &parent, "e", "p", "k", "a");
+
+    let metadata = metadata_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        77,
+        KIND_COMMENT,
+        "hello".to_string(),
+        tags.clone(),
+    )
+    .unwrap();
+    assert_eq!(metadata.id, "id");
+    assert_eq!(metadata.author, "author");
+    assert_eq!(metadata.published_at, 77);
+    assert_eq!(metadata.comment.content, "hello");
+    assert_event_ref_fields(&metadata.comment.root, &root);
+    assert_event_ref_fields(&metadata.comment.parent, &parent);
+
+    let index = index_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        77,
+        KIND_COMMENT,
+        "hello".to_string(),
+        tags,
+        "sig".to_string(),
+    )
+    .unwrap();
+    assert_eq!(index.event.created_at, 77);
+    assert_eq!(index.event.kind, KIND_COMMENT);
+    assert_eq!(index.event.sig, "sig");
+    assert_eq!(index.metadata.comment.content, "hello");
 }

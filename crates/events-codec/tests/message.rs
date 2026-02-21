@@ -1,10 +1,12 @@
 use radroots_events::{
-    RadrootsNostrEventPtr,
     kinds::{KIND_MESSAGE, KIND_POST},
     message::{RadrootsMessage, RadrootsMessageRecipient},
+    RadrootsNostrEventPtr,
 };
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
-use radroots_events_codec::message::decode::message_from_tags;
+use radroots_events_codec::message::decode::{
+    index_from_event, message_from_tags, metadata_from_event,
+};
 use radroots_events_codec::message::encode::{message_build_tags, to_wire_parts};
 
 #[test]
@@ -160,4 +162,52 @@ fn message_roundtrip_from_tags() {
         Some("wss://reply.example")
     );
     assert_eq!(message.subject.as_deref(), Some("topic"));
+}
+
+#[test]
+fn message_metadata_and_index_from_event_roundtrip() {
+    let tags = vec![
+        vec!["p".to_string(), "pub1".to_string()],
+        vec![
+            "p".to_string(),
+            "pub2".to_string(),
+            "wss://relay.example".to_string(),
+        ],
+        vec![
+            "e".to_string(),
+            "reply".to_string(),
+            "wss://reply.example".to_string(),
+        ],
+        vec!["subject".to_string(), "topic".to_string()],
+    ];
+    let metadata = metadata_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        77,
+        KIND_MESSAGE,
+        "hello".to_string(),
+        tags.clone(),
+    )
+    .unwrap();
+    assert_eq!(metadata.id, "id");
+    assert_eq!(metadata.author, "author");
+    assert_eq!(metadata.published_at, 77);
+    assert_eq!(metadata.kind, KIND_MESSAGE);
+    assert_eq!(metadata.message.recipients.len(), 2);
+    assert_eq!(metadata.message.content, "hello");
+    assert_eq!(metadata.message.subject.as_deref(), Some("topic"));
+
+    let index = index_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        77,
+        KIND_MESSAGE,
+        "hello".to_string(),
+        tags,
+        "sig".to_string(),
+    )
+    .unwrap();
+    assert_eq!(index.event.kind, KIND_MESSAGE);
+    assert_eq!(index.event.sig, "sig");
+    assert_eq!(index.metadata.message.recipients.len(), 2);
 }

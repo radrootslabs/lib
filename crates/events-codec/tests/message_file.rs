@@ -1,10 +1,12 @@
-use radroots_events::RadrootsNostrEventPtr;
 use radroots_events::kinds::{KIND_MESSAGE, KIND_MESSAGE_FILE};
 use radroots_events::message::RadrootsMessageRecipient;
 use radroots_events::message_file::{RadrootsMessageFile, RadrootsMessageFileDimensions};
+use radroots_events::RadrootsNostrEventPtr;
 
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
-use radroots_events_codec::message_file::decode::message_file_from_tags;
+use radroots_events_codec::message_file::decode::{
+    index_from_event, message_file_from_tags, metadata_from_event,
+};
 use radroots_events_codec::message_file::encode::{message_file_build_tags, to_wire_parts};
 
 fn sample_message_file() -> RadrootsMessageFile {
@@ -159,4 +161,85 @@ fn message_file_from_tags_rejects_wrong_kind() {
             got: KIND_MESSAGE
         }
     ));
+}
+
+#[test]
+fn message_file_from_tags_rejects_invalid_optional_tags() {
+    let message = sample_message_file();
+    let mut parts = to_wire_parts(&message).unwrap();
+    let size_tag = parts
+        .tags
+        .iter_mut()
+        .find(|tag| tag.first().map(|value| value.as_str()) == Some("size"))
+        .expect("size tag");
+    size_tag[1] = "not-a-number".to_string();
+    let err = message_file_from_tags(KIND_MESSAGE_FILE, &parts.tags, &parts.content).unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidNumber("size", _)));
+
+    let err = message_file_from_tags(
+        KIND_MESSAGE_FILE,
+        &[
+            vec!["p".to_string(), "pub1".to_string()],
+            vec!["file-type".to_string(), "image/jpeg".to_string()],
+            vec!["encryption-algorithm".to_string(), "aes-gcm".to_string()],
+            vec!["decryption-key".to_string(), "key".to_string()],
+            vec!["decryption-nonce".to_string(), "nonce".to_string()],
+            vec!["x".to_string(), "hash".to_string()],
+            vec!["dim".to_string(), "10".to_string()],
+        ],
+        "https://files.example/encrypted.bin",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("dim")));
+
+    let err = message_file_from_tags(
+        KIND_MESSAGE_FILE,
+        &[
+            vec!["p".to_string(), "pub1".to_string()],
+            vec!["file-type".to_string(), "image/jpeg".to_string()],
+            vec!["encryption-algorithm".to_string(), "aes-gcm".to_string()],
+            vec!["decryption-key".to_string(), "key".to_string()],
+            vec!["decryption-nonce".to_string(), "nonce".to_string()],
+            vec!["x".to_string(), "hash".to_string()],
+            vec!["fallback".to_string()],
+        ],
+        "https://files.example/encrypted.bin",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("fallback")));
+}
+
+#[test]
+fn message_file_metadata_and_index_from_event_roundtrip() {
+    let message = sample_message_file();
+    let parts = to_wire_parts(&message).unwrap();
+    let metadata = metadata_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        77,
+        parts.kind,
+        parts.content.clone(),
+        parts.tags.clone(),
+    )
+    .unwrap();
+    assert_eq!(metadata.id, "id");
+    assert_eq!(metadata.author, "author");
+    assert_eq!(metadata.published_at, 77);
+    assert_eq!(metadata.kind, KIND_MESSAGE_FILE);
+    assert_eq!(metadata.message_file.file_type, "image/jpeg");
+    assert_eq!(metadata.message_file.recipients.len(), 2);
+
+    let index = index_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        77,
+        parts.kind,
+        parts.content,
+        parts.tags,
+        "sig".to_string(),
+    )
+    .unwrap();
+    assert_eq!(index.event.kind, KIND_MESSAGE_FILE);
+    assert_eq!(index.event.sig, "sig");
+    assert_eq!(index.metadata.message_file.file_type, "image/jpeg");
 }
