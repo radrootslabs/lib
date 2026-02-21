@@ -2649,6 +2649,7 @@ dependencies = [
  "rust_decimal_macros",
  "serde",
  "serde_json",
+ "ts-rs",
  "typeshare",
 ]
 
