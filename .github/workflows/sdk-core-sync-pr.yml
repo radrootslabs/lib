@@ -1,4 +1,4 @@
-name: sdk-core-sync-pr
+name: sdk-models-sync-pr
 
 on:
   workflow_dispatch:
@@ -12,7 +12,7 @@ on:
       - ".github/workflows/sdk-core-sync-pr.yml"
 
 jobs:
-  sync-core:
+  sync-models:
     runs-on: ubuntu-latest
     steps:
       - name: checkout
@@ -29,8 +29,12 @@ jobs:
       - name: export ts sdk artifacts
         run: cargo run -q -p xtask -- sdk export-ts --out "${{ runner.temp }}/sdk-export"
 
-      - name: check core export artifact
-        run: test -f "${{ runner.temp }}/sdk-export/ts/packages/core/src/generated/types.ts"
+      - name: check required export artifacts
+        run: |
+          test -f "${{ runner.temp }}/sdk-export/ts/packages/core/src/generated/types.ts"
+          test -f "${{ runner.temp }}/sdk-export/ts/packages/types/src/generated/types.ts"
+          test -f "${{ runner.temp }}/sdk-export/ts/packages/events/src/generated/types.ts"
+          test -f "${{ runner.temp }}/sdk-export/ts/packages/trade/src/generated/types.ts"
 
       - name: checkout sdk-typescript
         uses: actions/checkout@v4
@@ -41,12 +45,30 @@ jobs:
           path: sdk-typescript
           fetch-depth: 0
 
-      - name: apply core generated types
+      - name: apply generated model artifacts
         run: |
-          install -d sdk-typescript/packages/core/src/generated
-          cp \
-            "${{ runner.temp }}/sdk-export/ts/packages/core/src/generated/types.ts" \
-            sdk-typescript/packages/core/src/generated/types.ts
+          for package in core types events trade; do
+            install -d "sdk-typescript/packages/${package}/src/generated"
+            cp \
+              "${{ runner.temp }}/sdk-export/ts/packages/${package}/src/generated/types.ts" \
+              "sdk-typescript/packages/${package}/src/generated/types.ts"
+          done
+          if test -f "${{ runner.temp }}/sdk-export/ts/packages/identity/src/generated/types.ts"; then
+            install -d sdk-typescript/packages/identity/src/generated
+            cp \
+              "${{ runner.temp }}/sdk-export/ts/packages/identity/src/generated/types.ts" \
+              sdk-typescript/packages/identity/src/generated/types.ts
+          fi
+          if test -f "${{ runner.temp }}/sdk-export/ts/packages/events/src/generated/constants.ts"; then
+            cp \
+              "${{ runner.temp }}/sdk-export/ts/packages/events/src/generated/constants.ts" \
+              sdk-typescript/packages/events/src/generated/constants.ts
+          fi
+          if test -f "${{ runner.temp }}/sdk-export/ts/packages/events/src/generated/kinds.ts"; then
+            cp \
+              "${{ runner.temp }}/sdk-export/ts/packages/events/src/generated/kinds.ts" \
+              sdk-typescript/packages/events/src/generated/kinds.ts
+          fi
 
       - name: setup bun
         uses: oven-sh/setup-bun@v2
@@ -66,10 +88,11 @@ jobs:
         with:
           token: ${{ secrets.RADROOTS_SDK_SYNC_TOKEN }}
           path: sdk-typescript
-          commit-message: core: sync generated types from rust sdk contract
-          branch: sync/core-${{ github.run_id }}-${{ github.run_attempt }}
+          commit-message: sdk: sync generated models from rust sdk contract
+          branch: sync/models-${{ github.run_id }}-${{ github.run_attempt }}
           delete-branch: true
-          title: core: sync generated types from rust sdk contract
+          title: sdk: sync generated models from rust sdk contract
           body: |
-            - sync @radroots/core generated types from rust export
+            - sync generated model types for @radroots/core, @radroots/types, @radroots/events, and @radroots/trade
+            - sync @radroots/identity generated types when present in rust export output
             - source revision: ${{ github.sha }}
