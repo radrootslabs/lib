@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 mod contract;
+mod coverage;
 mod export_ts;
 
 use std::env;
@@ -15,6 +16,7 @@ fn usage() {
     eprintln!("  cargo xtask sdk export-ts-wasm [--out <dir>]");
     eprintln!("  cargo xtask sdk export-manifest [--out <dir>]");
     eprintln!("  cargo xtask sdk validate");
+    eprintln!("  cargo xtask sdk coverage <subcommand>");
 }
 
 fn workspace_root() -> Result<PathBuf, String> {
@@ -99,6 +101,7 @@ fn run_sdk(args: &[String]) -> Result<(), String> {
         Some("export-ts-wasm") => export_ts_wasm(&args[1..]),
         Some("export-manifest") => export_manifest(&args[1..]),
         Some("validate") => validate_contract(),
+        Some("coverage") => coverage::run(&args[1..]),
         _ => Err("unknown sdk subcommand".to_string()),
     }
 }
