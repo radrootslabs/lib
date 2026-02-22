@@ -98,3 +98,114 @@ fn jitter_ms(max: u64) -> u64 {
         .subsec_nanos() as u64;
     nanos % (max + 1)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{Backoff, BackoffConfig, jitter_ms};
+    use core::time::Duration;
+
+    #[test]
+    fn default_values_round_trip() {
+        let cfg: BackoffConfig =
+            toml::from_str("").expect("backoff config defaults should deserialize");
+        assert_eq!(cfg.base_ms, 500);
+        assert_eq!(cfg.max_ms, 30_000);
+        assert_eq!(cfg.factor, 2);
+        assert_eq!(cfg.jitter_ms, 0);
+
+        let cfg_default = BackoffConfig::default();
+        assert_eq!(cfg_default.base_ms, 500);
+        assert_eq!(cfg_default.max_ms, 30_000);
+        assert_eq!(cfg_default.factor, 2);
+        assert_eq!(cfg_default.jitter_ms, 0);
+    }
+
+    #[test]
+    fn alias_fields_deserialize() {
+        let cfg: BackoffConfig = toml::from_str(
+            r#"
+reconnect_base_ms = 10
+reconnect_max_ms = 100
+reconnect_factor = 3
+reconnect_jitter_ms = 5
+"#,
+        )
+        .expect("backoff aliases should deserialize");
+
+        assert_eq!(cfg.base_ms, 10);
+        assert_eq!(cfg.max_ms, 100);
+        assert_eq!(cfg.factor, 3);
+        assert_eq!(cfg.jitter_ms, 5);
+    }
+
+    #[test]
+    fn delay_for_attempt_applies_bounds_and_factor_defaults() {
+        let cfg = BackoffConfig {
+            base_ms: 0,
+            max_ms: 0,
+            factor: 0,
+            jitter_ms: 0,
+        };
+        assert_eq!(cfg.delay_for_attempt(1), Duration::from_millis(1));
+        assert_eq!(cfg.delay_for_attempt(8), Duration::from_millis(1));
+    }
+
+    #[test]
+    fn delay_for_attempt_caps_growth_to_max() {
+        let cfg = BackoffConfig {
+            base_ms: 100,
+            max_ms: 1_000,
+            factor: 2,
+            jitter_ms: 0,
+        };
+
+        assert_eq!(cfg.delay_for_attempt(1), Duration::from_millis(100));
+        assert_eq!(cfg.delay_for_attempt(2), Duration::from_millis(200));
+        assert_eq!(cfg.delay_for_attempt(3), Duration::from_millis(400));
+        assert_eq!(cfg.delay_for_attempt(4), Duration::from_millis(800));
+        assert_eq!(cfg.delay_for_attempt(5), Duration::from_millis(1_000));
+        assert_eq!(cfg.delay_for_attempt(16), Duration::from_millis(1_000));
+    }
+
+    #[test]
+    fn delay_for_attempt_applies_jitter_without_exceeding_max() {
+        let cfg = BackoffConfig {
+            base_ms: 100,
+            max_ms: 500,
+            factor: 2,
+            jitter_ms: 50,
+        };
+
+        let delay = cfg.delay_for_attempt(2).as_millis() as u64;
+        assert!(delay >= 200);
+        assert!(delay <= 250);
+    }
+
+    #[test]
+    fn stateful_backoff_tracks_attempts_and_reset() {
+        let cfg = BackoffConfig {
+            base_ms: 5,
+            max_ms: 50,
+            factor: 2,
+            jitter_ms: 0,
+        };
+        let mut backoff = Backoff::new(cfg);
+
+        assert_eq!(backoff.attempt(), 0);
+        assert_eq!(backoff.next_delay(), Duration::from_millis(5));
+        assert_eq!(backoff.attempt(), 1);
+        assert_eq!(backoff.next_delay(), Duration::from_millis(10));
+        assert_eq!(backoff.attempt(), 2);
+
+        backoff.reset();
+        assert_eq!(backoff.attempt(), 0);
+        assert_eq!(backoff.next_delay(), Duration::from_millis(5));
+    }
+
+    #[test]
+    fn jitter_ms_bounds_output() {
+        assert_eq!(jitter_ms(0), 0);
+        let jitter = jitter_ms(7);
+        assert!(jitter <= 7);
+    }
+}
