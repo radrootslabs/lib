@@ -181,6 +181,11 @@ fn gift_wrap_build_tags_handles_optional_expiration_and_invalid_relay() {
         err,
         EventEncodeError::EmptyRequiredField("recipient.relay_url")
     ));
+
+    let mut gift_wrap = sample_gift_wrap();
+    gift_wrap.recipient.relay_url = None;
+    let tags = gift_wrap_build_tags(&gift_wrap).unwrap();
+    assert_eq!(tags[0], vec!["p".to_string(), "pubkey".to_string()]);
 }
 
 #[test]

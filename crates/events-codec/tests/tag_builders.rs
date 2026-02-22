@@ -2,6 +2,8 @@ use radroots_core::{
     RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
     RadrootsCoreQuantityPrice, RadrootsCoreUnit,
 };
+use radroots_events::RadrootsNostrEventPtr;
+use radroots_events::RadrootsNostrEventRef;
 use radroots_events::app_data::RadrootsAppData;
 use radroots_events::comment::RadrootsComment;
 use radroots_events::coop::RadrootsCoop;
@@ -36,8 +38,6 @@ use radroots_events::resource_area::{
 };
 use radroots_events::resource_cap::{RadrootsResourceHarvestCap, RadrootsResourceHarvestProduct};
 use radroots_events::seal::RadrootsSeal;
-use radroots_events::RadrootsNostrEventPtr;
-use radroots_events::RadrootsNostrEventRef;
 use radroots_events_codec::job::encode::JobEncodeError;
 use radroots_events_codec::listing::encode::listing_build_tags;
 use radroots_events_codec::tag_builders::RadrootsEventTagBuilder;
@@ -446,4 +446,29 @@ fn job_request_tag_builder_rejects_encrypted_without_provider() {
     };
     let err = request.build_tags().unwrap_err();
     assert!(matches!(err, JobEncodeError::MissingProvidersForEncrypted));
+}
+
+#[test]
+fn job_request_tag_builder_accepts_encrypted_with_provider() {
+    let request = RadrootsJobRequest {
+        kind: (KIND_JOB_REQUEST_MIN + 1) as u16,
+        inputs: vec![RadrootsJobInput {
+            data: "hello".to_string(),
+            input_type: JobInputType::Text,
+            relay: None,
+            marker: None,
+        }],
+        output: None,
+        params: Vec::new(),
+        bid_sat: None,
+        relays: Vec::new(),
+        providers: vec![TEST_PUBKEY_HEX.to_string()],
+        topics: Vec::new(),
+        encrypted: true,
+    };
+    let tags = request.build_tags().unwrap();
+    assert!(
+        tags.iter()
+            .any(|tag| tag.first().map(|v| v.as_str()) == Some("encrypted"))
+    );
 }

@@ -19,9 +19,6 @@ const TAG_IMAGE: &str = "image";
 
 fn entry_from_tag(tag: &[String]) -> Result<RadrootsListEntry, EventParseError> {
     let name = tag.get(0).ok_or(EventParseError::InvalidTag("tag"))?;
-    if name.trim().is_empty() {
-        return Err(EventParseError::InvalidTag("tag"));
-    }
     let value = tag.get(1).ok_or(EventParseError::InvalidTag("tag"))?;
     if value.trim().is_empty() {
         return Err(EventParseError::InvalidTag("tag"));

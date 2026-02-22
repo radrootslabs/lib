@@ -2,15 +2,15 @@ use std::error::Error as _;
 
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
 use radroots_events_codec::job::encode::{
-    assert_no_inputs_when_encrypted, push_provider_tag, push_relay_tag, push_status_tag,
-    JobEncodeError,
+    JobEncodeError, assert_no_inputs_when_encrypted, push_provider_tag, push_relay_tag,
+    push_status_tag,
 };
 use radroots_events_codec::job::error::JobParseError;
 use radroots_events_codec::profile::error::ProfileEncodeError;
 #[cfg(feature = "serde_json")]
-use serde::ser::{Error as _, Serializer};
-#[cfg(feature = "serde_json")]
 use serde::Serialize;
+#[cfg(feature = "serde_json")]
+use serde::ser::{Error as _, Serializer};
 
 #[test]
 fn parse_error_display_and_source_cover_variants() {
@@ -31,9 +31,11 @@ fn parse_error_display_and_source_cover_variants() {
 
     let parse_int = "x".parse::<u32>().expect_err("parse int error");
     let invalid_number = EventParseError::InvalidNumber("count", parse_int);
-    assert!(invalid_number
-        .to_string()
-        .contains("invalid number in 'count'"));
+    assert!(
+        invalid_number
+            .to_string()
+            .contains("invalid number in 'count'")
+    );
     assert!(invalid_number.source().is_some());
 
     let invalid_json = EventParseError::InvalidJson("content");
@@ -147,9 +149,11 @@ fn job_parse_error_display_and_source_covers_variants() {
     assert!(invalid.source().is_none());
 
     let invalid_number = JobParseError::InvalidNumber("amount", "x".parse::<u32>().unwrap_err());
-    assert!(invalid_number
-        .to_string()
-        .contains("invalid number in 'amount'"));
+    assert!(
+        invalid_number
+            .to_string()
+            .contains("invalid number in 'amount'")
+    );
     assert!(invalid_number.source().is_some());
 
     let non_whole = JobParseError::NonWholeSats("amount");

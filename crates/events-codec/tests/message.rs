@@ -1,7 +1,7 @@
 use radroots_events::{
+    RadrootsNostrEventPtr,
     kinds::{KIND_MESSAGE, KIND_POST},
     message::{RadrootsMessage, RadrootsMessageRecipient},
-    RadrootsNostrEventPtr,
 };
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
 use radroots_events_codec::message::decode::{
@@ -104,6 +104,22 @@ fn message_to_wire_parts_sets_tags() {
             vec!["subject".to_string(), "topic".to_string()],
         ]
     );
+}
+
+#[test]
+fn message_to_wire_parts_handles_absent_optional_fields() {
+    let message = RadrootsMessage {
+        recipients: vec![RadrootsMessageRecipient {
+            public_key: "pub1".to_string(),
+            relay_url: None,
+        }],
+        content: "hello".to_string(),
+        reply_to: None,
+        subject: None,
+    };
+
+    let parts = to_wire_parts(&message).unwrap();
+    assert_eq!(parts.tags, vec![vec!["p".to_string(), "pub1".to_string()]]);
 }
 
 #[test]
@@ -213,6 +229,27 @@ fn message_metadata_and_index_from_event_roundtrip() {
 }
 
 #[test]
+fn message_index_from_event_propagates_parse_errors() {
+    let err = index_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        77,
+        KIND_POST,
+        "hello".to_string(),
+        Vec::new(),
+        "sig".to_string(),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        EventParseError::InvalidKind {
+            expected: "14",
+            got: KIND_POST
+        }
+    ));
+}
+
+#[test]
 fn message_build_tags_rejects_invalid_optional_fields() {
     let message = RadrootsMessage {
         recipients: vec![RadrootsMessageRecipient {
@@ -309,11 +346,7 @@ fn message_from_tags_rejects_invalid_optional_tags() {
         KIND_MESSAGE,
         &[
             vec!["p".to_string(), "pub".to_string()],
-            vec![
-                "e".to_string(),
-                "reply".to_string(),
-                "   ".to_string(),
-            ],
+            vec!["e".to_string(), "reply".to_string(), "   ".to_string()],
         ],
         "hello",
     )

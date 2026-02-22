@@ -89,6 +89,31 @@ fn comment_to_wire_parts_sets_kind_content_and_tags() {
 }
 
 #[test]
+fn comment_build_tags_includes_address_tags_when_refs_have_d_tag() {
+    let comment = RadrootsComment {
+        root: common::event_ref_with_d(
+            "root",
+            "author",
+            KIND_POST,
+            "root-d",
+            Some(vec!["wss://relay".to_string()]),
+        ),
+        parent: common::event_ref_with_d(
+            "parent",
+            "author",
+            KIND_POST,
+            "parent-d",
+            Some(vec!["wss://relay-2".to_string()]),
+        ),
+        content: "hello".to_string(),
+    };
+    let tags = comment_build_tags(&comment).unwrap();
+    assert_eq!(tags.len(), 8);
+    assert!(tags.iter().any(|tag| tag[0] == "A"));
+    assert!(tags.iter().any(|tag| tag[0] == "a"));
+}
+
+#[test]
 fn comment_roundtrip_from_tags_with_parent() {
     let root = common::event_ref_with_d(
         "root",
@@ -150,6 +175,16 @@ fn comment_from_tags_requires_root_tag() {
 
     let err = comment_from_tags(KIND_COMMENT, &tags, "hello").unwrap_err();
     assert!(matches!(err, EventParseError::MissingTag("E")));
+}
+
+#[test]
+fn comment_from_tags_rejects_empty_content() {
+    let root = common::event_ref("root", "author", KIND_POST);
+    let mut tags = Vec::new();
+    push_nip10_ref_tags(&mut tags, &root, "E", "P", "K", "A");
+
+    let err = comment_from_tags(KIND_COMMENT, &tags, "   ").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("content")));
 }
 
 #[test]
@@ -216,4 +251,25 @@ fn comment_metadata_and_index_from_event_roundtrip() {
     assert_eq!(index.event.kind, KIND_COMMENT);
     assert_eq!(index.event.sig, "sig");
     assert_eq!(index.metadata.comment.content, "hello");
+}
+
+#[test]
+fn comment_index_from_event_propagates_parse_errors() {
+    let err = index_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        77,
+        KIND_POST,
+        "hello".to_string(),
+        Vec::new(),
+        "sig".to_string(),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        EventParseError::InvalidKind {
+            expected: "1111",
+            got: KIND_POST
+        }
+    ));
 }

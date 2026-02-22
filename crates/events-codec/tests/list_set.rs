@@ -176,6 +176,27 @@ fn list_set_metadata_and_index_from_event_roundtrip() {
 }
 
 #[test]
+fn list_set_index_from_event_propagates_parse_errors() {
+    let err = index_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        44,
+        KIND_POST,
+        "private".to_string(),
+        Vec::new(),
+        "sig".to_string(),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        EventParseError::InvalidKind {
+            expected: "nip51 list set kind",
+            got: KIND_POST
+        }
+    ));
+}
+
+#[test]
 fn list_set_decode_keeps_first_optional_display_tags() {
     let tags = vec![
         vec!["d".to_string(), "members.owners".to_string()],

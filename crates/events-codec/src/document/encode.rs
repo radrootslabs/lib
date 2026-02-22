@@ -86,3 +86,51 @@ pub fn to_wire_parts_with_kind(
         tags,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use radroots_events::document::RadrootsDocumentSubject;
+
+    fn sample_document() -> RadrootsDocument {
+        RadrootsDocument {
+            d_tag: "AAAAAAAAAAAAAAAAAAAAAg".to_string(),
+            doc_type: "charter".to_string(),
+            title: "Charter".to_string(),
+            version: "1.0.0".to_string(),
+            summary: None,
+            effective_at: None,
+            body_markdown: None,
+            subject: RadrootsDocumentSubject {
+                pubkey: "58e318557257f2ab58a415d21bb57082b4824cf667a1d64e72bcbc5acc018c62"
+                    .to_string(),
+                address: Some(
+                    "30340:58e318557257f2ab58a415d21bb57082b4824cf667a1d64e72bcbc5acc018c62:AAAAAAAAAAAAAAAAAAAAAA"
+                        .to_string(),
+                ),
+            },
+            tags: None,
+        }
+    }
+
+    #[test]
+    fn document_build_tags_includes_subject_address_when_present() {
+        let tags = document_build_tags(&sample_document()).expect("document tags");
+        assert!(
+            tags.iter()
+                .any(|tag| tag.first().map(|v| v.as_str()) == Some("a"))
+        );
+    }
+
+    #[test]
+    fn document_build_tags_omits_subject_address_when_absent() {
+        let mut document = sample_document();
+        document.subject.address = None;
+        let tags = document_build_tags(&document).expect("document tags");
+        assert!(
+            !tags
+                .iter()
+                .any(|tag| tag.first().map(|v| v.as_str()) == Some("a"))
+        );
+    }
+}

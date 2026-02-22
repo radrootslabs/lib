@@ -83,3 +83,24 @@ fn post_metadata_and_index_from_event_roundtrip() {
     assert_eq!(index.event.sig, "sig");
     assert_eq!(index.metadata.post.content, "hello");
 }
+
+#[test]
+fn post_index_from_event_propagates_parse_errors() {
+    let err = index_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        77,
+        KIND_COMMENT,
+        "hello".to_string(),
+        Vec::new(),
+        "sig".to_string(),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        EventParseError::InvalidKind {
+            expected: "1",
+            got: KIND_COMMENT
+        }
+    ));
+}

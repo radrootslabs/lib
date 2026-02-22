@@ -143,9 +143,11 @@ fn structured_build_tags_cover_optional_and_error_paths() {
     };
     let farm_tags = farm_build_tags(&farm).unwrap();
     assert!(farm_tags.iter().any(|tag| tag[0] == "d"));
-    assert!(farm_tags
-        .iter()
-        .any(|tag| tag[0] == "t" && tag[1] == "organic"));
+    assert!(
+        farm_tags
+            .iter()
+            .any(|tag| tag[0] == "t" && tag[1] == "organic")
+    );
     assert!(farm_tags.iter().any(|tag| tag[0] == "g"));
 
     let mut invalid_farm = farm.clone();
@@ -181,9 +183,11 @@ fn structured_build_tags_cover_optional_and_error_paths() {
     };
     let coop_tags = coop_build_tags(&coop).unwrap();
     assert!(coop_tags.iter().any(|tag| tag[0] == "g"));
-    assert!(coop_tags
-        .iter()
-        .any(|tag| tag[0] == "t" && tag[1] == "co-op"));
+    assert!(
+        coop_tags
+            .iter()
+            .any(|tag| tag[0] == "t" && tag[1] == "co-op")
+    );
     let coop_ref_tags = coop_ref_tags(&RadrootsCoopRef {
         pubkey: TEST_PUBKEY_HEX.to_string(),
         d_tag: "AAAAAAAAAAAAAAAAAAAAAQ".to_string(),
@@ -208,9 +212,11 @@ fn structured_build_tags_cover_optional_and_error_paths() {
     let doc_tags = document_build_tags(&document).unwrap();
     assert!(doc_tags.iter().any(|tag| tag[0] == "p"));
     assert!(doc_tags.iter().any(|tag| tag[0] == "a"));
-    assert!(doc_tags
-        .iter()
-        .any(|tag| tag[0] == "t" && tag[1] == "policy"));
+    assert!(
+        doc_tags
+            .iter()
+            .any(|tag| tag[0] == "t" && tag[1] == "policy")
+    );
 
     let mut invalid_document = document.clone();
     invalid_document.subject.address = Some(" ".to_string());
@@ -241,9 +247,11 @@ fn structured_build_tags_cover_optional_and_error_paths() {
     assert!(plot_tags.iter().any(|tag| tag[0] == "a"));
     assert!(plot_tags.iter().any(|tag| tag[0] == "p"));
     assert!(plot_tags.iter().any(|tag| tag[0] == "g"));
-    assert!(plot_tags
-        .iter()
-        .any(|tag| tag[0] == "t" && tag[1] == "shade-grown"));
+    assert!(
+        plot_tags
+            .iter()
+            .any(|tag| tag[0] == "t" && tag[1] == "shade-grown")
+    );
 
     let mut invalid_plot = plot.clone();
     invalid_plot.location.as_mut().unwrap().gcs.geohash = " ".to_string();
@@ -275,9 +283,11 @@ fn structured_build_tags_cover_optional_and_error_paths() {
     let area_tags = resource_area_build_tags(&area).unwrap();
     assert!(area_tags.iter().any(|tag| tag[0] == "d"));
     assert!(area_tags.iter().any(|tag| tag[0] == "g"));
-    assert!(area_tags
-        .iter()
-        .any(|tag| tag[0] == "t" && tag[1] == "orchard"));
+    assert!(
+        area_tags
+            .iter()
+            .any(|tag| tag[0] == "t" && tag[1] == "orchard")
+    );
     let area_ref_tags = resource_area_ref_tags(&RadrootsResourceAreaRef {
         pubkey: TEST_PUBKEY_HEX.to_string(),
         d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
@@ -315,12 +325,16 @@ fn structured_build_tags_cover_optional_and_error_paths() {
         tags: Some(vec!["seasonal".to_string(), " ".to_string()]),
     };
     let cap_tags = resource_harvest_cap_build_tags(&cap).unwrap();
-    assert!(cap_tags
-        .iter()
-        .any(|tag| tag[0] == "category" && tag[1] == "spice"));
-    assert!(cap_tags
-        .iter()
-        .any(|tag| tag[0] == "t" && tag[1] == "seasonal"));
+    assert!(
+        cap_tags
+            .iter()
+            .any(|tag| tag[0] == "category" && tag[1] == "spice")
+    );
+    assert!(
+        cap_tags
+            .iter()
+            .any(|tag| tag[0] == "t" && tag[1] == "seasonal")
+    );
 
     let mut invalid_cap = cap.clone();
     invalid_cap.product.key = " ".to_string();
@@ -360,7 +374,10 @@ fn structured_build_tags_cover_required_field_errors() {
     invalid_document = document.clone();
     invalid_document.doc_type = " ".to_string();
     let err = document_build_tags(&invalid_document).unwrap_err();
-    assert!(matches!(err, EventEncodeError::EmptyRequiredField("doc_type")));
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("doc_type")
+    ));
     invalid_document = document.clone();
     invalid_document.title = " ".to_string();
     let err = document_build_tags(&invalid_document).unwrap_err();
@@ -368,7 +385,10 @@ fn structured_build_tags_cover_required_field_errors() {
     invalid_document = document.clone();
     invalid_document.version = " ".to_string();
     let err = document_build_tags(&invalid_document).unwrap_err();
-    assert!(matches!(err, EventEncodeError::EmptyRequiredField("version")));
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("version")
+    ));
     invalid_document = document.clone();
     invalid_document.subject.pubkey = " ".to_string();
     let err = document_build_tags(&invalid_document).unwrap_err();
@@ -501,7 +521,10 @@ fn structured_build_tags_cover_required_field_errors() {
         EventEncodeError::EmptyRequiredField("farm.d_tag")
     ));
     let err = plot_address(TEST_PUBKEY_HEX, " ").unwrap_err();
-    assert!(matches!(err, EventEncodeError::EmptyRequiredField("plot.d_tag")));
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("plot.d_tag")
+    ));
 
     let area = RadrootsResourceArea {
         d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),

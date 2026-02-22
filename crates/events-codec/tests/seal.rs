@@ -94,11 +94,36 @@ fn seal_metadata_and_index_from_event_roundtrip() {
 }
 
 #[test]
+fn seal_index_from_event_propagates_parse_errors() {
+    let err = index_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        14,
+        KIND_MESSAGE,
+        "payload".to_string(),
+        Vec::new(),
+        "sig".to_string(),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        EventParseError::InvalidKind {
+            expected: "13",
+            got: KIND_MESSAGE
+        }
+    ));
+}
+
+#[test]
 fn seal_build_tags_and_kind_validation_cover_paths() {
     let seal = RadrootsSeal {
         content: "payload".to_string(),
     };
     assert!(seal_build_tags(&seal).unwrap().is_empty());
+
+    let parts = to_wire_parts_with_kind(&seal, KIND_SEAL).unwrap();
+    assert_eq!(parts.kind, KIND_SEAL);
+    assert_eq!(parts.content, "payload");
 
     let err = to_wire_parts_with_kind(&seal, KIND_MESSAGE).unwrap_err();
     assert!(matches!(err, EventEncodeError::InvalidKind(KIND_MESSAGE)));

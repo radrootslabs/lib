@@ -22,9 +22,6 @@ fn parse_follow_tag(
     tag: &[String],
     published_at: u32,
 ) -> Result<RadrootsFollowProfile, EventParseError> {
-    if tag.get(0).map(|s| s.as_str()) != Some("p") {
-        return Err(EventParseError::InvalidTag("p"));
-    }
     let public_key = tag.get(1).ok_or(EventParseError::InvalidTag("p"))?;
     let (relay_url, contact_name) = match tag.get(2).filter(|s| !s.is_empty()) {
         Some(value) if looks_like_ws_relay(value) => (

@@ -101,3 +101,62 @@ pub fn to_wire_parts_with_kind(
         tags,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use radroots_core::{RadrootsCoreDecimal, RadrootsCoreQuantity, RadrootsCoreUnit};
+    use radroots_events::resource_area::RadrootsResourceAreaRef;
+    use radroots_events::resource_cap::RadrootsResourceHarvestProduct;
+
+    fn sample_cap_with_category(category: Option<&str>) -> RadrootsResourceHarvestCap {
+        RadrootsResourceHarvestCap {
+            d_tag: "AAAAAAAAAAAAAAAAAAAABA".to_string(),
+            resource_area: RadrootsResourceAreaRef {
+                pubkey: "58e318557257f2ab58a415d21bb57082b4824cf667a1d64e72bcbc5acc018c62"
+                    .to_string(),
+                d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
+            },
+            product: RadrootsResourceHarvestProduct {
+                key: "nutmeg".to_string(),
+                category: category.map(|value| value.to_string()),
+            },
+            start: 1,
+            end: 2,
+            cap_quantity: RadrootsCoreQuantity::new(
+                RadrootsCoreDecimal::from(1000u32),
+                RadrootsCoreUnit::MassG,
+            ),
+            display_amount: None,
+            display_unit: None,
+            display_label: None,
+            tags: None,
+        }
+    }
+
+    #[test]
+    fn resource_harvest_cap_build_tags_omits_blank_category() {
+        let tags = resource_harvest_cap_build_tags(&sample_cap_with_category(Some(" ")))
+            .expect("resource harvest cap tags");
+        assert!(
+            !tags
+                .iter()
+                .any(|tag| tag.first().map(|v| v.as_str()) == Some("category"))
+        );
+
+        let tags = resource_harvest_cap_build_tags(&sample_cap_with_category(None))
+            .expect("resource harvest cap tags");
+        assert!(
+            !tags
+                .iter()
+                .any(|tag| tag.first().map(|v| v.as_str()) == Some("category"))
+        );
+
+        let tags = resource_harvest_cap_build_tags(&sample_cap_with_category(Some("spice")))
+            .expect("resource harvest cap tags");
+        assert!(
+            tags.iter()
+                .any(|tag| tag.first().map(|v| v.as_str()) == Some("category"))
+        );
+    }
+}

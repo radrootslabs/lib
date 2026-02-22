@@ -486,11 +486,7 @@ fn calculate_resolution(value: f64, max: u32) -> u32 {
     let s = value.to_string();
     let decimals = s.split('.').nth(1).map(|v| v.len() as u32).unwrap_or(0);
     let bounded = cmp::min(decimals, max);
-    if bounded == 0 {
-        1
-    } else {
-        bounded
-    }
+    if bounded == 0 { 1 } else { bounded }
 }
 
 fn truncate_to_resolution(value: f64, resolution: u32) -> f64 {
@@ -803,9 +799,10 @@ mod tests {
             geohash: None,
         };
         push_location_geotags(&mut tags, &location, ListingTagOptions::default());
-        assert!(tags
-            .iter()
-            .any(|tag| tag.first().map(|v| v.as_str()) == Some("g")));
+        assert!(
+            tags.iter()
+                .any(|tag| tag.first().map(|v| v.as_str()) == Some("g"))
+        );
         assert!(tags.iter().any(|tag| {
             tag.first().map(|v| v.as_str()) == Some("L")
                 && tag.get(1).map(|v| v.as_str()) == Some("dd.lat")
@@ -834,10 +831,13 @@ mod tests {
                 ..ListingTagOptions::default()
             },
         );
-        assert!(decoded_tags.iter().any(|tag| {
-            tag.first().map(|v| v.as_str()) == Some("l")
-                && tag.get(2).map(|v| v.as_str()) == Some("dd")
-        }));
+        let decoded_l_scopes: Vec<&str> = decoded_tags
+            .iter()
+            .filter(|tag| tag.first().map(|v| v.as_str()) == Some("l"))
+            .filter_map(|tag| tag.get(2).map(|v| v.as_str()))
+            .collect();
+        assert!(decoded_l_scopes.contains(&"dd"));
+        assert!(decoded_l_scopes.contains(&"dd.lat"));
 
         let mut invalid_tags = Vec::new();
         let invalid_geohash = RadrootsListingLocation {
@@ -892,9 +892,11 @@ mod tests {
             },
         );
         assert!(find_tag(&invalid_with_geohash_enabled, "g").is_some());
-        assert!(!invalid_with_geohash_enabled
-            .iter()
-            .any(|tag| tag.first().map(|v| v.as_str()) == Some("l")));
+        assert!(
+            !invalid_with_geohash_enabled
+                .iter()
+                .any(|tag| tag.first().map(|v| v.as_str()) == Some("l"))
+        );
 
         let mut no_coordinate_tags = Vec::new();
         let no_coordinate_location = RadrootsListingLocation {
@@ -916,6 +918,32 @@ mod tests {
             },
         );
         assert!(find_tag(&no_coordinate_tags, "l").is_none());
+
+        let mut partial_coordinate_tags = Vec::new();
+        let partial_coordinate_location = RadrootsListingLocation {
+            primary: "Test".to_string(),
+            city: None,
+            region: None,
+            country: None,
+            lat: Some(-6.03),
+            lng: None,
+            geohash: Some("6gkzwgjzn".to_string()),
+        };
+        push_location_geotags(
+            &mut partial_coordinate_tags,
+            &partial_coordinate_location,
+            ListingTagOptions {
+                include_geohash: false,
+                include_gps: true,
+                ..ListingTagOptions::default()
+            },
+        );
+        let partial_l_scopes: Vec<&str> = partial_coordinate_tags
+            .iter()
+            .filter(|tag| tag.first().map(|v| v.as_str()) == Some("l"))
+            .filter_map(|tag| tag.get(2).map(|v| v.as_str()))
+            .collect();
+        assert!(partial_l_scopes.contains(&"dd"));
     }
 
     #[test]
@@ -935,11 +963,13 @@ mod tests {
         .expect("image tag");
         assert_eq!(without_size.len(), 2);
 
-        assert!(tag_listing_image(&RadrootsListingImage {
-            url: "null".to_string(),
-            size: None,
-        })
-        .is_none());
+        assert!(
+            tag_listing_image(&RadrootsListingImage {
+                url: "null".to_string(),
+                size: None,
+            })
+            .is_none()
+        );
 
         assert_eq!(status_as_str(&RadrootsListingStatus::Active), "active");
         assert_eq!(status_as_str(&RadrootsListingStatus::Sold), "sold");
@@ -1286,6 +1316,29 @@ mod tests {
         assert!(find_tag(&no_geo_tags, "location").is_some());
         assert!(find_tag(&no_geo_tags, "g").is_none());
         assert!(find_tag(&no_geo_tags, "l").is_none());
+
+        let geohash_only_tags = listing_tags_with_options(
+            &no_geo,
+            ListingTagOptions {
+                include_geohash: true,
+                include_gps: false,
+                ..ListingTagOptions::default()
+            },
+        )
+        .expect("location with geohash only");
+        assert!(find_tag(&geohash_only_tags, "g").is_some());
+        assert!(find_tag(&geohash_only_tags, "l").is_none());
+
+        let gps_only_tags = listing_tags_with_options(
+            &no_geo,
+            ListingTagOptions {
+                include_geohash: false,
+                include_gps: true,
+                ..ListingTagOptions::default()
+            },
+        )
+        .expect("location with gps only");
+        assert!(find_tag(&gps_only_tags, "l").is_some());
     }
 
     #[test]

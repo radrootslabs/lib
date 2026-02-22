@@ -5,7 +5,7 @@ use radroots_events::job_feedback::RadrootsJobFeedback;
 use radroots_events::kinds::{KIND_JOB_FEEDBACK, KIND_JOB_REQUEST_MIN, KIND_JOB_RESULT_MIN};
 use radroots_events_codec::job::encode::JobEncodeError;
 use radroots_events_codec::job::error::JobParseError;
-use radroots_events_codec::job::feedback::decode::job_feedback_from_tags;
+use radroots_events_codec::job::feedback::decode::{index_from_event, job_feedback_from_tags};
 use radroots_events_codec::job::feedback::encode::to_wire_parts;
 
 fn sample_feedback() -> RadrootsJobFeedback {
@@ -32,6 +32,22 @@ fn job_feedback_roundtrip_from_tags() {
 
     let decoded = job_feedback_from_tags(parts.kind, &parts.tags, &content).unwrap();
     assert_eq!(decoded, fb);
+}
+
+#[test]
+fn job_feedback_from_tags_accepts_e_ref_and_empty_content() {
+    let tags = vec![
+        vec![
+            "e_ref".to_string(),
+            "req".to_string(),
+            "wss://relay".to_string(),
+        ],
+        vec!["status".to_string(), "processing".to_string()],
+    ];
+    let decoded = job_feedback_from_tags(KIND_JOB_FEEDBACK, &tags, "").unwrap();
+    assert_eq!(decoded.request_event.id, "req");
+    assert_eq!(decoded.request_event.relays.as_deref(), Some("wss://relay"));
+    assert!(decoded.content.is_none());
 }
 
 #[test]
@@ -72,6 +88,25 @@ fn job_feedback_metadata_rejects_wrong_kind() {
         KIND_JOB_REQUEST_MIN,
         "payload".to_string(),
         Vec::new(),
+    )
+    .unwrap_err();
+
+    assert!(matches!(
+        err,
+        JobParseError::InvalidTag("kind (expected 7000)")
+    ));
+}
+
+#[test]
+fn job_feedback_index_from_event_propagates_parse_errors() {
+    let err = index_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        1,
+        KIND_JOB_REQUEST_MIN,
+        "payload".to_string(),
+        Vec::new(),
+        "sig".to_string(),
     )
     .unwrap_err();
 

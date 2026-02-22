@@ -141,17 +141,19 @@ pub fn read_lcov(path: &Path) -> Result<LcovCoverage, String> {
     let mut da_covered: u64 = 0;
     let mut executable_total: u64 = 0;
     let mut executable_covered: u64 = 0;
-    let mut branch_total: u64 = 0;
-    let mut branch_covered: u64 = 0;
+    let mut branch_total_lcov: u64 = 0;
+    let mut branch_covered_lcov: u64 = 0;
+    let mut branch_total_brda: u64 = 0;
+    let mut branch_covered_brda: u64 = 0;
 
     for line in raw.lines() {
         if let Some(value) = line.strip_prefix("DA:") {
             let Some((_, hit)) = value.split_once(',') else {
                 return Err(format!("invalid DA record in {}", path.display()));
             };
-            let hit_count: u64 = hit
-                .parse()
-                .map_err(|err| format!("invalid DA hit count `{hit}` in {}: {err}", path.display()))?;
+            let hit_count: u64 = hit.parse().map_err(|err| {
+                format!("invalid DA hit count `{hit}` in {}: {err}", path.display())
+            })?;
             da_total = da_total.saturating_add(1);
             if hit_count > 0 {
                 da_covered = da_covered.saturating_add(1);
@@ -159,31 +161,63 @@ pub fn read_lcov(path: &Path) -> Result<LcovCoverage, String> {
             continue;
         }
         if let Some(value) = line.strip_prefix("LF:") {
-            let parsed: u64 = value
-                .parse()
-                .map_err(|err| format!("invalid LF value `{value}` in {}: {err}", path.display()))?;
+            let parsed: u64 = value.parse().map_err(|err| {
+                format!("invalid LF value `{value}` in {}: {err}", path.display())
+            })?;
             executable_total = executable_total.saturating_add(parsed);
             continue;
         }
         if let Some(value) = line.strip_prefix("LH:") {
-            let parsed: u64 = value
-                .parse()
-                .map_err(|err| format!("invalid LH value `{value}` in {}: {err}", path.display()))?;
+            let parsed: u64 = value.parse().map_err(|err| {
+                format!("invalid LH value `{value}` in {}: {err}", path.display())
+            })?;
             executable_covered = executable_covered.saturating_add(parsed);
             continue;
         }
         if let Some(value) = line.strip_prefix("BRF:") {
-            let parsed: u64 = value
-                .parse()
-                .map_err(|err| format!("invalid BRF value `{value}` in {}: {err}", path.display()))?;
-            branch_total = branch_total.saturating_add(parsed);
+            let parsed: u64 = value.parse().map_err(|err| {
+                format!("invalid BRF value `{value}` in {}: {err}", path.display())
+            })?;
+            branch_total_lcov = branch_total_lcov.saturating_add(parsed);
             continue;
         }
         if let Some(value) = line.strip_prefix("BRH:") {
-            let parsed: u64 = value
-                .parse()
-                .map_err(|err| format!("invalid BRH value `{value}` in {}: {err}", path.display()))?;
-            branch_covered = branch_covered.saturating_add(parsed);
+            let parsed: u64 = value.parse().map_err(|err| {
+                format!("invalid BRH value `{value}` in {}: {err}", path.display())
+            })?;
+            branch_covered_lcov = branch_covered_lcov.saturating_add(parsed);
+            continue;
+        }
+        if let Some(value) = line.strip_prefix("BRDA:") {
+            let mut fields = value.split(',');
+            let _line_no = fields
+                .next()
+                .ok_or_else(|| format!("invalid BRDA record in {}", path.display()))?;
+            let _block_no = fields
+                .next()
+                .ok_or_else(|| format!("invalid BRDA record in {}", path.display()))?;
+            let _branch_no = fields
+                .next()
+                .ok_or_else(|| format!("invalid BRDA record in {}", path.display()))?;
+            let taken = fields
+                .next()
+                .ok_or_else(|| format!("invalid BRDA record in {}", path.display()))?;
+            if fields.next().is_some() {
+                return Err(format!("invalid BRDA record in {}", path.display()));
+            }
+            if taken == "-" {
+                continue;
+            }
+            let hit_count: u64 = taken.parse().map_err(|err| {
+                format!(
+                    "invalid BRDA taken count `{taken}` in {}: {err}",
+                    path.display()
+                )
+            })?;
+            branch_total_brda = branch_total_brda.saturating_add(1);
+            if hit_count > 0 {
+                branch_covered_brda = branch_covered_brda.saturating_add(1);
+            }
         }
     }
 
@@ -199,6 +233,11 @@ pub fn read_lcov(path: &Path) -> Result<LcovCoverage, String> {
         executable_percent = (executable_covered as f64 / executable_total as f64) * 100.0_f64;
     }
 
+    let (branch_total, branch_covered) = if branch_total_brda > 0 {
+        (branch_total_brda, branch_covered_brda)
+    } else {
+        (branch_total_lcov, branch_covered_lcov)
+    };
     let branches_available = branch_total > 0;
     let branch_percent = if branches_available {
         Some((branch_covered as f64 / branch_total as f64) * 100.0_f64)
@@ -582,13 +621,27 @@ mod tests {
         let path = temp_file_path("lcov");
         fs::write(
             &path,
-            "DA:1,1\nDA:2,0\nDA:3,1\nBRF:4\nBRH:3\n",
+            "DA:1,1\nDA:2,0\nDA:3,1\nBRDA:1,0,0,1\nBRDA:1,0,1,0\nBRDA:2,0,0,3\nBRDA:2,0,1,-\n",
         )
         .expect("write lcov");
 
         let lcov = read_lcov(&path).expect("parse lcov");
         assert_eq!(lcov.executable_total, 3);
         assert_eq!(lcov.executable_covered, 2);
+        assert!(lcov.branches_available);
+        assert_eq!(lcov.branch_total, 3);
+        assert_eq!(lcov.branch_covered, 2);
+        assert_eq!(lcov.branch_percent, Some(66.66666666666666));
+
+        fs::remove_file(path).expect("remove lcov");
+    }
+
+    #[test]
+    fn reads_lcov_branch_metrics_from_brf_brh_when_brda_missing() {
+        let path = temp_file_path("lcov_fallback");
+        fs::write(&path, "DA:1,1\nDA:2,1\nBRF:4\nBRH:3\n").expect("write lcov");
+
+        let lcov = read_lcov(&path).expect("parse lcov");
         assert!(lcov.branches_available);
         assert_eq!(lcov.branch_total, 4);
         assert_eq!(lcov.branch_covered, 3);

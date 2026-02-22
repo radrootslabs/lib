@@ -138,6 +138,19 @@ fn push_and_parse_nip10_ref_tags_roundtrip_with_and_without_a_tag() {
     assert_eq!(parsed.author, event.author);
     assert_eq!(parsed.kind, event.kind);
     assert!(parsed.d_tag.is_none());
+
+    let event =
+        common::event_ref_with_d("id3", "author3", KIND_POST, "AAAAAAAAAAAAAAAAAAAAAA", None);
+    let mut tags = Vec::new();
+    push_nip10_ref_tags(&mut tags, &event, "e", "p", "k", "a");
+    let a_tag = tags
+        .iter()
+        .find(|tag| tag.first().map(|v| v.as_str()) == Some("a"))
+        .expect("a tag");
+    assert_eq!(a_tag.len(), 2);
+    let parsed = parse_nip10_ref_tags(&tags, "e", "p", "k", "a").unwrap();
+    assert_eq!(parsed.d_tag, event.d_tag);
+    assert!(parsed.relays.is_none());
 }
 
 #[test]
@@ -219,12 +232,20 @@ fn parse_nip10_ref_tags_skips_invalid_a_tags_until_match() {
         vec!["a".to_string()],
         vec![
             "a".to_string(),
-            format!("{}:{}:{}", KIND_POST + 1, "author", "AAAAAAAAAAAAAAAAAAAAAA"),
+            format!(
+                "{}:{}:{}",
+                KIND_POST + 1,
+                "author",
+                "AAAAAAAAAAAAAAAAAAAAAA"
+            ),
             "wss://relay.bad-kind.example.com".to_string(),
         ],
         vec![
             "a".to_string(),
-            format!("{}:{}:{}", KIND_POST, "other-author", "AAAAAAAAAAAAAAAAAAAAAA"),
+            format!(
+                "{}:{}:{}",
+                KIND_POST, "other-author", "AAAAAAAAAAAAAAAAAAAAAA"
+            ),
             "wss://relay.bad-author.example.com".to_string(),
         ],
         vec![

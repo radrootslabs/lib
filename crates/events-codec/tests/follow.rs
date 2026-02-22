@@ -8,8 +8,8 @@ use radroots_events_codec::follow::decode::{
     follow_from_tags, index_from_event, metadata_from_event,
 };
 use radroots_events_codec::follow::encode::{
-    follow_apply, follow_to_wire_parts_after, to_wire_parts, to_wire_parts_with_kind,
-    FollowMutation,
+    FollowMutation, follow_apply, follow_to_wire_parts_after, to_wire_parts,
+    to_wire_parts_with_kind,
 };
 
 #[test]
@@ -77,6 +77,23 @@ fn follow_from_tags_accepts_contact_without_relay() {
     assert_eq!(follow.list[0].published_at, 123);
     assert_eq!(follow.list[0].public_key, "pubkey");
     assert!(follow.list[0].relay_url.is_none());
+    assert_eq!(follow.list[0].contact_name.as_deref(), Some("alice"));
+}
+
+#[test]
+fn follow_from_tags_accepts_ws_relay_and_contact_name() {
+    let tags = vec![vec![
+        "p".to_string(),
+        "pubkey".to_string(),
+        "ws://relay.example.com".to_string(),
+        "alice".to_string(),
+    ]];
+
+    let follow = follow_from_tags(KIND_FOLLOW, &tags, 123).unwrap();
+    assert_eq!(
+        follow.list[0].relay_url.as_deref(),
+        Some("ws://relay.example.com")
+    );
     assert_eq!(follow.list[0].contact_name.as_deref(), Some("alice"));
 }
 
@@ -167,6 +184,27 @@ fn follow_metadata_and_index_from_event_roundtrip() {
     assert_eq!(index.event.kind, KIND_FOLLOW);
     assert_eq!(index.event.sig, "sig");
     assert_eq!(index.metadata.follow.list.len(), 1);
+}
+
+#[test]
+fn follow_index_from_event_propagates_parse_errors() {
+    let err = index_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        50,
+        KIND_POST,
+        "".to_string(),
+        Vec::new(),
+        "sig".to_string(),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        EventParseError::InvalidKind {
+            expected: "3",
+            got: KIND_POST
+        }
+    ));
 }
 
 #[test]

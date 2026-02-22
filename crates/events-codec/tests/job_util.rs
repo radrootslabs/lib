@@ -53,7 +53,10 @@ fn feedback_status_tag_covers_all_variants() {
         feedback_status_from_tag("payment-required"),
         Some(JobFeedbackStatus::PaymentRequired)
     );
-    assert_eq!(feedback_status_from_tag("error"), Some(JobFeedbackStatus::Error));
+    assert_eq!(
+        feedback_status_from_tag("error"),
+        Some(JobFeedbackStatus::Error)
+    );
     assert_eq!(
         feedback_status_from_tag("success"),
         Some(JobFeedbackStatus::Success)
@@ -114,6 +117,15 @@ fn parse_i_tags_handles_multiple_shapes() {
     assert_eq!(inputs[4].input_type, JobInputType::Job);
     assert_eq!(inputs[4].relay.as_deref(), Some("wss://relay"));
     assert_eq!(inputs[4].marker.as_deref(), Some("marker"));
+}
+
+#[test]
+fn parse_i_tags_http_url_uses_url_type() {
+    let tags = vec![vec!["i".to_string(), "http://example.com".to_string()]];
+    let inputs = parse_i_tags(&tags);
+    assert_eq!(inputs.len(), 1);
+    assert_eq!(inputs[0].input_type, JobInputType::Url);
+    assert_eq!(inputs[0].data, "http://example.com");
 }
 
 #[test]

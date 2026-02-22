@@ -1,11 +1,13 @@
 use radroots_events::{
-    app_data::{RadrootsAppData, KIND_APP_DATA},
+    app_data::{KIND_APP_DATA, RadrootsAppData},
     kinds::KIND_POST,
 };
 use radroots_events_codec::app_data::decode::{
     app_data_from_tags, index_from_event, metadata_from_event,
 };
-use radroots_events_codec::app_data::encode::{app_data_build_tags, to_wire_parts};
+use radroots_events_codec::app_data::encode::{
+    app_data_build_tags, to_wire_parts, to_wire_parts_with_kind,
+};
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
 
 #[test]
@@ -33,6 +35,16 @@ fn app_data_to_wire_parts_sets_kind_tags_content() {
         parts.tags,
         vec![vec!["d".to_string(), "radroots.app".to_string()]]
     );
+}
+
+#[test]
+fn app_data_to_wire_parts_with_kind_rejects_wrong_kind() {
+    let app_data = RadrootsAppData {
+        d_tag: "radroots.app".to_string(),
+        content: "payload".to_string(),
+    };
+    let err = to_wire_parts_with_kind(&app_data, KIND_POST).unwrap_err();
+    assert!(matches!(err, EventEncodeError::InvalidKind(KIND_POST)));
 }
 
 #[test]
@@ -113,4 +125,25 @@ fn app_data_metadata_and_index_from_event_roundtrip() {
     assert_eq!(index.event.content, "payload");
     assert_eq!(index.event.sig, "sig");
     assert_eq!(index.metadata.app_data.d_tag, "radroots.app");
+}
+
+#[test]
+fn app_data_index_from_event_propagates_parse_errors() {
+    let err = index_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        42,
+        KIND_POST,
+        "payload".to_string(),
+        Vec::new(),
+        "sig".to_string(),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        EventParseError::InvalidKind {
+            expected: "30078",
+            got: KIND_POST
+        }
+    ));
 }

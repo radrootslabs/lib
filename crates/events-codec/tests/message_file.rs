@@ -363,6 +363,27 @@ fn message_file_metadata_and_index_from_event_roundtrip() {
 }
 
 #[test]
+fn message_file_index_from_event_propagates_parse_errors() {
+    let err = index_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        77,
+        KIND_MESSAGE,
+        "payload".to_string(),
+        Vec::new(),
+        "sig".to_string(),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        EventParseError::InvalidKind {
+            expected: "15",
+            got: KIND_MESSAGE
+        }
+    ));
+}
+
+#[test]
 fn message_file_from_tags_rejects_empty_content() {
     let err = message_file_from_tags(
         KIND_MESSAGE_FILE,

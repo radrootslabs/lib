@@ -41,6 +41,19 @@ fn geochat_build_tags_requires_nickname_if_present() {
 }
 
 #[test]
+fn geochat_build_tags_omits_optional_nickname_and_teleport_when_disabled() {
+    let geochat = RadrootsGeoChat {
+        geohash: "dr5rsj7".to_string(),
+        content: "hello".to_string(),
+        nickname: None,
+        teleported: false,
+    };
+
+    let tags = geochat_build_tags(&geochat).unwrap();
+    assert_eq!(tags, vec![vec!["g".to_string(), "dr5rsj7".to_string()]]);
+}
+
+#[test]
 fn geochat_to_wire_parts_requires_content() {
     let geochat = RadrootsGeoChat {
         geohash: "dr5rsj7".to_string(),
@@ -117,6 +130,14 @@ fn geochat_roundtrip_from_tags() {
 fn geochat_from_tags_rejects_invalid_optional_tags() {
     let err = geochat_from_tags(
         KIND_GEOCHAT,
+        &[vec!["g".to_string(), " ".to_string()]],
+        "hello",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("g")));
+
+    let err = geochat_from_tags(
+        KIND_GEOCHAT,
         &[
             vec!["g".to_string(), "dr5rsj7".to_string()],
             vec!["n".to_string(), " ".to_string()],
@@ -136,6 +157,17 @@ fn geochat_from_tags_rejects_invalid_optional_tags() {
     )
     .unwrap_err();
     assert!(matches!(err, EventParseError::InvalidTag("t")));
+
+    let geochat = geochat_from_tags(
+        KIND_GEOCHAT,
+        &[
+            vec!["g".to_string(), "dr5rsj7".to_string()],
+            vec!["t".to_string(), "moving".to_string()],
+        ],
+        "hello",
+    )
+    .unwrap();
+    assert!(!geochat.teleported);
 }
 
 #[test]
@@ -174,4 +206,25 @@ fn geochat_metadata_and_index_from_event_roundtrip() {
     assert_eq!(index.event.kind, KIND_GEOCHAT);
     assert_eq!(index.event.sig, "sig");
     assert_eq!(index.metadata.geochat.geohash, "dr5rsj7");
+}
+
+#[test]
+fn geochat_index_from_event_propagates_parse_errors() {
+    let err = index_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        77,
+        KIND_POST,
+        "hello".to_string(),
+        vec![vec!["g".to_string(), "dr5rsj7".to_string()]],
+        "sig".to_string(),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        EventParseError::InvalidKind {
+            expected: "20000",
+            got: KIND_POST
+        }
+    ));
 }

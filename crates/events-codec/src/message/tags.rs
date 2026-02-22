@@ -158,11 +158,49 @@ pub(crate) fn parse_subject_tag(tags: &[Vec<String>]) -> Result<Option<String>, 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use radroots_events::RadrootsNostrEventPtr;
 
     #[test]
     fn parse_recipient_tag_rejects_non_p_tag() {
         let err = parse_recipient_tag(&["x".to_string(), "pub".to_string()])
             .expect_err("expected invalid tag");
         assert!(matches!(err, EventParseError::InvalidTag("p")));
+    }
+
+    #[test]
+    fn build_and_parse_reply_tags_cover_optional_relay_paths() {
+        let tag = build_reply_tag(&Some(RadrootsNostrEventPtr {
+            id: "reply".to_string(),
+            relays: Some("wss://relay.example.com".to_string()),
+        }))
+        .expect("build reply tag")
+        .expect("reply tag");
+        assert_eq!(tag.len(), 3);
+        let parsed = parse_reply_tag(&[tag]).expect("parse reply");
+        assert_eq!(
+            parsed.and_then(|value| value.relays),
+            Some("wss://relay.example.com".to_string())
+        );
+
+        let tag = build_reply_tag(&Some(RadrootsNostrEventPtr {
+            id: "reply".to_string(),
+            relays: None,
+        }))
+        .expect("build reply tag")
+        .expect("reply tag");
+        assert_eq!(tag.len(), 2);
+    }
+
+    #[test]
+    fn parse_reply_tag_handles_absent_relay() {
+        let parsed = parse_reply_tag(&[vec!["e".to_string(), "reply".to_string()]])
+            .expect("parse reply tag without relay");
+        assert_eq!(
+            parsed,
+            Some(RadrootsNostrEventPtr {
+                id: "reply".to_string(),
+                relays: None,
+            })
+        );
     }
 }

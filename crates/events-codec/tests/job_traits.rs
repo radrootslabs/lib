@@ -1,9 +1,9 @@
+use radroots_events::RadrootsNostrEvent;
 use radroots_events::job::{JobFeedbackStatus, JobInputType, JobPaymentRequest};
 use radroots_events::job_feedback::RadrootsJobFeedback;
 use radroots_events::job_request::{RadrootsJobInput, RadrootsJobParam, RadrootsJobRequest};
 use radroots_events::job_result::RadrootsJobResult;
 use radroots_events::kinds::{KIND_JOB_FEEDBACK, KIND_JOB_REQUEST_MIN, KIND_JOB_RESULT_MIN};
-use radroots_events::RadrootsNostrEvent;
 use radroots_events_codec::job::feedback::encode::to_wire_parts as to_feedback_wire_parts;
 use radroots_events_codec::job::request::encode::to_wire_parts as to_request_wire_parts;
 use radroots_events_codec::job::result::encode::to_wire_parts as to_result_wire_parts;

@@ -121,6 +121,23 @@ fn reaction_roundtrip_from_tags() {
 }
 
 #[test]
+fn reaction_build_tags_includes_address_tag_when_root_has_d_tag() {
+    let reaction = RadrootsReaction {
+        root: common::event_ref_with_d(
+            "root",
+            "author",
+            KIND_POST,
+            "note-1",
+            Some(vec!["wss://relay".to_string()]),
+        ),
+        content: "+".to_string(),
+    };
+    let tags = reaction_build_tags(&reaction).unwrap();
+    assert_eq!(tags.len(), 4);
+    assert_eq!(tags[3][0], "a");
+}
+
+#[test]
 fn reaction_roundtrip_from_legacy_tags() {
     let root = common::event_ref("root", "author", KIND_POST);
     let tags = vec![build_event_ref_tag(TAG_E_ROOT, &root)];

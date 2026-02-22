@@ -214,3 +214,24 @@ where
         image: None,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn farm_list_set_id_validates_suffix_and_farm_id() {
+        let err = farm_list_set_id("AAAAAAAAAAAAAAAAAAAAAA", " ")
+            .expect_err("expected suffix validation error");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("list_set_suffix")
+        ));
+
+        let err = farm_list_set_id(" ", "members").expect_err("expected farm_id error");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("farm_id")
+        ));
+    }
+}

@@ -175,10 +175,7 @@ pub fn parse_nip10_ref_tags(
         break;
     }
 
-    let relays = match relays {
-        Some(v) if !v.is_empty() => Some(v),
-        _ => addr_relays,
-    };
+    let relays = relays.or(addr_relays);
 
     Ok(RadrootsNostrEventRef {
         id: id.clone(),
