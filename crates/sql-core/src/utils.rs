@@ -43,18 +43,19 @@ pub fn to_db_bind_value(value: &Value) -> Value {
     match value {
         Value::Bool(b) => Value::from(i64::from(*b)),
         Value::Number(n) => {
-            if let Some(f) = n.as_f64() {
-                Value::from(f)
-            } else if let Some(i) = n.as_i64() {
-                Value::from(i)
-            } else if let Some(u) = n.as_u64() {
+            if let Some(u) = n.as_u64() {
                 if u <= u32::MAX as u64 {
                     Value::from(u as u32)
                 } else {
                     Value::from(u)
                 }
+            } else if let Some(i) = n.as_i64() {
+                Value::from(i)
             } else {
-                Value::Null
+                Value::from(
+                    n.as_f64()
+                        .expect("json number should map to u64, i64, or f64"),
+                )
             }
         }
         Value::String(s) => Value::from(s.clone()),

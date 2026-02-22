@@ -55,10 +55,7 @@ fn ensure_table<E>(executor: &E) -> Result<(), SqlError>
 where
     E: SqlExecutor,
 {
-    let _ = executor.exec(
-        "create table if not exists __migrations(id integer primary key, name text not null unique, applied_at text not null default (datetime('now')))",
-        "[]",
-    )?;
+    let _ = executor.exec("create table if not exists __migrations(id integer primary key, name text not null unique, applied_at text not null default (datetime('now')))", "[]")?;
     Ok(())
 }
 
@@ -67,10 +64,8 @@ where
     E: SqlExecutor,
 {
     let params = json!([name]).to_string();
-    let json = executor.query_raw(
-        "select 1 as applied from __migrations where name = ? limit 1",
-        &params,
-    )?;
+    let sql = "select 1 as applied from __migrations where name = ? limit 1";
+    let json = executor.query_raw(sql, &params)?;
     if json.trim().is_empty() {
         return Ok(false);
     }
@@ -83,9 +78,7 @@ where
     E: SqlExecutor,
 {
     let params = json!([name]).to_string();
-    let _ = executor.exec(
-        "insert or ignore into __migrations(name) values(?)",
-        &params,
-    )?;
+    let sql = "insert or ignore into __migrations(name) values(?)";
+    let _ = executor.exec(sql, &params)?;
     Ok(())
 }
