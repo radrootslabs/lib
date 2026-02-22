@@ -1,7 +1,7 @@
 use radroots_events::profile::RadrootsProfile;
 use radroots_identity::{
-    IdentityError, RadrootsIdentity, RadrootsIdentityId, RadrootsIdentityProfile,
-    RadrootsIdentityPublic, RadrootsIdentitySecretKeyFormat, DEFAULT_IDENTITY_PATH,
+    DEFAULT_IDENTITY_PATH, IdentityError, RadrootsIdentity, RadrootsIdentityId,
+    RadrootsIdentityProfile, RadrootsIdentityPublic, RadrootsIdentitySecretKeyFormat,
 };
 use std::path::PathBuf;
 

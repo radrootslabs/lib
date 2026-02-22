@@ -2,18 +2,18 @@ use crate::error::IdentityError;
 use core::convert::Infallible;
 use core::fmt;
 use nostr::{Keys, SecretKey};
-use serde::{Deserialize, Serialize};
 #[cfg(feature = "profile")]
 use radroots_events::profile::RadrootsProfile;
+use serde::{Deserialize, Serialize};
 
 #[cfg(not(feature = "std"))]
 use alloc::string::String;
 #[cfg(all(feature = "std", feature = "json-file"))]
 use radroots_runtime::JsonFile;
-#[cfg(feature = "std")]
-use std::{fs, path::Path};
 #[cfg(all(feature = "std", feature = "json-file"))]
 use std::path::PathBuf;
+#[cfg(feature = "std")]
+use std::{fs, path::Path};
 
 pub const DEFAULT_IDENTITY_PATH: &str = "identity.json";
 
