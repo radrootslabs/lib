@@ -125,7 +125,7 @@ order = 23
 
 [[rollout.crates]]
 name = "radroots-sql-wasm-bridge"
-status = "planned"
+status = "required"
 order = 24
 
 [[rollout.crates]]
