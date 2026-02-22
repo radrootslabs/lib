@@ -133,16 +133,15 @@ jobs:
             --fail-under-branches 100 \
             --require-branches
 
-      - name: run strict events-codec preflight gate
-        continue-on-error: true
+      - name: enforce blocking events-codec coverage gate
         run: |
           set -euo pipefail
           events_codec_dir="target/sdk-coverage/radroots_events_codec"
           cargo run -q -p xtask -- sdk coverage report \
-            --scope "radroots-events-codec-preflight" \
+            --scope "radroots-events-codec-blocking" \
             --summary "${events_codec_dir}/coverage-summary.json" \
             --lcov "${events_codec_dir}/coverage-lcov.info" \
-            --out "${events_codec_dir}/coverage-gate-preflight.json" \
+            --out "${events_codec_dir}/coverage-gate-blocking.json" \
             --fail-under-exec-lines 100 \
             --fail-under-functions 100 \
             --fail-under-branches 100 \
@@ -159,4 +158,4 @@ jobs:
             target/sdk-coverage/radroots_events/coverage-gate-blocking.json
             target/sdk-coverage/radroots_identity/coverage-gate-blocking.json
             target/sdk-coverage/radroots_trade/coverage-gate-blocking.json
-            target/sdk-coverage/radroots_events_codec/coverage-gate-preflight.json
+            target/sdk-coverage/radroots_events_codec/coverage-gate-blocking.json

@@ -35,7 +35,7 @@ order = 5
 
 [[rollout.crates]]
 name = "radroots-events-codec"
-status = "planned"
+status = "required"
 order = 6
 
 [[rollout.crates]]

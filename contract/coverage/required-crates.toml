@@ -5,6 +5,7 @@ crates = [
   "radroots-events",
   "radroots-identity",
   "radroots-trade",
+  "radroots-events-codec",
 ]
 
 [policy]
