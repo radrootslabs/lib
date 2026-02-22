@@ -120,7 +120,7 @@ order = 22
 
 [[rollout.crates]]
 name = "radroots-sql-wasm-core"
-status = "planned"
+status = "required"
 order = 23
 
 [[rollout.crates]]

@@ -21,6 +21,7 @@ crates = [
   "radroots-nostr-runtime",
   "radroots-runtime",
   "radroots-sql-core",
+  "radroots-sql-wasm-core",
 ]
 
 [policy]
