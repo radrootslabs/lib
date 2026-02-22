@@ -8,7 +8,7 @@ use radroots_events_codec::d_tag::is_d_tag_base64url;
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
 
-use crate::listing::dvm_kinds::{
+use crate::listing::kinds::{
     KIND_TRADE_LISTING_ANSWER_RES, KIND_TRADE_LISTING_CANCEL_REQ,
     KIND_TRADE_LISTING_DISCOUNT_ACCEPT_REQ, KIND_TRADE_LISTING_DISCOUNT_DECLINE_REQ,
     KIND_TRADE_LISTING_DISCOUNT_OFFER_RES, KIND_TRADE_LISTING_DISCOUNT_REQ,
@@ -455,6 +455,7 @@ mod tests {
 
     #[test]
     fn message_type_kind_and_request_flags_cover_all_variants() {
+        let expected_kinds = crate::listing::kinds::TRADE_LISTING_KINDS;
         let cases = [
             (TradeListingMessageType::ListingValidateRequest, true, false),
             (TradeListingMessageType::ListingValidateResult, false, true),
@@ -477,7 +478,7 @@ mod tests {
         for (message_type, is_request, is_result) in cases {
             assert_eq!(message_type.is_request(), is_request);
             assert_eq!(message_type.is_result(), is_result);
-            assert!(message_type.kind() > 0);
+            assert!(expected_kinds.contains(&message_type.kind()));
         }
     }
 
