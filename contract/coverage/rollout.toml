@@ -40,7 +40,7 @@ order = 6
 
 [[rollout.crates]]
 name = "radroots-events-codec-wasm"
-status = "planned"
+status = "required"
 order = 7
 
 [[rollout.crates]]
