@@ -1,5 +1,5 @@
 extern crate alloc;
-use alloc::{borrow::Cow, string::String, vec::Vec};
+use alloc::{string::String, vec::Vec};
 
 use nostr::nips::nip04;
 
@@ -35,11 +35,10 @@ pub fn radroots_nostr_tag_relays_parse(
 }
 
 pub fn radroots_nostr_tags_match<'a>(tag: &'a RadrootsNostrTag) -> Option<(&'a str, &'a [String])> {
-    if let RadrootsNostrTagKind::Custom(Cow::Borrowed(key)) = tag.kind() {
-        Some((key, &tag.as_slice()[1..]))
-    } else {
-        None
-    }
+    let values = tag.as_slice();
+    values
+        .split_first()
+        .map(|(key, tag_values)| (key.as_str(), tag_values))
 }
 
 pub fn radroots_nostr_tag_match_l(tag: &RadrootsNostrTag) -> Option<(&str, f64)> {

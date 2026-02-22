@@ -45,7 +45,10 @@ mod tests {
     fn build_event_preserves_self_p_tag() {
         let pubkey_hex = "1bdebe7b23fccb167fc8843280b789839dfa296ae9fd86cc9769b4813d76d8a4";
         let pubkey = RadrootsNostrPublicKey::from_hex(pubkey_hex).expect("pubkey");
-        let tags = vec![vec!["p".to_string(), pubkey_hex.to_string()]];
+        let tags = vec![
+            vec!["x".to_string(), "v".to_string()],
+            vec!["p".to_string(), pubkey_hex.to_string()],
+        ];
 
         let builder = radroots_nostr_build_event(1, "test", tags).expect("builder");
         let event = builder.build(pubkey);
@@ -54,5 +57,11 @@ mod tests {
             tag.kind() == RadrootsNostrTagKind::p() && tag.content() == Some(pubkey_hex)
         });
         assert!(has_self_tag);
+        let has_other_self_tag = event.tags.iter().any(|tag| {
+            tag.kind() == RadrootsNostrTagKind::p()
+                && tag.content()
+                    == Some("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+        });
+        assert!(!has_other_self_tag);
     }
 }
