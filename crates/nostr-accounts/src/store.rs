@@ -89,6 +89,7 @@ impl RadrootsNostrAccountStore for RadrootsNostrMemoryAccountStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::thread;
 
     #[test]
     fn file_store_round_trip() {
@@ -101,5 +102,48 @@ mod tests {
         let loaded = store.load().expect("load");
         assert_eq!(loaded.version, state.version);
         assert!(loaded.accounts.is_empty());
+    }
+
+    #[test]
+    fn file_store_load_missing_and_path_accessor() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let path = temp.path().join("missing.json");
+        let store = RadrootsNostrFileAccountStore::new(path.as_path());
+
+        assert_eq!(store.path(), path.as_path());
+        let loaded = store.load().expect("load");
+        assert_eq!(
+            loaded.version,
+            RadrootsNostrAccountStoreState::default().version
+        );
+        assert!(loaded.accounts.is_empty());
+    }
+
+    #[test]
+    fn memory_store_round_trip() {
+        let store = RadrootsNostrMemoryAccountStore::new();
+        let state = RadrootsNostrAccountStoreState::default();
+        store.save(&state).expect("save");
+
+        let loaded = store.load().expect("load");
+        assert_eq!(loaded.version, state.version);
+        assert_eq!(loaded.selected_account_id, state.selected_account_id);
+    }
+
+    #[test]
+    fn memory_store_reports_poisoned_lock() {
+        let store = RadrootsNostrMemoryAccountStore::new();
+        let shared = store.state.clone();
+        let _ = thread::spawn(move || {
+            let _guard = shared.write().expect("write");
+            panic!("poison memory store");
+        })
+        .join();
+
+        let load = store.load();
+        assert!(matches!(load, Err(RadrootsNostrAccountsError::Store(_))));
+
+        let save = store.save(&RadrootsNostrAccountStoreState::default());
+        assert!(matches!(save, Err(RadrootsNostrAccountsError::Store(_))));
     }
 }

@@ -37,3 +37,25 @@ impl From<radroots_runtime::RuntimeJsonError> for RadrootsNostrAccountsError {
         Self::Store(value.to_string())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use radroots_identity::IdentityError;
+    use radroots_runtime::RuntimeJsonError;
+    use std::path::PathBuf;
+
+    #[test]
+    fn converts_identity_error() {
+        let source = IdentityError::PublicKeyMismatch;
+        let converted: RadrootsNostrAccountsError = source.into();
+        assert!(matches!(converted, RadrootsNostrAccountsError::Identity(_)));
+    }
+
+    #[test]
+    fn converts_runtime_json_error() {
+        let source = RuntimeJsonError::NotFound(PathBuf::from("accounts.json"));
+        let converted: RadrootsNostrAccountsError = source.into();
+        assert!(matches!(converted, RadrootsNostrAccountsError::Store(_)));
+    }
+}

@@ -134,6 +134,7 @@ impl RadrootsNostrSecretVault for RadrootsNostrSecretVaultOsKeyring {
 mod tests {
     use super::*;
     use radroots_identity::RadrootsIdentityId;
+    use std::thread;
 
     #[test]
     fn memory_vault_round_trip() {
@@ -150,5 +151,30 @@ mod tests {
         vault.remove_secret(&account_id).expect("remove");
         let loaded = vault.load_secret_hex(&account_id).expect("load");
         assert!(loaded.is_none());
+    }
+
+    #[test]
+    fn memory_vault_reports_poisoned_lock() {
+        let vault = RadrootsNostrSecretVaultMemory::new();
+        let account_id = RadrootsIdentityId::parse(
+            "3bf0c63f0f4478a288f6b67f0429dbf7f5119d4fa7218a4c40ef1378f80f7606",
+        )
+        .expect("account id");
+
+        let shared = vault.entries.clone();
+        let _ = thread::spawn(move || {
+            let _guard = shared.write().expect("write");
+            panic!("poison memory vault");
+        })
+        .join();
+
+        let store = vault.store_secret_hex(&account_id, "abc123");
+        assert!(matches!(store, Err(RadrootsNostrAccountsError::Vault(_))));
+
+        let load = vault.load_secret_hex(&account_id);
+        assert!(matches!(load, Err(RadrootsNostrAccountsError::Vault(_))));
+
+        let remove = vault.remove_secret(&account_id);
+        assert!(matches!(remove, Err(RadrootsNostrAccountsError::Vault(_))));
     }
 }
