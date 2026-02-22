@@ -67,3 +67,40 @@ fn normalize_lng(value: f64) -> f64 {
     }
     lng
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{geojson_point_from_lat_lng, geojson_polygon_circle_wgs84};
+
+    #[test]
+    fn point_uses_lng_lat_coordinate_order() {
+        let point = geojson_point_from_lat_lng(37.7, -122.4);
+        assert_eq!(point.r#type, "Point");
+        assert_eq!(point.coordinates, [-122.4, 37.7]);
+    }
+
+    #[test]
+    fn polygon_enforces_minimum_steps_and_closed_ring() {
+        let polygon = geojson_polygon_circle_wgs84(37.7, -122.4, 100.0, 1);
+        assert_eq!(polygon.r#type, "Polygon");
+        assert_eq!(polygon.coordinates.len(), 1);
+        let ring = &polygon.coordinates[0];
+        assert_eq!(ring.len(), 4);
+        assert_eq!(ring.first(), ring.last());
+    }
+
+    #[test]
+    fn polygon_normalizes_longitudes_into_wgs84_range() {
+        let positive = geojson_polygon_circle_wgs84(0.0, 540.0, 10.0, 8);
+        for point in &positive.coordinates[0] {
+            assert!(point[0] <= 180.0);
+            assert!(point[0] >= -180.0);
+        }
+
+        let negative = geojson_polygon_circle_wgs84(0.0, -540.0, 10.0, 8);
+        for point in &negative.coordinates[0] {
+            assert!(point[0] <= 180.0);
+            assert!(point[0] >= -180.0);
+        }
+    }
+}

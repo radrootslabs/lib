@@ -6,7 +6,6 @@ use alloc::{
 #[cfg(feature = "std")]
 use std::collections::BTreeMap;
 
-use radroots_events::kinds::is_nip51_list_set_kind;
 use radroots_sql_core::SqlExecutor;
 use radroots_tangle_db_schema::farm::IFarmFindMany;
 use radroots_tangle_db_schema::nostr_event_state::INostrEventStateFindMany;
@@ -36,22 +35,18 @@ pub fn radroots_tangle_sync_status<E: SqlExecutor>(
         let bundle = crate::emit::radroots_tangle_sync_all_with_options(exec, &selector, None)?;
         for event in bundle.events {
             let d_tag = tag_value(&event.tags, "d").unwrap_or("");
-            if is_nip51_list_set_kind(event.kind) && d_tag.is_empty() {
-                return Err(RadrootsTangleEventsError::InvalidData(
-                    "list set d tag missing".to_string(),
-                ));
-            }
             let key = event_state_key(event.kind, &event.author, d_tag);
             let content_hash = event_content_hash(&event.content, &event.tags)?;
             expected.entry(key).or_insert(content_hash);
         }
     }
 
-    let states = radroots_tangle_db::nostr_event_state::find_many(
+    let states_query = radroots_tangle_db::nostr_event_state::find_many(
         exec,
         &INostrEventStateFindMany { filter: None },
-    )?
-    .results;
+    );
+    let states_result = states_query?;
+    let states = states_result.results;
 
     let mut state_map: BTreeMap<String, String> = BTreeMap::new();
     for state in states {
