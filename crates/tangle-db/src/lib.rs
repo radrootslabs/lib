@@ -1,4 +1,4 @@
-#![cfg_attr(coverage_nightly, allow(unused_imports))]
+#![cfg_attr(feature = "coverage-minimal", allow(unused_imports))]
 
 pub use radroots_sql_core::error::SqlError;
 pub use radroots_sql_core::{ExecOutcome, SqlExecutor};
@@ -110,26 +110,26 @@ use radroots_tangle_db_schema::trade_product_media::{
     ITradeProductMediaRelation, ITradeProductMediaResolve,
 };
 
-#[cfg(not(coverage_nightly))]
+#[cfg(not(feature = "coverage-minimal"))]
 pub mod backup;
-#[cfg(not(coverage_nightly))]
+#[cfg(not(feature = "coverage-minimal"))]
 pub mod export;
-#[cfg(not(coverage_nightly))]
+#[cfg(not(feature = "coverage-minimal"))]
 pub mod migrations;
-#[cfg(not(coverage_nightly))]
+#[cfg(not(feature = "coverage-minimal"))]
 pub mod models;
-#[cfg(not(coverage_nightly))]
+#[cfg(not(feature = "coverage-minimal"))]
 pub use backup::{DatabaseBackup, MigrationBackup, SchemaEntry};
-#[cfg(not(coverage_nightly))]
+#[cfg(not(feature = "coverage-minimal"))]
 pub use export::{TANGLE_DB_EXPORT_VERSION, TableCount, TangleDbExportManifestRs, export_manifest};
-#[cfg(not(coverage_nightly))]
+#[cfg(not(feature = "coverage-minimal"))]
 pub use models::*;
 
 pub struct TangleSql<E: SqlExecutor> {
     executor: E,
 }
 
-#[cfg(not(coverage_nightly))]
+#[cfg(not(feature = "coverage-minimal"))]
 impl<E: SqlExecutor> TangleSql<E> {
     pub fn new(executor: E) -> Self {
         Self { executor }
@@ -713,7 +713,7 @@ impl<E: SqlExecutor> TangleSql<E> {
     }
 }
 
-#[cfg(coverage_nightly)]
+#[cfg(feature = "coverage-minimal")]
 impl<E: SqlExecutor> TangleSql<E> {
     pub fn new(executor: E) -> Self {
         Self { executor }
