@@ -4,7 +4,7 @@ use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
-use std::{collections::BTreeSet, io::Write};
+use std::{collections::BTreeMap, collections::BTreeSet, io::Write};
 
 use serde::Deserialize;
 use serde::Serialize;
@@ -146,6 +146,34 @@ struct PackageSection {
     name: String,
 }
 
+#[derive(Debug, Deserialize, Default)]
+struct CoverageProfilesFile {
+    #[serde(default)]
+    profiles: CoverageProfilesSection,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct CoverageProfilesSection {
+    #[serde(default)]
+    default: CoverageProfileRaw,
+    #[serde(default)]
+    crates: BTreeMap<String, CoverageProfileRaw>,
+}
+
+#[derive(Debug, Deserialize, Default, Clone)]
+struct CoverageProfileRaw {
+    no_default_features: Option<bool>,
+    features: Option<Vec<String>>,
+    test_threads: Option<u32>,
+}
+
+#[derive(Debug, Clone)]
+struct CoverageProfile {
+    no_default_features: bool,
+    features: Vec<String>,
+    test_threads: Option<u32>,
+}
+
 pub fn read_summary(path: &Path) -> Result<CoverageSummary, String> {
     let raw = fs::read_to_string(path)
         .map_err(|err| format!("failed to read summary {}: {err}", path.display()))?;
@@ -215,6 +243,64 @@ fn parse_toml<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, String> {
     let raw = fs::read_to_string(path)
         .map_err(|err| format!("failed to read {}: {err}", path.display()))?;
     toml::from_str::<T>(&raw).map_err(|err| format!("failed to parse {}: {err}", path.display()))
+}
+
+fn merge_coverage_profile(
+    base: CoverageProfileRaw,
+    overlay: CoverageProfileRaw,
+) -> CoverageProfile {
+    CoverageProfile {
+        no_default_features: overlay
+            .no_default_features
+            .unwrap_or(base.no_default_features.unwrap_or(false)),
+        features: overlay
+            .features
+            .unwrap_or_else(|| base.features.unwrap_or_default()),
+        test_threads: overlay.test_threads.or(base.test_threads),
+    }
+}
+
+fn read_coverage_profile(
+    workspace_root: &Path,
+    crate_name: &str,
+) -> Result<CoverageProfile, String> {
+    let path = workspace_root
+        .join("contract")
+        .join("coverage")
+        .join("profiles.toml");
+    if !path.exists() {
+        return Ok(CoverageProfile {
+            no_default_features: false,
+            features: Vec::new(),
+            test_threads: None,
+        });
+    }
+    let parsed = parse_toml::<CoverageProfilesFile>(&path)?;
+    let base = parsed.profiles.default;
+    let overlay = parsed
+        .profiles
+        .crates
+        .get(crate_name)
+        .cloned()
+        .unwrap_or_default();
+    let resolved = merge_coverage_profile(base, overlay);
+    if resolved
+        .features
+        .iter()
+        .any(|feature| feature.trim().is_empty())
+    {
+        return Err(format!(
+            "coverage profile for {crate_name} includes an empty feature value"
+        ));
+    }
+    if let Some(test_threads) = resolved.test_threads {
+        if test_threads == 0 {
+            return Err(format!(
+                "coverage profile for {crate_name} must set test_threads > 0"
+            ));
+        }
+    }
+    Ok(resolved)
 }
 
 pub fn read_lcov(path: &Path) -> Result<LcovCoverage, String> {
@@ -433,13 +519,14 @@ fn parse_f64_arg(args: &[String], name: &str, default: f64) -> Result<f64, Strin
     Ok(default)
 }
 
-fn parse_u32_arg(args: &[String], name: &str, default: u32) -> Result<u32, String> {
+fn parse_optional_u32_arg(args: &[String], name: &str) -> Result<Option<u32>, String> {
     if let Some(raw) = parse_optional_string_arg(args, name) {
-        return raw
+        let parsed = raw
             .parse::<u32>()
-            .map_err(|err| format!("invalid --{name} value `{raw}`: {err}"));
+            .map_err(|err| format!("invalid --{name} value `{raw}`: {err}"))?;
+        return Ok(Some(parsed));
     }
-    Ok(default)
+    Ok(None)
 }
 
 fn parse_bool_flag(args: &[String], name: &str) -> bool {
@@ -468,9 +555,19 @@ fn run_command(mut command: Command, name: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn apply_coverage_profile_flags(command: &mut Command, profile: &CoverageProfile) {
+    if profile.no_default_features {
+        command.arg("--no-default-features");
+    }
+    if !profile.features.is_empty() {
+        command.arg("--features").arg(profile.features.join(","));
+    }
+}
+
 fn run_crate(args: &[String]) -> Result<(), String> {
     let crate_name = parse_string_arg(args, "crate")?;
     let workspace_root = workspace_root()?;
+    let profile = read_coverage_profile(&workspace_root, &crate_name)?;
     let out_dir = if let Some(raw) = parse_optional_string_arg(args, "out") {
         PathBuf::from(raw)
     } else {
@@ -479,7 +576,9 @@ fn run_crate(args: &[String]) -> Result<(), String> {
             .join("coverage")
             .join(crate_name.replace('-', "_"))
     };
-    let test_threads = parse_u32_arg(args, "test-threads", 1)?;
+    let test_threads = parse_optional_u32_arg(args, "test-threads")?
+        .or(profile.test_threads)
+        .unwrap_or(1);
 
     fs::create_dir_all(&out_dir)
         .map_err(|err| format!("failed to create {}: {err}", out_dir.display()))?;
@@ -502,13 +601,10 @@ fn run_crate(args: &[String]) -> Result<(), String> {
     run_command(
         {
             let mut cmd = Command::new("rustup");
-            cmd.arg("run")
-                .arg("nightly")
-                .arg("cargo")
-                .arg("llvm-cov")
-                .arg("-p")
-                .arg(&crate_name)
-                .arg("--no-report")
+            cmd.arg("run").arg("nightly").arg("cargo").arg("llvm-cov");
+            cmd.arg("-p").arg(&crate_name);
+            apply_coverage_profile_flags(&mut cmd, &profile);
+            cmd.arg("--no-report")
                 .arg("--branch")
                 .arg("--")
                 .arg(format!("--test-threads={test_threads}"))
@@ -522,14 +618,9 @@ fn run_crate(args: &[String]) -> Result<(), String> {
     run_command(
         {
             let mut cmd = Command::new("rustup");
-            cmd.arg("run")
-                .arg("nightly")
-                .arg("cargo")
-                .arg("llvm-cov")
-                .arg("report")
-                .arg("-p")
-                .arg(&crate_name)
-                .arg("--json")
+            cmd.arg("run").arg("nightly").arg("cargo").arg("llvm-cov");
+            cmd.arg("report").arg("-p").arg(&crate_name);
+            cmd.arg("--json")
                 .arg("--summary-only")
                 .arg("--branch")
                 .arg("--output-path")
@@ -544,14 +635,9 @@ fn run_crate(args: &[String]) -> Result<(), String> {
     run_command(
         {
             let mut cmd = Command::new("rustup");
-            cmd.arg("run")
-                .arg("nightly")
-                .arg("cargo")
-                .arg("llvm-cov")
-                .arg("report")
-                .arg("-p")
-                .arg(&crate_name)
-                .arg("--lcov")
+            cmd.arg("run").arg("nightly").arg("cargo").arg("llvm-cov");
+            cmd.arg("report").arg("-p").arg(&crate_name);
+            cmd.arg("--lcov")
                 .arg("--branch")
                 .arg("--output-path")
                 .arg(&lcov_path)
@@ -691,6 +777,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn temp_file_path(prefix: &str) -> PathBuf {
@@ -699,6 +786,14 @@ mod tests {
             .expect("system time")
             .as_nanos();
         std::env::temp_dir().join(format!("radroots_xtask_coverage_{prefix}_{ns}.tmp"))
+    }
+
+    fn temp_dir_path(prefix: &str) -> PathBuf {
+        let ns = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time")
+            .as_nanos();
+        std::env::temp_dir().join(format!("radroots_xtask_coverage_{prefix}_{ns}"))
     }
 
     #[test]
@@ -817,5 +912,71 @@ mod tests {
         let crates = read_workspace_crates(&root).expect("workspace crates");
         assert!(!crates.is_empty());
         assert!(crates.iter().any(|crate_name| crate_name == "xtask"));
+    }
+
+    #[test]
+    fn coverage_profiles_default_when_contract_file_is_missing() {
+        let root = temp_dir_path("profile_missing");
+        fs::create_dir_all(&root).expect("create root");
+        let profile = read_coverage_profile(&root, "radroots-app-core").expect("read profile");
+        assert!(!profile.no_default_features);
+        assert!(profile.features.is_empty());
+        assert_eq!(profile.test_threads, None);
+        fs::remove_dir_all(root).expect("remove root");
+    }
+
+    #[test]
+    fn coverage_profiles_merge_defaults_and_crate_overrides() {
+        let root = temp_dir_path("profile_merge");
+        let coverage_dir = root.join("contract").join("coverage");
+        fs::create_dir_all(&coverage_dir).expect("create coverage dir");
+        fs::write(
+            coverage_dir.join("profiles.toml"),
+            r#"[profiles.default]
+no_default_features = false
+features = ["std"]
+test_threads = 2
+
+[profiles.crates."radroots-app-core"]
+no_default_features = true
+features = ["rt"]
+"#,
+        )
+        .expect("write profiles");
+
+        let app_profile = read_coverage_profile(&root, "radroots-app-core").expect("app profile");
+        assert!(app_profile.no_default_features);
+        assert_eq!(app_profile.features, vec!["rt".to_string()]);
+        assert_eq!(app_profile.test_threads, Some(2));
+
+        let other_profile = read_coverage_profile(&root, "radroots-types").expect("other profile");
+        assert!(!other_profile.no_default_features);
+        assert_eq!(other_profile.features, vec!["std".to_string()]);
+        assert_eq!(other_profile.test_threads, Some(2));
+
+        fs::remove_dir_all(root).expect("remove root");
+    }
+
+    #[test]
+    fn coverage_profiles_reject_invalid_feature_and_thread_values() {
+        let root = temp_dir_path("profile_invalid");
+        let coverage_dir = root.join("contract").join("coverage");
+        fs::create_dir_all(&coverage_dir).expect("create coverage dir");
+        fs::write(
+            coverage_dir.join("profiles.toml"),
+            r#"[profiles.crates."radroots-app-core"]
+features = [""]
+test_threads = 0
+"#,
+        )
+        .expect("write profiles");
+
+        let err = read_coverage_profile(&root, "radroots-app-core").expect_err("invalid profile");
+        assert!(
+            err.contains("empty feature value") || err.contains("test_threads > 0"),
+            "unexpected error: {err}"
+        );
+
+        fs::remove_dir_all(root).expect("remove root");
     }
 }

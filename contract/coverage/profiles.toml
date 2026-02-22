@@ -1,0 +1,9 @@
+[profiles.default]
+no_default_features = false
+features = []
+test_threads = 1
+
+[profiles.crates."radroots-app-core"]
+no_default_features = true
+features = []
+test_threads = 1
