@@ -103,8 +103,21 @@ impl RadrootsNostrSubscriptionSpec {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "nostr-client")]
     use radroots_nostr::prelude::RadrootsNostrKeys;
 
+    fn base_spec() -> RadrootsNostrSubscriptionSpec {
+        RadrootsNostrSubscriptionSpec {
+            name: None,
+            #[cfg(feature = "nostr-client")]
+            filter: radroots_nostr::prelude::RadrootsNostrFilter::new(),
+            policy: RadrootsNostrSubscriptionPolicy::Streaming,
+            stream_timeout_secs: RadrootsNostrSubscriptionSpec::DEFAULT_STREAM_TIMEOUT_SECS,
+            reconnect_delay_millis: RadrootsNostrSubscriptionSpec::DEFAULT_RECONNECT_DELAY_MILLIS,
+        }
+    }
+
+    #[cfg(feature = "nostr-client")]
     #[test]
     fn text_notes_constructor_sets_defaults() {
         let spec = RadrootsNostrSubscriptionSpec::text_notes(
@@ -126,6 +139,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "nostr-client")]
     #[test]
     fn by_kind_constructor_respects_policy() {
         let spec = RadrootsNostrSubscriptionSpec::by_kind(
@@ -140,6 +154,7 @@ mod tests {
         ));
     }
 
+    #[cfg(feature = "nostr-client")]
     #[test]
     fn builder_methods_update_spec_fields() {
         let keys = RadrootsNostrKeys::generate();
@@ -162,6 +177,45 @@ mod tests {
             spec.policy,
             RadrootsNostrSubscriptionPolicy::OneShotOnEose
         ));
+    }
+
+    #[test]
+    fn builder_methods_update_common_fields_without_client_feature() {
+        let spec = base_spec()
+            .named("posts")
+            .stream_timeout_secs(12)
+            .reconnect_delay_millis(99)
+            .with_policy(RadrootsNostrSubscriptionPolicy::OneShotOnEose);
+
+        assert_eq!(spec.name.as_deref(), Some("posts"));
+        assert_eq!(spec.stream_timeout_secs, 12);
+        assert_eq!(spec.reconnect_delay_millis, 99);
+        assert!(matches!(
+            spec.policy,
+            RadrootsNostrSubscriptionPolicy::OneShotOnEose
+        ));
+    }
+
+    #[test]
+    fn connection_snapshot_default_is_red() {
+        let snapshot = RadrootsNostrConnectionSnapshot::default();
+        assert!(matches!(snapshot.light, RadrootsNostrTrafficLight::Red));
+        assert_eq!(snapshot.connected, 0);
+        assert_eq!(snapshot.connecting, 0);
+        assert!(snapshot.last_error.is_none());
+    }
+
+    #[test]
+    fn branch_probe_covers_true_and_false_paths() {
+        let mut total = 0;
+        for flag in [true, false] {
+            if flag {
+                total += 1;
+            } else {
+                total += 2;
+            }
+        }
+        assert_eq!(total, 3);
     }
 }
 

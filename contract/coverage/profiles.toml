@@ -12,3 +12,8 @@ test_threads = 1
 no_default_features = true
 features = []
 test_threads = 1
+
+[profiles.crates."radroots-nostr-runtime"]
+no_default_features = true
+features = ["std"]
+test_threads = 1
