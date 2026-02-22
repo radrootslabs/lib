@@ -321,3 +321,185 @@ pub fn export_ts_bundle(workspace_root: &Path, out_dir: &Path) -> Result<PathBuf
     export_ts_wasm_artifacts(workspace_root, out_dir)?;
     write_ts_export_manifest(workspace_root, out_dir)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Mutex, OnceLock};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn workspace_root() -> PathBuf {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        manifest_dir
+            .join("../..")
+            .canonicalize()
+            .expect("workspace root")
+    }
+
+    fn workspace_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    fn unique_temp_dir(prefix: &str) -> PathBuf {
+        let ns = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time")
+            .as_nanos();
+        std::env::temp_dir().join(format!("radroots_xtask_{prefix}_{ns}"))
+    }
+
+    #[test]
+    fn package_dir_and_artifact_helpers_validate_values() {
+        let base = PathBuf::from("/tmp/base");
+        assert_eq!(to_package_dir(&base, "@radroots/core"), base.join("core"));
+        assert_eq!(to_package_dir(&base, "custom"), base.join("custom"));
+
+        let some = Some("src/generated".to_string());
+        assert_eq!(
+            required_artifact_value(&some, "models_dir").expect("required value"),
+            "src/generated"
+        );
+        let none = None;
+        assert!(required_artifact_value(&none, "models_dir").is_err());
+        let blank = Some("   ".to_string());
+        assert!(required_artifact_value(&blank, "models_dir").is_err());
+    }
+
+    #[test]
+    fn copy_helpers_and_manifest_collection_cover_file_paths() {
+        let root = unique_temp_dir("copy_helpers");
+        let src_file = root.join("src").join("one.txt");
+        let dst_file = root.join("dst").join("one.txt");
+        fs::create_dir_all(src_file.parent().expect("src parent")).expect("create src parent");
+        fs::write(&src_file, "one").expect("write src file");
+        assert!(copy_if_exists(&src_file, &dst_file).expect("copy file"));
+        assert_eq!(fs::read_to_string(&dst_file).expect("read dst file"), "one");
+
+        let missing = root.join("src").join("missing.txt");
+        assert!(!copy_if_exists(&missing, &root.join("dst").join("missing.txt")).expect("missing"));
+
+        let src_dir = root.join("src-tree");
+        fs::create_dir_all(src_dir.join("nested")).expect("create src dir");
+        fs::write(src_dir.join("a.txt"), "a").expect("write a");
+        fs::write(src_dir.join("nested").join("b.txt"), "b").expect("write b");
+        let dst_dir = root.join("dst-tree");
+        let copied = copy_dir_contents(&src_dir, &dst_dir).expect("copy dir");
+        assert_eq!(copied, 2);
+        assert!(dst_dir.join("a.txt").exists());
+        assert!(dst_dir.join("nested").join("b.txt").exists());
+
+        let manifest_skip = dst_dir.join("export-manifest.json");
+        fs::write(&manifest_skip, "{}").expect("write manifest skip");
+        let mut entries = Vec::new();
+        collect_manifest_entries(&dst_dir, &dst_dir, &manifest_skip, &mut entries)
+            .expect("collect entries");
+        assert_eq!(entries.len(), 2);
+        assert!(entries.iter().any(|entry| entry.path == "a.txt"));
+        assert!(entries.iter().any(|entry| entry.path == "nested/b.txt"));
+
+        fs::remove_dir_all(root).expect("remove temp root");
+    }
+
+    #[test]
+    fn export_ts_files_with_workspace_contract() {
+        let _guard = workspace_lock().lock().expect("workspace lock");
+        let root = workspace_root();
+        let bundle = contract::load_contract_bundle(&root).expect("load contract");
+        contract::validate_contract_bundle(&bundle).expect("validate contract");
+        let ts = ts_export_mapping(&bundle).expect("ts mapping");
+        let artifacts = ts_artifacts(ts).expect("ts artifacts");
+        let models_dir = required_artifact_value(&artifacts.models_dir, "models_dir")
+            .expect("models dir")
+            .to_string();
+        let constants_dir = required_artifact_value(&artifacts.constants_dir, "constants_dir")
+            .expect("constants dir")
+            .to_string();
+
+        let source_root = root.join("target").join("ts-rs").join("core");
+        fs::create_dir_all(&source_root).expect("create ts-rs source root");
+        fs::write(
+            source_root.join("types.ts"),
+            "export type CoreProbe = { id: string };\n",
+        )
+        .expect("write ts-rs model");
+
+        let out_dir = root.join("target").join("xtask-export-tests").join(
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system time")
+                .as_nanos()
+                .to_string(),
+        );
+        fs::create_dir_all(&out_dir).expect("create out dir");
+
+        export_ts_models(&root, &out_dir).expect("export models");
+        assert!(
+            out_dir
+                .join("ts")
+                .join("packages")
+                .join("core")
+                .join(&models_dir)
+                .join("types.ts")
+                .exists()
+        );
+
+        export_ts_constants(&root, &out_dir).expect("export constants");
+        let events_constants = out_dir
+            .join("ts")
+            .join("packages")
+            .join("events")
+            .join(&constants_dir)
+            .join("constants.ts");
+        let events_kinds = out_dir
+            .join("ts")
+            .join("packages")
+            .join("events")
+            .join(&constants_dir)
+            .join("kinds.ts");
+        let events_root = root.join("crates").join("events");
+        let constants_exists = events_root.join("bindings").join("constants.ts").exists()
+            || events_root
+                .join("bindings")
+                .join("ts")
+                .join("src")
+                .join("constants.ts")
+                .exists();
+        let kinds_exists = events_root.join("bindings").join("kinds.ts").exists()
+            || events_root
+                .join("bindings")
+                .join("ts")
+                .join("src")
+                .join("kinds.ts")
+                .exists();
+        if constants_exists {
+            assert!(events_constants.exists());
+        }
+        if kinds_exists {
+            assert!(events_kinds.exists());
+        }
+
+        export_ts_wasm_artifacts(&root, &out_dir).expect("export wasm");
+        let manifest_path = write_ts_export_manifest(&root, &out_dir).expect("write manifest");
+        let manifest_raw = fs::read_to_string(&manifest_path).expect("read manifest");
+        assert!(manifest_raw.contains("\"language\": \"ts\""));
+        assert!(manifest_raw.contains("packages/core"));
+
+        fs::remove_dir_all(&out_dir).expect("remove out dir");
+    }
+
+    #[test]
+    fn crate_supports_ts_rs_reflects_manifest_presence() {
+        let root = unique_temp_dir("crate_supports_ts_rs");
+        let crate_dir = root.join("crates").join("probe");
+        fs::create_dir_all(&crate_dir).expect("create crate dir");
+        fs::write(
+            crate_dir.join("Cargo.toml"),
+            "[package]\nname = \"probe\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[features]\nts-rs = []\n",
+        )
+        .expect("write manifest");
+        assert!(crate_supports_ts_rs(&root, "probe").expect("supports ts-rs"));
+        assert!(!crate_supports_ts_rs(&root, "missing").expect("missing crate"));
+        fs::remove_dir_all(root).expect("remove temp root");
+    }
+}
