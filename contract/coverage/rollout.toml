@@ -75,7 +75,7 @@ order = 13
 
 [[rollout.crates]]
 name = "radroots-log"
-status = "planned"
+status = "required"
 order = 14
 
 [[rollout.crates]]
