@@ -13,8 +13,10 @@ pub trait RadrootsNostrSecretVault: Send + Sync {
         &self,
         account_id: &RadrootsIdentityId,
     ) -> Result<Option<String>, RadrootsNostrAccountsError>;
-    fn remove_secret(&self, account_id: &RadrootsIdentityId)
-    -> Result<(), RadrootsNostrAccountsError>;
+    fn remove_secret(
+        &self,
+        account_id: &RadrootsIdentityId,
+    ) -> Result<(), RadrootsNostrAccountsError>;
 }
 
 #[derive(Debug, Clone, Default)]

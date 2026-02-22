@@ -36,7 +36,10 @@ impl RadrootsNostrAccountsManager {
         }
 
         if let Some(selected) = state.selected_account_id.clone() {
-            let exists = state.accounts.iter().any(|record| record.account_id == selected);
+            let exists = state
+                .accounts
+                .iter()
+                .any(|record| record.account_id == selected);
             if !exists {
                 state.selected_account_id = None;
             }
@@ -49,29 +52,30 @@ impl RadrootsNostrAccountsManager {
         })
     }
 
-    pub fn list_accounts(&self) -> Result<Vec<RadrootsNostrAccountRecord>, RadrootsNostrAccountsError> {
-        let guard = self
-            .state
-            .read()
-            .map_err(|_| RadrootsNostrAccountsError::Store("accounts state lock poisoned".into()))?;
+    pub fn list_accounts(
+        &self,
+    ) -> Result<Vec<RadrootsNostrAccountRecord>, RadrootsNostrAccountsError> {
+        let guard = self.state.read().map_err(|_| {
+            RadrootsNostrAccountsError::Store("accounts state lock poisoned".into())
+        })?;
         Ok(guard.accounts.clone())
     }
 
-    pub fn selected_account_id(&self) -> Result<Option<RadrootsIdentityId>, RadrootsNostrAccountsError> {
-        let guard = self
-            .state
-            .read()
-            .map_err(|_| RadrootsNostrAccountsError::Store("accounts state lock poisoned".into()))?;
+    pub fn selected_account_id(
+        &self,
+    ) -> Result<Option<RadrootsIdentityId>, RadrootsNostrAccountsError> {
+        let guard = self.state.read().map_err(|_| {
+            RadrootsNostrAccountsError::Store("accounts state lock poisoned".into())
+        })?;
         Ok(guard.selected_account_id.clone())
     }
 
     pub fn selected_account(
         &self,
     ) -> Result<Option<RadrootsNostrAccountRecord>, RadrootsNostrAccountsError> {
-        let guard = self
-            .state
-            .read()
-            .map_err(|_| RadrootsNostrAccountsError::Store("accounts state lock poisoned".into()))?;
+        let guard = self.state.read().map_err(|_| {
+            RadrootsNostrAccountsError::Store("accounts state lock poisoned".into())
+        })?;
         let Some(selected) = guard.selected_account_id.as_ref() else {
             return Ok(None);
         };
@@ -103,10 +107,9 @@ impl RadrootsNostrAccountsManager {
         &self,
         account_id: &RadrootsIdentityId,
     ) -> Result<Option<RadrootsIdentity>, RadrootsNostrAccountsError> {
-        let guard = self
-            .state
-            .read()
-            .map_err(|_| RadrootsNostrAccountsError::Store("accounts state lock poisoned".into()))?;
+        let guard = self.state.read().map_err(|_| {
+            RadrootsNostrAccountsError::Store("accounts state lock poisoned".into())
+        })?;
         let Some(record) = guard
             .accounts
             .iter()
@@ -204,7 +207,9 @@ impl RadrootsNostrAccountsManager {
         let account_id = account_id.clone();
         self.update_state(|state| {
             let before = state.accounts.len();
-            state.accounts.retain(|record| record.account_id != account_id);
+            state
+                .accounts
+                .retain(|record| record.account_id != account_id);
             if state.accounts.len() == before {
                 return Err(RadrootsNostrAccountsError::AccountNotFound(
                     account_id.to_string(),
@@ -212,7 +217,10 @@ impl RadrootsNostrAccountsManager {
             }
 
             if state.selected_account_id.as_ref() == Some(&account_id) {
-                state.selected_account_id = state.accounts.first().map(|record| record.account_id.clone());
+                state.selected_account_id = state
+                    .accounts
+                    .first()
+                    .map(|record| record.account_id.clone());
             }
             Ok(())
         })?;
@@ -256,12 +264,13 @@ impl RadrootsNostrAccountsManager {
 
     fn update_state(
         &self,
-        update: impl FnOnce(&mut RadrootsNostrAccountStoreState) -> Result<(), RadrootsNostrAccountsError>,
+        update: impl FnOnce(
+            &mut RadrootsNostrAccountStoreState,
+        ) -> Result<(), RadrootsNostrAccountsError>,
     ) -> Result<(), RadrootsNostrAccountsError> {
-        let mut guard = self
-            .state
-            .write()
-            .map_err(|_| RadrootsNostrAccountsError::Store("accounts state lock poisoned".into()))?;
+        let mut guard = self.state.write().map_err(|_| {
+            RadrootsNostrAccountsError::Store("accounts state lock poisoned".into())
+        })?;
         let mut next = guard.clone();
         update(&mut next)?;
         self.store.save(&next)?;
@@ -291,7 +300,8 @@ mod tests {
             temp.path().join("accounts.json"),
         ));
         let vault = Arc::new(RadrootsNostrSecretVaultMemory::new());
-        let manager = RadrootsNostrAccountsManager::new(store.clone(), vault.clone()).expect("manager");
+        let manager =
+            RadrootsNostrAccountsManager::new(store.clone(), vault.clone()).expect("manager");
         let created_id = manager
             .generate_identity(Some("primary".into()), true)
             .expect("create identity");
@@ -308,10 +318,12 @@ mod tests {
             .expect("selected2")
             .expect("selected2 id");
         assert_eq!(selected2, created_id);
-        assert!(manager2
-            .selected_signing_identity()
-            .expect("signing")
-            .is_some());
+        assert!(
+            manager2
+                .selected_signing_identity()
+                .expect("signing")
+                .is_some()
+        );
     }
 
     #[test]
@@ -329,10 +341,12 @@ mod tests {
             .upsert_public_identity(public, Some("watch".into()), true)
             .expect("watch");
 
-        assert!(manager
-            .selected_signing_identity()
-            .expect("signing")
-            .is_none());
+        assert!(
+            manager
+                .selected_signing_identity()
+                .expect("signing")
+                .is_none()
+        );
     }
 
     #[test]
