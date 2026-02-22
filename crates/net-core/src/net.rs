@@ -89,9 +89,7 @@ impl Net {
     #[cfg(feature = "nostr-client")]
     pub fn nostr_set_default_relays(&mut self, urls: &[String]) -> Result<()> {
         if self.nostr.is_none() {
-            let keys = self
-                .selected_nostr_keys()
-                .ok_or(NetError::MissingKey)?;
+            let keys = self.selected_nostr_keys().ok_or(NetError::MissingKey)?;
             let rt = self
                 .rt
                 .as_ref()
