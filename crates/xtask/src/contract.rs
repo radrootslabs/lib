@@ -137,7 +137,10 @@ fn parse_enum_variants(enum_body: &str) -> Vec<String> {
             if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with("//") {
                 return None;
             }
-            let before_comma = trimmed.split_once(',').map_or(trimmed, |(head, _)| head).trim();
+            let before_comma = trimmed
+                .split_once(',')
+                .map_or(trimmed, |(head, _)| head)
+                .trim();
             if before_comma.is_empty() {
                 return None;
             }
@@ -161,9 +164,13 @@ fn parse_enum_variants(enum_body: &str) -> Vec<String> {
 }
 
 fn validate_core_unit_dimension_variant_order(workspace_root: &Path) -> Result<(), String> {
-    let source_path = workspace_root.join("crates").join("core").join("src").join("unit.rs");
-    let source =
-        fs::read_to_string(&source_path).map_err(|e| format!("read {}: {e}", source_path.display()))?;
+    let source_path = workspace_root
+        .join("crates")
+        .join("core")
+        .join("src")
+        .join("unit.rs");
+    let source = fs::read_to_string(&source_path)
+        .map_err(|e| format!("read {}: {e}", source_path.display()))?;
     let enum_body = extract_enum_body(&source, CORE_UNIT_DIMENSION_ENUM)?;
     let variants = parse_enum_variants(enum_body);
     let expected = CORE_UNIT_DIMENSION_ORDER
