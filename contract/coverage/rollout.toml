@@ -140,7 +140,7 @@ order = 26
 
 [[rollout.crates]]
 name = "radroots-tangle-events-wasm"
-status = "planned"
+status = "required"
 order = 27
 
 [[rollout.crates]]
