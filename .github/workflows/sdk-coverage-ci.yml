@@ -63,89 +63,25 @@ jobs:
               --fail-under-branches 0
           done
 
-      - name: enforce blocking core coverage gate
+      - name: enforce blocking required coverage gates
         run: |
           set -euo pipefail
-          core_dir="target/sdk-coverage/radroots_core"
-          cargo run -q -p xtask -- sdk coverage report \
-            --scope "radroots-core-blocking" \
-            --summary "${core_dir}/coverage-summary.json" \
-            --lcov "${core_dir}/coverage-lcov.info" \
-            --out "${core_dir}/coverage-gate-blocking.json" \
-            --fail-under-exec-lines 100 \
-            --fail-under-functions 100 \
-            --fail-under-branches 100 \
-            --require-branches
+          cargo run -q -p xtask -- sdk coverage required-crates > /tmp/radroots_required_coverage_crates.txt
 
-      - name: enforce blocking types coverage gate
-        run: |
-          set -euo pipefail
-          types_dir="target/sdk-coverage/radroots_types"
-          cargo run -q -p xtask -- sdk coverage report \
-            --scope "radroots-types-blocking" \
-            --summary "${types_dir}/coverage-summary.json" \
-            --lcov "${types_dir}/coverage-lcov.info" \
-            --out "${types_dir}/coverage-gate-blocking.json" \
-            --fail-under-exec-lines 100 \
-            --fail-under-functions 100 \
-            --fail-under-branches 100 \
-            --require-branches
-
-      - name: enforce blocking events coverage gate
-        run: |
-          set -euo pipefail
-          events_dir="target/sdk-coverage/radroots_events"
-          cargo run -q -p xtask -- sdk coverage report \
-            --scope "radroots-events-blocking" \
-            --summary "${events_dir}/coverage-summary.json" \
-            --lcov "${events_dir}/coverage-lcov.info" \
-            --out "${events_dir}/coverage-gate-blocking.json" \
-            --fail-under-exec-lines 100 \
-            --fail-under-functions 100 \
-            --fail-under-branches 100 \
-            --require-branches
-
-      - name: enforce blocking identity coverage gate
-        run: |
-          set -euo pipefail
-          identity_dir="target/sdk-coverage/radroots_identity"
-          cargo run -q -p xtask -- sdk coverage report \
-            --scope "radroots-identity-blocking" \
-            --summary "${identity_dir}/coverage-summary.json" \
-            --lcov "${identity_dir}/coverage-lcov.info" \
-            --out "${identity_dir}/coverage-gate-blocking.json" \
-            --fail-under-exec-lines 100 \
-            --fail-under-functions 100 \
-            --fail-under-branches 100 \
-            --require-branches
-
-      - name: enforce blocking trade coverage gate
-        run: |
-          set -euo pipefail
-          trade_dir="target/sdk-coverage/radroots_trade"
-          cargo run -q -p xtask -- sdk coverage report \
-            --scope "radroots-trade-blocking" \
-            --summary "${trade_dir}/coverage-summary.json" \
-            --lcov "${trade_dir}/coverage-lcov.info" \
-            --out "${trade_dir}/coverage-gate-blocking.json" \
-            --fail-under-exec-lines 100 \
-            --fail-under-functions 100 \
-            --fail-under-branches 100 \
-            --require-branches
-
-      - name: enforce blocking events-codec coverage gate
-        run: |
-          set -euo pipefail
-          events_codec_dir="target/sdk-coverage/radroots_events_codec"
-          cargo run -q -p xtask -- sdk coverage report \
-            --scope "radroots-events-codec-blocking" \
-            --summary "${events_codec_dir}/coverage-summary.json" \
-            --lcov "${events_codec_dir}/coverage-lcov.info" \
-            --out "${events_codec_dir}/coverage-gate-blocking.json" \
-            --fail-under-exec-lines 100 \
-            --fail-under-functions 100 \
-            --fail-under-branches 100 \
-            --require-branches
+          while IFS= read -r crate; do
+            [ -n "${crate}" ] || continue
+            safe_crate="${crate//-/_}"
+            crate_dir="target/sdk-coverage/${safe_crate}"
+            cargo run -q -p xtask -- sdk coverage report \
+              --scope "${crate}-blocking" \
+              --summary "${crate_dir}/coverage-summary.json" \
+              --lcov "${crate_dir}/coverage-lcov.info" \
+              --out "${crate_dir}/coverage-gate-blocking.json" \
+              --fail-under-exec-lines 100 \
+              --fail-under-functions 100 \
+              --fail-under-branches 100 \
+              --require-branches
+          done < /tmp/radroots_required_coverage_crates.txt
 
       - name: upload sdk coverage reports
         uses: actions/upload-artifact@v4
@@ -153,9 +89,4 @@ jobs:
           name: sdk-coverage-reports
           path: |
             target/sdk-coverage/**/coverage-gate-summary.json
-            target/sdk-coverage/radroots_core/coverage-gate-blocking.json
-            target/sdk-coverage/radroots_types/coverage-gate-blocking.json
-            target/sdk-coverage/radroots_events/coverage-gate-blocking.json
-            target/sdk-coverage/radroots_identity/coverage-gate-blocking.json
-            target/sdk-coverage/radroots_trade/coverage-gate-blocking.json
-            target/sdk-coverage/radroots_events_codec/coverage-gate-blocking.json
+            target/sdk-coverage/**/coverage-gate-blocking.json

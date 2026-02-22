@@ -4,6 +4,7 @@ use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
+use std::{collections::BTreeSet, io::Write};
 
 use serde::Deserialize;
 use serde::Serialize;
@@ -115,6 +116,16 @@ struct LlvmCovSummaryMetric {
     percent: f64,
 }
 
+#[derive(Debug, Deserialize)]
+struct CoverageRequiredContract {
+    required: CoverageRequiredList,
+}
+
+#[derive(Debug, Deserialize)]
+struct CoverageRequiredList {
+    crates: Vec<String>,
+}
+
 pub fn read_summary(path: &Path) -> Result<CoverageSummary, String> {
     let raw = fs::read_to_string(path)
         .map_err(|err| format!("failed to read summary {}: {err}", path.display()))?;
@@ -131,6 +142,28 @@ pub fn read_summary(path: &Path) -> Result<CoverageSummary, String> {
         summary_lines_percent: totals.lines.percent,
         summary_regions_percent: totals.regions.percent,
     })
+}
+
+fn read_required_crates(path: &Path) -> Result<Vec<String>, String> {
+    let raw = fs::read_to_string(path)
+        .map_err(|err| format!("failed to read required crates {}: {err}", path.display()))?;
+    let parsed: CoverageRequiredContract = toml::from_str(&raw)
+        .map_err(|err| format!("failed to parse required crates {}: {err}", path.display()))?;
+    if parsed.required.crates.is_empty() {
+        return Err("coverage required crates list must not be empty".to_string());
+    }
+    let mut seen = BTreeSet::new();
+    for crate_name in &parsed.required.crates {
+        if crate_name.trim().is_empty() {
+            return Err("coverage required crates list includes an empty crate name".to_string());
+        }
+        if !seen.insert(crate_name.clone()) {
+            return Err(format!(
+                "coverage required crates list includes duplicate crate {crate_name}"
+            ));
+        }
+    }
+    Ok(parsed.required.crates)
 }
 
 pub fn read_lcov(path: &Path) -> Result<LcovCoverage, String> {
@@ -566,11 +599,27 @@ fn report_gate(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+fn list_required_crates() -> Result<(), String> {
+    let root = workspace_root()?;
+    let required_path = root
+        .join("contract")
+        .join("coverage")
+        .join("required-crates.toml");
+    let crates = read_required_crates(&required_path)?;
+    let mut stdout = std::io::stdout().lock();
+    for crate_name in crates {
+        writeln!(stdout, "{crate_name}")
+            .map_err(|err| format!("failed to write required crates output: {err}"))?;
+    }
+    Ok(())
+}
+
 pub fn run(args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
         Some("help") => Ok(()),
         Some("run-crate") => run_crate(&args[1..]),
         Some("report") => report_gate(&args[1..]),
+        Some("required-crates") => list_required_crates(),
         Some(_) => Err("unknown sdk coverage subcommand".to_string()),
         None => Err("missing sdk coverage subcommand".to_string()),
     }
@@ -681,5 +730,21 @@ mod tests {
                 .iter()
                 .any(|reason| reason == "branches=unavailable")
         );
+    }
+
+    #[test]
+    fn reads_required_crates_and_rejects_duplicates() {
+        let path = temp_file_path("required_crates");
+        fs::write(&path, "[required]\ncrates = [\"a\", \"b\"]\n").expect("write required crates");
+        let crates = read_required_crates(&path).expect("parse required crates");
+        assert_eq!(crates, vec!["a".to_string(), "b".to_string()]);
+        fs::remove_file(&path).expect("remove required crates");
+
+        let dup_path = temp_file_path("required_crates_dup");
+        fs::write(&dup_path, "[required]\ncrates = [\"a\", \"a\"]\n")
+            .expect("write dup required crates");
+        let err = read_required_crates(&dup_path).expect_err("duplicate required crates");
+        assert!(err.contains("duplicate crate a"));
+        fs::remove_file(dup_path).expect("remove dup required crates");
     }
 }

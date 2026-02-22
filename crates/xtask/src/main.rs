@@ -17,6 +17,7 @@ fn usage() {
     eprintln!("  cargo xtask sdk export-manifest [--out <dir>]");
     eprintln!("  cargo xtask sdk validate");
     eprintln!("  cargo xtask sdk coverage run-crate --crate <crate> [--out <dir>]");
+    eprintln!("  cargo xtask sdk coverage required-crates");
     eprintln!(
         "  cargo xtask sdk coverage report --scope <scope> --summary <file> --lcov <file> --out <file>"
     );
