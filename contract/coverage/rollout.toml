@@ -52,3 +52,98 @@ order = 8
 name = "xtask"
 status = "planned"
 order = 9
+
+[[rollout.crates]]
+name = "radroots-app-core"
+status = "planned"
+order = 10
+
+[[rollout.crates]]
+name = "radroots-app-ffi-swift"
+status = "planned"
+order = 11
+
+[[rollout.crates]]
+name = "radroots-app-wasm"
+status = "planned"
+order = 12
+
+[[rollout.crates]]
+name = "radroots-events-indexed"
+status = "planned"
+order = 13
+
+[[rollout.crates]]
+name = "radroots-log"
+status = "planned"
+order = 14
+
+[[rollout.crates]]
+name = "radroots-net-core"
+status = "planned"
+order = 15
+
+[[rollout.crates]]
+name = "radroots-net"
+status = "planned"
+order = 16
+
+[[rollout.crates]]
+name = "radroots-nostr"
+status = "planned"
+order = 17
+
+[[rollout.crates]]
+name = "radroots-nostr-accounts"
+status = "planned"
+order = 18
+
+[[rollout.crates]]
+name = "radroots-nostr-ndb"
+status = "planned"
+order = 19
+
+[[rollout.crates]]
+name = "radroots-nostr-runtime"
+status = "planned"
+order = 20
+
+[[rollout.crates]]
+name = "radroots-runtime"
+status = "planned"
+order = 21
+
+[[rollout.crates]]
+name = "radroots-sql-core"
+status = "planned"
+order = 22
+
+[[rollout.crates]]
+name = "radroots-sql-wasm-core"
+status = "planned"
+order = 23
+
+[[rollout.crates]]
+name = "radroots-sql-wasm-bridge"
+status = "planned"
+order = 24
+
+[[rollout.crates]]
+name = "radroots-tangle-events"
+status = "planned"
+order = 25
+
+[[rollout.crates]]
+name = "radroots-tangle-db"
+status = "planned"
+order = 26
+
+[[rollout.crates]]
+name = "radroots-tangle-events-wasm"
+status = "planned"
+order = 27
+
+[[rollout.crates]]
+name = "radroots-tangle-db-wasm"
+status = "planned"
+order = 28
