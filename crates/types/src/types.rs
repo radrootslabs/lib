@@ -64,10 +64,6 @@ impl IResultPass {
     }
 
     pub fn status_label(&self) -> &'static str {
-        if self.pass {
-            "pass"
-        } else {
-            "fail"
-        }
+        if self.pass { "pass" } else { "fail" }
     }
 }
