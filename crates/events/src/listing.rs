@@ -5,9 +5,9 @@ use radroots_core::{
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
 
+use crate::RadrootsNostrEvent;
 use crate::plot::RadrootsPlotRef;
 use crate::resource_area::RadrootsResourceAreaRef;
-use crate::RadrootsNostrEvent;
 
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
@@ -250,7 +250,7 @@ pub struct RadrootsListingImageSize {
 
 #[cfg(all(test, feature = "ts-rs", feature = "std"))]
 mod constants_tests {
-    use super::{RadrootsListingFarmRef, RADROOTS_LISTING_PRODUCT_TAG_KEYS};
+    use super::{RADROOTS_LISTING_PRODUCT_TAG_KEYS, RadrootsListingFarmRef};
     use std::{
         fs,
         path::{Path, PathBuf},
