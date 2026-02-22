@@ -2679,8 +2679,10 @@ dependencies = [
 name = "radroots-events-codec-wasm"
 version = "0.1.0"
 dependencies = [
+ "radroots-core",
  "radroots-events",
  "radroots-events-codec",
+ "serde",
  "serde_json",
  "wasm-bindgen",
 ]
