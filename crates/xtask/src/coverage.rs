@@ -126,6 +126,26 @@ struct CoverageRequiredList {
     crates: Vec<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct WorkspaceManifest {
+    workspace: WorkspaceMembers,
+}
+
+#[derive(Debug, Deserialize)]
+struct WorkspaceMembers {
+    members: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PackageManifest {
+    package: PackageSection,
+}
+
+#[derive(Debug, Deserialize)]
+struct PackageSection {
+    name: String,
+}
+
 pub fn read_summary(path: &Path) -> Result<CoverageSummary, String> {
     let raw = fs::read_to_string(path)
         .map_err(|err| format!("failed to read summary {}: {err}", path.display()))?;
@@ -164,6 +184,37 @@ fn read_required_crates(path: &Path) -> Result<Vec<String>, String> {
         }
     }
     Ok(parsed.required.crates)
+}
+
+fn read_workspace_crates(workspace_root: &Path) -> Result<Vec<String>, String> {
+    let workspace_manifest = parse_toml::<WorkspaceManifest>(&workspace_root.join("Cargo.toml"))?;
+    if workspace_manifest.workspace.members.is_empty() {
+        return Err("workspace members list must not be empty".to_string());
+    }
+    let mut names = Vec::with_capacity(workspace_manifest.workspace.members.len());
+    let mut seen = BTreeSet::new();
+    for member in workspace_manifest.workspace.members {
+        let package_manifest =
+            parse_toml::<PackageManifest>(&workspace_root.join(member).join("Cargo.toml"))?;
+        let package_name = package_manifest.package.name;
+        if package_name.trim().is_empty() {
+            return Err("workspace includes an empty package name".to_string());
+        }
+        if !seen.insert(package_name.clone()) {
+            return Err(format!(
+                "workspace includes duplicate package name {}",
+                package_name
+            ));
+        }
+        names.push(package_name);
+    }
+    Ok(names)
+}
+
+fn parse_toml<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, String> {
+    let raw = fs::read_to_string(path)
+        .map_err(|err| format!("failed to read {}: {err}", path.display()))?;
+    toml::from_str::<T>(&raw).map_err(|err| format!("failed to parse {}: {err}", path.display()))
 }
 
 pub fn read_lcov(path: &Path) -> Result<LcovCoverage, String> {
@@ -614,12 +665,24 @@ fn list_required_crates() -> Result<(), String> {
     Ok(())
 }
 
+fn list_workspace_crates() -> Result<(), String> {
+    let root = workspace_root()?;
+    let crates = read_workspace_crates(&root)?;
+    let mut stdout = std::io::stdout().lock();
+    for crate_name in crates {
+        writeln!(stdout, "{crate_name}")
+            .map_err(|err| format!("failed to write workspace crates output: {err}"))?;
+    }
+    Ok(())
+}
+
 pub fn run(args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
         Some("help") => Ok(()),
         Some("run-crate") => run_crate(&args[1..]),
         Some("report") => report_gate(&args[1..]),
         Some("required-crates") => list_required_crates(),
+        Some("workspace-crates") => list_workspace_crates(),
         Some(_) => Err("unknown sdk coverage subcommand".to_string()),
         None => Err("missing sdk coverage subcommand".to_string()),
     }
@@ -746,5 +809,13 @@ mod tests {
         let err = read_required_crates(&dup_path).expect_err("duplicate required crates");
         assert!(err.contains("duplicate crate a"));
         fs::remove_file(dup_path).expect("remove dup required crates");
+    }
+
+    #[test]
+    fn reads_workspace_crates_and_contains_xtask() {
+        let root = workspace_root().expect("workspace root");
+        let crates = read_workspace_crates(&root).expect("workspace crates");
+        assert!(!crates.is_empty());
+        assert!(crates.iter().any(|crate_name| crate_name == "xtask"));
     }
 }
