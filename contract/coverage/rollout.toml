@@ -70,7 +70,7 @@ order = 12
 
 [[rollout.crates]]
 name = "radroots-events-indexed"
-status = "planned"
+status = "required"
 order = 13
 
 [[rollout.crates]]

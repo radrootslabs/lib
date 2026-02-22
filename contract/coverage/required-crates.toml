@@ -11,6 +11,7 @@ crates = [
   "radroots-app-core",
   "radroots-app-ffi-swift",
   "radroots-app-wasm",
+  "radroots-events-indexed",
 ]
 
 [policy]
