@@ -60,7 +60,7 @@ order = 10
 
 [[rollout.crates]]
 name = "radroots-app-ffi-swift"
-status = "planned"
+status = "required"
 order = 11
 
 [[rollout.crates]]
