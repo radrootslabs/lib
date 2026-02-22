@@ -100,7 +100,7 @@ order = 18
 
 [[rollout.crates]]
 name = "radroots-nostr-ndb"
-status = "planned"
+status = "required"
 order = 19
 
 [[rollout.crates]]
