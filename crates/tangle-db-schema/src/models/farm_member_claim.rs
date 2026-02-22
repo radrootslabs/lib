@@ -86,11 +86,6 @@ impl FarmMemberClaimQueryBindValues {
 }
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
-#[derive(Clone, Deserialize, Serialize)]
-pub enum FarmMemberClaimFindManyRel {}
-
-#[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
     ts(
@@ -122,13 +117,6 @@ pub struct IFarmMemberClaimFindOneArgs {
 }
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
-#[derive(Deserialize, Serialize)]
-pub struct IFarmMemberClaimFindOneRelArgs {
-    pub rel: FarmMemberClaimFindManyRel,
-}
-
-#[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
     ts(export, export_to = "types.ts", rename = "IFarmMemberClaimFindOne")
@@ -137,7 +125,6 @@ pub struct IFarmMemberClaimFindOneRelArgs {
 #[serde(untagged)]
 pub enum IFarmMemberClaimFindOne {
     On(IFarmMemberClaimFindOneArgs),
-    Rel(IFarmMemberClaimFindOneRelArgs),
 }
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]

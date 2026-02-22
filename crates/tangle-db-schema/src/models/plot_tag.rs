@@ -84,11 +84,6 @@ impl PlotTagQueryBindValues {
 }
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
-#[derive(Clone, Deserialize, Serialize)]
-pub enum PlotTagFindManyRel {}
-
-#[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
     ts(
@@ -120,13 +115,6 @@ pub struct IPlotTagFindOneArgs {
 }
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
-#[derive(Deserialize, Serialize)]
-pub struct IPlotTagFindOneRelArgs {
-    pub rel: PlotTagFindManyRel,
-}
-
-#[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
     ts(export, export_to = "types.ts", rename = "IPlotTagFindOne")
@@ -135,7 +123,6 @@ pub struct IPlotTagFindOneRelArgs {
 #[serde(untagged)]
 pub enum IPlotTagFindOne {
     On(IPlotTagFindOneArgs),
-    Rel(IPlotTagFindOneRelArgs),
 }
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]

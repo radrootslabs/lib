@@ -27,8 +27,7 @@ pub fn create<E: SqlExecutor>(
     let params_json = utils::to_params_json(bind_values)?;
     let _ = exec.exec(&sql, &params_json)?;
     let on = GcsLocationQueryBindValues::Id { id: id.clone() };
-    let result =
-        find_one_by_on(exec, &on)?.ok_or_else(|| IError::from(SqlError::NotFound(id.clone())))?;
+    let result = find_one_by_on(exec, &on)?.ok_or(IError::from(SqlError::NotFound(id.clone())))?;
     Ok(IResult { result })
 }
 
@@ -136,7 +135,7 @@ fn select_by_id<E: SqlExecutor>(exec: &E, id: &str) -> Result<GcsLocation, IErro
     let json = exec.query_raw(&sql, &params_json)?;
     let mut rows: Vec<GcsLocation> = utils::parse_json(&json)?;
     rows.pop()
-        .ok_or_else(|| IError::from(SqlError::NotFound(id.to_owned())))
+        .ok_or(IError::from(SqlError::NotFound(id.to_owned())))
 }
 
 pub fn update<E: SqlExecutor>(
@@ -163,8 +162,7 @@ pub fn update<E: SqlExecutor>(
         Some(id) => id,
         None => {
             let found = find_one_by_on(exec, &opts.on)?;
-            let model =
-                found.ok_or_else(|| IError::from(SqlError::NotFound(opts.on.lookup_key())))?;
+            let model = found.ok_or(IError::from(SqlError::NotFound(opts.on.lookup_key())))?;
             model.id
         }
     };
@@ -188,15 +186,13 @@ pub fn delete<E: SqlExecutor>(
             Some(id) => id,
             None => {
                 let found = find_one_by_on(exec, &args.on)?;
-                let model =
-                    found.ok_or_else(|| IError::from(SqlError::NotFound(args.on.lookup_key())))?;
+                let model = found.ok_or(IError::from(SqlError::NotFound(args.on.lookup_key())))?;
                 model.id
             }
         },
         IGcsLocationDelete::Rel(args) => {
             let found = find_one_by_rel(exec, &args.rel)?;
-            let model =
-                found.ok_or_else(|| IError::from(SqlError::NotFound(rel_lookup_key(&args.rel))))?;
+            let model = found.ok_or(IError::from(SqlError::NotFound(rel_lookup_key(&args.rel))))?;
             model.id
         }
     };

@@ -22,8 +22,3 @@ test_threads = 1
 no_default_features = true
 features = ["embedded"]
 test_threads = 1
-
-[profiles.crates."radroots-tangle-db"]
-no_default_features = false
-features = ["coverage-minimal"]
-test_threads = 1

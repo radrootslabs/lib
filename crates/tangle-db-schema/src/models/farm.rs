@@ -146,11 +146,6 @@ impl FarmQueryBindValues {
 }
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
-#[derive(Clone, Deserialize, Serialize)]
-pub enum FarmFindManyRel {}
-
-#[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
     ts(
@@ -182,13 +177,6 @@ pub struct IFarmFindOneArgs {
 }
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
-#[derive(Deserialize, Serialize)]
-pub struct IFarmFindOneRelArgs {
-    pub rel: FarmFindManyRel,
-}
-
-#[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
     ts(export, export_to = "types.ts", rename = "IFarmFindOne")
@@ -197,7 +185,6 @@ pub struct IFarmFindOneRelArgs {
 #[serde(untagged)]
 pub enum IFarmFindOne {
     On(IFarmFindOneArgs),
-    Rel(IFarmFindOneRelArgs),
 }
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]

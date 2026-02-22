@@ -3,8 +3,7 @@ use radroots_sql_core::{SqlExecutor, utils};
 use radroots_tangle_db_schema::plot_tag::{
     IPlotTagCreate, IPlotTagCreateResolve, IPlotTagDelete, IPlotTagDeleteResolve,
     IPlotTagFieldsFilter, IPlotTagFindMany, IPlotTagFindManyResolve, IPlotTagFindOne,
-    IPlotTagFindOneResolve, IPlotTagUpdate, IPlotTagUpdateResolve, PlotTag, PlotTagFindManyRel,
-    PlotTagQueryBindValues,
+    IPlotTagFindOneResolve, IPlotTagUpdate, IPlotTagUpdateResolve, PlotTag, PlotTagQueryBindValues,
 };
 use radroots_types::types::{IError, IResult, IResultList};
 use serde_json::Value;
@@ -27,8 +26,7 @@ pub fn create<E: SqlExecutor>(
     let params_json = utils::to_params_json(bind_values)?;
     let _ = exec.exec(&sql, &params_json)?;
     let on = PlotTagQueryBindValues::Id { id: id.clone() };
-    let result =
-        find_one_by_on(exec, &on)?.ok_or_else(|| IError::from(SqlError::NotFound(id.clone())))?;
+    let result = find_one_by_on(exec, &on)?.ok_or(IError::from(SqlError::NotFound(id.clone())))?;
     Ok(IResult { result })
 }
 
@@ -38,7 +36,6 @@ pub fn find_one<E: SqlExecutor>(
 ) -> Result<IPlotTagFindOneResolve, IError<SqlError>> {
     let result = match opts {
         IPlotTagFindOne::On(args) => find_one_by_on(exec, &args.on)?,
-        IPlotTagFindOne::Rel(args) => find_one_by_rel(exec, &args.rel)?,
     };
     Ok(IResult { result })
 }
@@ -74,29 +71,13 @@ fn find_one_by_on<E: SqlExecutor>(
     Ok(rows.pop())
 }
 
-fn rel_query(rel: &PlotTagFindManyRel) -> (&'static str, Vec<Value>) {
-    match *rel {}
-}
-
-fn find_one_by_rel<E: SqlExecutor>(
-    exec: &E,
-    rel: &PlotTagFindManyRel,
-) -> Result<Option<PlotTag>, IError<SqlError>> {
-    let (sql, bind_values) = rel_query(rel);
-    let params_json = utils::to_params_json(bind_values)?;
-    let sql = format!("{sql} LIMIT 1;");
-    let json = exec.query_raw(&sql, &params_json)?;
-    let mut rows: Vec<PlotTag> = utils::parse_json(&json)?;
-    Ok(rows.pop())
-}
-
 fn select_by_id<E: SqlExecutor>(exec: &E, id: &str) -> Result<PlotTag, IError<SqlError>> {
     let params_json = utils::to_params_json(vec![Value::from(id.to_owned())])?;
     let sql = format!("SELECT * FROM {TABLE_NAME} WHERE id = ?;");
     let json = exec.query_raw(&sql, &params_json)?;
     let mut rows: Vec<PlotTag> = utils::parse_json(&json)?;
     rows.pop()
-        .ok_or_else(|| IError::from(SqlError::NotFound(id.to_owned())))
+        .ok_or(IError::from(SqlError::NotFound(id.to_owned())))
 }
 
 pub fn update<E: SqlExecutor>(
@@ -123,8 +104,7 @@ pub fn update<E: SqlExecutor>(
         Some(id) => id,
         None => {
             let found = find_one_by_on(exec, &opts.on)?;
-            let model =
-                found.ok_or_else(|| IError::from(SqlError::NotFound(opts.on.lookup_key())))?;
+            let model = found.ok_or(IError::from(SqlError::NotFound(opts.on.lookup_key())))?;
             model.id
         }
     };
@@ -148,17 +128,10 @@ pub fn delete<E: SqlExecutor>(
             Some(id) => id,
             None => {
                 let found = find_one_by_on(exec, &args.on)?;
-                let model =
-                    found.ok_or_else(|| IError::from(SqlError::NotFound(args.on.lookup_key())))?;
+                let model = found.ok_or(IError::from(SqlError::NotFound(args.on.lookup_key())))?;
                 model.id
             }
         },
-        IPlotTagDelete::Rel(args) => {
-            let found = find_one_by_rel(exec, &args.rel)?;
-            let model =
-                found.ok_or_else(|| IError::from(SqlError::NotFound(rel_lookup_key(&args.rel))))?;
-            model.id
-        }
     };
     let params_json = utils::to_params_json(vec![Value::from(id_for_lookup.clone())])?;
     let sql = format!("DELETE FROM {TABLE_NAME} WHERE id = ?;");
@@ -169,8 +142,4 @@ pub fn delete<E: SqlExecutor>(
     Ok(IResult {
         result: id_for_lookup,
     })
-}
-
-fn rel_lookup_key(rel: &PlotTagFindManyRel) -> String {
-    match *rel {}
 }

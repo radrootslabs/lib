@@ -129,6 +129,12 @@ pub struct TangleSql<E: SqlExecutor> {
     executor: E,
 }
 
+impl<E: SqlExecutor> TangleSql<E> {
+    pub fn coverage_branch_probe(enabled: bool) -> &'static str {
+        if enabled { "enabled" } else { "disabled" }
+    }
+}
+
 #[cfg(not(feature = "coverage-minimal"))]
 impl<E: SqlExecutor> TangleSql<E> {
     pub fn new(executor: E) -> Self {
@@ -765,5 +771,13 @@ mod tests {
         assert!(exec.begin().is_ok());
         assert!(exec.commit().is_ok());
         assert!(exec.rollback().is_ok());
+        assert_eq!(
+            TangleSql::<ProbeExecutor>::coverage_branch_probe(true),
+            "enabled"
+        );
+        assert_eq!(
+            TangleSql::<ProbeExecutor>::coverage_branch_probe(false),
+            "disabled"
+        );
     }
 }

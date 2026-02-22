@@ -164,11 +164,6 @@ impl TradeProductQueryBindValues {
     }
 }
 #[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
-#[derive(Clone, Deserialize, Serialize)]
-pub enum TradeProductFindManyRel {}
-
-#[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
     ts(
@@ -200,13 +195,6 @@ pub struct ITradeProductFindOneArgs {
 }
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
-#[derive(Deserialize, Serialize)]
-pub struct ITradeProductFindOneRelArgs {
-    pub rel: TradeProductFindManyRel,
-}
-
-#[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
     ts(export, export_to = "types.ts", rename = "ITradeProductFindOne")
@@ -215,7 +203,6 @@ pub struct ITradeProductFindOneRelArgs {
 #[serde(untagged)]
 pub enum ITradeProductFindOne {
     On(ITradeProductFindOneArgs),
-    Rel(ITradeProductFindOneRelArgs),
 }
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]

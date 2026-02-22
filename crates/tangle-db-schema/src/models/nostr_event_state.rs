@@ -111,11 +111,6 @@ impl NostrEventStateQueryBindValues {
 }
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
-#[derive(Clone, Deserialize, Serialize)]
-pub enum NostrEventStateFindManyRel {}
-
-#[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
     ts(
@@ -147,13 +142,6 @@ pub struct INostrEventStateFindOneArgs {
 }
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
-#[derive(Deserialize, Serialize)]
-pub struct INostrEventStateFindOneRelArgs {
-    pub rel: NostrEventStateFindManyRel,
-}
-
-#[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(
     feature = "ts-rs",
     ts(export, export_to = "types.ts", rename = "INostrEventStateFindOne")
@@ -162,7 +150,6 @@ pub struct INostrEventStateFindOneRelArgs {
 #[serde(untagged)]
 pub enum INostrEventStateFindOne {
     On(INostrEventStateFindOneArgs),
-    Rel(INostrEventStateFindOneRelArgs),
 }
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
