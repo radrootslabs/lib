@@ -8,6 +8,7 @@ crates = [
   "radroots-events-codec",
   "radroots-events-codec-wasm",
   "radroots-tangle-db-schema",
+  "radroots-app-core",
 ]
 
 [policy]

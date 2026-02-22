@@ -55,7 +55,7 @@ order = 9
 
 [[rollout.crates]]
 name = "radroots-app-core"
-status = "planned"
+status = "required"
 order = 10
 
 [[rollout.crates]]
