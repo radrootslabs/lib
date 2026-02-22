@@ -156,3 +156,89 @@ pub(crate) fn parse_hex_32(
     out.copy_from_slice(bytes.as_slice());
     Ok(out)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn valid_hex_32(value: u8) -> String {
+        format!("{value:02x}").repeat(32)
+    }
+
+    #[test]
+    fn filter_spec_builders_and_accessors_round_trip() {
+        let event_id = valid_hex_32(0x11);
+        let author = valid_hex_32(0x22);
+
+        let empty_notes = RadrootsNostrNdbFilterSpec::text_notes(None, None);
+        assert_eq!(empty_notes.kinds(), &[1]);
+        assert_eq!(empty_notes.limit(), None);
+        assert_eq!(empty_notes.since_unix(), None);
+
+        let spec = RadrootsNostrNdbFilterSpec::text_notes(Some(50), Some(100))
+            .with_event_id_hex(event_id.clone())
+            .with_author_hex(author.clone())
+            .with_kind(30023)
+            .with_since_unix(200)
+            .with_until_unix(300)
+            .with_limit(10)
+            .with_search("coffee");
+
+        assert_eq!(spec.event_ids_hex(), &[event_id.clone()]);
+        assert_eq!(spec.authors_hex(), &[author.clone()]);
+        assert_eq!(spec.kinds(), &[1, 30023]);
+        assert_eq!(spec.since_unix(), Some(200));
+        assert_eq!(spec.until_unix(), Some(300));
+        assert_eq!(spec.limit(), Some(10));
+        assert_eq!(spec.search(), Some("coffee"));
+        let _ = spec.to_ndb_filter().expect("ndb filter");
+
+        let empty = RadrootsNostrNdbFilterSpec::new();
+        let _ = empty.to_ndb_filter().expect("empty ndb filter");
+    }
+
+    #[test]
+    fn parse_hex_32_validates_input() {
+        let valid = parse_hex_32(valid_hex_32(0xab).as_str(), "value").expect("valid");
+        assert_eq!(valid, [0xab; 32]);
+
+        let invalid_hex = parse_hex_32("zz", "value");
+        assert!(matches!(
+            invalid_hex,
+            Err(RadrootsNostrNdbError::InvalidHex { field: "value", .. })
+        ));
+
+        let invalid_len = parse_hex_32("abcd", "value");
+        assert!(matches!(
+            invalid_len,
+            Err(RadrootsNostrNdbError::InvalidHexLength {
+                field: "value",
+                expected: 32,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn to_ndb_filter_rejects_invalid_event_id_and_author_hex() {
+        let bad_event_id = RadrootsNostrNdbFilterSpec::new().with_event_id_hex("not-hex");
+        let bad_event_result = bad_event_id.to_ndb_filter();
+        assert!(matches!(
+            bad_event_result,
+            Err(RadrootsNostrNdbError::InvalidHex {
+                field: "event_id",
+                ..
+            })
+        ));
+
+        let bad_author = RadrootsNostrNdbFilterSpec::new().with_author_hex("not-hex");
+        let bad_author_result = bad_author.to_ndb_filter();
+        assert!(matches!(
+            bad_author_result,
+            Err(RadrootsNostrNdbError::InvalidHex {
+                field: "author",
+                ..
+            })
+        ));
+    }
+}

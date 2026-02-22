@@ -10,6 +10,10 @@ pub struct RadrootsNostrNdbEventStoreAdapter {
     source: RadrootsNostrNdbIngestSource,
 }
 
+fn ndb_error_to_string(source: crate::error::RadrootsNostrNdbError) -> String {
+    source.to_string()
+}
+
 impl RadrootsNostrNdbEventStoreAdapter {
     pub fn new(ndb: RadrootsNostrNdb) -> Self {
         Self {
@@ -31,7 +35,7 @@ impl RadrootsNostrNdbEventStoreAdapter {
 impl RadrootsNostrEventStore for RadrootsNostrNdb {
     fn ingest_event(&self, event: &RadrootsNostrEvent) -> Result<(), String> {
         RadrootsNostrNdb::ingest_event(self, event, RadrootsNostrNdbIngestSource::client())
-            .map_err(|source| source.to_string())
+            .map_err(ndb_error_to_string)
     }
 }
 
@@ -39,7 +43,7 @@ impl RadrootsNostrEventStore for RadrootsNostrNdbEventStoreAdapter {
     fn ingest_event(&self, event: &RadrootsNostrEvent) -> Result<(), String> {
         self.ndb
             .ingest_event(event, self.source.clone())
-            .map_err(|source| source.to_string())
+            .map_err(ndb_error_to_string)
     }
 }
 
@@ -88,5 +92,31 @@ mod tests {
         store
             .ingest_event(&event)
             .expect("boxed store should ingest event");
+    }
+
+    #[test]
+    fn ndb_can_be_boxed_as_store_trait() {
+        let tmp_dir = TempDir::new().expect("tempdir should open");
+        let db_dir = tmp_dir.path().join("ndb");
+        let config = RadrootsNostrNdbConfig::new(&db_dir);
+        let ndb = RadrootsNostrNdb::open(config).expect("database should open");
+        let store: Arc<dyn RadrootsNostrEventStore> = Arc::new(ndb.clone());
+
+        let keys = RadrootsNostrKeys::generate();
+        let event = RadrootsNostrEventBuilder::text_note("hello ndb trait object")
+            .sign_with_keys(&keys)
+            .expect("event should sign");
+
+        store
+            .ingest_event(&event)
+            .expect("ndb trait object should ingest event");
+    }
+
+    #[test]
+    fn runtime_adapter_error_to_string_converts() {
+        let rendered = ndb_error_to_string(crate::error::RadrootsNostrNdbError::Ndb(
+            "ndb error".to_string(),
+        ));
+        assert_eq!(rendered, "nostrdb error: ndb error");
     }
 }

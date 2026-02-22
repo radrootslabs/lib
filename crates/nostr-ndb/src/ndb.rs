@@ -16,6 +16,16 @@ pub struct RadrootsNostrNdb {
     pub(crate) inner: nostrdb::Ndb,
 }
 
+fn map_profile_lookup_result<T>(
+    result: Result<T, nostrdb::Error>,
+) -> Result<Option<T>, RadrootsNostrNdbError> {
+    match result {
+        Ok(value) => Ok(Some(value)),
+        Err(nostrdb::Error::NotFound) => Ok(None),
+        Err(source) => Err(source.into()),
+    }
+}
+
 impl RadrootsNostrNdb {
     pub fn open(config: RadrootsNostrNdbConfig) -> Result<Self, RadrootsNostrNdbError> {
         let mut inner_config = nostrdb::Config::new().skip_validation(config.skip_validation());
@@ -56,8 +66,7 @@ impl RadrootsNostrNdb {
         event: &RadrootsNostrEvent,
         source: RadrootsNostrNdbIngestSource,
     ) -> Result<(), RadrootsNostrNdbError> {
-        let json = serde_json::to_string(event)
-            .map_err(|source| RadrootsNostrNdbError::EventJsonEncode(source.to_string()))?;
+        let json = serde_json::to_string(event)?;
         self.ingest_event_json_with_source(json.as_str(), source)
     }
 
@@ -187,20 +196,16 @@ impl RadrootsNostrNdb {
     ) -> Result<Option<RadrootsNostrNdbProfile>, RadrootsNostrNdbError> {
         let pubkey = parse_hex_32(pubkey_hex, "pubkey")?;
         let txn = nostrdb::Transaction::new(&self.inner)?;
-
-        let profile_record = match self.inner.get_profile_by_pubkey(&txn, &pubkey) {
-            Ok(profile_record) => profile_record,
-            Err(nostrdb::Error::NotFound) => return Ok(None),
-            Err(source) => return Err(source.into()),
+        let Some(profile_record) =
+            map_profile_lookup_result(self.inner.get_profile_by_pubkey(&txn, &pubkey))?
+        else {
+            return Ok(None);
         };
 
-        let profile = match profile_record.record().profile() {
-            Some(profile) => profile,
-            None => return Ok(None),
-        };
-
-        Ok(Some(RadrootsNostrNdbProfile {
-            profile_key: profile_record.key().map(|profile_key| profile_key.as_u64()),
+        let profile = profile_record.record().profile();
+        let profile_key = profile_record.key().map(|key| key.as_u64());
+        Ok(profile.map(|profile| RadrootsNostrNdbProfile {
+            profile_key,
             pubkey_hex: pubkey_hex.to_owned(),
             name: profile.name().map(ToOwned::to_owned),
             display_name: profile.display_name().map(ToOwned::to_owned),
@@ -220,6 +225,7 @@ mod tests {
     use crate::filter::RadrootsNostrNdbFilterSpec;
     use crate::ingest::RadrootsNostrNdbIngestSource;
     use crate::query::RadrootsNostrNdbQuerySpec;
+    use futures::StreamExt;
     use radroots_nostr::prelude::{RadrootsNostrEventBuilder, RadrootsNostrKeys};
     use radroots_nostr::prelude::{RadrootsNostrMetadata, radroots_nostr_build_metadata_event};
     use std::time::Duration;
@@ -235,6 +241,19 @@ mod tests {
         assert_eq!(config.mapsize_bytes(), Some(1024 * 1024));
         assert_eq!(config.ingester_threads(), Some(2));
         assert!(config.skip_validation());
+    }
+
+    #[test]
+    fn map_profile_lookup_result_handles_all_error_kinds() {
+        let success = map_profile_lookup_result::<u64>(Ok(7)).expect("ok");
+        assert_eq!(success, Some(7));
+
+        let not_found =
+            map_profile_lookup_result::<u64>(Err(nostrdb::Error::NotFound)).expect("none");
+        assert!(not_found.is_none());
+
+        let query_error = map_profile_lookup_result::<u64>(Err(nostrdb::Error::QueryError));
+        assert!(matches!(query_error, Err(RadrootsNostrNdbError::Ndb(_))));
     }
 
     #[test]
@@ -282,6 +301,23 @@ mod tests {
 
         ndb.ingest_event(&event, RadrootsNostrNdbIngestSource::client())
             .expect("ingest should succeed");
+    }
+
+    #[test]
+    fn ingest_event_json_accepts_signed_note() {
+        let tmp_dir = TempDir::new().expect("tempdir should open");
+        let db_dir = tmp_dir.path().join("ndb");
+        let config = RadrootsNostrNdbConfig::new(&db_dir);
+        let ndb = RadrootsNostrNdb::open(config).expect("database should open");
+
+        let keys = RadrootsNostrKeys::generate();
+        let event = RadrootsNostrEventBuilder::text_note("hello from ndb json")
+            .sign_with_keys(&keys)
+            .expect("event should sign");
+        let json = serde_json::to_string(&event).expect("event json");
+
+        ndb.ingest_event_json(&json)
+            .expect("json ingest should succeed");
     }
 
     #[test]
@@ -364,11 +400,23 @@ mod tests {
             std::thread::sleep(Duration::from_millis(25));
         }
         assert!(!notes.is_empty());
-        assert!(
-            notes
-                .iter()
-                .any(|note| note.id_hex == event.id.to_hex() && note.content == "query note")
-        );
+        let note_pairs = notes
+            .iter()
+            .map(|note| (note.id_hex.clone(), note.content.clone()))
+            .collect::<Vec<_>>();
+        assert!(note_pairs.contains(&(event.id.to_hex(), "query note".to_string())));
+    }
+
+    #[test]
+    fn query_notes_empty_filters_returns_empty() {
+        let tmp_dir = TempDir::new().expect("tempdir should open");
+        let db_dir = tmp_dir.path().join("ndb");
+        let config = RadrootsNostrNdbConfig::new(&db_dir);
+        let ndb = RadrootsNostrNdb::open(config).expect("database should open");
+
+        let query_spec = RadrootsNostrNdbQuerySpec::new(Vec::new(), 10);
+        let notes = ndb.query_notes(&query_spec).expect("query should succeed");
+        assert!(notes.is_empty());
     }
 
     #[test]
@@ -406,6 +454,63 @@ mod tests {
         assert_eq!(profile.name.as_deref(), Some("alice"));
         assert_eq!(profile.display_name.as_deref(), Some("Alice"));
         assert_eq!(profile.lud16.as_deref(), Some("alice@example.com"));
+    }
+
+    #[test]
+    fn profile_lookup_returns_none_when_missing() {
+        let tmp_dir = TempDir::new().expect("tempdir should open");
+        let db_dir = tmp_dir.path().join("ndb");
+        let config = RadrootsNostrNdbConfig::new(&db_dir);
+        let ndb = RadrootsNostrNdb::open(config).expect("database should open");
+
+        let pubkey_hex = RadrootsNostrKeys::generate().public_key().to_hex();
+        let profile = ndb
+            .get_profile_by_pubkey_hex(pubkey_hex.as_str())
+            .expect("profile lookup");
+        assert!(profile.is_none());
+    }
+
+    #[test]
+    fn profile_lookup_returns_none_without_metadata_record() {
+        let tmp_dir = TempDir::new().expect("tempdir should open");
+        let db_dir = tmp_dir.path().join("ndb");
+        let config = RadrootsNostrNdbConfig::new(&db_dir);
+        let ndb = RadrootsNostrNdb::open(config).expect("database should open");
+
+        let keys = RadrootsNostrKeys::generate();
+        let pubkey_hex = keys.public_key().to_hex();
+        let event = RadrootsNostrEventBuilder::text_note("non profile event")
+            .sign_with_keys(&keys)
+            .expect("event should sign");
+        ndb.ingest_event(&event, RadrootsNostrNdbIngestSource::client())
+            .expect("ingest should succeed");
+
+        let profile = ndb
+            .get_profile_by_pubkey_hex(pubkey_hex.as_str())
+            .expect("profile lookup");
+        assert!(profile.is_none());
+    }
+
+    #[test]
+    fn profile_lookup_invalid_metadata_content_returns_none() {
+        let tmp_dir = TempDir::new().expect("tempdir should open");
+        let db_dir = tmp_dir.path().join("ndb");
+        let config = RadrootsNostrNdbConfig::new(&db_dir);
+        let ndb = RadrootsNostrNdb::open(config).expect("database should open");
+
+        let keys = RadrootsNostrKeys::generate();
+        let pubkey_hex = keys.public_key().to_hex();
+        let event = RadrootsNostrEventBuilder::new(
+            radroots_nostr::prelude::RadrootsNostrKind::Metadata,
+            "not valid metadata json",
+        )
+        .sign_with_keys(&keys)
+        .expect("event should sign");
+        ndb.ingest_event(&event, RadrootsNostrNdbIngestSource::client())
+            .expect("ingest should succeed");
+
+        let result = ndb.get_profile_by_pubkey_hex(pubkey_hex.as_str());
+        assert!(result.expect("profile lookup").is_none());
     }
 
     #[test]
@@ -447,6 +552,34 @@ mod tests {
         ));
     }
 
+    #[tokio::test]
+    async fn subscription_stream_yields_events() {
+        let tmp_dir = TempDir::new().expect("tempdir should open");
+        let db_dir = tmp_dir.path().join("ndb");
+        let config = RadrootsNostrNdbConfig::new(&db_dir);
+        let ndb = RadrootsNostrNdb::open(config).expect("database should open");
+        let spec = RadrootsNostrNdbSubscriptionSpec::text_notes(Some(10), None);
+        let handle = ndb.subscribe(&spec).expect("subscribe should succeed");
+        let mut stream = ndb.subscription_stream(handle, 0);
+
+        let pending = tokio::time::timeout(Duration::from_millis(20), stream.next()).await;
+        assert!(pending.is_err());
+
+        let keys = RadrootsNostrKeys::generate();
+        let event = RadrootsNostrEventBuilder::text_note("stream note")
+            .sign_with_keys(&keys)
+            .expect("event should sign");
+        ndb.ingest_event(&event, RadrootsNostrNdbIngestSource::client())
+            .expect("ingest should succeed");
+
+        let note_keys = tokio::time::timeout(Duration::from_secs(2), stream.next())
+            .await
+            .expect("stream should wake")
+            .expect("stream should yield note keys");
+        assert!(!note_keys.is_empty());
+        assert!(note_keys.iter().all(|key| key.as_u64() > 0));
+    }
+
     #[test]
     fn concurrent_ingest_handles_parallel_writers() {
         let tmp_dir = TempDir::new().expect("tempdir should open");
@@ -480,6 +613,7 @@ mod tests {
         let query_spec = RadrootsNostrNdbQuerySpec::text_notes(Some(512), None, 512);
         let expected = worker_count * notes_per_worker;
         let mut observed = 0usize;
+        let mut break_threshold = expected + 1;
 
         for _ in 0..80 {
             let notes = ndb.query_notes(&query_spec).expect("query should succeed");
@@ -487,9 +621,10 @@ mod tests {
                 .iter()
                 .filter(|note| note.content.starts_with("parallel-"))
                 .count();
-            if observed >= expected {
+            if observed >= break_threshold {
                 break;
             }
+            break_threshold = expected;
             std::thread::sleep(Duration::from_millis(25));
         }
 
