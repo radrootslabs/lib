@@ -45,7 +45,7 @@ order = 7
 
 [[rollout.crates]]
 name = "radroots-tangle-db-schema"
-status = "planned"
+status = "required"
 order = 8
 
 [[rollout.crates]]
