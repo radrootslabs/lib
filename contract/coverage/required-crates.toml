@@ -26,6 +26,7 @@ crates = [
   "radroots-tangle-events",
   "radroots-tangle-db",
   "radroots-tangle-events-wasm",
+  "radroots-tangle-db-wasm",
 ]
 
 [policy]

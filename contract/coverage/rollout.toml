@@ -145,5 +145,5 @@ order = 27
 
 [[rollout.crates]]
 name = "radroots-tangle-db-wasm"
-status = "planned"
+status = "required"
 order = 28
