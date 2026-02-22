@@ -85,7 +85,7 @@ order = 15
 
 [[rollout.crates]]
 name = "radroots-net"
-status = "planned"
+status = "required"
 order = 16
 
 [[rollout.crates]]
