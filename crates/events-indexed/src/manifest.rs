@@ -90,9 +90,9 @@ mod tests {
         RadrootsEventsIndexedShardMetadata, validate_manifest,
     };
     #[cfg(not(feature = "std"))]
-    use alloc::{string::String, vec, vec::Vec};
+    use alloc::{format, string::String, vec, vec::Vec};
     #[cfg(feature = "std")]
-    use std::{string::String, vec::Vec};
+    use std::{format, string::String, vec::Vec};
 
     fn shard(file: &str, count: u32, sha256: &str) -> RadrootsEventsIndexedShardMetadata {
         RadrootsEventsIndexedShardMetadata {
@@ -154,6 +154,15 @@ mod tests {
     }
 
     #[test]
+    fn validate_manifest_rejects_invalid_sha256_with_valid_length() {
+        let mut m = base_manifest();
+        m.shards[0].sha256 =
+            String::from("g123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
+        let err = validate_manifest(&m).unwrap_err();
+        assert_eq!(err, RadrootsEventsIndexedManifestError::InvalidSha256(0));
+    }
+
+    #[test]
     fn validate_manifest_rejects_total_overflow() {
         let m = RadrootsEventsIndexedManifest {
             country: String::from("us"),
@@ -189,5 +198,44 @@ mod tests {
 
         let err = validate_manifest(&m).unwrap_err();
         assert_eq!(err, RadrootsEventsIndexedManifestError::InconsistentTotals);
+    }
+
+    #[test]
+    fn validate_manifest_rejects_mismatched_total_without_overflow() {
+        let mut m = base_manifest();
+        m.total = 2;
+        let err = validate_manifest(&m).unwrap_err();
+        assert_eq!(err, RadrootsEventsIndexedManifestError::InconsistentTotals);
+    }
+
+    #[test]
+    fn validate_manifest_accepts_consistent_totals() {
+        let m = base_manifest();
+        let result = validate_manifest(&m);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn manifest_error_display_messages_are_stable() {
+        assert_eq!(
+            format!("{}", RadrootsEventsIndexedManifestError::EmptyCountry),
+            "country is empty"
+        );
+        assert_eq!(
+            format!("{}", RadrootsEventsIndexedManifestError::EmptyShards),
+            "no shards in manifest"
+        );
+        assert_eq!(
+            format!("{}", RadrootsEventsIndexedManifestError::EmptyFile(3)),
+            "shard 3 has empty file name"
+        );
+        assert_eq!(
+            format!("{}", RadrootsEventsIndexedManifestError::InvalidSha256(4)),
+            "shard 4 has invalid sha256"
+        );
+        assert_eq!(
+            format!("{}", RadrootsEventsIndexedManifestError::InconsistentTotals),
+            "total does not match sum of shard counts"
+        );
     }
 }

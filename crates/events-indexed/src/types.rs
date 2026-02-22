@@ -74,4 +74,31 @@ mod tests {
         };
         assert!(range.is_valid());
     }
+
+    #[test]
+    fn id_range_rejects_empty_bounds() {
+        let range = RadrootsEventsIndexedIdRange {
+            start: String::new(),
+            end: String::from("0f"),
+        };
+        assert!(!range.is_valid());
+    }
+
+    #[test]
+    fn id_range_rejects_empty_end() {
+        let range = RadrootsEventsIndexedIdRange {
+            start: String::from("0f"),
+            end: String::new(),
+        };
+        assert!(!range.is_valid());
+    }
+
+    #[test]
+    fn id_range_rejects_non_hex_end() {
+        let range = RadrootsEventsIndexedIdRange {
+            start: String::from("0f"),
+            end: String::from("zz"),
+        };
+        assert!(!range.is_valid());
+    }
 }
