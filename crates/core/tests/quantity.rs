@@ -172,6 +172,8 @@ fn try_convert_to_rejects_mismatched_dimensions() {
 #[test]
 fn try_convert_to_same_unit_returns_self_clone() {
     let q = common::qty("2", RadrootsCoreUnit::MassG).with_label("x");
-    let converted = q.try_convert_to(RadrootsCoreUnit::MassG).expect("same unit");
+    let converted = q
+        .try_convert_to(RadrootsCoreUnit::MassG)
+        .expect("same unit");
     assert_eq!(converted, q);
 }

@@ -145,7 +145,9 @@ fn try_to_unit_price_error_and_same_unit_paths_are_exercised() {
     assert_eq!(same.quantity.amount, common::dec("1"));
     assert_eq!(same.amount.amount, common::dec("2.5"));
 
-    let err = base.try_to_unit_price(RadrootsCoreUnit::VolumeMl).unwrap_err();
+    let err = base
+        .try_to_unit_price(RadrootsCoreUnit::VolumeMl)
+        .unwrap_err();
     assert_eq!(
         err,
         RadrootsCoreQuantityPriceError::NonConvertibleUnits {
@@ -169,7 +171,12 @@ fn cost_for_and_quantized_price_zero_paths_are_exercised() {
         common::money("3.33", "USD"),
         common::qty("0", RadrootsCoreUnit::Each),
     );
-    assert!(zero_per.cost_for(&common::qty("1", RadrootsCoreUnit::Each)).amount.is_zero());
+    assert!(
+        zero_per
+            .cost_for(&common::qty("1", RadrootsCoreUnit::Each))
+            .amount
+            .is_zero()
+    );
     assert!(
         zero_per
             .cost_for_with_quantized_price(&common::qty("1", RadrootsCoreUnit::Each))
@@ -178,7 +185,11 @@ fn cost_for_and_quantized_price_zero_paths_are_exercised() {
     );
 
     let mismatch_qty = common::qty("1", RadrootsCoreUnit::MassG);
-    assert!(p.cost_for_with_quantized_price(&mismatch_qty).amount.is_zero());
+    assert!(
+        p.cost_for_with_quantized_price(&mismatch_qty)
+            .amount
+            .is_zero()
+    );
 }
 
 #[test]
@@ -187,7 +198,9 @@ fn try_to_unit_price_detects_underflow_to_zero_normalized_amount() {
         common::money("1", "USD"),
         common::qty("0.0000000000000000000000000001", RadrootsCoreUnit::VolumeMl),
     );
-    let err = tiny.try_to_unit_price(RadrootsCoreUnit::VolumeL).unwrap_err();
+    let err = tiny
+        .try_to_unit_price(RadrootsCoreUnit::VolumeL)
+        .unwrap_err();
     assert_eq!(err, RadrootsCoreQuantityPriceError::PerQuantityZero);
 }
 

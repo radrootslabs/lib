@@ -82,8 +82,13 @@ mod ts_export_tests {
         export_types();
         let path = ts_export_dir().join("types.ts");
         let raw = fs::read_to_string(path).expect("read generated core types");
-        for literal in ["\"each\"", "\"kg\"", "\"g\"", "\"oz\"", "\"lb\"", "\"l\"", "\"ml\""] {
-            assert!(raw.contains(literal), "missing core unit literal: {literal}");
+        for literal in [
+            "\"each\"", "\"kg\"", "\"g\"", "\"oz\"", "\"lb\"", "\"l\"", "\"ml\"",
+        ] {
+            assert!(
+                raw.contains(literal),
+                "missing core unit literal: {literal}"
+            );
         }
         for literal in ["\"count\"", "\"mass\"", "\"volume\""] {
             assert!(
