@@ -95,7 +95,7 @@ order = 17
 
 [[rollout.crates]]
 name = "radroots-nostr-accounts"
-status = "planned"
+status = "required"
 order = 18
 
 [[rollout.crates]]

@@ -16,6 +16,7 @@ crates = [
   "radroots-net-core",
   "radroots-net",
   "radroots-nostr",
+  "radroots-nostr-accounts",
 ]
 
 [policy]
