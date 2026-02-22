@@ -10,6 +10,7 @@ crates = [
   "radroots-tangle-db-schema",
   "radroots-app-core",
   "radroots-app-ffi-swift",
+  "radroots-app-wasm",
 ]
 
 [policy]

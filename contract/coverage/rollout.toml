@@ -65,7 +65,7 @@ order = 11
 
 [[rollout.crates]]
 name = "radroots-app-wasm"
-status = "planned"
+status = "required"
 order = 12
 
 [[rollout.crates]]
