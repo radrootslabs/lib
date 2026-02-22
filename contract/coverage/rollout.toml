@@ -105,7 +105,7 @@ order = 19
 
 [[rollout.crates]]
 name = "radroots-nostr-runtime"
-status = "planned"
+status = "required"
 order = 20
 
 [[rollout.crates]]
