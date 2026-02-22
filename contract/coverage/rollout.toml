@@ -115,7 +115,7 @@ order = 21
 
 [[rollout.crates]]
 name = "radroots-sql-core"
-status = "planned"
+status = "required"
 order = 22
 
 [[rollout.crates]]

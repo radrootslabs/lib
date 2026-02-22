@@ -20,6 +20,7 @@ crates = [
   "radroots-nostr-ndb",
   "radroots-nostr-runtime",
   "radroots-runtime",
+  "radroots-sql-core",
 ]
 
 [policy]
