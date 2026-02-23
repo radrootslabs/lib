@@ -170,13 +170,19 @@ mod tests {
     #[test]
     fn request_to_result_roundtrip_is_defined_for_request_response_pairs() {
         let pairs = [
-            (KIND_TRADE_LISTING_VALIDATE_REQ, KIND_TRADE_LISTING_VALIDATE_RES),
+            (
+                KIND_TRADE_LISTING_VALIDATE_REQ,
+                KIND_TRADE_LISTING_VALIDATE_RES,
+            ),
             (KIND_TRADE_LISTING_ORDER_REQ, KIND_TRADE_LISTING_ORDER_RES),
             (
                 KIND_TRADE_LISTING_ORDER_REVISION_REQ,
                 KIND_TRADE_LISTING_ORDER_REVISION_RES,
             ),
-            (KIND_TRADE_LISTING_QUESTION_REQ, KIND_TRADE_LISTING_ANSWER_RES),
+            (
+                KIND_TRADE_LISTING_QUESTION_REQ,
+                KIND_TRADE_LISTING_ANSWER_RES,
+            ),
             (
                 KIND_TRADE_LISTING_DISCOUNT_REQ,
                 KIND_TRADE_LISTING_DISCOUNT_OFFER_RES,
