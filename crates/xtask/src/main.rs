@@ -11,6 +11,7 @@ use std::process::ExitCode;
 fn usage() {
     eprintln!("usage:");
     eprintln!("  cargo xtask sdk export-ts [--out <dir>]");
+    eprintln!("  cargo xtask sdk export-ts-crate --crate <crate> [--out <dir>]");
     eprintln!("  cargo xtask sdk export-ts-models [--out <dir>]");
     eprintln!("  cargo xtask sdk export-ts-constants [--out <dir>]");
     eprintln!("  cargo xtask sdk export-ts-wasm [--out <dir>]");
@@ -43,6 +44,41 @@ fn parse_out_dir(args: &[String], workspace_root: &Path) -> Result<PathBuf, Stri
         return Ok(PathBuf::from(&args[1]));
     }
     Err("invalid export args, expected --out <dir>".to_string())
+}
+
+fn parse_crate_out_dir(
+    args: &[String],
+    workspace_root: &Path,
+) -> Result<(String, PathBuf), String> {
+    let mut crate_selector = None;
+    let mut out_dir = workspace_root.join("target").join("sdk-export");
+    let mut index = 0usize;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--crate" => {
+                let Some(value) = args.get(index + 1) else {
+                    return Err("invalid export args, expected --crate <crate>".to_string());
+                };
+                crate_selector = Some(value.clone());
+                index += 2;
+            }
+            "--out" => {
+                let Some(value) = args.get(index + 1) else {
+                    return Err("invalid export args, expected --out <dir>".to_string());
+                };
+                out_dir = PathBuf::from(value);
+                index += 2;
+            }
+            _ => {
+                return Err(
+                    "invalid export args, expected --crate <crate> [--out <dir>]".to_string(),
+                );
+            }
+        }
+    }
+    let crate_selector =
+        crate_selector.ok_or_else(|| "missing required --crate <crate>".to_string())?;
+    Ok((crate_selector, out_dir))
 }
 
 fn export_ts_models(args: &[String]) -> Result<(), String> {
@@ -86,6 +122,19 @@ fn export_ts(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+fn export_ts_crate(args: &[String]) -> Result<(), String> {
+    let root = workspace_root()?;
+    let (crate_selector, out_dir) = parse_crate_out_dir(args, &root)?;
+    let manifest = export_ts::export_ts_bundle_for_crate(&root, &out_dir, &crate_selector)?;
+    eprintln!(
+        "exported ts sdk crate {} to {}",
+        crate_selector,
+        out_dir.display()
+    );
+    eprintln!("wrote export manifest {}", manifest.display());
+    Ok(())
+}
+
 fn validate_contract() -> Result<(), String> {
     let root = workspace_root()?;
     let bundle = contract::load_contract_bundle(&root)?;
@@ -101,6 +150,7 @@ fn validate_contract() -> Result<(), String> {
 fn run_sdk(args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
         Some("export-ts") => export_ts(&args[1..]),
+        Some("export-ts-crate") => export_ts_crate(&args[1..]),
         Some("export-ts-models") => export_ts_models(&args[1..]),
         Some("export-ts-constants") => export_ts_constants(&args[1..]),
         Some("export-ts-wasm") => export_ts_wasm(&args[1..]),

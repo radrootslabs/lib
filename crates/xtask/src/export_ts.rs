@@ -43,6 +43,50 @@ fn ts_artifacts(mapping: &contract::ExportMapping) -> Result<&contract::ExportAr
         .ok_or_else(|| "missing ts artifacts mapping".to_string())
 }
 
+fn selected_package_entries<'a>(
+    mapping: &'a contract::ExportMapping,
+    selector: Option<&str>,
+) -> Result<Vec<(&'a String, &'a String)>, String> {
+    if let Some(selector) = selector {
+        if let Some(entry) = mapping.packages.get_key_value(selector) {
+            return Ok(vec![entry]);
+        }
+        if let Some(entry) = mapping
+            .packages
+            .iter()
+            .find(|(_, package_name)| package_name.as_str() == selector)
+        {
+            return Ok(vec![entry]);
+        }
+        if !selector.starts_with("radroots-") {
+            let crate_candidate = format!("radroots-{selector}");
+            if let Some(entry) = mapping.packages.get_key_value(&crate_candidate) {
+                return Ok(vec![entry]);
+            }
+        }
+        if !selector.starts_with("@radroots/") {
+            let package_candidate = format!("@radroots/{selector}");
+            if let Some(entry) = mapping
+                .packages
+                .iter()
+                .find(|(_, package_name)| package_name.as_str() == package_candidate)
+            {
+                return Ok(vec![entry]);
+            }
+        }
+        let known_crates = mapping
+            .packages
+            .keys()
+            .map(String::as_str)
+            .collect::<Vec<_>>()
+            .join(", ");
+        return Err(format!(
+            "unknown ts export crate selector {selector}; available crates: {known_crates}"
+        ));
+    }
+    Ok(mapping.packages.iter().collect())
+}
+
 fn required_artifact_value<'a>(value: &'a Option<String>, field: &str) -> Result<&'a str, String> {
     value
         .as_deref()
@@ -146,10 +190,15 @@ fn collect_manifest_entries(
     Ok(())
 }
 
-pub fn export_ts_models(workspace_root: &Path, out_dir: &Path) -> Result<(), String> {
+fn export_ts_models_with_selector(
+    workspace_root: &Path,
+    out_dir: &Path,
+    selector: Option<&str>,
+) -> Result<(), String> {
     let bundle = contract::load_contract_bundle(workspace_root)?;
     contract::validate_contract_bundle(&bundle)?;
     let ts_export = ts_export_mapping(&bundle)?;
+    let selected_entries = selected_package_entries(ts_export, selector)?;
     let artifacts = ts_artifacts(ts_export)?;
     let models_dir = required_artifact_value(&artifacts.models_dir, "models_dir")?;
     let source_root = workspace_root.join("target").join("ts-rs");
@@ -160,9 +209,14 @@ pub fn export_ts_models(workspace_root: &Path, out_dir: &Path) -> Result<(), Str
         ));
     }
     let ts_out_root = out_dir.join("ts").join("packages");
+    let mut expected = 0usize;
     let mut copied = 0usize;
-    for (crate_name, package_name) in &ts_export.packages {
+    for (crate_name, package_name) in selected_entries {
         let crate_dir = crate_name.strip_prefix("radroots-").unwrap_or(crate_name);
+        if crate_name.ends_with("-wasm") || !crate_supports_ts_rs(workspace_root, crate_dir)? {
+            continue;
+        }
+        expected += 1;
         let src = source_root.join(crate_dir).join("types.ts");
         let dst = to_package_dir(&ts_out_root, package_name)
             .join(models_dir)
@@ -171,20 +225,37 @@ pub fn export_ts_models(workspace_root: &Path, out_dir: &Path) -> Result<(), Str
             copied += 1;
         }
     }
-    if copied == 0 {
+    if expected > 0 && copied == 0 {
         return Err("no ts model files were exported".to_string());
     }
     Ok(())
 }
 
-pub fn export_ts_constants(workspace_root: &Path, out_dir: &Path) -> Result<(), String> {
+pub fn export_ts_models(workspace_root: &Path, out_dir: &Path) -> Result<(), String> {
+    export_ts_models_with_selector(workspace_root, out_dir, None)
+}
+
+pub fn export_ts_models_for_crate(
+    workspace_root: &Path,
+    out_dir: &Path,
+    crate_selector: &str,
+) -> Result<(), String> {
+    export_ts_models_with_selector(workspace_root, out_dir, Some(crate_selector))
+}
+
+fn export_ts_constants_with_selector(
+    workspace_root: &Path,
+    out_dir: &Path,
+    selector: Option<&str>,
+) -> Result<(), String> {
     let bundle = contract::load_contract_bundle(workspace_root)?;
     contract::validate_contract_bundle(&bundle)?;
     let ts_export = ts_export_mapping(&bundle)?;
+    let selected_entries = selected_package_entries(ts_export, selector)?;
     let artifacts = ts_artifacts(ts_export)?;
     let constants_dir = required_artifact_value(&artifacts.constants_dir, "constants_dir")?;
     let ts_out_root = out_dir.join("ts").join("packages");
-    for (crate_name, package_name) in &ts_export.packages {
+    for (crate_name, package_name) in selected_entries {
         let crate_dir = crate_name.strip_prefix("radroots-").unwrap_or(crate_name);
         let crate_root = workspace_root.join("crates").join(crate_dir);
         for filename in ["constants.ts", "kinds.ts"] {
@@ -210,15 +281,32 @@ pub fn export_ts_constants(workspace_root: &Path, out_dir: &Path) -> Result<(), 
     Ok(())
 }
 
-pub fn export_ts_wasm_artifacts(workspace_root: &Path, out_dir: &Path) -> Result<(), String> {
+pub fn export_ts_constants(workspace_root: &Path, out_dir: &Path) -> Result<(), String> {
+    export_ts_constants_with_selector(workspace_root, out_dir, None)
+}
+
+pub fn export_ts_constants_for_crate(
+    workspace_root: &Path,
+    out_dir: &Path,
+    crate_selector: &str,
+) -> Result<(), String> {
+    export_ts_constants_with_selector(workspace_root, out_dir, Some(crate_selector))
+}
+
+fn export_ts_wasm_artifacts_with_selector(
+    workspace_root: &Path,
+    out_dir: &Path,
+    selector: Option<&str>,
+) -> Result<(), String> {
     let bundle = contract::load_contract_bundle(workspace_root)?;
     contract::validate_contract_bundle(&bundle)?;
     let ts_export = ts_export_mapping(&bundle)?;
+    let selected_entries = selected_package_entries(ts_export, selector)?;
     let artifacts = ts_artifacts(ts_export)?;
     let wasm_dist_dir = required_artifact_value(&artifacts.wasm_dist_dir, "wasm_dist_dir")?;
     let ts_out_root = out_dir.join("ts").join("packages");
     let mut copied = 0usize;
-    for (crate_name, package_name) in &ts_export.packages {
+    for (crate_name, package_name) in selected_entries {
         if !crate_name.ends_with("-wasm") {
             continue;
         }
@@ -235,6 +323,18 @@ pub fn export_ts_wasm_artifacts(workspace_root: &Path, out_dir: &Path) -> Result
         return Ok(());
     }
     Ok(())
+}
+
+pub fn export_ts_wasm_artifacts(workspace_root: &Path, out_dir: &Path) -> Result<(), String> {
+    export_ts_wasm_artifacts_with_selector(workspace_root, out_dir, None)
+}
+
+pub fn export_ts_wasm_artifacts_for_crate(
+    workspace_root: &Path,
+    out_dir: &Path,
+    crate_selector: &str,
+) -> Result<(), String> {
+    export_ts_wasm_artifacts_with_selector(workspace_root, out_dir, Some(crate_selector))
 }
 
 pub fn write_ts_export_manifest(workspace_root: &Path, out_dir: &Path) -> Result<PathBuf, String> {
@@ -266,10 +366,14 @@ pub fn write_ts_export_manifest(workspace_root: &Path, out_dir: &Path) -> Result
     Ok(manifest_path)
 }
 
-pub fn generate_ts_rs_sources(workspace_root: &Path) -> Result<PathBuf, String> {
+fn generate_ts_rs_sources_with_selector(
+    workspace_root: &Path,
+    selector: Option<&str>,
+) -> Result<PathBuf, String> {
     let bundle = contract::load_contract_bundle(workspace_root)?;
     contract::validate_contract_bundle(&bundle)?;
     let ts_export = ts_export_mapping(&bundle)?;
+    let selected_entries = selected_package_entries(ts_export, selector)?;
     let source_root = workspace_root.join("target").join("ts-rs");
     if source_root.exists() {
         fs::remove_dir_all(&source_root)
@@ -277,8 +381,21 @@ pub fn generate_ts_rs_sources(workspace_root: &Path) -> Result<PathBuf, String> 
     }
     fs::create_dir_all(&source_root)
         .map_err(|e| format!("create {}: {e}", source_root.display()))?;
+    let mut expected = 0usize;
+    for (crate_name, _) in &selected_entries {
+        if crate_name.ends_with("-wasm") {
+            continue;
+        }
+        let crate_dir = crate_name.strip_prefix("radroots-").unwrap_or(crate_name);
+        if crate_supports_ts_rs(workspace_root, crate_dir)? {
+            expected += 1;
+        }
+    }
+    if expected == 0 {
+        return Ok(source_root);
+    }
     let mut generated = 0usize;
-    for (crate_name, package_name) in &ts_export.packages {
+    for (crate_name, package_name) in selected_entries {
         if crate_name.ends_with("-wasm") {
             continue;
         }
@@ -314,6 +431,17 @@ pub fn generate_ts_rs_sources(workspace_root: &Path) -> Result<PathBuf, String> 
     Ok(source_root)
 }
 
+pub fn generate_ts_rs_sources(workspace_root: &Path) -> Result<PathBuf, String> {
+    generate_ts_rs_sources_with_selector(workspace_root, None)
+}
+
+pub fn generate_ts_rs_sources_for_crate(
+    workspace_root: &Path,
+    crate_selector: &str,
+) -> Result<PathBuf, String> {
+    generate_ts_rs_sources_with_selector(workspace_root, Some(crate_selector))
+}
+
 pub fn export_ts_bundle(workspace_root: &Path, out_dir: &Path) -> Result<PathBuf, String> {
     generate_ts_rs_sources(workspace_root)?;
     export_ts_models(workspace_root, out_dir)?;
@@ -322,9 +450,22 @@ pub fn export_ts_bundle(workspace_root: &Path, out_dir: &Path) -> Result<PathBuf
     write_ts_export_manifest(workspace_root, out_dir)
 }
 
+pub fn export_ts_bundle_for_crate(
+    workspace_root: &Path,
+    out_dir: &Path,
+    crate_selector: &str,
+) -> Result<PathBuf, String> {
+    generate_ts_rs_sources_for_crate(workspace_root, crate_selector)?;
+    export_ts_models_for_crate(workspace_root, out_dir, crate_selector)?;
+    export_ts_constants_for_crate(workspace_root, out_dir, crate_selector)?;
+    export_ts_wasm_artifacts_for_crate(workspace_root, out_dir, crate_selector)?;
+    write_ts_export_manifest(workspace_root, out_dir)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeMap;
     use std::sync::{Mutex, OnceLock};
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -347,6 +488,60 @@ mod tests {
             .expect("system time")
             .as_nanos();
         std::env::temp_dir().join(format!("radroots_xtask_{prefix}_{ns}"))
+    }
+
+    fn test_ts_mapping() -> contract::ExportMapping {
+        let mut packages = BTreeMap::new();
+        packages.insert("radroots-core".to_string(), "@radroots/core".to_string());
+        packages.insert(
+            "radroots-events-codec-wasm".to_string(),
+            "@radroots/events-codec-wasm".to_string(),
+        );
+        contract::ExportMapping {
+            language: contract::ExportLanguage {
+                id: "ts".to_string(),
+                repository: "sdk-typescript".to_string(),
+            },
+            packages,
+            artifacts: Some(contract::ExportArtifacts {
+                models_dir: Some("src/generated".to_string()),
+                constants_dir: Some("src/generated".to_string()),
+                wasm_dist_dir: Some("dist".to_string()),
+                manifest_file: Some("export-manifest.json".to_string()),
+            }),
+        }
+    }
+
+    #[test]
+    fn selected_package_entries_match_crate_and_package_selectors() {
+        let mapping = test_ts_mapping();
+
+        let all = selected_package_entries(&mapping, None).expect("select all");
+        assert_eq!(all.len(), 2);
+
+        let by_crate = selected_package_entries(&mapping, Some("radroots-core")).expect("by crate");
+        assert_eq!(by_crate.len(), 1);
+        assert_eq!(by_crate[0].0.as_str(), "radroots-core");
+
+        let by_short = selected_package_entries(&mapping, Some("core")).expect("by short crate");
+        assert_eq!(by_short.len(), 1);
+        assert_eq!(by_short[0].1.as_str(), "@radroots/core");
+
+        let by_package =
+            selected_package_entries(&mapping, Some("@radroots/core")).expect("by package");
+        assert_eq!(by_package.len(), 1);
+        assert_eq!(by_package[0].0.as_str(), "radroots-core");
+
+        let wasm = selected_package_entries(&mapping, Some("events-codec-wasm")).expect("wasm");
+        assert_eq!(wasm.len(), 1);
+        assert_eq!(wasm[0].0.as_str(), "radroots-events-codec-wasm");
+    }
+
+    #[test]
+    fn selected_package_entries_fail_for_unknown_selector() {
+        let mapping = test_ts_mapping();
+        let err = selected_package_entries(&mapping, Some("unknown")).expect_err("unknown");
+        assert!(err.contains("unknown ts export crate selector"));
     }
 
     #[test]
