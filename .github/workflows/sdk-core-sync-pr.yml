@@ -7,6 +7,11 @@ on:
       - master
     paths:
       - "crates/core/**"
+      - "crates/types/**"
+      - "crates/events/**"
+      - "crates/trade/**"
+      - "crates/identity/**"
+      - "crates/events-codec-wasm/**"
       - "crates/xtask/**"
       - "contract/**"
       - ".github/workflows/sdk-core-sync-pr.yml"
@@ -39,7 +44,18 @@ jobs:
 
       - name: export ts sdk artifacts
         if: steps.sync_token.outputs.configured == 'true'
-        run: cargo run -q -p xtask -- sdk export-ts --out "${{ runner.temp }}/sdk-export"
+        run: |
+          export_dir="${{ runner.temp }}/sdk-export"
+          for crate_name in \
+            radroots-core \
+            radroots-types \
+            radroots-events \
+            radroots-trade \
+            radroots-identity \
+            radroots-events-codec-wasm; do
+            cargo run -q -p xtask -- sdk export-ts-crate --crate "${crate_name}" --out "${export_dir}"
+          done
+          test -f "${export_dir}/ts/export-manifest.json"
 
       - name: check required export artifacts
         if: steps.sync_token.outputs.configured == 'true'
@@ -48,6 +64,15 @@ jobs:
           test -f "${{ runner.temp }}/sdk-export/ts/packages/types/src/generated/types.ts"
           test -f "${{ runner.temp }}/sdk-export/ts/packages/events/src/generated/types.ts"
           test -f "${{ runner.temp }}/sdk-export/ts/packages/trade/src/generated/types.ts"
+          test -f "${{ runner.temp }}/sdk-export/ts/packages/events/src/generated/constants.ts"
+          test -f "${{ runner.temp }}/sdk-export/ts/packages/events/src/generated/kinds.ts"
+
+      - name: upload sdk export artifact
+        if: steps.sync_token.outputs.configured == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdk-export-ts-bundle
+          path: ${{ runner.temp }}/sdk-export/ts
 
       - name: checkout sdk-typescript
         if: steps.sync_token.outputs.configured == 'true'
@@ -62,27 +87,17 @@ jobs:
       - name: apply generated model artifacts
         if: steps.sync_token.outputs.configured == 'true'
         run: |
-          for package in core types events trade; do
-            install -d "sdk-typescript/packages/${package}/src/generated"
-            cp \
-              "${{ runner.temp }}/sdk-export/ts/packages/${package}/src/generated/types.ts" \
-              "sdk-typescript/packages/${package}/src/generated/types.ts"
+          for package in core types events trade identity; do
+            src_dir="${{ runner.temp }}/sdk-export/ts/packages/${package}/src/generated"
+            if test -d "${src_dir}"; then
+              install -d "sdk-typescript/packages/${package}/src/generated"
+              rsync -a --delete "${src_dir}/" "sdk-typescript/packages/${package}/src/generated/"
+            fi
           done
-          if test -f "${{ runner.temp }}/sdk-export/ts/packages/identity/src/generated/types.ts"; then
-            install -d sdk-typescript/packages/identity/src/generated
-            cp \
-              "${{ runner.temp }}/sdk-export/ts/packages/identity/src/generated/types.ts" \
-              sdk-typescript/packages/identity/src/generated/types.ts
-          fi
-          if test -f "${{ runner.temp }}/sdk-export/ts/packages/events/src/generated/constants.ts"; then
-            cp \
-              "${{ runner.temp }}/sdk-export/ts/packages/events/src/generated/constants.ts" \
-              sdk-typescript/packages/events/src/generated/constants.ts
-          fi
-          if test -f "${{ runner.temp }}/sdk-export/ts/packages/events/src/generated/kinds.ts"; then
-            cp \
-              "${{ runner.temp }}/sdk-export/ts/packages/events/src/generated/kinds.ts" \
-              sdk-typescript/packages/events/src/generated/kinds.ts
+          wasm_src="${{ runner.temp }}/sdk-export/ts/packages/events-codec-wasm/dist"
+          if test -d "${wasm_src}"; then
+            install -d sdk-typescript/packages/events-codec-wasm/dist
+            rsync -a --delete "${wasm_src}/" sdk-typescript/packages/events-codec-wasm/dist/
           fi
 
       - name: setup bun
