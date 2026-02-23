@@ -254,24 +254,18 @@ fn export_ts_constants_with_selector(
     let selected_entries = selected_package_entries(ts_export, selector)?;
     let artifacts = ts_artifacts(ts_export)?;
     let constants_dir = required_artifact_value(&artifacts.constants_dir, "constants_dir")?;
+    let source_root = workspace_root.join("target").join("ts-rs");
+    if !source_root.exists() {
+        return Err(format!(
+            "missing ts-rs source root {}",
+            source_root.display()
+        ));
+    }
     let ts_out_root = out_dir.join("ts").join("packages");
     for (crate_name, package_name) in selected_entries {
         let crate_dir = crate_name.strip_prefix("radroots-").unwrap_or(crate_name);
-        let crate_root = workspace_root.join("crates").join(crate_dir);
         for filename in ["constants.ts", "kinds.ts"] {
-            let candidates = [
-                crate_root.join("bindings").join(filename),
-                crate_root
-                    .join("bindings")
-                    .join("ts")
-                    .join("src")
-                    .join(filename),
-            ];
-            let src = candidates
-                .iter()
-                .find(|path| path.exists())
-                .cloned()
-                .unwrap_or_else(|| candidates[0].clone());
+            let src = source_root.join(crate_dir).join(filename);
             let dst = to_package_dir(&ts_out_root, package_name)
                 .join(constants_dir)
                 .join(filename);
@@ -652,21 +646,9 @@ mod tests {
             .join("events")
             .join(&constants_dir)
             .join("kinds.ts");
-        let events_root = root.join("crates").join("events");
-        let constants_exists = events_root.join("bindings").join("constants.ts").exists()
-            || events_root
-                .join("bindings")
-                .join("ts")
-                .join("src")
-                .join("constants.ts")
-                .exists();
-        let kinds_exists = events_root.join("bindings").join("kinds.ts").exists()
-            || events_root
-                .join("bindings")
-                .join("ts")
-                .join("src")
-                .join("kinds.ts")
-                .exists();
+        let events_source = root.join("target").join("ts-rs").join("events");
+        let constants_exists = events_source.join("constants.ts").exists();
+        let kinds_exists = events_source.join("kinds.ts").exists();
         if constants_exists {
             assert!(events_constants.exists());
         }
