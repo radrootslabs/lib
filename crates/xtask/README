@@ -12,6 +12,7 @@ Validates the sdk contract manifest, version policy, export mappings, and requir
 
 ```bash
 cargo run -q -p xtask -- sdk export-ts
+cargo run -q -p xtask -- sdk export-ts-crate --crate radroots-core
 ```
 
 Runs the full export pipeline:
@@ -19,6 +20,12 @@ Runs the full export pipeline:
 - generates ts-rs model sources from contract crates
 - exports models/constants/wasm outputs to `target/sdk-export/ts/packages`
 - writes deterministic checksums to `target/sdk-export/ts/export-manifest.json`
+
+Per-crate export uses `--crate` and accepts:
+
+- workspace crate ids (for example `radroots-core`)
+- short crate names (for example `core`)
+- mapped package names (for example `@radroots/core`)
 
 ## granular commands
 
@@ -44,5 +51,17 @@ When available in export output, it also syncs:
 
 - `@radroots/identity` generated models
 - `@radroots/events` generated constants and kinds
+- `@radroots/events-codec-wasm` dist artifacts when present
+
+Workflow export order:
+
+1. `radroots-core`
+2. `radroots-types`
+3. `radroots-events`
+4. `radroots-trade`
+5. `radroots-identity`
+6. `radroots-events-codec-wasm`
+
+CI blocks commits that track files under `crates/*/bindings/**`.
 
 The workflow requires a `RADROOTS_SDK_SYNC_TOKEN` secret with permissions to push branches and open pull requests in `radrootslabs/sdk-typescript`.

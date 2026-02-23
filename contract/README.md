@@ -30,6 +30,14 @@ The sdk contract excludes app/runtime/storage implementation crates.
 - all contract changes require conformance updates.
 - all contract exports must be reproducible from source.
 - release automation must publish contract metadata and artifact checksums.
+- release automation exports ts artifacts in this order:
+  - `radroots-core`
+  - `radroots-types`
+  - `radroots-events`
+  - `radroots-trade`
+  - `radroots-identity`
+  - `radroots-events-codec-wasm`
+- ts artifact commits under `crates/*/bindings/**` are forbidden and blocked by ci guards.
 
 ## coverage governance
 
