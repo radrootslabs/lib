@@ -17,6 +17,7 @@ fn usage() {
     eprintln!("  cargo xtask sdk export-ts-wasm [--out <dir>]");
     eprintln!("  cargo xtask sdk export-manifest [--out <dir>]");
     eprintln!("  cargo xtask sdk validate");
+    eprintln!("  cargo xtask sdk release preflight");
     eprintln!("  cargo xtask sdk coverage run-crate --crate <crate> [--out <dir>]");
     eprintln!("  cargo xtask sdk coverage required-crates");
     eprintln!("  cargo xtask sdk coverage workspace-crates");
@@ -147,6 +148,20 @@ fn validate_contract() -> Result<(), String> {
     Ok(())
 }
 
+fn release_preflight() -> Result<(), String> {
+    let root = workspace_root()?;
+    contract::validate_release_preflight(&root)?;
+    eprintln!("validated release preflight for contract 0.1.0");
+    Ok(())
+}
+
+fn run_release(args: &[String]) -> Result<(), String> {
+    match args.first().map(String::as_str) {
+        Some("preflight") => release_preflight(),
+        _ => Err("unknown release subcommand".to_string()),
+    }
+}
+
 fn run_sdk(args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
         Some("export-ts") => export_ts(&args[1..]),
@@ -156,6 +171,7 @@ fn run_sdk(args: &[String]) -> Result<(), String> {
         Some("export-ts-wasm") => export_ts_wasm(&args[1..]),
         Some("export-manifest") => export_manifest(&args[1..]),
         Some("validate") => validate_contract(),
+        Some("release") => run_release(&args[1..]),
         Some("coverage") => coverage::run(&args[1..]),
         _ => Err("unknown sdk subcommand".to_string()),
     }

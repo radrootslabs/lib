@@ -183,6 +183,23 @@ fn workspace_package_names(workspace_root: &Path) -> Result<Vec<String>, String>
     Ok(names)
 }
 
+fn workspace_package_manifests(workspace_root: &Path) -> Result<BTreeMap<String, PathBuf>, String> {
+    let workspace_manifest =
+        parse_toml::<WorkspaceCargoManifest>(&workspace_root.join("Cargo.toml"))?;
+    let mut manifests = BTreeMap::new();
+    for member in workspace_manifest.workspace.members {
+        let member_manifest = workspace_root.join(&member).join("Cargo.toml");
+        let package_manifest = parse_toml::<PackageCargoManifest>(&member_manifest)?;
+        if manifests
+            .insert(package_manifest.package.name, member_manifest)
+            .is_some()
+        {
+            return Err("duplicate workspace package name in manifest map".to_string());
+        }
+    }
+    Ok(manifests)
+}
+
 fn load_coverage_rollout(contract_root: &Path) -> Result<CoverageRolloutFile, String> {
     parse_toml::<CoverageRolloutFile>(&contract_root.join("coverage").join("rollout.toml"))
 }
@@ -277,6 +294,119 @@ fn collect_unique_set(items: &[String], field: &str) -> Result<BTreeSet<String>,
         }
     }
     Ok(set)
+}
+
+fn package_field_configured(table: &toml::value::Table, field: &str) -> bool {
+    let Some(value) = table.get(field) else {
+        return false;
+    };
+    match value {
+        toml::Value::String(raw) => !raw.trim().is_empty(),
+        toml::Value::Table(inner) => inner
+            .get("workspace")
+            .and_then(toml::Value::as_bool)
+            .is_some_and(|configured| configured),
+        _ => false,
+    }
+}
+
+fn validate_publish_package_metadata(
+    workspace_root: &Path,
+    publish_crates: &BTreeSet<String>,
+) -> Result<(), String> {
+    let manifests = workspace_package_manifests(workspace_root)?;
+    for crate_name in publish_crates {
+        let manifest_path = manifests
+            .get(crate_name)
+            .ok_or_else(|| format!("publish crate {} has no workspace manifest", crate_name))?;
+        let parsed = parse_toml::<toml::Value>(manifest_path)?;
+        let package = parsed
+            .get("package")
+            .and_then(toml::Value::as_table)
+            .ok_or_else(|| format!("{} missing [package] table", manifest_path.display()))?;
+
+        if !package_field_configured(package, "description") {
+            return Err(format!(
+                "publish crate {} must define a non-empty package.description",
+                crate_name
+            ));
+        }
+        for field in ["repository", "homepage", "documentation", "readme"] {
+            if !package_field_configured(package, field) {
+                return Err(format!(
+                    "publish crate {} must configure package.{}",
+                    crate_name, field
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn parse_coverage_percent(raw: &str, field: &str, crate_name: &str) -> Result<f64, String> {
+    raw.parse::<f64>()
+        .map_err(|e| format!("parse {} for {}: {e}", field, crate_name))
+}
+
+fn load_coverage_refresh_rows(
+    workspace_root: &Path,
+) -> Result<BTreeMap<String, (String, f64, f64, f64)>, String> {
+    let report_path = workspace_root
+        .join("target")
+        .join("coverage")
+        .join("coverage-refresh.tsv");
+    let raw = fs::read_to_string(&report_path)
+        .map_err(|e| format!("read {}: {e}", report_path.display()))?;
+    let mut rows = BTreeMap::new();
+    for line in raw.lines().skip(1) {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let parts = trimmed.split('\t').collect::<Vec<_>>();
+        if parts.len() < 5 {
+            return Err(format!(
+                "coverage row must have at least 5 columns in {}: {}",
+                report_path.display(),
+                trimmed
+            ));
+        }
+        let crate_name = parts[0].to_string();
+        let status = parts[1].to_string();
+        let exec = parse_coverage_percent(parts[2], "exec", &crate_name)?;
+        let func = parse_coverage_percent(parts[3], "func", &crate_name)?;
+        let branch = parse_coverage_percent(parts[4], "branch", &crate_name)?;
+        rows.insert(crate_name, (status, exec, func, branch));
+    }
+    Ok(rows)
+}
+
+fn validate_required_coverage_summary(
+    workspace_root: &Path,
+    required_crates: &BTreeSet<String>,
+) -> Result<(), String> {
+    let rows = load_coverage_refresh_rows(workspace_root)?;
+    for crate_name in required_crates {
+        let (status, exec, func, branch) = rows.get(crate_name).ok_or_else(|| {
+            format!(
+                "required coverage crate {} missing from coverage-refresh.tsv",
+                crate_name
+            )
+        })?;
+        if status != "pass" {
+            return Err(format!(
+                "required coverage crate {} has non-pass status {}",
+                crate_name, status
+            ));
+        }
+        if *exec < 100.0 || *func < 100.0 || *branch < 100.0 {
+            return Err(format!(
+                "required coverage crate {} must be 100/100/100, found {}/{}/{}",
+                crate_name, exec, func, branch
+            ));
+        }
+    }
+    Ok(())
 }
 
 const CORE_UNIT_DIMENSION_ENUM: &str = "RadrootsCoreUnitDimension";
@@ -633,6 +763,18 @@ fn validate_release_publish_policy(
     Ok(())
 }
 
+pub fn validate_release_preflight(workspace_root: &Path) -> Result<(), String> {
+    let bundle = load_contract_bundle(workspace_root)?;
+    validate_contract_bundle(&bundle)?;
+    let release = load_release_contract(&bundle.root)?;
+    let required = load_coverage_required(&bundle.root)?;
+    let publish_crates = collect_unique_set(&release.publish.crates, "publish.crates")?;
+    let required_crates = collect_unique_set(&required.required.crates, "required.crates")?;
+    validate_publish_package_metadata(workspace_root, &publish_crates)?;
+    validate_required_coverage_summary(workspace_root, &required_crates)?;
+    Ok(())
+}
+
 pub fn load_contract_bundle(workspace_root: &Path) -> Result<ContractBundle, String> {
     let root = contract_root(workspace_root);
     let manifest = parse_toml::<ContractManifest>(&root.join("manifest.toml"))?;
@@ -768,7 +910,9 @@ pub fn validate_contract_bundle(bundle: &ContractBundle) -> Result<(), String> {
 mod tests {
     use super::*;
     use std::collections::BTreeSet;
+    use std::fs;
     use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     fn workspace_root() -> PathBuf {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -776,6 +920,16 @@ mod tests {
             .join("../..")
             .canonicalize()
             .expect("canonical workspace root")
+    }
+
+    fn temp_root(prefix: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("radroots_xtask_{prefix}_{nanos}"));
+        fs::create_dir_all(&root).expect("create temp root");
+        root
     }
 
     #[test]
@@ -911,5 +1065,64 @@ pub enum RadrootsCoreUnitDimension {
             .map(|entry| entry.name.clone())
             .collect::<BTreeSet<_>>();
         assert_eq!(required_names, rollout_required);
+    }
+
+    #[test]
+    fn package_field_configured_accepts_workspace_table() {
+        let mut package = toml::value::Table::new();
+        let mut repository = toml::value::Table::new();
+        repository.insert("workspace".to_string(), toml::Value::Boolean(true));
+        package.insert("repository".to_string(), toml::Value::Table(repository));
+        assert!(package_field_configured(&package, "repository"));
+    }
+
+    #[test]
+    fn validate_required_coverage_summary_enforces_strict_threshold() {
+        let root = temp_root("coverage_summary");
+        let coverage_dir = root.join("target").join("coverage");
+        fs::create_dir_all(&coverage_dir).expect("create coverage dir");
+        fs::write(
+            coverage_dir.join("coverage-refresh.tsv"),
+            "crate\tstatus\texec\tfunc\tbranch\treport\nradroots-core\tpass\t100.0\t100.0\t100.0\tfile\n",
+        )
+        .expect("write coverage file");
+        let required = ["radroots-core".to_string()]
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+        validate_required_coverage_summary(&root, &required).expect("coverage summary");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn validate_publish_package_metadata_requires_description() {
+        let root = temp_root("publish_metadata");
+        fs::create_dir_all(root.join("crates").join("a")).expect("create crate dir");
+        fs::write(
+            root.join("Cargo.toml"),
+            r#"[workspace]
+members = ["crates/a"]
+"#,
+        )
+        .expect("write workspace manifest");
+        fs::write(
+            root.join("crates").join("a").join("Cargo.toml"),
+            r#"[package]
+name = "radroots-a"
+version = "0.1.0"
+edition = "2024"
+repository = { workspace = true }
+homepage = { workspace = true }
+documentation = "https://docs.rs/radroots-a"
+readme = { workspace = true }
+"#,
+        )
+        .expect("write package manifest");
+        let publish = ["radroots-a".to_string()]
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+        let err =
+            validate_publish_package_metadata(&root, &publish).expect_err("missing description");
+        assert!(err.contains("package.description"));
+        let _ = fs::remove_dir_all(&root);
     }
 }

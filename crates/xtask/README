@@ -4,9 +4,12 @@
 
 ```bash
 cargo run -q -p xtask -- sdk validate
+cargo run -q -p xtask -- sdk release preflight
 ```
 
 Validates the sdk contract manifest, version policy, export mappings, and required artifacts.
+
+`sdk release preflight` validates contract parity plus release metadata and required coverage summaries for the publish set.
 
 ## export
 
