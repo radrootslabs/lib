@@ -43,3 +43,9 @@ The sdk contract excludes app/runtime/storage implementation crates.
 
 - strict coverage policy for oss rust crates is defined in `contract/coverage/POLICY.md`.
 - crate rollout and enforcement order is defined in `contract/coverage/rollout.toml`.
+
+## release operations
+
+- release crate set and publish order are defined in `contract/release/publish-set.toml`.
+- deterministic release execution is defined in `contract/release/runbook.md`.
+- release checklist for `0.1.0` is defined in `contract/release/checklist-0.1.0.md`.
