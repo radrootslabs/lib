@@ -1,0 +1,49 @@
+[release]
+version = "0.1.0"
+
+[publish]
+crates = [
+  "radroots-core",
+  "radroots-types",
+  "radroots-events",
+  "radroots-identity",
+  "radroots-trade",
+  "radroots-events-codec",
+  "radroots-events-codec-wasm",
+]
+
+[internal]
+crates = [
+  "radroots-app-core",
+  "radroots-app-ffi-swift",
+  "radroots-app-wasm",
+  "radroots-events-indexed",
+  "radroots-log",
+  "radroots-net",
+  "radroots-net-core",
+  "radroots-nostr",
+  "radroots-nostr-accounts",
+  "radroots-nostr-ndb",
+  "radroots-nostr-runtime",
+  "radroots-runtime",
+  "radroots-sql-core",
+  "radroots-sql-wasm-bridge",
+  "radroots-sql-wasm-core",
+  "radroots-tangle-db",
+  "radroots-tangle-db-schema",
+  "radroots-tangle-db-wasm",
+  "radroots-tangle-events",
+  "radroots-tangle-events-wasm",
+  "xtask",
+]
+
+[publish_order]
+crates = [
+  "radroots-core",
+  "radroots-types",
+  "radroots-events",
+  "radroots-events-codec",
+  "radroots-identity",
+  "radroots-trade",
+  "radroots-events-codec-wasm",
+]
