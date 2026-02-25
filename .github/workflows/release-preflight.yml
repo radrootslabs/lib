@@ -1,0 +1,37 @@
+name: release-preflight
+
+on:
+  workflow_dispatch:
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: guard committed ts artifacts
+        run: ./scripts/ci/guard_committed_ts_artifacts.sh
+
+      - name: install rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.92.0
+
+      - name: install nightly rust toolchain
+        run: rustup toolchain install nightly --profile minimal
+
+      - name: install cargo llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: run release preflight
+        run: ./scripts/ci/release_preflight.sh
+
+      - name: upload release preflight artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-preflight
+          path: |
+            target/coverage/coverage-refresh.tsv
+            target/coverage/coverage-refresh-status.tsv
+            target/coverage/**/gate-report.json
