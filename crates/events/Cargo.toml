@@ -1,11 +1,14 @@
 [package]
 name = "radroots-events"
-description = "Domain event model for Radroots"
 version.workspace = true
 edition.workspace = true
 authors = ["Radroots Authors"]
 rust-version.workspace = true
 license.workspace = true
+description = "Domain event model for Radroots"
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
 build = "build.rs"
 
 [features]

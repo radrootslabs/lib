@@ -1,11 +1,14 @@
 [package]
 name = "radroots-core"
-description = "Core value model for Radroots"
 version.workspace = true
 edition.workspace = true
 authors = ["Radroots Authors"]
 rust-version.workspace = true
 license.workspace = true
+description = "Core value model for Radroots"
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
 build = "build.rs"
 
 [features]
