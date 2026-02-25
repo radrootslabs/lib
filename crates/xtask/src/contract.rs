@@ -107,6 +107,14 @@ struct PackageCargoManifest {
 #[derive(Debug, Deserialize)]
 struct PackageSection {
     name: String,
+    publish: Option<PackagePublish>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum PackagePublish {
+    Bool(bool),
+    Registries(Vec<String>),
 }
 
 #[derive(Debug, Deserialize)]
@@ -133,6 +141,24 @@ struct CoverageRequiredFile {
 
 #[derive(Debug, Deserialize)]
 struct CoverageRequiredSection {
+    crates: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ReleaseContractFile {
+    release: ReleaseSection,
+    publish: ReleaseCrateSet,
+    internal: ReleaseCrateSet,
+    publish_order: ReleaseCrateSet,
+}
+
+#[derive(Debug, Deserialize)]
+struct ReleaseSection {
+    version: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ReleaseCrateSet {
     crates: Vec<String>,
 }
 
@@ -165,8 +191,92 @@ fn load_coverage_required(contract_root: &Path) -> Result<CoverageRequiredFile, 
     parse_toml::<CoverageRequiredFile>(&contract_root.join("coverage").join("required-crates.toml"))
 }
 
+fn load_release_contract(contract_root: &Path) -> Result<ReleaseContractFile, String> {
+    parse_toml::<ReleaseContractFile>(&contract_root.join("release").join("publish-set.toml"))
+}
+
+fn package_publish_enabled(publish: Option<&PackagePublish>) -> bool {
+    match publish {
+        None => true,
+        Some(PackagePublish::Bool(flag)) => *flag,
+        Some(PackagePublish::Registries(registries)) => !registries.is_empty(),
+    }
+}
+
+fn workspace_package_publish_flags(
+    workspace_root: &Path,
+) -> Result<BTreeMap<String, bool>, String> {
+    let workspace_manifest =
+        parse_toml::<WorkspaceCargoManifest>(&workspace_root.join("Cargo.toml"))?;
+    let mut flags = BTreeMap::new();
+    for member in workspace_manifest.workspace.members {
+        let member_manifest = workspace_root.join(member).join("Cargo.toml");
+        let package_manifest = parse_toml::<PackageCargoManifest>(&member_manifest)?;
+        if flags
+            .insert(
+                package_manifest.package.name.clone(),
+                package_publish_enabled(package_manifest.package.publish.as_ref()),
+            )
+            .is_some()
+        {
+            return Err(format!(
+                "duplicate workspace package name {}",
+                package_manifest.package.name
+            ));
+        }
+    }
+    Ok(flags)
+}
+
+fn read_workspace_package_dependencies(
+    workspace_root: &Path,
+) -> Result<BTreeMap<String, BTreeSet<String>>, String> {
+    let workspace_manifest =
+        parse_toml::<WorkspaceCargoManifest>(&workspace_root.join("Cargo.toml"))?;
+    let mut member_manifests = Vec::with_capacity(workspace_manifest.workspace.members.len());
+    let mut workspace_names = BTreeSet::new();
+    for member in workspace_manifest.workspace.members {
+        let member_manifest = workspace_root.join(&member).join("Cargo.toml");
+        let package_manifest = parse_toml::<PackageCargoManifest>(&member_manifest)?;
+        workspace_names.insert(package_manifest.package.name.clone());
+        member_manifests.push((package_manifest.package.name, member_manifest));
+    }
+
+    let mut deps = BTreeMap::new();
+    for (package_name, manifest_path) in member_manifests {
+        let parsed = parse_toml::<toml::Value>(&manifest_path)?;
+        let mut package_deps = BTreeSet::new();
+        for section in ["dependencies", "build-dependencies"] {
+            let Some(table) = parsed.get(section).and_then(toml::Value::as_table) else {
+                continue;
+            };
+            for dep_name in table.keys() {
+                if workspace_names.contains(dep_name) {
+                    package_deps.insert(dep_name.clone());
+                }
+            }
+        }
+        deps.insert(package_name, package_deps);
+    }
+
+    Ok(deps)
+}
+
 fn join_set(items: &BTreeSet<String>) -> String {
     items.iter().cloned().collect::<Vec<_>>().join(", ")
+}
+
+fn collect_unique_set(items: &[String], field: &str) -> Result<BTreeSet<String>, String> {
+    let mut set = BTreeSet::new();
+    for item in items {
+        if item.trim().is_empty() {
+            return Err(format!("{field} contains an empty crate name"));
+        }
+        if !set.insert(item.clone()) {
+            return Err(format!("{field} has duplicate crate {}", item));
+        }
+    }
+    Ok(set)
 }
 
 const CORE_UNIT_DIMENSION_ENUM: &str = "RadrootsCoreUnitDimension";
@@ -382,6 +492,147 @@ fn validate_coverage_rollout_parity(
     Ok(())
 }
 
+fn validate_release_publish_policy(
+    workspace_root: &Path,
+    contract_root: &Path,
+    contract_version: &str,
+) -> Result<(), String> {
+    let release = load_release_contract(contract_root)?;
+    if release.release.version.trim().is_empty() {
+        return Err("release.version must not be empty".to_string());
+    }
+    if release.release.version != contract_version {
+        return Err(format!(
+            "release.version {} must match contract version {}",
+            release.release.version, contract_version
+        ));
+    }
+
+    let workspace_packages = workspace_package_names(workspace_root)?
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+    let publish_set = collect_unique_set(&release.publish.crates, "publish.crates")?;
+    let internal_set = collect_unique_set(&release.internal.crates, "internal.crates")?;
+    let publish_order = &release.publish_order.crates;
+    let publish_order_set = collect_unique_set(publish_order, "publish_order.crates")?;
+
+    let overlap = publish_set
+        .intersection(&internal_set)
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    if !overlap.is_empty() {
+        return Err(format!(
+            "release publish/internal overlap is not allowed: {}",
+            join_set(&overlap)
+        ));
+    }
+
+    let combined = publish_set
+        .union(&internal_set)
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    if combined != workspace_packages {
+        let missing = workspace_packages
+            .difference(&combined)
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        let extra = combined
+            .difference(&workspace_packages)
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        if !missing.is_empty() {
+            return Err(format!(
+                "release publish/internal sets are missing workspace crates: {}",
+                join_set(&missing)
+            ));
+        }
+        if !extra.is_empty() {
+            return Err(format!(
+                "release publish/internal sets include unknown crates: {}",
+                join_set(&extra)
+            ));
+        }
+    }
+
+    if publish_order_set != publish_set {
+        let missing = publish_set
+            .difference(&publish_order_set)
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        let extra = publish_order_set
+            .difference(&publish_set)
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        if !missing.is_empty() {
+            return Err(format!(
+                "publish_order.crates is missing publish crates: {}",
+                join_set(&missing)
+            ));
+        }
+        if !extra.is_empty() {
+            return Err(format!(
+                "publish_order.crates has non-publish crates: {}",
+                join_set(&extra)
+            ));
+        }
+    }
+
+    let order_index = publish_order
+        .iter()
+        .enumerate()
+        .map(|(idx, name)| (name.clone(), idx))
+        .collect::<BTreeMap<_, _>>();
+    let dependencies = read_workspace_package_dependencies(workspace_root)?;
+    for crate_name in &publish_set {
+        let crate_deps = dependencies
+            .get(crate_name)
+            .ok_or_else(|| format!("missing dependency graph entry for {}", crate_name))?;
+        let crate_order = *order_index
+            .get(crate_name)
+            .ok_or_else(|| format!("missing publish order entry for {}", crate_name))?;
+        for dep in crate_deps {
+            if !publish_set.contains(dep) {
+                continue;
+            }
+            let dep_order = *order_index
+                .get(dep)
+                .ok_or_else(|| format!("missing publish order entry for {}", dep))?;
+            if dep_order >= crate_order {
+                return Err(format!(
+                    "publish order must place dependency {} before {}",
+                    dep, crate_name
+                ));
+            }
+        }
+    }
+
+    let publish_flags = workspace_package_publish_flags(workspace_root)?;
+    for crate_name in &publish_set {
+        let flag = publish_flags
+            .get(crate_name)
+            .ok_or_else(|| format!("missing publish flag entry for {}", crate_name))?;
+        if !*flag {
+            return Err(format!(
+                "publish crate {} must not set publish = false",
+                crate_name
+            ));
+        }
+    }
+    for crate_name in &internal_set {
+        let flag = publish_flags
+            .get(crate_name)
+            .ok_or_else(|| format!("missing publish flag entry for {}", crate_name))?;
+        if *flag {
+            return Err(format!(
+                "internal crate {} must set publish = false",
+                crate_name
+            ));
+        }
+    }
+
+    Ok(())
+}
+
 pub fn load_contract_bundle(workspace_root: &Path) -> Result<ContractBundle, String> {
     let root = contract_root(workspace_root);
     let manifest = parse_toml::<ContractManifest>(&root.join("manifest.toml"))?;
@@ -505,6 +756,11 @@ pub fn validate_contract_bundle(bundle: &ContractBundle) -> Result<(), String> {
         .ok_or_else(|| "failed to resolve workspace root from contract root".to_string())?;
     validate_core_unit_dimension_variant_order(workspace_root)?;
     validate_coverage_rollout_parity(workspace_root, &bundle.root)?;
+    validate_release_publish_policy(
+        workspace_root,
+        &bundle.root,
+        bundle.version.contract.version.as_str(),
+    )?;
     Ok(())
 }
 
