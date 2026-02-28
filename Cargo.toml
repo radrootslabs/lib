@@ -1,7 +1,6 @@
 [workspace]
 members = [
     "crates/app-core",
-    "crates/app-ffi-swift",
     "crates/app-wasm",
     "crates/core",
     "crates/events",
@@ -42,7 +41,6 @@ readme = "README"
 
 [workspace.dependencies]
 radroots-app-core = { path = "crates/app-core", version = "0.1.0", default-features = false }
-radroots-app-ffi-swift = { path = "crates/app-ffi-swift", version = "0.1.0", default-features = false }
 radroots-app-wasm = { path = "crates/app-wasm", version = "0.1.0", default-features = false }
 radroots-core = { path = "crates/core", version = "0.1.0", default-features = false }
 radroots-events = { path = "crates/events", version = "0.1.0", default-features = false }

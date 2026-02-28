@@ -59,91 +59,86 @@ status = "required"
 order = 10
 
 [[rollout.crates]]
-name = "radroots-app-ffi-swift"
+name = "radroots-app-wasm"
 status = "required"
 order = 11
 
 [[rollout.crates]]
-name = "radroots-app-wasm"
+name = "radroots-events-indexed"
 status = "required"
 order = 12
 
 [[rollout.crates]]
-name = "radroots-events-indexed"
+name = "radroots-log"
 status = "required"
 order = 13
 
 [[rollout.crates]]
-name = "radroots-log"
+name = "radroots-net-core"
 status = "required"
 order = 14
 
 [[rollout.crates]]
-name = "radroots-net-core"
+name = "radroots-net"
 status = "required"
 order = 15
 
 [[rollout.crates]]
-name = "radroots-net"
+name = "radroots-nostr"
 status = "required"
 order = 16
 
 [[rollout.crates]]
-name = "radroots-nostr"
+name = "radroots-nostr-accounts"
 status = "required"
 order = 17
 
 [[rollout.crates]]
-name = "radroots-nostr-accounts"
+name = "radroots-nostr-ndb"
 status = "required"
 order = 18
 
 [[rollout.crates]]
-name = "radroots-nostr-ndb"
+name = "radroots-nostr-runtime"
 status = "required"
 order = 19
 
 [[rollout.crates]]
-name = "radroots-nostr-runtime"
+name = "radroots-runtime"
 status = "required"
 order = 20
 
 [[rollout.crates]]
-name = "radroots-runtime"
+name = "radroots-sql-core"
 status = "required"
 order = 21
 
 [[rollout.crates]]
-name = "radroots-sql-core"
+name = "radroots-sql-wasm-core"
 status = "required"
 order = 22
 
 [[rollout.crates]]
-name = "radroots-sql-wasm-core"
+name = "radroots-sql-wasm-bridge"
 status = "required"
 order = 23
 
 [[rollout.crates]]
-name = "radroots-sql-wasm-bridge"
+name = "radroots-tangle-events"
 status = "required"
 order = 24
 
 [[rollout.crates]]
-name = "radroots-tangle-events"
+name = "radroots-tangle-db"
 status = "required"
 order = 25
 
 [[rollout.crates]]
-name = "radroots-tangle-db"
+name = "radroots-tangle-events-wasm"
 status = "required"
 order = 26
 
 [[rollout.crates]]
-name = "radroots-tangle-events-wasm"
-status = "required"
-order = 27
-
-[[rollout.crates]]
 name = "radroots-tangle-db-wasm"
 status = "required"
-order = 28
+order = 27
