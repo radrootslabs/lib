@@ -1,70 +1,25 @@
-# xtask sdk commands
+# xtask
 
-## validate
+Workspace automation for Rad Roots SDK validation and export operations.
 
-```bash
-cargo run -q -p xtask -- sdk validate
-cargo run -q -p xtask -- sdk release preflight
-```
+## Goals
 
-Validates the sdk contract manifest, version policy, export mappings, and required artifacts.
+- enforce sdk contract consistency across crates
+- generate deterministic sdk export artifacts
+- preserve stable package and crate mapping rules
+- block release drift before publish operations
 
-`sdk release preflight` validates contract parity plus release metadata and required coverage summaries for the publish set.
+## Commands
 
-## export
+- `cargo run -q -p xtask -- sdk validate`
+- `cargo run -q -p xtask -- sdk release preflight`
+- `cargo run -q -p xtask -- sdk export-ts`
+- `cargo run -q -p xtask -- sdk export-ts-crate --crate radroots-core`
+- `cargo run -q -p xtask -- sdk export-ts-models`
+- `cargo run -q -p xtask -- sdk export-ts-constants`
+- `cargo run -q -p xtask -- sdk export-ts-wasm`
+- `cargo run -q -p xtask -- sdk export-manifest`
 
-```bash
-cargo run -q -p xtask -- sdk export-ts
-cargo run -q -p xtask -- sdk export-ts-crate --crate radroots-core
-```
+## License
 
-Runs the full export pipeline:
-
-- generates ts-rs model sources from contract crates
-- exports models/constants/wasm outputs to `target/sdk-export/ts/packages`
-- writes deterministic checksums to `target/sdk-export/ts/export-manifest.json`
-
-Per-crate export uses `--crate` and accepts:
-
-- workspace crate ids (for example `radroots-core`)
-- short crate names (for example `core`)
-- mapped package names (for example `@radroots/core`)
-
-## granular commands
-
-```bash
-cargo run -q -p xtask -- sdk export-ts-models
-cargo run -q -p xtask -- sdk export-ts-constants
-cargo run -q -p xtask -- sdk export-ts-wasm
-cargo run -q -p xtask -- sdk export-manifest
-```
-
-Use `--out <dir>` with any export command to write artifacts to a custom directory.
-
-## sdk model sync automation
-
-The workflow `.github/workflows/sdk-core-sync-pr.yml` uses `sdk export-ts` and syncs generated model types into `sdk-typescript` for:
-
-- `@radroots/core`
-- `@radroots/types`
-- `@radroots/events`
-- `@radroots/trade`
-
-When available in export output, it also syncs:
-
-- `@radroots/identity` generated models
-- `@radroots/events` generated constants and kinds
-- `@radroots/events-codec-wasm` dist artifacts when present
-
-Workflow export order:
-
-1. `radroots-core`
-2. `radroots-types`
-3. `radroots-events`
-4. `radroots-trade`
-5. `radroots-identity`
-6. `radroots-events-codec-wasm`
-
-CI blocks commits that track files under `crates/*/bindings/**`.
-
-The workflow requires a `RADROOTS_SDK_SYNC_TOKEN` secret with permissions to push branches and open pull requests in `radrootslabs/sdk-typescript`.
+Licensed under AGPL-3.0. See LICENSE.
