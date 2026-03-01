@@ -14,4 +14,4 @@ sync_wasm = "radroots-replica-sync-wasm"
 transport_agnostic_sync_core = true
 deterministic_emit_and_ingest = true
 wasm_exports_prefix = "replica_"
-forbid_legacy_tangle_identifiers = true
+forbid_legacy_alias_identifiers = true

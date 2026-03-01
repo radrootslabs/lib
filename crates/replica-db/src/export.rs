@@ -3,11 +3,11 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::backup::{
-    DATABASE_BACKUP_VERSION, MigrationBackup, SchemaEntry, TANGLE_DB_VERSION, escape_identifier,
+    DATABASE_BACKUP_VERSION, MigrationBackup, SchemaEntry, REPLICA_DB_VERSION, escape_identifier,
     export_migrations, load_schema,
 };
 
-pub const TANGLE_DB_EXPORT_VERSION: &str = "1";
+pub const REPLICA_DB_EXPORT_VERSION: &str = "1";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TableCount {
@@ -16,7 +16,7 @@ pub struct TableCount {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TangleDbExportManifestRs {
+pub struct ReplicaDbExportManifestRs {
     pub export_version: String,
     pub replica_db_version: String,
     pub backup_format_version: String,
@@ -26,14 +26,14 @@ pub struct TangleDbExportManifestRs {
     pub table_counts: Vec<TableCount>,
 }
 
-pub fn export_manifest<E: SqlExecutor>(executor: &E) -> Result<TangleDbExportManifestRs, SqlError> {
+pub fn export_manifest<E: SqlExecutor>(executor: &E) -> Result<ReplicaDbExportManifestRs, SqlError> {
     let schema = load_schema(executor)?;
     let migrations = export_migrations();
     let table_counts = load_table_counts(executor, &schema)?;
     let schema_hash = schema_hash(&schema)?;
-    Ok(TangleDbExportManifestRs {
-        export_version: TANGLE_DB_EXPORT_VERSION.to_string(),
-        replica_db_version: TANGLE_DB_VERSION.to_string(),
+    Ok(ReplicaDbExportManifestRs {
+        export_version: REPLICA_DB_EXPORT_VERSION.to_string(),
+        replica_db_version: REPLICA_DB_VERSION.to_string(),
         backup_format_version: DATABASE_BACKUP_VERSION.to_string(),
         schema_hash,
         schema,

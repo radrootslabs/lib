@@ -1,5 +1,5 @@
 use radroots_sql_core::{SqlError, SqliteExecutor};
-use radroots_replica_db::{TangleSql, export_manifest};
+use radroots_replica_db::{ReplicaSql, export_manifest};
 use radroots_replica_db_schema::farm::{
     IFarmCreate, IFarmDelete, IFarmFindMany, IFarmFindOne, IFarmUpdate,
 };
@@ -87,9 +87,9 @@ fn assert_not_found<T>(result: Result<T, IError<SqlError>>) {
     assert!(matches!(err.err, SqlError::NotFound(_)));
 }
 
-fn open_db() -> TangleSql<SqliteExecutor> {
+fn open_db() -> ReplicaSql<SqliteExecutor> {
     let exec = SqliteExecutor::open_memory().expect("open sqlite memory");
-    let db = TangleSql::new(exec);
+    let db = ReplicaSql::new(exec);
     db.migrate_up().expect("migrate up");
     db
 }

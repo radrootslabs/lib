@@ -5,7 +5,7 @@ use crate::error::SqlError;
 use std::cell::Cell;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-pub(crate) const EXPORT_LOCK_ERR: &str = "tangle db export in progress";
+pub(crate) const EXPORT_LOCK_ERR: &str = "replica db export in progress";
 
 static EXPORT_LOCK_ACTIVE: AtomicBool = AtomicBool::new(false);
 

@@ -16,6 +16,9 @@ jobs:
       - name: guard committed ts artifacts
         run: ./scripts/ci/guard_committed_ts_artifacts.sh
 
+      - name: guard legacy identifiers
+        run: ./scripts/ci/guard_no_legacy_identifiers.sh
+
       - name: install rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:

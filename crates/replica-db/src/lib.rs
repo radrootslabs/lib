@@ -121,22 +121,22 @@ pub mod models;
 #[cfg(not(feature = "coverage-minimal"))]
 pub use backup::{DatabaseBackup, MigrationBackup, SchemaEntry};
 #[cfg(not(feature = "coverage-minimal"))]
-pub use export::{TANGLE_DB_EXPORT_VERSION, TableCount, TangleDbExportManifestRs, export_manifest};
+pub use export::{REPLICA_DB_EXPORT_VERSION, TableCount, ReplicaDbExportManifestRs, export_manifest};
 #[cfg(not(feature = "coverage-minimal"))]
 pub use models::*;
 
-pub struct TangleSql<E: SqlExecutor> {
+pub struct ReplicaSql<E: SqlExecutor> {
     executor: E,
 }
 
-impl<E: SqlExecutor> TangleSql<E> {
+impl<E: SqlExecutor> ReplicaSql<E> {
     pub fn coverage_branch_probe(enabled: bool) -> &'static str {
         if enabled { "enabled" } else { "disabled" }
     }
 }
 
 #[cfg(not(feature = "coverage-minimal"))]
-impl<E: SqlExecutor> TangleSql<E> {
+impl<E: SqlExecutor> ReplicaSql<E> {
     pub fn new(executor: E) -> Self {
         Self { executor }
     }
@@ -720,7 +720,7 @@ impl<E: SqlExecutor> TangleSql<E> {
 }
 
 #[cfg(feature = "coverage-minimal")]
-impl<E: SqlExecutor> TangleSql<E> {
+impl<E: SqlExecutor> ReplicaSql<E> {
     pub fn new(executor: E) -> Self {
         Self { executor }
     }
@@ -732,7 +732,7 @@ impl<E: SqlExecutor> TangleSql<E> {
 
 #[cfg(test)]
 mod tests {
-    use super::TangleSql;
+    use super::ReplicaSql;
     use radroots_sql_core::{ExecOutcome, SqlError, SqlExecutor};
 
     struct ProbeExecutor;
@@ -763,8 +763,8 @@ mod tests {
     }
 
     #[test]
-    fn tangle_sql_constructor_and_executor_access_are_supported() {
-        let db = TangleSql::new(ProbeExecutor);
+    fn replica_sql_constructor_and_executor_access_are_supported() {
+        let db = ReplicaSql::new(ProbeExecutor);
         let exec = db.executor();
         assert!(exec.exec("select 1", "[]").is_ok());
         assert!(exec.query_raw("select 1", "[]").is_ok());
@@ -772,11 +772,11 @@ mod tests {
         assert!(exec.commit().is_ok());
         assert!(exec.rollback().is_ok());
         assert_eq!(
-            TangleSql::<ProbeExecutor>::coverage_branch_probe(true),
+            ReplicaSql::<ProbeExecutor>::coverage_branch_probe(true),
             "enabled"
         );
         assert_eq!(
-            TangleSql::<ProbeExecutor>::coverage_branch_probe(false),
+            ReplicaSql::<ProbeExecutor>::coverage_branch_probe(false),
             "disabled"
         );
     }

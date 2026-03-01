@@ -1948,10 +1948,10 @@ mod tests {
     fn create_gcs_location_error_mapping_helpers_are_covered() {
         let point_json_err = serde_json::from_str::<Value>("{").expect_err("invalid json");
         let point_err = map_gcs_point_serialize_error(point_json_err);
-        assert_eq!(point_err.to_string(), "tangle_events.data: gcs.point");
+        assert_eq!(point_err.to_string(), "replica_sync.data: gcs.point");
 
         let polygon_json_err = serde_json::from_str::<Value>("{").expect_err("invalid json");
         let polygon_err = map_gcs_polygon_serialize_error(polygon_json_err);
-        assert_eq!(polygon_err.to_string(), "tangle_events.data: gcs.polygon");
+        assert_eq!(polygon_err.to_string(), "replica_sync.data: gcs.polygon");
     }
 }

@@ -19,11 +19,11 @@ pub enum RadrootsReplicaEventsError {
 impl fmt::Display for RadrootsReplicaEventsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Sql(err) => write!(f, "tangle_events.sql: {}", err.err.to_string()),
-            Self::Encode(err) => write!(f, "tangle_events.encode: {err}"),
-            Self::Parse(err) => write!(f, "tangle_events.parse: {err}"),
-            Self::InvalidSelector(msg) => write!(f, "tangle_events.selector: {msg}"),
-            Self::InvalidData(msg) => write!(f, "tangle_events.data: {msg}"),
+            Self::Sql(err) => write!(f, "replica_sync.sql: {}", err.err.to_string()),
+            Self::Encode(err) => write!(f, "replica_sync.encode: {err}"),
+            Self::Parse(err) => write!(f, "replica_sync.parse: {err}"),
+            Self::InvalidSelector(msg) => write!(f, "replica_sync.selector: {msg}"),
+            Self::InvalidData(msg) => write!(f, "replica_sync.data: {msg}"),
         }
     }
 }
@@ -59,20 +59,20 @@ mod tests {
     #[test]
     fn display_formats_all_error_variants() {
         let sql_err = RadrootsReplicaEventsError::Sql(IError::from(SqlError::Internal));
-        assert!(sql_err.to_string().contains("tangle_events.sql"));
+        assert!(sql_err.to_string().contains("replica_sync.sql"));
 
         let encode_err = RadrootsReplicaEventsError::Encode(EventEncodeError::InvalidField("name"));
-        assert!(encode_err.to_string().contains("tangle_events.encode"));
+        assert!(encode_err.to_string().contains("replica_sync.encode"));
 
         let parse_err = RadrootsReplicaEventsError::Parse(EventParseError::InvalidTag("d"));
-        assert!(parse_err.to_string().contains("tangle_events.parse"));
+        assert!(parse_err.to_string().contains("replica_sync.parse"));
 
         let selector_err =
             RadrootsReplicaEventsError::InvalidSelector("selector missing".to_string());
-        assert!(selector_err.to_string().contains("tangle_events.selector"));
+        assert!(selector_err.to_string().contains("replica_sync.selector"));
 
         let data_err = RadrootsReplicaEventsError::InvalidData("bad data".to_string());
-        assert!(data_err.to_string().contains("tangle_events.data"));
+        assert!(data_err.to_string().contains("replica_sync.data"));
     }
 
     #[test]

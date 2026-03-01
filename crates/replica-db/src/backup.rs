@@ -4,7 +4,7 @@ use serde_json::{Map, Value};
 use std::collections::{BTreeMap, HashMap};
 
 pub const DATABASE_BACKUP_VERSION: &str = "1.0.0";
-pub const TANGLE_DB_VERSION: &str = env!("CARGO_PKG_VERSION");
+pub const REPLICA_DB_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SchemaEntry {
@@ -44,7 +44,7 @@ pub fn export_database_backup<E: SqlExecutor>(executor: &E) -> Result<DatabaseBa
     let migrations = export_migrations();
     Ok(DatabaseBackup {
         format_version: DATABASE_BACKUP_VERSION.to_string(),
-        replica_db_version: TANGLE_DB_VERSION.to_string(),
+        replica_db_version: REPLICA_DB_VERSION.to_string(),
         schema,
         migrations,
         data,
@@ -277,10 +277,10 @@ fn validate_backup_version(backup: &DatabaseBackup) -> Result<(), SqlError> {
             backup.format_version, DATABASE_BACKUP_VERSION
         )));
     }
-    if backup.replica_db_version != TANGLE_DB_VERSION {
+    if backup.replica_db_version != REPLICA_DB_VERSION {
         return Err(SqlError::InvalidArgument(format!(
             "unsupported replica-db version {}, expected {}",
-            backup.replica_db_version, TANGLE_DB_VERSION
+            backup.replica_db_version, REPLICA_DB_VERSION
         )));
     }
     Ok(())
@@ -394,7 +394,7 @@ mod tests {
         );
         let backup = DatabaseBackup {
             format_version: DATABASE_BACKUP_VERSION.to_string(),
-            replica_db_version: TANGLE_DB_VERSION.to_string(),
+            replica_db_version: REPLICA_DB_VERSION.to_string(),
             schema: vec![SchemaEntry {
                 object_type: String::from("table"),
                 name: String::from("fail_table"),
@@ -517,7 +517,7 @@ mod tests {
         row.insert(String::from("co\"l"), Value::from(7));
         let backup = DatabaseBackup {
             format_version: DATABASE_BACKUP_VERSION.to_string(),
-            replica_db_version: TANGLE_DB_VERSION.to_string(),
+            replica_db_version: REPLICA_DB_VERSION.to_string(),
             schema: vec![
                 SchemaEntry {
                     object_type: String::from("table"),
@@ -581,7 +581,7 @@ mod tests {
 
     #[test]
     fn validate_backup_version_rejects_invalid_versions() {
-        let wrong_format = backup_with_versions("0.0.1", TANGLE_DB_VERSION);
+        let wrong_format = backup_with_versions("0.0.1", REPLICA_DB_VERSION);
         let err = validate_backup_version(&wrong_format).expect_err("format version must fail");
         assert!(matches!(err, SqlError::InvalidArgument(_)));
 
@@ -599,7 +599,7 @@ mod tests {
             )],
             None,
         );
-        let backup = backup_with_versions(DATABASE_BACKUP_VERSION, TANGLE_DB_VERSION);
+        let backup = backup_with_versions(DATABASE_BACKUP_VERSION, REPLICA_DB_VERSION);
 
         let matched = executor
             .query_raw("select type, name from sqlite_master", "[]")

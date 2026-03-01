@@ -3,7 +3,7 @@ use radroots_sql_core::{
 };
 use radroots_sql_wasm_core::{err_js, parse_json};
 use radroots_replica_db::migrations;
-use radroots_replica_db::{TangleDbExportManifestRs, export_manifest};
+use radroots_replica_db::{ReplicaDbExportManifestRs, export_manifest};
 use radroots_replica_sync::radroots_replica_sync_status;
 use wasm_bindgen::JsValue;
 use wasm_bindgen::prelude::*;
@@ -141,7 +141,7 @@ fn export_snapshot(exec: &WasmSqlExecutor) -> Result<JsValue, JsValue> {
     if status.pending_count > 0 {
         return Err(err_js(radroots_sql_core::SqlError::InvalidArgument(
             format!(
-                "tangle db export requires synced state (pending {}/{})",
+                "replica db export requires synced state (pending {}/{})",
                 status.pending_count, status.expected_count
             ),
         )));
@@ -150,13 +150,13 @@ fn export_snapshot(exec: &WasmSqlExecutor) -> Result<JsValue, JsValue> {
     export_snapshot_value(manifest)
 }
 
-fn export_snapshot_value(manifest: TangleDbExportManifestRs) -> Result<JsValue, JsValue> {
+fn export_snapshot_value(manifest: ReplicaDbExportManifestRs) -> Result<JsValue, JsValue> {
     let bytes_js = radroots_sql_wasm_core::export_bytes();
     export_snapshot_value_with_bytes(manifest, bytes_js)
 }
 
 fn export_snapshot_value_with_bytes(
-    manifest: TangleDbExportManifestRs,
+    manifest: ReplicaDbExportManifestRs,
     bytes_js: JsValue,
 ) -> Result<JsValue, JsValue> {
     let manifest_js = serde_wasm_bindgen::to_value(&manifest).map_err(|err| {
@@ -180,7 +180,7 @@ mod tests {
 
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn export_snapshot_value_includes_fields() {
-        let manifest = radroots_replica_db::TangleDbExportManifestRs {
+        let manifest = radroots_replica_db::ReplicaDbExportManifestRs {
             export_version: "1".to_string(),
             replica_db_version: "0.0.0".to_string(),
             backup_format_version: "0.0.0".to_string(),

@@ -41,6 +41,6 @@ require_reproducible_exports = true
 require_conformance_vectors = true
 
 [policy.replica]
-forbid_legacy_tangle_identifiers = true
+forbid_legacy_alias_identifiers = true
 require_transport_agnostic_sync_contract = true
 require_deterministic_emit_ingest = true
