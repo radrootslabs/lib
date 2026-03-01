@@ -30,7 +30,7 @@ jobs:
             -p radroots-events \
             -p radroots-trade \
             -p radroots-identity \
-            -p radroots-tangle-db-schema \
+            -p radroots-replica-db-schema \
             -p radroots-events-codec \
             -p radroots-events-codec-wasm
 
@@ -43,7 +43,7 @@ jobs:
             -p radroots-events \
             -p radroots-trade \
             -p radroots-identity \
-            -p radroots-tangle-db-schema \
+            -p radroots-replica-db-schema \
             -p radroots-events-codec \
             -p radroots-events-codec-wasm
 

@@ -1,13 +1,13 @@
 .PHONY: all build clean help export-ts-sdk-bindings \
-	build-events-codec-wasm build-tangle-db-wasm build-tangle-events-wasm
+	build-events-codec-wasm build-replica-db-wasm build-replica-sync-wasm
 
 SHELL := /bin/bash
 .SHELLFLAGS := -e -o pipefail -c
 
 BUILD_TARGETS := \
 	build-events-codec-wasm \
-	build-tangle-db-wasm \
-	build-tangle-events-wasm
+	build-replica-db-wasm \
+	build-replica-sync-wasm
 
 all: build
 
@@ -28,14 +28,14 @@ help:
 export-ts-sdk-bindings:
 	cargo run -q -p xtask -- sdk export-ts
 
-build-tangle-db-wasm:
-	wasm-pack build crates/tangle-db-wasm --release --target web \
-		--out-dir ../tangle-db-wasm/pkg/dist --scope radroots
+build-replica-db-wasm:
+	wasm-pack build crates/replica-db-wasm --release --target web \
+		--out-dir ../replica-db-wasm/pkg/dist --scope radroots
 
 build-events-codec-wasm:
 	wasm-pack build crates/events-codec-wasm --release --target web \
 		--out-dir ../events-codec-wasm/pkg/dist --scope radroots
 
-build-tangle-events-wasm:
-	wasm-pack build crates/tangle-events-wasm --release --target web \
-		--out-dir ../tangle-events-wasm/pkg/dist --scope radroots
+build-replica-sync-wasm:
+	wasm-pack build crates/replica-sync-wasm --release --target web \
+		--out-dir ../replica-sync-wasm/pkg/dist --scope radroots

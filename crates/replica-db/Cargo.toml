@@ -1,0 +1,31 @@
+[package]
+name = "radroots-replica-db"
+description = "Replica database layer for Radroots"
+version.workspace = true
+edition.workspace = true
+authors = ["Radroots Authors"]
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+crate-type = ["rlib"]
+
+[features]
+default = []
+web = ["radroots-sql-core/web"]
+native = ["radroots-sql-core/native"]
+embedded = ["radroots-sql-core/embedded"]
+coverage-minimal = []
+
+[dependencies]
+radroots-sql-core = { workspace = true }
+radroots-replica-db-schema = { workspace = true }
+radroots-types = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+hex = { workspace = true }
+sha2 = { workspace = true }
+
+[dev-dependencies]
+radroots-sql-core = { workspace = true, features = ["native"] }

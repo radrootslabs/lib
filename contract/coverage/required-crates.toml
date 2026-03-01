@@ -7,7 +7,7 @@ crates = [
   "radroots-trade",
   "radroots-events-codec",
   "radroots-events-codec-wasm",
-  "radroots-tangle-db-schema",
+  "radroots-replica-db-schema",
   "radroots-app-core",
   "radroots-app-wasm",
   "radroots-events-indexed",
@@ -22,10 +22,10 @@ crates = [
   "radroots-sql-core",
   "radroots-sql-wasm-core",
   "radroots-sql-wasm-bridge",
-  "radroots-tangle-events",
-  "radroots-tangle-db",
-  "radroots-tangle-events-wasm",
-  "radroots-tangle-db-wasm",
+  "radroots-replica-sync",
+  "radroots-replica-db",
+  "radroots-replica-sync-wasm",
+  "radroots-replica-db-wasm",
 ]
 
 [policy]

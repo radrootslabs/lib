@@ -44,7 +44,7 @@ status = "required"
 order = 7
 
 [[rollout.crates]]
-name = "radroots-tangle-db-schema"
+name = "radroots-replica-db-schema"
 status = "required"
 order = 8
 
@@ -124,21 +124,21 @@ status = "required"
 order = 23
 
 [[rollout.crates]]
-name = "radroots-tangle-events"
+name = "radroots-replica-sync"
 status = "required"
 order = 24
 
 [[rollout.crates]]
-name = "radroots-tangle-db"
+name = "radroots-replica-db"
 status = "required"
 order = 25
 
 [[rollout.crates]]
-name = "radroots-tangle-events-wasm"
+name = "radroots-replica-sync-wasm"
 status = "required"
 order = 26
 
 [[rollout.crates]]
-name = "radroots-tangle-db-wasm"
+name = "radroots-replica-db-wasm"
 status = "required"
 order = 27

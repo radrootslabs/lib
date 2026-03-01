@@ -19,11 +19,11 @@ members = [
     "crates/sql-wasm-bridge",
     "crates/sql-wasm-core",
     "crates/sql-core",
-    "crates/tangle-db-schema",
-    "crates/tangle-events",
-    "crates/tangle-events-wasm",
-    "crates/tangle-db",
-    "crates/tangle-db-wasm",
+    "crates/replica-db-schema",
+    "crates/replica-sync",
+    "crates/replica-sync-wasm",
+    "crates/replica-db",
+    "crates/replica-db-wasm",
     "crates/trade",
     "crates/types",
     "crates/xtask",
@@ -58,11 +58,11 @@ radroots-nostr-runtime = { path = "crates/nostr-runtime", version = "0.1.0", def
 radroots-sql-wasm-bridge = { path = "crates/sql-wasm-bridge", version = "0.1.0" }
 radroots-sql-wasm-core = { path = "crates/sql-wasm-core", version = "0.1.0", default-features = false }
 radroots-sql-core = { path = "crates/sql-core", version = "0.1.0" }
-radroots-tangle-db-schema = { path = "crates/tangle-db-schema", version = "0.1.0", default-features = false }
-radroots-tangle-events = { path = "crates/tangle-events", version = "0.1.0", default-features = false }
-radroots-tangle-db = { path = "crates/tangle-db", version = "0.1.0", default-features = false }
-radroots-tangle-db-wasm = { path = "crates/tangle-db-wasm", version = "0.1.0" }
-radroots-tangle-events-wasm = { path = "crates/tangle-events-wasm", version = "0.1.0" }
+radroots-replica-db-schema = { path = "crates/replica-db-schema", version = "0.1.0", default-features = false }
+radroots-replica-sync = { path = "crates/replica-sync", version = "0.1.0", default-features = false }
+radroots-replica-db = { path = "crates/replica-db", version = "0.1.0", default-features = false }
+radroots-replica-db-wasm = { path = "crates/replica-db-wasm", version = "0.1.0" }
+radroots-replica-sync-wasm = { path = "crates/replica-sync-wasm", version = "0.1.0" }
 radroots-trade = { path = "crates/trade", version = "0.1.0", default-features = false }
 radroots-types = { path = "crates/types", version = "0.1.0", default-features = false }
 

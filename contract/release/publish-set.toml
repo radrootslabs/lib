@@ -28,11 +28,11 @@ crates = [
   "radroots-sql-core",
   "radroots-sql-wasm-bridge",
   "radroots-sql-wasm-core",
-  "radroots-tangle-db",
-  "radroots-tangle-db-schema",
-  "radroots-tangle-db-wasm",
-  "radroots-tangle-events",
-  "radroots-tangle-events-wasm",
+  "radroots-replica-db",
+  "radroots-replica-db-schema",
+  "radroots-replica-db-wasm",
+  "radroots-replica-sync",
+  "radroots-replica-sync-wasm",
   "xtask",
 ]
 
