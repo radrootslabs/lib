@@ -1,0 +1,14 @@
+# radroots-events-indexed
+
+Indexed manifest and checkpoint types for Rad Roots event archives.
+
+## Goals
+
+- define stable manifest and checkpoint shapes for indexed event data
+- keep shard metadata and id range validation deterministic
+- support no_std and std targets with feature-gated serialization and type export
+- provide a reliable indexed data contract for archive and sync workflows
+
+## License
+
+Licensed under AGPL-3.0. See LICENSE.
