@@ -1,0 +1,14 @@
+# radroots-replica-sync
+
+Replica event ingest and synchronization interfaces for Rad Roots data layers.
+
+## Goals
+
+- define deterministic ingest rules for replica event state updates
+- produce sync bundles from local state with canonical transfer semantics
+- expose stable emit helpers for replica event publishing workflows
+- provide portable synchronization primitives for native and wasm integration crates
+
+## License
+
+Licensed under AGPL-3.0. See LICENSE.
