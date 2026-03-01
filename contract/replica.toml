@@ -1,0 +1,17 @@
+[replica]
+name = "radroots-replica-contract"
+version = "0.1.0"
+purpose = "offline-first local replica state and deterministic sync"
+
+[crate_family]
+schema = "radroots-replica-db-schema"
+storage = "radroots-replica-db"
+storage_wasm = "radroots-replica-db-wasm"
+sync = "radroots-replica-sync"
+sync_wasm = "radroots-replica-sync-wasm"
+
+[policy]
+transport_agnostic_sync_core = true
+deterministic_emit_and_ingest = true
+wasm_exports_prefix = "replica_"
+forbid_legacy_tangle_identifiers = true

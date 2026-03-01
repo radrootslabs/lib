@@ -24,6 +24,7 @@ The sdk contract includes only public interoperability primitives:
 - schema and conformance fixtures
 
 The sdk contract excludes app/runtime/storage implementation crates.
+Offline-first replica crates are internal surfaces governed by `contract/replica.toml` and are excluded from public sdk exports.
 
 ## governance
 
