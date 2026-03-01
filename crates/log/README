@@ -1,0 +1,14 @@
+# radroots-log
+
+Tracing-based logging primitives for the Rad Roots SDK runtime crates.
+
+## Goals
+
+- define stable logging and initialization primitives for shared runtime use
+- support std and no_std targets with deterministic behavior across environments
+- provide consistent tracing integration for Rad Roots crate consumers
+- keep logging setup reusable across application and service surfaces
+
+## License
+
+Licensed under AGPL-3.0. See LICENSE.
