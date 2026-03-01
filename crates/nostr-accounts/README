@@ -1,0 +1,14 @@
+# radroots-nostr-accounts
+
+Nostr protocol account primitives and vault interfaces for the Rad Roots SDK.
+
+## Goals
+
+- define stable account model and manager interfaces for Nostr identities
+- support pluggable secret vault backends for local and keyring-backed runtimes
+- keep account store and selection behavior deterministic across environments
+- provide reusable account primitives for higher-level Rad Roots crates
+
+## License
+
+Licensed under AGPL-3.0. See LICENSE.
