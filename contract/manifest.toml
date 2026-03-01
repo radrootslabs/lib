@@ -18,6 +18,13 @@ wasm_crates = [
   "radroots-events-codec-wasm",
 ]
 
+[surface.internal_replica_crates]
+schema = "radroots-replica-db-schema"
+storage = "radroots-replica-db"
+storage_wasm = "radroots-replica-db-wasm"
+sync = "radroots-replica-sync"
+sync_wasm = "radroots-replica-sync-wasm"
+
 [export.ts]
 packages = [
   "@radroots/core",
@@ -32,3 +39,8 @@ packages = [
 exclude_internal_workspace_crates = true
 require_reproducible_exports = true
 require_conformance_vectors = true
+
+[policy.replica]
+forbid_legacy_tangle_identifiers = true
+require_transport_agnostic_sync_contract = true
+require_deterministic_emit_ingest = true

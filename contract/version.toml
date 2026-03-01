@@ -10,6 +10,7 @@ major_on = [
   "change_exported_enum_variant",
   "change_exported_algorithm_behavior",
   "change_wasm_function_signature",
+  "rename_internal_replica_crate_family",
 ]
 minor_on = [
   "add_exported_type",
@@ -17,6 +18,7 @@ minor_on = [
   "add_enum_variant",
   "add_wasm_function",
   "add_conformance_vector",
+  "add_replica_transport_adapter",
 ]
 patch_on = [
   "fix_docs",
