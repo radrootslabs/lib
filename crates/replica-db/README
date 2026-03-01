@@ -1,0 +1,14 @@
+# radroots-replica-db
+
+Replica SQL runtime and migration interfaces for Rad Roots data layers.
+
+## Goals
+
+- define stable SQL-backed model operations for replica schema records
+- keep migration, backup, and restore behavior deterministic across targets
+- expose manifest export primitives for synchronized replica snapshots
+- provide reusable database interfaces for sync and wasm bridge crates
+
+## License
+
+Licensed under AGPL-3.0. See LICENSE.
