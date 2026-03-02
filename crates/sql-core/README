@@ -5,8 +5,8 @@ SQL execution and migration primitives for Rad Roots data layers.
 ## Goals
 
 - define stable SQL executor and error interfaces across target environments
-- support feature-gated native, web bridge, and embedded execution surfaces
 - keep migration execution behavior deterministic across runtime targets
+- support feature-gated native, web bridge, and embedded execution surfaces
 - provide reusable SQL primitives for higher-level Rad Roots crates
 
 ## License
