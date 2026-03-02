@@ -1,0 +1,14 @@
+# radroots-replica-db-wasm
+
+Wasm bindings for replica SQL runtime and synchronization interfaces in Rad Roots data layers.
+
+## Goals
+
+- expose wasm-callable replica CRUD, migration, and backup operations
+- keep export/import and manifest marshaling deterministic in web runtimes
+- bridge replica database flows to wasm SQL executor and sync status surfaces
+- provide stable data-layer interfaces for higher-level Rad Roots web clients
+
+## License
+
+Licensed under AGPL-3.0. See LICENSE.
