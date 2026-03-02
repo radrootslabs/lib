@@ -1,13 +1,13 @@
 # radroots-events
 
-Nostr event models, kinds, and tag helpers for the Rad Roots SDK.
+Nostr event models, kinds, and tag mappings for the Rad Roots SDK.
 
 ## Goals
 
-- define canonical event shapes for Rad Roots domain records
-- keep kind and tag encoding rules deterministic across targets
+- define stable event models for Rad Roots domain records
+- keep kind and tag mapping behavior deterministic across targets
 - support feature-gated serialization and type export for SDK consumers
-- provide stable event primitives for codec and runtime crates
+- provide reusable event primitives for higher-level Rad Roots crates
 
 ## License
 
