@@ -58,40 +58,40 @@ jobs:
 
             if [ "${status}" != "ok" ]; then
               cat > "${run_dir}/coverage-gate-summary.json" <<JSON
-{
-  "scope": "${crate}",
-  "thresholds": {
-    "executable_lines": 0,
-    "functions": 0,
-    "branches": 0,
-    "branches_required": false
-  },
-  "measured": {
-    "executable_lines_percent": 0,
-    "executable_lines_source": "da",
-    "functions_percent": 0,
-    "branches_percent": null,
-    "branches_available": false,
-    "summary_lines_percent": 0,
-    "summary_regions_percent": 0
-  },
-  "counts": {
-    "executable_lines": {
-      "covered": 0,
-      "total": 0
-    },
-    "branches": {
-      "covered": 0,
-      "total": 0
-    }
-  },
-  "result": {
-    "pass": false,
-    "fail_reasons": [
-      "${status}"
-    ]
-  }
-}
+              {
+                "scope": "${crate}",
+                "thresholds": {
+                  "executable_lines": 0,
+                  "functions": 0,
+                  "branches": 0,
+                  "branches_required": false
+                },
+                "measured": {
+                  "executable_lines_percent": 0,
+                  "executable_lines_source": "da",
+                  "functions_percent": 0,
+                  "branches_percent": null,
+                  "branches_available": false,
+                  "summary_lines_percent": 0,
+                  "summary_regions_percent": 0
+                },
+                "counts": {
+                  "executable_lines": {
+                    "covered": 0,
+                    "total": 0
+                  },
+                  "branches": {
+                    "covered": 0,
+                    "total": 0
+                  }
+                },
+                "result": {
+                  "pass": false,
+                  "fail_reasons": [
+                    "${status}"
+                  ]
+                }
+              }
 JSON
             fi
 
