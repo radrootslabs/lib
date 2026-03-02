@@ -1,10 +1,10 @@
 # radroots-nostr-runtime
 
-Nostr protocol runtime primitives and orchestration interfaces for the Rad Roots SDK.
+Nostr runtime primitives and orchestration interfaces for the Rad Roots SDK.
 
 ## Goals
 
-- define stable runtime event, subscription, and connection interfaces
+- define stable runtime interfaces for events, subscriptions, and connections
 - keep runtime orchestration behavior deterministic across supported environments
 - support feature-gated client and async runtime integration surfaces
 - provide reusable runtime primitives for higher-level Rad Roots crates
