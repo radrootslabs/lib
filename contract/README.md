@@ -1,52 +1,80 @@
-# Rad Roots SDK contract charter
+# radroots-sdk-contract
 
-## purpose
+Core contract for the Rad Roots cross-language SDK.
 
-The Rad Roots SDK contract defines the public, cross-language interface for interacting with the Rad Roots network profile on nostr.
+## Purpose
 
-This contract is the compatibility boundary for external integrators.
+This directory defines the Rad Roots SDK contract used to align Rust, TypeScript, Python, Swift, and Kotlin surfaces.
+It defines the public interoperability boundary for external integrators, keeps Rust as the canonical source for exported models and transforms, and enforces deterministic, machine-verifiable governance for contract changes and releases.
 
-## principles
+## Contract Surface
 
-- rust is the canonical contract source.
-- exported sdk surfaces are intentionally narrower than the full rust workspace.
-- deterministic transforms must be generated from canonical implementations.
-- language runtimes may implement networking natively if conformance is preserved.
-- contract evolution is semver-governed and must remain machine-verifiable.
+Contract metadata is defined in `contract/manifest.toml` and currently includes:
 
-## scope
+- model crates: `radroots-core`, `radroots-types`, `radroots-events`, `radroots-trade`, `radroots-identity`
+- algorithm crate: `radroots-events-codec`
+- wasm crate: `radroots-events-codec-wasm`
 
-The sdk contract includes only public interoperability primitives:
+Public SDK exports are intentionally narrower than the full Rust workspace.
 
-- event models and kind constants
-- identity and trade model surfaces
-- canonical tag and codec transforms
-- schema and conformance fixtures
+## Export Targets
 
-The sdk contract excludes app/runtime/storage implementation crates.
-Offline-first replica crates are internal surfaces governed by `contract/replica.toml` and are excluded from public sdk exports.
+Language export mappings and artifact layout rules are defined under `contract/exports/`:
 
-## governance
+- `contract/exports/ts.toml`
+- `contract/exports/py.toml`
+- `contract/exports/swift.toml`
+- `contract/exports/kotlin.toml`
 
-- all contract changes require conformance updates.
-- all contract exports must be reproducible from source.
-- release automation must publish contract metadata and artifact checksums.
-- release automation exports ts artifacts in this order:
-  - `radroots-core`
-  - `radroots-types`
-  - `radroots-events`
-  - `radroots-trade`
-  - `radroots-identity`
-  - `radroots-events-codec-wasm`
-- ts artifact commits under `crates/*/bindings/**` are forbidden and blocked by ci guards.
+Each export target defines package naming, artifact directories, and runtime expectations.
 
-## coverage governance
+## Internal Replica Contract
 
-- strict coverage policy for oss rust crates is defined in `contract/coverage/POLICY.md`.
-- crate rollout and enforcement order is defined in `contract/coverage/rollout.toml`.
+Offline-first replica crates are internal contract surfaces and are not public SDK exports.
+Replica contract metadata is defined in `contract/replica.toml`.
 
-## release operations
+Internal replica crate family:
 
-- release crate set and publish order are defined in `contract/release/publish-set.toml`.
-- deterministic release execution is defined in `contract/release/runbook.md`.
-- release checklist for `0.1.0` is defined in `contract/release/checklist-0.1.0.md`.
+- `radroots-replica-db-schema`
+- `radroots-replica-db`
+- `radroots-replica-db-wasm`
+- `radroots-replica-sync`
+- `radroots-replica-sync-wasm`
+
+## Governance
+
+Versioning and compatibility policy is defined in `contract/version.toml`.
+Contract evolution is semver-governed and requires conformance updates, export manifest validation, and release notes.
+
+Repository guards also enforce:
+
+- deterministic export requirements
+- strict no-legacy identifier policy for replica surfaces
+- no committed generated TypeScript artifacts under crate bindings
+
+## Coverage Policy
+
+Coverage governance is defined under `contract/coverage/`:
+
+- policy thresholds: `contract/coverage/POLICY.md`
+- rollout order: `contract/coverage/rollout.toml`
+- required crate list: `contract/coverage/required-crates.toml`
+
+Required Rust crates are gated at `100/100/100` (exec lines, functions, branches).
+
+## Release Policy
+
+Release crate set and publish order are defined in `contract/release/publish-set.toml`.
+Deterministic release workflow is defined in `contract/release/runbook.md`.
+Release checklist is defined in `contract/release/checklist-0.1.0.md`.
+
+Primary commands:
+
+- `cargo run -q -p xtask -- sdk validate`
+- `cargo run -q -p xtask -- sdk release preflight`
+- `./scripts/ci/release_preflight.sh`
+- `./scripts/ci/release_publish_order.sh dry-run`
+
+## License
+
+Licensed under AGPL-3.0. See LICENSE.
