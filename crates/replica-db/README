@@ -4,10 +4,10 @@ Replica SQL runtime and migration interfaces for Rad Roots data layers.
 
 ## Goals
 
-- define stable SQL-backed model operations for replica schema records
+- define stable SQL-backed interfaces for replica model operations
 - keep migration, backup, and restore behavior deterministic across targets
-- expose manifest export primitives for synchronized replica snapshots
-- provide reusable database interfaces for sync and wasm bridge crates
+- support export and manifest generation for synchronized replica snapshots
+- provide reusable database primitives for higher-level Rad Roots crates
 
 ## License
 
