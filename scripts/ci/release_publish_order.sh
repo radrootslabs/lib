@@ -6,9 +6,12 @@ cd "$root_dir"
 
 mode="${1:-publish}"
 if [[ "$mode" != "publish" && "$mode" != "dry-run" ]]; then
-  echo "usage: scripts/ci/release_publish_order.sh [publish|dry-run]"
+  echo "usage: scripts/ci/release_publish_order.sh [publish|dry-run] [crate names]"
   exit 2
 fi
+
+requested_raw="${2:-}"
+requested_raw="${requested_raw//,/ }"
 
 release_version="$(
   awk '
@@ -27,7 +30,6 @@ if [[ -z "$release_version" ]]; then
 fi
 
 order_file="$(mktemp)"
-trap 'rm -f "$order_file"' EXIT
 
 awk '
   /^\[publish_order\]/ { in_order = 1; next }
@@ -42,6 +44,34 @@ awk '
 if [[ ! -s "$order_file" ]]; then
   echo "publish_order.crates list is empty"
   exit 1
+fi
+
+selected_file="$(mktemp)"
+requested_file="$(mktemp)"
+trap 'rm -f "$order_file" "$selected_file" "$requested_file"' EXIT
+
+if [[ -n "$requested_raw" ]]; then
+  for token in $requested_raw; do
+    [[ -n "$token" ]] || continue
+    echo "$token" >> "$requested_file"
+  done
+  sort -u "$requested_file" -o "$requested_file"
+
+  while IFS= read -r token; do
+    if ! grep -Fxq "$token" "$order_file"; then
+      echo "requested crate is not in publish_order.crates: ${token}"
+      exit 1
+    fi
+  done < "$requested_file"
+
+  while IFS= read -r crate; do
+    [[ -n "$crate" ]] || continue
+    if grep -Fxq "$crate" "$requested_file"; then
+      echo "$crate" >> "$selected_file"
+    fi
+  done < "$order_file"
+else
+  cp "$order_file" "$selected_file"
 fi
 
 while IFS= read -r crate; do
@@ -77,6 +107,6 @@ while IFS= read -r crate; do
     fi
     sleep 10
   done
-done < "$order_file"
+done < "$selected_file"
 
 echo "publish sequence complete for release ${release_version}"
