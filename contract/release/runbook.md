@@ -24,6 +24,12 @@ This command validates:
 
 This runs `cargo publish --dry-run` in release order and reports deferred crates when they depend on earlier crates that are not yet published.
 
+GitHub Actions equivalent:
+
+- run workflow `publish crates`
+- set `dry_run = true`
+- optionally set `crates` (space or comma separated) to test a subset in release order
+
 ## publish
 
 ```bash
@@ -31,6 +37,14 @@ This runs `cargo publish --dry-run` in release order and reports deferred crates
 ```
 
 This publishes in `publish_order` and waits for each crate version to become visible on crates.io before continuing.
+
+GitHub Actions equivalent:
+
+- run workflow `publish crates`
+- set `dry_run = false`
+- ensure repository secret `CRATES_IO_TOKEN` is configured
+
+The workflow also accepts `CARGO_REGISTRY_TOKEN`; either secret can provide the cargo publish token.
 
 ## post-release verification
 

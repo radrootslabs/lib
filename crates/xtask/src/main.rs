@@ -151,7 +151,11 @@ fn validate_contract() -> Result<(), String> {
 fn release_preflight() -> Result<(), String> {
     let root = workspace_root()?;
     contract::validate_release_preflight(&root)?;
-    eprintln!("validated release preflight for contract 0.1.0");
+    let bundle = contract::load_contract_bundle(&root)?;
+    eprintln!(
+        "validated release preflight for contract {}",
+        bundle.version.contract.version
+    );
     Ok(())
 }
 
