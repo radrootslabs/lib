@@ -4,10 +4,10 @@ Shared API result and error wrapper types for the Rad Roots SDK.
 
 ## Goals
 
-- define consistent success and error envelope shapes across SDK surfaces
-- keep serialization behavior deterministic for API and transport boundaries
-- support type export for external SDK consumers when enabled
-- provide stable wrapper primitives for higher-level Rad Roots crates
+- define stable success and error envelope interfaces across SDK surfaces
+- keep envelope serialization behavior deterministic across API boundaries
+- support feature-gated type export for external SDK consumers
+- provide reusable wrapper primitives for higher-level Rad Roots crates
 
 ## License
 
