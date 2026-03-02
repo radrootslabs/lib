@@ -1,13 +1,13 @@
 # radroots-identity
 
-Identity model and profile utilities for the Rad Roots SDK.
+Identity models and profile primitives for the Rad Roots SDK.
 
 ## Goals
 
-- define stable identity types for keys, profiles, and public projections
-- support deterministic identity loading and serialization workflows
-- provide optional secret handling and zeroization features for secure runtimes
-- expose reusable identity primitives for higher-level Rad Roots crates
+- define stable identity interfaces for keys, profiles, and public projections
+- keep identity loading and serialization behavior deterministic across targets
+- support feature-gated secret handling and zeroization for secure runtimes
+- provide reusable identity primitives for higher-level Rad Roots crates
 
 ## License
 
