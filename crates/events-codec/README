@@ -4,10 +4,10 @@ Reference encoders and decoders for Rad Roots Nostr event payloads.
 
 ## Goals
 
-- define deterministic encode and decode behavior for Rad Roots event data
-- enforce stable parsing and validation across supported event forms
-- support std and no_std targets with feature-gated serde_json and nostr integration
-- provide a reliable codec layer for runtime and wasm bindings
+- define stable encoding and decoding interfaces for Rad Roots event payloads
+- keep parsing and validation behavior deterministic across supported event forms
+- support std and no_std builds with feature-gated `serde_json` and Nostr integration
+- provide reusable codec primitives for higher-level Rad Roots crates
 
 ## License
 
