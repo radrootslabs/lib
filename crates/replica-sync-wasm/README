@@ -1,6 +1,6 @@
 # radroots-replica-sync-wasm
 
-Wasm bindings for replica synchronization interfaces in Rad Roots data layers.
+Wasm bindings for replica synchronization interfaces for Rad Roots data layers.
 
 ## Goals
 
