@@ -58,18 +58,13 @@ jobs:
             dry_run="${DRY_RUN_INPUT:-false}"
           fi
 
-          mode="publish"
+          mode="--publish"
           if [ "${dry_run}" = "true" ]; then
-            mode="dry-run"
+            mode="--dry-run"
           fi
 
-          if [ "${mode}" = "publish" ] && [ -z "${CARGO_REGISTRY_TOKEN:-}" ] && [ -n "${CRATES_IO_TOKEN:-}" ]; then
-            export CARGO_REGISTRY_TOKEN="${CRATES_IO_TOKEN}"
+          if [ -n "${crates_input}" ]; then
+            ./publish-crates.sh "${mode}" "${crates_input}"
+          else
+            ./publish-crates.sh "${mode}"
           fi
-
-          if [ "${mode}" = "publish" ] && [ -z "${CARGO_REGISTRY_TOKEN:-}" ]; then
-            echo "set CRATES_IO_TOKEN or CARGO_REGISTRY_TOKEN for publish runs"
-            exit 1
-          fi
-
-          ./scripts/ci/release_publish_order.sh "${mode}" "${crates_input}"

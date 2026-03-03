@@ -50,6 +50,76 @@ selected_file="$(mktemp)"
 requested_file="$(mktemp)"
 trap 'rm -f "$order_file" "$selected_file" "$requested_file"' EXIT
 
+crate_version_visible() {
+  local crate="$1"
+  curl -fsSL "https://crates.io/api/v1/crates/${crate}/${release_version}" >/dev/null 2>&1
+}
+
+seconds_until_http_date() {
+  local retry_after="$1"
+  python3 - "$retry_after" <<'PY'
+import datetime
+import email.utils
+import sys
+
+retry_after = sys.argv[1].strip()
+try:
+    target = email.utils.parsedate_to_datetime(retry_after)
+except Exception:
+    print(0)
+    raise SystemExit(0)
+
+if target.tzinfo is None:
+    target = target.replace(tzinfo=datetime.timezone.utc)
+
+now = datetime.datetime.now(datetime.timezone.utc)
+remaining = (target - now).total_seconds()
+print(max(1, int(remaining) + 1))
+PY
+}
+
+publish_with_retry() {
+  local crate="$1"
+  local attempt=1
+  while true; do
+    local log_file
+    log_file="$(mktemp)"
+    if cargo publish --locked -p "$crate" >"$log_file" 2>&1; then
+      cat "$log_file"
+      rm -f "$log_file"
+      return 0
+    fi
+
+    cat "$log_file"
+
+    if grep -Fq "already uploaded" "$log_file"; then
+      echo "crate ${crate} version ${release_version} is already uploaded"
+      rm -f "$log_file"
+      return 0
+    fi
+
+    if grep -Fq "429 Too Many Requests" "$log_file"; then
+      local retry_after
+      retry_after="$(sed -n 's/.*Please try again after \(.*GMT\).*/\1/p' "$log_file" | head -n1)"
+      local sleep_secs=0
+      if [[ -n "$retry_after" ]]; then
+        sleep_secs="$(seconds_until_http_date "$retry_after")"
+      fi
+      if [[ "$sleep_secs" -le 0 ]]; then
+        sleep_secs=$((30 + attempt * 15))
+      fi
+      echo "publish rate-limited for ${crate}; retry ${attempt} in ${sleep_secs}s"
+      rm -f "$log_file"
+      sleep "$sleep_secs"
+      attempt=$((attempt + 1))
+      continue
+    fi
+
+    rm -f "$log_file"
+    return 1
+  done
+}
+
 if [[ -n "$requested_raw" ]]; then
   for token in $requested_raw; do
     [[ -n "$token" ]] || continue
@@ -96,9 +166,14 @@ while IFS= read -r crate; do
     exit 1
   fi
 
-  cargo publish --locked -p "$crate"
+  if crate_version_visible "$crate"; then
+    echo "skip ${crate}: version ${release_version} already visible on crates.io"
+    continue
+  fi
+
+  publish_with_retry "$crate"
   for attempt in $(seq 1 30); do
-    if curl -fsSL "https://crates.io/api/v1/crates/${crate}/${release_version}" >/dev/null 2>&1; then
+    if crate_version_visible "$crate"; then
       break
     fi
     if [[ "$attempt" == "30" ]]; then
