@@ -5,6 +5,10 @@ edition.workspace = true
 authors = ["Radroots Authors"]
 rust-version.workspace = true
 license.workspace = true
+description = "wasm sql runtime primitives for radroots data layers"
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
 
 [lib]
 crate-type = ["cdylib", "rlib"]

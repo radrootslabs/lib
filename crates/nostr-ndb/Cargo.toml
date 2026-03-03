@@ -1,11 +1,14 @@
 [package]
 name = "radroots-nostr-ndb"
-description = "NostrDB integration layer for Radroots"
 version = "0.1.0-alpha.1"
 edition.workspace = true
 authors = ["Radroots Authors"]
 rust-version.workspace = true
 license.workspace = true
+description = "NostrDB integration layer for Radroots"
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
 
 [features]
 default = ["std", "rt", "ndb", "runtime-adapter"]

@@ -1,11 +1,14 @@
 [package]
 name = "radroots-replica-db-schema"
-description = "Replica schema model for Radroots"
 version = "0.1.0-alpha.1"
 edition.workspace = true
 authors = ["Radroots Authors"]
 rust-version.workspace = true
 license.workspace = true
+description = "Replica schema model for Radroots"
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
 build = "build.rs"
 
 [lib]

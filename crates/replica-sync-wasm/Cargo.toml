@@ -1,11 +1,14 @@
 [package]
 name = "radroots-replica-sync-wasm"
-description = "WASM boundary for Radroots replica synchronization"
 version = "0.1.0-alpha.1"
 edition.workspace = true
 authors = ["Radroots Authors"]
 rust-version.workspace = true
 license.workspace = true
+description = "WASM boundary for Radroots replica synchronization"
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
 
 [lib]
 crate-type = ["cdylib", "rlib"]

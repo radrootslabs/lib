@@ -5,6 +5,10 @@ edition.workspace = true
 authors = ["Radroots Authors"]
 rust-version.workspace = true
 license.workspace = true
+description = "network orchestration primitives and runtime interfaces for the radroots sdk"
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
 
 [features]
 default = ["std"]
