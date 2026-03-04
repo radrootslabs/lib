@@ -1,11 +1,10 @@
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
 
-use crate::{job::JobInputType};
+use crate::job::JobInputType;
 
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
-
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]

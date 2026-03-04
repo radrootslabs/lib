@@ -1,13 +1,12 @@
 #![forbid(unsafe_code)]
 
+use crate::RadrootsNostrEventPtr;
 use crate::message::RadrootsMessageRecipient;
-use crate::{RadrootsNostrEventPtr};
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
 
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
-
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]

@@ -1,4 +1,4 @@
-use crate::{kinds::KIND_ACCOUNT_CLAIM as KIND_ACCOUNT_CLAIM_EVENT};
+use crate::kinds::KIND_ACCOUNT_CLAIM as KIND_ACCOUNT_CLAIM_EVENT;
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
 
@@ -6,7 +6,6 @@ use ts_rs::TS;
 use alloc::string::String;
 
 pub const KIND_ACCOUNT_CLAIM: u32 = KIND_ACCOUNT_CLAIM_EVENT;
-
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]

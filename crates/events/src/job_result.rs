@@ -1,14 +1,10 @@
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
 
-use crate::{
-    RadrootsNostrEventPtr, job::JobPaymentRequest,
-    job_request::RadrootsJobInput,
-};
+use crate::{RadrootsNostrEventPtr, job::JobPaymentRequest, job_request::RadrootsJobInput};
 
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
-
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]

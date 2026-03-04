@@ -45,7 +45,6 @@ pub fn radroots_profile_type_from_tag_value(value: &str) -> Option<RadrootsProfi
     }
 }
 
-
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
