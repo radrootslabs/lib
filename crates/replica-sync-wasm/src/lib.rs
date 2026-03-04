@@ -8,12 +8,12 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 #[cfg(target_arch = "wasm32")]
 use radroots_events::RadrootsNostrEvent;
 #[cfg(target_arch = "wasm32")]
-use radroots_sql_core::WasmSqlExecutor;
-#[cfg(target_arch = "wasm32")]
 use radroots_replica_sync::{
     RadrootsReplicaIdFactory, RadrootsReplicaIngestOutcome, RadrootsReplicaSyncRequest,
     radroots_replica_ingest_event_with_factory, radroots_replica_sync_all,
 };
+#[cfg(target_arch = "wasm32")]
+use radroots_sql_core::WasmSqlExecutor;
 #[cfg(target_arch = "wasm32")]
 use serde::Deserialize;
 #[cfg(target_arch = "wasm32")]
