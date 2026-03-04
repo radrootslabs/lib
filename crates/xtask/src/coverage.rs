@@ -809,21 +809,24 @@ fn list_required_crates() -> Result<(), String> {
         .join("required-crates.toml");
     let crates = read_required_crates(&required_path)?;
     let mut stdout = std::io::stdout().lock();
-    for crate_name in crates {
-        if let Err(err) = writeln!(stdout, "{crate_name}") {
-            return Err(format!("failed to write required crates output: {err}"));
-        }
-    }
-    Ok(())
+    write_crate_names_output(&mut stdout, crates, "required crates")
 }
 
 fn list_workspace_crates() -> Result<(), String> {
     let root = workspace_root()?;
     let crates = read_workspace_crates(&root)?;
     let mut stdout = std::io::stdout().lock();
+    write_crate_names_output(&mut stdout, crates, "workspace crates")
+}
+
+fn write_crate_names_output<W: Write>(
+    writer: &mut W,
+    crates: Vec<String>,
+    label: &str,
+) -> Result<(), String> {
     for crate_name in crates {
-        if let Err(err) = writeln!(stdout, "{crate_name}") {
-            return Err(format!("failed to write workspace crates output: {err}"));
+        if let Err(err) = writeln!(writer, "{crate_name}") {
+            return Err(format!("failed to write {label} output: {err}"));
         }
     }
     Ok(())
@@ -845,6 +848,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
 mod tests {
     use super::*;
     use std::fs;
+    use std::io::{self, Write};
     use std::path::Path;
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -869,6 +873,18 @@ mod tests {
             fs::create_dir_all(parent).expect("create parent");
         }
         fs::write(path, content).expect("write file");
+    }
+
+    struct FailingWriter;
+
+    impl Write for FailingWriter {
+        fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+            Err(io::Error::other("forced write failure"))
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
     }
 
     #[test]
@@ -896,6 +912,19 @@ mod tests {
         assert_eq!(summary.summary_regions_percent, 86.75);
 
         fs::remove_file(path).expect("remove summary");
+    }
+
+    #[test]
+    fn read_summary_reports_read_and_parse_errors() {
+        let missing = temp_file_path("summary_missing");
+        let read_err = read_summary(&missing).expect_err("missing summary should fail");
+        assert!(read_err.contains("failed to read summary"));
+
+        let invalid = temp_file_path("summary_invalid");
+        write_file(&invalid, "{not-json");
+        let parse_err = read_summary(&invalid).expect_err("invalid summary should fail");
+        assert!(parse_err.contains("failed to parse summary"));
+        fs::remove_file(invalid).expect("remove invalid summary");
     }
 
     #[test]
@@ -979,6 +1008,19 @@ mod tests {
         let err = read_required_crates(&dup_path).expect_err("duplicate required crates");
         assert!(err.contains("duplicate crate a"));
         fs::remove_file(dup_path).expect("remove dup required crates");
+    }
+
+    #[test]
+    fn read_required_crates_reports_read_and_parse_errors() {
+        let missing = temp_file_path("required_missing");
+        let read_err = read_required_crates(&missing).expect_err("missing required file");
+        assert!(read_err.contains("failed to read required crates"));
+
+        let invalid = temp_file_path("required_invalid");
+        write_file(&invalid, "not = [toml");
+        let parse_err = read_required_crates(&invalid).expect_err("invalid required file");
+        assert!(parse_err.contains("failed to parse required crates"));
+        fs::remove_file(invalid).expect("remove invalid required file");
     }
 
     #[test]
@@ -1194,6 +1236,21 @@ test_threads = 0
     }
 
     #[test]
+    fn parse_toml_reports_read_and_parse_errors() {
+        let missing = temp_file_path("parse_toml_missing");
+        let read_err =
+            parse_toml::<CoverageRequiredContract>(&missing).expect_err("missing file should fail");
+        assert!(read_err.contains("failed to read"));
+
+        let invalid = temp_file_path("parse_toml_invalid");
+        write_file(&invalid, "[required]\ncrates = [\n");
+        let parse_err =
+            parse_toml::<CoverageRequiredContract>(&invalid).expect_err("invalid toml should fail");
+        assert!(parse_err.contains("failed to parse"));
+        fs::remove_file(invalid).expect("remove invalid toml");
+    }
+
+    #[test]
     fn read_lcov_rejects_invalid_records() {
         let cases = vec![
             ("invalid_da_shape", "DA:1\n", "invalid DA record"),
@@ -1224,6 +1281,13 @@ test_threads = 0
             );
             fs::remove_file(path).expect("remove invalid lcov file");
         }
+    }
+
+    #[test]
+    fn read_lcov_reports_read_error() {
+        let missing = temp_file_path("lcov_missing");
+        let err = read_lcov(&missing).expect_err("missing lcov should fail");
+        assert!(err.contains("failed to read lcov"));
     }
 
     #[test]
@@ -1293,6 +1357,10 @@ test_threads = 0
         fail.arg("-c").arg("exit 9");
         let err = run_command(fail, "shell fail").expect_err("run failing command");
         assert!(err.contains("shell fail failed with status"));
+
+        let missing = Command::new("/definitely/not/a/real/command");
+        let err = run_command(missing, "shell missing").expect_err("missing command");
+        assert!(err.contains("failed to run shell missing"));
     }
 
     #[test]
@@ -1462,6 +1530,64 @@ test_threads = 0
     }
 
     #[test]
+    fn report_gate_handles_nan_threshold_input() {
+        let root = temp_dir_path("report_gate_nan");
+        let summary_path = root.join("summary.json");
+        let lcov_path = root.join("coverage.info");
+        let out_path = root.join("gate-report.json");
+        write_file(
+            &summary_path,
+            r#"{"data":[{"totals":{"functions":{"percent":100.0},"lines":{"percent":100.0},"regions":{"percent":100.0}}}]}"#,
+        );
+        write_file(&lcov_path, "DA:1,1\nBRDA:1,0,0,1\n");
+
+        let args = vec![
+            "--scope".to_string(),
+            "crate-nan".to_string(),
+            "--summary".to_string(),
+            summary_path.display().to_string(),
+            "--lcov".to_string(),
+            lcov_path.display().to_string(),
+            "--out".to_string(),
+            out_path.display().to_string(),
+            "--fail-under-functions".to_string(),
+            "NaN".to_string(),
+        ];
+        let err = report_gate(&args).expect_err("nan threshold should fail coverage gate");
+        assert!(err.contains("coverage gate failed"));
+        fs::remove_dir_all(root).expect("remove report gate nan root");
+    }
+
+    #[test]
+    fn report_gate_reports_write_failure() {
+        let root = temp_dir_path("report_gate_write_fail");
+        let summary_path = root.join("summary.json");
+        let lcov_path = root.join("coverage.info");
+        let out_path = root.join("gate-report.json");
+        write_file(
+            &summary_path,
+            r#"{"data":[{"totals":{"functions":{"percent":100.0},"lines":{"percent":100.0},"regions":{"percent":100.0}}}]}"#,
+        );
+        write_file(&lcov_path, "DA:1,1\nBRDA:1,0,0,1\n");
+        fs::create_dir_all(&out_path).expect("create directory at output path");
+
+        let args = vec![
+            "--scope".to_string(),
+            "crate-write".to_string(),
+            "--summary".to_string(),
+            summary_path.display().to_string(),
+            "--lcov".to_string(),
+            lcov_path.display().to_string(),
+            "--out".to_string(),
+            out_path.display().to_string(),
+            "--require-branches".to_string(),
+        ];
+        let err = report_gate(&args).expect_err("writing report to directory should fail");
+        assert!(err.contains("failed to write"));
+        fs::remove_dir_all(root).expect("remove report gate write root");
+    }
+
+    #[test]
     fn report_gate_logs_branch_unavailable_path() {
         let root = temp_dir_path("report_gate_no_branches");
         let summary_path = root.join("summary.json");
@@ -1498,6 +1624,29 @@ test_threads = 0
         assert!(unknown_err.contains("unknown sdk coverage subcommand"));
         let missing_err = run(&[]).expect_err("missing subcommand");
         assert!(missing_err.contains("missing sdk coverage subcommand"));
+    }
+
+    #[test]
+    fn write_crate_names_output_covers_success_and_error_paths() {
+        let mut output = Vec::new();
+        write_crate_names_output(
+            &mut output,
+            vec!["radroots-a".to_string(), "radroots-b".to_string()],
+            "required crates",
+        )
+        .expect("write crate names");
+        let rendered = String::from_utf8(output).expect("utf8");
+        assert!(rendered.contains("radroots-a"));
+        assert!(rendered.contains("radroots-b"));
+
+        let mut failing = FailingWriter;
+        let err = write_crate_names_output(
+            &mut failing,
+            vec!["radroots-a".to_string()],
+            "workspace crates",
+        )
+        .expect_err("writer failure");
+        assert!(err.contains("failed to write workspace crates output"));
     }
 
     #[test]
