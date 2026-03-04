@@ -5,7 +5,7 @@ use radroots_events::{
 
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
 use radroots_events_codec::follow::decode::{
-    follow_from_tags, index_from_event, metadata_from_event,
+    follow_from_tags, parsed_from_event, data_from_event,
 };
 use radroots_events_codec::follow::encode::{
     FollowMutation, follow_apply, follow_to_wire_parts_after, to_wire_parts,
@@ -146,7 +146,7 @@ fn follow_metadata_and_index_from_event_roundtrip() {
         "alice".to_string(),
         "88".to_string(),
     ]];
-    let metadata = metadata_from_event(
+    let metadata = data_from_event(
         "id".to_string(),
         "author".to_string(),
         50,
@@ -171,7 +171,7 @@ fn follow_metadata_and_index_from_event_roundtrip() {
         Some("alice")
     );
 
-    let index = index_from_event(
+    let index = parsed_from_event(
         "id".to_string(),
         "author".to_string(),
         50,
@@ -188,7 +188,7 @@ fn follow_metadata_and_index_from_event_roundtrip() {
 
 #[test]
 fn follow_index_from_event_propagates_parse_errors() {
-    let err = index_from_event(
+    let err = parsed_from_event(
         "id".to_string(),
         "author".to_string(),
         50,

@@ -4,7 +4,7 @@ use radroots_events::{
 };
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
 use radroots_events_codec::geochat::decode::{
-    geochat_from_tags, index_from_event, metadata_from_event,
+    geochat_from_tags, parsed_from_event, data_from_event,
 };
 use radroots_events_codec::geochat::encode::{geochat_build_tags, to_wire_parts};
 
@@ -177,7 +177,7 @@ fn geochat_metadata_and_index_from_event_roundtrip() {
         vec!["n".to_string(), "alex".to_string()],
         vec!["t".to_string(), "teleport".to_string()],
     ];
-    let metadata = metadata_from_event(
+    let metadata = data_from_event(
         "id".to_string(),
         "author".to_string(),
         77,
@@ -193,7 +193,7 @@ fn geochat_metadata_and_index_from_event_roundtrip() {
     assert_eq!(metadata.geochat.geohash, "dr5rsj7");
     assert!(metadata.geochat.teleported);
 
-    let index = index_from_event(
+    let index = parsed_from_event(
         "id".to_string(),
         "author".to_string(),
         77,
@@ -210,7 +210,7 @@ fn geochat_metadata_and_index_from_event_roundtrip() {
 
 #[test]
 fn geochat_index_from_event_propagates_parse_errors() {
-    let err = index_from_event(
+    let err = parsed_from_event(
         "id".to_string(),
         "author".to_string(),
         77,

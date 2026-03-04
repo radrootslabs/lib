@@ -12,16 +12,16 @@ use radroots_events::{
 use crate::job::{
     error::JobParseError,
     feedback::decode::{
-        index_from_event as feedback_index_from_event,
-        metadata_from_event as feedback_metadata_from_event,
+        parsed_from_event as feedback_index_from_event,
+        data_from_event as feedback_metadata_from_event,
     },
     request::decode::{
-        index_from_event as request_index_from_event,
-        metadata_from_event as request_metadata_from_event,
+        parsed_from_event as request_index_from_event,
+        data_from_event as request_metadata_from_event,
     },
     result::decode::{
-        index_from_event as result_index_from_event,
-        metadata_from_event as result_metadata_from_event,
+        parsed_from_event as result_index_from_event,
+        data_from_event as result_metadata_from_event,
     },
 };
 

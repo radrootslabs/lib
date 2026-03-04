@@ -67,7 +67,7 @@ pub fn job_request_from_tags(
     })
 }
 
-pub fn metadata_from_event(
+pub fn data_from_event(
     id: String,
     author: String,
     published_at: u32,
@@ -87,7 +87,7 @@ pub fn metadata_from_event(
     })
 }
 
-pub fn index_from_event(
+pub fn parsed_from_event(
     id: String,
     author: String,
     published_at: u32,
@@ -97,7 +97,7 @@ pub fn index_from_event(
     sig: String,
 ) -> Result<RadrootsJobRequestEventIndex, JobParseError> {
     let metadata =
-        metadata_from_event(id.clone(), author.clone(), published_at, kind, tags.clone())?;
+        data_from_event(id.clone(), author.clone(), published_at, kind, tags.clone())?;
     Ok(RadrootsJobRequestEventIndex {
         event: RadrootsNostrEvent {
             id,

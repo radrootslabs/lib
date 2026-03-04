@@ -43,7 +43,7 @@ fn profile_from_content_rejects_invalid_json() {
 
 #[test]
 fn profile_metadata_rejects_wrong_kind() {
-    let err = radroots_events_codec::profile::decode::metadata_from_event(
+    let err = radroots_events_codec::profile::decode::data_from_event(
         "id".to_string(),
         "author".to_string(),
         1,
@@ -64,7 +64,7 @@ fn profile_metadata_rejects_wrong_kind() {
 
 #[test]
 fn profile_metadata_reads_profile_type_tag() {
-    let metadata = radroots_events_codec::profile::decode::metadata_from_event(
+    let metadata = radroots_events_codec::profile::decode::data_from_event(
         "id".to_string(),
         "author".to_string(),
         1,
@@ -82,7 +82,7 @@ fn profile_metadata_reads_profile_type_tag() {
 
 #[test]
 fn profile_metadata_reads_profile_type_any_tag() {
-    let metadata = radroots_events_codec::profile::decode::metadata_from_event(
+    let metadata = radroots_events_codec::profile::decode::data_from_event(
         "id".to_string(),
         "author".to_string(),
         1,
@@ -100,7 +100,7 @@ fn profile_metadata_reads_profile_type_any_tag() {
 
 #[test]
 fn profile_metadata_reads_profile_type_radrootsd_tag() {
-    let metadata = radroots_events_codec::profile::decode::metadata_from_event(
+    let metadata = radroots_events_codec::profile::decode::data_from_event(
         "id".to_string(),
         "author".to_string(),
         1,

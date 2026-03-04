@@ -4,7 +4,7 @@ use radroots_events::{
 };
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
 use radroots_events_codec::post::decode::{
-    index_from_event, metadata_from_event, post_from_content,
+    parsed_from_event, data_from_event, post_from_content,
 };
 use radroots_events_codec::post::encode::to_wire_parts;
 
@@ -50,7 +50,7 @@ fn post_from_content_requires_kind_and_content() {
 
 #[test]
 fn post_metadata_and_index_from_event_roundtrip() {
-    let metadata = metadata_from_event(
+    let metadata = data_from_event(
         "id".to_string(),
         "author".to_string(),
         77,
@@ -65,7 +65,7 @@ fn post_metadata_and_index_from_event_roundtrip() {
     assert_eq!(metadata.kind, KIND_POST);
     assert_eq!(metadata.post.content, "hello");
 
-    let index = index_from_event(
+    let index = parsed_from_event(
         "id".to_string(),
         "author".to_string(),
         77,
@@ -86,7 +86,7 @@ fn post_metadata_and_index_from_event_roundtrip() {
 
 #[test]
 fn post_index_from_event_propagates_parse_errors() {
-    let err = index_from_event(
+    let err = parsed_from_event(
         "id".to_string(),
         "author".to_string(),
         77,

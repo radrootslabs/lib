@@ -3,7 +3,7 @@ use radroots_events::kinds::{KIND_GIFT_WRAP, KIND_MESSAGE};
 
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
 use radroots_events_codec::gift_wrap::decode::{
-    gift_wrap_from_tags, index_from_event, metadata_from_event,
+    gift_wrap_from_tags, parsed_from_event, data_from_event,
 };
 use radroots_events_codec::gift_wrap::encode::{
     gift_wrap_build_tags, to_wire_parts, to_wire_parts_with_kind,
@@ -122,7 +122,7 @@ fn gift_wrap_metadata_and_index_from_event_roundtrip() {
     let gift_wrap = sample_gift_wrap();
     let parts = to_wire_parts(&gift_wrap).unwrap();
 
-    let metadata = metadata_from_event(
+    let metadata = data_from_event(
         "id".to_string(),
         "author".to_string(),
         11,
@@ -145,7 +145,7 @@ fn gift_wrap_metadata_and_index_from_event_roundtrip() {
     assert_eq!(metadata.gift_wrap.content, gift_wrap.content);
     assert_eq!(metadata.gift_wrap.expiration, gift_wrap.expiration);
 
-    let index = index_from_event(
+    let index = parsed_from_event(
         "id".to_string(),
         "author".to_string(),
         11,
@@ -241,7 +241,7 @@ fn gift_wrap_from_tags_handles_missing_expiration_and_rejects_empty_fields() {
 #[test]
 fn gift_wrap_metadata_and_index_propagate_parse_errors() {
     let tags = vec![vec!["p".to_string(), "pubkey".to_string()]];
-    let err = metadata_from_event(
+    let err = data_from_event(
         "id".to_string(),
         "author".to_string(),
         11,
@@ -252,7 +252,7 @@ fn gift_wrap_metadata_and_index_propagate_parse_errors() {
     .unwrap_err();
     assert!(matches!(err, EventParseError::InvalidTag("content")));
 
-    let err = index_from_event(
+    let err = parsed_from_event(
         "id".to_string(),
         "author".to_string(),
         11,

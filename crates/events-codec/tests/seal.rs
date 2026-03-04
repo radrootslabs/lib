@@ -2,7 +2,7 @@ use radroots_events::kinds::{KIND_MESSAGE, KIND_SEAL};
 use radroots_events::seal::RadrootsSeal;
 
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
-use radroots_events_codec::seal::decode::{index_from_event, metadata_from_event, seal_from_parts};
+use radroots_events_codec::seal::decode::{parsed_from_event, data_from_event, seal_from_parts};
 use radroots_events_codec::seal::encode::{
     seal_build_tags, to_wire_parts, to_wire_parts_with_kind,
 };
@@ -63,7 +63,7 @@ fn seal_from_parts_requires_content() {
 
 #[test]
 fn seal_metadata_and_index_from_event_roundtrip() {
-    let metadata = metadata_from_event(
+    let metadata = data_from_event(
         "id".to_string(),
         "author".to_string(),
         14,
@@ -78,7 +78,7 @@ fn seal_metadata_and_index_from_event_roundtrip() {
     assert_eq!(metadata.kind, KIND_SEAL);
     assert_eq!(metadata.seal.content, "payload");
 
-    let index = index_from_event(
+    let index = parsed_from_event(
         "id".to_string(),
         "author".to_string(),
         14,
@@ -95,7 +95,7 @@ fn seal_metadata_and_index_from_event_roundtrip() {
 
 #[test]
 fn seal_index_from_event_propagates_parse_errors() {
-    let err = index_from_event(
+    let err = parsed_from_event(
         "id".to_string(),
         "author".to_string(),
         14,

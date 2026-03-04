@@ -9,7 +9,7 @@ use radroots_events::{
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
 use radroots_events_codec::event_ref::{build_event_ref_tag, push_nip10_ref_tags};
 use radroots_events_codec::reaction::decode::{
-    index_from_event, metadata_from_event, reaction_from_tags,
+    parsed_from_event, data_from_event, reaction_from_tags,
 };
 use radroots_events_codec::reaction::encode::{
     reaction_build_tags, to_wire_parts, to_wire_parts_with_kind,
@@ -162,7 +162,7 @@ fn reaction_metadata_and_index_from_event_roundtrip() {
     let mut tags = Vec::new();
     push_nip10_ref_tags(&mut tags, &root, "e", "p", "k", "a");
 
-    let metadata = metadata_from_event(
+    let metadata = data_from_event(
         "id".to_string(),
         "author".to_string(),
         99,
@@ -178,7 +178,7 @@ fn reaction_metadata_and_index_from_event_roundtrip() {
     assert_eq!(metadata.reaction.content, "+");
     assert_eq!(metadata.reaction.root.id, root.id);
 
-    let index = index_from_event(
+    let index = parsed_from_event(
         "id".to_string(),
         "author".to_string(),
         99,
@@ -196,7 +196,7 @@ fn reaction_metadata_and_index_from_event_roundtrip() {
 #[test]
 fn reaction_metadata_and_index_propagate_parse_errors() {
     let tags = vec![vec!["e".to_string(), "root".to_string()]];
-    let err = metadata_from_event(
+    let err = data_from_event(
         "id".to_string(),
         "author".to_string(),
         99,
@@ -213,7 +213,7 @@ fn reaction_metadata_and_index_propagate_parse_errors() {
         }
     ));
 
-    let err = index_from_event(
+    let err = parsed_from_event(
         "id".to_string(),
         "author".to_string(),
         99,

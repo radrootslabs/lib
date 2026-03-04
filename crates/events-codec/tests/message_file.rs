@@ -5,7 +5,7 @@ use radroots_events::message_file::{RadrootsMessageFile, RadrootsMessageFileDime
 
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
 use radroots_events_codec::message_file::decode::{
-    index_from_event, message_file_from_tags, metadata_from_event,
+    parsed_from_event, message_file_from_tags, data_from_event,
 };
 use radroots_events_codec::message_file::encode::{
     message_file_build_tags, to_wire_parts, to_wire_parts_with_kind,
@@ -331,7 +331,7 @@ fn message_file_from_tags_rejects_invalid_optional_tags() {
 fn message_file_metadata_and_index_from_event_roundtrip() {
     let message = sample_message_file();
     let parts = to_wire_parts(&message).unwrap();
-    let metadata = metadata_from_event(
+    let metadata = data_from_event(
         "id".to_string(),
         "author".to_string(),
         77,
@@ -347,7 +347,7 @@ fn message_file_metadata_and_index_from_event_roundtrip() {
     assert_eq!(metadata.message_file.file_type, "image/jpeg");
     assert_eq!(metadata.message_file.recipients.len(), 2);
 
-    let index = index_from_event(
+    let index = parsed_from_event(
         "id".to_string(),
         "author".to_string(),
         77,
@@ -364,7 +364,7 @@ fn message_file_metadata_and_index_from_event_roundtrip() {
 
 #[test]
 fn message_file_index_from_event_propagates_parse_errors() {
-    let err = index_from_event(
+    let err = parsed_from_event(
         "id".to_string(),
         "author".to_string(),
         77,

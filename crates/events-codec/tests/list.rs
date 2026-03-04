@@ -4,7 +4,7 @@ use radroots_events::{
 };
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
 use radroots_events_codec::list::decode::{
-    index_from_event, list_entries_from_tags, list_from_tags, metadata_from_event,
+    parsed_from_event, list_entries_from_tags, list_from_tags, data_from_event,
 };
 use radroots_events_codec::list::encode::{list_build_tags, to_wire_parts_with_kind};
 
@@ -92,7 +92,7 @@ fn list_metadata_and_index_from_event_roundtrip() {
     let list = sample_list();
     let parts = to_wire_parts_with_kind(&list, KIND_LIST_MUTE).unwrap();
 
-    let metadata = metadata_from_event(
+    let metadata = data_from_event(
         "id".to_string(),
         "author".to_string(),
         44,
@@ -110,7 +110,7 @@ fn list_metadata_and_index_from_event_roundtrip() {
     assert_eq!(metadata.list.entries[0].tag, list.entries[0].tag);
     assert_eq!(metadata.list.entries[0].values, list.entries[0].values);
 
-    let index = index_from_event(
+    let index = parsed_from_event(
         "id".to_string(),
         "author".to_string(),
         44,
@@ -127,7 +127,7 @@ fn list_metadata_and_index_from_event_roundtrip() {
 
 #[test]
 fn list_index_from_event_propagates_parse_errors() {
-    let err = index_from_event(
+    let err = parsed_from_event(
         "id".to_string(),
         "author".to_string(),
         44,

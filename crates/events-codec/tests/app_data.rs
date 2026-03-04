@@ -3,7 +3,7 @@ use radroots_events::{
     kinds::KIND_POST,
 };
 use radroots_events_codec::app_data::decode::{
-    app_data_from_tags, index_from_event, metadata_from_event,
+    app_data_from_tags, parsed_from_event, data_from_event,
 };
 use radroots_events_codec::app_data::encode::{
     app_data_build_tags, to_wire_parts, to_wire_parts_with_kind,
@@ -92,7 +92,7 @@ fn app_data_from_tags_rejects_invalid_d_tag_shape() {
 #[test]
 fn app_data_metadata_and_index_from_event_roundtrip() {
     let tags = vec![vec!["d".to_string(), "radroots.app".to_string()]];
-    let metadata = metadata_from_event(
+    let metadata = data_from_event(
         "id".to_string(),
         "author".to_string(),
         42,
@@ -108,7 +108,7 @@ fn app_data_metadata_and_index_from_event_roundtrip() {
     assert_eq!(metadata.app_data.d_tag, "radroots.app");
     assert_eq!(metadata.app_data.content, "payload");
 
-    let index = index_from_event(
+    let index = parsed_from_event(
         "id".to_string(),
         "author".to_string(),
         42,
@@ -129,7 +129,7 @@ fn app_data_metadata_and_index_from_event_roundtrip() {
 
 #[test]
 fn app_data_index_from_event_propagates_parse_errors() {
-    let err = index_from_event(
+    let err = parsed_from_event(
         "id".to_string(),
         "author".to_string(),
         42,

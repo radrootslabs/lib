@@ -7,7 +7,7 @@ use radroots_events::{
 };
 
 use radroots_events_codec::comment::decode::comment_from_tags;
-use radroots_events_codec::comment::decode::{index_from_event, metadata_from_event};
+use radroots_events_codec::comment::decode::{parsed_from_event, data_from_event};
 use radroots_events_codec::comment::encode::{
     comment_build_tags, to_wire_parts, to_wire_parts_with_kind,
 };
@@ -221,7 +221,7 @@ fn comment_metadata_and_index_from_event_roundtrip() {
     push_nip10_ref_tags(&mut tags, &root, "E", "P", "K", "A");
     push_nip10_ref_tags(&mut tags, &parent, "e", "p", "k", "a");
 
-    let metadata = metadata_from_event(
+    let metadata = data_from_event(
         "id".to_string(),
         "author".to_string(),
         77,
@@ -237,7 +237,7 @@ fn comment_metadata_and_index_from_event_roundtrip() {
     assert_event_ref_fields(&metadata.comment.root, &root);
     assert_event_ref_fields(&metadata.comment.parent, &parent);
 
-    let index = index_from_event(
+    let index = parsed_from_event(
         "id".to_string(),
         "author".to_string(),
         77,
@@ -255,7 +255,7 @@ fn comment_metadata_and_index_from_event_roundtrip() {
 
 #[test]
 fn comment_index_from_event_propagates_parse_errors() {
-    let err = index_from_event(
+    let err = parsed_from_event(
         "id".to_string(),
         "author".to_string(),
         77,

@@ -155,7 +155,7 @@ pub fn message_file_from_tags(
     })
 }
 
-pub fn metadata_from_event(
+pub fn data_from_event(
     id: String,
     author: String,
     published_at: u32,
@@ -173,7 +173,7 @@ pub fn metadata_from_event(
     })
 }
 
-pub fn index_from_event(
+pub fn parsed_from_event(
     id: String,
     author: String,
     published_at: u32,
@@ -182,7 +182,7 @@ pub fn index_from_event(
     tags: Vec<Vec<String>>,
     sig: String,
 ) -> Result<RadrootsMessageFileEventIndex, EventParseError> {
-    let metadata = metadata_from_event(
+    let metadata = data_from_event(
         id.clone(),
         author.clone(),
         published_at,

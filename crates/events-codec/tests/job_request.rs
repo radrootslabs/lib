@@ -3,7 +3,7 @@ use radroots_events::job_request::{RadrootsJobInput, RadrootsJobParam, RadrootsJ
 use radroots_events::kinds::{KIND_JOB_FEEDBACK, KIND_JOB_REQUEST_MIN, KIND_JOB_RESULT_MIN};
 use radroots_events_codec::job::encode::JobEncodeError;
 use radroots_events_codec::job::error::JobParseError;
-use radroots_events_codec::job::request::decode::{index_from_event, job_request_from_tags};
+use radroots_events_codec::job::request::decode::{parsed_from_event, job_request_from_tags};
 use radroots_events_codec::job::request::encode::to_wire_parts;
 
 fn sample_request() -> RadrootsJobRequest {
@@ -92,7 +92,7 @@ fn job_request_to_wire_parts_allows_encrypted_when_provider_present() {
 
 #[test]
 fn job_request_metadata_rejects_wrong_kind() {
-    let err = radroots_events_codec::job::request::decode::metadata_from_event(
+    let err = radroots_events_codec::job::request::decode::data_from_event(
         "id".to_string(),
         "author".to_string(),
         1,
@@ -109,7 +109,7 @@ fn job_request_metadata_rejects_wrong_kind() {
 
 #[test]
 fn job_request_index_from_event_propagates_parse_errors() {
-    let err = index_from_event(
+    let err = parsed_from_event(
         "id".to_string(),
         "author".to_string(),
         1,

@@ -5,7 +5,7 @@ use radroots_events::{
 };
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
 use radroots_events_codec::message::decode::{
-    index_from_event, message_from_tags, metadata_from_event,
+    parsed_from_event, message_from_tags, data_from_event,
 };
 use radroots_events_codec::message::encode::{message_build_tags, to_wire_parts};
 
@@ -196,7 +196,7 @@ fn message_metadata_and_index_from_event_roundtrip() {
         ],
         vec!["subject".to_string(), "topic".to_string()],
     ];
-    let metadata = metadata_from_event(
+    let metadata = data_from_event(
         "id".to_string(),
         "author".to_string(),
         77,
@@ -213,7 +213,7 @@ fn message_metadata_and_index_from_event_roundtrip() {
     assert_eq!(metadata.message.content, "hello");
     assert_eq!(metadata.message.subject.as_deref(), Some("topic"));
 
-    let index = index_from_event(
+    let index = parsed_from_event(
         "id".to_string(),
         "author".to_string(),
         77,
@@ -230,7 +230,7 @@ fn message_metadata_and_index_from_event_roundtrip() {
 
 #[test]
 fn message_index_from_event_propagates_parse_errors() {
-    let err = index_from_event(
+    let err = parsed_from_event(
         "id".to_string(),
         "author".to_string(),
         77,
