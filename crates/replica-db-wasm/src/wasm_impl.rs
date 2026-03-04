@@ -1,10 +1,10 @@
+use radroots_replica_db::migrations;
+use radroots_replica_db::{ReplicaDbExportManifestRs, export_manifest};
+use radroots_replica_sync::radroots_replica_sync_status;
 use radroots_sql_core::{
     WasmSqlExecutor, export_lock_begin, export_lock_end, with_export_lock_bypass,
 };
 use radroots_sql_wasm_core::{err_js, parse_json};
-use radroots_replica_db::migrations;
-use radroots_replica_db::{ReplicaDbExportManifestRs, export_manifest};
-use radroots_replica_sync::radroots_replica_sync_status;
 use wasm_bindgen::JsValue;
 use wasm_bindgen::prelude::*;
 
@@ -335,8 +335,8 @@ pub fn replica_db_farm_gcs_location_create(opts_json: &str) -> Result<JsValue, J
 pub fn replica_db_farm_gcs_location_find_one(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: IFarmGcsLocationFindOne = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_replica_db::farm_gcs_location::find_one(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_replica_db::farm_gcs_location::find_one(&exec, &opts)
+        .map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -380,8 +380,8 @@ pub fn replica_db_plot_gcs_location_create(opts_json: &str) -> Result<JsValue, J
 pub fn replica_db_plot_gcs_location_find_one(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: IPlotGcsLocationFindOne = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_replica_db::plot_gcs_location::find_one(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_replica_db::plot_gcs_location::find_one(&exec, &opts)
+        .map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -504,7 +504,8 @@ pub fn replica_db_farm_member_create(opts_json: &str) -> Result<JsValue, JsValue
 pub fn replica_db_farm_member_find_one(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: IFarmMemberFindOne = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out = radroots_replica_db::farm_member::find_one(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out =
+        radroots_replica_db::farm_member::find_one(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -546,8 +547,8 @@ pub fn replica_db_farm_member_claim_create(opts_json: &str) -> Result<JsValue, J
 pub fn replica_db_farm_member_claim_find_one(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: IFarmMemberClaimFindOne = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_replica_db::farm_member_claim::find_one(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_replica_db::farm_member_claim::find_one(&exec, &opts)
+        .map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -630,7 +631,8 @@ pub fn replica_db_media_image_create(opts_json: &str) -> Result<JsValue, JsValue
 pub fn replica_db_media_image_find_one(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: IMediaImageFindOne = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out = radroots_replica_db::media_image::find_one(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out =
+        radroots_replica_db::media_image::find_one(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -663,7 +665,8 @@ pub fn replica_db_media_image_delete(opts_json: &str) -> Result<JsValue, JsValue
 pub fn replica_db_nostr_profile_create(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: INostrProfileCreate = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out = radroots_replica_db::nostr_profile::create(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out =
+        radroots_replica_db::nostr_profile::create(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -689,7 +692,8 @@ pub fn replica_db_nostr_profile_find_many(opts_json: &str) -> Result<JsValue, Js
 pub fn replica_db_nostr_profile_update(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: INostrProfileUpdate = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out = radroots_replica_db::nostr_profile::update(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out =
+        radroots_replica_db::nostr_profile::update(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -697,7 +701,8 @@ pub fn replica_db_nostr_profile_update(opts_json: &str) -> Result<JsValue, JsVal
 pub fn replica_db_nostr_profile_delete(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: INostrProfileDelete = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out = radroots_replica_db::nostr_profile::delete(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out =
+        radroots_replica_db::nostr_profile::delete(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -714,8 +719,8 @@ pub fn replica_db_nostr_event_state_create(opts_json: &str) -> Result<JsValue, J
 pub fn replica_db_nostr_event_state_find_one(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: INostrEventStateFindOne = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_replica_db::nostr_event_state::find_one(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_replica_db::nostr_event_state::find_one(&exec, &opts)
+        .map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -758,7 +763,8 @@ pub fn replica_db_nostr_relay_create(opts_json: &str) -> Result<JsValue, JsValue
 pub fn replica_db_nostr_relay_find_one(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: INostrRelayFindOne = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out = radroots_replica_db::nostr_relay::find_one(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out =
+        radroots_replica_db::nostr_relay::find_one(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -791,7 +797,8 @@ pub fn replica_db_nostr_relay_delete(opts_json: &str) -> Result<JsValue, JsValue
 pub fn replica_db_trade_product_create(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: ITradeProductCreate = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out = radroots_replica_db::trade_product::create(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out =
+        radroots_replica_db::trade_product::create(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -817,7 +824,8 @@ pub fn replica_db_trade_product_find_many(opts_json: &str) -> Result<JsValue, Js
 pub fn replica_db_trade_product_update(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: ITradeProductUpdate = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out = radroots_replica_db::trade_product::update(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out =
+        radroots_replica_db::trade_product::update(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -825,7 +833,8 @@ pub fn replica_db_trade_product_update(opts_json: &str) -> Result<JsValue, JsVal
 pub fn replica_db_trade_product_delete(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: ITradeProductDelete = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out = radroots_replica_db::trade_product::delete(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out =
+        radroots_replica_db::trade_product::delete(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
@@ -851,8 +860,8 @@ pub fn replica_db_nostr_profile_relay_unset(opts_json: &str) -> Result<JsValue, 
 pub fn replica_db_trade_product_location_set(opts_json: &str) -> Result<JsValue, JsValue> {
     let opts: ITradeProductLocationRelation = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_replica_db::trade_product_location::set(&exec, &opts).map_err(|e| err_js(e.err))?;
+    let out = radroots_replica_db::trade_product_location::set(&exec, &opts)
+        .map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
