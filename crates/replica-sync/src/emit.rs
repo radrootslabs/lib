@@ -24,7 +24,6 @@ use radroots_events_codec::farm::list_sets as farm_list_sets;
 use radroots_events_codec::list_set::encode as list_set_encode;
 use radroots_events_codec::plot::encode as plot_encode;
 use radroots_events_codec::wire::WireEventParts;
-use radroots_sql_core::SqlExecutor;
 use radroots_replica_db::{
     farm, farm_gcs_location, farm_member, farm_member_claim, farm_tag, gcs_location, nostr_profile,
     plot, plot_gcs_location, plot_tag,
@@ -53,6 +52,7 @@ use radroots_replica_db_schema::plot_gcs_location::{
     IPlotGcsLocationFieldsFilter, IPlotGcsLocationFindMany, PlotGcsLocation,
 };
 use radroots_replica_db_schema::plot_tag::{IPlotTagFieldsFilter, IPlotTagFindMany};
+use radroots_sql_core::SqlExecutor;
 use serde_json::Value;
 
 use crate::canonical::canonical_json_string;
@@ -659,8 +659,10 @@ fn parse_polygon(value: &str, lat: f64, lng: f64) -> RadrootsGeoJsonPolygon {
 fn load_profile<E: SqlExecutor>(
     exec: &E,
     pubkey: &str,
-) -> Result<Option<radroots_replica_db_schema::nostr_profile::NostrProfile>, RadrootsReplicaEventsError>
-{
+) -> Result<
+    Option<radroots_replica_db_schema::nostr_profile::NostrProfile>,
+    RadrootsReplicaEventsError,
+> {
     let result_query = nostr_profile::find_one(
         exec,
         &INostrProfileFindOne::On(INostrProfileFindOneArgs {
@@ -823,7 +825,6 @@ fn parts_to_draft(author: &str, parts: WireEventParts) -> RadrootsReplicaEventDr
 #[cfg(test)]
 mod tests {
     use super::*;
-    use radroots_sql_core::SqliteExecutor;
     use radroots_replica_db::{
         farm, farm_gcs_location, farm_member, farm_member_claim, farm_tag, gcs_location,
         migrations, nostr_profile, plot, plot_gcs_location, plot_tag,
@@ -842,6 +843,7 @@ mod tests {
         IPlotGcsLocationFields, IPlotGcsLocationFindMany,
     };
     use radroots_replica_db_schema::plot_tag::IPlotTagFields;
+    use radroots_sql_core::SqliteExecutor;
 
     fn seed(exec: &SqliteExecutor) -> (Farm, Plot, Plot) {
         migrations::run_all_up(exec).expect("migrations");

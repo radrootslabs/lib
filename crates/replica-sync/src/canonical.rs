@@ -9,7 +9,9 @@ use serde_json::{Map, Value};
 
 use crate::error::RadrootsReplicaEventsError;
 
-pub fn canonical_json_string<T: Serialize>(value: &T) -> Result<String, RadrootsReplicaEventsError> {
+pub fn canonical_json_string<T: Serialize>(
+    value: &T,
+) -> Result<String, RadrootsReplicaEventsError> {
     let value = serde_json::to_value(value).map_err(|_| {
         RadrootsReplicaEventsError::InvalidData("canonical json serialization failed".to_string())
     })?;

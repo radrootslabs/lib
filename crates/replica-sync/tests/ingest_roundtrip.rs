@@ -18,9 +18,6 @@ use radroots_events_codec::farm::encode as farm_encode;
 use radroots_events_codec::farm::list_sets as farm_list_sets;
 use radroots_events_codec::list_set::encode as list_set_encode;
 use radroots_events_codec::plot::encode as plot_encode;
-use radroots_sql_core::SqlExecutor;
-use radroots_sql_core::SqliteExecutor;
-use radroots_sql_core::error::SqlError;
 use radroots_replica_db::{
     farm, farm_gcs_location, farm_member, farm_member_claim, farm_tag, gcs_location, migrations,
     nostr_profile, plot, plot_gcs_location, plot_tag,
@@ -33,18 +30,25 @@ use radroots_replica_db_schema::farm_member::{
 use radroots_replica_db_schema::farm_member_claim::{
     IFarmMemberClaimFields, IFarmMemberClaimFieldsFilter, IFarmMemberClaimFindMany,
 };
-use radroots_replica_db_schema::farm_tag::{IFarmTagFields, IFarmTagFieldsFilter, IFarmTagFindMany};
+use radroots_replica_db_schema::farm_tag::{
+    IFarmTagFields, IFarmTagFieldsFilter, IFarmTagFindMany,
+};
 use radroots_replica_db_schema::gcs_location::IGcsLocationFields;
 use radroots_replica_db_schema::nostr_profile::INostrProfileFields;
 use radroots_replica_db_schema::plot::IPlotFields;
 use radroots_replica_db_schema::plot_gcs_location::IPlotGcsLocationFields;
-use radroots_replica_db_schema::plot_tag::{IPlotTagFields, IPlotTagFieldsFilter, IPlotTagFindMany};
+use radroots_replica_db_schema::plot_tag::{
+    IPlotTagFields, IPlotTagFieldsFilter, IPlotTagFindMany,
+};
 use radroots_replica_sync::{
     RADROOTS_REPLICA_TRANSFER_VERSION, RadrootsReplicaEventDraft, RadrootsReplicaEventsError,
     RadrootsReplicaFarmSelector, RadrootsReplicaIngestOutcome, RadrootsReplicaSyncOptions,
     RadrootsReplicaSyncRequest, radroots_replica_ingest_event, radroots_replica_sync_all,
     radroots_replica_sync_status,
 };
+use radroots_sql_core::SqlExecutor;
+use radroots_sql_core::SqliteExecutor;
+use radroots_sql_core::error::SqlError;
 use radroots_types::types::IError;
 
 fn unwrap_sql<T>(result: Result<T, IError<SqlError>>, label: &str) -> T {

@@ -17,8 +17,6 @@ use radroots_events_codec::farm::decode as farm_decode;
 use radroots_events_codec::list_set::decode as list_set_decode;
 use radroots_events_codec::plot::decode as plot_decode;
 use radroots_events_codec::profile::decode as profile_decode;
-use radroots_sql_core::SqlExecutor;
-use radroots_sql_core::error::SqlError;
 use radroots_replica_db::{
     farm, farm_gcs_location, farm_member, farm_member_claim, farm_tag, gcs_location,
     nostr_event_state, nostr_profile, plot, plot_gcs_location, plot_tag,
@@ -64,6 +62,8 @@ use radroots_replica_db_schema::plot_tag::{
     IPlotTagDelete, IPlotTagFields, IPlotTagFieldsFilter, IPlotTagFindMany, IPlotTagFindOneArgs,
     PlotTagQueryBindValues,
 };
+use radroots_sql_core::SqlExecutor;
+use radroots_sql_core::error::SqlError;
 use serde_json::Value;
 
 use crate::error::RadrootsReplicaEventsError;
@@ -1048,7 +1048,6 @@ mod tests {
     use radroots_events_codec::farm::list_sets as farm_list_sets;
     use radroots_events_codec::list_set::encode as list_set_encode;
     use radroots_events_codec::plot::encode as plot_encode;
-    use radroots_sql_core::{ExecOutcome, SqlExecutor, SqliteExecutor};
     use radroots_replica_db::{
         farm, farm_gcs_location, farm_member, farm_member_claim, farm_tag, gcs_location,
         migrations, plot, plot_gcs_location, plot_tag,
@@ -1062,6 +1061,7 @@ mod tests {
     use radroots_replica_db_schema::plot::IPlotFields;
     use radroots_replica_db_schema::plot_gcs_location::IPlotGcsLocationFields;
     use radroots_replica_db_schema::plot_tag::IPlotTagFields;
+    use radroots_sql_core::{ExecOutcome, SqlExecutor, SqliteExecutor};
 
     struct FixedFactory;
 

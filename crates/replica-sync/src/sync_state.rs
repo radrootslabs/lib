@@ -6,9 +6,9 @@ use alloc::{
 #[cfg(feature = "std")]
 use std::collections::BTreeMap;
 
-use radroots_sql_core::SqlExecutor;
 use radroots_replica_db_schema::farm::IFarmFindMany;
 use radroots_replica_db_schema::nostr_event_state::INostrEventStateFindMany;
+use radroots_sql_core::SqlExecutor;
 
 use crate::error::RadrootsReplicaEventsError;
 use crate::event_state::{event_content_hash, event_state_key, tag_value};
@@ -23,7 +23,8 @@ pub struct RadrootsReplicaSyncStatus {
 pub fn radroots_replica_sync_status<E: SqlExecutor>(
     exec: &E,
 ) -> Result<RadrootsReplicaSyncStatus, RadrootsReplicaEventsError> {
-    let farms = radroots_replica_db::farm::find_many(exec, &IFarmFindMany { filter: None })?.results;
+    let farms =
+        radroots_replica_db::farm::find_many(exec, &IFarmFindMany { filter: None })?.results;
     let mut expected: BTreeMap<String, String> = BTreeMap::new();
 
     for farm in farms {
