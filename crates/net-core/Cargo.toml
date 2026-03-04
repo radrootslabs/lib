@@ -17,6 +17,7 @@ rt = ["std", "dep:tokio"]
 nostr-client = [
     "std",
     "dep:radroots-events",
+    "dep:radroots-events-codec",
     "radroots-events/serde",
     "dep:radroots-nostr-accounts",
     "dep:secrecy",
@@ -32,7 +33,8 @@ fs-persistence = ["std"]
 radroots-events = { workspace = true, optional = true, default-features = true, features = ["std", "serde", "typeshare"] }
 radroots-log = { workspace = true, features = ["std"] }
 radroots-nostr-accounts = { workspace = true, optional = true, default-features = true }
-radroots-nostr = { workspace = true, optional = true, default-features = true, features = ["client", "events"] }
+radroots-events-codec = { workspace = true, optional = true, default-features = true, features = ["std"] }
+radroots-nostr = { workspace = true, optional = true, default-features = true, features = ["client", "events", "codec"] }
 directories = { workspace = true, optional = true }
 hex = { workspace = true, optional = true }
 secrecy = { workspace = true, optional = true }

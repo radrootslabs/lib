@@ -11,13 +11,14 @@ use nostr::{
 use thiserror::Error;
 
 use radroots_events::kinds::{KIND_MESSAGE, KIND_MESSAGE_FILE};
-use radroots_events::message::{RadrootsMessage, RadrootsMessageEventMetadata};
-use radroots_events::message_file::{RadrootsMessageFile, RadrootsMessageFileEventMetadata};
+use radroots_events::message::RadrootsMessage;
+use radroots_events::message_file::RadrootsMessageFile;
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
 use radroots_events_codec::message::decode as message_decode;
 use radroots_events_codec::message::encode as message_encode;
 use radroots_events_codec::message_file::decode as message_file_decode;
 use radroots_events_codec::message_file::encode as message_file_encode;
+use radroots_events_codec::parsed::RadrootsParsedData;
 use radroots_events_codec::wire::WireEventParts;
 
 use crate::util::created_at_u32_saturating;
@@ -42,8 +43,8 @@ pub enum RadrootsNip17Error {
 
 #[derive(Clone, Debug)]
 pub enum RadrootsNip17Rumor {
-    Message(RadrootsMessageEventMetadata),
-    MessageFile(RadrootsMessageFileEventMetadata),
+    Message(RadrootsParsedData<RadrootsMessage>),
+    MessageFile(RadrootsParsedData<RadrootsMessageFile>),
 }
 
 #[derive(Clone, Debug)]
@@ -192,11 +193,11 @@ where
     match kind {
         KIND_MESSAGE => {
             let metadata =
-                message_decode::metadata_from_event(id, author, published_at, kind, content, tags)?;
+                message_decode::data_from_event(id, author, published_at, kind, content, tags)?;
             Ok(RadrootsNip17Rumor::Message(metadata))
         }
         KIND_MESSAGE_FILE => {
-            let metadata = message_file_decode::metadata_from_event(
+            let metadata = message_file_decode::data_from_event(
                 id,
                 author,
                 published_at,
@@ -254,8 +255,8 @@ mod tests {
             .unwrap();
         match rumor {
             RadrootsNip17Rumor::Message(metadata) => {
-                assert_eq!(metadata.message.content, "hello");
-                assert_eq!(metadata.message.recipients.len(), 1);
+                assert_eq!(metadata.data.content, "hello");
+                assert_eq!(metadata.data.recipients.len(), 1);
             }
             other => panic!("expected message rumor, got {other:?}"),
         }
@@ -301,8 +302,8 @@ mod tests {
             .unwrap();
         match rumor {
             RadrootsNip17Rumor::MessageFile(metadata) => {
-                assert_eq!(metadata.message_file.file_url, message.file_url);
-                assert_eq!(metadata.message_file.encrypted_hash, message.encrypted_hash);
+                assert_eq!(metadata.data.file_url, message.file_url);
+                assert_eq!(metadata.data.encrypted_hash, message.encrypted_hash);
             }
             other => panic!("expected message file rumor, got {other:?}"),
         }

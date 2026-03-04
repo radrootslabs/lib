@@ -2729,6 +2729,7 @@ dependencies = [
  "futures",
  "hex",
  "radroots-events",
+ "radroots-events-codec",
  "radroots-log",
  "radroots-nostr",
  "radroots-nostr-accounts",

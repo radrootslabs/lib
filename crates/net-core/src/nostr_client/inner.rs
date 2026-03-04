@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use radroots_events::post::RadrootsPostEventMetadata;
+use radroots_events::post::RadrootsPost;
+use radroots_events_codec::parsed::RadrootsParsedData;
 use radroots_nostr::prelude::{
     RadrootsNostrClient, RadrootsNostrKeys, RadrootsNostrMonitor, RadrootsNostrRelayStatus,
     RadrootsNostrRelayUrl,
@@ -16,7 +17,7 @@ pub(super) struct Inner {
     pub statuses: Arc<Mutex<HashMap<RadrootsNostrRelayUrl, RadrootsNostrRelayStatus>>>,
     pub last_error: Arc<Mutex<Option<String>>>,
     pub rt: Handle,
-    pub post_events_tx: broadcast::Sender<RadrootsPostEventMetadata>,
+    pub post_events_tx: broadcast::Sender<RadrootsParsedData<RadrootsPost>>,
     pub post_events_stream: Arc<Mutex<Option<JoinHandle<()>>>>,
 }
 

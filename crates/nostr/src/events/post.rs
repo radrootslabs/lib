@@ -56,7 +56,10 @@ pub async fn radroots_nostr_fetch_post_events(
     client: &RadrootsNostrClient,
     limit: u16,
     since_unix: Option<u64>,
-) -> Result<Vec<radroots_events::post::RadrootsPostEventMetadata>, RadrootsNostrError> {
+) -> Result<
+    Vec<radroots_events_codec::parsed::RadrootsParsedData<radroots_events::post::RadrootsPost>>,
+    RadrootsNostrError,
+> {
     let filter = radroots_nostr_post_events_filter(Some(limit), since_unix);
 
     let events = client.fetch_events(filter, Duration::from_secs(10)).await?;

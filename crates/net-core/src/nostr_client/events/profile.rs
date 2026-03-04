@@ -1,5 +1,6 @@
 use crate::error::{NetError, Result};
-use radroots_events::profile::RadrootsProfileEventMetadata;
+use radroots_events_codec::parsed::RadrootsParsedData;
+use radroots_events_codec::profile::RadrootsProfileData;
 use radroots_nostr::prelude::{
     RadrootsNostrMetadata, RadrootsNostrPublicKey, radroots_nostr_fetch_metadata_for_author,
     radroots_nostr_post_metadata_event,
@@ -11,7 +12,7 @@ impl NostrClientManager {
     pub async fn fetch_profile_event(
         &self,
         author: RadrootsNostrPublicKey,
-    ) -> Result<Option<RadrootsProfileEventMetadata>> {
+    ) -> Result<Option<RadrootsParsedData<RadrootsProfileData>>> {
         let ev = radroots_nostr_fetch_metadata_for_author(
             &self.inner.client,
             author,
@@ -33,7 +34,7 @@ impl NostrClientManager {
     pub fn fetch_profile_event_blocking(
         &self,
         author: RadrootsNostrPublicKey,
-    ) -> Result<Option<RadrootsProfileEventMetadata>> {
+    ) -> Result<Option<RadrootsParsedData<RadrootsProfileData>>> {
         let rt = self.inner.rt.clone();
         let this = self.clone();
         rt.block_on(async move { this.fetch_profile_event(author).await })

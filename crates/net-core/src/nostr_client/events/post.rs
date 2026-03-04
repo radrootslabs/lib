@@ -1,5 +1,6 @@
 use crate::error::{NetError, Result};
-use radroots_events::post::RadrootsPostEventMetadata;
+use radroots_events::post::RadrootsPost;
+use radroots_events_codec::parsed::RadrootsParsedData;
 use radroots_nostr::prelude::{
     radroots_nostr_build_post_event, radroots_nostr_build_post_reply_event,
     radroots_nostr_fetch_post_events, radroots_nostr_send_event,
@@ -68,7 +69,7 @@ impl NostrClientManager {
         &self,
         limit: u16,
         since_unix: Option<u64>,
-    ) -> Result<Vec<RadrootsPostEventMetadata>> {
+    ) -> Result<Vec<RadrootsParsedData<RadrootsPost>>> {
         let items = radroots_nostr_fetch_post_events(&self.inner.client, limit, since_unix)
             .await
             .map_err(|e| NetError::Msg(e.to_string()))?;
@@ -79,7 +80,7 @@ impl NostrClientManager {
         &self,
         limit: u16,
         since_unix: Option<u64>,
-    ) -> Result<Vec<RadrootsPostEventMetadata>> {
+    ) -> Result<Vec<RadrootsParsedData<RadrootsPost>>> {
         let rt = self.inner.rt.clone();
         let this = self.clone();
         rt.block_on(async move { this.fetch_post_events(limit, since_unix).await })

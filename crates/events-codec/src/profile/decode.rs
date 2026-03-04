@@ -6,6 +6,7 @@ use alloc::{
     vec::Vec,
 };
 
+use super::RadrootsProfileData;
 use radroots_events::{
     RadrootsNostrEvent,
     kinds::KIND_PROFILE,
@@ -19,13 +20,6 @@ use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 use serde_json::Value;
 
 const PROFILE_KIND: u32 = KIND_PROFILE;
-
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Debug)]
-pub struct RadrootsProfileData {
-    pub profile_type: Option<RadrootsProfileType>,
-    pub profile: RadrootsProfile,
-}
 
 fn parse_optional_string(value: &Value, key: &'static str) -> Option<String> {
     value
