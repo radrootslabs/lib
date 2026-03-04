@@ -148,7 +148,7 @@ fn ingest_profile_event<E: SqlExecutor>(
     exec: &E,
     event: &RadrootsNostrEvent,
 ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
-    let metadata_result = profile_decode::metadata_from_event(
+    let data_result = profile_decode::data_from_event(
         event.id.clone(),
         event.author.clone(),
         event.created_at,
@@ -156,8 +156,8 @@ fn ingest_profile_event<E: SqlExecutor>(
         event.content.clone(),
         event.tags.clone(),
     );
-    let metadata = metadata_result?;
-    let profile_type = metadata.profile_type.ok_or_else(|| {
+    let data = data_result?;
+    let profile_type = data.data.profile_type.ok_or_else(|| {
         RadrootsReplicaEventsError::InvalidData("profile_type required".to_string())
     })?;
 
@@ -179,7 +179,7 @@ fn ingest_profile_event<E: SqlExecutor>(
         exec,
         &INostrProfileFindOne::On(INostrProfileFindOneArgs {
             on: NostrProfileQueryBindValues::PublicKey {
-                public_key: metadata.author.clone(),
+                public_key: data.author.clone(),
             },
         }),
     );
@@ -190,15 +190,15 @@ fn ingest_profile_event<E: SqlExecutor>(
             let fields = INostrProfileFieldsPartial {
                 public_key: None,
                 profile_type: Some(Value::from(profile_type)),
-                name: Some(Value::from(metadata.profile.name)),
-                display_name: to_value_opt(metadata.profile.display_name),
-                about: to_value_opt(metadata.profile.about),
-                website: to_value_opt(metadata.profile.website),
-                picture: to_value_opt(metadata.profile.picture),
-                banner: to_value_opt(metadata.profile.banner),
-                nip05: to_value_opt(metadata.profile.nip05),
-                lud06: to_value_opt(metadata.profile.lud06),
-                lud16: to_value_opt(metadata.profile.lud16),
+                name: Some(Value::from(data.data.profile.name)),
+                display_name: to_value_opt(data.data.profile.display_name),
+                about: to_value_opt(data.data.profile.about),
+                website: to_value_opt(data.data.profile.website),
+                picture: to_value_opt(data.data.profile.picture),
+                banner: to_value_opt(data.data.profile.banner),
+                nip05: to_value_opt(data.data.profile.nip05),
+                lud06: to_value_opt(data.data.profile.lud06),
+                lud16: to_value_opt(data.data.profile.lud16),
             };
             let update_result = nostr_profile::update(
                 exec,
@@ -211,17 +211,17 @@ fn ingest_profile_event<E: SqlExecutor>(
         }
         None => {
             let fields = INostrProfileFields {
-                public_key: metadata.author.clone(),
+                public_key: data.author.clone(),
                 profile_type: profile_type.to_string(),
-                name: metadata.profile.name,
-                display_name: metadata.profile.display_name,
-                about: metadata.profile.about,
-                website: metadata.profile.website,
-                picture: metadata.profile.picture,
-                banner: metadata.profile.banner,
-                nip05: metadata.profile.nip05,
-                lud06: metadata.profile.lud06,
-                lud16: metadata.profile.lud16,
+                name: data.data.profile.name,
+                display_name: data.data.profile.display_name,
+                about: data.data.profile.about,
+                website: data.data.profile.website,
+                picture: data.data.profile.picture,
+                banner: data.data.profile.banner,
+                nip05: data.data.profile.nip05,
+                lud06: data.data.profile.lud06,
+                lud16: data.data.profile.lud16,
             };
             let _ = nostr_profile::create(exec, &fields)?;
         }
