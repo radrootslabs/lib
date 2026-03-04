@@ -8,6 +8,7 @@ crates = [
   "radroots-events-codec",
   "radroots-events-codec-wasm",
   "radroots-replica-db-schema",
+  "xtask",
   "radroots-app-core",
   "radroots-app-wasm",
   "radroots-events-indexed",

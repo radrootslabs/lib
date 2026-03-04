@@ -50,7 +50,7 @@ order = 8
 
 [[rollout.crates]]
 name = "xtask"
-status = "planned"
+status = "required"
 order = 9
 
 [[rollout.crates]]
