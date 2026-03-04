@@ -1,8 +1,8 @@
-use radroots_sql_core::error::SqlError;
-use radroots_sql_core::{SqlExecutor, utils};
 use radroots_replica_db_schema::trade_product_media::{
     ITradeProductMediaRelation, ITradeProductMediaResolve,
 };
+use radroots_sql_core::error::SqlError;
+use radroots_sql_core::{SqlExecutor, utils};
 use radroots_types::types::{IError, IResultPass};
 use serde_json::Value;
 

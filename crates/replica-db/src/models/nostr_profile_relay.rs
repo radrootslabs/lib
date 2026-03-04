@@ -1,8 +1,8 @@
-use radroots_sql_core::error::SqlError;
-use radroots_sql_core::{SqlExecutor, utils};
 use radroots_replica_db_schema::nostr_profile_relay::{
     INostrProfileRelayRelation, INostrProfileRelayResolve,
 };
+use radroots_sql_core::error::SqlError;
+use radroots_sql_core::{SqlExecutor, utils};
 use radroots_types::types::{IError, IResultPass};
 use serde_json::Value;
 

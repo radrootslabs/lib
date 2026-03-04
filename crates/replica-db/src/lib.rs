@@ -121,7 +121,9 @@ pub mod models;
 #[cfg(not(feature = "coverage-minimal"))]
 pub use backup::{DatabaseBackup, MigrationBackup, SchemaEntry};
 #[cfg(not(feature = "coverage-minimal"))]
-pub use export::{REPLICA_DB_EXPORT_VERSION, TableCount, ReplicaDbExportManifestRs, export_manifest};
+pub use export::{
+    REPLICA_DB_EXPORT_VERSION, ReplicaDbExportManifestRs, TableCount, export_manifest,
+};
 #[cfg(not(feature = "coverage-minimal"))]
 pub use models::*;
 

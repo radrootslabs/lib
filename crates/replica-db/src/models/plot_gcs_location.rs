@@ -1,5 +1,3 @@
-use radroots_sql_core::error::SqlError;
-use radroots_sql_core::{SqlExecutor, utils};
 use radroots_replica_db_schema::plot_gcs_location::{
     IPlotGcsLocationCreate, IPlotGcsLocationCreateResolve, IPlotGcsLocationDelete,
     IPlotGcsLocationDeleteResolve, IPlotGcsLocationFieldsFilter, IPlotGcsLocationFindMany,
@@ -7,6 +5,8 @@ use radroots_replica_db_schema::plot_gcs_location::{
     IPlotGcsLocationUpdate, IPlotGcsLocationUpdateResolve, PlotGcsLocation,
     PlotGcsLocationQueryBindValues,
 };
+use radroots_sql_core::error::SqlError;
+use radroots_sql_core::{SqlExecutor, utils};
 use radroots_types::types::{IError, IResult, IResultList};
 use serde_json::Value;
 

@@ -1,5 +1,3 @@
-use radroots_sql_core::error::SqlError;
-use radroots_sql_core::{SqlExecutor, utils};
 use radroots_replica_db_schema::nostr_profile::{
     INostrProfileCreate, INostrProfileCreateResolve, INostrProfileDelete,
     INostrProfileDeleteResolve, INostrProfileFieldsFilter, INostrProfileFindMany,
@@ -7,6 +5,8 @@ use radroots_replica_db_schema::nostr_profile::{
     INostrProfileUpdate, INostrProfileUpdateResolve, NostrProfile, NostrProfileFindManyRel,
     NostrProfileQueryBindValues,
 };
+use radroots_sql_core::error::SqlError;
+use radroots_sql_core::{SqlExecutor, utils};
 use radroots_types::types::{IError, IResult, IResultList};
 use serde_json::Value;
 

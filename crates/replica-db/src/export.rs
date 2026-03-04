@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::backup::{
-    DATABASE_BACKUP_VERSION, MigrationBackup, SchemaEntry, REPLICA_DB_VERSION, escape_identifier,
+    DATABASE_BACKUP_VERSION, MigrationBackup, REPLICA_DB_VERSION, SchemaEntry, escape_identifier,
     export_migrations, load_schema,
 };
 
@@ -26,7 +26,9 @@ pub struct ReplicaDbExportManifestRs {
     pub table_counts: Vec<TableCount>,
 }
 
-pub fn export_manifest<E: SqlExecutor>(executor: &E) -> Result<ReplicaDbExportManifestRs, SqlError> {
+pub fn export_manifest<E: SqlExecutor>(
+    executor: &E,
+) -> Result<ReplicaDbExportManifestRs, SqlError> {
     let schema = load_schema(executor)?;
     let migrations = export_migrations();
     let table_counts = load_table_counts(executor, &schema)?;

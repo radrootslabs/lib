@@ -1,5 +1,3 @@
-use radroots_sql_core::error::SqlError;
-use radroots_sql_core::{SqlExecutor, utils};
 use radroots_replica_db_schema::nostr_event_state::{
     INostrEventStateCreate, INostrEventStateCreateResolve, INostrEventStateDelete,
     INostrEventStateDeleteResolve, INostrEventStateFieldsFilter, INostrEventStateFindMany,
@@ -7,6 +5,8 @@ use radroots_replica_db_schema::nostr_event_state::{
     INostrEventStateUpdate, INostrEventStateUpdateResolve, NostrEventState,
     NostrEventStateQueryBindValues,
 };
+use radroots_sql_core::error::SqlError;
+use radroots_sql_core::{SqlExecutor, utils};
 use radroots_types::types::{IError, IResult, IResultList};
 use serde_json::Value;
 
