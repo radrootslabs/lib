@@ -5,15 +5,12 @@ use alloc::{
 };
 
 use radroots_events::{
-    RadrootsNostrEvent,
-    kinds::KIND_REACTION,
-    reaction::{RadrootsReaction},
-    tags::TAG_E_ROOT,
+    RadrootsNostrEvent, kinds::KIND_REACTION, reaction::RadrootsReaction, tags::TAG_E_ROOT,
 };
 
 use crate::error::EventParseError;
-use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 use crate::event_ref::{find_event_ref_tag, parse_event_ref_tag, parse_nip10_ref_tags};
+use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 
 const DEFAULT_KIND: u32 = KIND_REACTION;
 
@@ -53,7 +50,13 @@ pub fn data_from_event(
     tags: Vec<Vec<String>>,
 ) -> Result<RadrootsParsedData<RadrootsReaction>, EventParseError> {
     let reaction = reaction_from_tags(kind, &tags, &content)?;
-    Ok(RadrootsParsedData::new(id, author, published_at, kind, reaction))
+    Ok(RadrootsParsedData::new(
+        id,
+        author,
+        published_at,
+        kind,
+        reaction,
+    ))
 }
 
 pub fn parsed_from_event(

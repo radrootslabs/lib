@@ -4,11 +4,7 @@ use alloc::{
     vec::Vec,
 };
 
-use radroots_events::{
-    RadrootsNostrEvent,
-    kinds::KIND_POST,
-    post::{RadrootsPost},
-};
+use radroots_events::{RadrootsNostrEvent, kinds::KIND_POST, post::RadrootsPost};
 
 use crate::error::EventParseError;
 use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
@@ -39,7 +35,13 @@ pub fn data_from_event(
     _tags: Vec<Vec<String>>,
 ) -> Result<RadrootsParsedData<RadrootsPost>, EventParseError> {
     let post = post_from_content(kind, &content)?;
-    Ok(RadrootsParsedData::new(id, author, published_at, kind, post))
+    Ok(RadrootsParsedData::new(
+        id,
+        author,
+        published_at,
+        kind,
+        post,
+    ))
 }
 
 pub fn parsed_from_event(

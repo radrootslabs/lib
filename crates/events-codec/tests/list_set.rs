@@ -5,7 +5,7 @@ use radroots_events::{
 };
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
 use radroots_events_codec::list_set::decode::{
-    parsed_from_event, list_set_from_tags, data_from_event,
+    data_from_event, list_set_from_tags, parsed_from_event,
 };
 use radroots_events_codec::list_set::encode::{list_set_build_tags, to_wire_parts_with_kind};
 

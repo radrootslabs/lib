@@ -3,9 +3,7 @@ use radroots_events::{
     post::RadrootsPost,
 };
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
-use radroots_events_codec::post::decode::{
-    parsed_from_event, data_from_event, post_from_content,
-};
+use radroots_events_codec::post::decode::{data_from_event, parsed_from_event, post_from_content};
 use radroots_events_codec::post::encode::to_wire_parts;
 
 #[test]

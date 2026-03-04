@@ -4,11 +4,7 @@ use alloc::{
     vec::Vec,
 };
 
-use radroots_events::{
-    RadrootsNostrEvent,
-    kinds::KIND_SEAL,
-    seal::{RadrootsSeal},
-};
+use radroots_events::{RadrootsNostrEvent, kinds::KIND_SEAL, seal::RadrootsSeal};
 
 use crate::error::EventParseError;
 use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
@@ -46,7 +42,13 @@ pub fn data_from_event(
     tags: Vec<Vec<String>>,
 ) -> Result<RadrootsParsedData<RadrootsSeal>, EventParseError> {
     let seal = seal_from_parts(kind, &tags, &content)?;
-    Ok(RadrootsParsedData::new(id, author, published_at, kind, seal))
+    Ok(RadrootsParsedData::new(
+        id,
+        author,
+        published_at,
+        kind,
+        seal,
+    ))
 }
 
 pub fn parsed_from_event(

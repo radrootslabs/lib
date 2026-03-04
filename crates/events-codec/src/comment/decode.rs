@@ -6,14 +6,14 @@ use alloc::{
 
 use radroots_events::{
     RadrootsNostrEvent,
-    comment::{RadrootsComment},
+    comment::RadrootsComment,
     kinds::KIND_COMMENT,
     tags::{TAG_E_PREV, TAG_E_ROOT},
 };
 
 use crate::error::EventParseError;
-use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 use crate::event_ref::{find_event_ref_tag, parse_event_ref_tag, parse_nip10_ref_tags};
+use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 
 const DEFAULT_KIND: u32 = KIND_COMMENT;
 
@@ -64,7 +64,13 @@ pub fn data_from_event(
     tags: Vec<Vec<String>>,
 ) -> Result<RadrootsParsedData<RadrootsComment>, EventParseError> {
     let comment = comment_from_tags(kind, &tags, &content)?;
-    Ok(RadrootsParsedData::new(id, author, published_at, kind, comment))
+    Ok(RadrootsParsedData::new(
+        id,
+        author,
+        published_at,
+        kind,
+        comment,
+    ))
 }
 
 pub fn parsed_from_event(

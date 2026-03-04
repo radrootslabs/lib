@@ -3,7 +3,7 @@ use radroots_events::{
     kinds::KIND_POST,
 };
 use radroots_events_codec::app_data::decode::{
-    app_data_from_tags, parsed_from_event, data_from_event,
+    app_data_from_tags, data_from_event, parsed_from_event,
 };
 use radroots_events_codec::app_data::encode::{
     app_data_build_tags, to_wire_parts, to_wire_parts_with_kind,

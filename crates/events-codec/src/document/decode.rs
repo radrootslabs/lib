@@ -8,10 +8,7 @@ use alloc::{
 };
 
 use radroots_events::{
-    RadrootsNostrEvent,
-    document::{RadrootsDocument},
-    kinds::KIND_DOCUMENT,
-    tags::TAG_D,
+    RadrootsNostrEvent, document::RadrootsDocument, kinds::KIND_DOCUMENT, tags::TAG_D,
 };
 
 use crate::d_tag::validate_d_tag_tag;
@@ -133,7 +130,13 @@ pub fn data_from_event(
     tags: Vec<Vec<String>>,
 ) -> Result<RadrootsParsedData<RadrootsDocument>, EventParseError> {
     let document = document_from_event(kind, &tags, &content)?;
-    Ok(RadrootsParsedData::new(id, author, published_at, kind, document))
+    Ok(RadrootsParsedData::new(
+        id,
+        author,
+        published_at,
+        kind,
+        document,
+    ))
 }
 
 pub fn parsed_from_event(

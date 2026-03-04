@@ -6,10 +6,7 @@ use alloc::{
 
 use radroots_events::{
     RadrootsNostrEvent,
-    gift_wrap::{
-        RadrootsGiftWrap,
-        RadrootsGiftWrapRecipient,
-    },
+    gift_wrap::{RadrootsGiftWrap, RadrootsGiftWrapRecipient},
     kinds::KIND_GIFT_WRAP,
 };
 
@@ -87,7 +84,13 @@ pub fn data_from_event(
     tags: Vec<Vec<String>>,
 ) -> Result<RadrootsParsedData<RadrootsGiftWrap>, EventParseError> {
     let gift_wrap = gift_wrap_from_tags(kind, &tags, &content)?;
-    Ok(RadrootsParsedData::new(id, author, published_at, kind, gift_wrap))
+    Ok(RadrootsParsedData::new(
+        id,
+        author,
+        published_at,
+        kind,
+        gift_wrap,
+    ))
 }
 
 pub fn parsed_from_event(

@@ -2,9 +2,7 @@
 
 use radroots_core::{RadrootsCoreDecimal, RadrootsCoreQuantity, RadrootsCoreUnit};
 use radroots_events::coop::RadrootsCoop;
-use radroots_events::document::{
-    RadrootsDocument, RadrootsDocumentSubject,
-};
+use radroots_events::document::{RadrootsDocument, RadrootsDocumentSubject};
 use radroots_events::farm::{
     RadrootsFarm, RadrootsFarmRef, RadrootsGcsLocation, RadrootsGeoJsonPoint,
     RadrootsGeoJsonPolygon,
@@ -16,36 +14,34 @@ use radroots_events::plot::RadrootsPlot;
 use radroots_events::resource_area::{
     RadrootsResourceArea, RadrootsResourceAreaLocation, RadrootsResourceAreaRef,
 };
-use radroots_events::resource_cap::{
-    RadrootsResourceHarvestCap, RadrootsResourceHarvestProduct,
-};
+use radroots_events::resource_cap::{RadrootsResourceHarvestCap, RadrootsResourceHarvestProduct};
 use radroots_events::tags::TAG_D;
 use radroots_events_codec::coop::decode::{
-    coop_from_event, parsed_from_event as coop_index_from_event,
-    data_from_event as coop_metadata_from_event,
+    coop_from_event, data_from_event as coop_metadata_from_event,
+    parsed_from_event as coop_index_from_event,
 };
 use radroots_events_codec::document::decode::{
-    document_from_event, parsed_from_event as document_index_from_event,
-    data_from_event as document_metadata_from_event,
+    data_from_event as document_metadata_from_event, document_from_event,
+    parsed_from_event as document_index_from_event,
 };
 use radroots_events_codec::error::EventParseError;
 use radroots_events_codec::farm::decode::{
-    farm_from_event, parsed_from_event as farm_index_from_event,
-    data_from_event as farm_metadata_from_event,
+    data_from_event as farm_metadata_from_event, farm_from_event,
+    parsed_from_event as farm_index_from_event,
 };
+use radroots_events_codec::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 use radroots_events_codec::plot::decode::{
-    parsed_from_event as plot_index_from_event, data_from_event as plot_metadata_from_event,
+    data_from_event as plot_metadata_from_event, parsed_from_event as plot_index_from_event,
     plot_from_event,
 };
 use radroots_events_codec::resource_area::decode::{
-    parsed_from_event as resource_area_index_from_event,
-    data_from_event as resource_area_metadata_from_event, resource_area_from_event,
+    data_from_event as resource_area_metadata_from_event,
+    parsed_from_event as resource_area_index_from_event, resource_area_from_event,
 };
 use radroots_events_codec::resource_cap::decode::{
-    parsed_from_event as resource_cap_index_from_event,
-    data_from_event as resource_cap_metadata_from_event, resource_harvest_cap_from_event,
+    data_from_event as resource_cap_metadata_from_event,
+    parsed_from_event as resource_cap_index_from_event, resource_harvest_cap_from_event,
 };
-use radroots_events_codec::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 
 const TEST_NPUB: &str = "npub1tr33s4tj2le2kk9yzhfphdtss26gyn8kv7savnnjhj794nqp333q8e7grr";
 const TEST_PUBKEY_HEX: &str = "58e318557257f2ab58a415d21bb57082b4824cf667a1d64e72bcbc5acc018c62";
@@ -614,15 +610,16 @@ fn resource_cap_metadata_and_index_decode_roundtrip() {
     let d_tag = "DAAAAAAAAAAAAAAAAAAAAA";
     let content = serde_json::to_string(&sample_resource_cap(d_tag)).expect("cap content");
     let tags = d_tag_tags(d_tag);
-    let metadata: RadrootsParsedData<RadrootsResourceHarvestCap> = resource_cap_metadata_from_event(
-        "id6".to_string(),
-        TEST_PUBKEY_HEX.to_string(),
-        60,
-        KIND_RESOURCE_HARVEST_CAP,
-        content.clone(),
-        tags.clone(),
-    )
-    .expect("cap metadata");
+    let metadata: RadrootsParsedData<RadrootsResourceHarvestCap> =
+        resource_cap_metadata_from_event(
+            "id6".to_string(),
+            TEST_PUBKEY_HEX.to_string(),
+            60,
+            KIND_RESOURCE_HARVEST_CAP,
+            content.clone(),
+            tags.clone(),
+        )
+        .expect("cap metadata");
     assert_eq!(metadata.data.d_tag, d_tag);
 
     let index: RadrootsParsedEvent<RadrootsResourceHarvestCap> = resource_cap_index_from_event(

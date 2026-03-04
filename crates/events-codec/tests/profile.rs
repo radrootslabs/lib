@@ -113,5 +113,8 @@ fn profile_metadata_reads_profile_type_radrootsd_tag() {
     )
     .expect("metadata");
 
-    assert_eq!(metadata.data.profile_type, Some(RadrootsProfileType::Radrootsd));
+    assert_eq!(
+        metadata.data.profile_type,
+        Some(RadrootsProfileType::Radrootsd)
+    );
 }

@@ -4,9 +4,7 @@ use radroots_events::{
 };
 
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
-use radroots_events_codec::follow::decode::{
-    follow_from_tags, parsed_from_event, data_from_event,
-};
+use radroots_events_codec::follow::decode::{data_from_event, follow_from_tags, parsed_from_event};
 use radroots_events_codec::follow::encode::{
     FollowMutation, follow_apply, follow_to_wire_parts_after, to_wire_parts,
     to_wire_parts_with_kind,
@@ -166,10 +164,7 @@ fn follow_metadata_and_index_from_event_roundtrip() {
         metadata.data.list[0].relay_url.as_deref(),
         Some("wss://relay.example.com")
     );
-    assert_eq!(
-        metadata.data.list[0].contact_name.as_deref(),
-        Some("alice")
-    );
+    assert_eq!(metadata.data.list[0].contact_name.as_deref(), Some("alice"));
 
     let index = parsed_from_event(
         "id".to_string(),

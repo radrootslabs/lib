@@ -3,7 +3,7 @@ use radroots_events::kinds::{KIND_GIFT_WRAP, KIND_MESSAGE};
 
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
 use radroots_events_codec::gift_wrap::decode::{
-    gift_wrap_from_tags, parsed_from_event, data_from_event,
+    data_from_event, gift_wrap_from_tags, parsed_from_event,
 };
 use radroots_events_codec::gift_wrap::encode::{
     gift_wrap_build_tags, to_wire_parts, to_wire_parts_with_kind,

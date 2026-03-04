@@ -6,9 +6,7 @@ use alloc::{
 
 use radroots_events::{
     RadrootsNostrEvent,
-    app_data::{
-        KIND_APP_DATA, RadrootsAppData,
-    },
+    app_data::{KIND_APP_DATA, RadrootsAppData},
     tags::TAG_D,
 };
 
@@ -57,7 +55,13 @@ pub fn data_from_event(
     tags: Vec<Vec<String>>,
 ) -> Result<RadrootsParsedData<RadrootsAppData>, EventParseError> {
     let app_data = app_data_from_tags(kind, &tags, &content)?;
-    Ok(RadrootsParsedData::new(id, author, published_at, kind, app_data))
+    Ok(RadrootsParsedData::new(
+        id,
+        author,
+        published_at,
+        kind,
+        app_data,
+    ))
 }
 
 pub fn parsed_from_event(

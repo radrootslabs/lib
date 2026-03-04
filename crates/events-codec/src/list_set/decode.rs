@@ -2,16 +2,14 @@
 use alloc::{string::String, vec::Vec};
 
 use radroots_events::{
-    RadrootsNostrEvent,
-    kinds::is_nip51_list_set_kind,
-    list::RadrootsListEntry,
-    list_set::{RadrootsListSet},
+    RadrootsNostrEvent, kinds::is_nip51_list_set_kind, list::RadrootsListEntry,
+    list_set::RadrootsListSet,
 };
 
 use crate::error::EventParseError;
-use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 #[cfg(feature = "serde_json")]
 use crate::list::decode::list_entries_from_tags;
+use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 
 const TAG_D: &str = "d";
 const TAG_TITLE: &str = "title";
@@ -110,7 +108,13 @@ pub fn data_from_event(
     tags: Vec<Vec<String>>,
 ) -> Result<RadrootsParsedData<RadrootsListSet>, EventParseError> {
     let list_set = list_set_from_tags(kind, content, &tags)?;
-    Ok(RadrootsParsedData::new(id, author, published_at, kind, list_set))
+    Ok(RadrootsParsedData::new(
+        id,
+        author,
+        published_at,
+        kind,
+        list_set,
+    ))
 }
 
 pub fn parsed_from_event(

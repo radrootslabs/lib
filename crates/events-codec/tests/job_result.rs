@@ -6,7 +6,7 @@ use radroots_events::job_result::RadrootsJobResult;
 use radroots_events::kinds::{KIND_JOB_REQUEST_MIN, KIND_JOB_RESULT_MIN};
 use radroots_events_codec::job::encode::JobEncodeError;
 use radroots_events_codec::job::error::JobParseError;
-use radroots_events_codec::job::result::decode::{parsed_from_event, job_result_from_tags};
+use radroots_events_codec::job::result::decode::{job_result_from_tags, parsed_from_event};
 use radroots_events_codec::job::result::encode::to_wire_parts;
 
 fn sample_result() -> RadrootsJobResult {

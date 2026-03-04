@@ -1,8 +1,6 @@
 use radroots_events::{
     RadrootsNostrEvent,
-    job_request::{
-        RadrootsJobInput, RadrootsJobParam, RadrootsJobRequest,
-    },
+    job_request::{RadrootsJobInput, RadrootsJobParam, RadrootsJobRequest},
     kinds::is_request_kind,
 };
 
@@ -78,7 +76,13 @@ pub fn data_from_event(
         return Err(JobParseError::InvalidTag("kind (expected 5000-5999)"));
     }
     let job_request = job_request_from_tags(kind, &tags)?;
-    Ok(RadrootsParsedData::new(id, author, published_at, kind, job_request))
+    Ok(RadrootsParsedData::new(
+        id,
+        author,
+        published_at,
+        kind,
+        job_request,
+    ))
 }
 
 pub fn parsed_from_event(
@@ -90,8 +94,7 @@ pub fn parsed_from_event(
     tags: Vec<Vec<String>>,
     sig: String,
 ) -> Result<RadrootsParsedEvent<RadrootsJobRequest>, JobParseError> {
-    let data =
-        data_from_event(id.clone(), author.clone(), published_at, kind, tags.clone())?;
+    let data = data_from_event(id.clone(), author.clone(), published_at, kind, tags.clone())?;
     Ok(RadrootsParsedEvent {
         event: RadrootsNostrEvent {
             id,

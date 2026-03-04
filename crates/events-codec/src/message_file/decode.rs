@@ -7,14 +7,12 @@ use alloc::{
 use radroots_events::{
     RadrootsNostrEvent,
     kinds::KIND_MESSAGE_FILE,
-    message_file::{
-        RadrootsMessageFile, RadrootsMessageFileDimensions,
-    },
+    message_file::{RadrootsMessageFile, RadrootsMessageFileDimensions},
 };
 
 use crate::error::EventParseError;
-use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 use crate::message::tags::{parse_recipients, parse_reply_tag, parse_subject_tag};
+use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 
 const DEFAULT_KIND: u32 = KIND_MESSAGE_FILE;
 
@@ -164,7 +162,13 @@ pub fn data_from_event(
     tags: Vec<Vec<String>>,
 ) -> Result<RadrootsParsedData<RadrootsMessageFile>, EventParseError> {
     let message_file = message_file_from_tags(kind, &tags, &content)?;
-    Ok(RadrootsParsedData::new(id, author, published_at, kind, message_file))
+    Ok(RadrootsParsedData::new(
+        id,
+        author,
+        published_at,
+        kind,
+        message_file,
+    ))
 }
 
 pub fn parsed_from_event(

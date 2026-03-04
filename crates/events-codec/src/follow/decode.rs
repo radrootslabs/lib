@@ -3,10 +3,7 @@ use alloc::{string::String, vec::Vec};
 
 use radroots_events::{
     RadrootsNostrEvent,
-    follow::{
-        RadrootsFollow,
-        RadrootsFollowProfile,
-    },
+    follow::{RadrootsFollow, RadrootsFollowProfile},
     kinds::KIND_FOLLOW,
 };
 
@@ -78,7 +75,13 @@ pub fn data_from_event(
     tags: Vec<Vec<String>>,
 ) -> Result<RadrootsParsedData<RadrootsFollow>, EventParseError> {
     let follow = follow_from_tags(kind, &tags, published_at)?;
-    Ok(RadrootsParsedData::new(id, author, published_at, kind, follow))
+    Ok(RadrootsParsedData::new(
+        id,
+        author,
+        published_at,
+        kind,
+        follow,
+    ))
 }
 
 pub fn parsed_from_event(

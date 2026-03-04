@@ -5,7 +5,7 @@ use radroots_events::message_file::{RadrootsMessageFile, RadrootsMessageFileDime
 
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
 use radroots_events_codec::message_file::decode::{
-    parsed_from_event, message_file_from_tags, data_from_event,
+    data_from_event, message_file_from_tags, parsed_from_event,
 };
 use radroots_events_codec::message_file::encode::{
     message_file_build_tags, to_wire_parts, to_wire_parts_with_kind,

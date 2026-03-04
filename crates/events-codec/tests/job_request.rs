@@ -3,7 +3,7 @@ use radroots_events::job_request::{RadrootsJobInput, RadrootsJobParam, RadrootsJ
 use radroots_events::kinds::{KIND_JOB_FEEDBACK, KIND_JOB_REQUEST_MIN, KIND_JOB_RESULT_MIN};
 use radroots_events_codec::job::encode::JobEncodeError;
 use radroots_events_codec::job::error::JobParseError;
-use radroots_events_codec::job::request::decode::{parsed_from_event, job_request_from_tags};
+use radroots_events_codec::job::request::decode::{job_request_from_tags, parsed_from_event};
 use radroots_events_codec::job::request::encode::to_wire_parts;
 
 fn sample_request() -> RadrootsJobRequest {

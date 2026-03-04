@@ -4,11 +4,7 @@ use alloc::{
     vec::Vec,
 };
 
-use radroots_events::{
-    RadrootsNostrEvent,
-    geochat::{RadrootsGeoChat},
-    kinds::KIND_GEOCHAT,
-};
+use radroots_events::{RadrootsNostrEvent, geochat::RadrootsGeoChat, kinds::KIND_GEOCHAT};
 
 use crate::error::EventParseError;
 use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
@@ -98,7 +94,13 @@ pub fn data_from_event(
     tags: Vec<Vec<String>>,
 ) -> Result<RadrootsParsedData<RadrootsGeoChat>, EventParseError> {
     let geochat = geochat_from_tags(kind, &tags, &content)?;
-    Ok(RadrootsParsedData::new(id, author, published_at, kind, geochat))
+    Ok(RadrootsParsedData::new(
+        id,
+        author,
+        published_at,
+        kind,
+        geochat,
+    ))
 }
 
 pub fn parsed_from_event(

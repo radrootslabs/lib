@@ -59,7 +59,13 @@ pub fn data_from_event(
     tags: Vec<Vec<String>>,
 ) -> Result<RadrootsParsedData<RadrootsList>, EventParseError> {
     let list = list_from_tags(kind, content, &tags)?;
-    Ok(RadrootsParsedData::new(id, author, published_at, kind, list))
+    Ok(RadrootsParsedData::new(
+        id,
+        author,
+        published_at,
+        kind,
+        list,
+    ))
 }
 
 pub fn parsed_from_event(

@@ -2,7 +2,7 @@ use radroots_events::kinds::{KIND_MESSAGE, KIND_SEAL};
 use radroots_events::seal::RadrootsSeal;
 
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
-use radroots_events_codec::seal::decode::{parsed_from_event, data_from_event, seal_from_parts};
+use radroots_events_codec::seal::decode::{data_from_event, parsed_from_event, seal_from_parts};
 use radroots_events_codec::seal::encode::{
     seal_build_tags, to_wire_parts, to_wire_parts_with_kind,
 };

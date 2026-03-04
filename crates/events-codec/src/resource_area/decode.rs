@@ -7,12 +7,7 @@ use alloc::{
 };
 
 use radroots_events::{
-    RadrootsNostrEvent,
-    kinds::KIND_RESOURCE_AREA,
-    resource_area::{
-        RadrootsResourceArea,
-    },
-    tags::TAG_D,
+    RadrootsNostrEvent, kinds::KIND_RESOURCE_AREA, resource_area::RadrootsResourceArea, tags::TAG_D,
 };
 
 use crate::d_tag::validate_d_tag_tag;
@@ -73,7 +68,13 @@ pub fn data_from_event(
     tags: Vec<Vec<String>>,
 ) -> Result<RadrootsParsedData<RadrootsResourceArea>, EventParseError> {
     let area = resource_area_from_event(kind, &tags, &content)?;
-    Ok(RadrootsParsedData::new(id, author, published_at, kind, area))
+    Ok(RadrootsParsedData::new(
+        id,
+        author,
+        published_at,
+        kind,
+        area,
+    ))
 }
 
 pub fn parsed_from_event(

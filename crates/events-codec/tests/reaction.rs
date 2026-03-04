@@ -9,7 +9,7 @@ use radroots_events::{
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
 use radroots_events_codec::event_ref::{build_event_ref_tag, push_nip10_ref_tags};
 use radroots_events_codec::reaction::decode::{
-    parsed_from_event, data_from_event, reaction_from_tags,
+    data_from_event, parsed_from_event, reaction_from_tags,
 };
 use radroots_events_codec::reaction::encode::{
     reaction_build_tags, to_wire_parts, to_wire_parts_with_kind,

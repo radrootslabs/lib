@@ -10,10 +10,7 @@ use radroots_events::{
     RadrootsNostrEvent,
     kinds::KIND_LISTING,
     kinds::{KIND_FARM, KIND_PLOT, KIND_RESOURCE_AREA},
-    listing::{
-        RadrootsListing,
-        RadrootsListingFarmRef,
-    },
+    listing::{RadrootsListing, RadrootsListingFarmRef},
     plot::RadrootsPlotRef,
     resource_area::RadrootsResourceAreaRef,
     tags::TAG_D,
@@ -235,7 +232,13 @@ pub fn data_from_event(
     tags: Vec<Vec<String>>,
 ) -> Result<RadrootsParsedData<RadrootsListing>, EventParseError> {
     let listing = listing_from_event(kind, &tags, &content)?;
-    Ok(RadrootsParsedData::new(id, author, published_at, kind, listing))
+    Ok(RadrootsParsedData::new(
+        id,
+        author,
+        published_at,
+        kind,
+        listing,
+    ))
 }
 
 pub fn parsed_from_event(

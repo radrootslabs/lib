@@ -7,8 +7,8 @@ pub mod d_tag;
 pub mod error;
 pub mod event_ref;
 pub mod job;
-pub mod profile;
 pub mod parsed;
+pub mod profile;
 pub mod tag_builders;
 pub mod wire;
 

@@ -1,10 +1,6 @@
 use radroots_events::{
-    RadrootsNostrEvent, RadrootsNostrEventPtr,
-    job::JobPaymentRequest,
-    job_feedback::{
-        RadrootsJobFeedback,
-    },
-    kinds::KIND_JOB_FEEDBACK,
+    RadrootsNostrEvent, RadrootsNostrEventPtr, job::JobPaymentRequest,
+    job_feedback::RadrootsJobFeedback, kinds::KIND_JOB_FEEDBACK,
 };
 
 #[cfg(not(feature = "std"))]
@@ -90,7 +86,13 @@ pub fn data_from_event(
         return Err(JobParseError::InvalidTag("kind (expected 7000)"));
     }
     let job_feedback = job_feedback_from_tags(kind, &tags, &content)?;
-    Ok(RadrootsParsedData::new(id, author, published_at, kind, job_feedback))
+    Ok(RadrootsParsedData::new(
+        id,
+        author,
+        published_at,
+        kind,
+        job_feedback,
+    ))
 }
 
 pub fn parsed_from_event(

@@ -7,7 +7,7 @@ use radroots_events::{
 };
 
 use radroots_events_codec::comment::decode::comment_from_tags;
-use radroots_events_codec::comment::decode::{parsed_from_event, data_from_event};
+use radroots_events_codec::comment::decode::{data_from_event, parsed_from_event};
 use radroots_events_codec::comment::encode::{
     comment_build_tags, to_wire_parts, to_wire_parts_with_kind,
 };

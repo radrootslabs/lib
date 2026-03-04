@@ -11,7 +11,8 @@ use radroots_events::{
     RadrootsNostrEvent,
     kinds::KIND_PROFILE,
     profile::{
-        RADROOTS_PROFILE_TYPE_TAG_KEY, RadrootsProfile, RadrootsProfileType, radroots_profile_type_from_tag_value,
+        RADROOTS_PROFILE_TYPE_TAG_KEY, RadrootsProfile, RadrootsProfileType,
+        radroots_profile_type_from_tag_value,
     },
 };
 

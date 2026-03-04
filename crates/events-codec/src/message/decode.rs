@@ -4,15 +4,11 @@ use alloc::{
     vec::Vec,
 };
 
-use radroots_events::{
-    RadrootsNostrEvent,
-    kinds::KIND_MESSAGE,
-    message::{RadrootsMessage},
-};
+use radroots_events::{RadrootsNostrEvent, kinds::KIND_MESSAGE, message::RadrootsMessage};
 
 use crate::error::EventParseError;
-use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 use crate::message::tags::{parse_recipients, parse_reply_tag, parse_subject_tag};
+use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 
 const DEFAULT_KIND: u32 = KIND_MESSAGE;
 
@@ -54,7 +50,13 @@ pub fn data_from_event(
     tags: Vec<Vec<String>>,
 ) -> Result<RadrootsParsedData<RadrootsMessage>, EventParseError> {
     let message = message_from_tags(kind, &tags, &content)?;
-    Ok(RadrootsParsedData::new(id, author, published_at, kind, message))
+    Ok(RadrootsParsedData::new(
+        id,
+        author,
+        published_at,
+        kind,
+        message,
+    ))
 }
 
 pub fn parsed_from_event(

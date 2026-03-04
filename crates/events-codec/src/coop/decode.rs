@@ -7,12 +7,7 @@ use alloc::{
     vec::Vec,
 };
 
-use radroots_events::{
-    RadrootsNostrEvent,
-    coop::{RadrootsCoop},
-    kinds::KIND_COOP,
-    tags::TAG_D,
-};
+use radroots_events::{RadrootsNostrEvent, coop::RadrootsCoop, kinds::KIND_COOP, tags::TAG_D};
 
 use crate::d_tag::validate_d_tag_tag;
 use crate::error::EventParseError;
@@ -72,7 +67,13 @@ pub fn data_from_event(
     tags: Vec<Vec<String>>,
 ) -> Result<RadrootsParsedData<RadrootsCoop>, EventParseError> {
     let coop = coop_from_event(kind, &tags, &content)?;
-    Ok(RadrootsParsedData::new(id, author, published_at, kind, coop))
+    Ok(RadrootsParsedData::new(
+        id,
+        author,
+        published_at,
+        kind,
+        coop,
+    ))
 }
 
 pub fn parsed_from_event(

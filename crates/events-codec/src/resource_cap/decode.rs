@@ -7,11 +7,7 @@ use alloc::{
 };
 
 use radroots_events::{
-    RadrootsNostrEvent,
-    kinds::KIND_RESOURCE_HARVEST_CAP,
-    resource_cap::{
-        RadrootsResourceHarvestCap,
-    },
+    RadrootsNostrEvent, kinds::KIND_RESOURCE_HARVEST_CAP, resource_cap::RadrootsResourceHarvestCap,
     tags::TAG_D,
 };
 
