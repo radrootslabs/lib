@@ -364,7 +364,7 @@ fn parse_coverage_percent(raw: &str, field: &str, crate_name: &str) -> Result<f6
 
 fn load_coverage_refresh_rows(
     workspace_root: &Path,
-) -> Result<BTreeMap<String, (String, f64, f64, f64)>, String> {
+) -> Result<BTreeMap<String, (String, f64, f64, f64, f64)>, String> {
     let report_path = workspace_root
         .join("target")
         .join("coverage")
@@ -380,9 +380,9 @@ fn load_coverage_refresh_rows(
             continue;
         }
         let parts = trimmed.split('\t').collect::<Vec<_>>();
-        if parts.len() < 5 {
+        if parts.len() < 6 {
             return Err(format!(
-                "coverage row must have at least 5 columns in {}: {}",
+                "coverage row must have at least 6 columns in {}: {}",
                 report_path.display(),
                 trimmed
             ));
@@ -392,7 +392,8 @@ fn load_coverage_refresh_rows(
         let exec = parse_coverage_percent(parts[2], "exec", &crate_name)?;
         let func = parse_coverage_percent(parts[3], "func", &crate_name)?;
         let branch = parse_coverage_percent(parts[4], "branch", &crate_name)?;
-        rows.insert(crate_name, (status, exec, func, branch));
+        let region = parse_coverage_percent(parts[5], "region", &crate_name)?;
+        rows.insert(crate_name, (status, exec, func, branch, region));
     }
     Ok(rows)
 }
@@ -403,7 +404,7 @@ fn validate_required_coverage_summary(
 ) -> Result<(), String> {
     let rows = load_coverage_refresh_rows(workspace_root)?;
     for crate_name in required_crates {
-        let (status, exec, func, branch) = rows.get(crate_name).ok_or_else(|| {
+        let (status, exec, func, branch, region) = rows.get(crate_name).ok_or_else(|| {
             format!(
                 "required coverage crate {} missing from coverage-refresh.tsv",
                 crate_name
@@ -415,10 +416,10 @@ fn validate_required_coverage_summary(
                 crate_name, status
             ));
         }
-        if *exec < 100.0 || *func < 100.0 || *branch < 100.0 {
+        if *exec < 100.0 || *func < 100.0 || *branch < 100.0 || *region < 100.0 {
             return Err(format!(
-                "required coverage crate {} must be 100/100/100, found {}/{}/{}",
-                crate_name, exec, func, branch
+                "required coverage crate {} must be 100/100/100/100, found {}/{}/{}/{}",
+                crate_name, exec, func, branch, region
             ));
         }
     }
@@ -1037,7 +1038,7 @@ crates = ["radroots-a"]
                 .join("target")
                 .join("coverage")
                 .join("coverage-refresh.tsv"),
-            "crate\tstatus\texec\tfunc\tbranch\treport\nradroots-a\tpass\t100.0\t100.0\t100.0\tfile\n",
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots-a\tpass\t100.0\t100.0\t100.0\t100.0\tfile\n",
         );
         root
     }
@@ -1193,7 +1194,7 @@ pub enum RadrootsCoreUnitDimension {
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         fs::write(
             coverage_dir.join("coverage-refresh.tsv"),
-            "crate\tstatus\texec\tfunc\tbranch\treport\nradroots-core\tpass\t100.0\t100.0\t100.0\tfile\n",
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots-core\tpass\t100.0\t100.0\t100.0\t100.0\tfile\n",
         )
         .expect("write coverage file");
         let required = ["radroots-core".to_string()]
@@ -1203,21 +1204,30 @@ pub enum RadrootsCoreUnitDimension {
 
         fs::write(
             coverage_dir.join("coverage-refresh.tsv"),
-            "crate\tstatus\texec\tfunc\tbranch\treport\nradroots-core\tpass\t100.0\t99.9\t100.0\tfile\n",
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots-core\tpass\t100.0\t99.9\t100.0\t100.0\tfile\n",
         )
         .expect("write function coverage file");
         let func_err = validate_required_coverage_summary(&root, &required)
             .expect_err("function coverage below 100");
-        assert!(func_err.contains("must be 100/100/100"));
+        assert!(func_err.contains("must be 100/100/100/100"));
 
         fs::write(
             coverage_dir.join("coverage-refresh.tsv"),
-            "crate\tstatus\texec\tfunc\tbranch\treport\nradroots-core\tpass\t100.0\t100.0\t99.9\tfile\n",
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots-core\tpass\t100.0\t100.0\t99.9\t100.0\tfile\n",
         )
         .expect("write branch coverage file");
         let branch_err = validate_required_coverage_summary(&root, &required)
             .expect_err("branch coverage below 100");
-        assert!(branch_err.contains("must be 100/100/100"));
+        assert!(branch_err.contains("must be 100/100/100/100"));
+
+        fs::write(
+            coverage_dir.join("coverage-refresh.tsv"),
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots-core\tpass\t100.0\t100.0\t100.0\t99.9\tfile\n",
+        )
+        .expect("write region coverage file");
+        let region_err = validate_required_coverage_summary(&root, &required)
+            .expect_err("region coverage below 100");
+        assert!(region_err.contains("must be 100/100/100/100"));
         let _ = fs::remove_dir_all(&root);
     }
 
@@ -1323,21 +1333,29 @@ members = ["crates/a", "crates/b"]
 
         write_file(
             &coverage_dir.join("coverage-refresh.tsv"),
-            "crate\tstatus\texec\tfunc\tbranch\treport\nbad-row\n",
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nbad-row\n",
         );
         let bad_row = load_coverage_refresh_rows(&root).expect_err("invalid coverage row");
-        assert!(bad_row.contains("at least 5 columns"));
+        assert!(bad_row.contains("at least 6 columns"));
 
         write_file(
             &coverage_dir.join("coverage-refresh.tsv"),
-            "crate\tstatus\texec\tfunc\tbranch\treport\nradroots-a\tpass\tnot-a-number\t100\t100\tfile\n",
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots-a\tpass\tnot-a-number\t100\t100\t100\tfile\n",
         );
         let bad_percent = load_coverage_refresh_rows(&root).expect_err("invalid coverage percent");
         assert!(bad_percent.contains("parse exec"));
 
         write_file(
             &coverage_dir.join("coverage-refresh.tsv"),
-            "crate\tstatus\texec\tfunc\tbranch\treport\nradroots-a\tfail\t100\t100\t100\tfile\n",
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots-a\tpass\t100\t100\t100\tnot-a-number\tfile\n",
+        );
+        let bad_region =
+            load_coverage_refresh_rows(&root).expect_err("invalid region coverage percent");
+        assert!(bad_region.contains("parse region"));
+
+        write_file(
+            &coverage_dir.join("coverage-refresh.tsv"),
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots-a\tfail\t100\t100\t100\t100\tfile\n",
         );
         let required = ["radroots-a".to_string()]
             .into_iter()
@@ -1348,11 +1366,11 @@ members = ["crates/a", "crates/b"]
 
         write_file(
             &coverage_dir.join("coverage-refresh.tsv"),
-            "crate\tstatus\texec\tfunc\tbranch\treport\nradroots-a\tpass\t99.9\t100\t100\tfile\n",
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots-a\tpass\t99.9\t100\t100\t100\tfile\n",
         );
         let below_100 =
             validate_required_coverage_summary(&root, &required).expect_err("coverage below 100");
-        assert!(below_100.contains("must be 100/100/100"));
+        assert!(below_100.contains("must be 100/100/100/100"));
 
         let missing = ["missing".to_string()].into_iter().collect::<BTreeSet<_>>();
         let missing_err =
@@ -1963,7 +1981,7 @@ readme = { workspace = true }
                 .join("target")
                 .join("coverage")
                 .join("coverage-refresh.tsv"),
-            "crate\tstatus\texec\tfunc\tbranch\treport\n\nradroots-a\tpass\t100\t100\t100\tfile\n",
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\n\nradroots-a\tpass\t100\t100\t100\t100\tfile\n",
         );
         let rows = load_coverage_refresh_rows(&root).expect("rows");
         assert_eq!(rows.len(), 1);

@@ -38,6 +38,7 @@ pub struct LcovCoverage {
 pub struct CoverageThresholds {
     pub fail_under_exec_lines: f64,
     pub fail_under_functions: f64,
+    pub fail_under_regions: f64,
     pub fail_under_branches: f64,
     pub require_branches: bool,
 }
@@ -61,6 +62,7 @@ struct CoverageGateReport {
 struct CoverageGateReportThresholds {
     executable_lines: f64,
     functions: f64,
+    regions: f64,
     branches: f64,
     branches_required: bool,
 }
@@ -478,12 +480,13 @@ pub fn evaluate_gate(
 ) -> CoverageGateResult {
     let exec_ok = lcov.executable_percent >= thresholds.fail_under_exec_lines;
     let functions_ok = summary.functions_percent >= thresholds.fail_under_functions;
+    let regions_ok = summary.summary_regions_percent >= thresholds.fail_under_regions;
     let branch_presence_ok = !thresholds.require_branches || lcov.branches_available;
     let branch_ok = lcov
         .branch_percent
         .is_none_or(|branch_percent| branch_percent >= thresholds.fail_under_branches);
 
-    let pass = exec_ok && functions_ok && branch_presence_ok && branch_ok;
+    let pass = exec_ok && functions_ok && regions_ok && branch_presence_ok && branch_ok;
     let mut fail_reasons: Vec<String> = Vec::new();
 
     if !exec_ok {
@@ -497,6 +500,13 @@ pub fn evaluate_gate(
         fail_reasons.push(format!(
             "functions={:.6} < {:.6}",
             summary.functions_percent, thresholds.fail_under_functions
+        ));
+    }
+
+    if !regions_ok {
+        fail_reasons.push(format!(
+            "regions={:.6} < {:.6}",
+            summary.summary_regions_percent, thresholds.fail_under_regions
         ));
     }
 
@@ -704,6 +714,7 @@ fn report_gate(args: &[String]) -> Result<(), String> {
     let thresholds = CoverageThresholds {
         fail_under_exec_lines: parse_f64_arg(args, "fail-under-exec-lines", 100.0)?,
         fail_under_functions: parse_f64_arg(args, "fail-under-functions", 100.0)?,
+        fail_under_regions: parse_f64_arg(args, "fail-under-regions", 100.0)?,
         fail_under_branches: parse_f64_arg(args, "fail-under-branches", 100.0)?,
         require_branches: parse_bool_flag(args, "require-branches"),
     };
@@ -717,6 +728,7 @@ fn report_gate(args: &[String]) -> Result<(), String> {
         thresholds: CoverageGateReportThresholds {
             executable_lines: thresholds.fail_under_exec_lines,
             functions: thresholds.fail_under_functions,
+            regions: thresholds.fail_under_regions,
             branches: thresholds.fail_under_branches,
             branches_required: thresholds.require_branches,
         },
@@ -753,16 +765,20 @@ fn report_gate(args: &[String]) -> Result<(), String> {
 
     if lcov.branches_available {
         eprintln!(
-            "{} coverage: executable_lines={:.6} functions={:.6} branches={:.6}",
+            "{} coverage: executable_lines={:.6} functions={:.6} regions={:.6} branches={:.6}",
             scope,
             lcov.executable_percent,
             summary.functions_percent,
+            summary.summary_regions_percent,
             lcov.branch_percent.unwrap_or(0.0)
         );
     } else {
         eprintln!(
-            "{} coverage: executable_lines={:.6} functions={:.6} branches=unavailable",
-            scope, lcov.executable_percent, summary.functions_percent
+            "{} coverage: executable_lines={:.6} functions={:.6} regions={:.6} branches=unavailable",
+            scope,
+            lcov.executable_percent,
+            summary.functions_percent,
+            summary.summary_regions_percent
         );
     }
 
@@ -968,6 +984,7 @@ mod tests {
         let thresholds = CoverageThresholds {
             fail_under_exec_lines: 100.0,
             fail_under_functions: 100.0,
+            fail_under_regions: 100.0,
             fail_under_branches: 100.0,
             require_branches: true,
         };
@@ -1342,6 +1359,7 @@ test_threads = 0
         let thresholds = CoverageThresholds {
             fail_under_exec_lines: 90.0,
             fail_under_functions: 90.0,
+            fail_under_regions: 90.0,
             fail_under_branches: 90.0,
             require_branches: true,
         };
@@ -1357,6 +1375,11 @@ test_threads = 0
             gate.fail_reasons
                 .iter()
                 .any(|reason| reason.contains("functions"))
+        );
+        assert!(
+            gate.fail_reasons
+                .iter()
+                .any(|reason| reason.contains("regions"))
         );
         assert!(
             gate.fail_reasons
@@ -1522,6 +1545,7 @@ test_threads = 0
         report_gate(&args).expect("report gate success");
         let report_raw = fs::read_to_string(&out_path).expect("read report");
         assert!(report_raw.contains("\"scope\": \"crate-x\""));
+        assert!(report_raw.contains("\"regions\": 100.0"));
         assert!(report_raw.contains("\"pass\": true"));
         fs::remove_dir_all(root).expect("remove report gate success root");
     }
@@ -1550,6 +1574,8 @@ test_threads = 0
             "--fail-under-exec-lines".to_string(),
             "100.0".to_string(),
             "--fail-under-functions".to_string(),
+            "100.0".to_string(),
+            "--fail-under-regions".to_string(),
             "100.0".to_string(),
             "--fail-under-branches".to_string(),
             "100.0".to_string(),

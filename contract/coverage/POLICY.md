@@ -6,10 +6,11 @@ This document defines the required coverage gate for the oss rust workspace.
 
 - executable lines coverage: 100.0
 - function coverage: 100.0
+- region coverage: 100.0
 - branch coverage: 100.0
 - branch records must be present in lcov data
 
-All three thresholds are release-blocking.
+All four thresholds are release-blocking.
 
 ## toolchain contract
 
@@ -21,7 +22,7 @@ All three thresholds are release-blocking.
 ## enforcement contract
 
 - run coverage checks per crate, not only aggregate workspace totals
-- a crate cannot be promoted to required unless it is at 100/100/100
+- a crate cannot be promoted to required unless it is at 100/100/100/100
 - once required, the crate remains blocking on every pull request and push to `master`
 
 ## rollout contract

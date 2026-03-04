@@ -1,6 +1,7 @@
 [policy]
 fail_under_exec_lines = 100.0
 fail_under_functions = 100.0
+fail_under_regions = 100.0
 fail_under_branches = 100.0
 require_branches = true
 

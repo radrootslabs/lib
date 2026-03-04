@@ -52,6 +52,7 @@ jobs:
               --out "${run_dir}/coverage-gate-summary.json" \
               --fail-under-exec-lines 0 \
               --fail-under-functions 0 \
+              --fail-under-regions 0 \
               --fail-under-branches 0; then
               status="report-failed"
             fi
@@ -63,6 +64,7 @@ jobs:
                 "thresholds": {
                   "executable_lines": 0,
                   "functions": 0,
+                  "regions": 0,
                   "branches": 0,
                   "branches_required": false
                 },
@@ -114,6 +116,7 @@ JSON
               --out "${crate_dir}/coverage-gate-blocking.json" \
               --fail-under-exec-lines 100 \
               --fail-under-functions 100 \
+              --fail-under-regions 100 \
               --fail-under-branches 100 \
               --require-branches
           done < /tmp/radroots_required_coverage_crates.txt

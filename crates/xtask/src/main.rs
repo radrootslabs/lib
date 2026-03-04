@@ -22,7 +22,7 @@ fn usage() {
     eprintln!("  cargo xtask sdk coverage required-crates");
     eprintln!("  cargo xtask sdk coverage workspace-crates");
     eprintln!(
-        "  cargo xtask sdk coverage report --scope <scope> --summary <file> --lcov <file> --out <file>"
+        "  cargo xtask sdk coverage report --scope <scope> --summary <file> --lcov <file> --out <file> [--fail-under-exec-lines <pct>] [--fail-under-functions <pct>] [--fail-under-regions <pct>] [--fail-under-branches <pct>] [--require-branches]"
     );
 }
 
@@ -374,10 +374,12 @@ mod tests {
             .and_then(|table| table.get("crates"))
             .and_then(toml::Value::as_array)
             .expect("required crates array");
-        let mut rows = String::from("crate\tstatus\texec\tfunc\tbranch\treport\n");
+        let mut rows = String::from("crate\tstatus\texec\tfunc\tbranch\tregion\treport\n");
         for crate_name in required_crates {
             let crate_name = crate_name.as_str().expect("required crate name");
-            rows.push_str(&format!("{crate_name}\tpass\t100.0\t100.0\t100.0\tfile\n"));
+            rows.push_str(&format!(
+                "{crate_name}\tpass\t100.0\t100.0\t100.0\t100.0\tfile\n"
+            ));
         }
         fs::write(&coverage_refresh_path, rows).expect("write coverage refresh");
 

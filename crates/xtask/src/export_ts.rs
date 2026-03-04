@@ -655,7 +655,7 @@ crates = ["radroots-a"]
                 .join("target")
                 .join("coverage")
                 .join("coverage-refresh.tsv"),
-            "crate\tstatus\texec\tfunc\tbranch\treport\nradroots-a\tpass\t100.0\t100.0\t100.0\tfile\n",
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots-a\tpass\t100.0\t100.0\t100.0\t100.0\tfile\n",
         );
         root
     }
