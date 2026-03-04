@@ -175,10 +175,14 @@ struct CoverageProfile {
 }
 
 pub fn read_summary(path: &Path) -> Result<CoverageSummary, String> {
-    let raw = fs::read_to_string(path)
-        .map_err(|err| format!("failed to read summary {}: {err}", path.display()))?;
-    let parsed: LlvmCovSummaryRoot = serde_json::from_str(&raw)
-        .map_err(|err| format!("failed to parse summary {}: {err}", path.display()))?;
+    let raw = match fs::read_to_string(path) {
+        Ok(raw) => raw,
+        Err(err) => return Err(format!("failed to read summary {}: {err}", path.display())),
+    };
+    let parsed: LlvmCovSummaryRoot = match serde_json::from_str(&raw) {
+        Ok(parsed) => parsed,
+        Err(err) => return Err(format!("failed to parse summary {}: {err}", path.display())),
+    };
     let totals = parsed
         .data
         .first()
@@ -193,10 +197,24 @@ pub fn read_summary(path: &Path) -> Result<CoverageSummary, String> {
 }
 
 fn read_required_crates(path: &Path) -> Result<Vec<String>, String> {
-    let raw = fs::read_to_string(path)
-        .map_err(|err| format!("failed to read required crates {}: {err}", path.display()))?;
-    let parsed: CoverageRequiredContract = toml::from_str(&raw)
-        .map_err(|err| format!("failed to parse required crates {}: {err}", path.display()))?;
+    let raw = match fs::read_to_string(path) {
+        Ok(raw) => raw,
+        Err(err) => {
+            return Err(format!(
+                "failed to read required crates {}: {err}",
+                path.display()
+            ));
+        }
+    };
+    let parsed: CoverageRequiredContract = match toml::from_str(&raw) {
+        Ok(parsed) => parsed,
+        Err(err) => {
+            return Err(format!(
+                "failed to parse required crates {}: {err}",
+                path.display()
+            ));
+        }
+    };
     if parsed.required.crates.is_empty() {
         return Err("coverage required crates list must not be empty".to_string());
     }
@@ -240,9 +258,14 @@ fn read_workspace_crates(workspace_root: &Path) -> Result<Vec<String>, String> {
 }
 
 fn parse_toml<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, String> {
-    let raw = fs::read_to_string(path)
-        .map_err(|err| format!("failed to read {}: {err}", path.display()))?;
-    toml::from_str::<T>(&raw).map_err(|err| format!("failed to parse {}: {err}", path.display()))
+    let raw = match fs::read_to_string(path) {
+        Ok(raw) => raw,
+        Err(err) => return Err(format!("failed to read {}: {err}", path.display())),
+    };
+    match toml::from_str::<T>(&raw) {
+        Ok(parsed) => Ok(parsed),
+        Err(err) => Err(format!("failed to parse {}: {err}", path.display())),
+    }
 }
 
 fn merge_coverage_profile(
@@ -304,8 +327,10 @@ fn read_coverage_profile(
 }
 
 pub fn read_lcov(path: &Path) -> Result<LcovCoverage, String> {
-    let raw = fs::read_to_string(path)
-        .map_err(|err| format!("failed to read lcov {}: {err}", path.display()))?;
+    let raw = match fs::read_to_string(path) {
+        Ok(raw) => raw,
+        Err(err) => return Err(format!("failed to read lcov {}: {err}", path.display())),
+    };
 
     let mut da_total: u64 = 0;
     let mut da_covered: u64 = 0;
@@ -321,9 +346,15 @@ pub fn read_lcov(path: &Path) -> Result<LcovCoverage, String> {
             let Some((_, hit)) = value.split_once(',') else {
                 return Err(format!("invalid DA record in {}", path.display()));
             };
-            let hit_count: u64 = hit.parse().map_err(|err| {
-                format!("invalid DA hit count `{hit}` in {}: {err}", path.display())
-            })?;
+            let hit_count: u64 = match hit.parse() {
+                Ok(hit_count) => hit_count,
+                Err(err) => {
+                    return Err(format!(
+                        "invalid DA hit count `{hit}` in {}: {err}",
+                        path.display()
+                    ));
+                }
+            };
             da_total = da_total.saturating_add(1);
             if hit_count > 0 {
                 da_covered = da_covered.saturating_add(1);
@@ -331,30 +362,54 @@ pub fn read_lcov(path: &Path) -> Result<LcovCoverage, String> {
             continue;
         }
         if let Some(value) = line.strip_prefix("LF:") {
-            let parsed: u64 = value.parse().map_err(|err| {
-                format!("invalid LF value `{value}` in {}: {err}", path.display())
-            })?;
+            let parsed: u64 = match value.parse() {
+                Ok(parsed) => parsed,
+                Err(err) => {
+                    return Err(format!(
+                        "invalid LF value `{value}` in {}: {err}",
+                        path.display()
+                    ));
+                }
+            };
             executable_total = executable_total.saturating_add(parsed);
             continue;
         }
         if let Some(value) = line.strip_prefix("LH:") {
-            let parsed: u64 = value.parse().map_err(|err| {
-                format!("invalid LH value `{value}` in {}: {err}", path.display())
-            })?;
+            let parsed: u64 = match value.parse() {
+                Ok(parsed) => parsed,
+                Err(err) => {
+                    return Err(format!(
+                        "invalid LH value `{value}` in {}: {err}",
+                        path.display()
+                    ));
+                }
+            };
             executable_covered = executable_covered.saturating_add(parsed);
             continue;
         }
         if let Some(value) = line.strip_prefix("BRF:") {
-            let parsed: u64 = value.parse().map_err(|err| {
-                format!("invalid BRF value `{value}` in {}: {err}", path.display())
-            })?;
+            let parsed: u64 = match value.parse() {
+                Ok(parsed) => parsed,
+                Err(err) => {
+                    return Err(format!(
+                        "invalid BRF value `{value}` in {}: {err}",
+                        path.display()
+                    ));
+                }
+            };
             branch_total_lcov = branch_total_lcov.saturating_add(parsed);
             continue;
         }
         if let Some(value) = line.strip_prefix("BRH:") {
-            let parsed: u64 = value.parse().map_err(|err| {
-                format!("invalid BRH value `{value}` in {}: {err}", path.display())
-            })?;
+            let parsed: u64 = match value.parse() {
+                Ok(parsed) => parsed,
+                Err(err) => {
+                    return Err(format!(
+                        "invalid BRH value `{value}` in {}: {err}",
+                        path.display()
+                    ));
+                }
+            };
             branch_covered_lcov = branch_covered_lcov.saturating_add(parsed);
             continue;
         }
@@ -378,12 +433,15 @@ pub fn read_lcov(path: &Path) -> Result<LcovCoverage, String> {
             if taken == "-" {
                 continue;
             }
-            let hit_count: u64 = taken.parse().map_err(|err| {
-                format!(
-                    "invalid BRDA taken count `{taken}` in {}: {err}",
-                    path.display()
-                )
-            })?;
+            let hit_count: u64 = match taken.parse() {
+                Ok(hit_count) => hit_count,
+                Err(err) => {
+                    return Err(format!(
+                        "invalid BRDA taken count `{taken}` in {}: {err}",
+                        path.display()
+                    ));
+                }
+            };
             branch_total_brda = branch_total_brda.saturating_add(1);
             if hit_count > 0 {
                 branch_covered_brda = branch_covered_brda.saturating_add(1);
@@ -536,19 +594,16 @@ fn parse_bool_flag(args: &[String], name: &str) -> bool {
 
 fn workspace_root() -> Result<PathBuf, String> {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let Some(crates_dir) = manifest_dir.parent() else {
-        return Err("failed to resolve crates dir".to_string());
-    };
-    let Some(root) = crates_dir.parent() else {
-        return Err("failed to resolve workspace root".to_string());
-    };
+    let crates_dir = manifest_dir.parent().unwrap_or(manifest_dir);
+    let root = crates_dir.parent().unwrap_or(crates_dir);
     Ok(root.to_path_buf())
 }
 
 fn run_command(mut command: Command, name: &str) -> Result<(), String> {
-    let status = command
-        .status()
-        .map_err(|err| format!("failed to run {name}: {err}"))?;
+    let status = match command.status() {
+        Ok(status) => status,
+        Err(err) => return Err(format!("failed to run {name}: {err}")),
+    };
     if !status.success() {
         return Err(format!("{name} failed with status {status}"));
     }
@@ -564,7 +619,10 @@ fn apply_coverage_profile_flags(command: &mut Command, profile: &CoverageProfile
     }
 }
 
-fn run_crate(args: &[String]) -> Result<(), String> {
+fn run_crate_with_runner<F>(args: &[String], mut runner: F) -> Result<(), String>
+where
+    F: FnMut(Command, &str) -> Result<(), String>,
+{
     let crate_name = parse_string_arg(args, "crate")?;
     let workspace_root = workspace_root()?;
     let profile = read_coverage_profile(&workspace_root, &crate_name)?;
@@ -583,7 +641,7 @@ fn run_crate(args: &[String]) -> Result<(), String> {
     fs::create_dir_all(&out_dir)
         .map_err(|err| format!("failed to create {}: {err}", out_dir.display()))?;
 
-    run_command(
+    runner(
         {
             let mut cmd = Command::new("rustup");
             cmd.arg("run")
@@ -598,7 +656,7 @@ fn run_crate(args: &[String]) -> Result<(), String> {
         "cargo llvm-cov clean --workspace",
     )?;
 
-    run_command(
+    runner(
         {
             let mut cmd = Command::new("rustup");
             cmd.arg("run").arg("nightly").arg("cargo").arg("llvm-cov");
@@ -615,7 +673,7 @@ fn run_crate(args: &[String]) -> Result<(), String> {
     )?;
 
     let summary_path = out_dir.join("coverage-summary.json");
-    run_command(
+    runner(
         {
             let mut cmd = Command::new("rustup");
             cmd.arg("run").arg("nightly").arg("cargo").arg("llvm-cov");
@@ -632,7 +690,7 @@ fn run_crate(args: &[String]) -> Result<(), String> {
     )?;
 
     let lcov_path = out_dir.join("coverage-lcov.info");
-    run_command(
+    runner(
         {
             let mut cmd = Command::new("rustup");
             cmd.arg("run").arg("nightly").arg("cargo").arg("llvm-cov");
@@ -650,6 +708,10 @@ fn run_crate(args: &[String]) -> Result<(), String> {
     eprintln!("coverage summary: {}", summary_path.display());
     eprintln!("coverage lcov: {}", lcov_path.display());
     Ok(())
+}
+
+fn run_crate(args: &[String]) -> Result<(), String> {
+    run_crate_with_runner(args, run_command)
 }
 
 fn report_gate(args: &[String]) -> Result<(), String> {
@@ -701,10 +763,13 @@ fn report_gate(args: &[String]) -> Result<(), String> {
         },
     };
 
-    let json = serde_json::to_string_pretty(&report)
-        .map_err(|err| format!("failed to encode coverage report json: {err}"))?;
-    fs::write(&out_path, format!("{json}\n"))
-        .map_err(|err| format!("failed to write {}: {err}", out_path.display()))?;
+    let json = match serde_json::to_string_pretty(&report) {
+        Ok(json) => json,
+        Err(err) => return Err(format!("failed to encode coverage report json: {err}")),
+    };
+    if let Err(err) = fs::write(&out_path, format!("{json}\n")) {
+        return Err(format!("failed to write {}: {err}", out_path.display()));
+    }
 
     if lcov.branches_available {
         eprintln!(
@@ -745,8 +810,9 @@ fn list_required_crates() -> Result<(), String> {
     let crates = read_required_crates(&required_path)?;
     let mut stdout = std::io::stdout().lock();
     for crate_name in crates {
-        writeln!(stdout, "{crate_name}")
-            .map_err(|err| format!("failed to write required crates output: {err}"))?;
+        if let Err(err) = writeln!(stdout, "{crate_name}") {
+            return Err(format!("failed to write required crates output: {err}"));
+        }
     }
     Ok(())
 }
@@ -756,8 +822,9 @@ fn list_workspace_crates() -> Result<(), String> {
     let crates = read_workspace_crates(&root)?;
     let mut stdout = std::io::stdout().lock();
     for crate_name in crates {
-        writeln!(stdout, "{crate_name}")
-            .map_err(|err| format!("failed to write workspace crates output: {err}"))?;
+        if let Err(err) = writeln!(stdout, "{crate_name}") {
+            return Err(format!("failed to write workspace crates output: {err}"));
+        }
     }
     Ok(())
 }
@@ -778,6 +845,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
 mod tests {
     use super::*;
     use std::fs;
+    use std::path::Path;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn temp_file_path(prefix: &str) -> PathBuf {
@@ -794,6 +862,13 @@ mod tests {
             .expect("system time")
             .as_nanos();
         std::env::temp_dir().join(format!("radroots_xtask_coverage_{prefix}_{ns}"))
+    }
+
+    fn write_file(path: &Path, content: &str) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("create parent");
+        }
+        fs::write(path, content).expect("write file");
     }
 
     #[test]
@@ -978,5 +1053,479 @@ test_threads = 0
         );
 
         fs::remove_dir_all(root).expect("remove root");
+    }
+
+    #[test]
+    fn coverage_profiles_reject_zero_test_threads_without_feature_error() {
+        let root = temp_dir_path("profile_invalid_threads");
+        let coverage_dir = root.join("contract").join("coverage");
+        fs::create_dir_all(&coverage_dir).expect("create coverage dir");
+        fs::write(
+            coverage_dir.join("profiles.toml"),
+            r#"[profiles.crates."radroots-app-core"]
+test_threads = 0
+"#,
+        )
+        .expect("write profiles");
+
+        let err =
+            read_coverage_profile(&root, "radroots-app-core").expect_err("invalid thread count");
+        assert!(err.contains("test_threads > 0"));
+
+        fs::remove_dir_all(root).expect("remove root");
+    }
+
+    #[test]
+    fn parse_helpers_cover_success_and_error_paths() {
+        let args = vec![
+            "--scope".to_string(),
+            "crate-a".to_string(),
+            "--value".to_string(),
+            "3.5".to_string(),
+            "--threads".to_string(),
+            "4".to_string(),
+            "--flag".to_string(),
+        ];
+        assert_eq!(
+            parse_string_arg(&args, "scope").expect("scope value"),
+            "crate-a".to_string()
+        );
+        assert_eq!(
+            parse_optional_string_arg(&args, "scope").expect("optional scope"),
+            "crate-a".to_string()
+        );
+        assert_eq!(parse_f64_arg(&args, "value", 1.0).expect("f64 value"), 3.5);
+        assert_eq!(
+            parse_optional_u32_arg(&args, "threads").expect("u32 value"),
+            Some(4)
+        );
+        assert!(parse_bool_flag(&args, "flag"));
+        assert_eq!(parse_optional_string_arg(&args, "missing"), None);
+        assert_eq!(
+            parse_f64_arg(&args, "missing", 2.25).expect("default f64"),
+            2.25
+        );
+        assert_eq!(
+            parse_optional_u32_arg(&args, "missing").expect("missing u32"),
+            None
+        );
+
+        let missing_err = parse_string_arg(&args, "absent").expect_err("missing arg");
+        assert!(missing_err.contains("missing --absent"));
+
+        let missing_value = vec!["--scope".to_string()];
+        let missing_value_err =
+            parse_string_arg(&missing_value, "scope").expect_err("missing arg value");
+        assert!(missing_value_err.contains("missing value for --scope"));
+
+        let invalid_f64 = vec!["--value".to_string(), "bad".to_string()];
+        let invalid_f64_err = parse_f64_arg(&invalid_f64, "value", 1.0).expect_err("invalid f64");
+        assert!(invalid_f64_err.contains("invalid --value value"));
+
+        let invalid_u32 = vec!["--threads".to_string(), "bad".to_string()];
+        let invalid_u32_err =
+            parse_optional_u32_arg(&invalid_u32, "threads").expect_err("invalid u32");
+        assert!(invalid_u32_err.contains("invalid --threads value"));
+    }
+
+    #[test]
+    fn executable_source_labels_cover_all_variants() {
+        assert_eq!(executable_source_label(ExecutableSource::Da), "da");
+        assert_eq!(executable_source_label(ExecutableSource::LfLh), "lf_lh");
+    }
+
+    #[test]
+    fn read_required_crates_rejects_empty_and_blank_entries() {
+        let empty_path = temp_file_path("required_empty");
+        write_file(&empty_path, "[required]\ncrates = []\n");
+        let empty_err = read_required_crates(&empty_path).expect_err("empty required list");
+        assert!(empty_err.contains("must not be empty"));
+        fs::remove_file(&empty_path).expect("remove empty required file");
+
+        let blank_path = temp_file_path("required_blank");
+        write_file(&blank_path, "[required]\ncrates = [\"a\", \" \"]\n");
+        let blank_err = read_required_crates(&blank_path).expect_err("blank crate name");
+        assert!(blank_err.contains("empty crate name"));
+        fs::remove_file(&blank_path).expect("remove blank required file");
+    }
+
+    #[test]
+    fn read_workspace_crates_rejects_invalid_workspace_shapes() {
+        let root_empty = temp_dir_path("workspace_empty_members");
+        write_file(
+            &root_empty.join("Cargo.toml"),
+            "[workspace]\nmembers = []\n",
+        );
+        let empty_err = read_workspace_crates(&root_empty).expect_err("empty workspace members");
+        assert!(empty_err.contains("must not be empty"));
+        fs::remove_dir_all(&root_empty).expect("remove empty members root");
+
+        let root_blank = temp_dir_path("workspace_blank_package_name");
+        write_file(
+            &root_blank.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"crates/a\"]\n",
+        );
+        write_file(
+            &root_blank.join("crates").join("a").join("Cargo.toml"),
+            "[package]\nname = \"\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+        );
+        let blank_err = read_workspace_crates(&root_blank).expect_err("blank package name");
+        assert!(blank_err.contains("empty package name"));
+        fs::remove_dir_all(&root_blank).expect("remove blank package root");
+
+        let root_duplicate = temp_dir_path("workspace_duplicate_package");
+        write_file(
+            &root_duplicate.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"crates/a\", \"crates/b\"]\n",
+        );
+        let package_manifest =
+            "[package]\nname = \"duplicate\"\nversion = \"0.1.0\"\nedition = \"2024\"\n";
+        write_file(
+            &root_duplicate.join("crates").join("a").join("Cargo.toml"),
+            package_manifest,
+        );
+        write_file(
+            &root_duplicate.join("crates").join("b").join("Cargo.toml"),
+            package_manifest,
+        );
+        let dup_err = read_workspace_crates(&root_duplicate).expect_err("duplicate package names");
+        assert!(dup_err.contains("duplicate package name"));
+        fs::remove_dir_all(&root_duplicate).expect("remove duplicate package root");
+    }
+
+    #[test]
+    fn read_lcov_rejects_invalid_records() {
+        let cases = vec![
+            ("invalid_da_shape", "DA:1\n", "invalid DA record"),
+            ("invalid_da_hits", "DA:1,bad\n", "invalid DA hit count"),
+            ("invalid_lf", "LF:bad\n", "invalid LF value"),
+            ("invalid_lh", "LH:bad\n", "invalid LH value"),
+            ("invalid_brf", "BRF:bad\n", "invalid BRF value"),
+            ("invalid_brh", "BRH:bad\n", "invalid BRH value"),
+            ("invalid_brda_shape", "BRDA:1,0,0\n", "invalid BRDA record"),
+            (
+                "invalid_brda_taken",
+                "BRDA:1,0,0,bad\n",
+                "invalid BRDA taken count",
+            ),
+            (
+                "invalid_brda_extra",
+                "BRDA:1,0,0,1,extra\n",
+                "invalid BRDA record",
+            ),
+        ];
+        for (prefix, raw, expected) in cases {
+            let path = temp_file_path(prefix);
+            write_file(&path, raw);
+            let err = read_lcov(&path).expect_err("invalid lcov record");
+            assert!(
+                err.contains(expected),
+                "expected `{expected}` in `{err}` for case {prefix}"
+            );
+            fs::remove_file(path).expect("remove invalid lcov file");
+        }
+    }
+
+    #[test]
+    fn read_lcov_uses_lf_lh_when_da_is_missing_and_branches_absent() {
+        let path = temp_file_path("lcov_lf_lh");
+        fs::write(&path, "LF:4\nLH:3\n").expect("write lcov");
+        let parsed = read_lcov(&path).expect("parse lcov");
+        assert!(matches!(parsed.executable_source, ExecutableSource::LfLh));
+        assert_eq!(parsed.executable_total, 4);
+        assert_eq!(parsed.executable_covered, 3);
+        assert_eq!(parsed.executable_percent, 75.0);
+        assert!(!parsed.branches_available);
+        assert_eq!(parsed.branch_percent, None);
+        fs::remove_file(path).expect("remove lcov");
+    }
+
+    #[test]
+    fn evaluate_gate_collects_all_failure_reasons() {
+        let summary = CoverageSummary {
+            functions_percent: 40.0,
+            summary_lines_percent: 50.0,
+            summary_regions_percent: 60.0,
+        };
+        let lcov = LcovCoverage {
+            executable_total: 20,
+            executable_covered: 10,
+            executable_percent: 50.0,
+            executable_source: ExecutableSource::Da,
+            branch_total: 10,
+            branch_covered: 3,
+            branches_available: true,
+            branch_percent: Some(30.0),
+        };
+        let thresholds = CoverageThresholds {
+            fail_under_exec_lines: 90.0,
+            fail_under_functions: 90.0,
+            fail_under_branches: 90.0,
+            require_branches: true,
+        };
+
+        let gate = evaluate_gate(&summary, &lcov, thresholds);
+        assert!(!gate.pass);
+        assert!(
+            gate.fail_reasons
+                .iter()
+                .any(|reason| reason.contains("executable_lines"))
+        );
+        assert!(
+            gate.fail_reasons
+                .iter()
+                .any(|reason| reason.contains("functions"))
+        );
+        assert!(
+            gate.fail_reasons
+                .iter()
+                .any(|reason| reason.contains("branches"))
+        );
+    }
+
+    #[test]
+    fn run_command_covers_success_and_failure() {
+        let mut ok = Command::new("sh");
+        ok.arg("-c").arg("exit 0");
+        run_command(ok, "shell ok").expect("run ok command");
+
+        let mut fail = Command::new("sh");
+        fail.arg("-c").arg("exit 9");
+        let err = run_command(fail, "shell fail").expect_err("run failing command");
+        assert!(err.contains("shell fail failed with status"));
+    }
+
+    #[test]
+    fn apply_coverage_profile_flags_writes_expected_args() {
+        let profile = CoverageProfile {
+            no_default_features: true,
+            features: vec!["std".to_string(), "serde".to_string()],
+            test_threads: Some(2),
+        };
+        let mut command = Command::new("cargo");
+        apply_coverage_profile_flags(&mut command, &profile);
+        let args = command
+            .get_args()
+            .map(|arg| arg.to_string_lossy().to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            args,
+            vec![
+                "--no-default-features".to_string(),
+                "--features".to_string(),
+                "std,serde".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn run_crate_with_runner_builds_all_command_steps() {
+        let out = temp_dir_path("run_crate_runner");
+        let args = vec![
+            "--crate".to_string(),
+            "radroots-core".to_string(),
+            "--out".to_string(),
+            out.display().to_string(),
+            "--test-threads".to_string(),
+            "3".to_string(),
+        ];
+        let mut names = Vec::new();
+        run_crate_with_runner(&args, |cmd, name| {
+            names.push(name.to_string());
+            let rendered = cmd
+                .get_args()
+                .map(|arg| arg.to_string_lossy().to_string())
+                .collect::<Vec<_>>()
+                .join(" ");
+            assert!(!rendered.is_empty());
+            Ok(())
+        })
+        .expect("run crate with stub runner");
+        assert_eq!(
+            names,
+            vec![
+                "cargo llvm-cov clean --workspace".to_string(),
+                "cargo llvm-cov --no-report".to_string(),
+                "cargo llvm-cov report --json --summary-only".to_string(),
+                "cargo llvm-cov report --lcov".to_string(),
+            ]
+        );
+        fs::remove_dir_all(out).expect("remove run crate output dir");
+    }
+
+    #[test]
+    fn run_crate_with_runner_uses_default_output_dir_when_out_is_missing() {
+        let args = vec!["--crate".to_string(), "radroots-core".to_string()];
+        let mut output_path_seen = false;
+        run_crate_with_runner(&args, |cmd, _| {
+            let rendered = cmd
+                .get_args()
+                .map(|arg| arg.to_string_lossy().to_string())
+                .collect::<Vec<_>>();
+            if rendered
+                .iter()
+                .any(|arg| arg.ends_with("coverage-summary.json"))
+                || rendered
+                    .iter()
+                    .any(|arg| arg.ends_with("coverage-lcov.info"))
+            {
+                output_path_seen = true;
+            }
+            Ok(())
+        })
+        .expect("run crate with default out");
+        assert!(output_path_seen);
+    }
+
+    #[test]
+    fn run_crate_with_runner_propagates_runner_failures() {
+        let out = temp_dir_path("run_crate_runner_fail");
+        let args = vec![
+            "--crate".to_string(),
+            "radroots-core".to_string(),
+            "--out".to_string(),
+            out.display().to_string(),
+        ];
+        let err = run_crate_with_runner(&args, |_, _| Err("runner failed".to_string()))
+            .expect_err("runner failure should bubble up");
+        assert_eq!(err, "runner failed".to_string());
+        fs::remove_dir_all(out).expect("remove run crate failure output dir");
+    }
+
+    #[test]
+    fn run_crate_wrapper_returns_missing_crate_error_without_running_commands() {
+        let err = run_crate(&[]).expect_err("missing crate flag");
+        assert!(err.contains("missing --crate"));
+    }
+
+    #[test]
+    fn report_gate_writes_report_file_on_success() {
+        let root = temp_dir_path("report_gate_success");
+        let summary_path = root.join("summary.json");
+        let lcov_path = root.join("coverage.info");
+        let out_path = root.join("gate-report.json");
+        write_file(
+            &summary_path,
+            r#"{"data":[{"totals":{"functions":{"percent":100.0},"lines":{"percent":100.0},"regions":{"percent":100.0}}}]}"#,
+        );
+        write_file(&lcov_path, "DA:1,1\nBRDA:1,0,0,1\n");
+
+        let args = vec![
+            "--scope".to_string(),
+            "crate-x".to_string(),
+            "--summary".to_string(),
+            summary_path.display().to_string(),
+            "--lcov".to_string(),
+            lcov_path.display().to_string(),
+            "--out".to_string(),
+            out_path.display().to_string(),
+            "--require-branches".to_string(),
+        ];
+        report_gate(&args).expect("report gate success");
+        let report_raw = fs::read_to_string(&out_path).expect("read report");
+        assert!(report_raw.contains("\"scope\": \"crate-x\""));
+        assert!(report_raw.contains("\"pass\": true"));
+        fs::remove_dir_all(root).expect("remove report gate success root");
+    }
+
+    #[test]
+    fn report_gate_returns_error_on_failed_thresholds() {
+        let root = temp_dir_path("report_gate_fail");
+        let summary_path = root.join("summary.json");
+        let lcov_path = root.join("coverage.info");
+        let out_path = root.join("gate-report.json");
+        write_file(
+            &summary_path,
+            r#"{"data":[{"totals":{"functions":{"percent":10.0},"lines":{"percent":10.0},"regions":{"percent":10.0}}}]}"#,
+        );
+        write_file(&lcov_path, "DA:1,0\nBRDA:1,0,0,0\n");
+
+        let args = vec![
+            "--scope".to_string(),
+            "crate-y".to_string(),
+            "--summary".to_string(),
+            summary_path.display().to_string(),
+            "--lcov".to_string(),
+            lcov_path.display().to_string(),
+            "--out".to_string(),
+            out_path.display().to_string(),
+            "--fail-under-exec-lines".to_string(),
+            "100.0".to_string(),
+            "--fail-under-functions".to_string(),
+            "100.0".to_string(),
+            "--fail-under-branches".to_string(),
+            "100.0".to_string(),
+        ];
+        let err = report_gate(&args).expect_err("report gate failure");
+        assert!(err.contains("coverage gate failed"));
+        fs::remove_dir_all(root).expect("remove report gate failure root");
+    }
+
+    #[test]
+    fn report_gate_logs_branch_unavailable_path() {
+        let root = temp_dir_path("report_gate_no_branches");
+        let summary_path = root.join("summary.json");
+        let lcov_path = root.join("coverage.info");
+        let out_path = root.join("gate-report.json");
+        write_file(
+            &summary_path,
+            r#"{"data":[{"totals":{"functions":{"percent":100.0},"lines":{"percent":100.0},"regions":{"percent":100.0}}}]}"#,
+        );
+        write_file(&lcov_path, "DA:1,1\n");
+
+        let args = vec![
+            "--scope".to_string(),
+            "crate-no-branch".to_string(),
+            "--summary".to_string(),
+            summary_path.display().to_string(),
+            "--lcov".to_string(),
+            lcov_path.display().to_string(),
+            "--out".to_string(),
+            out_path.display().to_string(),
+        ];
+        report_gate(&args).expect("report gate no branches");
+        let report_raw = fs::read_to_string(&out_path).expect("read report");
+        assert!(report_raw.contains("\"branches_available\": false"));
+        fs::remove_dir_all(root).expect("remove no branch report root");
+    }
+
+    #[test]
+    fn run_dispatches_subcommands_and_errors() {
+        run(&["help".to_string()]).expect("help subcommand");
+        run(&["required-crates".to_string()]).expect("required crates subcommand");
+        run(&["workspace-crates".to_string()]).expect("workspace crates subcommand");
+        let unknown_err = run(&["unknown".to_string()]).expect_err("unknown subcommand");
+        assert!(unknown_err.contains("unknown sdk coverage subcommand"));
+        let missing_err = run(&[]).expect_err("missing subcommand");
+        assert!(missing_err.contains("missing sdk coverage subcommand"));
+    }
+
+    #[test]
+    fn run_report_subcommand_dispatches_to_report_gate() {
+        let root = temp_dir_path("run_dispatch_report");
+        let summary_path = root.join("summary.json");
+        let lcov_path = root.join("coverage.info");
+        let out_path = root.join("gate-report.json");
+        write_file(
+            &summary_path,
+            r#"{"data":[{"totals":{"functions":{"percent":100.0},"lines":{"percent":100.0},"regions":{"percent":100.0}}}]}"#,
+        );
+        write_file(&lcov_path, "DA:1,1\nBRDA:1,0,0,1\n");
+
+        run(&[
+            "report".to_string(),
+            "--scope".to_string(),
+            "dispatch".to_string(),
+            "--summary".to_string(),
+            summary_path.display().to_string(),
+            "--lcov".to_string(),
+            lcov_path.display().to_string(),
+            "--out".to_string(),
+            out_path.display().to_string(),
+            "--require-branches".to_string(),
+        ])
+        .expect("dispatch report");
+        assert!(out_path.exists());
+        fs::remove_dir_all(root).expect("remove report dispatch root");
     }
 }

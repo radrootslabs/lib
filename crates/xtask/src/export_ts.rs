@@ -29,18 +29,21 @@ fn to_package_dir(base: &Path, package_name: &str) -> PathBuf {
 fn ts_export_mapping(
     bundle: &contract::ContractBundle,
 ) -> Result<&contract::ExportMapping, String> {
-    bundle
+    if let Some(mapping) = bundle
         .exports
         .iter()
         .find(|mapping| mapping.language.id == "ts")
-        .ok_or_else(|| "missing ts export mapping".to_string())
+    {
+        return Ok(mapping);
+    }
+    Err("missing ts export mapping".to_string())
 }
 
 fn ts_artifacts(mapping: &contract::ExportMapping) -> Result<&contract::ExportArtifacts, String> {
-    mapping
-        .artifacts
-        .as_ref()
-        .ok_or_else(|| "missing ts artifacts mapping".to_string())
+    if let Some(artifacts) = mapping.artifacts.as_ref() {
+        return Ok(artifacts);
+    }
+    Err("missing ts artifacts mapping".to_string())
 }
 
 fn selected_package_entries<'a>(
@@ -88,10 +91,12 @@ fn selected_package_entries<'a>(
 }
 
 fn required_artifact_value<'a>(value: &'a Option<String>, field: &str) -> Result<&'a str, String> {
-    value
-        .as_deref()
-        .filter(|item| !item.trim().is_empty())
-        .ok_or_else(|| format!("missing ts artifacts.{field}"))
+    if let Some(raw) = value.as_deref() {
+        if !raw.trim().is_empty() {
+            return Ok(raw);
+        }
+    }
+    Err(format!("missing ts artifacts.{field}"))
 }
 
 fn crate_supports_ts_rs(workspace_root: &Path, crate_dir: &str) -> Result<bool, String> {
@@ -102,8 +107,10 @@ fn crate_supports_ts_rs(workspace_root: &Path, crate_dir: &str) -> Result<bool, 
     if !manifest.exists() {
         return Ok(false);
     }
-    let raw =
-        fs::read_to_string(&manifest).map_err(|e| format!("read {}: {e}", manifest.display()))?;
+    let raw = match fs::read_to_string(&manifest) {
+        Ok(raw) => raw,
+        Err(e) => return Err(format!("read {}: {e}", manifest.display())),
+    };
     Ok(raw.contains("ts-rs"))
 }
 
@@ -112,9 +119,13 @@ fn copy_if_exists(src: &Path, dst: &Path) -> Result<bool, String> {
         return Ok(false);
     }
     if let Some(parent) = dst.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("create {}: {e}", parent.display()))?;
+        if let Err(e) = fs::create_dir_all(parent) {
+            return Err(format!("create {}: {e}", parent.display()));
+        }
     }
-    fs::copy(src, dst).map_err(|e| format!("copy {} -> {}: {e}", src.display(), dst.display()))?;
+    if let Err(e) = fs::copy(src, dst) {
+        return Err(format!("copy {} -> {}: {e}", src.display(), dst.display()));
+    }
     Ok(true)
 }
 
@@ -122,24 +133,36 @@ fn copy_dir_contents(src: &Path, dst: &Path) -> Result<usize, String> {
     if !src.exists() {
         return Ok(0);
     }
-    fs::create_dir_all(dst).map_err(|e| format!("create {}: {e}", dst.display()))?;
+    if let Err(e) = fs::create_dir_all(dst) {
+        return Err(format!("create {}: {e}", dst.display()));
+    }
     let mut copied = 0usize;
-    let mut entries = fs::read_dir(src)
-        .map_err(|e| format!("read dir {}: {e}", src.display()))?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("read dir entries {}: {e}", src.display()))?;
+    let read_dir = match fs::read_dir(src) {
+        Ok(entries) => entries,
+        Err(e) => return Err(format!("read dir {}: {e}", src.display())),
+    };
+    let mut entries = match read_dir.collect::<Result<Vec<_>, _>>() {
+        Ok(entries) => entries,
+        Err(e) => return Err(format!("read dir entries {}: {e}", src.display())),
+    };
     entries.sort_by_key(|entry| entry.file_name());
     for entry in entries {
         let path = entry.path();
         let target = dst.join(entry.file_name());
-        let file_type = entry
-            .file_type()
-            .map_err(|e| format!("read type {}: {e}", path.display()))?;
+        let file_type = match entry.file_type() {
+            Ok(file_type) => file_type,
+            Err(e) => return Err(format!("read type {}: {e}", path.display())),
+        };
         if file_type.is_dir() {
             copied += copy_dir_contents(&path, &target)?;
         } else if file_type.is_file() {
-            fs::copy(&path, &target)
-                .map_err(|e| format!("copy {} -> {}: {e}", path.display(), target.display()))?;
+            if let Err(e) = fs::copy(&path, &target) {
+                return Err(format!(
+                    "copy {} -> {}: {e}",
+                    path.display(),
+                    target.display()
+                ));
+            }
             copied += 1;
         }
     }
@@ -155,19 +178,24 @@ fn collect_manifest_entries(
     if !current.exists() {
         return Ok(());
     }
-    let mut dir_entries = fs::read_dir(current)
-        .map_err(|e| format!("read dir {}: {e}", current.display()))?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("read dir entries {}: {e}", current.display()))?;
+    let read_dir = match fs::read_dir(current) {
+        Ok(entries) => entries,
+        Err(e) => return Err(format!("read dir {}: {e}", current.display())),
+    };
+    let mut dir_entries = match read_dir.collect::<Result<Vec<_>, _>>() {
+        Ok(entries) => entries,
+        Err(e) => return Err(format!("read dir entries {}: {e}", current.display())),
+    };
     dir_entries.sort_by_key(|entry| entry.file_name());
     for entry in dir_entries {
         let path = entry.path();
         if path == skip_path {
             continue;
         }
-        let file_type = entry
-            .file_type()
-            .map_err(|e| format!("read type {}: {e}", path.display()))?;
+        let file_type = match entry.file_type() {
+            Ok(file_type) => file_type,
+            Err(e) => return Err(format!("read type {}: {e}", path.display())),
+        };
         if file_type.is_dir() {
             collect_manifest_entries(root, &path, skip_path, entries)?;
             continue;
@@ -175,13 +203,15 @@ fn collect_manifest_entries(
         if !file_type.is_file() {
             continue;
         }
-        let bytes = fs::read(&path).map_err(|e| format!("read {}: {e}", path.display()))?;
+        let bytes = match fs::read(&path) {
+            Ok(bytes) => bytes,
+            Err(e) => return Err(format!("read {}: {e}", path.display())),
+        };
         let digest = Sha256::digest(&bytes);
-        let relative = path
-            .strip_prefix(root)
-            .map_err(|e| format!("strip prefix {}: {e}", path.display()))?
-            .to_string_lossy()
-            .replace('\\', "/");
+        let relative = match path.strip_prefix(root) {
+            Ok(relative) => relative.to_string_lossy().replace('\\', "/"),
+            Err(e) => return Err(format!("strip prefix {}: {e}", path.display())),
+        };
         entries.push(ExportManifestEntry {
             path: relative,
             sha256: hex::encode(digest),
@@ -351,12 +381,22 @@ pub fn write_ts_export_manifest(workspace_root: &Path, out_dir: &Path) -> Result
         files,
     };
     if let Some(parent) = manifest_path.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("create {}: {e}", parent.display()))?;
+        if let Err(e) = fs::create_dir_all(parent) {
+            return Err(format!("create {}: {e}", parent.display()));
+        }
     }
-    let bytes = serde_json::to_vec_pretty(&manifest)
-        .map_err(|e| format!("serialize manifest {}: {e}", manifest_path.display()))?;
-    fs::write(&manifest_path, bytes)
-        .map_err(|e| format!("write {}: {e}", manifest_path.display()))?;
+    let bytes = match serde_json::to_vec_pretty(&manifest) {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            return Err(format!(
+                "serialize manifest {}: {e}",
+                manifest_path.display()
+            ));
+        }
+    };
+    if let Err(e) = fs::write(&manifest_path, bytes) {
+        return Err(format!("write {}: {e}", manifest_path.display()));
+    }
     Ok(manifest_path)
 }
 
@@ -370,11 +410,13 @@ fn generate_ts_rs_sources_with_selector(
     let selected_entries = selected_package_entries(ts_export, selector)?;
     let source_root = workspace_root.join("target").join("ts-rs");
     if source_root.exists() {
-        fs::remove_dir_all(&source_root)
-            .map_err(|e| format!("remove {}: {e}", source_root.display()))?;
+        if let Err(e) = fs::remove_dir_all(&source_root) {
+            return Err(format!("remove {}: {e}", source_root.display()));
+        }
     }
-    fs::create_dir_all(&source_root)
-        .map_err(|e| format!("create {}: {e}", source_root.display()))?;
+    if let Err(e) = fs::create_dir_all(&source_root) {
+        return Err(format!("create {}: {e}", source_root.display()));
+    }
     let mut expected = 0usize;
     for (crate_name, _) in &selected_entries {
         if crate_name.ends_with("-wasm") {
@@ -401,8 +443,9 @@ fn generate_ts_rs_sources_with_selector(
             .strip_prefix("@radroots/")
             .unwrap_or(package_name);
         let export_dir = source_root.join(package_dir);
-        fs::create_dir_all(&export_dir)
-            .map_err(|e| format!("create {}: {e}", export_dir.display()))?;
+        if let Err(e) = fs::create_dir_all(&export_dir) {
+            return Err(format!("create {}: {e}", export_dir.display()));
+        }
         let status = Command::new("cargo")
             .arg("test")
             .arg("-q")
@@ -412,8 +455,11 @@ fn generate_ts_rs_sources_with_selector(
             .arg("ts-rs")
             .env("RADROOTS_TS_RS_EXPORT_DIR", &export_dir)
             .current_dir(workspace_root)
-            .status()
-            .map_err(|e| format!("run cargo test for {crate_name}: {e}"))?;
+            .status();
+        let status = match status {
+            Ok(status) => status,
+            Err(e) => return Err(format!("run cargo test for {crate_name}: {e}")),
+        };
         if !status.success() {
             return Err(format!("cargo test failed for {crate_name}"));
         }
