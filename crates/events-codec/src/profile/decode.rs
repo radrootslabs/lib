@@ -10,15 +10,22 @@ use radroots_events::{
     RadrootsNostrEvent,
     kinds::KIND_PROFILE,
     profile::{
-        RADROOTS_PROFILE_TYPE_TAG_KEY, RadrootsProfile, RadrootsProfileEventIndex,
-        RadrootsProfileEventMetadata, RadrootsProfileType, radroots_profile_type_from_tag_value,
+        RADROOTS_PROFILE_TYPE_TAG_KEY, RadrootsProfile, RadrootsProfileType, radroots_profile_type_from_tag_value,
     },
 };
 
 use crate::error::EventParseError;
+use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 use serde_json::Value;
 
 const PROFILE_KIND: u32 = KIND_PROFILE;
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug)]
+pub struct RadrootsProfileData {
+    pub profile_type: Option<RadrootsProfileType>,
+    pub profile: RadrootsProfile,
+}
 
 fn parse_optional_string(value: &Value, key: &'static str) -> Option<String> {
     value
@@ -74,7 +81,7 @@ pub fn data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsProfileEventMetadata, EventParseError> {
+) -> Result<RadrootsParsedData<RadrootsProfileData>, EventParseError> {
     if kind != PROFILE_KIND {
         return Err(EventParseError::InvalidKind {
             expected: "0",
@@ -83,14 +90,16 @@ pub fn data_from_event(
     }
     let profile = profile_from_content(&content)?;
     let profile_type = profile_type_from_tags(&tags);
-    Ok(RadrootsProfileEventMetadata {
+    Ok(RadrootsParsedData::new(
         id,
         author,
         published_at,
         kind,
-        profile_type,
-        profile,
-    })
+        RadrootsProfileData {
+            profile_type,
+            profile,
+        },
+    ))
 }
 
 pub fn parsed_from_event(
@@ -101,8 +110,8 @@ pub fn parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsProfileEventIndex, EventParseError> {
-    let metadata = data_from_event(
+) -> Result<RadrootsParsedEvent<RadrootsProfileData>, EventParseError> {
+    let data = data_from_event(
         id.clone(),
         author.clone(),
         published_at,
@@ -110,7 +119,7 @@ pub fn parsed_from_event(
         content.clone(),
         tags.clone(),
     )?;
-    Ok(RadrootsProfileEventIndex {
+    Ok(RadrootsParsedEvent {
         event: RadrootsNostrEvent {
             id,
             author,
@@ -120,6 +129,6 @@ pub fn parsed_from_event(
             tags,
             sig,
         },
-        metadata,
+        data,
     })
 }

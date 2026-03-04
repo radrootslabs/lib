@@ -158,7 +158,7 @@ fn list_set_metadata_and_index_from_event_roundtrip() {
     assert_eq!(metadata.author, "author");
     assert_eq!(metadata.published_at, 44);
     assert_eq!(metadata.kind, KIND_LIST_SET_FOLLOW);
-    assert_eq!(metadata.list_set.d_tag, "members.owners");
+    assert_eq!(metadata.data.d_tag, "members.owners");
 
     let index = parsed_from_event(
         "id".to_string(),
@@ -172,7 +172,7 @@ fn list_set_metadata_and_index_from_event_roundtrip() {
     .unwrap();
     assert_eq!(index.event.kind, KIND_LIST_SET_FOLLOW);
     assert_eq!(index.event.sig, "sig");
-    assert_eq!(index.metadata.list_set.entries.len(), 2);
+    assert_eq!(index.data.data.entries.len(), 2);
 }
 
 #[test]

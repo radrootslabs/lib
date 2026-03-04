@@ -5,10 +5,11 @@ use radroots_events::{
     RadrootsNostrEvent,
     kinds::is_nip51_list_set_kind,
     list::RadrootsListEntry,
-    list_set::{RadrootsListSet, RadrootsListSetEventIndex, RadrootsListSetEventMetadata},
+    list_set::{RadrootsListSet},
 };
 
 use crate::error::EventParseError;
+use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 #[cfg(feature = "serde_json")]
 use crate::list::decode::list_entries_from_tags;
 
@@ -107,15 +108,9 @@ pub fn data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsListSetEventMetadata, EventParseError> {
+) -> Result<RadrootsParsedData<RadrootsListSet>, EventParseError> {
     let list_set = list_set_from_tags(kind, content, &tags)?;
-    Ok(RadrootsListSetEventMetadata {
-        id,
-        author,
-        published_at,
-        kind,
-        list_set,
-    })
+    Ok(RadrootsParsedData::new(id, author, published_at, kind, list_set))
 }
 
 pub fn parsed_from_event(
@@ -126,8 +121,8 @@ pub fn parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsListSetEventIndex, EventParseError> {
-    let metadata = data_from_event(
+) -> Result<RadrootsParsedEvent<RadrootsListSet>, EventParseError> {
+    let data = data_from_event(
         id.clone(),
         author.clone(),
         published_at,
@@ -135,7 +130,7 @@ pub fn parsed_from_event(
         content.clone(),
         tags.clone(),
     )?;
-    Ok(RadrootsListSetEventIndex {
+    Ok(RadrootsParsedEvent {
         event: RadrootsNostrEvent {
             id,
             author,
@@ -145,7 +140,7 @@ pub fn parsed_from_event(
             tags,
             sig,
         },
-        metadata,
+        data,
     })
 }
 

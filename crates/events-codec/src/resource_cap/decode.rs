@@ -10,14 +10,14 @@ use radroots_events::{
     RadrootsNostrEvent,
     kinds::KIND_RESOURCE_HARVEST_CAP,
     resource_cap::{
-        RadrootsResourceHarvestCap, RadrootsResourceHarvestCapEventIndex,
-        RadrootsResourceHarvestCapEventMetadata,
+        RadrootsResourceHarvestCap,
     },
     tags::TAG_D,
 };
 
 use crate::d_tag::validate_d_tag_tag;
 use crate::error::EventParseError;
+use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 
 const DEFAULT_KIND: u32 = KIND_RESOURCE_HARVEST_CAP;
 
@@ -71,15 +71,9 @@ pub fn data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsResourceHarvestCapEventMetadata, EventParseError> {
+) -> Result<RadrootsParsedData<RadrootsResourceHarvestCap>, EventParseError> {
     let cap = resource_harvest_cap_from_event(kind, &tags, &content)?;
-    Ok(RadrootsResourceHarvestCapEventMetadata {
-        id,
-        author,
-        published_at,
-        kind,
-        cap,
-    })
+    Ok(RadrootsParsedData::new(id, author, published_at, kind, cap))
 }
 
 pub fn parsed_from_event(
@@ -90,8 +84,8 @@ pub fn parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsResourceHarvestCapEventIndex, EventParseError> {
-    let metadata = data_from_event(
+) -> Result<RadrootsParsedEvent<RadrootsResourceHarvestCap>, EventParseError> {
+    let data = data_from_event(
         id.clone(),
         author.clone(),
         published_at,
@@ -99,7 +93,7 @@ pub fn parsed_from_event(
         content.clone(),
         tags.clone(),
     )?;
-    Ok(RadrootsResourceHarvestCapEventIndex {
+    Ok(RadrootsParsedEvent {
         event: RadrootsNostrEvent {
             id,
             author,
@@ -109,6 +103,6 @@ pub fn parsed_from_event(
             tags,
             sig,
         },
-        metadata,
+        data,
     })
 }

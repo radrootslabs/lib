@@ -2,7 +2,7 @@ use radroots_events::{
     RadrootsNostrEvent, RadrootsNostrEventPtr,
     job::JobPaymentRequest,
     job_feedback::{
-        RadrootsJobFeedback, RadrootsJobFeedbackEventIndex, RadrootsJobFeedbackEventMetadata,
+        RadrootsJobFeedback,
     },
     kinds::KIND_JOB_FEEDBACK,
 };
@@ -17,6 +17,7 @@ use crate::job::{
     error::JobParseError,
     util::{feedback_status_from_tag, parse_amount_tag_sat, parse_bool_encrypted},
 };
+use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 
 pub fn job_feedback_from_tags(
     kind: u32,
@@ -84,18 +85,12 @@ pub fn data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsJobFeedbackEventMetadata, JobParseError> {
+) -> Result<RadrootsParsedData<RadrootsJobFeedback>, JobParseError> {
     if kind != KIND_JOB_FEEDBACK {
         return Err(JobParseError::InvalidTag("kind (expected 7000)"));
     }
     let job_feedback = job_feedback_from_tags(kind, &tags, &content)?;
-    Ok(RadrootsJobFeedbackEventMetadata {
-        id,
-        author,
-        published_at,
-        kind,
-        job_feedback,
-    })
+    Ok(RadrootsParsedData::new(id, author, published_at, kind, job_feedback))
 }
 
 pub fn parsed_from_event(
@@ -106,8 +101,8 @@ pub fn parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsJobFeedbackEventIndex, JobParseError> {
-    let metadata = data_from_event(
+) -> Result<RadrootsParsedEvent<RadrootsJobFeedback>, JobParseError> {
+    let data = data_from_event(
         id.clone(),
         author.clone(),
         published_at,
@@ -115,7 +110,7 @@ pub fn parsed_from_event(
         content.clone(),
         tags.clone(),
     )?;
-    Ok(RadrootsJobFeedbackEventIndex {
+    Ok(RadrootsParsedEvent {
         event: RadrootsNostrEvent {
             id,
             author,
@@ -125,6 +120,6 @@ pub fn parsed_from_event(
             tags,
             sig,
         },
-        metadata,
+        data,
     })
 }

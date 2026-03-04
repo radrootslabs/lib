@@ -159,15 +159,15 @@ fn follow_metadata_and_index_from_event_roundtrip() {
     assert_eq!(metadata.author, "author");
     assert_eq!(metadata.published_at, 50);
     assert_eq!(metadata.kind, KIND_FOLLOW);
-    assert_eq!(metadata.follow.list.len(), 1);
-    assert_eq!(metadata.follow.list[0].published_at, 88);
-    assert_eq!(metadata.follow.list[0].public_key, "pubkey");
+    assert_eq!(metadata.data.list.len(), 1);
+    assert_eq!(metadata.data.list[0].published_at, 88);
+    assert_eq!(metadata.data.list[0].public_key, "pubkey");
     assert_eq!(
-        metadata.follow.list[0].relay_url.as_deref(),
+        metadata.data.list[0].relay_url.as_deref(),
         Some("wss://relay.example.com")
     );
     assert_eq!(
-        metadata.follow.list[0].contact_name.as_deref(),
+        metadata.data.list[0].contact_name.as_deref(),
         Some("alice")
     );
 
@@ -183,7 +183,7 @@ fn follow_metadata_and_index_from_event_roundtrip() {
     .unwrap();
     assert_eq!(index.event.kind, KIND_FOLLOW);
     assert_eq!(index.event.sig, "sig");
-    assert_eq!(index.metadata.follow.list.len(), 1);
+    assert_eq!(index.data.data.list.len(), 1);
 }
 
 #[test]

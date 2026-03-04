@@ -7,13 +7,14 @@ use alloc::{
 use radroots_events::{
     RadrootsNostrEvent,
     gift_wrap::{
-        RadrootsGiftWrap, RadrootsGiftWrapEventIndex, RadrootsGiftWrapEventMetadata,
+        RadrootsGiftWrap,
         RadrootsGiftWrapRecipient,
     },
     kinds::KIND_GIFT_WRAP,
 };
 
 use crate::error::EventParseError;
+use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 
 const DEFAULT_KIND: u32 = KIND_GIFT_WRAP;
 
@@ -84,15 +85,9 @@ pub fn data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsGiftWrapEventMetadata, EventParseError> {
+) -> Result<RadrootsParsedData<RadrootsGiftWrap>, EventParseError> {
     let gift_wrap = gift_wrap_from_tags(kind, &tags, &content)?;
-    Ok(RadrootsGiftWrapEventMetadata {
-        id,
-        author,
-        published_at,
-        kind,
-        gift_wrap,
-    })
+    Ok(RadrootsParsedData::new(id, author, published_at, kind, gift_wrap))
 }
 
 pub fn parsed_from_event(
@@ -103,8 +98,8 @@ pub fn parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsGiftWrapEventIndex, EventParseError> {
-    let metadata = data_from_event(
+) -> Result<RadrootsParsedEvent<RadrootsGiftWrap>, EventParseError> {
+    let data = data_from_event(
         id.clone(),
         author.clone(),
         published_at,
@@ -112,7 +107,7 @@ pub fn parsed_from_event(
         content.clone(),
         tags.clone(),
     )?;
-    Ok(RadrootsGiftWrapEventIndex {
+    Ok(RadrootsParsedEvent {
         event: RadrootsNostrEvent {
             id,
             author,
@@ -122,6 +117,6 @@ pub fn parsed_from_event(
             tags,
             sig,
         },
-        metadata,
+        data,
     })
 }

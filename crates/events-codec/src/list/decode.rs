@@ -4,10 +4,11 @@ use alloc::{string::String, vec::Vec};
 use radroots_events::{
     RadrootsNostrEvent,
     kinds::is_nip51_standard_list_kind,
-    list::{RadrootsList, RadrootsListEntry, RadrootsListEventIndex, RadrootsListEventMetadata},
+    list::{RadrootsList, RadrootsListEntry},
 };
 
 use crate::error::EventParseError;
+use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 
 fn entry_from_tag(tag: &[String]) -> Result<RadrootsListEntry, EventParseError> {
     let name = tag.get(0).ok_or(EventParseError::InvalidTag("tag"))?;
@@ -56,15 +57,9 @@ pub fn data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsListEventMetadata, EventParseError> {
+) -> Result<RadrootsParsedData<RadrootsList>, EventParseError> {
     let list = list_from_tags(kind, content, &tags)?;
-    Ok(RadrootsListEventMetadata {
-        id,
-        author,
-        published_at,
-        kind,
-        list,
-    })
+    Ok(RadrootsParsedData::new(id, author, published_at, kind, list))
 }
 
 pub fn parsed_from_event(
@@ -75,8 +70,8 @@ pub fn parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsListEventIndex, EventParseError> {
-    let metadata = data_from_event(
+) -> Result<RadrootsParsedEvent<RadrootsList>, EventParseError> {
+    let data = data_from_event(
         id.clone(),
         author.clone(),
         published_at,
@@ -84,7 +79,7 @@ pub fn parsed_from_event(
         content.clone(),
         tags.clone(),
     )?;
-    Ok(RadrootsListEventIndex {
+    Ok(RadrootsParsedEvent {
         event: RadrootsNostrEvent {
             id,
             author,
@@ -94,7 +89,7 @@ pub fn parsed_from_event(
             tags,
             sig,
         },
-        metadata,
+        data,
     })
 }
 

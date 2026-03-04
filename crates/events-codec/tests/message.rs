@@ -209,9 +209,9 @@ fn message_metadata_and_index_from_event_roundtrip() {
     assert_eq!(metadata.author, "author");
     assert_eq!(metadata.published_at, 77);
     assert_eq!(metadata.kind, KIND_MESSAGE);
-    assert_eq!(metadata.message.recipients.len(), 2);
-    assert_eq!(metadata.message.content, "hello");
-    assert_eq!(metadata.message.subject.as_deref(), Some("topic"));
+    assert_eq!(metadata.data.recipients.len(), 2);
+    assert_eq!(metadata.data.content, "hello");
+    assert_eq!(metadata.data.subject.as_deref(), Some("topic"));
 
     let index = parsed_from_event(
         "id".to_string(),
@@ -225,7 +225,7 @@ fn message_metadata_and_index_from_event_roundtrip() {
     .unwrap();
     assert_eq!(index.event.kind, KIND_MESSAGE);
     assert_eq!(index.event.sig, "sig");
-    assert_eq!(index.metadata.message.recipients.len(), 2);
+    assert_eq!(index.data.data.recipients.len(), 2);
 }
 
 #[test]

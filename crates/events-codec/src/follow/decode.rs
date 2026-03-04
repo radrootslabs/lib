@@ -4,13 +4,14 @@ use alloc::{string::String, vec::Vec};
 use radroots_events::{
     RadrootsNostrEvent,
     follow::{
-        RadrootsFollow, RadrootsFollowEventIndex, RadrootsFollowEventMetadata,
+        RadrootsFollow,
         RadrootsFollowProfile,
     },
     kinds::KIND_FOLLOW,
 };
 
 use crate::error::EventParseError;
+use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 
 const DEFAULT_KIND: u32 = KIND_FOLLOW;
 
@@ -75,15 +76,9 @@ pub fn data_from_event(
     kind: u32,
     _content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsFollowEventMetadata, EventParseError> {
+) -> Result<RadrootsParsedData<RadrootsFollow>, EventParseError> {
     let follow = follow_from_tags(kind, &tags, published_at)?;
-    Ok(RadrootsFollowEventMetadata {
-        id,
-        author,
-        published_at,
-        kind,
-        follow,
-    })
+    Ok(RadrootsParsedData::new(id, author, published_at, kind, follow))
 }
 
 pub fn parsed_from_event(
@@ -94,8 +89,8 @@ pub fn parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsFollowEventIndex, EventParseError> {
-    let metadata = data_from_event(
+) -> Result<RadrootsParsedEvent<RadrootsFollow>, EventParseError> {
+    let data = data_from_event(
         id.clone(),
         author.clone(),
         published_at,
@@ -103,7 +98,7 @@ pub fn parsed_from_event(
         content.clone(),
         tags.clone(),
     )?;
-    Ok(RadrootsFollowEventIndex {
+    Ok(RadrootsParsedEvent {
         event: RadrootsNostrEvent {
             id,
             author,
@@ -113,6 +108,6 @@ pub fn parsed_from_event(
             tags,
             sig,
         },
-        metadata,
+        data,
     })
 }

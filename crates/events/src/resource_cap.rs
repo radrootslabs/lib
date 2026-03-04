@@ -2,7 +2,6 @@
 
 use radroots_core::{RadrootsCoreDecimal, RadrootsCoreQuantity, RadrootsCoreUnit};
 
-use crate::RadrootsNostrEvent;
 use crate::resource_area::RadrootsResourceAreaRef;
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
@@ -10,26 +9,6 @@ use ts_rs::TS;
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Debug)]
-pub struct RadrootsResourceHarvestCapEventIndex {
-    pub event: RadrootsNostrEvent,
-    pub metadata: RadrootsResourceHarvestCapEventMetadata,
-}
-
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Debug)]
-pub struct RadrootsResourceHarvestCapEventMetadata {
-    pub id: String,
-    pub author: String,
-    pub published_at: u32,
-    pub kind: u32,
-    pub cap: RadrootsResourceHarvestCap,
-}
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]

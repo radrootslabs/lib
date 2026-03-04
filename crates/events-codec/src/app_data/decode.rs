@@ -7,12 +7,13 @@ use alloc::{
 use radroots_events::{
     RadrootsNostrEvent,
     app_data::{
-        KIND_APP_DATA, RadrootsAppData, RadrootsAppDataEventIndex, RadrootsAppDataEventMetadata,
+        KIND_APP_DATA, RadrootsAppData,
     },
     tags::TAG_D,
 };
 
 use crate::error::EventParseError;
+use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 
 fn parse_d_tag(tags: &[Vec<String>]) -> Result<String, EventParseError> {
     let tag = tags
@@ -54,15 +55,9 @@ pub fn data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsAppDataEventMetadata, EventParseError> {
+) -> Result<RadrootsParsedData<RadrootsAppData>, EventParseError> {
     let app_data = app_data_from_tags(kind, &tags, &content)?;
-    Ok(RadrootsAppDataEventMetadata {
-        id,
-        author,
-        published_at,
-        kind,
-        app_data,
-    })
+    Ok(RadrootsParsedData::new(id, author, published_at, kind, app_data))
 }
 
 pub fn parsed_from_event(
@@ -73,8 +68,8 @@ pub fn parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsAppDataEventIndex, EventParseError> {
-    let metadata = data_from_event(
+) -> Result<RadrootsParsedEvent<RadrootsAppData>, EventParseError> {
+    let data = data_from_event(
         id.clone(),
         author.clone(),
         published_at,
@@ -82,7 +77,7 @@ pub fn parsed_from_event(
         content.clone(),
         tags.clone(),
     )?;
-    Ok(RadrootsAppDataEventIndex {
+    Ok(RadrootsParsedEvent {
         event: RadrootsNostrEvent {
             id,
             author,
@@ -92,6 +87,6 @@ pub fn parsed_from_event(
             tags,
             sig,
         },
-        metadata,
+        data,
     })
 }

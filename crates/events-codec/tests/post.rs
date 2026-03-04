@@ -63,7 +63,7 @@ fn post_metadata_and_index_from_event_roundtrip() {
     assert_eq!(metadata.author, "author");
     assert_eq!(metadata.published_at, 77);
     assert_eq!(metadata.kind, KIND_POST);
-    assert_eq!(metadata.post.content, "hello");
+    assert_eq!(metadata.data.content, "hello");
 
     let index = parsed_from_event(
         "id".to_string(),
@@ -81,7 +81,7 @@ fn post_metadata_and_index_from_event_roundtrip() {
     assert_eq!(index.event.kind, KIND_POST);
     assert_eq!(index.event.content, "hello");
     assert_eq!(index.event.sig, "sig");
-    assert_eq!(index.metadata.post.content, "hello");
+    assert_eq!(index.data.data.content, "hello");
 }
 
 #[test]

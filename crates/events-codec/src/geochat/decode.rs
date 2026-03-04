@@ -6,11 +6,12 @@ use alloc::{
 
 use radroots_events::{
     RadrootsNostrEvent,
-    geochat::{RadrootsGeoChat, RadrootsGeoChatEventIndex, RadrootsGeoChatEventMetadata},
+    geochat::{RadrootsGeoChat},
     kinds::KIND_GEOCHAT,
 };
 
 use crate::error::EventParseError;
+use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 
 const DEFAULT_KIND: u32 = KIND_GEOCHAT;
 const TAG_G: &str = "g";
@@ -95,15 +96,9 @@ pub fn data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsGeoChatEventMetadata, EventParseError> {
+) -> Result<RadrootsParsedData<RadrootsGeoChat>, EventParseError> {
     let geochat = geochat_from_tags(kind, &tags, &content)?;
-    Ok(RadrootsGeoChatEventMetadata {
-        id,
-        author,
-        published_at,
-        kind,
-        geochat,
-    })
+    Ok(RadrootsParsedData::new(id, author, published_at, kind, geochat))
 }
 
 pub fn parsed_from_event(
@@ -114,8 +109,8 @@ pub fn parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsGeoChatEventIndex, EventParseError> {
-    let metadata = data_from_event(
+) -> Result<RadrootsParsedEvent<RadrootsGeoChat>, EventParseError> {
+    let data = data_from_event(
         id.clone(),
         author.clone(),
         published_at,
@@ -123,7 +118,7 @@ pub fn parsed_from_event(
         content.clone(),
         tags.clone(),
     )?;
-    Ok(RadrootsGeoChatEventIndex {
+    Ok(RadrootsParsedEvent {
         event: RadrootsNostrEvent {
             id,
             author,
@@ -133,6 +128,6 @@ pub fn parsed_from_event(
             tags,
             sig,
         },
-        metadata,
+        data,
     })
 }

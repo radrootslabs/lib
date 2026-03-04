@@ -105,10 +105,10 @@ fn list_metadata_and_index_from_event_roundtrip() {
     assert_eq!(metadata.author, "author");
     assert_eq!(metadata.published_at, 44);
     assert_eq!(metadata.kind, KIND_LIST_MUTE);
-    assert_eq!(metadata.list.content, list.content);
-    assert_eq!(metadata.list.entries.len(), list.entries.len());
-    assert_eq!(metadata.list.entries[0].tag, list.entries[0].tag);
-    assert_eq!(metadata.list.entries[0].values, list.entries[0].values);
+    assert_eq!(metadata.data.content, list.content);
+    assert_eq!(metadata.data.entries.len(), list.entries.len());
+    assert_eq!(metadata.data.entries[0].tag, list.entries[0].tag);
+    assert_eq!(metadata.data.entries[0].values, list.entries[0].values);
 
     let index = parsed_from_event(
         "id".to_string(),
@@ -122,7 +122,7 @@ fn list_metadata_and_index_from_event_roundtrip() {
     .unwrap();
     assert_eq!(index.event.kind, KIND_LIST_MUTE);
     assert_eq!(index.event.sig, "sig");
-    assert_eq!(index.metadata.list.entries.len(), 2);
+    assert_eq!(index.data.data.entries.len(), 2);
 }
 
 #[test]

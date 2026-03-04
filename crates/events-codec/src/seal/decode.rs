@@ -7,10 +7,11 @@ use alloc::{
 use radroots_events::{
     RadrootsNostrEvent,
     kinds::KIND_SEAL,
-    seal::{RadrootsSeal, RadrootsSealEventIndex, RadrootsSealEventMetadata},
+    seal::{RadrootsSeal},
 };
 
 use crate::error::EventParseError;
+use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 
 const DEFAULT_KIND: u32 = KIND_SEAL;
 
@@ -43,15 +44,9 @@ pub fn data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsSealEventMetadata, EventParseError> {
+) -> Result<RadrootsParsedData<RadrootsSeal>, EventParseError> {
     let seal = seal_from_parts(kind, &tags, &content)?;
-    Ok(RadrootsSealEventMetadata {
-        id,
-        author,
-        published_at,
-        kind,
-        seal,
-    })
+    Ok(RadrootsParsedData::new(id, author, published_at, kind, seal))
 }
 
 pub fn parsed_from_event(
@@ -62,8 +57,8 @@ pub fn parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsSealEventIndex, EventParseError> {
-    let metadata = data_from_event(
+) -> Result<RadrootsParsedEvent<RadrootsSeal>, EventParseError> {
+    let data = data_from_event(
         id.clone(),
         author.clone(),
         published_at,
@@ -71,7 +66,7 @@ pub fn parsed_from_event(
         content.clone(),
         tags.clone(),
     )?;
-    Ok(RadrootsSealEventIndex {
+    Ok(RadrootsParsedEvent {
         event: RadrootsNostrEvent {
             id,
             author,
@@ -81,6 +76,6 @@ pub fn parsed_from_event(
             tags,
             sig,
         },
-        metadata,
+        data,
     })
 }

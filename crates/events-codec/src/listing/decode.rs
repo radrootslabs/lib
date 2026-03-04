@@ -11,7 +11,7 @@ use radroots_events::{
     kinds::KIND_LISTING,
     kinds::{KIND_FARM, KIND_PLOT, KIND_RESOURCE_AREA},
     listing::{
-        RadrootsListing, RadrootsListingEventIndex, RadrootsListingEventMetadata,
+        RadrootsListing,
         RadrootsListingFarmRef,
     },
     plot::RadrootsPlotRef,
@@ -21,6 +21,7 @@ use radroots_events::{
 
 use crate::d_tag::validate_d_tag_tag;
 use crate::error::EventParseError;
+use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 
 const DEFAULT_KIND: u32 = KIND_LISTING;
 const TAG_A: &str = "a";
@@ -232,15 +233,9 @@ pub fn data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsListingEventMetadata, EventParseError> {
+) -> Result<RadrootsParsedData<RadrootsListing>, EventParseError> {
     let listing = listing_from_event(kind, &tags, &content)?;
-    Ok(RadrootsListingEventMetadata {
-        id,
-        author,
-        published_at,
-        kind,
-        listing,
-    })
+    Ok(RadrootsParsedData::new(id, author, published_at, kind, listing))
 }
 
 pub fn parsed_from_event(
@@ -251,8 +246,8 @@ pub fn parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsListingEventIndex, EventParseError> {
-    let metadata = data_from_event(
+) -> Result<RadrootsParsedEvent<RadrootsListing>, EventParseError> {
+    let data = data_from_event(
         id.clone(),
         author.clone(),
         published_at,
@@ -260,7 +255,7 @@ pub fn parsed_from_event(
         content.clone(),
         tags.clone(),
     )?;
-    Ok(RadrootsListingEventIndex {
+    Ok(RadrootsParsedEvent {
         event: RadrootsNostrEvent {
             id,
             author,
@@ -270,6 +265,6 @@ pub fn parsed_from_event(
             tags,
             sig,
         },
-        metadata,
+        data,
     })
 }

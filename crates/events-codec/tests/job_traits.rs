@@ -53,7 +53,7 @@ fn borrowed_event_adapter_builds_request_metadata() {
     assert_eq!(metadata.author, event.author);
     assert_eq!(metadata.published_at, event.created_at);
     assert_eq!(metadata.kind, event.kind);
-    assert_eq!(metadata.job_request, req);
+    assert_eq!(metadata.data, req);
 }
 
 fn sample_result() -> RadrootsJobResult {
@@ -155,9 +155,9 @@ fn borrowed_event_adapter_builds_result_metadata_and_index() {
     assert_eq!(metadata.author, event.author);
     assert_eq!(metadata.published_at, event.created_at);
     assert_eq!(metadata.kind, event.kind);
-    assert_eq!(metadata.job_result.kind, result.kind);
-    assert_eq!(metadata.job_result.request_event.id, "req");
-    assert_eq!(metadata.job_result.content.as_deref(), Some("payload"));
+    assert_eq!(metadata.data.kind, result.kind);
+    assert_eq!(metadata.data.request_event.id, "req");
+    assert_eq!(metadata.data.content.as_deref(), Some("payload"));
 
     let index = adapter.to_job_result_event_index().unwrap();
     assert_eq!(index.event.id, event.id);
@@ -188,9 +188,9 @@ fn borrowed_event_adapter_builds_feedback_metadata_and_index() {
     assert_eq!(metadata.author, event.author);
     assert_eq!(metadata.published_at, event.created_at);
     assert_eq!(metadata.kind, event.kind);
-    assert_eq!(metadata.job_feedback.kind, feedback.kind);
-    assert_eq!(metadata.job_feedback.request_event.id, "req");
-    assert_eq!(metadata.job_feedback.content.as_deref(), Some("payload"));
+    assert_eq!(metadata.data.kind, feedback.kind);
+    assert_eq!(metadata.data.request_event.id, "req");
+    assert_eq!(metadata.data.content.as_deref(), Some("payload"));
 
     let index = adapter.to_job_feedback_event_index().unwrap();
     assert_eq!(index.event.id, event.id);

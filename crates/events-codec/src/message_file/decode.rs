@@ -8,12 +8,12 @@ use radroots_events::{
     RadrootsNostrEvent,
     kinds::KIND_MESSAGE_FILE,
     message_file::{
-        RadrootsMessageFile, RadrootsMessageFileDimensions, RadrootsMessageFileEventIndex,
-        RadrootsMessageFileEventMetadata,
+        RadrootsMessageFile, RadrootsMessageFileDimensions,
     },
 };
 
 use crate::error::EventParseError;
+use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 use crate::message::tags::{parse_recipients, parse_reply_tag, parse_subject_tag};
 
 const DEFAULT_KIND: u32 = KIND_MESSAGE_FILE;
@@ -162,15 +162,9 @@ pub fn data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsMessageFileEventMetadata, EventParseError> {
+) -> Result<RadrootsParsedData<RadrootsMessageFile>, EventParseError> {
     let message_file = message_file_from_tags(kind, &tags, &content)?;
-    Ok(RadrootsMessageFileEventMetadata {
-        id,
-        author,
-        published_at,
-        kind,
-        message_file,
-    })
+    Ok(RadrootsParsedData::new(id, author, published_at, kind, message_file))
 }
 
 pub fn parsed_from_event(
@@ -181,8 +175,8 @@ pub fn parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsMessageFileEventIndex, EventParseError> {
-    let metadata = data_from_event(
+) -> Result<RadrootsParsedEvent<RadrootsMessageFile>, EventParseError> {
+    let data = data_from_event(
         id.clone(),
         author.clone(),
         published_at,
@@ -190,7 +184,7 @@ pub fn parsed_from_event(
         content.clone(),
         tags.clone(),
     )?;
-    Ok(RadrootsMessageFileEventIndex {
+    Ok(RadrootsParsedEvent {
         event: RadrootsNostrEvent {
             id,
             author,
@@ -200,6 +194,6 @@ pub fn parsed_from_event(
             tags,
             sig,
         },
-        metadata,
+        data,
     })
 }

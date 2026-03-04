@@ -175,8 +175,8 @@ fn reaction_metadata_and_index_from_event_roundtrip() {
     assert_eq!(metadata.author, "author");
     assert_eq!(metadata.published_at, 99);
     assert_eq!(metadata.kind, KIND_REACTION);
-    assert_eq!(metadata.reaction.content, "+");
-    assert_eq!(metadata.reaction.root.id, root.id);
+    assert_eq!(metadata.data.content, "+");
+    assert_eq!(metadata.data.root.id, root.id);
 
     let index = parsed_from_event(
         "id".to_string(),
@@ -190,7 +190,7 @@ fn reaction_metadata_and_index_from_event_roundtrip() {
     .unwrap();
     assert_eq!(index.event.kind, KIND_REACTION);
     assert_eq!(index.event.sig, "sig");
-    assert_eq!(index.metadata.reaction.content, "+");
+    assert_eq!(index.data.data.content, "+");
 }
 
 #[test]

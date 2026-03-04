@@ -76,7 +76,7 @@ fn seal_metadata_and_index_from_event_roundtrip() {
     assert_eq!(metadata.author, "author");
     assert_eq!(metadata.published_at, 14);
     assert_eq!(metadata.kind, KIND_SEAL);
-    assert_eq!(metadata.seal.content, "payload");
+    assert_eq!(metadata.data.content, "payload");
 
     let index = parsed_from_event(
         "id".to_string(),
@@ -90,7 +90,7 @@ fn seal_metadata_and_index_from_event_roundtrip() {
     .unwrap();
     assert_eq!(index.event.kind, KIND_SEAL);
     assert_eq!(index.event.sig, "sig");
-    assert_eq!(index.metadata.seal.content, "payload");
+    assert_eq!(index.data.data.content, "payload");
 }
 
 #[test]

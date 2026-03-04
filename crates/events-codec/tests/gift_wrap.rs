@@ -135,15 +135,15 @@ fn gift_wrap_metadata_and_index_from_event_roundtrip() {
     assert_eq!(metadata.author, "author");
     assert_eq!(metadata.published_at, 11);
     assert_eq!(
-        metadata.gift_wrap.recipient.public_key,
+        metadata.data.recipient.public_key,
         gift_wrap.recipient.public_key
     );
     assert_eq!(
-        metadata.gift_wrap.recipient.relay_url,
+        metadata.data.recipient.relay_url,
         gift_wrap.recipient.relay_url
     );
-    assert_eq!(metadata.gift_wrap.content, gift_wrap.content);
-    assert_eq!(metadata.gift_wrap.expiration, gift_wrap.expiration);
+    assert_eq!(metadata.data.content, gift_wrap.content);
+    assert_eq!(metadata.data.expiration, gift_wrap.expiration);
 
     let index = parsed_from_event(
         "id".to_string(),
@@ -157,7 +157,7 @@ fn gift_wrap_metadata_and_index_from_event_roundtrip() {
     .unwrap();
     assert_eq!(index.event.kind, KIND_GIFT_WRAP);
     assert_eq!(index.event.sig, "sig");
-    assert_eq!(index.metadata.gift_wrap.recipient.public_key, "pubkey");
+    assert_eq!(index.data.data.recipient.public_key, "pubkey");
 }
 
 #[test]

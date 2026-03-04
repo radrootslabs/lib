@@ -344,8 +344,8 @@ fn message_file_metadata_and_index_from_event_roundtrip() {
     assert_eq!(metadata.author, "author");
     assert_eq!(metadata.published_at, 77);
     assert_eq!(metadata.kind, KIND_MESSAGE_FILE);
-    assert_eq!(metadata.message_file.file_type, "image/jpeg");
-    assert_eq!(metadata.message_file.recipients.len(), 2);
+    assert_eq!(metadata.data.file_type, "image/jpeg");
+    assert_eq!(metadata.data.recipients.len(), 2);
 
     let index = parsed_from_event(
         "id".to_string(),
@@ -359,7 +359,7 @@ fn message_file_metadata_and_index_from_event_roundtrip() {
     .unwrap();
     assert_eq!(index.event.kind, KIND_MESSAGE_FILE);
     assert_eq!(index.event.sig, "sig");
-    assert_eq!(index.metadata.message_file.file_type, "image/jpeg");
+    assert_eq!(index.data.data.file_type, "image/jpeg");
 }
 
 #[test]

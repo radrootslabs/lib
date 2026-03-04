@@ -9,13 +9,14 @@ use alloc::{
 
 use radroots_events::{
     RadrootsNostrEvent,
-    coop::{RadrootsCoop, RadrootsCoopEventIndex, RadrootsCoopEventMetadata},
+    coop::{RadrootsCoop},
     kinds::KIND_COOP,
     tags::TAG_D,
 };
 
 use crate::d_tag::validate_d_tag_tag;
 use crate::error::EventParseError;
+use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 
 const DEFAULT_KIND: u32 = KIND_COOP;
 
@@ -69,15 +70,9 @@ pub fn data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsCoopEventMetadata, EventParseError> {
+) -> Result<RadrootsParsedData<RadrootsCoop>, EventParseError> {
     let coop = coop_from_event(kind, &tags, &content)?;
-    Ok(RadrootsCoopEventMetadata {
-        id,
-        author,
-        published_at,
-        kind,
-        coop,
-    })
+    Ok(RadrootsParsedData::new(id, author, published_at, kind, coop))
 }
 
 pub fn parsed_from_event(
@@ -88,8 +83,8 @@ pub fn parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsCoopEventIndex, EventParseError> {
-    let metadata = data_from_event(
+) -> Result<RadrootsParsedEvent<RadrootsCoop>, EventParseError> {
+    let data = data_from_event(
         id.clone(),
         author.clone(),
         published_at,
@@ -97,7 +92,7 @@ pub fn parsed_from_event(
         content.clone(),
         tags.clone(),
     )?;
-    Ok(RadrootsCoopEventIndex {
+    Ok(RadrootsParsedEvent {
         event: RadrootsNostrEvent {
             id,
             author,
@@ -107,6 +102,6 @@ pub fn parsed_from_event(
             tags,
             sig,
         },
-        metadata,
+        data,
     })
 }
