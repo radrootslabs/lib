@@ -237,6 +237,9 @@ mod tests {
 
         let invalid_out = parse_out_dir(&["--bad".to_string()], &root).expect_err("invalid out");
         assert!(invalid_out.contains("invalid export args"));
+        let invalid_out_pair =
+            parse_out_dir(&["--bad".to_string(), "x".to_string()], &root).expect_err("invalid out");
+        assert!(invalid_out_pair.contains("invalid export args"));
 
         let parsed = parse_crate_out_dir(
             &[
@@ -297,9 +300,7 @@ mod tests {
 
     #[test]
     fn export_wrappers_cover_success_and_error_paths() {
-        let _guard = workspace_lock()
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _guard = workspace_lock().lock().expect("lock workspace");
         let root = workspace_root().expect("workspace root");
         let out_dir = unique_temp_dir("export_wrappers");
         fs::create_dir_all(&out_dir).expect("create out dir");
@@ -344,9 +345,7 @@ mod tests {
 
     #[test]
     fn contract_and_coverage_dispatchers_execute() {
-        let _guard = workspace_lock()
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _guard = workspace_lock().lock().expect("lock workspace");
         let root = workspace_root().expect("workspace root");
         let out_dir = unique_temp_dir("coverage_dispatch");
         fs::create_dir_all(&out_dir).expect("create out dir");
@@ -355,34 +354,32 @@ mod tests {
             .join("target")
             .join("coverage")
             .join("coverage-refresh.tsv");
-        if coverage_refresh_path.exists() {
-            fs::remove_file(&coverage_refresh_path).expect("remove existing coverage refresh");
+        let parent = coverage_refresh_path.parent().expect("coverage parent");
+        fs::create_dir_all(parent).expect("create coverage parent");
+        fs::write(&coverage_refresh_path, "stale").expect("seed stale coverage refresh");
+        fs::remove_file(&coverage_refresh_path).expect("remove existing coverage refresh");
+        let parent = coverage_refresh_path.parent().expect("coverage parent");
+        fs::create_dir_all(parent).expect("create coverage parent");
+        let required_raw = fs::read_to_string(
+            root.join("contract")
+                .join("coverage")
+                .join("required-crates.toml"),
+        )
+        .expect("read required crates contract");
+        let required_toml =
+            toml::from_str::<toml::Value>(&required_raw).expect("parse required crates contract");
+        let required_crates = required_toml
+            .get("required")
+            .and_then(toml::Value::as_table)
+            .and_then(|table| table.get("crates"))
+            .and_then(toml::Value::as_array)
+            .expect("required crates array");
+        let mut rows = String::from("crate\tstatus\texec\tfunc\tbranch\treport\n");
+        for crate_name in required_crates {
+            let crate_name = crate_name.as_str().expect("required crate name");
+            rows.push_str(&format!("{crate_name}\tpass\t100.0\t100.0\t100.0\tfile\n"));
         }
-        if !coverage_refresh_path.exists() {
-            if let Some(parent) = coverage_refresh_path.parent() {
-                fs::create_dir_all(parent).expect("create coverage parent");
-            }
-            let required_raw = fs::read_to_string(
-                root.join("contract")
-                    .join("coverage")
-                    .join("required-crates.toml"),
-            )
-            .expect("read required crates contract");
-            let required_toml = toml::from_str::<toml::Value>(&required_raw)
-                .expect("parse required crates contract");
-            let required_crates = required_toml
-                .get("required")
-                .and_then(toml::Value::as_table)
-                .and_then(|table| table.get("crates"))
-                .and_then(toml::Value::as_array)
-                .expect("required crates array");
-            let mut rows = String::from("crate\tstatus\texec\tfunc\tbranch\treport\n");
-            for crate_name in required_crates {
-                let crate_name = crate_name.as_str().expect("required crate name");
-                rows.push_str(&format!("{crate_name}\tpass\t100.0\t100.0\t100.0\tfile\n"));
-            }
-            fs::write(&coverage_refresh_path, rows).expect("write coverage refresh");
-        }
+        fs::write(&coverage_refresh_path, rows).expect("write coverage refresh");
 
         validate_contract().expect("validate contract");
         release_preflight().expect("release preflight");

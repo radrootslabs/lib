@@ -183,11 +183,10 @@ pub fn read_summary(path: &Path) -> Result<CoverageSummary, String> {
         Ok(parsed) => parsed,
         Err(err) => return Err(format!("failed to parse summary {}: {err}", path.display())),
     };
-    let totals = parsed
-        .data
-        .first()
-        .map(|entry| &entry.totals)
-        .ok_or_else(|| format!("summary data is empty in {}", path.display()))?;
+    let totals = match parsed.data.first() {
+        Some(entry) => &entry.totals,
+        None => return Err(format!("summary data is empty in {}", path.display())),
+    };
 
     Ok(CoverageSummary {
         functions_percent: totals.functions.percent,
@@ -316,12 +315,10 @@ fn read_coverage_profile(
             "coverage profile for {crate_name} includes an empty feature value"
         ));
     }
-    if let Some(test_threads) = resolved.test_threads {
-        if test_threads == 0 {
-            return Err(format!(
-                "coverage profile for {crate_name} must set test_threads > 0"
-            ));
-        }
+    if resolved.test_threads == Some(0) {
+        return Err(format!(
+            "coverage profile for {crate_name} must set test_threads > 0"
+        ));
     }
     Ok(resolved)
 }
@@ -414,22 +411,11 @@ pub fn read_lcov(path: &Path) -> Result<LcovCoverage, String> {
             continue;
         }
         if let Some(value) = line.strip_prefix("BRDA:") {
-            let mut fields = value.split(',');
-            let _line_no = fields
-                .next()
-                .ok_or_else(|| format!("invalid BRDA record in {}", path.display()))?;
-            let _block_no = fields
-                .next()
-                .ok_or_else(|| format!("invalid BRDA record in {}", path.display()))?;
-            let _branch_no = fields
-                .next()
-                .ok_or_else(|| format!("invalid BRDA record in {}", path.display()))?;
-            let taken = fields
-                .next()
-                .ok_or_else(|| format!("invalid BRDA record in {}", path.display()))?;
-            if fields.next().is_some() {
+            let fields = value.split(',').collect::<Vec<_>>();
+            if fields.len() != 4 {
                 return Err(format!("invalid BRDA record in {}", path.display()));
             }
+            let taken = fields[3];
             if taken == "-" {
                 continue;
             }
@@ -493,13 +479,9 @@ pub fn evaluate_gate(
     let exec_ok = lcov.executable_percent >= thresholds.fail_under_exec_lines;
     let functions_ok = summary.functions_percent >= thresholds.fail_under_functions;
     let branch_presence_ok = !thresholds.require_branches || lcov.branches_available;
-
-    let mut branch_ok = true;
-    if lcov.branches_available {
-        if let Some(branch_percent) = lcov.branch_percent {
-            branch_ok = branch_percent >= thresholds.fail_under_branches;
-        }
-    }
+    let branch_ok = lcov
+        .branch_percent
+        .is_none_or(|branch_percent| branch_percent >= thresholds.fail_under_branches);
 
     let pass = exec_ok && functions_ok && branch_presence_ok && branch_ok;
     let mut fail_reasons: Vec<String> = Vec::new();
@@ -523,12 +505,11 @@ pub fn evaluate_gate(
     }
 
     if lcov.branches_available && !branch_ok {
-        if let Some(branch_percent) = lcov.branch_percent {
-            fail_reasons.push(format!(
-                "branches={:.6} < {:.6}",
-                branch_percent, thresholds.fail_under_branches
-            ));
-        }
+        fail_reasons.push(format!(
+            "branches={:.6} < {:.6}",
+            lcov.branch_percent.unwrap_or(0.0),
+            thresholds.fail_under_branches
+        ));
     }
 
     CoverageGateResult { pass, fail_reasons }
@@ -638,8 +619,9 @@ where
         .or(profile.test_threads)
         .unwrap_or(1);
 
-    fs::create_dir_all(&out_dir)
-        .map_err(|err| format!("failed to create {}: {err}", out_dir.display()))?;
+    if let Err(err) = fs::create_dir_all(&out_dir) {
+        return Err(format!("failed to create {}: {err}", out_dir.display()));
+    }
 
     runner(
         {
@@ -763,10 +745,8 @@ fn report_gate(args: &[String]) -> Result<(), String> {
         },
     };
 
-    let json = match serde_json::to_string_pretty(&report) {
-        Ok(json) => json,
-        Err(err) => return Err(format!("failed to encode coverage report json: {err}")),
-    };
+    let json = serde_json::to_string_pretty(&report)
+        .expect("serializing coverage gate report should succeed");
     if let Err(err) = fs::write(&out_path, format!("{json}\n")) {
         return Err(format!("failed to write {}: {err}", out_path.display()));
     }
@@ -869,9 +849,7 @@ mod tests {
     }
 
     fn write_file(path: &Path, content: &str) {
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).expect("create parent");
-        }
+        let _ = fs::create_dir_all(path.parent().unwrap_or(Path::new("")));
         fs::write(path, content).expect("write file");
     }
 
@@ -925,6 +903,15 @@ mod tests {
         let parse_err = read_summary(&invalid).expect_err("invalid summary should fail");
         assert!(parse_err.contains("failed to parse summary"));
         fs::remove_file(invalid).expect("remove invalid summary");
+    }
+
+    #[test]
+    fn read_summary_reports_empty_data_error() {
+        let path = temp_file_path("summary_empty_data");
+        write_file(&path, r#"{"data":[]}"#);
+        let err = read_summary(&path).expect_err("summary without data should fail");
+        assert!(err.contains("summary data is empty"));
+        fs::remove_file(path).expect("remove empty summary");
     }
 
     #[test]
@@ -1075,6 +1062,24 @@ features = ["rt"]
     }
 
     #[test]
+    fn coverage_profiles_accept_positive_test_threads() {
+        let root = temp_dir_path("profile_positive_threads");
+        let coverage_dir = root.join("contract").join("coverage");
+        fs::create_dir_all(&coverage_dir).expect("create coverage dir");
+        fs::write(
+            coverage_dir.join("profiles.toml"),
+            r#"[profiles.crates."radroots-app-core"]
+test_threads = 4
+"#,
+        )
+        .expect("write profiles");
+        let profile = read_coverage_profile(&root, "radroots-app-core")
+            .expect("valid positive thread profile");
+        assert_eq!(profile.test_threads, Some(4));
+        fs::remove_dir_all(root).expect("remove root");
+    }
+
+    #[test]
     fn coverage_profiles_reject_invalid_feature_and_thread_values() {
         let root = temp_dir_path("profile_invalid");
         let coverage_dir = root.join("contract").join("coverage");
@@ -1090,7 +1095,7 @@ test_threads = 0
 
         let err = read_coverage_profile(&root, "radroots-app-core").expect_err("invalid profile");
         assert!(
-            err.contains("empty feature value") || err.contains("test_threads > 0"),
+            err.contains("empty feature value"),
             "unexpected error: {err}"
         );
 
@@ -1305,6 +1310,19 @@ test_threads = 0
     }
 
     #[test]
+    fn read_lcov_defaults_to_full_when_no_line_records_exist() {
+        let path = temp_file_path("lcov_empty");
+        write_file(&path, "TN:probe\n");
+        let parsed = read_lcov(&path).expect("parse lcov");
+        assert_eq!(parsed.executable_total, 0);
+        assert_eq!(parsed.executable_covered, 0);
+        assert_eq!(parsed.executable_percent, 100.0);
+        assert!(!parsed.branches_available);
+        assert_eq!(parsed.branch_percent, None);
+        fs::remove_file(path).expect("remove lcov");
+    }
+
+    #[test]
     fn evaluate_gate_collects_all_failure_reasons() {
         let summary = CoverageSummary {
             functions_percent: 40.0,
@@ -1458,6 +1476,18 @@ test_threads = 0
             .expect_err("runner failure should bubble up");
         assert_eq!(err, "runner failed".to_string());
         fs::remove_dir_all(out).expect("remove run crate failure output dir");
+        let root = temp_dir_path("run_crate_create_out_error");
+        write_file(&root.join("blocker"), "x");
+        let args = vec![
+            "--crate".to_string(),
+            "radroots-core".to_string(),
+            "--out".to_string(),
+            root.join("blocker").join("nested").display().to_string(),
+        ];
+        let err = run_crate_with_runner(&args, run_command)
+            .expect_err("output dir create error should fail");
+        assert!(err.contains("failed to create"));
+        fs::remove_dir_all(root).expect("remove run crate create error root");
     }
 
     #[test]
@@ -1647,6 +1677,7 @@ test_threads = 0
         )
         .expect_err("writer failure");
         assert!(err.contains("failed to write workspace crates output"));
+        failing.flush().expect("flush failing writer");
     }
 
     #[test]

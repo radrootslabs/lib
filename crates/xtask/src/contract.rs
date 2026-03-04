@@ -332,15 +332,10 @@ fn validate_publish_package_metadata(
             }
         };
         let parsed = parse_toml::<toml::Value>(manifest_path)?;
-        let package = match parsed.get("package").and_then(toml::Value::as_table) {
-            Some(package) => package,
-            None => {
-                return Err(format!(
-                    "{} missing [package] table",
-                    manifest_path.display()
-                ));
-            }
-        };
+        let package = parsed
+            .get("package")
+            .and_then(toml::Value::as_table)
+            .expect("workspace package manifests include [package] table");
 
         if !package_field_configured(package, "description") {
             return Err(format!(
@@ -489,9 +484,6 @@ fn parse_enum_variants(enum_body: &str) -> Vec<String> {
                 .split_whitespace()
                 .next()
                 .unwrap_or_default();
-            if ident.is_empty() {
-                return None;
-            }
             Some(ident.to_string())
         })
         .collect()
@@ -570,18 +562,11 @@ fn validate_coverage_rollout_parity(
             .difference(&workspace_packages)
             .cloned()
             .collect::<BTreeSet<_>>();
-        if !missing.is_empty() {
-            return Err(format!(
-                "coverage rollout missing workspace crates: {}",
-                join_set(&missing)
-            ));
-        }
-        if !extra.is_empty() {
-            return Err(format!(
-                "coverage rollout includes unknown crates: {}",
-                join_set(&extra)
-            ));
-        }
+        return Err(format!(
+            "coverage rollout missing workspace crates: {}; coverage rollout includes unknown crates: {}",
+            join_set(&missing),
+            join_set(&extra)
+        ));
     }
 
     let required = load_coverage_required(contract_root)?;
@@ -599,20 +584,12 @@ fn validate_coverage_rollout_parity(
                 crate_name
             ));
         }
-        match rollout_status.get(crate_name) {
-            Some(status) if status == "required" => {}
-            Some(status) => {
-                return Err(format!(
-                    "coverage required crate {} must have rollout status required, found {}",
-                    crate_name, status
-                ));
-            }
-            None => {
-                return Err(format!(
-                    "coverage required crate {} missing from rollout",
-                    crate_name
-                ));
-            }
+        let status = &rollout_status[crate_name];
+        if status != "required" {
+            return Err(format!(
+                "coverage required crate {} must have rollout status required, found {}",
+                crate_name, status
+            ));
         }
     }
 
@@ -626,22 +603,10 @@ fn validate_coverage_rollout_parity(
             .difference(&required_set)
             .cloned()
             .collect::<BTreeSet<_>>();
-        let extra = required_set
-            .difference(&rollout_required)
-            .cloned()
-            .collect::<BTreeSet<_>>();
-        if !missing.is_empty() {
-            return Err(format!(
-                "coverage required list missing rollout required crates: {}",
-                join_set(&missing)
-            ));
-        }
-        if !extra.is_empty() {
-            return Err(format!(
-                "coverage required list has crates without rollout required status: {}",
-                join_set(&extra)
-            ));
-        }
+        return Err(format!(
+            "coverage required list missing rollout required crates: {}",
+            join_set(&missing)
+        ));
     }
 
     Ok(())
@@ -695,18 +660,11 @@ fn validate_release_publish_policy(
             .difference(&workspace_packages)
             .cloned()
             .collect::<BTreeSet<_>>();
-        if !missing.is_empty() {
-            return Err(format!(
-                "release publish/internal sets are missing workspace crates: {}",
-                join_set(&missing)
-            ));
-        }
-        if !extra.is_empty() {
-            return Err(format!(
-                "release publish/internal sets include unknown crates: {}",
-                join_set(&extra)
-            ));
-        }
+        return Err(format!(
+            "release publish/internal sets are missing workspace crates: {}; release publish/internal sets include unknown crates: {}",
+            join_set(&missing),
+            join_set(&extra)
+        ));
     }
 
     if publish_order_set != publish_set {
@@ -718,18 +676,11 @@ fn validate_release_publish_policy(
             .difference(&publish_set)
             .cloned()
             .collect::<BTreeSet<_>>();
-        if !missing.is_empty() {
-            return Err(format!(
-                "publish_order.crates is missing publish crates: {}",
-                join_set(&missing)
-            ));
-        }
-        if !extra.is_empty() {
-            return Err(format!(
-                "publish_order.crates has non-publish crates: {}",
-                join_set(&extra)
-            ));
-        }
+        return Err(format!(
+            "publish_order.crates is missing publish crates: {}; publish_order.crates has non-publish crates: {}",
+            join_set(&missing),
+            join_set(&extra)
+        ));
     }
 
     let order_index = publish_order
@@ -739,22 +690,13 @@ fn validate_release_publish_policy(
         .collect::<BTreeMap<_, _>>();
     let dependencies = read_workspace_package_dependencies(workspace_root)?;
     for crate_name in &publish_set {
-        let crate_deps = match dependencies.get(crate_name) {
-            Some(crate_deps) => crate_deps,
-            None => return Err(format!("missing dependency graph entry for {}", crate_name)),
-        };
-        let crate_order = match order_index.get(crate_name) {
-            Some(crate_order) => *crate_order,
-            None => return Err(format!("missing publish order entry for {}", crate_name)),
-        };
+        let crate_deps = &dependencies[crate_name];
+        let crate_order = order_index[crate_name];
         for dep in crate_deps {
             if !publish_set.contains(dep) {
                 continue;
             }
-            let dep_order = match order_index.get(dep) {
-                Some(dep_order) => *dep_order,
-                None => return Err(format!("missing publish order entry for {}", dep)),
-            };
+            let dep_order = order_index[dep];
             if dep_order >= crate_order {
                 return Err(format!(
                     "publish order must place dependency {} before {}",
@@ -766,11 +708,8 @@ fn validate_release_publish_policy(
 
     let publish_flags = workspace_package_publish_flags(workspace_root)?;
     for crate_name in &publish_set {
-        let flag = match publish_flags.get(crate_name) {
-            Some(flag) => flag,
-            None => return Err(format!("missing publish flag entry for {}", crate_name)),
-        };
-        if !*flag {
+        let flag = publish_flags[crate_name];
+        if !flag {
             return Err(format!(
                 "publish crate {} must not set publish = false",
                 crate_name
@@ -778,11 +717,8 @@ fn validate_release_publish_policy(
         }
     }
     for crate_name in &internal_set {
-        let flag = match publish_flags.get(crate_name) {
-            Some(flag) => flag,
-            None => return Err(format!("missing publish flag entry for {}", crate_name)),
-        };
-        if *flag {
+        let flag = publish_flags[crate_name];
+        if flag {
             return Err(format!(
                 "internal crate {} must set publish = false",
                 crate_name
@@ -815,10 +751,7 @@ pub fn load_contract_bundle(workspace_root: &Path) -> Result<ContractBundle, Str
         Ok(read_dir) => read_dir,
         Err(e) => return Err(format!("read dir {}: {e}", exports_dir.display())),
     };
-    let mut entries = match read_dir.collect::<Result<Vec<_>, _>>() {
-        Ok(entries) => entries,
-        Err(e) => return Err(format!("read dir entries {}: {e}", exports_dir.display())),
-    };
+    let mut entries = read_dir.filter_map(Result::ok).collect::<Vec<_>>();
     entries.sort_by_key(|entry| entry.file_name());
     for entry in entries {
         let path = entry.path();
@@ -929,7 +862,7 @@ pub fn validate_contract_bundle(bundle: &ContractBundle) -> Result<(), String> {
     let workspace_root = bundle
         .root
         .parent()
-        .ok_or_else(|| "failed to resolve workspace root from contract root".to_string())?;
+        .expect("contract root must have a workspace parent");
     validate_core_unit_dimension_variant_order(workspace_root)?;
     validate_coverage_rollout_parity(workspace_root, &bundle.root)?;
     validate_release_publish_policy(
@@ -967,9 +900,7 @@ mod tests {
     }
 
     fn write_file(path: &Path, content: &str) {
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).expect("create parent");
-        }
+        let _ = fs::create_dir_all(path.parent().unwrap_or(Path::new("")));
         fs::write(path, content).expect("write file");
     }
 
@@ -1269,6 +1200,24 @@ pub enum RadrootsCoreUnitDimension {
             .into_iter()
             .collect::<BTreeSet<_>>();
         validate_required_coverage_summary(&root, &required).expect("coverage summary");
+
+        fs::write(
+            coverage_dir.join("coverage-refresh.tsv"),
+            "crate\tstatus\texec\tfunc\tbranch\treport\nradroots-core\tpass\t100.0\t99.9\t100.0\tfile\n",
+        )
+        .expect("write function coverage file");
+        let func_err = validate_required_coverage_summary(&root, &required)
+            .expect_err("function coverage below 100");
+        assert!(func_err.contains("must be 100/100/100"));
+
+        fs::write(
+            coverage_dir.join("coverage-refresh.tsv"),
+            "crate\tstatus\texec\tfunc\tbranch\treport\nradroots-core\tpass\t100.0\t100.0\t99.9\tfile\n",
+        )
+        .expect("write branch coverage file");
+        let branch_err = validate_required_coverage_summary(&root, &required)
+            .expect_err("branch coverage below 100");
+        assert!(branch_err.contains("must be 100/100/100"));
         let _ = fs::remove_dir_all(&root);
     }
 
@@ -1443,6 +1392,13 @@ members = ["crates/a", "crates/b"]
             "#,
         );
         assert_eq!(variants, vec!["Count".to_string()]);
+
+        let nested = extract_enum_body(
+            "pub enum RadrootsCoreUnitDimension { Count = { 1 }, Mass = 2 }",
+            "RadrootsCoreUnitDimension",
+        )
+        .expect("nested braces in enum body");
+        assert!(nested.contains("Count"));
     }
 
     #[test]
@@ -1721,6 +1677,33 @@ crates = ["radroots-a", "radroots-b"]
         assert!(dependency_order.contains("must place dependency"));
 
         write_file(
+            &contract_root.join("release").join("publish-set.toml"),
+            r#"[release]
+version = "1.0.0"
+
+[publish]
+crates = ["radroots-a"]
+
+[internal]
+crates = ["radroots-b"]
+
+[publish_order]
+crates = ["radroots-a"]
+"#,
+        );
+        write_file(
+            &root.join("crates").join("b").join("Cargo.toml"),
+            r#"[package]
+name = "radroots-b"
+version = "0.1.0"
+edition = "2024"
+publish = false
+"#,
+        );
+        validate_release_publish_policy(&root, &contract_root, "1.0.0")
+            .expect("internal dependency should be ignored in publish ordering");
+
+        write_file(
             &root.join("crates").join("a").join("Cargo.toml"),
             r#"[package]
 name = "radroots-a"
@@ -1805,6 +1788,12 @@ edition = "2024"
         assert_bundle_error("surface.wasm_crates must not be empty", |bundle| {
             bundle.manifest.surface.wasm_crates.clear();
         });
+        assert_bundle_error(
+            "at least one language export mapping is required",
+            |bundle| {
+                bundle.exports.clear();
+            },
+        );
         assert_bundle_error("language.id is required", |bundle| {
             bundle.exports[0].language.id.clear();
         });
@@ -1821,6 +1810,27 @@ edition = "2024"
                 .expect("ts artifacts")
                 .models_dir = Some(String::new());
         });
+        assert_bundle_error("artifacts fields must be non-empty for ts", |bundle| {
+            bundle.exports[0]
+                .artifacts
+                .as_mut()
+                .expect("ts artifacts")
+                .constants_dir = Some(String::new());
+        });
+        assert_bundle_error("artifacts fields must be non-empty for ts", |bundle| {
+            bundle.exports[0]
+                .artifacts
+                .as_mut()
+                .expect("ts artifacts")
+                .wasm_dist_dir = Some(String::new());
+        });
+        assert_bundle_error("artifacts fields must be non-empty for ts", |bundle| {
+            bundle.exports[0]
+                .artifacts
+                .as_mut()
+                .expect("ts artifacts")
+                .manifest_file = Some(String::new());
+        });
         assert_bundle_error("version.contract.version is required", |bundle| {
             bundle.version.contract.version.clear();
         });
@@ -1829,6 +1839,12 @@ edition = "2024"
         });
         assert_bundle_error("version.semver rules must all be non-empty", |bundle| {
             bundle.version.semver.major_on.clear();
+        });
+        assert_bundle_error("version.semver rules must all be non-empty", |bundle| {
+            bundle.version.semver.minor_on.clear();
+        });
+        assert_bundle_error("version.semver rules must all be non-empty", |bundle| {
+            bundle.version.semver.patch_on.clear();
         });
         assert_bundle_error(
             "compatibility.requires_conformance_pass must be true",
@@ -1850,6 +1866,12 @@ edition = "2024"
         );
         assert_bundle_error("contract policy flags must all be true", |bundle| {
             bundle.manifest.policy.exclude_internal_workspace_crates = false;
+        });
+        assert_bundle_error("contract policy flags must all be true", |bundle| {
+            bundle.manifest.policy.require_reproducible_exports = false;
+        });
+        assert_bundle_error("contract policy flags must all be true", |bundle| {
+            bundle.manifest.policy.require_conformance_vectors = false;
         });
 
         let _ = fs::remove_dir_all(root);

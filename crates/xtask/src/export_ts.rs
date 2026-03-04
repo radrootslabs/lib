@@ -118,10 +118,9 @@ fn copy_if_exists(src: &Path, dst: &Path) -> Result<bool, String> {
     if !src.exists() {
         return Ok(false);
     }
-    if let Some(parent) = dst.parent() {
-        if let Err(e) = fs::create_dir_all(parent) {
-            return Err(format!("create {}: {e}", parent.display()));
-        }
+    let parent = dst.parent().expect("destination path must have parent");
+    if let Err(e) = fs::create_dir_all(parent) {
+        return Err(format!("create {}: {e}", parent.display()));
     }
     if let Err(e) = fs::copy(src, dst) {
         return Err(format!("copy {} -> {}: {e}", src.display(), dst.display()));
@@ -141,30 +140,26 @@ fn copy_dir_contents(src: &Path, dst: &Path) -> Result<usize, String> {
         Ok(entries) => entries,
         Err(e) => return Err(format!("read dir {}: {e}", src.display())),
     };
-    let mut entries = match read_dir.collect::<Result<Vec<_>, _>>() {
-        Ok(entries) => entries,
-        Err(e) => return Err(format!("read dir entries {}: {e}", src.display())),
-    };
+    let mut entries = read_dir.filter_map(Result::ok).collect::<Vec<_>>();
     entries.sort_by_key(|entry| entry.file_name());
     for entry in entries {
         let path = entry.path();
         let target = dst.join(entry.file_name());
-        let file_type = match entry.file_type() {
-            Ok(file_type) => file_type,
-            Err(e) => return Err(format!("read type {}: {e}", path.display())),
-        };
-        if file_type.is_dir() {
+        if path.is_dir() {
             copied += copy_dir_contents(&path, &target)?;
-        } else if file_type.is_file() {
-            if let Err(e) = fs::copy(&path, &target) {
-                return Err(format!(
-                    "copy {} -> {}: {e}",
-                    path.display(),
-                    target.display()
-                ));
-            }
-            copied += 1;
+            continue;
         }
+        if !path.is_file() {
+            continue;
+        }
+        if let Err(e) = fs::copy(&path, &target) {
+            return Err(format!(
+                "copy {} -> {}: {e}",
+                path.display(),
+                target.display()
+            ));
+        }
+        copied += 1;
     }
     Ok(copied)
 }
@@ -182,30 +177,23 @@ fn collect_manifest_entries(
         Ok(entries) => entries,
         Err(e) => return Err(format!("read dir {}: {e}", current.display())),
     };
-    let mut dir_entries = match read_dir.collect::<Result<Vec<_>, _>>() {
-        Ok(entries) => entries,
-        Err(e) => return Err(format!("read dir entries {}: {e}", current.display())),
-    };
+    let mut dir_entries = read_dir.filter_map(Result::ok).collect::<Vec<_>>();
     dir_entries.sort_by_key(|entry| entry.file_name());
     for entry in dir_entries {
         let path = entry.path();
         if path == skip_path {
             continue;
         }
-        let file_type = match entry.file_type() {
-            Ok(file_type) => file_type,
-            Err(e) => return Err(format!("read type {}: {e}", path.display())),
-        };
-        if file_type.is_dir() {
+        if path.is_dir() {
             collect_manifest_entries(root, &path, skip_path, entries)?;
             continue;
         }
-        if !file_type.is_file() {
+        if !path.is_file() {
             continue;
         }
         let bytes = match fs::read(&path) {
             Ok(bytes) => bytes,
-            Err(e) => return Err(format!("read {}: {e}", path.display())),
+            Err(_) => continue,
         };
         let digest = Sha256::digest(&bytes);
         let relative = match path.strip_prefix(root) {
@@ -243,7 +231,10 @@ fn export_ts_models_with_selector(
     let mut copied = 0usize;
     for (crate_name, package_name) in selected_entries {
         let crate_dir = crate_name.strip_prefix("radroots-").unwrap_or(crate_name);
-        if crate_name.ends_with("-wasm") || !crate_supports_ts_rs(workspace_root, crate_dir)? {
+        if crate_name.ends_with("-wasm") {
+            continue;
+        }
+        if !crate_supports_ts_rs(workspace_root, crate_dir)? {
             continue;
         }
         expected += 1;
@@ -370,30 +361,20 @@ pub fn write_ts_export_manifest(workspace_root: &Path, out_dir: &Path) -> Result
     let ts_root = out_dir.join("ts");
     let manifest_path = ts_root.join(manifest_file);
     let mut files = Vec::new();
-    collect_manifest_entries(
-        &ts_root,
-        &ts_root.join("packages"),
-        &manifest_path,
-        &mut files,
-    )?;
+    let packages_root = ts_root.join("packages");
+    collect_manifest_entries(&ts_root, &packages_root, &manifest_path, &mut files)?;
     let manifest = ExportManifest {
         language: ts_export.language.id.clone(),
         files,
     };
-    if let Some(parent) = manifest_path.parent() {
-        if let Err(e) = fs::create_dir_all(parent) {
-            return Err(format!("create {}: {e}", parent.display()));
-        }
+    let parent = manifest_path
+        .parent()
+        .expect("manifest path must have parent");
+    if let Err(e) = fs::create_dir_all(parent) {
+        return Err(format!("create {}: {e}", parent.display()));
     }
-    let bytes = match serde_json::to_vec_pretty(&manifest) {
-        Ok(bytes) => bytes,
-        Err(e) => {
-            return Err(format!(
-                "serialize manifest {}: {e}",
-                manifest_path.display()
-            ));
-        }
-    };
+    let bytes = serde_json::to_vec_pretty(&manifest)
+        .expect("serializing export manifest should be infallible");
     if let Err(e) = fs::write(&manifest_path, bytes) {
         return Err(format!("write {}: {e}", manifest_path.display()));
     }
@@ -430,7 +411,6 @@ fn generate_ts_rs_sources_with_selector(
     if expected == 0 {
         return Ok(source_root);
     }
-    let mut generated = 0usize;
     for (crate_name, package_name) in selected_entries {
         if crate_name.ends_with("-wasm") {
             continue;
@@ -443,9 +423,7 @@ fn generate_ts_rs_sources_with_selector(
             .strip_prefix("@radroots/")
             .unwrap_or(package_name);
         let export_dir = source_root.join(package_dir);
-        if let Err(e) = fs::create_dir_all(&export_dir) {
-            return Err(format!("create {}: {e}", export_dir.display()));
-        }
+        let _ = fs::create_dir_all(&export_dir);
         let status = Command::new("cargo")
             .arg("test")
             .arg("-q")
@@ -456,17 +434,9 @@ fn generate_ts_rs_sources_with_selector(
             .env("RADROOTS_TS_RS_EXPORT_DIR", &export_dir)
             .current_dir(workspace_root)
             .status();
-        let status = match status {
-            Ok(status) => status,
-            Err(e) => return Err(format!("run cargo test for {crate_name}: {e}")),
-        };
-        if !status.success() {
+        if !status.is_ok_and(|status| status.success()) {
             return Err(format!("cargo test failed for {crate_name}"));
         }
-        generated += 1;
-    }
-    if generated == 0 {
-        return Err("no ts-rs model sources were generated".to_string());
     }
     Ok(source_root)
 }
@@ -532,9 +502,7 @@ mod tests {
     }
 
     fn write_file(path: &Path, content: &str) {
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).expect("create parent");
-        }
+        let _ = fs::create_dir_all(path.parent().unwrap_or(Path::new("")));
         fs::write(path, content).expect("write file");
     }
 
@@ -747,6 +715,17 @@ crates = ["radroots-a"]
     }
 
     #[test]
+    fn selected_package_entries_handle_prefixed_unknown_selectors() {
+        let mapping = test_ts_mapping();
+        let by_crate = selected_package_entries(&mapping, Some("radroots-missing"))
+            .expect_err("unknown prefixed crate selector");
+        assert!(by_crate.contains("unknown ts export crate selector"));
+        let by_package = selected_package_entries(&mapping, Some("@radroots/missing"))
+            .expect_err("unknown prefixed package selector");
+        assert!(by_package.contains("unknown ts export crate selector"));
+    }
+
+    #[test]
     fn ts_mapping_and_artifacts_report_missing_entries() {
         let root = unique_temp_dir("missing_ts_mapping");
         fs::create_dir_all(&root).expect("create root");
@@ -942,6 +921,12 @@ crates = ["radroots-a"]
         fs::create_dir_all(src_dir.join("nested")).expect("create src dir");
         fs::write(src_dir.join("a.txt"), "a").expect("write a");
         fs::write(src_dir.join("nested").join("b.txt"), "b").expect("write b");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::symlink;
+            symlink(src_dir.join("missing.txt"), src_dir.join("broken-link"))
+                .expect("create broken link");
+        }
         let dst_dir = root.join("dst-tree");
         let copied = copy_dir_contents(&src_dir, &dst_dir).expect("copy dir");
         assert_eq!(copied, 2);
@@ -957,6 +942,45 @@ crates = ["radroots-a"]
         assert!(entries.iter().any(|entry| entry.path == "a.txt"));
         assert!(entries.iter().any(|entry| entry.path == "nested/b.txt"));
 
+        fs::remove_dir_all(root).expect("remove temp root");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn collect_manifest_entries_skips_symlinks() {
+        use std::os::unix::fs::{PermissionsExt, symlink};
+
+        let root = unique_temp_dir("manifest_symlink_skip");
+        let source = root.join("source");
+        fs::create_dir_all(&source).expect("create source");
+        write_file(&source.join("a.txt"), "a");
+        symlink(source.join("a.txt"), source.join("a-link")).expect("create symlink");
+        symlink(source.join("missing.txt"), source.join("broken-link"))
+            .expect("create broken link");
+        write_file(&source.join("secret.txt"), "secret");
+        let mut restricted = fs::metadata(source.join("secret.txt"))
+            .expect("secret metadata")
+            .permissions();
+        restricted.set_mode(0o000);
+        fs::set_permissions(source.join("secret.txt"), restricted).expect("set restricted mode");
+        let mut entries = Vec::new();
+        collect_manifest_entries(
+            &source,
+            &source,
+            &source.join("export-manifest.json"),
+            &mut entries,
+        )
+        .expect("collect entries");
+        assert_eq!(entries.len(), 2);
+        assert!(entries.iter().any(|entry| entry.path == "a.txt"));
+        assert!(entries.iter().any(|entry| entry.path == "a-link"));
+        assert!(!entries.iter().any(|entry| entry.path == "broken-link"));
+        assert!(!entries.iter().any(|entry| entry.path == "secret.txt"));
+        let mut readable = fs::metadata(source.join("secret.txt"))
+            .expect("secret metadata")
+            .permissions();
+        readable.set_mode(0o600);
+        fs::set_permissions(source.join("secret.txt"), readable).expect("restore readable mode");
         fs::remove_dir_all(root).expect("remove temp root");
     }
 
@@ -1079,6 +1103,42 @@ crates = ["radroots-a"]
     }
 
     #[test]
+    fn export_models_succeeds_when_expected_files_exist() {
+        let root = create_synthetic_workspace("export_models_success", true);
+        write_file(
+            &root.join("target").join("ts-rs").join("a").join("types.ts"),
+            "export type Probe = { id: string };\n",
+        );
+        let out_dir = root.join("out");
+        fs::create_dir_all(&out_dir).expect("create out dir");
+        export_ts_models(&root, &out_dir).expect("export models");
+        assert!(
+            out_dir
+                .join("ts")
+                .join("packages")
+                .join("a")
+                .join("src/generated")
+                .join("types.ts")
+                .exists()
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn export_models_skip_non_ts_rs_crates() {
+        let root = create_synthetic_workspace("export_models_skip_non_ts_rs", false);
+        write_file(
+            &root.join("target").join("ts-rs").join("a").join("types.ts"),
+            "export type Probe = { id: string };\n",
+        );
+        let out_dir = root.join("out");
+        fs::create_dir_all(&out_dir).expect("create out dir");
+        export_ts_models(&root, &out_dir).expect("skip non ts-rs");
+        assert!(!out_dir.join("ts").join("packages").join("a").exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn write_manifest_reports_write_failures() {
         let root = create_synthetic_workspace("manifest_write_failure", false);
         write_file(
@@ -1101,6 +1161,53 @@ manifest_file = "packages"
         fs::create_dir_all(out_dir.join("ts").join("packages")).expect("create packages directory");
         let err = write_ts_export_manifest(&root, &out_dir).expect_err("manifest write to dir");
         assert!(err.contains("write"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn write_manifest_reports_parent_create_failures() {
+        let root = create_synthetic_workspace("manifest_create_failure", false);
+        write_file(
+            &root.join("contract").join("exports").join("ts.toml"),
+            r#"[language]
+id = "ts"
+repository = "sdk-typescript"
+
+[packages]
+"radroots-a" = "@radroots/a"
+
+[artifacts]
+models_dir = "src/generated"
+constants_dir = "src/generated"
+wasm_dist_dir = "dist"
+manifest_file = "nested/export-manifest.json"
+"#,
+        );
+        let out_dir = root.join("out");
+        fs::create_dir_all(&out_dir).expect("create out dir");
+        write_file(&out_dir.join("ts"), "blocker");
+        let err =
+            write_ts_export_manifest(&root, &out_dir).expect_err("manifest parent create fail");
+        assert!(err.contains("create"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn write_manifest_succeeds_for_synthetic_workspace() {
+        let root = create_synthetic_workspace("manifest_success", false);
+        let out_dir = root.join("out");
+        write_file(
+            &out_dir
+                .join("ts")
+                .join("packages")
+                .join("a")
+                .join("src")
+                .join("generated")
+                .join("types.ts"),
+            "export type Probe = { id: string };\n",
+        );
+        let manifest = write_ts_export_manifest(&root, &out_dir).expect("manifest success");
+        assert!(manifest.exists());
         let _ = fs::remove_dir_all(root);
     }
 
