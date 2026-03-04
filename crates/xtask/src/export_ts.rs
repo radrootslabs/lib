@@ -506,6 +506,7 @@ pub fn export_ts_bundle_for_crate(
 mod tests {
     use super::*;
     use std::collections::BTreeMap;
+    use std::path::Path;
     use std::sync::{Mutex, OnceLock};
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -528,6 +529,167 @@ mod tests {
             .expect("system time")
             .as_nanos();
         std::env::temp_dir().join(format!("radroots_xtask_{prefix}_{ns}"))
+    }
+
+    fn write_file(path: &Path, content: &str) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("create parent");
+        }
+        fs::write(path, content).expect("write file");
+    }
+
+    fn create_synthetic_workspace(prefix: &str, crate_a_ts_rs: bool) -> PathBuf {
+        let root = unique_temp_dir(prefix);
+        fs::create_dir_all(&root).expect("create root");
+        write_file(
+            &root.join("Cargo.toml"),
+            r#"[workspace]
+members = ["crates/a", "crates/b"]
+resolver = "2"
+"#,
+        );
+        let crate_a_features = if crate_a_ts_rs {
+            "\n[features]\nts-rs = []\n"
+        } else {
+            ""
+        };
+        write_file(
+            &root.join("crates").join("a").join("Cargo.toml"),
+            &format!(
+                r#"[package]
+name = "radroots-a"
+version = "0.1.0"
+edition = "2024"
+description = "crate a"
+repository = "https://example.com/a"
+homepage = "https://example.com/a"
+documentation = "https://docs.example.com/a"
+readme = "README.md"
+{}"#,
+                crate_a_features
+            ),
+        );
+        write_file(
+            &root.join("crates").join("a").join("src").join("lib.rs"),
+            "pub fn crate_a() {}\n",
+        );
+        write_file(
+            &root.join("crates").join("b").join("Cargo.toml"),
+            r#"[package]
+name = "radroots-b"
+version = "0.1.0"
+edition = "2024"
+publish = false
+"#,
+        );
+        write_file(
+            &root.join("crates").join("b").join("src").join("lib.rs"),
+            "pub fn crate_b() {}\n",
+        );
+        write_file(
+            &root.join("crates").join("core").join("src").join("unit.rs"),
+            r#"pub enum RadrootsCoreUnitDimension {
+    Count,
+    Mass,
+    Volume,
+}
+"#,
+        );
+        write_file(
+            &root.join("contract").join("manifest.toml"),
+            r#"[contract]
+name = "radroots-contract"
+version = "1.0.0"
+source = "synthetic"
+
+[surface]
+model_crates = ["radroots-a"]
+algorithm_crates = ["radroots-b"]
+wasm_crates = ["radroots-a-wasm"]
+
+[policy]
+exclude_internal_workspace_crates = true
+require_reproducible_exports = true
+require_conformance_vectors = true
+"#,
+        );
+        write_file(
+            &root.join("contract").join("version.toml"),
+            r#"[contract]
+version = "1.0.0"
+stability = "alpha"
+
+[semver]
+major_on = ["breaking"]
+minor_on = ["feature"]
+patch_on = ["fix"]
+
+[compatibility]
+requires_conformance_pass = true
+requires_export_manifest_diff = true
+requires_release_notes = true
+"#,
+        );
+        write_file(
+            &root.join("contract").join("exports").join("ts.toml"),
+            r#"[language]
+id = "ts"
+repository = "sdk-typescript"
+
+[packages]
+"radroots-a" = "@radroots/a"
+
+[artifacts]
+models_dir = "src/generated"
+constants_dir = "src/generated"
+wasm_dist_dir = "dist"
+manifest_file = "export-manifest.json"
+"#,
+        );
+        write_file(
+            &root.join("contract").join("coverage").join("rollout.toml"),
+            r#"[rollout]
+crates = [
+  { name = "radroots-a", status = "required", order = 1 },
+  { name = "radroots-b", status = "planned", order = 2 },
+]
+"#,
+        );
+        write_file(
+            &root
+                .join("contract")
+                .join("coverage")
+                .join("required-crates.toml"),
+            r#"[required]
+crates = ["radroots-a"]
+"#,
+        );
+        write_file(
+            &root
+                .join("contract")
+                .join("release")
+                .join("publish-set.toml"),
+            r#"[release]
+version = "1.0.0"
+
+[publish]
+crates = ["radroots-a"]
+
+[internal]
+crates = ["radroots-b"]
+
+[publish_order]
+crates = ["radroots-a"]
+"#,
+        );
+        write_file(
+            &root
+                .join("target")
+                .join("coverage")
+                .join("coverage-refresh.tsv"),
+            "crate\tstatus\texec\tfunc\tbranch\treport\nradroots-a\tpass\t100.0\t100.0\t100.0\tfile\n",
+        );
+        root
     }
 
     fn test_ts_mapping() -> contract::ExportMapping {
@@ -585,6 +747,87 @@ mod tests {
     }
 
     #[test]
+    fn ts_mapping_and_artifacts_report_missing_entries() {
+        let root = unique_temp_dir("missing_ts_mapping");
+        fs::create_dir_all(&root).expect("create root");
+        let bundle = contract::ContractBundle {
+            root: root.clone(),
+            manifest: contract::ContractManifest {
+                contract: contract::ManifestContract {
+                    name: "name".to_string(),
+                    version: "1.0.0".to_string(),
+                    source: "source".to_string(),
+                },
+                surface: contract::Surface {
+                    model_crates: vec!["radroots-a".to_string()],
+                    algorithm_crates: vec!["radroots-b".to_string()],
+                    wasm_crates: vec![],
+                },
+                policy: contract::Policy {
+                    exclude_internal_workspace_crates: true,
+                    require_reproducible_exports: true,
+                    require_conformance_vectors: true,
+                },
+            },
+            version: contract::VersionPolicy {
+                contract: contract::VersionContract {
+                    version: "1.0.0".to_string(),
+                    stability: "alpha".to_string(),
+                },
+                semver: contract::SemverRules {
+                    major_on: vec!["breaking".to_string()],
+                    minor_on: vec!["feature".to_string()],
+                    patch_on: vec!["fix".to_string()],
+                },
+                compatibility: contract::CompatibilityRules {
+                    requires_conformance_pass: true,
+                    requires_export_manifest_diff: true,
+                    requires_release_notes: true,
+                },
+            },
+            exports: Vec::new(),
+        };
+        let mapping_err = ts_export_mapping(&bundle).expect_err("missing ts mapping");
+        assert!(mapping_err.contains("missing ts export mapping"));
+
+        let mut packages = BTreeMap::new();
+        packages.insert("radroots-a".to_string(), "@radroots/a".to_string());
+        let no_artifacts = contract::ExportMapping {
+            language: contract::ExportLanguage {
+                id: "ts".to_string(),
+                repository: "sdk-typescript".to_string(),
+            },
+            packages,
+            artifacts: None,
+        };
+        let artifacts_err = ts_artifacts(&no_artifacts).expect_err("missing ts artifacts mapping");
+        assert!(artifacts_err.contains("missing ts artifacts mapping"));
+        fs::remove_dir_all(root).expect("remove root");
+    }
+
+    #[test]
+    fn selected_package_entries_supports_package_candidate_lookup() {
+        let mut packages = BTreeMap::new();
+        packages.insert(
+            "radroots-special".to_string(),
+            "@radroots/special-pkg".to_string(),
+        );
+        let mapping = contract::ExportMapping {
+            language: contract::ExportLanguage {
+                id: "ts".to_string(),
+                repository: "sdk-typescript".to_string(),
+            },
+            packages,
+            artifacts: Some(contract::ExportArtifacts::default()),
+        };
+        let selected =
+            selected_package_entries(&mapping, Some("special-pkg")).expect("package candidate");
+        assert_eq!(selected.len(), 1);
+        assert_eq!(selected[0].0.as_str(), "radroots-special");
+        assert_eq!(selected[0].1.as_str(), "@radroots/special-pkg");
+    }
+
+    #[test]
     fn package_dir_and_artifact_helpers_validate_values() {
         let base = PathBuf::from("/tmp/base");
         assert_eq!(to_package_dir(&base, "@radroots/core"), base.join("core"));
@@ -599,6 +842,87 @@ mod tests {
         assert!(required_artifact_value(&none, "models_dir").is_err());
         let blank = Some("   ".to_string());
         assert!(required_artifact_value(&blank, "models_dir").is_err());
+    }
+
+    #[test]
+    fn helper_error_paths_cover_copy_manifest_and_support_checks() {
+        let root = unique_temp_dir("helper_errors");
+        fs::create_dir_all(&root).expect("create root");
+
+        let manifest_dir = root.join("crates").join("probe").join("Cargo.toml");
+        fs::create_dir_all(&manifest_dir).expect("create directory in place of manifest");
+        let supports_err = crate_supports_ts_rs(&root, "probe").expect_err("manifest read error");
+        assert!(supports_err.contains("read"));
+
+        let src_file = root.join("src").join("one.txt");
+        write_file(&src_file, "one");
+        let dst_parent_file = root.join("dst-parent-file");
+        write_file(&dst_parent_file, "block");
+        let create_err = copy_if_exists(&src_file, &dst_parent_file.join("out.txt"))
+            .expect_err("create parent error");
+        assert!(create_err.contains("create"));
+
+        let dst_file = root.join("dst-dir");
+        fs::create_dir_all(&dst_file).expect("create destination directory");
+        let copy_err =
+            copy_if_exists(&src_file, &dst_file).expect_err("copy to directory should fail");
+        assert!(copy_err.contains("copy"));
+
+        let missing_dir = root.join("missing-dir");
+        assert_eq!(
+            copy_dir_contents(&missing_dir, &root.join("dst-missing")).expect("missing dir"),
+            0
+        );
+
+        let src_dir = root.join("src-dir");
+        fs::create_dir_all(&src_dir).expect("create src dir");
+        let dst_blocker = root.join("dst-blocker");
+        write_file(&dst_blocker, "blocker");
+        let dst_err = copy_dir_contents(&src_dir, &dst_blocker).expect_err("create dst error");
+        assert!(dst_err.contains("create"));
+
+        let src_file_not_dir = root.join("src-file-not-dir");
+        write_file(&src_file_not_dir, "not dir");
+        let read_dir_err =
+            copy_dir_contents(&src_file_not_dir, &root.join("dst-ok")).expect_err("read dir error");
+        assert!(read_dir_err.contains("read dir"));
+
+        let src_tree = root.join("src-tree");
+        let dst_tree = root.join("dst-tree");
+        fs::create_dir_all(&src_tree).expect("create src-tree");
+        fs::create_dir_all(&dst_tree).expect("create dst-tree");
+        write_file(&src_tree.join("entry.txt"), "entry");
+        fs::create_dir_all(dst_tree.join("entry.txt")).expect("create colliding directory");
+        let copy_tree_err = copy_dir_contents(&src_tree, &dst_tree).expect_err("copy tree error");
+        assert!(copy_tree_err.contains("copy"));
+
+        let current_is_file = root.join("manifest-file");
+        write_file(&current_is_file, "x");
+        let mut entries = Vec::new();
+        let collect_err = collect_manifest_entries(
+            &root,
+            &current_is_file,
+            &root.join("skip.json"),
+            &mut entries,
+        )
+        .expect_err("read dir error for file");
+        assert!(collect_err.contains("read dir"));
+
+        let other_root = unique_temp_dir("manifest_strip_prefix");
+        fs::create_dir_all(&other_root).expect("create other root");
+        write_file(&other_root.join("x.txt"), "x");
+        let mut entries = Vec::new();
+        let strip_err = collect_manifest_entries(
+            &root,
+            &other_root,
+            &other_root.join("skip.json"),
+            &mut entries,
+        )
+        .expect_err("strip prefix error");
+        assert!(strip_err.contains("strip prefix"));
+        fs::remove_dir_all(other_root).expect("remove other root");
+
+        fs::remove_dir_all(root).expect("remove helper root");
     }
 
     #[test]
@@ -658,6 +982,12 @@ mod tests {
             "export type CoreProbe = { id: string };\n",
         )
         .expect("write ts-rs model");
+        let events_source = root.join("target").join("ts-rs").join("events");
+        fs::create_dir_all(&events_source).expect("create events source");
+        fs::write(events_source.join("constants.ts"), "export const A = 1;\n")
+            .expect("write events constants");
+        fs::write(events_source.join("kinds.ts"), "export const K = 1;\n")
+            .expect("write events kinds");
 
         let out_dir = root.join("target").join("xtask-export-tests").join(
             SystemTime::now()
@@ -692,15 +1022,10 @@ mod tests {
             .join("events")
             .join(&constants_dir)
             .join("kinds.ts");
-        let events_source = root.join("target").join("ts-rs").join("events");
-        let constants_exists = events_source.join("constants.ts").exists();
-        let kinds_exists = events_source.join("kinds.ts").exists();
-        if constants_exists {
-            assert!(events_constants.exists());
-        }
-        if kinds_exists {
-            assert!(events_kinds.exists());
-        }
+        assert!(events_source.join("constants.ts").exists());
+        assert!(events_source.join("kinds.ts").exists());
+        assert!(events_constants.exists());
+        assert!(events_kinds.exists());
 
         export_ts_wasm_artifacts(&root, &out_dir).expect("export wasm");
         let manifest_path = write_ts_export_manifest(&root, &out_dir).expect("write manifest");
@@ -724,5 +1049,126 @@ mod tests {
         assert!(crate_supports_ts_rs(&root, "probe").expect("supports ts-rs"));
         assert!(!crate_supports_ts_rs(&root, "missing").expect("missing crate"));
         fs::remove_dir_all(root).expect("remove temp root");
+    }
+
+    #[test]
+    fn export_models_and_constants_report_missing_source_roots() {
+        let root = create_synthetic_workspace("export_missing_source", true);
+        let out_dir = root.join("out");
+        fs::create_dir_all(&out_dir).expect("create out dir");
+
+        let models_err = export_ts_models(&root, &out_dir).expect_err("missing models source root");
+        assert!(models_err.contains("missing ts-rs source root"));
+
+        let constants_err =
+            export_ts_constants(&root, &out_dir).expect_err("missing constants source root");
+        assert!(constants_err.contains("missing ts-rs source root"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn export_models_reports_when_expected_files_are_missing() {
+        let root = create_synthetic_workspace("export_models_missing_files", true);
+        fs::create_dir_all(root.join("target").join("ts-rs")).expect("create ts-rs root");
+        let out_dir = root.join("out");
+        fs::create_dir_all(&out_dir).expect("create out dir");
+
+        let err = export_ts_models(&root, &out_dir).expect_err("expected model files are missing");
+        assert!(err.contains("no ts model files were exported"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn write_manifest_reports_write_failures() {
+        let root = create_synthetic_workspace("manifest_write_failure", false);
+        write_file(
+            &root.join("contract").join("exports").join("ts.toml"),
+            r#"[language]
+id = "ts"
+repository = "sdk-typescript"
+
+[packages]
+"radroots-a" = "@radroots/a"
+
+[artifacts]
+models_dir = "src/generated"
+constants_dir = "src/generated"
+wasm_dist_dir = "dist"
+manifest_file = "packages"
+"#,
+        );
+        let out_dir = root.join("out");
+        fs::create_dir_all(out_dir.join("ts").join("packages")).expect("create packages directory");
+        let err = write_ts_export_manifest(&root, &out_dir).expect_err("manifest write to dir");
+        assert!(err.contains("write"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn generate_ts_rs_sources_reports_path_and_command_failures() {
+        let root_remove = create_synthetic_workspace("generate_remove_fail", true);
+        write_file(&root_remove.join("target").join("ts-rs"), "not-a-directory");
+        let remove_err = generate_ts_rs_sources(&root_remove)
+            .expect_err("remove existing source root should fail");
+        assert!(remove_err.contains("remove"));
+        let _ = fs::remove_dir_all(root_remove);
+
+        let root_create = create_synthetic_workspace("generate_create_fail", true);
+        let _ = fs::remove_dir_all(root_create.join("target"));
+        write_file(&root_create.join("target"), "blocker");
+        let create_err = generate_ts_rs_sources(&root_create)
+            .expect_err("create source root parent should fail");
+        assert!(create_err.contains("create"));
+        let _ = fs::remove_dir_all(root_create);
+
+        let root_no_expected = create_synthetic_workspace("generate_no_expected", false);
+        let generated = generate_ts_rs_sources(&root_no_expected).expect("no expected crates");
+        assert_eq!(generated, root_no_expected.join("target").join("ts-rs"));
+        let _ = fs::remove_dir_all(root_no_expected);
+
+        let root_command_fail = create_synthetic_workspace("generate_command_fail", true);
+        write_file(
+            &root_command_fail
+                .join("crates")
+                .join("a")
+                .join("src")
+                .join("lib.rs"),
+            "pub fn broken( {\n",
+        );
+        let command_fail_err = generate_ts_rs_sources(&root_command_fail)
+            .expect_err("cargo test failure should surface");
+        assert!(command_fail_err.contains("cargo test failed for radroots-a"));
+        let _ = fs::remove_dir_all(root_command_fail);
+    }
+
+    #[test]
+    fn generate_ts_rs_sources_succeeds_and_skips_non_ts_rs_crates() {
+        let _guard = workspace_lock().lock().expect("workspace lock");
+        let root = create_synthetic_workspace("generate_skip_non_ts_rs", true);
+        write_file(
+            &root.join("contract").join("exports").join("ts.toml"),
+            r#"[language]
+id = "ts"
+repository = "sdk-typescript"
+
+[packages]
+"radroots-a" = "@radroots/a"
+"radroots-b" = "@radroots/b"
+
+[artifacts]
+models_dir = "src/generated"
+constants_dir = "src/generated"
+wasm_dist_dir = "dist"
+manifest_file = "export-manifest.json"
+"#,
+        );
+        write_file(
+            &root.join("crates").join("a").join("src").join("lib.rs"),
+            "pub fn probe() {}\n",
+        );
+        let generated = generate_ts_rs_sources(&root).expect("ts-rs generation should pass");
+        assert!(generated.join("a").exists());
+        assert!(!generated.join("b").exists());
+        let _ = fs::remove_dir_all(root);
     }
 }
