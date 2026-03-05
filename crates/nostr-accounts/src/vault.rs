@@ -168,13 +168,17 @@ mod tests {
         })
         .join();
 
-        let store = vault.store_secret_hex(&account_id, "abc123");
-        assert!(matches!(store, Err(RadrootsNostrAccountsError::Vault(_))));
+        let store = vault
+            .store_secret_hex(&account_id, "abc123")
+            .expect_err("poisoned store");
+        assert!(store.to_string().starts_with("vault error:"));
 
-        let load = vault.load_secret_hex(&account_id);
-        assert!(matches!(load, Err(RadrootsNostrAccountsError::Vault(_))));
+        let load = vault.load_secret_hex(&account_id).expect_err("poisoned load");
+        assert!(load.to_string().starts_with("vault error:"));
 
-        let remove = vault.remove_secret(&account_id);
-        assert!(matches!(remove, Err(RadrootsNostrAccountsError::Vault(_))));
+        let remove = vault
+            .remove_secret(&account_id)
+            .expect_err("poisoned remove");
+        assert!(remove.to_string().starts_with("vault error:"));
     }
 }

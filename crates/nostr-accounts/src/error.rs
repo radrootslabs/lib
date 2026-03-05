@@ -49,13 +49,13 @@ mod tests {
     fn converts_identity_error() {
         let source = IdentityError::PublicKeyMismatch;
         let converted: RadrootsNostrAccountsError = source.into();
-        assert!(matches!(converted, RadrootsNostrAccountsError::Identity(_)));
+        assert!(converted.to_string().starts_with("identity error:"));
     }
 
     #[test]
     fn converts_runtime_json_error() {
         let source = RuntimeJsonError::NotFound(PathBuf::from("accounts.json"));
         let converted: RadrootsNostrAccountsError = source.into();
-        assert!(matches!(converted, RadrootsNostrAccountsError::Store(_)));
+        assert!(converted.to_string().starts_with("store error:"));
     }
 }

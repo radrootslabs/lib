@@ -145,6 +145,11 @@ impl RadrootsNostrAccountsManager {
         let updated_at_unix = now_unix_secs();
         let account_id = public_identity.id.clone();
         self.update_state(|state| {
+            if public_identity.id.as_str() != public_identity.public_key_hex {
+                return Err(RadrootsNostrAccountsError::InvalidState(
+                    "public identity id does not match public key".into(),
+                ));
+            }
             if let Some(existing) = state
                 .accounts
                 .iter_mut()
@@ -428,6 +433,34 @@ mod tests {
         }
     }
 
+    struct VaultRemoveError;
+
+    impl RadrootsNostrSecretVault for VaultRemoveError {
+        fn store_secret_hex(
+            &self,
+            _account_id: &RadrootsIdentityId,
+            _secret_key_hex: &str,
+        ) -> Result<(), RadrootsNostrAccountsError> {
+            Ok(())
+        }
+
+        fn load_secret_hex(
+            &self,
+            _account_id: &RadrootsIdentityId,
+        ) -> Result<Option<String>, RadrootsNostrAccountsError> {
+            Ok(None)
+        }
+
+        fn remove_secret(
+            &self,
+            _account_id: &RadrootsIdentityId,
+        ) -> Result<(), RadrootsNostrAccountsError> {
+            Err(RadrootsNostrAccountsError::Vault(
+                "vault remove failed".into(),
+            ))
+        }
+    }
+
     fn poison_manager_state(manager: &RadrootsNostrAccountsManager) {
         let state = manager.state.clone();
         let _ = thread::spawn(move || {
@@ -550,11 +583,10 @@ mod tests {
         state.version = crate::model::RADROOTS_NOSTR_ACCOUNTS_STORE_VERSION + 1;
         store.save(&state).expect("save");
 
-        let result = RadrootsNostrAccountsManager::new(store, vault);
-        assert!(matches!(
-            result,
-            Err(RadrootsNostrAccountsError::InvalidState(_))
-        ));
+        let err = RadrootsNostrAccountsManager::new(store, vault)
+            .err()
+            .expect("unsupported schema version");
+        assert!(err.to_string().contains("invalid account state"));
     }
 
     #[test]
@@ -640,16 +672,14 @@ mod tests {
                 .is_none()
         );
 
-        let select_missing = manager.select_account(&second_id);
-        assert!(matches!(
-            select_missing,
-            Err(RadrootsNostrAccountsError::AccountNotFound(_))
-        ));
-        let remove_missing = manager.remove_account(&second_id);
-        assert!(matches!(
-            remove_missing,
-            Err(RadrootsNostrAccountsError::AccountNotFound(_))
-        ));
+        let select_missing = manager
+            .select_account(&second_id)
+            .expect_err("missing select");
+        assert!(select_missing.to_string().contains("account not found"));
+        let remove_missing = manager
+            .remove_account(&second_id)
+            .expect_err("missing remove");
+        assert!(remove_missing.to_string().contains("account not found"));
     }
 
     #[test]
@@ -688,6 +718,19 @@ mod tests {
     }
 
     #[test]
+    fn upsert_public_identity_rejects_mismatched_id() {
+        let manager = RadrootsNostrAccountsManager::new_in_memory();
+        let mut public_identity = RadrootsIdentity::generate().to_public();
+        let other = RadrootsIdentity::generate().to_public();
+        public_identity.id = other.id.clone();
+
+        let err = manager
+            .upsert_public_identity(public_identity, None, true)
+            .expect_err("id mismatch");
+        assert!(err.to_string().starts_with("invalid account state:"));
+    }
+
+    #[test]
     fn remove_non_selected_account_keeps_current_selection() {
         let manager = RadrootsNostrAccountsManager::new_in_memory();
         let selected_id = manager
@@ -702,6 +745,30 @@ mod tests {
             manager.selected_account_id().expect("selected"),
             Some(selected_id)
         );
+    }
+
+    #[test]
+    fn remove_account_propagates_vault_remove_error() {
+        let store = Arc::new(RadrootsNostrMemoryAccountStore::new());
+        let vault = Arc::new(VaultRemoveError);
+        let manager = RadrootsNostrAccountsManager::new(store, vault.clone()).expect("manager");
+        let public = RadrootsIdentity::generate().to_public();
+        let account_id = public.id.clone();
+        vault
+            .store_secret_hex(&account_id, "secret")
+            .expect("vault store");
+        assert!(vault
+            .load_secret_hex(&account_id)
+            .expect("vault load")
+            .is_none());
+        manager
+            .upsert_public_identity(public, Some("remove".into()), true)
+            .expect("upsert");
+
+        let err = manager
+            .remove_account(&account_id)
+            .expect_err("remove error");
+        assert!(err.to_string().starts_with("vault error:"));
     }
 
     #[test]
@@ -721,11 +788,12 @@ mod tests {
             .store_secret_hex(&mismatch_id, wrong_identity.secret_key_hex().as_str())
             .expect("vault store");
 
-        let mismatch = manager.selected_signing_identity();
-        assert!(matches!(
-            mismatch,
-            Err(RadrootsNostrAccountsError::PublicKeyMismatch)
-        ));
+        let mismatch = manager
+            .selected_signing_identity()
+            .expect_err("public key mismatch");
+        assert!(mismatch
+            .to_string()
+            .contains("public key does not match secret key"));
 
         let mut with_profile = RadrootsIdentity::generate();
         let profile = RadrootsIdentityProfile {
@@ -754,11 +822,10 @@ mod tests {
         let load_error = RadrootsNostrAccountsManager::new(
             Arc::new(LoadErrorStore),
             Arc::new(RadrootsNostrSecretVaultMemory::new()),
-        );
-        assert!(matches!(
-            load_error,
-            Err(RadrootsNostrAccountsError::Store(_))
-        ));
+        )
+        .err()
+        .expect("load error manager");
+        assert!(load_error.to_string().starts_with("store error:"));
 
         let save_error_store = Arc::new(SaveErrorStore::new(
             RadrootsNostrAccountStoreState::default(),
@@ -768,15 +835,10 @@ mod tests {
             Arc::new(RadrootsNostrSecretVaultMemory::new()),
         )
         .expect("manager");
-        let save_error = save_error_manager.upsert_public_identity(
-            RadrootsIdentity::generate().to_public(),
-            None,
-            true,
-        );
-        assert!(matches!(
-            save_error,
-            Err(RadrootsNostrAccountsError::Store(_))
-        ));
+        let save_error = save_error_manager
+            .upsert_public_identity(RadrootsIdentity::generate().to_public(), None, true)
+            .expect_err("save error");
+        assert!(save_error.to_string().starts_with("store error:"));
 
         let vault_store_error_manager = RadrootsNostrAccountsManager::new(
             Arc::new(RadrootsNostrMemoryAccountStore::new()),
@@ -784,11 +846,10 @@ mod tests {
         )
         .expect("manager");
         let identity = RadrootsIdentity::generate();
-        let vault_store_error = vault_store_error_manager.upsert_identity(&identity, None, true);
-        assert!(matches!(
-            vault_store_error,
-            Err(RadrootsNostrAccountsError::Vault(_))
-        ));
+        let vault_store_error = vault_store_error_manager
+            .upsert_identity(&identity, None, true)
+            .expect_err("vault store error");
+        assert!(vault_store_error.to_string().starts_with("vault error:"));
 
         let mut load_error_state = RadrootsNostrAccountStoreState::default();
         let load_error_public = RadrootsIdentity::generate().to_public();
@@ -807,11 +868,10 @@ mod tests {
         let vault_load_error_manager =
             RadrootsNostrAccountsManager::new(load_error_store, Arc::new(VaultLoadError))
                 .expect("manager");
-        let vault_load_error = vault_load_error_manager.selected_signing_identity();
-        assert!(matches!(
-            vault_load_error,
-            Err(RadrootsNostrAccountsError::Vault(_))
-        ));
+        let vault_load_error = vault_load_error_manager
+            .selected_signing_identity()
+            .expect_err("vault load error");
+        assert!(vault_load_error.to_string().starts_with("vault error:"));
 
         let mut invalid_secret_state = RadrootsNostrAccountStoreState::default();
         let invalid_secret_public = RadrootsIdentity::generate().to_public();
@@ -830,11 +890,10 @@ mod tests {
         let invalid_secret_manager =
             RadrootsNostrAccountsManager::new(invalid_secret_store, Arc::new(VaultInvalidSecret))
                 .expect("manager");
-        let invalid_secret = invalid_secret_manager.selected_signing_identity();
-        assert!(matches!(
-            invalid_secret,
-            Err(RadrootsNostrAccountsError::Identity(_))
-        ));
+        let invalid_secret = invalid_secret_manager
+            .selected_signing_identity()
+            .expect_err("invalid secret");
+        assert!(invalid_secret.to_string().starts_with("identity error:"));
     }
 
     #[test]
@@ -842,11 +901,10 @@ mod tests {
         let manager = RadrootsNostrAccountsManager::new_in_memory();
         let temp = tempfile::tempdir().expect("tempdir");
         let missing = temp.path().join("missing_legacy.json");
-        let migrated = manager.migrate_legacy_identity_file(&missing, None, false);
-        assert!(matches!(
-            migrated,
-            Err(RadrootsNostrAccountsError::Identity(_))
-        ));
+        let migrated = manager
+            .migrate_legacy_identity_file(&missing, None, false)
+            .expect_err("missing legacy");
+        assert!(migrated.to_string().starts_with("identity error:"));
     }
 
     #[test]
@@ -854,36 +912,42 @@ mod tests {
         let manager = RadrootsNostrAccountsManager::new_in_memory();
         poison_manager_state(&manager);
 
-        assert!(matches!(
-            manager.list_accounts(),
-            Err(RadrootsNostrAccountsError::Store(_))
-        ));
-        assert!(matches!(
-            manager.selected_account_id(),
-            Err(RadrootsNostrAccountsError::Store(_))
-        ));
-        assert!(matches!(
-            manager.selected_account(),
-            Err(RadrootsNostrAccountsError::Store(_))
-        ));
+        let list_err = manager.list_accounts().expect_err("list poisoned");
+        assert!(list_err.to_string().starts_with("store error:"));
+        let selected_id_err = manager
+            .selected_account_id()
+            .expect_err("selected id poisoned");
+        assert!(selected_id_err.to_string().starts_with("store error:"));
+        let selected_err = manager
+            .selected_account()
+            .expect_err("selected poisoned");
+        assert!(selected_err.to_string().starts_with("store error:"));
+        let selected_public_err = manager
+            .selected_public_identity()
+            .expect_err("selected public poisoned");
+        assert!(selected_public_err.to_string().starts_with("store error:"));
+        let selected_signing_err = manager
+            .selected_signing_identity()
+            .expect_err("selected signing poisoned");
+        assert!(selected_signing_err.to_string().starts_with("store error:"));
 
         let account_id = RadrootsIdentity::generate().id();
-        assert!(matches!(
-            manager.get_signing_identity(&account_id),
-            Err(RadrootsNostrAccountsError::Store(_))
-        ));
-        assert!(matches!(
-            manager.select_account(&account_id),
-            Err(RadrootsNostrAccountsError::Store(_))
-        ));
-        assert!(matches!(
-            manager.remove_account(&account_id),
-            Err(RadrootsNostrAccountsError::Store(_))
-        ));
-        assert!(matches!(
-            manager.upsert_public_identity(RadrootsIdentity::generate().to_public(), None, false),
-            Err(RadrootsNostrAccountsError::Store(_))
-        ));
+        let signing_err = manager
+            .get_signing_identity(&account_id)
+            .expect_err("signing poisoned");
+        assert!(signing_err.to_string().starts_with("store error:"));
+        let select_err = manager
+            .select_account(&account_id)
+            .expect_err("select poisoned");
+        assert!(select_err.to_string().starts_with("store error:"));
+        let remove_err = manager
+            .remove_account(&account_id)
+            .expect_err("remove poisoned");
+        assert!(remove_err.to_string().starts_with("store error:"));
+        let upsert_err = manager
+            .upsert_public_identity(RadrootsIdentity::generate().to_public(), None, false)
+            .expect_err("upsert poisoned");
+        assert!(upsert_err.to_string().starts_with("store error:"));
     }
 
     #[test]
@@ -903,11 +967,8 @@ mod tests {
             let _guard = save_error_store.state.write().expect("write");
             panic!("poison save error store");
         }));
-        let poisoned_load = save_error_store.load();
-        assert!(matches!(
-            poisoned_load,
-            Err(RadrootsNostrAccountsError::Store(_))
-        ));
+        let poisoned_load = save_error_store.load().expect_err("poisoned load");
+        assert!(poisoned_load.to_string().starts_with("store error:"));
 
         let account_id = RadrootsIdentity::generate().id();
         let vault_store_error = VaultStoreError;

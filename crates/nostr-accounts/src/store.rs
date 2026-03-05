@@ -59,7 +59,9 @@ impl RadrootsNostrAccountStore for RadrootsNostrFileAccountStore {
             mode_unix: Some(0o600),
         });
         file.value = state.clone();
-        file.save()?;
+        if let Err(err) = file.save() {
+            return Err(err.into());
+        }
         Ok(())
     }
 }
@@ -120,6 +122,60 @@ mod tests {
     }
 
     #[test]
+    fn file_store_load_reports_parse_error() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let path = temp.path().join("invalid.json");
+        std::fs::write(&path, "{").expect("write invalid json");
+        let store = RadrootsNostrFileAccountStore::new(path.as_path());
+
+        let err = store.load().expect_err("invalid json");
+        assert!(err.to_string().starts_with("store error:"));
+    }
+
+    #[test]
+    fn file_store_save_reports_parse_error() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let path = temp.path().join("invalid.json");
+        std::fs::write(&path, "{").expect("write invalid json");
+        let store = RadrootsNostrFileAccountStore::new(path.as_path());
+
+        let err = store
+            .save(&RadrootsNostrAccountStoreState::default())
+            .expect_err("invalid json save");
+        assert!(err.to_string().starts_with("store error:"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn file_store_save_reports_write_error() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = tempfile::tempdir().expect("tempdir");
+        let path = temp.path().join("accounts.json");
+        let json = serde_json::to_string(&RadrootsNostrAccountStoreState::default())
+            .expect("serialize");
+        std::fs::write(&path, json).expect("write json");
+        let store = RadrootsNostrFileAccountStore::new(path.as_path());
+
+        let mut perms = std::fs::metadata(temp.path())
+            .expect("dir metadata")
+            .permissions();
+        perms.set_mode(0o500);
+        std::fs::set_permissions(temp.path(), perms).expect("set perms");
+
+        let err = store
+            .save(&RadrootsNostrAccountStoreState::default())
+            .expect_err("read-only save");
+        assert!(err.to_string().starts_with("store error:"));
+
+        let mut perms = std::fs::metadata(temp.path())
+            .expect("dir metadata")
+            .permissions();
+        perms.set_mode(0o700);
+        std::fs::set_permissions(temp.path(), perms).expect("restore perms");
+    }
+
+    #[test]
     fn memory_store_round_trip() {
         let store = RadrootsNostrMemoryAccountStore::new();
         let state = RadrootsNostrAccountStoreState::default();
@@ -140,10 +196,12 @@ mod tests {
         })
         .join();
 
-        let load = store.load();
-        assert!(matches!(load, Err(RadrootsNostrAccountsError::Store(_))));
+        let load = store.load().expect_err("poisoned load");
+        assert!(load.to_string().contains("memory store lock poisoned"));
 
-        let save = store.save(&RadrootsNostrAccountStoreState::default());
-        assert!(matches!(save, Err(RadrootsNostrAccountsError::Store(_))));
+        let save = store
+            .save(&RadrootsNostrAccountStoreState::default())
+            .expect_err("poisoned save");
+        assert!(save.to_string().contains("memory store lock poisoned"));
     }
 }
