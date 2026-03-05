@@ -307,4 +307,14 @@ mod tests {
             serde_json::from_str(&request_tags_json).expect("request tags json");
         assert!(!request_tags.is_empty());
     }
+
+    #[test]
+    fn listing_bindings_surface_builder_errors() {
+        let mut listing = sample_listing();
+        listing.d_tag.clear();
+        let listing_json = serde_json::to_string(&listing).expect("listing json");
+
+        assert!(listing_tags(&listing_json).is_err());
+        assert!(listing_tags_full(&listing_json).is_err());
+    }
 }
