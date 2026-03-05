@@ -283,6 +283,18 @@ fn from_secret_key_bytes_rejects_wrong_length() {
 }
 
 #[test]
+fn from_secret_key_str_rejects_invalid_secret() {
+    let err = RadrootsIdentity::from_secret_key_str("not-a-secret-key").unwrap_err();
+    assert!(matches!(err, IdentityError::InvalidSecretKey(_)));
+}
+
+#[test]
+fn from_secret_key_bytes_rejects_invalid_scalar() {
+    let err = RadrootsIdentity::from_secret_key_bytes(&[0u8; 32]).unwrap_err();
+    assert!(matches!(err, IdentityError::InvalidSecretKey(_)));
+}
+
+#[test]
 fn load_from_path_reports_not_found_and_read_errors() {
     let dir = tempfile::tempdir().unwrap();
     let missing = dir.path().join("missing-identity.json");
@@ -330,6 +342,82 @@ fn load_from_json_file_without_public_key_succeeds() {
 }
 
 #[test]
+fn load_from_json_file_rejects_invalid_secret_key_string() {
+    let payload = serde_json::json!({
+        "secret_key": "invalid-secret-key",
+        "public_key": null,
+    });
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("identity.json");
+    std::fs::write(&path, payload.to_string()).unwrap();
+
+    let err = RadrootsIdentity::load_from_path_auto(&path).unwrap_err();
+    assert!(matches!(err, IdentityError::InvalidSecretKey(_)));
+}
+
+#[test]
+fn load_from_json_file_rejects_invalid_public_key_value() {
+    let keys = nostr::Keys::generate();
+    let identity = RadrootsIdentity::new(keys);
+    let mut file = identity.to_file();
+    file.public_key = Some("invalid-public-key".to_string());
+    let json = serde_json::to_string(&file).unwrap();
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("identity.json");
+    std::fs::write(&path, json).unwrap();
+
+    let err = RadrootsIdentity::load_from_path_auto(&path).unwrap_err();
+    assert!(matches!(err, IdentityError::InvalidPublicKey(_)));
+}
+
+#[test]
+fn save_json_rejects_directory_target() {
+    let identity = RadrootsIdentity::generate();
+    let dir = tempfile::tempdir().unwrap();
+    let err = identity.save_json(dir.path()).unwrap_err();
+    assert!(matches!(err, IdentityError::Store(_)));
+}
+
+#[cfg(unix)]
+#[test]
+fn save_json_reports_write_failure_on_read_only_directory() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let identity = RadrootsIdentity::generate();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("identity.json");
+    identity.save_json(path.as_path()).unwrap();
+
+    std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o500)).unwrap();
+    let err_path = identity.save_json(path.as_path()).unwrap_err();
+    assert!(matches!(err_path, IdentityError::Store(_)));
+    let err_path_buf = identity.save_json(&path).unwrap_err();
+    assert!(matches!(err_path_buf, IdentityError::Store(_)));
+    std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn load_or_generate_reports_save_failure_when_parent_not_writable() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = tempfile::tempdir().unwrap();
+    let parent = dir.path().join("readonly");
+    std::fs::create_dir(&parent).unwrap();
+    std::fs::set_permissions(&parent, std::fs::Permissions::from_mode(0o500)).unwrap();
+
+    let path = parent.join("identity.json");
+    let err =
+        RadrootsIdentity::load_or_generate::<&std::path::Path>(Some(path.as_path()), true)
+            .unwrap_err();
+    assert!(matches!(err, IdentityError::Store(_)));
+    let err_path_buf = RadrootsIdentity::load_or_generate(Some(&path), true).unwrap_err();
+    assert!(matches!(err_path_buf, IdentityError::Store(_)));
+    std::fs::set_permissions(&parent, std::fs::Permissions::from_mode(0o700)).unwrap();
+}
+
+#[test]
 fn load_or_generate_uses_default_path_when_missing() {
     let original = std::env::current_dir().unwrap();
     let dir = tempfile::tempdir().unwrap();
@@ -362,6 +450,23 @@ fn load_or_generate_prefers_existing_path() {
 
     let loaded = RadrootsIdentity::load_or_generate(Some(&path), false).unwrap();
     assert_eq!(loaded.public_key(), keys.public_key());
+}
+
+#[test]
+fn path_ref_variants_cover_success_paths() {
+    let identity = RadrootsIdentity::generate();
+    let dir = tempfile::tempdir().unwrap();
+
+    let saved_path = dir.path().join("saved.json");
+    identity.save_json(saved_path.as_path()).unwrap();
+    let loaded = RadrootsIdentity::load_from_path_auto(saved_path.as_path()).unwrap();
+    assert_eq!(loaded.public_key(), identity.public_key());
+
+    let generated_path = dir.path().join("generated.json");
+    let generated = RadrootsIdentity::load_or_generate(Some(generated_path.as_path()), true).unwrap();
+    assert!(generated_path.exists());
+    let roundtrip = RadrootsIdentity::load_from_path_auto(generated_path.as_path()).unwrap();
+    assert_eq!(generated.public_key(), roundtrip.public_key());
 }
 
 #[test]
