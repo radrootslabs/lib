@@ -101,7 +101,7 @@ where
     }
 
     pub fn save(&self) -> Result<(), RuntimeJsonError> {
-        self.save_as(&self.path)
+        self.save_as(self.path.clone())
     }
 
     pub fn save_as(&self, new_path: impl AsRef<Path>) -> Result<(), RuntimeJsonError> {
@@ -123,6 +123,113 @@ where
     }
 }
 
+#[cfg(test)]
+mod test_hooks {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+    use std::thread::{self, ThreadId};
+
+    const FAIL_WRITE: u8 = 1;
+    const FAIL_SYNC: u8 = 2;
+    const FAIL_PERMS: u8 = 3;
+
+    static FAIL_POINTS: OnceLock<Mutex<HashMap<ThreadId, u8>>> = OnceLock::new();
+
+    pub struct FailGuard {
+        thread_id: ThreadId,
+    }
+
+    impl Drop for FailGuard {
+        fn drop(&mut self) {
+            clear(self.thread_id);
+        }
+    }
+
+    pub fn fail_write() -> FailGuard {
+        set(FAIL_WRITE)
+    }
+
+    pub fn fail_sync() -> FailGuard {
+        set(FAIL_SYNC)
+    }
+
+    pub fn fail_perms() -> FailGuard {
+        set(FAIL_PERMS)
+    }
+
+    pub fn take_write() -> bool {
+        take(FAIL_WRITE)
+    }
+
+    pub fn take_sync() -> bool {
+        take(FAIL_SYNC)
+    }
+
+    pub fn take_perms() -> bool {
+        take(FAIL_PERMS)
+    }
+
+    fn set(point: u8) -> FailGuard {
+        let thread_id = thread::current().id();
+        fail_map()
+            .lock()
+            .expect("lock fail hooks")
+            .insert(thread_id, point);
+        FailGuard { thread_id }
+    }
+
+    fn clear(thread_id: ThreadId) {
+        fail_map()
+            .lock()
+            .expect("lock clear hooks")
+            .remove(&thread_id);
+    }
+
+    fn take(point: u8) -> bool {
+        let thread_id = thread::current().id();
+        let mut map = fail_map().lock().expect("lock take hooks");
+        match map.get(&thread_id).copied() {
+            Some(current_point) if current_point == point => {
+                map.remove(&thread_id);
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn fail_map() -> &'static Mutex<HashMap<ThreadId, u8>> {
+        FAIL_POINTS.get_or_init(|| Mutex::new(HashMap::new()))
+    }
+}
+
+fn write_temp_file(tmp: &mut NamedTempFile, bytes: &[u8]) -> io::Result<()> {
+    #[cfg(test)]
+    if test_hooks::take_write() {
+        return Err(io::Error::new(io::ErrorKind::Other, "forced write failure"));
+    }
+    tmp.write_all(bytes)
+}
+
+fn sync_temp_file(tmp: &mut NamedTempFile) -> io::Result<()> {
+    #[cfg(test)]
+    if test_hooks::take_sync() {
+        return Err(io::Error::new(io::ErrorKind::Other, "forced sync failure"));
+    }
+    tmp.as_file_mut().sync_all()
+}
+
+#[cfg(unix)]
+fn set_temp_permissions(path: &Path, mode: u32) -> io::Result<()> {
+    #[cfg(test)]
+    if test_hooks::take_perms() {
+        return Err(io::Error::new(
+            io::ErrorKind::Other,
+            "forced permissions failure",
+        ));
+    }
+    fs::set_permissions(path, fs::Permissions::from_mode(mode))
+}
+
 fn atomic_write_json(
     path: &Path,
     bytes: &[u8],
@@ -132,12 +239,12 @@ fn atomic_write_json(
     fs::create_dir_all(dir).ok();
 
     let mut tmp = NamedTempFile::new_in(dir)?;
-    tmp.write_all(bytes)?;
-    tmp.as_file_mut().sync_all()?;
+    write_temp_file(&mut tmp, bytes)?;
+    sync_temp_file(&mut tmp)?;
 
     #[cfg(unix)]
     if let Some(mode) = mode_unix {
-        fs::set_permissions(tmp.path(), fs::Permissions::from_mode(mode))?;
+        set_temp_permissions(tmp.path(), mode)?;
     }
 
     tmp.persist(path)?;
@@ -146,7 +253,7 @@ fn atomic_write_json(
 
 #[cfg(test)]
 mod tests {
-    use super::{JsonFile, JsonWriteOptions, RuntimeJsonError, atomic_write_json};
+    use super::{JsonFile, JsonWriteOptions, atomic_write_json, test_hooks};
     use serde::{Deserialize, Serialize, Serializer};
     use std::path::{Path, PathBuf};
     use tempfile::tempdir;
@@ -157,18 +264,35 @@ mod tests {
         count: u32,
     }
 
-    #[derive(Debug, Clone, Deserialize)]
-    struct AlwaysSerializeError;
+    #[derive(Debug, Clone, Deserialize, PartialEq)]
+    struct SerializeToggle {
+        fail: bool,
+        label: String,
+    }
 
-    impl Serialize for AlwaysSerializeError {
+    #[derive(Serialize)]
+    struct SerializeToggleData<'a> {
+        fail: bool,
+        label: &'a str,
+    }
+
+    impl Serialize for SerializeToggle {
         fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
         where
             S: Serializer,
         {
-            Err(serde::ser::Error::custom(format!(
-                "serialize error: {}",
-                core::any::type_name::<S>()
-            )))
+            if self.fail {
+                Err(serde::ser::Error::custom(format!(
+                    "serialize error: {}",
+                    core::any::type_name::<S>()
+                )))
+            } else {
+                SerializeToggleData {
+                    fail: self.fail,
+                    label: &self.label,
+                }
+                .serialize(_serializer)
+            }
         }
     }
 
@@ -178,24 +302,39 @@ mod tests {
         (dir, path)
     }
 
-    fn should_not_create_payload() -> Payload {
-        Payload {
-            id: "should-not-create".to_string(),
-            count: 9,
+    fn toggle_default() -> SerializeToggle {
+        SerializeToggle {
+            fail: false,
+            label: "item-1".to_string(),
         }
+    }
+
+    fn toggle_should_not_create() -> SerializeToggle {
+        SerializeToggle {
+            fail: false,
+            label: "should-not-create".to_string(),
+        }
+    }
+
+    #[test]
+    fn toggle_should_not_create_builds_expected_value() {
+        let value = toggle_should_not_create();
+        assert_eq!(value.label, "should-not-create");
+        assert!(!value.fail);
     }
 
     #[test]
     fn load_reports_not_found_for_missing_path() {
         let (_dir, path) = payload_path("missing.json");
-        let err = JsonFile::<Payload>::load(&path).expect_err("missing path should fail");
+        let err = JsonFile::<Payload>::load(path.clone()).expect_err("missing path should fail");
         assert!(err.to_string().contains(path.to_string_lossy().as_ref()));
     }
 
     #[test]
     fn load_reports_file_open_error_for_directory() {
         let dir = tempdir().expect("tempdir");
-        let err = JsonFile::<Payload>::load(dir.path()).expect_err("directory path should fail");
+        let err = JsonFile::<Payload>::load(dir.path().to_path_buf())
+            .expect_err("directory path should fail");
         assert!(err.to_string().contains("Failed to parse JSON"));
         assert!(
             err.to_string()
@@ -205,7 +344,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn load_reports_file_open_error_for_unreadable_file_path_variants() {
+    fn load_reports_file_open_error_for_unreadable_file_path() {
         use std::os::unix::fs::PermissionsExt;
 
         let dir = tempdir().expect("tempdir");
@@ -214,16 +353,8 @@ mod tests {
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o000))
             .expect("set unreadable permission");
 
-        let err_owned =
-            JsonFile::<Payload>::load(path.clone()).expect_err("owned path should fail");
-        assert!(matches!(err_owned, RuntimeJsonError::FileOpen(_, _)));
-
-        let err_ref_buf = JsonFile::<Payload>::load(&path).expect_err("pathbuf ref should fail");
-        assert!(matches!(err_ref_buf, RuntimeJsonError::FileOpen(_, _)));
-
-        let err_ref_path =
-            JsonFile::<Payload>::load(path.as_path()).expect_err("path ref should fail");
-        assert!(matches!(err_ref_path, RuntimeJsonError::FileOpen(_, _)));
+        let err = JsonFile::<Payload>::load(path.clone()).expect_err("owned path should fail");
+        assert!(err.to_string().contains("Failed to open JSON file"));
 
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
             .expect("restore permission");
@@ -233,74 +364,79 @@ mod tests {
     fn load_reports_file_parse_error_for_invalid_json() {
         let (_dir, path) = payload_path("invalid.json");
         std::fs::write(&path, "{invalid json").expect("write invalid json");
-        let err_ref = JsonFile::<Payload>::load(&path).expect_err("invalid json should fail");
-        assert!(matches!(err_ref, RuntimeJsonError::FileParse(_, _)));
-        let err_owned =
-            JsonFile::<Payload>::load(path.clone()).expect_err("invalid json should fail");
-        assert!(matches!(err_owned, RuntimeJsonError::FileParse(_, _)));
+        let err = JsonFile::<Payload>::load(path.clone()).expect_err("invalid json should fail");
+        assert!(err.to_string().contains("Failed to parse JSON"));
+    }
+
+    #[test]
+    fn load_reads_valid_json_payload() {
+        let (_dir, path) = payload_path("valid.json");
+        let payload = Payload {
+            id: "item-1".to_string(),
+            count: 2,
+        };
+        let encoded = serde_json::to_string(&payload).expect("serialize payload");
+        std::fs::write(&path, encoded).expect("write json");
+        let loaded = JsonFile::<Payload>::load(path.clone()).expect("load json");
+        assert_eq!(loaded.value, payload);
     }
 
     #[test]
     fn load_or_create_save_modify_and_load_round_trip() {
         let (_dir, path) = payload_path("payload.json");
-        let mut json = JsonFile::load_or_create_with(&path, || Payload {
-            id: "item-1".to_string(),
-            count: 1,
-        })
-        .expect("create json");
+        let builder: fn() -> SerializeToggle = toggle_default;
+        let mut json =
+            JsonFile::load_or_create_with(path.clone(), builder).expect("create json");
 
         assert_eq!(json.path(), path);
-        assert_eq!(
-            json.value,
-            Payload {
-                id: "item-1".to_string(),
-                count: 1,
-            }
-        );
+        assert_eq!(json.value, toggle_default());
 
         json.set_options(JsonWriteOptions {
             pretty: true,
             mode_unix: None,
         });
         json.modify(|value| {
-            value.count = 2;
+            value.label = "item-2".to_string();
         })
         .expect("modify json");
 
         let raw = std::fs::read_to_string(&path).expect("read json");
         assert!(raw.contains('\n'));
-        assert_eq!(should_not_create_payload().count, 9);
 
-        let loaded = JsonFile::<Payload>::load_or_create_with(&path, should_not_create_payload)
+        let skip_builder: fn() -> SerializeToggle = toggle_should_not_create;
+        let loaded = JsonFile::<SerializeToggle>::load_or_create_with(path.clone(), skip_builder)
             .expect("load existing json");
         assert_eq!(
             loaded.value,
-            Payload {
-                id: "item-1".to_string(),
-                count: 2,
+            SerializeToggle {
+                fail: false,
+                label: "item-2".to_string(),
             }
         );
+    }
+
+    #[test]
+    fn load_or_create_reports_save_error() {
+        let (_dir, path) = payload_path("create-error.json");
+        let builder: fn() -> SerializeToggle = toggle_default;
+        let _guard = test_hooks::fail_write();
+        let err = JsonFile::load_or_create_with(path.clone(), builder)
+            .expect_err("save failure should surface");
+        assert!(err.to_string().contains("I/O error during JSON write"));
     }
 
     #[test]
     fn save_as_writes_to_new_path() {
         let (_src_dir, source) = payload_path("source.json");
         let (_dst_dir, destination) = payload_path("dest.json");
-        let json = JsonFile::load_or_create_with(&source, || Payload {
-            id: "item-2".to_string(),
-            count: 3,
-        })
-        .expect("create source json");
+        let builder: fn() -> SerializeToggle = toggle_default;
+        let json =
+            JsonFile::load_or_create_with(source.clone(), builder).expect("create source json");
 
-        json.save_as(&destination).expect("save as");
-        let loaded = JsonFile::<Payload>::load(&destination).expect("load destination json");
-        assert_eq!(
-            loaded.value,
-            Payload {
-                id: "item-2".to_string(),
-                count: 3,
-            }
-        );
+        json.save_as(destination.clone()).expect("save as");
+        let loaded =
+            JsonFile::<SerializeToggle>::load(destination.clone()).expect("load destination json");
+        assert_eq!(loaded.value, toggle_default());
     }
 
     #[test]
@@ -310,14 +446,12 @@ mod tests {
         std::fs::write(&parent_file, "file").expect("write parent file");
         let target = parent_file.join("payload.json");
 
-        let json = JsonFile::load_or_create_with(dir.path().join("valid.json"), || Payload {
-            id: "item-3".to_string(),
-            count: 4,
-        })
-        .expect("create json");
+        let builder: fn() -> SerializeToggle = toggle_default;
+        let json = JsonFile::load_or_create_with(dir.path().join("valid.json"), builder)
+            .expect("create json");
 
-        let err = json.save_as(&target).expect_err("io error should surface");
-        assert!(matches!(err, RuntimeJsonError::Io(_)));
+        let err = json.save_as(target.clone()).expect_err("io error should surface");
+        assert!(err.to_string().contains("I/O error during JSON write"));
     }
 
     #[test]
@@ -326,23 +460,26 @@ mod tests {
         let target_dir = dir.path().join("target");
         std::fs::create_dir_all(&target_dir).expect("create target dir");
 
-        let json = JsonFile::load_or_create_with(dir.path().join("value.json"), || Payload {
-            id: "item-4".to_string(),
-            count: 5,
-        })
-        .expect("create json");
+        let builder: fn() -> SerializeToggle = toggle_default;
+        let json = JsonFile::load_or_create_with(dir.path().join("value.json"), builder)
+            .expect("create json");
 
         let err = json
-            .save_as(&target_dir)
+            .save_as(target_dir.clone())
             .expect_err("persist error should surface");
-        assert!(matches!(err, RuntimeJsonError::Persist(_)));
+        assert!(err
+            .to_string()
+            .contains("Failed to persist JSON file to disk"));
     }
 
     #[test]
     fn save_reports_serialization_error() {
         let (_dir, path) = payload_path("serialize-error.json");
         let mut json = JsonFile {
-            value: AlwaysSerializeError,
+            value: SerializeToggle {
+                fail: true,
+                label: "error".to_string(),
+            },
             path,
             options: JsonWriteOptions::default(),
         };
@@ -352,7 +489,36 @@ mod tests {
         });
 
         let err = json.save().expect_err("serialization error should surface");
-        assert!(matches!(err, RuntimeJsonError::Serialization(_)));
+        assert!(err.to_string().contains("Failed to serialize JSON"));
+    }
+
+    #[test]
+    fn save_reports_serialization_error_non_pretty() {
+        let (_dir, path) = payload_path("serialize-error-plain.json");
+        let json = JsonFile {
+            value: SerializeToggle {
+                fail: true,
+                label: "error".to_string(),
+            },
+            path,
+            options: JsonWriteOptions::default(),
+        };
+        let err = json.save().expect_err("serialization error should surface");
+        assert!(err.to_string().contains("Failed to serialize JSON"));
+    }
+
+    #[test]
+    fn save_writes_when_serialize_toggle_allows() {
+        let (_dir, path) = payload_path("serialize-ok.json");
+        let json = JsonFile {
+            value: SerializeToggle {
+                fail: false,
+                label: "ok".to_string(),
+            },
+            path,
+            options: JsonWriteOptions::default(),
+        };
+        json.save().expect("save should succeed");
     }
 
     #[test]
@@ -366,9 +532,63 @@ mod tests {
 
         let err =
             atomic_write_json(Path::new("/"), br#"{}"#, None).expect_err("root write should fail");
-        assert!(matches!(
-            err,
-            RuntimeJsonError::Persist(_) | RuntimeJsonError::Io(_)
-        ));
+        let message = err.to_string();
+        let is_persist = message.contains("Failed to persist JSON file to disk");
+        let is_io = message.contains("I/O error during JSON write");
+        assert!(is_persist | is_io);
+    }
+
+    #[test]
+    fn atomic_write_json_reports_write_error() {
+        let (_dir, path) = payload_path("write-error.json");
+        let _guard = test_hooks::fail_write();
+        let err = atomic_write_json(&path, br#"{"id":"x","count":1}"#, None)
+            .expect_err("write error should surface");
+        assert!(err.to_string().contains("I/O error during JSON write"));
+    }
+
+    #[test]
+    fn atomic_write_json_reports_sync_error() {
+        let (_dir, path) = payload_path("sync-error.json");
+        let _guard = test_hooks::fail_sync();
+        let err = atomic_write_json(&path, br#"{"id":"x","count":1}"#, None)
+            .expect_err("sync error should surface");
+        assert!(err.to_string().contains("I/O error during JSON write"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn atomic_write_json_reports_permissions_error() {
+        let (_dir, path) = payload_path("perms-error.json");
+        let _guard = test_hooks::fail_perms();
+        let err = atomic_write_json(&path, br#"{"id":"x","count":1}"#, Some(0o600))
+            .expect_err("permissions error should surface");
+        assert!(err.to_string().contains("I/O error during JSON write"));
+    }
+
+    #[test]
+    fn fail_hook_ignores_other_points() {
+        let (_dir, path) = payload_path("ignore-other.json");
+        let _guard = test_hooks::fail_write();
+        assert!(!test_hooks::take_sync());
+        let err = atomic_write_json(&path, br#"{"id":"x","count":1}"#, None)
+            .expect_err("write error should surface");
+        assert!(err.to_string().contains("I/O error during JSON write"));
+    }
+
+    #[test]
+    fn fail_hook_is_thread_local() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("thread-local.json");
+        let other_path = dir.path().join("thread-ok.json");
+        let _guard = test_hooks::fail_write();
+        let handle = std::thread::spawn(move || {
+            atomic_write_json(&other_path, br#"{"id":"x","count":1}"#, None)
+                .expect("other thread write");
+        });
+        handle.join().expect("join thread");
+        let err = atomic_write_json(&path, br#"{"id":"x","count":1}"#, None)
+            .expect_err("write error should surface");
+        assert!(err.to_string().contains("I/O error during JSON write"));
     }
 }

@@ -35,9 +35,28 @@ fn default_log_file_name_from_exe_name(exe_name: Option<String>) -> String {
 }
 
 fn log_name_from_exe() -> Option<String> {
-    let exe = std::env::current_exe().ok()?;
+    log_name_from_path(std::env::current_exe().ok())
+}
+
+fn log_name_from_path(exe: Option<PathBuf>) -> Option<String> {
+    let exe = exe?;
     let name = exe.file_stem()?.to_string_lossy();
     log_name_from_stem(name.as_ref())
+}
+
+#[cfg(test)]
+mod test_hooks {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    static IGNORE_ENV: AtomicBool = AtomicBool::new(false);
+
+    pub fn set_ignore_env(ignore: bool) {
+        IGNORE_ENV.store(ignore, Ordering::SeqCst);
+    }
+
+    pub fn ignore_env() -> bool {
+        IGNORE_ENV.load(Ordering::SeqCst)
+    }
 }
 
 fn log_name_from_stem(stem: &str) -> Option<String> {
@@ -49,6 +68,10 @@ fn log_name_from_stem(stem: &str) -> Option<String> {
 }
 
 fn env_value(key: &str) -> Option<String> {
+    #[cfg(test)]
+    if test_hooks::ignore_env() {
+        return None;
+    }
     let value = std::env::var(key).ok()?;
     normalize_env_value(&value)
 }
@@ -88,7 +111,8 @@ fn resolve_default_level(env_level: Option<String>, default_level: Option<&str>)
 mod tests {
     use super::{
         default_log_file_name, default_log_file_name_from_exe_name, env_path, env_value, init,
-        init_with, log_name_from_stem, normalize_env_value, resolve_default_level, resolve_log_dir,
+        init_with, log_name_from_path, log_name_from_stem, normalize_env_value,
+        resolve_default_level, resolve_log_dir, test_hooks,
     };
     use std::path::{Path, PathBuf};
     use tempfile::tempdir;
@@ -116,6 +140,16 @@ mod tests {
             Some("radrootsd.log".to_string())
         );
         assert_eq!(log_name_from_stem(""), None);
+    }
+
+    #[test]
+    fn log_name_from_path_handles_missing_components() {
+        assert_eq!(log_name_from_path(None), None);
+        assert_eq!(log_name_from_path(Some(PathBuf::from("/"))), None);
+        assert_eq!(
+            log_name_from_path(Some(PathBuf::from("/tmp/radrootsd"))),
+            Some("radrootsd.log".to_string())
+        );
     }
 
     #[test]
@@ -157,6 +191,15 @@ mod tests {
     #[test]
     fn init_paths_execute() {
         let dir = tempdir().expect("tempdir");
+        test_hooks::set_ignore_env(true);
+        let invalid = dir.path().join("not-a-dir");
+        std::fs::write(&invalid, "file").expect("write invalid path");
+        let err_path = init_with(invalid.as_path(), Some("info"));
+        assert!(err_path.is_err());
+        let invalid_str = invalid.to_string_lossy().to_string();
+        let err_str = init_with(invalid_str.as_str(), Some("info"));
+        assert!(err_str.is_err());
+        test_hooks::set_ignore_env(false);
         let first = init_with(dir.path(), Some("info"));
         assert!(first.is_ok());
         let owned_path = dir.path().to_path_buf();

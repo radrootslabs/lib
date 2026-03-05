@@ -39,18 +39,47 @@ where
 #[cfg(test)]
 mod tests {
     use super::{shutdown_signal, wait_for_shutdown};
-    use core::future::{pending, ready};
+    use core::future::Future;
+    use core::pin::Pin;
+    use core::task::{Context, Poll};
     use std::process::Command;
     use std::time::Duration;
 
+    struct TestFuture {
+        ready: bool,
+    }
+
+    impl Future for TestFuture {
+        type Output = ();
+
+        fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+            if self.ready {
+                Poll::Ready(())
+            } else {
+                Poll::Pending
+            }
+        }
+    }
+
     #[tokio::test]
     async fn wait_for_shutdown_returns_when_ctrl_completes() {
-        wait_for_shutdown(ready(()), pending::<()>()).await;
+        wait_for_shutdown(TestFuture { ready: true }, TestFuture { ready: false }).await;
     }
 
     #[tokio::test]
     async fn wait_for_shutdown_returns_when_terminate_completes() {
-        wait_for_shutdown(pending::<()>(), ready(())).await;
+        wait_for_shutdown(TestFuture { ready: false }, TestFuture { ready: true }).await;
+    }
+
+    #[tokio::test]
+    async fn wait_for_shutdown_polls_pending_paths() {
+        let handle = tokio::task::spawn(wait_for_shutdown(
+            TestFuture { ready: false },
+            TestFuture { ready: false },
+        ));
+        tokio::task::yield_now().await;
+        handle.abort();
+        let _ = handle.await;
     }
 
     #[cfg(unix)]
