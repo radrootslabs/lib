@@ -337,10 +337,18 @@ fn validate_publish_package_metadata(
     workspace_root: &Path,
     publish_crates: &BTreeSet<String>,
 ) -> Result<(), String> {
-    let manifests = workspace_package_manifests(workspace_root)?;
+    let mut package_tables = BTreeMap::new();
+    for record in workspace_package_records(workspace_root)? {
+        if package_tables
+            .insert(record.name, record.manifest_value)
+            .is_some()
+        {
+            return Err("duplicate workspace package name in package metadata map".to_string());
+        }
+    }
     for crate_name in publish_crates {
-        let manifest_path = match manifests.get(crate_name) {
-            Some(manifest_path) => manifest_path,
+        let parsed = match package_tables.get(crate_name) {
+            Some(parsed) => parsed,
             None => {
                 return Err(format!(
                     "publish crate {} has no workspace manifest",
@@ -348,11 +356,10 @@ fn validate_publish_package_metadata(
                 ));
             }
         };
-        let parsed = parse_toml::<toml::Value>(manifest_path)?;
         let package = parsed
             .get("package")
             .and_then(toml::Value::as_table)
-            .expect("workspace package manifests include [package] table");
+            .expect("workspace package records include [package] table");
 
         if !package_field_configured(package, "description") {
             return Err(format!(
@@ -706,7 +713,8 @@ fn validate_release_publish_policy(
         .enumerate()
         .map(|(idx, name)| (name.clone(), idx))
         .collect::<BTreeMap<_, _>>();
-    let dependencies = read_workspace_package_dependencies(workspace_root)?;
+    let dependencies = read_workspace_package_dependencies(workspace_root)
+        .expect("workspace package manifests were already parsed");
     for crate_name in &publish_set {
         let crate_deps = &dependencies[crate_name];
         let crate_order = order_index[crate_name];
@@ -724,7 +732,8 @@ fn validate_release_publish_policy(
         }
     }
 
-    let publish_flags = workspace_package_publish_flags(workspace_root)?;
+    let publish_flags = workspace_package_publish_flags(workspace_root)
+        .expect("workspace publish flags are stable");
     for crate_name in &publish_set {
         let flag = publish_flags[crate_name];
         if !flag {
@@ -750,10 +759,14 @@ fn validate_release_publish_policy(
 pub fn validate_release_preflight(workspace_root: &Path) -> Result<(), String> {
     let bundle = load_contract_bundle(workspace_root)?;
     validate_contract_bundle(&bundle)?;
-    let release = load_release_contract(&bundle.root)?;
-    let required = load_coverage_required(&bundle.root)?;
-    let publish_crates = collect_unique_set(&release.publish.crates, "publish.crates")?;
-    let required_crates = collect_unique_set(&required.required.crates, "required.crates")?;
+    let release =
+        load_release_contract(&bundle.root).expect("validated contract includes release metadata");
+    let required = load_coverage_required(&bundle.root)
+        .expect("validated contract includes coverage metadata");
+    let publish_crates = collect_unique_set(&release.publish.crates, "publish.crates")
+        .expect("validated contract enforces unique publish.crates");
+    let required_crates = collect_unique_set(&required.required.crates, "required.crates")
+        .expect("validated contract enforces unique required.crates");
     validate_publish_package_metadata(workspace_root, &publish_crates)?;
     validate_required_coverage_summary(workspace_root, &required_crates)?;
     Ok(())
@@ -1947,6 +1960,473 @@ members = ["crates/a", "crates/b"]
         let dup_err = workspace_package_publish_flags(&dup).expect_err("duplicate publish flags");
         assert!(dup_err.contains("duplicate workspace package name"));
         let _ = fs::remove_dir_all(&dup);
+    }
+
+    #[test]
+    fn workspace_package_records_and_callers_report_member_manifest_errors() {
+        let root = temp_root("workspace_package_record_errors");
+        write_file(
+            &root.join("Cargo.toml"),
+            r#"[workspace]
+members = ["crates/a"]
+"#,
+        );
+
+        let read_err =
+            workspace_package_records(&root).expect_err("missing member manifest should fail");
+        assert!(read_err.contains("read"));
+
+        let names_err = workspace_package_names(&root).expect_err("names should fail");
+        assert!(names_err.contains("read"));
+        let manifests_err = workspace_package_manifests(&root).expect_err("manifests should fail");
+        assert!(manifests_err.contains("read"));
+        let flags_err = workspace_package_publish_flags(&root).expect_err("flags should fail");
+        assert!(flags_err.contains("read"));
+        let deps_err = read_workspace_package_dependencies(&root).expect_err("deps should fail");
+        assert!(deps_err.contains("read"));
+
+        let publish = ["radroots-a".to_string()]
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+        let publish_err =
+            validate_publish_package_metadata(&root, &publish).expect_err("publish metadata");
+        assert!(publish_err.contains("read"));
+
+        write_file(
+            &root.join("crates").join("a").join("Cargo.toml"),
+            "[package",
+        );
+        let parse_value_err =
+            workspace_package_records(&root).expect_err("invalid toml should fail");
+        assert!(parse_value_err.contains("parse"));
+
+        write_file(
+            &root.join("crates").join("a").join("Cargo.toml"),
+            r#"[workspace]
+resolver = "2"
+"#,
+        );
+        let parse_package_err =
+            workspace_package_records(&root).expect_err("missing package table should fail");
+        assert!(parse_package_err.contains("parse"));
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn workspace_package_manifests_success_and_publish_metadata_duplicate_names() {
+        let root = create_synthetic_workspace("workspace_manifest_success");
+        let manifests = workspace_package_manifests(&root).expect("workspace manifests");
+        assert_eq!(manifests.len(), 2);
+        assert!(manifests.contains_key("radroots-a"));
+        assert!(manifests.contains_key("radroots-b"));
+
+        write_file(
+            &root.join("crates").join("b").join("Cargo.toml"),
+            r#"[package]
+name = "radroots-a"
+version = "0.1.0"
+edition = "2024"
+description = "crate b duplicate name"
+repository = "https://example.com/b"
+homepage = "https://example.com/b"
+documentation = "https://docs.example.com/b"
+readme = "README.md"
+publish = false
+"#,
+        );
+        let publish = ["radroots-a".to_string()]
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+        let duplicate_err =
+            validate_publish_package_metadata(&root, &publish).expect_err("duplicate package map");
+        assert!(duplicate_err.contains("duplicate workspace package name"));
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn rollout_release_and_bundle_loaders_report_parse_and_read_errors() {
+        let root = create_synthetic_workspace("rollout_release_loader_errors");
+        let contract_root = root.join("contract");
+
+        let missing_workspace = temp_root("rollout_missing_workspace_manifest");
+        let rollout_workspace_err =
+            validate_coverage_rollout_parity(&missing_workspace, &contract_root)
+                .expect_err("rollout workspace manifest read error");
+        assert!(rollout_workspace_err.contains("Cargo.toml"));
+        let _ = fs::remove_dir_all(&missing_workspace);
+
+        let _ = fs::remove_file(contract_root.join("coverage").join("rollout.toml"));
+        let rollout_load_err = validate_coverage_rollout_parity(&root, &contract_root)
+            .expect_err("rollout read error");
+        assert!(rollout_load_err.contains("rollout.toml"));
+        write_file(
+            &contract_root.join("coverage").join("rollout.toml"),
+            r#"[rollout]
+crates = [
+  { name = "radroots-a", status = "required", order = 1 },
+  { name = "radroots-b", status = "planned", order = 2 },
+]
+"#,
+        );
+
+        let _ = fs::remove_file(contract_root.join("coverage").join("required-crates.toml"));
+        let required_load_err = validate_coverage_rollout_parity(&root, &contract_root)
+            .expect_err("required read error");
+        assert!(required_load_err.contains("required-crates.toml"));
+        write_file(
+            &contract_root.join("coverage").join("required-crates.toml"),
+            "[required]\ncrates = [\"radroots-a\"]\n",
+        );
+
+        let missing_release = temp_root("release_missing_workspace_manifest");
+        let release_workspace_err =
+            validate_release_publish_policy(&missing_release, &contract_root, "1.0.0")
+                .expect_err("release workspace read error");
+        assert!(release_workspace_err.contains("Cargo.toml"));
+        let _ = fs::remove_dir_all(&missing_release);
+
+        let _ = fs::remove_file(contract_root.join("release").join("publish-set.toml"));
+        let release_load_err = validate_release_publish_policy(&root, &contract_root, "1.0.0")
+            .expect_err("release contract read error");
+        assert!(release_load_err.contains("publish-set.toml"));
+
+        write_file(
+            &contract_root.join("release").join("publish-set.toml"),
+            r#"[release]
+version = "1.0.0"
+
+[publish]
+crates = ["radroots-a", "radroots-a"]
+
+[internal]
+crates = ["radroots-b"]
+
+[publish_order]
+crates = ["radroots-a"]
+"#,
+        );
+        let duplicate_publish = validate_release_publish_policy(&root, &contract_root, "1.0.0")
+            .expect_err("duplicate publish crates");
+        assert!(duplicate_publish.contains("publish.crates has duplicate crate"));
+
+        write_file(
+            &contract_root.join("release").join("publish-set.toml"),
+            r#"[release]
+version = "1.0.0"
+
+[publish]
+crates = ["radroots-a"]
+
+[internal]
+crates = ["radroots-b", "radroots-b"]
+
+[publish_order]
+crates = ["radroots-a"]
+"#,
+        );
+        let duplicate_internal = validate_release_publish_policy(&root, &contract_root, "1.0.0")
+            .expect_err("duplicate internal crates");
+        assert!(duplicate_internal.contains("internal.crates has duplicate crate"));
+
+        write_file(
+            &contract_root.join("release").join("publish-set.toml"),
+            r#"[release]
+version = "1.0.0"
+
+[publish]
+crates = ["radroots-a"]
+
+[internal]
+crates = ["radroots-b"]
+
+[publish_order]
+crates = ["radroots-a", "radroots-a"]
+"#,
+        );
+        let duplicate_order = validate_release_publish_policy(&root, &contract_root, "1.0.0")
+            .expect_err("duplicate publish order");
+        assert!(duplicate_order.contains("publish_order.crates has duplicate crate"));
+
+        write_file(
+            &contract_root.join("release").join("publish-set.toml"),
+            r#"[release]
+version = "1.0.0"
+
+[publish]
+crates = ["radroots-a"]
+
+[internal]
+crates = ["radroots-b"]
+
+[publish_order]
+crates = ["radroots-a"]
+"#,
+        );
+        write_file(
+            &root.join("crates").join("a").join("Cargo.toml"),
+            "[package",
+        );
+        let dependency_err = validate_release_publish_policy(&root, &contract_root, "1.0.0")
+            .expect_err("workspace dependency parse error");
+        assert!(dependency_err.contains("parse"));
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn validate_release_preflight_reports_each_stage_error() {
+        let missing_contract_root = temp_root("preflight_missing_contract");
+        let missing_contract_err =
+            validate_release_preflight(&missing_contract_root).expect_err("missing contract");
+        assert!(missing_contract_err.contains("manifest.toml"));
+        let _ = fs::remove_dir_all(&missing_contract_root);
+
+        let invalid_bundle = create_synthetic_workspace("preflight_invalid_bundle");
+        write_file(
+            &invalid_bundle.join("contract").join("manifest.toml"),
+            r#"[contract]
+name = "radroots-contract"
+version = "1.0.0"
+source = "synthetic"
+
+[surface]
+model_crates = ["radroots-a"]
+algorithm_crates = ["radroots-b"]
+wasm_crates = ["radroots-a-wasm"]
+
+[policy]
+exclude_internal_workspace_crates = false
+require_reproducible_exports = true
+require_conformance_vectors = true
+"#,
+        );
+        let invalid_bundle_err =
+            validate_release_preflight(&invalid_bundle).expect_err("bundle validation");
+        assert!(invalid_bundle_err.contains("contract policy flags must all be true"));
+        let _ = fs::remove_dir_all(&invalid_bundle);
+
+        let missing_release = create_synthetic_workspace("preflight_missing_release");
+        let _ = fs::remove_file(
+            missing_release
+                .join("contract")
+                .join("release")
+                .join("publish-set.toml"),
+        );
+        let missing_release_err =
+            validate_release_preflight(&missing_release).expect_err("missing release");
+        assert!(missing_release_err.contains("publish-set.toml"));
+        let _ = fs::remove_dir_all(&missing_release);
+
+        let missing_required = create_synthetic_workspace("preflight_missing_required");
+        let _ = fs::remove_file(
+            missing_required
+                .join("contract")
+                .join("coverage")
+                .join("required-crates.toml"),
+        );
+        let missing_required_err =
+            validate_release_preflight(&missing_required).expect_err("missing required list");
+        assert!(missing_required_err.contains("required-crates.toml"));
+        let _ = fs::remove_dir_all(&missing_required);
+
+        let duplicate_publish = create_synthetic_workspace("preflight_duplicate_publish");
+        write_file(
+            &duplicate_publish
+                .join("contract")
+                .join("release")
+                .join("publish-set.toml"),
+            r#"[release]
+version = "1.0.0"
+
+[publish]
+crates = ["radroots-a", "radroots-a"]
+
+[internal]
+crates = ["radroots-b"]
+
+[publish_order]
+crates = ["radroots-a"]
+"#,
+        );
+        let duplicate_publish_err =
+            validate_release_preflight(&duplicate_publish).expect_err("duplicate publish crates");
+        assert!(duplicate_publish_err.contains("publish.crates has duplicate crate"));
+        let _ = fs::remove_dir_all(&duplicate_publish);
+
+        let duplicate_required = create_synthetic_workspace("preflight_duplicate_required");
+        write_file(
+            &duplicate_required
+                .join("contract")
+                .join("coverage")
+                .join("required-crates.toml"),
+            "[required]\ncrates = [\"radroots-a\", \"radroots-a\"]\n",
+        );
+        let duplicate_required_err =
+            validate_release_preflight(&duplicate_required).expect_err("duplicate required crates");
+        assert!(duplicate_required_err.contains("duplicate coverage required crate"));
+        let _ = fs::remove_dir_all(&duplicate_required);
+
+        let publish_metadata = create_synthetic_workspace("preflight_publish_metadata");
+        write_file(
+            &publish_metadata.join("crates").join("a").join("Cargo.toml"),
+            r#"[package]
+name = "radroots-a"
+version = "0.1.0"
+edition = "2024"
+"#,
+        );
+        let publish_metadata_err =
+            validate_release_preflight(&publish_metadata).expect_err("publish metadata validation");
+        assert!(publish_metadata_err.contains("must define a non-empty package.description"));
+        let _ = fs::remove_dir_all(&publish_metadata);
+
+        let missing_coverage_row = create_synthetic_workspace("preflight_missing_coverage_row");
+        write_file(
+            &missing_coverage_row
+                .join("target")
+                .join("coverage")
+                .join("coverage-refresh.tsv"),
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\n",
+        );
+        let missing_coverage_row_err = validate_release_preflight(&missing_coverage_row)
+            .expect_err("required coverage refresh row missing");
+        assert!(missing_coverage_row_err.contains("missing from coverage-refresh.tsv"));
+        let _ = fs::remove_dir_all(&missing_coverage_row);
+    }
+
+    #[test]
+    fn load_contract_bundle_and_validation_report_version_export_and_rollout_errors() {
+        let root = create_synthetic_workspace("bundle_version_export_and_rollout_errors");
+        write_file(&root.join("contract").join("version.toml"), "[contract");
+        let version_parse_err = load_contract_bundle(&root).expect_err("invalid version file");
+        assert!(version_parse_err.contains("version.toml"));
+
+        write_file(
+            &root.join("contract").join("version.toml"),
+            r#"[contract]
+version = "1.0.0"
+stability = "alpha"
+
+[semver]
+major_on = ["breaking"]
+minor_on = ["feature"]
+patch_on = ["fix"]
+
+[compatibility]
+requires_conformance_pass = true
+requires_export_manifest_diff = true
+requires_release_notes = true
+"#,
+        );
+        write_file(
+            &root.join("contract").join("exports").join("ts.toml"),
+            "[language",
+        );
+        let export_parse_err = load_contract_bundle(&root).expect_err("invalid export mapping");
+        assert!(export_parse_err.contains("ts.toml"));
+
+        write_file(
+            &root.join("contract").join("exports").join("ts.toml"),
+            r#"[language]
+id = "ts"
+repository = "sdk-typescript"
+
+[packages]
+"radroots-a" = "@radroots/a"
+
+[artifacts]
+models_dir = "src/generated"
+constants_dir = "src/generated"
+wasm_dist_dir = "dist"
+manifest_file = "export-manifest.json"
+"#,
+        );
+        let bundle = load_contract_bundle(&root).expect("load bundle");
+        write_file(
+            &root.join("crates").join("core").join("src").join("unit.rs"),
+            r#"pub enum RadrootsCoreUnitDimension {
+Mass,
+Count,
+Volume,
+}
+"#,
+        );
+        let core_err = validate_contract_bundle(&bundle).expect_err("core unit mismatch");
+        assert!(core_err.contains("variant order must be"));
+
+        write_file(
+            &root.join("crates").join("core").join("src").join("unit.rs"),
+            r#"pub enum RadrootsCoreUnitDimension {
+Count,
+Mass,
+Volume,
+}
+"#,
+        );
+        write_file(
+            &root.join("contract").join("coverage").join("rollout.toml"),
+            r#"[rollout]
+crates = [
+  { name = "radroots-a", status = "invalid", order = 1 },
+  { name = "radroots-b", status = "planned", order = 2 },
+]
+"#,
+        );
+        let rollout_err = validate_contract_bundle(&bundle).expect_err("rollout validation");
+        assert!(rollout_err.contains("status must be required or planned"));
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn coverage_summary_and_core_enum_additional_error_paths() {
+        let coverage_root = temp_root("coverage_summary_additional_errors");
+        write_file(
+            &coverage_root
+                .join("target")
+                .join("coverage")
+                .join("coverage-refresh.tsv"),
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots-a\tpass\t100\tbad\t100\t100\tfile\n",
+        );
+        let func_err = load_coverage_refresh_rows(&coverage_root).expect_err("func parse error");
+        assert!(func_err.contains("parse func"));
+        write_file(
+            &coverage_root
+                .join("target")
+                .join("coverage")
+                .join("coverage-refresh.tsv"),
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots-a\tpass\t100\t100\tbad\t100\tfile\n",
+        );
+        let branch_err =
+            load_coverage_refresh_rows(&coverage_root).expect_err("branch parse error");
+        assert!(branch_err.contains("parse branch"));
+        let _ = fs::remove_dir_all(&coverage_root);
+
+        let missing_refresh_root = temp_root("coverage_summary_missing_refresh");
+        let required = ["radroots-a".to_string()]
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+        let missing_refresh_err =
+            validate_required_coverage_summary(&missing_refresh_root, &required)
+                .expect_err("missing refresh should fail");
+        assert!(missing_refresh_err.contains("coverage-refresh.tsv"));
+        let _ = fs::remove_dir_all(&missing_refresh_root);
+
+        let enum_root = temp_root("core_unit_missing_enum");
+        write_file(
+            &enum_root
+                .join("crates")
+                .join("core")
+                .join("src")
+                .join("unit.rs"),
+            "pub struct NotTheEnum;",
+        );
+        let enum_err =
+            validate_core_unit_dimension_variant_order(&enum_root).expect_err("missing enum");
+        assert!(enum_err.contains("missing enum"));
+        let _ = fs::remove_dir_all(&enum_root);
     }
 
     #[test]

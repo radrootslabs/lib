@@ -1323,6 +1323,15 @@ test_threads = 0
     }
 
     #[test]
+    fn parse_toml_parses_valid_coverage_required_contract() {
+        let valid = temp_file_path("parse_toml_valid");
+        write_file(&valid, "[required]\ncrates = [\"radroots-core\"]\n");
+        let parsed = parse_toml::<CoverageRequiredContract>(&valid).expect("valid toml");
+        assert_eq!(parsed.required.crates, vec!["radroots-core".to_string()]);
+        fs::remove_file(valid).expect("remove valid toml");
+    }
+
+    #[test]
     fn read_lcov_rejects_invalid_records() {
         let cases = vec![
             ("invalid_da_shape", "DA:1\n", "invalid DA record"),

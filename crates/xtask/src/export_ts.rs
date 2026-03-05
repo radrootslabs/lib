@@ -3,6 +3,7 @@
 use crate::contract;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -217,8 +218,9 @@ fn export_ts_models_with_selector(
     contract::validate_contract_bundle(&bundle)?;
     let ts_export = ts_export_mapping(&bundle)?;
     let selected_entries = selected_package_entries(ts_export, selector)?;
-    let artifacts = ts_artifacts(ts_export)?;
-    let models_dir = required_artifact_value(&artifacts.models_dir, "models_dir")?;
+    let artifacts = ts_artifacts(ts_export).expect("validated contract includes ts artifacts");
+    let models_dir = required_artifact_value(&artifacts.models_dir, "models_dir")
+        .expect("validated contract includes ts models_dir");
     let source_root = workspace_root.join("target").join("ts-rs");
     if !source_root.exists() {
         return Err(format!(
@@ -234,7 +236,9 @@ fn export_ts_models_with_selector(
         if crate_name.ends_with("-wasm") {
             continue;
         }
-        if !crate_supports_ts_rs(workspace_root, crate_dir)? {
+        if !crate_supports_ts_rs(workspace_root, crate_dir)
+            .expect("validated workspace crate manifests are readable")
+        {
             continue;
         }
         expected += 1;
@@ -273,8 +277,9 @@ fn export_ts_constants_with_selector(
     contract::validate_contract_bundle(&bundle)?;
     let ts_export = ts_export_mapping(&bundle)?;
     let selected_entries = selected_package_entries(ts_export, selector)?;
-    let artifacts = ts_artifacts(ts_export)?;
-    let constants_dir = required_artifact_value(&artifacts.constants_dir, "constants_dir")?;
+    let artifacts = ts_artifacts(ts_export).expect("validated contract includes ts artifacts");
+    let constants_dir = required_artifact_value(&artifacts.constants_dir, "constants_dir")
+        .expect("validated contract includes ts constants_dir");
     let source_root = workspace_root.join("target").join("ts-rs");
     if !source_root.exists() {
         return Err(format!(
@@ -317,8 +322,9 @@ fn export_ts_wasm_artifacts_with_selector(
     contract::validate_contract_bundle(&bundle)?;
     let ts_export = ts_export_mapping(&bundle)?;
     let selected_entries = selected_package_entries(ts_export, selector)?;
-    let artifacts = ts_artifacts(ts_export)?;
-    let wasm_dist_dir = required_artifact_value(&artifacts.wasm_dist_dir, "wasm_dist_dir")?;
+    let artifacts = ts_artifacts(ts_export).expect("validated contract includes ts artifacts");
+    let wasm_dist_dir = required_artifact_value(&artifacts.wasm_dist_dir, "wasm_dist_dir")
+        .expect("validated contract includes ts wasm_dist_dir");
     let ts_out_root = out_dir.join("ts").join("packages");
     let mut copied = 0usize;
     for (crate_name, package_name) in selected_entries {
@@ -356,8 +362,9 @@ pub fn write_ts_export_manifest(workspace_root: &Path, out_dir: &Path) -> Result
     let bundle = contract::load_contract_bundle(workspace_root)?;
     contract::validate_contract_bundle(&bundle)?;
     let ts_export = ts_export_mapping(&bundle)?;
-    let artifacts = ts_artifacts(ts_export)?;
-    let manifest_file = required_artifact_value(&artifacts.manifest_file, "manifest_file")?;
+    let artifacts = ts_artifacts(ts_export).expect("validated contract includes ts artifacts");
+    let manifest_file = required_artifact_value(&artifacts.manifest_file, "manifest_file")
+        .expect("validated contract includes ts manifest_file");
     let ts_root = out_dir.join("ts");
     let manifest_path = ts_root.join(manifest_file);
     let mut files = Vec::new();
@@ -399,12 +406,16 @@ fn generate_ts_rs_sources_with_selector(
         return Err(format!("create {}: {e}", source_root.display()));
     }
     let mut expected = 0usize;
+    let mut supports_ts_rs = BTreeMap::new();
     for (crate_name, _) in &selected_entries {
         if crate_name.ends_with("-wasm") {
             continue;
         }
         let crate_dir = crate_name.strip_prefix("radroots-").unwrap_or(crate_name);
-        if crate_supports_ts_rs(workspace_root, crate_dir)? {
+        let supports = crate_supports_ts_rs(workspace_root, crate_dir)
+            .expect("validated workspace crate manifests are readable");
+        supports_ts_rs.insert(crate_name.as_str(), supports);
+        if supports {
             expected += 1;
         }
     }
@@ -415,8 +426,11 @@ fn generate_ts_rs_sources_with_selector(
         if crate_name.ends_with("-wasm") {
             continue;
         }
-        let crate_dir = crate_name.strip_prefix("radroots-").unwrap_or(crate_name);
-        if !crate_supports_ts_rs(workspace_root, crate_dir)? {
+        if !supports_ts_rs
+            .get(crate_name.as_str())
+            .copied()
+            .unwrap_or(false)
+        {
             continue;
         }
         let package_dir = package_name
@@ -658,6 +672,37 @@ crates = ["radroots-a"]
             "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots-a\tpass\t100.0\t100.0\t100.0\t100.0\tfile\n",
         );
         root
+    }
+
+    fn write_ts_rs_probe_lib(root: &Path) {
+        write_file(
+            &root.join("crates").join("a").join("src").join("lib.rs"),
+            r#"pub fn crate_a() {}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::path::PathBuf;
+
+    #[test]
+    fn write_ts_exports() {
+        if let Ok(path) = std::env::var("RADROOTS_TS_RS_EXPORT_DIR") {
+            let export_dir = PathBuf::from(path);
+            let _ = fs::create_dir_all(&export_dir);
+            fs::write(
+                export_dir.join("types.ts"),
+                "export type Probe = { id: string };\n",
+            )
+            .expect("write types");
+            fs::write(export_dir.join("constants.ts"), "export const PROBE = 1;\n")
+                .expect("write constants");
+            fs::write(export_dir.join("kinds.ts"), "export const KIND = 1;\n")
+                .expect("write kinds");
+        }
+    }
+}
+"#,
+        );
     }
 
     fn test_ts_mapping() -> contract::ExportMapping {
@@ -1277,5 +1322,632 @@ manifest_file = "export-manifest.json"
         assert!(generated.join("a").exists());
         assert!(!generated.join("b").exists());
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn wrapper_calls_succeed_for_bundle_and_single_crate() {
+        let _guard = workspace_lock().lock().expect("workspace lock");
+        let root = create_synthetic_workspace("wrapper_bundle_success", true);
+        write_file(
+            &root.join("contract").join("exports").join("ts.toml"),
+            r#"[language]
+id = "ts"
+repository = "sdk-typescript"
+
+[packages]
+"radroots-a" = "@radroots/a"
+"radroots-b" = "@radroots/b"
+
+[artifacts]
+models_dir = "src/generated"
+constants_dir = "src/generated"
+wasm_dist_dir = "dist"
+manifest_file = "export-manifest.json"
+"#,
+        );
+        write_ts_rs_probe_lib(&root);
+
+        let out_dir = root.join("out");
+        fs::create_dir_all(&out_dir).expect("create bundle out");
+        let manifest = export_ts_bundle(&root, &out_dir).expect("bundle success");
+        assert!(manifest.exists());
+        assert!(
+            out_dir
+                .join("ts")
+                .join("packages")
+                .join("a")
+                .join("src/generated")
+                .join("types.ts")
+                .exists()
+        );
+        assert!(
+            out_dir
+                .join("ts")
+                .join("packages")
+                .join("a")
+                .join("src/generated")
+                .join("constants.ts")
+                .exists()
+        );
+        assert!(
+            out_dir
+                .join("ts")
+                .join("packages")
+                .join("a")
+                .join("src/generated")
+                .join("kinds.ts")
+                .exists()
+        );
+
+        let single_out = root.join("single-out");
+        fs::create_dir_all(&single_out).expect("create single out");
+        let single_manifest =
+            export_ts_bundle_for_crate(&root, &single_out, "radroots-a").expect("single bundle");
+        assert!(single_manifest.exists());
+        assert!(
+            single_out
+                .join("ts")
+                .join("packages")
+                .join("a")
+                .join("src/generated")
+                .join("types.ts")
+                .exists()
+        );
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn wrapper_calls_surface_mid_pipeline_errors() {
+        let _guard = workspace_lock().lock().expect("workspace lock");
+
+        let bundle_models = create_synthetic_workspace("wrapper_bundle_models_fail", true);
+        write_ts_rs_probe_lib(&bundle_models);
+        let bundle_models_out = bundle_models.join("out");
+        write_file(
+            &bundle_models_out.join("ts").join("packages").join("a"),
+            "blocker",
+        );
+        let bundle_models_err =
+            export_ts_bundle(&bundle_models, &bundle_models_out).expect_err("bundle models fail");
+        assert!(bundle_models_err.contains("create"));
+        let _ = fs::remove_dir_all(&bundle_models);
+
+        let bundle_constants = create_synthetic_workspace("wrapper_bundle_constants_fail", true);
+        write_file(
+            &bundle_constants
+                .join("contract")
+                .join("exports")
+                .join("ts.toml"),
+            r#"[language]
+id = "ts"
+repository = "sdk-typescript"
+
+[packages]
+"radroots-a" = "@radroots/a"
+
+[artifacts]
+models_dir = "src/generated"
+constants_dir = "src/generated/types.ts"
+wasm_dist_dir = "dist"
+manifest_file = "export-manifest.json"
+"#,
+        );
+        write_ts_rs_probe_lib(&bundle_constants);
+        let bundle_constants_out = bundle_constants.join("out");
+        fs::create_dir_all(&bundle_constants_out).expect("create bundle constants out");
+        let bundle_constants_err = export_ts_bundle(&bundle_constants, &bundle_constants_out)
+            .expect_err("bundle constants fail");
+        assert!(bundle_constants_err.contains("create"));
+        let _ = fs::remove_dir_all(&bundle_constants);
+
+        let bundle_wasm = create_synthetic_workspace("wrapper_bundle_wasm_fail", true);
+        write_file(
+            &bundle_wasm.join("contract").join("exports").join("ts.toml"),
+            r#"[language]
+id = "ts"
+repository = "sdk-typescript"
+
+[packages]
+"radroots-a" = "@radroots/a"
+"radroots-a-wasm" = "@radroots/a-wasm"
+
+[artifacts]
+models_dir = "src/generated"
+constants_dir = "src/generated"
+wasm_dist_dir = "dist"
+manifest_file = "export-manifest.json"
+"#,
+        );
+        write_ts_rs_probe_lib(&bundle_wasm);
+        write_file(
+            &bundle_wasm
+                .join("crates")
+                .join("a-wasm")
+                .join("pkg")
+                .join("dist")
+                .join("nested")
+                .join("artifact.js"),
+            "export const wasm = 1;\n",
+        );
+        let bundle_wasm_out = bundle_wasm.join("out");
+        write_file(
+            &bundle_wasm_out
+                .join("ts")
+                .join("packages")
+                .join("a-wasm")
+                .join("dist")
+                .join("nested"),
+            "blocker",
+        );
+        let bundle_wasm_err =
+            export_ts_bundle(&bundle_wasm, &bundle_wasm_out).expect_err("bundle wasm fail");
+        assert!(bundle_wasm_err.contains("create"));
+        let _ = fs::remove_dir_all(&bundle_wasm);
+
+        let crate_models = create_synthetic_workspace("wrapper_crate_models_fail", true);
+        write_ts_rs_probe_lib(&crate_models);
+        let crate_models_out = crate_models.join("out");
+        write_file(
+            &crate_models_out.join("ts").join("packages").join("a"),
+            "blocker",
+        );
+        let crate_models_err =
+            export_ts_bundle_for_crate(&crate_models, &crate_models_out, "radroots-a")
+                .expect_err("crate models fail");
+        assert!(crate_models_err.contains("create"));
+        let _ = fs::remove_dir_all(&crate_models);
+
+        let crate_constants = create_synthetic_workspace("wrapper_crate_constants_fail", true);
+        write_file(
+            &crate_constants
+                .join("contract")
+                .join("exports")
+                .join("ts.toml"),
+            r#"[language]
+id = "ts"
+repository = "sdk-typescript"
+
+[packages]
+"radroots-a" = "@radroots/a"
+
+[artifacts]
+models_dir = "src/generated"
+constants_dir = "src/generated/types.ts"
+wasm_dist_dir = "dist"
+manifest_file = "export-manifest.json"
+"#,
+        );
+        write_ts_rs_probe_lib(&crate_constants);
+        let crate_constants_out = crate_constants.join("out");
+        fs::create_dir_all(&crate_constants_out).expect("create crate constants out");
+        let crate_constants_err =
+            export_ts_bundle_for_crate(&crate_constants, &crate_constants_out, "radroots-a")
+                .expect_err("crate constants fail");
+        assert!(crate_constants_err.contains("create"));
+        let _ = fs::remove_dir_all(&crate_constants);
+
+        let crate_wasm = create_synthetic_workspace("wrapper_crate_wasm_fail", true);
+        write_file(
+            &crate_wasm.join("contract").join("exports").join("ts.toml"),
+            r#"[language]
+id = "ts"
+repository = "sdk-typescript"
+
+[packages]
+"radroots-a-wasm" = "@radroots/a-wasm"
+
+[artifacts]
+models_dir = "src/generated"
+constants_dir = "src/generated"
+wasm_dist_dir = "dist"
+manifest_file = "export-manifest.json"
+"#,
+        );
+        write_file(
+            &crate_wasm
+                .join("crates")
+                .join("a-wasm")
+                .join("pkg")
+                .join("dist")
+                .join("nested")
+                .join("artifact.js"),
+            "export const wasm = 1;\n",
+        );
+        let crate_wasm_out = crate_wasm.join("out");
+        write_file(
+            &crate_wasm_out
+                .join("ts")
+                .join("packages")
+                .join("a-wasm")
+                .join("dist")
+                .join("nested"),
+            "blocker",
+        );
+        let crate_wasm_err =
+            export_ts_bundle_for_crate(&crate_wasm, &crate_wasm_out, "radroots-a-wasm")
+                .expect_err("crate wasm fail");
+        assert!(crate_wasm_err.contains("create"));
+        let _ = fs::remove_dir_all(&crate_wasm);
+    }
+
+    #[test]
+    fn wrapper_calls_surface_contract_and_selector_errors() {
+        let missing_root = unique_temp_dir("wrapper_missing_contract");
+        fs::create_dir_all(&missing_root).expect("create missing root");
+        let missing_out = missing_root.join("out");
+        fs::create_dir_all(&missing_out).expect("create missing out");
+        assert!(export_ts_models(&missing_root, &missing_out).is_err());
+        assert!(export_ts_constants(&missing_root, &missing_out).is_err());
+        assert!(export_ts_wasm_artifacts(&missing_root, &missing_out).is_err());
+        assert!(write_ts_export_manifest(&missing_root, &missing_out).is_err());
+        assert!(generate_ts_rs_sources(&missing_root).is_err());
+        assert!(export_ts_bundle(&missing_root, &missing_out).is_err());
+        assert!(export_ts_bundle_for_crate(&missing_root, &missing_out, "radroots-a").is_err());
+        let _ = fs::remove_dir_all(&missing_root);
+
+        let invalid_contract = create_synthetic_workspace("wrapper_invalid_contract", true);
+        write_file(
+            &invalid_contract.join("contract").join("manifest.toml"),
+            r#"[contract]
+name = ""
+version = "1.0.0"
+source = "synthetic"
+
+[surface]
+model_crates = ["radroots-a"]
+algorithm_crates = ["radroots-b"]
+wasm_crates = ["radroots-a-wasm"]
+
+[policy]
+exclude_internal_workspace_crates = true
+require_reproducible_exports = true
+require_conformance_vectors = true
+"#,
+        );
+        let invalid_out = invalid_contract.join("out");
+        fs::create_dir_all(&invalid_out).expect("create invalid out");
+        assert!(export_ts_models(&invalid_contract, &invalid_out).is_err());
+        assert!(export_ts_constants(&invalid_contract, &invalid_out).is_err());
+        assert!(export_ts_wasm_artifacts(&invalid_contract, &invalid_out).is_err());
+        assert!(write_ts_export_manifest(&invalid_contract, &invalid_out).is_err());
+        assert!(generate_ts_rs_sources(&invalid_contract).is_err());
+        let _ = fs::remove_dir_all(&invalid_contract);
+
+        let missing_ts_export = create_synthetic_workspace("wrapper_missing_ts_export", true);
+        write_file(
+            &missing_ts_export
+                .join("contract")
+                .join("exports")
+                .join("ts.toml"),
+            r#"[language]
+id = "py"
+repository = "sdk-python"
+
+[packages]
+"radroots-a" = "radroots-a"
+"#,
+        );
+        let missing_ts_out = missing_ts_export.join("out");
+        fs::create_dir_all(&missing_ts_out).expect("create missing ts out");
+        assert!(export_ts_models(&missing_ts_export, &missing_ts_out).is_err());
+        assert!(export_ts_constants(&missing_ts_export, &missing_ts_out).is_err());
+        assert!(export_ts_wasm_artifacts(&missing_ts_export, &missing_ts_out).is_err());
+        assert!(write_ts_export_manifest(&missing_ts_export, &missing_ts_out).is_err());
+        assert!(generate_ts_rs_sources(&missing_ts_export).is_err());
+        let _ = fs::remove_dir_all(&missing_ts_export);
+
+        let selector_root = create_synthetic_workspace("wrapper_selector_errors", true);
+        let selector_out = selector_root.join("out");
+        fs::create_dir_all(&selector_out).expect("create selector out");
+        let models_selector_err =
+            export_ts_models_for_crate(&selector_root, &selector_out, "missing-crate")
+                .expect_err("models unknown selector");
+        assert!(models_selector_err.contains("unknown ts export crate selector"));
+        let constants_selector_err =
+            export_ts_constants_for_crate(&selector_root, &selector_out, "missing-crate")
+                .expect_err("constants unknown selector");
+        assert!(constants_selector_err.contains("unknown ts export crate selector"));
+        let wasm_selector_err =
+            export_ts_wasm_artifacts_for_crate(&selector_root, &selector_out, "missing-crate")
+                .expect_err("wasm unknown selector");
+        assert!(wasm_selector_err.contains("unknown ts export crate selector"));
+        let generate_selector_err =
+            generate_ts_rs_sources_for_crate(&selector_root, "missing-crate")
+                .expect_err("generate unknown selector");
+        assert!(generate_selector_err.contains("unknown ts export crate selector"));
+        let bundle_selector_err =
+            export_ts_bundle_for_crate(&selector_root, &selector_out, "missing-crate")
+                .expect_err("bundle unknown selector");
+        assert!(bundle_selector_err.contains("unknown ts export crate selector"));
+        let _ = fs::remove_dir_all(&selector_root);
+    }
+
+    #[test]
+    fn wrapper_calls_surface_artifact_and_copy_errors() {
+        let missing_artifacts = create_synthetic_workspace("wrapper_missing_artifacts", true);
+        write_file(
+            &missing_artifacts
+                .join("contract")
+                .join("exports")
+                .join("ts.toml"),
+            r#"[language]
+id = "ts"
+repository = "sdk-typescript"
+
+[packages]
+"radroots-a" = "@radroots/a"
+"#,
+        );
+        let missing_artifacts_out = missing_artifacts.join("out");
+        fs::create_dir_all(&missing_artifacts_out).expect("create missing artifacts out");
+        assert!(export_ts_models(&missing_artifacts, &missing_artifacts_out).is_err());
+        assert!(export_ts_constants(&missing_artifacts, &missing_artifacts_out).is_err());
+        assert!(export_ts_wasm_artifacts(&missing_artifacts, &missing_artifacts_out).is_err());
+        assert!(write_ts_export_manifest(&missing_artifacts, &missing_artifacts_out).is_err());
+        let _ = fs::remove_dir_all(&missing_artifacts);
+
+        let missing_models_dir = create_synthetic_workspace("wrapper_missing_models_dir", true);
+        write_file(
+            &missing_models_dir
+                .join("contract")
+                .join("exports")
+                .join("ts.toml"),
+            r#"[language]
+id = "ts"
+repository = "sdk-typescript"
+
+[packages]
+"radroots-a" = "@radroots/a"
+
+[artifacts]
+models_dir = ""
+constants_dir = "src/generated"
+wasm_dist_dir = "dist"
+manifest_file = "export-manifest.json"
+"#,
+        );
+        let missing_models_out = missing_models_dir.join("out");
+        fs::create_dir_all(&missing_models_out).expect("create missing models out");
+        let missing_models_err =
+            export_ts_models(&missing_models_dir, &missing_models_out).expect_err("models dir");
+        assert!(missing_models_err.contains("artifacts fields must be non-empty for ts"));
+        let _ = fs::remove_dir_all(&missing_models_dir);
+
+        let missing_constants_dir =
+            create_synthetic_workspace("wrapper_missing_constants_dir", true);
+        write_file(
+            &missing_constants_dir
+                .join("contract")
+                .join("exports")
+                .join("ts.toml"),
+            r#"[language]
+id = "ts"
+repository = "sdk-typescript"
+
+[packages]
+"radroots-a" = "@radroots/a"
+
+[artifacts]
+models_dir = "src/generated"
+constants_dir = ""
+wasm_dist_dir = "dist"
+manifest_file = "export-manifest.json"
+"#,
+        );
+        let missing_constants_out = missing_constants_dir.join("out");
+        fs::create_dir_all(&missing_constants_out).expect("create missing constants out");
+        let missing_constants_err =
+            export_ts_constants(&missing_constants_dir, &missing_constants_out)
+                .expect_err("constants dir");
+        assert!(missing_constants_err.contains("artifacts fields must be non-empty for ts"));
+        let _ = fs::remove_dir_all(&missing_constants_dir);
+
+        let missing_wasm_dir = create_synthetic_workspace("wrapper_missing_wasm_dir", true);
+        write_file(
+            &missing_wasm_dir
+                .join("contract")
+                .join("exports")
+                .join("ts.toml"),
+            r#"[language]
+id = "ts"
+repository = "sdk-typescript"
+
+[packages]
+"radroots-a-wasm" = "@radroots/a-wasm"
+
+[artifacts]
+models_dir = "src/generated"
+constants_dir = "src/generated"
+wasm_dist_dir = ""
+manifest_file = "export-manifest.json"
+"#,
+        );
+        let missing_wasm_out = missing_wasm_dir.join("out");
+        fs::create_dir_all(&missing_wasm_out).expect("create missing wasm out");
+        let missing_wasm_err =
+            export_ts_wasm_artifacts(&missing_wasm_dir, &missing_wasm_out).expect_err("wasm dir");
+        assert!(missing_wasm_err.contains("artifacts fields must be non-empty for ts"));
+        let _ = fs::remove_dir_all(&missing_wasm_dir);
+
+        let missing_manifest_file =
+            create_synthetic_workspace("wrapper_missing_manifest_file", true);
+        write_file(
+            &missing_manifest_file
+                .join("contract")
+                .join("exports")
+                .join("ts.toml"),
+            r#"[language]
+id = "ts"
+repository = "sdk-typescript"
+
+[packages]
+"radroots-a" = "@radroots/a"
+
+[artifacts]
+models_dir = "src/generated"
+constants_dir = "src/generated"
+wasm_dist_dir = "dist"
+manifest_file = ""
+"#,
+        );
+        let missing_manifest_out = missing_manifest_file.join("out");
+        fs::create_dir_all(&missing_manifest_out).expect("create missing manifest out");
+        let missing_manifest_err =
+            write_ts_export_manifest(&missing_manifest_file, &missing_manifest_out)
+                .expect_err("manifest file");
+        assert!(missing_manifest_err.contains("artifacts fields must be non-empty for ts"));
+        let _ = fs::remove_dir_all(&missing_manifest_file);
+
+        let models_copy_err_root = create_synthetic_workspace("wrapper_models_copy_err", true);
+        write_file(
+            &models_copy_err_root
+                .join("target")
+                .join("ts-rs")
+                .join("a")
+                .join("types.ts"),
+            "export type Probe = { id: string };\n",
+        );
+        let models_copy_out = models_copy_err_root.join("out");
+        write_file(
+            &models_copy_out.join("ts").join("packages").join("a"),
+            "blocker",
+        );
+        let models_copy_err =
+            export_ts_models(&models_copy_err_root, &models_copy_out).expect_err("copy models");
+        assert!(models_copy_err.contains("create"));
+        let _ = fs::remove_dir_all(&models_copy_err_root);
+
+        let constants_copy_err_root =
+            create_synthetic_workspace("wrapper_constants_copy_err", true);
+        write_file(
+            &constants_copy_err_root
+                .join("target")
+                .join("ts-rs")
+                .join("a")
+                .join("constants.ts"),
+            "export const A = 1;\n",
+        );
+        write_file(
+            &constants_copy_err_root
+                .join("target")
+                .join("ts-rs")
+                .join("a")
+                .join("kinds.ts"),
+            "export const K = 1;\n",
+        );
+        let constants_copy_out = constants_copy_err_root.join("out");
+        write_file(
+            &constants_copy_out.join("ts").join("packages").join("a"),
+            "blocker",
+        );
+        let constants_copy_err = export_ts_constants(&constants_copy_err_root, &constants_copy_out)
+            .expect_err("copy constants");
+        assert!(constants_copy_err.contains("create"));
+        let _ = fs::remove_dir_all(&constants_copy_err_root);
+
+        let wasm_copy_err_root = create_synthetic_workspace("wrapper_wasm_copy_err", true);
+        write_file(
+            &wasm_copy_err_root
+                .join("contract")
+                .join("exports")
+                .join("ts.toml"),
+            r#"[language]
+id = "ts"
+repository = "sdk-typescript"
+
+[packages]
+"radroots-a-wasm" = "@radroots/a-wasm"
+
+[artifacts]
+models_dir = "src/generated"
+constants_dir = "src/generated"
+wasm_dist_dir = "dist"
+manifest_file = "export-manifest.json"
+"#,
+        );
+        write_file(
+            &wasm_copy_err_root
+                .join("crates")
+                .join("a-wasm")
+                .join("pkg")
+                .join("dist")
+                .join("nested")
+                .join("artifact.js"),
+            "export const wasm = 1;\n",
+        );
+        let wasm_copy_out = wasm_copy_err_root.join("out");
+        write_file(
+            &wasm_copy_out
+                .join("ts")
+                .join("packages")
+                .join("a-wasm")
+                .join("dist")
+                .join("nested"),
+            "blocker",
+        );
+        let wasm_copy_err =
+            export_ts_wasm_artifacts(&wasm_copy_err_root, &wasm_copy_out).expect_err("copy wasm");
+        assert!(wasm_copy_err.contains("create"));
+        let _ = fs::remove_dir_all(&wasm_copy_err_root);
+
+        let manifest_collect_err_root =
+            create_synthetic_workspace("wrapper_manifest_collect_err", true);
+        let manifest_collect_out = manifest_collect_err_root.join("out");
+        write_file(
+            &manifest_collect_out.join("ts").join("packages"),
+            "not-a-directory",
+        );
+        let manifest_collect_err =
+            write_ts_export_manifest(&manifest_collect_err_root, &manifest_collect_out)
+                .expect_err("manifest collect error");
+        assert!(manifest_collect_err.contains("read dir"));
+        let _ = fs::remove_dir_all(&manifest_collect_err_root);
+
+        let recursive_copy_root = unique_temp_dir("wrapper_recursive_copy");
+        let recursive_src = recursive_copy_root.join("src");
+        let recursive_dst = recursive_copy_root.join("dst");
+        write_file(&recursive_src.join("nested").join("value.txt"), "value");
+        write_file(&recursive_dst.join("nested"), "blocker");
+        let recursive_copy_err =
+            copy_dir_contents(&recursive_src, &recursive_dst).expect_err("recursive copy error");
+        assert!(recursive_copy_err.contains("create"));
+        let _ = fs::remove_dir_all(&recursive_copy_root);
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+
+            let recursive_manifest_root = unique_temp_dir("wrapper_recursive_manifest");
+            let recursive_manifest_src = recursive_manifest_root.join("src");
+            write_file(
+                &recursive_manifest_src.join("nested").join("value.txt"),
+                "value",
+            );
+            let mut restricted = fs::metadata(recursive_manifest_src.join("nested"))
+                .expect("nested metadata")
+                .permissions();
+            restricted.set_mode(0o000);
+            fs::set_permissions(recursive_manifest_src.join("nested"), restricted)
+                .expect("set nested restricted mode");
+
+            let mut entries = Vec::new();
+            let recursive_manifest_err = collect_manifest_entries(
+                &recursive_manifest_src,
+                &recursive_manifest_src,
+                &recursive_manifest_src.join("skip.json"),
+                &mut entries,
+            )
+            .expect_err("recursive manifest error");
+            assert!(recursive_manifest_err.contains("read dir"));
+
+            let mut readable = fs::metadata(recursive_manifest_src.join("nested"))
+                .expect("nested metadata")
+                .permissions();
+            readable.set_mode(0o755);
+            fs::set_permissions(recursive_manifest_src.join("nested"), readable)
+                .expect("restore nested readable mode");
+            let _ = fs::remove_dir_all(&recursive_manifest_root);
+        }
     }
 }
