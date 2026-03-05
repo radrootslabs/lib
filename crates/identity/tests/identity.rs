@@ -408,9 +408,8 @@ fn load_or_generate_reports_save_failure_when_parent_not_writable() {
     std::fs::set_permissions(&parent, std::fs::Permissions::from_mode(0o500)).unwrap();
 
     let path = parent.join("identity.json");
-    let err =
-        RadrootsIdentity::load_or_generate::<&std::path::Path>(Some(path.as_path()), true)
-            .unwrap_err();
+    let err = RadrootsIdentity::load_or_generate::<&std::path::Path>(Some(path.as_path()), true)
+        .unwrap_err();
     assert!(matches!(err, IdentityError::Store(_)));
     let err_path_buf = RadrootsIdentity::load_or_generate(Some(&path), true).unwrap_err();
     assert!(matches!(err_path_buf, IdentityError::Store(_)));
@@ -463,7 +462,8 @@ fn path_ref_variants_cover_success_paths() {
     assert_eq!(loaded.public_key(), identity.public_key());
 
     let generated_path = dir.path().join("generated.json");
-    let generated = RadrootsIdentity::load_or_generate(Some(generated_path.as_path()), true).unwrap();
+    let generated =
+        RadrootsIdentity::load_or_generate(Some(generated_path.as_path()), true).unwrap();
     assert!(generated_path.exists());
     let roundtrip = RadrootsIdentity::load_from_path_auto(generated_path.as_path()).unwrap();
     assert_eq!(generated.public_key(), roundtrip.public_key());
