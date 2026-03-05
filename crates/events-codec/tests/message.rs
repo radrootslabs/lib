@@ -61,6 +61,21 @@ fn message_to_wire_parts_requires_content() {
         err,
         EventEncodeError::EmptyRequiredField("content")
     ));
+
+    let message = RadrootsMessage {
+        recipients: vec![RadrootsMessageRecipient {
+            public_key: " ".to_string(),
+            relay_url: None,
+        }],
+        content: "hello".to_string(),
+        reply_to: None,
+        subject: None,
+    };
+    let err = to_wire_parts(&message).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("recipients.public_key")
+    ));
 }
 
 #[test]
@@ -123,6 +138,31 @@ fn message_to_wire_parts_handles_absent_optional_fields() {
 }
 
 #[test]
+fn message_to_wire_parts_supports_reply_without_relay() {
+    let message = RadrootsMessage {
+        recipients: vec![RadrootsMessageRecipient {
+            public_key: "pub1".to_string(),
+            relay_url: None,
+        }],
+        content: "hello".to_string(),
+        reply_to: Some(RadrootsNostrEventPtr {
+            id: "reply".to_string(),
+            relays: None,
+        }),
+        subject: None,
+    };
+
+    let parts = to_wire_parts(&message).unwrap();
+    assert_eq!(
+        parts.tags,
+        vec![
+            vec!["p".to_string(), "pub1".to_string()],
+            vec!["e".to_string(), "reply".to_string()],
+        ]
+    );
+}
+
+#[test]
 fn message_from_tags_requires_kind_content_and_recipients() {
     let tags = vec![vec!["p".to_string(), "pub".to_string()]];
     let err = message_from_tags(KIND_POST, &tags, "hello").unwrap_err();
@@ -178,6 +218,20 @@ fn message_roundtrip_from_tags() {
         Some("wss://reply.example")
     );
     assert_eq!(message.subject.as_deref(), Some("topic"));
+
+    let tags_without_reply_relay = vec![
+        vec!["p".to_string(), "pub1".to_string()],
+        vec!["e".to_string(), "reply".to_string()],
+    ];
+    let no_relay_message = message_from_tags(KIND_MESSAGE, &tags_without_reply_relay, "hello")
+        .expect("message without reply relay");
+    assert_eq!(
+        no_relay_message
+            .reply_to
+            .as_ref()
+            .and_then(|reply| reply.relays.as_deref()),
+        None
+    );
 }
 
 #[test]
@@ -323,6 +377,17 @@ fn message_from_tags_rejects_invalid_optional_tags() {
     let err = message_from_tags(
         KIND_MESSAGE,
         &[
+            vec!["p".to_string()],
+            vec!["e".to_string(), "reply".to_string()],
+        ],
+        "hello",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("p")));
+
+    let err = message_from_tags(
+        KIND_MESSAGE,
+        &[
             vec!["p".to_string(), "pub".to_string(), " ".to_string()],
             vec!["e".to_string(), "reply".to_string()],
         ],
@@ -330,6 +395,17 @@ fn message_from_tags_rejects_invalid_optional_tags() {
     )
     .unwrap_err();
     assert!(matches!(err, EventParseError::InvalidTag("p")));
+
+    let err = message_from_tags(
+        KIND_MESSAGE,
+        &[
+            vec!["p".to_string(), "pub".to_string()],
+            vec!["e".to_string()],
+        ],
+        "hello",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("e")));
 
     let err = message_from_tags(
         KIND_MESSAGE,

@@ -6,6 +6,7 @@ pub mod list_sets;
 
 #[cfg(test)]
 mod tests {
+    use crate::error::EventEncodeError;
     use crate::resource_area::encode::{resource_area_build_tags, resource_area_ref_tags};
     use crate::resource_area::list_sets::{
         resource_area_members_farms_list_set, resource_area_members_plots_list_set,
@@ -87,6 +88,32 @@ mod tests {
     }
 
     #[test]
+    fn resource_area_tags_allow_missing_optional_fields() {
+        let area = RadrootsResourceArea {
+            d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
+            name: "Banda Grove".to_string(),
+            about: None,
+            location: sample_location(),
+            tags: None,
+        };
+
+        let tags = resource_area_build_tags(&area).expect("tags without optional fields");
+        assert!(
+            tags.iter()
+                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("d"))
+        );
+        assert!(
+            tags.iter()
+                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("g"))
+        );
+        assert!(
+            !tags
+                .iter()
+                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("t"))
+        );
+    }
+
+    #[test]
     fn resource_area_ref_tags_include_p_and_a() {
         let area_ref = RadrootsResourceAreaRef {
             pubkey: "area_pubkey".to_string(),
@@ -102,6 +129,78 @@ mod tests {
             tags.iter()
                 .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("a"))
         );
+
+        let err = resource_area_ref_tags(&RadrootsResourceAreaRef {
+            pubkey: "area_pubkey".to_string(),
+            d_tag: "invalid".to_string(),
+        })
+        .expect_err("expected invalid resource_area.d_tag");
+        assert!(matches!(
+            err,
+            EventEncodeError::InvalidField("resource_area.d_tag")
+        ));
+    }
+
+    #[test]
+    fn resource_area_build_tags_rejects_invalid_d_tag() {
+        let area = RadrootsResourceArea {
+            d_tag: "invalid".to_string(),
+            name: "Banda Grove".to_string(),
+            about: None,
+            location: sample_location(),
+            tags: None,
+        };
+
+        let err = resource_area_build_tags(&area).expect_err("expected invalid d_tag");
+        assert!(matches!(err, EventEncodeError::InvalidField("d_tag")));
+    }
+
+    #[test]
+    fn resource_area_encode_rejects_empty_required_fields() {
+        let mut area = RadrootsResourceArea {
+            d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
+            name: "Banda Grove".to_string(),
+            about: None,
+            location: sample_location(),
+            tags: None,
+        };
+
+        area.d_tag = " ".to_string();
+        let err = resource_area_build_tags(&area).expect_err("expected empty d_tag");
+        assert!(matches!(err, EventEncodeError::EmptyRequiredField("d_tag")));
+
+        area.d_tag = "AAAAAAAAAAAAAAAAAAAAAw".to_string();
+        area.name = " ".to_string();
+        let err = resource_area_build_tags(&area).expect_err("expected empty name");
+        assert!(matches!(err, EventEncodeError::EmptyRequiredField("name")));
+
+        area.name = "Banda Grove".to_string();
+        area.location.gcs.geohash = " ".to_string();
+        let err = resource_area_build_tags(&area).expect_err("expected empty geohash");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("location.gcs.geohash")
+        ));
+
+        let err = resource_area_ref_tags(&RadrootsResourceAreaRef {
+            pubkey: " ".to_string(),
+            d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
+        })
+        .expect_err("expected empty resource_area.pubkey");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("resource_area.pubkey")
+        ));
+
+        let err = resource_area_ref_tags(&RadrootsResourceAreaRef {
+            pubkey: "area_pubkey".to_string(),
+            d_tag: " ".to_string(),
+        })
+        .expect_err("expected empty resource_area.d_tag");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("resource_area.d_tag")
+        ));
     }
 
     #[test]
@@ -138,5 +237,12 @@ mod tests {
             "resource:AAAAAAAAAAAAAAAAAAAAAw:members.stewards"
         );
         assert!(stewards.entries.iter().any(|entry| entry.tag == "p"));
+
+        let err = resource_area_stewards_list_set("AAAAAAAAAAAAAAAAAAAAAw", [" "])
+            .expect_err("expected invalid steward entry");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("entry.values")
+        ));
     }
 }

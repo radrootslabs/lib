@@ -136,6 +136,13 @@ fn follow_from_tags_rejects_invalid_published_at_number() {
 }
 
 #[test]
+fn follow_from_tags_rejects_missing_public_key_value() {
+    let tags = vec![vec!["p".to_string()]];
+    let err = follow_from_tags(KIND_FOLLOW, &tags, 123).unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("p")));
+}
+
+#[test]
 fn follow_metadata_and_index_from_event_roundtrip() {
     let tags = vec![vec![
         "p".to_string(),
@@ -323,6 +330,74 @@ fn follow_apply_rejects_empty_pubkey() {
         &follow,
         FollowMutation::Follow {
             public_key: "  ".to_string(),
+            relay_url: None,
+            contact_name: None,
+        },
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("follow.public_key")
+    ));
+}
+
+#[test]
+fn follow_apply_rejects_empty_pubkey_for_unfollow_and_toggle() {
+    let follow = RadrootsFollow { list: Vec::new() };
+    let err = follow_apply(
+        &follow,
+        FollowMutation::Unfollow {
+            public_key: "  ".to_string(),
+        },
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("follow.public_key")
+    ));
+
+    let err = follow_apply(
+        &follow,
+        FollowMutation::Toggle {
+            public_key: "  ".to_string(),
+            relay_url: None,
+            contact_name: None,
+        },
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("follow.public_key")
+    ));
+}
+
+#[test]
+fn follow_apply_rejects_invalid_existing_entries_and_after_mutation_propagates_error() {
+    let follow = RadrootsFollow {
+        list: vec![RadrootsFollowProfile {
+            published_at: 1,
+            public_key: " ".to_string(),
+            relay_url: None,
+            contact_name: None,
+        }],
+    };
+
+    let err = follow_apply(
+        &follow,
+        FollowMutation::Unfollow {
+            public_key: "pubkey-a".to_string(),
+        },
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("follow.public_key")
+    ));
+
+    let err = follow_to_wire_parts_after(
+        &RadrootsFollow { list: Vec::new() },
+        FollowMutation::Follow {
+            public_key: " ".to_string(),
             relay_url: None,
             contact_name: None,
         },

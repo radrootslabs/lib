@@ -68,6 +68,17 @@ fn comment_to_wire_parts_requires_content() {
         err,
         EventEncodeError::EmptyRequiredField("content")
     ));
+
+    let comment = RadrootsComment {
+        root: common::event_ref("", "author", KIND_POST),
+        parent: common::event_ref("parent", "author", KIND_POST),
+        content: "hello".to_string(),
+    };
+    let err = to_wire_parts(&comment).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("root.id")
+    ));
 }
 
 #[test]
@@ -175,6 +186,53 @@ fn comment_from_tags_requires_root_tag() {
 
     let err = comment_from_tags(KIND_COMMENT, &tags, "hello").unwrap_err();
     assert!(matches!(err, EventParseError::MissingTag("E")));
+}
+
+#[test]
+fn comment_from_tags_propagates_root_and_parent_reference_parse_errors() {
+    let err = comment_from_tags(
+        KIND_COMMENT,
+        &[
+            vec!["E".to_string()],
+            vec!["P".to_string(), "author".to_string()],
+            vec!["K".to_string(), KIND_POST.to_string()],
+        ],
+        "hello",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("E")));
+
+    let err = comment_from_tags(
+        KIND_COMMENT,
+        &[
+            vec!["e".to_string()],
+            vec!["p".to_string(), "author".to_string()],
+            vec!["k".to_string(), KIND_POST.to_string()],
+            build_event_ref_tag(TAG_E_ROOT, &common::event_ref("root", "author", KIND_POST)),
+        ],
+        "hello",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("e")));
+
+    let err = comment_from_tags(
+        KIND_COMMENT,
+        &[vec![TAG_E_ROOT.to_string(), "root".to_string()]],
+        "hello",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("e_root")));
+
+    let err = comment_from_tags(
+        KIND_COMMENT,
+        &[
+            build_event_ref_tag(TAG_E_ROOT, &common::event_ref("root", "author", KIND_POST)),
+            vec![TAG_E_PREV.to_string(), "parent".to_string()],
+        ],
+        "hello",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("e_prev")));
 }
 
 #[test]

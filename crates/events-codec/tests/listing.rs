@@ -18,7 +18,9 @@ use radroots_events::{
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
 use radroots_events_codec::listing::decode::listing_from_event;
 use radroots_events_codec::listing::encode::{listing_build_tags, to_wire_parts};
-use radroots_events_codec::listing::tags::listing_tags_full;
+use radroots_events_codec::listing::tags::{
+    ListingTagOptions, listing_tags_full, listing_tags_with_options,
+};
 use std::str::FromStr;
 
 fn sample_listing(d_tag: &str) -> RadrootsListing {
@@ -408,5 +410,78 @@ fn listing_build_tags_ignores_null_strings() {
         !tags
             .iter()
             .any(|tag| tag.iter().any(|value| value == "null"))
+    );
+}
+
+#[test]
+fn listing_tags_with_options_cover_location_fallback_paths() {
+    let mut geohash_only = sample_listing("AAAAAAAAAAAAAAAAAAAAAg");
+    geohash_only.location = Some(RadrootsListingLocation {
+        primary: "Moyobamba".to_string(),
+        city: None,
+        region: None,
+        country: None,
+        lat: None,
+        lng: None,
+        geohash: Some("6gkzwgjzn".to_string()),
+    });
+    let tags = listing_tags_with_options(&geohash_only, ListingTagOptions::default()).unwrap();
+    assert!(
+        tags.iter()
+            .any(|tag| tag.get(0).map(|value| value.as_str()) == Some("g"))
+    );
+    assert!(tags.iter().any(|tag| {
+        tag.get(0).map(|value| value.as_str()) == Some("l")
+            && tag.get(2).map(|value| value.as_str()) == Some("dd")
+    }));
+
+    let mut no_coordinates = sample_listing("AAAAAAAAAAAAAAAAAAAAAQ");
+    no_coordinates.location = Some(RadrootsListingLocation {
+        primary: "Moyobamba".to_string(),
+        city: None,
+        region: None,
+        country: None,
+        lat: None,
+        lng: None,
+        geohash: None,
+    });
+    let tags = listing_tags_with_options(&no_coordinates, ListingTagOptions::default()).unwrap();
+    assert!(
+        !tags
+            .iter()
+            .any(|tag| tag.get(0).map(|value| value.as_str()) == Some("L"))
+    );
+    assert!(
+        !tags
+            .iter()
+            .any(|tag| tag.get(0).map(|value| value.as_str()) == Some("g"))
+    );
+
+    let mut no_gps = sample_listing("AAAAAAAAAAAAAAAAAAAAAw");
+    no_gps.location = Some(RadrootsListingLocation {
+        primary: "Moyobamba".to_string(),
+        city: None,
+        region: None,
+        country: None,
+        lat: Some(-6.0346),
+        lng: Some(-76.9714),
+        geohash: None,
+    });
+    let tags = listing_tags_with_options(
+        &no_gps,
+        ListingTagOptions {
+            include_gps: false,
+            ..ListingTagOptions::default()
+        },
+    )
+    .unwrap();
+    assert!(
+        tags.iter()
+            .any(|tag| tag.get(0).map(|value| value.as_str()) == Some("g"))
+    );
+    assert!(
+        !tags
+            .iter()
+            .any(|tag| tag.get(0).map(|value| value.as_str()) == Some("L"))
     );
 }

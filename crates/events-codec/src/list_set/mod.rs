@@ -23,7 +23,9 @@ mod tests {
     use super::{decode::list_set_from_tags, encode::list_set_build_tags};
     use crate::error::{EventEncodeError, EventParseError};
     use radroots_events::{
-        kinds::KIND_LIST_SET_FOLLOW, list::RadrootsListEntry, list_set::RadrootsListSet,
+        kinds::{KIND_LIST_SET_FOLLOW, KIND_POST},
+        list::RadrootsListEntry,
+        list_set::RadrootsListSet,
     };
 
     #[test]
@@ -124,5 +126,58 @@ mod tests {
         let err = list_set_from_tags(KIND_LIST_SET_FOLLOW, "".to_string(), &tags)
             .expect_err("expected invalid d_tag");
         assert!(matches!(err, EventParseError::InvalidTag("d")));
+    }
+
+    #[test]
+    fn list_set_decode_ignores_short_tags() {
+        let tags = vec![
+            vec!["d".to_string(), "members.owners".to_string()],
+            vec!["p".to_string(), "owner".to_string()],
+            vec!["subject".to_string()],
+        ];
+        let parsed =
+            list_set_from_tags(KIND_LIST_SET_FOLLOW, "private".to_string(), &tags).expect("parsed");
+        assert_eq!(parsed.d_tag, "members.owners");
+        assert_eq!(parsed.entries.len(), 1);
+        assert_eq!(parsed.entries[0].tag, "p");
+    }
+
+    #[test]
+    fn list_set_decode_rejects_empty_entry_value() {
+        let tags = vec![
+            vec!["d".to_string(), "members.owners".to_string()],
+            vec!["p".to_string(), " ".to_string()],
+        ];
+        let err = list_set_from_tags(KIND_LIST_SET_FOLLOW, "private".to_string(), &tags)
+            .expect_err("expected invalid entry tag");
+        assert!(matches!(err, EventParseError::InvalidTag("tag")));
+    }
+
+    #[test]
+    fn list_set_decode_rejects_invalid_kind() {
+        let tags = vec![
+            vec!["d".to_string(), "members.owners".to_string()],
+            vec!["p".to_string(), "owner".to_string()],
+        ];
+        let err = list_set_from_tags(KIND_POST, "private".to_string(), &tags)
+            .expect_err("expected invalid kind");
+        assert!(matches!(
+            err,
+            EventParseError::InvalidKind {
+                expected: "nip51 list set kind",
+                got: KIND_POST
+            }
+        ));
+    }
+
+    #[test]
+    fn list_set_decode_rejects_empty_tag_name() {
+        let tags = vec![
+            vec!["d".to_string(), "members.owners".to_string()],
+            vec!["".to_string(), "owner".to_string()],
+        ];
+        let err = list_set_from_tags(KIND_LIST_SET_FOLLOW, "private".to_string(), &tags)
+            .expect_err("expected invalid empty tag name");
+        assert!(matches!(err, EventParseError::InvalidTag("tag")));
     }
 }

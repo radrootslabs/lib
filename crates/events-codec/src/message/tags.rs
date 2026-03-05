@@ -81,9 +81,6 @@ pub(crate) fn build_subject_tag(
 }
 
 fn parse_recipient_tag(tag: &[String]) -> Result<RadrootsMessageRecipient, EventParseError> {
-    if tag.get(0).map(|s| s.as_str()) != Some("p") {
-        return Err(EventParseError::InvalidTag("p"));
-    }
     let public_key = tag.get(1).ok_or(EventParseError::InvalidTag("p"))?;
     if public_key.trim().is_empty() {
         return Err(EventParseError::InvalidTag("p"));
@@ -158,13 +155,44 @@ pub(crate) fn parse_subject_tag(tags: &[Vec<String>]) -> Result<Option<String>, 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use radroots_events::RadrootsNostrEventPtr;
+    use radroots_events::{RadrootsNostrEventPtr, message::RadrootsMessageRecipient};
 
     #[test]
-    fn parse_recipient_tag_rejects_non_p_tag() {
-        let err = parse_recipient_tag(&["x".to_string(), "pub".to_string()])
-            .expect_err("expected invalid tag");
+    fn parse_recipients_rejects_missing_p_tags() {
+        let err = parse_recipients(&[vec!["x".to_string(), "pub".to_string()]])
+            .expect_err("expected missing recipient tag");
+        assert!(matches!(err, EventParseError::MissingTag("p")));
+
+        let err = parse_recipients(&[vec!["p".to_string(), " ".to_string()]])
+            .expect_err("expected invalid recipient tag");
         assert!(matches!(err, EventParseError::InvalidTag("p")));
+    }
+
+    #[test]
+    fn parse_recipient_and_reply_tag_require_id_values() {
+        let err = parse_recipient_tag(&["p".to_string()]).expect_err("missing recipient pubkey");
+        assert!(matches!(err, EventParseError::InvalidTag("p")));
+
+        let err = parse_recipient_tag(&["p".to_string(), " ".to_string()])
+            .expect_err("empty recipient pubkey");
+        assert!(matches!(err, EventParseError::InvalidTag("p")));
+
+        let err = parse_reply_tag(&[vec!["e".to_string()]]).expect_err("missing reply id");
+        assert!(matches!(err, EventParseError::InvalidTag("e")));
+
+        let err =
+            parse_reply_tag(&[vec!["e".to_string(), " ".to_string()]]).expect_err("empty reply id");
+        assert!(matches!(err, EventParseError::InvalidTag("e")));
+
+        let err = build_reply_tag(&Some(RadrootsNostrEventPtr {
+            id: " ".to_string(),
+            relays: None,
+        }))
+        .expect_err("empty reply id");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("reply_to.id")
+        ));
     }
 
     #[test]
@@ -202,5 +230,118 @@ mod tests {
                 relays: None,
             })
         );
+    }
+
+    #[test]
+    fn recipient_and_subject_tag_builders_cover_error_paths() {
+        let tags = build_recipient_tags(&[RadrootsMessageRecipient {
+            public_key: "recipient-without-relay".to_string(),
+            relay_url: None,
+        }])
+        .expect("recipient tag without relay");
+        assert_eq!(tags.len(), 1);
+        assert_eq!(tags[0].len(), 2);
+
+        let tags = build_recipient_tags(&[RadrootsMessageRecipient {
+            public_key: "recipient".to_string(),
+            relay_url: Some("wss://relay.example.com".to_string()),
+        }])
+        .expect("recipient tag");
+        assert_eq!(tags.len(), 1);
+        assert_eq!(tags[0].len(), 3);
+
+        let err = build_recipient_tags(&[]).expect_err("missing recipients");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("recipients")
+        ));
+
+        let err = build_recipient_tags(&[RadrootsMessageRecipient {
+            public_key: " ".to_string(),
+            relay_url: None,
+        }])
+        .expect_err("empty recipient pubkey");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("recipients.public_key")
+        ));
+
+        let err = build_recipient_tags(&[RadrootsMessageRecipient {
+            public_key: "recipient".to_string(),
+            relay_url: Some(" ".to_string()),
+        }])
+        .expect_err("empty recipient relay");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("recipients.relay_url")
+        ));
+
+        let subject = build_subject_tag(&Some("subject".to_string()))
+            .expect("subject tag")
+            .expect("subject present");
+        assert_eq!(subject, vec!["subject".to_string(), "subject".to_string()]);
+        let none = build_subject_tag(&None).expect("none subject");
+        assert!(none.is_none());
+        let err = build_subject_tag(&Some(" ".to_string())).expect_err("empty subject");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("subject")
+        ));
+    }
+
+    #[test]
+    fn recipient_reply_and_subject_parsers_cover_missing_and_invalid_tags() {
+        let recipients = parse_recipients(&[
+            vec!["p".to_string(), "recipient".to_string()],
+            vec![
+                "p".to_string(),
+                "recipient-2".to_string(),
+                "wss://relay.example.com".to_string(),
+            ],
+        ])
+        .expect("parse recipients");
+        assert_eq!(recipients.len(), 2);
+
+        let err = parse_recipients(&[vec!["e".to_string(), "reply".to_string()]])
+            .expect_err("missing recipient tags");
+        assert!(matches!(err, EventParseError::MissingTag("p")));
+
+        let err = parse_recipients(&[vec![
+            "p".to_string(),
+            "recipient".to_string(),
+            " ".to_string(),
+        ]])
+        .expect_err("invalid recipient relay");
+        assert!(matches!(err, EventParseError::InvalidTag("p")));
+
+        let err = build_reply_tag(&Some(RadrootsNostrEventPtr {
+            id: "reply".to_string(),
+            relays: Some(" ".to_string()),
+        }))
+        .expect_err("empty reply relay");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("reply_to.relays")
+        ));
+
+        let err = parse_reply_tag(&[vec!["e".to_string(), "reply".to_string(), " ".to_string()]])
+            .expect_err("invalid reply relay");
+        assert!(matches!(err, EventParseError::InvalidTag("e")));
+
+        let subject = parse_subject_tag(&[vec!["subject".to_string(), "topic".to_string()]])
+            .expect("subject tag");
+        assert_eq!(subject.as_deref(), Some("topic"));
+
+        let none = parse_subject_tag(&[vec!["p".to_string(), "recipient".to_string()]])
+            .expect("subject absent");
+        assert!(none.is_none());
+
+        let err =
+            parse_subject_tag(&[vec!["subject".to_string()]]).expect_err("missing subject value");
+        assert!(matches!(err, EventParseError::InvalidTag("subject")));
+
+        let err = parse_subject_tag(&[vec!["subject".to_string(), " ".to_string()]])
+            .expect_err("empty subject value");
+        assert!(matches!(err, EventParseError::InvalidTag("subject")));
     }
 }

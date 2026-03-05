@@ -17,8 +17,8 @@ const TAG_DESCRIPTION: &str = "description";
 const TAG_IMAGE: &str = "image";
 
 fn entry_from_tag(tag: &[String]) -> Result<RadrootsListEntry, EventParseError> {
-    let name = tag.get(0).ok_or(EventParseError::InvalidTag("tag"))?;
-    let value = tag.get(1).ok_or(EventParseError::InvalidTag("tag"))?;
+    let name = &tag[0];
+    let value = &tag[1];
     if value.trim().is_empty() {
         return Err(EventParseError::InvalidTag("tag"));
     }
@@ -50,14 +50,14 @@ pub fn list_set_from_tags(
     let mut entries = Vec::new();
 
     for tag in tags.iter().filter(|t| t.len() >= 2) {
-        let name = tag.get(0).ok_or(EventParseError::InvalidTag("tag"))?;
+        let name = &tag[0];
         if name.trim().is_empty() {
             return Err(EventParseError::InvalidTag("tag"));
         }
         match name.as_str() {
             TAG_D => {
                 if d_tag.is_none() {
-                    let value = tag.get(1).ok_or(EventParseError::InvalidTag("d"))?;
+                    let value = &tag[1];
                     if value.trim().is_empty() {
                         return Err(EventParseError::InvalidTag("d"));
                     }

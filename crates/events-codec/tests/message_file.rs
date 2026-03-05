@@ -46,6 +46,17 @@ fn sample_message_file() -> RadrootsMessageFile {
     }
 }
 
+fn minimal_message_file_tags() -> Vec<Vec<String>> {
+    vec![
+        vec!["p".to_string(), "pub1".to_string()],
+        vec!["file-type".to_string(), "image/jpeg".to_string()],
+        vec!["encryption-algorithm".to_string(), "aes-gcm".to_string()],
+        vec!["decryption-key".to_string(), "key".to_string()],
+        vec!["decryption-nonce".to_string(), "nonce".to_string()],
+        vec!["x".to_string(), "hash".to_string()],
+    ]
+}
+
 #[test]
 fn message_file_build_tags_requires_recipients() {
     let mut message = sample_message_file();
@@ -67,6 +78,17 @@ fn message_file_to_wire_parts_requires_file_url() {
     assert!(matches!(
         err,
         EventEncodeError::EmptyRequiredField("file_url")
+    ));
+}
+
+#[test]
+fn message_file_to_wire_parts_propagates_tag_build_errors() {
+    let mut message = sample_message_file();
+    message.file_type = " ".to_string();
+    let err = to_wire_parts(&message).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("file_type")
     ));
 }
 
@@ -106,6 +128,44 @@ fn message_file_build_tags_requires_crypto_fields() {
     assert!(matches!(
         err,
         EventEncodeError::EmptyRequiredField("decryption_nonce")
+    ));
+
+    let mut message = sample_message_file();
+    message.encrypted_hash = " ".to_string();
+    let err = message_file_build_tags(&message).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("encrypted_hash")
+    ));
+}
+
+#[test]
+fn message_file_build_tags_rejects_invalid_reply_subject_and_fallbacks() {
+    let mut message = sample_message_file();
+    message.reply_to = Some(RadrootsNostrEventPtr {
+        id: " ".to_string(),
+        relays: None,
+    });
+    let err = message_file_build_tags(&message).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("reply_to.id")
+    ));
+
+    let mut message = sample_message_file();
+    message.subject = Some(" ".to_string());
+    let err = message_file_build_tags(&message).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("subject")
+    ));
+
+    let mut message = sample_message_file();
+    message.fallbacks = vec![" ".to_string()];
+    let err = message_file_build_tags(&message).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("fallback")
     ));
 }
 
@@ -399,4 +459,136 @@ fn message_file_from_tags_rejects_empty_content() {
     )
     .unwrap_err();
     assert!(matches!(err, EventParseError::InvalidTag("content")));
+}
+
+#[test]
+fn message_file_from_tags_rejects_more_invalid_tag_shapes() {
+    let mut tags = minimal_message_file_tags();
+    tags[1].truncate(1);
+    let err = message_file_from_tags(
+        KIND_MESSAGE_FILE,
+        &tags,
+        "https://files.example/encrypted.bin",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::MissingTag("file-type")));
+
+    let mut tags = minimal_message_file_tags();
+    tags[0][1] = " ".to_string();
+    let err = message_file_from_tags(
+        KIND_MESSAGE_FILE,
+        &tags,
+        "https://files.example/encrypted.bin",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("p")));
+
+    let mut tags = minimal_message_file_tags();
+    tags.push(vec!["e".to_string(), " ".to_string()]);
+    let err = message_file_from_tags(
+        KIND_MESSAGE_FILE,
+        &tags,
+        "https://files.example/encrypted.bin",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("e")));
+
+    let mut tags = minimal_message_file_tags();
+    tags.push(vec!["subject".to_string(), " ".to_string()]);
+    let err = message_file_from_tags(
+        KIND_MESSAGE_FILE,
+        &tags,
+        "https://files.example/encrypted.bin",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("subject")));
+
+    let mut tags = minimal_message_file_tags();
+    tags[2][1] = " ".to_string();
+    let err = message_file_from_tags(
+        KIND_MESSAGE_FILE,
+        &tags,
+        "https://files.example/encrypted.bin",
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        EventParseError::InvalidTag("encryption-algorithm")
+    ));
+
+    let mut tags = minimal_message_file_tags();
+    tags[3][1] = " ".to_string();
+    let err = message_file_from_tags(
+        KIND_MESSAGE_FILE,
+        &tags,
+        "https://files.example/encrypted.bin",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("decryption-key")));
+
+    let mut tags = minimal_message_file_tags();
+    tags[4][1] = " ".to_string();
+    let err = message_file_from_tags(
+        KIND_MESSAGE_FILE,
+        &tags,
+        "https://files.example/encrypted.bin",
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        EventParseError::InvalidTag("decryption-nonce")
+    ));
+
+    let mut tags = minimal_message_file_tags();
+    tags[5][1] = " ".to_string();
+    let err = message_file_from_tags(
+        KIND_MESSAGE_FILE,
+        &tags,
+        "https://files.example/encrypted.bin",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("x")));
+
+    let mut tags = minimal_message_file_tags();
+    tags.push(vec!["ox".to_string(), " ".to_string()]);
+    let err = message_file_from_tags(
+        KIND_MESSAGE_FILE,
+        &tags,
+        "https://files.example/encrypted.bin",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("ox")));
+
+    let mut tags = minimal_message_file_tags();
+    tags.push(vec!["blurhash".to_string(), " ".to_string()]);
+    let err = message_file_from_tags(
+        KIND_MESSAGE_FILE,
+        &tags,
+        "https://files.example/encrypted.bin",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("blurhash")));
+}
+
+#[test]
+fn message_file_from_tags_rejects_invalid_dimension_components() {
+    let mut tags = minimal_message_file_tags();
+    tags.push(vec!["dim".to_string(), "badx10".to_string()]);
+    let err = message_file_from_tags(
+        KIND_MESSAGE_FILE,
+        &tags,
+        "https://files.example/encrypted.bin",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("dim")));
+
+    let mut tags = minimal_message_file_tags();
+    tags.push(vec!["dim".to_string(), "10xbad".to_string()]);
+    let err = message_file_from_tags(
+        KIND_MESSAGE_FILE,
+        &tags,
+        "https://files.example/encrypted.bin",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("dim")));
 }

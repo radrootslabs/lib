@@ -65,6 +65,25 @@ fn list_encode_and_decode_reject_invalid_inputs() {
         EventEncodeError::EmptyRequiredField("entry.values")
     ));
 
+    let invalid = RadrootsList {
+        content: "".to_string(),
+        entries: vec![RadrootsListEntry {
+            tag: "p".to_string(),
+            values: Vec::new(),
+        }],
+    };
+    let err = list_build_tags(&invalid).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("entry.values")
+    ));
+
+    let err = to_wire_parts_with_kind(&invalid, KIND_LIST_MUTE).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("entry.values")
+    ));
+
     let err = to_wire_parts_with_kind(&sample_list(), KIND_POST).unwrap_err();
     assert!(matches!(err, EventEncodeError::InvalidKind(KIND_POST)));
 
@@ -84,6 +103,14 @@ fn list_entries_from_tags_rejects_empty_entry_fields() {
     assert!(matches!(err, EventParseError::InvalidTag("tag")));
 
     let err = list_entries_from_tags(&[vec!["p".to_string(), " ".to_string()]]).unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("tag")));
+
+    let err = list_from_tags(
+        KIND_LIST_MUTE,
+        "private".to_string(),
+        &[vec!["".to_string(), "x".to_string()]],
+    )
+    .unwrap_err();
     assert!(matches!(err, EventParseError::InvalidTag("tag")));
 }
 

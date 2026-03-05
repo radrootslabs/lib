@@ -100,6 +100,22 @@ fn parse_event_ref_tag_rejects_wrong_tag_name_and_missing_fields() {
 }
 
 #[test]
+fn parse_event_ref_tag_rejects_missing_required_values() {
+    let err = parse_event_ref_tag(&["e".to_string()], "e").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("e")));
+
+    let err = parse_event_ref_tag(&["e".to_string(), "id".to_string()], "e").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("e")));
+
+    let err = parse_event_ref_tag(
+        &["e".to_string(), "id".to_string(), "author".to_string()],
+        "e",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("e")));
+}
+
+#[test]
 fn find_event_ref_tag_locates_first_match() {
     let event = common::event_ref("id", "author", KIND_POST);
     let tags = vec![
@@ -181,6 +197,50 @@ fn parse_nip10_ref_tags_rejects_missing_or_invalid_required_tags() {
     ];
     let err = parse_nip10_ref_tags(&tags, "e", "p", "k", "a").unwrap_err();
     assert!(matches!(err, EventParseError::InvalidNumber("k", _)));
+}
+
+#[test]
+fn parse_nip10_ref_tags_rejects_missing_required_values() {
+    let tags = vec![
+        vec!["e".to_string()],
+        vec!["p".to_string(), "author".to_string()],
+        vec!["k".to_string(), KIND_POST.to_string()],
+    ];
+    let err = parse_nip10_ref_tags(&tags, "e", "p", "k", "a").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("e")));
+
+    let tags = vec![
+        vec!["e".to_string(), "id".to_string()],
+        vec!["p".to_string()],
+        vec!["k".to_string(), KIND_POST.to_string()],
+    ];
+    let err = parse_nip10_ref_tags(&tags, "e", "p", "k", "a").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("p")));
+
+    let tags = vec![
+        vec!["e".to_string(), "id".to_string()],
+        vec!["p".to_string(), "author".to_string()],
+        vec!["k".to_string()],
+    ];
+    let err = parse_nip10_ref_tags(&tags, "e", "p", "k", "a").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("k")));
+}
+
+#[test]
+fn parse_nip10_ref_tags_rejects_missing_p_and_k_tags() {
+    let missing_p = vec![
+        vec!["e".to_string(), "id".to_string()],
+        vec!["k".to_string(), KIND_POST.to_string()],
+    ];
+    let err = parse_nip10_ref_tags(&missing_p, "e", "p", "k", "a").unwrap_err();
+    assert!(matches!(err, EventParseError::MissingTag("p")));
+
+    let missing_k = vec![
+        vec!["e".to_string(), "id".to_string()],
+        vec!["p".to_string(), "author".to_string()],
+    ];
+    let err = parse_nip10_ref_tags(&missing_k, "e", "p", "k", "a").unwrap_err();
+    assert!(matches!(err, EventParseError::MissingTag("k")));
 }
 
 #[test]

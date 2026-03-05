@@ -703,6 +703,11 @@ fn structured_list_sets_cover_success_and_error_paths() {
         err,
         EventEncodeError::EmptyRequiredField("coop_id")
     ));
+    let err = coop_members_list_set(coop_id, [" "]).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("entry.values")
+    ));
     let err = coop_members_farms_list_set(
         coop_id,
         [RadrootsFarmRef {
@@ -715,6 +720,15 @@ fn structured_list_sets_cover_success_and_error_paths() {
         err,
         EventEncodeError::EmptyRequiredField("farm.pubkey")
     ));
+    let err = coop_members_farms_list_set(
+        "invalid",
+        [RadrootsFarmRef {
+            pubkey: TEST_PUBKEY_HEX.to_string(),
+            d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
+        }],
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventEncodeError::InvalidField("coop_id")));
 
     let area_id = "AAAAAAAAAAAAAAAAAAAAAw";
     let resource_farms = resource_area_members_farms_list_set(
@@ -744,6 +758,11 @@ fn structured_list_sets_cover_success_and_error_paths() {
     assert!(matches!(
         err,
         EventEncodeError::EmptyRequiredField("area_id")
+    ));
+    let err = resource_area_stewards_list_set(area_id, [" "]).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("entry.values")
     ));
     let err = resource_area_members_plots_list_set(
         area_id,

@@ -26,9 +26,6 @@ fn farm_list_set_id(farm_id: &str, suffix: &str) -> Result<String, EventEncodeEr
         return Err(EventEncodeError::EmptyRequiredField("farm_id"));
     }
     validate_d_tag(farm_id, "farm_id")?;
-    if suffix.trim().is_empty() {
-        return Err(EventEncodeError::EmptyRequiredField("list_set_suffix"));
-    }
     Ok(format!("farm:{farm_id}:{suffix}"))
 }
 
@@ -220,18 +217,80 @@ mod tests {
     use super::*;
 
     #[test]
-    fn farm_list_set_id_validates_suffix_and_farm_id() {
-        let err = farm_list_set_id("AAAAAAAAAAAAAAAAAAAAAA", " ")
-            .expect_err("expected suffix validation error");
-        assert!(matches!(
-            err,
-            EventEncodeError::EmptyRequiredField("list_set_suffix")
-        ));
-
+    fn farm_list_set_id_validates_farm_id() {
         let err = farm_list_set_id(" ", "members").expect_err("expected farm_id error");
         assert!(matches!(
             err,
             EventEncodeError::EmptyRequiredField("farm_id")
+        ));
+    }
+
+    #[test]
+    fn farm_list_set_builders_cover_success_and_error_paths() {
+        let farm_id = "AAAAAAAAAAAAAAAAAAAAAA";
+        let farm_pubkey = "58e318557257f2ab58a415d21bb57082b4824cf667a1d64e72bcbc5acc018c62";
+
+        let err = farm_members_list_set("invalid", ["member-a"]).expect_err("invalid farm id");
+        assert!(matches!(err, EventEncodeError::InvalidField("farm_id")));
+
+        let owners = farm_owners_list_set(farm_id, ["owner-a"]).expect("owners list set");
+        assert_eq!(owners.d_tag, "farm:AAAAAAAAAAAAAAAAAAAAAA:members.owners");
+        assert_eq!(owners.entries[0].tag, "p");
+        let err = farm_owners_list_set("invalid", ["owner-a"]).expect_err("invalid farm id");
+        assert!(matches!(err, EventEncodeError::InvalidField("farm_id")));
+        let err = farm_owners_list_set(farm_id, [" "]).expect_err("invalid owner entry");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("entry.values")
+        ));
+
+        let workers = farm_workers_list_set(farm_id, ["worker-a"]).expect("workers list set");
+        assert_eq!(workers.d_tag, "farm:AAAAAAAAAAAAAAAAAAAAAA:members.workers");
+        assert_eq!(workers.entries[0].tag, "p");
+        let err = farm_workers_list_set("invalid", ["worker-a"]).expect_err("invalid farm id");
+        assert!(matches!(err, EventEncodeError::InvalidField("farm_id")));
+        let err = farm_workers_list_set(farm_id, [" "]).expect_err("invalid worker entry");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("entry.values")
+        ));
+
+        let plots =
+            farm_plots_list_set(farm_id, farm_pubkey, ["AAAAAAAAAAAAAAAAAAAAAA"]).expect("plots");
+        assert_eq!(plots.d_tag, "farm:AAAAAAAAAAAAAAAAAAAAAA:plots");
+        assert_eq!(plots.entries[0].tag, "a");
+        let err = farm_plots_list_set("invalid", farm_pubkey, ["AAAAAAAAAAAAAAAAAAAAAA"])
+            .expect_err("invalid farm id");
+        assert!(matches!(err, EventEncodeError::InvalidField("farm_id")));
+        let err =
+            farm_plots_list_set(farm_id, farm_pubkey, ["invalid"]).expect_err("invalid plot_id");
+        assert!(matches!(err, EventEncodeError::InvalidField("plot.d_tag")));
+
+        let listings = farm_listings_list_set(farm_id, farm_pubkey, ["AAAAAAAAAAAAAAAAAAAAAA"])
+            .expect("listings");
+        assert_eq!(listings.d_tag, "farm:AAAAAAAAAAAAAAAAAAAAAA:listings");
+        assert_eq!(listings.entries[0].tag, "a");
+        let err = farm_listings_list_set("invalid", farm_pubkey, ["AAAAAAAAAAAAAAAAAAAAAA"])
+            .expect_err("invalid farm id");
+        assert!(matches!(err, EventEncodeError::InvalidField("farm_id")));
+        let err = farm_listings_list_set(farm_id, farm_pubkey, ["invalid"])
+            .expect_err("invalid listing_id");
+        assert!(matches!(err, EventEncodeError::InvalidField("listing_id")));
+
+        let err =
+            farm_listings_list_set(farm_id, farm_pubkey, [" "]).expect_err("empty listing_id");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("listing_id")
+        ));
+
+        let member_of = member_of_farms_list_set(["farm-pubkey"]).expect("member_of farms");
+        assert_eq!(member_of.d_tag, "member_of.farms");
+        assert_eq!(member_of.entries[0].tag, "p");
+        let err = member_of_farms_list_set([" "]).expect_err("invalid member_of entry");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("entry.values")
         ));
     }
 }

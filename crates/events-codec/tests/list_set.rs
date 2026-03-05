@@ -58,6 +58,8 @@ fn list_set_encode_and_decode_reject_invalid_inputs() {
     };
     let err = list_set_build_tags(&invalid).unwrap_err();
     assert!(matches!(err, EventEncodeError::EmptyRequiredField("d_tag")));
+    let err = to_wire_parts_with_kind(&invalid, KIND_LIST_SET_FOLLOW).unwrap_err();
+    assert!(matches!(err, EventEncodeError::EmptyRequiredField("d_tag")));
 
     let invalid = RadrootsListSet {
         d_tag: "farm:invalid:owners".to_string(),
@@ -138,6 +140,17 @@ fn list_set_decode_rejects_invalid_tag_shapes() {
     )
     .unwrap_err();
     assert!(matches!(err, EventParseError::InvalidTag("tag")));
+
+    let err = list_set_from_tags(
+        KIND_LIST_SET_FOLLOW,
+        "".to_string(),
+        &[
+            vec!["d".to_string(), "farm:invalid:members".to_string()],
+            vec!["p".to_string(), "owner".to_string()],
+        ],
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("d")));
 }
 
 #[test]

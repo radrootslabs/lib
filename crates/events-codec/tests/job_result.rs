@@ -162,6 +162,20 @@ fn job_result_requires_request_event_tag() {
     let tags = vec![vec!["p".to_string(), "customer".to_string()]];
     let err = job_result_from_tags(KIND_JOB_RESULT_MIN + 1, &tags, "payload").unwrap_err();
     assert!(matches!(err, JobParseError::MissingTag("e")));
+
+    let tags = vec![
+        vec!["e".to_string()],
+        vec!["amount".to_string(), "not-a-number".to_string()],
+    ];
+    let err = job_result_from_tags(KIND_JOB_RESULT_MIN + 1, &tags, "payload").unwrap_err();
+    assert!(matches!(err, JobParseError::InvalidTag("e")));
+
+    let tags = vec![
+        vec!["e".to_string(), "req".to_string()],
+        vec!["amount".to_string(), "not-a-number".to_string()],
+    ];
+    let err = job_result_from_tags(KIND_JOB_RESULT_MIN + 1, &tags, "payload").unwrap_err();
+    assert!(matches!(err, JobParseError::InvalidNumber("amount", _)));
 }
 
 #[test]
@@ -180,6 +194,40 @@ fn job_result_metadata_rejects_wrong_kind() {
         err,
         JobParseError::InvalidTag("kind (expected 6000-6999)")
     ));
+}
+
+#[test]
+fn job_result_data_from_event_success_path() {
+    let result = sample_result();
+    let content = result.content.clone().unwrap();
+    let parts = to_wire_parts(&result, &content).expect("wire parts");
+    let data = radroots_events_codec::job::result::decode::data_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        1,
+        parts.kind,
+        content,
+        parts.tags,
+    )
+    .expect("job result data");
+    assert_eq!(data.id, "id");
+    assert_eq!(data.author, "author");
+    assert_eq!(data.kind, KIND_JOB_RESULT_MIN + 1);
+    assert_eq!(data.data.request_event.id, "req");
+}
+
+#[test]
+fn job_result_data_from_event_propagates_decode_errors_with_valid_kind() {
+    let err = radroots_events_codec::job::result::decode::data_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        1,
+        KIND_JOB_RESULT_MIN + 1,
+        "payload".to_string(),
+        Vec::new(),
+    )
+    .unwrap_err();
+    assert!(matches!(err, JobParseError::MissingTag("e")));
 }
 
 #[test]

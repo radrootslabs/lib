@@ -67,6 +67,18 @@ fn geochat_to_wire_parts_requires_content() {
         err,
         EventEncodeError::EmptyRequiredField("content")
     ));
+
+    let geochat = RadrootsGeoChat {
+        geohash: " ".to_string(),
+        content: "hello".to_string(),
+        nickname: None,
+        teleported: false,
+    };
+    let err = to_wire_parts(&geochat).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("geohash")
+    ));
 }
 
 #[test]
@@ -168,6 +180,34 @@ fn geochat_from_tags_rejects_invalid_optional_tags() {
     )
     .unwrap();
     assert!(!geochat.teleported);
+}
+
+#[test]
+fn geochat_from_tags_rejects_missing_tag_values() {
+    let err = geochat_from_tags(KIND_GEOCHAT, &[vec!["g".to_string()]], "hello").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("g")));
+
+    let err = geochat_from_tags(
+        KIND_GEOCHAT,
+        &[
+            vec!["g".to_string(), "dr5rsj7".to_string()],
+            vec!["n".to_string()],
+        ],
+        "hello",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("n")));
+
+    let err = geochat_from_tags(
+        KIND_GEOCHAT,
+        &[
+            vec!["g".to_string(), "dr5rsj7".to_string()],
+            vec!["t".to_string()],
+        ],
+        "hello",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("t")));
 }
 
 #[test]

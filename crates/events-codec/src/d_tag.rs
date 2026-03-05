@@ -46,6 +46,8 @@ mod tests {
     #[test]
     fn d_tag_base64url_validation_covers_allowed_and_rejected_shapes() {
         assert!(is_d_tag_base64url("AAAAAAAAAAAAAAAAAAAAAA"));
+        assert!(is_d_tag_base64url("AAAAAAAAAAAAAAAAAAAA-A"));
+        assert!(is_d_tag_base64url("AAAAAAAAAAAAAAAAAAAA_A"));
         assert!(!is_d_tag_base64url("AAAAAAAAAAAAAAAAAAAAA!"));
         assert!(!is_d_tag_base64url("AAAAAAAAAAAAAAAAAAAAAB"));
         assert!(!is_d_tag_base64url("short"));

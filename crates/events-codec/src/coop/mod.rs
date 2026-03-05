@@ -11,6 +11,7 @@ mod tests {
         coop_items_list_set, coop_members_farms_list_set, coop_members_list_set,
         member_of_coops_list_set,
     };
+    use crate::error::EventEncodeError;
     use radroots_events::coop::{RadrootsCoop, RadrootsCoopLocation, RadrootsCoopRef};
     use radroots_events::farm::{
         RadrootsFarmRef, RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon,
@@ -88,6 +89,30 @@ mod tests {
             .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("p"));
         assert!(has_a);
         assert!(has_p);
+
+        let err = coop_ref_tags(&RadrootsCoopRef {
+            pubkey: "coop_pubkey".to_string(),
+            d_tag: "invalid".to_string(),
+        })
+        .expect_err("expected invalid coop.d_tag");
+        assert!(matches!(err, EventEncodeError::InvalidField("coop.d_tag")));
+    }
+
+    #[test]
+    fn coop_build_tags_rejects_invalid_d_tag() {
+        let coop = RadrootsCoop {
+            d_tag: "invalid".to_string(),
+            name: "Test Coop".to_string(),
+            about: None,
+            website: None,
+            picture: None,
+            banner: None,
+            location: None,
+            tags: None,
+        };
+
+        let err = coop_build_tags(&coop).expect_err("expected invalid d_tag");
+        assert!(matches!(err, EventEncodeError::InvalidField("d_tag")));
     }
 
     #[test]
@@ -97,6 +122,13 @@ mod tests {
         assert_eq!(members.d_tag, "coop:BAAAAAAAAAAAAAAAAAAAAA:members");
         assert_eq!(members.entries.len(), 1);
         assert_eq!(members.entries[0].tag, "p");
+
+        let err = coop_members_list_set("BAAAAAAAAAAAAAAAAAAAAA", [" "])
+            .expect_err("expected invalid members entry");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("entry.values")
+        ));
 
         let farm_members = coop_members_farms_list_set(
             "BAAAAAAAAAAAAAAAAAAAAA",

@@ -133,4 +133,12 @@ mod tests {
                 .any(|tag| tag.first().map(|v| v.as_str()) == Some("a"))
         );
     }
+
+    #[test]
+    fn document_build_tags_rejects_invalid_d_tag() {
+        let mut document = sample_document();
+        document.d_tag = "invalid".to_string();
+        let err = document_build_tags(&document).expect_err("expected invalid d_tag");
+        assert!(matches!(err, EventEncodeError::InvalidField("d_tag")));
+    }
 }

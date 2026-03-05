@@ -91,6 +91,16 @@ fn job_request_to_wire_parts_allows_encrypted_when_provider_present() {
 }
 
 #[test]
+fn job_request_from_tags_rejects_invalid_bid_tag() {
+    let err = job_request_from_tags(
+        KIND_JOB_REQUEST_MIN + 1,
+        &[vec!["bid".to_string(), "not-a-number".to_string()]],
+    )
+    .unwrap_err();
+    assert!(matches!(err, JobParseError::InvalidNumber("bid", _)));
+}
+
+#[test]
 fn job_request_metadata_rejects_wrong_kind() {
     let err = radroots_events_codec::job::request::decode::data_from_event(
         "id".to_string(),
@@ -105,6 +115,37 @@ fn job_request_metadata_rejects_wrong_kind() {
         err,
         JobParseError::InvalidTag("kind (expected 5000-5999)")
     ));
+}
+
+#[test]
+fn job_request_data_from_event_success_path() {
+    let request = sample_request();
+    let parts = to_wire_parts(&request, "payload").expect("wire parts");
+    let data = radroots_events_codec::job::request::decode::data_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        1,
+        parts.kind,
+        parts.tags,
+    )
+    .expect("job request data");
+    assert_eq!(data.id, "id");
+    assert_eq!(data.author, "author");
+    assert_eq!(data.kind, KIND_JOB_REQUEST_MIN + 1);
+    assert_eq!(data.data.providers, vec!["provider".to_string()]);
+}
+
+#[test]
+fn job_request_data_from_event_propagates_decode_errors_with_valid_kind() {
+    let err = radroots_events_codec::job::request::decode::data_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        1,
+        KIND_JOB_REQUEST_MIN + 1,
+        vec![vec!["bid".to_string(), "not-a-number".to_string()]],
+    )
+    .unwrap_err();
+    assert!(matches!(err, JobParseError::InvalidNumber("bid", _)));
 }
 
 #[test]

@@ -55,6 +55,16 @@ fn reaction_to_wire_parts_requires_content() {
         err,
         EventEncodeError::EmptyRequiredField("content")
     ));
+
+    let reaction = RadrootsReaction {
+        root: common::event_ref("", "author", KIND_POST),
+        content: "+".to_string(),
+    };
+    let err = to_wire_parts(&reaction).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("root.id")
+    ));
 }
 
 #[test]
@@ -77,6 +87,29 @@ fn reaction_from_tags_requires_root_tag() {
     let tags = vec![vec!["p".to_string(), "x".to_string()]];
     let err = reaction_from_tags(KIND_REACTION, &tags, "+").unwrap_err();
     assert!(matches!(err, EventParseError::MissingTag("e")));
+}
+
+#[test]
+fn reaction_from_tags_propagates_reference_parse_errors() {
+    let err = reaction_from_tags(
+        KIND_REACTION,
+        &[
+            vec!["e".to_string()],
+            vec!["p".to_string(), "author".to_string()],
+            vec!["k".to_string(), KIND_POST.to_string()],
+        ],
+        "+",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("e")));
+
+    let err = reaction_from_tags(
+        KIND_REACTION,
+        &[vec![TAG_E_ROOT.to_string(), "root".to_string()]],
+        "+",
+    )
+    .unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("e_root")));
 }
 
 #[test]

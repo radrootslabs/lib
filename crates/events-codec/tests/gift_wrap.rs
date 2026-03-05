@@ -71,6 +71,9 @@ fn gift_wrap_from_tags_rejects_wrong_kind() {
 fn gift_wrap_from_tags_requires_p_tag() {
     let err = gift_wrap_from_tags(KIND_GIFT_WRAP, &[], "payload").unwrap_err();
     assert!(matches!(err, EventParseError::MissingTag("p")));
+
+    let err = gift_wrap_from_tags(KIND_GIFT_WRAP, &[vec!["p".to_string()]], "payload").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag("p")));
 }
 
 #[test]
@@ -201,6 +204,14 @@ fn gift_wrap_to_wire_parts_requires_content_and_accepts_default_kind() {
     let parts = to_wire_parts_with_kind(&sample_gift_wrap(), KIND_GIFT_WRAP).unwrap();
     assert_eq!(parts.kind, KIND_GIFT_WRAP);
     assert_eq!(parts.content, "encrypted");
+
+    let mut gift_wrap = sample_gift_wrap();
+    gift_wrap.recipient.public_key = " ".to_string();
+    let err = to_wire_parts(&gift_wrap).unwrap_err();
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("recipient.public_key")
+    ));
 }
 
 #[test]

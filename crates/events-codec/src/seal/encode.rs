@@ -10,13 +10,13 @@ use crate::wire::WireEventParts;
 const DEFAULT_KIND: u32 = KIND_SEAL;
 
 pub fn seal_build_tags(_seal: &RadrootsSeal) -> Result<Vec<Vec<String>>, EventEncodeError> {
+    if _seal.content.trim().is_empty() {
+        return Err(EventEncodeError::EmptyRequiredField("content"));
+    }
     Ok(Vec::new())
 }
 
 pub fn to_wire_parts(seal: &RadrootsSeal) -> Result<WireEventParts, EventEncodeError> {
-    if seal.content.trim().is_empty() {
-        return Err(EventEncodeError::EmptyRequiredField("content"));
-    }
     let tags = seal_build_tags(seal)?;
     Ok(WireEventParts {
         kind: DEFAULT_KIND,

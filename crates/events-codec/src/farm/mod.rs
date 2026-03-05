@@ -80,6 +80,36 @@ mod tests {
     }
 
     #[test]
+    fn farm_tags_allow_missing_optional_fields() {
+        let farm = RadrootsFarm {
+            d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
+            name: "Test Farm".to_string(),
+            about: None,
+            website: None,
+            picture: None,
+            banner: None,
+            location: None,
+            tags: None,
+        };
+
+        let tags = farm_build_tags(&farm).expect("tags without optional fields");
+        assert!(
+            tags.iter()
+                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("d"))
+        );
+        assert!(
+            !tags
+                .iter()
+                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("t"))
+        );
+        assert!(
+            !tags
+                .iter()
+                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("g"))
+        );
+    }
+
+    #[test]
     fn farm_build_tags_rejects_invalid_d_tag() {
         let farm = RadrootsFarm {
             d_tag: "farm:invalid".to_string(),
@@ -112,6 +142,101 @@ mod tests {
             .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("p"));
         assert!(has_a);
         assert!(has_p);
+
+        let err = farm_ref_tags(&RadrootsFarmRef {
+            pubkey: "farm_pubkey".to_string(),
+            d_tag: "invalid".to_string(),
+        })
+        .expect_err("expected invalid farm.d_tag");
+        assert!(matches!(err, EventEncodeError::InvalidField("farm.d_tag")));
+    }
+
+    #[test]
+    fn farm_encode_rejects_empty_required_fields() {
+        let mut farm = RadrootsFarm {
+            d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
+            name: "Test Farm".to_string(),
+            about: None,
+            website: None,
+            picture: None,
+            banner: None,
+            location: Some(RadrootsFarmLocation {
+                primary: None,
+                city: None,
+                region: None,
+                country: None,
+                gcs: RadrootsGcsLocation {
+                    lat: 37.0,
+                    lng: -122.0,
+                    geohash: "9q8yy".to_string(),
+                    point: RadrootsGeoJsonPoint {
+                        r#type: "Point".to_string(),
+                        coordinates: [-122.0, 37.0],
+                    },
+                    polygon: RadrootsGeoJsonPolygon {
+                        r#type: "Polygon".to_string(),
+                        coordinates: vec![vec![
+                            [-122.0, 37.0],
+                            [-122.0, 37.0001],
+                            [-122.0001, 37.0001],
+                            [-122.0, 37.0],
+                        ]],
+                    },
+                    accuracy: None,
+                    altitude: None,
+                    tag_0: None,
+                    label: None,
+                    area: None,
+                    elevation: None,
+                    soil: None,
+                    climate: None,
+                    gc_id: None,
+                    gc_name: None,
+                    gc_admin1_id: None,
+                    gc_admin1_name: None,
+                    gc_country_id: None,
+                    gc_country_name: None,
+                },
+            }),
+            tags: None,
+        };
+
+        farm.d_tag = " ".to_string();
+        let err = farm_build_tags(&farm).expect_err("expected empty d_tag");
+        assert!(matches!(err, EventEncodeError::EmptyRequiredField("d_tag")));
+
+        farm.d_tag = "AAAAAAAAAAAAAAAAAAAAAA".to_string();
+        farm.name = " ".to_string();
+        let err = farm_build_tags(&farm).expect_err("expected empty name");
+        assert!(matches!(err, EventEncodeError::EmptyRequiredField("name")));
+
+        farm.name = "Test Farm".to_string();
+        farm.location.as_mut().expect("location").gcs.geohash = " ".to_string();
+        let err = farm_build_tags(&farm).expect_err("expected empty geohash");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("location.gcs.geohash")
+        ));
+
+        let err = farm_ref_tags(&RadrootsFarmRef {
+            pubkey: " ".to_string(),
+            d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
+        })
+        .expect_err("expected empty farm.pubkey");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("farm.pubkey")
+        ));
+
+        let err = farm_ref_tags(&RadrootsFarmRef {
+            pubkey: "farm_pubkey".to_string(),
+            d_tag: " ".to_string(),
+        })
+        .expect_err("expected empty farm.d_tag");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("farm.d_tag")
+        ));
     }
 
     #[test]

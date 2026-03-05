@@ -3,7 +3,8 @@ pub mod encode;
 
 #[cfg(test)]
 mod tests {
-    use crate::plot::encode::plot_build_tags;
+    use crate::error::EventEncodeError;
+    use crate::plot::encode::{plot_address, plot_build_tags};
     use radroots_events::{
         farm::{
             RadrootsFarmRef, RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon,
@@ -71,5 +72,166 @@ mod tests {
             .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("p"));
         assert!(has_a);
         assert!(has_p);
+    }
+
+    #[test]
+    fn plot_tags_allow_missing_optional_fields() {
+        let plot = RadrootsPlot {
+            d_tag: "AAAAAAAAAAAAAAAAAAAAAQ".to_string(),
+            farm: RadrootsFarmRef {
+                pubkey: "farm_pubkey".to_string(),
+                d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
+            },
+            name: "Orchard".to_string(),
+            about: None,
+            location: None,
+            tags: None,
+        };
+
+        let tags = plot_build_tags(&plot).expect("tags without optional fields");
+        assert!(
+            tags.iter()
+                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("d"))
+        );
+        assert!(
+            tags.iter()
+                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("a"))
+        );
+        assert!(
+            tags.iter()
+                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("p"))
+        );
+        assert!(
+            !tags
+                .iter()
+                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("t"))
+        );
+        assert!(
+            !tags
+                .iter()
+                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("g"))
+        );
+    }
+
+    #[test]
+    fn plot_build_tags_rejects_invalid_plot_and_farm_d_tag() {
+        let mut plot = RadrootsPlot {
+            d_tag: "AAAAAAAAAAAAAAAAAAAAAQ".to_string(),
+            farm: RadrootsFarmRef {
+                pubkey: "farm_pubkey".to_string(),
+                d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
+            },
+            name: "Orchard".to_string(),
+            about: None,
+            location: None,
+            tags: None,
+        };
+
+        plot.d_tag = "invalid".to_string();
+        let err = plot_build_tags(&plot).expect_err("invalid plot d_tag");
+        assert!(matches!(err, EventEncodeError::InvalidField("d_tag")));
+
+        plot.d_tag = "AAAAAAAAAAAAAAAAAAAAAQ".to_string();
+        plot.farm.d_tag = "invalid".to_string();
+        let err = plot_build_tags(&plot).expect_err("invalid farm d_tag");
+        assert!(matches!(err, EventEncodeError::InvalidField("farm.d_tag")));
+    }
+
+    #[test]
+    fn plot_encode_rejects_empty_required_fields() {
+        let mut plot = RadrootsPlot {
+            d_tag: "AAAAAAAAAAAAAAAAAAAAAQ".to_string(),
+            farm: RadrootsFarmRef {
+                pubkey: "farm_pubkey".to_string(),
+                d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
+            },
+            name: "Orchard".to_string(),
+            about: None,
+            location: Some(RadrootsPlotLocation {
+                primary: None,
+                city: None,
+                region: None,
+                country: None,
+                gcs: RadrootsGcsLocation {
+                    lat: 37.0,
+                    lng: -122.0,
+                    geohash: "9q8yy".to_string(),
+                    point: RadrootsGeoJsonPoint {
+                        r#type: "Point".to_string(),
+                        coordinates: [-122.0, 37.0],
+                    },
+                    polygon: RadrootsGeoJsonPolygon {
+                        r#type: "Polygon".to_string(),
+                        coordinates: vec![vec![
+                            [-122.0, 37.0],
+                            [-122.0, 37.0001],
+                            [-122.0001, 37.0001],
+                            [-122.0, 37.0],
+                        ]],
+                    },
+                    accuracy: None,
+                    altitude: None,
+                    tag_0: None,
+                    label: None,
+                    area: None,
+                    elevation: None,
+                    soil: None,
+                    climate: None,
+                    gc_id: None,
+                    gc_name: None,
+                    gc_admin1_id: None,
+                    gc_admin1_name: None,
+                    gc_country_id: None,
+                    gc_country_name: None,
+                },
+            }),
+            tags: None,
+        };
+
+        let err =
+            plot_address(" ", "AAAAAAAAAAAAAAAAAAAAAQ").expect_err("expected empty author pubkey");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("plot.author_pubkey")
+        ));
+
+        let err = plot_address("farm_pubkey", " ").expect_err("expected empty plot d_tag");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("plot.d_tag")
+        ));
+
+        plot.d_tag = " ".to_string();
+        let err = plot_build_tags(&plot).expect_err("expected empty d_tag");
+        assert!(matches!(err, EventEncodeError::EmptyRequiredField("d_tag")));
+
+        plot.d_tag = "AAAAAAAAAAAAAAAAAAAAAQ".to_string();
+        plot.name = " ".to_string();
+        let err = plot_build_tags(&plot).expect_err("expected empty name");
+        assert!(matches!(err, EventEncodeError::EmptyRequiredField("name")));
+
+        plot.name = "Orchard".to_string();
+        plot.farm.pubkey = " ".to_string();
+        let err = plot_build_tags(&plot).expect_err("expected empty farm pubkey");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("farm.pubkey")
+        ));
+
+        plot.farm.pubkey = "farm_pubkey".to_string();
+        plot.farm.d_tag = " ".to_string();
+        let err = plot_build_tags(&plot).expect_err("expected empty farm d_tag");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("farm.d_tag")
+        ));
+
+        plot.farm.d_tag = "AAAAAAAAAAAAAAAAAAAAAA".to_string();
+        plot.location.as_mut().expect("location").gcs.geohash = " ".to_string();
+        let err = plot_build_tags(&plot).expect_err("expected empty geohash");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("location.gcs.geohash")
+        ));
     }
 }

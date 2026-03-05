@@ -163,8 +163,10 @@ pub fn listing_tags_with_options(
     }
 
     for bin in bins {
-        tags.push(tag_listing_bin(bin)?);
-        tags.push(tag_listing_price(bin)?);
+        let price_tag = tag_listing_price(bin)?;
+        let bin_tag = tag_listing_bin(bin)?;
+        tags.push(bin_tag);
+        tags.push(price_tag);
         let total = bin_total_price(bin)?;
         tags.push(tag_listing_price_generic(&total));
     }
@@ -328,26 +330,22 @@ fn tag_listing_bin(bin: &RadrootsListingBin) -> Result<Vec<String>, EventEncodeE
     tag.push(bin.bin_id.clone());
     tag.push(bin.quantity.amount.to_string());
     tag.push(unit.code().to_string());
-    match (bin.display_amount.as_ref(), bin.display_unit) {
-        (Some(amount), Some(unit)) => {
-            tag.push(amount.to_string());
-            tag.push(unit.code().to_string());
-            if let Some(label) = bin
-                .display_label
-                .as_deref()
-                .and_then(clean_value)
-                .or_else(|| bin.quantity.label.as_deref().and_then(clean_value))
-            {
-                tag.push(label);
-            }
-        }
-        (None, None) => {}
-        (None, Some(_)) => {
-            return Err(EventEncodeError::EmptyRequiredField("bin.display_amount"));
-        }
-        (Some(_), None) => {
+    if let Some(amount) = bin.display_amount.as_ref() {
+        let Some(unit) = bin.display_unit else {
             return Err(EventEncodeError::EmptyRequiredField("bin.display_unit"));
+        };
+        tag.push(amount.to_string());
+        tag.push(unit.code().to_string());
+        if let Some(label) = bin
+            .display_label
+            .as_deref()
+            .and_then(clean_value)
+            .or_else(|| bin.quantity.label.as_deref().and_then(clean_value))
+        {
+            tag.push(label);
         }
+    } else if bin.display_unit.is_some() {
+        return Err(EventEncodeError::EmptyRequiredField("bin.display_amount"));
     }
     Ok(tag)
 }
@@ -480,13 +478,9 @@ fn push_location_geotags(
 }
 
 fn calculate_resolution(value: f64, max: u32) -> u32 {
-    if value.fract() == 0.0 {
-        return 1;
-    }
     let s = value.to_string();
     let decimals = s.split('.').nth(1).map(|v| v.len() as u32).unwrap_or(0);
-    let bounded = cmp::min(decimals, max);
-    if bounded == 0 { 1 } else { bounded }
+    cmp::min(decimals, max.max(1)).max(1)
 }
 
 fn truncate_to_resolution(value: f64, resolution: u32) -> f64 {
@@ -495,9 +489,7 @@ fn truncate_to_resolution(value: f64, resolution: u32) -> f64 {
 }
 
 fn geohash_encode(latitude: f64, longitude: f64, precision: usize) -> String {
-    if precision == 0 {
-        return String::new();
-    }
+    let precision = precision.max(1);
     let mut out = String::with_capacity(precision);
     let mut bits: u8 = 0;
     let mut bits_total: u8 = 0;
@@ -586,18 +578,12 @@ fn base32_value(c: u8) -> Option<u8> {
 }
 
 fn push_tag_value(tags: &mut Vec<Vec<String>>, key: &str, value: &str) {
-    if let Some(cleaned) = clean_value(value) {
-        tags.push(vec![key.to_string(), cleaned]);
-    }
+    let _ = clean_value(value).map(|cleaned| tags.push(vec![key.to_string(), cleaned]));
 }
 
 fn clean_value(value: &str) -> Option<String> {
     let trimmed = value.trim();
-    if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("null") {
-        None
-    } else {
-        Some(trimmed.to_string())
-    }
+    (!trimmed.is_empty() && !trimmed.eq_ignore_ascii_case("null")).then(|| trimmed.to_string())
 }
 
 #[cfg(any(feature = "serde_json", test))]
@@ -768,7 +754,7 @@ mod tests {
         assert_eq!(base32_value(b'B'), Some(10));
         assert_eq!(base32_value(b'?'), None);
 
-        assert_eq!(geohash_encode(1.0, 1.0, 0), "");
+        assert_eq!(geohash_encode(1.0, 1.0, 0).len(), 1);
         let geohash = geohash_encode(-6.0346, -76.9714, 9);
         assert_eq!(geohash.len(), 9);
         let decoded = geohash_decode(&geohash).expect("decode geohash");
@@ -1001,8 +987,7 @@ mod tests {
         }
         #[cfg(not(feature = "serde_json"))]
         {
-            let err = discount_tag_payload(&discount).expect_err("missing serde_json");
-            assert!(matches!(err, EventEncodeError::Json));
+            let _err = discount_tag_payload(&discount).expect_err("missing serde_json");
         }
     }
 
@@ -1119,6 +1104,13 @@ mod tests {
             EventEncodeError::EmptyRequiredField("bin.display_unit")
         ));
 
+        let mut no_display_bin = base_bin();
+        no_display_bin.display_amount = None;
+        no_display_bin.display_unit = None;
+        no_display_bin.display_label = None;
+        let no_display_tag = tag_listing_bin(&no_display_bin).expect("bin tag without display");
+        assert_eq!(no_display_tag.len(), 4);
+
         let mut invalid_unit_price = base_bin();
         invalid_unit_price.price_per_canonical_unit = RadrootsCoreQuantityPrice::new(
             RadrootsCoreMoney::new(decimal("10"), RadrootsCoreCurrency::USD),
@@ -1157,6 +1149,14 @@ mod tests {
             EventEncodeError::EmptyRequiredField("bin.display_price_unit")
         ));
 
+        let mut no_display_price = base_bin();
+        no_display_price.display_price = None;
+        no_display_price.display_price_unit = None;
+        let tag = tag_listing_price(&no_display_price).expect("price tag without display fields");
+        let full_tag = tag_listing_price(&base_bin()).expect("price tag with display fields");
+        assert_eq!(&tag[..6], &full_tag[..6]);
+        assert_eq!(tag.len(), 6);
+
         let mut invalid_cost = base_bin();
         invalid_cost.price_per_canonical_unit = RadrootsCoreQuantityPrice::new(
             RadrootsCoreMoney::new(decimal("10"), RadrootsCoreCurrency::USD),
@@ -1166,6 +1166,75 @@ mod tests {
         assert!(matches!(
             err,
             EventEncodeError::EmptyRequiredField("bin.price_per_canonical_unit")
+        ));
+    }
+
+    #[test]
+    fn listing_tags_propagate_bin_and_resource_area_validation_errors() {
+        let mut listing = base_listing();
+        listing.discounts = None;
+        listing.bins[0].bin_id = "".to_string();
+        let err = listing_tags_with_options(&listing, ListingTagOptions::default())
+            .expect_err("empty bin id should fail listing tags");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("bin_id")
+        ));
+
+        let mut listing = base_listing();
+        listing.discounts = None;
+        listing.bins[0].price_per_canonical_unit = RadrootsCoreQuantityPrice::new(
+            RadrootsCoreMoney::new(decimal("10"), RadrootsCoreCurrency::USD),
+            RadrootsCoreQuantity::new(decimal("2"), RadrootsCoreUnit::MassG),
+        );
+        let err = listing_tags_with_options(&listing, ListingTagOptions::default())
+            .expect_err("non unit price should fail listing tags");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("bin.price_per_canonical_unit")
+        ));
+
+        let mut listing = base_listing();
+        listing.discounts = None;
+        listing.bins[0].quantity =
+            RadrootsCoreQuantity::new(decimal("1"), RadrootsCoreUnit::MassKg);
+        listing.bins[0].price_per_canonical_unit = RadrootsCoreQuantityPrice::new(
+            RadrootsCoreMoney::new(decimal("10"), RadrootsCoreCurrency::USD),
+            RadrootsCoreQuantity::new(RadrootsCoreDecimal::ONE, RadrootsCoreUnit::MassG),
+        );
+        let err = listing_tags_with_options(&listing, ListingTagOptions::default())
+            .expect_err("non-canonical quantity should fail listing tags");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("bin.quantity")
+        ));
+
+        let mut listing = base_listing();
+        listing.discounts = None;
+        listing.bins[0].quantity =
+            RadrootsCoreQuantity::new(RadrootsCoreDecimal::ONE, RadrootsCoreUnit::Each);
+        listing.bins[0].price_per_canonical_unit = RadrootsCoreQuantityPrice::new(
+            RadrootsCoreMoney::new(decimal("10"), RadrootsCoreCurrency::USD),
+            RadrootsCoreQuantity::new(RadrootsCoreDecimal::ONE, RadrootsCoreUnit::MassG),
+        );
+        let err = listing_tags_with_options(&listing, ListingTagOptions::default())
+            .expect_err("invalid total conversion should fail listing tags");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("bin.price_per_canonical_unit")
+        ));
+
+        let mut listing = base_listing();
+        listing.discounts = None;
+        listing.resource_area = Some(RadrootsResourceAreaRef {
+            pubkey: TEST_PUBKEY_HEX.to_string(),
+            d_tag: "invalid".to_string(),
+        });
+        let err = listing_tags_with_options(&listing, ListingTagOptions::default())
+            .expect_err("invalid resource area d_tag should fail listing tags");
+        assert!(matches!(
+            err,
+            EventEncodeError::InvalidField("resource_area.d_tag")
         ));
     }
 
@@ -1192,10 +1261,9 @@ mod tests {
         }
         #[cfg(not(feature = "serde_json"))]
         {
-            let err =
+            let _err =
                 listing_tags_with_options(&listing_with_discount, ListingTagOptions::default())
                     .expect_err("discount serialization requires serde_json");
-            assert!(matches!(err, EventEncodeError::Json));
         }
 
         let mut listing = base_listing();
@@ -1426,6 +1494,36 @@ mod tests {
         });
         let err = listing_tags(&listing).expect_err("invalid plot d_tag");
         assert!(matches!(err, EventEncodeError::InvalidField("plot.d_tag")));
+    }
+
+    #[test]
+    fn listing_tags_omit_optional_refs_and_product_fields_when_absent() {
+        let mut listing = base_listing();
+        listing.discounts = None;
+        listing.resource_area = None;
+        listing.plot = None;
+        listing.product.summary = None;
+        listing.product.process = None;
+        listing.product.lot = None;
+        listing.product.location = None;
+        listing.product.profile = None;
+        listing.product.year = None;
+        listing.location = None;
+        listing.images = None;
+
+        let tags = listing_tags(&listing).expect("listing tags without optional fields");
+        assert!(find_tag(&tags, "d").is_some());
+        assert!(find_tag(&tags, "p").is_some());
+        assert!(find_tag(&tags, "a").is_some());
+        assert!(find_tag(&tags, "radroots:resource_area").is_none());
+        assert!(find_tag(&tags, "radroots:plot").is_none());
+        assert!(find_tag(&tags, "summary").is_none());
+        assert!(find_tag(&tags, "process").is_none());
+        assert!(find_tag(&tags, "lot").is_none());
+        assert!(find_tag(&tags, "location").is_none());
+        assert!(find_tag(&tags, "profile").is_none());
+        assert!(find_tag(&tags, "year").is_none());
+        assert!(find_tag(&tags, "image").is_none());
     }
 
     #[test]

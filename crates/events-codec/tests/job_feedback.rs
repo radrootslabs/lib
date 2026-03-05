@@ -67,6 +67,10 @@ fn job_feedback_requires_status_tag() {
     let tags = vec![vec!["e".to_string(), "req".to_string()]];
     let err = job_feedback_from_tags(KIND_JOB_FEEDBACK, &tags, "payload").unwrap_err();
     assert!(matches!(err, JobParseError::MissingTag("status")));
+
+    let tags = vec![vec!["status".to_string(), "processing".to_string()]];
+    let err = job_feedback_from_tags(KIND_JOB_FEEDBACK, &tags, "payload").unwrap_err();
+    assert!(matches!(err, JobParseError::MissingTag("e")));
 }
 
 #[test]
@@ -77,6 +81,58 @@ fn job_feedback_rejects_unknown_status() {
     ];
     let err = job_feedback_from_tags(KIND_JOB_FEEDBACK, &tags, "payload").unwrap_err();
     assert!(matches!(err, JobParseError::InvalidTag("status")));
+
+    let tags = vec![
+        vec!["status".to_string(), "processing".to_string()],
+        vec!["e".to_string()],
+    ];
+    let err = job_feedback_from_tags(KIND_JOB_FEEDBACK, &tags, "payload").unwrap_err();
+    assert!(matches!(err, JobParseError::InvalidTag("e")));
+
+    let tags = vec![
+        vec!["status".to_string(), "processing".to_string()],
+        vec!["e".to_string(), "req".to_string()],
+        vec!["amount".to_string(), "not-a-number".to_string()],
+    ];
+    let err = job_feedback_from_tags(KIND_JOB_FEEDBACK, &tags, "payload").unwrap_err();
+    assert!(matches!(err, JobParseError::InvalidNumber("amount", _)));
+}
+
+#[test]
+fn job_feedback_data_from_event_success_path() {
+    let tags = vec![
+        vec!["status".to_string(), "processing".to_string()],
+        vec!["e".to_string(), "req".to_string()],
+        vec!["amount".to_string(), "12000".to_string()],
+    ];
+    let data = radroots_events_codec::job::feedback::decode::data_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        1,
+        KIND_JOB_FEEDBACK,
+        "payload".to_string(),
+        tags,
+    )
+    .expect("job feedback data");
+    assert_eq!(data.id, "id");
+    assert_eq!(data.author, "author");
+    assert_eq!(data.kind, KIND_JOB_FEEDBACK);
+    assert_eq!(data.data.request_event.id, "req");
+    assert_eq!(data.data.payment.as_ref().map(|p| p.amount_sat), Some(12));
+}
+
+#[test]
+fn job_feedback_data_from_event_propagates_decode_errors_with_valid_kind() {
+    let err = radroots_events_codec::job::feedback::decode::data_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        1,
+        KIND_JOB_FEEDBACK,
+        "payload".to_string(),
+        Vec::new(),
+    )
+    .unwrap_err();
+    assert!(matches!(err, JobParseError::MissingTag("e")));
 }
 
 #[test]

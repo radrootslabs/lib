@@ -1,6 +1,7 @@
 use radroots_core::{
-    RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
-    RadrootsCoreQuantityPrice, RadrootsCoreUnit,
+    RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreDiscount, RadrootsCoreDiscountScope,
+    RadrootsCoreDiscountThreshold, RadrootsCoreDiscountValue, RadrootsCoreMoney,
+    RadrootsCoreQuantity, RadrootsCoreQuantityPrice, RadrootsCoreUnit,
 };
 use radroots_events::RadrootsNostrEventPtr;
 use radroots_events::RadrootsNostrEventRef;
@@ -25,11 +26,13 @@ use radroots_events::kinds::{
 use radroots_events::list::{RadrootsList, RadrootsListEntry};
 use radroots_events::list_set::RadrootsListSet;
 use radroots_events::listing::{
-    RadrootsListing, RadrootsListingBin, RadrootsListingFarmRef, RadrootsListingProduct,
+    RadrootsListing, RadrootsListingAvailability, RadrootsListingBin, RadrootsListingFarmRef,
+    RadrootsListingImage, RadrootsListingImageSize, RadrootsListingLocation,
+    RadrootsListingProduct, RadrootsListingStatus,
 };
 use radroots_events::message::{RadrootsMessage, RadrootsMessageRecipient};
 use radroots_events::message_file::RadrootsMessageFile;
-use radroots_events::plot::RadrootsPlot;
+use radroots_events::plot::{RadrootsPlot, RadrootsPlotRef};
 use radroots_events::post::RadrootsPost;
 use radroots_events::profile::RadrootsProfile;
 use radroots_events::reaction::RadrootsReaction;
@@ -38,8 +41,10 @@ use radroots_events::resource_area::{
 };
 use radroots_events::resource_cap::{RadrootsResourceHarvestCap, RadrootsResourceHarvestProduct};
 use radroots_events::seal::RadrootsSeal;
+use radroots_events_codec::error::EventEncodeError;
 use radroots_events_codec::job::encode::JobEncodeError;
 use radroots_events_codec::listing::encode::listing_build_tags;
+use radroots_events_codec::listing::tags::{ListingTagOptions, listing_tags_with_options};
 use radroots_events_codec::tag_builders::RadrootsEventTagBuilder;
 
 const TEST_PUBKEY_HEX: &str = "58e318557257f2ab58a415d21bb57082b4824cf667a1d64e72bcbc5acc018c62";
@@ -424,6 +429,245 @@ fn event_tag_builder_impls_build_tags_for_all_supported_types() {
         content: "hello".to_string(),
     };
     assert!(post.build_tags().unwrap().is_empty());
+}
+
+#[test]
+fn listing_and_message_builders_cover_optional_shapes() {
+    let mut listing = sample_listing();
+    listing.resource_area = Some(RadrootsResourceAreaRef {
+        pubkey: TEST_PUBKEY_HEX.to_string(),
+        d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
+    });
+    listing.plot = Some(RadrootsPlotRef {
+        pubkey: TEST_PUBKEY_HEX.to_string(),
+        d_tag: "AAAAAAAAAAAAAAAAAAAAAQ".to_string(),
+    });
+    listing.product.summary = Some("summary".to_string());
+    listing.product.process = Some("washed".to_string());
+    listing.product.lot = Some("lot-1".to_string());
+    listing.product.location = Some("Moyobamba".to_string());
+    listing.product.profile = Some("fruity".to_string());
+    listing.product.year = Some("2024".to_string());
+    listing.location = Some(RadrootsListingLocation {
+        primary: "Moyobamba".to_string(),
+        city: Some("Moyobamba".to_string()),
+        region: Some("San Martin".to_string()),
+        country: Some("PE".to_string()),
+        lat: Some(-6.03),
+        lng: Some(-76.97),
+        geohash: None,
+    });
+    listing.images = Some(vec![RadrootsListingImage {
+        url: "https://example.com/a.jpg".to_string(),
+        size: Some(RadrootsListingImageSize { w: 1200, h: 800 }),
+    }]);
+    assert!(!listing_build_tags(&listing).unwrap().is_empty());
+
+    let mut listing_with_trade = listing.clone();
+    listing_with_trade.inventory_available = Some(RadrootsCoreDecimal::from(12u32));
+    let with_trade_fields: fn() -> ListingTagOptions = ListingTagOptions::with_trade_fields;
+    let trade_options = with_trade_fields();
+    listing_with_trade.availability = Some(RadrootsListingAvailability::Status {
+        status: RadrootsListingStatus::Active,
+    });
+    let listing_tags_full_fn: fn(&RadrootsListing) -> Result<Vec<Vec<String>>, EventEncodeError> =
+        radroots_events_codec::listing::tags::listing_tags_full;
+    let full_tags = listing_tags_full_fn(&listing_with_trade).unwrap();
+    assert!(full_tags.iter().any(|tag| {
+        tag.first().map(|v| v.as_str()) == Some("inventory")
+            && tag.get(1).map(|v| v.as_str()) == Some("12")
+    }));
+
+    let trade_tags = listing_tags_with_options(&listing_with_trade, trade_options).unwrap();
+    assert!(trade_tags.iter().any(|tag| {
+        tag.first().map(|v| v.as_str()) == Some("inventory")
+            && tag.get(1).map(|v| v.as_str()) == Some("12")
+    }));
+    assert!(trade_tags.iter().any(|tag| {
+        tag.first().map(|v| v.as_str()) == Some("status")
+            && tag.get(1).map(|v| v.as_str()) == Some("active")
+    }));
+
+    let mut listing_status_sold = listing_with_trade.clone();
+    listing_status_sold.availability = Some(RadrootsListingAvailability::Status {
+        status: RadrootsListingStatus::Sold,
+    });
+    let sold_tags = listing_tags_with_options(&listing_status_sold, trade_options).unwrap();
+    assert!(sold_tags.iter().any(|tag| {
+        tag.first().map(|v| v.as_str()) == Some("status")
+            && tag.get(1).map(|v| v.as_str()) == Some("sold")
+    }));
+
+    let mut listing_status_other = listing_with_trade.clone();
+    listing_status_other.availability = Some(RadrootsListingAvailability::Status {
+        status: RadrootsListingStatus::Other {
+            value: "paused".to_string(),
+        },
+    });
+    let other_tags = listing_tags_with_options(&listing_status_other, trade_options).unwrap();
+    assert!(other_tags.iter().any(|tag| {
+        tag.first().map(|v| v.as_str()) == Some("status")
+            && tag.get(1).map(|v| v.as_str()) == Some("paused")
+    }));
+
+    let mut listing_geohash_only = listing_with_trade.clone();
+    listing_geohash_only.location = Some(RadrootsListingLocation {
+        primary: "Moyobamba".to_string(),
+        city: None,
+        region: None,
+        country: None,
+        lat: None,
+        lng: None,
+        geohash: Some("6gkzwgjzn".to_string()),
+    });
+    let geohash_tags =
+        listing_tags_with_options(&listing_geohash_only, ListingTagOptions::default()).unwrap();
+    assert!(geohash_tags.iter().any(|tag| {
+        tag.first().map(|v| v.as_str()) == Some("g")
+            && tag.get(1).map(|v| v.as_str()) == Some("6gkzwgjzn")
+    }));
+
+    let mut listing_no_coordinates = listing_with_trade.clone();
+    listing_no_coordinates.location = Some(RadrootsListingLocation {
+        primary: "Moyobamba".to_string(),
+        city: None,
+        region: None,
+        country: None,
+        lat: None,
+        lng: None,
+        geohash: None,
+    });
+    let no_coordinates_tags =
+        listing_tags_with_options(&listing_no_coordinates, ListingTagOptions::default()).unwrap();
+    assert!(
+        !no_coordinates_tags
+            .iter()
+            .any(|tag| tag.first().map(|v| v.as_str()) == Some("L"))
+    );
+
+    let no_gps_tags = listing_tags_with_options(
+        &listing_with_trade,
+        ListingTagOptions {
+            include_gps: false,
+            ..ListingTagOptions::default()
+        },
+    )
+    .unwrap();
+    assert!(
+        !no_gps_tags
+            .iter()
+            .any(|tag| tag.first().map(|v| v.as_str()) == Some("L"))
+    );
+
+    let mut listing_with_empty_primary_location = listing_with_trade.clone();
+    listing_with_empty_primary_location.location = Some(RadrootsListingLocation {
+        primary: " null ".to_string(),
+        city: None,
+        region: None,
+        country: None,
+        lat: Some(-6.03),
+        lng: Some(-76.97),
+        geohash: None,
+    });
+    let no_primary_location_tags =
+        listing_tags_with_options(&listing_with_empty_primary_location, trade_options).unwrap();
+    assert!(
+        !no_primary_location_tags
+            .iter()
+            .any(|tag| tag.first().map(|v| v.as_str()) == Some("location") && tag.len() > 2)
+    );
+
+    let mut listing_with_discount_payload = listing_with_trade.clone();
+    listing_with_discount_payload.discounts = Some(vec![RadrootsCoreDiscount {
+        scope: RadrootsCoreDiscountScope::Bin,
+        threshold: RadrootsCoreDiscountThreshold::BinCount {
+            bin_id: "bin-1".to_string(),
+            min: 2,
+        },
+        value: RadrootsCoreDiscountValue::MoneyPerBin(RadrootsCoreMoney::new(
+            RadrootsCoreDecimal::from(1u32),
+            RadrootsCoreCurrency::USD,
+        )),
+    }]);
+    let err = listing_tags_with_options(&listing_with_discount_payload, trade_options)
+        .expect_err("discounts require serde_json in non-serde lane");
+    assert!(matches!(err, EventEncodeError::Json));
+
+    let message_without_relays = RadrootsMessage {
+        recipients: vec![RadrootsMessageRecipient {
+            public_key: TEST_PUBKEY_HEX.to_string(),
+            relay_url: None,
+        }],
+        content: "hello".to_string(),
+        reply_to: Some(RadrootsNostrEventPtr {
+            id: "reply".to_string(),
+            relays: None,
+        }),
+        subject: None,
+    };
+    assert!(!message_without_relays.build_tags().unwrap().is_empty());
+
+    let message_invalid_reply = RadrootsMessage {
+        recipients: vec![RadrootsMessageRecipient {
+            public_key: TEST_PUBKEY_HEX.to_string(),
+            relay_url: None,
+        }],
+        content: "hello".to_string(),
+        reply_to: Some(RadrootsNostrEventPtr {
+            id: " ".to_string(),
+            relays: None,
+        }),
+        subject: None,
+    };
+    let err = message_invalid_reply
+        .build_tags()
+        .expect_err("empty reply id should fail");
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("reply_to.id")
+    ));
+}
+
+#[test]
+fn listing_builder_rejects_required_field_errors() {
+    let mut listing = sample_listing();
+    listing.d_tag = " ".to_string();
+    let err = listing_build_tags(&listing).expect_err("empty listing d_tag");
+    assert!(matches!(err, EventEncodeError::EmptyRequiredField("d")));
+
+    let mut listing = sample_listing();
+    listing.d_tag = "invalid".to_string();
+    let err = listing_build_tags(&listing).expect_err("invalid listing d_tag");
+    assert!(matches!(err, EventEncodeError::InvalidField("d")));
+
+    let mut listing = sample_listing();
+    listing.primary_bin_id = " ".to_string();
+    let err = listing_build_tags(&listing).expect_err("empty primary bin id");
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("primary_bin_id")
+    ));
+
+    let mut listing = sample_listing();
+    listing.bins.clear();
+    let err = listing_build_tags(&listing).expect_err("empty bins");
+    assert!(matches!(err, EventEncodeError::EmptyRequiredField("bins")));
+
+    let mut listing = sample_listing();
+    listing.farm.pubkey = " ".to_string();
+    let err = listing_build_tags(&listing).expect_err("empty farm pubkey");
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("farm.pubkey")
+    ));
+
+    let mut listing = sample_listing();
+    listing.farm.d_tag = " ".to_string();
+    let err = listing_build_tags(&listing).expect_err("empty farm d_tag");
+    assert!(matches!(
+        err,
+        EventEncodeError::EmptyRequiredField("farm.d_tag")
+    ));
 }
 
 #[test]

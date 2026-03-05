@@ -11,11 +11,11 @@ use crate::error::EventParseError;
 use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 
 fn entry_from_tag(tag: &[String]) -> Result<RadrootsListEntry, EventParseError> {
-    let name = tag.get(0).ok_or(EventParseError::InvalidTag("tag"))?;
+    let name = &tag[0];
     if name.trim().is_empty() {
         return Err(EventParseError::InvalidTag("tag"));
     }
-    let value = tag.get(1).ok_or(EventParseError::InvalidTag("tag"))?;
+    let value = &tag[1];
     if value.trim().is_empty() {
         return Err(EventParseError::InvalidTag("tag"));
     }

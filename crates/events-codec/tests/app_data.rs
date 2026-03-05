@@ -38,6 +38,16 @@ fn app_data_to_wire_parts_sets_kind_tags_content() {
 }
 
 #[test]
+fn app_data_to_wire_parts_propagates_tag_build_errors() {
+    let app_data = RadrootsAppData {
+        d_tag: "  ".to_string(),
+        content: "payload".to_string(),
+    };
+    let err = to_wire_parts(&app_data).unwrap_err();
+    assert!(matches!(err, EventEncodeError::EmptyRequiredField("d_tag")));
+}
+
+#[test]
 fn app_data_to_wire_parts_with_kind_rejects_wrong_kind() {
     let app_data = RadrootsAppData {
         d_tag: "radroots.app".to_string(),
