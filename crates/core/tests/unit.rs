@@ -86,6 +86,10 @@ fn parse_mass_unit_enforces_mass_only() {
         parse_mass_unit("each"),
         Err(RadrootsCoreUnitParseError::NotAMassUnit)
     );
+    assert_eq!(
+        parse_mass_unit("bogus"),
+        Err(RadrootsCoreUnitParseError::UnknownUnit)
+    );
 }
 
 #[test]
@@ -94,6 +98,10 @@ fn parse_volume_unit_enforces_volume_only() {
     assert_eq!(
         parse_volume_unit("kg"),
         Err(RadrootsCoreUnitParseError::NotAVolumeUnit)
+    );
+    assert_eq!(
+        parse_volume_unit("bogus"),
+        Err(RadrootsCoreUnitParseError::UnknownUnit)
     );
 }
 
@@ -104,11 +112,15 @@ fn convert_mass_decimal_converts_between_mass_units() {
     let g_to_kg = convert_mass_decimal(common::dec("1000"), MassG, MassKg).unwrap();
     let lb_to_g = convert_mass_decimal(common::dec("1"), MassLb, MassG).unwrap();
     let oz_to_g = convert_mass_decimal(common::dec("1"), MassOz, MassG).unwrap();
+    let g_to_oz = convert_mass_decimal(common::dec("28.349523125"), MassG, MassOz).unwrap();
+    let g_to_lb = convert_mass_decimal(common::dec("453.59237"), MassG, MassLb).unwrap();
 
     assert_eq!(kg_to_g, common::dec("1000"));
     assert_eq!(g_to_kg, common::dec("1"));
     assert_eq!(lb_to_g, common::dec("453.59237"));
     assert_eq!(oz_to_g, common::dec("28.349523125"));
+    assert_eq!(g_to_oz, common::dec("1"));
+    assert_eq!(g_to_lb, common::dec("1"));
 }
 
 #[test]
@@ -254,8 +266,19 @@ fn convert_unit_decimal_rejects_mismatched_dimensions() {
 #[cfg(feature = "serde")]
 #[test]
 fn serde_roundtrip_for_unit_paths() {
-    let json = serde_json::to_string(&RadrootsCoreUnit::VolumeL).unwrap();
-    assert_eq!(json, "\"l\"");
+    use RadrootsCoreUnit::*;
+    let all = [Each, MassKg, MassG, MassOz, MassLb, VolumeL, VolumeMl];
+    for unit in all {
+        let json = serde_json::to_string(&unit).unwrap();
+        let back: RadrootsCoreUnit = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, unit);
+    }
     let back: RadrootsCoreUnit = serde_json::from_str("\"kg\"").unwrap();
     assert_eq!(back, RadrootsCoreUnit::MassKg);
+    let unknown_err = serde_json::from_str::<RadrootsCoreUnit>("\"bogus\"").unwrap_err();
+    assert!(unknown_err.to_string().contains("unknown unit"));
+    let err = serde_json::from_str::<RadrootsCoreUnit>("123").unwrap_err();
+    assert!(err.to_string().contains("invalid type"));
+    let missing_err = serde_json::from_str::<RadrootsCoreUnit>("{}").unwrap_err();
+    assert!(!missing_err.to_string().is_empty());
 }

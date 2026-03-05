@@ -28,3 +28,6 @@ ts-rs = { workspace = true, optional = true }
 [dev-dependencies]
 serde_json = { workspace = true }
 rust_decimal = { workspace = true }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage_nightly)'] }

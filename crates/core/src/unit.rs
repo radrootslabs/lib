@@ -226,36 +226,32 @@ pub fn parse_volume_unit(s: &str) -> Result<RadrootsCoreUnit, RadrootsCoreUnitPa
 }
 
 #[inline]
-fn grams_factor_decimal(u: RadrootsCoreUnit) -> RadrootsCoreDecimal {
-    match u {
-        RadrootsCoreUnit::MassG => RadrootsCoreDecimal::ONE,
-        RadrootsCoreUnit::MassKg => RadrootsCoreDecimal::from(1000u32),
-        RadrootsCoreUnit::MassOz => RadrootsCoreDecimal(dec!(28.349523125)),
-        RadrootsCoreUnit::MassLb => RadrootsCoreDecimal(dec!(453.59237)),
-        _ => RadrootsCoreDecimal::ONE,
-    }
-}
-
-#[inline]
-fn milliliters_factor_decimal(u: RadrootsCoreUnit) -> RadrootsCoreDecimal {
-    match u {
-        RadrootsCoreUnit::VolumeMl => RadrootsCoreDecimal::ONE,
-        RadrootsCoreUnit::VolumeL => RadrootsCoreDecimal::from(1000u32),
-        _ => RadrootsCoreDecimal::ONE,
-    }
-}
-
-#[inline]
 pub fn convert_mass_decimal(
     amount: RadrootsCoreDecimal,
     from: RadrootsCoreUnit,
     to: RadrootsCoreUnit,
 ) -> Result<RadrootsCoreDecimal, RadrootsCoreUnitConvertError> {
-    if !from.is_mass() || !to.is_mass() {
-        return Err(RadrootsCoreUnitConvertError::NotMassUnit { from, to });
-    }
-    let amount_g = amount * grams_factor_decimal(from);
-    Ok(amount_g / grams_factor_decimal(to))
+    let amount_g = match from {
+        RadrootsCoreUnit::MassG => amount,
+        RadrootsCoreUnit::MassKg => amount * RadrootsCoreDecimal::from(1000u32),
+        RadrootsCoreUnit::MassOz => amount * RadrootsCoreDecimal(dec!(28.349523125)),
+        RadrootsCoreUnit::MassLb => amount * RadrootsCoreDecimal(dec!(453.59237)),
+        _ => {
+            return Err(RadrootsCoreUnitConvertError::NotMassUnit { from, to });
+        }
+    };
+
+    let to_factor = match to {
+        RadrootsCoreUnit::MassG => RadrootsCoreDecimal::ONE,
+        RadrootsCoreUnit::MassKg => RadrootsCoreDecimal::from(1000u32),
+        RadrootsCoreUnit::MassOz => RadrootsCoreDecimal(dec!(28.349523125)),
+        RadrootsCoreUnit::MassLb => RadrootsCoreDecimal(dec!(453.59237)),
+        _ => {
+            return Err(RadrootsCoreUnitConvertError::NotMassUnit { from, to });
+        }
+    };
+
+    Ok(amount_g / to_factor)
 }
 
 #[inline]
@@ -264,11 +260,23 @@ pub fn convert_volume_decimal(
     from: RadrootsCoreUnit,
     to: RadrootsCoreUnit,
 ) -> Result<RadrootsCoreDecimal, RadrootsCoreUnitConvertError> {
-    if !from.is_volume() || !to.is_volume() {
-        return Err(RadrootsCoreUnitConvertError::NotVolumeUnit { from, to });
-    }
-    let amount_ml = amount * milliliters_factor_decimal(from);
-    Ok(amount_ml / milliliters_factor_decimal(to))
+    let amount_ml = match from {
+        RadrootsCoreUnit::VolumeMl => amount,
+        RadrootsCoreUnit::VolumeL => amount * RadrootsCoreDecimal::from(1000u32),
+        _ => {
+            return Err(RadrootsCoreUnitConvertError::NotVolumeUnit { from, to });
+        }
+    };
+
+    let to_factor = match to {
+        RadrootsCoreUnit::VolumeMl => RadrootsCoreDecimal::ONE,
+        RadrootsCoreUnit::VolumeL => RadrootsCoreDecimal::from(1000u32),
+        _ => {
+            return Err(RadrootsCoreUnitConvertError::NotVolumeUnit { from, to });
+        }
+    };
+
+    Ok(amount_ml / to_factor)
 }
 
 #[inline]
@@ -292,14 +300,28 @@ mod tests {
     use super::*;
 
     #[test]
-    fn helper_factor_fallback_paths_are_exercised() {
+    fn convert_paths_cover_unit_branches() {
         assert_eq!(
-            grams_factor_decimal(RadrootsCoreUnit::Each),
-            RadrootsCoreDecimal::ONE
+            convert_mass_decimal(
+                RadrootsCoreDecimal::ONE,
+                RadrootsCoreUnit::Each,
+                RadrootsCoreUnit::MassG
+            ),
+            Err(RadrootsCoreUnitConvertError::NotMassUnit {
+                from: RadrootsCoreUnit::Each,
+                to: RadrootsCoreUnit::MassG
+            })
         );
         assert_eq!(
-            milliliters_factor_decimal(RadrootsCoreUnit::Each),
-            RadrootsCoreDecimal::ONE
+            convert_volume_decimal(
+                RadrootsCoreDecimal::ONE,
+                RadrootsCoreUnit::Each,
+                RadrootsCoreUnit::VolumeMl
+            ),
+            Err(RadrootsCoreUnitConvertError::NotVolumeUnit {
+                from: RadrootsCoreUnit::Each,
+                to: RadrootsCoreUnit::VolumeMl
+            })
         );
     }
 }

@@ -141,6 +141,46 @@ fn display_without_label_and_error_display_are_exercised() {
 }
 
 #[test]
+fn display_propagates_formatter_errors() {
+    use core::fmt::{self, Write};
+
+    struct FailWriter {
+        fail_on_paren: bool,
+        fail_on_call: usize,
+        calls: usize,
+    }
+
+    impl Write for FailWriter {
+        fn write_str(&mut self, s: &str) -> fmt::Result {
+            self.calls += 1;
+            if self.fail_on_paren && s.contains('(') {
+                return Err(fmt::Error);
+            }
+            if self.calls == self.fail_on_call {
+                Err(fmt::Error)
+            } else {
+                Ok(())
+            }
+        }
+    }
+
+    let with_label = common::qty("1.5", RadrootsCoreUnit::Each).with_label("bag");
+    let mut first_write_fails = FailWriter {
+        fail_on_paren: false,
+        fail_on_call: 1,
+        calls: 0,
+    };
+    assert!(fmt::write(&mut first_write_fails, format_args!("{with_label}")).is_err());
+
+    let mut second_write_fails = FailWriter {
+        fail_on_paren: true,
+        fail_on_call: usize::MAX,
+        calls: 0,
+    };
+    assert!(fmt::write(&mut second_write_fails, format_args!("{with_label}")).is_err());
+}
+
+#[test]
 fn try_convert_to_changes_unit_and_amount() {
     let q = common::qty("1", RadrootsCoreUnit::MassKg);
     let converted = q.try_convert_to(RadrootsCoreUnit::MassG).unwrap();

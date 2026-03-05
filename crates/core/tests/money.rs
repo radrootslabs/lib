@@ -124,6 +124,18 @@ fn minor_units_u32_overflow_is_detected() {
 }
 
 #[test]
+fn minor_units_u32_exact_success_path_is_exercised() {
+    let usd = RadrootsCoreCurrency::USD;
+    let m = RadrootsCoreMoney::new(common::dec("42.01"), usd);
+    assert_eq!(m.to_minor_units_u32_exact().unwrap(), 4201);
+    let fractional = RadrootsCoreMoney::new(common::dec("1.001"), usd);
+    assert_eq!(
+        fractional.to_minor_units_u32_exact(),
+        Err(RadrootsCoreMoneyInvariantError::NotWholeMinorUnits)
+    );
+}
+
+#[test]
 fn from_minor_units_u32_and_u32_rounded_paths_are_exercised() {
     let usd = RadrootsCoreCurrency::USD;
     let from_u32 = RadrootsCoreMoney::from_minor_units_u32(505, usd);
@@ -133,6 +145,21 @@ fn from_minor_units_u32_and_u32_rounded_paths_are_exercised() {
             .to_minor_units_u32_rounded(RoundingStrategy::MidpointAwayFromZero)
             .unwrap(),
         505
+    );
+}
+
+#[test]
+fn minor_units_u32_rounded_overflow_is_detected() {
+    let usd = RadrootsCoreCurrency::USD;
+    let too_large = RadrootsCoreMoney::from_minor_units_u64(u64::from(u32::MAX) + 1, usd);
+    assert_eq!(
+        too_large.to_minor_units_u32_rounded(RoundingStrategy::MidpointAwayFromZero),
+        Err(RadrootsCoreMoneyInvariantError::AmountOverflow)
+    );
+    let negative = RadrootsCoreMoney::new(common::dec("-1.00"), usd);
+    assert_eq!(
+        negative.to_minor_units_u32_rounded(RoundingStrategy::MidpointAwayFromZero),
+        Err(RadrootsCoreMoneyInvariantError::AmountOverflow)
     );
 }
 

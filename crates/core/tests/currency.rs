@@ -90,4 +90,6 @@ fn serde_deserialize_paths_are_exercised() {
     assert_eq!(parsed.as_str(), "USD");
     let err = serde_json::from_str::<RadrootsCoreCurrency>("\"US1\"").unwrap_err();
     assert!(err.to_string().contains("currency must be a 3-letter code"));
+    let non_string_err = serde_json::from_str::<RadrootsCoreCurrency>("123").unwrap_err();
+    assert!(non_string_err.to_string().contains("invalid type"));
 }

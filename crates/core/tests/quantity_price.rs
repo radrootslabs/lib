@@ -64,6 +64,21 @@ fn try_cost_for_validates_quantity_and_units() {
 }
 
 #[test]
+fn try_cost_for_rounded_error_path_is_exercised() {
+    let price = RadrootsCoreQuantityPrice::new(
+        common::money("10", "USD"),
+        common::qty("1", RadrootsCoreUnit::Each),
+    );
+    assert_eq!(
+        price.try_cost_for_rounded(&common::qty("1", RadrootsCoreUnit::MassKg)),
+        Err(RadrootsCoreQuantityPriceError::UnitMismatch {
+            have: RadrootsCoreUnit::MassKg,
+            want: RadrootsCoreUnit::Each
+        })
+    );
+}
+
+#[test]
 fn try_cost_for_amount_in_converts_mass_units() {
     let price = RadrootsCoreQuantityPrice::new(
         common::money("10", "USD"),

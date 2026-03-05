@@ -50,3 +50,12 @@ fn from_str_exact_and_conversion_impl_paths_are_exercised() {
     assert_eq!(from_u64, common::dec("11"));
     assert_eq!(from_i64, common::dec("-9"));
 }
+
+#[cfg(feature = "serde")]
+#[test]
+fn serde_deserialize_error_paths_are_exercised() {
+    let parse_err = serde_json::from_str::<RadrootsCoreDecimal>("\"not-a-decimal\"").unwrap_err();
+    assert!(!parse_err.to_string().is_empty());
+    let non_string_err = serde_json::from_str::<RadrootsCoreDecimal>("123").unwrap_err();
+    assert!(non_string_err.to_string().contains("invalid type"));
+}

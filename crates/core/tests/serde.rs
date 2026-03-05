@@ -40,6 +40,13 @@ fn quantity_deserializes_decimal_str_via_serde_ext() {
 }
 
 #[test]
+fn quantity_rejects_non_string_decimal_amount() {
+    let raw = r#"{"amount":1.23,"unit":"kg"}"#;
+    let err = serde_json::from_str::<RadrootsCoreQuantity>(raw).unwrap_err();
+    assert!(err.to_string().contains("invalid type"));
+}
+
+#[test]
 fn money_and_percent_roundtrip_with_strings() {
     let money = RadrootsCoreMoney::new(common::dec("2.50"), RadrootsCoreCurrency::USD);
     let value = serde_json::to_value(&money).unwrap();
