@@ -241,23 +241,20 @@ pub struct TradeListingAddress {
 
 impl TradeListingAddress {
     pub fn parse(addr: &str) -> Result<Self, TradeListingAddressError> {
-        let mut parts = addr.split(':');
-        let kind = parts
-            .next()
-            .ok_or(TradeListingAddressError::InvalidFormat)?
-            .parse::<u16>()
-            .map_err(|_| TradeListingAddressError::InvalidFormat)?;
-        let seller_pubkey = parts
-            .next()
-            .ok_or(TradeListingAddressError::InvalidFormat)?
-            .to_string();
-        let listing_id = parts
-            .next()
-            .ok_or(TradeListingAddressError::InvalidFormat)?
-            .to_string();
-        if parts.next().is_some() {
+        let (kind_raw, seller_and_listing) = addr
+            .split_once(':')
+            .ok_or(TradeListingAddressError::InvalidFormat)?;
+        let (seller_pubkey_raw, listing_id_raw) = seller_and_listing
+            .split_once(':')
+            .ok_or(TradeListingAddressError::InvalidFormat)?;
+        if listing_id_raw.contains(':') {
             return Err(TradeListingAddressError::InvalidFormat);
         }
+        let kind = kind_raw
+            .parse::<u16>()
+            .map_err(|_| TradeListingAddressError::InvalidFormat)?;
+        let seller_pubkey = seller_pubkey_raw.to_string();
+        let listing_id = listing_id_raw.to_string();
         if kind == KIND_PROFILE as u16
             || seller_pubkey.trim().is_empty()
             || listing_id.trim().is_empty()
@@ -456,30 +453,29 @@ mod tests {
     #[test]
     fn message_type_kind_and_request_flags_cover_all_variants() {
         let expected_kinds = crate::listing::kinds::TRADE_LISTING_KINDS;
-        let cases = [
-            (TradeListingMessageType::ListingValidateRequest, true, false),
-            (TradeListingMessageType::ListingValidateResult, false, true),
-            (TradeListingMessageType::OrderRequest, true, false),
-            (TradeListingMessageType::OrderResponse, false, true),
-            (TradeListingMessageType::OrderRevision, true, false),
-            (TradeListingMessageType::OrderRevisionAccept, false, true),
-            (TradeListingMessageType::OrderRevisionDecline, false, true),
-            (TradeListingMessageType::Question, true, false),
-            (TradeListingMessageType::Answer, false, true),
-            (TradeListingMessageType::DiscountRequest, true, false),
-            (TradeListingMessageType::DiscountOffer, false, true),
-            (TradeListingMessageType::DiscountAccept, true, false),
-            (TradeListingMessageType::DiscountDecline, true, false),
-            (TradeListingMessageType::Cancel, true, false),
-            (TradeListingMessageType::FulfillmentUpdate, true, false),
-            (TradeListingMessageType::Receipt, true, false),
-        ];
+        let assert_case =
+            |message_type: TradeListingMessageType, is_request: bool, is_result: bool| {
+                assert_eq!(message_type.is_request(), is_request);
+                assert_eq!(message_type.is_result(), is_result);
+                assert!(expected_kinds.contains(&message_type.kind()));
+            };
 
-        for (message_type, is_request, is_result) in cases {
-            assert_eq!(message_type.is_request(), is_request);
-            assert_eq!(message_type.is_result(), is_result);
-            assert!(expected_kinds.contains(&message_type.kind()));
-        }
+        assert_case(TradeListingMessageType::ListingValidateRequest, true, false);
+        assert_case(TradeListingMessageType::ListingValidateResult, false, true);
+        assert_case(TradeListingMessageType::OrderRequest, true, false);
+        assert_case(TradeListingMessageType::OrderResponse, false, true);
+        assert_case(TradeListingMessageType::OrderRevision, true, false);
+        assert_case(TradeListingMessageType::OrderRevisionAccept, false, true);
+        assert_case(TradeListingMessageType::OrderRevisionDecline, false, true);
+        assert_case(TradeListingMessageType::Question, true, false);
+        assert_case(TradeListingMessageType::Answer, false, true);
+        assert_case(TradeListingMessageType::DiscountRequest, true, false);
+        assert_case(TradeListingMessageType::DiscountOffer, false, true);
+        assert_case(TradeListingMessageType::DiscountAccept, true, false);
+        assert_case(TradeListingMessageType::DiscountDecline, true, false);
+        assert_case(TradeListingMessageType::Cancel, true, false);
+        assert_case(TradeListingMessageType::FulfillmentUpdate, true, false);
+        assert_case(TradeListingMessageType::Receipt, true, false);
     }
 
     #[test]
@@ -539,6 +535,10 @@ mod tests {
             TradeListingAddressError::InvalidFormat
         );
         assert_eq!(
+            TradeListingAddress::parse("30340").unwrap_err(),
+            TradeListingAddressError::InvalidFormat
+        );
+        assert_eq!(
             TradeListingAddress::parse("30340:seller").unwrap_err(),
             TradeListingAddressError::InvalidFormat
         );
@@ -573,12 +573,40 @@ mod tests {
     }
 
     #[cfg(feature = "serde_json")]
+    #[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
+    struct EnvelopePayload {
+        fail: bool,
+    }
+
+    #[cfg(feature = "serde_json")]
+    impl EnvelopePayload {
+        fn ok() -> Self {
+            Self { fail: false }
+        }
+
+        fn fail() -> Self {
+            Self { fail: true }
+        }
+    }
+
+    #[cfg(feature = "serde_json")]
+    impl serde::Serialize for EnvelopePayload {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            if self.fail {
+                return Err(serde::ser::Error::custom("intentional"));
+            }
+            serializer.serialize_str("ok")
+        }
+    }
+
+    #[cfg(feature = "serde_json")]
     #[test]
     fn envelope_event_build_includes_order_tag() {
         let listing_addr = format!("{KIND_LISTING}:pubkey:AAAAAAAAAAAAAAAAAAAAAg");
-        let payload = TradeListingValidateRequest {
-            listing_event: None,
-        };
+        let payload = EnvelopePayload::ok();
         let built = super::trade_listing_envelope_event_build(
             "pubkey",
             TradeListingMessageType::OrderRequest,
@@ -590,7 +618,7 @@ mod tests {
 
         assert_eq!(built.kind, TradeListingMessageType::OrderRequest.kind());
 
-        let envelope: TradeListingEnvelope<TradeListingValidateRequest> =
+        let envelope: TradeListingEnvelope<serde_json::Value> =
             serde_json::from_str(&built.content).unwrap();
         assert_eq!(envelope.listing_addr, listing_addr.clone());
         assert_eq!(envelope.order_id.as_deref(), Some("order-1"));
@@ -601,9 +629,7 @@ mod tests {
     #[test]
     fn envelope_event_build_omits_order_tag_when_missing() {
         let listing_addr = format!("{KIND_LISTING}:pubkey:AAAAAAAAAAAAAAAAAAAAAg");
-        let payload = TradeListingValidateRequest {
-            listing_event: None,
-        };
+        let payload = EnvelopePayload::ok();
         let built = super::trade_listing_envelope_event_build(
             "pubkey",
             TradeListingMessageType::ListingValidateRequest,
@@ -618,10 +644,26 @@ mod tests {
             TradeListingMessageType::ListingValidateRequest.kind()
         );
 
-        let envelope: TradeListingEnvelope<TradeListingValidateRequest> =
+        let envelope: TradeListingEnvelope<serde_json::Value> =
             serde_json::from_str(&built.content).unwrap();
         assert_eq!(envelope.listing_addr, listing_addr);
         assert!(envelope.order_id.is_none());
         assert_eq!(built.tags.len(), 2);
+    }
+
+    #[cfg(feature = "serde_json")]
+    #[test]
+    fn envelope_event_build_propagates_payload_serialization_error() {
+        let listing_addr = format!("{KIND_LISTING}:pubkey:AAAAAAAAAAAAAAAAAAAAAg");
+        let payload = EnvelopePayload::fail();
+        let err = super::trade_listing_envelope_event_build(
+            "pubkey",
+            TradeListingMessageType::ListingValidateRequest,
+            listing_addr,
+            None,
+            &payload,
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("intentional"));
     }
 }

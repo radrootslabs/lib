@@ -325,19 +325,23 @@ fn listing_from_tags(
                 }
                 bin.quantity = Some(RadrootsCoreQuantity::new(amount, unit));
 
-                if tag.len() >= 5 {
-                    if tag.len() < 6 {
+                match tag.as_slice() {
+                    [_, _, _, _, display_amount_raw, display_unit_raw]
+                    | [_, _, _, _, display_amount_raw, display_unit_raw, _] => {
+                        let display_amount = parse_decimal(display_amount_raw, TAG_RADROOTS_BIN)?;
+                        let display_unit = parse_unit(display_unit_raw)?;
+                        bin.display_amount = Some(display_amount);
+                        bin.display_unit = Some(display_unit);
+                        if let [_, _, _, _, _, _, label] = tag.as_slice() {
+                            bin.display_label = clean_value(label);
+                        }
+                    }
+                    [_, _, _, _, _] => {
                         return Err(TradeListingParseError::InvalidTag(
                             TAG_RADROOTS_BIN.to_string(),
                         ));
                     }
-                    let display_amount = parse_decimal(&tag[4], TAG_RADROOTS_BIN)?;
-                    let display_unit = parse_unit(&tag[5])?;
-                    bin.display_amount = Some(display_amount);
-                    bin.display_unit = Some(display_unit);
-                    if tag.len() == 7 {
-                        bin.display_label = clean_value(&tag[6]);
-                    }
+                    _ => {}
                 }
             }
             TAG_RADROOTS_PRICE => {
@@ -375,16 +379,19 @@ fn listing_from_tags(
                 }
                 bin.price_per_canonical_unit = Some(price_per_canonical_unit);
 
-                if tag.len() == 7 {
-                    return Err(TradeListingParseError::InvalidTag(
-                        TAG_RADROOTS_PRICE.to_string(),
-                    ));
-                }
-                if tag.len() == 8 {
-                    let display_price = parse_decimal(&tag[6], TAG_RADROOTS_PRICE)?;
-                    let display_unit = parse_unit(&tag[7])?;
-                    bin.display_price = Some(RadrootsCoreMoney::new(display_price, currency));
-                    bin.display_price_unit = Some(display_unit);
+                match tag.as_slice() {
+                    [_, _, _, _, _, _, _] => {
+                        return Err(TradeListingParseError::InvalidTag(
+                            TAG_RADROOTS_PRICE.to_string(),
+                        ));
+                    }
+                    [_, _, _, _, _, _, display_price_raw, display_unit_raw] => {
+                        let display_price = parse_decimal(display_price_raw, TAG_RADROOTS_PRICE)?;
+                        let display_unit = parse_unit(display_unit_raw)?;
+                        bin.display_price = Some(RadrootsCoreMoney::new(display_price, currency));
+                        bin.display_price_unit = Some(display_unit);
+                    }
+                    _ => {}
                 }
             }
             TAG_RADROOTS_DISCOUNT => {
@@ -655,9 +662,7 @@ mod tests {
         RadrootsCoreDiscountThreshold, RadrootsCoreDiscountValue, RadrootsCoreMoney,
         RadrootsCorePercent, RadrootsCoreQuantity, RadrootsCoreQuantityPrice, RadrootsCoreUnit,
     };
-    use radroots_events::listing::{
-        RadrootsListing, RadrootsListingFarmRef, RadrootsListingStatus,
-    };
+    use radroots_events::listing::{RadrootsListing, RadrootsListingFarmRef};
 
     fn farm_ref() -> RadrootsListingFarmRef {
         RadrootsListingFarmRef {
@@ -1021,6 +1026,27 @@ mod tests {
     }
 
     #[test]
+    fn listing_from_event_parts_rejects_missing_reference_tags() {
+        let mut missing_farm_ref = base_event_tags();
+        missing_farm_ref.extend(base_trade_tags());
+        missing_farm_ref.retain(|tag| tag.first().map(|v| v.as_str()) != Some(TAG_A));
+        let err = listing_from_event_parts(&missing_farm_ref, "").unwrap_err();
+        assert_eq!(parse_error_tag(err), TAG_A.to_string());
+
+        let mut missing_farm_pubkey = base_event_tags();
+        missing_farm_pubkey.extend(base_trade_tags());
+        missing_farm_pubkey.retain(|tag| tag.first().map(|v| v.as_str()) != Some(TAG_P));
+        let err = listing_from_event_parts(&missing_farm_pubkey, "").unwrap_err();
+        assert_eq!(parse_error_tag(err), TAG_P.to_string());
+
+        let mut invalid_resource_area = base_event_tags();
+        invalid_resource_area.extend(base_trade_tags());
+        invalid_resource_area.push(vec![TAG_RADROOTS_RESOURCE_AREA.into(), "bad".into()]);
+        let err = listing_from_event_parts(&invalid_resource_area, "").unwrap_err();
+        assert_eq!(parse_error_tag(err), TAG_RADROOTS_RESOURCE_AREA.to_string());
+    }
+
+    #[test]
     fn listing_tags_build_and_error_mapping_cover_paths() {
         let listing = parse_base_listing_from_tags();
         let built = listing_tags_build(&listing).expect("build tags");
@@ -1045,6 +1071,10 @@ mod tests {
         let mut tags = base_trade_tags();
         tags.push(Vec::new());
         tags.push(vec![TAG_PRICE.into(), "ignored".into()]);
+        tags.push(vec!["process".into(), "washed".into()]);
+        tags.push(vec!["lot".into(), "lot-7".into()]);
+        tags.push(vec!["profile".into(), "fruity".into()]);
+        tags.push(vec!["year".into(), "2024".into()]);
         tags.push(vec![TAG_RADROOTS_PRIMARY_BIN.into(), "bin-1".into()]);
         tags.push(vec![
             TAG_LOCATION.into(),
@@ -1101,6 +1131,10 @@ mod tests {
             listing.location.as_ref().unwrap().geohash.as_deref(),
             Some("u6se")
         );
+        assert_eq!(listing.product.process.as_deref(), Some("washed"));
+        assert_eq!(listing.product.lot.as_deref(), Some("lot-7"));
+        assert_eq!(listing.product.profile.as_deref(), Some("fruity"));
+        assert_eq!(listing.product.year.as_deref(), Some("2024"));
         assert_eq!(listing.images.as_ref().unwrap().len(), 1);
         assert_eq!(listing.discounts.as_ref().unwrap().len(), 1);
     }
@@ -1127,6 +1161,38 @@ mod tests {
             format!("{:?}", listing.delivery_method),
             "Some(Other { method: \"parcel\" })"
         );
+    }
+
+    #[test]
+    fn listing_from_tags_parses_delivery_enum_variants() {
+        let mut local_delivery = base_trade_tags();
+        local_delivery.push(vec![TAG_DELIVERY.into(), "local_delivery".into()]);
+        let listing = listing_from_tags(
+            &local_delivery,
+            listing_d_tag(),
+            farm_ref(),
+            "seller".to_string(),
+            None,
+            None,
+        )
+        .expect("local delivery parse");
+        assert_eq!(
+            format!("{:?}", listing.delivery_method),
+            "Some(LocalDelivery)"
+        );
+
+        let mut shipping = base_trade_tags();
+        shipping.push(vec![TAG_DELIVERY.into(), "shipping".into()]);
+        let listing = listing_from_tags(
+            &shipping,
+            listing_d_tag(),
+            farm_ref(),
+            "seller".to_string(),
+            None,
+            None,
+        )
+        .expect("shipping parse");
+        assert_eq!(format!("{:?}", listing.delivery_method), "Some(Shipping)");
     }
 
     #[test]
@@ -1522,6 +1588,219 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(parse_error_tag(err), TAG_IMAGE.to_string());
+
+        let mut tags = base_trade_tags();
+        tags.push(vec![TAG_INVENTORY.into(), "bad".into()]);
+        let err = listing_from_tags(
+            &tags,
+            listing_d_tag(),
+            farm_ref(),
+            "seller".to_string(),
+            None,
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(parse_error_tag(err), TAG_INVENTORY.to_string());
+
+        let mut tags = base_trade_tags();
+        tags.push(vec![
+            TAG_RADROOTS_BIN.into(),
+            "bin-1".into(),
+            "bad".into(),
+            "g".into(),
+        ]);
+        let err = listing_from_tags(
+            &tags,
+            listing_d_tag(),
+            farm_ref(),
+            "seller".to_string(),
+            None,
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(parse_error_tag(err), TAG_RADROOTS_BIN.to_string());
+
+        let mut tags = base_trade_tags();
+        tags.push(vec![
+            TAG_RADROOTS_BIN.into(),
+            "bin-1".into(),
+            "500".into(),
+            "bad".into(),
+        ]);
+        let err = listing_from_tags(
+            &tags,
+            listing_d_tag(),
+            farm_ref(),
+            "seller".to_string(),
+            None,
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(parse_error_tag(err), "unit".to_string());
+
+        let mut tags = base_trade_tags();
+        tags.push(vec![
+            TAG_RADROOTS_BIN.into(),
+            "bin-2".into(),
+            "500".into(),
+            "g".into(),
+            "bad".into(),
+            "g".into(),
+        ]);
+        let err = listing_from_tags(
+            &tags,
+            listing_d_tag(),
+            farm_ref(),
+            "seller".to_string(),
+            None,
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(parse_error_tag(err), TAG_RADROOTS_BIN.to_string());
+
+        let mut tags = base_trade_tags();
+        tags.push(vec![
+            TAG_RADROOTS_BIN.into(),
+            "bin-2".into(),
+            "500".into(),
+            "g".into(),
+            "1".into(),
+            "bad".into(),
+        ]);
+        let err = listing_from_tags(
+            &tags,
+            listing_d_tag(),
+            farm_ref(),
+            "seller".to_string(),
+            None,
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(parse_error_tag(err), "unit".to_string());
+
+        let mut tags = base_trade_tags();
+        tags.push(vec![
+            TAG_RADROOTS_PRICE.into(),
+            "bin-1".into(),
+            "bad".into(),
+            "USD".into(),
+            "1".into(),
+            "g".into(),
+        ]);
+        let err = listing_from_tags(
+            &tags,
+            listing_d_tag(),
+            farm_ref(),
+            "seller".to_string(),
+            None,
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(parse_error_tag(err), TAG_RADROOTS_PRICE.to_string());
+
+        let mut tags = base_trade_tags();
+        tags.push(vec![
+            TAG_RADROOTS_PRICE.into(),
+            "bin-1".into(),
+            "10".into(),
+            "US".into(),
+            "1".into(),
+            "g".into(),
+        ]);
+        let err = listing_from_tags(
+            &tags,
+            listing_d_tag(),
+            farm_ref(),
+            "seller".to_string(),
+            None,
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(parse_error_tag(err), "currency".to_string());
+
+        let mut tags = base_trade_tags();
+        tags.push(vec![
+            TAG_RADROOTS_PRICE.into(),
+            "bin-1".into(),
+            "10".into(),
+            "USD".into(),
+            "bad".into(),
+            "g".into(),
+        ]);
+        let err = listing_from_tags(
+            &tags,
+            listing_d_tag(),
+            farm_ref(),
+            "seller".to_string(),
+            None,
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(parse_error_tag(err), TAG_RADROOTS_PRICE.to_string());
+
+        let mut tags = base_trade_tags();
+        tags.push(vec![
+            TAG_RADROOTS_PRICE.into(),
+            "bin-1".into(),
+            "10".into(),
+            "USD".into(),
+            "1".into(),
+            "bad".into(),
+        ]);
+        let err = listing_from_tags(
+            &tags,
+            listing_d_tag(),
+            farm_ref(),
+            "seller".to_string(),
+            None,
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(parse_error_tag(err), "unit".to_string());
+
+        let mut tags = base_trade_tags();
+        tags.push(vec![
+            TAG_RADROOTS_PRICE.into(),
+            "bin-2".into(),
+            "10".into(),
+            "USD".into(),
+            "1".into(),
+            "g".into(),
+            "bad".into(),
+            "g".into(),
+        ]);
+        let err = listing_from_tags(
+            &tags,
+            listing_d_tag(),
+            farm_ref(),
+            "seller".to_string(),
+            None,
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(parse_error_tag(err), TAG_RADROOTS_PRICE.to_string());
+
+        let mut tags = base_trade_tags();
+        tags.push(vec![
+            TAG_RADROOTS_PRICE.into(),
+            "bin-2".into(),
+            "10".into(),
+            "USD".into(),
+            "1".into(),
+            "g".into(),
+            "12".into(),
+            "bad".into(),
+        ]);
+        let err = listing_from_tags(
+            &tags,
+            listing_d_tag(),
+            farm_ref(),
+            "seller".to_string(),
+            None,
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(parse_error_tag(err), "unit".to_string());
     }
 
     #[test]
@@ -1632,6 +1911,32 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(parse_error_tag(err), TAG_RADROOTS_PRIMARY_BIN.to_string());
+    }
+
+    #[test]
+    fn listing_from_tags_rejects_incomplete_bin_draft() {
+        let tags = vec![
+            vec!["key".into(), "coffee".into()],
+            vec!["title".into(), "Coffee".into()],
+            vec!["category".into(), "coffee".into()],
+            vec![TAG_RADROOTS_PRIMARY_BIN.into(), "bin-1".into()],
+            vec![
+                TAG_RADROOTS_BIN.into(),
+                "bin-1".into(),
+                "500".into(),
+                "g".into(),
+            ],
+        ];
+        let err = listing_from_tags(
+            &tags,
+            listing_d_tag(),
+            farm_ref(),
+            "seller".to_string(),
+            None,
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(parse_error_tag(err), TAG_RADROOTS_PRICE.to_string());
     }
 
     #[test]
@@ -1865,18 +2170,17 @@ mod tests {
         set_optional(&mut opt_none, Some(&blank));
         assert_eq!(opt_none, None);
 
-        assert!(matches!(
-            parse_status("ACTIVE"),
-            RadrootsListingStatus::Active
-        ));
-        assert!(matches!(parse_status("sold"), RadrootsListingStatus::Sold));
+        assert_eq!(format!("{:?}", parse_status("ACTIVE")), "Active");
+        assert_eq!(format!("{:?}", parse_status("sold")), "Sold");
         assert_eq!(
             format!("{:?}", parse_status("queued")),
             "Other { value: \"queued\" }"
         );
 
         assert_eq!(parse_image_size("100x200").unwrap().w, 100);
+        assert!(parse_image_size("100").is_none());
         assert!(parse_image_size("invalid").is_none());
+        assert!(parse_image_size("badx100").is_none());
         assert!(parse_image_size("100xbad").is_none());
     }
 
@@ -2050,9 +2354,9 @@ fn parse_status(value: &str) -> RadrootsListingStatus {
 }
 
 fn parse_image_size(value: &str) -> Option<RadrootsListingImageSize> {
-    let mut parts = value.split('x');
-    let w = parts.next()?.parse::<u32>().ok()?;
-    let h = parts.next()?.parse::<u32>().ok()?;
+    let (w_raw, h_raw) = value.split_once('x')?;
+    let w = w_raw.parse::<u32>().ok()?;
+    let h = h_raw.parse::<u32>().ok()?;
     Some(RadrootsListingImageSize { w, h })
 }
 

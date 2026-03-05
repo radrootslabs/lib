@@ -377,10 +377,12 @@ mod tests {
         let mut event = base_event(&listing);
         event.tags.clear();
         let err = validate_listing_event(&event).unwrap_err();
-        assert!(matches!(
+        assert_eq!(
             err,
-            TradeListingValidationError::ParseError { .. }
-        ));
+            TradeListingValidationError::ParseError {
+                error: crate::listing::codec::TradeListingParseError::MissingTag("d".to_string())
+            }
+        );
     }
 
     #[test]
@@ -419,10 +421,7 @@ mod tests {
             vec!["delivery".into(), "pickup".into()],
         ];
         let err = validate_listing_event(&event).unwrap_err();
-        assert!(matches!(
-            err,
-            TradeListingValidationError::ParseError { .. }
-        ));
+        assert!(format!("{err:?}").starts_with("ParseError"));
     }
 
     #[test]
@@ -431,7 +430,7 @@ mod tests {
         let mut event = base_event(&listing);
         event.author = "other".into();
         let err = validate_listing_event(&event).unwrap_err();
-        assert!(matches!(err, TradeListingValidationError::InvalidSeller));
+        assert_eq!(err, TradeListingValidationError::InvalidSeller);
     }
 
     #[test]
@@ -440,7 +439,7 @@ mod tests {
         listing.inventory_available = None;
         let event = base_event(&listing);
         let err = validate_listing_event(&event).unwrap_err();
-        assert!(matches!(err, TradeListingValidationError::MissingInventory));
+        assert_eq!(err, TradeListingValidationError::MissingInventory);
     }
 
     #[test]
@@ -449,10 +448,7 @@ mod tests {
         let mut event = base_event(&listing);
         event.kind = 0;
         let err = validate_listing_event(&event).unwrap_err();
-        assert!(matches!(
-            err,
-            TradeListingValidationError::InvalidKind { kind: 0 }
-        ));
+        assert_eq!(err, TradeListingValidationError::InvalidKind { kind: 0 });
     }
 
     #[test]

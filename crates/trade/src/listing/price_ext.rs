@@ -178,4 +178,33 @@ mod tests {
         assert_eq!(total.quantity_amount, subtotal.quantity_amount);
         assert_eq!(total.price_amount, subtotal.price_amount);
     }
+
+    #[test]
+    fn try_total_for_count_propagates_subtotal_errors() {
+        let bin = RadrootsListingBin {
+            bin_id: "bin-1".into(),
+            quantity: RadrootsCoreQuantity::new(
+                RadrootsCoreDecimal::from(1u32),
+                RadrootsCoreUnit::MassG,
+            ),
+            price_per_canonical_unit: RadrootsCoreQuantityPrice::new(
+                RadrootsCoreMoney::new(RadrootsCoreDecimal::from(10u32), RadrootsCoreCurrency::USD),
+                RadrootsCoreQuantity::new(RadrootsCoreDecimal::from(1u32), RadrootsCoreUnit::Each),
+            ),
+            display_amount: None,
+            display_unit: None,
+            display_label: None,
+            display_price: None,
+            display_price_unit: None,
+        };
+
+        let err = bin.try_total_for_count(1).unwrap_err();
+        assert_eq!(
+            err,
+            RadrootsCoreQuantityPriceError::UnitMismatch {
+                have: RadrootsCoreUnit::MassG,
+                want: RadrootsCoreUnit::Each,
+            }
+        );
+    }
 }
