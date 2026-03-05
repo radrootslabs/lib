@@ -42,16 +42,15 @@ mod tests {
     #[test]
     fn converts_nostrdb_error() {
         let converted: RadrootsNostrNdbError = nostrdb::Error::NotFound.into();
-        assert!(matches!(converted, RadrootsNostrNdbError::Ndb(_)));
+        assert!(converted.to_string().starts_with("nostrdb error:"));
     }
 
     #[test]
     fn converts_serde_json_error() {
         let source = serde_json::from_str::<serde_json::Value>("not json").expect_err("json error");
         let converted: RadrootsNostrNdbError = source.into();
-        assert!(matches!(
-            converted,
-            RadrootsNostrNdbError::EventJsonEncode(_)
-        ));
+        assert!(converted
+            .to_string()
+            .starts_with("event json encode failed:"));
     }
 }
