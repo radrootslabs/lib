@@ -173,10 +173,7 @@ mod tests {
         assert_eq!(spec.name.as_deref(), Some("posts"));
         assert_eq!(spec.stream_timeout_secs, 12);
         assert_eq!(spec.reconnect_delay_millis, 99);
-        assert_eq!(
-            spec.policy,
-            RadrootsNostrSubscriptionPolicy::OneShotOnEose
-        );
+        assert_eq!(spec.policy, RadrootsNostrSubscriptionPolicy::OneShotOnEose);
     }
 
     #[test]
@@ -190,10 +187,7 @@ mod tests {
         assert_eq!(spec.name.as_deref(), Some("posts"));
         assert_eq!(spec.stream_timeout_secs, 12);
         assert_eq!(spec.reconnect_delay_millis, 99);
-        assert_eq!(
-            spec.policy,
-            RadrootsNostrSubscriptionPolicy::OneShotOnEose
-        );
+        assert_eq!(spec.policy, RadrootsNostrSubscriptionPolicy::OneShotOnEose);
     }
 
     #[test]
