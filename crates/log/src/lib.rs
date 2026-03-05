@@ -67,6 +67,46 @@ mod tests {
     }
 
     #[test]
+    fn logging_helpers_cover_enabled_paths() {
+        struct TestSubscriber;
+
+        impl tracing::Subscriber for TestSubscriber {
+            fn enabled(&self, _: &tracing::Metadata<'_>) -> bool {
+                true
+            }
+
+            fn new_span(&self, _: &tracing::span::Attributes<'_>) -> tracing::span::Id {
+                tracing::span::Id::from_u64(1)
+            }
+
+            fn record(&self, _: &tracing::span::Id, _: &tracing::span::Record<'_>) {}
+
+            fn record_follows_from(&self, _: &tracing::span::Id, _: &tracing::span::Id) {}
+
+            fn event(&self, _: &tracing::Event<'_>) {}
+
+            fn enter(&self, _: &tracing::span::Id) {}
+
+            fn exit(&self, _: &tracing::span::Id) {}
+        }
+
+        log_info("info");
+        log_error("error");
+        log_debug("debug");
+        let _ = tracing::subscriber::set_global_default(TestSubscriber);
+        let span = tracing::span!(tracing::Level::INFO, "log_span", value = 1);
+        let other = tracing::span!(tracing::Level::INFO, "log_span_other");
+        span.record("value", &2);
+        span.follows_from(other.id());
+        let _enter = span.enter();
+        tracing::event!(tracing::Level::INFO, "log_event");
+        drop(_enter);
+        log_info("info");
+        log_error("error");
+        log_debug("debug");
+    }
+
+    #[test]
     fn coverage_branch_probe_hits_both_paths() {
         assert_eq!(coverage_branch_probe(true), "log");
         assert_eq!(coverage_branch_probe(false), "log");
