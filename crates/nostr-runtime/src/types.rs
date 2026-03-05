@@ -173,10 +173,10 @@ mod tests {
         assert_eq!(spec.name.as_deref(), Some("posts"));
         assert_eq!(spec.stream_timeout_secs, 12);
         assert_eq!(spec.reconnect_delay_millis, 99);
-        assert!(matches!(
+        assert_eq!(
             spec.policy,
             RadrootsNostrSubscriptionPolicy::OneShotOnEose
-        ));
+        );
     }
 
     #[test]
@@ -190,16 +190,16 @@ mod tests {
         assert_eq!(spec.name.as_deref(), Some("posts"));
         assert_eq!(spec.stream_timeout_secs, 12);
         assert_eq!(spec.reconnect_delay_millis, 99);
-        assert!(matches!(
+        assert_eq!(
             spec.policy,
             RadrootsNostrSubscriptionPolicy::OneShotOnEose
-        ));
+        );
     }
 
     #[test]
     fn connection_snapshot_default_is_red() {
         let snapshot = RadrootsNostrConnectionSnapshot::default();
-        assert!(matches!(snapshot.light, RadrootsNostrTrafficLight::Red));
+        assert_eq!(snapshot.light, RadrootsNostrTrafficLight::Red);
         assert_eq!(snapshot.connected, 0);
         assert_eq!(snapshot.connecting, 0);
         assert!(snapshot.last_error.is_none());
