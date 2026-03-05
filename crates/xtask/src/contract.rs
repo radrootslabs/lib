@@ -177,27 +177,56 @@ fn contract_root(workspace_root: &Path) -> PathBuf {
     workspace_root.join("contract")
 }
 
-fn workspace_package_names(workspace_root: &Path) -> Result<Vec<String>, String> {
+#[derive(Debug)]
+struct WorkspacePackageRecord {
+    name: String,
+    manifest_path: PathBuf,
+    publish_enabled: bool,
+    manifest_value: toml::Value,
+}
+
+fn workspace_package_records(workspace_root: &Path) -> Result<Vec<WorkspacePackageRecord>, String> {
     let workspace_manifest =
         parse_toml::<WorkspaceCargoManifest>(&workspace_root.join("Cargo.toml"))?;
-    let mut names = Vec::with_capacity(workspace_manifest.workspace.members.len());
+    let mut records = Vec::with_capacity(workspace_manifest.workspace.members.len());
     for member in workspace_manifest.workspace.members {
-        let member_manifest = workspace_root.join(member).join("Cargo.toml");
-        let package_manifest = parse_toml::<PackageCargoManifest>(&member_manifest)?;
-        names.push(package_manifest.package.name);
+        let manifest_path = workspace_root.join(&member).join("Cargo.toml");
+        let raw = match fs::read_to_string(&manifest_path) {
+            Ok(raw) => raw,
+            Err(e) => return Err(format!("read {}: {e}", manifest_path.display())),
+        };
+        let manifest_value = match toml::from_str::<toml::Value>(&raw) {
+            Ok(value) => value,
+            Err(e) => return Err(format!("parse {}: {e}", manifest_path.display())),
+        };
+        let package_manifest = match toml::from_str::<PackageCargoManifest>(&raw) {
+            Ok(manifest) => manifest,
+            Err(e) => return Err(format!("parse {}: {e}", manifest_path.display())),
+        };
+        let name = package_manifest.package.name;
+        let publish_enabled = package_publish_enabled(package_manifest.package.publish.as_ref());
+        records.push(WorkspacePackageRecord {
+            name,
+            manifest_path,
+            publish_enabled,
+            manifest_value,
+        });
     }
-    Ok(names)
+    Ok(records)
+}
+
+fn workspace_package_names(workspace_root: &Path) -> Result<Vec<String>, String> {
+    Ok(workspace_package_records(workspace_root)?
+        .into_iter()
+        .map(|record| record.name)
+        .collect())
 }
 
 fn workspace_package_manifests(workspace_root: &Path) -> Result<BTreeMap<String, PathBuf>, String> {
-    let workspace_manifest =
-        parse_toml::<WorkspaceCargoManifest>(&workspace_root.join("Cargo.toml"))?;
     let mut manifests = BTreeMap::new();
-    for member in workspace_manifest.workspace.members {
-        let member_manifest = workspace_root.join(&member).join("Cargo.toml");
-        let package_manifest = parse_toml::<PackageCargoManifest>(&member_manifest)?;
+    for record in workspace_package_records(workspace_root)? {
         if manifests
-            .insert(package_manifest.package.name, member_manifest)
+            .insert(record.name, record.manifest_path)
             .is_some()
         {
             return Err("duplicate workspace package name in manifest map".to_string());
@@ -229,23 +258,13 @@ fn package_publish_enabled(publish: Option<&PackagePublish>) -> bool {
 fn workspace_package_publish_flags(
     workspace_root: &Path,
 ) -> Result<BTreeMap<String, bool>, String> {
-    let workspace_manifest =
-        parse_toml::<WorkspaceCargoManifest>(&workspace_root.join("Cargo.toml"))?;
     let mut flags = BTreeMap::new();
-    for member in workspace_manifest.workspace.members {
-        let member_manifest = workspace_root.join(member).join("Cargo.toml");
-        let package_manifest = parse_toml::<PackageCargoManifest>(&member_manifest)?;
+    for record in workspace_package_records(workspace_root)? {
         if flags
-            .insert(
-                package_manifest.package.name.clone(),
-                package_publish_enabled(package_manifest.package.publish.as_ref()),
-            )
+            .insert(record.name.clone(), record.publish_enabled)
             .is_some()
         {
-            return Err(format!(
-                "duplicate workspace package name {}",
-                package_manifest.package.name
-            ));
+            return Err(format!("duplicate workspace package name {}", record.name));
         }
     }
     Ok(flags)
@@ -254,23 +273,21 @@ fn workspace_package_publish_flags(
 fn read_workspace_package_dependencies(
     workspace_root: &Path,
 ) -> Result<BTreeMap<String, BTreeSet<String>>, String> {
-    let workspace_manifest =
-        parse_toml::<WorkspaceCargoManifest>(&workspace_root.join("Cargo.toml"))?;
-    let mut member_manifests = Vec::with_capacity(workspace_manifest.workspace.members.len());
-    let mut workspace_names = BTreeSet::new();
-    for member in workspace_manifest.workspace.members {
-        let member_manifest = workspace_root.join(&member).join("Cargo.toml");
-        let package_manifest = parse_toml::<PackageCargoManifest>(&member_manifest)?;
-        workspace_names.insert(package_manifest.package.name.clone());
-        member_manifests.push((package_manifest.package.name, member_manifest));
-    }
+    let package_records = workspace_package_records(workspace_root)?;
+    let workspace_names = package_records
+        .iter()
+        .map(|record| record.name.clone())
+        .collect::<BTreeSet<_>>();
 
     let mut deps = BTreeMap::new();
-    for (package_name, manifest_path) in member_manifests {
-        let parsed = parse_toml::<toml::Value>(&manifest_path)?;
+    for record in package_records {
         let mut package_deps = BTreeSet::new();
         for section in ["dependencies", "build-dependencies"] {
-            let Some(table) = parsed.get(section).and_then(toml::Value::as_table) else {
+            let Some(table) = record
+                .manifest_value
+                .get(section)
+                .and_then(toml::Value::as_table)
+            else {
                 continue;
             };
             for dep_name in table.keys() {
@@ -279,7 +296,7 @@ fn read_workspace_package_dependencies(
                 }
             }
         }
-        deps.insert(package_name, package_deps);
+        deps.insert(record.name, package_deps);
     }
 
     Ok(deps)

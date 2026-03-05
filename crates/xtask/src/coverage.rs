@@ -486,7 +486,15 @@ pub fn evaluate_gate(
         .branch_percent
         .is_none_or(|branch_percent| branch_percent >= thresholds.fail_under_branches);
 
-    let pass = exec_ok && functions_ok && regions_ok && branch_presence_ok && branch_ok;
+    let pass = [
+        exec_ok,
+        functions_ok,
+        regions_ok,
+        branch_presence_ok,
+        branch_ok,
+    ]
+    .into_iter()
+    .all(|flag| flag);
     let mut fail_reasons: Vec<String> = Vec::new();
 
     if !exec_ok {
@@ -583,11 +591,11 @@ fn parse_bool_flag(args: &[String], name: &str) -> bool {
     args.iter().any(|arg| arg == &flag)
 }
 
-fn workspace_root() -> Result<PathBuf, String> {
+fn workspace_root() -> PathBuf {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let crates_dir = manifest_dir.parent().unwrap_or(manifest_dir);
     let root = crates_dir.parent().unwrap_or(crates_dir);
-    Ok(root.to_path_buf())
+    root.to_path_buf()
 }
 
 fn run_command(mut command: Command, name: &str) -> Result<(), String> {
@@ -610,13 +618,13 @@ fn apply_coverage_profile_flags(command: &mut Command, profile: &CoverageProfile
     }
 }
 
-fn run_crate_with_runner<F>(args: &[String], mut runner: F) -> Result<(), String>
-where
-    F: FnMut(Command, &str) -> Result<(), String>,
-{
+fn run_crate_with_runner_at_root(
+    args: &[String],
+    workspace_root: &Path,
+    runner: &mut dyn FnMut(Command, &str) -> Result<(), String>,
+) -> Result<(), String> {
     let crate_name = parse_string_arg(args, "crate")?;
-    let workspace_root = workspace_root()?;
-    let profile = read_coverage_profile(&workspace_root, &crate_name)?;
+    let profile = read_coverage_profile(workspace_root, &crate_name)?;
     let out_dir = if let Some(raw) = parse_optional_string_arg(args, "out") {
         PathBuf::from(raw)
     } else {
@@ -642,7 +650,7 @@ where
                 .arg("llvm-cov")
                 .arg("clean")
                 .arg("--workspace")
-                .current_dir(&workspace_root);
+                .current_dir(workspace_root);
             cmd
         },
         "cargo llvm-cov clean --workspace",
@@ -658,7 +666,7 @@ where
                 .arg("--branch")
                 .arg("--")
                 .arg(format!("--test-threads={test_threads}"))
-                .current_dir(&workspace_root);
+                .current_dir(workspace_root);
             cmd
         },
         "cargo llvm-cov --no-report",
@@ -675,7 +683,7 @@ where
                 .arg("--branch")
                 .arg("--output-path")
                 .arg(&summary_path)
-                .current_dir(&workspace_root);
+                .current_dir(workspace_root);
             cmd
         },
         "cargo llvm-cov report --json --summary-only",
@@ -691,7 +699,7 @@ where
                 .arg("--branch")
                 .arg("--output-path")
                 .arg(&lcov_path)
-                .current_dir(&workspace_root);
+                .current_dir(workspace_root);
             cmd
         },
         "cargo llvm-cov report --lcov",
@@ -702,8 +710,17 @@ where
     Ok(())
 }
 
+fn run_crate_with_runner(
+    args: &[String],
+    runner: &mut dyn FnMut(Command, &str) -> Result<(), String>,
+) -> Result<(), String> {
+    let root = workspace_root();
+    run_crate_with_runner_at_root(args, &root, runner)
+}
+
 fn run_crate(args: &[String]) -> Result<(), String> {
-    run_crate_with_runner(args, run_command)
+    let mut runner = run_command;
+    run_crate_with_runner(args, &mut runner)
 }
 
 fn report_gate(args: &[String]) -> Result<(), String> {
@@ -797,26 +814,34 @@ fn report_gate(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
-fn list_required_crates() -> Result<(), String> {
-    let root = workspace_root()?;
+fn list_required_crates_with_root(root: &Path, writer: &mut dyn Write) -> Result<(), String> {
     let required_path = root
         .join("contract")
         .join("coverage")
         .join("required-crates.toml");
     let crates = read_required_crates(&required_path)?;
+    write_crate_names_output(writer, crates, "required crates")
+}
+
+fn list_required_crates() -> Result<(), String> {
+    let root = workspace_root();
     let mut stdout = std::io::stdout().lock();
-    write_crate_names_output(&mut stdout, crates, "required crates")
+    list_required_crates_with_root(&root, &mut stdout)
+}
+
+fn list_workspace_crates_with_root(root: &Path, writer: &mut dyn Write) -> Result<(), String> {
+    let crates = read_workspace_crates(&root)?;
+    write_crate_names_output(writer, crates, "workspace crates")
 }
 
 fn list_workspace_crates() -> Result<(), String> {
-    let root = workspace_root()?;
-    let crates = read_workspace_crates(&root)?;
+    let root = workspace_root();
     let mut stdout = std::io::stdout().lock();
-    write_crate_names_output(&mut stdout, crates, "workspace crates")
+    list_workspace_crates_with_root(&root, &mut stdout)
 }
 
-fn write_crate_names_output<W: Write>(
-    writer: &mut W,
+fn write_crate_names_output(
+    writer: &mut dyn Write,
     crates: Vec<String>,
     label: &str,
 ) -> Result<(), String> {
@@ -1029,7 +1054,7 @@ mod tests {
 
     #[test]
     fn reads_workspace_crates_and_contains_xtask() {
-        let root = workspace_root().expect("workspace root");
+        let root = workspace_root();
         let crates = read_workspace_crates(&root).expect("workspace crates");
         assert!(!crates.is_empty());
         assert!(crates.iter().any(|crate_name| crate_name == "xtask"));
@@ -1116,6 +1141,18 @@ test_threads = 0
             "unexpected error: {err}"
         );
 
+        fs::remove_dir_all(root).expect("remove root");
+    }
+
+    #[test]
+    fn coverage_profiles_reject_invalid_toml() {
+        let root = temp_dir_path("profile_invalid_toml");
+        let coverage_dir = root.join("contract").join("coverage");
+        fs::create_dir_all(&coverage_dir).expect("create coverage dir");
+        fs::write(coverage_dir.join("profiles.toml"), "[profiles.default\n")
+            .expect("write invalid profiles");
+        let err = read_coverage_profile(&root, "radroots-app-core").expect_err("invalid toml");
+        assert!(err.contains("failed to parse"));
         fs::remove_dir_all(root).expect("remove root");
     }
 
@@ -1255,6 +1292,19 @@ test_threads = 0
         let dup_err = read_workspace_crates(&root_duplicate).expect_err("duplicate package names");
         assert!(dup_err.contains("duplicate package name"));
         fs::remove_dir_all(&root_duplicate).expect("remove duplicate package root");
+
+        let root_parse = temp_dir_path("workspace_parse_error");
+        write_file(
+            &root_parse.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"crates/a\"]\n",
+        );
+        write_file(
+            &root_parse.join("crates").join("a").join("Cargo.toml"),
+            "[package",
+        );
+        let parse_err = read_workspace_crates(&root_parse).expect_err("invalid package manifest");
+        assert!(parse_err.contains("failed to parse"));
+        fs::remove_dir_all(&root_parse).expect("remove parse package root");
     }
 
     #[test]
@@ -1317,7 +1367,7 @@ test_threads = 0
         let path = temp_file_path("lcov_lf_lh");
         fs::write(&path, "LF:4\nLH:3\n").expect("write lcov");
         let parsed = read_lcov(&path).expect("parse lcov");
-        assert!(matches!(parsed.executable_source, ExecutableSource::LfLh));
+        assert_eq!(executable_source_label(parsed.executable_source), "lf_lh");
         assert_eq!(parsed.executable_total, 4);
         assert_eq!(parsed.executable_covered, 3);
         assert_eq!(parsed.executable_percent, 75.0);
@@ -1439,7 +1489,7 @@ test_threads = 0
             "3".to_string(),
         ];
         let mut names = Vec::new();
-        run_crate_with_runner(&args, |cmd, name| {
+        let mut runner = |cmd: Command, name: &str| {
             names.push(name.to_string());
             let rendered = cmd
                 .get_args()
@@ -1448,8 +1498,8 @@ test_threads = 0
                 .join(" ");
             assert!(!rendered.is_empty());
             Ok(())
-        })
-        .expect("run crate with stub runner");
+        };
+        run_crate_with_runner(&args, &mut runner).expect("run crate with stub runner");
         assert_eq!(
             names,
             vec![
@@ -1466,7 +1516,7 @@ test_threads = 0
     fn run_crate_with_runner_uses_default_output_dir_when_out_is_missing() {
         let args = vec!["--crate".to_string(), "radroots-core".to_string()];
         let mut output_path_seen = false;
-        run_crate_with_runner(&args, |cmd, _| {
+        let mut runner = |cmd: Command, _: &str| {
             let rendered = cmd
                 .get_args()
                 .map(|arg| arg.to_string_lossy().to_string())
@@ -1481,8 +1531,8 @@ test_threads = 0
                 output_path_seen = true;
             }
             Ok(())
-        })
-        .expect("run crate with default out");
+        };
+        run_crate_with_runner(&args, &mut runner).expect("run crate with default out");
         assert!(output_path_seen);
     }
 
@@ -1495,8 +1545,9 @@ test_threads = 0
             "--out".to_string(),
             out.display().to_string(),
         ];
-        let err = run_crate_with_runner(&args, |_, _| Err("runner failed".to_string()))
-            .expect_err("runner failure should bubble up");
+        let mut runner = |_: Command, _: &str| Err("runner failed".to_string());
+        let err =
+            run_crate_with_runner(&args, &mut runner).expect_err("runner failure should bubble up");
         assert_eq!(err, "runner failed".to_string());
         fs::remove_dir_all(out).expect("remove run crate failure output dir");
         let root = temp_dir_path("run_crate_create_out_error");
@@ -1507,7 +1558,8 @@ test_threads = 0
             "--out".to_string(),
             root.join("blocker").join("nested").display().to_string(),
         ];
-        let err = run_crate_with_runner(&args, run_command)
+        let mut runner = run_command;
+        let err = run_crate_with_runner(&args, &mut runner)
             .expect_err("output dir create error should fail");
         assert!(err.contains("failed to create"));
         fs::remove_dir_all(root).expect("remove run crate create error root");
@@ -1517,6 +1569,67 @@ test_threads = 0
     fn run_crate_wrapper_returns_missing_crate_error_without_running_commands() {
         let err = run_crate(&[]).expect_err("missing crate flag");
         assert!(err.contains("missing --crate"));
+    }
+
+    #[test]
+    fn run_crate_with_runner_at_root_covers_profile_and_runner_error_paths() {
+        let profile_root = temp_dir_path("run_crate_profile_invalid");
+        write_file(
+            &profile_root
+                .join("contract")
+                .join("coverage")
+                .join("profiles.toml"),
+            "[profiles.default]\nfeatures = [\"\"]\n",
+        );
+        let profile_args = vec![
+            "--crate".to_string(),
+            "radroots-core".to_string(),
+            "--out".to_string(),
+            profile_root.join("out").display().to_string(),
+        ];
+        let mut runner = run_command;
+        let profile_err = run_crate_with_runner_at_root(&profile_args, &profile_root, &mut runner)
+            .expect_err("invalid profile should fail");
+        assert!(profile_err.contains("empty feature value"));
+        fs::remove_dir_all(&profile_root).expect("remove profile root");
+
+        let thread_root = temp_dir_path("run_crate_bad_threads");
+        fs::create_dir_all(&thread_root).expect("create thread root");
+        let thread_args = vec![
+            "--crate".to_string(),
+            "radroots-core".to_string(),
+            "--out".to_string(),
+            thread_root.join("out").display().to_string(),
+            "--test-threads".to_string(),
+            "bad".to_string(),
+        ];
+        let mut runner = run_command;
+        let thread_err = run_crate_with_runner_at_root(&thread_args, &thread_root, &mut runner)
+            .expect_err("invalid test threads should fail");
+        assert!(thread_err.contains("invalid --test-threads value"));
+        fs::remove_dir_all(&thread_root).expect("remove thread root");
+
+        for fail_step in [2usize, 3usize, 4usize] {
+            let step_root = temp_dir_path("run_crate_step_fail");
+            let step_args = vec![
+                "--crate".to_string(),
+                "radroots-core".to_string(),
+                "--out".to_string(),
+                step_root.join("out").display().to_string(),
+            ];
+            let mut calls = 0usize;
+            let mut runner = |_: Command, name: &str| {
+                calls += 1;
+                if calls == fail_step {
+                    return Err(format!("runner failure at {name}"));
+                }
+                Ok(())
+            };
+            let err = run_crate_with_runner_at_root(&step_args, &step_root, &mut runner)
+                .expect_err("runner should fail at selected step");
+            assert!(err.contains("runner failure at"));
+            fs::remove_dir_all(&step_root).expect("remove step root");
+        }
     }
 
     #[test]
@@ -1672,14 +1785,160 @@ test_threads = 0
     }
 
     #[test]
+    fn report_gate_reports_argument_and_input_errors() {
+        let missing_scope = report_gate(&[]).expect_err("missing scope");
+        assert!(missing_scope.contains("missing --scope"));
+
+        let missing_summary = report_gate(&["--scope".to_string(), "crate".to_string()])
+            .expect_err("missing summary");
+        assert!(missing_summary.contains("missing --summary"));
+
+        let missing_lcov = report_gate(&[
+            "--scope".to_string(),
+            "crate".to_string(),
+            "--summary".to_string(),
+            "summary.json".to_string(),
+        ])
+        .expect_err("missing lcov");
+        assert!(missing_lcov.contains("missing --lcov"));
+
+        let missing_out = report_gate(&[
+            "--scope".to_string(),
+            "crate".to_string(),
+            "--summary".to_string(),
+            "summary.json".to_string(),
+            "--lcov".to_string(),
+            "coverage.info".to_string(),
+        ])
+        .expect_err("missing out");
+        assert!(missing_out.contains("missing --out"));
+
+        let root = temp_dir_path("report_gate_arg_errors");
+        let summary_path = root.join("summary.json");
+        let lcov_path = root.join("coverage.info");
+        let out_path = root.join("gate-report.json");
+        write_file(
+            &summary_path,
+            r#"{"data":[{"totals":{"functions":{"percent":100.0},"lines":{"percent":100.0},"regions":{"percent":100.0}}}]}"#,
+        );
+        write_file(&lcov_path, "DA:1,1\nBRDA:1,0,0,1\n");
+
+        let invalid_functions = report_gate(&[
+            "--scope".to_string(),
+            "crate".to_string(),
+            "--summary".to_string(),
+            summary_path.display().to_string(),
+            "--lcov".to_string(),
+            lcov_path.display().to_string(),
+            "--out".to_string(),
+            out_path.display().to_string(),
+            "--fail-under-functions".to_string(),
+            "bad".to_string(),
+        ])
+        .expect_err("invalid functions threshold");
+        assert!(invalid_functions.contains("invalid --fail-under-functions value"));
+
+        let invalid_exec = report_gate(&[
+            "--scope".to_string(),
+            "crate".to_string(),
+            "--summary".to_string(),
+            summary_path.display().to_string(),
+            "--lcov".to_string(),
+            lcov_path.display().to_string(),
+            "--out".to_string(),
+            out_path.display().to_string(),
+            "--fail-under-exec-lines".to_string(),
+            "bad".to_string(),
+        ])
+        .expect_err("invalid executable threshold");
+        assert!(invalid_exec.contains("invalid --fail-under-exec-lines value"));
+
+        let invalid_regions = report_gate(&[
+            "--scope".to_string(),
+            "crate".to_string(),
+            "--summary".to_string(),
+            summary_path.display().to_string(),
+            "--lcov".to_string(),
+            lcov_path.display().to_string(),
+            "--out".to_string(),
+            out_path.display().to_string(),
+            "--fail-under-regions".to_string(),
+            "bad".to_string(),
+        ])
+        .expect_err("invalid regions threshold");
+        assert!(invalid_regions.contains("invalid --fail-under-regions value"));
+
+        let invalid_branches = report_gate(&[
+            "--scope".to_string(),
+            "crate".to_string(),
+            "--summary".to_string(),
+            summary_path.display().to_string(),
+            "--lcov".to_string(),
+            lcov_path.display().to_string(),
+            "--out".to_string(),
+            out_path.display().to_string(),
+            "--fail-under-branches".to_string(),
+            "bad".to_string(),
+        ])
+        .expect_err("invalid branches threshold");
+        assert!(invalid_branches.contains("invalid --fail-under-branches value"));
+
+        let missing_summary_file = report_gate(&[
+            "--scope".to_string(),
+            "crate".to_string(),
+            "--summary".to_string(),
+            root.join("missing-summary.json").display().to_string(),
+            "--lcov".to_string(),
+            lcov_path.display().to_string(),
+            "--out".to_string(),
+            out_path.display().to_string(),
+        ])
+        .expect_err("missing summary file should fail");
+        assert!(missing_summary_file.contains("failed to read summary"));
+
+        let missing_lcov_file = report_gate(&[
+            "--scope".to_string(),
+            "crate".to_string(),
+            "--summary".to_string(),
+            summary_path.display().to_string(),
+            "--lcov".to_string(),
+            root.join("missing-lcov.info").display().to_string(),
+            "--out".to_string(),
+            out_path.display().to_string(),
+        ])
+        .expect_err("missing lcov file should fail");
+        assert!(missing_lcov_file.contains("failed to read lcov"));
+
+        fs::remove_dir_all(root).expect("remove report arg errors root");
+    }
+
+    #[test]
     fn run_dispatches_subcommands_and_errors() {
         run(&["help".to_string()]).expect("help subcommand");
         run(&["required-crates".to_string()]).expect("required crates subcommand");
         run(&["workspace-crates".to_string()]).expect("workspace crates subcommand");
+        let run_crate_err = run(&["run-crate".to_string()]).expect_err("run crate missing args");
+        assert!(run_crate_err.contains("missing --crate"));
         let unknown_err = run(&["unknown".to_string()]).expect_err("unknown subcommand");
         assert!(unknown_err.contains("unknown sdk coverage subcommand"));
         let missing_err = run(&[]).expect_err("missing subcommand");
         assert!(missing_err.contains("missing sdk coverage subcommand"));
+    }
+
+    #[test]
+    fn list_root_helpers_report_missing_contract_files() {
+        let root = temp_dir_path("list_helper_missing");
+        fs::create_dir_all(&root).expect("create list helper root");
+        let mut output = Vec::new();
+        let required_err = list_required_crates_with_root(&root, &mut output)
+            .expect_err("missing required crates file should fail");
+        assert!(required_err.contains("failed to read required crates"));
+
+        let workspace_err = list_workspace_crates_with_root(&root, &mut output)
+            .expect_err("missing workspace manifest should fail");
+        assert!(workspace_err.contains("failed to read"));
+
+        fs::remove_dir_all(root).expect("remove list helper root");
     }
 
     #[test]

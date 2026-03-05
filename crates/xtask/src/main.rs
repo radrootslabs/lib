@@ -26,11 +26,11 @@ fn usage() {
     );
 }
 
-fn workspace_root() -> Result<PathBuf, String> {
+fn workspace_root() -> PathBuf {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let crates_dir = manifest_dir.parent().unwrap_or(manifest_dir);
     let root = crates_dir.parent().unwrap_or(crates_dir);
-    Ok(root.to_path_buf())
+    root.to_path_buf()
 }
 
 fn parse_out_dir(args: &[String], workspace_root: &Path) -> Result<PathBuf, String> {
@@ -79,80 +79,49 @@ fn parse_crate_out_dir(
 }
 
 fn export_ts_models(args: &[String]) -> Result<(), String> {
-    let root = workspace_root()?;
+    let root = workspace_root();
     let out_dir = parse_out_dir(args, &root)?;
-    export_ts::export_ts_models(&root, &out_dir)?;
-    eprintln!("exported ts models to {}", out_dir.display());
-    Ok(())
+    export_ts::export_ts_models(&root, &out_dir)
 }
 
 fn export_ts_constants(args: &[String]) -> Result<(), String> {
-    let root = workspace_root()?;
+    let root = workspace_root();
     let out_dir = parse_out_dir(args, &root)?;
-    export_ts::export_ts_constants(&root, &out_dir)?;
-    eprintln!("exported ts constants to {}", out_dir.display());
-    Ok(())
+    export_ts::export_ts_constants(&root, &out_dir)
 }
 
 fn export_ts_wasm(args: &[String]) -> Result<(), String> {
-    let root = workspace_root()?;
+    let root = workspace_root();
     let out_dir = parse_out_dir(args, &root)?;
-    export_ts::export_ts_wasm_artifacts(&root, &out_dir)?;
-    eprintln!("exported ts wasm to {}", out_dir.display());
-    Ok(())
+    export_ts::export_ts_wasm_artifacts(&root, &out_dir)
 }
 
 fn export_manifest(args: &[String]) -> Result<(), String> {
-    let root = workspace_root()?;
+    let root = workspace_root();
     let out_dir = parse_out_dir(args, &root)?;
-    let manifest = export_ts::write_ts_export_manifest(&root, &out_dir)?;
-    eprintln!("wrote export manifest {}", manifest.display());
-    Ok(())
+    export_ts::write_ts_export_manifest(&root, &out_dir).map(|_| ())
 }
 
 fn export_ts(args: &[String]) -> Result<(), String> {
-    let root = workspace_root()?;
+    let root = workspace_root();
     let out_dir = parse_out_dir(args, &root)?;
-    let manifest = export_ts::export_ts_bundle(&root, &out_dir)?;
-    eprintln!("exported ts sdk bundle to {}", out_dir.display());
-    eprintln!("wrote export manifest {}", manifest.display());
-    Ok(())
+    export_ts::export_ts_bundle(&root, &out_dir).map(|_| ())
 }
 
 fn export_ts_crate(args: &[String]) -> Result<(), String> {
-    let root = workspace_root()?;
+    let root = workspace_root();
     let (crate_selector, out_dir) = parse_crate_out_dir(args, &root)?;
-    let manifest = export_ts::export_ts_bundle_for_crate(&root, &out_dir, &crate_selector)?;
-    eprintln!(
-        "exported ts sdk crate {} to {}",
-        crate_selector,
-        out_dir.display()
-    );
-    eprintln!("wrote export manifest {}", manifest.display());
-    Ok(())
+    export_ts::export_ts_bundle_for_crate(&root, &out_dir, &crate_selector).map(|_| ())
 }
 
 fn validate_contract() -> Result<(), String> {
-    let root = workspace_root()?;
-    let bundle = contract::load_contract_bundle(&root)?;
-    contract::validate_contract_bundle(&bundle)?;
-    eprintln!(
-        "validated contract {} {}",
-        bundle.manifest.contract.name, bundle.manifest.contract.version
-    );
-    eprintln!("contract root: {}", bundle.root.display());
-    Ok(())
+    let root = workspace_root();
+    contract::load_contract_bundle(&root)
+        .and_then(|bundle| contract::validate_contract_bundle(&bundle))
 }
 
 fn release_preflight() -> Result<(), String> {
-    let root = workspace_root()?;
-    contract::validate_release_preflight(&root)?;
-    let bundle = contract::load_contract_bundle(&root)?;
-    eprintln!(
-        "validated release preflight for contract {}",
-        bundle.version.contract.version
-    );
-    Ok(())
+    contract::validate_release_preflight(&workspace_root())
 }
 
 fn run_release(args: &[String]) -> Result<(), String> {
@@ -225,7 +194,7 @@ mod tests {
 
     #[test]
     fn workspace_root_resolves_and_parse_helpers_cover_branches() {
-        let root = workspace_root().expect("workspace root");
+        let root = workspace_root();
         assert!(root.join("Cargo.toml").exists());
 
         let default_out = parse_out_dir(&[], &root).expect("default out dir");
@@ -301,7 +270,7 @@ mod tests {
     #[test]
     fn export_wrappers_cover_success_and_error_paths() {
         let _guard = workspace_lock().lock().expect("lock workspace");
-        let root = workspace_root().expect("workspace root");
+        let root = workspace_root();
         let out_dir = unique_temp_dir("export_wrappers");
         fs::create_dir_all(&out_dir).expect("create out dir");
 
@@ -346,7 +315,7 @@ mod tests {
     #[test]
     fn contract_and_coverage_dispatchers_execute() {
         let _guard = workspace_lock().lock().expect("lock workspace");
-        let root = workspace_root().expect("workspace root");
+        let root = workspace_root();
         let out_dir = unique_temp_dir("coverage_dispatch");
         fs::create_dir_all(&out_dir).expect("create out dir");
 
@@ -441,5 +410,17 @@ mod tests {
         let failure_code = main_with_args(vec!["unknown".to_string()]);
         assert_eq!(failure_code, ExitCode::from(2));
         let _ = main();
+    }
+
+    #[test]
+    fn run_sdk_dispatches_export_and_validate_commands() {
+        let _guard = workspace_lock().lock().expect("lock workspace");
+        assert!(run_sdk(&["export-ts".to_string(), "--bad".to_string()]).is_err());
+        assert!(run_sdk(&["export-ts-crate".to_string(), "--bad".to_string()]).is_err());
+        assert!(run_sdk(&["export-ts-models".to_string(), "--bad".to_string()]).is_err());
+        assert!(run_sdk(&["export-ts-constants".to_string(), "--bad".to_string()]).is_err());
+        assert!(run_sdk(&["export-ts-wasm".to_string(), "--bad".to_string()]).is_err());
+        assert!(run_sdk(&["export-manifest".to_string(), "--bad".to_string()]).is_err());
+        run_sdk(&["validate".to_string()]).expect("sdk validate");
     }
 }
