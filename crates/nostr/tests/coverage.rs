@@ -361,16 +361,17 @@ fn tag_helpers_cover_matchers_and_resolve_paths() {
         Err(RadrootsNostrTagsResolveError::MissingPTag(_))
     ));
 
-    let encrypted_empty_p_content = RadrootsNostrEventBuilder::new(RadrootsNostrKind::TextNote, "cipher")
-        .tags(vec![
-            RadrootsNostrTag::custom(
-                RadrootsNostrTagKind::Encrypted,
-                vec!["encrypted".to_string()],
-            ),
-            RadrootsNostrTag::custom(RadrootsNostrTagKind::p(), Vec::<String>::new()),
-        ])
-        .sign_with_keys(&sender)
-        .expect("sign encrypted event with empty p tag");
+    let encrypted_empty_p_content =
+        RadrootsNostrEventBuilder::new(RadrootsNostrKind::TextNote, "cipher")
+            .tags(vec![
+                RadrootsNostrTag::custom(
+                    RadrootsNostrTagKind::Encrypted,
+                    vec!["encrypted".to_string()],
+                ),
+                RadrootsNostrTag::custom(RadrootsNostrTagKind::p(), Vec::<String>::new()),
+            ])
+            .sign_with_keys(&sender)
+            .expect("sign encrypted event with empty p tag");
     let empty_p_content = radroots_nostr_tags_resolve(&encrypted_empty_p_content, &keys);
     assert!(matches!(
         empty_p_content,
