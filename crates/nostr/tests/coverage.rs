@@ -361,6 +361,22 @@ fn tag_helpers_cover_matchers_and_resolve_paths() {
         Err(RadrootsNostrTagsResolveError::MissingPTag(_))
     ));
 
+    let encrypted_empty_p_content = RadrootsNostrEventBuilder::new(RadrootsNostrKind::TextNote, "cipher")
+        .tags(vec![
+            RadrootsNostrTag::custom(
+                RadrootsNostrTagKind::Encrypted,
+                vec!["encrypted".to_string()],
+            ),
+            RadrootsNostrTag::custom(RadrootsNostrTagKind::p(), Vec::<String>::new()),
+        ])
+        .sign_with_keys(&sender)
+        .expect("sign encrypted event with empty p tag");
+    let empty_p_content = radroots_nostr_tags_resolve(&encrypted_empty_p_content, &keys);
+    assert!(matches!(
+        empty_p_content,
+        Err(RadrootsNostrTagsResolveError::MissingPTag(_))
+    ));
+
     let encrypted_not_recipient =
         encrypted_event_with_p_tag(&sender, "cipher", &other.public_key().to_hex());
     let not_recipient = radroots_nostr_tags_resolve(&encrypted_not_recipient, &keys);
@@ -384,6 +400,16 @@ fn tag_helpers_cover_matchers_and_resolve_paths() {
     let resolved_encrypted =
         radroots_nostr_tags_resolve(&encrypted_ok, &keys).expect("resolve tags");
     assert!(resolved_encrypted.is_empty());
+
+    let encrypted_bad_json = nip04::encrypt(sender.secret_key(), &keys.public_key(), "not-json")
+        .expect("encrypt invalid tags payload");
+    let encrypted_bad_json_event =
+        encrypted_event_with_p_tag(&sender, encrypted_bad_json, &keys.public_key().to_hex());
+    let bad_json = radroots_nostr_tags_resolve(&encrypted_bad_json_event, &keys);
+    assert!(matches!(
+        bad_json,
+        Err(RadrootsNostrTagsResolveError::ParseError(_))
+    ));
 }
 
 #[test]
