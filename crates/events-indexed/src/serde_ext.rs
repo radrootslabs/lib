@@ -53,7 +53,8 @@ mod tests {
 
     #[test]
     fn epoch_seconds_rejects_invalid_input_type() {
-        let err = serde_json::from_str::<EpochSecondsFixture>(r#"{"ts":"1700000000"}"#).unwrap_err();
+        let err =
+            serde_json::from_str::<EpochSecondsFixture>(r#"{"ts":"1700000000"}"#).unwrap_err();
         let msg = err.to_string();
         assert!(msg.contains("invalid type"));
     }
