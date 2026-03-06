@@ -137,10 +137,12 @@ pub fn to_params_json<T: Serialize>(v: T) -> Result<String, SqlError> {
     serde_json::to_string(&v).map_err(SqlError::from)
 }
 
-pub fn with_transaction<E, F, T>(exec: &E, f: F) -> Result<T, SqlError>
+fn with_transaction_inner<E, T>(
+    exec: &E,
+    f: &mut dyn FnMut() -> Result<T, SqlError>,
+) -> Result<T, SqlError>
 where
     E: crate::SqlExecutor,
-    F: FnOnce() -> Result<T, SqlError>,
 {
     exec.begin()?;
     match f() {
@@ -153,4 +155,16 @@ where
             Err(e)
         }
     }
+}
+
+pub fn with_transaction<E, F, T>(exec: &E, f: F) -> Result<T, SqlError>
+where
+    E: crate::SqlExecutor,
+    F: FnOnce() -> Result<T, SqlError>,
+{
+    let mut f = Some(f);
+    with_transaction_inner(exec, &mut || {
+        let f = f.take().expect("transaction closure already used");
+        f()
+    })
 }

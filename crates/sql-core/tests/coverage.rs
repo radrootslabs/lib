@@ -6,6 +6,7 @@ use radroots_sql_core::utils::{
     to_partial_object_map, uuidv4, with_transaction,
 };
 use radroots_sql_core::{ExecOutcome, SqlExecutor};
+use serde::ser::{SerializeMap, SerializeSeq};
 use serde::{Deserialize, Serialize, Serializer};
 use serde_json::{Map, Value, json};
 use std::collections::BTreeSet;
@@ -170,23 +171,66 @@ struct Payload {
     amount: Option<i64>,
 }
 
-#[derive(Debug, Serialize)]
-struct NullFilter {
+#[derive(Debug, Clone, Copy)]
+enum FilterMode {
+    Object,
+    Array,
+    Error,
+}
+
+#[derive(Debug, Clone)]
+struct FilterInput {
+    mode: FilterMode,
+    id: Option<String>,
     amount: Option<i64>,
 }
 
-#[derive(Debug, Serialize)]
-struct NotAnObject(Vec<i64>);
+impl FilterInput {
+    fn object(id: Option<&str>, amount: Option<i64>) -> Self {
+        Self {
+            mode: FilterMode::Object,
+            id: id.map(str::to_string),
+            amount,
+        }
+    }
 
-#[derive(Debug)]
-struct SerializeFail;
+    fn array() -> Self {
+        Self {
+            mode: FilterMode::Array,
+            id: None,
+            amount: None,
+        }
+    }
 
-impl Serialize for SerializeFail {
-    fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
+    fn error() -> Self {
+        Self {
+            mode: FilterMode::Error,
+            id: None,
+            amount: None,
+        }
+    }
+}
+
+impl Serialize for FilterInput {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        Err(serde::ser::Error::custom("serialize fail"))
+        match self.mode {
+            FilterMode::Error => Err(serde::ser::Error::custom("serialize fail")),
+            FilterMode::Array => {
+                let mut seq = serializer.serialize_seq(Some(2))?;
+                seq.serialize_element(&1)?;
+                seq.serialize_element(&2)?;
+                seq.end()
+            }
+            FilterMode::Object => {
+                let mut map = serializer.serialize_map(Some(2))?;
+                map.serialize_entry("id", &self.id)?;
+                map.serialize_entry("amount", &self.amount)?;
+                map.end()
+            }
+        }
     }
 }
 
@@ -242,26 +286,24 @@ fn parse_json_and_identifiers_work() {
 
 #[test]
 fn object_map_helpers_cover_success_and_error_paths() {
-    let payload = Payload {
-        id: "row-1".to_string(),
-        amount: Some(8),
-    };
+    let payload = FilterInput::object(Some("row-1"), Some(8));
     let object = to_object_map(payload).expect("to object map");
     assert_eq!(object.get("id"), Some(&Value::String("row-1".to_string())));
 
-    let err = to_object_map(NotAnObject(vec![1, 2, 3])).expect_err("array should fail");
+    let err = to_object_map(FilterInput::array()).expect_err("array should fail");
+    assert!(matches!(err, SqlError::SerializationError(_)));
+    let err = to_object_map(FilterInput::error()).expect_err("serialize fail should surface");
     assert!(matches!(err, SqlError::SerializationError(_)));
 
-    let partial = to_partial_object_map(Payload {
-        id: "row-2".to_string(),
-        amount: None,
-    })
-    .expect("to partial map");
+    let partial =
+        to_partial_object_map(FilterInput::object(Some("row-2"), None)).expect("to partial map");
     assert_eq!(partial.get("id"), Some(&Value::String("row-2".to_string())));
     assert!(!partial.contains_key("amount"));
 
+    let err_partial = to_partial_object_map(FilterInput::array()).expect_err("array should fail");
+    assert!(matches!(err_partial, SqlError::SerializationError(_)));
     let err_partial =
-        to_partial_object_map(NotAnObject(vec![4, 5])).expect_err("array should fail");
+        to_partial_object_map(FilterInput::error()).expect_err("serialize fail should surface");
     assert!(matches!(err_partial, SqlError::SerializationError(_)));
 }
 
@@ -289,10 +331,14 @@ fn bind_value_helpers_cover_all_value_paths() {
 
 #[test]
 fn query_builder_helpers_cover_empty_and_non_empty_paths() {
-    let empty_filter = NullFilter { amount: None };
+    let empty_filter = FilterInput::object(None, None);
     let (where_empty, binds_empty) = build_where_clause_eq(&empty_filter).expect("where empty");
     assert_eq!(where_empty, "");
     assert!(binds_empty.is_empty());
+
+    let err_filter = FilterInput::error();
+    let err = build_where_clause_eq(&err_filter).expect_err("where error");
+    assert!(matches!(err, SqlError::SerializationError(_)));
 
     let mut fields = Map::new();
     fields.insert("name".to_string(), Value::String("alpha".to_string()));
@@ -305,22 +351,18 @@ fn query_builder_helpers_cover_empty_and_non_empty_paths() {
     assert!(insert_sql.contains("INSERT INTO items"));
     assert_eq!(insert_binds.len(), 3);
 
-    let (select_all, select_binds_all) = build_select_query_with_meta::<Payload>("items", None);
+    let (select_all, select_binds_all) = build_select_query_with_meta::<FilterInput>("items", None);
     assert_eq!(select_all, "SELECT * FROM items;");
     assert!(select_binds_all.is_empty());
 
-    let filter = Payload {
-        id: "row-3".to_string(),
-        amount: Some(10),
-    };
-    let (select_filtered, select_binds_filtered) =
-        build_select_query_with_meta("items", Some(&filter));
+    let filter = FilterInput::object(Some("row-3"), Some(10));
+    let (select_filtered, select_binds_filtered) = build_select_query_with_meta("items", Some(&filter));
     assert!(select_filtered.contains(" WHERE "));
     assert_eq!(select_binds_filtered.len(), 2);
 
-    let vec_filter = vec![1, 2, 3];
+    let array_filter = FilterInput::array();
     let (select_error_path, select_error_binds) =
-        build_select_query_with_meta("items", Some(&vec_filter));
+        build_select_query_with_meta("items", Some(&array_filter));
     assert_eq!(select_error_path, "SELECT * FROM items;");
     assert!(select_error_binds.is_empty());
 }
@@ -345,10 +387,11 @@ fn parse_query_and_params_helpers_cover_success_and_error_paths() {
     let err = parse_query_value(&json!({"bad": true})).expect_err("object should fail");
     assert!(matches!(err, SqlError::InvalidArgument(_)));
 
-    let params_json = to_params_json(json!(["a", 1, true])).expect("params json");
-    assert_eq!(params_json, r#"["a",1,true]"#);
+    let params_json = to_params_json(FilterInput::object(Some("a"), Some(1))).expect("params json");
+    let params_value: Value = serde_json::from_str(&params_json).expect("params json parse");
+    assert_eq!(params_value, json!({"id":"a","amount":1}));
 
-    let err_params = to_params_json(SerializeFail).expect_err("serialize fail should surface");
+    let err_params = to_params_json(FilterInput::error()).expect_err("serialize fail should surface");
     assert!(matches!(err_params, SqlError::SerializationError(_)));
 }
 
@@ -364,7 +407,7 @@ fn with_transaction_covers_commit_and_rollback_paths() {
 
     let err_exec = MockExecutor::new();
     let err = with_transaction(&err_exec, || {
-        Err::<(), SqlError>(SqlError::InvalidQuery("bad".to_string()))
+        Err::<i32, SqlError>(SqlError::InvalidQuery("bad".to_string()))
     })
     .expect_err("tx should rollback");
     assert!(matches!(err, SqlError::InvalidQuery(_)));
@@ -376,11 +419,27 @@ fn with_transaction_covers_commit_and_rollback_paths() {
     let rollback_err_exec = MockExecutor::new();
     rollback_err_exec.set_fail_rollback(true);
     let _ = with_transaction(&rollback_err_exec, || {
-        Err::<(), SqlError>(SqlError::InvalidQuery("err".to_string()))
+        Err::<i32, SqlError>(SqlError::InvalidQuery("err".to_string()))
     })
     .expect_err("tx should still return original error");
     let rollback_snapshot = rollback_err_exec.snapshot();
     assert_eq!(rollback_snapshot.rollback_count, 1);
+}
+
+#[test]
+fn with_transaction_surfaces_begin_error() {
+    let exec = MockExecutor::new();
+    exec.set_fail_begin(true);
+    let err = with_transaction(&exec, || Ok::<_, SqlError>(1)).expect_err("begin should fail");
+    assert!(matches!(err, SqlError::Internal));
+}
+
+#[test]
+fn with_transaction_surfaces_commit_error() {
+    let exec = MockExecutor::new();
+    exec.set_fail_commit(true);
+    let err = with_transaction(&exec, || Ok::<_, SqlError>(1)).expect_err("commit should fail");
+    assert!(matches!(err, SqlError::Internal));
 }
 
 fn sample_migrations() -> Vec<Migration> {
@@ -418,6 +477,40 @@ fn migrations_run_all_up_applies_pending_and_skips_existing() {
 }
 
 #[test]
+fn migrations_run_all_up_surfaces_ensure_table_error() {
+    let exec = MockExecutor::new().with_fail_sql("create table if not exists __migrations");
+    let migrations = sample_migrations();
+    let err = migrations_run_all_up(&exec, &migrations).expect_err("ensure table should fail");
+    assert!(matches!(err, SqlError::InvalidQuery(_)));
+}
+
+#[test]
+fn migrations_run_all_up_surfaces_begin_error() {
+    let exec = MockExecutor::new();
+    exec.set_fail_begin(true);
+    let migrations = sample_migrations();
+    let err = migrations_run_all_up(&exec, &migrations).expect_err("begin should fail");
+    assert!(matches!(err, SqlError::Internal));
+}
+
+#[test]
+fn migrations_run_all_up_surfaces_commit_error() {
+    let exec = MockExecutor::new();
+    exec.set_fail_commit(true);
+    let migrations = sample_migrations();
+    let err = migrations_run_all_up(&exec, &migrations).expect_err("commit should fail");
+    assert!(matches!(err, SqlError::Internal));
+}
+
+#[test]
+fn migrations_run_all_up_surfaces_mark_applied_error() {
+    let exec = MockExecutor::new().with_fail_sql("insert or ignore into __migrations");
+    let migrations = sample_migrations();
+    let err = migrations_run_all_up(&exec, &migrations).expect_err("mark applied should fail");
+    assert!(matches!(err, SqlError::InvalidQuery(_)));
+}
+
+#[test]
 fn migrations_run_all_up_rolls_back_on_failure() {
     let exec = MockExecutor::new().with_fail_sql("create table m2");
     let migrations = sample_migrations();
@@ -438,6 +531,15 @@ fn migrations_run_all_up_surfaces_query_parse_error() {
     let migrations = sample_migrations();
     let err = migrations_run_all_up(&exec, &migrations).expect_err("query parse should fail");
     assert!(matches!(err, SqlError::SerializationError(_)));
+}
+
+#[test]
+fn migrations_run_all_up_surfaces_query_error() {
+    let exec = MockExecutor::new();
+    exec.set_query_override(Some(Err(SqlError::Internal)));
+    let migrations = sample_migrations();
+    let err = migrations_run_all_up(&exec, &migrations).expect_err("query should fail");
+    assert!(matches!(err, SqlError::Internal));
 }
 
 #[test]
@@ -472,6 +574,30 @@ fn migrations_run_all_down_reverses_and_commits() {
     assert_eq!(down_calls.len(), 2);
     assert_eq!(down_calls[0].as_str(), "drop table m2");
     assert_eq!(down_calls[1].as_str(), "drop table m1");
+}
+
+#[test]
+fn migrations_run_all_down_surfaces_ensure_table_error() {
+    let exec = MockExecutor::new().with_fail_sql("create table if not exists __migrations");
+    let migrations = sample_migrations();
+    let err = migrations_run_all_down(&exec, &migrations).expect_err("ensure table should fail");
+    assert!(matches!(err, SqlError::InvalidQuery(_)));
+}
+
+#[test]
+fn migrations_run_all_down_surfaces_delete_error() {
+    let exec = MockExecutor::new().with_fail_sql("delete from __migrations");
+    let migrations = sample_migrations();
+    let err = migrations_run_all_down(&exec, &migrations).expect_err("delete should fail");
+    assert!(matches!(err, SqlError::InvalidQuery(_)));
+}
+
+#[test]
+fn migrations_run_all_down_surfaces_down_sql_error() {
+    let exec = MockExecutor::new().with_fail_sql("drop table m2");
+    let migrations = sample_migrations();
+    let err = migrations_run_all_down(&exec, &migrations).expect_err("down sql should fail");
+    assert!(matches!(err, SqlError::InvalidQuery(_)));
 }
 
 #[test]
