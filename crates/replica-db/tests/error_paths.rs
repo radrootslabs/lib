@@ -32,6 +32,7 @@ use radroots_replica_db_schema::nostr_event_state::{
     INostrEventStateCreate, INostrEventStateDelete, INostrEventStateFindMany,
     INostrEventStateFindOne, INostrEventStateUpdate,
 };
+use radroots_replica_db_schema::nostr_profile_relay::INostrProfileRelayRelation;
 use radroots_replica_db_schema::nostr_profile::{
     INostrProfileCreate, INostrProfileDelete, INostrProfileFindMany, INostrProfileFindOne,
     INostrProfileUpdate,
@@ -54,6 +55,8 @@ use radroots_replica_db_schema::trade_product::{
     ITradeProductCreate, ITradeProductDelete, ITradeProductFindMany, ITradeProductFindOne,
     ITradeProductUpdate,
 };
+use radroots_replica_db_schema::trade_product_location::ITradeProductLocationRelation;
+use radroots_replica_db_schema::trade_product_media::ITradeProductMediaRelation;
 use radroots_sql_core::{SqlError, SqlExecutor, SqliteExecutor};
 use radroots_types::types::IError;
 use serde::de::DeserializeOwned;
@@ -939,4 +942,33 @@ fn trade_product_error_paths_cover_regions() {
         "on": { "id": "id-1" }
     }));
     assert_invalid_query(db.trade_product_delete(&delete_id));
+}
+
+#[test]
+fn relation_set_unset_error_paths_cover_regions() {
+    let db = open_db();
+
+    drop_table(&db, "nostr_profile_relay");
+    let profile_relay_rel: INostrProfileRelayRelation = parse_json(json!({
+        "nostr_profile": { "id": "profile-1" },
+        "nostr_relay": { "id": "relay-1" }
+    }));
+    assert_invalid_query(db.nostr_profile_relay_set(&profile_relay_rel));
+    assert_invalid_query(db.nostr_profile_relay_unset(&profile_relay_rel));
+
+    drop_table(&db, "trade_product_location");
+    let product_location_rel: ITradeProductLocationRelation = parse_json(json!({
+        "trade_product": { "id": "product-1" },
+        "gcs_location": { "id": "gcs-1" }
+    }));
+    assert_invalid_query(db.trade_product_location_set(&product_location_rel));
+    assert_invalid_query(db.trade_product_location_unset(&product_location_rel));
+
+    drop_table(&db, "trade_product_media");
+    let product_media_rel: ITradeProductMediaRelation = parse_json(json!({
+        "trade_product": { "id": "product-1" },
+        "media_image": { "id": "media-1" }
+    }));
+    assert_invalid_query(db.trade_product_media_set(&product_media_rel));
+    assert_invalid_query(db.trade_product_media_unset(&product_media_rel));
 }
