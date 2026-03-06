@@ -1138,6 +1138,32 @@ mod tests {
         }
     }
 
+    struct PassExecutor<'a> {
+        inner: &'a SqliteExecutor,
+    }
+
+    impl SqlExecutor for PassExecutor<'_> {
+        fn exec(&self, sql: &str, params_json: &str) -> Result<ExecOutcome, SqlError> {
+            self.inner.exec(sql, params_json)
+        }
+
+        fn query_raw(&self, sql: &str, params_json: &str) -> Result<String, SqlError> {
+            self.inner.query_raw(sql, params_json)
+        }
+
+        fn begin(&self) -> Result<(), SqlError> {
+            self.inner.begin()
+        }
+
+        fn commit(&self) -> Result<(), SqlError> {
+            self.inner.commit()
+        }
+
+        fn rollback(&self) -> Result<(), SqlError> {
+            self.inner.rollback()
+        }
+    }
+
     fn sample_gcs(lat: f64, lng: f64, geohash: &str) -> RadrootsGcsLocation {
         RadrootsGcsLocation {
             lat,
@@ -2028,5 +2054,109 @@ mod tests {
         let polygon_json_err = serde_json::from_str::<Value>("{").expect_err("invalid json");
         let polygon_err = map_gcs_polygon_serialize_error(polygon_json_err);
         assert_eq!(polygon_err.to_string(), "replica_sync.data: gcs.polygon");
+    }
+
+    #[test]
+    fn ingest_pass_executor_and_parse_edge_paths_are_covered() {
+        let exec = SqliteExecutor::open_memory().expect("db");
+        migrations::run_all_up(&exec).expect("migrations");
+        let pass = PassExecutor { inner: &exec };
+
+        let profile_pubkey = "p".repeat(64);
+        let farm_pubkey = "f".repeat(64);
+        let farm_d_tag = "AAAAAAAAAAAAAAAAAAAAAA";
+        let plot_d_tag = "AAAAAAAAAAAAAAAAAAAAAQ";
+
+        let profile = profile_event(
+            500,
+            &profile_pubkey,
+            50,
+            Some(RadrootsProfileType::Individual),
+            "pass-profile",
+        );
+        assert_eq!(
+            radroots_replica_ingest_event_with_factory(&pass, &profile, &FixedFactory)
+                .expect("profile ingest"),
+            RadrootsReplicaIngestOutcome::Applied
+        );
+        assert_eq!(
+            ingest_profile_event(&pass, &profile).expect("profile skip"),
+            RadrootsReplicaIngestOutcome::Skipped
+        );
+
+        let farm = farm_event(
+            501,
+            &farm_pubkey,
+            51,
+            farm_d_tag,
+            "pass-farm",
+            Some(RadrootsFarmLocation {
+                primary: Some("primary".to_string()),
+                city: Some("city".to_string()),
+                region: Some("region".to_string()),
+                country: Some("country".to_string()),
+                gcs: sample_gcs(10.0, 20.0, "s0"),
+            }),
+            Some(vec!["coffee".to_string(), "coffee".to_string()]),
+        );
+        assert_eq!(
+            ingest_farm_event(&pass, &farm, &FixedFactory).expect("farm ingest"),
+            RadrootsReplicaIngestOutcome::Applied
+        );
+
+        let plot = plot_event(
+            502,
+            &farm_pubkey,
+            52,
+            plot_d_tag,
+            RadrootsFarmRef {
+                pubkey: farm_pubkey.clone(),
+                d_tag: farm_d_tag.to_string(),
+            },
+            "pass-plot",
+            Some(RadrootsPlotLocation {
+                primary: Some("plot".to_string()),
+                city: None,
+                region: None,
+                country: None,
+                gcs: sample_gcs(11.0, 21.0, "s1"),
+            }),
+            Some(vec!["orchard".to_string()]),
+        );
+        assert_eq!(
+            ingest_plot_event(&pass, &plot, &FixedFactory).expect("plot ingest"),
+            RadrootsReplicaIngestOutcome::Applied
+        );
+
+        let members =
+            farm_list_sets::farm_members_list_set(farm_d_tag, vec!["m".repeat(64)]).expect("list");
+        let members_event = list_set_event(503, &farm_pubkey, 53, KIND_LIST_SET_GENERIC, &members);
+        assert_eq!(
+            ingest_list_set_event(&pass, &members_event).expect("members list set"),
+            RadrootsReplicaIngestOutcome::Applied
+        );
+
+        let claims = farm_list_sets::member_of_farms_list_set(vec![farm_pubkey.clone()])
+            .expect("claims list set");
+        let claims_event =
+            list_set_event(504, &profile_pubkey, 54, KIND_LIST_SET_GENERIC, &claims);
+        assert_eq!(
+            ingest_list_set_event(&pass, &claims_event).expect("claims list set"),
+            RadrootsReplicaIngestOutcome::Applied
+        );
+
+        assert!(parse_farm_list_set_d_tag("coop:AAAAAAAAAAAAAAAAAAAAAA:members").is_none());
+        assert!(parse_farm_list_set_d_tag("farm:AAAAAAAAAAAAAAAAAAAAAA").is_none());
+        assert!(parse_farm_list_set_d_tag("farm:AAAAAAAAAAAAAAAAAAAAAA:members").is_some());
+    }
+
+    #[test]
+    fn create_gcs_location_success_path_is_covered() {
+        let exec = SqliteExecutor::open_memory().expect("db");
+        migrations::run_all_up(&exec).expect("migrations");
+
+        let id = create_gcs_location(&exec, sample_gcs(1.0, 2.0, "s0"), &FixedFactory)
+            .expect("create gcs");
+        assert!(!id.trim().is_empty());
     }
 }
