@@ -356,7 +356,8 @@ fn query_builder_helpers_cover_empty_and_non_empty_paths() {
     assert!(select_binds_all.is_empty());
 
     let filter = FilterInput::object(Some("row-3"), Some(10));
-    let (select_filtered, select_binds_filtered) = build_select_query_with_meta("items", Some(&filter));
+    let (select_filtered, select_binds_filtered) =
+        build_select_query_with_meta("items", Some(&filter));
     assert!(select_filtered.contains(" WHERE "));
     assert_eq!(select_binds_filtered.len(), 2);
 
@@ -391,7 +392,8 @@ fn parse_query_and_params_helpers_cover_success_and_error_paths() {
     let params_value: Value = serde_json::from_str(&params_json).expect("params json parse");
     assert_eq!(params_value, json!({"id":"a","amount":1}));
 
-    let err_params = to_params_json(FilterInput::error()).expect_err("serialize fail should surface");
+    let err_params =
+        to_params_json(FilterInput::error()).expect_err("serialize fail should surface");
     assert!(matches!(err_params, SqlError::SerializationError(_)));
 }
 
