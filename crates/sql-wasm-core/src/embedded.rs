@@ -264,7 +264,9 @@ mod tests {
             .exec("INSERT INTO test_items (name) VALUES (?)", "[\"rad\"]")
             .unwrap();
         engine.rollback_tx().unwrap();
-        let rows = engine.query_rows("SELECT name FROM test_items", "[]").unwrap();
+        let rows = engine
+            .query_rows("SELECT name FROM test_items", "[]")
+            .unwrap();
         assert!(rows.is_empty());
     }
 
