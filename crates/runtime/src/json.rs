@@ -385,8 +385,7 @@ mod tests {
     fn load_or_create_save_modify_and_load_round_trip() {
         let (_dir, path) = payload_path("payload.json");
         let builder: fn() -> SerializeToggle = toggle_default;
-        let mut json =
-            JsonFile::load_or_create_with(path.clone(), builder).expect("create json");
+        let mut json = JsonFile::load_or_create_with(path.clone(), builder).expect("create json");
 
         assert_eq!(json.path(), path);
         assert_eq!(json.value, toggle_default());
@@ -450,7 +449,9 @@ mod tests {
         let json = JsonFile::load_or_create_with(dir.path().join("valid.json"), builder)
             .expect("create json");
 
-        let err = json.save_as(target.clone()).expect_err("io error should surface");
+        let err = json
+            .save_as(target.clone())
+            .expect_err("io error should surface");
         assert!(err.to_string().contains("I/O error during JSON write"));
     }
 
@@ -467,9 +468,10 @@ mod tests {
         let err = json
             .save_as(target_dir.clone())
             .expect_err("persist error should surface");
-        assert!(err
-            .to_string()
-            .contains("Failed to persist JSON file to disk"));
+        assert!(
+            err.to_string()
+                .contains("Failed to persist JSON file to disk")
+        );
     }
 
     #[test]
