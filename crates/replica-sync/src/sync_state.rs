@@ -37,7 +37,10 @@ pub fn radroots_replica_sync_status<E: SqlExecutor>(
         for event in bundle.events {
             let d_tag = tag_value(&event.tags, "d").unwrap_or("");
             let key = event_state_key(event.kind, &event.author, d_tag);
+            #[cfg(test)]
             let content_hash = event_content_hash(&event.content, &event.tags)?;
+            #[cfg(not(test))]
+            let content_hash = event_content_hash(&event.content, &event.tags);
             expected.entry(key).or_insert(content_hash);
         }
     }

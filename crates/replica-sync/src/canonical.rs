@@ -33,16 +33,26 @@ pub(crate) mod failpoints {
 pub fn canonical_json_string<T: Serialize>(
     value: &T,
 ) -> Result<String, RadrootsReplicaEventsError> {
+    let value = serde_json::to_value(value).map_err(map_canonical_serialize_error)?;
+    canonical_json_value(value)
+}
+
+fn canonical_json_value(value: Value) -> Result<String, RadrootsReplicaEventsError> {
     #[cfg(test)]
     if failpoints::take_error() {
         return Err(RadrootsReplicaEventsError::InvalidData(
-            "canonical json serialization failed".to_string(),
+            canonical_error_message(),
         ));
     }
-    let value = serde_json::to_value(value).map_err(|_| {
-        RadrootsReplicaEventsError::InvalidData("canonical json serialization failed".to_string())
-    })?;
     Ok(canonicalize_value(value).to_string())
+}
+
+fn canonical_error_message() -> String {
+    "canonical json serialization failed".to_string()
+}
+
+fn map_canonical_serialize_error(_err: serde_json::Error) -> RadrootsReplicaEventsError {
+    RadrootsReplicaEventsError::InvalidData(canonical_error_message())
 }
 
 fn canonicalize_value(value: Value) -> Value {
@@ -112,27 +122,39 @@ mod tests {
     fn canonical_json_string_failpoint_returns_error() {
         super::failpoints::set_error();
         let err = canonical_json_string(&"value").expect_err("failpoint");
-        assert!(err
-            .to_string()
-            .contains("canonical json serialization failed"));
+        assert!(
+            err.to_string()
+                .contains("canonical json serialization failed")
+        );
     }
 
-    struct AlwaysErr;
+    struct FlakySerialize {
+        fail: bool,
+    }
 
-    impl Serialize for AlwaysErr {
-        fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
+    impl Serialize for FlakySerialize {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
         where
             S: serde::Serializer,
         {
-            Err(serde::ser::Error::custom("always fail"))
+            if self.fail {
+                Err(serde::ser::Error::custom("always fail"))
+            } else {
+                serializer.serialize_str("ok")
+            }
         }
     }
 
     #[test]
     fn canonical_json_string_propagates_serialization_errors() {
-        let err = canonical_json_string(&AlwaysErr).expect_err("serialize fail");
-        assert!(err
-            .to_string()
-            .contains("canonical json serialization failed"));
+        let ok = canonical_json_string(&FlakySerialize { fail: false }).expect("serialize ok");
+        assert_eq!(ok, r#""ok""#);
+
+        let err =
+            canonical_json_string(&FlakySerialize { fail: true }).expect_err("serialize fail");
+        assert!(
+            err.to_string()
+                .contains("canonical json serialization failed")
+        );
     }
 }

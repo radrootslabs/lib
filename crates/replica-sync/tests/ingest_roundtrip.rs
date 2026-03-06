@@ -46,9 +46,9 @@ use radroots_replica_sync::{
     RadrootsReplicaSyncRequest, radroots_replica_ingest_event, radroots_replica_sync_all,
     radroots_replica_sync_status,
 };
-use radroots_sql_core::SqlExecutor;
 use radroots_sql_core::SqliteExecutor;
 use radroots_sql_core::error::SqlError;
+use radroots_sql_core::{ExecOutcome, SqlExecutor};
 use radroots_types::types::IError;
 use std::panic;
 
@@ -56,6 +56,123 @@ fn unwrap_sql<T>(result: Result<T, IError<SqlError>>, label: &str) -> T {
     match result {
         Ok(value) => value,
         Err(err) => panic!("{label}: {}", err.err),
+    }
+}
+
+struct BeginFailExecutor<'a> {
+    inner: &'a SqliteExecutor,
+}
+
+impl SqlExecutor for BeginFailExecutor<'_> {
+    fn exec(&self, sql: &str, params_json: &str) -> Result<ExecOutcome, SqlError> {
+        self.inner.exec(sql, params_json)
+    }
+
+    fn query_raw(&self, sql: &str, params_json: &str) -> Result<String, SqlError> {
+        self.inner.query_raw(sql, params_json)
+    }
+
+    fn begin(&self) -> Result<(), SqlError> {
+        Err(SqlError::Internal)
+    }
+
+    fn commit(&self) -> Result<(), SqlError> {
+        self.inner.commit()
+    }
+
+    fn rollback(&self) -> Result<(), SqlError> {
+        self.inner.rollback()
+    }
+}
+
+struct CommitFailExecutor<'a> {
+    inner: &'a SqliteExecutor,
+}
+
+impl SqlExecutor for CommitFailExecutor<'_> {
+    fn exec(&self, sql: &str, params_json: &str) -> Result<ExecOutcome, SqlError> {
+        self.inner.exec(sql, params_json)
+    }
+
+    fn query_raw(&self, sql: &str, params_json: &str) -> Result<String, SqlError> {
+        self.inner.query_raw(sql, params_json)
+    }
+
+    fn begin(&self) -> Result<(), SqlError> {
+        self.inner.begin()
+    }
+
+    fn commit(&self) -> Result<(), SqlError> {
+        Err(SqlError::Internal)
+    }
+
+    fn rollback(&self) -> Result<(), SqlError> {
+        self.inner.rollback()
+    }
+}
+
+struct DeleteFailExecutor<'a> {
+    inner: &'a SqliteExecutor,
+    table_name: &'static str,
+    err: SqlError,
+}
+
+impl SqlExecutor for DeleteFailExecutor<'_> {
+    fn exec(&self, sql: &str, params_json: &str) -> Result<ExecOutcome, SqlError> {
+        if sql.contains("DELETE") && sql.contains(self.table_name) {
+            return Err(self.err.clone());
+        }
+        self.inner.exec(sql, params_json)
+    }
+
+    fn query_raw(&self, sql: &str, params_json: &str) -> Result<String, SqlError> {
+        self.inner.query_raw(sql, params_json)
+    }
+
+    fn begin(&self) -> Result<(), SqlError> {
+        self.inner.begin()
+    }
+
+    fn commit(&self) -> Result<(), SqlError> {
+        self.inner.commit()
+    }
+
+    fn rollback(&self) -> Result<(), SqlError> {
+        self.inner.rollback()
+    }
+}
+
+struct QueryFailExecutor<'a> {
+    inner: &'a SqliteExecutor,
+    needle: &'static str,
+    err: SqlError,
+}
+
+impl SqlExecutor for QueryFailExecutor<'_> {
+    fn exec(&self, sql: &str, params_json: &str) -> Result<ExecOutcome, SqlError> {
+        if sql.to_ascii_lowercase().contains(self.needle) {
+            return Err(self.err.clone());
+        }
+        self.inner.exec(sql, params_json)
+    }
+
+    fn query_raw(&self, sql: &str, params_json: &str) -> Result<String, SqlError> {
+        if sql.to_ascii_lowercase().contains(self.needle) {
+            return Err(self.err.clone());
+        }
+        self.inner.query_raw(sql, params_json)
+    }
+
+    fn begin(&self) -> Result<(), SqlError> {
+        self.inner.begin()
+    }
+
+    fn commit(&self) -> Result<(), SqlError> {
+        self.inner.commit()
+    }
+
+    fn rollback(&self) -> Result<(), SqlError> {
+        self.inner.rollback()
     }
 }
 
@@ -447,6 +564,359 @@ fn ingest_rejects_unsupported_kind() {
     };
     let err = radroots_replica_ingest_event(&exec, &event).expect_err("unsupported kind");
     assert!(err.to_string().contains("unsupported kind"));
+}
+
+#[test]
+fn ingest_reports_transaction_boundary_errors() {
+    let exec = SqliteExecutor::open_memory().expect("db");
+    migrations::run_all_up(&exec).expect("migrations");
+    let author = "a".repeat(64);
+    let profile = profile_event(
+        9_001,
+        &author,
+        10,
+        Some(RadrootsProfileType::Individual),
+        "tx-errors",
+    );
+
+    let begin_fail = BeginFailExecutor { inner: &exec };
+    assert!(radroots_replica_ingest_event(&begin_fail, &profile).is_err());
+
+    let commit_fail = CommitFailExecutor { inner: &exec };
+    assert!(radroots_replica_ingest_event(&commit_fail, &profile).is_err());
+}
+
+#[test]
+fn ingest_reports_delete_internal_errors() {
+    let exec = SqliteExecutor::open_memory().expect("db");
+    migrations::run_all_up(&exec).expect("migrations");
+    let farm_pubkey = "f".repeat(64);
+    let farm_d_tag = "AAAAAAAAAAAAAAAAAAAAAA";
+
+    let create_event = farm_event(
+        9_101,
+        &farm_pubkey,
+        10,
+        farm_d_tag,
+        "delete-error-farm",
+        None,
+        Some(vec!["seed".to_string()]),
+    );
+    assert_eq!(
+        radroots_replica_ingest_event(&exec, &create_event).expect("seed farm"),
+        RadrootsReplicaIngestOutcome::Applied
+    );
+
+    let update_event = farm_event(
+        9_102,
+        &farm_pubkey,
+        11,
+        farm_d_tag,
+        "delete-error-farm",
+        None,
+        Some(vec!["next".to_string()]),
+    );
+    let delete_fail = DeleteFailExecutor {
+        inner: &exec,
+        table_name: "farm_tag",
+        err: SqlError::Internal,
+    };
+    assert!(radroots_replica_ingest_event(&delete_fail, &update_event).is_err());
+}
+
+#[test]
+fn ingest_reports_parse_and_state_error_paths_for_all_kinds() {
+    let exec = SqliteExecutor::open_memory().expect("db");
+    migrations::run_all_up(&exec).expect("migrations");
+
+    let profile_pubkey = "q".repeat(64);
+    let profile_ok = profile_event(
+        9_201,
+        &profile_pubkey,
+        10,
+        Some(RadrootsProfileType::Individual),
+        "profile-ok",
+    );
+    let profile_parse_error = event_with_parts(
+        9_202,
+        &profile_pubkey,
+        11,
+        KIND_PROFILE,
+        "{".to_string(),
+        profile_ok.tags.clone(),
+    );
+    assert!(radroots_replica_ingest_event(&exec, &profile_parse_error).is_err());
+
+    let farm_pubkey = "r".repeat(64);
+    let farm_seed_d_tag = "AAAAAAAAAAAAAAAAAAAAAA";
+    let farm_seed = farm_event(
+        9_203,
+        &farm_pubkey,
+        12,
+        farm_seed_d_tag,
+        "farm-seed",
+        None,
+        None,
+    );
+    assert_eq!(
+        radroots_replica_ingest_event(&exec, &farm_seed).expect("seed farm"),
+        RadrootsReplicaIngestOutcome::Applied
+    );
+
+    let farm_parse_error = event_with_parts(
+        9_204,
+        &farm_pubkey,
+        13,
+        KIND_FARM,
+        "{".to_string(),
+        farm_seed.tags.clone(),
+    );
+    assert!(radroots_replica_ingest_event(&exec, &farm_parse_error).is_err());
+
+    let plot_ok = plot_event(
+        9_205,
+        &farm_pubkey,
+        14,
+        "AAAAAAAAAAAAAAAAAAAAAQ",
+        RadrootsFarmRef {
+            pubkey: farm_pubkey.clone(),
+            d_tag: farm_seed_d_tag.to_string(),
+        },
+        "plot-ok",
+        None,
+        None,
+    );
+    let plot_parse_error = event_with_parts(
+        9_206,
+        &farm_pubkey,
+        15,
+        KIND_PLOT,
+        "{".to_string(),
+        plot_ok.tags.clone(),
+    );
+    assert!(radroots_replica_ingest_event(&exec, &plot_parse_error).is_err());
+
+    let list_parse_error = event_with_parts(
+        9_207,
+        &profile_pubkey,
+        16,
+        KIND_LIST_SET_GENERIC,
+        String::new(),
+        Vec::new(),
+    );
+    assert!(radroots_replica_ingest_event(&exec, &list_parse_error).is_err());
+
+    let state_query_fail = QueryFailExecutor {
+        inner: &exec,
+        needle: "nostr_event_state",
+        err: SqlError::Internal,
+    };
+    assert!(radroots_replica_ingest_event(&state_query_fail, &profile_ok).is_err());
+    assert!(radroots_replica_ingest_event(&state_query_fail, &farm_seed).is_err());
+    assert!(radroots_replica_ingest_event(&state_query_fail, &plot_ok).is_err());
+
+    let claims_set =
+        farm_list_sets::member_of_farms_list_set(vec![farm_pubkey.clone()]).expect("member_of");
+    let claims_event = list_set_event(
+        9_208,
+        &profile_pubkey,
+        17,
+        KIND_LIST_SET_GENERIC,
+        &claims_set,
+    );
+    assert!(radroots_replica_ingest_event(&state_query_fail, &claims_event).is_err());
+
+    let state_insert_fail = QueryFailExecutor {
+        inner: &exec,
+        needle: "insert into nostr_event_state",
+        err: SqlError::Internal,
+    };
+    let profile_insert_state_error = profile_event(
+        9_209,
+        &"s".repeat(64),
+        18,
+        Some(RadrootsProfileType::Individual),
+        "profile-state-insert",
+    );
+    assert!(
+        radroots_replica_ingest_event(&state_insert_fail, &profile_insert_state_error).is_err()
+    );
+
+    let farm_insert_state_error = farm_event(
+        9_210,
+        &farm_pubkey,
+        19,
+        "AAAAAAAAAAAAAAAAAAAAAw",
+        "farm-state-insert",
+        None,
+        None,
+    );
+    assert!(radroots_replica_ingest_event(&state_insert_fail, &farm_insert_state_error).is_err());
+
+    let plot_insert_state_error = plot_event(
+        9_211,
+        &farm_pubkey,
+        20,
+        "AAAAAAAAAAAAAAAAAAAAAg",
+        RadrootsFarmRef {
+            pubkey: farm_pubkey.clone(),
+            d_tag: farm_seed_d_tag.to_string(),
+        },
+        "plot-state-insert",
+        None,
+        None,
+    );
+    assert!(radroots_replica_ingest_event(&state_insert_fail, &plot_insert_state_error).is_err());
+    assert!(radroots_replica_ingest_event(&state_insert_fail, &claims_event).is_err());
+}
+
+#[test]
+fn ingest_reports_query_fail_paths_for_profile_farm_plot_and_list_sets() {
+    let exec = SqliteExecutor::open_memory().expect("db");
+    migrations::run_all_up(&exec).expect("migrations");
+
+    let assert_query_fail = |needle: &'static str, event: &RadrootsNostrEvent| {
+        let fail = QueryFailExecutor {
+            inner: &exec,
+            needle,
+            err: SqlError::Internal,
+        };
+        assert!(
+            radroots_replica_ingest_event(&fail, event).is_err(),
+            "needle {needle} should fail"
+        );
+    };
+
+    let profile_pubkey = "t".repeat(64);
+    let profile_create = profile_event(
+        9_301,
+        &profile_pubkey,
+        10,
+        Some(RadrootsProfileType::Individual),
+        "profile-query",
+    );
+    assert_query_fail("select * from nostr_profile", &profile_create);
+    assert_query_fail("insert into nostr_profile", &profile_create);
+    assert_eq!(
+        radroots_replica_ingest_event(&exec, &profile_create).expect("seed profile"),
+        RadrootsReplicaIngestOutcome::Applied
+    );
+    let profile_update = profile_event(
+        9_302,
+        &profile_pubkey,
+        11,
+        Some(RadrootsProfileType::Individual),
+        "profile-query-updated",
+    );
+    assert_query_fail("update nostr_profile", &profile_update);
+
+    let farm_pubkey = "u".repeat(64);
+    let farm_d_tag = "AAAAAAAAAAAAAAAAAAAAAA";
+    let farm_create = farm_event(
+        9_303,
+        &farm_pubkey,
+        12,
+        farm_d_tag,
+        "farm-query",
+        Some(RadrootsFarmLocation {
+            primary: Some("farm".to_string()),
+            city: None,
+            region: None,
+            country: None,
+            gcs: sample_gcs(37.7, -122.4, "9q8yy"),
+        }),
+        Some(vec!["coffee".to_string()]),
+    );
+    assert_query_fail("select * from farm where", &farm_create);
+    assert_query_fail("insert into farm", &farm_create);
+    assert_query_fail("insert into farm_tag", &farm_create);
+    assert_query_fail("insert into gcs_location", &farm_create);
+    assert_query_fail("insert into farm_gcs_location", &farm_create);
+    assert_eq!(
+        radroots_replica_ingest_event(&exec, &farm_create).expect("seed farm"),
+        RadrootsReplicaIngestOutcome::Applied
+    );
+    let farm_update = farm_event(
+        9_304,
+        &farm_pubkey,
+        13,
+        farm_d_tag,
+        "farm-query-updated",
+        None,
+        Some(vec!["grain".to_string()]),
+    );
+    assert_query_fail("update farm", &farm_update);
+
+    let plot_d_tag = "AAAAAAAAAAAAAAAAAAAAAQ";
+    let plot_create = plot_event(
+        9_305,
+        &farm_pubkey,
+        14,
+        plot_d_tag,
+        RadrootsFarmRef {
+            pubkey: farm_pubkey.clone(),
+            d_tag: farm_d_tag.to_string(),
+        },
+        "plot-query",
+        Some(RadrootsPlotLocation {
+            primary: Some("plot".to_string()),
+            city: None,
+            region: None,
+            country: None,
+            gcs: sample_gcs(37.8, -122.5, "9q8yz"),
+        }),
+        Some(vec!["orchard".to_string()]),
+    );
+    assert_query_fail("select * from plot where", &plot_create);
+    assert_query_fail("insert into plot", &plot_create);
+    assert_query_fail("insert into plot_tag", &plot_create);
+    assert_query_fail("insert into plot_gcs_location", &plot_create);
+    assert_eq!(
+        radroots_replica_ingest_event(&exec, &plot_create).expect("seed plot"),
+        RadrootsReplicaIngestOutcome::Applied
+    );
+    let plot_update = plot_event(
+        9_306,
+        &farm_pubkey,
+        15,
+        plot_d_tag,
+        RadrootsFarmRef {
+            pubkey: farm_pubkey.clone(),
+            d_tag: farm_d_tag.to_string(),
+        },
+        "plot-query-updated",
+        None,
+        Some(vec!["updated".to_string()]),
+    );
+    assert_query_fail("update plot", &plot_update);
+
+    let member_of_set =
+        farm_list_sets::member_of_farms_list_set(vec![farm_pubkey.clone()]).expect("member_of");
+    let member_of_event = list_set_event(
+        9_307,
+        &profile_pubkey,
+        16,
+        KIND_LIST_SET_GENERIC,
+        &member_of_set,
+    );
+    assert_query_fail("insert into farm_member_claim", &member_of_event);
+
+    let members_set =
+        farm_list_sets::farm_members_list_set(farm_d_tag, vec!["m".repeat(64)]).expect("members");
+    let members_event =
+        list_set_event(9_308, &farm_pubkey, 17, KIND_LIST_SET_GENERIC, &members_set);
+    assert_query_fail("insert into farm_member", &members_event);
+    assert_query_fail("select * from farm where", &members_event);
+
+    assert_query_fail("select * from nostr_event_state", &members_event);
+    assert_query_fail("insert into nostr_event_state", &members_event);
+    assert_eq!(
+        radroots_replica_ingest_event(&exec, &members_event).expect("seed members"),
+        RadrootsReplicaIngestOutcome::Applied
+    );
+    let members_update =
+        list_set_event(9_309, &farm_pubkey, 18, KIND_LIST_SET_GENERIC, &members_set);
+    assert_query_fail("update nostr_event_state", &members_update);
 }
 
 fn event_with_parts(
@@ -954,6 +1424,50 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
         .expect_err("metadata must be rejected");
     assert!(metadata_err.to_string().contains("must omit metadata"));
 
+    let description_list_set = RadrootsListSet {
+        d_tag: "member_of.farms".to_string(),
+        content: String::new(),
+        entries: vec![RadrootsListEntry {
+            tag: "p".to_string(),
+            values: vec![farm_pubkey.clone()],
+        }],
+        title: None,
+        description: Some("desc".to_string()),
+        image: None,
+    };
+    let description_event = list_set_event(
+        4011,
+        &profile_pubkey,
+        3011,
+        KIND_LIST_SET_GENERIC,
+        &description_list_set,
+    );
+    let description_err = radroots_replica_ingest_event(&exec, &description_event)
+        .expect_err("description metadata must be rejected");
+    assert!(description_err.to_string().contains("must omit metadata"));
+
+    let image_list_set = RadrootsListSet {
+        d_tag: "member_of.farms".to_string(),
+        content: String::new(),
+        entries: vec![RadrootsListEntry {
+            tag: "p".to_string(),
+            values: vec![farm_pubkey.clone()],
+        }],
+        title: None,
+        description: None,
+        image: Some("image".to_string()),
+    };
+    let image_event = list_set_event(
+        4012,
+        &profile_pubkey,
+        3012,
+        KIND_LIST_SET_GENERIC,
+        &image_list_set,
+    );
+    let image_err = radroots_replica_ingest_event(&exec, &image_event)
+        .expect_err("image metadata must be rejected");
+    assert!(image_err.to_string().contains("must omit metadata"));
+
     let content_list_set = RadrootsListSet {
         d_tag: "member_of.farms".to_string(),
         content: "not-empty".to_string(),
@@ -1034,6 +1548,25 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
         radroots_replica_ingest_event(&exec, &member_of_event).expect("member_of skip"),
         RadrootsReplicaIngestOutcome::Skipped
     );
+    let mut member_of_with_empty_parts =
+        list_set_encode::to_wire_parts_with_kind(&member_of_valid, KIND_LIST_SET_GENERIC)
+            .expect("member_of parts");
+    member_of_with_empty_parts
+        .tags
+        .insert(0, vec!["p".to_string()]);
+    let member_of_with_empty_event = event_with_parts(
+        4041,
+        &profile_pubkey,
+        305,
+        KIND_LIST_SET_GENERIC,
+        member_of_with_empty_parts.content,
+        member_of_with_empty_parts.tags,
+    );
+    assert_eq!(
+        radroots_replica_ingest_event(&exec, &member_of_with_empty_event)
+            .expect("member_of with empty entry"),
+        RadrootsReplicaIngestOutcome::Applied
+    );
 
     let claims = unwrap_sql(
         farm_member_claim::find_many(
@@ -1092,6 +1625,25 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
     );
     assert_eq!(
         radroots_replica_ingest_event(&exec, &members_event).expect("members apply"),
+        RadrootsReplicaIngestOutcome::Applied
+    );
+    let mut members_with_empty_parts =
+        list_set_encode::to_wire_parts_with_kind(&members_valid, KIND_LIST_SET_GENERIC)
+            .expect("members parts");
+    members_with_empty_parts
+        .tags
+        .insert(0, vec!["p".to_string()]);
+    let members_with_empty_event = event_with_parts(
+        4061,
+        &farm_pubkey,
+        307,
+        KIND_LIST_SET_GENERIC,
+        members_with_empty_parts.content,
+        members_with_empty_parts.tags,
+    );
+    assert_eq!(
+        radroots_replica_ingest_event(&exec, &members_with_empty_event)
+            .expect("members with empty entry"),
         RadrootsReplicaIngestOutcome::Applied
     );
     let owners_valid =
@@ -1183,7 +1735,7 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
         content: String::new(),
         entries: vec![RadrootsListEntry {
             tag: "p".to_string(),
-            values: vec![farm_pubkey],
+            values: vec![farm_pubkey.clone()],
         }],
         title: None,
         description: None,
@@ -1202,6 +1754,44 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
         unsupported_err
             .to_string()
             .contains("unsupported list set d_tag")
+    );
+
+    let mut malformed_farm_list_missing_farm_parts =
+        list_set_encode::to_wire_parts_with_kind(&member_of_valid, KIND_LIST_SET_GENERIC)
+            .expect("malformed missing farm parts");
+    for tag in &mut malformed_farm_list_missing_farm_parts.tags {
+        if tag.first().map(String::as_str) == Some("d") && tag.len() > 1 {
+            tag[1] = "farm".to_string();
+        }
+    }
+    let malformed_farm_list_missing_farm_event = event_with_parts(
+        412,
+        &farm_pubkey,
+        312,
+        KIND_LIST_SET_GENERIC,
+        malformed_farm_list_missing_farm_parts.content,
+        malformed_farm_list_missing_farm_parts.tags,
+    );
+    assert!(radroots_replica_ingest_event(&exec, &malformed_farm_list_missing_farm_event).is_err());
+
+    let mut malformed_farm_list_missing_suffix_parts =
+        list_set_encode::to_wire_parts_with_kind(&member_of_valid, KIND_LIST_SET_GENERIC)
+            .expect("malformed missing suffix parts");
+    for tag in &mut malformed_farm_list_missing_suffix_parts.tags {
+        if tag.first().map(String::as_str) == Some("d") && tag.len() > 1 {
+            tag[1] = format!("farm:{farm_d_tag}");
+        }
+    }
+    let malformed_farm_list_missing_suffix_event = event_with_parts(
+        413,
+        &farm_pubkey,
+        313,
+        KIND_LIST_SET_GENERIC,
+        malformed_farm_list_missing_suffix_parts.content,
+        malformed_farm_list_missing_suffix_parts.tags,
+    );
+    assert!(
+        radroots_replica_ingest_event(&exec, &malformed_farm_list_missing_suffix_event).is_err()
     );
 }
 
@@ -1495,6 +2085,47 @@ fn sync_emit_handles_invalid_geojson_and_unknown_profile_type() {
                 .iter()
                 .all(|tag| tag[0] != RADROOTS_PROFILE_TYPE_TAG_KEY)
     }));
+}
+
+#[test]
+fn sync_emit_reports_encode_error_for_invalid_farm_record() {
+    let exec = SqliteExecutor::open_memory().expect("db");
+    migrations::run_all_up(&exec).expect("migrations");
+
+    let farm_row = unwrap_sql(
+        farm::create(
+            &exec,
+            &IFarmFields {
+                d_tag: String::new(),
+                pubkey: "v".repeat(64),
+                name: "invalid farm".to_string(),
+                about: None,
+                website: None,
+                picture: None,
+                banner: None,
+                location_primary: None,
+                location_city: None,
+                location_region: None,
+                location_country: None,
+            },
+        ),
+        "farm",
+    )
+    .result;
+
+    let err = radroots_replica_sync_all(
+        &exec,
+        &RadrootsReplicaSyncRequest {
+            farm: RadrootsReplicaFarmSelector {
+                id: Some(farm_row.id),
+                d_tag: None,
+                pubkey: None,
+            },
+            options: None,
+        },
+    )
+    .expect_err("encode error");
+    assert!(err.to_string().contains("replica_sync.encode"));
 }
 
 #[test]
