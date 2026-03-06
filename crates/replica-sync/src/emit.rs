@@ -1678,4 +1678,95 @@ mod tests {
         };
         assert!(collect_profile_pubkeys(&claims_fail, &farm).is_err());
     }
+
+    #[test]
+    fn emit_pass_through_executor_instantiation_paths_are_covered() {
+        let exec = SqliteExecutor::open_memory().expect("db");
+        let (farm_row, _, plot_secondary) = seed(&exec);
+
+        let pass = QueryFailExecutor {
+            inner: &exec,
+            needle: "__never_match__",
+            err: SqlError::Internal,
+        };
+
+        let selector = RadrootsReplicaFarmSelector {
+            id: Some(farm_row.id.clone()),
+            d_tag: None,
+            pubkey: None,
+        };
+        let request = RadrootsReplicaSyncRequest {
+            farm: selector.clone(),
+            options: None,
+        };
+        let bundle = radroots_replica_sync_all(&pass, &request).expect("sync via pass executor");
+        assert!(!bundle.events.is_empty());
+
+        let resolved_by_id = resolve_farm(&pass, &selector).expect("resolve by id");
+        assert_eq!(resolved_by_id.id, farm_row.id);
+        let resolved_by_pair = resolve_farm(
+            &pass,
+            &RadrootsReplicaFarmSelector {
+                id: None,
+                d_tag: Some(farm_row.d_tag.clone()),
+                pubkey: Some(farm_row.pubkey.clone()),
+            },
+        )
+        .expect("resolve by pair");
+        assert_eq!(resolved_by_pair.id, farm_row.id);
+
+        let member_pubkeys = collect_member_pubkeys(&pass, &farm_row.id).expect("member pubkeys");
+        assert!(!member_pubkeys.is_empty());
+        let profile_pubkeys = collect_profile_pubkeys(&pass, &farm_row).expect("profile pubkeys");
+        assert!(!profile_pubkeys.is_empty());
+
+        assert!(
+            load_relation_by_role(&pass, &farm_row.id, ROLE_PRIMARY, RelationType::Farm)
+                .expect("farm primary relation")
+                .is_some()
+        );
+        assert!(
+            load_relation_by_role(&pass, &plot_secondary.id, "", RelationType::Plot)
+                .expect("plot fallback relation")
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn emit_executor_trait_method_paths_are_covered() {
+        let sqlite = SqliteExecutor::open_memory().expect("db");
+        migrations::run_all_up(&sqlite).expect("migrations");
+
+        let err_exec = ErrorExecutor;
+        assert!(err_exec.exec("SELECT 1", "[]").is_err());
+        assert!(err_exec.query_raw("SELECT 1", "[]").is_err());
+        assert!(err_exec.begin().is_ok());
+        assert!(err_exec.commit().is_ok());
+        assert!(err_exec.rollback().is_ok());
+
+        let pass = QueryFailExecutor {
+            inner: &sqlite,
+            needle: "__never_match__",
+            err: SqlError::Internal,
+        };
+        assert!(pass.exec("PRAGMA foreign_keys = ON", "[]").is_ok());
+        assert!(pass.query_raw("SELECT 1", "[]").is_ok());
+        assert!(pass.begin().is_ok());
+        assert!(pass.commit().is_ok());
+
+        let pass_rollback = QueryFailExecutor {
+            inner: &sqlite,
+            needle: "__never_match__",
+            err: SqlError::Internal,
+        };
+        assert!(pass_rollback.begin().is_ok());
+        assert!(pass_rollback.rollback().is_ok());
+
+        let fail_query = QueryFailExecutor {
+            inner: &sqlite,
+            needle: "select 1",
+            err: SqlError::Internal,
+        };
+        assert!(fail_query.query_raw("SELECT 1", "[]").is_err());
+    }
 }
