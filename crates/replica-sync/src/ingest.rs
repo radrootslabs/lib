@@ -1086,19 +1086,26 @@ mod tests {
         }
     }
 
-    struct TxnExecutor {
+    struct TxnExecutor<'a> {
+        inner: Option<&'a SqliteExecutor>,
         begin_err: Option<SqlError>,
         commit_err: Option<SqlError>,
         rollback_count: Arc<AtomicUsize>,
     }
 
-    impl SqlExecutor for TxnExecutor {
-        fn exec(&self, _sql: &str, _params_json: &str) -> Result<ExecOutcome, SqlError> {
-            Err(SqlError::UnsupportedPlatform)
+    impl SqlExecutor for TxnExecutor<'_> {
+        fn exec(&self, sql: &str, params_json: &str) -> Result<ExecOutcome, SqlError> {
+            match self.inner {
+                Some(inner) => inner.exec(sql, params_json),
+                None => Err(SqlError::UnsupportedPlatform),
+            }
         }
 
-        fn query_raw(&self, _sql: &str, _params_json: &str) -> Result<String, SqlError> {
-            Err(SqlError::UnsupportedPlatform)
+        fn query_raw(&self, sql: &str, params_json: &str) -> Result<String, SqlError> {
+            match self.inner {
+                Some(inner) => inner.query_raw(sql, params_json),
+                None => Err(SqlError::UnsupportedPlatform),
+            }
         }
 
         fn begin(&self) -> Result<(), SqlError> {
@@ -1457,6 +1464,7 @@ mod tests {
     #[test]
     fn ingest_transaction_paths_are_covered() {
         let begin_executor = TxnExecutor {
+            inner: None,
             begin_err: Some(SqlError::Internal),
             commit_err: None,
             rollback_count: Arc::new(AtomicUsize::new(0)),
@@ -1489,6 +1497,7 @@ mod tests {
 
         let rollback_count = Arc::new(AtomicUsize::new(0));
         let commit_executor = TxnExecutor {
+            inner: None,
             begin_err: None,
             commit_err: Some(SqlError::Internal),
             rollback_count: rollback_count.clone(),
@@ -1500,6 +1509,7 @@ mod tests {
         assert_eq!(rollback_count.load(Ordering::SeqCst), 0);
 
         let rollback_executor = TxnExecutor {
+            inner: None,
             begin_err: None,
             commit_err: None,
             rollback_count: Arc::new(AtomicUsize::new(0)),
@@ -2313,25 +2323,44 @@ mod tests {
 
     #[test]
     fn ingest_txn_executor_instantiation_error_paths_are_covered() {
-        let rollback_count = Arc::new(AtomicUsize::new(0));
-        let txn = TxnExecutor {
+        let pass_db = SqliteExecutor::open_memory().expect("db");
+        migrations::run_all_up(&pass_db).expect("migrations");
+        let pass_txn = TxnExecutor {
+            inner: Some(&pass_db),
             begin_err: None,
             commit_err: None,
-            rollback_count,
+            rollback_count: Arc::new(AtomicUsize::new(0)),
         };
 
+        let profile_pubkey = "p".repeat(64);
         let profile_event_row = profile_event(
             700,
-            &"p".repeat(64),
+            &profile_pubkey,
             70,
             Some(RadrootsProfileType::Individual),
             "txn-profile",
         );
-        assert!(ingest_profile_event(&txn, &profile_event_row).is_err());
-        assert!(event_state_decision(&txn, &profile_event_row, "").is_err());
-        assert!(radroots_replica_ingest_event_state(&txn, &profile_event_row, "", "hash").is_err());
-        assert!(radroots_replica_ingest_event_with_factory(&txn, &profile_event_row, &FixedFactory)
-            .is_err());
+        assert_eq!(
+            ingest_profile_event(&pass_txn, &profile_event_row).expect("txn profile"),
+            RadrootsReplicaIngestOutcome::Applied
+        );
+        let profile_decision = event_state_decision(&pass_txn, &profile_event_row, "")
+            .expect("profile decision");
+        assert!(!profile_decision.apply);
+        assert!(
+            radroots_replica_ingest_event_state(
+                &pass_txn,
+                &profile_event_row,
+                "",
+                &profile_decision.content_hash,
+            )
+            .is_ok()
+        );
+        assert_eq!(
+            radroots_replica_ingest_event_with_factory(&pass_txn, &profile_event_row, &FixedFactory)
+                .expect("txn wrapper"),
+            RadrootsReplicaIngestOutcome::Skipped
+        );
 
         let farm_pubkey = "f".repeat(64);
         let farm_d_tag = "AAAAAAAAAAAAAAAAAAAAAA";
@@ -2350,7 +2379,10 @@ mod tests {
             }),
             Some(vec!["coffee".to_string()]),
         );
-        assert!(ingest_farm_event(&txn, &farm_event_row, &FixedFactory).is_err());
+        assert_eq!(
+            ingest_farm_event(&pass_txn, &farm_event_row, &FixedFactory).expect("txn farm"),
+            RadrootsReplicaIngestOutcome::Applied
+        );
 
         let plot_event_row = plot_event(
             702,
@@ -2371,12 +2403,79 @@ mod tests {
             }),
             Some(vec!["orchard".to_string()]),
         );
-        assert!(ingest_plot_event(&txn, &plot_event_row, &FixedFactory).is_err());
+        assert_eq!(
+            ingest_plot_event(&pass_txn, &plot_event_row, &FixedFactory).expect("txn plot"),
+            RadrootsReplicaIngestOutcome::Applied
+        );
 
+        let farm_row = find_farm_by_ref(&pass_txn, &farm_pubkey, farm_d_tag).expect("find farm");
+        assert!(upsert_farm_tags(&pass_txn, &farm_row.id, Some(vec!["x".to_string()])).is_ok());
+        let plot_id = plot::find_many(&pass_db, &IPlotFindMany { filter: None })
+            .expect("plots")
+            .results[0]
+            .id
+            .clone();
+        assert!(upsert_plot_tags(&pass_txn, &plot_id, Some(vec!["y".to_string()])).is_ok());
+        assert!(clear_farm_locations(&pass_txn, &farm_row.id).is_ok());
+        assert!(clear_plot_locations(&pass_txn, &plot_id).is_ok());
+        assert!(create_gcs_location(&pass_txn, sample_gcs(14.0, 24.0, "s4"), &FixedFactory).is_ok());
+        assert!(
+            upsert_farm_location(
+                &pass_txn,
+                &farm_row.id,
+                Some(RadrootsFarmLocation {
+                    primary: Some("primary".to_string()),
+                    city: None,
+                    region: None,
+                    country: None,
+                    gcs: sample_gcs(15.0, 25.0, "s5"),
+                }),
+                &FixedFactory,
+            )
+            .is_ok()
+        );
+        assert!(
+            upsert_plot_location(
+                &pass_txn,
+                &plot_id,
+                Some(RadrootsPlotLocation {
+                    primary: Some("primary".to_string()),
+                    city: None,
+                    region: None,
+                    country: None,
+                    gcs: sample_gcs(16.0, 26.0, "s6"),
+                }),
+                &FixedFactory,
+            )
+            .is_ok()
+        );
         let members_list =
             farm_list_sets::farm_members_list_set(farm_d_tag, vec!["m".repeat(64)]).expect("list");
+        assert!(
+            upsert_farm_members(&pass_txn, &farm_row.id, ListSetRole::Members, &members_list)
+                .is_ok()
+        );
         let member_of_list = farm_list_sets::member_of_farms_list_set(vec![farm_pubkey.clone()])
             .expect("member_of");
+        assert!(upsert_member_claims(&pass_txn, &"m".repeat(64), &member_of_list).is_ok());
+
+        let rollback_count = Arc::new(AtomicUsize::new(0));
+        let txn = TxnExecutor {
+            inner: None,
+            begin_err: None,
+            commit_err: None,
+            rollback_count,
+        };
+
+        assert!(ingest_profile_event(&txn, &profile_event_row).is_err());
+        assert!(event_state_decision(&txn, &profile_event_row, "").is_err());
+        assert!(radroots_replica_ingest_event_state(&txn, &profile_event_row, "", "hash").is_err());
+        assert!(radroots_replica_ingest_event_with_factory(&txn, &profile_event_row, &FixedFactory)
+            .is_err());
+
+        assert!(ingest_farm_event(&txn, &farm_event_row, &FixedFactory).is_err());
+
+        assert!(ingest_plot_event(&txn, &plot_event_row, &FixedFactory).is_err());
 
         assert!(find_farm_by_ref(&txn, &farm_pubkey, farm_d_tag).is_err());
         assert!(upsert_farm_tags(&txn, "farm-id", Some(vec!["x".to_string()])).is_err());
