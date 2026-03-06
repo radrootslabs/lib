@@ -1720,6 +1720,147 @@ mod tests {
     }
 
     #[test]
+    fn emit_propagates_queryfail_and_builder_errors() {
+        let exec = SqliteExecutor::open_memory().expect("db");
+        let (farm_row, _, _) = seed(&exec);
+        let selector = RadrootsReplicaFarmSelector {
+            id: Some(farm_row.id.clone()),
+            d_tag: None,
+            pubkey: None,
+        };
+
+        let profile_query_fail = QueryFailExecutor {
+            inner: &exec,
+            needle: "farm_member_claim",
+            err: SqlError::Internal,
+        };
+        assert!(radroots_replica_profile_events(&profile_query_fail, &farm_row).is_err());
+        let profile_load_fail = QueryFailExecutor {
+            inner: &exec,
+            needle: "nostr_profile",
+            err: SqlError::Internal,
+        };
+        assert!(radroots_replica_profile_events(&profile_load_fail, &farm_row).is_err());
+
+        let farm_tag_fail = QueryFailExecutor {
+            inner: &exec,
+            needle: "farm_tag",
+            err: SqlError::Internal,
+        };
+        assert!(radroots_replica_farm_event(&farm_tag_fail, &farm_row).is_err());
+
+        let plot_tag_fail = QueryFailExecutor {
+            inner: &exec,
+            needle: "plot_tag",
+            err: SqlError::Internal,
+        };
+        assert!(radroots_replica_plot_events(&plot_tag_fail, &farm_row).is_err());
+
+        let list_set_fail = QueryFailExecutor {
+            inner: &exec,
+            needle: "farm_member",
+            err: SqlError::Internal,
+        };
+        assert!(radroots_replica_list_set_events(&list_set_fail, &farm_row).is_err());
+
+        let claims_fail = QueryFailExecutor {
+            inner: &exec,
+            needle: "farm_member_claim",
+            err: SqlError::Internal,
+        };
+        assert!(radroots_replica_membership_claim_events(&claims_fail, &farm_row.pubkey).is_err());
+
+        let sync_profiles_fail = QueryFailExecutor {
+            inner: &exec,
+            needle: "nostr_profile",
+            err: SqlError::Internal,
+        };
+        assert!(
+            radroots_replica_sync_all_with_options(
+                &sync_profiles_fail,
+                &selector,
+                Some(&RadrootsReplicaSyncOptions {
+                    include_profiles: Some(true),
+                    include_list_sets: Some(false),
+                    include_membership_claims: Some(false),
+                }),
+            )
+            .is_err()
+        );
+        let sync_farm_fail = QueryFailExecutor {
+            inner: &exec,
+            needle: "farm_tag",
+            err: SqlError::Internal,
+        };
+        assert!(
+            radroots_replica_sync_all_with_options(
+                &sync_farm_fail,
+                &selector,
+                Some(&RadrootsReplicaSyncOptions {
+                    include_profiles: Some(false),
+                    include_list_sets: Some(false),
+                    include_membership_claims: Some(false),
+                }),
+            )
+            .is_err()
+        );
+        let sync_plot_fail = QueryFailExecutor {
+            inner: &exec,
+            needle: "plot_tag",
+            err: SqlError::Internal,
+        };
+        assert!(
+            radroots_replica_sync_all_with_options(
+                &sync_plot_fail,
+                &selector,
+                Some(&RadrootsReplicaSyncOptions {
+                    include_profiles: Some(false),
+                    include_list_sets: Some(false),
+                    include_membership_claims: Some(false),
+                }),
+            )
+            .is_err()
+        );
+        let sync_list_set_fail = QueryFailExecutor {
+            inner: &exec,
+            needle: "farm_member",
+            err: SqlError::Internal,
+        };
+        assert!(
+            radroots_replica_sync_all_with_options(
+                &sync_list_set_fail,
+                &selector,
+                Some(&RadrootsReplicaSyncOptions {
+                    include_profiles: Some(false),
+                    include_list_sets: Some(true),
+                    include_membership_claims: Some(false),
+                }),
+            )
+            .is_err()
+        );
+        let sync_claims_fail = QueryFailExecutor {
+            inner: &exec,
+            needle: "farm_member_claim",
+            err: SqlError::Internal,
+        };
+        assert!(
+            radroots_replica_sync_all_with_options(
+                &sync_claims_fail,
+                &selector,
+                Some(&RadrootsReplicaSyncOptions {
+                    include_profiles: Some(false),
+                    include_list_sets: Some(false),
+                    include_membership_claims: Some(true),
+                }),
+            )
+            .is_err()
+        );
+
+        assert!(radroots_replica_farm_event(&exec, &farm_row).is_ok());
+        assert!(radroots_replica_plot_events(&exec, &farm_row).is_ok());
+    }
+
+    #[test]
     fn emit_pass_through_executor_instantiation_paths_are_covered() {
         let exec = SqliteExecutor::open_memory().expect("db");
         let (farm_row, _, plot_secondary) = seed(&exec);
