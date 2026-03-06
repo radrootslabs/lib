@@ -589,9 +589,21 @@ fn listing_and_message_builders_cover_optional_shapes() {
             RadrootsCoreCurrency::USD,
         )),
     }]);
-    let err = listing_tags_with_options(&listing_with_discount_payload, trade_options)
-        .expect_err("discounts require serde_json in non-serde lane");
-    assert!(matches!(err, EventEncodeError::Json));
+    #[cfg(feature = "serde_json")]
+    {
+        let tags = listing_tags_with_options(&listing_with_discount_payload, trade_options)
+            .expect("discount serialization works");
+        assert!(
+            tags.iter()
+                .any(|tag| tag.first().map(|v| v.as_str()) == Some("radroots:discount"))
+        );
+    }
+    #[cfg(not(feature = "serde_json"))]
+    {
+        let err = listing_tags_with_options(&listing_with_discount_payload, trade_options)
+            .expect_err("discounts require serde_json in non-serde lane");
+        assert!(matches!(err, EventEncodeError::Json));
+    }
 
     let message_without_relays = RadrootsMessage {
         recipients: vec![RadrootsMessageRecipient {

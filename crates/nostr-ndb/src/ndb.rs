@@ -350,8 +350,24 @@ mod tests {
     use radroots_nostr::prelude::{RadrootsNostrEventBuilder, RadrootsNostrKeys};
     use radroots_nostr::prelude::{RadrootsNostrMetadata, radroots_nostr_build_metadata_event};
     use std::sync::atomic::Ordering;
+    use std::sync::{Mutex, OnceLock};
     use std::time::Duration;
     use tempfile::TempDir;
+
+    fn query_notes_lock() -> &'static Mutex<()> {
+        static QUERY_NOTES_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        QUERY_NOTES_LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    fn query_notes_guard() -> std::sync::MutexGuard<'static, ()> {
+        query_notes_lock().lock().expect("query notes lock")
+    }
+
+    fn reset_query_flags() {
+        test_hooks::FORCE_TRANSACTION_ERROR.store(false, Ordering::SeqCst);
+        test_hooks::FORCE_QUERY_ERROR.store(false, Ordering::SeqCst);
+        test_hooks::FORCE_NOTE_JSON_ERROR.store(false, Ordering::SeqCst);
+    }
 
     #[test]
     fn config_builder_tracks_values() {
@@ -601,6 +617,8 @@ mod tests {
 
     #[test]
     fn query_notes_returns_ingested_results() {
+        let _guard = query_notes_guard();
+        reset_query_flags();
         let tmp_dir = TempDir::new().expect("tempdir should open");
         let db_dir = tmp_dir.path().join("ndb");
         let config = RadrootsNostrNdbConfig::new(&db_dir);
@@ -632,6 +650,8 @@ mod tests {
 
     #[test]
     fn query_notes_empty_filters_returns_empty() {
+        let _guard = query_notes_guard();
+        reset_query_flags();
         let tmp_dir = TempDir::new().expect("tempdir should open");
         let db_dir = tmp_dir.path().join("ndb");
         let config = RadrootsNostrNdbConfig::new(&db_dir);
@@ -644,6 +664,8 @@ mod tests {
 
     #[test]
     fn query_notes_rejects_invalid_filters() {
+        let _guard = query_notes_guard();
+        reset_query_flags();
         let tmp_dir = TempDir::new().expect("tempdir should open");
         let db_dir = tmp_dir.path().join("ndb");
         let config = RadrootsNostrNdbConfig::new(&db_dir);
@@ -659,6 +681,8 @@ mod tests {
 
     #[test]
     fn query_notes_reports_transaction_error() {
+        let _guard = query_notes_guard();
+        reset_query_flags();
         let tmp_dir = TempDir::new().expect("tempdir should open");
         let db_dir = tmp_dir.path().join("ndb");
         let config = RadrootsNostrNdbConfig::new(&db_dir);
@@ -672,6 +696,8 @@ mod tests {
 
     #[test]
     fn query_notes_reports_query_error() {
+        let _guard = query_notes_guard();
+        reset_query_flags();
         let tmp_dir = TempDir::new().expect("tempdir should open");
         let db_dir = tmp_dir.path().join("ndb");
         let config = RadrootsNostrNdbConfig::new(&db_dir);
@@ -685,6 +711,8 @@ mod tests {
 
     #[test]
     fn query_notes_reports_note_json_error() {
+        let _guard = query_notes_guard();
+        reset_query_flags();
         let tmp_dir = TempDir::new().expect("tempdir should open");
         let db_dir = tmp_dir.path().join("ndb");
         let config = RadrootsNostrNdbConfig::new(&db_dir);
@@ -894,6 +922,8 @@ mod tests {
 
     #[test]
     fn concurrent_ingest_handles_parallel_writers() {
+        let _guard = query_notes_guard();
+        reset_query_flags();
         let tmp_dir = TempDir::new().expect("tempdir should open");
         let db_dir = tmp_dir.path().join("ndb");
         let config = RadrootsNostrNdbConfig::new(&db_dir);
