@@ -243,7 +243,7 @@ fn seed_source(
             &IPlotGcsLocationFields {
                 plot_id: plot_row_secondary.id.clone(),
                 gcs_location_id: gcs_row.id.clone(),
-                role: "primary".to_string(),
+                role: "secondary".to_string(),
             },
         ),
         "plot_secondary_gcs",

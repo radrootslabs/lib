@@ -1777,6 +1777,11 @@ mod tests {
                 .is_some()
         );
         assert!(
+            load_relation_by_role(&pass, &farm_row.id, "", RelationType::Farm)
+                .expect("farm fallback relation")
+                .is_some()
+        );
+        assert!(
             load_relation_by_role(&pass, &plot_secondary.id, "", RelationType::Plot)
                 .expect("plot fallback relation")
                 .is_some()
