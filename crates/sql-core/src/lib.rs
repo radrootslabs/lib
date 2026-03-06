@@ -48,3 +48,28 @@ pub trait SqlExecutor: Send + Sync {
     fn commit(&self) -> Result<(), SqlError>;
     fn rollback(&self) -> Result<(), SqlError>;
 }
+
+impl<T> SqlExecutor for &T
+where
+    T: SqlExecutor + ?Sized,
+{
+    fn exec(&self, sql: &str, params_json: &str) -> Result<ExecOutcome, SqlError> {
+        (**self).exec(sql, params_json)
+    }
+
+    fn query_raw(&self, sql: &str, params_json: &str) -> Result<String, SqlError> {
+        (**self).query_raw(sql, params_json)
+    }
+
+    fn begin(&self) -> Result<(), SqlError> {
+        (**self).begin()
+    }
+
+    fn commit(&self) -> Result<(), SqlError> {
+        (**self).commit()
+    }
+
+    fn rollback(&self) -> Result<(), SqlError> {
+        (**self).rollback()
+    }
+}

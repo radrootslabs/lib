@@ -165,6 +165,30 @@ impl SqlExecutor for MockExecutor {
     }
 }
 
+#[test]
+fn sql_executor_reference_impl_forwards_all_methods() {
+    let exec = MockExecutor::new();
+    let exec_ref = &exec;
+
+    let exec_result = <&MockExecutor as SqlExecutor>::exec(&exec_ref, "select 1", "[]")
+        .expect("reference exec should forward");
+    assert_eq!(exec_result.changes, 1);
+
+    let query_result = <&MockExecutor as SqlExecutor>::query_raw(&exec_ref, "select 1", "[]")
+        .expect("reference query should forward");
+    assert_eq!(query_result, String::new());
+
+    <&MockExecutor as SqlExecutor>::begin(&exec_ref).expect("reference begin should forward");
+    <&MockExecutor as SqlExecutor>::commit(&exec_ref).expect("reference commit should forward");
+    <&MockExecutor as SqlExecutor>::rollback(&exec_ref).expect("reference rollback should forward");
+
+    let snapshot = exec.snapshot();
+    assert_eq!(snapshot.begin_count, 1);
+    assert_eq!(snapshot.commit_count, 1);
+    assert_eq!(snapshot.rollback_count, 1);
+    assert!(snapshot.exec_sql.iter().any(|sql| sql == "select 1"));
+}
+
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 struct Payload {
     id: String,
