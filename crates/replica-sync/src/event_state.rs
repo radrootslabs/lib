@@ -13,6 +13,21 @@ use sha2::{Digest, Sha256};
 
 use crate::error::RadrootsReplicaEventsError;
 
+#[cfg(test)]
+mod failpoints {
+    use core::sync::atomic::{AtomicBool, Ordering};
+
+    static FORCE_ERROR: AtomicBool = AtomicBool::new(false);
+
+    pub(crate) fn set_error() {
+        FORCE_ERROR.store(true, Ordering::SeqCst);
+    }
+
+    pub(crate) fn take_error() -> bool {
+        FORCE_ERROR.swap(false, Ordering::SeqCst)
+    }
+}
+
 pub fn event_state_key(kind: u32, pubkey: &str, d_tag: &str) -> String {
     format!("{kind}:{pubkey}:{d_tag}")
 }
@@ -21,6 +36,12 @@ pub fn event_content_hash(
     content: &str,
     tags: &[Vec<String>],
 ) -> Result<String, RadrootsReplicaEventsError> {
+    #[cfg(test)]
+    if failpoints::take_error() {
+        return Err(RadrootsReplicaEventsError::InvalidData(
+            "content_hash".to_string(),
+        ));
+    }
     let tags_json = Value::Array(
         tags.iter()
             .map(|tag| Value::Array(tag.iter().cloned().map(Value::String).collect()))

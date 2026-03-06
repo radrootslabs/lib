@@ -843,7 +843,62 @@ mod tests {
         IPlotGcsLocationFields, IPlotGcsLocationFindMany,
     };
     use radroots_replica_db_schema::plot_tag::IPlotTagFields;
-    use radroots_sql_core::SqliteExecutor;
+    use radroots_sql_core::{ExecOutcome, SqlError, SqlExecutor, SqliteExecutor};
+
+    struct ErrorExecutor;
+
+    impl SqlExecutor for ErrorExecutor {
+        fn exec(&self, _sql: &str, _params_json: &str) -> Result<ExecOutcome, SqlError> {
+            Err(SqlError::Internal)
+        }
+
+        fn query_raw(&self, _sql: &str, _params_json: &str) -> Result<String, SqlError> {
+            Err(SqlError::Internal)
+        }
+
+        fn begin(&self) -> Result<(), SqlError> {
+            Ok(())
+        }
+
+        fn commit(&self) -> Result<(), SqlError> {
+            Ok(())
+        }
+
+        fn rollback(&self) -> Result<(), SqlError> {
+            Ok(())
+        }
+    }
+
+    struct QueryFailExecutor<'a> {
+        inner: &'a SqliteExecutor,
+        needle: &'static str,
+        err: SqlError,
+    }
+
+    impl SqlExecutor for QueryFailExecutor<'_> {
+        fn exec(&self, sql: &str, params_json: &str) -> Result<ExecOutcome, SqlError> {
+            self.inner.exec(sql, params_json)
+        }
+
+        fn query_raw(&self, sql: &str, params_json: &str) -> Result<String, SqlError> {
+            if sql.to_ascii_lowercase().contains(self.needle) {
+                return Err(self.err.clone());
+            }
+            self.inner.query_raw(sql, params_json)
+        }
+
+        fn begin(&self) -> Result<(), SqlError> {
+            self.inner.begin()
+        }
+
+        fn commit(&self) -> Result<(), SqlError> {
+            self.inner.commit()
+        }
+
+        fn rollback(&self) -> Result<(), SqlError> {
+            self.inner.rollback()
+        }
+    }
 
     fn seed(exec: &SqliteExecutor) -> (Farm, Plot, Plot) {
         migrations::run_all_up(exec).expect("migrations");
@@ -1413,5 +1468,214 @@ mod tests {
         )
         .expect("plots lookup");
         assert_eq!(plots_lookup.results.len(), 2);
+    }
+
+    #[test]
+    fn emit_option_toggles_and_empty_rows_cover_branches() {
+        let exec = SqliteExecutor::open_memory().expect("db");
+        migrations::run_all_up(&exec).expect("migrations");
+
+        let farm = farm::create(
+            &exec,
+            &IFarmFields {
+                d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
+                pubkey: "b".repeat(64),
+                name: "farm-empty".to_string(),
+                about: None,
+                website: None,
+                picture: None,
+                banner: None,
+                location_primary: None,
+                location_city: None,
+                location_region: None,
+                location_country: None,
+            },
+        )
+        .expect("farm")
+        .result;
+
+        let _plot = plot::create(
+            &exec,
+            &IPlotFields {
+                d_tag: "AAAAAAAAAAAAAAAAAAAAAQ".to_string(),
+                farm_id: farm.id.clone(),
+                name: "plot-empty".to_string(),
+                about: None,
+                location_primary: None,
+                location_city: None,
+                location_region: None,
+                location_country: None,
+            },
+        )
+        .expect("plot");
+
+        let selector = RadrootsReplicaFarmSelector {
+            id: Some(farm.id.clone()),
+            d_tag: None,
+            pubkey: None,
+        };
+        let bundle = radroots_replica_sync_all_with_options(
+            &exec,
+            &selector,
+            Some(&RadrootsReplicaSyncOptions {
+                include_profiles: Some(false),
+                include_list_sets: Some(false),
+                include_membership_claims: Some(false),
+            }),
+        )
+        .expect("sync");
+        assert_eq!(bundle.events.len(), 2);
+
+        let farm_event = radroots_replica_farm_event(&exec, &farm).expect("farm event");
+        assert_eq!(farm_event.kind, KIND_FARM);
+        let plot_events = radroots_replica_plot_events(&exec, &farm).expect("plot events");
+        assert_eq!(plot_events.len(), 1);
+
+        let claims = radroots_replica_membership_claim_events(&exec, &"z".repeat(64))
+            .expect("empty claims");
+        assert!(claims.is_empty());
+
+        let by_pair = resolve_farm(
+            &exec,
+            &RadrootsReplicaFarmSelector {
+                id: None,
+                d_tag: Some(farm.d_tag.clone()),
+                pubkey: Some(farm.pubkey.clone()),
+            },
+        )
+        .expect("resolve by pair");
+        assert_eq!(by_pair.id, farm.id);
+    }
+
+    #[test]
+    fn emit_profile_variants_and_missing_profiles_are_handled() {
+        let exec = SqliteExecutor::open_memory().expect("db");
+        let (farm_row, _, _) = seed(&exec);
+
+        let _ = farm_member::create(
+            &exec,
+            &IFarmMemberFields {
+                farm_id: farm_row.id.clone(),
+                member_pubkey: "z".repeat(64),
+                role: ROLE_MEMBER.to_string(),
+            },
+        )
+        .expect("member");
+
+        let profiles = radroots_replica_profile_events(&exec, &farm_row).expect("profiles");
+        assert!(!profiles.is_empty());
+
+        let profile_coop = profile_event(
+            &"c".repeat(64),
+            radroots_replica_db_schema::nostr_profile::NostrProfile {
+                id: "00000000-0000-0000-0000-0000000000c0".to_string(),
+                created_at: "2024-01-01T00:00:00.000Z".to_string(),
+                updated_at: "2024-01-01T00:00:00.000Z".to_string(),
+                public_key: "c".repeat(64),
+                profile_type: "coop".to_string(),
+                name: "coop".to_string(),
+                display_name: None,
+                about: None,
+                website: None,
+                picture: None,
+                banner: None,
+                nip05: None,
+                lud06: None,
+                lud16: None,
+            },
+        )
+        .expect("profile coop");
+        assert!(!profile_coop.tags.is_empty());
+
+        let profile_any = profile_event(
+            &"a".repeat(64),
+            radroots_replica_db_schema::nostr_profile::NostrProfile {
+                id: "00000000-0000-0000-0000-0000000000a0".to_string(),
+                created_at: "2024-01-01T00:00:00.000Z".to_string(),
+                updated_at: "2024-01-01T00:00:00.000Z".to_string(),
+                public_key: "a".repeat(64),
+                profile_type: "any".to_string(),
+                name: "any".to_string(),
+                display_name: None,
+                about: None,
+                website: None,
+                picture: None,
+                banner: None,
+                nip05: None,
+                lud06: None,
+                lud16: None,
+            },
+        )
+        .expect("profile any");
+        assert!(!profile_any.tags.is_empty());
+
+        let profile_sparse = serialize_profile_content(&RadrootsProfile {
+            name: "sparse".to_string(),
+            display_name: None,
+            nip05: None,
+            about: None,
+            website: None,
+            picture: None,
+            banner: None,
+            lud06: None,
+            lud16: None,
+            bot: None,
+        })
+        .expect("serialize");
+        assert!(profile_sparse.contains("\"name\""));
+    }
+
+    #[test]
+    fn emit_query_error_paths_are_reported() {
+        let exec = SqliteExecutor::open_memory().expect("db");
+        migrations::run_all_up(&exec).expect("migrations");
+
+        let farm = Farm {
+            id: "farm".to_string(),
+            created_at: "now".to_string(),
+            updated_at: "now".to_string(),
+            d_tag: "d".to_string(),
+            pubkey: "p".repeat(64),
+            name: "farm".to_string(),
+            about: None,
+            website: None,
+            picture: None,
+            banner: None,
+            location_primary: None,
+            location_city: None,
+            location_region: None,
+            location_country: None,
+        };
+        let plot = Plot {
+            id: "plot".to_string(),
+            created_at: "now".to_string(),
+            updated_at: "now".to_string(),
+            d_tag: "plot".to_string(),
+            farm_id: farm.id.clone(),
+            name: "plot".to_string(),
+            about: None,
+            location_primary: None,
+            location_city: None,
+            location_region: None,
+            location_country: None,
+        };
+
+        let err_exec = ErrorExecutor;
+        assert!(collect_farm_tags(&err_exec, "id").is_err());
+        assert!(collect_plot_tags(&err_exec, "id").is_err());
+        assert!(load_farm_members(&err_exec, "id").is_err());
+        assert!(load_plots(&err_exec, "id").is_err());
+        assert!(load_farm_location(&err_exec, &farm).is_err());
+        assert!(load_plot_location(&err_exec, &plot).is_err());
+        assert!(load_profile(&err_exec, "p").is_err());
+        assert!(load_member_claims(&err_exec, "p").is_err());
+        assert!(load_member_claims_for_member(&err_exec, "p").is_err());
+
+        let claims_fail = QueryFailExecutor {
+            inner: &exec,
+            needle: "farm_member_claim",
+            err: SqlError::Internal,
+        };
+        assert!(collect_profile_pubkeys(&claims_fail, &farm).is_err());
     }
 }

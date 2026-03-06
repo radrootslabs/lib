@@ -78,14 +78,14 @@ mod tests {
     #[test]
     fn from_impls_map_into_expected_variants() {
         let sql_from: RadrootsReplicaEventsError = IError::from(SqlError::Internal).into();
-        assert!(matches!(sql_from, RadrootsReplicaEventsError::Sql(_)));
+        assert!(sql_from.to_string().contains("replica_sync.sql"));
 
         let encode_from: RadrootsReplicaEventsError = EventEncodeError::Json.into();
-        assert!(matches!(encode_from, RadrootsReplicaEventsError::Encode(_)));
+        assert!(encode_from.to_string().contains("replica_sync.encode"));
 
         let parse_number_err = "invalid".parse::<u32>().expect_err("parse int should fail");
         let parse_from: RadrootsReplicaEventsError =
             EventParseError::InvalidNumber("k", parse_number_err).into();
-        assert!(matches!(parse_from, RadrootsReplicaEventsError::Parse(_)));
+        assert!(parse_from.to_string().contains("replica_sync.parse"));
     }
 }

@@ -1432,18 +1432,19 @@ mod tests {
         let begin_err =
             radroots_replica_ingest_event_with_factory(&begin_executor, &event, &FixedFactory)
                 .expect_err("begin");
-        assert!(matches!(begin_err, RadrootsReplicaEventsError::Sql(_)));
+        assert!(begin_err.to_string().contains("replica_sync.sql"));
         assert!(begin_executor.commit().is_ok());
-        assert!(matches!(
-            begin_executor.exec("select 1", "[]").expect_err("exec"),
-            SqlError::UnsupportedPlatform
-        ));
-        assert!(matches!(
+        assert_eq!(
+            begin_executor.exec("select 1", "[]").expect_err("exec").code(),
+            "ERR_UNSUPPORTED_PLATFORM"
+        );
+        assert_eq!(
             begin_executor
                 .query_raw("select 1", "[]")
-                .expect_err("query"),
-            SqlError::UnsupportedPlatform
-        ));
+                .expect_err("query")
+                .code(),
+            "ERR_UNSUPPORTED_PLATFORM"
+        );
 
         let rollback_count = Arc::new(AtomicUsize::new(0));
         let commit_executor = TxnExecutor {
@@ -1454,7 +1455,7 @@ mod tests {
         let commit_err =
             radroots_replica_ingest_event_with_factory(&commit_executor, &event, &FixedFactory)
                 .expect_err("commit");
-        assert!(matches!(commit_err, RadrootsReplicaEventsError::Sql(_)));
+        assert!(commit_err.to_string().contains("replica_sync.sql"));
         assert_eq!(rollback_count.load(Ordering::SeqCst), 0);
 
         let rollback_executor = TxnExecutor {
@@ -1855,10 +1856,13 @@ mod tests {
         assert!(not_found_claims.commit().is_ok());
         let _ = not_found_claims.rollback();
         assert!(not_found_claims.query_raw("SELECT 1", "[]").is_ok());
-        assert!(matches!(
-            not_found_claims.exec("DELETE FROM farm_member_claim WHERE id = 1", "[]"),
-            Err(SqlError::NotFound(_))
-        ));
+        assert_eq!(
+            not_found_claims
+                .exec("DELETE FROM farm_member_claim WHERE id = 1", "[]")
+                .expect_err("exec not found")
+                .code(),
+            "ERR_NOT_FOUND"
+        );
         let _ = not_found_claims.exec("DELETE FROM other_table WHERE id = 1", "[]");
 
         let internal_farm_tags = DeleteErrorExecutor {
