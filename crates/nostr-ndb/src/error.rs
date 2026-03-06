@@ -49,8 +49,10 @@ mod tests {
     fn converts_serde_json_error() {
         let source = serde_json::from_str::<serde_json::Value>("not json").expect_err("json error");
         let converted: RadrootsNostrNdbError = source.into();
-        assert!(converted
-            .to_string()
-            .starts_with("event json encode failed:"));
+        assert!(
+            converted
+                .to_string()
+                .starts_with("event json encode failed:")
+        );
     }
 }

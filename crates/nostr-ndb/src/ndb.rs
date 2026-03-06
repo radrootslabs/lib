@@ -89,7 +89,9 @@ impl RadrootsNostrNdb {
     ) -> Result<(), RadrootsNostrNdbError> {
         #[cfg(test)]
         if test_hooks::take(&test_hooks::FORCE_UNSUBSCRIBE_ERROR) {
-            return Err(RadrootsNostrNdbError::Ndb("forced unsubscribe error".into()));
+            return Err(RadrootsNostrNdbError::Ndb(
+                "forced unsubscribe error".into(),
+            ));
         }
         let mut inner = self.inner.clone();
         inner.unsubscribe(subscription).map_err(Into::into)
@@ -114,7 +116,9 @@ impl RadrootsNostrNdb {
     fn open_txn(&self) -> Result<nostrdb::Transaction, RadrootsNostrNdbError> {
         #[cfg(test)]
         if test_hooks::take(&test_hooks::FORCE_TRANSACTION_ERROR) {
-            return Err(RadrootsNostrNdbError::Ndb("forced transaction error".into()));
+            return Err(RadrootsNostrNdbError::Ndb(
+                "forced transaction error".into(),
+            ));
         }
         nostrdb::Transaction::new(&self.inner).map_err(Into::into)
     }
@@ -293,7 +297,8 @@ impl RadrootsNostrNdb {
             .map(|filter_spec| filter_spec.to_ndb_filter())
             .collect::<Result<Vec<_>, _>>()?;
         let txn = self.open_txn()?;
-        let query_results = self.query_inner(&txn, filters.as_slice(), spec.max_results() as i32)?;
+        let query_results =
+            self.query_inner(&txn, filters.as_slice(), spec.max_results() as i32)?;
 
         query_results
             .into_iter()
@@ -510,9 +515,7 @@ mod tests {
         let err = ndb
             .ingest_event(&event, RadrootsNostrNdbIngestSource::client())
             .expect_err("forced json error");
-        assert!(err
-            .to_string()
-            .starts_with("event json encode failed:"));
+        assert!(err.to_string().starts_with("event json encode failed:"));
     }
 
     #[test]
@@ -571,7 +574,9 @@ mod tests {
         let handle = ndb.subscribe(&spec).expect("subscribe should succeed");
         test_hooks::FORCE_UNSUBSCRIBE_ERROR.store(true, Ordering::SeqCst);
 
-        let err = ndb.unsubscribe(handle).expect_err("forced unsubscribe error");
+        let err = ndb
+            .unsubscribe(handle)
+            .expect_err("forced unsubscribe error");
         assert!(err.to_string().starts_with("nostrdb error:"));
     }
 
@@ -690,7 +695,9 @@ mod tests {
         let spec = RadrootsNostrNdbQuerySpec::text_notes(Some(10), None, 10);
         test_hooks::FORCE_TRANSACTION_ERROR.store(true, Ordering::SeqCst);
 
-        let err = ndb.query_notes(&spec).expect_err("forced transaction error");
+        let err = ndb
+            .query_notes(&spec)
+            .expect_err("forced transaction error");
         assert!(err.to_string().starts_with("nostrdb error:"));
     }
 
@@ -735,7 +742,9 @@ mod tests {
         }
         test_hooks::FORCE_NOTE_JSON_ERROR.store(true, Ordering::SeqCst);
 
-        let err = ndb.query_notes(&query_spec).expect_err("forced note json error");
+        let err = ndb
+            .query_notes(&query_spec)
+            .expect_err("forced note json error");
         assert!(err.to_string().starts_with("nostrdb error:"));
     }
 
@@ -887,9 +896,7 @@ mod tests {
         let err = ndb
             .get_profile_by_pubkey_hex("abcd")
             .expect_err("lookup should fail");
-        assert!(err
-            .to_string()
-            .contains("invalid hex length for pubkey"));
+        assert!(err.to_string().contains("invalid hex length for pubkey"));
     }
 
     #[tokio::test]
@@ -986,9 +993,10 @@ mod tests {
 
         let result = ndb.add_giftwrap_secret_key_hex("abcd");
         let err = result.expect_err("invalid giftwrap key");
-        assert!(err
-            .to_string()
-            .contains("invalid hex length for secret_key"));
+        assert!(
+            err.to_string()
+                .contains("invalid hex length for secret_key")
+        );
     }
 
     #[cfg(feature = "giftwrap")]
