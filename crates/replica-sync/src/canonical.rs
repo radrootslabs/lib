@@ -106,7 +106,10 @@ mod tests {
     fn canonical_json_string_failpoint_returns_error() {
         super::failpoints::set_error();
         let err = canonical_json_string(&"value").expect_err("failpoint");
-        assert!(err.to_string().contains("canonical json serialization failed"));
+        assert!(
+            err.to_string()
+                .contains("canonical json serialization failed")
+        );
     }
 
     struct AlwaysErr;

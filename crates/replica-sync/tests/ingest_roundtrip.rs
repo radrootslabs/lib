@@ -165,8 +165,11 @@ fn seed_source(
         gc_country_id: None,
         gc_country_name: None,
     };
-    let gcs_secondary_row =
-        unwrap_sql(gcs_location::create(exec, &gcs_secondary_fields), "gcs secondary").result;
+    let gcs_secondary_row = unwrap_sql(
+        gcs_location::create(exec, &gcs_secondary_fields),
+        "gcs secondary",
+    )
+    .result;
 
     let _ = unwrap_sql(
         farm_gcs_location::create(

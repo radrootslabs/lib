@@ -117,8 +117,8 @@ mod tests {
             d_tag: None,
             pubkey: None,
         };
-        let bundle = radroots_replica_sync_all_with_options(&exec, &selector, None)
-            .expect("bundle");
+        let bundle =
+            radroots_replica_sync_all_with_options(&exec, &selector, None).expect("bundle");
         let expected_count = bundle.events.len();
         let first = bundle.events.first().expect("event");
         let d_tag = tag_value(&first.tags, "d").unwrap_or("");

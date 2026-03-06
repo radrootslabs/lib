@@ -1531,8 +1531,8 @@ mod tests {
         let plot_events = radroots_replica_plot_events(&exec, &farm).expect("plot events");
         assert_eq!(plot_events.len(), 1);
 
-        let claims = radroots_replica_membership_claim_events(&exec, &"z".repeat(64))
-            .expect("empty claims");
+        let claims =
+            radroots_replica_membership_claim_events(&exec, &"z".repeat(64)).expect("empty claims");
         assert!(claims.is_empty());
 
         let by_pair = resolve_farm(
