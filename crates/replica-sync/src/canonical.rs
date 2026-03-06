@@ -11,16 +11,22 @@ use crate::error::RadrootsReplicaEventsError;
 
 #[cfg(test)]
 pub(crate) mod failpoints {
-    use core::sync::atomic::{AtomicBool, Ordering};
+    use std::cell::Cell;
 
-    static FORCE_ERROR: AtomicBool = AtomicBool::new(false);
+    thread_local! {
+        static FORCE_ERROR: Cell<bool> = const { Cell::new(false) };
+    }
 
     pub(crate) fn set_error() {
-        FORCE_ERROR.store(true, Ordering::SeqCst);
+        FORCE_ERROR.with(|flag| flag.set(true));
     }
 
     pub(crate) fn take_error() -> bool {
-        FORCE_ERROR.swap(false, Ordering::SeqCst)
+        FORCE_ERROR.with(|flag| {
+            let value = flag.get();
+            flag.set(false);
+            value
+        })
     }
 }
 
@@ -106,10 +112,9 @@ mod tests {
     fn canonical_json_string_failpoint_returns_error() {
         super::failpoints::set_error();
         let err = canonical_json_string(&"value").expect_err("failpoint");
-        assert!(
-            err.to_string()
-                .contains("canonical json serialization failed")
-        );
+        assert!(err
+            .to_string()
+            .contains("canonical json serialization failed"));
     }
 
     struct AlwaysErr;
@@ -126,9 +131,8 @@ mod tests {
     #[test]
     fn canonical_json_string_propagates_serialization_errors() {
         let err = canonical_json_string(&AlwaysErr).expect_err("serialize fail");
-        assert!(
-            err.to_string()
-                .contains("canonical json serialization failed")
-        );
+        assert!(err
+            .to_string()
+            .contains("canonical json serialization failed"));
     }
 }
