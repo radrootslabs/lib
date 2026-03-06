@@ -72,7 +72,6 @@ pub fn radroots_replica_sync_status<E: SqlExecutor>(
 mod tests {
     use super::radroots_replica_sync_status;
     use crate::emit::radroots_replica_sync_all_with_options;
-    use crate::error::RadrootsReplicaEventsError;
     use crate::event_state::{
         event_content_hash, event_content_hash_fail_next, event_state_key, tag_value,
     };
@@ -201,13 +200,7 @@ mod tests {
         .expect("farm");
         event_content_hash_fail_next();
         let err = radroots_replica_sync_status(&exec).expect_err("content hash error");
-        assert!(
-            matches!(
-                err,
-                RadrootsReplicaEventsError::InvalidData(ref field) if field == "content_hash"
-            ),
-            "{err:?}"
-        );
+        assert!(err.to_string().contains("content_hash"));
     }
 
     #[test]

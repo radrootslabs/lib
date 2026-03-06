@@ -2172,8 +2172,20 @@ mod tests {
         create_plot_record(&exec, &list_plot_error_farm.id, "", "plot-list-error");
         assert!(radroots_replica_list_set_events(&exec, &list_plot_error_farm).is_err());
 
+        let clean_exec = SqliteExecutor::open_memory().expect("db clean");
+        let (clean_farm, _, _) = seed(&clean_exec);
         super::failpoints::set_list_set_to_wire_error();
-        assert!(radroots_replica_list_set_events(&exec, &farm_row).is_err());
+        assert!(radroots_replica_list_set_events(&clean_exec, &clean_farm).is_err());
+
+        let invalid_list_set = radroots_events::list_set::RadrootsListSet {
+            d_tag: String::new(),
+            content: String::new(),
+            entries: Vec::new(),
+            title: None,
+            description: None,
+            image: None,
+        };
+        assert!(list_set_to_wire_parts(&invalid_list_set).is_err());
 
         let claims_member_query_fail = QueryFailExecutor {
             inner: &exec,
@@ -2197,7 +2209,26 @@ mod tests {
         assert!(radroots_replica_membership_claim_events(&exec, &" ".repeat(64)).is_err());
 
         super::failpoints::set_list_set_to_wire_error();
-        assert!(radroots_replica_membership_claim_events(&exec, &farm_row.pubkey).is_err());
+        assert!(radroots_replica_membership_claim_events(&clean_exec, &clean_farm.pubkey).is_err());
+    }
+
+    #[test]
+    fn emit_list_set_wire_error_paths_are_reported() {
+        let exec = SqliteExecutor::open_memory().expect("db");
+        let (farm_row, _, _) = seed(&exec);
+
+        super::failpoints::set_list_set_to_wire_error();
+        assert!(radroots_replica_list_set_events(&exec, &farm_row).is_err());
+
+        let invalid_list_set = radroots_events::list_set::RadrootsListSet {
+            d_tag: String::new(),
+            content: String::new(),
+            entries: Vec::new(),
+            title: None,
+            description: None,
+            image: None,
+        };
+        assert!(list_set_to_wire_parts(&invalid_list_set).is_err());
     }
 
     #[test]

@@ -827,18 +827,8 @@ fn create_gcs_location<E: SqlExecutor, F: RadrootsReplicaIdFactory>(
     factory: &F,
 ) -> Result<String, RadrootsReplicaEventsError> {
     let d_tag = factory.new_d_tag();
-    #[cfg(test)]
-    if failpoints::take_gcs_point_serialize_error() {
-        let err = serde_json::from_str::<Value>("{").expect_err("point failpoint");
-        return Err(map_gcs_point_serialize_error(err));
-    }
-    let point = serde_json::to_string(&gcs.point).map_err(map_gcs_point_serialize_error)?;
-    #[cfg(test)]
-    if failpoints::take_gcs_polygon_serialize_error() {
-        let err = serde_json::from_str::<Value>("{").expect_err("polygon failpoint");
-        return Err(map_gcs_polygon_serialize_error(err));
-    }
-    let polygon = serde_json::to_string(&gcs.polygon).map_err(map_gcs_polygon_serialize_error)?;
+    let point = serialize_gcs_point(&gcs.point).map_err(map_gcs_point_serialize_error)?;
+    let polygon = serialize_gcs_polygon(&gcs.polygon).map_err(map_gcs_polygon_serialize_error)?;
 
     let fields = IGcsLocationFields {
         d_tag,
@@ -872,6 +862,31 @@ fn map_gcs_point_serialize_error(_err: serde_json::Error) -> RadrootsReplicaEven
 
 fn map_gcs_polygon_serialize_error(_err: serde_json::Error) -> RadrootsReplicaEventsError {
     RadrootsReplicaEventsError::InvalidData("gcs.polygon".to_string())
+}
+
+fn serialize_gcs_point(
+    point: &radroots_events::farm::RadrootsGeoJsonPoint,
+) -> Result<String, serde_json::Error> {
+    #[cfg(test)]
+    if failpoints::take_gcs_point_serialize_error() {
+        return Err(json_parse_error());
+    }
+    serde_json::to_string(point)
+}
+
+fn serialize_gcs_polygon(
+    polygon: &radroots_events::farm::RadrootsGeoJsonPolygon,
+) -> Result<String, serde_json::Error> {
+    #[cfg(test)]
+    if failpoints::take_gcs_polygon_serialize_error() {
+        return Err(json_parse_error());
+    }
+    serde_json::to_string(polygon)
+}
+
+#[cfg(test)]
+fn json_parse_error() -> serde_json::Error {
+    serde_json::from_str::<Value>("{").expect_err("json parse error")
 }
 
 fn upsert_farm_members<E: SqlExecutor>(
@@ -1058,7 +1073,7 @@ fn ensure_list_set_entries_tag(
 
 fn parse_farm_list_set_d_tag(d_tag: &str) -> Option<(String, ListSetRole)> {
     let mut parts = d_tag.splitn(3, ':');
-    if parts.next()? != "farm" {
+    if parts.next() != Some("farm") {
         return None;
     }
     let farm_d_tag = parts.next()?.to_string();
