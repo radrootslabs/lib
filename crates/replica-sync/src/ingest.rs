@@ -7,12 +7,12 @@ use alloc::{
 };
 
 #[cfg(feature = "std")]
-use base64::Engine;
-#[cfg(feature = "std")]
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+#[cfg(feature = "std")]
+use base64::Engine;
 
+use radroots_events::kinds::{is_nip51_list_set_kind, KIND_FARM, KIND_PLOT, KIND_PROFILE};
 use radroots_events::RadrootsNostrEvent;
-use radroots_events::kinds::{KIND_FARM, KIND_PLOT, KIND_PROFILE, is_nip51_list_set_kind};
 use radroots_events_codec::farm::decode as farm_decode;
 use radroots_events_codec::list_set::decode as list_set_decode;
 use radroots_events_codec::plot::decode as plot_decode;
@@ -62,8 +62,8 @@ use radroots_replica_db_schema::plot_tag::{
     IPlotTagDelete, IPlotTagFields, IPlotTagFieldsFilter, IPlotTagFindMany, IPlotTagFindOneArgs,
     PlotTagQueryBindValues,
 };
-use radroots_sql_core::SqlExecutor;
 use radroots_sql_core::error::SqlError;
+use radroots_sql_core::SqlExecutor;
 use serde_json::Value;
 
 use crate::error::RadrootsReplicaEventsError;
@@ -72,6 +72,40 @@ const ROLE_PRIMARY: &str = "primary";
 const ROLE_MEMBER: &str = "member";
 const ROLE_OWNER: &str = "owner";
 const ROLE_WORKER: &str = "worker";
+
+#[cfg(test)]
+pub(crate) mod failpoints {
+    use std::cell::Cell;
+
+    thread_local! {
+        static FORCE_GCS_POINT_SERIALIZE_ERROR: Cell<bool> = const { Cell::new(false) };
+        static FORCE_GCS_POLYGON_SERIALIZE_ERROR: Cell<bool> = const { Cell::new(false) };
+    }
+
+    pub(crate) fn set_gcs_point_serialize_error() {
+        FORCE_GCS_POINT_SERIALIZE_ERROR.with(|flag| flag.set(true));
+    }
+
+    pub(crate) fn take_gcs_point_serialize_error() -> bool {
+        FORCE_GCS_POINT_SERIALIZE_ERROR.with(|flag| {
+            let value = flag.get();
+            flag.set(false);
+            value
+        })
+    }
+
+    pub(crate) fn set_gcs_polygon_serialize_error() {
+        FORCE_GCS_POLYGON_SERIALIZE_ERROR.with(|flag| flag.set(true));
+    }
+
+    pub(crate) fn take_gcs_polygon_serialize_error() -> bool {
+        FORCE_GCS_POLYGON_SERIALIZE_ERROR.with(|flag| {
+            let value = flag.get();
+            flag.set(false);
+            value
+        })
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsReplicaIngestOutcome {
@@ -793,7 +827,17 @@ fn create_gcs_location<E: SqlExecutor, F: RadrootsReplicaIdFactory>(
     factory: &F,
 ) -> Result<String, RadrootsReplicaEventsError> {
     let d_tag = factory.new_d_tag();
+    #[cfg(test)]
+    if failpoints::take_gcs_point_serialize_error() {
+        let err = serde_json::from_str::<Value>("{").expect_err("point failpoint");
+        return Err(map_gcs_point_serialize_error(err));
+    }
     let point = serde_json::to_string(&gcs.point).map_err(map_gcs_point_serialize_error)?;
+    #[cfg(test)]
+    if failpoints::take_gcs_polygon_serialize_error() {
+        let err = serde_json::from_str::<Value>("{").expect_err("polygon failpoint");
+        return Err(map_gcs_polygon_serialize_error(err));
+    }
     let polygon = serde_json::to_string(&gcs.polygon).map_err(map_gcs_polygon_serialize_error)?;
 
     let fields = IGcsLocationFields {
@@ -1044,8 +1088,8 @@ struct EventStateDecision {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
 
     use radroots_events::farm::{
         RadrootsFarm, RadrootsFarmLocation, RadrootsFarmRef, RadrootsGcsLocation,
@@ -1056,8 +1100,8 @@ mod tests {
     use radroots_events::list_set::RadrootsListSet;
     use radroots_events::plot::{RadrootsPlot, RadrootsPlotLocation};
     use radroots_events::profile::{
-        RADROOTS_PROFILE_TYPE_TAG_KEY, RadrootsProfile, RadrootsProfileType,
-        radroots_profile_type_tag_value,
+        radroots_profile_type_tag_value, RadrootsProfile, RadrootsProfileType,
+        RADROOTS_PROFILE_TYPE_TAG_KEY,
     };
     use radroots_events_codec::farm::encode as farm_encode;
     use radroots_events_codec::farm::list_sets as farm_list_sets;
@@ -1823,24 +1867,22 @@ mod tests {
             Some("p".to_string())
         );
         assert!(ensure_list_set_entries_tag(&bad_image, "p", "x").is_ok());
-        assert!(
-            ensure_list_set_entries_tag(
-                &RadrootsListSet {
-                    d_tag: "x".to_string(),
-                    content: String::new(),
-                    entries: vec![RadrootsListEntry {
-                        tag: "a".to_string(),
-                        values: vec!["x".to_string()],
-                    }],
-                    title: None,
-                    description: None,
-                    image: None,
-                },
-                "p",
-                "x",
-            )
-            .is_err()
-        );
+        assert!(ensure_list_set_entries_tag(
+            &RadrootsListSet {
+                d_tag: "x".to_string(),
+                content: String::new(),
+                entries: vec![RadrootsListEntry {
+                    tag: "a".to_string(),
+                    values: vec!["x".to_string()],
+                }],
+                title: None,
+                description: None,
+                image: None,
+            },
+            "p",
+            "x",
+        )
+        .is_err());
     }
 
     #[test]
@@ -1896,14 +1938,12 @@ mod tests {
             table_name: "farm_tag",
             err: SqlError::NotFound("farm_tag".to_string()),
         };
-        assert!(
-            upsert_farm_tags(
-                &not_found_farm_tags,
-                &farm_id,
-                Some(vec!["next".to_string()])
-            )
-            .is_ok()
-        );
+        assert!(upsert_farm_tags(
+            &not_found_farm_tags,
+            &farm_id,
+            Some(vec!["next".to_string()])
+        )
+        .is_ok());
 
         let not_found_plot_tags = DeleteErrorExecutor {
             inner: &exec,
@@ -1915,56 +1955,50 @@ mod tests {
             .results[0]
             .id
             .clone();
-        assert!(
-            upsert_plot_tags(
-                &not_found_plot_tags,
-                &plot_id,
-                Some(vec!["next".to_string()])
-            )
-            .is_ok()
-        );
+        assert!(upsert_plot_tags(
+            &not_found_plot_tags,
+            &plot_id,
+            Some(vec!["next".to_string()])
+        )
+        .is_ok());
 
         let not_found_farm_locations = DeleteErrorExecutor {
             inner: &exec,
             table_name: "farm_gcs_location",
             err: SqlError::NotFound("farm_gcs_location".to_string()),
         };
-        assert!(
-            upsert_farm_location(
-                &not_found_farm_locations,
-                &farm_id,
-                Some(RadrootsFarmLocation {
-                    primary: None,
-                    city: None,
-                    region: None,
-                    country: None,
-                    gcs: sample_gcs(1.0, 2.0, "s4"),
-                }),
-                &FixedFactory,
-            )
-            .is_ok()
-        );
+        assert!(upsert_farm_location(
+            &not_found_farm_locations,
+            &farm_id,
+            Some(RadrootsFarmLocation {
+                primary: None,
+                city: None,
+                region: None,
+                country: None,
+                gcs: sample_gcs(1.0, 2.0, "s4"),
+            }),
+            &FixedFactory,
+        )
+        .is_ok());
 
         let not_found_plot_locations = DeleteErrorExecutor {
             inner: &exec,
             table_name: "plot_gcs_location",
             err: SqlError::NotFound("plot_gcs_location".to_string()),
         };
-        assert!(
-            upsert_plot_location(
-                &not_found_plot_locations,
-                &plot_id,
-                Some(RadrootsPlotLocation {
-                    primary: None,
-                    city: None,
-                    region: None,
-                    country: None,
-                    gcs: sample_gcs(1.1, 2.1, "s5"),
-                }),
-                &FixedFactory,
-            )
-            .is_ok()
-        );
+        assert!(upsert_plot_location(
+            &not_found_plot_locations,
+            &plot_id,
+            Some(RadrootsPlotLocation {
+                primary: None,
+                city: None,
+                region: None,
+                country: None,
+                gcs: sample_gcs(1.1, 2.1, "s5"),
+            }),
+            &FixedFactory,
+        )
+        .is_ok());
 
         let members_list_set =
             farm_list_sets::farm_members_list_set(&farm_d_tag, vec!["n".repeat(64)])
@@ -1980,24 +2014,20 @@ mod tests {
         let not_found_members_list_set =
             farm_list_sets::farm_members_list_set(&farm_d_tag, vec!["q".repeat(64)])
                 .expect("not found members");
-        assert!(
-            upsert_farm_members(
-                &not_found_members,
-                &farm_id,
-                ListSetRole::Members,
-                &not_found_members_list_set,
-            )
-            .is_ok()
-        );
-        assert!(
-            upsert_farm_members(
-                &not_found_members,
-                &farm_id,
-                ListSetRole::Plots,
-                &not_found_members_list_set,
-            )
-            .is_ok()
-        );
+        assert!(upsert_farm_members(
+            &not_found_members,
+            &farm_id,
+            ListSetRole::Members,
+            &not_found_members_list_set,
+        )
+        .is_ok());
+        assert!(upsert_farm_members(
+            &not_found_members,
+            &farm_id,
+            ListSetRole::Plots,
+            &not_found_members_list_set,
+        )
+        .is_ok());
 
         let member_claims =
             farm_list_sets::member_of_farms_list_set(vec!["z".repeat(64)]).expect("claims");
@@ -2049,57 +2079,51 @@ mod tests {
             table_name: "farm_gcs_location",
             err: SqlError::Internal,
         };
-        assert!(
-            upsert_farm_location(
-                &internal_farm_locations,
-                &farm_id,
-                Some(RadrootsFarmLocation {
-                    primary: None,
-                    city: None,
-                    region: None,
-                    country: None,
-                    gcs: sample_gcs(2.0, 3.0, "s6"),
-                }),
-                &FixedFactory,
-            )
-            .is_err()
-        );
+        assert!(upsert_farm_location(
+            &internal_farm_locations,
+            &farm_id,
+            Some(RadrootsFarmLocation {
+                primary: None,
+                city: None,
+                region: None,
+                country: None,
+                gcs: sample_gcs(2.0, 3.0, "s6"),
+            }),
+            &FixedFactory,
+        )
+        .is_err());
 
         let internal_plot_locations = DeleteErrorExecutor {
             inner: &exec,
             table_name: "plot_gcs_location",
             err: SqlError::Internal,
         };
-        assert!(
-            upsert_plot_location(
-                &internal_plot_locations,
-                &plot_id,
-                Some(RadrootsPlotLocation {
-                    primary: None,
-                    city: None,
-                    region: None,
-                    country: None,
-                    gcs: sample_gcs(2.1, 3.1, "s7"),
-                }),
-                &FixedFactory,
-            )
-            .is_err()
-        );
+        assert!(upsert_plot_location(
+            &internal_plot_locations,
+            &plot_id,
+            Some(RadrootsPlotLocation {
+                primary: None,
+                city: None,
+                region: None,
+                country: None,
+                gcs: sample_gcs(2.1, 3.1, "s7"),
+            }),
+            &FixedFactory,
+        )
+        .is_err());
 
         let internal_members = DeleteErrorExecutor {
             inner: &exec,
             table_name: "farm_member",
             err: SqlError::Internal,
         };
-        assert!(
-            upsert_farm_members(
-                &internal_members,
-                &farm_id,
-                ListSetRole::Members,
-                &members_list_set,
-            )
-            .is_err()
-        );
+        assert!(upsert_farm_members(
+            &internal_members,
+            &farm_id,
+            ListSetRole::Members,
+            &members_list_set,
+        )
+        .is_err());
 
         let internal_claims = DeleteErrorExecutor {
             inner: &exec,
@@ -2230,15 +2254,13 @@ mod tests {
             description: None,
             image: None,
         };
-        assert!(
-            upsert_farm_members(
-                &pass,
-                &farm_row.id,
-                ListSetRole::Members,
-                &mixed_member_entries
-            )
-            .is_ok()
-        );
+        assert!(upsert_farm_members(
+            &pass,
+            &farm_row.id,
+            ListSetRole::Members,
+            &mixed_member_entries
+        )
+        .is_ok());
         let mixed_claim_entries = RadrootsListSet {
             d_tag: "member_of.farms".to_string(),
             content: String::new(),
@@ -2390,15 +2412,13 @@ mod tests {
         let profile_decision =
             event_state_decision(&pass_txn, &profile_event_row, "").expect("profile decision");
         assert!(!profile_decision.apply);
-        assert!(
-            radroots_replica_ingest_event_state(
-                &pass_txn,
-                &profile_event_row,
-                "",
-                &profile_decision.content_hash,
-            )
-            .is_ok()
-        );
+        assert!(radroots_replica_ingest_event_state(
+            &pass_txn,
+            &profile_event_row,
+            "",
+            &profile_decision.content_hash,
+        )
+        .is_ok());
         assert_eq!(
             radroots_replica_ingest_event_with_factory(
                 &pass_txn,
@@ -2468,36 +2488,32 @@ mod tests {
         assert!(
             create_gcs_location(&pass_txn, sample_gcs(14.0, 24.0, "s4"), &FixedFactory).is_ok()
         );
-        assert!(
-            upsert_farm_location(
-                &pass_txn,
-                &farm_row.id,
-                Some(RadrootsFarmLocation {
-                    primary: Some("primary".to_string()),
-                    city: None,
-                    region: None,
-                    country: None,
-                    gcs: sample_gcs(15.0, 25.0, "s5"),
-                }),
-                &FixedFactory,
-            )
-            .is_ok()
-        );
-        assert!(
-            upsert_plot_location(
-                &pass_txn,
-                &plot_id,
-                Some(RadrootsPlotLocation {
-                    primary: Some("primary".to_string()),
-                    city: None,
-                    region: None,
-                    country: None,
-                    gcs: sample_gcs(16.0, 26.0, "s6"),
-                }),
-                &FixedFactory,
-            )
-            .is_ok()
-        );
+        assert!(upsert_farm_location(
+            &pass_txn,
+            &farm_row.id,
+            Some(RadrootsFarmLocation {
+                primary: Some("primary".to_string()),
+                city: None,
+                region: None,
+                country: None,
+                gcs: sample_gcs(15.0, 25.0, "s5"),
+            }),
+            &FixedFactory,
+        )
+        .is_ok());
+        assert!(upsert_plot_location(
+            &pass_txn,
+            &plot_id,
+            Some(RadrootsPlotLocation {
+                primary: Some("primary".to_string()),
+                city: None,
+                region: None,
+                country: None,
+                gcs: sample_gcs(16.0, 26.0, "s6"),
+            }),
+            &FixedFactory,
+        )
+        .is_ok());
         let members_list =
             farm_list_sets::farm_members_list_set(farm_d_tag, vec!["m".repeat(64)]).expect("list");
         assert!(
@@ -2519,10 +2535,12 @@ mod tests {
         assert!(ingest_profile_event(&txn, &profile_event_row).is_err());
         assert!(event_state_decision(&txn, &profile_event_row, "").is_err());
         assert!(radroots_replica_ingest_event_state(&txn, &profile_event_row, "", "hash").is_err());
-        assert!(
-            radroots_replica_ingest_event_with_factory(&txn, &profile_event_row, &FixedFactory)
-                .is_err()
-        );
+        assert!(radroots_replica_ingest_event_with_factory(
+            &txn,
+            &profile_event_row,
+            &FixedFactory
+        )
+        .is_err());
 
         assert!(ingest_farm_event(&txn, &farm_event_row, &FixedFactory).is_err());
 
@@ -2534,36 +2552,32 @@ mod tests {
         assert!(clear_farm_locations(&txn, "farm-id").is_err());
         assert!(clear_plot_locations(&txn, "plot-id").is_err());
         assert!(create_gcs_location(&txn, sample_gcs(14.0, 24.0, "s4"), &FixedFactory).is_err());
-        assert!(
-            upsert_farm_location(
-                &txn,
-                "farm-id",
-                Some(RadrootsFarmLocation {
-                    primary: Some("primary".to_string()),
-                    city: None,
-                    region: None,
-                    country: None,
-                    gcs: sample_gcs(15.0, 25.0, "s5"),
-                }),
-                &FixedFactory,
-            )
-            .is_err()
-        );
-        assert!(
-            upsert_plot_location(
-                &txn,
-                "plot-id",
-                Some(RadrootsPlotLocation {
-                    primary: Some("primary".to_string()),
-                    city: None,
-                    region: None,
-                    country: None,
-                    gcs: sample_gcs(16.0, 26.0, "s6"),
-                }),
-                &FixedFactory,
-            )
-            .is_err()
-        );
+        assert!(upsert_farm_location(
+            &txn,
+            "farm-id",
+            Some(RadrootsFarmLocation {
+                primary: Some("primary".to_string()),
+                city: None,
+                region: None,
+                country: None,
+                gcs: sample_gcs(15.0, 25.0, "s5"),
+            }),
+            &FixedFactory,
+        )
+        .is_err());
+        assert!(upsert_plot_location(
+            &txn,
+            "plot-id",
+            Some(RadrootsPlotLocation {
+                primary: Some("primary".to_string()),
+                city: None,
+                region: None,
+                country: None,
+                gcs: sample_gcs(16.0, 26.0, "s6"),
+            }),
+            &FixedFactory,
+        )
+        .is_err());
         assert!(upsert_farm_members(&txn, "farm-id", ListSetRole::Members, &members_list).is_err());
         assert!(upsert_member_claims(&txn, &"m".repeat(64), &member_of_list).is_err());
     }
@@ -2578,14 +2592,12 @@ mod tests {
             err: SqlError::Internal,
         };
         assert!(pass_through.query_raw("select 1", "[]").is_ok());
-        assert!(
-            pass_through
-                .exec(
-                    "create table if not exists coverage_probe (id integer)",
-                    "[]"
-                )
-                .is_ok()
-        );
+        assert!(pass_through
+            .exec(
+                "create table if not exists coverage_probe (id integer)",
+                "[]"
+            )
+            .is_ok());
         let _ = pass_through.begin();
         let _ = pass_through.rollback();
         let _ = pass_through.commit();
@@ -3127,5 +3139,225 @@ mod tests {
         assert!(
             radroots_replica_ingest_event_state(&state_update_fail, &profile, "", "hash2").is_err()
         );
+    }
+
+    #[test]
+    fn ingest_insert_and_state_error_branches_are_covered() {
+        let exec = SqliteExecutor::open_memory().expect("db");
+        let (farm_id, farm_pubkey, farm_d_tag, plot_d_tag) = seed_rows(&exec);
+
+        let profile = profile_event(
+            900,
+            &"u".repeat(64),
+            120,
+            Some(RadrootsProfileType::Individual),
+            "profile-state-insert",
+        );
+        let state_insert_fail = QueryFailExecutor {
+            inner: &exec,
+            needle: "insert into nostr_event_state",
+            err: SqlError::Internal,
+        };
+        assert!(ingest_profile_event(&state_insert_fail, &profile).is_err());
+
+        let farm_state = farm_event(
+            901,
+            &"a".repeat(64),
+            121,
+            "AAAAAAAAAAAAAAAAAAAAAQ",
+            "farm-state-insert",
+            None,
+            None,
+        );
+        assert!(ingest_farm_event(&state_insert_fail, &farm_state, &FixedFactory).is_err());
+
+        let plot_state = plot_event(
+            902,
+            &farm_pubkey,
+            122,
+            "AAAAAAAAAAAAAAAAAAAAAg",
+            RadrootsFarmRef {
+                pubkey: farm_pubkey.clone(),
+                d_tag: farm_d_tag.clone(),
+            },
+            "plot-state-insert",
+            None,
+            None,
+        );
+        assert!(ingest_plot_event(&state_insert_fail, &plot_state, &FixedFactory).is_err());
+
+        let members_set = farm_list_sets::farm_members_list_set(&farm_d_tag, vec!["n".repeat(64)])
+            .expect("members");
+        let members_event =
+            list_set_event(903, &farm_pubkey, 123, KIND_LIST_SET_GENERIC, &members_set);
+        assert!(ingest_list_set_event(&state_insert_fail, &members_event).is_err());
+
+        let plots_set = farm_list_sets::farm_plots_list_set(
+            &farm_d_tag,
+            &farm_pubkey,
+            vec![plot_d_tag.clone()],
+        )
+        .expect("plots");
+        let plots_event = list_set_event(904, &farm_pubkey, 124, KIND_LIST_SET_GENERIC, &plots_set);
+        assert!(ingest_list_set_event(&state_insert_fail, &plots_event).is_err());
+
+        let member_of_set =
+            farm_list_sets::member_of_farms_list_set(vec![farm_pubkey.clone()]).expect("member_of");
+        let member_of_event = list_set_event(
+            905,
+            &"n".repeat(64),
+            125,
+            KIND_LIST_SET_GENERIC,
+            &member_of_set,
+        );
+        assert!(ingest_list_set_event(&state_insert_fail, &member_of_event).is_err());
+
+        let state_insert_only_fail = QueryFailExecutor {
+            inner: &exec,
+            needle: "insert into nostr_event_state",
+            err: SqlError::Internal,
+        };
+        assert!(
+            radroots_replica_ingest_event_state(&state_insert_only_fail, &profile, "", "hash")
+                .is_err()
+        );
+
+        crate::event_state::event_content_hash_fail_next();
+        assert!(event_state_decision(&exec, &profile, "").is_err());
+
+        let farm_tag_insert_fail = QueryFailExecutor {
+            inner: &exec,
+            needle: "insert into farm_tag",
+            err: SqlError::Internal,
+        };
+        assert!(upsert_farm_tags(
+            &farm_tag_insert_fail,
+            &farm_id,
+            Some(vec!["delta".to_string()])
+        )
+        .is_err());
+
+        let plot_id = plot::find_many(&exec, &IPlotFindMany { filter: None })
+            .expect("plots")
+            .results[0]
+            .id
+            .clone();
+        let plot_tag_insert_fail = QueryFailExecutor {
+            inner: &exec,
+            needle: "insert into plot_tag",
+            err: SqlError::Internal,
+        };
+        assert!(upsert_plot_tags(
+            &plot_tag_insert_fail,
+            &plot_id,
+            Some(vec!["epsilon".to_string()])
+        )
+        .is_err());
+
+        let farm_gcs_insert_fail = QueryFailExecutor {
+            inner: &exec,
+            needle: "insert into gcs_location",
+            err: SqlError::Internal,
+        };
+        assert!(upsert_farm_location(
+            &farm_gcs_insert_fail,
+            &farm_id,
+            Some(RadrootsFarmLocation {
+                primary: Some("primary".to_string()),
+                city: None,
+                region: None,
+                country: None,
+                gcs: sample_gcs(31.0, 41.0, "s8"),
+            }),
+            &FixedFactory,
+        )
+        .is_err());
+
+        let farm_rel_insert_fail = QueryFailExecutor {
+            inner: &exec,
+            needle: "insert into farm_gcs_location",
+            err: SqlError::Internal,
+        };
+        assert!(upsert_farm_location(
+            &farm_rel_insert_fail,
+            &farm_id,
+            Some(RadrootsFarmLocation {
+                primary: Some("primary".to_string()),
+                city: None,
+                region: None,
+                country: None,
+                gcs: sample_gcs(32.0, 42.0, "s9"),
+            }),
+            &FixedFactory,
+        )
+        .is_err());
+
+        let plot_gcs_insert_fail = QueryFailExecutor {
+            inner: &exec,
+            needle: "insert into gcs_location",
+            err: SqlError::Internal,
+        };
+        assert!(upsert_plot_location(
+            &plot_gcs_insert_fail,
+            &plot_id,
+            Some(RadrootsPlotLocation {
+                primary: Some("primary".to_string()),
+                city: None,
+                region: None,
+                country: None,
+                gcs: sample_gcs(33.0, 43.0, "sa"),
+            }),
+            &FixedFactory,
+        )
+        .is_err());
+
+        let plot_rel_insert_fail = QueryFailExecutor {
+            inner: &exec,
+            needle: "insert into plot_gcs_location",
+            err: SqlError::Internal,
+        };
+        assert!(upsert_plot_location(
+            &plot_rel_insert_fail,
+            &plot_id,
+            Some(RadrootsPlotLocation {
+                primary: Some("primary".to_string()),
+                city: None,
+                region: None,
+                country: None,
+                gcs: sample_gcs(34.0, 44.0, "sb"),
+            }),
+            &FixedFactory,
+        )
+        .is_err());
+
+        let member_insert_fail = QueryFailExecutor {
+            inner: &exec,
+            needle: "insert into farm_member",
+            err: SqlError::Internal,
+        };
+        assert!(upsert_farm_members(
+            &member_insert_fail,
+            &farm_id,
+            ListSetRole::Members,
+            &members_set
+        )
+        .is_err());
+
+        let claims_insert_fail = QueryFailExecutor {
+            inner: &exec,
+            needle: "insert into farm_member_claim",
+            err: SqlError::Internal,
+        };
+        assert!(
+            upsert_member_claims(&claims_insert_fail, &"n".repeat(64), &member_of_set).is_err()
+        );
+
+        super::failpoints::set_gcs_point_serialize_error();
+        assert!(create_gcs_location(&exec, sample_gcs(35.0, 45.0, "sc"), &FixedFactory).is_err());
+
+        super::failpoints::set_gcs_polygon_serialize_error();
+        assert!(create_gcs_location(&exec, sample_gcs(36.0, 46.0, "sd"), &FixedFactory).is_err());
+
+        assert!(parse_farm_list_set_d_tag("coop:AAAAAAAAAAAAAAAAAAAAAA:members").is_none());
     }
 }
