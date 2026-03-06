@@ -81,6 +81,14 @@ mod tests {
     }
 
     #[test]
+    fn event_content_hash_reports_failpoint_errors() {
+        super::failpoints::set_error();
+        let tags = vec![vec!["d".to_string(), "tag".to_string()]];
+        let err = event_content_hash("content", &tags).expect_err("failpoint");
+        assert!(err.to_string().contains("content_hash"));
+    }
+
+    #[test]
     fn tag_value_finds_and_misses_keys() {
         let tags = vec![
             vec!["p".to_string(), "member".to_string()],

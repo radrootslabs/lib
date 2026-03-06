@@ -9,9 +9,30 @@ use serde_json::{Map, Value};
 
 use crate::error::RadrootsReplicaEventsError;
 
+#[cfg(test)]
+pub(crate) mod failpoints {
+    use core::sync::atomic::{AtomicBool, Ordering};
+
+    static FORCE_ERROR: AtomicBool = AtomicBool::new(false);
+
+    pub(crate) fn set_error() {
+        FORCE_ERROR.store(true, Ordering::SeqCst);
+    }
+
+    pub(crate) fn take_error() -> bool {
+        FORCE_ERROR.swap(false, Ordering::SeqCst)
+    }
+}
+
 pub fn canonical_json_string<T: Serialize>(
     value: &T,
 ) -> Result<String, RadrootsReplicaEventsError> {
+    #[cfg(test)]
+    if failpoints::take_error() {
+        return Err(RadrootsReplicaEventsError::InvalidData(
+            "canonical json serialization failed".to_string(),
+        ));
+    }
     let value = serde_json::to_value(value).map_err(|_| {
         RadrootsReplicaEventsError::InvalidData("canonical json serialization failed".to_string())
     })?;
@@ -73,6 +94,19 @@ mod tests {
     fn canonical_json_string_handles_arrays() {
         let json = canonical_json_string(&serde_json::json!([{"b": 2, "a": 1}])).expect("json");
         assert_eq!(json, r#"[{"a":1,"b":2}]"#);
+    }
+
+    #[test]
+    fn canonical_json_string_handles_scalar_values() {
+        let json = canonical_json_string(&"value").expect("json");
+        assert_eq!(json, r#""value""#);
+    }
+
+    #[test]
+    fn canonical_json_string_failpoint_returns_error() {
+        super::failpoints::set_error();
+        let err = canonical_json_string(&"value").expect_err("failpoint");
+        assert!(err.to_string().contains("canonical json serialization failed"));
     }
 
     struct AlwaysErr;

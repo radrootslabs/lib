@@ -50,12 +50,22 @@ use radroots_sql_core::SqlExecutor;
 use radroots_sql_core::SqliteExecutor;
 use radroots_sql_core::error::SqlError;
 use radroots_types::types::IError;
+use std::panic;
 
 fn unwrap_sql<T>(result: Result<T, IError<SqlError>>, label: &str) -> T {
     match result {
         Ok(value) => value,
         Err(err) => panic!("{label}: {}", err.err),
     }
+}
+
+#[test]
+fn unwrap_sql_panics_on_error() {
+    let result = panic::catch_unwind(|| {
+        let err = IError::from(SqlError::InvalidArgument("bad".to_string()));
+        let _ = unwrap_sql::<()>(Err(err), "unwrap");
+    });
+    assert!(result.is_err());
 }
 
 fn draft_to_event(draft: &RadrootsReplicaEventDraft, index: u32) -> RadrootsNostrEvent {
@@ -1400,12 +1410,17 @@ fn sync_emit_handles_invalid_geojson_and_unknown_profile_type() {
     assert_eq!(bundle.version, RADROOTS_REPLICA_TRANSFER_VERSION);
     assert!(bundle.events.iter().any(|event| event.kind == KIND_FARM));
     assert!(bundle.events.iter().any(|event| event.kind == KIND_PLOT));
-    assert!(
-        bundle
-            .events
-            .iter()
-            .any(|event| event.kind == KIND_LIST_SET_GENERIC)
-    );
+    let mut list_set_seen = false;
+    let mut list_set_missed = false;
+    for event in &bundle.events {
+        if event.kind == KIND_LIST_SET_GENERIC {
+            list_set_seen = true;
+        } else {
+            list_set_missed = true;
+        }
+    }
+    assert!(list_set_seen);
+    assert!(list_set_missed);
     assert!(bundle.events.iter().any(|event| {
         event.kind == KIND_PROFILE
             && event.author == member_pubkey
@@ -1419,13 +1434,13 @@ fn sync_emit_handles_invalid_geojson_and_unknown_profile_type() {
 #[test]
 fn error_conversion_paths_are_exercised() {
     let sql: RadrootsReplicaEventsError = IError::from(SqlError::Internal).into();
-    assert!(matches!(sql, RadrootsReplicaEventsError::Sql(_)));
+    assert!(sql.to_string().contains("replica_sync.sql"));
 
     let encode: RadrootsReplicaEventsError = EventEncodeError::Json.into();
-    assert!(matches!(encode, RadrootsReplicaEventsError::Encode(_)));
+    assert!(encode.to_string().contains("replica_sync.encode"));
 
     let parse_number_err = "x".parse::<u32>().expect_err("parse should fail");
     let parse: RadrootsReplicaEventsError =
         EventParseError::InvalidNumber("k", parse_number_err).into();
-    assert!(matches!(parse, RadrootsReplicaEventsError::Parse(_)));
+    assert!(parse.to_string().contains("replica_sync.parse"));
 }

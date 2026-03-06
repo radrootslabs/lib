@@ -67,3 +67,76 @@ pub fn radroots_replica_sync_status<E: SqlExecutor>(
         pending_count: pending,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::radroots_replica_sync_status;
+    use crate::emit::radroots_replica_sync_all_with_options;
+    use crate::event_state::{event_content_hash, event_state_key, tag_value};
+    use crate::types::RadrootsReplicaFarmSelector;
+    use radroots_replica_db::{farm, migrations, nostr_event_state};
+    use radroots_replica_db_schema::farm::IFarmFields;
+    use radroots_replica_db_schema::nostr_event_state::INostrEventStateFields;
+    use radroots_sql_core::SqliteExecutor;
+
+    #[test]
+    fn sync_status_empty_db_is_zero() {
+        let exec = SqliteExecutor::open_memory().expect("db");
+        migrations::run_all_up(&exec).expect("migrations");
+        let status = radroots_replica_sync_status(&exec).expect("status");
+        assert_eq!(status.expected_count, 0);
+        assert_eq!(status.pending_count, 0);
+    }
+
+    #[test]
+    fn sync_status_tracks_expected_and_pending() {
+        let exec = SqliteExecutor::open_memory().expect("db");
+        migrations::run_all_up(&exec).expect("migrations");
+
+        let farm_row = farm::create(
+            &exec,
+            &IFarmFields {
+                d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
+                pubkey: "f".repeat(64),
+                name: "farm".to_string(),
+                about: None,
+                website: None,
+                picture: None,
+                banner: None,
+                location_primary: None,
+                location_city: None,
+                location_region: None,
+                location_country: None,
+            },
+        )
+        .expect("farm")
+        .result;
+
+        let selector = RadrootsReplicaFarmSelector {
+            id: Some(farm_row.id.clone()),
+            d_tag: None,
+            pubkey: None,
+        };
+        let bundle = radroots_replica_sync_all_with_options(&exec, &selector, None)
+            .expect("bundle");
+        let expected_count = bundle.events.len();
+        let first = bundle.events.first().expect("event");
+        let d_tag = tag_value(&first.tags, "d").unwrap_or("");
+        let key = event_state_key(first.kind, &first.author, d_tag);
+        let content_hash = event_content_hash(&first.content, &first.tags).expect("hash");
+        let fields = INostrEventStateFields {
+            key,
+            kind: first.kind,
+            pubkey: first.author.clone(),
+            d_tag: d_tag.to_string(),
+            last_event_id: format!("{:064x}", 1u64),
+            last_created_at: 1,
+            content_hash,
+        };
+        let _ = nostr_event_state::create(&exec, &fields).expect("state");
+
+        let status = radroots_replica_sync_status(&exec).expect("status");
+        assert_eq!(status.expected_count, expected_count);
+        assert_eq!(status.pending_count, expected_count.saturating_sub(1));
+    }
+}

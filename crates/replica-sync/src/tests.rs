@@ -21,6 +21,7 @@ use radroots_replica_db_schema::plot_tag::IPlotTagFields;
 use radroots_sql_core::SqliteExecutor;
 use radroots_sql_core::error::SqlError;
 use radroots_types::types::IError;
+use std::panic;
 
 fn unwrap_sql<T>(result: Result<T, IError<SqlError>>, label: &str) -> T {
     match result {
@@ -232,4 +233,13 @@ fn sync_all_emits_expected_order() {
             .all(|kind| *kind == KIND_LIST_SET_GENERIC)
     );
     assert_eq!(kinds[8], KIND_LIST_SET_GENERIC);
+}
+
+#[test]
+fn unwrap_sql_panics_on_error() {
+    let result = panic::catch_unwind(|| {
+        let err = IError::from(SqlError::InvalidArgument("bad".to_string()));
+        let _ = unwrap_sql::<()>(Err(err), "unwrap");
+    });
+    assert!(result.is_err());
 }

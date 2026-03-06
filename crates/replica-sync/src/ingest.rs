@@ -1515,6 +1515,22 @@ mod tests {
             ingest_profile_event(&exec, &profile_update).expect("profile update"),
             RadrootsReplicaIngestOutcome::Applied
         );
+        assert_eq!(
+            ingest_profile_event(&exec, &profile_update).expect("profile skip"),
+            RadrootsReplicaIngestOutcome::Skipped
+        );
+        let profile_older = profile_event(
+            8,
+            &profile_pubkey,
+            1,
+            Some(RadrootsProfileType::Individual),
+            "alice-old",
+        );
+        let decision_old = event_state_decision(&exec, &profile_older, "").expect("decision old");
+        assert!(!decision_old.apply);
+        let decision_same =
+            event_state_decision(&exec, &profile_update, "").expect("decision same");
+        assert!(!decision_same.apply);
         let profile_same_time_diff_hash = profile_event(
             12,
             &profile_pubkey,
@@ -1564,6 +1580,10 @@ mod tests {
             ingest_farm_event(&exec, &farm_update, &FixedFactory).expect("farm update"),
             RadrootsReplicaIngestOutcome::Applied
         );
+        assert_eq!(
+            ingest_farm_event(&exec, &farm_update, &FixedFactory).expect("farm skip"),
+            RadrootsReplicaIngestOutcome::Skipped
+        );
 
         let plot_d_tag = "AAAAAAAAAAAAAAAAAAAAAQ";
         let plot = plot_event(
@@ -1606,6 +1626,10 @@ mod tests {
             ingest_plot_event(&exec, &plot_update, &FixedFactory).expect("plot update"),
             RadrootsReplicaIngestOutcome::Applied
         );
+        assert_eq!(
+            ingest_plot_event(&exec, &plot_update, &FixedFactory).expect("plot skip"),
+            RadrootsReplicaIngestOutcome::Skipped
+        );
 
         let members = farm_list_sets::farm_members_list_set(farm_d_tag, vec!["m".repeat(64)])
             .expect("members");
@@ -1640,6 +1664,10 @@ mod tests {
             assert_eq!(
                 ingest_list_set_event(&exec, &event).expect("list set"),
                 RadrootsReplicaIngestOutcome::Applied
+            );
+            assert_eq!(
+                ingest_list_set_event(&exec, &event).expect("list set skip"),
+                RadrootsReplicaIngestOutcome::Skipped
             );
         }
 
@@ -1723,6 +1751,49 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn upsert_location_none_paths_are_ok() {
+        let exec = SqliteExecutor::open_memory().expect("db");
+        migrations::run_all_up(&exec).expect("migrations");
+
+        let farm_row = farm::create(
+            &exec,
+            &IFarmFields {
+                d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
+                pubkey: "f".repeat(64),
+                name: "farm-none".to_string(),
+                about: None,
+                website: None,
+                picture: None,
+                banner: None,
+                location_primary: None,
+                location_city: None,
+                location_region: None,
+                location_country: None,
+            },
+        )
+        .expect("farm")
+        .result;
+        let plot_row = plot::create(
+            &exec,
+            &IPlotFields {
+                d_tag: "AAAAAAAAAAAAAAAAAAAAAQ".to_string(),
+                farm_id: farm_row.id.clone(),
+                name: "plot-none".to_string(),
+                about: None,
+                location_primary: None,
+                location_city: None,
+                location_region: None,
+                location_country: None,
+            },
+        )
+        .expect("plot")
+        .result;
+
+        let _ = upsert_farm_location(&exec, &farm_row.id, None, &FixedFactory).expect("farm none");
+        let _ = upsert_plot_location(&exec, &plot_row.id, None, &FixedFactory).expect("plot none");
     }
 
     #[test]

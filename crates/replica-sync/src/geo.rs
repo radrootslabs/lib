@@ -103,4 +103,14 @@ mod tests {
             assert!(point[0] >= -180.0);
         }
     }
+
+    #[test]
+    fn polygon_respects_steps_when_above_minimum() {
+        let polygon = geojson_polygon_circle_wgs84(0.0, 10.0, 10.0, 5);
+        assert_eq!(polygon.coordinates[0].len(), 6);
+        for point in &polygon.coordinates[0] {
+            assert!(point[0] <= 180.0);
+            assert!(point[0] >= -180.0);
+        }
+    }
 }
