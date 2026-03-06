@@ -11,11 +11,11 @@ use serde_json::Value;
 
 const TABLE_NAME: &str = "farm_member";
 
-pub fn create<E: SqlExecutor>(
-    exec: &E,
+pub fn create(
+    exec: &dyn SqlExecutor,
     opts: &IFarmMemberCreate,
 ) -> Result<IFarmMemberCreateResolve, IError<SqlError>> {
-    let field_map = utils::to_object_map(opts)?;
+    let field_map = utils::to_object_map(opts).expect("serialize object map");
     let id = utils::uuidv4();
     let now = utils::time_created_on();
     let meta: [(&str, Value); 3] = [
@@ -24,15 +24,15 @@ pub fn create<E: SqlExecutor>(
         ("updated_at", Value::from(now.clone())),
     ];
     let (sql, bind_values) = utils::build_insert_query_with_meta(TABLE_NAME, &meta, &field_map);
-    let params_json = utils::to_params_json(bind_values)?;
+    let params_json = utils::to_params_json(bind_values).expect("serialize bind params");
     let _ = exec.exec(&sql, &params_json)?;
     let on = FarmMemberQueryBindValues::Id { id: id.clone() };
     let result = find_one_by_on(exec, &on)?.ok_or(IError::from(SqlError::NotFound(id.clone())))?;
     Ok(IResult { result })
 }
 
-pub fn find_one<E: SqlExecutor>(
-    exec: &E,
+pub fn find_one(
+    exec: &dyn SqlExecutor,
     opts: &IFarmMemberFindOne,
 ) -> Result<IFarmMemberFindOneResolve, IError<SqlError>> {
     let result = match opts {
@@ -41,39 +41,40 @@ pub fn find_one<E: SqlExecutor>(
     Ok(IResult { result })
 }
 
-pub fn find_many<E: SqlExecutor>(
-    exec: &E,
+pub fn find_many(
+    exec: &dyn SqlExecutor,
     opts: &IFarmMemberFindMany,
 ) -> Result<IFarmMemberFindManyResolve, IError<SqlError>> {
     let results = find_many_filter(exec, &opts.filter)?;
     Ok(IResultList { results })
 }
 
-fn find_many_filter<E: SqlExecutor>(
-    exec: &E,
+fn find_many_filter(
+    exec: &dyn SqlExecutor,
     filter: &Option<IFarmMemberFieldsFilter>,
 ) -> Result<Vec<FarmMember>, IError<SqlError>> {
     let (sql, bind_values) = utils::build_select_query_with_meta(TABLE_NAME, filter.as_ref());
-    let params_json = utils::to_params_json(bind_values)?;
+    let params_json = utils::to_params_json(bind_values).expect("serialize bind params");
     let json = exec.query_raw(&sql, &params_json)?;
     let rows: Vec<FarmMember> = utils::parse_json(&json)?;
     Ok(rows)
 }
 
-fn find_one_by_on<E: SqlExecutor>(
-    exec: &E,
+fn find_one_by_on(
+    exec: &dyn SqlExecutor,
     on: &FarmMemberQueryBindValues,
 ) -> Result<Option<FarmMember>, IError<SqlError>> {
     let (column, value) = on.to_filter_param();
     let sql = format!("SELECT * FROM {TABLE_NAME} WHERE {column} = ? LIMIT 1;");
-    let params_json = utils::to_params_json(vec![value])?;
+    let params_json = utils::to_params_json(vec![value]).expect("serialize bind params");
     let json = exec.query_raw(&sql, &params_json)?;
     let mut rows: Vec<FarmMember> = utils::parse_json(&json)?;
     Ok(rows.pop())
 }
 
-fn select_by_id<E: SqlExecutor>(exec: &E, id: &str) -> Result<FarmMember, IError<SqlError>> {
-    let params_json = utils::to_params_json(vec![Value::from(id.to_owned())])?;
+fn select_by_id(exec: &dyn SqlExecutor, id: &str) -> Result<FarmMember, IError<SqlError>> {
+    let params_json =
+        utils::to_params_json(vec![Value::from(id.to_owned())]).expect("serialize bind params");
     let sql = format!("SELECT * FROM {TABLE_NAME} WHERE id = ?;");
     let json = exec.query_raw(&sql, &params_json)?;
     let mut rows: Vec<FarmMember> = utils::parse_json(&json)?;
@@ -81,11 +82,12 @@ fn select_by_id<E: SqlExecutor>(exec: &E, id: &str) -> Result<FarmMember, IError
         .ok_or(IError::from(SqlError::NotFound(id.to_owned())))
 }
 
-pub fn update<E: SqlExecutor>(
-    exec: &E,
+pub fn update(
+    exec: &dyn SqlExecutor,
     opts: &IFarmMemberUpdate,
 ) -> Result<IFarmMemberUpdateResolve, IError<SqlError>> {
-    let mut updates = utils::to_partial_object_map(&opts.fields)?;
+    let mut updates =
+        utils::to_partial_object_map(&opts.fields).expect("serialize partial object map");
     if updates.is_empty() {
         return Err(IError::from(SqlError::InvalidArgument(String::from(
             "no fields to update",
@@ -114,14 +116,14 @@ pub fn update<E: SqlExecutor>(
         "UPDATE {TABLE_NAME} SET {} WHERE id = ?;",
         set_parts.join(", ")
     );
-    let params_json = utils::to_params_json(bind_values)?;
+    let params_json = utils::to_params_json(bind_values).expect("serialize bind params");
     let _ = exec.exec(&sql, &params_json)?;
     let updated = select_by_id(exec, &id_for_lookup)?;
     Ok(IResult { result: updated })
 }
 
-pub fn delete<E: SqlExecutor>(
-    exec: &E,
+pub fn delete(
+    exec: &dyn SqlExecutor,
     opts: &IFarmMemberDelete,
 ) -> Result<IFarmMemberDeleteResolve, IError<SqlError>> {
     let id_for_lookup = match opts {
@@ -134,7 +136,8 @@ pub fn delete<E: SqlExecutor>(
             }
         },
     };
-    let params_json = utils::to_params_json(vec![Value::from(id_for_lookup.clone())])?;
+    let params_json = utils::to_params_json(vec![Value::from(id_for_lookup.clone())])
+        .expect("serialize bind params");
     let sql = format!("DELETE FROM {TABLE_NAME} WHERE id = ?;");
     let outcome = exec.exec(&sql, &params_json)?;
     if outcome.changes == 0 {

@@ -26,13 +26,11 @@ pub struct ReplicaDbExportManifestRs {
     pub table_counts: Vec<TableCount>,
 }
 
-pub fn export_manifest<E: SqlExecutor>(
-    executor: &E,
-) -> Result<ReplicaDbExportManifestRs, SqlError> {
+pub fn export_manifest(executor: &dyn SqlExecutor) -> Result<ReplicaDbExportManifestRs, SqlError> {
     let schema = load_schema(executor)?;
     let migrations = export_migrations();
     let table_counts = load_table_counts(executor, &schema)?;
-    let schema_hash = schema_hash(&schema)?;
+    let schema_hash = schema_hash(&schema);
     Ok(ReplicaDbExportManifestRs {
         export_version: REPLICA_DB_EXPORT_VERSION.to_string(),
         replica_db_version: REPLICA_DB_VERSION.to_string(),
@@ -44,8 +42,8 @@ pub fn export_manifest<E: SqlExecutor>(
     })
 }
 
-fn load_table_counts<E: SqlExecutor>(
-    executor: &E,
+fn load_table_counts(
+    executor: &dyn SqlExecutor,
     schema: &[SchemaEntry],
 ) -> Result<Vec<TableCount>, SqlError> {
     #[derive(Deserialize)]
@@ -69,17 +67,34 @@ fn load_table_counts<E: SqlExecutor>(
     Ok(counts)
 }
 
-fn schema_hash(schema: &[SchemaEntry]) -> Result<String, SqlError> {
-    let json = serde_json::to_string(schema).map_err(SqlError::from)?;
+fn schema_hash(schema: &[SchemaEntry]) -> String {
     let mut hasher = Sha256::new();
-    hasher.update(json.as_bytes());
-    Ok(hex::encode(hasher.finalize()))
+    for entry in schema {
+        hasher.update(entry.object_type.as_bytes());
+        hasher.update([0]);
+        hasher.update(entry.name.as_bytes());
+        hasher.update([0]);
+        if let Some(table_name) = &entry.table_name {
+            hasher.update(table_name.as_bytes());
+        }
+        hasher.update([0]);
+        if let Some(sql) = &entry.sql {
+            hasher.update(sql.as_bytes());
+        }
+        hasher.update([255]);
+    }
+    hex::encode(hasher.finalize())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use radroots_sql_core::ExecOutcome;
+
+    fn assert_sql_error_code<T: core::fmt::Debug>(result: Result<T, SqlError>, code: &str) {
+        let err = result.unwrap_err();
+        assert_eq!(err.code(), code);
+    }
 
     struct MockExecutor {
         query_rules: Vec<(String, String)>,
@@ -138,8 +153,7 @@ mod tests {
                 "select type, name, tbl_name as table_name, sql from sqlite_master",
             )),
         );
-        let err = export_manifest(&executor).expect_err("export should fail");
-        assert!(matches!(err, SqlError::InvalidQuery(_)));
+        assert_sql_error_code(export_manifest(&executor), "ERR_INVALID_QUERY");
     }
 
     #[test]
@@ -160,8 +174,36 @@ mod tests {
             )],
             Some(String::from("select count(1) as count from \"tb_a\"")),
         );
-        let err = export_manifest(&executor).expect_err("export should fail");
-        assert!(matches!(err, SqlError::InvalidQuery(_)));
+        assert_sql_error_code(export_manifest(&executor), "ERR_INVALID_QUERY");
+    }
+
+    #[test]
+    fn export_manifest_propagates_table_count_parse_errors() {
+        let schema_rows = serde_json::json!([
+            {
+                "type": "table",
+                "name": "tb_a",
+                "table_name": "tb_a",
+                "sql": "CREATE TABLE tb_a (id TEXT);"
+            }
+        ])
+        .to_string();
+        let executor = MockExecutor::new(
+            vec![
+                (
+                    String::from(
+                        "select type, name, tbl_name as table_name, sql from sqlite_master",
+                    ),
+                    schema_rows,
+                ),
+                (
+                    String::from("select count(1) as count from \"tb_a\""),
+                    String::from("{"),
+                ),
+            ],
+            None,
+        );
+        assert_sql_error_code(export_manifest(&executor), "ERR_SERIALIZATION");
     }
 
     #[test]
@@ -178,10 +220,15 @@ mod tests {
         let executor = MockExecutor::new(
             vec![
                 (
-                    String::from("select type, name, tbl_name as table_name, sql from sqlite_master"),
+                    String::from(
+                        "select type, name, tbl_name as table_name, sql from sqlite_master",
+                    ),
                     schema_rows,
                 ),
-                (String::from("select count(1) as count from \"tb_a\""), String::from("[]")),
+                (
+                    String::from("select count(1) as count from \"tb_a\""),
+                    String::from("[]"),
+                ),
             ],
             None,
         );
@@ -189,6 +236,24 @@ mod tests {
         assert_eq!(manifest.table_counts.len(), 1);
         assert_eq!(manifest.table_counts[0].name, "tb_a");
         assert_eq!(manifest.table_counts[0].row_count, 0);
+    }
+
+    #[test]
+    fn schema_hash_handles_optional_fields() {
+        let with_all = SchemaEntry {
+            object_type: String::from("table"),
+            name: String::from("tb_a"),
+            table_name: Some(String::from("tb_a")),
+            sql: Some(String::from("CREATE TABLE tb_a (id TEXT);")),
+        };
+        let without_optional = SchemaEntry {
+            object_type: String::from("index"),
+            name: String::from("ix_a"),
+            table_name: None,
+            sql: None,
+        };
+        let hash = schema_hash(&[with_all, without_optional]);
+        assert_eq!(hash.len(), 64);
     }
 
     #[test]
@@ -207,13 +272,12 @@ mod tests {
 
         let matched = executor.query_raw("select 1", "[]").expect("matched query");
         assert_eq!(matched, "[{\"count\":1}]");
-        let fallback = executor.query_raw("select 2", "[]").expect("fallback query");
+        let fallback = executor
+            .query_raw("select 2", "[]")
+            .expect("fallback query");
         assert_eq!(fallback, "[]");
 
         let failing = MockExecutor::new(Vec::new(), Some(String::from("select fail")));
-        let err = failing
-            .query_raw("select fail", "[]")
-            .expect_err("query should fail");
-        assert!(matches!(err, SqlError::InvalidQuery(_)));
+        assert_sql_error_code(failing.query_raw("select fail", "[]"), "ERR_INVALID_QUERY");
     }
 }

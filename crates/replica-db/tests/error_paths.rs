@@ -32,11 +32,11 @@ use radroots_replica_db_schema::nostr_event_state::{
     INostrEventStateCreate, INostrEventStateDelete, INostrEventStateFindMany,
     INostrEventStateFindOne, INostrEventStateUpdate,
 };
-use radroots_replica_db_schema::nostr_profile_relay::INostrProfileRelayRelation;
 use radroots_replica_db_schema::nostr_profile::{
     INostrProfileCreate, INostrProfileDelete, INostrProfileFindMany, INostrProfileFindOne,
     INostrProfileUpdate,
 };
+use radroots_replica_db_schema::nostr_profile_relay::INostrProfileRelayRelation;
 use radroots_replica_db_schema::nostr_relay::{
     INostrRelayCreate, INostrRelayDelete, INostrRelayFindMany, INostrRelayFindOne,
     INostrRelayUpdate,

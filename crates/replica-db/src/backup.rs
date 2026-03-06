@@ -38,7 +38,7 @@ pub struct DatabaseBackup {
     pub data: Vec<TableData>,
 }
 
-pub fn export_database_backup<E: SqlExecutor>(executor: &E) -> Result<DatabaseBackup, SqlError> {
+pub fn export_database_backup(executor: &dyn SqlExecutor) -> Result<DatabaseBackup, SqlError> {
     let schema = load_schema(executor)?;
     let data = read_tables_for_backup(executor, &schema)?;
     let migrations = export_migrations();
@@ -51,13 +51,13 @@ pub fn export_database_backup<E: SqlExecutor>(executor: &E) -> Result<DatabaseBa
     })
 }
 
-pub fn export_database_backup_json<E: SqlExecutor>(executor: &E) -> Result<String, SqlError> {
+pub fn export_database_backup_json(executor: &dyn SqlExecutor) -> Result<String, SqlError> {
     let backup = export_database_backup(executor)?;
     serde_json::to_string(&backup).map_err(SqlError::from)
 }
 
-pub fn restore_database_backup<E: SqlExecutor>(
-    executor: &E,
+pub fn restore_database_backup(
+    executor: &dyn SqlExecutor,
     backup: &DatabaseBackup,
 ) -> Result<(), SqlError> {
     validate_backup_version(backup)?;
@@ -84,15 +84,15 @@ pub fn restore_database_backup<E: SqlExecutor>(
     }
 }
 
-pub fn restore_database_backup_json<E: SqlExecutor>(
-    executor: &E,
+pub fn restore_database_backup_json(
+    executor: &dyn SqlExecutor,
     backup_json: &str,
 ) -> Result<(), SqlError> {
     let backup: DatabaseBackup = serde_json::from_str(backup_json).map_err(SqlError::from)?;
     restore_database_backup(executor, &backup)
 }
 
-fn drop_existing_objects<E: SqlExecutor>(executor: &E) -> Result<(), SqlError> {
+fn drop_existing_objects(executor: &dyn SqlExecutor) -> Result<(), SqlError> {
     #[derive(Deserialize)]
     struct MasterRow {
         #[serde(rename = "type")]
@@ -129,8 +129,8 @@ fn drop_existing_objects<E: SqlExecutor>(executor: &E) -> Result<(), SqlError> {
     Ok(())
 }
 
-fn create_schema_from_backup<E: SqlExecutor>(
-    executor: &E,
+fn create_schema_from_backup(
+    executor: &dyn SqlExecutor,
     schema: &[SchemaEntry],
 ) -> Result<(), SqlError> {
     for entry in schema.iter().filter(|s| s.object_type == "table") {
@@ -146,8 +146,8 @@ fn create_schema_from_backup<E: SqlExecutor>(
     Ok(())
 }
 
-fn insert_rows_from_backup<E: SqlExecutor>(
-    executor: &E,
+fn insert_rows_from_backup(
+    executor: &dyn SqlExecutor,
     backup: &DatabaseBackup,
 ) -> Result<(), SqlError> {
     let mut row_sources: HashMap<&str, &Vec<Map<String, Value>>> = HashMap::new();
@@ -166,8 +166,8 @@ fn insert_rows_from_backup<E: SqlExecutor>(
     Ok(())
 }
 
-fn insert_row<E: SqlExecutor>(
-    executor: &E,
+fn insert_row(
+    executor: &dyn SqlExecutor,
     table: &str,
     row: &Map<String, Value>,
 ) -> Result<(), SqlError> {
@@ -197,12 +197,12 @@ fn insert_row<E: SqlExecutor>(
     );
 
     let binds: Vec<Value> = cols.values().map(|v| utils::to_db_bind_value(*v)).collect();
-    let params_json = serde_json::to_string(&binds).map_err(SqlError::from)?;
+    let params_json = Value::Array(binds).to_string();
     executor.exec(&sql, &params_json)?;
     Ok(())
 }
 
-pub(crate) fn load_schema<E: SqlExecutor>(executor: &E) -> Result<Vec<SchemaEntry>, SqlError> {
+pub(crate) fn load_schema(executor: &dyn SqlExecutor) -> Result<Vec<SchemaEntry>, SqlError> {
     let query = "select type, name, tbl_name as table_name, sql from sqlite_master where name not like 'sqlite_%' order by type, name";
     let json = executor.query_raw(query, "[]")?;
     #[derive(Deserialize)]
@@ -240,8 +240,8 @@ pub(crate) fn export_migrations() -> Vec<MigrationBackup> {
         .collect()
 }
 
-fn read_tables_for_backup<E: SqlExecutor>(
-    executor: &E,
+fn read_tables_for_backup(
+    executor: &dyn SqlExecutor,
     schema: &[SchemaEntry],
 ) -> Result<Vec<TableData>, SqlError> {
     let mut data = Vec::new();
@@ -293,9 +293,17 @@ mod tests {
     use std::sync::Mutex;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
+    fn assert_sql_error_code<T: core::fmt::Debug>(result: Result<T, SqlError>, code: &str) {
+        let err = result.unwrap_err();
+        assert_eq!(err.code(), code);
+    }
+
     struct MockExecutor {
         query_rules: Vec<(String, String)>,
         fail_exec_contains: Option<String>,
+        fail_query_contains: Option<String>,
+        fail_begin: bool,
+        fail_commit: bool,
         exec_calls: Mutex<Vec<String>>,
         begin_calls: AtomicUsize,
         commit_calls: AtomicUsize,
@@ -307,11 +315,29 @@ mod tests {
             Self {
                 query_rules,
                 fail_exec_contains,
+                fail_query_contains: None,
+                fail_begin: false,
+                fail_commit: false,
                 exec_calls: Mutex::new(Vec::new()),
                 begin_calls: AtomicUsize::new(0),
                 commit_calls: AtomicUsize::new(0),
                 rollback_calls: AtomicUsize::new(0),
             }
+        }
+
+        fn with_query_failure(mut self, needle: &str) -> Self {
+            self.fail_query_contains = Some(needle.to_string());
+            self
+        }
+
+        fn with_begin_failure(mut self) -> Self {
+            self.fail_begin = true;
+            self
+        }
+
+        fn with_commit_failure(mut self) -> Self {
+            self.fail_commit = true;
+            self
         }
 
         fn exec_calls(&self) -> Vec<String> {
@@ -349,6 +375,11 @@ mod tests {
         }
 
         fn query_raw(&self, sql: &str, _params_json: &str) -> Result<String, SqlError> {
+            if let Some(needle) = &self.fail_query_contains {
+                if sql.contains(needle) {
+                    return Err(SqlError::InvalidQuery(String::from("forced query failure")));
+                }
+            }
             for (needle, response) in &self.query_rules {
                 if sql.contains(needle) {
                     return Ok(response.clone());
@@ -359,11 +390,19 @@ mod tests {
 
         fn begin(&self) -> Result<(), SqlError> {
             self.begin_calls.fetch_add(1, Ordering::SeqCst);
+            if self.fail_begin {
+                return Err(SqlError::InvalidQuery(String::from("forced begin failure")));
+            }
             Ok(())
         }
 
         fn commit(&self) -> Result<(), SqlError> {
             self.commit_calls.fetch_add(1, Ordering::SeqCst);
+            if self.fail_commit {
+                return Err(SqlError::InvalidQuery(String::from(
+                    "forced commit failure",
+                )));
+            }
             Ok(())
         }
 
@@ -405,8 +444,10 @@ mod tests {
             data: Vec::new(),
         };
 
-        let err = restore_database_backup(&executor, &backup).expect_err("restore should fail");
-        assert!(matches!(err, SqlError::InvalidQuery(_)));
+        assert_sql_error_code(
+            restore_database_backup(&executor, &backup),
+            "ERR_INVALID_QUERY",
+        );
         assert_eq!(executor.begin_count(), 1);
         assert_eq!(executor.commit_count(), 0);
         assert_eq!(executor.rollback_count(), 1);
@@ -580,14 +621,30 @@ mod tests {
     }
 
     #[test]
+    fn load_schema_rejects_invalid_json() {
+        let executor = MockExecutor::new(
+            vec![(
+                String::from("select type, name, tbl_name as table_name, sql from sqlite_master"),
+                String::from("{"),
+            )],
+            None,
+        );
+        assert_sql_error_code(load_schema(&executor), "ERR_SERIALIZATION");
+    }
+
+    #[test]
     fn validate_backup_version_rejects_invalid_versions() {
         let wrong_format = backup_with_versions("0.0.1", REPLICA_DB_VERSION);
-        let err = validate_backup_version(&wrong_format).expect_err("format version must fail");
-        assert!(matches!(err, SqlError::InvalidArgument(_)));
+        assert_sql_error_code(
+            validate_backup_version(&wrong_format),
+            "ERR_INVALID_ARGUMENT",
+        );
 
         let wrong_db_version = backup_with_versions(DATABASE_BACKUP_VERSION, "0.0.0");
-        let err = validate_backup_version(&wrong_db_version).expect_err("db version must fail");
-        assert!(matches!(err, SqlError::InvalidArgument(_)));
+        assert_sql_error_code(
+            validate_backup_version(&wrong_db_version),
+            "ERR_INVALID_ARGUMENT",
+        );
     }
 
     #[test]
@@ -620,8 +677,317 @@ mod tests {
     #[test]
     fn restore_database_backup_json_rejects_invalid_json() {
         let executor = MockExecutor::new(Vec::new(), None);
-        let err = restore_database_backup_json(&executor, "{")
-            .expect_err("invalid backup json should fail");
-        assert!(matches!(err, SqlError::SerializationError(_)));
+        assert_sql_error_code(
+            restore_database_backup_json(&executor, "{"),
+            "ERR_SERIALIZATION",
+        );
+    }
+
+    #[test]
+    fn restore_database_backup_json_accepts_valid_json() {
+        let executor = MockExecutor::new(
+            vec![(
+                String::from("select type, name from sqlite_master"),
+                String::from("[]"),
+            )],
+            None,
+        );
+        let backup = backup_with_versions(DATABASE_BACKUP_VERSION, REPLICA_DB_VERSION);
+        let backup_json = serde_json::to_string(&backup).expect("serialize backup");
+
+        restore_database_backup_json(&executor, &backup_json).expect("restore should succeed");
+        assert_eq!(executor.begin_count(), 1);
+        assert_eq!(executor.commit_count(), 1);
+        assert_eq!(executor.rollback_count(), 0);
+    }
+
+    #[test]
+    fn export_database_backup_propagates_schema_query_errors() {
+        let executor = MockExecutor::new(Vec::new(), None).with_query_failure(
+            "select type, name, tbl_name as table_name, sql from sqlite_master",
+        );
+        assert_sql_error_code(export_database_backup(&executor), "ERR_INVALID_QUERY");
+    }
+
+    #[test]
+    fn export_database_backup_propagates_table_query_errors() {
+        let schema_rows = serde_json::json!([
+            {
+                "type": "table",
+                "name": "tb_a",
+                "table_name": "tb_a",
+                "sql": "CREATE TABLE tb_a (id TEXT);"
+            }
+        ])
+        .to_string();
+        let executor = MockExecutor::new(
+            vec![(
+                String::from("select type, name, tbl_name as table_name, sql from sqlite_master"),
+                schema_rows,
+            )],
+            None,
+        )
+        .with_query_failure("SELECT * FROM \"tb_a\";");
+        assert_sql_error_code(export_database_backup(&executor), "ERR_INVALID_QUERY");
+    }
+
+    #[test]
+    fn export_database_backup_json_propagates_export_errors() {
+        let executor = MockExecutor::new(Vec::new(), None).with_query_failure(
+            "select type, name, tbl_name as table_name, sql from sqlite_master",
+        );
+        assert_sql_error_code(export_database_backup_json(&executor), "ERR_INVALID_QUERY");
+    }
+
+    #[test]
+    fn export_database_backup_succeeds_with_empty_schema() {
+        let executor = MockExecutor::new(
+            vec![(
+                String::from("select type, name, tbl_name as table_name, sql from sqlite_master"),
+                String::from("[]"),
+            )],
+            None,
+        );
+        let backup = export_database_backup(&executor).expect("backup success");
+        assert!(backup.schema.is_empty());
+        assert!(backup.data.is_empty());
+    }
+
+    #[test]
+    fn export_database_backup_json_succeeds_with_empty_schema() {
+        let executor = MockExecutor::new(
+            vec![(
+                String::from("select type, name, tbl_name as table_name, sql from sqlite_master"),
+                String::from("[]"),
+            )],
+            None,
+        );
+        let backup_json = export_database_backup_json(&executor).expect("backup json success");
+        assert!(backup_json.contains("\"schema\":[]"));
+    }
+
+    #[test]
+    fn drop_existing_objects_rejects_invalid_master_json() {
+        let executor = MockExecutor::new(
+            vec![(
+                String::from("select type, name from sqlite_master"),
+                String::from("{"),
+            )],
+            None,
+        );
+        assert_sql_error_code(drop_existing_objects(&executor), "ERR_SERIALIZATION");
+    }
+
+    #[test]
+    fn drop_existing_objects_propagates_drop_exec_errors() {
+        let master_rows = serde_json::json!([{ "type": "table", "name": "tb_a" }]).to_string();
+        let executor = MockExecutor::new(
+            vec![(
+                String::from("select type, name from sqlite_master"),
+                master_rows,
+            )],
+            Some(String::from("DROP TABLE IF EXISTS")),
+        );
+        assert_sql_error_code(drop_existing_objects(&executor), "ERR_INVALID_QUERY");
+    }
+
+    #[test]
+    fn create_schema_from_backup_propagates_non_table_exec_errors() {
+        let executor = MockExecutor::new(Vec::new(), Some(String::from("CREATE VIEW")));
+        let schema = vec![SchemaEntry {
+            object_type: String::from("view"),
+            name: String::from("vw_a"),
+            table_name: Some(String::from("vw_a")),
+            sql: Some(String::from("CREATE VIEW vw_a AS SELECT 1;")),
+        }];
+        assert_sql_error_code(
+            create_schema_from_backup(&executor, &schema),
+            "ERR_INVALID_QUERY",
+        );
+    }
+
+    #[test]
+    fn read_tables_for_backup_propagates_query_errors() {
+        let executor =
+            MockExecutor::new(Vec::new(), None).with_query_failure("SELECT * FROM \"tb_a\";");
+        let schema = vec![SchemaEntry {
+            object_type: String::from("table"),
+            name: String::from("tb_a"),
+            table_name: Some(String::from("tb_a")),
+            sql: Some(String::from("CREATE TABLE tb_a (id TEXT);")),
+        }];
+        assert_sql_error_code(
+            read_tables_for_backup(&executor, &schema),
+            "ERR_INVALID_QUERY",
+        );
+    }
+
+    #[test]
+    fn read_tables_for_backup_propagates_parse_errors() {
+        let executor = MockExecutor::new(
+            vec![(String::from("SELECT * FROM \"tb_a\";"), String::from("{"))],
+            None,
+        );
+        let schema = vec![SchemaEntry {
+            object_type: String::from("table"),
+            name: String::from("tb_a"),
+            table_name: Some(String::from("tb_a")),
+            sql: Some(String::from("CREATE TABLE tb_a (id TEXT);")),
+        }];
+        assert_sql_error_code(
+            read_tables_for_backup(&executor, &schema),
+            "ERR_SERIALIZATION",
+        );
+    }
+
+    #[test]
+    fn restore_database_backup_rejects_invalid_versions_before_transaction() {
+        let executor = MockExecutor::new(Vec::new(), None);
+        let backup = backup_with_versions("0.0.1", REPLICA_DB_VERSION);
+        assert_sql_error_code(
+            restore_database_backup(&executor, &backup),
+            "ERR_INVALID_ARGUMENT",
+        );
+        assert_eq!(executor.begin_count(), 0);
+    }
+
+    #[test]
+    fn restore_database_backup_fails_when_foreign_keys_disable_fails() {
+        let executor = MockExecutor::new(
+            vec![(
+                String::from("select type, name from sqlite_master"),
+                String::from("[]"),
+            )],
+            Some(String::from("PRAGMA foreign_keys = OFF;")),
+        );
+        let backup = backup_with_versions(DATABASE_BACKUP_VERSION, REPLICA_DB_VERSION);
+        assert_sql_error_code(
+            restore_database_backup(&executor, &backup),
+            "ERR_INVALID_QUERY",
+        );
+    }
+
+    #[test]
+    fn restore_database_backup_fails_when_begin_fails() {
+        let executor = MockExecutor::new(
+            vec![(
+                String::from("select type, name from sqlite_master"),
+                String::from("[]"),
+            )],
+            None,
+        )
+        .with_begin_failure();
+        let backup = backup_with_versions(DATABASE_BACKUP_VERSION, REPLICA_DB_VERSION);
+        assert_sql_error_code(
+            restore_database_backup(&executor, &backup),
+            "ERR_INVALID_QUERY",
+        );
+    }
+
+    #[test]
+    fn restore_database_backup_fails_when_drop_query_fails() {
+        let executor = MockExecutor::new(Vec::new(), None)
+            .with_query_failure("select type, name from sqlite_master");
+        let backup = backup_with_versions(DATABASE_BACKUP_VERSION, REPLICA_DB_VERSION);
+        assert_sql_error_code(
+            restore_database_backup(&executor, &backup),
+            "ERR_INVALID_QUERY",
+        );
+    }
+
+    #[test]
+    fn restore_database_backup_fails_when_create_schema_fails() {
+        let executor = MockExecutor::new(
+            vec![(
+                String::from("select type, name from sqlite_master"),
+                String::from("[]"),
+            )],
+            Some(String::from("CREATE TABLE tb_a")),
+        );
+        let backup = DatabaseBackup {
+            format_version: DATABASE_BACKUP_VERSION.to_string(),
+            replica_db_version: REPLICA_DB_VERSION.to_string(),
+            schema: vec![SchemaEntry {
+                object_type: String::from("table"),
+                name: String::from("tb_a"),
+                table_name: Some(String::from("tb_a")),
+                sql: Some(String::from("CREATE TABLE tb_a (id TEXT);")),
+            }],
+            migrations: Vec::new(),
+            data: Vec::new(),
+        };
+
+        assert_sql_error_code(
+            restore_database_backup(&executor, &backup),
+            "ERR_INVALID_QUERY",
+        );
+        assert_eq!(executor.begin_count(), 1);
+        assert_eq!(executor.commit_count(), 0);
+        assert_eq!(executor.rollback_count(), 1);
+    }
+
+    #[test]
+    fn restore_database_backup_fails_when_insert_rows_fail() {
+        let executor = MockExecutor::new(
+            vec![(
+                String::from("select type, name from sqlite_master"),
+                String::from("[]"),
+            )],
+            Some(String::from("INSERT INTO \"tb_a\"")),
+        );
+        let mut row = Map::new();
+        row.insert(String::from("id"), Value::from("1"));
+        let backup = DatabaseBackup {
+            format_version: DATABASE_BACKUP_VERSION.to_string(),
+            replica_db_version: REPLICA_DB_VERSION.to_string(),
+            schema: vec![SchemaEntry {
+                object_type: String::from("table"),
+                name: String::from("tb_a"),
+                table_name: Some(String::from("tb_a")),
+                sql: Some(String::from("CREATE TABLE tb_a (id TEXT);")),
+            }],
+            migrations: Vec::new(),
+            data: vec![TableData {
+                name: String::from("tb_a"),
+                rows: vec![row],
+            }],
+        };
+        assert_sql_error_code(
+            restore_database_backup(&executor, &backup),
+            "ERR_INVALID_QUERY",
+        );
+    }
+
+    #[test]
+    fn restore_database_backup_fails_when_commit_fails() {
+        let executor = MockExecutor::new(
+            vec![(
+                String::from("select type, name from sqlite_master"),
+                String::from("[]"),
+            )],
+            None,
+        )
+        .with_commit_failure();
+        let backup = backup_with_versions(DATABASE_BACKUP_VERSION, REPLICA_DB_VERSION);
+        assert_sql_error_code(
+            restore_database_backup(&executor, &backup),
+            "ERR_INVALID_QUERY",
+        );
+    }
+
+    #[test]
+    fn restore_database_backup_fails_when_foreign_keys_enable_fails_after_commit() {
+        let executor = MockExecutor::new(
+            vec![(
+                String::from("select type, name from sqlite_master"),
+                String::from("[]"),
+            )],
+            Some(String::from("PRAGMA foreign_keys = ON;")),
+        );
+        let backup = backup_with_versions(DATABASE_BACKUP_VERSION, REPLICA_DB_VERSION);
+        assert_sql_error_code(
+            restore_database_backup(&executor, &backup),
+            "ERR_INVALID_QUERY",
+        );
     }
 }

@@ -8,8 +8,8 @@ use serde_json::Value;
 
 const TABLE_NAME: &str = "nostr_profile_relay";
 
-pub fn set<E: SqlExecutor>(
-    exec: &E,
+pub fn set(
+    exec: &dyn SqlExecutor,
     opts: &INostrProfileRelayRelation,
 ) -> Result<INostrProfileRelayResolve, IError<SqlError>> {
     let mut query_vals: Vec<Value> = Vec::with_capacity(2);
@@ -21,13 +21,13 @@ pub fn set<E: SqlExecutor>(
         "INSERT INTO {} (tb_pr, tb_rl) VALUES ((SELECT id FROM nostr_profile WHERE {} = ?), (SELECT id FROM nostr_relay WHERE {} = ?));",
         TABLE_NAME, nostr_profile_column, nostr_relay_column
     );
-    let params_json = utils::to_params_json(query_vals)?;
+    let params_json = utils::to_params_json(query_vals).expect("serialize bind params");
     let _ = exec.exec(&query, &params_json)?;
     Ok(IResultPass { pass: true })
 }
 
-pub fn unset<E: SqlExecutor>(
-    exec: &E,
+pub fn unset(
+    exec: &dyn SqlExecutor,
     opts: &INostrProfileRelayRelation,
 ) -> Result<INostrProfileRelayResolve, IError<SqlError>> {
     let mut query_vals: Vec<Value> = Vec::with_capacity(2);
@@ -39,7 +39,7 @@ pub fn unset<E: SqlExecutor>(
         "DELETE FROM {} WHERE tb_pr = (SELECT id FROM nostr_profile WHERE {} = ?) AND tb_rl = (SELECT id FROM nostr_relay WHERE {} = ?);",
         TABLE_NAME, nostr_profile_column, nostr_relay_column
     );
-    let params_json = utils::to_params_json(query_vals)?;
+    let params_json = utils::to_params_json(query_vals).expect("serialize bind params");
     let _ = exec.exec(&query, &params_json)?;
     Ok(IResultPass { pass: true })
 }
