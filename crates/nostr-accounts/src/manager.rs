@@ -757,10 +757,12 @@ mod tests {
         vault
             .store_secret_hex(&account_id, "secret")
             .expect("vault store");
-        assert!(vault
-            .load_secret_hex(&account_id)
-            .expect("vault load")
-            .is_none());
+        assert!(
+            vault
+                .load_secret_hex(&account_id)
+                .expect("vault load")
+                .is_none()
+        );
         manager
             .upsert_public_identity(public, Some("remove".into()), true)
             .expect("upsert");
@@ -791,9 +793,11 @@ mod tests {
         let mismatch = manager
             .selected_signing_identity()
             .expect_err("public key mismatch");
-        assert!(mismatch
-            .to_string()
-            .contains("public key does not match secret key"));
+        assert!(
+            mismatch
+                .to_string()
+                .contains("public key does not match secret key")
+        );
 
         let mut with_profile = RadrootsIdentity::generate();
         let profile = RadrootsIdentityProfile {
@@ -918,9 +922,7 @@ mod tests {
             .selected_account_id()
             .expect_err("selected id poisoned");
         assert!(selected_id_err.to_string().starts_with("store error:"));
-        let selected_err = manager
-            .selected_account()
-            .expect_err("selected poisoned");
+        let selected_err = manager.selected_account().expect_err("selected poisoned");
         assert!(selected_err.to_string().starts_with("store error:"));
         let selected_public_err = manager
             .selected_public_identity()

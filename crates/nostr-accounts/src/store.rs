@@ -152,8 +152,8 @@ mod tests {
 
         let temp = tempfile::tempdir().expect("tempdir");
         let path = temp.path().join("accounts.json");
-        let json = serde_json::to_string(&RadrootsNostrAccountStoreState::default())
-            .expect("serialize");
+        let json =
+            serde_json::to_string(&RadrootsNostrAccountStoreState::default()).expect("serialize");
         std::fs::write(&path, json).expect("write json");
         let store = RadrootsNostrFileAccountStore::new(path.as_path());
 

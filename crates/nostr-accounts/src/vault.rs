@@ -173,7 +173,9 @@ mod tests {
             .expect_err("poisoned store");
         assert!(store.to_string().starts_with("vault error:"));
 
-        let load = vault.load_secret_hex(&account_id).expect_err("poisoned load");
+        let load = vault
+            .load_secret_hex(&account_id)
+            .expect_err("poisoned load");
         assert!(load.to_string().starts_with("vault error:"));
 
         let remove = vault
