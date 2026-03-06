@@ -233,7 +233,7 @@ mod tests {
         failpoints::clear();
         failpoints::set(failpoints::Point::Open);
         let err = EmbeddedSqlEngine::new().unwrap_err();
-        assert!(matches!(err, SqlError::InvalidQuery(_)));
+        assert_eq!(err.code(), "ERR_INVALID_QUERY");
     }
 
     #[test]
