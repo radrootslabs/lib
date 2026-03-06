@@ -11,6 +11,7 @@ use std::{string::String, vec::Vec};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+#[cfg(test)]
 use crate::error::RadrootsReplicaEventsError;
 
 #[cfg(test)]
@@ -38,6 +39,20 @@ pub fn event_state_key(kind: u32, pubkey: &str, d_tag: &str) -> String {
     format!("{kind}:{pubkey}:{d_tag}")
 }
 
+fn event_content_hash_value(content: &str, tags: &[Vec<String>]) -> String {
+    let tags_json = Value::Array(
+        tags.iter()
+            .map(|tag| Value::Array(tag.iter().cloned().map(Value::String).collect()))
+            .collect(),
+    )
+    .to_string();
+    let mut hasher = Sha256::new();
+    hasher.update(content.as_bytes());
+    hasher.update(tags_json.as_bytes());
+    hex::encode(hasher.finalize())
+}
+
+#[cfg(test)]
 pub fn event_content_hash(
     content: &str,
     tags: &[Vec<String>],
@@ -48,16 +63,12 @@ pub fn event_content_hash(
             "content_hash".to_string(),
         ));
     }
-    let tags_json = Value::Array(
-        tags.iter()
-            .map(|tag| Value::Array(tag.iter().cloned().map(Value::String).collect()))
-            .collect(),
-    )
-    .to_string();
-    let mut hasher = Sha256::new();
-    hasher.update(content.as_bytes());
-    hasher.update(tags_json.as_bytes());
-    Ok(hex::encode(hasher.finalize()))
+    Ok(event_content_hash_value(content, tags))
+}
+
+#[cfg(not(test))]
+pub fn event_content_hash(content: &str, tags: &[Vec<String>]) -> String {
+    event_content_hash_value(content, tags)
 }
 
 #[cfg(test)]

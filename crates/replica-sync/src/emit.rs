@@ -16,8 +16,8 @@ use radroots_events::farm::{
 use radroots_events::kinds::{KIND_FARM, KIND_LIST_SET_GENERIC, KIND_PLOT};
 use radroots_events::plot::RadrootsPlot;
 use radroots_events::profile::{
-    radroots_profile_type_from_tag_value, radroots_profile_type_tag_value, RadrootsProfile,
-    RadrootsProfileType, RADROOTS_PROFILE_TYPE_TAG_KEY,
+    RADROOTS_PROFILE_TYPE_TAG_KEY, RadrootsProfile, RadrootsProfileType,
+    radroots_profile_type_from_tag_value, radroots_profile_type_tag_value,
 };
 use radroots_events_codec::farm::encode as farm_encode;
 use radroots_events_codec::farm::list_sets as farm_list_sets;
@@ -59,8 +59,8 @@ use crate::canonical::canonical_json_string;
 use crate::error::RadrootsReplicaEventsError;
 use crate::geo::{geojson_point_from_lat_lng, geojson_polygon_circle_wgs84};
 use crate::types::{
-    RadrootsReplicaEventDraft, RadrootsReplicaFarmSelector, RadrootsReplicaSyncBundle,
-    RadrootsReplicaSyncOptions, RadrootsReplicaSyncRequest, RADROOTS_REPLICA_TRANSFER_VERSION,
+    RADROOTS_REPLICA_TRANSFER_VERSION, RadrootsReplicaEventDraft, RadrootsReplicaFarmSelector,
+    RadrootsReplicaSyncBundle, RadrootsReplicaSyncOptions, RadrootsReplicaSyncRequest,
 };
 
 const ROLE_PRIMARY: &str = "primary";
@@ -102,15 +102,15 @@ pub(crate) mod failpoints {
     }
 }
 
-pub fn radroots_replica_sync_all<E: SqlExecutor>(
-    exec: &E,
+pub fn radroots_replica_sync_all(
+    exec: &dyn SqlExecutor,
     request: &RadrootsReplicaSyncRequest,
 ) -> Result<RadrootsReplicaSyncBundle, RadrootsReplicaEventsError> {
     radroots_replica_sync_all_with_options(exec, &request.farm, request.options.as_ref())
 }
 
-pub fn radroots_replica_sync_all_with_options<E: SqlExecutor>(
-    exec: &E,
+pub fn radroots_replica_sync_all_with_options(
+    exec: &dyn SqlExecutor,
     farm_selector: &RadrootsReplicaFarmSelector,
     options: Option<&RadrootsReplicaSyncOptions>,
 ) -> Result<RadrootsReplicaSyncBundle, RadrootsReplicaEventsError> {
@@ -151,8 +151,8 @@ pub fn radroots_replica_sync_all_with_options<E: SqlExecutor>(
     })
 }
 
-pub fn radroots_replica_profile_events<E: SqlExecutor>(
-    exec: &E,
+pub fn radroots_replica_profile_events(
+    exec: &dyn SqlExecutor,
     farm: &Farm,
 ) -> Result<Vec<RadrootsReplicaEventDraft>, RadrootsReplicaEventsError> {
     let mut pubkeys = collect_profile_pubkeys(exec, farm)?;
@@ -168,8 +168,8 @@ pub fn radroots_replica_profile_events<E: SqlExecutor>(
     Ok(events)
 }
 
-pub fn radroots_replica_farm_event<E: SqlExecutor>(
-    exec: &E,
+pub fn radroots_replica_farm_event(
+    exec: &dyn SqlExecutor,
     farm: &Farm,
 ) -> Result<RadrootsReplicaEventDraft, RadrootsReplicaEventsError> {
     let tags = collect_farm_tags(exec, &farm.id)?;
@@ -194,8 +194,8 @@ pub fn radroots_replica_farm_event<E: SqlExecutor>(
     Ok(parts_to_draft(&farm.pubkey, parts))
 }
 
-pub fn radroots_replica_plot_events<E: SqlExecutor>(
-    exec: &E,
+pub fn radroots_replica_plot_events(
+    exec: &dyn SqlExecutor,
     farm: &Farm,
 ) -> Result<Vec<RadrootsReplicaEventDraft>, RadrootsReplicaEventsError> {
     let plots = load_plots(exec, &farm.id)?;
@@ -226,8 +226,8 @@ pub fn radroots_replica_plot_events<E: SqlExecutor>(
     Ok(events)
 }
 
-pub fn radroots_replica_list_set_events<E: SqlExecutor>(
-    exec: &E,
+pub fn radroots_replica_list_set_events(
+    exec: &dyn SqlExecutor,
     farm: &Farm,
 ) -> Result<Vec<RadrootsReplicaEventDraft>, RadrootsReplicaEventsError> {
     let members = load_farm_members(exec, &farm.id)?;
@@ -252,8 +252,8 @@ pub fn radroots_replica_list_set_events<E: SqlExecutor>(
     Ok(events)
 }
 
-pub fn radroots_replica_membership_claim_events<E: SqlExecutor>(
-    exec: &E,
+pub fn radroots_replica_membership_claim_events(
+    exec: &dyn SqlExecutor,
     farm_pubkey: &str,
 ) -> Result<Vec<RadrootsReplicaEventDraft>, RadrootsReplicaEventsError> {
     let claims = load_member_claims(exec, farm_pubkey)?;
@@ -282,8 +282,8 @@ pub fn radroots_replica_membership_claim_events<E: SqlExecutor>(
     Ok(events)
 }
 
-fn resolve_farm<E: SqlExecutor>(
-    exec: &E,
+fn resolve_farm(
+    exec: &dyn SqlExecutor,
     selector: &RadrootsReplicaFarmSelector,
 ) -> Result<Farm, RadrootsReplicaEventsError> {
     if let Some(id) = selector.id.as_ref().filter(|v| !v.trim().is_empty()) {
@@ -350,8 +350,8 @@ fn resolve_farm<E: SqlExecutor>(
     ))
 }
 
-fn collect_farm_tags<E: SqlExecutor>(
-    exec: &E,
+fn collect_farm_tags(
+    exec: &dyn SqlExecutor,
     farm_id: &str,
 ) -> Result<Vec<String>, RadrootsReplicaEventsError> {
     let filter = IFarmTagFieldsFilter {
@@ -378,8 +378,8 @@ fn collect_farm_tags<E: SqlExecutor>(
     Ok(tags)
 }
 
-fn collect_plot_tags<E: SqlExecutor>(
-    exec: &E,
+fn collect_plot_tags(
+    exec: &dyn SqlExecutor,
     plot_id: &str,
 ) -> Result<Vec<String>, RadrootsReplicaEventsError> {
     let filter = IPlotTagFieldsFilter {
@@ -406,8 +406,8 @@ fn collect_plot_tags<E: SqlExecutor>(
     Ok(tags)
 }
 
-fn load_farm_members<E: SqlExecutor>(
-    exec: &E,
+fn load_farm_members(
+    exec: &dyn SqlExecutor,
     farm_id: &str,
 ) -> Result<Vec<FarmMember>, RadrootsReplicaEventsError> {
     let filter = IFarmMemberFieldsFilter {
@@ -449,8 +449,8 @@ fn sorted_plot_ids(plots: &[Plot]) -> Vec<String> {
     ids
 }
 
-fn load_plots<E: SqlExecutor>(
-    exec: &E,
+fn load_plots(
+    exec: &dyn SqlExecutor,
     farm_id: &str,
 ) -> Result<Vec<Plot>, RadrootsReplicaEventsError> {
     let filter = IPlotFieldsFilter {
@@ -478,8 +478,8 @@ fn load_plots<E: SqlExecutor>(
     Ok(plots)
 }
 
-fn load_farm_location<E: SqlExecutor>(
-    exec: &E,
+fn load_farm_location(
+    exec: &dyn SqlExecutor,
     farm: &Farm,
 ) -> Result<Option<RadrootsFarmLocation>, RadrootsReplicaEventsError> {
     let location = load_gcs_location_for_farm(exec, &farm.id)?;
@@ -492,8 +492,8 @@ fn load_farm_location<E: SqlExecutor>(
     }))
 }
 
-fn load_plot_location<E: SqlExecutor>(
-    exec: &E,
+fn load_plot_location(
+    exec: &dyn SqlExecutor,
     plot: &Plot,
 ) -> Result<Option<radroots_events::plot::RadrootsPlotLocation>, RadrootsReplicaEventsError> {
     let location = load_gcs_location_for_plot(exec, &plot.id)?;
@@ -508,8 +508,8 @@ fn load_plot_location<E: SqlExecutor>(
     )
 }
 
-fn load_gcs_location_for_farm<E: SqlExecutor>(
-    exec: &E,
+fn load_gcs_location_for_farm(
+    exec: &dyn SqlExecutor,
     farm_id: &str,
 ) -> Result<Option<RadrootsGcsLocation>, RadrootsReplicaEventsError> {
     let primary = load_relation_by_role(exec, farm_id, ROLE_PRIMARY, RelationType::Farm)?;
@@ -519,8 +519,8 @@ fn load_gcs_location_for_farm<E: SqlExecutor>(
     }
 }
 
-fn load_gcs_location_for_plot<E: SqlExecutor>(
-    exec: &E,
+fn load_gcs_location_for_plot(
+    exec: &dyn SqlExecutor,
     plot_id: &str,
 ) -> Result<Option<RadrootsGcsLocation>, RadrootsReplicaEventsError> {
     let primary = load_relation_by_role(exec, plot_id, ROLE_PRIMARY, RelationType::Plot)?;
@@ -535,8 +535,8 @@ enum RelationType {
     Plot,
 }
 
-fn load_relation_by_role<E: SqlExecutor>(
-    exec: &E,
+fn load_relation_by_role(
+    exec: &dyn SqlExecutor,
     id: &str,
     role: &str,
     relation: RelationType,
@@ -600,10 +600,7 @@ fn load_relation_by_role<E: SqlExecutor>(
         return Ok(None);
     }
 
-    rels.sort_by(|a, b| {
-        let rank = location_role_rank(a.role()).cmp(&location_role_rank(b.role()));
-        rank.then_with(|| a.gcs_location_id().cmp(b.gcs_location_id()))
-    });
+    rels.sort_by(compare_relation_rows);
     let gcs_id = rels[0].gcs_location_id().to_string();
     let gcs_result = gcs_location::find_one(
         exec,
@@ -611,10 +608,20 @@ fn load_relation_by_role<E: SqlExecutor>(
             on: GcsLocationQueryBindValues::Id { id: gcs_id },
         }),
     );
-    let gcs = gcs_result?.result.ok_or_else(|| {
-        RadrootsReplicaEventsError::InvalidData("gcs_location not found".to_string())
-    })?;
+    let gcs = match gcs_result?.result {
+        Some(gcs) => gcs,
+        None => {
+            return Err(RadrootsReplicaEventsError::InvalidData(
+                "gcs_location not found".to_string(),
+            ));
+        }
+    };
     Ok(Some(gcs_location_to_event(&gcs)?))
+}
+
+fn compare_relation_rows(a: &RelationRow, b: &RelationRow) -> core::cmp::Ordering {
+    let rank = location_role_rank(a.role()).cmp(&location_role_rank(b.role()));
+    rank.then_with(|| a.gcs_location_id().cmp(b.gcs_location_id()))
 }
 
 fn list_set_to_wire_parts(
@@ -654,11 +661,7 @@ impl RelationRow {
 }
 
 fn location_role_rank(role: &str) -> u8 {
-    if role == ROLE_PRIMARY {
-        0
-    } else {
-        1
-    }
+    u8::from(role != ROLE_PRIMARY)
 }
 
 fn gcs_location_to_event(
@@ -715,8 +718,8 @@ fn parse_polygon(value: &str, lat: f64, lng: f64) -> RadrootsGeoJsonPolygon {
     geojson_polygon_circle_wgs84(lat, lng, 100.0, 64)
 }
 
-fn load_profile<E: SqlExecutor>(
-    exec: &E,
+fn load_profile(
+    exec: &dyn SqlExecutor,
     pubkey: &str,
 ) -> Result<
     Option<radroots_replica_db_schema::nostr_profile::NostrProfile>,
@@ -805,8 +808,8 @@ fn serialize_profile_content(
     canonical_json_string(&Value::Object(obj))
 }
 
-fn collect_member_pubkeys<E: SqlExecutor>(
-    exec: &E,
+fn collect_member_pubkeys(
+    exec: &dyn SqlExecutor,
     farm_id: &str,
 ) -> Result<Vec<String>, RadrootsReplicaEventsError> {
     let members = load_farm_members(exec, farm_id)?;
@@ -819,8 +822,8 @@ fn collect_member_pubkeys<E: SqlExecutor>(
     Ok(pubkeys)
 }
 
-fn collect_profile_pubkeys<E: SqlExecutor>(
-    exec: &E,
+fn collect_profile_pubkeys(
+    exec: &dyn SqlExecutor,
     farm: &Farm,
 ) -> Result<Vec<String>, RadrootsReplicaEventsError> {
     let mut pubkeys = collect_member_pubkeys(exec, &farm.id)?;
@@ -830,8 +833,8 @@ fn collect_profile_pubkeys<E: SqlExecutor>(
     Ok(pubkeys)
 }
 
-fn load_member_claims<E: SqlExecutor>(
-    exec: &E,
+fn load_member_claims(
+    exec: &dyn SqlExecutor,
     farm_pubkey: &str,
 ) -> Result<Vec<FarmMemberClaim>, RadrootsReplicaEventsError> {
     let filter = IFarmMemberClaimFieldsFilter {
@@ -851,8 +854,8 @@ fn load_member_claims<E: SqlExecutor>(
     Ok(result.results)
 }
 
-fn load_member_claims_for_member<E: SqlExecutor>(
-    exec: &E,
+fn load_member_claims_for_member(
+    exec: &dyn SqlExecutor,
     member_pubkey: &str,
 ) -> Result<Vec<FarmMemberClaim>, RadrootsReplicaEventsError> {
     let filter = IFarmMemberClaimFieldsFilter {
@@ -1289,24 +1292,40 @@ mod tests {
         .expect("resolve by id");
         assert_eq!(by_id.id, farm_row.id);
 
-        assert!(resolve_farm(
-            &exec,
-            &RadrootsReplicaFarmSelector {
-                id: Some("00000000-0000-0000-0000-000000000000".to_string()),
-                d_tag: None,
-                pubkey: None,
-            },
-        )
-        .is_err());
-        assert!(resolve_farm(
-            &exec,
-            &RadrootsReplicaFarmSelector {
-                id: None,
-                d_tag: None,
-                pubkey: None,
-            },
-        )
-        .is_err());
+        assert!(
+            resolve_farm(
+                &exec,
+                &RadrootsReplicaFarmSelector {
+                    id: Some("00000000-0000-0000-0000-000000000000".to_string()),
+                    d_tag: None,
+                    pubkey: None,
+                },
+            )
+            .is_err()
+        );
+        assert!(
+            radroots_replica_sync_all_with_options(
+                &exec,
+                &RadrootsReplicaFarmSelector {
+                    id: Some("00000000-0000-0000-0000-000000000000".to_string()),
+                    d_tag: None,
+                    pubkey: None,
+                },
+                None,
+            )
+            .is_err()
+        );
+        assert!(
+            resolve_farm(
+                &exec,
+                &RadrootsReplicaFarmSelector {
+                    id: None,
+                    d_tag: None,
+                    pubkey: None,
+                },
+            )
+            .is_err()
+        );
 
         let _ = farm::create(
             &exec,
@@ -1325,15 +1344,17 @@ mod tests {
             },
         )
         .expect("duplicate farm");
-        assert!(resolve_farm(
-            &exec,
-            &RadrootsReplicaFarmSelector {
-                id: None,
-                d_tag: Some(farm_row.d_tag.clone()),
-                pubkey: Some(farm_row.pubkey.clone()),
-            },
-        )
-        .is_err());
+        assert!(
+            resolve_farm(
+                &exec,
+                &RadrootsReplicaFarmSelector {
+                    id: None,
+                    d_tag: Some(farm_row.d_tag.clone()),
+                    pubkey: Some(farm_row.pubkey.clone()),
+                },
+            )
+            .is_err()
+        );
 
         let tags = collect_farm_tags(&exec, &farm_row.id).expect("farm tags");
         assert_eq!(tags, vec!["coffee".to_string()]);
@@ -1410,12 +1431,16 @@ mod tests {
         let polygon_blank = parse_polygon("", 3.0, 4.0);
         assert!(!polygon_blank.coordinates[0].is_empty());
 
-        assert!(load_profile(&exec, &farm_row.pubkey)
-            .expect("farm profile")
-            .is_some());
-        assert!(load_profile(&exec, &"z".repeat(64))
-            .expect("missing profile")
-            .is_none());
+        assert!(
+            load_profile(&exec, &farm_row.pubkey)
+                .expect("farm profile")
+                .is_some()
+        );
+        assert!(
+            load_profile(&exec, &"z".repeat(64))
+                .expect("missing profile")
+                .is_none()
+        );
 
         let profile_event_farm = profile_event(
             &farm_row.pubkey,
@@ -1874,76 +1899,86 @@ mod tests {
             needle: "nostr_profile",
             err: SqlError::Internal,
         };
-        assert!(radroots_replica_sync_all_with_options(
-            &sync_profiles_fail,
-            &selector,
-            Some(&RadrootsReplicaSyncOptions {
-                include_profiles: Some(true),
-                include_list_sets: Some(false),
-                include_membership_claims: Some(false),
-            }),
-        )
-        .is_err());
+        assert!(
+            radroots_replica_sync_all_with_options(
+                &sync_profiles_fail,
+                &selector,
+                Some(&RadrootsReplicaSyncOptions {
+                    include_profiles: Some(true),
+                    include_list_sets: Some(false),
+                    include_membership_claims: Some(false),
+                }),
+            )
+            .is_err()
+        );
         let sync_farm_fail = QueryFailExecutor {
             inner: &exec,
             needle: "farm_tag",
             err: SqlError::Internal,
         };
-        assert!(radroots_replica_sync_all_with_options(
-            &sync_farm_fail,
-            &selector,
-            Some(&RadrootsReplicaSyncOptions {
-                include_profiles: Some(false),
-                include_list_sets: Some(false),
-                include_membership_claims: Some(false),
-            }),
-        )
-        .is_err());
+        assert!(
+            radroots_replica_sync_all_with_options(
+                &sync_farm_fail,
+                &selector,
+                Some(&RadrootsReplicaSyncOptions {
+                    include_profiles: Some(false),
+                    include_list_sets: Some(false),
+                    include_membership_claims: Some(false),
+                }),
+            )
+            .is_err()
+        );
         let sync_plot_fail = QueryFailExecutor {
             inner: &exec,
             needle: "plot_tag",
             err: SqlError::Internal,
         };
-        assert!(radroots_replica_sync_all_with_options(
-            &sync_plot_fail,
-            &selector,
-            Some(&RadrootsReplicaSyncOptions {
-                include_profiles: Some(false),
-                include_list_sets: Some(false),
-                include_membership_claims: Some(false),
-            }),
-        )
-        .is_err());
+        assert!(
+            radroots_replica_sync_all_with_options(
+                &sync_plot_fail,
+                &selector,
+                Some(&RadrootsReplicaSyncOptions {
+                    include_profiles: Some(false),
+                    include_list_sets: Some(false),
+                    include_membership_claims: Some(false),
+                }),
+            )
+            .is_err()
+        );
         let sync_list_set_fail = QueryFailExecutor {
             inner: &exec,
             needle: "farm_member",
             err: SqlError::Internal,
         };
-        assert!(radroots_replica_sync_all_with_options(
-            &sync_list_set_fail,
-            &selector,
-            Some(&RadrootsReplicaSyncOptions {
-                include_profiles: Some(false),
-                include_list_sets: Some(true),
-                include_membership_claims: Some(false),
-            }),
-        )
-        .is_err());
+        assert!(
+            radroots_replica_sync_all_with_options(
+                &sync_list_set_fail,
+                &selector,
+                Some(&RadrootsReplicaSyncOptions {
+                    include_profiles: Some(false),
+                    include_list_sets: Some(true),
+                    include_membership_claims: Some(false),
+                }),
+            )
+            .is_err()
+        );
         let sync_claims_fail = QueryFailExecutor {
             inner: &exec,
             needle: "farm_member_claim",
             err: SqlError::Internal,
         };
-        assert!(radroots_replica_sync_all_with_options(
-            &sync_claims_fail,
-            &selector,
-            Some(&RadrootsReplicaSyncOptions {
-                include_profiles: Some(false),
-                include_list_sets: Some(false),
-                include_membership_claims: Some(true),
-            }),
-        )
-        .is_err());
+        assert!(
+            radroots_replica_sync_all_with_options(
+                &sync_claims_fail,
+                &selector,
+                Some(&RadrootsReplicaSyncOptions {
+                    include_profiles: Some(false),
+                    include_list_sets: Some(false),
+                    include_membership_claims: Some(true),
+                }),
+            )
+            .is_err()
+        );
 
         assert!(radroots_replica_farm_event(&exec, &farm_row).is_ok());
         assert!(radroots_replica_plot_events(&exec, &farm_row).is_ok());
@@ -2010,42 +2045,48 @@ mod tests {
             needle: "from farm",
             err: SqlError::Internal,
         };
-        assert!(resolve_farm(
-            &resolve_id_fail,
-            &RadrootsReplicaFarmSelector {
-                id: Some(farm_row.id.clone()),
-                d_tag: None,
-                pubkey: None,
-            }
-        )
-        .is_err());
+        assert!(
+            resolve_farm(
+                &resolve_id_fail,
+                &RadrootsReplicaFarmSelector {
+                    id: Some(farm_row.id.clone()),
+                    d_tag: None,
+                    pubkey: None,
+                }
+            )
+            .is_err()
+        );
         let resolve_pair_fail = QueryFailExecutor {
             inner: &exec,
             needle: "from farm",
             err: SqlError::Internal,
         };
-        assert!(resolve_farm(
-            &resolve_pair_fail,
-            &RadrootsReplicaFarmSelector {
-                id: None,
-                d_tag: Some(farm_row.d_tag.clone()),
-                pubkey: Some(farm_row.pubkey.clone()),
-            }
-        )
-        .is_err());
+        assert!(
+            resolve_farm(
+                &resolve_pair_fail,
+                &RadrootsReplicaFarmSelector {
+                    id: None,
+                    d_tag: Some(farm_row.d_tag.clone()),
+                    pubkey: Some(farm_row.pubkey.clone()),
+                }
+            )
+            .is_err()
+        );
 
         let gcs_query_fail = QueryFailExecutor {
             inner: &exec,
             needle: "from gcs_location",
             err: SqlError::Internal,
         };
-        assert!(load_relation_by_role(
-            &gcs_query_fail,
-            &farm_row.id,
-            ROLE_PRIMARY,
-            RelationType::Farm
-        )
-        .is_err());
+        assert!(
+            load_relation_by_role(
+                &gcs_query_fail,
+                &farm_row.id,
+                ROLE_PRIMARY,
+                RelationType::Farm
+            )
+            .is_err()
+        );
         super::failpoints::set_gcs_location_to_event_error();
         assert!(
             load_relation_by_role(&exec, &farm_row.id, ROLE_PRIMARY, RelationType::Farm).is_err()
@@ -2192,11 +2233,10 @@ mod tests {
             needle: "where member_pubkey",
             err: SqlError::Internal,
         };
-        assert!(radroots_replica_membership_claim_events(
-            &claims_member_query_fail,
-            &farm_row.pubkey
-        )
-        .is_err());
+        assert!(
+            radroots_replica_membership_claim_events(&claims_member_query_fail, &farm_row.pubkey)
+                .is_err()
+        );
 
         let _ = farm_member_claim::create(
             &exec,
@@ -2266,15 +2306,17 @@ mod tests {
         )
         .expect("resolve by pair");
         assert_eq!(resolved_by_pair.id, farm_row.id);
-        assert!(resolve_farm(
-            &pass,
-            &RadrootsReplicaFarmSelector {
-                id: Some("00000000-0000-0000-0000-000000000000".to_string()),
-                d_tag: None,
-                pubkey: None,
-            },
-        )
-        .is_err());
+        assert!(
+            resolve_farm(
+                &pass,
+                &RadrootsReplicaFarmSelector {
+                    id: Some("00000000-0000-0000-0000-000000000000".to_string()),
+                    d_tag: None,
+                    pubkey: None,
+                },
+            )
+            .is_err()
+        );
 
         let member_pubkeys = collect_member_pubkeys(&pass, &farm_row.id).expect("member pubkeys");
         assert!(!member_pubkeys.is_empty());
