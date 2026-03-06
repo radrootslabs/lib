@@ -11,6 +11,111 @@ const SAVEPOINT_BEGIN: &str = "savepoint radroots_schema_tx";
 const SAVEPOINT_RELEASE: &str = "release savepoint radroots_schema_tx";
 const SAVEPOINT_ROLLBACK: &str = "rollback to savepoint radroots_schema_tx";
 
+#[cfg(test)]
+mod failpoints {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[derive(Clone, Copy)]
+    pub enum Point {
+        Open = 1 << 0,
+        BeginExecute = 1 << 1,
+        ReleaseExecute = 1 << 2,
+        ExportSerialize = 1 << 3,
+        EncodeRows = 1 << 4,
+        RowToJson = 1 << 5,
+    }
+
+    static FLAGS: AtomicUsize = AtomicUsize::new(0);
+
+    pub fn set(point: Point) {
+        FLAGS.fetch_or(point as usize, Ordering::SeqCst);
+    }
+
+    pub fn take(point: Point) -> bool {
+        let mask = point as usize;
+        let prev = FLAGS.fetch_and(!mask, Ordering::SeqCst);
+        (prev & mask) != 0
+    }
+
+    pub fn clear() {
+        FLAGS.store(0, Ordering::SeqCst);
+    }
+}
+
+#[cfg(test)]
+fn forced_error() -> rusqlite::Error {
+    rusqlite::Error::InvalidParameterName("forced".to_string())
+}
+
+fn open_in_memory_with_failpoint() -> Result<Connection, rusqlite::Error> {
+    #[cfg(test)]
+    if failpoints::take(failpoints::Point::Open) {
+        return Err(forced_error());
+    }
+    Connection::open_in_memory()
+}
+
+fn execute_begin_savepoint(conn: &Connection) -> Result<(), SqlError> {
+    #[cfg(test)]
+    let result = if failpoints::take(failpoints::Point::BeginExecute) {
+        Err(forced_error())
+    } else {
+        conn.execute(SAVEPOINT_BEGIN, [])
+    };
+    #[cfg(not(test))]
+    let result = conn.execute(SAVEPOINT_BEGIN, []);
+    result.map(|_| ()).map_err(map_rusqlite)
+}
+
+fn execute_release_savepoint(conn: &Connection) -> Result<(), SqlError> {
+    #[cfg(test)]
+    let result = if failpoints::take(failpoints::Point::ReleaseExecute) {
+        Err(forced_error())
+    } else {
+        conn.execute(SAVEPOINT_RELEASE, [])
+    };
+    #[cfg(not(test))]
+    let result = conn.execute(SAVEPOINT_RELEASE, []);
+    result.map(|_| ()).map_err(map_rusqlite)
+}
+
+fn serialize_main(conn: &Connection) -> Result<Vec<u8>, rusqlite::Error> {
+    #[cfg(test)]
+    if failpoints::take(failpoints::Point::ExportSerialize) {
+        return Err(forced_error());
+    }
+    conn.serialize(DatabaseName::Main).map(|data| data.to_vec())
+}
+
+fn map_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Value> {
+    #[cfg(test)]
+    if failpoints::take(failpoints::Point::RowToJson) {
+        return Err(forced_error());
+    }
+    sqlite_util::row_to_json(row)
+}
+
+fn encode_rows(rows: &[Value]) -> Result<String, SqlError> {
+    #[cfg(test)]
+    if failpoints::take(failpoints::Point::EncodeRows) {
+        return serde_json::to_string(&FailSerialize).map_err(SqlError::from);
+    }
+    serde_json::to_string(rows).map_err(SqlError::from)
+}
+
+#[cfg(test)]
+struct FailSerialize;
+
+#[cfg(test)]
+impl serde::Serialize for FailSerialize {
+    fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        Err(serde::ser::Error::custom("forced"))
+    }
+}
+
 #[derive(Debug)]
 pub struct EmbeddedSqlEngine {
     conn: Mutex<Connection>,
@@ -18,7 +123,7 @@ pub struct EmbeddedSqlEngine {
 
 impl EmbeddedSqlEngine {
     pub fn new() -> Result<Self, SqlError> {
-        let conn = Connection::open_in_memory().map_err(map_rusqlite)?;
+        let conn = open_in_memory_with_failpoint().map_err(map_rusqlite)?;
         Ok(Self {
             conn: Mutex::new(conn),
         })
@@ -43,7 +148,7 @@ impl EmbeddedSqlEngine {
             let conn = self.conn.lock().map_err(|_| SqlError::Internal)?;
             let mut stmt = conn.prepare(sql).map_err(map_rusqlite)?;
             let params = params_from_iter(binds.into_iter());
-            let mapped = stmt.query_map(params, sqlite_util::row_to_json)?;
+            let mapped = stmt.query_map(params, map_row)?;
             mapped
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(map_rusqlite)?
@@ -53,32 +158,29 @@ impl EmbeddedSqlEngine {
 
     pub fn query_raw(&self, sql: &str, params_json: &str) -> Result<String, SqlError> {
         let rows = self.query_rows(sql, params_json)?;
-        serde_json::to_string(&rows).map_err(SqlError::from)
+        encode_rows(&rows)
     }
 
     pub fn begin_tx(&self) -> Result<(), SqlError> {
         let conn = self.conn.lock().map_err(|_| SqlError::Internal)?;
-        conn.execute(SAVEPOINT_BEGIN, []).map_err(map_rusqlite)?;
-        Ok(())
+        execute_begin_savepoint(&conn)
     }
 
     pub fn commit_tx(&self) -> Result<(), SqlError> {
         let conn = self.conn.lock().map_err(|_| SqlError::Internal)?;
-        conn.execute(SAVEPOINT_RELEASE, []).map_err(map_rusqlite)?;
-        Ok(())
+        execute_release_savepoint(&conn)
     }
 
     pub fn rollback_tx(&self) -> Result<(), SqlError> {
         let conn = self.conn.lock().map_err(|_| SqlError::Internal)?;
         conn.execute(SAVEPOINT_ROLLBACK, []).map_err(map_rusqlite)?;
-        conn.execute(SAVEPOINT_RELEASE, []).map_err(map_rusqlite)?;
-        Ok(())
+        execute_release_savepoint(&conn)
     }
 
     pub fn export_bytes(&self) -> Result<Vec<u8>, SqlError> {
         let conn = self.conn.lock().map_err(|_| SqlError::Internal)?;
-        let data = conn.serialize(DatabaseName::Main).map_err(map_rusqlite)?;
-        Ok(data.to_vec())
+        let data = serialize_main(&conn).map_err(map_rusqlite)?;
+        Ok(data)
     }
 }
 
@@ -114,91 +216,227 @@ pub fn coverage_branch_probe(input: bool) -> &'static str {
 
 #[cfg(all(test, feature = "embedded"))]
 mod tests {
-    use super::{EmbeddedSqlEngine, coverage_branch_probe};
+    use super::{EmbeddedSqlEngine, coverage_branch_probe, failpoints};
     use radroots_sql_core::{SqlError, SqlExecutor};
 
     const CREATE_TABLE_SQL: &str = "CREATE TABLE test_items (id INTEGER PRIMARY KEY, name TEXT)";
 
+    fn poison_engine(engine: &EmbeddedSqlEngine) {
+        let _ = std::panic::catch_unwind(|| {
+            let _guard = engine.conn.lock().unwrap();
+            panic!("poison");
+        });
+    }
+
     #[test]
-    fn exec_query_roundtrip() -> Result<(), SqlError> {
-        let engine = EmbeddedSqlEngine::new()?;
-        engine.exec(CREATE_TABLE_SQL, "[]")?;
-        let outcome = engine.exec("INSERT INTO test_items (name) VALUES (?)", "[\"rad\"]")?;
+    fn open_in_memory_failpoint_surfaces_error() {
+        failpoints::clear();
+        failpoints::set(failpoints::Point::Open);
+        let err = EmbeddedSqlEngine::new().unwrap_err();
+        assert!(matches!(err, SqlError::InvalidQuery(_)));
+    }
+
+    #[test]
+    fn exec_query_roundtrip() {
+        let engine = EmbeddedSqlEngine::new().unwrap();
+        engine.exec(CREATE_TABLE_SQL, "[]").unwrap();
+        let outcome = engine
+            .exec("INSERT INTO test_items (name) VALUES (?)", "[\"rad\"]")
+            .unwrap();
         assert_eq!(outcome.changes, 1);
-        let rows = engine.query_rows("SELECT name FROM test_items WHERE id = ?", "[1]")?;
+        let rows = engine
+            .query_rows("SELECT name FROM test_items WHERE id = ?", "[1]")
+            .unwrap();
         let name = rows
             .first()
             .and_then(|row| row.get("name"))
             .and_then(|value| value.as_str())
-            .ok_or(SqlError::InvalidArgument("missing name".to_string()))?;
+            .expect("missing name");
         assert_eq!(name, "rad");
-        Ok(())
     }
 
     #[test]
-    fn rollback_discards_changes() -> Result<(), SqlError> {
-        let engine = EmbeddedSqlEngine::new()?;
-        engine.exec(CREATE_TABLE_SQL, "[]")?;
-        engine.begin_tx()?;
-        engine.exec("INSERT INTO test_items (name) VALUES (?)", "[\"rad\"]")?;
-        engine.rollback_tx()?;
-        let rows = engine.query_rows("SELECT name FROM test_items", "[]")?;
+    fn rollback_discards_changes() {
+        let engine = EmbeddedSqlEngine::new().unwrap();
+        engine.exec(CREATE_TABLE_SQL, "[]").unwrap();
+        engine.begin_tx().unwrap();
+        engine
+            .exec("INSERT INTO test_items (name) VALUES (?)", "[\"rad\"]")
+            .unwrap();
+        engine.rollback_tx().unwrap();
+        let rows = engine.query_rows("SELECT name FROM test_items", "[]").unwrap();
         assert!(rows.is_empty());
-        Ok(())
     }
 
     #[test]
-    fn export_bytes_non_empty() -> Result<(), SqlError> {
-        let engine = EmbeddedSqlEngine::new()?;
-        engine.exec(CREATE_TABLE_SQL, "[]")?;
-        engine.exec("INSERT INTO test_items (name) VALUES (?)", "[\"rad\"]")?;
-        let bytes = engine.export_bytes()?;
+    fn export_bytes_non_empty() {
+        let engine = EmbeddedSqlEngine::new().unwrap();
+        engine.exec(CREATE_TABLE_SQL, "[]").unwrap();
+        engine
+            .exec("INSERT INTO test_items (name) VALUES (?)", "[\"rad\"]")
+            .unwrap();
+        let bytes = engine.export_bytes().unwrap();
         assert!(!bytes.is_empty());
-        Ok(())
     }
 
     #[test]
-    fn query_raw_commit_and_trait_executor_paths() -> Result<(), SqlError> {
-        let engine = EmbeddedSqlEngine::new()?;
-        engine.exec(CREATE_TABLE_SQL, "[]")?;
-        engine.begin_tx()?;
-        engine.exec("INSERT INTO test_items (name) VALUES (?)", "[\"rad\"]")?;
-        engine.commit_tx()?;
-        let rows = engine.query_raw("SELECT name FROM test_items ORDER BY id ASC", "[]")?;
+    fn query_raw_commit_and_trait_executor_paths() {
+        let engine = EmbeddedSqlEngine::new().unwrap();
+        engine.exec(CREATE_TABLE_SQL, "[]").unwrap();
+        engine.begin_tx().unwrap();
+        engine
+            .exec("INSERT INTO test_items (name) VALUES (?)", "[\"rad\"]")
+            .unwrap();
+        engine.commit_tx().unwrap();
+        let rows = engine
+            .query_raw("SELECT name FROM test_items ORDER BY id ASC", "[]")
+            .unwrap();
         assert!(rows.contains("rad"));
 
         let executor: &dyn SqlExecutor = &engine;
-        executor.begin()?;
-        let _ = executor.exec("INSERT INTO test_items (name) VALUES (?)", "[\"trait\"]")?;
-        executor.rollback()?;
-        let rows_after = executor.query_raw("SELECT name FROM test_items ORDER BY id ASC", "[]")?;
+        executor.begin().unwrap();
+        let _ = executor
+            .exec("INSERT INTO test_items (name) VALUES (?)", "[\"trait\"]")
+            .unwrap();
+        executor.rollback().unwrap();
+        let rows_after = executor
+            .query_raw("SELECT name FROM test_items ORDER BY id ASC", "[]")
+            .unwrap();
         assert!(rows_after.contains("rad"));
         assert!(!rows_after.contains("trait"));
-        Ok(())
     }
 
     #[test]
-    fn invalid_sql_paths_surface_invalid_query() -> Result<(), SqlError> {
-        let engine = EmbeddedSqlEngine::new()?;
-        let err_exec = engine.exec("INSERT INTO missing (name) VALUES (?)", "[\"rad\"]");
-        assert!(matches!(err_exec, Err(SqlError::InvalidQuery(_))));
+    fn invalid_sql_paths_surface_invalid_query() {
+        let engine = EmbeddedSqlEngine::new().unwrap();
+        let err_exec = engine
+            .exec("INSERT INTO missing (name) VALUES (?)", "[\"rad\"]")
+            .unwrap_err();
+        assert_eq!(err_exec.code(), "ERR_INVALID_QUERY");
 
         let err_rows = engine.query_rows("SELECT name FROM missing", "[]");
-        assert!(matches!(err_rows, Err(SqlError::InvalidQuery(_))));
+        assert_eq!(err_rows.unwrap_err().code(), "ERR_INVALID_QUERY");
 
         let err_raw = engine.query_raw("SELECT name FROM missing", "[]");
-        assert!(matches!(err_raw, Err(SqlError::InvalidQuery(_))));
+        assert_eq!(err_raw.unwrap_err().code(), "ERR_INVALID_QUERY");
 
-        let err_commit = engine.commit_tx();
-        assert!(matches!(err_commit, Err(SqlError::InvalidQuery(_))));
+        let err_commit = engine.commit_tx().unwrap_err();
+        assert_eq!(err_commit.code(), "ERR_INVALID_QUERY");
 
-        let err_rollback = engine.rollback_tx();
-        assert!(matches!(err_rollback, Err(SqlError::InvalidQuery(_))));
+        let err_rollback = engine.rollback_tx().unwrap_err();
+        assert_eq!(err_rollback.code(), "ERR_INVALID_QUERY");
 
         let executor: &dyn SqlExecutor = &engine;
-        let err_trait_commit = executor.commit();
-        assert!(matches!(err_trait_commit, Err(SqlError::InvalidQuery(_))));
-        Ok(())
+        let err_trait_commit = executor.commit().unwrap_err();
+        assert_eq!(err_trait_commit.code(), "ERR_INVALID_QUERY");
+    }
+
+    #[test]
+    fn invalid_params_surface_errors() {
+        let engine = EmbeddedSqlEngine::new().unwrap();
+        let err_exec = engine.exec(CREATE_TABLE_SQL, "{}").unwrap_err();
+        assert_eq!(err_exec.code(), "ERR_SERIALIZATION");
+
+        let err_rows = engine.query_rows("SELECT 1", "{}").unwrap_err();
+        assert_eq!(err_rows.code(), "ERR_SERIALIZATION");
+
+        let err_raw = engine.query_raw("SELECT 1", "{}").unwrap_err();
+        assert_eq!(err_raw.code(), "ERR_SERIALIZATION");
+    }
+
+    #[test]
+    fn query_rows_surfaces_prepare_and_bind_errors() {
+        let engine = EmbeddedSqlEngine::new().unwrap();
+        let err_prepare = engine
+            .query_rows("SELEC name FROM test_items", "[]")
+            .unwrap_err();
+        assert_eq!(err_prepare.code(), "ERR_INVALID_QUERY");
+
+        engine.exec(CREATE_TABLE_SQL, "[]").unwrap();
+        let err_bind = engine
+            .query_rows("SELECT name FROM test_items WHERE id = ?", "[]")
+            .unwrap_err();
+        assert_eq!(err_bind.code(), "ERR_INVALID_QUERY");
+    }
+
+    #[test]
+    fn query_rows_collect_error_is_reported() {
+        let engine = EmbeddedSqlEngine::new().unwrap();
+        engine.exec(CREATE_TABLE_SQL, "[]").unwrap();
+        engine
+            .exec("INSERT INTO test_items (name) VALUES (?)", "[\"rad\"]")
+            .unwrap();
+        failpoints::clear();
+        failpoints::set(failpoints::Point::RowToJson);
+        let err = engine
+            .query_rows("SELECT name FROM test_items", "[]")
+            .unwrap_err();
+        assert_eq!(err.code(), "ERR_INVALID_QUERY");
+    }
+
+    #[test]
+    fn query_raw_serialization_error_is_reported() {
+        let engine = EmbeddedSqlEngine::new().unwrap();
+        engine.exec(CREATE_TABLE_SQL, "[]").unwrap();
+        engine
+            .exec("INSERT INTO test_items (name) VALUES (?)", "[\"rad\"]")
+            .unwrap();
+        failpoints::clear();
+        failpoints::set(failpoints::Point::EncodeRows);
+        let err = engine
+            .query_raw("SELECT name FROM test_items", "[]")
+            .unwrap_err();
+        assert_eq!(err.code(), "ERR_SERIALIZATION");
+    }
+
+    #[test]
+    fn begin_tx_failpoint_surfaces_error() {
+        let engine = EmbeddedSqlEngine::new().unwrap();
+        failpoints::clear();
+        failpoints::set(failpoints::Point::BeginExecute);
+        let err = engine.begin_tx().unwrap_err();
+        assert_eq!(err.code(), "ERR_INVALID_QUERY");
+    }
+
+    #[test]
+    fn rollback_release_failpoint_surfaces_error() {
+        let engine = EmbeddedSqlEngine::new().unwrap();
+        engine.exec(CREATE_TABLE_SQL, "[]").unwrap();
+        engine.begin_tx().unwrap();
+        failpoints::clear();
+        failpoints::set(failpoints::Point::ReleaseExecute);
+        let err = engine.rollback_tx().unwrap_err();
+        assert_eq!(err.code(), "ERR_INVALID_QUERY");
+    }
+
+    #[test]
+    fn export_bytes_failpoint_surfaces_error() {
+        let engine = EmbeddedSqlEngine::new().unwrap();
+        engine.exec(CREATE_TABLE_SQL, "[]").unwrap();
+        failpoints::clear();
+        failpoints::set(failpoints::Point::ExportSerialize);
+        let err = engine.export_bytes().unwrap_err();
+        assert_eq!(err.code(), "ERR_INVALID_QUERY");
+    }
+
+    #[test]
+    fn lock_errors_surface_internal() {
+        let engine = EmbeddedSqlEngine::new().unwrap();
+        poison_engine(&engine);
+        let err_exec = engine.exec(CREATE_TABLE_SQL, "[]");
+        assert_eq!(err_exec.unwrap_err().code(), "ERR_INTERNAL");
+        let err_rows = engine.query_rows("SELECT 1", "[]");
+        assert_eq!(err_rows.unwrap_err().code(), "ERR_INTERNAL");
+        let err_raw = engine.query_raw("SELECT 1", "[]");
+        assert_eq!(err_raw.unwrap_err().code(), "ERR_INTERNAL");
+        let err_begin = engine.begin_tx();
+        assert_eq!(err_begin.unwrap_err().code(), "ERR_INTERNAL");
+        let err_commit = engine.commit_tx();
+        assert_eq!(err_commit.unwrap_err().code(), "ERR_INTERNAL");
+        let err_rollback = engine.rollback_tx();
+        assert_eq!(err_rollback.unwrap_err().code(), "ERR_INTERNAL");
+        let err_export = engine.export_bytes();
+        assert_eq!(err_export.unwrap_err().code(), "ERR_INTERNAL");
     }
 
     #[test]
