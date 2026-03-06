@@ -143,6 +143,30 @@ fn seed_source(
         gc_country_name: None,
     };
     let gcs_row = unwrap_sql(gcs_location::create(exec, &gcs_fields), "gcs").result;
+    let gcs_secondary_fields = IGcsLocationFields {
+        d_tag: "AAAAAAAAAAAAAAAAAAAAAg".to_string(),
+        lat: 37.71,
+        lng: -122.41,
+        geohash: "9q8yz".to_string(),
+        point: "{".to_string(),
+        polygon: "{\"type\":\"Polygon\",\"coordinates\":[[]]}".to_string(),
+        accuracy: None,
+        altitude: None,
+        tag_0: None,
+        label: None,
+        area: None,
+        elevation: None,
+        soil: None,
+        climate: None,
+        gc_id: None,
+        gc_name: None,
+        gc_admin1_id: None,
+        gc_admin1_name: None,
+        gc_country_id: None,
+        gc_country_name: None,
+    };
+    let gcs_secondary_row =
+        unwrap_sql(gcs_location::create(exec, &gcs_secondary_fields), "gcs secondary").result;
 
     let _ = unwrap_sql(
         farm_gcs_location::create(
@@ -179,11 +203,50 @@ fn seed_source(
             exec,
             &IPlotGcsLocationFields {
                 plot_id: plot_row.id.clone(),
+                gcs_location_id: gcs_secondary_row.id.clone(),
+                role: "primary".to_string(),
+            },
+        ),
+        "plot_gcs secondary primary",
+    );
+    let _ = unwrap_sql(
+        plot_gcs_location::create(
+            exec,
+            &IPlotGcsLocationFields {
+                plot_id: plot_row.id.clone(),
                 gcs_location_id: gcs_row.id.clone(),
                 role: "primary".to_string(),
             },
         ),
         "plot_gcs",
+    );
+    let plot_row_secondary = unwrap_sql(
+        plot::create(
+            exec,
+            &IPlotFields {
+                d_tag: "AAAAAAAAAAAAAAAAAAAAAg".to_string(),
+                farm_id: farm_row.id.clone(),
+                name: "Plot B".to_string(),
+                about: None,
+                location_primary: None,
+                location_city: None,
+                location_region: None,
+                location_country: None,
+            },
+        ),
+        "plot secondary",
+    )
+    .result;
+    let _ = unwrap_sql(
+        plot_gcs_location::create(
+            exec,
+            &IPlotGcsLocationFields {
+                plot_id: plot_row_secondary.id.clone(),
+                gcs_location_id: gcs_row.id.clone(),
+                role: "primary".to_string(),
+            },
+        ),
+        "plot_secondary_gcs",
     );
 
     let _ = unwrap_sql(
@@ -286,7 +349,7 @@ fn seed_source(
 fn ingest_roundtrip_yields_zero_pending_sync() {
     let source = SqliteExecutor::open_memory().expect("source db");
     let (_source_request, farm_d_tag, farm_pubkey, drafts) = seed_source(&source);
-    assert_eq!(drafts.len(), 9);
+    assert_eq!(drafts.len(), 10);
 
     let target = SqliteExecutor::open_memory().expect("target db");
     migrations::run_all_up(&target).expect("target migrations");
@@ -363,7 +426,7 @@ fn sync_all_selector_and_options_paths_are_supported() {
         },
     )
     .expect("reduced sync");
-    assert_eq!(reduced.events.len(), 2);
+    assert_eq!(reduced.events.len(), 3);
 }
 
 #[test]

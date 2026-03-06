@@ -1660,22 +1660,62 @@ mod tests {
             location_country: None,
         };
 
-        let err_exec = ErrorExecutor;
-        assert!(collect_farm_tags(&err_exec, "id").is_err());
-        assert!(collect_plot_tags(&err_exec, "id").is_err());
-        assert!(load_farm_members(&err_exec, "id").is_err());
-        assert!(load_plots(&err_exec, "id").is_err());
-        assert!(load_farm_location(&err_exec, &farm).is_err());
-        assert!(load_plot_location(&err_exec, &plot).is_err());
-        assert!(load_profile(&err_exec, "p").is_err());
-        assert!(load_member_claims(&err_exec, "p").is_err());
-        assert!(load_member_claims_for_member(&err_exec, "p").is_err());
+        let tags_fail = QueryFailExecutor {
+            inner: &exec,
+            needle: "farm_tag",
+            err: SqlError::Internal,
+        };
+        assert!(collect_farm_tags(&tags_fail, "id").is_err());
+
+        let plot_tags_fail = QueryFailExecutor {
+            inner: &exec,
+            needle: "plot_tag",
+            err: SqlError::Internal,
+        };
+        assert!(collect_plot_tags(&plot_tags_fail, "id").is_err());
+
+        let members_fail = QueryFailExecutor {
+            inner: &exec,
+            needle: "farm_member",
+            err: SqlError::Internal,
+        };
+        assert!(load_farm_members(&members_fail, "id").is_err());
+
+        let plots_fail = QueryFailExecutor {
+            inner: &exec,
+            needle: "from plot",
+            err: SqlError::Internal,
+        };
+        assert!(load_plots(&plots_fail, "id").is_err());
+
+        let farm_location_fail = QueryFailExecutor {
+            inner: &exec,
+            needle: "farm_gcs_location",
+            err: SqlError::Internal,
+        };
+        assert!(load_farm_location(&farm_location_fail, &farm).is_err());
+
+        let plot_location_fail = QueryFailExecutor {
+            inner: &exec,
+            needle: "plot_gcs_location",
+            err: SqlError::Internal,
+        };
+        assert!(load_plot_location(&plot_location_fail, &plot).is_err());
+
+        let profile_fail = QueryFailExecutor {
+            inner: &exec,
+            needle: "nostr_profile",
+            err: SqlError::Internal,
+        };
+        assert!(load_profile(&profile_fail, "p").is_err());
 
         let claims_fail = QueryFailExecutor {
             inner: &exec,
             needle: "farm_member_claim",
             err: SqlError::Internal,
         };
+        assert!(load_member_claims(&claims_fail, "p").is_err());
+        assert!(load_member_claims_for_member(&claims_fail, "p").is_err());
         assert!(collect_profile_pubkeys(&claims_fail, &farm).is_err());
     }
 
@@ -1714,6 +1754,17 @@ mod tests {
         )
         .expect("resolve by pair");
         assert_eq!(resolved_by_pair.id, farm_row.id);
+        assert!(
+            resolve_farm(
+                &pass,
+                &RadrootsReplicaFarmSelector {
+                    id: Some("00000000-0000-0000-0000-000000000000".to_string()),
+                    d_tag: None,
+                    pubkey: None,
+                },
+            )
+            .is_err()
+        );
 
         let member_pubkeys = collect_member_pubkeys(&pass, &farm_row.id).expect("member pubkeys");
         assert!(!member_pubkeys.is_empty());
