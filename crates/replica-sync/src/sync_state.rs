@@ -72,12 +72,15 @@ pub fn radroots_replica_sync_status<E: SqlExecutor>(
 mod tests {
     use super::radroots_replica_sync_status;
     use crate::emit::radroots_replica_sync_all_with_options;
-    use crate::event_state::{event_content_hash, event_state_key, tag_value};
+    use crate::error::RadrootsReplicaEventsError;
+    use crate::event_state::{
+        event_content_hash, event_content_hash_fail_next, event_state_key, tag_value,
+    };
     use crate::types::RadrootsReplicaFarmSelector;
     use radroots_replica_db::{farm, migrations, nostr_event_state};
     use radroots_replica_db_schema::farm::IFarmFields;
     use radroots_replica_db_schema::nostr_event_state::INostrEventStateFields;
-    use radroots_sql_core::SqliteExecutor;
+    use radroots_sql_core::{SqlExecutor, SqliteExecutor};
 
     #[test]
     fn sync_status_empty_db_is_zero() {
@@ -138,5 +141,83 @@ mod tests {
         let status = radroots_replica_sync_status(&exec).expect("status");
         assert_eq!(status.expected_count, expected_count);
         assert_eq!(status.pending_count, expected_count.saturating_sub(1));
+    }
+
+    #[test]
+    fn sync_status_reports_farm_query_errors() {
+        let exec = SqliteExecutor::open_memory().expect("db");
+        let err = radroots_replica_sync_status(&exec).expect_err("farm query error");
+        assert!(err.to_string().contains("invalid query"));
+    }
+
+    #[test]
+    fn sync_status_reports_emit_errors() {
+        let exec = SqliteExecutor::open_memory().expect("db");
+        migrations::run_all_up(&exec).expect("migrations");
+        let _ = farm::create(
+            &exec,
+            &IFarmFields {
+                d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
+                pubkey: "b".repeat(64),
+                name: "farm".to_string(),
+                about: None,
+                website: None,
+                picture: None,
+                banner: None,
+                location_primary: None,
+                location_city: None,
+                location_region: None,
+                location_country: None,
+            },
+        )
+        .expect("farm");
+        let _ = exec
+            .exec("DROP TABLE farm_tag;", "[]")
+            .expect("drop farm_tag");
+        let err = radroots_replica_sync_status(&exec).expect_err("emit error");
+        assert!(err.to_string().contains("invalid query"));
+    }
+
+    #[test]
+    fn sync_status_reports_content_hash_errors() {
+        let exec = SqliteExecutor::open_memory().expect("db");
+        migrations::run_all_up(&exec).expect("migrations");
+        let _ = farm::create(
+            &exec,
+            &IFarmFields {
+                d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
+                pubkey: "c".repeat(64),
+                name: "farm".to_string(),
+                about: None,
+                website: None,
+                picture: None,
+                banner: None,
+                location_primary: None,
+                location_city: None,
+                location_region: None,
+                location_country: None,
+            },
+        )
+        .expect("farm");
+        event_content_hash_fail_next();
+        let err = radroots_replica_sync_status(&exec).expect_err("content hash error");
+        assert!(
+            matches!(
+                err,
+                RadrootsReplicaEventsError::InvalidData(ref field) if field == "content_hash"
+            ),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn sync_status_reports_state_query_errors() {
+        let exec = SqliteExecutor::open_memory().expect("db");
+        migrations::run_all_up(&exec).expect("migrations");
+        let _ = exec
+            .exec("DROP TABLE nostr_event_state;", "[]")
+            .expect("drop nostr_event_state");
+        let err = radroots_replica_sync_status(&exec).expect_err("state query error");
+        assert!(err.to_string().contains("invalid query"));
     }
 }

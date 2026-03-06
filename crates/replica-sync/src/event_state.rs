@@ -15,16 +15,22 @@ use crate::error::RadrootsReplicaEventsError;
 
 #[cfg(test)]
 mod failpoints {
-    use core::sync::atomic::{AtomicBool, Ordering};
+    use std::cell::Cell;
 
-    static FORCE_ERROR: AtomicBool = AtomicBool::new(false);
+    thread_local! {
+        static FORCE_ERROR: Cell<bool> = const { Cell::new(false) };
+    }
 
     pub(crate) fn set_error() {
-        FORCE_ERROR.store(true, Ordering::SeqCst);
+        FORCE_ERROR.with(|flag| flag.set(true));
     }
 
     pub(crate) fn take_error() -> bool {
-        FORCE_ERROR.swap(false, Ordering::SeqCst)
+        FORCE_ERROR.with(|flag| {
+            let value = flag.get();
+            flag.set(false);
+            value
+        })
     }
 }
 
@@ -52,6 +58,11 @@ pub fn event_content_hash(
     hasher.update(content.as_bytes());
     hasher.update(tags_json.as_bytes());
     Ok(hex::encode(hasher.finalize()))
+}
+
+#[cfg(test)]
+pub(crate) fn event_content_hash_fail_next() {
+    failpoints::set_error();
 }
 
 pub fn tag_value<'a>(tags: &'a [Vec<String>], key: &str) -> Option<&'a str> {
