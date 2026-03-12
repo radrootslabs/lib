@@ -1,6 +1,7 @@
-name: sdk-contract-ci
+name: nix-flake-ci
 
 on:
+  workflow_dispatch:
   pull_request:
   push:
     branches:
@@ -11,8 +12,14 @@ permissions:
   id-token: write
 
 jobs:
-  contract:
-    runs-on: ubuntu-latest
+  flake-check:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - ubuntu-latest
+          - macos-latest
+    runs-on: ${{ matrix.runner }}
     steps:
       - name: checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -26,11 +33,5 @@ jobs:
       - name: prime nix cache
         uses: DeterminateSystems/magic-nix-cache-action@565684385bcd71bad329742eefe8d12f2e765b39
 
-      - name: run contract lane
-        run: nix run .#contract
-
-      - name: upload export manifest
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: sdk-export-manifest
-          path: target/sdk-export-ci/ts/export-manifest.json
+      - name: run flake check
+        run: nix flake check

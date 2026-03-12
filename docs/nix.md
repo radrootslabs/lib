@@ -95,6 +95,7 @@ nix run .#publish-crates -- --dry-run
 
 - Nix, shell, and TOML formatting through `treefmt`
 - Rust formatting through `cargo fmt --check`
+- GitHub Actions workflow validation through `actionlint`
 - pure cargo check/test derivations for the contract crate set
 - repo guards that can run without cargo registry network access
 
@@ -120,3 +121,7 @@ nix run .#release-preflight
 - Flakes only see tracked files when the source is treated as a git checkout. If Nix appears to miss a new file, `git add` it first.
 - Do not put secrets in `flake.nix`.
 - `publish-crates.sh` reads `CARGO_REGISTRY_TOKEN` or `CRATES_IO_TOKEN` from your runtime environment.
+
+## Deferred Infrastructure
+
+Public binary-cache support is intentionally deferred until repository infrastructure is ready to own it. The next infrastructure-backed follow-up is to provision a public cache, publish its trust key in `flake.nix`, and wire CI to write to it.

@@ -6,6 +6,11 @@ on:
     branches:
       - master
     paths:
+      - "flake.nix"
+      - "flake.lock"
+      - "treefmt.nix"
+      - "nix/**"
+      - "rust-toolchain.toml"
       - "crates/core/**"
       - "crates/types/**"
       - "crates/events/**"
@@ -16,21 +21,25 @@ on:
       - "contract/**"
       - ".github/workflows/sdk-core-sync-pr.yml"
 
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   sync-models:
     runs-on: ubuntu-latest
     steps:
       - name: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: install nix
-        uses: cachix/install-nix-action@v31
+        uses: cachix/install-nix-action@1ca7d21a94afc7c957383a2d217460d980de4934
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
 
       - name: prime nix cache
-        uses: DeterminateSystems/magic-nix-cache-action@main
+        uses: DeterminateSystems/magic-nix-cache-action@565684385bcd71bad329742eefe8d12f2e765b39
 
       - name: run repo guards
         run: nix run .#guards
@@ -67,14 +76,14 @@ jobs:
 
       - name: upload sdk export artifact
         if: steps.sync_token.outputs.configured == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: sdk-export-ts-bundle
           path: ${{ runner.temp }}/sdk-export/ts
 
       - name: checkout sdk-typescript
         if: steps.sync_token.outputs.configured == 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: radrootslabs/sdk-typescript
           ref: master
@@ -100,7 +109,7 @@ jobs:
 
       - name: setup bun
         if: steps.sync_token.outputs.configured == 'true'
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@ecf28ddc73e819eb6fa29df6b34ef8921c743461
         with:
           bun-version: 1.3.9
 
@@ -115,7 +124,7 @@ jobs:
 
       - name: create pull request
         if: steps.sync_token.outputs.configured == 'true'
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e
         with:
           token: ${{ secrets.RADROOTS_SDK_SYNC_TOKEN }}
           path: sdk-typescript

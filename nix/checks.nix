@@ -1,22 +1,43 @@
 { common, pkgs }:
 let
   cargoFmt = common.craneLib.cargoFmt common.commonCraneArgs;
-  cargoCheck = common.craneLib.cargoCheck (
+  cargoCheck = common.craneLib.mkCargoDerivation (
     common.commonCraneArgs
     // {
       inherit (common) cargoArtifacts;
-      cargoExtraArgs = common.sdkContractCargoArgs;
+      pname = "radroots-cargo-check";
+      doCheck = false;
+      buildPhaseCargoCommand = ''
+        cargo check ${common.sdkContractCargoArgs}
+      '';
+      installPhaseCommand = "mkdir -p $out";
     }
   );
-  cargoTest = common.craneLib.cargoTest (
+  cargoTest = common.craneLib.mkCargoDerivation (
     common.commonCraneArgs
     // {
       inherit (common) cargoArtifacts;
-      cargoExtraArgs = common.sdkContractCargoArgs;
+      pname = "radroots-cargo-test";
+      doCheck = false;
+      buildPhaseCargoCommand = ''
+        cargo test ${common.sdkContractCargoArgs}
+      '';
+      installPhaseCommand = "mkdir -p $out";
     }
   );
+  actionlint = common.mkRepoCheck {
+    name = "actionlint";
+    runtimeInputs = [
+      pkgs.actionlint
+      pkgs.shellcheck
+    ];
+    command = ''
+      actionlint
+    '';
+  };
 in
 {
+  actionlint = actionlint;
   cargo-fmt = cargoFmt;
   cargo-check = cargoCheck;
   cargo-test = cargoTest;

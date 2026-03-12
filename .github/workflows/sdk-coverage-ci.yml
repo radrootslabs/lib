@@ -6,31 +6,40 @@ on:
     branches:
       - master
     paths:
+      - "flake.nix"
+      - "flake.lock"
+      - "treefmt.nix"
+      - "nix/**"
+      - "rust-toolchain.toml"
       - ".github/workflows/sdk-coverage-ci.yml"
       - "crates/xtask/**"
       - "crates/**"
+
+permissions:
+  contents: read
+  id-token: write
 
 jobs:
   coverage-report:
     runs-on: ubuntu-latest
     steps:
       - name: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: install nix
-        uses: cachix/install-nix-action@v31
+        uses: cachix/install-nix-action@1ca7d21a94afc7c957383a2d217460d980de4934
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
 
       - name: prime nix cache
-        uses: DeterminateSystems/magic-nix-cache-action@main
+        uses: DeterminateSystems/magic-nix-cache-action@565684385bcd71bad329742eefe8d12f2e765b39
 
       - name: run sdk coverage report set
         run: nix run .#coverage-report
 
       - name: upload sdk coverage reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: sdk-coverage-reports
           path: |
