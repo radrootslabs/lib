@@ -26,11 +26,22 @@ fn usage() {
     );
 }
 
-fn workspace_root() -> PathBuf {
+fn workspace_root_with_override(override_root: Option<&str>) -> PathBuf {
+    if let Some(raw) = override_root {
+        let trimmed = raw.trim();
+        if !trimmed.is_empty() {
+            return PathBuf::from(trimmed);
+        }
+    }
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let crates_dir = manifest_dir.parent().unwrap_or(manifest_dir);
     let root = crates_dir.parent().unwrap_or(crates_dir);
     root.to_path_buf()
+}
+
+fn workspace_root() -> PathBuf {
+    let override_root = env::var("RADROOTS_WORKSPACE_ROOT").ok();
+    workspace_root_with_override(override_root.as_deref())
 }
 
 fn parse_out_dir(args: &[String], workspace_root: &Path) -> Result<PathBuf, String> {
@@ -252,6 +263,15 @@ mod tests {
         )
         .expect_err("missing out value");
         assert!(missing_out_value.contains("expected --out <dir>"));
+    }
+
+    #[test]
+    fn workspace_root_override_takes_precedence() {
+        let root = workspace_root_with_override(Some("/tmp/radroots-test-root"));
+        assert_eq!(root, PathBuf::from("/tmp/radroots-test-root"));
+
+        let fallback = workspace_root_with_override(Some("   "));
+        assert!(fallback.join("Cargo.toml").exists());
     }
 
     #[test]

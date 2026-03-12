@@ -591,11 +591,22 @@ fn parse_bool_flag(args: &[String], name: &str) -> bool {
     args.iter().any(|arg| arg == &flag)
 }
 
-fn workspace_root() -> PathBuf {
+fn workspace_root_with_override(override_root: Option<&str>) -> PathBuf {
+    if let Some(raw) = override_root {
+        let trimmed = raw.trim();
+        if !trimmed.is_empty() {
+            return PathBuf::from(trimmed);
+        }
+    }
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let crates_dir = manifest_dir.parent().unwrap_or(manifest_dir);
     let root = crates_dir.parent().unwrap_or(crates_dir);
     root.to_path_buf()
+}
+
+fn workspace_root() -> PathBuf {
+    let override_root = std::env::var("RADROOTS_WORKSPACE_ROOT").ok();
+    workspace_root_with_override(override_root.as_deref())
 }
 
 fn run_command(mut command: Command, name: &str) -> Result<(), String> {
@@ -616,6 +627,30 @@ fn apply_coverage_profile_flags(command: &mut Command, profile: &CoverageProfile
     if !profile.features.is_empty() {
         command.arg("--features").arg(profile.features.join(","));
     }
+}
+
+fn coverage_cargo_command_with_override(override_binary: Option<&str>) -> Command {
+    if let Some(binary) = override_binary {
+        return Command::new(binary);
+    }
+
+    let mut cmd = Command::new("rustup");
+    cmd.arg("run").arg("nightly").arg("cargo");
+    cmd
+}
+
+fn coverage_cargo_command() -> Command {
+    let override_binary = std::env::var("RADROOTS_COVERAGE_CARGO")
+        .ok()
+        .map(|raw| raw.trim().to_string())
+        .filter(|raw| !raw.is_empty());
+    coverage_cargo_command_with_override(override_binary.as_deref())
+}
+
+fn coverage_llvm_cov_command() -> Command {
+    let mut cmd = coverage_cargo_command();
+    cmd.arg("llvm-cov");
+    cmd
 }
 
 fn run_crate_with_runner_at_root(
@@ -643,12 +678,8 @@ fn run_crate_with_runner_at_root(
 
     runner(
         {
-            let mut cmd = Command::new("rustup");
-            cmd.arg("run")
-                .arg("nightly")
-                .arg("cargo")
-                .arg("llvm-cov")
-                .arg("clean")
+            let mut cmd = coverage_llvm_cov_command();
+            cmd.arg("clean")
                 .arg("--workspace")
                 .current_dir(workspace_root);
             cmd
@@ -658,8 +689,7 @@ fn run_crate_with_runner_at_root(
 
     runner(
         {
-            let mut cmd = Command::new("rustup");
-            cmd.arg("run").arg("nightly").arg("cargo").arg("llvm-cov");
+            let mut cmd = coverage_llvm_cov_command();
             cmd.arg("-p").arg(&crate_name);
             apply_coverage_profile_flags(&mut cmd, &profile);
             cmd.arg("--no-report")
@@ -675,8 +705,7 @@ fn run_crate_with_runner_at_root(
     let summary_path = out_dir.join("coverage-summary.json");
     runner(
         {
-            let mut cmd = Command::new("rustup");
-            cmd.arg("run").arg("nightly").arg("cargo").arg("llvm-cov");
+            let mut cmd = coverage_llvm_cov_command();
             cmd.arg("report").arg("-p").arg(&crate_name);
             cmd.arg("--json")
                 .arg("--summary-only")
@@ -692,8 +721,7 @@ fn run_crate_with_runner_at_root(
     let lcov_path = out_dir.join("coverage-lcov.info");
     runner(
         {
-            let mut cmd = Command::new("rustup");
-            cmd.arg("run").arg("nightly").arg("cargo").arg("llvm-cov");
+            let mut cmd = coverage_llvm_cov_command();
             cmd.arg("report").arg("-p").arg(&crate_name);
             cmd.arg("--lcov")
                 .arg("--branch")
@@ -1519,6 +1547,46 @@ test_threads = 0
             ]
         );
         fs::remove_dir_all(out).expect("remove run crate output dir");
+    }
+
+    #[test]
+    fn coverage_cargo_command_defaults_to_rustup_nightly() {
+        let cmd = coverage_cargo_command_with_override(None);
+        let args = cmd
+            .get_args()
+            .map(|arg| arg.to_string_lossy().to_string())
+            .collect::<Vec<_>>();
+
+        assert_eq!(cmd.get_program().to_string_lossy(), "rustup");
+        assert_eq!(
+            args,
+            vec![
+                "run".to_string(),
+                "nightly".to_string(),
+                "cargo".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn coverage_cargo_command_uses_override_binary_when_present() {
+        let cmd = coverage_cargo_command_with_override(Some("/tmp/nightly-cargo"));
+        let args = cmd
+            .get_args()
+            .map(|arg| arg.to_string_lossy().to_string())
+            .collect::<Vec<_>>();
+
+        assert_eq!(cmd.get_program().to_string_lossy(), "/tmp/nightly-cargo");
+        assert!(args.is_empty());
+    }
+
+    #[test]
+    fn workspace_root_override_takes_precedence() {
+        let root = workspace_root_with_override(Some("/tmp/radroots-coverage-root"));
+        assert_eq!(root, PathBuf::from("/tmp/radroots-coverage-root"));
+
+        let fallback = workspace_root_with_override(Some(""));
+        assert!(fallback.join("Cargo.toml").exists());
     }
 
     #[test]

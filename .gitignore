@@ -45,3 +45,6 @@ prompt*.txt
 
 # Dev
 .local
+.direnv/
+.treefmt-cache/
+result
