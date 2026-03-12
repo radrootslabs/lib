@@ -23,8 +23,17 @@ jobs:
       - name: checkout
         uses: actions/checkout@v4
 
-      - name: guard committed ts artifacts
-        run: ./scripts/ci/guard_committed_ts_artifacts.sh
+      - name: install nix
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: prime nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+
+      - name: run repo guards
+        run: nix run .#guards
 
       - name: detect sync token
         id: sync_token
@@ -39,25 +48,11 @@ jobs:
         if: steps.sync_token.outputs.configured != 'true'
         run: echo "radroots_sdk_sync_token is not configured; skipping sdk sync workflow"
 
-      - name: install rust toolchain
-        if: steps.sync_token.outputs.configured == 'true'
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.92.0
-
       - name: export ts sdk artifacts
         if: steps.sync_token.outputs.configured == 'true'
         run: |
           export_dir="${{ runner.temp }}/sdk-export"
-          for crate_name in \
-            radroots-core \
-            radroots-types \
-            radroots-events \
-            radroots-trade \
-            radroots-identity \
-            radroots-events-codec-wasm; do
-            cargo run -q -p xtask -- sdk export-ts-crate --crate "${crate_name}" --out "${export_dir}"
-          done
+          nix run .#export-ts -- --out "${export_dir}"
           test -f "${export_dir}/ts/export-manifest.json"
 
       - name: check required export artifacts

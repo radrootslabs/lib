@@ -30,16 +30,17 @@ jobs:
       - name: checkout
         uses: actions/checkout@v4
 
-      - name: setup rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: install nix
+        uses: cachix/install-nix-action@v31
         with:
-          toolchain: 1.92.0
+          extra_nix_config: |
+            experimental-features = nix-command flakes
 
-      - name: cache cargo
-        uses: Swatinem/rust-cache@v2
+      - name: prime nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
 
       - name: verify workspace
-        run: cargo check --workspace
+        run: nix run .#check
 
       - name: publish crates
         env:
@@ -64,7 +65,7 @@ jobs:
           fi
 
           if [ -n "${crates_input}" ]; then
-            ./publish-crates.sh "${mode}" "${crates_input}"
+            nix run .#publish-crates -- "${mode}" "${crates_input}"
           else
-            ./publish-crates.sh "${mode}"
+            nix run .#publish-crates -- "${mode}"
           fi

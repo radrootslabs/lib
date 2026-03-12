@@ -13,48 +13,17 @@ jobs:
       - name: checkout
         uses: actions/checkout@v4
 
-      - name: guard committed ts artifacts
-        run: ./scripts/ci/guard_committed_ts_artifacts.sh
-
-      - name: guard legacy identifiers
-        run: ./scripts/ci/guard_no_legacy_identifiers.sh
-
-      - name: install rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: install nix
+        uses: cachix/install-nix-action@v31
         with:
-          toolchain: 1.92.0
+          extra_nix_config: |
+            experimental-features = nix-command flakes
 
-      - name: cargo check
-        run: |
-          cargo check -q \
-            -p xtask \
-            -p radroots-core \
-            -p radroots-types \
-            -p radroots-events \
-            -p radroots-trade \
-            -p radroots-identity \
-            -p radroots-replica-db-schema \
-            -p radroots-events-codec \
-            -p radroots-events-codec-wasm
+      - name: prime nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
 
-      - name: cargo test
-        run: |
-          cargo test -q \
-            -p xtask \
-            -p radroots-core \
-            -p radroots-types \
-            -p radroots-events \
-            -p radroots-trade \
-            -p radroots-identity \
-            -p radroots-replica-db-schema \
-            -p radroots-events-codec \
-            -p radroots-events-codec-wasm
-
-      - name: validate sdk contract
-        run: cargo run -q -p xtask -- sdk validate
-
-      - name: export ts sdk artifacts
-        run: cargo run -q -p xtask -- sdk export-ts --out target/sdk-export-ci
+      - name: run contract lane
+        run: nix run .#contract
 
       - name: upload export manifest
         uses: actions/upload-artifact@v4

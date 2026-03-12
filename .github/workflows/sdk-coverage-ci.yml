@@ -17,109 +17,17 @@ jobs:
       - name: checkout
         uses: actions/checkout@v4
 
-      - name: install rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: install nix
+        uses: cachix/install-nix-action@v31
         with:
-          toolchain: 1.92.0
+          extra_nix_config: |
+            experimental-features = nix-command flakes
 
-      - name: install nightly rust toolchain
-        run: rustup toolchain install nightly --profile minimal
-
-      - name: install cargo llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
+      - name: prime nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
 
       - name: run sdk coverage report set
-        run: |
-          set -euo pipefail
-          mkdir -p target/sdk-coverage
-          : > target/sdk-coverage/coverage-report-status.txt
-          cargo run -q -p xtask -- sdk coverage workspace-crates > /tmp/radroots_workspace_coverage_crates.txt
-          while IFS= read -r crate; do
-            [ -n "${crate}" ] || continue
-            safe_crate="${crate//-/_}"
-            run_dir="target/sdk-coverage/${safe_crate}"
-            mkdir -p "${run_dir}"
-            status="ok"
-
-            if ! cargo run -q -p xtask -- sdk coverage run-crate --crate "${crate}" --out "${run_dir}" --test-threads 1; then
-              status="run-failed"
-            fi
-
-            if [ "${status}" = "ok" ] && ! cargo run -q -p xtask -- sdk coverage report \
-              --scope "${crate}" \
-              --summary "${run_dir}/coverage-summary.json" \
-              --lcov "${run_dir}/coverage-lcov.info" \
-              --out "${run_dir}/coverage-gate-summary.json" \
-              --fail-under-exec-lines 0 \
-              --fail-under-functions 0 \
-              --fail-under-regions 0 \
-              --fail-under-branches 0; then
-              status="report-failed"
-            fi
-
-            if [ "${status}" != "ok" ]; then
-              cat > "${run_dir}/coverage-gate-summary.json" <<JSON
-              {
-                "scope": "${crate}",
-                "thresholds": {
-                  "executable_lines": 0,
-                  "functions": 0,
-                  "regions": 0,
-                  "branches": 0,
-                  "branches_required": false
-                },
-                "measured": {
-                  "executable_lines_percent": 0,
-                  "executable_lines_source": "da",
-                  "functions_percent": 0,
-                  "branches_percent": null,
-                  "branches_available": false,
-                  "summary_lines_percent": 0,
-                  "summary_regions_percent": 0
-                },
-                "counts": {
-                  "executable_lines": {
-                    "covered": 0,
-                    "total": 0
-                  },
-                  "branches": {
-                    "covered": 0,
-                    "total": 0
-                  }
-                },
-                "result": {
-                  "pass": false,
-                  "fail_reasons": [
-                    "${status}"
-                  ]
-                }
-              }
-JSON
-            fi
-
-            echo "${crate}:${status}" >> target/sdk-coverage/coverage-report-status.txt
-          done < /tmp/radroots_workspace_coverage_crates.txt
-
-      - name: enforce blocking required coverage gates
-        run: |
-          set -euo pipefail
-          cargo run -q -p xtask -- sdk coverage required-crates > /tmp/radroots_required_coverage_crates.txt
-
-          while IFS= read -r crate; do
-            [ -n "${crate}" ] || continue
-            safe_crate="${crate//-/_}"
-            crate_dir="target/sdk-coverage/${safe_crate}"
-            cargo run -q -p xtask -- sdk coverage report \
-              --scope "${crate}-blocking" \
-              --summary "${crate_dir}/coverage-summary.json" \
-              --lcov "${crate_dir}/coverage-lcov.info" \
-              --out "${crate_dir}/coverage-gate-blocking.json" \
-              --fail-under-exec-lines 100 \
-              --fail-under-functions 100 \
-              --fail-under-regions 100 \
-              --fail-under-branches 100 \
-              --require-branches
-          done < /tmp/radroots_required_coverage_crates.txt
+        run: nix run .#coverage-report
 
       - name: upload sdk coverage reports
         uses: actions/upload-artifact@v4

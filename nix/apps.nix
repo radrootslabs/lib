@@ -61,6 +61,15 @@ in
     '';
   };
 
+  guards = mkRepoApp {
+    name = "guards";
+    runtimeInputs = common.runtimeInputs.stable;
+    command = ''
+      ./scripts/ci/guard_committed_ts_artifacts.sh
+      ./scripts/ci/guard_no_legacy_identifiers.sh
+    '';
+  };
+
   fmt = mkRepoApp {
     name = "fmt";
     runtimeInputs = common.runtimeInputs.stable ++ [
