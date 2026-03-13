@@ -28,8 +28,6 @@ let
     CARGO_TERM_COLOR = "always";
     LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
     SODIUM_USE_PKG_CONFIG = "1";
-  } // lib.optionalAttrs pkgs.stdenv.isDarwin {
-    SDKROOT = "${pkgs.darwin.apple_sdk.sdk}";
   };
   coverageEnv = sharedEnv // {
     RADROOTS_COVERAGE_CARGO = "${toolchains.coverage}/bin/cargo";

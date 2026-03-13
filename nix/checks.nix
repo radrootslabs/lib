@@ -31,6 +31,7 @@ let
       pkgs.actionlint
       pkgs.shellcheck
     ];
+    initGit = true;
     command = ''
       actionlint
     '';
