@@ -87,6 +87,7 @@ nix run .#export-ts
 nix run .#coverage-report
 nix run .#wasm-builds
 nix run .#release-preflight
+nix run .#validate-sdk-typescript -- ./sdk-typescript
 nix run .#publish-dry-run
 nix run .#publish-crates -- --dry-run
 ```
@@ -102,6 +103,7 @@ nix run .#publish-crates -- --dry-run
 Repo-aware flows stay behind `nix run` apps because they need a real checkout:
 
 - `sdk export-ts` writes into repo-local `target/`
+- sdk sync validation runs `bun` against a checked-out `sdk-typescript` repo path
 - coverage refresh and release preflight produce repo-local artifacts
 - wasm packaging writes package output directories
 - publish commands read runtime tokens and the live checkout state

@@ -54,6 +54,9 @@ let
     pkg-config
     python3
   ] ++ darwinBuildInputs;
+  syncRuntimeInputs = stableRuntimeInputs ++ [
+    pkgs.bun
+  ];
   coverageRuntimeInputs = stableRuntimeInputs ++ [
     toolchains.coverage
     pkgs.cargo-llvm-cov
@@ -163,6 +166,24 @@ let
   '';
   releasePreflightCommand = ''
     ./scripts/ci/release_preflight.sh
+  '';
+  validateSdkTypescriptCommand = ''
+    if [ "$#" -ne 1 ]; then
+      echo "usage: validate-sdk-typescript <path-to-sdk-typescript-checkout>" >&2
+      exit 1
+    fi
+
+    target_dir="$1"
+    if [ ! -d "$target_dir" ]; then
+      echo "sdk-typescript checkout not found at $target_dir" >&2
+      exit 1
+    fi
+
+    cd "$target_dir"
+    bun install --frozen-lockfile
+    bun run typecheck
+    bun run build
+    bun run test
   '';
   coverageReportCommand = ''
     mkdir -p target/sdk-coverage
@@ -319,6 +340,7 @@ in
     releasePreflightCommand
     sdkContractCargoArgs
     sharedEnv
+    validateSdkTypescriptCommand
     version
     wasmBuildsCommand
     xtaskPackage;
@@ -328,6 +350,7 @@ in
 
   runtimeInputs = {
     stable = stableRuntimeInputs;
+    sync = syncRuntimeInputs;
     coverage = coverageRuntimeInputs;
     release = releaseRuntimeInputs;
     wasm = wasmRuntimeInputs;
