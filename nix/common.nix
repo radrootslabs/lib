@@ -244,6 +244,54 @@ EOF
       [ -n "''${crate}" ] || continue
       safe_crate="''${crate//-/_}"
       crate_dir="target/sdk-coverage/''${safe_crate}"
+      crate_status="$(awk -F: -v crate="''${crate}" '$1 == crate { status = $2 } END { print status }' target/sdk-coverage/coverage-report-status.txt)"
+
+      if [ ! -f "''${crate_dir}/coverage-summary.json" ] || [ ! -f "''${crate_dir}/coverage-lcov.info" ]; then
+        fail_reason="missing-coverage-artifacts"
+        if [ -n "''${crate_status}" ] && [ "''${crate_status}" != "ok" ]; then
+          fail_reason="''${crate_status}"
+        fi
+
+        cat > "''${crate_dir}/coverage-gate-blocking.json" <<EOF
+        {
+          "scope": "''${crate}-blocking",
+          "thresholds": {
+            "executable_lines": 100,
+            "functions": 100,
+            "regions": 100,
+            "branches": 100,
+            "branches_required": true
+          },
+          "measured": {
+            "executable_lines_percent": 0,
+            "executable_lines_source": "da",
+            "functions_percent": 0,
+            "branches_percent": null,
+            "branches_available": false,
+            "summary_lines_percent": 0,
+            "summary_regions_percent": 0
+          },
+          "counts": {
+            "executable_lines": {
+              "covered": 0,
+              "total": 0
+            },
+            "branches": {
+              "covered": 0,
+              "total": 0
+            }
+          },
+          "result": {
+            "pass": false,
+            "fail_reasons": [
+              "''${fail_reason}"
+            ]
+          }
+        }
+EOF
+        continue
+      fi
+
       cargo run -q -p xtask -- sdk coverage report \
         --scope "''${crate}-blocking" \
         --summary "''${crate_dir}/coverage-summary.json" \
