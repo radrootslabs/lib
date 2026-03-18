@@ -1,6 +1,6 @@
-# radroots oss rust coverage policy
+# Radroots Core Libraries Rust Coverage Policy
 
-This document defines the required coverage gate for the oss rust workspace.
+This document defines the required coverage gate for the Radroots Core Libraries Rust workspace.
 
 ## gate contract
 

@@ -48,3 +48,7 @@ prompt*.txt
 .direnv/
 .treefmt-cache/
 result
+
+# Beads / Dolt runtime files
+.beads/dolt/
+.beads/dolt-access.lock

@@ -1,0 +1,56 @@
+issue-prefix: "rr"
+no-git-ops: true
+
+create:
+  require-description: true
+
+validation:
+  on-create: warn
+  on-sync: none
+
+dolt:
+  auto-commit: on
+  auto-push: false
+  shared-server: true
+
+backup:
+  enabled: false
+
+directory:
+  labels:
+    contract: area:contract
+    conformance: area:conformance
+    docs: area:docs
+    nix: area:nix
+    scripts: area:scripts
+
+    crates/app-core: crate:app_core
+    crates/app-wasm: crate:app_wasm
+    crates/core: crate:core
+    crates/events: crate:events
+    crates/events-codec: crate:events_codec
+    crates/events-codec-wasm: crate:events_codec_wasm
+    crates/events-indexed: crate:events_indexed
+    crates/identity: crate:identity
+    crates/log: crate:log
+    crates/net: crate:net
+    crates/net-core: crate:net_core
+    crates/nostr: crate:nostr
+    crates/nostr-accounts: crate:nostr_accounts
+    crates/nostr-ndb: crate:nostr_ndb
+    crates/nostr-runtime: crate:nostr_runtime
+    crates/runtime: crate:runtime
+    crates/sql-core: crate:sql_core
+    crates/sql-wasm-bridge: crate:sql_wasm_bridge
+    crates/sql-wasm-core: crate:sql_wasm_core
+    crates/replica-db-schema: crate:replica_db_schema
+    crates/replica-db: crate:replica_db
+    crates/replica-db-wasm: crate:replica_db_wasm
+    crates/replica-sync: crate:replica_sync
+    crates/replica-sync-wasm: crate:replica_sync_wasm
+    crates/trade: crate:trade
+    crates/types: crate:types
+    crates/xtask: crate:xtask
+
+external_projects:
+  plat: ../../../..

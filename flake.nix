@@ -1,5 +1,5 @@
 {
-  description = "radroots core libraries";
+  description = "Radroots Core Libraries";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
