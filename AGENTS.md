@@ -1,48 +1,76 @@
-# Rad Roots - Code Directives
+# Radroots Core Libraries - Agent Specification
 
-## Purpose
-- The crates are a shared Rust library layer used by Radroots networking apps and libraries across web (wasm), native, daemons, and embedded systems. Prioritize portability, correctness, and low overhead.
+See [AGENT_INSTRUCTIONS.md](AGENT_INSTRUCTIONS.md) for full instructions.
 
-## Scope
-- Applies to the workspace in this repository.
+This file exists for compatibility with tools that look for AGENTS.md.
 
-## Workspace Architecture
-- core: no_std core value types (money, currency, quantity, percent, discount, unit) with serde/typeshare gates.
-- types: API wrapper types (IError, IResult, IResultList) with ts-rs support.
-- events: Nostr event models (post, profile, job, tags, kinds) with ts-rs support.
-- events-codec: encode/decode for events (jobs, profiles) for nostr payloads.
-- events-indexed: manifest/checkpoint/types for indexed event archives (typeshare + serde gates).
-- nostr: Nostr utilities (filters, tags, relays, parsing) and SDK adapters.
-- log: tracing-based logging helpers with std/no_std split.
-- runtime: config loading, JSON IO, tracing init, signals, CLI helpers.
-- identity: identity spec + load/generate utilities, built on runtime.
-- net-core: networking core, build info, config, optional tokio runtime and Nostr client.
-- net: thin re-export of net-core.
-- sql-core: SQL executor trait + migrations for native/web/embedded targets.
-- sql-wasm-bridge: wasm JS bridge for exec/query and savepoint transactions.
-- sql-wasm-core: wasm-bindgen exports + error marshaling for SQL.
-- tangle-db-schema: Tangle schema models and relation types (ts-rs bindings).
-- tangle-db: SQL access layer for Tangle schema, migrations, backup/restore.
-- tangle-db-wasm: wasm-bindgen exports for Tangle SQL operations.
-- trade: trade/listing domain models and tags.
+## 1. Scope and hierarchy
 
-## Rust Code Directives
-- Toolchain: Rust 1.88, edition 2024; use workspace versions from the root Cargo.toml.
-- Portability: preserve no_std patterns; gate std usage with cfg(feature = "std") and use alloc when needed.
-- Safety: avoid unsafe; prefer safe, explicit APIs. Add #![forbid(unsafe_code)] on new crates/modules.
-- Public API: keep Radroots* prefix; avoid hidden panics; return Result/Option for fallible ops; use precise error enums (thiserror where appropriate).
-- Features: keep serde/typeshare/ts-rs derives behind existing feature gates and in the current style; ensure feature combinations compile (no_std, std, wasm).
-- Events modules: in `crates/events`, each `.rs` file must map to a single Nostr kind (or a single NIP-defined kind range), and a kind must not be defined in multiple modules.
-- Generated outputs: treat */bindings/ts/src/types.ts as generated; do not hand-edit.
-- Performance: borrow over clone, avoid intermediate allocations, preallocate when sizes are known, and prefer iterators over indexing loops.
-- DRY: consolidate shared logic into core/types/events-codec or dedicated helpers.
-- Parity: maintain feature parity across native/wasm layers when adding SQL or Tangle APIs.
-- Module layout: keep lib.rs as a module manifest and re-export surface; avoid heavy logic in lib.rs.
-- Testing: add or update unit tests for new behavior and edge cases, especially around parsing, invariants, conversions, and rounding.
+- This file applies to the full repository.
+- Keep this file concise and durable.
+- Put detailed procedures, examples, and extended guidance in `AGENT_INSTRUCTIONS.md`.
+- If a closer directory-level `AGENTS.md` is added later, it overrides this file for that subtree.
 
-## Git Commit Directives
-- Format commits like the latest reference: `<scope>: <imperative summary>` (scope = crate or subsystem, lowercase).
-- Leave a blank line after the summary.
-- Add a bullet list of key changes, each prefixed with `- `, matching the structure of the last commit.
-- Keep the summary concise; use bullets for notable changes, tests run, and compatibility notes.
+## 2. Repository operating model
+
+- This is a public open-source library workspace; optimize for durable library design, portability, determinism, and explicit contracts.
+- Prefer clean target-state changes over compatibility scaffolding unless compatibility is explicitly required.
+- Stay within the requested scope and the smallest coherent file set.
+- Do not fold unrelated cleanup, speculative refactors, or roadmap work into the same change.
+- Do not create hidden task trackers in markdown checklists, source comments, or stray notes.
+- Keep commits and handoff language standalone and open-source-readable; do not reference internal monorepo paths, internal mapping rationale, or private repository context.
+
+## 3. Preflight before edits
+
+Before editing code:
+
+- Read this file, `AGENT_INSTRUCTIONS.md`, `README.md`, `docs/nix.md`, and `contract/README.md`.
+- Enter the canonical environment with `nix develop` or `direnv allow` before targeted cargo work.
+- Discover commands from checked-in repo surfaces; do not invent ad hoc workflows.
+- Read the current implementation and nearby tests before designing a change.
+- Inspect `git status --short` before broad edits or refactors.
+- Fail early when the task is blocked by missing prerequisites, contaminated scope, or unresolved public contract questions.
+
+## 4. Canonical command surface
+
+- `nix flake check`
+- `nix run .#contract`
+- `nix run .#release-preflight`
+- targeted `cargo check -p <crate>` and `cargo test -p <crate>` only inside the Nix shell
+- targeted `cargo run -q -p xtask -- ...` only when narrowing a repo-owned contract or export workflow
+- if Beads is active, read `.beads/PRIME.md`
+
+## 5. Rust engineering rules
+
+- Use Rust `1.92.0`, edition `2024`, and workspace dependency versions from the root `Cargo.toml`.
+- Preserve intended `no_std` portability; gate `std`, wasm, and runtime-specific behavior explicitly.
+- Keep core logic functional and composable: prefer pure transformations, explicit state, and narrow side-effect boundaries.
+- Prefer enums, newtypes, and typed domain models over stringly APIs, boolean mode switches, or loosely typed maps.
+- Avoid hidden panics in library code; reserve `unwrap` and `expect` for tests, build tooling, or proven internal invariants.
+- Prefer typed public error surfaces; do not expose opaque convenience errors as stable library contracts.
+- Avoid `unsafe` unless it is strictly necessary and documented by invariants close to the code.
+- Borrow first, clone late, and allocate intentionally.
+- Keep `lib.rs` thin as a module manifest and public re-export surface.
+- Treat generated bindings and generated type artifacts as generated; do not hand-edit them.
+- Add or update deterministic tests for new behavior, invariants, parsing, conversions, feature gates, and cross-target behavior where relevant.
+
+## 6. Contract and release discipline
+
+- `contract/`, `conformance/`, and `crates/xtask` are authoritative for public SDK contract, export, and release governance.
+- Behavior changes that affect public surfaces must update the relevant contract metadata, conformance vectors, export rules, or validation flows in the same change.
+- Keep pure flake checks and repo-aware command apps aligned with the documented Nix command map.
+
+## 7. Commit directives
+
+- Format commits as `<scope>: <imperative summary>`.
+- Use lowercase scopes that match the crate or subsystem being changed.
+- Leave a blank line after the summary when writing a multi-line commit.
+- Use `- ` bullets for notable changes, validations, or compatibility notes when a body is needed.
 - Split unrelated changes into separate commits.
+
+## 8. Definition of done
+
+- The requested change is implemented.
+- Affected code, tests, docs, and contract surfaces are updated together.
+- Relevant canonical validation ran, or a concrete blocker is reported.
+- The handoff states what changed, what validations ran, and any follow-up risks or assumptions.
