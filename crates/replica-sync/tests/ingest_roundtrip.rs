@@ -1819,7 +1819,7 @@ fn sync_status_reports_pending_when_not_all_events_are_ingested() {
 }
 
 #[test]
-fn sync_all_rejects_invalid_selectors_and_non_unique_pair() {
+fn sync_all_rejects_invalid_selectors_and_resolves_unique_pair() {
     let exec = SqliteExecutor::open_memory().expect("db");
     migrations::run_all_up(&exec).expect("migrations");
 
@@ -1871,9 +1871,9 @@ fn sync_all_rejects_invalid_selectors_and_non_unique_pair() {
         location_country: None,
     };
     let _ = unwrap_sql(farm::create(&exec, &fields), "farm one");
-    let _ = unwrap_sql(farm::create(&exec, &fields), "farm two");
+    assert!(farm::create(&exec, &fields).is_err());
 
-    let non_unique_err = radroots_replica_sync_all(
+    let bundle = radroots_replica_sync_all(
         &exec,
         &RadrootsReplicaSyncRequest {
             farm: RadrootsReplicaFarmSelector {
@@ -1884,12 +1884,8 @@ fn sync_all_rejects_invalid_selectors_and_non_unique_pair() {
             options: None,
         },
     )
-    .expect_err("non unique selector");
-    assert!(
-        non_unique_err
-            .to_string()
-            .contains("did not resolve to a single farm")
-    );
+    .expect("unique pair should resolve");
+    assert_eq!(bundle.version, RADROOTS_REPLICA_TRANSFER_VERSION);
 }
 
 #[test]

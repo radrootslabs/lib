@@ -29,6 +29,16 @@ impl SqlExecutor for SqliteExecutor {
     fn exec(&self, sql: &str, params_json: &str) -> Result<ExecOutcome, SqlError> {
         let binds = sqlite_util::parse_params(params_json)?;
         let conn = self.conn.lock().map_err(|_| SqlError::Internal)?;
+        if binds.is_empty() {
+            let total_changes_before = conn.total_changes();
+            conn.execute_batch(sql).map_err(SqlError::from)?;
+            let total_changes_after = conn.total_changes();
+            let last_insert_id = conn.last_insert_rowid();
+            return Ok(ExecOutcome {
+                changes: (total_changes_after - total_changes_before) as i64,
+                last_insert_id,
+            });
+        }
         let n = conn
             .execute(sql, params_from_iter(binds.into_iter()))
             .map_err(SqlError::from)?;

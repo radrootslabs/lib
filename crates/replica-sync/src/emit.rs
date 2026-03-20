@@ -1327,34 +1327,35 @@ mod tests {
             .is_err()
         );
 
-        let _ = farm::create(
-            &exec,
-            &IFarmFields {
-                d_tag: farm_row.d_tag.clone(),
-                pubkey: farm_row.pubkey.clone(),
-                name: "duplicate".to_string(),
-                about: None,
-                website: None,
-                picture: None,
-                banner: None,
-                location_primary: None,
-                location_city: None,
-                location_region: None,
-                location_country: None,
-            },
-        )
-        .expect("duplicate farm");
         assert!(
-            resolve_farm(
+            farm::create(
                 &exec,
-                &RadrootsReplicaFarmSelector {
-                    id: None,
-                    d_tag: Some(farm_row.d_tag.clone()),
-                    pubkey: Some(farm_row.pubkey.clone()),
+                &IFarmFields {
+                    d_tag: farm_row.d_tag.clone(),
+                    pubkey: farm_row.pubkey.clone(),
+                    name: "duplicate".to_string(),
+                    about: None,
+                    website: None,
+                    picture: None,
+                    banner: None,
+                    location_primary: None,
+                    location_city: None,
+                    location_region: None,
+                    location_country: None,
                 },
             )
             .is_err()
         );
+        let by_identity = resolve_farm(
+            &exec,
+            &RadrootsReplicaFarmSelector {
+                id: None,
+                d_tag: Some(farm_row.d_tag.clone()),
+                pubkey: Some(farm_row.pubkey.clone()),
+            },
+        )
+        .expect("resolve unique farm");
+        assert_eq!(by_identity.id, farm_row.id);
 
         let tags = collect_farm_tags(&exec, &farm_row.id).expect("farm tags");
         assert_eq!(tags, vec!["coffee".to_string()]);

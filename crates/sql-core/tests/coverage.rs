@@ -6,6 +6,8 @@ use radroots_sql_core::utils::{
     to_partial_object_map, uuidv4, with_transaction,
 };
 use radroots_sql_core::{ExecOutcome, SqlExecutor};
+#[cfg(feature = "native")]
+use radroots_sql_core::SqliteExecutor;
 use serde::ser::{SerializeMap, SerializeSeq};
 use serde::{Deserialize, Serialize, Serializer};
 use serde_json::{Map, Value, json};
@@ -187,6 +189,33 @@ fn sql_executor_reference_impl_forwards_all_methods() {
     assert_eq!(snapshot.commit_count, 1);
     assert_eq!(snapshot.rollback_count, 1);
     assert!(snapshot.exec_sql.iter().any(|sql| sql == "select 1"));
+}
+
+#[cfg(feature = "native")]
+#[test]
+fn sqlite_executor_exec_runs_multi_statement_batches_without_params() {
+    let exec = SqliteExecutor::open_memory().expect("open sqlite memory");
+
+    let outcome = exec
+        .exec(
+            "create table demo (id integer primary key, name text not null);\ncreate unique index demo_name_idx on demo(name);",
+            "[]",
+        )
+        .expect("multi-statement batch should succeed");
+    assert_eq!(outcome.changes, 0);
+
+    let insert = exec
+        .exec("insert into demo(name) values ('alpha')", "[]")
+        .expect("insert should succeed");
+    assert_eq!(insert.changes, 1);
+
+    let index_rows = exec
+        .query_raw(
+            "select name from sqlite_master where type = 'index' and name = 'demo_name_idx'",
+            "[]",
+        )
+        .expect("index metadata query should succeed");
+    assert_eq!(index_rows, json!([{ "name": "demo_name_idx" }]).to_string());
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
