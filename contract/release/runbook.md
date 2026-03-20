@@ -16,35 +16,33 @@ This command validates:
 - required crate coverage at `100/100/100`
 - publish crate metadata required for crates.io
 
+## release tag
+
+Create an annotated tag whose version matches `release.version` in `contract/release/publish-set.toml`.
+
+Recommended form:
+
+```bash
+git tag -a "v$(awk -F '\"' '/^version = / { print $2; exit }' contract/release/publish-set.toml)" -m "release"
+```
+
 ## publish simulation
 
 ```bash
-./scripts/ci/release_publish_order.sh dry-run
+./publish-crates.sh --dry-run
 ```
 
 This runs `cargo publish --dry-run` in release order and reports deferred crates when they depend on earlier crates that are not yet published.
 
-GitHub Actions equivalent:
-
-- run workflow `publish crates`
-- set `dry_run = true`
-- optionally set `crates` (space or comma separated) to test a subset in release order
-
 ## publish
 
 ```bash
-./scripts/ci/release_publish_order.sh publish
+./publish-crates.sh --publish
 ```
 
 This publishes in `publish_order` and waits for each crate version to become visible on crates.io before continuing.
 
-GitHub Actions equivalent:
-
-- run workflow `publish crates`
-- set `dry_run = false`
-- ensure repository secret `CRATES_IO_TOKEN` is configured
-
-The workflow also accepts `CARGO_REGISTRY_TOKEN`; either secret can provide the cargo publish token.
+Set `CARGO_REGISTRY_TOKEN` or `CRATES_IO_TOKEN` in the runtime environment before the publish step.
 
 ## post-release verification
 

@@ -25,20 +25,8 @@ let
       installPhaseCommand = "mkdir -p $out";
     }
   );
-  actionlint = common.mkRepoCheck {
-    name = "actionlint";
-    runtimeInputs = [
-      pkgs.actionlint
-      pkgs.shellcheck
-    ];
-    initGit = true;
-    command = ''
-      actionlint
-    '';
-  };
 in
 {
-  actionlint = actionlint;
   cargo-fmt = cargoFmt;
   cargo-check = cargoCheck;
   cargo-test = cargoTest;

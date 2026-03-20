@@ -32,6 +32,7 @@ Stay disciplined:
 - do not leave dead paths, temporary adapters, or silent fallback behavior behind
 
 This repo is a library workspace, not an app monolith. The right default is small, durable changes that preserve clean crate boundaries.
+Release automation should stay forge-agnostic. Keep release truth in repo-owned scripts, Nix apps, tags, and contract metadata rather than committed provider-specific workflow files.
 
 ## 3. Preflight workflow
 
@@ -167,6 +168,12 @@ Validation rules:
 - contract, export, conformance, flake, release, or multi-crate changes should close on a canonical Nix lane
 - deterministic tests are required for new behavior and edge cases
 - do not rely on wall-clock time, random order, external network access, or ambient machine state in unit tests
+
+Release discipline:
+
+- create annotated release tags that match `contract/release/publish-set.toml`
+- keep repo-owned release commands runnable without depending on GitHub-specific workflow files
+- when documenting release flow here, document the local repo contract rather than forge-specific orchestration
 
 ## 8. Commit and handoff guidance
 

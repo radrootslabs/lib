@@ -96,7 +96,6 @@ nix run .#publish-crates -- --dry-run
 
 - Nix, shell, and TOML formatting through `treefmt`
 - Rust formatting through `cargo fmt --check`
-- GitHub Actions workflow validation through `actionlint`
 - pure cargo check/test derivations for the contract crate set
 - repo guards that can run without cargo registry network access
 

@@ -14,6 +14,7 @@ This file exists for compatibility with tools that look for AGENTS.md.
 ## 2. Repository operating model
 
 - This is a public open-source library workspace; optimize for durable library design, portability, determinism, and explicit contracts.
+- Keep release and validation automation forge-agnostic; repo-owned scripts, Nix apps, tags, and contract metadata are canonical, while committed provider-specific workflow automation is not.
 - Prefer clean target-state changes over compatibility scaffolding unless compatibility is explicitly required.
 - Stay within the requested scope and the smallest coherent file set.
 - Do not fold unrelated cleanup, speculative refactors, or roadmap work into the same change.
