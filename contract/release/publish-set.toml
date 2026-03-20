@@ -26,9 +26,7 @@ crates = [
   "radroots-net-core",
   "radroots-replica-db-wasm",
   "radroots-replica-sync-wasm",
-  "radroots-app-core",
   "radroots-net",
-  "radroots-app-wasm",
 ]
 
 [internal]
@@ -61,7 +59,5 @@ crates = [
   "radroots-net-core",
   "radroots-replica-db-wasm",
   "radroots-replica-sync-wasm",
-  "radroots-app-core",
   "radroots-net",
-  "radroots-app-wasm",
 ]

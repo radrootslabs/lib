@@ -1092,7 +1092,7 @@ mod tests {
     fn coverage_profiles_default_when_contract_file_is_missing() {
         let root = temp_dir_path("profile_missing");
         fs::create_dir_all(&root).expect("create root");
-        let profile = read_coverage_profile(&root, "radroots-app-core").expect("read profile");
+        let profile = read_coverage_profile(&root, "radroots-log").expect("read profile");
         assert!(!profile.no_default_features);
         assert!(profile.features.is_empty());
         assert_eq!(profile.test_threads, None);
@@ -1111,14 +1111,14 @@ no_default_features = false
 features = ["std"]
 test_threads = 2
 
-[profiles.crates."radroots-app-core"]
+[profiles.crates."radroots-log"]
 no_default_features = true
 features = ["rt"]
 "#,
         )
         .expect("write profiles");
 
-        let app_profile = read_coverage_profile(&root, "radroots-app-core").expect("app profile");
+        let app_profile = read_coverage_profile(&root, "radroots-log").expect("app profile");
         assert!(app_profile.no_default_features);
         assert_eq!(app_profile.features, vec!["rt".to_string()]);
         assert_eq!(app_profile.test_threads, Some(2));
@@ -1138,12 +1138,12 @@ features = ["rt"]
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         fs::write(
             coverage_dir.join("profiles.toml"),
-            r#"[profiles.crates."radroots-app-core"]
+            r#"[profiles.crates."radroots-log"]
 test_threads = 4
 "#,
         )
         .expect("write profiles");
-        let profile = read_coverage_profile(&root, "radroots-app-core")
+        let profile = read_coverage_profile(&root, "radroots-log")
             .expect("valid positive thread profile");
         assert_eq!(profile.test_threads, Some(4));
         fs::remove_dir_all(root).expect("remove root");
@@ -1156,14 +1156,14 @@ test_threads = 4
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         fs::write(
             coverage_dir.join("profiles.toml"),
-            r#"[profiles.crates."radroots-app-core"]
+            r#"[profiles.crates."radroots-log"]
 features = [""]
 test_threads = 0
 "#,
         )
         .expect("write profiles");
 
-        let err = read_coverage_profile(&root, "radroots-app-core").expect_err("invalid profile");
+        let err = read_coverage_profile(&root, "radroots-log").expect_err("invalid profile");
         assert!(
             err.contains("empty feature value"),
             "unexpected error: {err}"
@@ -1179,7 +1179,7 @@ test_threads = 0
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         fs::write(coverage_dir.join("profiles.toml"), "[profiles.default\n")
             .expect("write invalid profiles");
-        let err = read_coverage_profile(&root, "radroots-app-core").expect_err("invalid toml");
+        let err = read_coverage_profile(&root, "radroots-log").expect_err("invalid toml");
         assert!(err.contains("failed to parse"));
         fs::remove_dir_all(root).expect("remove root");
     }
@@ -1191,14 +1191,13 @@ test_threads = 0
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         fs::write(
             coverage_dir.join("profiles.toml"),
-            r#"[profiles.crates."radroots-app-core"]
+            r#"[profiles.crates."radroots-log"]
 test_threads = 0
 "#,
         )
         .expect("write profiles");
 
-        let err =
-            read_coverage_profile(&root, "radroots-app-core").expect_err("invalid thread count");
+        let err = read_coverage_profile(&root, "radroots-log").expect_err("invalid thread count");
         assert!(err.contains("test_threads > 0"));
 
         fs::remove_dir_all(root).expect("remove root");

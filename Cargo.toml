@@ -1,7 +1,5 @@
 [workspace]
 members = [
-    "crates/app-core",
-    "crates/app-wasm",
     "crates/core",
     "crates/events",
     "crates/events-codec",
@@ -40,8 +38,6 @@ homepage = "https://radroots.org"
 readme = "README"
 
 [workspace.dependencies]
-radroots-app-core = { path = "crates/app-core", version = "0.1.0-alpha.1", default-features = false }
-radroots-app-wasm = { path = "crates/app-wasm", version = "0.1.0-alpha.1", default-features = false }
 radroots-core = { path = "crates/core", version = "0.1.0-alpha.1", default-features = false }
 radroots-events = { path = "crates/events", version = "0.1.0-alpha.1", default-features = false }
 radroots-events-codec = { path = "crates/events-codec", version = "0.1.0-alpha.1", default-features = false }

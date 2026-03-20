@@ -55,91 +55,81 @@ status = "required"
 order = 9
 
 [[rollout.crates]]
-name = "radroots-app-core"
+name = "radroots-events-indexed"
 status = "required"
 order = 10
 
 [[rollout.crates]]
-name = "radroots-app-wasm"
+name = "radroots-log"
 status = "required"
 order = 11
 
 [[rollout.crates]]
-name = "radroots-events-indexed"
+name = "radroots-net-core"
 status = "required"
 order = 12
 
 [[rollout.crates]]
-name = "radroots-log"
+name = "radroots-net"
 status = "required"
 order = 13
 
 [[rollout.crates]]
-name = "radroots-net-core"
+name = "radroots-nostr"
 status = "required"
 order = 14
 
 [[rollout.crates]]
-name = "radroots-net"
+name = "radroots-nostr-accounts"
 status = "required"
 order = 15
 
 [[rollout.crates]]
-name = "radroots-nostr"
+name = "radroots-nostr-ndb"
 status = "required"
 order = 16
 
 [[rollout.crates]]
-name = "radroots-nostr-accounts"
+name = "radroots-nostr-runtime"
 status = "required"
 order = 17
 
 [[rollout.crates]]
-name = "radroots-nostr-ndb"
+name = "radroots-runtime"
 status = "required"
 order = 18
 
 [[rollout.crates]]
-name = "radroots-nostr-runtime"
+name = "radroots-sql-core"
 status = "required"
 order = 19
 
 [[rollout.crates]]
-name = "radroots-runtime"
+name = "radroots-sql-wasm-core"
 status = "required"
 order = 20
 
 [[rollout.crates]]
-name = "radroots-sql-core"
+name = "radroots-sql-wasm-bridge"
 status = "required"
 order = 21
 
 [[rollout.crates]]
-name = "radroots-sql-wasm-core"
+name = "radroots-replica-sync"
 status = "required"
 order = 22
 
 [[rollout.crates]]
-name = "radroots-sql-wasm-bridge"
+name = "radroots-replica-db"
 status = "required"
 order = 23
 
 [[rollout.crates]]
-name = "radroots-replica-sync"
+name = "radroots-replica-sync-wasm"
 status = "required"
 order = 24
 
 [[rollout.crates]]
-name = "radroots-replica-db"
-status = "required"
-order = 25
-
-[[rollout.crates]]
-name = "radroots-replica-sync-wasm"
-status = "required"
-order = 26
-
-[[rollout.crates]]
 name = "radroots-replica-db-wasm"
 status = "required"
-order = 27
+order = 25
