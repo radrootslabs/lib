@@ -19,7 +19,7 @@ os-keyring = ["std", "dep:keyring"]
 ndb-bridge = ["std", "dep:radroots-nostr-ndb"]
 
 [dependencies]
-keyring = { version = "2.3.3", optional = true }
+keyring = { version = "2.3.3", optional = true, default-features = false, features = ["linux-no-secret-service", "platform-macos", "platform-ios", "platform-windows"] }
 radroots-identity = { workspace = true, optional = true, default-features = false, features = ["std", "profile", "json-file"] }
 radroots-nostr-ndb = { workspace = true, optional = true, default-features = false, features = ["ndb", "giftwrap", "rt"] }
 radroots-runtime = { workspace = true, optional = true }
