@@ -98,6 +98,11 @@ pub static MIGRATIONS: &[Migration] = &[
         up_sql: include_str!("../migrations/0018_nostr_event_state.up.sql"),
         down_sql: include_str!("../migrations/0018_nostr_event_state.down.sql"),
     },
+    Migration {
+        name: "0019_repair_missing_indexes",
+        up_sql: include_str!("../migrations/0019_repair_missing_indexes.up.sql"),
+        down_sql: include_str!("../migrations/0019_repair_missing_indexes.down.sql"),
+    },
 ];
 
 pub fn run_all_up<E>(executor: &E) -> Result<(), SqlError>

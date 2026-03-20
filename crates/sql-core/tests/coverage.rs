@@ -1,3 +1,5 @@
+#[cfg(feature = "native")]
+use radroots_sql_core::SqliteExecutor;
 use radroots_sql_core::error::SqlError;
 use radroots_sql_core::migrations::{Migration, migrations_run_all_down, migrations_run_all_up};
 use radroots_sql_core::utils::{
@@ -6,8 +8,6 @@ use radroots_sql_core::utils::{
     to_partial_object_map, uuidv4, with_transaction,
 };
 use radroots_sql_core::{ExecOutcome, SqlExecutor};
-#[cfg(feature = "native")]
-use radroots_sql_core::SqliteExecutor;
 use serde::ser::{SerializeMap, SerializeSeq};
 use serde::{Deserialize, Serialize, Serializer};
 use serde_json::{Map, Value, json};

@@ -4,7 +4,7 @@ use std::sync::Mutex;
 
 use radroots_sql_core::sqlite_util;
 use radroots_sql_core::{ExecOutcome, SqlError, SqlExecutor};
-use rusqlite::{Connection, DatabaseName, params_from_iter};
+use rusqlite::{Connection, MAIN_DB, params_from_iter};
 use serde_json::Value;
 
 const SAVEPOINT_BEGIN: &str = "savepoint radroots_schema_tx";
@@ -84,7 +84,7 @@ fn serialize_main(conn: &Connection) -> Result<Vec<u8>, rusqlite::Error> {
     if failpoints::take(failpoints::Point::ExportSerialize) {
         return Err(forced_error());
     }
-    conn.serialize(DatabaseName::Main).map(|data| data.to_vec())
+    conn.serialize(MAIN_DB).map(|data| data.to_vec())
 }
 
 fn map_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Value> {
@@ -132,6 +132,16 @@ impl EmbeddedSqlEngine {
     pub fn exec(&self, sql: &str, params_json: &str) -> Result<ExecOutcome, SqlError> {
         let binds = sqlite_util::parse_params(params_json)?;
         let conn = self.conn.lock().map_err(|_| SqlError::Internal)?;
+        if binds.is_empty() {
+            let total_changes_before = conn.total_changes();
+            conn.execute_batch(sql).map_err(map_rusqlite)?;
+            let total_changes_after = conn.total_changes();
+            let last_insert_id = conn.last_insert_rowid();
+            return Ok(ExecOutcome {
+                changes: (total_changes_after - total_changes_before) as i64,
+                last_insert_id,
+            });
+        }
         let changes = conn
             .execute(sql, params_from_iter(binds.into_iter()))
             .map_err(map_rusqlite)?;
@@ -217,7 +227,7 @@ pub fn coverage_branch_probe(input: bool) -> &'static str {
 #[cfg(all(test, feature = "embedded"))]
 mod tests {
     use super::{EmbeddedSqlEngine, coverage_branch_probe, failpoints};
-    use radroots_sql_core::{SqlError, SqlExecutor};
+    use radroots_sql_core::SqlExecutor;
 
     const CREATE_TABLE_SQL: &str = "CREATE TABLE test_items (id INTEGER PRIMARY KEY, name TEXT)";
 
@@ -268,6 +278,33 @@ mod tests {
             .query_rows("SELECT name FROM test_items", "[]")
             .unwrap();
         assert!(rows.is_empty());
+    }
+
+    #[test]
+    fn exec_runs_multi_statement_batches_without_params() {
+        let engine = EmbeddedSqlEngine::new().unwrap();
+
+        let outcome = engine
+            .exec(
+                "CREATE TABLE demo (id INTEGER PRIMARY KEY, name TEXT NOT NULL);\
+\nCREATE UNIQUE INDEX demo_name_idx ON demo(name);",
+                "[]",
+            )
+            .unwrap();
+        assert_eq!(outcome.changes, 0);
+
+        let insert = engine
+            .exec("INSERT INTO demo (name) VALUES ('alpha')", "[]")
+            .unwrap();
+        assert_eq!(insert.changes, 1);
+
+        let rows = engine
+            .query_rows(
+                "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'demo_name_idx'",
+                "[]",
+            )
+            .unwrap();
+        assert_eq!(rows.len(), 1);
     }
 
     #[test]
