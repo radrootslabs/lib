@@ -19,13 +19,14 @@ os-keyring = ["std", "dep:keyring"]
 ndb-bridge = ["std", "dep:radroots-nostr-ndb"]
 
 [dependencies]
-keyring = { version = "2.3.3", optional = true, default-features = false, features = ["linux-no-secret-service", "platform-macos", "platform-ios", "platform-windows"] }
+keyring = { workspace = true, optional = true }
 radroots-identity = { workspace = true, optional = true, default-features = false, features = ["std", "profile", "json-file"] }
 radroots-nostr-ndb = { workspace = true, optional = true, default-features = false, features = ["ndb", "giftwrap", "rt"] }
 radroots-runtime = { workspace = true, optional = true }
 serde = { workspace = true, optional = true, features = ["derive"] }
 serde_json = { workspace = true, optional = true }
 thiserror = { workspace = true }
+zeroize = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

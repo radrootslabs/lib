@@ -20,6 +20,13 @@ pub struct RadrootsNostrAccountStoreState {
     pub accounts: Vec<RadrootsNostrAccountRecord>,
 }
 
+#[derive(Debug, Clone)]
+pub enum RadrootsNostrSelectedAccountStatus {
+    NotConfigured,
+    PublicOnly { account: RadrootsNostrAccountRecord },
+    Ready { account: RadrootsNostrAccountRecord },
+}
+
 impl Default for RadrootsNostrAccountStoreState {
     fn default() -> Self {
         Self {

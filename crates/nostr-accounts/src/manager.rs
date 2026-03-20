@@ -1,11 +1,14 @@
 use crate::error::RadrootsNostrAccountsError;
-use crate::model::{RadrootsNostrAccountRecord, RadrootsNostrAccountStoreState};
+use crate::model::{
+    RadrootsNostrAccountRecord, RadrootsNostrAccountStoreState, RadrootsNostrSelectedAccountStatus,
+};
 use crate::store::{RadrootsNostrAccountStore, RadrootsNostrMemoryAccountStore};
 use crate::vault::{RadrootsNostrSecretVault, RadrootsNostrSecretVaultMemory};
 use radroots_identity::{RadrootsIdentity, RadrootsIdentityId, RadrootsIdentityPublic};
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
+use zeroize::Zeroizing;
 
 #[derive(Clone)]
 pub struct RadrootsNostrAccountsManager {
@@ -94,6 +97,26 @@ impl RadrootsNostrAccountsManager {
             .map(|record| record.public_identity.clone()))
     }
 
+    pub fn selected_account_status(
+        &self,
+    ) -> Result<RadrootsNostrSelectedAccountStatus, RadrootsNostrAccountsError> {
+        let Some(record) = self.selected_account()? else {
+            return Ok(RadrootsNostrSelectedAccountStatus::NotConfigured);
+        };
+
+        let Some(secret_key_hex) = self.vault.load_secret_hex(&record.account_id)? else {
+            return Ok(RadrootsNostrSelectedAccountStatus::PublicOnly { account: record });
+        };
+
+        let secret_key_hex = Zeroizing::new(secret_key_hex);
+        let identity = RadrootsIdentity::from_secret_key_str(secret_key_hex.as_str())?;
+        if identity.public_key_hex() != record.public_identity.public_key_hex {
+            return Err(RadrootsNostrAccountsError::PublicKeyMismatch);
+        }
+
+        Ok(RadrootsNostrSelectedAccountStatus::Ready { account: record })
+    }
+
     pub fn selected_signing_identity(
         &self,
     ) -> Result<Option<RadrootsIdentity>, RadrootsNostrAccountsError> {
@@ -129,8 +152,9 @@ impl RadrootsNostrAccountsManager {
         make_selected: bool,
     ) -> Result<RadrootsIdentityId, RadrootsNostrAccountsError> {
         let account_id = identity.id();
+        let secret_key_hex = Zeroizing::new(identity.secret_key_hex());
         self.vault
-            .store_secret_hex(&account_id, identity.secret_key_hex().as_str())?;
+            .store_secret_hex(&account_id, secret_key_hex.as_str())?;
 
         let public_identity = identity.to_public();
         self.upsert_public_identity(public_identity, label, make_selected)
@@ -257,6 +281,7 @@ impl RadrootsNostrAccountsManager {
         let Some(secret_key_hex) = self.vault.load_secret_hex(&record.account_id)? else {
             return Ok(None);
         };
+        let secret_key_hex = Zeroizing::new(secret_key_hex);
         let mut identity = RadrootsIdentity::from_secret_key_str(secret_key_hex.as_str())?;
         if identity.public_key_hex() != record.public_identity.public_key_hex {
             return Err(RadrootsNostrAccountsError::PublicKeyMismatch);
@@ -524,6 +549,34 @@ mod tests {
                 .expect("signing")
                 .is_none()
         );
+        match manager
+            .selected_account_status()
+            .expect("selected account status")
+        {
+            RadrootsNostrSelectedAccountStatus::PublicOnly { account } => {
+                assert_eq!(account.label.as_deref(), Some("watch"));
+            }
+            other => panic!("unexpected account status: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn selected_account_status_reports_ready_for_signing_identity() {
+        let manager = RadrootsNostrAccountsManager::new_in_memory();
+        let selected_id = manager
+            .generate_identity(Some("primary".into()), true)
+            .expect("generate");
+
+        match manager
+            .selected_account_status()
+            .expect("selected account status")
+        {
+            RadrootsNostrSelectedAccountStatus::Ready { account } => {
+                assert_eq!(account.account_id, selected_id);
+                assert_eq!(account.label.as_deref(), Some("primary"));
+            }
+            other => panic!("unexpected account status: {other:?}"),
+        }
     }
 
     #[test]
@@ -622,6 +675,12 @@ mod tests {
                 .expect("selected signing")
                 .is_none()
         );
+        assert!(matches!(
+            manager
+                .selected_account_status()
+                .expect("selected account status"),
+            RadrootsNostrSelectedAccountStatus::NotConfigured
+        ));
 
         let missing_id = RadrootsIdentity::generate().id();
         assert!(
@@ -630,6 +689,39 @@ mod tests {
                 .expect("signing")
                 .is_none()
         );
+    }
+
+    #[test]
+    fn selected_account_status_propagates_secret_integrity_errors() {
+        let manager = RadrootsNostrAccountsManager::new_in_memory();
+        let account_id = manager
+            .generate_identity(Some("primary".into()), true)
+            .expect("generate");
+        manager
+            .vault
+            .remove_secret(&account_id)
+            .expect("remove secret");
+
+        match manager
+            .selected_account_status()
+            .expect("selected account status")
+        {
+            RadrootsNostrSelectedAccountStatus::PublicOnly { account } => {
+                assert_eq!(account.account_id, account_id);
+            }
+            other => panic!("unexpected account status: {other:?}"),
+        }
+
+        let wrong_identity = RadrootsIdentity::generate();
+        manager
+            .vault
+            .store_secret_hex(&account_id, wrong_identity.secret_key_hex().as_str())
+            .expect("store wrong secret");
+
+        let err = manager
+            .selected_account_status()
+            .expect_err("public key mismatch");
+        assert_eq!(err.to_string(), "public key does not match secret key");
     }
 
     #[test]

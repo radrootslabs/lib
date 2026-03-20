@@ -123,7 +123,7 @@ impl RadrootsNostrSecretVault for RadrootsNostrSecretVaultOsKeyring {
     ) -> Result<(), RadrootsNostrAccountsError> {
         let entry = keyring::Entry::new(self.service_name.as_str(), account_id.as_str())
             .map_err(|source| RadrootsNostrAccountsError::Vault(source.to_string()))?;
-        match entry.delete_password() {
+        match entry.delete_credential() {
             Ok(_) | Err(keyring::Error::NoEntry) => Ok(()),
             Err(source) => Err(RadrootsNostrAccountsError::Vault(source.to_string())),
         }
@@ -151,6 +151,34 @@ mod tests {
         vault.remove_secret(&account_id).expect("remove");
         let loaded = vault.load_secret_hex(&account_id).expect("load");
         assert!(loaded.is_none());
+    }
+
+    #[test]
+    fn memory_vault_distinguishes_present_and_missing_entries() {
+        let vault = RadrootsNostrSecretVaultMemory::new();
+        let account_id = RadrootsIdentityId::parse(
+            "3bf0c63f0f4478a288f6b67f0429dbf7f5119d4fa7218a4c40ef1378f80f7606",
+        )
+        .expect("account id");
+
+        assert!(
+            vault
+                .load_secret_hex(&account_id)
+                .expect("missing")
+                .is_none()
+        );
+
+        vault
+            .store_secret_hex(&account_id, "abc123")
+            .expect("store");
+
+        assert_eq!(
+            vault
+                .load_secret_hex(&account_id)
+                .expect("present")
+                .as_deref(),
+            Some("abc123")
+        );
     }
 
     #[test]

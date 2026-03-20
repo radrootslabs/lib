@@ -72,6 +72,7 @@ directories = { version = "6" }
 futures = { version = "0.3" }
 hex = { version = "0.4" }
 js-sys = { version = "0.3" }
+keyring = { version = "3.6.3", default-features = false, features = ["apple-native", "windows-native", "linux-native-sync-persistent", "vendored"] }
 nostr = { version = "0.44.2" }
 nostr-relay-pool = { version = "0.44.0" }
 nostr-sdk = { version = "0.44.1" }
