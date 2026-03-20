@@ -22,7 +22,7 @@ fn usage() {
     eprintln!("  cargo xtask sdk coverage required-crates");
     eprintln!("  cargo xtask sdk coverage workspace-crates");
     eprintln!(
-        "  cargo xtask sdk coverage report --scope <scope> --summary <file> --lcov <file> --out <file> [--fail-under-exec-lines <pct>] [--fail-under-functions <pct>] [--fail-under-regions <pct>] [--fail-under-branches <pct>] [--require-branches]"
+        "  cargo xtask sdk coverage report --scope <scope> --summary <file> --lcov <file> --out <file> [--policy-gate | (--fail-under-exec-lines <pct> --fail-under-functions <pct> --fail-under-regions <pct> --fail-under-branches <pct> [--require-branches])]"
     );
 }
 
@@ -352,11 +352,11 @@ mod tests {
         let required_raw = fs::read_to_string(
             root.join("contract")
                 .join("coverage")
-                .join("required-crates.toml"),
+                .join("policy.toml"),
         )
-        .expect("read required crates contract");
+        .expect("read coverage policy contract");
         let required_toml =
-            toml::from_str::<toml::Value>(&required_raw).expect("parse required crates contract");
+            toml::from_str::<toml::Value>(&required_raw).expect("parse coverage policy contract");
         let required_crates = required_toml
             .get("required")
             .and_then(toml::Value::as_table)
@@ -400,7 +400,7 @@ mod tests {
             lcov_path.display().to_string(),
             "--out".to_string(),
             gate_out.display().to_string(),
-            "--require-branches".to_string(),
+            "--policy-gate".to_string(),
         ])
         .expect("coverage report");
 

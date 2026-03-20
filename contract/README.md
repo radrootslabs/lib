@@ -56,11 +56,11 @@ Repository guards also enforce:
 
 Coverage governance is defined under `contract/coverage/`:
 
-- policy thresholds: `contract/coverage/POLICY.md`
-- rollout order: `contract/coverage/rollout.toml`
-- required crate list: `contract/coverage/required-crates.toml`
+- machine-readable policy: `contract/coverage/policy.toml`
+- human policy notes: `contract/coverage/POLICY.md`
+- per-crate profiles: `contract/coverage/profiles.toml`
 
-Required Rust crates are gated at `100/100/100` (exec lines, functions, branches).
+Required Rust crates are gated at `100/100/100/100` (exec lines, functions, branches, regions), with branch records required.
 
 ## Release Policy
 

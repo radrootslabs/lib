@@ -119,12 +119,25 @@ struct LlvmCovSummaryMetric {
 }
 
 #[derive(Debug, Deserialize)]
-struct CoverageRequiredContract {
+#[serde(deny_unknown_fields)]
+pub(crate) struct CoveragePolicyFile {
+    gate: CoveragePolicyGate,
     required: CoverageRequiredList,
 }
 
 #[derive(Debug, Deserialize)]
-struct CoverageRequiredList {
+#[serde(deny_unknown_fields)]
+pub(crate) struct CoveragePolicyGate {
+    fail_under_exec_lines: f64,
+    fail_under_functions: f64,
+    fail_under_regions: f64,
+    fail_under_branches: f64,
+    require_branches: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CoverageRequiredList {
     crates: Vec<String>,
 }
 
@@ -197,40 +210,79 @@ pub fn read_summary(path: &Path) -> Result<CoverageSummary, String> {
     })
 }
 
-fn read_required_crates(path: &Path) -> Result<Vec<String>, String> {
+impl CoveragePolicyFile {
+    pub(crate) fn thresholds(&self) -> CoverageThresholds {
+        CoverageThresholds {
+            fail_under_exec_lines: self.gate.fail_under_exec_lines,
+            fail_under_functions: self.gate.fail_under_functions,
+            fail_under_regions: self.gate.fail_under_regions,
+            fail_under_branches: self.gate.fail_under_branches,
+            require_branches: self.gate.require_branches,
+        }
+    }
+
+    pub(crate) fn required_crates(&self) -> Result<Vec<String>, String> {
+        if self.required.crates.is_empty() {
+            return Err("coverage required crates list must not be empty".to_string());
+        }
+        let mut seen = BTreeSet::new();
+        for crate_name in &self.required.crates {
+            if crate_name.trim().is_empty() {
+                return Err("coverage required crates list includes an empty crate name".to_string());
+            }
+            if !seen.insert(crate_name.clone()) {
+                return Err(format!(
+                    "coverage required crates list includes duplicate crate {crate_name}"
+                ));
+            }
+        }
+        Ok(self.required.crates.clone())
+    }
+}
+
+pub(crate) fn coverage_policy_path(root: &Path) -> PathBuf {
+    root.join("contract").join("coverage").join("policy.toml")
+}
+
+pub(crate) fn read_coverage_policy(path: &Path) -> Result<CoveragePolicyFile, String> {
     let raw = match fs::read_to_string(path) {
         Ok(raw) => raw,
         Err(err) => {
             return Err(format!(
-                "failed to read required crates {}: {err}",
+                "failed to read coverage policy {}: {err}",
                 path.display()
             ));
         }
     };
-    let parsed: CoverageRequiredContract = match toml::from_str(&raw) {
+    let parsed: CoveragePolicyFile = match toml::from_str(&raw) {
         Ok(parsed) => parsed,
         Err(err) => {
             return Err(format!(
-                "failed to parse required crates {}: {err}",
+                "failed to parse coverage policy {}: {err}",
                 path.display()
             ));
         }
     };
-    if parsed.required.crates.is_empty() {
-        return Err("coverage required crates list must not be empty".to_string());
-    }
-    let mut seen = BTreeSet::new();
-    for crate_name in &parsed.required.crates {
-        if crate_name.trim().is_empty() {
-            return Err("coverage required crates list includes an empty crate name".to_string());
+    let thresholds = parsed.thresholds();
+    for (label, value) in [
+        ("fail_under_exec_lines", thresholds.fail_under_exec_lines),
+        ("fail_under_functions", thresholds.fail_under_functions),
+        ("fail_under_regions", thresholds.fail_under_regions),
+        ("fail_under_branches", thresholds.fail_under_branches),
+    ] {
+        if !value.is_finite() {
+            return Err(format!("coverage policy {label} must be finite"));
         }
-        if !seen.insert(crate_name.clone()) {
-            return Err(format!(
-                "coverage required crates list includes duplicate crate {crate_name}"
-            ));
+        if !(0.0..=100.0).contains(&value) {
+            return Err(format!("coverage policy {label} must be within 0..=100"));
         }
     }
-    Ok(parsed.required.crates)
+    parsed.required_crates()?;
+    Ok(parsed)
+}
+
+fn read_required_crates(path: &Path) -> Result<Vec<String>, String> {
+    read_coverage_policy(path)?.required_crates()
 }
 
 fn read_workspace_crates(workspace_root: &Path) -> Result<Vec<String>, String> {
@@ -567,6 +619,20 @@ fn parse_optional_string_arg(args: &[String], name: &str) -> Option<String> {
     None
 }
 
+fn parse_optional_f64_arg(args: &[String], name: &str) -> Result<Option<f64>, String> {
+    if let Some(raw) = parse_optional_string_arg(args, name) {
+        let parsed = raw
+            .parse::<f64>()
+            .map_err(|err| format!("invalid --{name} value `{raw}`: {err}"))?;
+        if !parsed.is_finite() {
+            return Err(format!("invalid --{name} value `{raw}`: must be finite"));
+        }
+        return Ok(Some(parsed));
+    }
+    Ok(None)
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
 fn parse_f64_arg(args: &[String], name: &str, default: f64) -> Result<f64, String> {
     if let Some(raw) = parse_optional_string_arg(args, name) {
         return raw
@@ -587,6 +653,11 @@ fn parse_optional_u32_arg(args: &[String], name: &str) -> Result<Option<u32>, St
 }
 
 fn parse_bool_flag(args: &[String], name: &str) -> bool {
+    let flag = format!("--{name}");
+    args.iter().any(|arg| arg == &flag)
+}
+
+fn has_flag(args: &[String], name: &str) -> bool {
     let flag = format!("--{name}");
     args.iter().any(|arg| arg == &flag)
 }
@@ -756,12 +827,57 @@ fn report_gate(args: &[String]) -> Result<(), String> {
     let summary_path = PathBuf::from(parse_string_arg(args, "summary")?);
     let lcov_path = PathBuf::from(parse_string_arg(args, "lcov")?);
     let out_path = PathBuf::from(parse_string_arg(args, "out")?);
-    let thresholds = CoverageThresholds {
-        fail_under_exec_lines: parse_f64_arg(args, "fail-under-exec-lines", 100.0)?,
-        fail_under_functions: parse_f64_arg(args, "fail-under-functions", 100.0)?,
-        fail_under_regions: parse_f64_arg(args, "fail-under-regions", 100.0)?,
-        fail_under_branches: parse_f64_arg(args, "fail-under-branches", 100.0)?,
-        require_branches: parse_bool_flag(args, "require-branches"),
+    let policy_gate = parse_bool_flag(args, "policy-gate");
+    let explicit_exec = parse_optional_f64_arg(args, "fail-under-exec-lines")?;
+    let explicit_functions = parse_optional_f64_arg(args, "fail-under-functions")?;
+    let explicit_regions = parse_optional_f64_arg(args, "fail-under-regions")?;
+    let explicit_branches = parse_optional_f64_arg(args, "fail-under-branches")?;
+    let explicit_require_branches = has_flag(args, "require-branches");
+    let any_explicit_threshold = explicit_exec.is_some()
+        || explicit_functions.is_some()
+        || explicit_regions.is_some()
+        || explicit_branches.is_some();
+    let thresholds = if policy_gate {
+        if any_explicit_threshold || explicit_require_branches {
+            return Err(
+                "--policy-gate cannot be combined with explicit threshold or branch flags"
+                    .to_string(),
+            );
+        }
+        let root = workspace_root();
+        read_coverage_policy(&coverage_policy_path(&root))?.thresholds()
+    } else {
+        let Some(fail_under_exec_lines) = explicit_exec else {
+            return Err(
+                "missing coverage thresholds; pass --policy-gate or explicit --fail-under-* values"
+                    .to_string(),
+            );
+        };
+        let Some(fail_under_functions) = explicit_functions else {
+            return Err(
+                "missing coverage thresholds; pass --policy-gate or explicit --fail-under-* values"
+                    .to_string(),
+            );
+        };
+        let Some(fail_under_regions) = explicit_regions else {
+            return Err(
+                "missing coverage thresholds; pass --policy-gate or explicit --fail-under-* values"
+                    .to_string(),
+            );
+        };
+        let Some(fail_under_branches) = explicit_branches else {
+            return Err(
+                "missing coverage thresholds; pass --policy-gate or explicit --fail-under-* values"
+                    .to_string(),
+            );
+        };
+        CoverageThresholds {
+            fail_under_exec_lines,
+            fail_under_functions,
+            fail_under_regions,
+            fail_under_branches,
+            require_branches: explicit_require_branches,
+        }
     };
 
     let summary = read_summary(&summary_path)?;
@@ -843,10 +959,7 @@ fn report_gate(args: &[String]) -> Result<(), String> {
 }
 
 fn list_required_crates_with_root(root: &Path, writer: &mut dyn Write) -> Result<(), String> {
-    let required_path = root
-        .join("contract")
-        .join("coverage")
-        .join("required-crates.toml");
+    let required_path = coverage_policy_path(root);
     let crates = read_required_crates(&required_path)?;
     write_crate_names_output(writer, crates, "required crates")
 }
@@ -1054,14 +1167,21 @@ mod tests {
     #[test]
     fn reads_required_crates_and_rejects_duplicates() {
         let path = temp_file_path("required_crates");
-        fs::write(&path, "[required]\ncrates = [\"a\", \"b\"]\n").expect("write required crates");
+        fs::write(
+            &path,
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"a\", \"b\"]\n",
+        )
+        .expect("write required crates");
         let crates = read_required_crates(&path).expect("parse required crates");
         assert_eq!(crates, vec!["a".to_string(), "b".to_string()]);
         fs::remove_file(&path).expect("remove required crates");
 
         let dup_path = temp_file_path("required_crates_dup");
-        fs::write(&dup_path, "[required]\ncrates = [\"a\", \"a\"]\n")
-            .expect("write dup required crates");
+        fs::write(
+            &dup_path,
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"a\", \"a\"]\n",
+        )
+        .expect("write dup required crates");
         let err = read_required_crates(&dup_path).expect_err("duplicate required crates");
         assert!(err.contains("duplicate crate a"));
         fs::remove_file(dup_path).expect("remove dup required crates");
@@ -1071,12 +1191,12 @@ mod tests {
     fn read_required_crates_reports_read_and_parse_errors() {
         let missing = temp_file_path("required_missing");
         let read_err = read_required_crates(&missing).expect_err("missing required file");
-        assert!(read_err.contains("failed to read required crates"));
+        assert!(read_err.contains("failed to read coverage policy"));
 
         let invalid = temp_file_path("required_invalid");
         write_file(&invalid, "not = [toml");
         let parse_err = read_required_crates(&invalid).expect_err("invalid required file");
-        assert!(parse_err.contains("failed to parse required crates"));
+        assert!(parse_err.contains("failed to parse coverage policy"));
         fs::remove_file(invalid).expect("remove invalid required file");
     }
 
@@ -1265,13 +1385,19 @@ test_threads = 0
     #[test]
     fn read_required_crates_rejects_empty_and_blank_entries() {
         let empty_path = temp_file_path("required_empty");
-        write_file(&empty_path, "[required]\ncrates = []\n");
+        write_file(
+            &empty_path,
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = []\n",
+        );
         let empty_err = read_required_crates(&empty_path).expect_err("empty required list");
         assert!(empty_err.contains("must not be empty"));
         fs::remove_file(&empty_path).expect("remove empty required file");
 
         let blank_path = temp_file_path("required_blank");
-        write_file(&blank_path, "[required]\ncrates = [\"a\", \" \"]\n");
+        write_file(
+            &blank_path,
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"a\", \" \"]\n",
+        );
         let blank_err = read_required_crates(&blank_path).expect_err("blank crate name");
         assert!(blank_err.contains("empty crate name"));
         fs::remove_file(&blank_path).expect("remove blank required file");
@@ -1338,13 +1464,13 @@ test_threads = 0
     fn parse_toml_reports_read_and_parse_errors() {
         let missing = temp_file_path("parse_toml_missing");
         let read_err =
-            parse_toml::<CoverageRequiredContract>(&missing).expect_err("missing file should fail");
+            parse_toml::<CoveragePolicyFile>(&missing).expect_err("missing file should fail");
         assert!(read_err.contains("failed to read"));
 
         let invalid = temp_file_path("parse_toml_invalid");
-        write_file(&invalid, "[required]\ncrates = [\n");
+        write_file(&invalid, "[gate]\nfail_under_exec_lines = 100.0\n");
         let parse_err =
-            parse_toml::<CoverageRequiredContract>(&invalid).expect_err("invalid toml should fail");
+            parse_toml::<CoveragePolicyFile>(&invalid).expect_err("invalid toml should fail");
         assert!(parse_err.contains("failed to parse"));
         fs::remove_file(invalid).expect("remove invalid toml");
     }
@@ -1352,8 +1478,11 @@ test_threads = 0
     #[test]
     fn parse_toml_parses_valid_coverage_required_contract() {
         let valid = temp_file_path("parse_toml_valid");
-        write_file(&valid, "[required]\ncrates = [\"radroots-core\"]\n");
-        let parsed = parse_toml::<CoverageRequiredContract>(&valid).expect("valid toml");
+        write_file(
+            &valid,
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots-core\"]\n",
+        );
+        let parsed = parse_toml::<CoveragePolicyFile>(&valid).expect("valid toml");
         assert_eq!(parsed.required.crates, vec!["radroots-core".to_string()]);
         fs::remove_file(valid).expect("remove valid toml");
     }
@@ -1729,7 +1858,7 @@ test_threads = 0
             lcov_path.display().to_string(),
             "--out".to_string(),
             out_path.display().to_string(),
-            "--require-branches".to_string(),
+            "--policy-gate".to_string(),
         ];
         report_gate(&args).expect("report gate success");
         let report_raw = fs::read_to_string(&out_path).expect("read report");
@@ -1799,7 +1928,7 @@ test_threads = 0
             "NaN".to_string(),
         ];
         let err = report_gate(&args).expect_err("nan threshold should fail coverage gate");
-        assert!(err.contains("coverage gate failed"));
+        assert!(err.contains("invalid --fail-under-functions value"));
         fs::remove_dir_all(root).expect("remove report gate nan root");
     }
 
@@ -1825,7 +1954,7 @@ test_threads = 0
             lcov_path.display().to_string(),
             "--out".to_string(),
             out_path.display().to_string(),
-            "--require-branches".to_string(),
+            "--policy-gate".to_string(),
         ];
         let err = report_gate(&args).expect_err("writing report to directory should fail");
         assert!(err.contains("failed to write"));
@@ -1853,6 +1982,14 @@ test_threads = 0
             lcov_path.display().to_string(),
             "--out".to_string(),
             out_path.display().to_string(),
+            "--fail-under-exec-lines".to_string(),
+            "100.0".to_string(),
+            "--fail-under-functions".to_string(),
+            "100.0".to_string(),
+            "--fail-under-regions".to_string(),
+            "100.0".to_string(),
+            "--fail-under-branches".to_string(),
+            "100.0".to_string(),
         ];
         report_gate(&args).expect("report gate no branches");
         let report_raw = fs::read_to_string(&out_path).expect("read report");
@@ -1959,6 +2096,19 @@ test_threads = 0
         .expect_err("invalid branches threshold");
         assert!(invalid_branches.contains("invalid --fail-under-branches value"));
 
+        let missing_thresholds = report_gate(&[
+            "--scope".to_string(),
+            "crate".to_string(),
+            "--summary".to_string(),
+            summary_path.display().to_string(),
+            "--lcov".to_string(),
+            lcov_path.display().to_string(),
+            "--out".to_string(),
+            out_path.display().to_string(),
+        ])
+        .expect_err("missing thresholds");
+        assert!(missing_thresholds.contains("missing coverage thresholds"));
+
         let missing_summary_file = report_gate(&[
             "--scope".to_string(),
             "crate".to_string(),
@@ -1968,6 +2118,7 @@ test_threads = 0
             lcov_path.display().to_string(),
             "--out".to_string(),
             out_path.display().to_string(),
+            "--policy-gate".to_string(),
         ])
         .expect_err("missing summary file should fail");
         assert!(missing_summary_file.contains("failed to read summary"));
@@ -1981,9 +2132,26 @@ test_threads = 0
             root.join("missing-lcov.info").display().to_string(),
             "--out".to_string(),
             out_path.display().to_string(),
+            "--policy-gate".to_string(),
         ])
         .expect_err("missing lcov file should fail");
         assert!(missing_lcov_file.contains("failed to read lcov"));
+
+        let mixed_policy_gate = report_gate(&[
+            "--scope".to_string(),
+            "crate".to_string(),
+            "--summary".to_string(),
+            summary_path.display().to_string(),
+            "--lcov".to_string(),
+            lcov_path.display().to_string(),
+            "--out".to_string(),
+            out_path.display().to_string(),
+            "--policy-gate".to_string(),
+            "--fail-under-functions".to_string(),
+            "100.0".to_string(),
+        ])
+        .expect_err("policy gate mixed with explicit thresholds");
+        assert!(mixed_policy_gate.contains("cannot be combined"));
 
         fs::remove_dir_all(root).expect("remove report arg errors root");
     }
@@ -2008,7 +2176,7 @@ test_threads = 0
         let mut output = Vec::new();
         let required_err = list_required_crates_with_root(&root, &mut output)
             .expect_err("missing required crates file should fail");
-        assert!(required_err.contains("failed to read required crates"));
+        assert!(required_err.contains("failed to read coverage policy"));
 
         let workspace_err = list_workspace_crates_with_root(&root, &mut output)
             .expect_err("missing workspace manifest should fail");
@@ -2063,7 +2231,7 @@ test_threads = 0
             lcov_path.display().to_string(),
             "--out".to_string(),
             out_path.display().to_string(),
-            "--require-branches".to_string(),
+            "--policy-gate".to_string(),
         ])
         .expect("dispatch report");
         assert!(out_path.exists());

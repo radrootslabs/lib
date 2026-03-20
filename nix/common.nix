@@ -201,7 +201,7 @@ let
       mkdir -p "''${run_dir}"
       status="ok"
 
-      if ! cargo run -q -p xtask -- sdk coverage run-crate --crate "''${crate}" --out "''${run_dir}" --test-threads 1; then
+      if ! cargo run -q -p xtask -- sdk coverage run-crate --crate "''${crate}" --out "''${run_dir}"; then
         status="run-failed"
       fi
 
@@ -318,11 +318,7 @@ EOF
         --summary "''${crate_dir}/coverage-summary.json" \
         --lcov "''${crate_dir}/coverage-lcov.info" \
         --out "''${crate_dir}/coverage-gate-blocking.json" \
-        --fail-under-exec-lines 100 \
-        --fail-under-functions 100 \
-        --fail-under-regions 100 \
-        --fail-under-branches 100 \
-        --require-branches
+        --policy-gate
     done < "$required_crates_file"
   '';
 in

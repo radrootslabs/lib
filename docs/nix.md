@@ -62,7 +62,7 @@ nix develop .#release
 The shells provide:
 
 - Rust `1.92.0` with `wasm32-unknown-unknown`
-- pinned nightly cargo for coverage
+- pinned nightly cargo for coverage from `rust-toolchain-coverage.toml`
 - `wasm-pack`
 - `cargo-llvm-cov`
 - `pkg-config`

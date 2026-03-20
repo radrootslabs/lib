@@ -629,21 +629,19 @@ manifest_file = "export-manifest.json"
 "#,
         );
         write_file(
-            &root.join("contract").join("coverage").join("rollout.toml"),
-            r#"[rollout]
-crates = [
-  { name = "radroots-a", status = "required", order = 1 },
-  { name = "radroots-b", status = "planned", order = 2 },
-]
-"#,
-        );
-        write_file(
             &root
                 .join("contract")
                 .join("coverage")
-                .join("required-crates.toml"),
-            r#"[required]
-crates = ["radroots-a"]
+                .join("policy.toml"),
+            r#"[gate]
+fail_under_exec_lines = 100.0
+fail_under_functions = 100.0
+fail_under_regions = 100.0
+fail_under_branches = 100.0
+require_branches = true
+
+[required]
+crates = ["radroots-a", "radroots-b"]
 "#,
         );
         write_file(
@@ -669,7 +667,7 @@ crates = ["radroots-a"]
                 .join("target")
                 .join("coverage")
                 .join("coverage-refresh.tsv"),
-            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots-a\tpass\t100.0\t100.0\t100.0\t100.0\tfile\n",
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots-a\tpass\t100.0\t100.0\t100.0\t100.0\tfile\nradroots-b\tpass\t100.0\t100.0\t100.0\t100.0\tfile\n",
         );
         root
     }

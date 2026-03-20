@@ -1,3 +1,10 @@
+[gate]
+fail_under_exec_lines = 100.0
+fail_under_functions = 100.0
+fail_under_regions = 100.0
+fail_under_branches = 100.0
+require_branches = true
+
 [required]
 crates = [
   "radroots-core",
@@ -26,7 +33,3 @@ crates = [
   "radroots-replica-sync-wasm",
   "radroots-replica-db-wasm",
 ]
-
-[policy]
-mode = "blocking"
-threshold_profile = "strict_100"

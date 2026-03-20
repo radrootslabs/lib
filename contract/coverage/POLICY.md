@@ -1,6 +1,7 @@
 # Radroots Core Libraries Rust Coverage Policy
 
 This document defines the required coverage gate for the Radroots Core Libraries Rust workspace.
+The authoritative machine-readable contract is `contract/coverage/policy.toml`.
 
 ## gate contract
 
@@ -25,13 +26,16 @@ All four thresholds are release-blocking.
 - a crate cannot be promoted to required unless it is at 100/100/100/100
 - once required, the crate remains blocking on every pull request and push to `master`
 
-## rollout contract
+## required crate contract
 
-- start with `radroots-core` as the first required crate
-- expand required coverage crate-by-crate
-- full workspace required coverage is only enabled after every required crate is green
-- required blocking crate list is tracked in `contract/coverage/required-crates.toml`
+- every workspace crate is required
+- the required blocking crate list is tracked in `contract/coverage/policy.toml`
+- workspace membership changes must update `contract/coverage/policy.toml` in the same change
 
 ## local override policy
 
-Local override env vars may exist for smoke runs, but ci must run with default strict thresholds and required branch data.
+Local override env vars may exist for smoke runs, but canonical release and coverage lanes must read the strict gate from `contract/coverage/policy.toml`.
+
+## toolchain pin
+
+The pinned nightly used for coverage lives in `rust-toolchain-coverage.toml`.

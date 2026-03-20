@@ -9,9 +9,6 @@ let
     "rust-src"
     "rustfmt"
   ];
-  coverageExtensions = stableExtensions ++ [
-    "llvm-tools-preview"
-  ];
 in
 {
   stable = pkgs.rust-bin.stable.${stableVersion}.default.override {
@@ -19,11 +16,5 @@ in
     targets = stableTargets;
   };
 
-  coverage = pkgs.rust-bin.selectLatestNightlyWith (
-    nightly:
-    nightly.default.override {
-      extensions = coverageExtensions;
-      targets = stableTargets;
-    }
-  );
+  coverage = pkgs.rust-bin.fromRustupToolchainFile ../rust-toolchain-coverage.toml;
 }
