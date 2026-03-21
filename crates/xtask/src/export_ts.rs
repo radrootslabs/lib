@@ -6,7 +6,7 @@ use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Output};
 
 #[derive(Serialize)]
 struct ExportManifest {
@@ -163,6 +163,35 @@ fn copy_dir_contents(src: &Path, dst: &Path) -> Result<usize, String> {
         copied += 1;
     }
     Ok(copied)
+}
+
+fn summarize_command_output(output: &[u8]) -> Option<String> {
+    let lines = String::from_utf8_lossy(output)
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(ToOwned::to_owned)
+        .collect::<Vec<_>>();
+    if lines.is_empty() {
+        return None;
+    }
+    let keep = lines.len().saturating_sub(8);
+    Some(lines[keep..].join(" | "))
+}
+
+fn cargo_test_failure(crate_name: &str, output: &Output) -> String {
+    let status = output
+        .status
+        .code()
+        .map(|code| format!("exit code {code}"))
+        .unwrap_or_else(|| "terminated by signal".to_string());
+    let stderr = summarize_command_output(&output.stderr);
+    let stdout = summarize_command_output(&output.stdout);
+    match (stderr, stdout) {
+        (Some(stderr), _) => format!("cargo test failed for {crate_name} ({status}): {stderr}"),
+        (None, Some(stdout)) => format!("cargo test failed for {crate_name} ({status}): {stdout}"),
+        (None, None) => format!("cargo test failed for {crate_name} ({status})"),
+    }
 }
 
 fn collect_manifest_entries(
@@ -438,7 +467,7 @@ fn generate_ts_rs_sources_with_selector(
             .unwrap_or(package_name);
         let export_dir = source_root.join(package_dir);
         let _ = fs::create_dir_all(&export_dir);
-        let status = Command::new("cargo")
+        let output = Command::new("cargo")
             .arg("test")
             .arg("-q")
             .arg("-p")
@@ -447,9 +476,13 @@ fn generate_ts_rs_sources_with_selector(
             .arg("ts-rs")
             .env("RADROOTS_TS_RS_EXPORT_DIR", &export_dir)
             .current_dir(workspace_root)
-            .status();
-        if !status.is_ok_and(|status| status.success()) {
-            return Err(format!("cargo test failed for {crate_name}"));
+            .output();
+        let output = match output {
+            Ok(output) => output,
+            Err(e) => return Err(format!("run cargo test for {crate_name}: {e}")),
+        };
+        if !output.status.success() {
+            return Err(cargo_test_failure(crate_name, &output));
         }
     }
     Ok(source_root)
@@ -1343,6 +1376,7 @@ manifest_file = "nested/export-manifest.json"
         let command_fail_err = generate_ts_rs_sources(&root_command_fail)
             .expect_err("cargo test failure should surface");
         assert!(command_fail_err.contains("cargo test failed for radroots-a"));
+        assert!(command_fail_err.contains("unclosed delimiter"));
         let _ = fs::remove_dir_all(root_command_fail);
     }
 
