@@ -5,6 +5,10 @@ use crate::model::{
 use crate::store::{RadrootsNostrAccountStore, RadrootsNostrMemoryAccountStore};
 use crate::vault::{RadrootsNostrSecretVault, RadrootsNostrSecretVaultMemory};
 use radroots_identity::{RadrootsIdentity, RadrootsIdentityId, RadrootsIdentityPublic};
+use radroots_nostr_signer::prelude::{
+    RadrootsNostrLocalSignerAvailability, RadrootsNostrLocalSignerCapability,
+    RadrootsNostrSignerCapability,
+};
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -104,17 +108,14 @@ impl RadrootsNostrAccountsManager {
             return Ok(RadrootsNostrSelectedAccountStatus::NotConfigured);
         };
 
-        let Some(secret_key_hex) = self.vault.load_secret_hex(&record.account_id)? else {
-            return Ok(RadrootsNostrSelectedAccountStatus::PublicOnly { account: record });
-        };
-
-        let secret_key_hex = Zeroizing::new(secret_key_hex);
-        let identity = RadrootsIdentity::from_secret_key_str(secret_key_hex.as_str())?;
-        if identity.public_key_hex() != record.public_identity.public_key_hex {
-            return Err(RadrootsNostrAccountsError::PublicKeyMismatch);
-        }
-
-        Ok(RadrootsNostrSelectedAccountStatus::Ready { account: record })
+        Ok(match self.local_signer_availability(&record)? {
+            RadrootsNostrLocalSignerAvailability::PublicOnly => {
+                RadrootsNostrSelectedAccountStatus::PublicOnly { account: record }
+            }
+            RadrootsNostrLocalSignerAvailability::SecretBacked => {
+                RadrootsNostrSelectedAccountStatus::Ready { account: record }
+            }
+        })
     }
 
     pub fn selected_signing_identity(
@@ -143,6 +144,46 @@ impl RadrootsNostrAccountsManager {
         };
         drop(guard);
         self.resolve_signing_identity(record)
+    }
+
+    pub fn selected_signer_capability(
+        &self,
+    ) -> Result<Option<RadrootsNostrSignerCapability>, RadrootsNostrAccountsError> {
+        let Some(record) = self.selected_account()? else {
+            return Ok(None);
+        };
+        Ok(Some(self.local_signer_capability(record)?))
+    }
+
+    pub fn get_signer_capability(
+        &self,
+        account_id: &RadrootsIdentityId,
+    ) -> Result<Option<RadrootsNostrSignerCapability>, RadrootsNostrAccountsError> {
+        let guard = self.state.read().map_err(|_| {
+            RadrootsNostrAccountsError::Store("accounts state lock poisoned".into())
+        })?;
+        let Some(record) = guard
+            .accounts
+            .iter()
+            .find(|record| &record.account_id == account_id)
+            .cloned()
+        else {
+            return Ok(None);
+        };
+        drop(guard);
+        Ok(Some(self.local_signer_capability(record)?))
+    }
+
+    pub fn resolve_signing_identity_for_signer(
+        &self,
+        signer: &RadrootsNostrSignerCapability,
+    ) -> Result<Option<RadrootsIdentity>, RadrootsNostrAccountsError> {
+        match signer {
+            RadrootsNostrSignerCapability::LocalAccount(capability) => {
+                self.get_signing_identity(&capability.account_id)
+            }
+            RadrootsNostrSignerCapability::RemoteSession(_) => Ok(None),
+        }
     }
 
     pub fn upsert_identity(
@@ -290,6 +331,36 @@ impl RadrootsNostrAccountsManager {
             identity.set_profile(profile);
         }
         Ok(Some(identity))
+    }
+
+    fn local_signer_capability(
+        &self,
+        record: RadrootsNostrAccountRecord,
+    ) -> Result<RadrootsNostrSignerCapability, RadrootsNostrAccountsError> {
+        let availability = self.local_signer_availability(&record)?;
+        Ok(RadrootsNostrSignerCapability::LocalAccount(
+            RadrootsNostrLocalSignerCapability::new(
+                record.account_id,
+                record.public_identity,
+                availability,
+            ),
+        ))
+    }
+
+    fn local_signer_availability(
+        &self,
+        record: &RadrootsNostrAccountRecord,
+    ) -> Result<RadrootsNostrLocalSignerAvailability, RadrootsNostrAccountsError> {
+        let Some(secret_key_hex) = self.vault.load_secret_hex(&record.account_id)? else {
+            return Ok(RadrootsNostrLocalSignerAvailability::PublicOnly);
+        };
+
+        let secret_key_hex = Zeroizing::new(secret_key_hex);
+        let identity = RadrootsIdentity::from_secret_key_str(secret_key_hex.as_str())?;
+        if identity.public_key_hex() != record.public_identity.public_key_hex {
+            return Err(RadrootsNostrAccountsError::PublicKeyMismatch);
+        }
+        Ok(RadrootsNostrLocalSignerAvailability::SecretBacked)
     }
 
     fn update_state(
@@ -589,6 +660,14 @@ mod tests {
         let account = status_account(&status).expect("account");
         assert_eq!(account.account_id, selected_id);
         assert_eq!(account.label.as_deref(), Some("primary"));
+
+        let signer = manager
+            .selected_signer_capability()
+            .expect("selected signer capability")
+            .expect("signer capability");
+        let local = signer.local_account().expect("local signer");
+        assert_eq!(local.account_id, selected_id);
+        assert!(local.is_secret_backed());
     }
 
     #[test]
@@ -687,6 +766,12 @@ mod tests {
                 .expect("selected signing")
                 .is_none()
         );
+        assert!(
+            manager
+                .selected_signer_capability()
+                .expect("selected signer capability")
+                .is_none()
+        );
         let status = manager
             .selected_account_status()
             .expect("selected account status");
@@ -698,6 +783,12 @@ mod tests {
             manager
                 .get_signing_identity(&missing_id)
                 .expect("signing")
+                .is_none()
+        );
+        assert!(
+            manager
+                .get_signer_capability(&missing_id)
+                .expect("signer capability")
                 .is_none()
         );
     }
@@ -973,6 +1064,31 @@ mod tests {
                 .as_deref(),
             Some("profile-id")
         );
+
+        let local_signer = manager
+            .get_signer_capability(&profile_id)
+            .expect("local signer capability")
+            .expect("local signer");
+        assert!(
+            manager
+                .resolve_signing_identity_for_signer(&local_signer)
+                .expect("resolve local signer")
+                .is_some()
+        );
+
+        let remote_signer = RadrootsNostrSignerCapability::RemoteSession(
+            radroots_nostr_signer::prelude::RadrootsNostrRemoteSessionSignerCapability::new(
+                radroots_nostr_signer::prelude::RadrootsNostrSignerConnectionId::new_v7(),
+                RadrootsIdentity::generate().to_public(),
+                RadrootsIdentity::generate().to_public(),
+            ),
+        );
+        assert!(
+            manager
+                .resolve_signing_identity_for_signer(&remote_signer)
+                .expect("resolve remote signer")
+                .is_none()
+        );
     }
 
     #[test]
@@ -1086,12 +1202,20 @@ mod tests {
             .selected_signing_identity()
             .expect_err("selected signing poisoned");
         assert!(selected_signing_err.to_string().starts_with("store error:"));
+        let selected_signer_err = manager
+            .selected_signer_capability()
+            .expect_err("selected signer poisoned");
+        assert!(selected_signer_err.to_string().starts_with("store error:"));
 
         let account_id = RadrootsIdentity::generate().id();
         let signing_err = manager
             .get_signing_identity(&account_id)
             .expect_err("signing poisoned");
         assert!(signing_err.to_string().starts_with("store error:"));
+        let signer_err = manager
+            .get_signer_capability(&account_id)
+            .expect_err("signer poisoned");
+        assert!(signer_err.to_string().starts_with("store error:"));
         let select_err = manager
             .select_account(&account_id)
             .expect_err("select poisoned");

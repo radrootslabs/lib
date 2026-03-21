@@ -6,6 +6,8 @@ use crate::error::{NetError, Result};
 use crate::nostr_client::{NostrClientManager, NostrConnectionSnapshot};
 #[cfg(feature = "nostr-client")]
 use radroots_nostr_accounts::prelude::RadrootsNostrAccountsManager;
+#[cfg(feature = "nostr-client")]
+use radroots_nostr_signer::prelude::RadrootsNostrSignerCapability;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct BuildInfo {
@@ -34,6 +36,9 @@ pub struct Net {
     pub accounts: RadrootsNostrAccountsManager,
 
     #[cfg(feature = "nostr-client")]
+    pub signer: Option<RadrootsNostrSignerCapability>,
+
+    #[cfg(feature = "nostr-client")]
     pub nostr: Option<NostrClientManager>,
 
     #[cfg(feature = "rt")]
@@ -56,6 +61,8 @@ impl Net {
             config: cfg,
             #[cfg(feature = "nostr-client")]
             accounts: RadrootsNostrAccountsManager::new_in_memory(),
+            #[cfg(feature = "nostr-client")]
+            signer: None,
             #[cfg(feature = "nostr-client")]
             nostr: None,
             #[cfg(feature = "rt")]
@@ -126,9 +133,22 @@ impl Net {
     }
 
     #[cfg(feature = "nostr-client")]
+    pub fn set_nostr_signer(&mut self, signer: Option<RadrootsNostrSignerCapability>) {
+        self.signer = signer;
+    }
+
+    #[cfg(feature = "nostr-client")]
+    pub fn selected_nostr_signer(&self) -> Option<RadrootsNostrSignerCapability> {
+        self.signer
+            .clone()
+            .or_else(|| self.accounts.selected_signer_capability().ok().flatten())
+    }
+
+    #[cfg(feature = "nostr-client")]
     pub fn selected_nostr_keys(&self) -> Option<radroots_nostr::prelude::RadrootsNostrKeys> {
+        let signer = self.selected_nostr_signer()?;
         self.accounts
-            .selected_signing_identity()
+            .resolve_signing_identity_for_signer(&signer)
             .ok()
             .flatten()
             .map(|identity| identity.into_keys())
@@ -151,6 +171,13 @@ impl NetHandle {
 #[cfg(test)]
 mod tests {
     use crate::builder::NetBuilder;
+    #[cfg(feature = "nostr-client")]
+    use radroots_identity::RadrootsIdentity;
+    #[cfg(feature = "nostr-client")]
+    use radroots_nostr_signer::prelude::{
+        RadrootsNostrRemoteSessionSignerCapability, RadrootsNostrSignerCapability,
+        RadrootsNostrSignerConnectionId,
+    };
 
     #[test]
     fn builds_minimal() {
@@ -185,12 +212,28 @@ mod tests {
     #[test]
     fn selected_nostr_keys_reflects_selected_signing_account() {
         let cfg = crate::config::NetConfig::default();
-        let net = crate::Net::new(cfg);
+        let mut net = crate::Net::new(cfg);
         assert!(net.selected_nostr_keys().is_none());
+        assert!(net.selected_nostr_signer().is_none());
 
         net.accounts
             .generate_identity(Some("primary".into()), true)
             .expect("generate account");
+        assert!(net.selected_nostr_keys().is_some());
+        assert!(net.selected_nostr_signer().is_some());
+
+        let remote = RadrootsNostrSignerCapability::RemoteSession(
+            RadrootsNostrRemoteSessionSignerCapability::new(
+                RadrootsNostrSignerConnectionId::new_v7(),
+                RadrootsIdentity::generate().to_public(),
+                RadrootsIdentity::generate().to_public(),
+            ),
+        );
+        net.set_nostr_signer(Some(remote.clone()));
+        assert_eq!(net.selected_nostr_signer(), Some(remote));
+        assert!(net.selected_nostr_keys().is_none());
+
+        net.set_nostr_signer(None);
         assert!(net.selected_nostr_keys().is_some());
     }
 }

@@ -1,6 +1,7 @@
 #![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 #![forbid(unsafe_code)]
 
+pub mod capability;
 pub mod error;
 pub mod evaluation;
 pub mod manager;
@@ -8,6 +9,10 @@ pub mod model;
 pub mod store;
 
 pub mod prelude {
+    pub use crate::capability::{
+        RadrootsNostrLocalSignerAvailability, RadrootsNostrLocalSignerCapability,
+        RadrootsNostrRemoteSessionSignerCapability, RadrootsNostrSignerCapability,
+    };
     pub use crate::error::RadrootsNostrSignerError;
     pub use crate::evaluation::{
         RadrootsNostrSignerConnectEvaluation, RadrootsNostrSignerConnectProposal,

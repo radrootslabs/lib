@@ -18,6 +18,7 @@ std = [
   "dep:serde",
   "dep:serde_json",
   "dep:radroots-identity",
+  "dep:radroots-nostr-signer",
   "dep:radroots-runtime",
 ]
 file-store = ["std"]
@@ -32,6 +33,7 @@ radroots-identity = { workspace = true, optional = true, default-features = fals
   "profile",
   "json-file",
 ] }
+radroots-nostr-signer = { workspace = true, optional = true }
 radroots-nostr-ndb = { workspace = true, optional = true, default-features = false, features = [
   "ndb",
   "giftwrap",
