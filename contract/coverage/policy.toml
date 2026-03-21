@@ -17,6 +17,7 @@ crates = [
   "radroots-replica-db-schema",
   "xtask",
   "radroots-events-indexed",
+  "radroots-geocoder",
   "radroots-log",
   "radroots-net-core",
   "radroots-net",
