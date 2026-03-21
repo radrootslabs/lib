@@ -469,6 +469,17 @@ impl RadrootsNostrSignerConnectionRecord {
             .into()
     }
 
+    pub fn effective_permissions(&self) -> RadrootsNostrConnectPermissions {
+        let granted_permissions = self.granted_permissions();
+        if !granted_permissions.is_empty() {
+            granted_permissions
+        } else if self.approval_state == RadrootsNostrSignerApprovalState::NotRequired {
+            self.requested_permissions.clone()
+        } else {
+            RadrootsNostrConnectPermissions::default()
+        }
+    }
+
     pub fn is_terminal(&self) -> bool {
         matches!(
             self.status,
@@ -793,6 +804,42 @@ mod tests {
             decoded.permission,
             RadrootsNostrConnectPermission::new(RadrootsNostrConnectMethod::Ping)
         );
+    }
+
+    #[test]
+    fn effective_permissions_prefers_grants_then_auto_requested_then_empty() {
+        let requested: RadrootsNostrConnectPermissions = vec![RadrootsNostrConnectPermission::new(
+            RadrootsNostrConnectMethod::Nip04Encrypt,
+        )]
+        .into();
+        let auto_record = RadrootsNostrSignerConnectionRecord::new(
+            RadrootsNostrSignerConnectionId::new_v7(),
+            public_identity("0000000000000000000000000000000000000000000000000000000000000031"),
+            RadrootsNostrSignerConnectionDraft::new(
+                public_key("0000000000000000000000000000000000000000000000000000000000000032"),
+                public_identity("0000000000000000000000000000000000000000000000000000000000000033"),
+            )
+            .with_requested_permissions(requested.clone()),
+            1,
+        );
+        assert_eq!(auto_record.effective_permissions(), requested);
+
+        let mut granted_record = auto_record.clone();
+        granted_record.granted_permissions = vec![RadrootsNostrSignerPermissionGrant::new(
+            RadrootsNostrConnectPermission::new(RadrootsNostrConnectMethod::Ping),
+            2,
+        )];
+        assert_eq!(
+            granted_record.effective_permissions(),
+            vec![RadrootsNostrConnectPermission::new(
+                RadrootsNostrConnectMethod::Ping
+            )]
+            .into()
+        );
+
+        let mut approved_without_grants = auto_record;
+        approved_without_grants.approval_state = RadrootsNostrSignerApprovalState::Approved;
+        assert!(approved_without_grants.effective_permissions().is_empty());
     }
 
     #[test]
