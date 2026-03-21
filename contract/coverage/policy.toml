@@ -22,6 +22,7 @@ crates = [
   "radroots-net",
   "radroots-nostr",
   "radroots-nostr-accounts",
+  "radroots-nostr-connect",
   "radroots-nostr-ndb",
   "radroots-nostr-runtime",
   "radroots-runtime",

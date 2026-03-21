@@ -2237,6 +2237,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "radroots-nostr-connect"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "nostr",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "url",
+]
+
+[[package]]
 name = "radroots-nostr-ndb"
 version = "0.1.0-alpha.1"
 dependencies = [
