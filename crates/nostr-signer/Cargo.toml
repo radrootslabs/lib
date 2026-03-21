@@ -14,7 +14,10 @@ readme.workspace = true
 
 [dependencies]
 nostr = { workspace = true }
-radroots-identity = { workspace = true, default-features = false, features = ["std", "profile"] }
+radroots-identity = { workspace = true, default-features = false, features = [
+  "std",
+  "profile",
+] }
 radroots-nostr-connect = { workspace = true }
 radroots-runtime = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
