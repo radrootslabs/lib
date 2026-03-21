@@ -1,17 +1,20 @@
 use crate::error::RadrootsNostrSignerError;
 use crate::model::{
     RADROOTS_NOSTR_SIGNER_STORE_VERSION, RadrootsNostrSignerApprovalRequirement,
-    RadrootsNostrSignerApprovalState, RadrootsNostrSignerConnectionDraft,
+    RadrootsNostrSignerApprovalState, RadrootsNostrSignerAuthChallenge,
+    RadrootsNostrSignerAuthState, RadrootsNostrSignerAuthorizationOutcome,
+    RadrootsNostrSignerConnectSecretHash, RadrootsNostrSignerConnectionDraft,
     RadrootsNostrSignerConnectionId, RadrootsNostrSignerConnectionRecord,
-    RadrootsNostrSignerConnectionStatus, RadrootsNostrSignerPermissionGrant,
-    RadrootsNostrSignerRequestAuditRecord, RadrootsNostrSignerRequestDecision,
-    RadrootsNostrSignerRequestId, RadrootsNostrSignerStoreState,
+    RadrootsNostrSignerConnectionStatus, RadrootsNostrSignerPendingRequest,
+    RadrootsNostrSignerPermissionGrant, RadrootsNostrSignerRequestAuditRecord,
+    RadrootsNostrSignerRequestDecision, RadrootsNostrSignerRequestId,
+    RadrootsNostrSignerStoreState,
 };
 use crate::store::{RadrootsNostrMemorySignerStore, RadrootsNostrSignerStore};
 use nostr::{PublicKey, RelayUrl};
 use radroots_identity::RadrootsIdentityPublic;
 use radroots_nostr_connect::prelude::{
-    RadrootsNostrConnectMethod, RadrootsNostrConnectPermissions,
+    RadrootsNostrConnectMethod, RadrootsNostrConnectPermissions, RadrootsNostrConnectRequestMessage,
 };
 use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -111,7 +114,8 @@ impl RadrootsNostrSignerManager {
         &self,
         connect_secret: &str,
     ) -> Result<Option<RadrootsNostrSignerConnectionRecord>, RadrootsNostrSignerError> {
-        let Some(connect_secret) = normalize_optional_string(Some(connect_secret.to_owned()))
+        let Some(connect_secret_hash) =
+            RadrootsNostrSignerConnectSecretHash::from_secret(connect_secret)
         else {
             return Ok(None);
         };
@@ -125,7 +129,7 @@ impl RadrootsNostrSignerManager {
             .iter()
             .find(|record| {
                 !record.is_terminal()
-                    && record.connect_secret.as_deref() == Some(connect_secret.as_str())
+                    && record.connect_secret_hash.as_ref() == Some(&connect_secret_hash)
             })
             .cloned())
     }
@@ -168,10 +172,14 @@ impl RadrootsNostrSignerManager {
             validate_public_identity(&signer_identity)?;
             validate_public_identity(&draft.user_identity)?;
 
-            let connect_secret = normalize_optional_string(draft.connect_secret.clone());
-            if let Some(secret) = connect_secret.as_deref() {
+            let connect_secret_hash = draft
+                .connect_secret
+                .as_deref()
+                .and_then(RadrootsNostrSignerConnectSecretHash::from_secret);
+            if let Some(secret_hash) = connect_secret_hash.as_ref() {
                 if state.connections.iter().any(|record| {
-                    !record.is_terminal() && record.connect_secret.as_deref() == Some(secret)
+                    !record.is_terminal()
+                        && record.connect_secret_hash.as_ref() == Some(secret_hash)
                 }) {
                     return Err(RadrootsNostrSignerError::ConnectSecretAlreadyInUse);
                 }
@@ -195,7 +203,7 @@ impl RadrootsNostrSignerManager {
                 RadrootsNostrSignerConnectionDraft {
                     client_public_key: draft.client_public_key,
                     user_identity: draft.user_identity,
-                    connect_secret,
+                    connect_secret: draft.connect_secret,
                     requested_permissions: normalize_permissions(draft.requested_permissions),
                     relays: normalize_relays(draft.relays),
                     approval_requirement: draft.approval_requirement,
@@ -337,6 +345,80 @@ impl RadrootsNostrSignerManager {
             record.relays = normalize_relays(relays);
             record.touch_updated(updated_at_unix);
             Ok(record.clone())
+        })
+    }
+
+    pub fn require_auth_challenge(
+        &self,
+        connection_id: &RadrootsNostrSignerConnectionId,
+        auth_url: impl AsRef<str>,
+    ) -> Result<RadrootsNostrSignerConnectionRecord, RadrootsNostrSignerError> {
+        self.update_state_with(|state| {
+            let required_at_unix = now_unix_secs();
+            let record = find_connection_mut(state, connection_id)?;
+            if record.is_terminal() {
+                return Err(RadrootsNostrSignerError::InvalidState(format!(
+                    "cannot require auth for {} connection",
+                    status_label(record.status)
+                )));
+            }
+
+            let challenge =
+                RadrootsNostrSignerAuthChallenge::new(auth_url.as_ref(), required_at_unix)?;
+            record.require_auth_challenge(challenge);
+            Ok(record.clone())
+        })
+    }
+
+    pub fn set_pending_request(
+        &self,
+        connection_id: &RadrootsNostrSignerConnectionId,
+        request_message: RadrootsNostrConnectRequestMessage,
+    ) -> Result<RadrootsNostrSignerConnectionRecord, RadrootsNostrSignerError> {
+        self.update_state_with(|state| {
+            let record = find_connection_mut(state, connection_id)?;
+            if record.is_terminal() {
+                return Err(RadrootsNostrSignerError::InvalidState(format!(
+                    "cannot set pending request for {} connection",
+                    status_label(record.status)
+                )));
+            }
+            if record.auth_state != RadrootsNostrSignerAuthState::Pending {
+                return Err(RadrootsNostrSignerError::InvalidState(
+                    "auth challenge not pending for connection".into(),
+                ));
+            }
+
+            let pending_request =
+                RadrootsNostrSignerPendingRequest::new(request_message, now_unix_secs())?;
+            record.set_pending_request(pending_request);
+            Ok(record.clone())
+        })
+    }
+
+    pub fn authorize_auth_challenge(
+        &self,
+        connection_id: &RadrootsNostrSignerConnectionId,
+    ) -> Result<RadrootsNostrSignerAuthorizationOutcome, RadrootsNostrSignerError> {
+        self.update_state_with(|state| {
+            let record = find_connection_mut(state, connection_id)?;
+            if record.is_terminal() {
+                return Err(RadrootsNostrSignerError::InvalidState(format!(
+                    "cannot authorize auth challenge for {} connection",
+                    status_label(record.status)
+                )));
+            }
+            if record.auth_state != RadrootsNostrSignerAuthState::Pending {
+                return Err(RadrootsNostrSignerError::InvalidState(
+                    "auth challenge not pending for connection".into(),
+                ));
+            }
+
+            let pending_request = record.authorize_auth_challenge(now_unix_secs());
+            Ok(RadrootsNostrSignerAuthorizationOutcome::new(
+                record.clone(),
+                pending_request,
+            ))
         })
     }
 
@@ -544,6 +626,13 @@ mod tests {
         RelayUrl::parse(url).expect("relay")
     }
 
+    fn request_message(id: &str) -> RadrootsNostrConnectRequestMessage {
+        RadrootsNostrConnectRequestMessage::new(
+            id,
+            radroots_nostr_connect::prelude::RadrootsNostrConnectRequest::Ping,
+        )
+    }
+
     fn poison_manager_state(manager: &RadrootsNostrSignerManager) {
         let shared = manager.state.clone();
         let _ = thread::spawn(move || {
@@ -567,12 +656,15 @@ mod tests {
         assert_eq!(left.client_public_key, right.client_public_key);
         assert_same_public_identity(&left.signer_identity, &right.signer_identity);
         assert_same_public_identity(&left.user_identity, &right.user_identity);
-        assert_eq!(left.connect_secret, right.connect_secret);
+        assert_eq!(left.connect_secret_hash, right.connect_secret_hash);
         assert_eq!(left.requested_permissions, right.requested_permissions);
         assert_eq!(left.granted_permissions, right.granted_permissions);
         assert_eq!(left.relays, right.relays);
         assert_eq!(left.approval_requirement, right.approval_requirement);
         assert_eq!(left.approval_state, right.approval_state);
+        assert_eq!(left.auth_state, right.auth_state);
+        assert_eq!(left.auth_challenge, right.auth_challenge);
+        assert_eq!(left.pending_request, right.pending_request);
         assert_eq!(left.status, right.status);
         assert_eq!(left.status_reason, right.status_reason);
         assert_eq!(left.created_at_unix, right.created_at_unix);
@@ -724,12 +816,19 @@ mod tests {
             )
             .expect("register");
 
-        assert_eq!(record.connect_secret.as_deref(), Some("secret"));
+        assert!(
+            record
+                .connect_secret_hash
+                .as_ref()
+                .expect("connect secret hash")
+                .matches_secret("secret")
+        );
         assert_eq!(record.status, RadrootsNostrSignerConnectionStatus::Active);
         assert_eq!(
             record.approval_state,
             RadrootsNostrSignerApprovalState::NotRequired
         );
+        assert_eq!(record.auth_state, RadrootsNostrSignerAuthState::NotRequired);
         assert_eq!(record.requested_permissions.as_slice(), &[sign_event, ping]);
         assert_eq!(
             record
@@ -1082,6 +1181,33 @@ mod tests {
                 .to_string()
                 .contains("cannot update granted permissions for revoked connection")
         );
+
+        let require_auth_err = manager
+            .require_auth_challenge(&active.connection_id, "https://auth.example")
+            .expect_err("require auth revoked");
+        assert!(
+            require_auth_err
+                .to_string()
+                .contains("cannot require auth for revoked connection")
+        );
+
+        let pending_request_err = manager
+            .set_pending_request(&active.connection_id, request_message("req-terminal"))
+            .expect_err("pending request revoked");
+        assert!(
+            pending_request_err
+                .to_string()
+                .contains("cannot set pending request for revoked connection")
+        );
+
+        let authorize_auth_err = manager
+            .authorize_auth_challenge(&active.connection_id)
+            .expect_err("authorize auth revoked");
+        assert!(
+            authorize_auth_err
+                .to_string()
+                .contains("cannot authorize auth challenge for revoked connection")
+        );
     }
 
     #[test]
@@ -1116,6 +1242,17 @@ mod tests {
         assert_eq!(audit.request_id.as_str(), "request-1");
         assert_eq!(audit.message.as_deref(), Some("challenge"));
 
+        let blank_message_audit = manager
+            .record_request(
+                &record.connection_id,
+                "request-2",
+                RadrootsNostrConnectMethod::Ping,
+                RadrootsNostrSignerRequestDecision::Denied,
+                Some("   ".into()),
+            )
+            .expect("record blank message");
+        assert!(blank_message_audit.message.is_none());
+
         let all_audits = manager.list_audit_records().expect("list audits");
         let connection_audits = manager
             .audit_records_for_connection(&record.connection_id)
@@ -1124,8 +1261,8 @@ mod tests {
             .get_connection(&record.connection_id)
             .expect("get")
             .expect("stored");
-        assert_eq!(all_audits, vec![audit.clone()]);
-        assert_eq!(connection_audits, vec![audit]);
+        assert_eq!(all_audits, vec![audit.clone(), blank_message_audit.clone()]);
+        assert_eq!(connection_audits, vec![audit, blank_message_audit]);
         assert!(stored.last_request_at_unix.is_some());
 
         let request_err = manager
@@ -1138,6 +1275,100 @@ mod tests {
             )
             .expect_err("invalid request id");
         assert!(request_err.to_string().contains("invalid request id"));
+    }
+
+    #[test]
+    fn auth_challenge_and_pending_request_state_are_persisted_and_replayed() {
+        let manager = RadrootsNostrSignerManager::new_in_memory();
+        manager
+            .set_signer_identity(public_identity(
+                "0000000000000000000000000000000000000000000000000000000000000034",
+            ))
+            .expect("set signer");
+        let record = manager
+            .register_connection(RadrootsNostrSignerConnectionDraft::new(
+                public_key("0000000000000000000000000000000000000000000000000000000000000035"),
+                public_identity("0000000000000000000000000000000000000000000000000000000000000036"),
+            ))
+            .expect("register");
+
+        let required = manager
+            .require_auth_challenge(&record.connection_id, " https://auth.example/flow ")
+            .expect("require auth");
+        assert_eq!(required.auth_state, RadrootsNostrSignerAuthState::Pending);
+        assert_eq!(
+            required
+                .auth_challenge
+                .as_ref()
+                .expect("auth challenge")
+                .auth_url,
+            "https://auth.example/flow"
+        );
+        assert!(required.pending_request.is_none());
+
+        let pending = manager
+            .set_pending_request(&record.connection_id, request_message(" req-auth "))
+            .expect("set pending request");
+        assert_eq!(
+            pending
+                .pending_request
+                .as_ref()
+                .expect("pending request")
+                .request_id()
+                .as_str(),
+            "req-auth"
+        );
+
+        let authorized = manager
+            .authorize_auth_challenge(&record.connection_id)
+            .expect("authorize");
+        assert_eq!(
+            authorized.connection.auth_state,
+            RadrootsNostrSignerAuthState::Authorized
+        );
+        assert!(authorized.connection.last_authenticated_at_unix.is_some());
+        assert!(authorized.connection.pending_request.is_none());
+        assert_eq!(
+            authorized
+                .pending_request
+                .as_ref()
+                .expect("replayed request")
+                .request_message()
+                .id,
+            "req-auth"
+        );
+        assert_eq!(
+            authorized
+                .connection
+                .auth_challenge
+                .as_ref()
+                .expect("authorized challenge")
+                .authorized_at_unix,
+            authorized.connection.last_authenticated_at_unix
+        );
+
+        let invalid_url = manager
+            .require_auth_challenge(&record.connection_id, "not-a-url")
+            .expect_err("invalid auth url");
+        assert!(invalid_url.to_string().contains("invalid auth url"));
+
+        let no_pending_auth = manager
+            .set_pending_request(&record.connection_id, request_message("req-again"))
+            .expect_err("pending request without auth challenge");
+        assert!(
+            no_pending_auth
+                .to_string()
+                .contains("auth challenge not pending for connection")
+        );
+
+        let no_authorize = manager
+            .authorize_auth_challenge(&record.connection_id)
+            .expect_err("authorize without pending auth challenge");
+        assert!(
+            no_authorize
+                .to_string()
+                .contains("auth challenge not pending for connection")
+        );
     }
 
     #[test]
@@ -1193,6 +1424,15 @@ mod tests {
         let missing_relays = manager
             .update_relays(&missing_id, vec![relay("wss://relay.example")])
             .expect_err("missing relays");
+        let missing_require_auth = manager
+            .require_auth_challenge(&missing_id, "https://auth.example")
+            .expect_err("missing require auth");
+        let missing_pending_request = manager
+            .set_pending_request(&missing_id, request_message("req-missing-2"))
+            .expect_err("missing pending request");
+        let missing_authorize_auth = manager
+            .authorize_auth_challenge(&missing_id)
+            .expect_err("missing authorize auth");
         let missing_request = manager
             .record_request(
                 &missing_id,
@@ -1209,6 +1449,9 @@ mod tests {
             missing_reject,
             missing_revoke,
             missing_relays,
+            missing_require_auth,
+            missing_pending_request,
+            missing_authorize_auth,
             missing_request,
         ] {
             assert!(err.to_string().contains("connection not found"));
@@ -1241,6 +1484,23 @@ mod tests {
             invalid_approve
                 .to_string()
                 .contains("invalid granted permission")
+        );
+
+        let auth_required = manager
+            .require_auth_challenge(&pending.connection_id, "https://auth.example")
+            .expect("require auth");
+        assert_eq!(
+            auth_required.auth_state,
+            RadrootsNostrSignerAuthState::Pending
+        );
+
+        let invalid_pending_request = manager
+            .set_pending_request(&pending.connection_id, request_message("   "))
+            .expect_err("invalid pending request id");
+        assert!(
+            invalid_pending_request
+                .to_string()
+                .contains("invalid request id")
         );
 
         let update_state_err = manager
@@ -1355,6 +1615,15 @@ mod tests {
         let update_relays_err = manager
             .update_relays(&connection_id, vec![relay("wss://relay.example")])
             .expect_err("poisoned relays");
+        let require_auth_err = manager
+            .require_auth_challenge(&connection_id, "https://auth.example")
+            .expect_err("poisoned require auth");
+        let set_pending_request_err = manager
+            .set_pending_request(&connection_id, request_message("req-2"))
+            .expect_err("poisoned set pending request");
+        let authorize_auth_err = manager
+            .authorize_auth_challenge(&connection_id)
+            .expect_err("poisoned authorize auth");
         let auth_err = manager
             .mark_authenticated(&connection_id)
             .expect_err("poisoned auth");
@@ -1376,6 +1645,9 @@ mod tests {
             reject_err,
             revoke_err,
             update_relays_err,
+            require_auth_err,
+            set_pending_request_err,
+            authorize_auth_err,
             auth_err,
             request_err,
         ] {
@@ -1452,6 +1724,12 @@ mod tests {
             )
             .expect("register reused secret");
 
-        assert_eq!(reused.connect_secret.as_deref(), Some("reusable-secret"));
+        assert!(
+            reused
+                .connect_secret_hash
+                .as_ref()
+                .expect("connect secret hash")
+                .matches_secret("reusable-secret")
+        );
     }
 }

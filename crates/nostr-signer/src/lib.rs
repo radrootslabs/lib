@@ -11,11 +11,14 @@ pub mod prelude {
     pub use crate::manager::RadrootsNostrSignerManager;
     pub use crate::model::{
         RADROOTS_NOSTR_SIGNER_STORE_VERSION, RadrootsNostrSignerApprovalRequirement,
-        RadrootsNostrSignerApprovalState, RadrootsNostrSignerConnectionDraft,
+        RadrootsNostrSignerApprovalState, RadrootsNostrSignerAuthChallenge,
+        RadrootsNostrSignerAuthState, RadrootsNostrSignerAuthorizationOutcome,
+        RadrootsNostrSignerConnectSecretHash, RadrootsNostrSignerConnectionDraft,
         RadrootsNostrSignerConnectionId, RadrootsNostrSignerConnectionRecord,
-        RadrootsNostrSignerConnectionStatus, RadrootsNostrSignerPermissionGrant,
-        RadrootsNostrSignerRequestAuditRecord, RadrootsNostrSignerRequestDecision,
-        RadrootsNostrSignerRequestId, RadrootsNostrSignerStoreState,
+        RadrootsNostrSignerConnectionStatus, RadrootsNostrSignerPendingRequest,
+        RadrootsNostrSignerPermissionGrant, RadrootsNostrSignerRequestAuditRecord,
+        RadrootsNostrSignerRequestDecision, RadrootsNostrSignerRequestId,
+        RadrootsNostrSignerSecretDigestAlgorithm, RadrootsNostrSignerStoreState,
     };
     pub use crate::store::{
         RadrootsNostrFileSignerStore, RadrootsNostrMemorySignerStore, RadrootsNostrSignerStore,

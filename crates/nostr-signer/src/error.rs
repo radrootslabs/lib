@@ -22,6 +22,9 @@ pub enum RadrootsNostrSignerError {
     #[error("connect secret already in use")]
     ConnectSecretAlreadyInUse,
 
+    #[error("invalid auth url `{0}`")]
+    InvalidAuthUrl(String),
+
     #[error("invalid signer state: {0}")]
     InvalidState(String),
 

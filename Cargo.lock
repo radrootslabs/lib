@@ -2276,14 +2276,17 @@ dependencies = [
 name = "radroots-nostr-signer"
 version = "0.1.0-alpha.1"
 dependencies = [
+ "hex",
  "nostr",
  "radroots-identity",
  "radroots-nostr-connect",
  "radroots-runtime",
  "serde",
  "serde_json",
+ "sha2",
  "tempfile",
  "thiserror 1.0.69",
+ "url",
  "uuid",
 ]
 
