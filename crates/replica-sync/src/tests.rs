@@ -24,10 +24,9 @@ use radroots_types::types::IError;
 use std::panic;
 
 fn unwrap_sql<T>(result: Result<T, IError<SqlError>>, label: &str) -> T {
-    match result {
-        Ok(value) => value,
-        Err(err) => panic!("{label}: {}", err.err),
-    }
+    result
+        .map_err(|err| format!("{label}: {}", err.err))
+        .unwrap()
 }
 
 #[test]

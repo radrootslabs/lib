@@ -15,7 +15,8 @@
     };
   };
 
-  outputs = inputs@{ flake-parts, ... }:
+  outputs =
+    inputs@{ flake-parts, ... }:
     flake-parts.lib.mkFlake { inherit inputs; } {
       imports = [ inputs.treefmt-nix.flakeModule ];
       systems = [
@@ -47,7 +48,13 @@
           treefmt = import ./treefmt.nix;
 
           apps = import ./nix/apps.nix {
-            inherit common config pkgs toolchains;
+            inherit
+              common
+              config
+              lib
+              pkgs
+              toolchains
+              ;
           };
 
           checks = lib.filterAttrs (_: value: value != null) (

@@ -1,30 +1,30 @@
 [workspace]
 members = [
-    "crates/core",
-    "crates/events",
-    "crates/events-codec",
-    "crates/events-codec-wasm",
-    "crates/events-indexed",
-    "crates/identity",
-    "crates/log",
-    "crates/net",
-    "crates/net-core",
-    "crates/nostr",
-    "crates/nostr-accounts",
-    "crates/nostr-ndb",
-    "crates/nostr-runtime",
-    "crates/runtime",
-    "crates/sql-wasm-bridge",
-    "crates/sql-wasm-core",
-    "crates/sql-core",
-    "crates/replica-db-schema",
-    "crates/replica-sync",
-    "crates/replica-sync-wasm",
-    "crates/replica-db",
-    "crates/replica-db-wasm",
-    "crates/trade",
-    "crates/types",
-    "crates/xtask",
+  "crates/core",
+  "crates/events",
+  "crates/events-codec",
+  "crates/events-codec-wasm",
+  "crates/events-indexed",
+  "crates/identity",
+  "crates/log",
+  "crates/net",
+  "crates/net-core",
+  "crates/nostr",
+  "crates/nostr-accounts",
+  "crates/nostr-ndb",
+  "crates/nostr-runtime",
+  "crates/runtime",
+  "crates/sql-wasm-bridge",
+  "crates/sql-wasm-core",
+  "crates/sql-core",
+  "crates/replica-db-schema",
+  "crates/replica-sync",
+  "crates/replica-sync-wasm",
+  "crates/replica-db",
+  "crates/replica-db-wasm",
+  "crates/trade",
+  "crates/types",
+  "crates/xtask",
 ]
 resolver = "2"
 
@@ -72,13 +72,21 @@ directories = { version = "6" }
 futures = { version = "0.3" }
 hex = { version = "0.4" }
 js-sys = { version = "0.3" }
-keyring = { version = "3.6.3", default-features = false, features = ["apple-native", "windows-native", "linux-native-sync-persistent", "vendored"] }
+keyring = { version = "3.6.3", default-features = false, features = [
+  "apple-native",
+  "windows-native",
+  "linux-native-sync-persistent",
+  "vendored",
+] }
 nostr = { version = "0.44.2" }
 nostr-relay-pool = { version = "0.44.0" }
 nostr-sdk = { version = "0.44.1" }
 num_cpus = { version = "1.17.0" }
 secrecy = { version = "0.10.3" }
-serde = { version = "1", default-features = false, features = ["derive"] }
+serde = { version = "1", default-features = false, features = [
+  "derive",
+  "alloc",
+] }
 serde_json = { version = "1", default-features = false, features = ["alloc"] }
 serde-wasm-bindgen = { version = "0.6" }
 sha2 = { version = "0.10", default-features = false }
@@ -96,7 +104,7 @@ tracing-log = { version = "0.2" }
 tracing-subscriber = { version = "0.3" }
 ts-rs = { version = "11.1" }
 typeshare = { version = "1" }
-url  = { version = "2" }
+url = { version = "2" }
 uuid = { version = "1.22.0", features = ["v4", "v7"] }
 zeroize = { version = "1" }
 uniffi = { version = "=0.29.4" }

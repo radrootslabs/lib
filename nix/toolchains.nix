@@ -2,7 +2,7 @@
 let
   toolchain = builtins.fromTOML (builtins.readFile ../rust-toolchain.toml);
   stableVersion = toolchain.toolchain.channel;
-  stableTargets = toolchain.toolchain.targets or [];
+  stableTargets = toolchain.toolchain.targets or [ ];
   stableExtensions = [
     "clippy"
     "rust-analyzer"

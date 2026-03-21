@@ -2,7 +2,9 @@
 name = "radroots-nostr-runtime"
 version = "0.1.0-alpha.1"
 edition.workspace = true
-authors = ["Radroots Authors"]
+authors = [
+  "Radroots Authors",
+]
 rust-version.workspace = true
 license.workspace = true
 description = "Nostr runtime layer for Radroots"
@@ -18,7 +20,9 @@ nostr-client = ["std", "dep:radroots-nostr"]
 nostr-ndb = ["nostr-client"]
 
 [dependencies]
-radroots-nostr = { workspace = true, optional = true, default-features = true, features = ["client"] }
+radroots-nostr = { workspace = true, optional = true, default-features = true, features = [
+  "client",
+] }
 futures = { workspace = true, optional = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, optional = true, features = ["rt", "sync", "time"] }

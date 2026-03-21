@@ -2,7 +2,9 @@
 name = "radroots-net-core"
 version = "0.1.0-alpha.1"
 edition.workspace = true
-authors = ["Radroots Authors"]
+authors = [
+  "Radroots Authors",
+]
 rust-version.workspace = true
 license.workspace = true
 description = "network orchestration primitives and runtime interfaces for the radroots sdk"
@@ -15,26 +17,36 @@ default = ["std"]
 std = ["serde/std"]
 rt = ["std", "dep:tokio"]
 nostr-client = [
-    "std",
-    "dep:radroots-events",
-    "dep:radroots-events-codec",
-    "radroots-events/serde",
-    "dep:radroots-nostr-accounts",
-    "dep:secrecy",
-    "dep:hex",
-    "dep:tempfile",
-    "dep:serde_json",
-    "dep:radroots-nostr"
+  "std",
+  "dep:radroots-events",
+  "dep:radroots-events-codec",
+  "radroots-events/serde",
+  "dep:radroots-nostr-accounts",
+  "dep:secrecy",
+  "dep:hex",
+  "dep:tempfile",
+  "dep:serde_json",
+  "dep:radroots-nostr",
 ]
 directories = ["std", "dep:directories"]
 fs-persistence = ["std"]
 
 [dependencies]
-radroots-events = { workspace = true, optional = true, default-features = true, features = ["std", "serde", "typeshare"] }
+radroots-events = { workspace = true, optional = true, default-features = true, features = [
+  "std",
+  "serde",
+  "typeshare",
+] }
 radroots-log = { workspace = true, features = ["std"] }
 radroots-nostr-accounts = { workspace = true, optional = true, default-features = true }
-radroots-events-codec = { workspace = true, optional = true, default-features = true, features = ["std"] }
-radroots-nostr = { workspace = true, optional = true, default-features = true, features = ["client", "events", "codec"] }
+radroots-events-codec = { workspace = true, optional = true, default-features = true, features = [
+  "std",
+] }
+radroots-nostr = { workspace = true, optional = true, default-features = true, features = [
+  "client",
+  "events",
+  "codec",
+] }
 directories = { workspace = true, optional = true }
 hex = { workspace = true, optional = true }
 secrecy = { workspace = true, optional = true }

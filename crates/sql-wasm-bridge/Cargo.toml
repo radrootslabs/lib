@@ -2,7 +2,9 @@
 name = "radroots-sql-wasm-bridge"
 version = "0.1.0-alpha.1"
 edition.workspace = true
-authors = ["Radroots Authors"]
+authors = [
+  "Radroots Authors",
+]
 rust-version.workspace = true
 license.workspace = true
 description = "wasm sql bridge primitives for radroots data layers"
@@ -15,4 +17,4 @@ default = []
 
 [dependencies]
 js-sys = { workspace = true }
-wasm-bindgen = { workspace = true } 
+wasm-bindgen = { workspace = true }

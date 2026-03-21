@@ -2,7 +2,9 @@
 name = "radroots-log"
 version = "0.1.0-alpha.1"
 edition.workspace = true
-authors = ["Radroots Authors"]
+authors = [
+  "Radroots Authors",
+]
 rust-version.workspace = true
 license.workspace = true
 description = "Logging layer for Radroots"
@@ -17,5 +19,8 @@ std = ["dep:thiserror", "dep:tracing-subscriber", "dep:tracing-appender"]
 [dependencies]
 tracing = { workspace = true, default-features = false }
 thiserror = { workspace = true, optional = true }
-tracing-subscriber = { workspace = true, optional = true, features = ["fmt", "env-filter"] }
+tracing-subscriber = { workspace = true, optional = true, features = [
+  "fmt",
+  "env-filter",
+] }
 tracing-appender = { workspace = true, optional = true }

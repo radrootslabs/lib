@@ -2,7 +2,9 @@
 name = "radroots-sql-core"
 version = "0.1.0-alpha.1"
 edition.workspace = true
-authors = ["Radroots Authors"]
+authors = [
+  "Radroots Authors",
+]
 rust-version.workspace = true
 license.workspace = true
 description = "SQL support layer for Radroots"
@@ -15,7 +17,12 @@ crate-type = ["rlib"]
 
 [features]
 web = []
-bridge = ["web", "dep:radroots-sql-wasm-bridge", "dep:serde-wasm-bindgen", "dep:wasm-bindgen"]
+bridge = [
+  "web",
+  "dep:radroots-sql-wasm-bridge",
+  "dep:serde-wasm-bindgen",
+  "dep:wasm-bindgen",
+]
 native = ["dep:rusqlite"]
 embedded = []
 

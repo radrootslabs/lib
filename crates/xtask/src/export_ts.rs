@@ -629,10 +629,7 @@ manifest_file = "export-manifest.json"
 "#,
         );
         write_file(
-            &root
-                .join("contract")
-                .join("coverage")
-                .join("policy.toml"),
+            &root.join("contract").join("coverage").join("policy.toml"),
             r#"[gate]
 fail_under_exec_lines = 100.0
 fail_under_functions = 100.0
@@ -1101,6 +1098,64 @@ mod tests {
         assert!(manifest_raw.contains("packages/core"));
 
         fs::remove_dir_all(&out_dir).expect("remove out dir");
+    }
+
+    #[test]
+    fn export_ts_wasm_artifacts_returns_ok_when_no_wasm_packages_are_selected() {
+        let root = create_synthetic_workspace("export_ts_no_wasm_packages", false);
+        let out_dir = root.join("out");
+        fs::create_dir_all(&out_dir).expect("create output dir");
+
+        export_ts_wasm_artifacts(&root, &out_dir).expect("export wasm without wasm packages");
+        assert!(!out_dir.join("ts").join("packages").exists());
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn export_ts_wasm_artifacts_copies_selected_wasm_package_dist() {
+        let root = create_synthetic_workspace("export_ts_with_wasm_dist", false);
+        write_file(
+            &root.join("contract").join("exports").join("ts.toml"),
+            r#"[language]
+id = "ts"
+repository = "sdk-typescript"
+
+[packages]
+"radroots-a" = "@radroots/a"
+"radroots-a-wasm" = "@radroots/a-wasm"
+
+[artifacts]
+models_dir = "src/generated"
+constants_dir = "src/generated"
+wasm_dist_dir = "dist"
+manifest_file = "export-manifest.json"
+"#,
+        );
+        write_file(
+            &root
+                .join("crates")
+                .join("a-wasm")
+                .join("pkg")
+                .join("dist")
+                .join("radroots-a-wasm.js"),
+            "export const probe = true;\n",
+        );
+        let out_dir = root.join("out");
+        fs::create_dir_all(&out_dir).expect("create output dir");
+
+        export_ts_wasm_artifacts(&root, &out_dir).expect("export wasm dist");
+        assert!(
+            out_dir
+                .join("ts")
+                .join("packages")
+                .join("a-wasm")
+                .join("dist")
+                .join("radroots-a-wasm.js")
+                .exists()
+        );
+
+        fs::remove_dir_all(root).expect("remove root");
     }
 
     #[test]

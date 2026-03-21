@@ -495,6 +495,24 @@ mod tests {
         .join();
     }
 
+    fn status_kind(status: &RadrootsNostrSelectedAccountStatus) -> &'static str {
+        match status {
+            RadrootsNostrSelectedAccountStatus::NotConfigured => "not-configured",
+            RadrootsNostrSelectedAccountStatus::PublicOnly { .. } => "public-only",
+            RadrootsNostrSelectedAccountStatus::Ready { .. } => "ready",
+        }
+    }
+
+    fn status_account(
+        status: &RadrootsNostrSelectedAccountStatus,
+    ) -> Option<&RadrootsNostrAccountRecord> {
+        match status {
+            RadrootsNostrSelectedAccountStatus::NotConfigured => None,
+            RadrootsNostrSelectedAccountStatus::PublicOnly { account }
+            | RadrootsNostrSelectedAccountStatus::Ready { account } => Some(account),
+        }
+    }
+
     #[test]
     fn manager_persists_selection_and_restores_signing_identity() {
         let temp = tempfile::tempdir().expect("tempdir");
@@ -549,15 +567,12 @@ mod tests {
                 .expect("signing")
                 .is_none()
         );
-        match manager
+        let status = manager
             .selected_account_status()
-            .expect("selected account status")
-        {
-            RadrootsNostrSelectedAccountStatus::PublicOnly { account } => {
-                assert_eq!(account.label.as_deref(), Some("watch"));
-            }
-            other => panic!("unexpected account status: {other:?}"),
-        }
+            .expect("selected account status");
+        assert_eq!(status_kind(&status), "public-only");
+        let account = status_account(&status).expect("account");
+        assert_eq!(account.label.as_deref(), Some("watch"));
     }
 
     #[test]
@@ -567,16 +582,13 @@ mod tests {
             .generate_identity(Some("primary".into()), true)
             .expect("generate");
 
-        match manager
+        let status = manager
             .selected_account_status()
-            .expect("selected account status")
-        {
-            RadrootsNostrSelectedAccountStatus::Ready { account } => {
-                assert_eq!(account.account_id, selected_id);
-                assert_eq!(account.label.as_deref(), Some("primary"));
-            }
-            other => panic!("unexpected account status: {other:?}"),
-        }
+            .expect("selected account status");
+        assert_eq!(status_kind(&status), "ready");
+        let account = status_account(&status).expect("account");
+        assert_eq!(account.account_id, selected_id);
+        assert_eq!(account.label.as_deref(), Some("primary"));
     }
 
     #[test]
@@ -675,12 +687,11 @@ mod tests {
                 .expect("selected signing")
                 .is_none()
         );
-        assert!(matches!(
-            manager
-                .selected_account_status()
-                .expect("selected account status"),
-            RadrootsNostrSelectedAccountStatus::NotConfigured
-        ));
+        let status = manager
+            .selected_account_status()
+            .expect("selected account status");
+        assert_eq!(status_kind(&status), "not-configured");
+        assert!(status_account(&status).is_none());
 
         let missing_id = RadrootsIdentity::generate().id();
         assert!(
@@ -702,15 +713,12 @@ mod tests {
             .remove_secret(&account_id)
             .expect("remove secret");
 
-        match manager
+        let status = manager
             .selected_account_status()
-            .expect("selected account status")
-        {
-            RadrootsNostrSelectedAccountStatus::PublicOnly { account } => {
-                assert_eq!(account.account_id, account_id);
-            }
-            other => panic!("unexpected account status: {other:?}"),
-        }
+            .expect("selected account status");
+        assert_eq!(status_kind(&status), "public-only");
+        let account = status_account(&status).expect("account");
+        assert_eq!(account.account_id, account_id);
 
         let wrong_identity = RadrootsIdentity::generate();
         manager
@@ -722,6 +730,60 @@ mod tests {
             .selected_account_status()
             .expect_err("public key mismatch");
         assert_eq!(err.to_string(), "public key does not match secret key");
+    }
+
+    #[test]
+    fn selected_account_status_propagates_store_vault_and_secret_parse_errors() {
+        let poisoned_manager = RadrootsNostrAccountsManager::new_in_memory();
+        poison_manager_state(&poisoned_manager);
+        let selected_err = poisoned_manager
+            .selected_account_status()
+            .expect_err("selected status poisoned");
+        assert!(selected_err.to_string().starts_with("store error:"));
+
+        let mut load_error_state = RadrootsNostrAccountStoreState::default();
+        let load_error_public = RadrootsIdentity::generate().to_public();
+        load_error_state
+            .accounts
+            .push(RadrootsNostrAccountRecord::new(
+                load_error_public.clone(),
+                Some("watch".into()),
+                1,
+            ));
+        load_error_state.selected_account_id = Some(load_error_public.id.clone());
+        let load_error_store = Arc::new(RadrootsNostrMemoryAccountStore::new());
+        load_error_store
+            .save(&load_error_state)
+            .expect("save state");
+        let vault_load_error_manager =
+            RadrootsNostrAccountsManager::new(load_error_store, Arc::new(VaultLoadError))
+                .expect("manager");
+        let vault_load_error = vault_load_error_manager
+            .selected_account_status()
+            .expect_err("vault load error");
+        assert!(vault_load_error.to_string().starts_with("vault error:"));
+
+        let mut invalid_secret_state = RadrootsNostrAccountStoreState::default();
+        let invalid_secret_public = RadrootsIdentity::generate().to_public();
+        invalid_secret_state
+            .accounts
+            .push(RadrootsNostrAccountRecord::new(
+                invalid_secret_public.clone(),
+                Some("invalid".into()),
+                1,
+            ));
+        invalid_secret_state.selected_account_id = Some(invalid_secret_public.id.clone());
+        let invalid_secret_store = Arc::new(RadrootsNostrMemoryAccountStore::new());
+        invalid_secret_store
+            .save(&invalid_secret_state)
+            .expect("save state");
+        let invalid_secret_manager =
+            RadrootsNostrAccountsManager::new(invalid_secret_store, Arc::new(VaultInvalidSecret))
+                .expect("manager");
+        let invalid_secret = invalid_secret_manager
+            .selected_account_status()
+            .expect_err("invalid secret");
+        assert!(invalid_secret.to_string().starts_with("identity error:"));
     }
 
     #[test]

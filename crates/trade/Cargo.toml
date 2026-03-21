@@ -2,7 +2,9 @@
 name = "radroots-trade"
 version = "0.1.0-alpha.1"
 edition.workspace = true
-authors = ["Radroots Authors"]
+authors = [
+  "Radroots Authors",
+]
 rust-version.workspace = true
 license.workspace = true
 description = "Trade domain model for Radroots"
@@ -14,7 +16,12 @@ build = "build.rs"
 [features]
 default = ["std", "serde", "serde_json", "ts-rs"]
 std = []
-serde = ["dep:serde", "radroots-core/serde", "radroots-events/serde", "radroots-events-codec/serde"]
+serde = [
+  "dep:serde",
+  "radroots-core/serde",
+  "radroots-events/serde",
+  "radroots-events-codec/serde",
+]
 serde_json = ["serde", "dep:serde_json"]
 ts-rs = ["dep:ts-rs", "radroots-events/ts-rs", "radroots-events/std"]
 
@@ -22,6 +29,11 @@ ts-rs = ["dep:ts-rs", "radroots-events/ts-rs", "radroots-events/std"]
 radroots-core = { workspace = true, default-features = false }
 radroots-events = { workspace = true, default-features = false }
 radroots-events-codec = { workspace = true, default-features = false }
-serde = { workspace = true, default-features = false, features = ["alloc", "derive"], optional = true }
-serde_json = { workspace = true, default-features = false, features = ["alloc"], optional = true }
+serde = { workspace = true, default-features = false, features = [
+  "alloc",
+  "derive",
+], optional = true }
+serde_json = { workspace = true, default-features = false, features = [
+  "alloc",
+], optional = true }
 ts-rs = { workspace = true, optional = true }

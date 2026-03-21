@@ -2,7 +2,9 @@
 name = "radroots-types"
 version = "0.1.0-alpha.1"
 edition.workspace = true
-authors = ["Radroots Authors"]
+authors = [
+  "Radroots Authors",
+]
 rust-version.workspace = true
 license.workspace = true
 description = "Shared type primitives for Radroots"

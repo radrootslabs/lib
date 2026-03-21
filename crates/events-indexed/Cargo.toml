@@ -2,7 +2,9 @@
 name = "radroots-events-indexed"
 version = "0.1.0-alpha.1"
 edition.workspace = true
-authors = ["Radroots Authors"]
+authors = [
+  "Radroots Authors",
+]
 rust-version.workspace = true
 license.workspace = true
 description = "Indexed event model for Radroots"
@@ -17,7 +19,10 @@ typeshare = ["dep:typeshare"]
 std = []
 
 [dependencies]
-serde = { workspace = true, default-features = false, features = ["alloc", "derive"], optional = true }
+serde = { workspace = true, default-features = false, features = [
+  "alloc",
+  "derive",
+], optional = true }
 typeshare = { workspace = true, optional = true }
 
 [dev-dependencies]

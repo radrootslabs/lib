@@ -308,6 +308,13 @@ mod tests {
     }
 
     #[test]
+    fn exec_empty_bind_batch_surfaces_invalid_query() {
+        let engine = EmbeddedSqlEngine::new().unwrap();
+        let err = engine.exec("CREATE TABLE broken (", "[]").unwrap_err();
+        assert_eq!(err.code(), "ERR_INVALID_QUERY");
+    }
+
+    #[test]
     fn export_bytes_non_empty() {
         let engine = EmbeddedSqlEngine::new().unwrap();
         engine.exec(CREATE_TABLE_SQL, "[]").unwrap();

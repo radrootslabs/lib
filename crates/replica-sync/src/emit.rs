@@ -962,6 +962,34 @@ mod tests {
         }
     }
 
+    struct DuplicateFarmSelectorExecutor<'a> {
+        inner: &'a SqliteExecutor,
+        duplicated_rows_json: String,
+    }
+
+    impl SqlExecutor for DuplicateFarmSelectorExecutor<'_> {
+        fn exec(&self, sql: &str, params_json: &str) -> Result<ExecOutcome, SqlError> {
+            self.inner.exec(sql, params_json)
+        }
+
+        fn query_raw(&self, sql: &str, params_json: &str) -> Result<String, SqlError> {
+            let _ = (sql, params_json);
+            Ok(self.duplicated_rows_json.clone())
+        }
+
+        fn begin(&self) -> Result<(), SqlError> {
+            self.inner.begin()
+        }
+
+        fn commit(&self) -> Result<(), SqlError> {
+            self.inner.commit()
+        }
+
+        fn rollback(&self) -> Result<(), SqlError> {
+            self.inner.rollback()
+        }
+    }
+
     fn seed(exec: &SqliteExecutor) -> (Farm, Plot, Plot) {
         migrations::run_all_up(exec).expect("migrations");
         let farm = farm::create(
@@ -2307,6 +2335,35 @@ mod tests {
         )
         .expect("resolve by pair");
         assert_eq!(resolved_by_pair.id, farm_row.id);
+        let duplicate_pair = DuplicateFarmSelectorExecutor {
+            inner: &exec,
+            duplicated_rows_json: {
+                let farm_json = serde_json::to_string(&farm_row).expect("farm json");
+                format!("[{farm_json},{farm_json}]")
+            },
+        };
+        duplicate_pair.begin().expect("duplicate begin");
+        duplicate_pair.rollback().expect("duplicate rollback");
+        duplicate_pair.begin().expect("duplicate begin");
+        duplicate_pair.commit().expect("duplicate commit");
+        duplicate_pair
+            .exec("CREATE TABLE duplicate_probe (id INTEGER)", "[]")
+            .expect("duplicate exec");
+        let duplicate_err = resolve_farm(
+            &duplicate_pair,
+            &RadrootsReplicaFarmSelector {
+                id: None,
+                d_tag: Some(farm_row.d_tag.clone()),
+                pubkey: Some(farm_row.pubkey.clone()),
+            },
+        )
+        .map(|_| ())
+        .unwrap_err();
+        assert!(
+            duplicate_err
+                .to_string()
+                .contains("did not resolve to a single farm")
+        );
         assert!(
             resolve_farm(
                 &pass,

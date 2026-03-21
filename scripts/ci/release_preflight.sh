@@ -10,11 +10,10 @@ cargo run -q -p xtask -- sdk validate
 
 required_file="$(mktemp)"
 trap 'rm -f "$required_file"' EXIT
-cargo run -q -p xtask -- sdk coverage required-crates > "$required_file"
+cargo run -q -p xtask -- sdk coverage required-crates >"$required_file"
 
+rm -rf target/coverage
 mkdir -p target/coverage
-printf "crate\tstatus\texec\tfunc\tbranch\tregion\treport\n" > target/coverage/coverage-refresh.tsv
-printf "crate\tstatus\n" > target/coverage/coverage-refresh-status.tsv
 
 while IFS= read -r crate; do
   [ -n "$crate" ] || continue
@@ -29,10 +28,12 @@ while IFS= read -r crate; do
     --lcov "${out_dir}/coverage-lcov.info" \
     --out "${out_dir}/gate-report.json" \
     --policy-gate
+done <"$required_file"
 
-  printf "%s\tpass\t100.0\t100.0\t100.0\t100.0\t%s\n" "$crate" "${out_dir}/gate-report.json" >> target/coverage/coverage-refresh.tsv
-  printf "%s\tpass\n" "$crate" >> target/coverage/coverage-refresh-status.tsv
-done < "$required_file"
+cargo run -q -p xtask -- sdk coverage refresh-summary \
+  --reports-root target/coverage \
+  --out target/coverage/coverage-refresh.tsv \
+  --status-out target/coverage/coverage-refresh-status.tsv
 
 cargo run -q -p xtask -- sdk release preflight
 echo "release preflight complete"

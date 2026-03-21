@@ -1,7 +1,16 @@
-{ common, config, pkgs, toolchains }:
+{
+  common,
+  config,
+  lib,
+  pkgs,
+  toolchains,
+}:
 let
   stablePath = "export PATH=${toolchains.stable}/bin:$PATH";
   coveragePath = "export PATH=${toolchains.stable}/bin:${toolchains.coverage}/bin:$PATH";
+  coverageShellExec = command: ''
+    exec nix develop .#coverage --accept-flake-config -c sh -lc ${lib.escapeShellArg command} sh "$@"
+  '';
   mkRepoApp =
     {
       name,
@@ -92,10 +101,10 @@ in
   publish-crates = mkRepoApp {
     name = "publish-crates";
     description = "Publish crates through the workspace release script";
-    runtimeInputs = common.runtimeInputs.release;
-    command = ''
-      ./publish-crates.sh "$@"
-    '';
+    runtimeInputs = [
+      pkgs.nix
+    ];
+    command = coverageShellExec ''./publish-crates.sh "$@"'';
     env = common.exportCoverageEnv;
     pathPrefix = coveragePath;
   };
@@ -103,10 +112,10 @@ in
   publish-dry-run = mkRepoApp {
     name = "publish-dry-run";
     description = "Run a dry-run crates publish through the workspace release script";
-    runtimeInputs = common.runtimeInputs.release;
-    command = ''
-      ./publish-crates.sh --dry-run "$@"
-    '';
+    runtimeInputs = [
+      pkgs.nix
+    ];
+    command = coverageShellExec ''./publish-crates.sh --dry-run "$@"'';
     env = common.exportCoverageEnv;
     pathPrefix = coveragePath;
   };
@@ -114,8 +123,10 @@ in
   release-preflight = mkRepoApp {
     name = "release-preflight";
     description = "Run release coverage refresh and preflight validation";
-    runtimeInputs = common.runtimeInputs.coverage;
-    command = common.releasePreflightCommand;
+    runtimeInputs = [
+      pkgs.nix
+    ];
+    command = coverageShellExec common.releasePreflightCommand;
     env = common.exportCoverageEnv;
     pathPrefix = coveragePath;
   };

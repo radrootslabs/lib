@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use crate::coverage::{read_coverage_policy, CoverageThresholds};
+use crate::coverage::{CoverageThresholds, read_coverage_policy};
 use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -223,17 +223,9 @@ fn workspace_package_manifests(workspace_root: &Path) -> Result<BTreeMap<String,
     Ok(manifests)
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
-fn load_coverage_required(contract_root: &Path) -> Result<CoverageRequiredFile, String> {
-    let policy = load_coverage_policy(contract_root)?;
-    Ok(CoverageRequiredFile {
-        required: CoverageRequiredSection {
-            crates: policy.required_crates()?,
-        },
-    })
-}
-
-fn load_coverage_policy(contract_root: &Path) -> Result<crate::coverage::CoveragePolicyFile, String> {
+fn load_coverage_policy(
+    contract_root: &Path,
+) -> Result<crate::coverage::CoveragePolicyFile, String> {
     read_coverage_policy(&contract_root.join("coverage").join("policy.toml"))
 }
 
@@ -576,7 +568,11 @@ fn validate_coverage_policy_parity(
         );
     }
 
-    let required_packages = policy.required_crates()?.into_iter().collect::<BTreeSet<_>>();
+    let required_packages = policy
+        .required_crate_entries()
+        .iter()
+        .cloned()
+        .collect::<BTreeSet<_>>();
     if workspace_packages != required_packages {
         let missing = workspace_packages
             .difference(&required_packages)
@@ -720,11 +716,14 @@ pub fn validate_release_preflight(workspace_root: &Path) -> Result<(), String> {
     validate_contract_bundle(&bundle)?;
     let release =
         load_release_contract(&bundle.root).expect("validated contract includes release metadata");
-    let policy = load_coverage_policy(&bundle.root)
-        .expect("validated contract includes coverage metadata");
+    let policy =
+        load_coverage_policy(&bundle.root).expect("validated contract includes coverage metadata");
     let publish_crates = collect_unique_set(&release.publish.crates, "publish.crates")
         .expect("validated contract enforces unique publish.crates");
-    let required_crates = collect_unique_set(&policy.required_crates()?, "required.crates")
+    let required_crate_list = policy
+        .required_crates()
+        .expect("validated contract includes required crates");
+    let required_crates = collect_unique_set(&required_crate_list, "required.crates")
         .expect("validated contract enforces unique required.crates");
     validate_publish_package_metadata(workspace_root, &publish_crates)?;
     validate_required_coverage_summary(workspace_root, &required_crates, policy.thresholds())?;
@@ -1154,19 +1153,44 @@ pub enum RadrootsCoreUnitDimension {
     fn coverage_required_crates_match_policy_required_status() {
         let root = workspace_root();
         let contract_root = root.join("contract");
-        let required = load_coverage_required(&contract_root).expect("coverage required");
+        let policy = load_coverage_policy(&contract_root).expect("coverage policy");
+        let required = CoverageRequiredFile {
+            required: CoverageRequiredSection {
+                crates: policy.required_crates().expect("coverage required"),
+            },
+        };
         let required_names = required
             .required
             .crates
             .into_iter()
             .collect::<BTreeSet<_>>();
-        let policy = load_coverage_policy(&contract_root).expect("coverage policy");
         let policy_required = policy
             .required_crates()
             .expect("policy required crates")
             .into_iter()
             .collect::<BTreeSet<_>>();
         assert_eq!(required_names, policy_required);
+    }
+
+    #[test]
+    fn coverage_policy_required_crates_report_policy_errors() {
+        let missing_root = temp_root("load_coverage_required_missing_policy");
+        let missing_err =
+            load_coverage_policy(&missing_root).expect_err("missing policy should fail");
+        assert!(missing_err.contains("policy.toml"));
+        let _ = fs::remove_dir_all(&missing_root);
+
+        let duplicate_root =
+            create_synthetic_workspace("load_coverage_required_duplicate_required");
+        let contract_root = duplicate_root.join("contract");
+        write_file(
+            &contract_root.join("coverage").join("policy.toml"),
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots-a\", \"radroots-a\"]\n",
+        );
+        let duplicate_err =
+            load_coverage_policy(&contract_root).expect_err("duplicate required crates");
+        assert!(duplicate_err.contains("duplicate crate"));
+        let _ = fs::remove_dir_all(&duplicate_root);
     }
 
     #[test]
@@ -1347,6 +1371,13 @@ members = ["crates/a", "crates/b"]
 
         write_file(
             &coverage_dir.join("coverage-refresh.tsv"),
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots-a\tpass\t100\t100\t100\t100\tfile\nradroots-a\tpass\t100\t100\t100\t100\tfile\n",
+        );
+        let duplicate_row = load_coverage_refresh_rows(&root).expect_err("duplicate coverage row");
+        assert!(duplicate_row.contains("duplicate coverage row"));
+
+        write_file(
+            &coverage_dir.join("coverage-refresh.tsv"),
             "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots-a\tfail\t100\t100\t100\t100\tfile\n",
         );
         let required = ["radroots-a".to_string()]
@@ -1449,6 +1480,57 @@ crates = ["radroots-a", "radroots-b"]
         let invalid_gate = validate_coverage_policy_parity(&root, &contract_root)
             .expect_err("invalid policy thresholds");
         assert!(invalid_gate.contains("100/100/100/100"));
+
+        write_file(
+            &contract_root.join("coverage").join("policy.toml"),
+            r#"[gate]
+fail_under_exec_lines = 100.0
+fail_under_functions = 99.0
+fail_under_regions = 100.0
+fail_under_branches = 100.0
+require_branches = true
+
+[required]
+crates = ["radroots-a", "radroots-b"]
+"#,
+        );
+        let invalid_functions = validate_coverage_policy_parity(&root, &contract_root)
+            .expect_err("invalid function threshold");
+        assert!(invalid_functions.contains("100/100/100/100"));
+
+        write_file(
+            &contract_root.join("coverage").join("policy.toml"),
+            r#"[gate]
+fail_under_exec_lines = 100.0
+fail_under_functions = 100.0
+fail_under_regions = 99.0
+fail_under_branches = 100.0
+require_branches = true
+
+[required]
+crates = ["radroots-a", "radroots-b"]
+"#,
+        );
+        let invalid_regions = validate_coverage_policy_parity(&root, &contract_root)
+            .expect_err("invalid region threshold");
+        assert!(invalid_regions.contains("100/100/100/100"));
+
+        write_file(
+            &contract_root.join("coverage").join("policy.toml"),
+            r#"[gate]
+fail_under_exec_lines = 100.0
+fail_under_functions = 100.0
+fail_under_regions = 100.0
+fail_under_branches = 99.0
+require_branches = true
+
+[required]
+crates = ["radroots-a", "radroots-b"]
+"#,
+        );
+        let invalid_branches = validate_coverage_policy_parity(&root, &contract_root)
+            .expect_err("invalid branch threshold");
+        assert!(invalid_branches.contains("100/100/100/100"));
 
         write_file(
             &contract_root.join("coverage").join("policy.toml"),
@@ -1903,6 +1985,65 @@ edition = "2024"
             .expect_err("invalid manifest");
         assert!(parse_err.contains("parse"));
         let _ = fs::remove_dir_all(&invalid);
+
+        let contract_manifest_missing = temp_root("parse_contract_manifest_missing");
+        let contract_manifest_read_err =
+            parse_toml::<ContractManifest>(&contract_manifest_missing.join("manifest.toml"))
+                .expect_err("missing contract manifest");
+        assert!(contract_manifest_read_err.contains("read"));
+        let _ = fs::remove_dir_all(&contract_manifest_missing);
+
+        let contract_manifest_invalid = temp_root("parse_contract_manifest_invalid");
+        write_file(
+            &contract_manifest_invalid.join("manifest.toml"),
+            "[contract",
+        );
+        let contract_manifest_parse_err =
+            parse_toml::<ContractManifest>(&contract_manifest_invalid.join("manifest.toml"))
+                .expect_err("invalid contract manifest");
+        assert!(contract_manifest_parse_err.contains("parse"));
+        let _ = fs::remove_dir_all(&contract_manifest_invalid);
+
+        let version_missing = temp_root("parse_version_policy_missing");
+        let version_read_err = parse_toml::<VersionPolicy>(&version_missing.join("version.toml"))
+            .expect_err("missing version policy");
+        assert!(version_read_err.contains("read"));
+        let _ = fs::remove_dir_all(&version_missing);
+
+        let version_invalid = temp_root("parse_version_policy_invalid");
+        write_file(&version_invalid.join("version.toml"), "[version");
+        let version_parse_err = parse_toml::<VersionPolicy>(&version_invalid.join("version.toml"))
+            .expect_err("invalid version policy");
+        assert!(version_parse_err.contains("parse"));
+        let _ = fs::remove_dir_all(&version_invalid);
+
+        let release_missing = temp_root("parse_release_contract_missing");
+        let release_read_err =
+            parse_toml::<ReleaseContractFile>(&release_missing.join("publish-set.toml"))
+                .expect_err("missing release contract");
+        assert!(release_read_err.contains("read"));
+        let _ = fs::remove_dir_all(&release_missing);
+
+        let release_invalid = temp_root("parse_release_contract_invalid");
+        write_file(&release_invalid.join("publish-set.toml"), "[release");
+        let release_parse_err =
+            parse_toml::<ReleaseContractFile>(&release_invalid.join("publish-set.toml"))
+                .expect_err("invalid release contract");
+        assert!(release_parse_err.contains("parse"));
+        let _ = fs::remove_dir_all(&release_invalid);
+
+        let export_missing = temp_root("parse_export_mapping_missing");
+        let export_read_err = parse_toml::<ExportMapping>(&export_missing.join("model.toml"))
+            .expect_err("missing export mapping");
+        assert!(export_read_err.contains("read"));
+        let _ = fs::remove_dir_all(&export_missing);
+
+        let export_invalid = temp_root("parse_export_mapping_invalid");
+        write_file(&export_invalid.join("model.toml"), "[export");
+        let export_parse_err = parse_toml::<ExportMapping>(&export_invalid.join("model.toml"))
+            .expect_err("invalid export mapping");
+        assert!(export_parse_err.contains("parse"));
+        let _ = fs::remove_dir_all(&export_invalid);
 
         let dup = temp_root("publish_flags_duplicate");
         write_file(
@@ -2371,9 +2512,12 @@ crates = ["radroots-a", "radroots-b"]
         let required = ["radroots-a".to_string()]
             .into_iter()
             .collect::<BTreeSet<_>>();
-        let missing_refresh_err =
-            validate_required_coverage_summary(&missing_refresh_root, &required, strict_thresholds())
-                .expect_err("missing refresh should fail");
+        let missing_refresh_err = validate_required_coverage_summary(
+            &missing_refresh_root,
+            &required,
+            strict_thresholds(),
+        )
+        .expect_err("missing refresh should fail");
         assert!(missing_refresh_err.contains("coverage-refresh.tsv"));
         let _ = fs::remove_dir_all(&missing_refresh_root);
 

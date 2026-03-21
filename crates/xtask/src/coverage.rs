@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+use std::ffi::OsString;
 use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
@@ -49,7 +50,7 @@ pub struct CoverageGateResult {
     pub fail_reasons: Vec<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct CoverageGateReport {
     scope: String,
     thresholds: CoverageGateReportThresholds,
@@ -58,7 +59,7 @@ struct CoverageGateReport {
     result: CoverageGateReportResult,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct CoverageGateReportThresholds {
     executable_lines: f64,
     functions: f64,
@@ -67,7 +68,7 @@ struct CoverageGateReportThresholds {
     branches_required: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct CoverageGateReportMeasured {
     executable_lines_percent: f64,
     executable_lines_source: String,
@@ -78,19 +79,19 @@ struct CoverageGateReportMeasured {
     summary_regions_percent: f64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct CoverageGateReportCounts {
     executable_lines: CoverageCount,
     branches: CoverageCount,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct CoverageCount {
     covered: u64,
     total: u64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct CoverageGateReportResult {
     pass: bool,
     fail_reasons: Vec<String>,
@@ -228,7 +229,9 @@ impl CoveragePolicyFile {
         let mut seen = BTreeSet::new();
         for crate_name in &self.required.crates {
             if crate_name.trim().is_empty() {
-                return Err("coverage required crates list includes an empty crate name".to_string());
+                return Err(
+                    "coverage required crates list includes an empty crate name".to_string()
+                );
             }
             if !seen.insert(crate_name.clone()) {
                 return Err(format!(
@@ -237,6 +240,10 @@ impl CoveragePolicyFile {
             }
         }
         Ok(self.required.crates.clone())
+    }
+
+    pub(crate) fn required_crate_entries(&self) -> &[String] {
+        &self.required.crates
     }
 }
 
@@ -286,15 +293,20 @@ fn read_required_crates(path: &Path) -> Result<Vec<String>, String> {
 }
 
 fn read_workspace_crates(workspace_root: &Path) -> Result<Vec<String>, String> {
+    let packages = read_workspace_packages(workspace_root)?;
+    Ok(packages.into_iter().map(|(name, _)| name).collect())
+}
+
+fn read_workspace_packages(workspace_root: &Path) -> Result<Vec<(String, PathBuf)>, String> {
     let workspace_manifest = parse_toml::<WorkspaceManifest>(&workspace_root.join("Cargo.toml"))?;
     if workspace_manifest.workspace.members.is_empty() {
         return Err("workspace members list must not be empty".to_string());
     }
-    let mut names = Vec::with_capacity(workspace_manifest.workspace.members.len());
+    let mut packages = Vec::with_capacity(workspace_manifest.workspace.members.len());
     let mut seen = BTreeSet::new();
     for member in workspace_manifest.workspace.members {
         let package_manifest =
-            parse_toml::<PackageManifest>(&workspace_root.join(member).join("Cargo.toml"))?;
+            parse_toml::<PackageManifest>(&workspace_root.join(&member).join("Cargo.toml"))?;
         let package_name = package_manifest.package.name;
         if package_name.trim().is_empty() {
             return Err("workspace includes an empty package name".to_string());
@@ -305,9 +317,9 @@ fn read_workspace_crates(workspace_root: &Path) -> Result<Vec<String>, String> {
                 package_name
             ));
         }
-        names.push(package_name);
+        packages.push((package_name, PathBuf::from(member)));
     }
-    Ok(names)
+    Ok(packages)
 }
 
 fn parse_toml<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, String> {
@@ -700,9 +712,43 @@ fn apply_coverage_profile_flags(command: &mut Command, profile: &CoverageProfile
     }
 }
 
+fn prepend_toolchain_bin_to_path(
+    toolchain_bin: &Path,
+    existing_path: Option<OsString>,
+) -> OsString {
+    match existing_path {
+        Some(existing) => std::env::join_paths(
+            std::iter::once(toolchain_bin.to_path_buf()).chain(std::env::split_paths(&existing)),
+        )
+        .expect("joining PATH entries for coverage toolchain should succeed"),
+        None => OsString::from(toolchain_bin),
+    }
+}
+
+fn configure_coverage_toolchain_env(command: &mut Command, toolchain_bin: &Path) {
+    let joined_path = prepend_toolchain_bin_to_path(toolchain_bin, std::env::var_os("PATH"));
+    command.env("PATH", joined_path);
+
+    for (env_name, binary_name) in [
+        ("RUSTC", "rustc"),
+        ("RUSTDOC", "rustdoc"),
+        ("LLVM_COV", "llvm-cov"),
+        ("LLVM_PROFDATA", "llvm-profdata"),
+    ] {
+        let binary_path = toolchain_bin.join(binary_name);
+        if binary_path.exists() {
+            command.env(env_name, binary_path);
+        }
+    }
+}
+
 fn coverage_cargo_command_with_override(override_binary: Option<&str>) -> Command {
     if let Some(binary) = override_binary {
-        return Command::new(binary);
+        let mut cmd = Command::new(binary);
+        if let Some(toolchain_bin) = Path::new(binary).parent() {
+            configure_coverage_toolchain_env(&mut cmd, toolchain_bin);
+        }
+        return cmd;
     }
 
     let mut cmd = Command::new("rustup");
@@ -724,6 +770,55 @@ fn coverage_llvm_cov_command() -> Command {
     cmd
 }
 
+const COVERAGE_EXTERNAL_IGNORE_FILENAME_REGEX: &str =
+    r"(/\.cargo/registry/|/lib/rustlib/src/rust/)";
+
+fn escape_regex_literal(raw: &str) -> String {
+    let mut escaped = String::with_capacity(raw.len());
+    for ch in raw.chars() {
+        match ch {
+            '\\' | '.' | '+' | '*' | '?' | '(' | ')' | '|' | '[' | ']' | '{' | '}' | '^' | '$' => {
+                escaped.push('\\');
+                escaped.push(ch);
+            }
+            _ => escaped.push(ch),
+        }
+    }
+    escaped
+}
+
+fn coverage_ignore_filename_regex(
+    workspace_root: &Path,
+    crate_name: &str,
+) -> Result<String, String> {
+    let mut patterns = vec![COVERAGE_EXTERNAL_IGNORE_FILENAME_REGEX.to_string()];
+    let mut found_target = false;
+
+    for (package_name, member_path) in read_workspace_packages(workspace_root)? {
+        let absolute_member = workspace_root.join(member_path);
+        if package_name == crate_name {
+            found_target = true;
+            continue;
+        }
+        patterns.push(format!(
+            "^{}/",
+            escape_regex_literal(&absolute_member.display().to_string())
+        ));
+    }
+
+    if !found_target {
+        return Err(format!(
+            "workspace coverage filters could not resolve crate directory for {crate_name}"
+        ));
+    }
+
+    Ok(format!("({})", patterns.join("|")))
+}
+
+fn apply_coverage_report_filters(command: &mut Command, ignore_regex: &str) {
+    command.arg("--ignore-filename-regex").arg(ignore_regex);
+}
+
 fn run_crate_with_runner_at_root(
     args: &[String],
     workspace_root: &Path,
@@ -742,6 +837,7 @@ fn run_crate_with_runner_at_root(
     let test_threads = parse_optional_u32_arg(args, "test-threads")?
         .or(profile.test_threads)
         .unwrap_or(1);
+    let ignore_regex = coverage_ignore_filename_regex(workspace_root, &crate_name)?;
 
     if let Err(err) = fs::create_dir_all(&out_dir) {
         return Err(format!("failed to create {}: {err}", out_dir.display()));
@@ -778,6 +874,7 @@ fn run_crate_with_runner_at_root(
         {
             let mut cmd = coverage_llvm_cov_command();
             cmd.arg("report").arg("-p").arg(&crate_name);
+            apply_coverage_report_filters(&mut cmd, &ignore_regex);
             cmd.arg("--json")
                 .arg("--summary-only")
                 .arg("--branch")
@@ -794,6 +891,7 @@ fn run_crate_with_runner_at_root(
         {
             let mut cmd = coverage_llvm_cov_command();
             cmd.arg("report").arg("-p").arg(&crate_name);
+            apply_coverage_report_filters(&mut cmd, &ignore_regex);
             cmd.arg("--lcov")
                 .arg("--branch")
                 .arg("--output-path")
@@ -822,7 +920,7 @@ fn run_crate(args: &[String]) -> Result<(), String> {
     run_crate_with_runner(args, &mut runner)
 }
 
-fn report_gate(args: &[String]) -> Result<(), String> {
+fn report_gate_with_root(args: &[String], root: &Path) -> Result<(), String> {
     let scope = parse_string_arg(args, "scope")?;
     let summary_path = PathBuf::from(parse_string_arg(args, "summary")?);
     let lcov_path = PathBuf::from(parse_string_arg(args, "lcov")?);
@@ -844,8 +942,7 @@ fn report_gate(args: &[String]) -> Result<(), String> {
                     .to_string(),
             );
         }
-        let root = workspace_root();
-        read_coverage_policy(&coverage_policy_path(&root))?.thresholds()
+        read_coverage_policy(&coverage_policy_path(root))?.thresholds()
     } else {
         let Some(fail_under_exec_lines) = explicit_exec else {
             return Err(
@@ -917,12 +1014,7 @@ fn report_gate(args: &[String]) -> Result<(), String> {
             fail_reasons: gate.fail_reasons.clone(),
         },
     };
-
-    let json = serde_json::to_string_pretty(&report)
-        .expect("serializing coverage gate report should succeed");
-    if let Err(err) = fs::write(&out_path, format!("{json}\n")) {
-        return Err(format!("failed to write {}: {err}", out_path.display()));
-    }
+    write_gate_report(&out_path, &report)?;
 
     if lcov.branches_available {
         eprintln!(
@@ -958,27 +1050,99 @@ fn report_gate(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
+fn report_gate(args: &[String]) -> Result<(), String> {
+    let root = workspace_root();
+    report_gate_with_root(args, &root)
+}
+
+fn report_missing_gate_with_root(args: &[String], root: &Path) -> Result<(), String> {
+    let scope = parse_string_arg(args, "scope")?;
+    let out_path = PathBuf::from(parse_string_arg(args, "out")?);
+    let reason = parse_string_arg(args, "reason")?;
+    let thresholds = read_coverage_policy(&coverage_policy_path(root))?.thresholds();
+
+    let report = CoverageGateReport {
+        scope: scope.clone(),
+        thresholds: CoverageGateReportThresholds {
+            executable_lines: thresholds.fail_under_exec_lines,
+            functions: thresholds.fail_under_functions,
+            regions: thresholds.fail_under_regions,
+            branches: thresholds.fail_under_branches,
+            branches_required: thresholds.require_branches,
+        },
+        measured: CoverageGateReportMeasured {
+            executable_lines_percent: 0.0,
+            executable_lines_source: executable_source_label(ExecutableSource::Da).to_string(),
+            functions_percent: 0.0,
+            branches_percent: None,
+            branches_available: false,
+            summary_lines_percent: 0.0,
+            summary_regions_percent: 0.0,
+        },
+        counts: CoverageGateReportCounts {
+            executable_lines: CoverageCount {
+                covered: 0,
+                total: 0,
+            },
+            branches: CoverageCount {
+                covered: 0,
+                total: 0,
+            },
+        },
+        result: CoverageGateReportResult {
+            pass: false,
+            fail_reasons: vec![reason.clone()],
+        },
+    };
+    write_gate_report(&out_path, &report)?;
+    eprintln!("{scope} gate fail: {reason}");
+    Ok(())
+}
+
+fn write_gate_report(out_path: &Path, report: &CoverageGateReport) -> Result<(), String> {
+    let json = serde_json::to_string_pretty(report)
+        .expect("serializing coverage gate report should succeed");
+    if let Err(err) = fs::write(out_path, format!("{json}\n")) {
+        return Err(format!("failed to write {}: {err}", out_path.display()));
+    }
+    Ok(())
+}
+
+fn coverage_report_path(reports_root: &Path, crate_name: &str) -> PathBuf {
+    reports_root
+        .join(crate_name.replace('-', "_"))
+        .join("gate-report.json")
+}
+
+fn read_gate_report(path: &Path) -> Result<CoverageGateReport, String> {
+    let raw = match fs::read_to_string(path) {
+        Ok(raw) => raw,
+        Err(err) => {
+            return Err(format!(
+                "failed to read gate report {}: {err}",
+                path.display()
+            ));
+        }
+    };
+    match serde_json::from_str::<CoverageGateReport>(&raw) {
+        Ok(report) => Ok(report),
+        Err(err) => Err(format!(
+            "failed to parse gate report {}: {err}",
+            path.display()
+        )),
+    }
+}
+
 fn list_required_crates_with_root(root: &Path, writer: &mut dyn Write) -> Result<(), String> {
     let required_path = coverage_policy_path(root);
     let crates = read_required_crates(&required_path)?;
     write_crate_names_output(writer, crates, "required crates")
 }
 
-fn list_required_crates() -> Result<(), String> {
-    let root = workspace_root();
-    let mut stdout = std::io::stdout().lock();
-    list_required_crates_with_root(&root, &mut stdout)
-}
-
 fn list_workspace_crates_with_root(root: &Path, writer: &mut dyn Write) -> Result<(), String> {
     let crates = read_workspace_crates(&root)?;
     write_crate_names_output(writer, crates, "workspace crates")
-}
-
-fn list_workspace_crates() -> Result<(), String> {
-    let root = workspace_root();
-    let mut stdout = std::io::stdout().lock();
-    list_workspace_crates_with_root(&root, &mut stdout)
 }
 
 fn write_crate_names_output(
@@ -994,16 +1158,90 @@ fn write_crate_names_output(
     Ok(())
 }
 
-pub fn run(args: &[String]) -> Result<(), String> {
+fn run_with_root(args: &[String], root: &Path) -> Result<(), String> {
     match args.first().map(String::as_str) {
         Some("help") => Ok(()),
         Some("run-crate") => run_crate(&args[1..]),
-        Some("report") => report_gate(&args[1..]),
-        Some("required-crates") => list_required_crates(),
-        Some("workspace-crates") => list_workspace_crates(),
+        Some("report") => report_gate_with_root(&args[1..], root),
+        Some("report-missing") => report_missing_gate_with_root(&args[1..], root),
+        Some("refresh-summary") => {
+            let reports_root = match parse_optional_string_arg(&args[1..], "reports-root") {
+                Some(raw) => PathBuf::from(raw),
+                None => PathBuf::from("target/coverage"),
+            };
+            let out_path = match parse_optional_string_arg(&args[1..], "out") {
+                Some(raw) => PathBuf::from(raw),
+                None => PathBuf::from("target/coverage/coverage-refresh.tsv"),
+            };
+            let status_out_path = match parse_optional_string_arg(&args[1..], "status-out") {
+                Some(raw) => Some(PathBuf::from(raw)),
+                None => None,
+            };
+            let required_crates = read_required_crates(&coverage_policy_path(root))?;
+
+            let mut refresh_rows =
+                String::from("crate\tstatus\texec\tfunc\tbranch\tregion\treport\n");
+            let mut status_rows = String::from("crate\tstatus\n");
+
+            for crate_name in required_crates {
+                let report_path = coverage_report_path(&reports_root, &crate_name);
+                let report = read_gate_report(&report_path)?;
+                let status = if report.result.pass { "pass" } else { "fail" };
+                let branch = report.measured.branches_percent.unwrap_or(0.0);
+                refresh_rows.push_str(&format!(
+                    "{}\t{}\t{:.6}\t{:.6}\t{:.6}\t{:.6}\t{}\n",
+                    crate_name,
+                    status,
+                    report.measured.executable_lines_percent,
+                    report.measured.functions_percent,
+                    branch,
+                    report.measured.summary_regions_percent,
+                    report_path.display()
+                ));
+                status_rows.push_str(&format!("{}\t{}\n", crate_name, status));
+            }
+
+            if let Some(parent) = out_path.parent() {
+                if !parent.as_os_str().is_empty() {
+                    if let Err(err) = fs::create_dir_all(parent) {
+                        return Err(format!("failed to create {}: {err}", parent.display()));
+                    }
+                }
+            }
+            fs::write(&out_path, refresh_rows)
+                .map_err(|err| format!("failed to write {}: {err}", out_path.display()))?;
+
+            if let Some(status_out_path) = status_out_path {
+                if let Some(parent) = status_out_path.parent() {
+                    if !parent.as_os_str().is_empty() {
+                        fs::create_dir_all(parent).map_err(|err| {
+                            format!("failed to create {}: {err}", parent.display())
+                        })?;
+                    }
+                }
+                fs::write(&status_out_path, status_rows).map_err(|err| {
+                    format!("failed to write {}: {err}", status_out_path.display())
+                })?;
+            }
+
+            Ok(())
+        }
+        Some("required-crates") => {
+            let mut stdout = std::io::stdout().lock();
+            list_required_crates_with_root(root, &mut stdout)
+        }
+        Some("workspace-crates") => {
+            let mut stdout = std::io::stdout().lock();
+            list_workspace_crates_with_root(root, &mut stdout)
+        }
         Some(_) => Err("unknown sdk coverage subcommand".to_string()),
         None => Err("missing sdk coverage subcommand".to_string()),
     }
+}
+
+pub fn run(args: &[String]) -> Result<(), String> {
+    let root = workspace_root();
+    run_with_root(args, &root)
 }
 
 #[cfg(test)]
@@ -1012,6 +1250,7 @@ mod tests {
     use std::fs;
     use std::io::{self, Write};
     use std::path::Path;
+    use std::sync::{Mutex, MutexGuard, OnceLock};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn temp_file_path(prefix: &str) -> PathBuf {
@@ -1033,6 +1272,37 @@ mod tests {
     fn write_file(path: &Path, content: &str) {
         let _ = fs::create_dir_all(path.parent().unwrap_or(Path::new("")));
         fs::write(path, content).expect("write file");
+    }
+
+    fn cwd_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    fn recover_lock(lock: &'static Mutex<()>) -> MutexGuard<'static, ()> {
+        match lock.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        }
+    }
+
+    fn lock_cwd() -> MutexGuard<'static, ()> {
+        recover_lock(cwd_lock())
+    }
+
+    fn collect_command_envs(cmd: &Command) -> BTreeMap<String, Option<String>> {
+        let mut envs = BTreeMap::new();
+        for (key, value) in cmd.get_envs() {
+            envs.insert(
+                key.to_string_lossy().to_string(),
+                value.map(|raw| raw.to_string_lossy().to_string()),
+            );
+        }
+        envs
+    }
+
+    fn ok_runner(_cmd: Command, _name: &str) -> Result<(), String> {
+        Ok(())
     }
 
     struct FailingWriter;
@@ -1085,6 +1355,653 @@ mod tests {
         let parse_err = read_summary(&invalid).expect_err("invalid summary should fail");
         assert!(parse_err.contains("failed to parse summary"));
         fs::remove_file(invalid).expect("remove invalid summary");
+    }
+
+    #[test]
+    fn read_coverage_policy_rejects_non_finite_and_out_of_range_thresholds() {
+        let non_finite = temp_file_path("coverage_policy_non_finite");
+        write_file(
+            &non_finite,
+            "[gate]\nfail_under_exec_lines = inf\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots-a\"]\n",
+        );
+        let non_finite_err =
+            read_coverage_policy(&non_finite).expect_err("non-finite threshold should fail");
+        assert!(non_finite_err.contains("must be finite"));
+        fs::remove_file(non_finite).expect("remove non-finite policy");
+
+        let out_of_range = temp_file_path("coverage_policy_out_of_range");
+        write_file(
+            &out_of_range,
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 101.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots-a\"]\n",
+        );
+        let out_of_range_err =
+            read_coverage_policy(&out_of_range).expect_err("out-of-range threshold should fail");
+        assert!(out_of_range_err.contains("must be within 0..=100"));
+        fs::remove_file(out_of_range).expect("remove out-of-range policy");
+    }
+
+    #[test]
+    fn report_missing_gate_uses_policy_thresholds() {
+        let root = temp_dir_path("report_missing_gate_root");
+        let coverage_dir = root.join("contract").join("coverage");
+        fs::create_dir_all(&coverage_dir).expect("create coverage dir");
+        write_file(
+            &coverage_dir.join("policy.toml"),
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots-a\"]\n",
+        );
+        let out_path = root.join("gate-report.json");
+
+        report_missing_gate_with_root(
+            &[
+                "--scope".to_string(),
+                "radroots-a-blocking".to_string(),
+                "--out".to_string(),
+                out_path.display().to_string(),
+                "--reason".to_string(),
+                "missing-coverage-artifacts".to_string(),
+            ],
+            &root,
+        )
+        .expect("report missing gate");
+
+        let report_raw = fs::read_to_string(&out_path).expect("read gate report");
+        let report_json: serde_json::Value =
+            serde_json::from_str(&report_raw).expect("parse gate report json");
+        assert_eq!(
+            report_json["thresholds"]["executable_lines"],
+            serde_json::json!(100.0)
+        );
+        assert_eq!(
+            report_json["thresholds"]["branches_required"],
+            serde_json::json!(true)
+        );
+        assert_eq!(report_json["result"]["pass"], serde_json::json!(false));
+        assert_eq!(
+            report_json["result"]["fail_reasons"],
+            serde_json::json!(["missing-coverage-artifacts"])
+        );
+
+        fs::remove_dir_all(root).expect("remove root");
+    }
+
+    #[test]
+    fn report_missing_gate_reports_argument_policy_and_write_errors() {
+        let root = temp_dir_path("report_missing_gate_error_root");
+        let missing_scope =
+            report_missing_gate_with_root(&[], &root).expect_err("missing scope should fail");
+        assert!(missing_scope.contains("missing --scope"));
+
+        let missing_out = report_missing_gate_with_root(
+            &[
+                "--scope".to_string(),
+                "radroots-a-blocking".to_string(),
+                "--reason".to_string(),
+                "missing-coverage-artifacts".to_string(),
+            ],
+            &root,
+        )
+        .expect_err("missing out should fail");
+        assert!(missing_out.contains("missing --out"));
+
+        let missing_reason = report_missing_gate_with_root(
+            &[
+                "--scope".to_string(),
+                "radroots-a-blocking".to_string(),
+                "--out".to_string(),
+                root.join("missing-gate.json").display().to_string(),
+            ],
+            &root,
+        )
+        .expect_err("missing reason should fail");
+        assert!(missing_reason.contains("missing --reason"));
+
+        let policy_err = report_missing_gate_with_root(
+            &[
+                "--scope".to_string(),
+                "radroots-a-blocking".to_string(),
+                "--out".to_string(),
+                root.join("missing-gate.json").display().to_string(),
+                "--reason".to_string(),
+                "missing-coverage-artifacts".to_string(),
+            ],
+            &root,
+        )
+        .expect_err("missing policy should fail");
+        assert!(policy_err.contains("failed to read coverage policy"));
+
+        let coverage_dir = root.join("contract").join("coverage");
+        fs::create_dir_all(&coverage_dir).expect("create coverage dir");
+        write_file(
+            &coverage_dir.join("policy.toml"),
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots-a\"]\n",
+        );
+        let out_path = root.join("gate-report.json");
+        fs::create_dir_all(&out_path).expect("create blocking output dir");
+        let write_err = report_missing_gate_with_root(
+            &[
+                "--scope".to_string(),
+                "radroots-a-blocking".to_string(),
+                "--out".to_string(),
+                out_path.display().to_string(),
+                "--reason".to_string(),
+                "missing-coverage-artifacts".to_string(),
+            ],
+            &root,
+        )
+        .expect_err("directory output should fail");
+        assert!(write_err.contains("failed to write"));
+
+        fs::remove_dir_all(root).expect("remove report missing gate error root");
+    }
+
+    #[test]
+    fn refresh_summary_uses_measured_gate_report_values() {
+        let root = temp_dir_path("refresh_summary_root");
+        let coverage_dir = root.join("contract").join("coverage");
+        fs::create_dir_all(&coverage_dir).expect("create coverage dir");
+        write_file(
+            &coverage_dir.join("policy.toml"),
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots-a\"]\n",
+        );
+
+        let reports_root = root.join("target").join("coverage");
+        let crate_dir = reports_root.join("radroots_a");
+        fs::create_dir_all(&crate_dir).expect("create crate dir");
+        write_file(
+            &crate_dir.join("gate-report.json"),
+            r#"{
+  "scope": "radroots-a",
+  "thresholds": {
+    "executable_lines": 100.0,
+    "functions": 100.0,
+    "regions": 100.0,
+    "branches": 100.0,
+    "branches_required": true
+  },
+  "measured": {
+    "executable_lines_percent": 100.0,
+    "executable_lines_source": "da",
+    "functions_percent": 100.0,
+    "branches_percent": 100.0,
+    "branches_available": true,
+    "summary_lines_percent": 100.0,
+    "summary_regions_percent": 97.5
+  },
+  "counts": {
+    "executable_lines": {
+      "covered": 4,
+      "total": 4
+    },
+    "branches": {
+      "covered": 2,
+      "total": 2
+    }
+  },
+  "result": {
+    "pass": true,
+    "fail_reasons": []
+  }
+}"#,
+        );
+
+        let refresh_out = reports_root.join("coverage-refresh.tsv");
+        let status_out = reports_root.join("coverage-refresh-status.tsv");
+        run_with_root(
+            &[
+                "refresh-summary".to_string(),
+                "--reports-root".to_string(),
+                reports_root.display().to_string(),
+                "--out".to_string(),
+                refresh_out.display().to_string(),
+                "--status-out".to_string(),
+                status_out.display().to_string(),
+            ],
+            &root,
+        )
+        .expect("write refresh summary");
+
+        let refresh = fs::read_to_string(&refresh_out).expect("read refresh summary");
+        assert!(refresh.contains("crate\tstatus\texec\tfunc\tbranch\tregion\treport"));
+        assert!(
+            refresh.contains("radroots-a\tpass\t100.000000\t100.000000\t100.000000\t97.500000\t")
+        );
+
+        let status = fs::read_to_string(&status_out).expect("read status summary");
+        assert_eq!(status, "crate\tstatus\nradroots-a\tpass\n");
+
+        fs::remove_dir_all(root).expect("remove root");
+
+        let defaults_root = temp_dir_path("refresh_summary_defaults_root");
+        let defaults_coverage_dir = defaults_root.join("contract").join("coverage");
+        fs::create_dir_all(&defaults_coverage_dir).expect("create defaults coverage dir");
+        write_file(
+            &defaults_coverage_dir.join("policy.toml"),
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots-a\"]\n",
+        );
+        write_file(
+            &defaults_root
+                .join("target")
+                .join("coverage")
+                .join("radroots_a")
+                .join("gate-report.json"),
+            r#"{
+  "scope": "radroots-a",
+  "thresholds": {
+    "executable_lines": 100.0,
+    "functions": 100.0,
+    "regions": 100.0,
+    "branches": 100.0,
+    "branches_required": true
+  },
+  "measured": {
+    "executable_lines_percent": 100.0,
+    "executable_lines_source": "da",
+    "functions_percent": 100.0,
+    "branches_percent": 100.0,
+    "branches_available": true,
+    "summary_lines_percent": 100.0,
+    "summary_regions_percent": 100.0
+  },
+  "counts": {
+    "executable_lines": {
+      "covered": 4,
+      "total": 4
+    },
+    "branches": {
+      "covered": 2,
+      "total": 2
+    }
+  },
+  "result": {
+    "pass": false,
+    "fail_reasons": ["synthetic-fail"]
+  }
+}"#,
+        );
+
+        let _guard = lock_cwd();
+        let previous_dir = std::env::current_dir().expect("read current dir");
+        std::env::set_current_dir(&defaults_root).expect("set current dir");
+        run_with_root(&["refresh-summary".to_string()], &defaults_root)
+            .expect("write refresh summary defaults");
+        let defaults_refresh = fs::read_to_string(
+            defaults_root
+                .join("target")
+                .join("coverage")
+                .join("coverage-refresh.tsv"),
+        )
+        .expect("read defaults refresh summary");
+        assert!(
+            defaults_refresh
+                .contains("radroots-a\tfail\t100.000000\t100.000000\t100.000000\t100.000000\t")
+        );
+
+        let dispatch_root = temp_dir_path("refresh_summary_parentless_root");
+        let dispatch_coverage_dir = dispatch_root.join("contract").join("coverage");
+        fs::create_dir_all(&dispatch_coverage_dir).expect("create dispatch coverage dir");
+        write_file(
+            &dispatch_coverage_dir.join("policy.toml"),
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots-a\"]\n",
+        );
+        write_file(
+            &dispatch_root.join("Cargo.toml"),
+            "[workspace]\nmembers = []\nresolver = \"2\"\n",
+        );
+        write_file(
+            &dispatch_root
+                .join("target")
+                .join("coverage")
+                .join("radroots_a")
+                .join("gate-report.json"),
+            r#"{
+  "scope": "radroots-a",
+  "thresholds": {
+    "executable_lines": 100.0,
+    "functions": 100.0,
+    "regions": 100.0,
+    "branches": 100.0,
+    "branches_required": true
+  },
+  "measured": {
+    "executable_lines_percent": 100.0,
+    "executable_lines_source": "da",
+    "functions_percent": 100.0,
+    "branches_percent": 100.0,
+    "branches_available": true,
+    "summary_lines_percent": 100.0,
+    "summary_regions_percent": 100.0
+  },
+  "counts": {
+    "executable_lines": {
+      "covered": 4,
+      "total": 4
+    },
+    "branches": {
+      "covered": 2,
+      "total": 2
+    }
+  },
+  "result": {
+    "pass": true,
+    "fail_reasons": []
+  }
+}"#,
+        );
+        std::env::set_current_dir(&dispatch_root).expect("set dispatch current dir");
+        run_with_root(
+            &[
+                "report-missing".to_string(),
+                "--scope".to_string(),
+                "radroots-a-blocking".to_string(),
+                "--out".to_string(),
+                "missing-gate.json".to_string(),
+                "--reason".to_string(),
+                "missing-coverage-artifacts".to_string(),
+            ],
+            &dispatch_root,
+        )
+        .expect("dispatch report-missing");
+        run_with_root(
+            &[
+                "refresh-summary".to_string(),
+                "--out".to_string(),
+                "coverage-refresh.tsv".to_string(),
+                "--status-out".to_string(),
+                "coverage-refresh-status.tsv".to_string(),
+            ],
+            &dispatch_root,
+        )
+        .expect("dispatch refresh-summary");
+        std::env::set_current_dir(previous_dir).expect("restore current dir");
+
+        assert!(dispatch_root.join("missing-gate.json").exists());
+        assert!(dispatch_root.join("coverage-refresh.tsv").exists());
+        assert!(dispatch_root.join("coverage-refresh-status.tsv").exists());
+
+        fs::remove_dir_all(defaults_root).expect("remove defaults root");
+        fs::remove_dir_all(dispatch_root).expect("remove dispatch root");
+    }
+
+    #[test]
+    fn refresh_summary_rejects_empty_output_paths() {
+        let root = temp_dir_path("refresh_summary_empty_paths_root");
+        let coverage_dir = root.join("contract").join("coverage");
+        fs::create_dir_all(&coverage_dir).expect("create coverage dir");
+        write_file(
+            &coverage_dir.join("policy.toml"),
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots-a\"]\n",
+        );
+        write_file(
+            &root
+                .join("target")
+                .join("coverage")
+                .join("radroots_a")
+                .join("gate-report.json"),
+            r#"{
+  "scope": "radroots-a",
+  "thresholds": {
+    "executable_lines": 100.0,
+    "functions": 100.0,
+    "regions": 100.0,
+    "branches": 100.0,
+    "branches_required": true
+  },
+  "measured": {
+    "executable_lines_percent": 100.0,
+    "executable_lines_source": "da",
+    "functions_percent": 100.0,
+    "branches_percent": 100.0,
+    "branches_available": true,
+    "summary_lines_percent": 100.0,
+    "summary_regions_percent": 100.0
+  },
+  "counts": {
+    "executable_lines": {
+      "covered": 4,
+      "total": 4
+    },
+    "branches": {
+      "covered": 2,
+      "total": 2
+    }
+  },
+  "result": {
+    "pass": true,
+    "fail_reasons": []
+  }
+}"#,
+        );
+
+        let out_err = run_with_root(
+            &[
+                "refresh-summary".to_string(),
+                "--reports-root".to_string(),
+                root.join("target").join("coverage").display().to_string(),
+                "--out".to_string(),
+                String::new(),
+            ],
+            &root,
+        )
+        .expect_err("empty out path should fail");
+        assert!(out_err.contains("failed to write"));
+
+        let status_err = run_with_root(
+            &[
+                "refresh-summary".to_string(),
+                "--reports-root".to_string(),
+                root.join("target").join("coverage").display().to_string(),
+                "--out".to_string(),
+                root.join("target")
+                    .join("coverage")
+                    .join("coverage-refresh.tsv")
+                    .display()
+                    .to_string(),
+                "--status-out".to_string(),
+                String::new(),
+            ],
+            &root,
+        )
+        .expect_err("empty status out path should fail");
+        assert!(status_err.contains("failed to write"));
+
+        fs::remove_dir_all(root).expect("remove empty path root");
+    }
+
+    #[test]
+    fn refresh_summary_reports_output_parent_creation_failure() {
+        let root = temp_dir_path("refresh_summary_out_parent_fail");
+        let coverage_dir = root.join("contract").join("coverage");
+        fs::create_dir_all(&coverage_dir).expect("create coverage dir");
+        write_file(
+            &coverage_dir.join("policy.toml"),
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots-a\"]\n",
+        );
+        write_file(
+            &root
+                .join("target")
+                .join("coverage")
+                .join("radroots_a")
+                .join("gate-report.json"),
+            r#"{
+  "scope": "radroots-a",
+  "thresholds": {
+    "executable_lines": 100.0,
+    "functions": 100.0,
+    "regions": 100.0,
+    "branches": 100.0,
+    "branches_required": true
+  },
+  "measured": {
+    "executable_lines_percent": 100.0,
+    "executable_lines_source": "da",
+    "functions_percent": 100.0,
+    "branches_percent": 100.0,
+    "branches_available": true,
+    "summary_lines_percent": 100.0,
+    "summary_regions_percent": 100.0
+  },
+  "counts": {
+    "executable_lines": {
+      "covered": 4,
+      "total": 4
+    },
+    "branches": {
+      "covered": 2,
+      "total": 2
+    }
+  },
+  "result": {
+    "pass": true,
+    "fail_reasons": []
+  }
+}"#,
+        );
+        write_file(&root.join("out-blocker"), "x");
+
+        let err = run_with_root(
+            &[
+                "refresh-summary".to_string(),
+                "--reports-root".to_string(),
+                root.join("target").join("coverage").display().to_string(),
+                "--out".to_string(),
+                root.join("out-blocker")
+                    .join("nested")
+                    .join("coverage-refresh.tsv")
+                    .display()
+                    .to_string(),
+            ],
+            &root,
+        )
+        .expect_err("out parent create failure should bubble up");
+        assert!(err.contains("failed to create"));
+
+        fs::remove_dir_all(root).expect("remove out parent fail root");
+    }
+
+    #[test]
+    fn refresh_summary_reports_status_output_parent_creation_failure() {
+        let root = temp_dir_path("refresh_summary_status_parent_fail");
+        let coverage_dir = root.join("contract").join("coverage");
+        fs::create_dir_all(&coverage_dir).expect("create coverage dir");
+        write_file(
+            &coverage_dir.join("policy.toml"),
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots-a\"]\n",
+        );
+        write_file(
+            &root
+                .join("target")
+                .join("coverage")
+                .join("radroots_a")
+                .join("gate-report.json"),
+            r#"{
+  "scope": "radroots-a",
+  "thresholds": {
+    "executable_lines": 100.0,
+    "functions": 100.0,
+    "regions": 100.0,
+    "branches": 100.0,
+    "branches_required": true
+  },
+  "measured": {
+    "executable_lines_percent": 100.0,
+    "executable_lines_source": "da",
+    "functions_percent": 100.0,
+    "branches_percent": 100.0,
+    "branches_available": true,
+    "summary_lines_percent": 100.0,
+    "summary_regions_percent": 100.0
+  },
+  "counts": {
+    "executable_lines": {
+      "covered": 4,
+      "total": 4
+    },
+    "branches": {
+      "covered": 2,
+      "total": 2
+    }
+  },
+  "result": {
+    "pass": true,
+    "fail_reasons": []
+  }
+}"#,
+        );
+        write_file(&root.join("status-blocker"), "x");
+
+        let err = run_with_root(
+            &[
+                "refresh-summary".to_string(),
+                "--reports-root".to_string(),
+                root.join("target").join("coverage").display().to_string(),
+                "--out".to_string(),
+                root.join("target")
+                    .join("coverage")
+                    .join("coverage-refresh.tsv")
+                    .display()
+                    .to_string(),
+                "--status-out".to_string(),
+                root.join("status-blocker")
+                    .join("nested")
+                    .join("coverage-refresh-status.tsv")
+                    .display()
+                    .to_string(),
+            ],
+            &root,
+        )
+        .expect_err("status-out parent create failure should bubble up");
+        assert!(err.contains("failed to create"));
+
+        fs::remove_dir_all(root).expect("remove status parent fail root");
+    }
+
+    #[test]
+    fn refresh_summary_reports_policy_and_gate_report_errors() {
+        let root = temp_dir_path("refresh_summary_error_root");
+        let policy_err = run_with_root(
+            &[
+                "refresh-summary".to_string(),
+                "--reports-root".to_string(),
+                root.join("target").join("coverage").display().to_string(),
+            ],
+            &root,
+        )
+        .expect_err("missing policy should fail");
+        assert!(policy_err.contains("failed to read coverage policy"));
+
+        let coverage_dir = root.join("contract").join("coverage");
+        fs::create_dir_all(&coverage_dir).expect("create coverage dir");
+        write_file(
+            &coverage_dir.join("policy.toml"),
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots-a\"]\n",
+        );
+        let gate_err = run_with_root(
+            &[
+                "refresh-summary".to_string(),
+                "--reports-root".to_string(),
+                root.join("target").join("coverage").display().to_string(),
+            ],
+            &root,
+        )
+        .expect_err("missing gate report should fail");
+        assert!(gate_err.contains("failed to read gate report"));
+
+        fs::remove_dir_all(root).expect("remove refresh summary error root");
+    }
+
+    #[test]
+    fn recover_lock_covers_ok_and_poisoned_paths() {
+        let ok_lock: &'static Mutex<()> = Box::leak(Box::new(Mutex::new(())));
+        let _ok_guard = recover_lock(ok_lock);
+
+        let poisoned_lock: &'static Mutex<()> = Box::leak(Box::new(Mutex::new(())));
+        let handle = std::thread::spawn(move || {
+            let _guard = poisoned_lock.lock().expect("lock poisoned mutex");
+            panic!("poison test mutex");
+        });
+        assert!(handle.join().is_err());
+
+        let _poisoned_guard = recover_lock(poisoned_lock);
     }
 
     #[test]
@@ -1263,8 +2180,8 @@ test_threads = 4
 "#,
         )
         .expect("write profiles");
-        let profile = read_coverage_profile(&root, "radroots-log")
-            .expect("valid positive thread profile");
+        let profile =
+            read_coverage_profile(&root, "radroots-log").expect("valid positive thread profile");
         assert_eq!(profile.test_threads, Some(4));
         fs::remove_dir_all(root).expect("remove root");
     }
@@ -1473,6 +2390,42 @@ test_threads = 0
             parse_toml::<CoveragePolicyFile>(&invalid).expect_err("invalid toml should fail");
         assert!(parse_err.contains("failed to parse"));
         fs::remove_file(invalid).expect("remove invalid toml");
+
+        let workspace_missing = temp_file_path("parse_toml_workspace_missing");
+        let workspace_read_err = parse_toml::<WorkspaceManifest>(&workspace_missing)
+            .expect_err("missing workspace manifest should fail");
+        assert!(workspace_read_err.contains("failed to read"));
+
+        let workspace_invalid = temp_file_path("parse_toml_workspace_invalid");
+        write_file(&workspace_invalid, "[workspace");
+        let workspace_parse_err = parse_toml::<WorkspaceManifest>(&workspace_invalid)
+            .expect_err("invalid workspace manifest should fail");
+        assert!(workspace_parse_err.contains("failed to parse"));
+        fs::remove_file(workspace_invalid).expect("remove invalid workspace manifest");
+
+        let package_missing = temp_file_path("parse_toml_package_missing");
+        let package_read_err = parse_toml::<PackageManifest>(&package_missing)
+            .expect_err("missing package manifest should fail");
+        assert!(package_read_err.contains("failed to read"));
+
+        let package_invalid = temp_file_path("parse_toml_package_invalid");
+        write_file(&package_invalid, "[package");
+        let package_parse_err = parse_toml::<PackageManifest>(&package_invalid)
+            .expect_err("invalid package manifest should fail");
+        assert!(package_parse_err.contains("failed to parse"));
+        fs::remove_file(package_invalid).expect("remove invalid package manifest");
+
+        let profiles_missing = temp_file_path("parse_toml_profiles_missing");
+        let profiles_read_err = parse_toml::<CoverageProfilesFile>(&profiles_missing)
+            .expect_err("missing coverage profiles should fail");
+        assert!(profiles_read_err.contains("failed to read"));
+
+        let profiles_invalid = temp_file_path("parse_toml_profiles_invalid");
+        write_file(&profiles_invalid, "[profiles.default");
+        let profiles_parse_err = parse_toml::<CoverageProfilesFile>(&profiles_invalid)
+            .expect_err("invalid coverage profiles should fail");
+        assert!(profiles_parse_err.contains("failed to parse"));
+        fs::remove_file(profiles_invalid).expect("remove invalid coverage profiles");
     }
 
     #[test]
@@ -1654,6 +2607,7 @@ test_threads = 0
             "3".to_string(),
         ];
         let mut names = Vec::new();
+        let mut rendered_commands = Vec::new();
         let mut runner = |cmd: Command, name: &str| {
             names.push(name.to_string());
             let rendered = cmd
@@ -1662,6 +2616,7 @@ test_threads = 0
                 .collect::<Vec<_>>()
                 .join(" ");
             assert!(!rendered.is_empty());
+            rendered_commands.push(rendered);
             Ok(())
         };
         run_crate_with_runner(&args, &mut runner).expect("run crate with stub runner");
@@ -1674,16 +2629,44 @@ test_threads = 0
                 "cargo llvm-cov report --lcov".to_string(),
             ]
         );
+        assert!(
+            rendered_commands
+                .iter()
+                .filter(|rendered| rendered.contains("report -p radroots-core"))
+                .all(|rendered| rendered.contains("--ignore-filename-regex"))
+        );
+        assert!(
+            rendered_commands
+                .iter()
+                .filter(|rendered| rendered.contains("report -p radroots-core"))
+                .all(|rendered| rendered.contains(COVERAGE_EXTERNAL_IGNORE_FILENAME_REGEX))
+        );
         fs::remove_dir_all(out).expect("remove run crate output dir");
+    }
+
+    #[test]
+    fn coverage_ignore_filename_regex_excludes_external_and_sibling_workspace_paths() {
+        let root = workspace_root();
+        let ignore_regex =
+            coverage_ignore_filename_regex(&root, "radroots-core").expect("build ignore regex");
+        assert!(ignore_regex.contains(COVERAGE_EXTERNAL_IGNORE_FILENAME_REGEX));
+        assert!(ignore_regex.contains("crates/identity"));
+        assert!(!ignore_regex.contains("crates/core/"));
+    }
+
+    #[test]
+    fn escape_regex_literal_escapes_regex_metacharacters() {
+        let escaped = escape_regex_literal(r"\.+*?()|[]{}^$");
+        assert_eq!(escaped, r"\\\.\+\*\?\(\)\|\[\]\{\}\^\$");
     }
 
     #[test]
     fn coverage_cargo_command_defaults_to_rustup_nightly() {
         let cmd = coverage_cargo_command_with_override(None);
-        let args = cmd
-            .get_args()
-            .map(|arg| arg.to_string_lossy().to_string())
-            .collect::<Vec<_>>();
+        let mut args = Vec::new();
+        for arg in cmd.get_args() {
+            args.push(arg.to_string_lossy().to_string());
+        }
 
         assert_eq!(cmd.get_program().to_string_lossy(), "rustup");
         assert_eq!(
@@ -1697,15 +2680,89 @@ test_threads = 0
     }
 
     #[test]
-    fn coverage_cargo_command_uses_override_binary_when_present() {
-        let cmd = coverage_cargo_command_with_override(Some("/tmp/nightly-cargo"));
-        let args = cmd
-            .get_args()
-            .map(|arg| arg.to_string_lossy().to_string())
-            .collect::<Vec<_>>();
+    fn coverage_cargo_command_override_variants_cover_parented_and_parentless_paths() {
+        let toolchain_dir = temp_dir_path("coverage_toolchain_override");
+        fs::create_dir_all(&toolchain_dir).expect("create toolchain dir");
+        for binary in [
+            "nightly-cargo",
+            "rustc",
+            "rustdoc",
+            "llvm-cov",
+            "llvm-profdata",
+        ] {
+            write_file(&toolchain_dir.join(binary), "");
+        }
 
-        assert_eq!(cmd.get_program().to_string_lossy(), "/tmp/nightly-cargo");
-        assert!(args.is_empty());
+        let default_cmd = coverage_cargo_command_with_override(None);
+        let mut args = Vec::new();
+        for arg in default_cmd.get_args() {
+            args.push(arg.to_string_lossy().to_string());
+        }
+        assert_eq!(default_cmd.get_program().to_string_lossy(), "rustup");
+        assert_eq!(
+            args,
+            vec![
+                "run".to_string(),
+                "nightly".to_string(),
+                "cargo".to_string()
+            ]
+        );
+
+        let override_binary = toolchain_dir.join("nightly-cargo");
+        let cmd = coverage_cargo_command_with_override(Some(
+            override_binary
+                .to_str()
+                .expect("override path should be utf-8"),
+        ));
+
+        assert_eq!(
+            cmd.get_program().to_string_lossy(),
+            override_binary.to_string_lossy()
+        );
+        assert!(cmd.get_args().next().is_none());
+        let mut envs = collect_command_envs(&cmd);
+        envs.insert("MISSING".to_string(), None);
+        assert_eq!(
+            envs.get("RUSTC"),
+            Some(&Some(
+                toolchain_dir.join("rustc").to_string_lossy().to_string()
+            ))
+        );
+        assert_eq!(
+            envs.get("RUSTDOC"),
+            Some(&Some(
+                toolchain_dir.join("rustdoc").to_string_lossy().to_string()
+            ))
+        );
+        assert_eq!(
+            envs.get("LLVM_COV"),
+            Some(&Some(
+                toolchain_dir.join("llvm-cov").to_string_lossy().to_string()
+            ))
+        );
+        assert_eq!(
+            envs.get("LLVM_PROFDATA"),
+            Some(&Some(
+                toolchain_dir
+                    .join("llvm-profdata")
+                    .to_string_lossy()
+                    .to_string()
+            ))
+        );
+        let path_env = envs
+            .get("PATH")
+            .and_then(|value| value.as_ref())
+            .expect("override binary should prepend PATH");
+        assert!(path_env.starts_with(toolchain_dir.to_string_lossy().as_ref()));
+        let mut cmd = coverage_cargo_command_with_override(Some("/"));
+        cmd.env_remove("RUSTC");
+        cmd.env_remove("LLVM_COV");
+        assert_eq!(cmd.get_program().to_string_lossy(), "/");
+        let envs = collect_command_envs(&cmd);
+        assert_eq!(envs.get("RUSTC"), Some(&None));
+        assert_eq!(envs.get("LLVM_COV"), Some(&None));
+
+        fs::remove_dir_all(toolchain_dir).expect("remove toolchain dir");
     }
 
     #[test]
@@ -1715,6 +2772,38 @@ test_threads = 0
 
         let fallback = workspace_root_with_override(Some(""));
         assert!(fallback.join("Cargo.toml").exists());
+
+        let default_root = workspace_root_with_override(None);
+        assert!(default_root.join("Cargo.toml").exists());
+    }
+
+    #[test]
+    fn prepend_toolchain_bin_to_path_covers_missing_and_existing_path_inputs() {
+        let toolchain_dir = PathBuf::from("/tmp/radroots-coverage-toolchain");
+        let no_path = prepend_toolchain_bin_to_path(&toolchain_dir, None);
+        assert_eq!(no_path, OsString::from(&toolchain_dir));
+
+        let joined =
+            prepend_toolchain_bin_to_path(&toolchain_dir, Some(OsString::from("/usr/bin:/bin")));
+        let joined = joined.to_string_lossy().to_string();
+        assert!(joined.starts_with("/tmp/radroots-coverage-toolchain"));
+        assert!(joined.contains("/usr/bin"));
+    }
+
+    #[test]
+    fn collect_command_envs_cover_helper_paths() {
+        let mut cmd = Command::new("sh");
+        cmd.env("PRESENT", "value");
+        cmd.env_remove("REMOVED");
+        let envs = collect_command_envs(&cmd);
+        assert_eq!(envs.get("PRESENT"), Some(&Some("value".to_string())));
+        assert_eq!(envs.get("REMOVED"), Some(&None));
+    }
+
+    #[test]
+    fn ok_runner_helper_returns_success() {
+        let cmd = Command::new("true");
+        assert!(ok_runner(cmd, "noop").is_ok());
     }
 
     #[test]
@@ -1778,7 +2867,19 @@ test_threads = 0
 
     #[test]
     fn run_crate_with_runner_at_root_covers_profile_and_runner_error_paths() {
+        let write_minimal_workspace = |root: &Path| {
+            write_file(
+                &root.join("Cargo.toml"),
+                "[workspace]\nmembers = [\"crates/core\"]\n",
+            );
+            write_file(
+                &root.join("crates").join("core").join("Cargo.toml"),
+                "[package]\nname = \"radroots-core\"\nversion = \"0.1.0-alpha.1\"\nedition = \"2024\"\n",
+            );
+        };
+
         let profile_root = temp_dir_path("run_crate_profile_invalid");
+        write_minimal_workspace(&profile_root);
         write_file(
             &profile_root
                 .join("contract")
@@ -1800,6 +2901,7 @@ test_threads = 0
 
         let thread_root = temp_dir_path("run_crate_bad_threads");
         fs::create_dir_all(&thread_root).expect("create thread root");
+        write_minimal_workspace(&thread_root);
         let thread_args = vec![
             "--crate".to_string(),
             "radroots-core".to_string(),
@@ -1816,6 +2918,7 @@ test_threads = 0
 
         for fail_step in [2usize, 3usize, 4usize] {
             let step_root = temp_dir_path("run_crate_step_fail");
+            write_minimal_workspace(&step_root);
             let step_args = vec![
                 "--crate".to_string(),
                 "radroots-core".to_string(),
@@ -2109,6 +3212,57 @@ test_threads = 0
         .expect_err("missing thresholds");
         assert!(missing_thresholds.contains("missing coverage thresholds"));
 
+        let missing_functions = report_gate(&[
+            "--scope".to_string(),
+            "crate".to_string(),
+            "--summary".to_string(),
+            summary_path.display().to_string(),
+            "--lcov".to_string(),
+            lcov_path.display().to_string(),
+            "--out".to_string(),
+            out_path.display().to_string(),
+            "--fail-under-exec-lines".to_string(),
+            "100".to_string(),
+        ])
+        .expect_err("missing functions threshold");
+        assert!(missing_functions.contains("missing coverage thresholds"));
+
+        let missing_regions = report_gate(&[
+            "--scope".to_string(),
+            "crate".to_string(),
+            "--summary".to_string(),
+            summary_path.display().to_string(),
+            "--lcov".to_string(),
+            lcov_path.display().to_string(),
+            "--out".to_string(),
+            out_path.display().to_string(),
+            "--fail-under-exec-lines".to_string(),
+            "100".to_string(),
+            "--fail-under-functions".to_string(),
+            "100".to_string(),
+        ])
+        .expect_err("missing regions threshold");
+        assert!(missing_regions.contains("missing coverage thresholds"));
+
+        let missing_branches = report_gate(&[
+            "--scope".to_string(),
+            "crate".to_string(),
+            "--summary".to_string(),
+            summary_path.display().to_string(),
+            "--lcov".to_string(),
+            lcov_path.display().to_string(),
+            "--out".to_string(),
+            out_path.display().to_string(),
+            "--fail-under-exec-lines".to_string(),
+            "100".to_string(),
+            "--fail-under-functions".to_string(),
+            "100".to_string(),
+            "--fail-under-regions".to_string(),
+            "100".to_string(),
+        ])
+        .expect_err("missing branches threshold");
+        assert!(missing_branches.contains("missing coverage thresholds"));
+
         let missing_summary_file = report_gate(&[
             "--scope".to_string(),
             "crate".to_string(),
@@ -2122,6 +3276,14 @@ test_threads = 0
         ])
         .expect_err("missing summary file should fail");
         assert!(missing_summary_file.contains("failed to read summary"));
+
+        let missing_gate_report = read_gate_report(&root.join("missing-gate-report.json"))
+            .expect_err("missing gate report should fail");
+        assert!(missing_gate_report.contains("failed to read gate report"));
+
+        write_file(&out_path, "{not-json");
+        let invalid_gate_report = read_gate_report(&out_path).expect_err("invalid gate report");
+        assert!(invalid_gate_report.contains("failed to parse gate report"));
 
         let missing_lcov_file = report_gate(&[
             "--scope".to_string(),
@@ -2153,7 +3315,97 @@ test_threads = 0
         .expect_err("policy gate mixed with explicit thresholds");
         assert!(mixed_policy_gate.contains("cannot be combined"));
 
+        let mixed_policy_gate_regions = report_gate(&[
+            "--scope".to_string(),
+            "crate".to_string(),
+            "--summary".to_string(),
+            summary_path.display().to_string(),
+            "--lcov".to_string(),
+            lcov_path.display().to_string(),
+            "--out".to_string(),
+            out_path.display().to_string(),
+            "--policy-gate".to_string(),
+            "--fail-under-regions".to_string(),
+            "100.0".to_string(),
+        ])
+        .expect_err("policy gate mixed with regions threshold");
+        assert!(mixed_policy_gate_regions.contains("cannot be combined"));
+
+        let mixed_policy_gate_branches_flag = report_gate(&[
+            "--scope".to_string(),
+            "crate".to_string(),
+            "--summary".to_string(),
+            summary_path.display().to_string(),
+            "--lcov".to_string(),
+            lcov_path.display().to_string(),
+            "--out".to_string(),
+            out_path.display().to_string(),
+            "--policy-gate".to_string(),
+            "--require-branches".to_string(),
+        ])
+        .expect_err("policy gate mixed with require-branches");
+        assert!(mixed_policy_gate_branches_flag.contains("cannot be combined"));
+
         fs::remove_dir_all(root).expect("remove report arg errors root");
+    }
+
+    #[test]
+    fn coverage_ignore_filename_regex_reports_unknown_crate() {
+        let root = temp_dir_path("coverage_unknown_crate_root");
+        write_file(
+            &root.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"crates/core\"]\n",
+        );
+        write_file(
+            &root.join("crates").join("core").join("Cargo.toml"),
+            "[package]\nname = \"radroots-core\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+        );
+
+        let err = coverage_ignore_filename_regex(&root, "radroots-missing")
+            .expect_err("unknown crate should fail");
+        assert!(err.contains("could not resolve crate directory"));
+
+        fs::remove_dir_all(root).expect("remove unknown crate root");
+    }
+
+    #[test]
+    fn coverage_ignore_filename_regex_reports_workspace_manifest_errors() {
+        let root = temp_dir_path("coverage_regex_workspace_error_root");
+        let read_err = coverage_ignore_filename_regex(&root, "radroots-core")
+            .expect_err("missing workspace manifest should fail");
+        assert!(read_err.contains("failed to read"));
+
+        write_file(&root.join("Cargo.toml"), "[workspace");
+        let parse_err = coverage_ignore_filename_regex(&root, "radroots-core")
+            .expect_err("invalid workspace manifest should fail");
+        assert!(parse_err.contains("failed to parse"));
+
+        fs::remove_dir_all(root).expect("remove workspace error root");
+    }
+
+    #[test]
+    fn run_crate_with_runner_at_root_reports_ignore_filter_errors() {
+        let root = temp_dir_path("run_crate_ignore_filter_error");
+        write_file(
+            &root.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"crates/other\"]\n",
+        );
+        write_file(
+            &root.join("crates").join("other").join("Cargo.toml"),
+            "[package]\nname = \"radroots-other\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+        );
+        let args = vec![
+            "--crate".to_string(),
+            "radroots-core".to_string(),
+            "--out".to_string(),
+            root.join("target").join("coverage").display().to_string(),
+        ];
+        let mut runner = ok_runner;
+        let err = run_crate_with_runner_at_root(&args, &root, &mut runner)
+            .expect_err("missing crate coverage filter should fail");
+        assert!(err.contains("could not resolve crate directory"));
+
+        fs::remove_dir_all(root).expect("remove run crate ignore filter root");
     }
 
     #[test]
@@ -2236,5 +3488,37 @@ test_threads = 0
         .expect("dispatch report");
         assert!(out_path.exists());
         fs::remove_dir_all(root).expect("remove report dispatch root");
+    }
+
+    #[test]
+    fn report_gate_with_root_reports_policy_read_errors() {
+        let root = temp_dir_path("report_gate_policy_root_error");
+        let summary_path = root.join("summary.json");
+        let lcov_path = root.join("coverage.info");
+        let out_path = root.join("gate-report.json");
+        write_file(
+            &summary_path,
+            r#"{"data":[{"totals":{"functions":{"percent":100.0},"lines":{"percent":100.0},"regions":{"percent":100.0}}}]}"#,
+        );
+        write_file(&lcov_path, "DA:1,1\nBRDA:1,0,0,1\n");
+
+        let err = report_gate_with_root(
+            &[
+                "--scope".to_string(),
+                "crate-x".to_string(),
+                "--summary".to_string(),
+                summary_path.display().to_string(),
+                "--lcov".to_string(),
+                lcov_path.display().to_string(),
+                "--out".to_string(),
+                out_path.display().to_string(),
+                "--policy-gate".to_string(),
+            ],
+            &root,
+        )
+        .expect_err("missing policy should fail");
+        assert!(err.contains("failed to read coverage policy"));
+
+        fs::remove_dir_all(root).expect("remove report gate policy error root");
     }
 }

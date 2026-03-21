@@ -24,7 +24,8 @@ All four thresholds are release-blocking.
 
 - run coverage checks per crate, not only aggregate workspace totals
 - a crate cannot be promoted to required unless it is at 100/100/100/100
-- once required, the crate remains blocking on every pull request and push to `master`
+- once required, the crate remains blocking on every canonical release-preflight run and any external automation that wraps that run
+- `coverage-refresh.tsv` must be generated from measured per-crate gate reports, not from synthetic pass rows
 
 ## required crate contract
 

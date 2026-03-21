@@ -2,7 +2,9 @@
 name = "radroots-nostr"
 version = "0.1.0-alpha.1"
 edition.workspace = true
-authors = ["Radroots Authors"]
+authors = [
+  "Radroots Authors",
+]
 rust-version.workspace = true
 license.workspace = true
 description = "Nostr integration layer for Radroots"
@@ -14,13 +16,17 @@ readme.workspace = true
 default = ["std"]
 std = []
 client = ["std", "dep:nostr-sdk", "dep:radroots-identity"]
-codec = ["dep:radroots-events", "dep:radroots-events-codec", "radroots-events-codec/nostr"]
+codec = [
+  "dep:radroots-events",
+  "dep:radroots-events-codec",
+  "radroots-events-codec/nostr",
+]
 events = [
-    "dep:radroots-events",
-    "dep:radroots-events-codec",
-    "radroots-events/std",
-    "radroots-events/serde",
-    "radroots-events-codec/std",
+  "dep:radroots-events",
+  "dep:radroots-events-codec",
+  "radroots-events/std",
+  "radroots-events/serde",
+  "radroots-events-codec/std",
 ]
 http = ["dep:reqwest"]
 nip17 = ["std", "codec", "nostr/nip44", "nostr/nip59"]
@@ -31,7 +37,10 @@ radroots-events-codec = { workspace = true, optional = true, default-features = 
 radroots-identity = { workspace = true, optional = true, default-features = true }
 nostr = { workspace = true, features = ["nip04"] }
 nostr-sdk = { workspace = true, optional = true }
-reqwest = { workspace = true, optional = true, default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { workspace = true, optional = true, default-features = false, features = [
+  "json",
+  "rustls-tls",
+] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

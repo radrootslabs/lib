@@ -3,7 +3,7 @@ set -euo pipefail
 
 tracked_artifacts="$(git ls-files 'crates/*/bindings/**')"
 
-if [[ -n "$tracked_artifacts" ]]; then
+if [[ -n $tracked_artifacts ]]; then
   echo "committed ts artifacts are not allowed under crates/*/bindings/**"
   echo "$tracked_artifacts"
   exit 1

@@ -7,7 +7,7 @@ This workspace uses Nix as the canonical development and CI environment contract
 macOS:
 
 ```bash
-sh <(curl --proto '=https' --tlsv1.2 -L https://nixos.org/nix/install)
+sh <(curl --proto '=https' --tlsv1.2 -L https://nixos.org/nix/install) --daemon
 ```
 
 Linux with systemd:
@@ -103,7 +103,7 @@ Repo-aware flows stay behind `nix run` apps because they need a real checkout:
 
 - `sdk export-ts` writes into repo-local `target/`
 - sdk sync validation runs `bun` against a checked-out `sdk-typescript` repo path
-- coverage refresh and release preflight produce repo-local artifacts
+- coverage refresh and release preflight produce repo-local artifacts derived from measured per-crate gate reports
 - wasm packaging writes package output directories
 - publish commands read runtime tokens and the live checkout state
 

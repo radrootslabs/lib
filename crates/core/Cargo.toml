@@ -2,7 +2,9 @@
 name = "radroots-core"
 version = "0.1.0-alpha.1"
 edition.workspace = true
-authors = ["Radroots Authors"]
+authors = [
+  "Radroots Authors",
+]
 rust-version.workspace = true
 license.workspace = true
 description = "Core value model for Radroots"
@@ -21,7 +23,10 @@ ts-rs = ["dep:ts-rs"]
 [dependencies]
 rust_decimal = { workspace = true, default-features = false }
 rust_decimal_macros = { workspace = true }
-serde = { workspace = true, default-features = false, features = ["alloc", "derive"], optional = true }
+serde = { workspace = true, default-features = false, features = [
+  "alloc",
+  "derive",
+], optional = true }
 typeshare = { workspace = true, optional = true }
 ts-rs = { workspace = true, optional = true }
 

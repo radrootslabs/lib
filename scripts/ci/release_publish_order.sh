@@ -5,7 +5,7 @@ root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$root_dir"
 
 mode="${1:-publish}"
-if [[ "$mode" != "publish" && "$mode" != "dry-run" ]]; then
+if [[ $mode != "publish" && $mode != "dry-run" ]]; then
   echo "usage: scripts/ci/release_publish_order.sh [publish|dry-run] [crate names]"
   exit 2
 fi
@@ -24,7 +24,7 @@ release_version="$(
   ' contract/release/publish-set.toml
 )"
 
-if [[ -z "$release_version" ]]; then
+if [[ -z $release_version ]]; then
   echo "failed to resolve release.version from contract/release/publish-set.toml"
   exit 1
 fi
@@ -39,9 +39,9 @@ awk '
     gsub(/[" ,]/, "", line)
     if (length(line) > 0) print line
   }
-' contract/release/publish-set.toml > "$order_file"
+' contract/release/publish-set.toml >"$order_file"
 
-if [[ ! -s "$order_file" ]]; then
+if [[ ! -s $order_file ]]; then
   echo "publish_order.crates list is empty"
   exit 1
 fi
@@ -102,10 +102,10 @@ publish_with_retry() {
       local retry_after
       retry_after="$(sed -n 's/.*Please try again after \(.*GMT\).*/\1/p' "$log_file" | head -n1)"
       local sleep_secs=0
-      if [[ -n "$retry_after" ]]; then
+      if [[ -n $retry_after ]]; then
         sleep_secs="$(seconds_until_http_date "$retry_after")"
       fi
-      if [[ "$sleep_secs" -le 0 ]]; then
+      if [[ $sleep_secs -le 0 ]]; then
         sleep_secs=$((30 + attempt * 15))
       fi
       echo "publish rate-limited for ${crate}; retry ${attempt} in ${sleep_secs}s"
@@ -120,10 +120,10 @@ publish_with_retry() {
   done
 }
 
-if [[ -n "$requested_raw" ]]; then
+if [[ -n $requested_raw ]]; then
   for token in $requested_raw; do
-    [[ -n "$token" ]] || continue
-    echo "$token" >> "$requested_file"
+    [[ -n $token ]] || continue
+    echo "$token" >>"$requested_file"
   done
   sort -u "$requested_file" -o "$requested_file"
 
@@ -132,21 +132,21 @@ if [[ -n "$requested_raw" ]]; then
       echo "requested crate is not in publish_order.crates: ${token}"
       exit 1
     fi
-  done < "$requested_file"
+  done <"$requested_file"
 
   while IFS= read -r crate; do
-    [[ -n "$crate" ]] || continue
+    [[ -n $crate ]] || continue
     if grep -Fxq "$crate" "$requested_file"; then
-      echo "$crate" >> "$selected_file"
+      echo "$crate" >>"$selected_file"
     fi
-  done < "$order_file"
+  done <"$order_file"
 else
   cp "$order_file" "$selected_file"
 fi
 
 while IFS= read -r crate; do
   [ -n "$crate" ] || continue
-  if [[ "$mode" == "dry-run" ]]; then
+  if [[ $mode == "dry-run" ]]; then
     log_file="$(mktemp)"
     if cargo publish --dry-run --locked --allow-dirty -p "$crate" >"$log_file" 2>&1; then
       cat "$log_file"
@@ -155,7 +155,7 @@ while IFS= read -r crate; do
     fi
 
     missing_dep="$(sed -n 's/.*no matching package named `\([^`]*\)`.*/\1/p' "$log_file" | head -n1)"
-    if [[ -n "$missing_dep" ]] && grep -Fxq "$missing_dep" "$order_file"; then
+    if [[ -n $missing_dep ]] && grep -Fxq "$missing_dep" "$order_file"; then
       echo "dry-run defer for ${crate}: dependency ${missing_dep} is not yet published"
       rm -f "$log_file"
       continue
@@ -176,12 +176,12 @@ while IFS= read -r crate; do
     if crate_version_visible "$crate"; then
       break
     fi
-    if [[ "$attempt" == "30" ]]; then
+    if [[ $attempt == "30" ]]; then
       echo "crate ${crate} version ${release_version} not visible on crates.io after publish"
       exit 1
     fi
     sleep 10
   done
-done < "$selected_file"
+done <"$selected_file"
 
 echo "publish sequence complete for release ${release_version}"

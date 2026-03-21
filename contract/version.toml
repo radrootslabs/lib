@@ -20,11 +20,7 @@ minor_on = [
   "add_conformance_vector",
   "add_replica_transport_adapter",
 ]
-patch_on = [
-  "fix_docs",
-  "fix_non_behavioral_codegen",
-  "fix_packaging_metadata",
-]
+patch_on = ["fix_docs", "fix_non_behavioral_codegen", "fix_packaging_metadata"]
 
 [compatibility]
 requires_conformance_pass = true

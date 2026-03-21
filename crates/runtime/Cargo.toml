@@ -2,7 +2,9 @@
 name = "radroots-runtime"
 version = "0.1.0-alpha.1"
 edition.workspace = true
-authors = ["Radroots Authors"]
+authors = [
+  "Radroots Authors",
+]
 rust-version.workspace = true
 license.workspace = true
 description = "Runtime configuration model for Radroots"
@@ -20,9 +22,9 @@ clap = { workspace = true, features = ["derive", "env"], optional = true }
 config = { workspace = true }
 radroots-log = { workspace = true, features = ["std"] }
 serde = { workspace = true }
-serde_json = { workspace = true } 
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "signal"] }
 toml = { workspace = true }
 tracing = { workspace = true }
-tempfile = { workspace = true } 
+tempfile = { workspace = true }

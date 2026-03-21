@@ -2,7 +2,9 @@
 name = "radroots-events"
 version = "0.1.0-alpha.1"
 edition.workspace = true
-authors = ["Radroots Authors"]
+authors = [
+  "Radroots Authors",
+]
 rust-version.workspace = true
 license.workspace = true
 description = "Domain event model for Radroots"
@@ -20,7 +22,10 @@ typeshare = ["dep:typeshare", "radroots-core/typeshare"]
 
 [dependencies]
 radroots-core = { workspace = true, default-features = false }
-serde = { workspace = true, default-features = false, features = ["alloc", "derive"], optional = true }
+serde = { workspace = true, default-features = false, features = [
+  "alloc",
+  "derive",
+], optional = true }
 ts-rs = { workspace = true, optional = true }
 typeshare = { workspace = true, optional = true }
 

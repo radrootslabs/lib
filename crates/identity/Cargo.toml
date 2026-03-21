@@ -2,7 +2,9 @@
 name = "radroots-identity"
 version = "0.1.0-alpha.1"
 edition.workspace = true
-authors = ["Radroots Authors"]
+authors = [
+  "Radroots Authors",
+]
 rust-version.workspace = true
 license.workspace = true
 description = "Identity model for Radroots"
@@ -22,7 +24,9 @@ ts-rs = ["dep:ts-rs"]
 
 [dependencies]
 radroots-runtime = { workspace = true, optional = true }
-radroots-events = { workspace = true, optional = true, default-features = false, features = ["serde"] }
+radroots-events = { workspace = true, optional = true, default-features = false, features = [
+  "serde",
+] }
 nostr = { workspace = true }
 secrecy = { workspace = true, optional = true }
 serde = { workspace = true }

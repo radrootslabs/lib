@@ -24,6 +24,12 @@ fn usage() {
     eprintln!(
         "  cargo xtask sdk coverage report --scope <scope> --summary <file> --lcov <file> --out <file> [--policy-gate | (--fail-under-exec-lines <pct> --fail-under-functions <pct> --fail-under-regions <pct> --fail-under-branches <pct> [--require-branches])]"
     );
+    eprintln!(
+        "  cargo xtask sdk coverage report-missing --scope <scope> --out <file> --reason <reason>"
+    );
+    eprintln!(
+        "  cargo xtask sdk coverage refresh-summary [--reports-root <dir>] [--out <file>] [--status-out <file>]"
+    );
 }
 
 fn workspace_root_with_override(override_root: Option<&str>) -> PathBuf {
@@ -89,40 +95,64 @@ fn parse_crate_out_dir(
     Ok((crate_selector, out_dir))
 }
 
+fn export_ts_models_with_root(args: &[String], root: &Path) -> Result<(), String> {
+    let out_dir = parse_out_dir(args, root)?;
+    export_ts::export_ts_models(root, &out_dir)
+}
+
 fn export_ts_models(args: &[String]) -> Result<(), String> {
     let root = workspace_root();
-    let out_dir = parse_out_dir(args, &root)?;
-    export_ts::export_ts_models(&root, &out_dir)
+    export_ts_models_with_root(args, &root)
+}
+
+fn export_ts_constants_with_root(args: &[String], root: &Path) -> Result<(), String> {
+    let out_dir = parse_out_dir(args, root)?;
+    export_ts::export_ts_constants(root, &out_dir)
 }
 
 fn export_ts_constants(args: &[String]) -> Result<(), String> {
     let root = workspace_root();
+    export_ts_constants_with_root(args, &root)
+}
+
+fn export_ts_wasm_with_root(args: &[String], root: &Path) -> Result<(), String> {
     let out_dir = parse_out_dir(args, &root)?;
-    export_ts::export_ts_constants(&root, &out_dir)
+    export_ts::export_ts_wasm_artifacts(root, &out_dir)
 }
 
 fn export_ts_wasm(args: &[String]) -> Result<(), String> {
     let root = workspace_root();
-    let out_dir = parse_out_dir(args, &root)?;
-    export_ts::export_ts_wasm_artifacts(&root, &out_dir)
+    export_ts_wasm_with_root(args, &root)
+}
+
+fn export_manifest_with_root(args: &[String], root: &Path) -> Result<(), String> {
+    let out_dir = parse_out_dir(args, root)?;
+    export_ts::write_ts_export_manifest(root, &out_dir).map(|_| ())
 }
 
 fn export_manifest(args: &[String]) -> Result<(), String> {
     let root = workspace_root();
-    let out_dir = parse_out_dir(args, &root)?;
-    export_ts::write_ts_export_manifest(&root, &out_dir).map(|_| ())
+    export_manifest_with_root(args, &root)
+}
+
+fn export_ts_with_root(args: &[String], root: &Path) -> Result<(), String> {
+    let out_dir = parse_out_dir(args, root)?;
+    export_ts::export_ts_bundle(root, &out_dir).map(|_| ())
 }
 
 fn export_ts(args: &[String]) -> Result<(), String> {
     let root = workspace_root();
-    let out_dir = parse_out_dir(args, &root)?;
-    export_ts::export_ts_bundle(&root, &out_dir).map(|_| ())
+    export_ts_with_root(args, &root)
+}
+
+fn export_ts_crate_with_root(args: &[String], root: &Path) -> Result<(), String> {
+    let (crate_selector, out_dir) = parse_crate_out_dir(args, root)?;
+    export_ts::export_ts_bundle_for_crate(root, &out_dir, &crate_selector).map(|_| ())
 }
 
 fn export_ts_crate(args: &[String]) -> Result<(), String> {
     let root = workspace_root();
-    let (crate_selector, out_dir) = parse_crate_out_dir(args, &root)?;
-    export_ts::export_ts_bundle_for_crate(&root, &out_dir, &crate_selector).map(|_| ())
+    export_ts_crate_with_root(args, &root)
 }
 
 fn validate_contract() -> Result<(), String> {
@@ -187,12 +217,19 @@ fn main() -> ExitCode {
 mod tests {
     use super::*;
     use std::fs;
-    use std::sync::{Mutex, OnceLock};
+    use std::sync::{Mutex, MutexGuard, OnceLock};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn workspace_lock() -> &'static Mutex<()> {
         static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
         LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    fn lock_workspace() -> MutexGuard<'static, ()> {
+        match workspace_lock().lock() {
+            Ok(guard) => guard,
+            Err(poison) => poison.into_inner(),
+        }
     }
 
     fn unique_temp_dir(prefix: &str) -> PathBuf {
@@ -201,6 +238,168 @@ mod tests {
             .expect("system time")
             .as_nanos();
         std::env::temp_dir().join(format!("radroots_xtask_main_{prefix}_{ns}"))
+    }
+
+    fn write_file(path: &Path, content: &str) {
+        let _ = fs::create_dir_all(path.parent().unwrap_or(Path::new("")));
+        fs::write(path, content).expect("write file");
+    }
+
+    fn create_synthetic_export_workspace(prefix: &str) -> PathBuf {
+        let root = unique_temp_dir(prefix);
+        fs::create_dir_all(&root).expect("create root");
+        write_file(
+            &root.join("Cargo.toml"),
+            r#"[workspace]
+members = ["crates/a", "crates/b"]
+resolver = "2"
+"#,
+        );
+        write_file(
+            &root.join("crates").join("a").join("Cargo.toml"),
+            r#"[package]
+name = "radroots-a"
+version = "0.1.0"
+edition = "2024"
+description = "crate a"
+repository = "https://example.com/a"
+homepage = "https://example.com/a"
+documentation = "https://docs.example.com/a"
+readme = "README.md"
+
+[features]
+ts-rs = []
+"#,
+        );
+        write_file(
+            &root.join("crates").join("a").join("src").join("lib.rs"),
+            r#"pub fn crate_a() {}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::path::PathBuf;
+
+    #[test]
+    fn write_ts_exports() {
+        if let Ok(path) = std::env::var("RADROOTS_TS_RS_EXPORT_DIR") {
+            let export_dir = PathBuf::from(path);
+            let _ = fs::create_dir_all(&export_dir);
+            fs::write(
+                export_dir.join("types.ts"),
+                "export type Probe = { id: string };\n",
+            )
+            .expect("write generated types");
+        }
+    }
+}
+"#,
+        );
+        write_file(
+            &root.join("crates").join("b").join("Cargo.toml"),
+            r#"[package]
+name = "radroots-b"
+version = "0.1.0"
+edition = "2024"
+publish = false
+"#,
+        );
+        write_file(
+            &root.join("crates").join("b").join("src").join("lib.rs"),
+            "pub fn crate_b() {}\n",
+        );
+        write_file(
+            &root.join("crates").join("core").join("src").join("unit.rs"),
+            r#"pub enum RadrootsCoreUnitDimension {
+    Count,
+    Mass,
+    Volume,
+}
+"#,
+        );
+        write_file(
+            &root.join("contract").join("manifest.toml"),
+            r#"[contract]
+name = "radroots-contract"
+version = "1.0.0"
+source = "synthetic"
+
+[surface]
+model_crates = ["radroots-a"]
+algorithm_crates = ["radroots-b"]
+wasm_crates = ["radroots-a-wasm"]
+
+[policy]
+exclude_internal_workspace_crates = true
+require_reproducible_exports = true
+require_conformance_vectors = true
+"#,
+        );
+        write_file(
+            &root.join("contract").join("version.toml"),
+            r#"[contract]
+version = "1.0.0"
+stability = "alpha"
+
+[semver]
+major_on = ["breaking"]
+minor_on = ["feature"]
+patch_on = ["fix"]
+
+[compatibility]
+requires_conformance_pass = true
+requires_export_manifest_diff = true
+requires_release_notes = true
+"#,
+        );
+        write_file(
+            &root.join("contract").join("exports").join("ts.toml"),
+            r#"[language]
+id = "ts"
+repository = "sdk-typescript"
+
+[packages]
+"radroots-a" = "@radroots/a"
+
+[artifacts]
+models_dir = "src/generated"
+constants_dir = "src/generated"
+wasm_dist_dir = "dist"
+manifest_file = "export-manifest.json"
+"#,
+        );
+        write_file(
+            &root.join("contract").join("coverage").join("policy.toml"),
+            r#"[gate]
+fail_under_exec_lines = 100.0
+fail_under_functions = 100.0
+fail_under_regions = 100.0
+fail_under_branches = 100.0
+require_branches = true
+
+[required]
+crates = ["radroots-a", "radroots-b"]
+"#,
+        );
+        write_file(
+            &root
+                .join("contract")
+                .join("release")
+                .join("publish-set.toml"),
+            r#"[release]
+version = "1.0.0"
+
+[publish]
+crates = ["radroots-a"]
+
+[internal]
+crates = ["radroots-b"]
+
+[publish_order]
+crates = ["radroots-a"]
+"#,
+        );
+        root
     }
 
     #[test]
@@ -272,6 +471,9 @@ mod tests {
 
         let fallback = workspace_root_with_override(Some("   "));
         assert!(fallback.join("Cargo.toml").exists());
+
+        let default_root = workspace_root_with_override(None);
+        assert!(default_root.join("Cargo.toml").exists());
     }
 
     #[test]
@@ -289,52 +491,54 @@ mod tests {
 
     #[test]
     fn export_wrappers_cover_success_and_error_paths() {
-        let _guard = workspace_lock().lock().expect("lock workspace");
-        let root = workspace_root();
+        let _guard = lock_workspace();
+        let root = create_synthetic_export_workspace("export_wrappers");
         let out_dir = unique_temp_dir("export_wrappers");
         fs::create_dir_all(&out_dir).expect("create out dir");
 
         let invalid_args = vec!["--bad".to_string()];
-        assert!(export_ts_models(&invalid_args).is_err());
-        assert!(export_ts_constants(&invalid_args).is_err());
-        assert!(export_ts_wasm(&invalid_args).is_err());
-        assert!(export_manifest(&invalid_args).is_err());
-        assert!(export_ts(&invalid_args).is_err());
-        assert!(export_ts_crate(&invalid_args).is_err());
-
-        let ts_rs_root = root.join("target").join("ts-rs");
-        fs::create_dir_all(ts_rs_root.join("core")).expect("create ts-rs core dir");
-        fs::write(
-            ts_rs_root.join("core").join("types.ts"),
-            "export type CoreProbe = { id: string };\n",
-        )
-        .expect("write core types");
+        assert!(export_ts_models_with_root(&invalid_args, &root).is_err());
+        assert!(export_ts_constants_with_root(&invalid_args, &root).is_err());
+        assert!(export_ts_wasm_with_root(&invalid_args, &root).is_err());
+        assert!(export_manifest_with_root(&invalid_args, &root).is_err());
+        assert!(export_ts_with_root(&invalid_args, &root).is_err());
+        assert!(export_ts_crate_with_root(&invalid_args, &root).is_err());
 
         let args = vec!["--out".to_string(), out_dir.display().to_string()];
-        export_manifest(&args).expect("export manifest");
-        export_ts_wasm(&args).expect("export wasm");
-        export_ts_constants(&args).expect("export constants");
-        export_ts_models(&args).expect("export models");
+        export_ts_with_root(&args, &root).expect("export ts bundle");
+        export_manifest_with_root(&args, &root).expect("export manifest");
+        export_ts_wasm_with_root(&args, &root).expect("export wasm");
+        export_ts_constants_with_root(&args, &root).expect("export constants");
+        export_ts_models_with_root(&args, &root).expect("export models");
 
         let crate_args = vec![
             "--crate".to_string(),
-            "core".to_string(),
+            "a".to_string(),
             "--out".to_string(),
             out_dir.display().to_string(),
         ];
-        export_ts_crate(&crate_args).expect("export ts crate");
-
-        let bundle_args = vec!["--out".to_string(), out_dir.display().to_string()];
-        export_ts(&bundle_args).expect("export ts bundle");
+        export_ts_crate_with_root(&crate_args, &root).expect("export ts crate");
 
         assert!(out_dir.join("ts").exists());
 
         let _ = fs::remove_dir_all(out_dir);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn lock_workspace_recovers_from_poisoned_mutex() {
+        let handle = std::thread::spawn(|| {
+            let _guard = workspace_lock().lock().expect("lock workspace");
+            panic!("poison workspace lock");
+        });
+        assert!(handle.join().is_err());
+
+        let _guard = lock_workspace();
     }
 
     #[test]
     fn contract_and_coverage_dispatchers_execute() {
-        let _guard = workspace_lock().lock().expect("lock workspace");
+        let _guard = lock_workspace();
         let root = workspace_root();
         let out_dir = unique_temp_dir("coverage_dispatch");
         fs::create_dir_all(&out_dir).expect("create out dir");
@@ -349,12 +553,9 @@ mod tests {
         fs::remove_file(&coverage_refresh_path).expect("remove existing coverage refresh");
         let parent = coverage_refresh_path.parent().expect("coverage parent");
         fs::create_dir_all(parent).expect("create coverage parent");
-        let required_raw = fs::read_to_string(
-            root.join("contract")
-                .join("coverage")
-                .join("policy.toml"),
-        )
-        .expect("read coverage policy contract");
+        let required_raw =
+            fs::read_to_string(root.join("contract").join("coverage").join("policy.toml"))
+                .expect("read coverage policy contract");
         let required_toml =
             toml::from_str::<toml::Value>(&required_raw).expect("parse coverage policy contract");
         let required_crates = required_toml
@@ -434,7 +635,7 @@ mod tests {
 
     #[test]
     fn run_sdk_dispatches_export_and_validate_commands() {
-        let _guard = workspace_lock().lock().expect("lock workspace");
+        let _guard = lock_workspace();
         assert!(run_sdk(&["export-ts".to_string(), "--bad".to_string()]).is_err());
         assert!(run_sdk(&["export-ts-crate".to_string(), "--bad".to_string()]).is_err());
         assert!(run_sdk(&["export-ts-models".to_string(), "--bad".to_string()]).is_err());

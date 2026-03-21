@@ -1,4 +1,8 @@
-{ common, pkgs, toolchains }:
+{
+  common,
+  pkgs,
+  toolchains,
+}:
 let
   defaultHook = ''
     ${common.exportSharedEnv}
@@ -12,7 +16,7 @@ in
 {
   default = pkgs.mkShell {
     packages = common.runtimeInputs.wasm ++ [
-      pkgs.cargo-llvm-cov
+      common.cargoLlvmCov
     ];
     shellHook = defaultHook;
   };

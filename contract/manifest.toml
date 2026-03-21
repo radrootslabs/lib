@@ -11,12 +11,8 @@ model_crates = [
   "radroots-trade",
   "radroots-identity",
 ]
-algorithm_crates = [
-  "radroots-events-codec",
-]
-wasm_crates = [
-  "radroots-events-codec-wasm",
-]
+algorithm_crates = ["radroots-events-codec"]
+wasm_crates = ["radroots-events-codec-wasm"]
 
 [surface.internal_replica_crates]
 schema = "radroots-replica-db-schema"
