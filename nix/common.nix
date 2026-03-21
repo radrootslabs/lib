@@ -39,9 +39,14 @@ let
     SDKROOT = pkgs.apple-sdk_14.sdkroot;
     MACOSX_DEPLOYMENT_TARGET = pkgs.stdenv.hostPlatform.darwinMinVersion;
   };
-  sharedEnv = baseEnv // {
-    PKG_CONFIG_PATH = lib.makeSearchPathOutput "dev" "lib/pkgconfig" stableRuntimeInputs;
-  };
+  sharedEnv =
+    baseEnv
+    // {
+      PKG_CONFIG_PATH = lib.makeSearchPathOutput "dev" "lib/pkgconfig" stableRuntimeInputs;
+    }
+    // lib.optionalAttrs pkgs.stdenv.isDarwin {
+      LIBRARY_PATH = lib.makeLibraryPath darwinBuildInputs;
+    };
   coverageEnv = sharedEnv // {
     RADROOTS_COVERAGE_CARGO = "${toolchains.coverage}/bin/cargo";
   };
