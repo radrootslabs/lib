@@ -1,0 +1,29 @@
+[package]
+name = "radroots-nostr-signer"
+version = "0.1.0-alpha.1"
+edition.workspace = true
+authors = [
+  "Radroots Authors",
+]
+rust-version.workspace = true
+license.workspace = true
+description = "Signer state model for Radroots"
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+
+[dependencies]
+nostr = { workspace = true }
+radroots-identity = { workspace = true, default-features = false, features = ["std", "profile"] }
+radroots-nostr-connect = { workspace = true }
+radroots-runtime = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+thiserror = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage_nightly)'] }

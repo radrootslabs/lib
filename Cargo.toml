@@ -12,6 +12,7 @@ members = [
   "crates/nostr",
   "crates/nostr-accounts",
   "crates/nostr-connect",
+  "crates/nostr-signer",
   "crates/nostr-ndb",
   "crates/nostr-runtime",
   "crates/runtime",
@@ -47,6 +48,7 @@ radroots-identity = { path = "crates/identity", version = "0.1.0-alpha.1", defau
 radroots-nostr = { path = "crates/nostr", version = "0.1.0-alpha.1", default-features = false }
 radroots-nostr-accounts = { path = "crates/nostr-accounts", version = "0.1.0-alpha.1", default-features = false }
 radroots-nostr-connect = { path = "crates/nostr-connect", version = "0.1.0-alpha.1", default-features = false }
+radroots-nostr-signer = { path = "crates/nostr-signer", version = "0.1.0-alpha.1", default-features = false }
 radroots-nostr-ndb = { path = "crates/nostr-ndb", version = "0.1.0-alpha.1", default-features = false }
 radroots-runtime = { path = "crates/runtime", version = "0.1.0-alpha.1", default-features = false }
 radroots-log = { path = "crates/log", version = "0.1.0-alpha.1", default-features = false }

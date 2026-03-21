@@ -108,6 +108,7 @@ let
     "radroots-events-codec"
     "radroots-events-codec-wasm"
     "radroots-nostr-connect"
+    "radroots-nostr-signer"
   ];
   sdkContractCargoArgs = lib.concatStringsSep " " (map (crate: "-p ${crate}") sdkContractCrates);
   craneLib = (crane.mkLib pkgs).overrideToolchain toolchains.stable;
