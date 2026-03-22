@@ -28,6 +28,7 @@ crates = [
   "radroots-nostr-ndb",
   "radroots-nostr-runtime",
   "radroots-runtime",
+  "radroots-simplex-smp-proto",
   "radroots-sql-core",
   "radroots-sql-wasm-core",
   "radroots-sql-wasm-bridge",
