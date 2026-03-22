@@ -1,0 +1,23 @@
+[package]
+name = "radroots-simplex-chat-proto"
+version = "0.1.0-alpha.1"
+edition.workspace = true
+authors = [
+  "Radroots Authors",
+]
+rust-version.workspace = true
+license.workspace = true
+description = "SimpleX chat protocol model for Radroots"
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+
+[features]
+default = ["std"]
+std = ["serde/std", "serde_json/std", "dep:zstd"]
+
+[dependencies]
+base64 = { version = "0.22", default-features = false, features = ["alloc"] }
+serde = { workspace = true, default-features = false, features = ["alloc", "derive"] }
+serde_json = { workspace = true, default-features = false, features = ["alloc"] }
+zstd = { workspace = true, optional = true }

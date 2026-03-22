@@ -8,6 +8,7 @@ crates = [
   "radroots-events",
   "radroots-log",
   "radroots-runtime",
+  "radroots-simplex-chat-proto",
   "radroots-simplex-smp-proto",
   "radroots-identity",
   "radroots-trade",
@@ -34,7 +35,7 @@ crates = [
 ]
 
 [internal]
-crates = ["xtask"]
+crates = ["xtask", "radroots-test-fixtures"]
 
 [publish_order]
 crates = [
@@ -43,6 +44,7 @@ crates = [
   "radroots-log",
   "radroots-events",
   "radroots-runtime",
+  "radroots-simplex-chat-proto",
   "radroots-simplex-smp-proto",
   "radroots-events-codec",
   "radroots-identity",

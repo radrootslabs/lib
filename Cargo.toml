@@ -17,6 +17,7 @@ members = [
   "crates/nostr-ndb",
   "crates/nostr-runtime",
   "crates/runtime",
+  "crates/simplex-chat-proto",
   "crates/simplex-smp-proto",
   "crates/sql-wasm-bridge",
   "crates/sql-wasm-core",
@@ -59,6 +60,7 @@ radroots-log = { path = "crates/log", version = "0.1.0-alpha.1", default-feature
 radroots-net = { path = "crates/net", version = "0.1.0-alpha.1", default-features = false }
 radroots-net-core = { path = "crates/net-core", version = "0.1.0-alpha.1", default-features = false }
 radroots-nostr-runtime = { path = "crates/nostr-runtime", version = "0.1.0-alpha.1", default-features = false }
+radroots-simplex-chat-proto = { path = "crates/simplex-chat-proto", version = "0.1.0-alpha.1", default-features = false }
 radroots-simplex-smp-proto = { path = "crates/simplex-smp-proto", version = "0.1.0-alpha.1", default-features = false }
 radroots-sql-wasm-bridge = { path = "crates/sql-wasm-bridge", version = "0.1.0-alpha.1" }
 radroots-sql-wasm-core = { path = "crates/sql-wasm-core", version = "0.1.0-alpha.1", default-features = false }
@@ -116,6 +118,7 @@ ts-rs = { version = "11.1" }
 typeshare = { version = "1" }
 url = { version = "2" }
 uuid = { version = "1.22.0", features = ["v4", "v7"] }
+zstd = { version = "0.13", default-features = false }
 zeroize = { version = "1" }
 uniffi = { version = "=0.29.4" }
 uniffi_build = { version = "=0.29.4" }
