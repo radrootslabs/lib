@@ -7,6 +7,7 @@ use radroots_events_codec::job::encode::{
 };
 use radroots_events_codec::job::error::JobParseError;
 use radroots_events_codec::profile::error::ProfileEncodeError;
+use radroots_test_fixtures::{FIXTURE_ALICE_PUBLIC_KEY_HEX, RELAY_PRIMARY_WSS};
 #[cfg(feature = "serde_json")]
 use serde::Serialize;
 #[cfg(feature = "serde_json")]
@@ -63,11 +64,8 @@ fn job_encode_helpers_cover_status_provider_relay_and_inputs() {
     let mut tags: Vec<Vec<String>> = Vec::new();
     push_status_tag(&mut tags, "ok", None);
     push_status_tag(&mut tags, "warning", Some("detail"));
-    push_provider_tag(
-        &mut tags,
-        "58e318557257f2ab58a415d21bb57082b4824cf667a1d64e72bcbc5acc018c62",
-    );
-    push_relay_tag(&mut tags, "wss://relay.example.com");
+    push_provider_tag(&mut tags, FIXTURE_ALICE_PUBLIC_KEY_HEX);
+    push_relay_tag(&mut tags, RELAY_PRIMARY_WSS);
 
     assert_eq!(tags[0], vec!["status".to_string(), "ok".to_string()]);
     assert_eq!(
@@ -80,14 +78,11 @@ fn job_encode_helpers_cover_status_provider_relay_and_inputs() {
     );
     assert_eq!(
         tags[2],
-        vec![
-            "p".to_string(),
-            "58e318557257f2ab58a415d21bb57082b4824cf667a1d64e72bcbc5acc018c62".to_string(),
-        ]
+        vec!["p".to_string(), FIXTURE_ALICE_PUBLIC_KEY_HEX.to_string(),]
     );
     assert_eq!(
         tags[3],
-        vec!["relays".to_string(), "wss://relay.example.com".to_string()]
+        vec!["relays".to_string(), RELAY_PRIMARY_WSS.to_string()]
     );
 
     assert!(assert_no_inputs_when_encrypted(&tags));

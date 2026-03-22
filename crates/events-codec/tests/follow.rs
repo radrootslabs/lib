@@ -9,6 +9,7 @@ use radroots_events_codec::follow::encode::{
     FollowMutation, follow_apply, follow_to_wire_parts_after, to_wire_parts,
     to_wire_parts_with_kind,
 };
+use radroots_test_fixtures::{RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS};
 
 #[test]
 fn follow_to_wire_parts_builds_p_tags() {
@@ -147,7 +148,7 @@ fn follow_metadata_and_index_from_event_roundtrip() {
     let tags = vec![vec![
         "p".to_string(),
         "pubkey".to_string(),
-        "wss://relay.example.com".to_string(),
+        RELAY_PRIMARY_WSS.to_string(),
         "alice".to_string(),
         "88".to_string(),
     ]];
@@ -169,7 +170,7 @@ fn follow_metadata_and_index_from_event_roundtrip() {
     assert_eq!(metadata.data.list[0].public_key, "pubkey");
     assert_eq!(
         metadata.data.list[0].relay_url.as_deref(),
-        Some("wss://relay.example.com")
+        Some(RELAY_PRIMARY_WSS)
     );
     assert_eq!(metadata.data.list[0].contact_name.as_deref(), Some("alice"));
 
@@ -443,7 +444,7 @@ fn follow_to_wire_parts_with_kind_and_after_mutation_work() {
         &follow,
         FollowMutation::Toggle {
             public_key: "pubkey-b".to_string(),
-            relay_url: Some("wss://relay.example.com".to_string()),
+            relay_url: Some(RELAY_PRIMARY_WSS.to_string()),
             contact_name: Some("alice".to_string()),
         },
     )
@@ -465,7 +466,7 @@ fn follow_apply_normalizes_optional_fields_and_deduplicates_existing_list() {
             RadrootsFollowProfile {
                 published_at: 2,
                 public_key: "pubkey-a".to_string(),
-                relay_url: Some("wss://duplicate.example.com".to_string()),
+                relay_url: Some(RELAY_SECONDARY_WSS.to_string()),
                 contact_name: Some("duplicate".to_string()),
             },
         ],
@@ -493,7 +494,7 @@ fn follow_apply_follow_with_none_preserves_existing_values() {
         list: vec![RadrootsFollowProfile {
             published_at: 1,
             public_key: "pubkey-a".to_string(),
-            relay_url: Some("wss://relay.example.com".to_string()),
+            relay_url: Some(RELAY_PRIMARY_WSS.to_string()),
             contact_name: Some("alice".to_string()),
         }],
     };
@@ -510,7 +511,7 @@ fn follow_apply_follow_with_none_preserves_existing_values() {
     assert_eq!(updated.list.len(), 1);
     assert_eq!(
         updated.list[0].relay_url.as_deref(),
-        Some("wss://relay.example.com")
+        Some(RELAY_PRIMARY_WSS)
     );
     assert_eq!(updated.list[0].contact_name.as_deref(), Some("alice"));
 }

@@ -91,6 +91,11 @@ pub fn to_wire_parts_with_kind(
 mod tests {
     use super::*;
     use radroots_events::document::RadrootsDocumentSubject;
+    use radroots_test_fixtures::FIXTURE_ALICE_PUBLIC_KEY_HEX;
+
+    fn sample_document_address() -> String {
+        format!("30340:{FIXTURE_ALICE_PUBLIC_KEY_HEX}:AAAAAAAAAAAAAAAAAAAAAA")
+    }
 
     fn sample_document() -> RadrootsDocument {
         RadrootsDocument {
@@ -102,12 +107,8 @@ mod tests {
             effective_at: None,
             body_markdown: None,
             subject: RadrootsDocumentSubject {
-                pubkey: "58e318557257f2ab58a415d21bb57082b4824cf667a1d64e72bcbc5acc018c62"
-                    .to_string(),
-                address: Some(
-                    "30340:58e318557257f2ab58a415d21bb57082b4824cf667a1d64e72bcbc5acc018c62:AAAAAAAAAAAAAAAAAAAAAA"
-                        .to_string(),
-                ),
+                pubkey: FIXTURE_ALICE_PUBLIC_KEY_HEX.to_string(),
+                address: Some(sample_document_address()),
             },
             tags: None,
         }

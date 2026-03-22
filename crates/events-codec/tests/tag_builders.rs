@@ -46,9 +46,16 @@ use radroots_events_codec::job::encode::JobEncodeError;
 use radroots_events_codec::listing::encode::listing_build_tags;
 use radroots_events_codec::listing::tags::{ListingTagOptions, listing_tags_with_options};
 use radroots_events_codec::tag_builders::RadrootsEventTagBuilder;
+use radroots_test_fixtures::{
+    CDN_PRIMARY_HTTPS, FIXTURE_ALICE_NPUB, FIXTURE_ALICE_PUBLIC_KEY_HEX, RELAY_PRIMARY_WSS,
+};
 
-const TEST_PUBKEY_HEX: &str = "58e318557257f2ab58a415d21bb57082b4824cf667a1d64e72bcbc5acc018c62";
-const TEST_NPUB: &str = "npub1tr33s4tj2le2kk9yzhfphdtss26gyn8kv7savnnjhj794nqp333q8e7grr";
+const TEST_PUBKEY_HEX: &str = FIXTURE_ALICE_PUBLIC_KEY_HEX;
+const TEST_NPUB: &str = FIXTURE_ALICE_NPUB;
+
+fn cdn_url(path: &str) -> String {
+    format!("{CDN_PRIMARY_HTTPS}/{path}")
+}
 
 fn sample_event_ref(id: &str) -> RadrootsNostrEventRef {
     RadrootsNostrEventRef {
@@ -170,12 +177,12 @@ fn event_tag_builder_impls_build_tags_for_all_supported_types() {
     let message = RadrootsMessage {
         recipients: vec![RadrootsMessageRecipient {
             public_key: TEST_PUBKEY_HEX.to_string(),
-            relay_url: Some("wss://relay.example.com".to_string()),
+            relay_url: Some(RELAY_PRIMARY_WSS.to_string()),
         }],
         content: "hello".to_string(),
         reply_to: Some(RadrootsNostrEventPtr {
             id: "reply".to_string(),
-            relays: Some("wss://relay.example.com".to_string()),
+            relays: Some(RELAY_PRIMARY_WSS.to_string()),
         }),
         subject: Some("topic".to_string()),
     };
@@ -186,7 +193,7 @@ fn event_tag_builder_impls_build_tags_for_all_supported_types() {
             public_key: TEST_PUBKEY_HEX.to_string(),
             relay_url: None,
         }],
-        file_url: "https://files.example.com/blob".to_string(),
+        file_url: cdn_url("blob"),
         reply_to: None,
         subject: None,
         file_type: "image/jpeg".to_string(),
@@ -199,7 +206,7 @@ fn event_tag_builder_impls_build_tags_for_all_supported_types() {
         dimensions: None,
         blurhash: None,
         thumb: None,
-        fallbacks: vec!["https://files.example.com/fallback".to_string()],
+        fallbacks: vec![cdn_url("fallback")],
     };
     assert!(!message_file.build_tags().unwrap().is_empty());
 
@@ -215,7 +222,7 @@ fn event_tag_builder_impls_build_tags_for_all_supported_types() {
         list: vec![RadrootsFollowProfile {
             published_at: 1,
             public_key: TEST_PUBKEY_HEX.to_string(),
-            relay_url: Some("wss://relay.example.com".to_string()),
+            relay_url: Some(RELAY_PRIMARY_WSS.to_string()),
             contact_name: Some("alex".to_string()),
         }],
     };
@@ -293,7 +300,7 @@ fn event_tag_builder_impls_build_tags_for_all_supported_types() {
         body_markdown: None,
         subject: RadrootsDocumentSubject {
             pubkey: TEST_PUBKEY_HEX.to_string(),
-            address: Some("30340:58e318557257f2ab58a415d21bb57082b4824cf667a1d64e72bcbc5acc018c62:AAAAAAAAAAAAAAAAAAAAAA".to_string()),
+            address: Some(format!("30340:{TEST_PUBKEY_HEX}:AAAAAAAAAAAAAAAAAAAAAA")),
         },
         tags: None,
     };
@@ -317,7 +324,7 @@ fn event_tag_builder_impls_build_tags_for_all_supported_types() {
         }],
         title: Some("owners".to_string()),
         description: Some("team".to_string()),
-        image: Some("https://example.com/team.png".to_string()),
+        image: Some(format!("{CDN_PRIMARY_HTTPS}/team.png")),
     };
     assert!(!list_set.build_tags().unwrap().is_empty());
 
@@ -348,7 +355,7 @@ fn event_tag_builder_impls_build_tags_for_all_supported_types() {
             value: "bar".to_string(),
         }],
         bid_sat: None,
-        relays: vec!["wss://relay.example.com".to_string()],
+        relays: vec![RELAY_PRIMARY_WSS.to_string()],
         providers: vec![TEST_PUBKEY_HEX.to_string()],
         topics: vec!["topic".to_string()],
         encrypted: false,
@@ -359,7 +366,7 @@ fn event_tag_builder_impls_build_tags_for_all_supported_types() {
         kind: (KIND_JOB_RESULT_MIN + 1) as u16,
         request_event: RadrootsNostrEventPtr {
             id: "req".to_string(),
-            relays: Some("wss://relay.example.com".to_string()),
+            relays: Some(RELAY_PRIMARY_WSS.to_string()),
         },
         request_json: None,
         inputs: vec![RadrootsJobInput {
@@ -384,7 +391,7 @@ fn event_tag_builder_impls_build_tags_for_all_supported_types() {
         extra_info: Some("queued".to_string()),
         request_event: RadrootsNostrEventPtr {
             id: "req".to_string(),
-            relays: Some("wss://relay.example.com".to_string()),
+            relays: Some(RELAY_PRIMARY_WSS.to_string()),
         },
         customer_pubkey: Some(TEST_PUBKEY_HEX.to_string()),
         payment: Some(JobPaymentRequest {
@@ -404,7 +411,7 @@ fn event_tag_builder_impls_build_tags_for_all_supported_types() {
     let gift_wrap = RadrootsGiftWrap {
         recipient: RadrootsGiftWrapRecipient {
             public_key: TEST_PUBKEY_HEX.to_string(),
-            relay_url: Some("wss://relay.example.com".to_string()),
+            relay_url: Some(RELAY_PRIMARY_WSS.to_string()),
         },
         content: "encrypted".to_string(),
         expiration: Some(1700000000),
@@ -458,7 +465,7 @@ fn listing_and_message_builders_cover_optional_shapes() {
         geohash: None,
     });
     listing.images = Some(vec![RadrootsListingImage {
-        url: "https://example.com/a.jpg".to_string(),
+        url: cdn_url("a.jpg"),
         size: Some(RadrootsListingImageSize { w: 1200, h: 800 }),
     }]);
     assert!(!listing_build_tags(&listing).unwrap().is_empty());

@@ -8,6 +8,7 @@ use radroots_events_codec::message::decode::{
     data_from_event, message_from_tags, parsed_from_event,
 };
 use radroots_events_codec::message::encode::{message_build_tags, to_wire_parts};
+use radroots_test_fixtures::{RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS};
 
 #[test]
 fn message_build_tags_requires_recipients() {
@@ -88,13 +89,13 @@ fn message_to_wire_parts_sets_tags() {
             },
             RadrootsMessageRecipient {
                 public_key: "pub2".to_string(),
-                relay_url: Some("wss://relay.example".to_string()),
+                relay_url: Some(RELAY_PRIMARY_WSS.to_string()),
             },
         ],
         content: "hello".to_string(),
         reply_to: Some(RadrootsNostrEventPtr {
             id: "reply".to_string(),
-            relays: Some("wss://reply.example".to_string()),
+            relays: Some(RELAY_SECONDARY_WSS.to_string()),
         }),
         subject: Some("topic".to_string()),
     };
@@ -109,12 +110,12 @@ fn message_to_wire_parts_sets_tags() {
             vec![
                 "p".to_string(),
                 "pub2".to_string(),
-                "wss://relay.example".to_string()
+                RELAY_PRIMARY_WSS.to_string()
             ],
             vec![
                 "e".to_string(),
                 "reply".to_string(),
-                "wss://reply.example".to_string()
+                RELAY_SECONDARY_WSS.to_string()
             ],
             vec!["subject".to_string(), "topic".to_string()],
         ]
@@ -188,12 +189,12 @@ fn message_roundtrip_from_tags() {
         vec![
             "p".to_string(),
             "pub2".to_string(),
-            "wss://relay.example".to_string(),
+            RELAY_PRIMARY_WSS.to_string(),
         ],
         vec![
             "e".to_string(),
             "reply".to_string(),
-            "wss://reply.example".to_string(),
+            RELAY_SECONDARY_WSS.to_string(),
         ],
         vec!["subject".to_string(), "topic".to_string()],
     ];
@@ -206,7 +207,7 @@ fn message_roundtrip_from_tags() {
     assert_eq!(message.recipients[1].public_key, "pub2");
     assert_eq!(
         message.recipients[1].relay_url,
-        Some("wss://relay.example".to_string())
+        Some(RELAY_PRIMARY_WSS.to_string())
     );
     assert_eq!(message.content, "hello");
     assert_eq!(
@@ -215,7 +216,7 @@ fn message_roundtrip_from_tags() {
     );
     assert_eq!(
         message.reply_to.as_ref().and_then(|r| r.relays.as_deref()),
-        Some("wss://reply.example")
+        Some(RELAY_SECONDARY_WSS)
     );
     assert_eq!(message.subject.as_deref(), Some("topic"));
 
@@ -241,12 +242,12 @@ fn message_metadata_and_index_from_event_roundtrip() {
         vec![
             "p".to_string(),
             "pub2".to_string(),
-            "wss://relay.example".to_string(),
+            RELAY_PRIMARY_WSS.to_string(),
         ],
         vec![
             "e".to_string(),
             "reply".to_string(),
-            "wss://reply.example".to_string(),
+            RELAY_SECONDARY_WSS.to_string(),
         ],
         vec!["subject".to_string(), "topic".to_string()],
     ];

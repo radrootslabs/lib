@@ -8,14 +8,15 @@ use radroots_events_codec::job::encode::JobEncodeError;
 use radroots_events_codec::job::error::JobParseError;
 use radroots_events_codec::job::result::decode::{job_result_from_tags, parsed_from_event};
 use radroots_events_codec::job::result::encode::to_wire_parts;
+use radroots_test_fixtures::{APP_PRIMARY_HTTPS, RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS};
 
 fn sample_result() -> RadrootsJobResult {
     RadrootsJobResult {
         kind: (KIND_JOB_RESULT_MIN + 1) as u16,
-        request_event: common::event_ptr("req", Some("wss://relay")),
+        request_event: common::event_ptr("req", Some(RELAY_PRIMARY_WSS)),
         request_json: Some("{\"foo\":\"bar\"}".to_string()),
         inputs: vec![RadrootsJobInput {
-            data: "https://example.com".to_string(),
+            data: APP_PRIMARY_HTTPS.to_string(),
             input_type: JobInputType::Url,
             relay: None,
             marker: None,
@@ -54,7 +55,7 @@ fn job_result_roundtrip_preserves_input_relay_and_marker() {
     res.inputs = vec![RadrootsJobInput {
         data: "note1payload".to_string(),
         input_type: JobInputType::Event,
-        relay: Some("wss://relay.input.example.com".to_string()),
+        relay: Some(RELAY_SECONDARY_WSS.to_string()),
         marker: Some("root".to_string()),
     }];
     let content = res.content.clone().unwrap();

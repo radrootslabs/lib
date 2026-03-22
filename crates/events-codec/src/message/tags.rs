@@ -156,6 +156,7 @@ pub(crate) fn parse_subject_tag(tags: &[Vec<String>]) -> Result<Option<String>, 
 mod tests {
     use super::*;
     use radroots_events::{RadrootsNostrEventPtr, message::RadrootsMessageRecipient};
+    use radroots_test_fixtures::RELAY_PRIMARY_WSS;
 
     #[test]
     fn parse_recipients_rejects_missing_p_tags() {
@@ -199,7 +200,7 @@ mod tests {
     fn build_and_parse_reply_tags_cover_optional_relay_paths() {
         let tag = build_reply_tag(&Some(RadrootsNostrEventPtr {
             id: "reply".to_string(),
-            relays: Some("wss://relay.example.com".to_string()),
+            relays: Some(RELAY_PRIMARY_WSS.to_string()),
         }))
         .expect("build reply tag")
         .expect("reply tag");
@@ -207,7 +208,7 @@ mod tests {
         let parsed = parse_reply_tag(&[tag]).expect("parse reply");
         assert_eq!(
             parsed.and_then(|value| value.relays),
-            Some("wss://relay.example.com".to_string())
+            Some(RELAY_PRIMARY_WSS.to_string())
         );
 
         let tag = build_reply_tag(&Some(RadrootsNostrEventPtr {
@@ -244,7 +245,7 @@ mod tests {
 
         let tags = build_recipient_tags(&[RadrootsMessageRecipient {
             public_key: "recipient".to_string(),
-            relay_url: Some("wss://relay.example.com".to_string()),
+            relay_url: Some(RELAY_PRIMARY_WSS.to_string()),
         }])
         .expect("recipient tag");
         assert_eq!(tags.len(), 1);
@@ -296,7 +297,7 @@ mod tests {
             vec![
                 "p".to_string(),
                 "recipient-2".to_string(),
-                "wss://relay.example.com".to_string(),
+                RELAY_PRIMARY_WSS.to_string(),
             ],
         ])
         .expect("parse recipients");

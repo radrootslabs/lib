@@ -39,8 +39,9 @@ use radroots_events_codec::resource_area::list_sets::{
     resource_area_stewards_list_set,
 };
 use radroots_events_codec::resource_cap::encode::resource_harvest_cap_build_tags;
+use radroots_test_fixtures::FIXTURE_ALICE_PUBLIC_KEY_HEX;
 
-const VALID_PUBKEY: &str = "58e318557257f2ab58a415d21bb57082b4824cf667a1d64e72bcbc5acc018c62";
+const VALID_PUBKEY: &str = FIXTURE_ALICE_PUBLIC_KEY_HEX;
 const VALID_FARM_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAA";
 const VALID_PLOT_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAQ";
 const VALID_COOP_D_TAG: &str = "BAAAAAAAAAAAAAAAAAAAAA";

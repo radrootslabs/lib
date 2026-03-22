@@ -6,6 +6,7 @@ use radroots_events_codec::event_ref::{
     build_event_ref_tag, find_event_ref_tag, parse_event_ref_tag, parse_nip10_ref_tags,
     push_nip10_ref_tags,
 };
+use radroots_test_fixtures::{RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS, RELAY_TERTIARY_WSS};
 
 #[test]
 fn build_and_parse_roundtrip_with_d_tag_and_relays() {
@@ -135,7 +136,7 @@ fn push_and_parse_nip10_ref_tags_roundtrip_with_and_without_a_tag() {
         "author",
         KIND_POST,
         "AAAAAAAAAAAAAAAAAAAAAA",
-        Some(vec!["wss://relay.example.com".to_string()]),
+        Some(vec![RELAY_PRIMARY_WSS.to_string()]),
     );
     let mut tags = Vec::new();
     push_nip10_ref_tags(&mut tags, &event, "e", "p", "k", "a");
@@ -252,35 +253,29 @@ fn parse_nip10_ref_tags_prefers_e_relays_and_can_fall_back_to_a_relays() {
         vec![
             "a".to_string(),
             format!("{}:{}:{}", KIND_POST, "author", "AAAAAAAAAAAAAAAAAAAAAA"),
-            "wss://relay.a.example.com".to_string(),
+            RELAY_SECONDARY_WSS.to_string(),
         ],
     ];
     let parsed = parse_nip10_ref_tags(&tags, "e", "p", "k", "a").unwrap();
     assert_eq!(parsed.d_tag.as_deref(), Some("AAAAAAAAAAAAAAAAAAAAAA"));
-    assert_eq!(
-        parsed.relays,
-        Some(vec!["wss://relay.a.example.com".to_string()])
-    );
+    assert_eq!(parsed.relays, Some(vec![RELAY_SECONDARY_WSS.to_string()]));
 
     let tags = vec![
         vec![
             "e".to_string(),
             "id".to_string(),
-            "wss://relay.e.example.com".to_string(),
+            RELAY_PRIMARY_WSS.to_string(),
         ],
         vec!["p".to_string(), "author".to_string()],
         vec!["k".to_string(), KIND_POST.to_string()],
         vec![
             "a".to_string(),
             format!("{}:{}:{}", KIND_POST, "author", "AAAAAAAAAAAAAAAAAAAAAA"),
-            "wss://relay.a.example.com".to_string(),
+            RELAY_SECONDARY_WSS.to_string(),
         ],
     ];
     let parsed = parse_nip10_ref_tags(&tags, "e", "p", "k", "a").unwrap();
-    assert_eq!(
-        parsed.relays,
-        Some(vec!["wss://relay.e.example.com".to_string()])
-    );
+    assert_eq!(parsed.relays, Some(vec![RELAY_PRIMARY_WSS.to_string()]));
 }
 
 #[test]
@@ -298,7 +293,7 @@ fn parse_nip10_ref_tags_skips_invalid_a_tags_until_match() {
                 "author",
                 "AAAAAAAAAAAAAAAAAAAAAA"
             ),
-            "wss://relay.bad-kind.example.com".to_string(),
+            RELAY_PRIMARY_WSS.to_string(),
         ],
         vec![
             "a".to_string(),
@@ -306,21 +301,18 @@ fn parse_nip10_ref_tags_skips_invalid_a_tags_until_match() {
                 "{}:{}:{}",
                 KIND_POST, "other-author", "AAAAAAAAAAAAAAAAAAAAAA"
             ),
-            "wss://relay.bad-author.example.com".to_string(),
+            RELAY_SECONDARY_WSS.to_string(),
         ],
         vec![
             "a".to_string(),
             format!("{}:{}:", KIND_POST, "author"),
-            "wss://relay.empty-d.example.com".to_string(),
+            RELAY_TERTIARY_WSS.to_string(),
         ],
     ];
 
     let parsed = parse_nip10_ref_tags(&tags, "e", "p", "k", "a").unwrap();
     assert!(parsed.d_tag.is_none());
-    assert_eq!(
-        parsed.relays,
-        Some(vec!["wss://relay.empty-d.example.com".to_string()])
-    );
+    assert_eq!(parsed.relays, Some(vec![RELAY_TERTIARY_WSS.to_string()]));
 
     let tags = vec![
         vec!["e".to_string(), "id".to_string()],

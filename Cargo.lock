@@ -2125,6 +2125,7 @@ dependencies = [
  "nostr",
  "radroots-core",
  "radroots-events",
+ "radroots-test-fixtures",
  "serde",
  "serde_json",
 ]
@@ -2441,6 +2442,10 @@ dependencies = [
  "uuid",
  "wasm-bindgen",
 ]
+
+[[package]]
+name = "radroots-test-fixtures"
+version = "0.1.0-alpha.1"
 
 [[package]]
 name = "radroots-trade"

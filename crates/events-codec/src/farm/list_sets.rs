@@ -215,6 +215,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use radroots_test_fixtures::FIXTURE_ALICE_PUBLIC_KEY_HEX;
 
     #[test]
     fn farm_list_set_id_validates_farm_id() {
@@ -228,7 +229,7 @@ mod tests {
     #[test]
     fn farm_list_set_builders_cover_success_and_error_paths() {
         let farm_id = "AAAAAAAAAAAAAAAAAAAAAA";
-        let farm_pubkey = "58e318557257f2ab58a415d21bb57082b4824cf667a1d64e72bcbc5acc018c62";
+        let farm_pubkey = FIXTURE_ALICE_PUBLIC_KEY_HEX;
 
         let err = farm_members_list_set("invalid", ["member-a"]).expect_err("invalid farm id");
         assert!(matches!(err, EventEncodeError::InvalidField("farm_id")));

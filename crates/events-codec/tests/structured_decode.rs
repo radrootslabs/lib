@@ -42,9 +42,10 @@ use radroots_events_codec::resource_cap::decode::{
     data_from_event as resource_cap_metadata_from_event,
     parsed_from_event as resource_cap_index_from_event, resource_harvest_cap_from_event,
 };
+use radroots_test_fixtures::{FIXTURE_ALICE_NPUB, FIXTURE_ALICE_PUBLIC_KEY_HEX};
 
-const TEST_NPUB: &str = "npub1tr33s4tj2le2kk9yzhfphdtss26gyn8kv7savnnjhj794nqp333q8e7grr";
-const TEST_PUBKEY_HEX: &str = "58e318557257f2ab58a415d21bb57082b4824cf667a1d64e72bcbc5acc018c62";
+const TEST_NPUB: &str = FIXTURE_ALICE_NPUB;
+const TEST_PUBKEY_HEX: &str = FIXTURE_ALICE_PUBLIC_KEY_HEX;
 
 fn sample_gcs() -> RadrootsGcsLocation {
     RadrootsGcsLocation {

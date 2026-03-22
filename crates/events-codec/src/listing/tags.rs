@@ -620,12 +620,18 @@ mod tests {
     use radroots_events::listing::{
         RadrootsListingImageSize, RadrootsListingProduct, RadrootsListingStatus,
     };
+    use radroots_test_fixtures::{
+        CDN_PRIMARY_HTTPS, FIXTURE_ALICE_NPUB, FIXTURE_ALICE_PUBLIC_KEY_HEX,
+    };
 
-    const TEST_NPUB: &str = "npub1tr33s4tj2le2kk9yzhfphdtss26gyn8kv7savnnjhj794nqp333q8e7grr";
-    const TEST_PUBKEY_HEX: &str =
-        "58e318557257f2ab58a415d21bb57082b4824cf667a1d64e72bcbc5acc018c62";
+    const TEST_NPUB: &str = FIXTURE_ALICE_NPUB;
+    const TEST_PUBKEY_HEX: &str = FIXTURE_ALICE_PUBLIC_KEY_HEX;
     const TEST_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAg";
     const TEST_FARM_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAA";
+
+    fn cdn_url(path: &str) -> String {
+        format!("{CDN_PRIMARY_HTTPS}/{path}")
+    }
 
     fn decimal(value: &str) -> RadrootsCoreDecimal {
         RadrootsCoreDecimal::from_str(value).expect("valid decimal")
@@ -701,7 +707,7 @@ mod tests {
             }),
             images: Some(vec![
                 RadrootsListingImage {
-                    url: "https://example.com/a.jpg".to_string(),
+                    url: cdn_url("a.jpg"),
                     size: Some(RadrootsListingImageSize { w: 1200, h: 800 }),
                 },
                 RadrootsListingImage {
@@ -935,7 +941,7 @@ mod tests {
     #[test]
     fn image_and_status_helpers_cover_variants() {
         let with_size = tag_listing_image(&RadrootsListingImage {
-            url: " https://example.com/a.jpg ".to_string(),
+            url: format!(" {CDN_PRIMARY_HTTPS}/a.jpg "),
             size: Some(RadrootsListingImageSize { w: 10, h: 20 }),
         })
         .expect("image tag");
@@ -943,7 +949,7 @@ mod tests {
         assert_eq!(with_size[2], "10x20");
 
         let without_size = tag_listing_image(&RadrootsListingImage {
-            url: "https://example.com/b.jpg".to_string(),
+            url: cdn_url("b.jpg"),
             size: None,
         })
         .expect("image tag");

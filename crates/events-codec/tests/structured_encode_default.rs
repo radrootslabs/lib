@@ -39,8 +39,9 @@ use radroots_events_codec::resource_area::list_sets::{
     resource_area_stewards_list_set,
 };
 use radroots_events_codec::resource_cap::encode::resource_harvest_cap_build_tags;
+use radroots_test_fixtures::FIXTURE_ALICE_PUBLIC_KEY_HEX;
 
-const TEST_PUBKEY_HEX: &str = "58e318557257f2ab58a415d21bb57082b4824cf667a1d64e72bcbc5acc018c62";
+const TEST_PUBKEY_HEX: &str = FIXTURE_ALICE_PUBLIC_KEY_HEX;
 
 fn sample_gcs() -> RadrootsGcsLocation {
     RadrootsGcsLocation {
@@ -205,7 +206,7 @@ fn structured_build_tags_cover_optional_and_error_paths() {
         body_markdown: None,
         subject: RadrootsDocumentSubject {
             pubkey: TEST_PUBKEY_HEX.to_string(),
-            address: Some("30340:58e318557257f2ab58a415d21bb57082b4824cf667a1d64e72bcbc5acc018c62:AAAAAAAAAAAAAAAAAAAAAA".to_string()),
+            address: Some(format!("30340:{TEST_PUBKEY_HEX}:AAAAAAAAAAAAAAAAAAAAAA")),
         },
         tags: Some(vec!["policy".to_string(), " ".to_string()]),
     };
@@ -357,10 +358,7 @@ fn structured_build_tags_cover_required_field_errors() {
         body_markdown: None,
         subject: RadrootsDocumentSubject {
             pubkey: TEST_PUBKEY_HEX.to_string(),
-            address: Some(
-                "30340:58e318557257f2ab58a415d21bb57082b4824cf667a1d64e72bcbc5acc018c62:AAAAAAAAAAAAAAAAAAAAAA"
-                    .to_string(),
-            ),
+            address: Some(format!("30340:{TEST_PUBKEY_HEX}:AAAAAAAAAAAAAAAAAAAAAA")),
         },
         tags: None,
     };

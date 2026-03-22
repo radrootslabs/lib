@@ -5,14 +5,15 @@ use radroots_events_codec::job::encode::JobEncodeError;
 use radroots_events_codec::job::error::JobParseError;
 use radroots_events_codec::job::request::decode::{job_request_from_tags, parsed_from_event};
 use radroots_events_codec::job::request::encode::to_wire_parts;
+use radroots_test_fixtures::{APP_PRIMARY_HTTPS, RELAY_PRIMARY_WSS};
 
 fn sample_request() -> RadrootsJobRequest {
     RadrootsJobRequest {
         kind: (KIND_JOB_REQUEST_MIN + 1) as u16,
         inputs: vec![RadrootsJobInput {
-            data: "https://example.com".to_string(),
+            data: APP_PRIMARY_HTTPS.to_string(),
             input_type: JobInputType::Url,
-            relay: Some("wss://relay".to_string()),
+            relay: Some(RELAY_PRIMARY_WSS.to_string()),
             marker: Some("source".to_string()),
         }],
         output: Some("json".to_string()),
@@ -21,7 +22,7 @@ fn sample_request() -> RadrootsJobRequest {
             value: "bar".to_string(),
         }],
         bid_sat: Some(250),
-        relays: vec!["wss://relay".to_string()],
+        relays: vec![RELAY_PRIMARY_WSS.to_string()],
         providers: vec!["provider".to_string()],
         topics: vec!["topic".to_string()],
         encrypted: false,

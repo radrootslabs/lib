@@ -182,6 +182,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use radroots_test_fixtures::FIXTURE_ALICE_PUBLIC_KEY_HEX;
 
     #[test]
     fn coop_list_set_id_validates_coop_id() {
@@ -243,7 +244,7 @@ mod tests {
         ));
 
         let err = farm_address(&RadrootsFarmRef {
-            pubkey: "58e318557257f2ab58a415d21bb57082b4824cf667a1d64e72bcbc5acc018c62".to_string(),
+            pubkey: FIXTURE_ALICE_PUBLIC_KEY_HEX.to_string(),
             d_tag: " ".to_string(),
         })
         .expect_err("expected empty d_tag error");
@@ -253,7 +254,7 @@ mod tests {
         ));
 
         let err = farm_address(&RadrootsFarmRef {
-            pubkey: "58e318557257f2ab58a415d21bb57082b4824cf667a1d64e72bcbc5acc018c62".to_string(),
+            pubkey: FIXTURE_ALICE_PUBLIC_KEY_HEX.to_string(),
             d_tag: "invalid".to_string(),
         })
         .expect_err("expected invalid d_tag error");
@@ -329,7 +330,7 @@ mod tests {
     #[test]
     fn coop_members_farms_list_set_covers_success_and_invalid_coop_id() {
         let farms = vec![RadrootsFarmRef {
-            pubkey: "58e318557257f2ab58a415d21bb57082b4824cf667a1d64e72bcbc5acc018c62".to_string(),
+            pubkey: FIXTURE_ALICE_PUBLIC_KEY_HEX.to_string(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
         }];
         let list_set = coop_members_farms_list_set("AAAAAAAAAAAAAAAAAAAAAA", farms.clone())

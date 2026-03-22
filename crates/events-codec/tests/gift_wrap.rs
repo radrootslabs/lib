@@ -8,12 +8,13 @@ use radroots_events_codec::gift_wrap::decode::{
 use radroots_events_codec::gift_wrap::encode::{
     gift_wrap_build_tags, to_wire_parts, to_wire_parts_with_kind,
 };
+use radroots_test_fixtures::RELAY_PRIMARY_WSS;
 
 fn sample_gift_wrap() -> RadrootsGiftWrap {
     RadrootsGiftWrap {
         recipient: RadrootsGiftWrapRecipient {
             public_key: "pubkey".to_string(),
-            relay_url: Some("wss://relay.example".to_string()),
+            relay_url: Some(RELAY_PRIMARY_WSS.to_string()),
         },
         content: "encrypted".to_string(),
         expiration: Some(1700000000),
@@ -45,7 +46,7 @@ fn gift_wrap_to_wire_parts_sets_kind_content_and_tags() {
             vec![
                 "p".to_string(),
                 "pubkey".to_string(),
-                "wss://relay.example".to_string()
+                RELAY_PRIMARY_WSS.to_string()
             ],
             vec!["expiration".to_string(), "1700000000".to_string()],
         ]
@@ -84,7 +85,7 @@ fn gift_wrap_from_tags_rejects_invalid_expiration_and_relay() {
             vec![
                 "p".to_string(),
                 "pubkey".to_string(),
-                "wss://relay.example".to_string(),
+                RELAY_PRIMARY_WSS.to_string(),
             ],
             vec!["expiration".to_string(), " ".to_string()],
         ],
@@ -99,7 +100,7 @@ fn gift_wrap_from_tags_rejects_invalid_expiration_and_relay() {
             vec![
                 "p".to_string(),
                 "pubkey".to_string(),
-                "wss://relay.example".to_string(),
+                RELAY_PRIMARY_WSS.to_string(),
             ],
             vec!["expiration".to_string(), "invalid".to_string()],
         ],
@@ -173,7 +174,7 @@ fn gift_wrap_build_tags_handles_optional_expiration_and_invalid_relay() {
         vec![vec![
             "p".to_string(),
             "pubkey".to_string(),
-            "wss://relay.example".to_string()
+            RELAY_PRIMARY_WSS.to_string()
         ]]
     );
 

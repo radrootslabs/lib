@@ -158,6 +158,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use radroots_test_fixtures::{FIXTURE_ALICE_PUBLIC_KEY_HEX, FIXTURE_BOB_PUBLIC_KEY_HEX};
 
     #[test]
     fn resource_list_set_id_validates_area_id() {
@@ -244,8 +245,8 @@ mod tests {
     #[test]
     fn resource_area_list_set_builders_cover_success_and_error_paths() {
         let area_id = "AAAAAAAAAAAAAAAAAAAAAA";
-        let farm_pubkey = "58e318557257f2ab58a415d21bb57082b4824cf667a1d64e72bcbc5acc018c62";
-        let plot_pubkey = "1487cc4a73c21190f2e518314a4f2b8995f546f2f2f56600fdf45be7d1676763";
+        let farm_pubkey = FIXTURE_ALICE_PUBLIC_KEY_HEX;
+        let plot_pubkey = FIXTURE_BOB_PUBLIC_KEY_HEX;
 
         let err = resource_area_members_farms_list_set(
             "invalid",

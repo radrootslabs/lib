@@ -108,13 +108,13 @@ mod tests {
     use radroots_core::{RadrootsCoreDecimal, RadrootsCoreQuantity, RadrootsCoreUnit};
     use radroots_events::resource_area::RadrootsResourceAreaRef;
     use radroots_events::resource_cap::RadrootsResourceHarvestProduct;
+    use radroots_test_fixtures::FIXTURE_ALICE_PUBLIC_KEY_HEX;
 
     fn sample_cap_with_category(category: Option<&str>) -> RadrootsResourceHarvestCap {
         RadrootsResourceHarvestCap {
             d_tag: "AAAAAAAAAAAAAAAAAAAABA".to_string(),
             resource_area: RadrootsResourceAreaRef {
-                pubkey: "58e318557257f2ab58a415d21bb57082b4824cf667a1d64e72bcbc5acc018c62"
-                    .to_string(),
+                pubkey: FIXTURE_ALICE_PUBLIC_KEY_HEX.to_string(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
             },
             product: RadrootsResourceHarvestProduct {

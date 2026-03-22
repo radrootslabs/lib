@@ -8,6 +8,11 @@ use radroots_events_codec::list_set::decode::{
     data_from_event, list_set_from_tags, parsed_from_event,
 };
 use radroots_events_codec::list_set::encode::{list_set_build_tags, to_wire_parts_with_kind};
+use radroots_test_fixtures::APP_PRIMARY_HTTPS;
+
+fn app_url(path: &str) -> String {
+    format!("{APP_PRIMARY_HTTPS}/{path}")
+}
 
 fn sample_list_set() -> RadrootsListSet {
     RadrootsListSet {
@@ -25,7 +30,7 @@ fn sample_list_set() -> RadrootsListSet {
         ],
         title: Some("owners".to_string()),
         description: Some("core team".to_string()),
-        image: Some("https://example.com/team.png".to_string()),
+        image: Some(app_url("team.png")),
     }
 }
 
@@ -217,14 +222,15 @@ fn list_set_decode_keeps_first_optional_display_tags() {
         vec!["title".to_string(), "ignored".to_string()],
         vec!["description".to_string(), "team".to_string()],
         vec!["description".to_string(), "ignored".to_string()],
-        vec!["image".to_string(), "https://example.com/a.png".to_string()],
-        vec!["image".to_string(), "https://example.com/b.png".to_string()],
+        vec!["image".to_string(), app_url("a.png")],
+        vec!["image".to_string(), app_url("b.png")],
         vec!["p".to_string(), "owner".to_string()],
     ];
     let decoded = list_set_from_tags(KIND_LIST_SET_FOLLOW, "private".to_string(), &tags).unwrap();
+    let expected_image = app_url("a.png");
     assert_eq!(decoded.title.as_deref(), Some("owners"));
     assert_eq!(decoded.description.as_deref(), Some("team"));
-    assert_eq!(decoded.image.as_deref(), Some("https://example.com/a.png"));
+    assert_eq!(decoded.image.as_deref(), Some(expected_image.as_str()));
 }
 
 #[test]

@@ -5,6 +5,7 @@ use radroots_events_codec::job::util::{
     parse_amount_tag_sat, parse_bid_tag_sat, parse_bool_encrypted, parse_i_tags, parse_params,
     push_amount_tag_msat, push_bid_tag_sat,
 };
+use radroots_test_fixtures::{APP_PRIMARY_HTTPS, RELAY_PRIMARY_WSS};
 
 #[test]
 fn parse_bool_encrypted_detects_tag() {
@@ -70,7 +71,7 @@ fn feedback_status_tag_covers_all_variants() {
 #[test]
 fn parse_i_tags_handles_multiple_shapes() {
     let tags = vec![
-        vec!["i".to_string(), "https://example.com".to_string()],
+        vec!["i".to_string(), APP_PRIMARY_HTTPS.to_string()],
         vec!["i".to_string(), "note1abcdef".to_string()],
         vec![
             "i".to_string(),
@@ -92,7 +93,7 @@ fn parse_i_tags_handles_multiple_shapes() {
     let inputs = parse_i_tags(&tags);
     assert_eq!(inputs.len(), 5);
 
-    assert_eq!(inputs[0].data, "https://example.com");
+    assert_eq!(inputs[0].data, APP_PRIMARY_HTTPS);
     assert_eq!(inputs[0].input_type, JobInputType::Url);
     assert!(inputs[0].relay.is_none());
     assert!(inputs[0].marker.is_none());
@@ -148,7 +149,7 @@ fn parse_i_tags_covers_marker_and_fallback_shapes() {
             "i".to_string(),
             "event-id".to_string(),
             "event".to_string(),
-            "wss://relay.example.com".to_string(),
+            RELAY_PRIMARY_WSS.to_string(),
         ],
         vec![
             "i".to_string(),
@@ -161,7 +162,7 @@ fn parse_i_tags_covers_marker_and_fallback_shapes() {
             "i".to_string(),
             "event-id".to_string(),
             "event".to_string(),
-            "wss://relay.example.com".to_string(),
+            RELAY_PRIMARY_WSS.to_string(),
             "final-marker".to_string(),
         ],
         vec!["i".to_string(), "nostr:note1abcdef".to_string()],
@@ -184,11 +185,11 @@ fn parse_i_tags_covers_marker_and_fallback_shapes() {
     assert_eq!(inputs[1].data, "event-id");
     assert_eq!(inputs[2].marker.as_deref(), Some("marker-4"));
     assert_eq!(inputs[2].relay, None);
-    assert_eq!(inputs[3].relay.as_deref(), Some("wss://relay.example.com"));
+    assert_eq!(inputs[3].relay.as_deref(), Some(RELAY_PRIMARY_WSS));
     assert_eq!(inputs[3].marker, None);
     assert_eq!(inputs[4].marker.as_deref(), Some("marker-5"));
     assert_eq!(inputs[4].relay, None);
-    assert_eq!(inputs[5].relay.as_deref(), Some("wss://relay.example.com"));
+    assert_eq!(inputs[5].relay.as_deref(), Some(RELAY_PRIMARY_WSS));
     assert_eq!(inputs[5].marker.as_deref(), Some("final-marker"));
     assert_eq!(inputs[6].input_type, JobInputType::Event);
     assert_eq!(inputs[7].input_type, JobInputType::Event);

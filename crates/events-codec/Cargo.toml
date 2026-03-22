@@ -29,3 +29,6 @@ serde_json = { workspace = true, default-features = false, features = [
   "alloc",
 ], optional = true }
 nostr = { workspace = true, optional = true }
+
+[dev-dependencies]
+radroots-test-fixtures = { workspace = true }

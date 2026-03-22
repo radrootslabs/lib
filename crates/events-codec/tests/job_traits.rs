@@ -8,6 +8,7 @@ use radroots_events_codec::job::feedback::encode::to_wire_parts as to_feedback_w
 use radroots_events_codec::job::request::encode::to_wire_parts as to_request_wire_parts;
 use radroots_events_codec::job::result::encode::to_wire_parts as to_result_wire_parts;
 use radroots_events_codec::job::traits::{BorrowedEventAdapter, JobEventLike};
+use radroots_test_fixtures::{FIXTURE_ALICE_PUBLIC_KEY_HEX, RELAY_PRIMARY_WSS};
 
 fn sample_request() -> RadrootsJobRequest {
     RadrootsJobRequest {
@@ -61,7 +62,7 @@ fn sample_result() -> RadrootsJobResult {
         kind: (KIND_JOB_RESULT_MIN + 1) as u16,
         request_event: radroots_events::RadrootsNostrEventPtr {
             id: "req".to_string(),
-            relays: Some("wss://relay.example.com".to_string()),
+            relays: Some(RELAY_PRIMARY_WSS.to_string()),
         },
         request_json: Some("{\"foo\":\"bar\"}".to_string()),
         inputs: vec![RadrootsJobInput {
@@ -70,9 +71,7 @@ fn sample_result() -> RadrootsJobResult {
             relay: None,
             marker: None,
         }],
-        customer_pubkey: Some(
-            "58e318557257f2ab58a415d21bb57082b4824cf667a1d64e72bcbc5acc018c62".to_string(),
-        ),
+        customer_pubkey: Some(FIXTURE_ALICE_PUBLIC_KEY_HEX.to_string()),
         payment: Some(JobPaymentRequest {
             amount_sat: 1,
             bolt11: None,
@@ -89,11 +88,9 @@ fn sample_feedback() -> RadrootsJobFeedback {
         extra_info: Some("processing".to_string()),
         request_event: radroots_events::RadrootsNostrEventPtr {
             id: "req".to_string(),
-            relays: Some("wss://relay.example.com".to_string()),
+            relays: Some(RELAY_PRIMARY_WSS.to_string()),
         },
-        customer_pubkey: Some(
-            "58e318557257f2ab58a415d21bb57082b4824cf667a1d64e72bcbc5acc018c62".to_string(),
-        ),
+        customer_pubkey: Some(FIXTURE_ALICE_PUBLIC_KEY_HEX.to_string()),
         payment: Some(JobPaymentRequest {
             amount_sat: 2,
             bolt11: None,

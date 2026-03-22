@@ -10,6 +10,11 @@ use radroots_events_codec::message_file::decode::{
 use radroots_events_codec::message_file::encode::{
     message_file_build_tags, to_wire_parts, to_wire_parts_with_kind,
 };
+use radroots_test_fixtures::{CDN_PRIMARY_HTTPS, RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS};
+
+fn file_url(path: &str) -> String {
+    format!("{CDN_PRIMARY_HTTPS}/{path}")
+}
 
 fn sample_message_file() -> RadrootsMessageFile {
     RadrootsMessageFile {
@@ -20,13 +25,13 @@ fn sample_message_file() -> RadrootsMessageFile {
             },
             RadrootsMessageRecipient {
                 public_key: "pub2".to_string(),
-                relay_url: Some("wss://relay.example".to_string()),
+                relay_url: Some(RELAY_PRIMARY_WSS.to_string()),
             },
         ],
-        file_url: "https://files.example/encrypted.bin".to_string(),
+        file_url: file_url("encrypted.bin"),
         reply_to: Some(RadrootsNostrEventPtr {
             id: "reply".to_string(),
-            relays: Some("wss://reply.example".to_string()),
+            relays: Some(RELAY_SECONDARY_WSS.to_string()),
         }),
         subject: Some("topic".to_string()),
         file_type: "image/jpeg".to_string(),
@@ -38,11 +43,8 @@ fn sample_message_file() -> RadrootsMessageFile {
         size: Some(1200),
         dimensions: Some(RadrootsMessageFileDimensions { w: 1200, h: 800 }),
         blurhash: Some("blurhash".to_string()),
-        thumb: Some("https://files.example/thumb.bin".to_string()),
-        fallbacks: vec![
-            "https://files.example/fallback-1.bin".to_string(),
-            "https://files.example/fallback-2.bin".to_string(),
-        ],
+        thumb: Some(file_url("thumb.bin")),
+        fallbacks: vec![file_url("fallback-1.bin"), file_url("fallback-2.bin")],
     }
 }
 
@@ -193,12 +195,12 @@ fn message_file_to_wire_parts_sets_kind_content_and_tags() {
             vec![
                 "p".to_string(),
                 "pub2".to_string(),
-                "wss://relay.example".to_string()
+                RELAY_PRIMARY_WSS.to_string()
             ],
             vec![
                 "e".to_string(),
                 "reply".to_string(),
-                "wss://reply.example".to_string()
+                RELAY_SECONDARY_WSS.to_string()
             ],
             vec!["subject".to_string(), "topic".to_string()],
             vec!["file-type".to_string(), "image/jpeg".to_string()],
@@ -210,18 +212,9 @@ fn message_file_to_wire_parts_sets_kind_content_and_tags() {
             vec!["size".to_string(), "1200".to_string()],
             vec!["dim".to_string(), "1200x800".to_string()],
             vec!["blurhash".to_string(), "blurhash".to_string()],
-            vec![
-                "thumb".to_string(),
-                "https://files.example/thumb.bin".to_string()
-            ],
-            vec![
-                "fallback".to_string(),
-                "https://files.example/fallback-1.bin".to_string()
-            ],
-            vec![
-                "fallback".to_string(),
-                "https://files.example/fallback-2.bin".to_string()
-            ],
+            vec!["thumb".to_string(), file_url("thumb.bin")],
+            vec!["fallback".to_string(), file_url("fallback-1.bin")],
+            vec!["fallback".to_string(), file_url("fallback-2.bin")],
         ]
     );
 }
@@ -286,7 +279,7 @@ fn message_file_from_tags_rejects_invalid_optional_tags() {
             vec!["x".to_string(), "hash".to_string()],
             vec!["dim".to_string(), "10".to_string()],
         ],
-        "https://files.example/encrypted.bin",
+        &file_url("encrypted.bin"),
     )
     .unwrap_err();
     assert!(matches!(err, EventParseError::InvalidTag("dim")));
@@ -302,7 +295,7 @@ fn message_file_from_tags_rejects_invalid_optional_tags() {
             vec!["x".to_string(), "hash".to_string()],
             vec!["fallback".to_string()],
         ],
-        "https://files.example/encrypted.bin",
+        &file_url("encrypted.bin"),
     )
     .unwrap_err();
     assert!(matches!(err, EventParseError::InvalidTag("fallback")));
@@ -317,7 +310,7 @@ fn message_file_from_tags_rejects_invalid_optional_tags() {
             vec!["decryption-nonce".to_string(), "nonce".to_string()],
             vec!["x".to_string(), "hash".to_string()],
         ],
-        "https://files.example/encrypted.bin",
+        &file_url("encrypted.bin"),
     )
     .unwrap_err();
     assert!(matches!(err, EventParseError::InvalidTag("file-type")));
@@ -333,7 +326,7 @@ fn message_file_from_tags_rejects_invalid_optional_tags() {
             vec!["x".to_string(), "hash".to_string()],
             vec!["size".to_string(), " ".to_string()],
         ],
-        "https://files.example/encrypted.bin",
+        &file_url("encrypted.bin"),
     )
     .unwrap_err();
     assert!(matches!(err, EventParseError::InvalidTag("size")));
@@ -349,7 +342,7 @@ fn message_file_from_tags_rejects_invalid_optional_tags() {
             vec!["x".to_string(), "hash".to_string()],
             vec!["dim".to_string(), " ".to_string()],
         ],
-        "https://files.example/encrypted.bin",
+        &file_url("encrypted.bin"),
     )
     .unwrap_err();
     assert!(matches!(err, EventParseError::InvalidTag("dim")));
@@ -365,7 +358,7 @@ fn message_file_from_tags_rejects_invalid_optional_tags() {
             vec!["x".to_string(), "hash".to_string()],
             vec!["thumb".to_string(), " ".to_string()],
         ],
-        "https://files.example/encrypted.bin",
+        &file_url("encrypted.bin"),
     )
     .unwrap_err();
     assert!(matches!(err, EventParseError::InvalidTag("thumb")));
@@ -381,7 +374,7 @@ fn message_file_from_tags_rejects_invalid_optional_tags() {
             vec!["x".to_string(), "hash".to_string()],
             vec!["fallback".to_string(), " ".to_string()],
         ],
-        "https://files.example/encrypted.bin",
+        &file_url("encrypted.bin"),
     )
     .unwrap_err();
     assert!(matches!(err, EventParseError::InvalidTag("fallback")));
@@ -465,52 +458,32 @@ fn message_file_from_tags_rejects_empty_content() {
 fn message_file_from_tags_rejects_more_invalid_tag_shapes() {
     let mut tags = minimal_message_file_tags();
     tags[1].truncate(1);
-    let err = message_file_from_tags(
-        KIND_MESSAGE_FILE,
-        &tags,
-        "https://files.example/encrypted.bin",
-    )
-    .unwrap_err();
+    let err =
+        message_file_from_tags(KIND_MESSAGE_FILE, &tags, &file_url("encrypted.bin")).unwrap_err();
     assert!(matches!(err, EventParseError::MissingTag("file-type")));
 
     let mut tags = minimal_message_file_tags();
     tags[0][1] = " ".to_string();
-    let err = message_file_from_tags(
-        KIND_MESSAGE_FILE,
-        &tags,
-        "https://files.example/encrypted.bin",
-    )
-    .unwrap_err();
+    let err =
+        message_file_from_tags(KIND_MESSAGE_FILE, &tags, &file_url("encrypted.bin")).unwrap_err();
     assert!(matches!(err, EventParseError::InvalidTag("p")));
 
     let mut tags = minimal_message_file_tags();
     tags.push(vec!["e".to_string(), " ".to_string()]);
-    let err = message_file_from_tags(
-        KIND_MESSAGE_FILE,
-        &tags,
-        "https://files.example/encrypted.bin",
-    )
-    .unwrap_err();
+    let err =
+        message_file_from_tags(KIND_MESSAGE_FILE, &tags, &file_url("encrypted.bin")).unwrap_err();
     assert!(matches!(err, EventParseError::InvalidTag("e")));
 
     let mut tags = minimal_message_file_tags();
     tags.push(vec!["subject".to_string(), " ".to_string()]);
-    let err = message_file_from_tags(
-        KIND_MESSAGE_FILE,
-        &tags,
-        "https://files.example/encrypted.bin",
-    )
-    .unwrap_err();
+    let err =
+        message_file_from_tags(KIND_MESSAGE_FILE, &tags, &file_url("encrypted.bin")).unwrap_err();
     assert!(matches!(err, EventParseError::InvalidTag("subject")));
 
     let mut tags = minimal_message_file_tags();
     tags[2][1] = " ".to_string();
-    let err = message_file_from_tags(
-        KIND_MESSAGE_FILE,
-        &tags,
-        "https://files.example/encrypted.bin",
-    )
-    .unwrap_err();
+    let err =
+        message_file_from_tags(KIND_MESSAGE_FILE, &tags, &file_url("encrypted.bin")).unwrap_err();
     assert!(matches!(
         err,
         EventParseError::InvalidTag("encryption-algorithm")
@@ -518,22 +491,14 @@ fn message_file_from_tags_rejects_more_invalid_tag_shapes() {
 
     let mut tags = minimal_message_file_tags();
     tags[3][1] = " ".to_string();
-    let err = message_file_from_tags(
-        KIND_MESSAGE_FILE,
-        &tags,
-        "https://files.example/encrypted.bin",
-    )
-    .unwrap_err();
+    let err =
+        message_file_from_tags(KIND_MESSAGE_FILE, &tags, &file_url("encrypted.bin")).unwrap_err();
     assert!(matches!(err, EventParseError::InvalidTag("decryption-key")));
 
     let mut tags = minimal_message_file_tags();
     tags[4][1] = " ".to_string();
-    let err = message_file_from_tags(
-        KIND_MESSAGE_FILE,
-        &tags,
-        "https://files.example/encrypted.bin",
-    )
-    .unwrap_err();
+    let err =
+        message_file_from_tags(KIND_MESSAGE_FILE, &tags, &file_url("encrypted.bin")).unwrap_err();
     assert!(matches!(
         err,
         EventParseError::InvalidTag("decryption-nonce")
@@ -541,32 +506,20 @@ fn message_file_from_tags_rejects_more_invalid_tag_shapes() {
 
     let mut tags = minimal_message_file_tags();
     tags[5][1] = " ".to_string();
-    let err = message_file_from_tags(
-        KIND_MESSAGE_FILE,
-        &tags,
-        "https://files.example/encrypted.bin",
-    )
-    .unwrap_err();
+    let err =
+        message_file_from_tags(KIND_MESSAGE_FILE, &tags, &file_url("encrypted.bin")).unwrap_err();
     assert!(matches!(err, EventParseError::InvalidTag("x")));
 
     let mut tags = minimal_message_file_tags();
     tags.push(vec!["ox".to_string(), " ".to_string()]);
-    let err = message_file_from_tags(
-        KIND_MESSAGE_FILE,
-        &tags,
-        "https://files.example/encrypted.bin",
-    )
-    .unwrap_err();
+    let err =
+        message_file_from_tags(KIND_MESSAGE_FILE, &tags, &file_url("encrypted.bin")).unwrap_err();
     assert!(matches!(err, EventParseError::InvalidTag("ox")));
 
     let mut tags = minimal_message_file_tags();
     tags.push(vec!["blurhash".to_string(), " ".to_string()]);
-    let err = message_file_from_tags(
-        KIND_MESSAGE_FILE,
-        &tags,
-        "https://files.example/encrypted.bin",
-    )
-    .unwrap_err();
+    let err =
+        message_file_from_tags(KIND_MESSAGE_FILE, &tags, &file_url("encrypted.bin")).unwrap_err();
     assert!(matches!(err, EventParseError::InvalidTag("blurhash")));
 }
 
@@ -574,21 +527,13 @@ fn message_file_from_tags_rejects_more_invalid_tag_shapes() {
 fn message_file_from_tags_rejects_invalid_dimension_components() {
     let mut tags = minimal_message_file_tags();
     tags.push(vec!["dim".to_string(), "badx10".to_string()]);
-    let err = message_file_from_tags(
-        KIND_MESSAGE_FILE,
-        &tags,
-        "https://files.example/encrypted.bin",
-    )
-    .unwrap_err();
+    let err =
+        message_file_from_tags(KIND_MESSAGE_FILE, &tags, &file_url("encrypted.bin")).unwrap_err();
     assert!(matches!(err, EventParseError::InvalidTag("dim")));
 
     let mut tags = minimal_message_file_tags();
     tags.push(vec!["dim".to_string(), "10xbad".to_string()]);
-    let err = message_file_from_tags(
-        KIND_MESSAGE_FILE,
-        &tags,
-        "https://files.example/encrypted.bin",
-    )
-    .unwrap_err();
+    let err =
+        message_file_from_tags(KIND_MESSAGE_FILE, &tags, &file_url("encrypted.bin")).unwrap_err();
     assert!(matches!(err, EventParseError::InvalidTag("dim")));
 }
