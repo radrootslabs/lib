@@ -492,6 +492,36 @@ impl RadrootsNostrSignerManager {
         })
     }
 
+    pub fn restore_pending_auth_challenge(
+        &self,
+        connection_id: &RadrootsNostrSignerConnectionId,
+        pending_request: RadrootsNostrSignerPendingRequest,
+    ) -> Result<RadrootsNostrSignerConnectionRecord, RadrootsNostrSignerError> {
+        self.update_state_with(|state| {
+            let restored_at_unix = now_unix_secs();
+            let record = find_connection_mut(state, connection_id)?;
+            if record.is_terminal() {
+                return Err(RadrootsNostrSignerError::InvalidState(format!(
+                    "cannot restore auth challenge for {} connection",
+                    status_label(record.status)
+                )));
+            }
+            if record.auth_state != RadrootsNostrSignerAuthState::Authorized {
+                return Err(RadrootsNostrSignerError::InvalidState(
+                    "auth challenge not authorized for connection".into(),
+                ));
+            }
+            if record.auth_challenge.is_none() {
+                return Err(RadrootsNostrSignerError::InvalidState(
+                    "auth challenge missing for connection".into(),
+                ));
+            }
+
+            record.restore_pending_auth_challenge(pending_request, restored_at_unix);
+            Ok(record.clone())
+        })
+    }
+
     pub fn mark_authenticated(
         &self,
         connection_id: &RadrootsNostrSignerConnectionId,
@@ -1708,6 +1738,57 @@ mod tests {
             no_authorize
                 .to_string()
                 .contains("auth challenge not pending for connection")
+        );
+    }
+
+    #[test]
+    fn restored_authorized_auth_challenge_requeues_pending_request() {
+        let manager = RadrootsNostrSignerManager::new_in_memory();
+        manager
+            .set_signer_identity(public_identity(
+                "0000000000000000000000000000000000000000000000000000000000000134",
+            ))
+            .expect("set signer");
+        let record = manager
+            .register_connection(RadrootsNostrSignerConnectionDraft::new(
+                public_key("0000000000000000000000000000000000000000000000000000000000000135"),
+                public_identity("0000000000000000000000000000000000000000000000000000000000000136"),
+            ))
+            .expect("register");
+
+        manager
+            .require_auth_challenge(&record.connection_id, "https://auth.example/flow")
+            .expect("require auth");
+        manager
+            .set_pending_request(&record.connection_id, request_message("req-replay"))
+            .expect("set pending");
+
+        let authorized = manager
+            .authorize_auth_challenge(&record.connection_id)
+            .expect("authorize");
+        let pending_request = authorized.pending_request.expect("pending request");
+
+        let restored = manager
+            .restore_pending_auth_challenge(&record.connection_id, pending_request.clone())
+            .expect("restore pending challenge");
+        assert_eq!(restored.auth_state, RadrootsNostrSignerAuthState::Pending);
+        assert_eq!(
+            restored
+                .auth_challenge
+                .as_ref()
+                .expect("challenge")
+                .authorized_at_unix,
+            None
+        );
+        assert!(restored.last_authenticated_at_unix.is_none());
+        assert_eq!(
+            restored
+                .pending_request
+                .as_ref()
+                .expect("pending request")
+                .request_id()
+                .as_str(),
+            pending_request.request_id().as_str()
         );
     }
 

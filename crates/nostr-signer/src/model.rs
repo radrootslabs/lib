@@ -541,6 +541,22 @@ impl RadrootsNostrSignerConnectionRecord {
         self.updated_at_unix = authorized_at_unix;
         self.pending_request.take()
     }
+
+    pub fn restore_pending_auth_challenge(
+        &mut self,
+        pending_request: RadrootsNostrSignerPendingRequest,
+        restored_at_unix: u64,
+    ) {
+        self.auth_state = RadrootsNostrSignerAuthState::Pending;
+        if let Some(auth_challenge) = self.auth_challenge.as_mut() {
+            let previous_authorized_at_unix = auth_challenge.authorized_at_unix.take();
+            if self.last_authenticated_at_unix == previous_authorized_at_unix {
+                self.last_authenticated_at_unix = None;
+            }
+        }
+        self.pending_request = Some(pending_request);
+        self.updated_at_unix = restored_at_unix;
+    }
 }
 
 impl RadrootsNostrSignerRequestAuditRecord {
@@ -787,6 +803,29 @@ mod tests {
         assert_eq!(record.last_request_at_unix, Some(16));
         assert_eq!(replay.request_id().as_str(), "req-1");
         assert!(no_challenge_replay.is_none());
+
+        record.restore_pending_auth_challenge(replay, 23);
+
+        assert_eq!(record.auth_state, RadrootsNostrSignerAuthState::Pending);
+        assert_eq!(
+            record
+                .auth_challenge
+                .as_ref()
+                .expect("restored challenge")
+                .authorized_at_unix,
+            None
+        );
+        assert_eq!(record.last_authenticated_at_unix, None);
+        assert_eq!(record.updated_at_unix, 23);
+        assert_eq!(
+            record
+                .pending_request
+                .as_ref()
+                .expect("restored pending request")
+                .request_id()
+                .as_str(),
+            "req-1"
+        );
     }
 
     #[test]
