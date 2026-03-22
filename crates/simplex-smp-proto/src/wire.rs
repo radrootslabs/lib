@@ -1458,14 +1458,14 @@ fn decode_error(bytes: &[u8]) -> Result<RadrootsSimplexSmpError, RadrootsSimplex
         return Ok(RadrootsSimplexSmpError::Command(command_error));
     }
     if let Some(proxy_error) = bytes.strip_prefix(b"PROXY ") {
-        if let Some(proxy_error) = decode_proxy_error(proxy_error) {
-            return Ok(RadrootsSimplexSmpError::Proxy(proxy_error));
-        }
+        return Ok(RadrootsSimplexSmpError::Proxy(decode_proxy_error(
+            proxy_error,
+        )?));
     }
     if let Some(blocking_info) = bytes.strip_prefix(b"BLOCKED ") {
-        if let Some(blocking_info) = decode_blocking_info(blocking_info) {
-            return Ok(RadrootsSimplexSmpError::Blocked(blocking_info));
-        }
+        return Ok(RadrootsSimplexSmpError::Blocked(decode_blocking_info(
+            blocking_info,
+        )?));
     }
     Ok(RadrootsSimplexSmpError::Other(bytes.to_vec()))
 }
@@ -1487,18 +1487,20 @@ fn encode_proxy_error(error: &RadrootsSimplexSmpProxyError) -> Vec<u8> {
     }
 }
 
-fn decode_proxy_error(bytes: &[u8]) -> Option<RadrootsSimplexSmpProxyError> {
-    let (tag, rest) = parse_tag(bytes).ok()?;
+fn decode_proxy_error(
+    bytes: &[u8],
+) -> Result<RadrootsSimplexSmpProxyError, RadrootsSimplexSmpProtoError> {
+    let (tag, rest) = parse_tag(bytes)?;
     match tag.as_slice() {
-        b"PROTOCOL" => Some(RadrootsSimplexSmpProxyError::Protocol(Box::new(
-            decode_error(rest).ok()?,
+        b"PROTOCOL" => Ok(RadrootsSimplexSmpProxyError::Protocol(Box::new(
+            decode_error(rest)?,
         ))),
-        b"BROKER" => Some(RadrootsSimplexSmpProxyError::Broker(decode_broker_error(
+        b"BROKER" => Ok(RadrootsSimplexSmpProxyError::Broker(decode_broker_error(
             rest,
         )?)),
-        b"BASIC_AUTH" if rest.is_empty() => Some(RadrootsSimplexSmpProxyError::BasicAuth),
-        b"NO_SESSION" if rest.is_empty() => Some(RadrootsSimplexSmpProxyError::NoSession),
-        _ => None,
+        b"BASIC_AUTH" if rest.is_empty() => Ok(RadrootsSimplexSmpProxyError::BasicAuth),
+        b"NO_SESSION" if rest.is_empty() => Ok(RadrootsSimplexSmpProxyError::NoSession),
+        _ => Err(invalid_ascii_tag(&tag)),
     }
 }
 
@@ -1528,28 +1530,30 @@ fn encode_broker_error(error: &RadrootsSimplexSmpBrokerError) -> Vec<u8> {
     }
 }
 
-fn decode_broker_error(bytes: &[u8]) -> Option<RadrootsSimplexSmpBrokerError> {
-    let (tag, rest) = parse_tag(bytes).ok()?;
+fn decode_broker_error(
+    bytes: &[u8],
+) -> Result<RadrootsSimplexSmpBrokerError, RadrootsSimplexSmpProtoError> {
+    let (tag, rest) = parse_tag(bytes)?;
     match tag.as_slice() {
-        b"RESPONSE" => Some(RadrootsSimplexSmpBrokerError::Response(
-            decode_short_string_lossy(rest).ok()?,
+        b"RESPONSE" => Ok(RadrootsSimplexSmpBrokerError::Response(
+            decode_short_string_lossy(rest)?,
         )),
-        b"UNEXPECTED" => Some(RadrootsSimplexSmpBrokerError::Unexpected(
-            decode_short_string_lossy(rest).ok()?,
+        b"UNEXPECTED" => Ok(RadrootsSimplexSmpBrokerError::Unexpected(
+            decode_short_string_lossy(rest)?,
         )),
-        b"TRANSPORT" => Some(RadrootsSimplexSmpBrokerError::Transport(
+        b"TRANSPORT" => Ok(RadrootsSimplexSmpBrokerError::Transport(
             decode_transport_error(rest)?,
         )),
-        b"NETWORK" if rest.is_empty() => Some(RadrootsSimplexSmpBrokerError::Network(
+        b"NETWORK" if rest.is_empty() => Ok(RadrootsSimplexSmpBrokerError::Network(
             RadrootsSimplexSmpNetworkError::Failed,
         )),
-        b"NETWORK" => Some(RadrootsSimplexSmpBrokerError::Network(
+        b"NETWORK" => Ok(RadrootsSimplexSmpBrokerError::Network(
             decode_network_error(rest)?,
         )),
-        b"TIMEOUT" if rest.is_empty() => Some(RadrootsSimplexSmpBrokerError::Timeout),
-        b"HOST" if rest.is_empty() => Some(RadrootsSimplexSmpBrokerError::Host),
-        b"NO_SERVICE" if rest.is_empty() => Some(RadrootsSimplexSmpBrokerError::NoService),
-        _ => None,
+        b"TIMEOUT" if rest.is_empty() => Ok(RadrootsSimplexSmpBrokerError::Timeout),
+        b"HOST" if rest.is_empty() => Ok(RadrootsSimplexSmpBrokerError::Host),
+        b"NO_SERVICE" if rest.is_empty() => Ok(RadrootsSimplexSmpBrokerError::NoService),
+        _ => Err(invalid_ascii_tag(&tag)),
     }
 }
 
@@ -1568,18 +1572,20 @@ fn encode_transport_error(error: &RadrootsSimplexSmpTransportError) -> Vec<u8> {
     }
 }
 
-fn decode_transport_error(bytes: &[u8]) -> Option<RadrootsSimplexSmpTransportError> {
-    let (tag, rest) = parse_tag(bytes).ok()?;
+fn decode_transport_error(
+    bytes: &[u8],
+) -> Result<RadrootsSimplexSmpTransportError, RadrootsSimplexSmpProtoError> {
+    let (tag, rest) = parse_tag(bytes)?;
     match tag.as_slice() {
-        b"BLOCK" if rest.is_empty() => Some(RadrootsSimplexSmpTransportError::Block),
-        b"VERSION" if rest.is_empty() => Some(RadrootsSimplexSmpTransportError::Version),
-        b"LARGE_MSG" if rest.is_empty() => Some(RadrootsSimplexSmpTransportError::LargeMsg),
-        b"SESSION" if rest.is_empty() => Some(RadrootsSimplexSmpTransportError::Session),
-        b"NO_AUTH" if rest.is_empty() => Some(RadrootsSimplexSmpTransportError::NoAuth),
-        b"HANDSHAKE" => Some(RadrootsSimplexSmpTransportError::Handshake(
-            decode_handshake_error(rest),
+        b"BLOCK" if rest.is_empty() => Ok(RadrootsSimplexSmpTransportError::Block),
+        b"VERSION" if rest.is_empty() => Ok(RadrootsSimplexSmpTransportError::Version),
+        b"LARGE_MSG" if rest.is_empty() => Ok(RadrootsSimplexSmpTransportError::LargeMsg),
+        b"SESSION" if rest.is_empty() => Ok(RadrootsSimplexSmpTransportError::Session),
+        b"NO_AUTH" if rest.is_empty() => Ok(RadrootsSimplexSmpTransportError::NoAuth),
+        b"HANDSHAKE" => Ok(RadrootsSimplexSmpTransportError::Handshake(
+            decode_handshake_error(rest)?,
         )),
-        _ => None,
+        _ => Err(invalid_ascii_tag(&tag)),
     }
 }
 
@@ -1610,22 +1616,24 @@ fn encode_network_error(error: &RadrootsSimplexSmpNetworkError) -> Vec<u8> {
     }
 }
 
-fn decode_network_error(bytes: &[u8]) -> Option<RadrootsSimplexSmpNetworkError> {
-    let (tag, rest) = parse_tag(bytes).ok()?;
+fn decode_network_error(
+    bytes: &[u8],
+) -> Result<RadrootsSimplexSmpNetworkError, RadrootsSimplexSmpProtoError> {
+    let (tag, rest) = parse_tag(bytes)?;
     match tag.as_slice() {
-        b"CONNECT" => Some(RadrootsSimplexSmpNetworkError::Connect(
-            decode_short_string_lossy(rest).ok()?,
+        b"CONNECT" => Ok(RadrootsSimplexSmpNetworkError::Connect(
+            decode_short_string_lossy(rest)?,
         )),
-        b"TLS" => Some(RadrootsSimplexSmpNetworkError::Tls(
-            decode_short_string_lossy(rest).ok()?,
+        b"TLS" => Ok(RadrootsSimplexSmpNetworkError::Tls(
+            decode_short_string_lossy(rest)?,
         )),
-        b"UNKNOWNCA" if rest.is_empty() => Some(RadrootsSimplexSmpNetworkError::UnknownCa),
-        b"FAILED" if rest.is_empty() => Some(RadrootsSimplexSmpNetworkError::Failed),
-        b"TIMEOUT" if rest.is_empty() => Some(RadrootsSimplexSmpNetworkError::Timeout),
-        b"SUBSCRIBE" => Some(RadrootsSimplexSmpNetworkError::Subscribe(
-            decode_short_string_lossy(rest).ok()?,
+        b"UNKNOWNCA" if rest.is_empty() => Ok(RadrootsSimplexSmpNetworkError::UnknownCa),
+        b"FAILED" if rest.is_empty() => Ok(RadrootsSimplexSmpNetworkError::Failed),
+        b"TIMEOUT" if rest.is_empty() => Ok(RadrootsSimplexSmpNetworkError::Timeout),
+        b"SUBSCRIBE" => Ok(RadrootsSimplexSmpNetworkError::Subscribe(
+            decode_short_string_lossy(rest)?,
         )),
-        _ => None,
+        _ => Err(invalid_ascii_tag(&tag)),
     }
 }
 
@@ -1639,13 +1647,15 @@ fn encode_handshake_error(error: &RadrootsSimplexSmpHandshakeError) -> Vec<u8> {
     }
 }
 
-fn decode_handshake_error(bytes: &[u8]) -> RadrootsSimplexSmpHandshakeError {
+fn decode_handshake_error(
+    bytes: &[u8],
+) -> Result<RadrootsSimplexSmpHandshakeError, RadrootsSimplexSmpProtoError> {
     match bytes {
-        b"PARSE" => RadrootsSimplexSmpHandshakeError::Parse,
-        b"IDENTITY" => RadrootsSimplexSmpHandshakeError::Identity,
-        b"BAD_AUTH" => RadrootsSimplexSmpHandshakeError::BadAuth,
-        b"BAD_SERVICE" => RadrootsSimplexSmpHandshakeError::BadService,
-        raw => RadrootsSimplexSmpHandshakeError::Other(String::from_utf8_lossy(raw).into_owned()),
+        b"PARSE" => Ok(RadrootsSimplexSmpHandshakeError::Parse),
+        b"IDENTITY" => Ok(RadrootsSimplexSmpHandshakeError::Identity),
+        b"BAD_AUTH" => Ok(RadrootsSimplexSmpHandshakeError::BadAuth),
+        b"BAD_SERVICE" => Ok(RadrootsSimplexSmpHandshakeError::BadService),
+        raw => Err(invalid_ascii_tag(raw)),
     }
 }
 
@@ -1659,14 +1669,18 @@ fn encode_blocking_info(info: &RadrootsSimplexSmpBlockingInfo) -> Vec<u8> {
     bytes
 }
 
-fn decode_blocking_info(bytes: &[u8]) -> Option<RadrootsSimplexSmpBlockingInfo> {
-    let reason = bytes.strip_prefix(b"reason=")?;
+fn decode_blocking_info(
+    bytes: &[u8],
+) -> Result<RadrootsSimplexSmpBlockingInfo, RadrootsSimplexSmpProtoError> {
+    let Some(reason) = bytes.strip_prefix(b"reason=") else {
+        return Err(invalid_ascii_tag(bytes));
+    };
     let reason = match reason {
         b"spam" => RadrootsSimplexSmpBlockingReason::Spam,
         b"content" => RadrootsSimplexSmpBlockingReason::Content,
-        raw => RadrootsSimplexSmpBlockingReason::Other(String::from_utf8_lossy(raw).into_owned()),
+        raw => return Err(invalid_ascii_tag(raw)),
     };
-    Some(RadrootsSimplexSmpBlockingInfo { reason })
+    Ok(RadrootsSimplexSmpBlockingInfo { reason })
 }
 
 fn decode_short_string_lossy(bytes: &[u8]) -> Result<String, RadrootsSimplexSmpProtoError> {
@@ -1676,6 +1690,10 @@ fn decode_short_string_lossy(bytes: &[u8]) -> Result<String, RadrootsSimplexSmpP
         return Err(RadrootsSimplexSmpProtoError::TrailingBytes);
     }
     Ok(value)
+}
+
+fn invalid_ascii_tag(bytes: &[u8]) -> RadrootsSimplexSmpProtoError {
+    RadrootsSimplexSmpProtoError::InvalidTag(String::from_utf8_lossy(bytes).into_owned())
 }
 
 fn parse_tag(bytes: &[u8]) -> Result<(Vec<u8>, &[u8]), RadrootsSimplexSmpProtoError> {
@@ -2544,6 +2562,42 @@ mod tests {
             Err(RadrootsSimplexSmpProtoError::InvalidHostList(
                 "[invalid]".to_string(),
             ))
+        );
+    }
+
+    #[test]
+    fn top_level_unknown_error_tags_stay_opaque() {
+        assert_eq!(
+            decode_error(b"FUTURE"),
+            Ok(RadrootsSimplexSmpError::Other(b"FUTURE".to_vec()))
+        );
+    }
+
+    #[test]
+    fn malformed_nested_proxy_error_fails_decode() {
+        assert_eq!(
+            decode_error(b"PROXY BROKER TRANSPORT HANDSHAKE UNKNOWN"),
+            Err(RadrootsSimplexSmpProtoError::InvalidTag(
+                "UNKNOWN".to_string(),
+            ))
+        );
+    }
+
+    #[test]
+    fn malformed_blocked_reason_fails_decode() {
+        assert_eq!(
+            decode_error(b"BLOCKED reason=custom"),
+            Err(RadrootsSimplexSmpProtoError::InvalidTag(
+                "custom".to_string(),
+            ))
+        );
+    }
+
+    #[test]
+    fn malformed_network_detail_fails_decode() {
+        assert_eq!(
+            decode_broker_error(b"NETWORK CONNECT"),
+            Err(RadrootsSimplexSmpProtoError::UnexpectedEof)
         );
     }
 
