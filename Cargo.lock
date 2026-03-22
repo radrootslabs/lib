@@ -2286,6 +2286,7 @@ dependencies = [
  "nostrdb",
  "radroots-nostr",
  "radroots-nostr-runtime",
+ "radroots-test-fixtures",
  "serde_json",
  "tempfile",
  "thiserror 1.0.69",

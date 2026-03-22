@@ -354,6 +354,7 @@ mod tests {
     use futures::StreamExt;
     use radroots_nostr::prelude::{RadrootsNostrEventBuilder, RadrootsNostrKeys};
     use radroots_nostr::prelude::{RadrootsNostrMetadata, radroots_nostr_build_metadata_event};
+    use radroots_test_fixtures::{FIXTURE_ALICE_EMAIL, FIXTURE_ALICE_USERNAME};
     use std::sync::atomic::Ordering;
     use std::sync::{Mutex, OnceLock};
     use std::time::Duration;
@@ -780,10 +781,10 @@ mod tests {
         let keys = RadrootsNostrKeys::generate();
         let pubkey_hex = keys.public_key().to_hex();
         let metadata = RadrootsNostrMetadata::new()
-            .name("alice")
-            .display_name("Alice")
+            .name(FIXTURE_ALICE_USERNAME)
+            .display_name(FIXTURE_ALICE_USERNAME)
             .about("coffee operator")
-            .lud16("alice@example.com");
+            .lud16(FIXTURE_ALICE_EMAIL);
         let metadata_event = radroots_nostr_build_metadata_event(&metadata)
             .sign_with_keys(&keys)
             .expect("metadata event should sign");
@@ -802,9 +803,12 @@ mod tests {
         }
         let profile = profile.expect("profile should exist");
         assert_eq!(profile.pubkey_hex, pubkey_hex);
-        assert_eq!(profile.name.as_deref(), Some("alice"));
-        assert_eq!(profile.display_name.as_deref(), Some("Alice"));
-        assert_eq!(profile.lud16.as_deref(), Some("alice@example.com"));
+        assert_eq!(profile.name.as_deref(), Some(FIXTURE_ALICE_USERNAME));
+        assert_eq!(
+            profile.display_name.as_deref(),
+            Some(FIXTURE_ALICE_USERNAME)
+        );
+        assert_eq!(profile.lud16.as_deref(), Some(FIXTURE_ALICE_EMAIL));
     }
 
     #[test]
