@@ -1,4 +1,4 @@
-use radroots_log::LoggingOptions;
+use radroots_log::{LogFileLayout, LoggingOptions};
 use std::path::{Path, PathBuf};
 
 use crate::error::RuntimeTracingError;
@@ -21,6 +21,7 @@ pub fn init_with(
         file_name: env_file.unwrap_or_else(default_log_file_name),
         stdout: true,
         default_level: resolve_default_level(env_level, default_level),
+        file_layout: LogFileLayout::PrefixedDate,
     };
     radroots_log::init_logging(opts)?;
     Ok(())

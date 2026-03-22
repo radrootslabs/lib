@@ -25,6 +25,7 @@ pub fn init_logging(opts: LoggingOptions) -> Result<()> {
         file_name: opts.file_name.clone(),
         stdout: opts.also_stdout,
         default_level: None,
+        file_layout: radroots_log::LogFileLayout::PrefixedDate,
     };
     match radroots_log::init_logging(log_opts) {
         Ok(()) => {}
