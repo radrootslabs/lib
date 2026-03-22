@@ -2194,6 +2194,185 @@ mod tests {
     }
 
     #[test]
+    fn v9_new_matches_official_sender_secure_layout() {
+        let command = RadrootsSimplexSmpCommand::New(RadrootsSimplexSmpNewQueueRequest {
+            recipient_auth_public_key: vec![0x01, 0x02, 0x03],
+            recipient_dh_public_key: vec![0x04, 0x05],
+            basic_auth: Some("server-pass".to_string()),
+            subscription_mode: RadrootsSimplexSmpSubscriptionMode::Subscribe,
+            queue_request_data: Some(RadrootsSimplexSmpQueueRequestData::Messaging(None)),
+            notifier_credentials: None,
+        });
+
+        let encoded = command
+            .encode_for_version(RADROOTS_SIMPLEX_SMP_SENDER_AUTH_KEY_TRANSPORT_VERSION)
+            .unwrap();
+
+        assert_eq!(
+            encoded,
+            b"NEW \x03\x01\x02\x03\x02\x04\x051\x0bserver-passST".to_vec()
+        );
+    }
+
+    #[test]
+    fn v15_new_matches_official_short_link_layout() {
+        let command = RadrootsSimplexSmpCommand::New(RadrootsSimplexSmpNewQueueRequest {
+            recipient_auth_public_key: vec![0x01, 0x02, 0x03],
+            recipient_dh_public_key: vec![0x04, 0x05],
+            basic_auth: Some("server-pass".to_string()),
+            subscription_mode: RadrootsSimplexSmpSubscriptionMode::Subscribe,
+            queue_request_data: Some(RadrootsSimplexSmpQueueRequestData::Messaging(Some(
+                RadrootsSimplexSmpMessagingQueueRequest {
+                    sender_id: vec![0x10, 0x11],
+                    link_data: RadrootsSimplexSmpQueueLinkData {
+                        fixed_data: vec![0xaa, 0xbb],
+                        user_data: vec![0xcc, 0xdd, 0xee],
+                    },
+                },
+            ))),
+            notifier_credentials: Some(RadrootsSimplexSmpNewNotifierCredentials {
+                notifier_auth_public_key: vec![0x21, 0x22],
+                recipient_notification_dh_public_key: vec![0x23, 0x24],
+            }),
+        });
+
+        let encoded = command
+            .encode_for_version(RADROOTS_SIMPLEX_SMP_SHORT_LINKS_TRANSPORT_VERSION)
+            .unwrap();
+
+        assert_eq!(
+            encoded,
+            b"NEW \x03\x01\x02\x03\x02\x04\x051\x0bserver-passS1M1\x02\x10\x11\x00\x02\xaa\xbb\x00\x03\xcc\xdd\xee"
+                .to_vec()
+        );
+    }
+
+    #[test]
+    fn v17_ids_matches_official_notifier_layout() {
+        let response = RadrootsSimplexSmpBrokerMessage::Ids(RadrootsSimplexSmpQueueIdsResponse {
+            recipient_id: vec![0x10],
+            sender_id: vec![0x11],
+            server_dh_public_key: vec![0x12, 0x13],
+            queue_mode: Some(RadrootsSimplexSmpQueueMode::Messaging),
+            link_id: Some(vec![0x14, 0x15]),
+            service_id: Some(vec![0x16, 0x17]),
+            server_notification_credentials: Some(RadrootsSimplexSmpServerNotifierCredentials {
+                notifier_id: vec![0x18, 0x19],
+                server_notification_dh_public_key: vec![0x1a, 0x1b],
+            }),
+        });
+
+        let encoded = response.encode().unwrap();
+
+        assert_eq!(
+            encoded,
+            b"IDS \x01\x10\x01\x11\x02\x12\x131M1\x02\x14\x151\x02\x16\x171\x02\x18\x19\x02\x1a\x1b"
+                .to_vec()
+        );
+    }
+
+    #[test]
+    fn v15_ids_matches_official_short_link_layout() {
+        let response = RadrootsSimplexSmpBrokerMessage::Ids(RadrootsSimplexSmpQueueIdsResponse {
+            recipient_id: vec![0x10],
+            sender_id: vec![0x11],
+            server_dh_public_key: vec![0x12, 0x13],
+            queue_mode: Some(RadrootsSimplexSmpQueueMode::Messaging),
+            link_id: Some(vec![0x14, 0x15]),
+            service_id: Some(vec![0x16, 0x17]),
+            server_notification_credentials: None,
+        });
+
+        let encoded = response
+            .encode_for_version(RADROOTS_SIMPLEX_SMP_SHORT_LINKS_TRANSPORT_VERSION)
+            .unwrap();
+
+        assert_eq!(
+            encoded,
+            b"IDS \x01\x10\x01\x11\x02\x12\x131M1\x02\x14\x15".to_vec()
+        );
+    }
+
+    #[test]
+    fn v9_ids_matches_official_sender_secure_layout() {
+        let response = RadrootsSimplexSmpBrokerMessage::Ids(RadrootsSimplexSmpQueueIdsResponse {
+            recipient_id: vec![0x10],
+            sender_id: vec![0x11],
+            server_dh_public_key: vec![0x12, 0x13],
+            queue_mode: Some(RadrootsSimplexSmpQueueMode::Messaging),
+            link_id: Some(vec![0x14, 0x15]),
+            service_id: Some(vec![0x16, 0x17]),
+            server_notification_credentials: None,
+        });
+
+        let encoded = response
+            .encode_for_version(RADROOTS_SIMPLEX_SMP_SENDER_AUTH_KEY_TRANSPORT_VERSION)
+            .unwrap();
+
+        assert_eq!(encoded, b"IDS \x01\x10\x01\x11\x02\x12\x13T".to_vec());
+    }
+
+    #[test]
+    fn prxy_matches_official_proxy_session_layout() {
+        let command = RadrootsSimplexSmpCommand::Prxy {
+            server: RadrootsSimplexSmpProtocolServer {
+                hosts: vec![
+                    "smp4.simplex.im".to_string(),
+                    "simplexabc.onion".to_string(),
+                ],
+                port: "5223".to_string(),
+                key_hash: vec![0xaa, 0xbb, 0xcc],
+            },
+            basic_auth: Some("relay-pass".to_string()),
+        };
+
+        let encoded = command.encode().unwrap();
+
+        assert_eq!(
+            encoded,
+            b"PRXY \x02\x0fsmp4.simplex.im\x10simplexabc.onion\x045223\x03\xaa\xbb\xcc1\x0arelay-pass"
+                .to_vec()
+        );
+    }
+
+    #[test]
+    fn pkey_matches_official_proxy_session_key_layout() {
+        let message = RadrootsSimplexSmpBrokerMessage::PKey {
+            session_id: vec![0x31, 0x32],
+            version_range: RadrootsSimplexSmpVersionRange::new(8, 16).unwrap(),
+            cert_chain_public_key: RadrootsSimplexSmpCertChainPublicKey {
+                certificate_chain: vec![vec![0x41, 0x42], vec![0x43, 0x44, 0x45]],
+                signed_public_key: vec![0x51, 0x52, 0x53],
+            },
+        };
+
+        let encoded = message.encode().unwrap();
+
+        assert_eq!(
+            encoded,
+            b"PKEY \x0212\x00\x08\x00\x10\x02\x00\x02AB\x00\x03CDE\x00\x03QRS".to_vec()
+        );
+    }
+
+    #[test]
+    fn proxy_transport_error_matches_official_nested_error_layout() {
+        let encoded = RadrootsSimplexSmpBrokerMessage::Err(RadrootsSimplexSmpError::Proxy(
+            RadrootsSimplexSmpProxyError::Broker(RadrootsSimplexSmpBrokerError::Transport(
+                RadrootsSimplexSmpTransportError::Handshake(
+                    RadrootsSimplexSmpHandshakeError::Identity,
+                ),
+            )),
+        ))
+        .encode()
+        .unwrap();
+
+        assert_eq!(
+            encoded,
+            b"ERR PROXY BROKER TRANSPORT HANDSHAKE IDENTITY".to_vec()
+        );
+    }
+
+    #[test]
     fn round_trips_proxy_and_short_link_commands() {
         let prxy = RadrootsSimplexSmpCommandTransmission {
             authorization: Vec::new(),
