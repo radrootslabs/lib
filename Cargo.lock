@@ -2168,6 +2168,7 @@ dependencies = [
  "nostr",
  "radroots-events",
  "radroots-runtime",
+ "radroots-test-fixtures",
  "secrecy",
  "serde",
  "serde_json",
@@ -2227,6 +2228,7 @@ dependencies = [
  "radroots-events",
  "radroots-events-codec",
  "radroots-identity",
+ "radroots-test-fixtures",
  "reqwest",
  "serde",
  "serde_json",
@@ -2243,6 +2245,7 @@ dependencies = [
  "radroots-nostr-ndb",
  "radroots-nostr-signer",
  "radroots-runtime",
+ "radroots-test-fixtures",
  "serde",
  "serde_json",
  "tempfile",
@@ -2255,6 +2258,7 @@ name = "radroots-nostr-connect"
 version = "0.1.0-alpha.1"
 dependencies = [
  "nostr",
+ "radroots-test-fixtures",
  "serde",
  "serde_json",
  "thiserror 1.0.69",

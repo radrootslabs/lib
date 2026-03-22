@@ -5,19 +5,28 @@ use radroots_nostr_connect::prelude::{
     RadrootsNostrConnectRequestMessage, RadrootsNostrConnectResponse,
     RadrootsNostrConnectResponseEnvelope, RadrootsNostrConnectUri,
 };
+use radroots_test_fixtures::{
+    APP_PRIMARY_HTTPS, CDN_PRIMARY_HTTPS, FIXTURE_ALICE, RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS,
+    RELAY_TERTIARY_WSS,
+};
 use serde_json::{Value, json};
 use std::str::FromStr;
 
 fn test_public_key() -> PublicKey {
-    PublicKey::parse("83f3b2ae6aa368e8275397b9c26cf550101d63ebaab900d19dd4a4429f5ad8f5")
-        .expect("public key")
+    PublicKey::parse(FIXTURE_ALICE.public_key_hex).expect("public key")
 }
 
 fn test_keys() -> Keys {
-    let secret_key =
-        SecretKey::from_hex("6d5f4530cbf6a9e8f021eb409c8c5f2ee7ea123c76364b6f53c2d8a3507f7f5b")
-            .expect("secret key");
+    let secret_key = SecretKey::from_hex(FIXTURE_ALICE.secret_key_hex).expect("secret key");
     Keys::new(secret_key)
+}
+
+fn encode_uri_component(value: &str) -> String {
+    url::form_urlencoded::byte_serialize(value.as_bytes()).collect()
+}
+
+fn logo_url() -> String {
+    format!("{CDN_PRIMARY_HTTPS}/logo.png")
 }
 
 fn unsigned_event() -> UnsignedEvent {
@@ -156,18 +165,26 @@ fn error_method_and_permission_surfaces_cover_public_paths() {
 
 #[test]
 fn uri_surface_covers_rendering_ignored_queries_and_error_paths() {
-    let bunker = RadrootsNostrConnectUri::parse(
-        "bunker://83f3b2ae6aa368e8275397b9c26cf550101d63ebaab900d19dd4a4429f5ad8f5?relay=wss%3A%2F%2Frelay.example.com&foo=bar",
-    )
+    let bunker = RadrootsNostrConnectUri::parse(&format!(
+        "bunker://{}?relay={}&foo=bar",
+        FIXTURE_ALICE.public_key_hex,
+        encode_uri_component(RELAY_PRIMARY_WSS),
+    ))
     .expect("parse bunker");
     let bunker_rendered = bunker.to_string();
-    assert!(bunker_rendered.contains("relay=wss%3A%2F%2Frelay.example.com"));
+    assert!(bunker_rendered.contains(&format!(
+        "relay={}",
+        encode_uri_component(RELAY_PRIMARY_WSS)
+    )));
     assert!(!bunker_rendered.contains("secret="));
 
-    let minimal_client: RadrootsNostrConnectUri =
-        "nostrconnect://83f3b2ae6aa368e8275397b9c26cf550101d63ebaab900d19dd4a4429f5ad8f5?relay=wss%3A%2F%2Frelay.example.com&secret=shared"
-            .parse()
-            .expect("parse minimal client");
+    let minimal_client: RadrootsNostrConnectUri = format!(
+        "nostrconnect://{}?relay={}&secret=shared",
+        FIXTURE_ALICE.public_key_hex,
+        encode_uri_component(RELAY_PRIMARY_WSS),
+    )
+    .parse()
+    .expect("parse minimal client");
     let minimal_client_rendered = minimal_client.to_string();
     assert!(minimal_client_rendered.contains("secret=shared"));
     assert!(!minimal_client_rendered.contains("perms="));
@@ -175,15 +192,22 @@ fn uri_surface_covers_rendering_ignored_queries_and_error_paths() {
     assert!(!minimal_client_rendered.contains("url="));
     assert!(!minimal_client_rendered.contains("image="));
 
-    let metadata_client = RadrootsNostrConnectUri::parse(
-        "nostrconnect://83f3b2ae6aa368e8275397b9c26cf550101d63ebaab900d19dd4a4429f5ad8f5?relay=wss%3A%2F%2Frelay.example.com&secret=shared&perms=ping&name=myc&url=https%3A%2F%2Fexample.com&image=https%3A%2F%2Fexample.com%2Flogo.png&ignored=value",
-    )
+    let metadata_client = RadrootsNostrConnectUri::parse(&format!(
+        "nostrconnect://{}?relay={}&secret=shared&perms=ping&name=myc&url={}&image={}&ignored=value",
+        FIXTURE_ALICE.public_key_hex,
+        encode_uri_component(RELAY_PRIMARY_WSS),
+        encode_uri_component(APP_PRIMARY_HTTPS),
+        encode_uri_component(&logo_url()),
+    ))
     .expect("parse metadata client");
     let metadata_rendered = metadata_client.to_string();
     assert!(metadata_rendered.contains("perms=ping"));
     assert!(metadata_rendered.contains("name=myc"));
-    assert!(metadata_rendered.contains("url=https%3A%2F%2Fexample.com%2F"));
-    assert!(metadata_rendered.contains("image=https%3A%2F%2Fexample.com%2Flogo.png"));
+    assert!(metadata_rendered.contains(&format!(
+        "url={}",
+        encode_uri_component(&format!("{APP_PRIMARY_HTTPS}/"))
+    )));
+    assert!(metadata_rendered.contains(&format!("image={}", encode_uri_component(&logo_url()))));
 
     assert!(matches!(
         RadrootsNostrConnectUri::parse("not a uri"),
@@ -196,21 +220,22 @@ fn uri_surface_covers_rendering_ignored_queries_and_error_paths() {
         Err(RadrootsNostrConnectError::MissingPublicKey)
     ));
     assert!(matches!(
-        RadrootsNostrConnectUri::parse(
-            "bunker://83f3b2ae6aa368e8275397b9c26cf550101d63ebaab900d19dd4a4429f5ad8f5"
-        ),
+        RadrootsNostrConnectUri::parse(&format!("bunker://{}", FIXTURE_ALICE.public_key_hex)),
         Err(RadrootsNostrConnectError::MissingRelay)
     ));
     assert!(matches!(
-        RadrootsNostrConnectUri::parse(
-            "nostrconnect://83f3b2ae6aa368e8275397b9c26cf550101d63ebaab900d19dd4a4429f5ad8f5?secret=abc"
-        ),
+        RadrootsNostrConnectUri::parse(&format!(
+            "nostrconnect://{}?secret=abc",
+            FIXTURE_ALICE.public_key_hex
+        )),
         Err(RadrootsNostrConnectError::MissingRelay)
     ));
     assert!(matches!(
-        RadrootsNostrConnectUri::parse(
-            "nostrconnect://83f3b2ae6aa368e8275397b9c26cf550101d63ebaab900d19dd4a4429f5ad8f5?relay=wss%3A%2F%2Frelay.example.com"
-        ),
+        RadrootsNostrConnectUri::parse(&format!(
+            "nostrconnect://{}?relay={}",
+            FIXTURE_ALICE.public_key_hex,
+            encode_uri_component(RELAY_PRIMARY_WSS),
+        )),
         Err(RadrootsNostrConnectError::MissingSecret)
     ));
     assert!(matches!(
@@ -224,15 +249,18 @@ fn uri_surface_covers_rendering_ignored_queries_and_error_paths() {
         Err(RadrootsNostrConnectError::InvalidPublicKey { .. })
     ));
     assert!(matches!(
-        RadrootsNostrConnectUri::parse(
-            "nostrconnect://83f3b2ae6aa368e8275397b9c26cf550101d63ebaab900d19dd4a4429f5ad8f5?relay=http%3A%2F%2Frelay.example.com&secret=abc"
-        ),
+        RadrootsNostrConnectUri::parse(&format!(
+            "nostrconnect://{}?relay=http%3A%2F%2Frelay.example.com&secret=abc",
+            FIXTURE_ALICE.public_key_hex
+        )),
         Err(RadrootsNostrConnectError::InvalidRelayUrl { .. })
     ));
     assert!(matches!(
-        RadrootsNostrConnectUri::parse(
-            "nostrconnect://83f3b2ae6aa368e8275397b9c26cf550101d63ebaab900d19dd4a4429f5ad8f5?relay=wss%3A%2F%2Frelay.example.com&secret=abc&url=not-a-url"
-        ),
+        RadrootsNostrConnectUri::parse(&format!(
+            "nostrconnect://{}?relay={}&secret=abc&url=not-a-url",
+            FIXTURE_ALICE.public_key_hex,
+            encode_uri_component(RELAY_PRIMARY_WSS),
+        )),
         Err(RadrootsNostrConnectError::InvalidUrl { value, .. }) if value == "not-a-url"
     ));
     assert!(matches!(
@@ -240,21 +268,26 @@ fn uri_surface_covers_rendering_ignored_queries_and_error_paths() {
         Err(RadrootsNostrConnectError::InvalidPublicKey { .. })
     ));
     assert!(matches!(
-        RadrootsNostrConnectUri::parse(
-            "bunker://83f3b2ae6aa368e8275397b9c26cf550101d63ebaab900d19dd4a4429f5ad8f5?relay=http%3A%2F%2Frelay.example.com"
-        ),
+        RadrootsNostrConnectUri::parse(&format!(
+            "bunker://{}?relay=http%3A%2F%2Frelay.example.com",
+            FIXTURE_ALICE.public_key_hex
+        )),
         Err(RadrootsNostrConnectError::InvalidRelayUrl { .. })
     ));
     assert!(matches!(
-        RadrootsNostrConnectUri::parse(
-            "nostrconnect://83f3b2ae6aa368e8275397b9c26cf550101d63ebaab900d19dd4a4429f5ad8f5?relay=wss%3A%2F%2Frelay.example.com&secret=abc&perms=sign_event%3A"
-        ),
+        RadrootsNostrConnectUri::parse(&format!(
+            "nostrconnect://{}?relay={}&secret=abc&perms=sign_event%3A",
+            FIXTURE_ALICE.public_key_hex,
+            encode_uri_component(RELAY_PRIMARY_WSS),
+        )),
         Err(RadrootsNostrConnectError::InvalidPermission(value)) if value == "sign_event:"
     ));
     assert!(matches!(
-        RadrootsNostrConnectUri::parse(
-            "nostrconnect://83f3b2ae6aa368e8275397b9c26cf550101d63ebaab900d19dd4a4429f5ad8f5?relay=wss%3A%2F%2Frelay.example.com&secret=abc&image=not-a-url"
-        ),
+        RadrootsNostrConnectUri::parse(&format!(
+            "nostrconnect://{}?relay={}&secret=abc&image=not-a-url",
+            FIXTURE_ALICE.public_key_hex,
+            encode_uri_component(RELAY_PRIMARY_WSS),
+        )),
         Err(RadrootsNostrConnectError::InvalidUrl { value, .. }) if value == "not-a-url"
     ));
 }
@@ -636,13 +669,13 @@ fn response_surface_covers_success_and_error_paths() {
         ),
         (
             RadrootsNostrConnectResponse::RelayList(vec![
-                relay("wss://relay1.example.com"),
-                relay("wss://relay2.example.com"),
+                relay(RELAY_SECONDARY_WSS),
+                relay(RELAY_TERTIARY_WSS),
             ]),
             RadrootsNostrConnectMethod::SwitchRelays,
             RadrootsNostrConnectResponse::RelayList(vec![
-                relay("wss://relay1.example.com"),
-                relay("wss://relay2.example.com"),
+                relay(RELAY_SECONDARY_WSS),
+                relay(RELAY_TERTIARY_WSS),
             ]),
         ),
         (
@@ -761,12 +794,12 @@ fn response_surface_covers_success_and_error_paths() {
             &RadrootsNostrConnectMethod::SwitchRelays,
             RadrootsNostrConnectResponseEnvelope {
                 id: "req-switch".to_owned(),
-                result: Some(json!("[\"wss://relay1.example.com\"]")),
+                result: Some(json!(format!("[\"{RELAY_SECONDARY_WSS}\"]"))),
                 error: None,
             },
         )
         .expect("parse stringified relay list"),
-        RadrootsNostrConnectResponse::RelayList(vec![relay("wss://relay1.example.com")])
+        RadrootsNostrConnectResponse::RelayList(vec![relay(RELAY_SECONDARY_WSS)])
     );
 
     assert!(matches!(

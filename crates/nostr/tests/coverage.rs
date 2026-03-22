@@ -31,6 +31,7 @@ use radroots_nostr::types::{
 use radroots_nostr::util::{
     created_at_u32_saturating, event_created_at_u32_saturating, radroots_nostr_npub_string,
 };
+use radroots_test_fixtures::RELAY_PRIMARY_WSS;
 
 fn make_keys() -> RadrootsNostrKeys {
     RadrootsNostrKeys::generate()
@@ -254,7 +255,7 @@ fn tag_helpers_cover_matchers_and_resolve_paths() {
     assert_eq!(matched.1, ["v1".to_string(), "v2".to_string()]);
 
     let relays_tag = RadrootsNostrTag::from_standardized(RadrootsNostrTagStandard::Relays(vec![
-        RadrootsNostrRelayUrl::parse("wss://relay.example.com").expect("relay"),
+        RadrootsNostrRelayUrl::parse(RELAY_PRIMARY_WSS).expect("relay"),
     ]));
     assert!(radroots_nostr_tag_relays_parse(&relays_tag).is_some());
     let relays_non_match =

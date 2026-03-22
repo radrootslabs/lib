@@ -214,16 +214,17 @@ where
 #[cfg(all(test, feature = "nip17"))]
 mod tests {
     use super::*;
-    use nostr::Keys;
+    use nostr::{Keys, SecretKey};
     use radroots_events::message::{RadrootsMessage, RadrootsMessageRecipient};
     use radroots_events::message_file::{RadrootsMessageFile, RadrootsMessageFileDimensions};
+    use radroots_test_fixtures::{FIXTURE_ALICE, FIXTURE_BOB};
 
     fn sender_keys() -> Keys {
-        Keys::parse("6b911fd37cdf5c81d4c0adb1ab7fa822ed253ab0ad9aa18d77257c88b29b718e").unwrap()
+        Keys::new(SecretKey::from_hex(FIXTURE_ALICE.secret_key_hex).unwrap())
     }
 
     fn receiver_keys() -> Keys {
-        Keys::parse("7b911fd37cdf5c81d4c0adb1ab7fa822ed253ab0ad9aa18d77257c88b29b718e").unwrap()
+        Keys::new(SecretKey::from_hex(FIXTURE_BOB.secret_key_hex).unwrap())
     }
 
     #[tokio::test]

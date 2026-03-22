@@ -4,24 +4,40 @@ use radroots_nostr_connect::prelude::{
     RadrootsNostrConnectRequest, RadrootsNostrConnectRequestMessage, RadrootsNostrConnectResponse,
     RadrootsNostrConnectResponseEnvelope, RadrootsNostrConnectUri,
 };
+use radroots_test_fixtures::{
+    APP_PRIMARY_HTTPS, CDN_PRIMARY_HTTPS, FIXTURE_ALICE, RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS,
+    RELAY_TERTIARY_WSS,
+};
 use serde_json::{Value, json};
 
 fn test_public_key() -> PublicKey {
-    PublicKey::parse("83f3b2ae6aa368e8275397b9c26cf550101d63ebaab900d19dd4a4429f5ad8f5")
-        .expect("public key")
+    PublicKey::parse(FIXTURE_ALICE.public_key_hex).expect("public key")
 }
 
 fn test_keys() -> Keys {
-    let secret_key =
-        SecretKey::from_hex("6d5f4530cbf6a9e8f021eb409c8c5f2ee7ea123c76364b6f53c2d8a3507f7f5b")
-            .expect("secret key");
+    let secret_key = SecretKey::from_hex(FIXTURE_ALICE.secret_key_hex).expect("secret key");
     Keys::new(secret_key)
+}
+
+fn encode_uri_component(value: &str) -> String {
+    url::form_urlencoded::byte_serialize(value.as_bytes()).collect()
+}
+
+fn logo_url() -> String {
+    format!("{CDN_PRIMARY_HTTPS}/logo.png")
 }
 
 #[test]
 fn parses_client_uri_with_current_spec_query_fields() {
-    let uri = "nostrconnect://83f3b2ae6aa368e8275397b9c26cf550101d63ebaab900d19dd4a4429f5ad8f5?relay=wss%3A%2F%2Frelay1.example.com&relay=wss%3A%2F%2Frelay2.example.com&secret=0s8j2djs&perms=nip44_encrypt%2Csign_event%3A1059&name=My+Client&url=https%3A%2F%2Fexample.com&image=https%3A%2F%2Fexample.com%2Flogo.png";
-    let parsed = RadrootsNostrConnectUri::parse(uri).expect("parse client uri");
+    let uri = format!(
+        "nostrconnect://{}?relay={}&relay={}&secret=0s8j2djs&perms=nip44_encrypt%2Csign_event%3A1059&name=My+Client&url={}&image={}",
+        FIXTURE_ALICE.public_key_hex,
+        encode_uri_component(RELAY_SECONDARY_WSS),
+        encode_uri_component(RELAY_TERTIARY_WSS),
+        encode_uri_component(APP_PRIMARY_HTTPS),
+        encode_uri_component(&logo_url()),
+    );
+    let parsed = RadrootsNostrConnectUri::parse(&uri).expect("parse client uri");
 
     match parsed {
         RadrootsNostrConnectUri::Client(client) => {
@@ -39,11 +55,11 @@ fn parses_client_uri_with_current_spec_query_fields() {
                     ),
                 ])
             );
-            assert_eq!(client.metadata.url.as_deref(), Some("https://example.com/"));
             assert_eq!(
-                client.metadata.image.as_deref(),
-                Some("https://example.com/logo.png")
+                client.metadata.url.as_deref(),
+                Some(format!("{APP_PRIMARY_HTTPS}/").as_str())
             );
+            assert_eq!(client.metadata.image.as_deref(), Some(logo_url().as_str()));
         }
         other => panic!("expected client uri, got {other:?}"),
     }
@@ -51,8 +67,12 @@ fn parses_client_uri_with_current_spec_query_fields() {
 
 #[test]
 fn parses_bunker_uri_and_roundtrips() {
-    let source = "bunker://83f3b2ae6aa368e8275397b9c26cf550101d63ebaab900d19dd4a4429f5ad8f5?relay=wss%3A%2F%2Frelay.example.com&secret=abcd";
-    let parsed = RadrootsNostrConnectUri::parse(source).expect("parse bunker uri");
+    let source = format!(
+        "bunker://{}?relay={}&secret=abcd",
+        FIXTURE_ALICE.public_key_hex,
+        encode_uri_component(RELAY_PRIMARY_WSS),
+    );
+    let parsed = RadrootsNostrConnectUri::parse(&source).expect("parse bunker uri");
     let rendered = parsed.to_string();
     let reparsed = RadrootsNostrConnectUri::parse(&rendered).expect("reparse bunker uri");
     assert_eq!(parsed, reparsed);
@@ -60,8 +80,12 @@ fn parses_bunker_uri_and_roundtrips() {
 
 #[test]
 fn rejects_client_uri_without_required_secret() {
-    let source = "nostrconnect://83f3b2ae6aa368e8275397b9c26cf550101d63ebaab900d19dd4a4429f5ad8f5?relay=wss%3A%2F%2Frelay.example.com";
-    assert!(RadrootsNostrConnectUri::parse(source).is_err());
+    let source = format!(
+        "nostrconnect://{}?relay={}",
+        FIXTURE_ALICE.public_key_hex,
+        encode_uri_component(RELAY_PRIMARY_WSS),
+    );
+    assert!(RadrootsNostrConnectUri::parse(&source).is_err());
 }
 
 #[test]
@@ -98,7 +122,7 @@ fn connect_request_roundtrips_requested_permissions() {
             "id": "req-1",
             "method": "connect",
             "params": [
-                "83f3b2ae6aa368e8275397b9c26cf550101d63ebaab900d19dd4a4429f5ad8f5",
+                FIXTURE_ALICE.public_key_hex,
                 "abcd",
                 "nip44_encrypt,sign_event:1059"
             ]
@@ -141,10 +165,7 @@ fn sign_event_request_roundtrips_unsigned_event_payload() {
 fn switch_relays_response_accepts_array_or_null() {
     let relays_response = RadrootsNostrConnectResponseEnvelope {
         id: "req-switch".to_owned(),
-        result: Some(json!([
-            "wss://relay1.example.com",
-            "wss://relay2.example.com"
-        ])),
+        result: Some(json!([RELAY_SECONDARY_WSS, RELAY_TERTIARY_WSS])),
         error: None,
     };
     let parsed = RadrootsNostrConnectResponse::from_envelope(
@@ -155,8 +176,8 @@ fn switch_relays_response_accepts_array_or_null() {
     assert_eq!(
         parsed,
         RadrootsNostrConnectResponse::RelayList(vec![
-            RelayUrl::parse("wss://relay1.example.com").expect("relay 1"),
-            RelayUrl::parse("wss://relay2.example.com").expect("relay 2"),
+            RelayUrl::parse(RELAY_SECONDARY_WSS).expect("relay 1"),
+            RelayUrl::parse(RELAY_TERTIARY_WSS).expect("relay 2"),
         ])
     );
 

@@ -134,15 +134,17 @@ impl RadrootsNostrSecretVault for RadrootsNostrSecretVaultOsKeyring {
 mod tests {
     use super::*;
     use radroots_identity::RadrootsIdentityId;
+    use radroots_test_fixtures::FIXTURE_ALICE;
     use std::thread;
+
+    fn fixture_account_id() -> RadrootsIdentityId {
+        RadrootsIdentityId::parse(FIXTURE_ALICE.public_key_hex).expect("account id")
+    }
 
     #[test]
     fn memory_vault_round_trip() {
         let vault = RadrootsNostrSecretVaultMemory::new();
-        let account_id = RadrootsIdentityId::parse(
-            "3bf0c63f0f4478a288f6b67f0429dbf7f5119d4fa7218a4c40ef1378f80f7606",
-        )
-        .expect("account id");
+        let account_id = fixture_account_id();
         vault
             .store_secret_hex(&account_id, "abc123")
             .expect("store");
@@ -156,10 +158,7 @@ mod tests {
     #[test]
     fn memory_vault_distinguishes_present_and_missing_entries() {
         let vault = RadrootsNostrSecretVaultMemory::new();
-        let account_id = RadrootsIdentityId::parse(
-            "3bf0c63f0f4478a288f6b67f0429dbf7f5119d4fa7218a4c40ef1378f80f7606",
-        )
-        .expect("account id");
+        let account_id = fixture_account_id();
 
         assert!(
             vault
@@ -184,10 +183,7 @@ mod tests {
     #[test]
     fn memory_vault_reports_poisoned_lock() {
         let vault = RadrootsNostrSecretVaultMemory::new();
-        let account_id = RadrootsIdentityId::parse(
-            "3bf0c63f0f4478a288f6b67f0429dbf7f5119d4fa7218a4c40ef1378f80f7606",
-        )
-        .expect("account id");
+        let account_id = fixture_account_id();
 
         let shared = vault.entries.clone();
         let _ = thread::spawn(move || {

@@ -7,7 +7,17 @@ use radroots_identity::{
 use radroots_identity::{
     RadrootsIdentityEncryptedSecretKeyOptions, RadrootsIdentityEncryptedSecretKeySecurity,
 };
+use radroots_test_fixtures::{ApprovedFixtureIdentity, FIXTURE_ALICE, FIXTURE_BOB};
 use std::path::PathBuf;
+
+fn fixture_keys(fixture: ApprovedFixtureIdentity) -> nostr::Keys {
+    let secret = nostr::SecretKey::from_hex(fixture.secret_key_hex).unwrap();
+    nostr::Keys::new(secret)
+}
+
+fn fixture_identity(fixture: ApprovedFixtureIdentity) -> RadrootsIdentity {
+    RadrootsIdentity::from_secret_key_str(fixture.secret_key_hex).unwrap()
+}
 
 fn profile_with_identifier(value: &str) -> RadrootsIdentityProfile {
     RadrootsIdentityProfile {
@@ -18,14 +28,13 @@ fn profile_with_identifier(value: &str) -> RadrootsIdentityProfile {
 
 fn sample_event(content: &str) -> nostr::Event {
     nostr::EventBuilder::text_note(content)
-        .sign_with_keys(&nostr::Keys::generate())
+        .sign_with_keys(&fixture_keys(FIXTURE_ALICE))
         .unwrap()
 }
 
 #[test]
 fn load_from_json_file_hex() {
-    let keys = nostr::Keys::generate();
-    let identity = RadrootsIdentity::new(keys.clone());
+    let identity = fixture_identity(FIXTURE_ALICE);
     let json = serde_json::to_string(&identity.to_file()).unwrap();
 
     let dir = tempfile::tempdir().unwrap();
@@ -33,13 +42,12 @@ fn load_from_json_file_hex() {
     std::fs::write(&path, json).unwrap();
 
     let loaded = RadrootsIdentity::load_from_path_auto(&path).unwrap();
-    assert_eq!(loaded.public_key(), keys.public_key());
+    assert_eq!(loaded.public_key().to_hex(), FIXTURE_ALICE.public_key_hex);
 }
 
 #[test]
 fn load_from_json_file_profile() {
-    let keys = nostr::Keys::generate();
-    let mut identity = RadrootsIdentity::new(keys.clone());
+    let mut identity = fixture_identity(FIXTURE_ALICE);
     let profile = RadrootsProfile {
         name: "relay-agent".to_string(),
         display_name: Some("Relay Agent".to_string()),
@@ -71,8 +79,7 @@ fn load_from_json_file_profile() {
 
 #[test]
 fn load_from_text_file_hex() {
-    let keys = nostr::Keys::generate();
-    let identity = RadrootsIdentity::new(keys.clone());
+    let identity = fixture_identity(FIXTURE_ALICE);
     let secret = identity.secret_key_hex();
 
     let dir = tempfile::tempdir().unwrap();
@@ -80,13 +87,12 @@ fn load_from_text_file_hex() {
     std::fs::write(&path, secret).unwrap();
 
     let loaded = RadrootsIdentity::load_from_path_auto(&path).unwrap();
-    assert_eq!(loaded.public_key(), keys.public_key());
+    assert_eq!(loaded.public_key().to_hex(), FIXTURE_ALICE.public_key_hex);
 }
 
 #[test]
 fn load_from_text_file_nsec() {
-    let keys = nostr::Keys::generate();
-    let identity = RadrootsIdentity::new(keys.clone());
+    let identity = fixture_identity(FIXTURE_ALICE);
     let secret = identity.secret_key_nsec();
 
     let dir = tempfile::tempdir().unwrap();
@@ -94,13 +100,12 @@ fn load_from_text_file_nsec() {
     std::fs::write(&path, secret).unwrap();
 
     let loaded = RadrootsIdentity::load_from_path_auto(&path).unwrap();
-    assert_eq!(loaded.public_key(), keys.public_key());
+    assert_eq!(loaded.public_key().to_hex(), FIXTURE_ALICE.public_key_hex);
 }
 
 #[test]
 fn load_from_binary_file() {
-    let keys = nostr::Keys::generate();
-    let identity = RadrootsIdentity::new(keys.clone());
+    let identity = fixture_identity(FIXTURE_ALICE);
     let secret = identity.secret_key_bytes();
 
     let dir = tempfile::tempdir().unwrap();
@@ -108,7 +113,7 @@ fn load_from_binary_file() {
     std::fs::write(&path, secret).unwrap();
 
     let loaded = RadrootsIdentity::load_from_path_auto(&path).unwrap();
-    assert_eq!(loaded.public_key(), keys.public_key());
+    assert_eq!(loaded.public_key().to_hex(), FIXTURE_ALICE.public_key_hex);
 }
 
 #[test]
@@ -134,8 +139,7 @@ fn load_or_generate_missing_allowed_creates_json() {
 
 #[test]
 fn load_from_json_file_public_key_npub() {
-    let keys = nostr::Keys::generate();
-    let identity = RadrootsIdentity::new(keys.clone());
+    let identity = fixture_identity(FIXTURE_ALICE);
     let mut file = identity.to_file();
     file.public_key = Some(identity.public_key_npub());
     let json = serde_json::to_string(&file).unwrap();
@@ -145,16 +149,14 @@ fn load_from_json_file_public_key_npub() {
     std::fs::write(&path, json).unwrap();
 
     let loaded = RadrootsIdentity::load_from_path_auto(&path).unwrap();
-    assert_eq!(loaded.public_key(), keys.public_key());
+    assert_eq!(loaded.public_key().to_hex(), FIXTURE_ALICE.public_key_hex);
 }
 
 #[test]
 fn load_from_json_file_public_key_mismatch() {
-    let keys = nostr::Keys::generate();
-    let identity = RadrootsIdentity::new(keys);
-    let other_keys = nostr::Keys::generate();
+    let identity = fixture_identity(FIXTURE_ALICE);
     let mut file = identity.to_file();
-    file.public_key = Some(other_keys.public_key().to_hex());
+    file.public_key = Some(FIXTURE_BOB.public_key_hex.to_string());
     let json = serde_json::to_string(&file).unwrap();
 
     let dir = tempfile::tempdir().unwrap();
@@ -167,36 +169,28 @@ fn load_from_json_file_public_key_mismatch() {
 
 #[test]
 fn identity_id_matches_public_key_hex() {
-    let keys = nostr::Keys::generate();
-    let identity = RadrootsIdentity::new(keys.clone());
+    let identity = fixture_identity(FIXTURE_ALICE);
 
     let id = identity.id();
-    assert_eq!(id.as_str(), keys.public_key().to_hex());
+    assert_eq!(id.as_str(), FIXTURE_ALICE.public_key_hex);
 }
 
 #[test]
 fn identity_id_parses_hex_and_npub() {
-    use nostr::nips::nip19::ToBech32;
-
-    let keys = nostr::Keys::generate();
-    let public_key = keys.public_key();
-    let hex = public_key.to_hex();
-    let npub = public_key.to_bech32().unwrap();
-
-    let from_hex = RadrootsIdentityId::parse(hex.as_str()).unwrap();
-    let from_npub = RadrootsIdentityId::parse(npub.as_str()).unwrap();
-    assert_eq!(from_hex.as_str(), hex);
-    assert_eq!(from_npub.as_str(), hex);
+    let from_hex = RadrootsIdentityId::parse(FIXTURE_ALICE.public_key_hex).unwrap();
+    let from_npub = RadrootsIdentityId::parse(FIXTURE_ALICE.npub).unwrap();
+    assert_eq!(from_hex.as_str(), FIXTURE_ALICE.public_key_hex);
+    assert_eq!(from_npub.as_str(), FIXTURE_ALICE.public_key_hex);
 }
 
 #[test]
 fn to_public_projection_excludes_secret_key_fields() {
-    let keys = nostr::Keys::generate();
-    let identity = RadrootsIdentity::new(keys.clone());
+    let identity = fixture_identity(FIXTURE_ALICE);
     let public = identity.to_public();
 
-    assert_eq!(public.id.as_str(), keys.public_key().to_hex());
-    assert_eq!(public.public_key_hex, keys.public_key().to_hex());
+    assert_eq!(public.id.as_str(), FIXTURE_ALICE.public_key_hex);
+    assert_eq!(public.public_key_hex, FIXTURE_ALICE.public_key_hex);
+    assert_eq!(public.public_key_npub, FIXTURE_ALICE.npub);
     assert!(public.profile.is_none());
 
     let json = serde_json::to_string(&public).unwrap();
@@ -206,9 +200,8 @@ fn to_public_projection_excludes_secret_key_fields() {
 
 #[test]
 fn identity_id_trait_paths_and_string_conversions() {
-    let keys = nostr::Keys::generate();
-    let public_key = keys.public_key();
-    let public_key_hex = public_key.to_hex();
+    let public_key = fixture_identity(FIXTURE_ALICE).public_key();
+    let public_key_hex = FIXTURE_ALICE.public_key_hex.to_string();
 
     let from_impl = RadrootsIdentityId::from(public_key);
     assert_eq!(from_impl.as_ref(), public_key_hex);
@@ -220,9 +213,10 @@ fn identity_id_trait_paths_and_string_conversions() {
 
 #[test]
 fn identity_profile_state_mutation_paths() {
-    let keys = nostr::Keys::generate();
-    let mut identity =
-        RadrootsIdentity::with_profile(keys.clone(), RadrootsIdentityProfile::default());
+    let mut identity = RadrootsIdentity::with_profile(
+        fixture_keys(FIXTURE_ALICE),
+        RadrootsIdentityProfile::default(),
+    );
     assert!(identity.profile().is_none());
 
     identity.set_profile(RadrootsIdentityProfile::default());
@@ -245,36 +239,42 @@ fn identity_profile_state_mutation_paths() {
     identity.clear_profile();
     assert!(identity.profile().is_none());
 
-    let public_without_profile = RadrootsIdentityPublic::new(keys.public_key())
+    let public_without_profile = RadrootsIdentityPublic::new(identity.public_key())
         .with_profile(RadrootsIdentityProfile::default());
     assert!(public_without_profile.profile.is_none());
 
-    let public_with_profile = RadrootsIdentityPublic::new(keys.public_key()).with_profile(profile);
+    let public_with_profile =
+        RadrootsIdentityPublic::new(identity.public_key()).with_profile(profile);
     assert!(public_with_profile.profile.is_some());
 }
 
 #[test]
 fn identity_accessor_paths_and_secret_formats() {
-    let keys = nostr::Keys::generate();
-    let identity = RadrootsIdentity::new(keys.clone());
+    let identity = fixture_identity(FIXTURE_ALICE);
 
-    assert_eq!(identity.keys().public_key(), keys.public_key());
-    assert_eq!(identity.public_key(), keys.public_key());
-    assert!(identity.npub().starts_with("npub1"));
-    assert!(identity.nsec().starts_with("nsec1"));
+    assert_eq!(
+        identity.keys().public_key().to_hex(),
+        FIXTURE_ALICE.public_key_hex
+    );
+    assert_eq!(identity.public_key().to_hex(), FIXTURE_ALICE.public_key_hex);
+    assert_eq!(identity.npub(), FIXTURE_ALICE.npub);
+    assert_eq!(identity.nsec(), FIXTURE_ALICE.nsec);
 
     let file_nsec = identity.to_file_with_secret_format(RadrootsIdentitySecretKeyFormat::Nsec);
-    assert!(file_nsec.secret_key.starts_with("nsec1"));
+    assert_eq!(file_nsec.secret_key, FIXTURE_ALICE.nsec);
 
-    let from_keys: RadrootsIdentity = keys.clone().into();
+    let from_keys: RadrootsIdentity = fixture_keys(FIXTURE_ALICE).into();
     let roundtrip_keys = from_keys.clone().into_keys();
-    assert_eq!(roundtrip_keys.public_key(), keys.public_key());
+    assert_eq!(
+        roundtrip_keys.public_key().to_hex(),
+        FIXTURE_ALICE.public_key_hex
+    );
 }
 
 #[cfg(feature = "nip49")]
 #[test]
 fn encrypted_secret_key_round_trips_to_identity() {
-    let identity = RadrootsIdentity::generate();
+    let identity = fixture_identity(FIXTURE_ALICE);
     let encrypted = identity
         .encrypt_secret_key_ncryptsec("fixture-password")
         .unwrap();
@@ -291,7 +291,7 @@ fn encrypted_secret_key_options_propagate_to_output() {
     use nostr::nips::nip19::FromBech32;
     use nostr::nips::nip49::{EncryptedSecretKey, KeySecurity};
 
-    let identity = RadrootsIdentity::generate();
+    let identity = fixture_identity(FIXTURE_ALICE);
     let encrypted = identity
         .encrypt_secret_key_ncryptsec_with_options(
             "fixture-password",
@@ -309,7 +309,7 @@ fn encrypted_secret_key_options_propagate_to_output() {
 #[cfg(feature = "nip49")]
 #[test]
 fn encrypted_secret_key_rejects_invalid_and_wrong_password_inputs() {
-    let identity = RadrootsIdentity::generate();
+    let identity = fixture_identity(FIXTURE_ALICE);
     let encrypted = identity
         .encrypt_secret_key_ncryptsec("fixture-password")
         .unwrap();
@@ -390,8 +390,7 @@ fn load_from_path_rejects_invalid_payloads() {
 
 #[test]
 fn load_from_json_file_without_public_key_succeeds() {
-    let keys = nostr::Keys::generate();
-    let identity = RadrootsIdentity::new(keys.clone());
+    let identity = fixture_identity(FIXTURE_ALICE);
     let mut file = identity.to_file();
     file.public_key = None;
     let json = serde_json::to_string(&file).unwrap();
@@ -401,7 +400,7 @@ fn load_from_json_file_without_public_key_succeeds() {
     std::fs::write(&path, json).unwrap();
 
     let loaded = RadrootsIdentity::load_from_path_auto(&path).unwrap();
-    assert_eq!(loaded.public_key(), keys.public_key());
+    assert_eq!(loaded.public_key().to_hex(), FIXTURE_ALICE.public_key_hex);
 }
 
 #[test]
@@ -420,8 +419,7 @@ fn load_from_json_file_rejects_invalid_secret_key_string() {
 
 #[test]
 fn load_from_json_file_rejects_invalid_public_key_value() {
-    let keys = nostr::Keys::generate();
-    let identity = RadrootsIdentity::new(keys);
+    let identity = fixture_identity(FIXTURE_ALICE);
     let mut file = identity.to_file();
     file.public_key = Some("invalid-public-key".to_string());
     let json = serde_json::to_string(&file).unwrap();
@@ -436,7 +434,7 @@ fn load_from_json_file_rejects_invalid_public_key_value() {
 
 #[test]
 fn save_json_rejects_directory_target() {
-    let identity = RadrootsIdentity::generate();
+    let identity = fixture_identity(FIXTURE_ALICE);
     let dir = tempfile::tempdir().unwrap();
     let err = identity.save_json(dir.path()).unwrap_err();
     assert!(matches!(err, IdentityError::Store(_)));
@@ -447,7 +445,7 @@ fn save_json_rejects_directory_target() {
 fn save_json_reports_write_failure_on_read_only_directory() {
     use std::os::unix::fs::PermissionsExt;
 
-    let identity = RadrootsIdentity::generate();
+    let identity = fixture_identity(FIXTURE_ALICE);
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("identity.json");
     identity.save_json(path.as_path()).unwrap();
@@ -502,8 +500,7 @@ fn load_or_generate_uses_default_path_when_missing() {
 
 #[test]
 fn load_or_generate_prefers_existing_path() {
-    let keys = nostr::Keys::generate();
-    let identity = RadrootsIdentity::new(keys.clone());
+    let identity = fixture_identity(FIXTURE_ALICE);
     let payload = serde_json::to_string(&identity.to_file()).unwrap();
 
     let dir = tempfile::tempdir().unwrap();
@@ -511,12 +508,12 @@ fn load_or_generate_prefers_existing_path() {
     std::fs::write(&path, payload).unwrap();
 
     let loaded = RadrootsIdentity::load_or_generate(Some(&path), false).unwrap();
-    assert_eq!(loaded.public_key(), keys.public_key());
+    assert_eq!(loaded.public_key().to_hex(), FIXTURE_ALICE.public_key_hex);
 }
 
 #[test]
 fn path_ref_variants_cover_success_paths() {
-    let identity = RadrootsIdentity::generate();
+    let identity = fixture_identity(FIXTURE_ALICE);
     let dir = tempfile::tempdir().unwrap();
 
     let saved_path = dir.path().join("saved.json");
@@ -562,8 +559,7 @@ fn identity_profile_is_empty_checks_metadata_and_application_handler() {
 fn secret_key_hex_secret_returns_secret_string() {
     use secrecy::ExposeSecret;
 
-    let keys = nostr::Keys::generate();
-    let identity = RadrootsIdentity::new(keys);
+    let identity = fixture_identity(FIXTURE_ALICE);
     let secret = identity.secret_key_hex_secret();
     assert_eq!(secret.expose_secret(), &identity.secret_key_hex());
 }
@@ -571,8 +567,7 @@ fn secret_key_hex_secret_returns_secret_string() {
 #[cfg(feature = "zeroize")]
 #[test]
 fn secret_key_zeroizing_bytes_matches_raw_secret() {
-    let keys = nostr::Keys::generate();
-    let identity = RadrootsIdentity::new(keys);
+    let identity = fixture_identity(FIXTURE_ALICE);
     let raw = identity.secret_key_bytes();
     let protected = identity.secret_key_bytes_zeroizing();
     assert_eq!(&*protected, &raw);

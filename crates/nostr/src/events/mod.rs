@@ -40,10 +40,11 @@ pub fn radroots_nostr_build_event(
 mod tests {
     use super::radroots_nostr_build_event;
     use crate::types::{RadrootsNostrPublicKey, RadrootsNostrTagKind};
+    use radroots_test_fixtures::FIXTURE_ALICE_PUBLIC_KEY_HEX;
 
     #[test]
     fn build_event_preserves_self_p_tag() {
-        let pubkey_hex = "1bdebe7b23fccb167fc8843280b789839dfa296ae9fd86cc9769b4813d76d8a4";
+        let pubkey_hex = FIXTURE_ALICE_PUBLIC_KEY_HEX;
         let pubkey = RadrootsNostrPublicKey::from_hex(pubkey_hex).expect("pubkey");
         let tags = vec![
             vec!["x".to_string(), "v".to_string()],
