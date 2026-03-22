@@ -11,6 +11,8 @@ use crate::version::{
 use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+use core::net::Ipv6Addr;
+use core::str::FromStr;
 
 const TAG_NEW: &[u8] = b"NEW";
 const TAG_SUB: &[u8] = b"SUB";
@@ -1106,6 +1108,7 @@ fn encode_protocol_server(
     buffer: &mut Vec<u8>,
     server: &RadrootsSimplexSmpProtocolServer,
 ) -> Result<(), RadrootsSimplexSmpProtoError> {
+    validate_transport_hosts(&server.hosts)?;
     push_short_string_list(buffer, &server.hosts)?;
     push_short_string(buffer, &server.port)?;
     push_short_bytes(buffer, &server.key_hash)
@@ -1114,8 +1117,10 @@ fn encode_protocol_server(
 fn decode_protocol_server(
     cursor: &mut Cursor<'_>,
 ) -> Result<RadrootsSimplexSmpProtocolServer, RadrootsSimplexSmpProtoError> {
+    let hosts = cursor.read_short_string_list()?;
+    validate_transport_hosts(&hosts)?;
     Ok(RadrootsSimplexSmpProtocolServer {
-        hosts: cursor.read_short_string_list()?,
+        hosts,
         port: cursor.read_short_string_lossy()?,
         key_hash: cursor.read_short_bytes()?,
     })
@@ -1210,6 +1215,83 @@ fn decode_queue_mode(
             String::from_utf8_lossy(&[value]).into_owned(),
         )),
     }
+}
+
+fn validate_transport_hosts(hosts: &[String]) -> Result<(), RadrootsSimplexSmpProtoError> {
+    for host in hosts {
+        validate_transport_host(host)?;
+    }
+    Ok(())
+}
+
+fn validate_transport_host(host: &str) -> Result<(), RadrootsSimplexSmpProtoError> {
+    if is_valid_ipv4_transport_host(host)
+        || is_valid_ipv6_transport_host(host)
+        || is_valid_onion_transport_host(host)
+        || is_valid_domain_transport_host(host)
+    {
+        return Ok(());
+    }
+    Err(RadrootsSimplexSmpProtoError::InvalidHostList(
+        host.to_string(),
+    ))
+}
+
+fn is_valid_ipv4_transport_host(host: &str) -> bool {
+    let mut segments = 0_usize;
+    for segment in host.split('.') {
+        if segment.is_empty() || !segment.bytes().all(|byte| byte.is_ascii_digit()) {
+            return false;
+        }
+        if segment.parse::<u16>().map_or(true, |value| value > 255) {
+            return false;
+        }
+        segments += 1;
+    }
+    segments == 4
+}
+
+fn is_valid_ipv6_transport_host(host: &str) -> bool {
+    let candidate = if let Some(stripped) = host.strip_prefix('[') {
+        let Some(inner) = stripped.strip_suffix(']') else {
+            return false;
+        };
+        inner
+    } else {
+        if host.ends_with(']') {
+            return false;
+        }
+        host
+    };
+    if candidate.is_empty()
+        || !candidate
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() || byte == b':')
+    {
+        return false;
+    }
+    Ipv6Addr::from_str(candidate).is_ok()
+}
+
+fn is_valid_onion_transport_host(host: &str) -> bool {
+    let Some(prefix) = host.strip_suffix(".onion") else {
+        return false;
+    };
+    !prefix.is_empty()
+        && prefix
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+}
+
+fn is_valid_domain_transport_host(host: &str) -> bool {
+    !host.is_empty()
+        && !host.ends_with(".onion")
+        && !host.starts_with('[')
+        && !host.ends_with(']')
+        && !host.contains(':')
+        && host
+            .chars()
+            .all(|character| !matches!(character, '#' | ',' | ';' | '/' | ' ' | '\n' | '\r' | '\t'))
 }
 
 fn encode_transmission(
@@ -1836,6 +1918,11 @@ impl<'a> Cursor<'a> {
         Ok(self.read_exact(len)?.to_vec())
     }
 
+    fn read_short_string(&mut self) -> Result<String, RadrootsSimplexSmpProtoError> {
+        String::from_utf8(self.read_short_bytes()?)
+            .map_err(|error| RadrootsSimplexSmpProtoError::InvalidUtf8(error.to_string()))
+    }
+
     fn read_short_string_lossy(&mut self) -> Result<String, RadrootsSimplexSmpProtoError> {
         Ok(String::from_utf8_lossy(&self.read_short_bytes()?).into_owned())
     }
@@ -1862,7 +1949,7 @@ impl<'a> Cursor<'a> {
         }
         let mut values = Vec::with_capacity(len);
         for _ in 0..len {
-            values.push(self.read_short_string_lossy()?);
+            values.push(self.read_short_string()?);
         }
         Ok(values)
     }
@@ -2408,6 +2495,56 @@ mod tests {
         let rkey_encoded = rkey.encode().unwrap();
         let rkey_decoded = RadrootsSimplexSmpCommandTransmission::decode(&rkey_encoded).unwrap();
         assert_eq!(rkey_decoded, rkey);
+    }
+
+    #[test]
+    fn protocol_server_accepts_official_transport_host_forms() {
+        let server = RadrootsSimplexSmpProtocolServer {
+            hosts: vec![
+                "smp4.simplex.im".to_string(),
+                "192.0.2.24".to_string(),
+                "2001:db8::24".to_string(),
+                "[2001:db8::42]".to_string(),
+                "simplexabc.onion".to_string(),
+            ],
+            port: "5223".to_string(),
+            key_hash: vec![0xaa, 0xbb, 0xcc],
+        };
+
+        let mut encoded = Vec::new();
+        encode_protocol_server(&mut encoded, &server).unwrap();
+        let decoded = decode_protocol_server(&mut Cursor::new(&encoded)).unwrap();
+
+        assert_eq!(decoded, server);
+    }
+
+    #[test]
+    fn protocol_server_rejects_invalid_transport_host_forms() {
+        let invalid_server = RadrootsSimplexSmpProtocolServer {
+            hosts: vec!["bad host".to_string()],
+            port: "5223".to_string(),
+            key_hash: vec![0xaa, 0xbb, 0xcc],
+        };
+
+        let mut encoded = Vec::new();
+        assert_eq!(
+            encode_protocol_server(&mut encoded, &invalid_server),
+            Err(RadrootsSimplexSmpProtoError::InvalidHostList(
+                "bad host".to_string(),
+            ))
+        );
+
+        let mut invalid_bytes = Vec::new();
+        push_short_string_list(&mut invalid_bytes, &["[invalid]".to_string()]).unwrap();
+        push_short_string(&mut invalid_bytes, "5223").unwrap();
+        push_short_bytes(&mut invalid_bytes, &[0xaa, 0xbb, 0xcc]).unwrap();
+
+        assert_eq!(
+            decode_protocol_server(&mut Cursor::new(&invalid_bytes)),
+            Err(RadrootsSimplexSmpProtoError::InvalidHostList(
+                "[invalid]".to_string(),
+            ))
+        );
     }
 
     #[test]
