@@ -163,22 +163,14 @@ impl RadrootsNostrSignerConnectionRecord {
 mod tests {
     use super::*;
     use crate::model::{RadrootsNostrSignerConnectionDraft, RadrootsNostrSignerConnectionRecord};
-    use nostr::{Keys, PublicKey, RelayUrl, SecretKey};
-    use radroots_identity::{RadrootsIdentity, RadrootsIdentityPublic};
+    use crate::test_support::{
+        fixture_alice_identity, fixture_bob_identity, fixture_carol_identity,
+        fixture_diego_public_key, primary_relay,
+    };
+    use radroots_identity::RadrootsIdentityPublic;
     use radroots_nostr_connect::prelude::{
         RadrootsNostrConnectMethod, RadrootsNostrConnectPermission,
     };
-
-    fn public_identity(secret_hex: &str) -> RadrootsIdentityPublic {
-        RadrootsIdentity::from_secret_key_str(secret_hex)
-            .expect("identity")
-            .to_public()
-    }
-
-    fn public_key(secret_hex: &str) -> PublicKey {
-        let secret = SecretKey::from_hex(secret_hex).expect("secret");
-        Keys::new(secret).public_key()
-    }
 
     fn assert_public_identity_matches(
         actual: &RadrootsIdentityPublic,
@@ -191,8 +183,7 @@ mod tests {
 
     #[test]
     fn local_capability_reports_secret_backing_and_public_identity() {
-        let public_identity =
-            public_identity("0000000000000000000000000000000000000000000000000000000000000001");
+        let public_identity = fixture_alice_identity();
         let capability =
             RadrootsNostrSignerCapability::LocalAccount(RadrootsNostrLocalSignerCapability::new(
                 public_identity.id.clone(),
@@ -212,15 +203,13 @@ mod tests {
 
     #[test]
     fn remote_session_capability_reflects_connection_effective_permissions() {
-        let signer_identity =
-            public_identity("0000000000000000000000000000000000000000000000000000000000000002");
-        let user_identity =
-            public_identity("0000000000000000000000000000000000000000000000000000000000000003");
+        let signer_identity = fixture_bob_identity();
+        let user_identity = fixture_carol_identity();
         let record = RadrootsNostrSignerConnectionRecord::new(
             RadrootsNostrSignerConnectionId::new_v7(),
             signer_identity.clone(),
             RadrootsNostrSignerConnectionDraft::new(
-                public_key("0000000000000000000000000000000000000000000000000000000000000004"),
+                fixture_diego_public_key(),
                 user_identity.clone(),
             )
             .with_requested_permissions(
@@ -229,7 +218,7 @@ mod tests {
                 )]
                 .into(),
             )
-            .with_relays(vec![RelayUrl::parse("wss://relay.example").expect("relay")]),
+            .with_relays(vec![primary_relay()]),
             1,
         );
 
@@ -247,8 +236,8 @@ mod tests {
     fn remote_session_builder_helpers_replace_default_fields() {
         let capability = RadrootsNostrRemoteSessionSignerCapability::new(
             RadrootsNostrSignerConnectionId::new_v7(),
-            public_identity("0000000000000000000000000000000000000000000000000000000000000005"),
-            public_identity("0000000000000000000000000000000000000000000000000000000000000006"),
+            fixture_alice_identity(),
+            fixture_bob_identity(),
         )
         .with_permissions(
             vec![RadrootsNostrConnectPermission::new(
@@ -256,7 +245,7 @@ mod tests {
             )]
             .into(),
         )
-        .with_relays(vec![RelayUrl::parse("wss://relay.example").expect("relay")]);
+        .with_relays(vec![primary_relay()]);
 
         assert_eq!(capability.permissions.as_slice().len(), 1);
         assert_eq!(capability.relays.len(), 1);

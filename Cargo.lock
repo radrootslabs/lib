@@ -2311,6 +2311,7 @@ dependencies = [
  "radroots-identity",
  "radroots-nostr-connect",
  "radroots-runtime",
+ "radroots-test-fixtures",
  "serde",
  "serde_json",
  "sha2",

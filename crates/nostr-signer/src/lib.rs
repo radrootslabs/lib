@@ -8,6 +8,9 @@ pub mod manager;
 pub mod model;
 pub mod store;
 
+#[cfg(test)]
+mod test_support;
+
 pub mod prelude {
     pub use crate::capability::{
         RadrootsNostrLocalSignerAvailability, RadrootsNostrLocalSignerCapability,

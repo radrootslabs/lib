@@ -844,33 +844,30 @@ mod tests {
         RadrootsNostrSignerRequestResponseHint, RadrootsNostrSignerSessionLookup,
     };
     use crate::store::RadrootsNostrSignerStore;
-    use nostr::{Keys, SecretKey, Timestamp, UnsignedEvent};
-    use radroots_identity::RadrootsIdentity;
+    use crate::test_support::{
+        api_primary_https, fixture_alice_identity, primary_relay, secondary_relay,
+        synthetic_public_identity, synthetic_public_key, tertiary_relay,
+    };
+    use nostr::{PublicKey, Timestamp, UnsignedEvent};
+    use radroots_identity::RadrootsIdentityPublic;
     use radroots_nostr_connect::prelude::RadrootsNostrConnectPermission;
     use serde_json::json;
     use std::sync::Arc;
     use std::thread;
 
-    fn public_identity(secret_hex: &str) -> RadrootsIdentityPublic {
-        RadrootsIdentity::from_secret_key_str(secret_hex)
-            .expect("identity")
-            .to_public()
+    fn public_identity(index: u32) -> RadrootsIdentityPublic {
+        synthetic_public_identity(index)
     }
 
-    fn invalid_public_identity(secret_hex: &str) -> RadrootsIdentityPublic {
-        let mut identity = public_identity(secret_hex);
-        let other =
-            SecretKey::from_hex("00000000000000000000000000000000000000000000000000000000000000ff")
-                .expect("secret");
+    fn invalid_public_identity(index: u32) -> RadrootsIdentityPublic {
+        let mut identity = public_identity(index);
         identity.id =
-            radroots_identity::RadrootsIdentityId::parse(&Keys::new(other).public_key().to_hex())
-                .expect("id");
+            radroots_identity::RadrootsIdentityId::parse(&public_key(0xff).to_hex()).expect("id");
         identity
     }
 
-    fn public_key(secret_hex: &str) -> PublicKey {
-        let secret = SecretKey::from_hex(secret_hex).expect("secret");
-        Keys::new(secret).public_key()
+    fn public_key(index: u32) -> PublicKey {
+        synthetic_public_key(index)
     }
 
     fn permission(
@@ -881,10 +878,6 @@ mod tests {
             Some(parameter) => RadrootsNostrConnectPermission::with_parameter(method, parameter),
             None => RadrootsNostrConnectPermission::new(method),
         }
-    }
-
-    fn relay(url: &str) -> RelayUrl {
-        RelayUrl::parse(url).expect("relay")
     }
 
     fn request_message(id: &str) -> RadrootsNostrConnectRequestMessage {
@@ -903,7 +896,7 @@ mod tests {
 
     fn unsigned_event(kind: u16) -> UnsignedEvent {
         serde_json::from_value(json!({
-            "pubkey": public_key("00000000000000000000000000000000000000000000000000000000000000a1").to_hex(),
+            "pubkey": public_key(0xa1).to_hex(),
             "created_at": Timestamp::from(1).as_secs(),
             "kind": kind,
             "tags": [],
@@ -1115,8 +1108,7 @@ mod tests {
     #[test]
     fn set_signer_identity_validates_and_persists() {
         let manager = RadrootsNostrSignerManager::new_in_memory();
-        let signer_identity =
-            public_identity("0000000000000000000000000000000000000000000000000000000000000001");
+        let signer_identity = fixture_alice_identity();
         manager
             .set_signer_identity(signer_identity.clone())
             .expect("set signer");
@@ -1128,9 +1120,7 @@ mod tests {
         assert_same_public_identity(&loaded, &signer_identity);
 
         let err = manager
-            .set_signer_identity(invalid_public_identity(
-                "0000000000000000000000000000000000000000000000000000000000000002",
-            ))
+            .set_signer_identity(invalid_public_identity(0x2))
             .expect_err("invalid identity");
         assert!(
             err.to_string()
@@ -1143,37 +1133,26 @@ mod tests {
         let manager = RadrootsNostrSignerManager::new_in_memory();
         let err = manager
             .register_connection(RadrootsNostrSignerConnectionDraft::new(
-                public_key("0000000000000000000000000000000000000000000000000000000000000003"),
-                public_identity("0000000000000000000000000000000000000000000000000000000000000004"),
+                public_key(0x3),
+                public_identity(0x4),
             ))
             .expect_err("missing signer");
         assert!(err.to_string().contains("missing signer identity"));
 
         manager
-            .set_signer_identity(public_identity(
-                "0000000000000000000000000000000000000000000000000000000000000005",
-            ))
+            .set_signer_identity(public_identity(0x5))
             .expect("set signer");
 
         let sign_event = permission(RadrootsNostrConnectMethod::SignEvent, Some("kind:1"));
         let ping = permission(RadrootsNostrConnectMethod::Ping, None);
         let record = manager
             .register_connection(
-                RadrootsNostrSignerConnectionDraft::new(
-                    public_key("0000000000000000000000000000000000000000000000000000000000000006"),
-                    public_identity(
-                        "0000000000000000000000000000000000000000000000000000000000000007",
-                    ),
-                )
-                .with_connect_secret(" secret ")
-                .with_requested_permissions(
-                    vec![sign_event.clone(), ping.clone(), sign_event.clone()].into(),
-                )
-                .with_relays(vec![
-                    relay("wss://z.example"),
-                    relay("wss://a.example"),
-                    relay("wss://a.example"),
-                ]),
+                RadrootsNostrSignerConnectionDraft::new(public_key(0x6), public_identity(0x7))
+                    .with_connect_secret(" secret ")
+                    .with_requested_permissions(
+                        vec![sign_event.clone(), ping.clone(), sign_event.clone()].into(),
+                    )
+                    .with_relays(vec![primary_relay(), secondary_relay(), secondary_relay()]),
             )
             .expect("register");
 
@@ -1191,29 +1170,18 @@ mod tests {
         );
         assert_eq!(record.auth_state, RadrootsNostrSignerAuthState::NotRequired);
         assert_eq!(record.requested_permissions.as_slice(), &[sign_event, ping]);
-        assert_eq!(
-            record
-                .relays
-                .iter()
-                .map(|relay| relay.as_str().to_owned())
-                .collect::<Vec<_>>(),
-            vec!["wss://a.example", "wss://z.example"]
-        );
+        assert_eq!(record.relays, vec![secondary_relay(), primary_relay()]);
     }
 
     #[test]
     fn register_connection_enforces_identity_and_uniqueness_rules() {
         let manager = RadrootsNostrSignerManager::new_in_memory();
         manager
-            .set_signer_identity(public_identity(
-                "0000000000000000000000000000000000000000000000000000000000000008",
-            ))
+            .set_signer_identity(public_identity(0x8))
             .expect("set signer");
 
-        let user_identity =
-            public_identity("0000000000000000000000000000000000000000000000000000000000000009");
-        let client_public_key =
-            public_key("0000000000000000000000000000000000000000000000000000000000000010");
+        let user_identity = public_identity(0x9);
+        let client_public_key = public_key(0x10);
         let pending = manager
             .register_connection(
                 RadrootsNostrSignerConnectionDraft::new(client_public_key, user_identity.clone())
@@ -1239,13 +1207,8 @@ mod tests {
 
         let duplicate_secret = manager
             .register_connection(
-                RadrootsNostrSignerConnectionDraft::new(
-                    public_key("0000000000000000000000000000000000000000000000000000000000000011"),
-                    public_identity(
-                        "0000000000000000000000000000000000000000000000000000000000000012",
-                    ),
-                )
-                .with_connect_secret("shared-secret"),
+                RadrootsNostrSignerConnectionDraft::new(public_key(0x11), public_identity(0x12))
+                    .with_connect_secret("shared-secret"),
             )
             .expect_err("duplicate secret");
         assert!(
@@ -1256,10 +1219,8 @@ mod tests {
 
         let invalid_user = manager
             .register_connection(RadrootsNostrSignerConnectionDraft::new(
-                public_key("0000000000000000000000000000000000000000000000000000000000000013"),
-                invalid_public_identity(
-                    "0000000000000000000000000000000000000000000000000000000000000014",
-                ),
+                public_key(0x13),
+                invalid_public_identity(0x14),
             ))
             .expect_err("invalid user identity");
         assert!(
@@ -1273,22 +1234,14 @@ mod tests {
     fn manager_query_helpers_find_connections() {
         let manager = RadrootsNostrSignerManager::new_in_memory();
         manager
-            .set_signer_identity(public_identity(
-                "0000000000000000000000000000000000000000000000000000000000000015",
-            ))
+            .set_signer_identity(public_identity(0x15))
             .expect("set signer");
 
-        let client_public_key =
-            public_key("0000000000000000000000000000000000000000000000000000000000000016");
+        let client_public_key = public_key(0x16);
         let record = manager
             .register_connection(
-                RadrootsNostrSignerConnectionDraft::new(
-                    client_public_key,
-                    public_identity(
-                        "0000000000000000000000000000000000000000000000000000000000000017",
-                    ),
-                )
-                .with_connect_secret("lookup-secret"),
+                RadrootsNostrSignerConnectionDraft::new(client_public_key, public_identity(0x17))
+                    .with_connect_secret("lookup-secret"),
             )
             .expect("register");
 
@@ -1319,9 +1272,7 @@ mod tests {
     fn granted_permissions_and_approval_enforce_subset_rules() {
         let manager = RadrootsNostrSignerManager::new_in_memory();
         manager
-            .set_signer_identity(public_identity(
-                "0000000000000000000000000000000000000000000000000000000000000018",
-            ))
+            .set_signer_identity(public_identity(0x18))
             .expect("set signer");
         let requested = vec![
             permission(RadrootsNostrConnectMethod::SignEvent, Some("kind:1")),
@@ -1334,14 +1285,11 @@ mod tests {
         )];
         let pending = manager
             .register_connection(
-                RadrootsNostrSignerConnectionDraft::new(
-                    public_key("0000000000000000000000000000000000000000000000000000000000000019"),
-                    public_identity(
-                        "0000000000000000000000000000000000000000000000000000000000000020",
+                RadrootsNostrSignerConnectionDraft::new(public_key(0x19), public_identity(0x20))
+                    .with_requested_permissions(requested.clone().into())
+                    .with_approval_requirement(
+                        RadrootsNostrSignerApprovalRequirement::ExplicitUser,
                     ),
-                )
-                .with_requested_permissions(requested.clone().into())
-                .with_approval_requirement(RadrootsNostrSignerApprovalRequirement::ExplicitUser),
             )
             .expect("register");
 
@@ -1389,8 +1337,8 @@ mod tests {
 
         let auto = manager
             .register_connection(RadrootsNostrSignerConnectionDraft::new(
-                public_key("0000000000000000000000000000000000000000000000000000000000000021"),
-                public_identity("0000000000000000000000000000000000000000000000000000000000000022"),
+                public_key(0x21),
+                public_identity(0x22),
             ))
             .expect("register auto");
         let err = manager
@@ -1403,14 +1351,11 @@ mod tests {
 
         let terminal_pending = manager
             .register_connection(
-                RadrootsNostrSignerConnectionDraft::new(
-                    public_key("0000000000000000000000000000000000000000000000000000000000000040"),
-                    public_identity(
-                        "0000000000000000000000000000000000000000000000000000000000000041",
+                RadrootsNostrSignerConnectionDraft::new(public_key(0x40), public_identity(0x41))
+                    .with_connect_secret("terminal-secret")
+                    .with_approval_requirement(
+                        RadrootsNostrSignerApprovalRequirement::ExplicitUser,
                     ),
-                )
-                .with_connect_secret("terminal-secret")
-                .with_approval_requirement(RadrootsNostrSignerApprovalRequirement::ExplicitUser),
             )
             .expect("register terminal");
         manager
@@ -1430,8 +1375,8 @@ mod tests {
 
         let unrestricted = manager
             .register_connection(RadrootsNostrSignerConnectionDraft::new(
-                public_key("0000000000000000000000000000000000000000000000000000000000000023"),
-                public_identity("0000000000000000000000000000000000000000000000000000000000000024"),
+                public_key(0x23),
+                public_identity(0x24),
             ))
             .expect("register unrestricted");
         let unrestricted_grants = manager
@@ -1444,20 +1389,15 @@ mod tests {
     fn reject_revoke_and_relay_updates_cover_terminal_paths() {
         let manager = RadrootsNostrSignerManager::new_in_memory();
         manager
-            .set_signer_identity(public_identity(
-                "0000000000000000000000000000000000000000000000000000000000000025",
-            ))
+            .set_signer_identity(public_identity(0x25))
             .expect("set signer");
         let rejected = manager
             .register_connection(
-                RadrootsNostrSignerConnectionDraft::new(
-                    public_key("0000000000000000000000000000000000000000000000000000000000000026"),
-                    public_identity(
-                        "0000000000000000000000000000000000000000000000000000000000000027",
+                RadrootsNostrSignerConnectionDraft::new(public_key(0x26), public_identity(0x27))
+                    .with_connect_secret("shared-secret")
+                    .with_approval_requirement(
+                        RadrootsNostrSignerApprovalRequirement::ExplicitUser,
                     ),
-                )
-                .with_connect_secret("shared-secret")
-                .with_approval_requirement(RadrootsNostrSignerApprovalRequirement::ExplicitUser),
             )
             .expect("register reject");
         let rejected = manager
@@ -1479,7 +1419,7 @@ mod tests {
         );
 
         let relay_err = manager
-            .update_relays(&rejected.connection_id, vec![relay("wss://relay.example")])
+            .update_relays(&rejected.connection_id, vec![primary_relay()])
             .expect_err("update rejected");
         assert!(
             relay_err
@@ -1493,28 +1433,17 @@ mod tests {
 
         let active = manager
             .register_connection(RadrootsNostrSignerConnectionDraft::new(
-                public_key("0000000000000000000000000000000000000000000000000000000000000028"),
-                public_identity("0000000000000000000000000000000000000000000000000000000000000029"),
+                public_key(0x28),
+                public_identity(0x29),
             ))
             .expect("register active");
         let active = manager
             .update_relays(
                 &active.connection_id,
-                vec![
-                    relay("wss://b.example"),
-                    relay("wss://a.example"),
-                    relay("wss://a.example"),
-                ],
+                vec![tertiary_relay(), secondary_relay(), secondary_relay()],
             )
             .expect("update relays");
-        assert_eq!(
-            active
-                .relays
-                .iter()
-                .map(|relay| relay.as_str().to_owned())
-                .collect::<Vec<_>>(),
-            vec!["wss://a.example", "wss://b.example"]
-        );
+        assert_eq!(active.relays, vec![secondary_relay(), tertiary_relay()]);
 
         let revoked = manager
             .revoke_connection(&active.connection_id, Some("manual".into()))
@@ -1544,7 +1473,7 @@ mod tests {
         );
 
         let require_auth_err = manager
-            .require_auth_challenge(&active.connection_id, "https://auth.example")
+            .require_auth_challenge(&active.connection_id, api_primary_https())
             .expect_err("require auth revoked");
         assert!(
             require_auth_err
@@ -1575,14 +1504,12 @@ mod tests {
     fn authentication_and_request_audit_paths_are_recorded() {
         let manager = RadrootsNostrSignerManager::new_in_memory();
         manager
-            .set_signer_identity(public_identity(
-                "0000000000000000000000000000000000000000000000000000000000000030",
-            ))
+            .set_signer_identity(public_identity(0x30))
             .expect("set signer");
         let record = manager
             .register_connection(RadrootsNostrSignerConnectionDraft::new(
-                public_key("0000000000000000000000000000000000000000000000000000000000000031"),
-                public_identity("0000000000000000000000000000000000000000000000000000000000000032"),
+                public_key(0x31),
+                public_identity(0x32),
             ))
             .expect("register");
 
@@ -1651,19 +1578,20 @@ mod tests {
     fn auth_challenge_and_pending_request_state_are_persisted_and_replayed() {
         let manager = RadrootsNostrSignerManager::new_in_memory();
         manager
-            .set_signer_identity(public_identity(
-                "0000000000000000000000000000000000000000000000000000000000000034",
-            ))
+            .set_signer_identity(public_identity(0x34))
             .expect("set signer");
         let record = manager
             .register_connection(RadrootsNostrSignerConnectionDraft::new(
-                public_key("0000000000000000000000000000000000000000000000000000000000000035"),
-                public_identity("0000000000000000000000000000000000000000000000000000000000000036"),
+                public_key(0x35),
+                public_identity(0x36),
             ))
             .expect("register");
 
         let required = manager
-            .require_auth_challenge(&record.connection_id, " https://auth.example/flow ")
+            .require_auth_challenge(
+                &record.connection_id,
+                format!(" {}/flow ", api_primary_https()).as_str(),
+            )
             .expect("require auth");
         assert_eq!(required.auth_state, RadrootsNostrSignerAuthState::Pending);
         assert_eq!(
@@ -1672,7 +1600,7 @@ mod tests {
                 .as_ref()
                 .expect("auth challenge")
                 .auth_url,
-            "https://auth.example/flow"
+            format!("{}/flow", api_primary_https())
         );
         assert!(required.pending_request.is_none());
 
@@ -1745,19 +1673,20 @@ mod tests {
     fn restored_authorized_auth_challenge_requeues_pending_request() {
         let manager = RadrootsNostrSignerManager::new_in_memory();
         manager
-            .set_signer_identity(public_identity(
-                "0000000000000000000000000000000000000000000000000000000000000134",
-            ))
+            .set_signer_identity(public_identity(0x134))
             .expect("set signer");
         let record = manager
             .register_connection(RadrootsNostrSignerConnectionDraft::new(
-                public_key("0000000000000000000000000000000000000000000000000000000000000135"),
-                public_identity("0000000000000000000000000000000000000000000000000000000000000136"),
+                public_key(0x135),
+                public_identity(0x136),
             ))
             .expect("register");
 
         manager
-            .require_auth_challenge(&record.connection_id, "https://auth.example/flow")
+            .require_auth_challenge(
+                &record.connection_id,
+                format!("{}/flow", api_primary_https()).as_str(),
+            )
             .expect("require auth");
         manager
             .set_pending_request(&record.connection_id, request_message("req-replay"))
@@ -1796,19 +1725,12 @@ mod tests {
     fn connect_secret_consumption_persists_and_remains_idempotent() {
         let manager = RadrootsNostrSignerManager::new_in_memory();
         manager
-            .set_signer_identity(public_identity(
-                "0000000000000000000000000000000000000000000000000000000000000037",
-            ))
+            .set_signer_identity(public_identity(0x37))
             .expect("set signer");
         let record = manager
             .register_connection(
-                RadrootsNostrSignerConnectionDraft::new(
-                    public_key("0000000000000000000000000000000000000000000000000000000000000038"),
-                    public_identity(
-                        "0000000000000000000000000000000000000000000000000000000000000039",
-                    ),
-                )
-                .with_connect_secret("one-shot-secret"),
+                RadrootsNostrSignerConnectionDraft::new(public_key(0x38), public_identity(0x39))
+                    .with_connect_secret("one-shot-secret"),
             )
             .expect("register");
 
@@ -1855,9 +1777,7 @@ mod tests {
         assert_eq!(loaded_state.version, RADROOTS_NOSTR_SIGNER_STORE_VERSION);
         let manager = RadrootsNostrSignerManager::new(save_error_store).expect("manager");
         let err = manager
-            .set_signer_identity(public_identity(
-                "0000000000000000000000000000000000000000000000000000000000000033",
-            ))
+            .set_signer_identity(public_identity(0x33))
             .expect_err("save error");
         assert!(err.to_string().contains("store save failed"));
     }
@@ -1866,9 +1786,7 @@ mod tests {
     fn mutation_methods_cover_remaining_error_paths() {
         let manager = RadrootsNostrSignerManager::new_in_memory();
         manager
-            .set_signer_identity(public_identity(
-                "0000000000000000000000000000000000000000000000000000000000000051",
-            ))
+            .set_signer_identity(public_identity(0x51))
             .expect("set signer");
 
         let missing_id = RadrootsNostrSignerConnectionId::parse("missing-2").expect("id");
@@ -1888,10 +1806,10 @@ mod tests {
             .revoke_connection(&missing_id, None)
             .expect_err("missing revoke");
         let missing_relays = manager
-            .update_relays(&missing_id, vec![relay("wss://relay.example")])
+            .update_relays(&missing_id, vec![primary_relay()])
             .expect_err("missing relays");
         let missing_require_auth = manager
-            .require_auth_challenge(&missing_id, "https://auth.example")
+            .require_auth_challenge(&missing_id, api_primary_https())
             .expect_err("missing require auth");
         let missing_pending_request = manager
             .set_pending_request(&missing_id, request_message("req-missing-2"))
@@ -1926,14 +1844,11 @@ mod tests {
         let requested = vec![permission(RadrootsNostrConnectMethod::Ping, None)];
         let pending = manager
             .register_connection(
-                RadrootsNostrSignerConnectionDraft::new(
-                    public_key("0000000000000000000000000000000000000000000000000000000000000052"),
-                    public_identity(
-                        "0000000000000000000000000000000000000000000000000000000000000053",
+                RadrootsNostrSignerConnectionDraft::new(public_key(0x52), public_identity(0x53))
+                    .with_requested_permissions(requested.into())
+                    .with_approval_requirement(
+                        RadrootsNostrSignerApprovalRequirement::ExplicitUser,
                     ),
-                )
-                .with_requested_permissions(requested.into())
-                .with_approval_requirement(RadrootsNostrSignerApprovalRequirement::ExplicitUser),
             )
             .expect("register pending");
         let invalid_approve = manager
@@ -1953,7 +1868,7 @@ mod tests {
         );
 
         let auth_required = manager
-            .require_auth_challenge(&pending.connection_id, "https://auth.example")
+            .require_auth_challenge(&pending.connection_id, api_primary_https())
             .expect("require auth");
         assert_eq!(
             auth_required.auth_state,
@@ -1979,16 +1894,14 @@ mod tests {
     fn register_connection_rejects_invalid_persisted_signer_identity() {
         let store = Arc::new(RadrootsNostrMemorySignerStore::new());
         let mut state = RadrootsNostrSignerStoreState::default();
-        state.signer_identity = Some(invalid_public_identity(
-            "0000000000000000000000000000000000000000000000000000000000000054",
-        ));
+        state.signer_identity = Some(invalid_public_identity(0x54));
         store.save(&state).expect("seed state");
 
         let manager = RadrootsNostrSignerManager::new(store).expect("manager");
         let err = manager
             .register_connection(RadrootsNostrSignerConnectionDraft::new(
-                public_key("0000000000000000000000000000000000000000000000000000000000000055"),
-                public_identity("0000000000000000000000000000000000000000000000000000000000000056"),
+                public_key(0x55),
+                public_identity(0x56),
             ))
             .expect_err("invalid signer identity");
         assert!(
@@ -2012,8 +1925,7 @@ mod tests {
         poison_manager_state(&manager);
 
         let connection_id = RadrootsNostrSignerConnectionId::parse("conn-1").expect("id");
-        let client_public_key =
-            public_key("0000000000000000000000000000000000000000000000000000000000000047");
+        let client_public_key = public_key(0x47);
 
         let get_err = manager
             .get_connection(&connection_id)
@@ -2055,8 +1967,7 @@ mod tests {
     #[test]
     fn evaluate_connect_request_reports_poisoned_state_lock() {
         let store = Arc::new(RadrootsNostrMemorySignerStore::new());
-        let signer_identity =
-            public_identity("0000000000000000000000000000000000000000000000000000000000000057");
+        let signer_identity = public_identity(0x57);
         let mut state = RadrootsNostrSignerStoreState::default();
         state.signer_identity = Some(signer_identity.clone());
         store.save(&state).expect("save state");
@@ -2066,7 +1977,7 @@ mod tests {
 
         let err = manager
             .evaluate_connect_request(
-                public_key("0000000000000000000000000000000000000000000000000000000000000058"),
+                public_key(0x58),
                 RadrootsNostrConnectRequest::Connect {
                     remote_signer_public_key: PublicKey::parse(
                         signer_identity.public_key_hex.as_str(),
@@ -2085,13 +1996,10 @@ mod tests {
         let manager = RadrootsNostrSignerManager::new_in_memory();
         poison_manager_state(&manager);
 
-        let signer_identity =
-            public_identity("0000000000000000000000000000000000000000000000000000000000000048");
+        let signer_identity = public_identity(0x48);
         let connection_id = RadrootsNostrSignerConnectionId::parse("conn-2").expect("id");
-        let connect_draft = RadrootsNostrSignerConnectionDraft::new(
-            public_key("0000000000000000000000000000000000000000000000000000000000000049"),
-            public_identity("0000000000000000000000000000000000000000000000000000000000000050"),
-        );
+        let connect_draft =
+            RadrootsNostrSignerConnectionDraft::new(public_key(0x49), public_identity(0x50));
 
         let set_signer_err = manager
             .set_signer_identity(signer_identity)
@@ -2115,10 +2023,10 @@ mod tests {
             .revoke_connection(&connection_id, Some("reason".into()))
             .expect_err("poisoned revoke");
         let update_relays_err = manager
-            .update_relays(&connection_id, vec![relay("wss://relay.example")])
+            .update_relays(&connection_id, vec![primary_relay()])
             .expect_err("poisoned relays");
         let require_auth_err = manager
-            .require_auth_challenge(&connection_id, "https://auth.example")
+            .require_auth_challenge(&connection_id, api_primary_https())
             .expect_err("poisoned require auth");
         let set_pending_request_err = manager
             .set_pending_request(&connection_id, request_message("req-2"))
@@ -2193,21 +2101,16 @@ mod tests {
 
         let manager = RadrootsNostrSignerManager::new_in_memory();
         manager
-            .set_signer_identity(public_identity(
-                "0000000000000000000000000000000000000000000000000000000000000042",
-            ))
+            .set_signer_identity(public_identity(0x42))
             .expect("set signer");
 
         let initial = manager
             .register_connection(
-                RadrootsNostrSignerConnectionDraft::new(
-                    public_key("0000000000000000000000000000000000000000000000000000000000000043"),
-                    public_identity(
-                        "0000000000000000000000000000000000000000000000000000000000000044",
+                RadrootsNostrSignerConnectionDraft::new(public_key(0x43), public_identity(0x44))
+                    .with_connect_secret("reusable-secret")
+                    .with_approval_requirement(
+                        RadrootsNostrSignerApprovalRequirement::ExplicitUser,
                     ),
-                )
-                .with_connect_secret("reusable-secret")
-                .with_approval_requirement(RadrootsNostrSignerApprovalRequirement::ExplicitUser),
             )
             .expect("register initial");
         manager
@@ -2216,13 +2119,8 @@ mod tests {
 
         let reused = manager
             .register_connection(
-                RadrootsNostrSignerConnectionDraft::new(
-                    public_key("0000000000000000000000000000000000000000000000000000000000000045"),
-                    public_identity(
-                        "0000000000000000000000000000000000000000000000000000000000000046",
-                    ),
-                )
-                .with_connect_secret("reusable-secret"),
+                RadrootsNostrSignerConnectionDraft::new(public_key(0x45), public_identity(0x46))
+                    .with_connect_secret("reusable-secret"),
             )
             .expect("register reused secret");
 
@@ -2244,13 +2142,8 @@ mod tests {
 
         let blocked_reuse = manager
             .register_connection(
-                RadrootsNostrSignerConnectionDraft::new(
-                    public_key("0000000000000000000000000000000000000000000000000000000000000047"),
-                    public_identity(
-                        "0000000000000000000000000000000000000000000000000000000000000048",
-                    ),
-                )
-                .with_connect_secret("reusable-secret"),
+                RadrootsNostrSignerConnectionDraft::new(public_key(0x47), public_identity(0x48))
+                    .with_connect_secret("reusable-secret"),
             )
             .expect_err("block consumed secret reuse");
         assert!(matches!(
@@ -2262,25 +2155,18 @@ mod tests {
     #[test]
     fn session_lookup_and_connect_evaluation_cover_new_paths() {
         let manager = RadrootsNostrSignerManager::new_in_memory();
-        let signer_identity =
-            public_identity("0000000000000000000000000000000000000000000000000000000000000060");
+        let signer_identity = public_identity(0x60);
         let signer_public_key =
             PublicKey::parse(signer_identity.public_key_hex.as_str()).expect("signer public key");
         manager
             .set_signer_identity(signer_identity)
             .expect("set signer");
 
-        let client_public_key =
-            public_key("0000000000000000000000000000000000000000000000000000000000000061");
+        let client_public_key = public_key(0x61);
         let primary = manager
             .register_connection(
-                RadrootsNostrSignerConnectionDraft::new(
-                    client_public_key,
-                    public_identity(
-                        "0000000000000000000000000000000000000000000000000000000000000062",
-                    ),
-                )
-                .with_connect_secret("connect-secret"),
+                RadrootsNostrSignerConnectionDraft::new(client_public_key, public_identity(0x62))
+                    .with_connect_secret("connect-secret"),
             )
             .expect("register primary");
 
@@ -2300,13 +2186,8 @@ mod tests {
 
         let second = manager
             .register_connection(
-                RadrootsNostrSignerConnectionDraft::new(
-                    client_public_key,
-                    public_identity(
-                        "0000000000000000000000000000000000000000000000000000000000000063",
-                    ),
-                )
-                .with_connect_secret("second-secret"),
+                RadrootsNostrSignerConnectionDraft::new(client_public_key, public_identity(0x63))
+                    .with_connect_secret("second-secret"),
             )
             .expect("register second");
 
@@ -2326,10 +2207,7 @@ mod tests {
         assert_same_connection(&found[1], &second);
 
         let mismatch_secret = manager
-            .lookup_session(
-                &public_key("0000000000000000000000000000000000000000000000000000000000000064"),
-                Some("connect-secret"),
-            )
+            .lookup_session(&public_key(0x64), Some("connect-secret"))
             .expect_err("secret mismatch");
         assert!(
             mismatch_secret
@@ -2338,10 +2216,7 @@ mod tests {
         );
 
         let none_lookup = manager
-            .lookup_session(
-                &public_key("0000000000000000000000000000000000000000000000000000000000000065"),
-                None,
-            )
+            .lookup_session(&public_key(0x65), None)
             .expect("lookup none");
         expect_none_lookup(none_lookup);
 
@@ -2370,9 +2245,7 @@ mod tests {
             .evaluate_connect_request(
                 client_public_key,
                 RadrootsNostrConnectRequest::Connect {
-                    remote_signer_public_key: public_key(
-                        "0000000000000000000000000000000000000000000000000000000000000066",
-                    ),
+                    remote_signer_public_key: public_key(0x66),
                     secret: None,
                     requested_permissions: RadrootsNostrConnectPermissions::default(),
                 },
@@ -2402,7 +2275,7 @@ mod tests {
 
         let registration_connect = manager
             .evaluate_connect_request(
-                public_key("0000000000000000000000000000000000000000000000000000000000000067"),
+                public_key(0x67),
                 RadrootsNostrConnectRequest::Connect {
                     remote_signer_public_key: signer_public_key,
                     secret: Some(" fresh-secret ".into()),
@@ -2416,10 +2289,7 @@ mod tests {
             )
             .expect("registration connect request");
         let proposal = expect_registration_connect(registration_connect);
-        assert_eq!(
-            proposal.client_public_key,
-            public_key("0000000000000000000000000000000000000000000000000000000000000067")
-        );
+        assert_eq!(proposal.client_public_key, public_key(0x67));
         assert_eq!(proposal.connect_secret.as_deref(), Some("fresh-secret"));
         assert_eq!(
             proposal.requested_permissions.as_slice(),
@@ -2431,7 +2301,7 @@ mod tests {
 
         let existing_secret_mismatch = manager
             .evaluate_connect_request(
-                public_key("0000000000000000000000000000000000000000000000000000000000000068"),
+                public_key(0x68),
                 RadrootsNostrConnectRequest::Connect {
                     remote_signer_public_key: signer_public_key,
                     secret: Some("connect-secret".into()),
@@ -2447,8 +2317,7 @@ mod tests {
 
         let store = Arc::new(RadrootsNostrMemorySignerStore::new());
         let mut invalid_state = RadrootsNostrSignerStoreState::default();
-        let mut invalid_identity =
-            public_identity("0000000000000000000000000000000000000000000000000000000000000069");
+        let mut invalid_identity = public_identity(0x69);
         invalid_identity.public_key_hex = "invalid".into();
         invalid_state.signer_identity = Some(invalid_identity);
         store
@@ -2457,7 +2326,7 @@ mod tests {
         let invalid_manager = RadrootsNostrSignerManager::new(store).expect("invalid manager");
         let invalid_signer_err = invalid_manager
             .evaluate_connect_request(
-                public_key("0000000000000000000000000000000000000000000000000000000000000070"),
+                public_key(0x70),
                 RadrootsNostrConnectRequest::Connect {
                     remote_signer_public_key: signer_public_key,
                     secret: None,
@@ -2476,26 +2345,19 @@ mod tests {
     fn evaluate_request_covers_allowed_denied_and_challenged_paths() {
         let manager = RadrootsNostrSignerManager::new_in_memory();
         manager
-            .set_signer_identity(public_identity(
-                "0000000000000000000000000000000000000000000000000000000000000071",
-            ))
+            .set_signer_identity(public_identity(0x71))
             .expect("set signer");
 
         let active = manager
             .register_connection(
-                RadrootsNostrSignerConnectionDraft::new(
-                    public_key("0000000000000000000000000000000000000000000000000000000000000072"),
-                    public_identity(
-                        "0000000000000000000000000000000000000000000000000000000000000073",
+                RadrootsNostrSignerConnectionDraft::new(public_key(0x72), public_identity(0x73))
+                    .with_requested_permissions(
+                        vec![permission(
+                            RadrootsNostrConnectMethod::SignEvent,
+                            Some("kind:1"),
+                        )]
+                        .into(),
                     ),
-                )
-                .with_requested_permissions(
-                    vec![permission(
-                        RadrootsNostrConnectMethod::SignEvent,
-                        Some("kind:1"),
-                    )]
-                    .into(),
-                ),
             )
             .expect("register active");
 
@@ -2540,13 +2402,10 @@ mod tests {
 
         let pending = manager
             .register_connection(
-                RadrootsNostrSignerConnectionDraft::new(
-                    public_key("0000000000000000000000000000000000000000000000000000000000000074"),
-                    public_identity(
-                        "0000000000000000000000000000000000000000000000000000000000000075",
+                RadrootsNostrSignerConnectionDraft::new(public_key(0x74), public_identity(0x75))
+                    .with_approval_requirement(
+                        RadrootsNostrSignerApprovalRequirement::ExplicitUser,
                     ),
-                )
-                .with_approval_requirement(RadrootsNostrSignerApprovalRequirement::ExplicitUser),
             )
             .expect("register pending");
         let pending_eval = manager
@@ -2556,12 +2415,12 @@ mod tests {
 
         let challenged = manager
             .register_connection(RadrootsNostrSignerConnectionDraft::new(
-                public_key("0000000000000000000000000000000000000000000000000000000000000076"),
-                public_identity("0000000000000000000000000000000000000000000000000000000000000077"),
+                public_key(0x76),
+                public_identity(0x77),
             ))
             .expect("register challenged");
         manager
-            .require_auth_challenge(&challenged.connection_id, "https://auth.example")
+            .require_auth_challenge(&challenged.connection_id, api_primary_https())
             .expect("require auth challenge");
         let challenged_eval = manager
             .evaluate_request(&challenged.connection_id, request_message("req-auth"))
@@ -2616,17 +2475,13 @@ mod tests {
     #[test]
     fn evaluate_request_reports_invalid_corrupted_auth_state() {
         let store = Arc::new(RadrootsNostrMemorySignerStore::new());
-        let signer_identity =
-            public_identity("0000000000000000000000000000000000000000000000000000000000000078");
+        let signer_identity = public_identity(0x78);
         let mut state = RadrootsNostrSignerStoreState::default();
         state.signer_identity = Some(signer_identity.clone());
         let mut record = RadrootsNostrSignerConnectionRecord::new(
             RadrootsNostrSignerConnectionId::new_v7(),
             signer_identity,
-            RadrootsNostrSignerConnectionDraft::new(
-                public_key("0000000000000000000000000000000000000000000000000000000000000079"),
-                public_identity("0000000000000000000000000000000000000000000000000000000000000080"),
-            ),
+            RadrootsNostrSignerConnectionDraft::new(public_key(0x79), public_identity(0x80)),
             1,
         );
         record.auth_state = RadrootsNostrSignerAuthState::Pending;
@@ -2645,15 +2500,13 @@ mod tests {
     fn evaluate_request_reports_invalid_request_id_and_missing_connection() {
         let manager = RadrootsNostrSignerManager::new_in_memory();
         manager
-            .set_signer_identity(public_identity(
-                "0000000000000000000000000000000000000000000000000000000000000081",
-            ))
+            .set_signer_identity(public_identity(0x81))
             .expect("set signer");
 
         let active = manager
             .register_connection(RadrootsNostrSignerConnectionDraft::new(
-                public_key("0000000000000000000000000000000000000000000000000000000000000082"),
-                public_identity("0000000000000000000000000000000000000000000000000000000000000083"),
+                public_key(0x82),
+                public_identity(0x83),
             ))
             .expect("register active");
 
@@ -2686,18 +2539,14 @@ mod tests {
     fn evaluate_request_action_reports_pending_request_and_response_hint_errors() {
         let mut pending_record = RadrootsNostrSignerConnectionRecord::new(
             RadrootsNostrSignerConnectionId::new_v7(),
-            public_identity("0000000000000000000000000000000000000000000000000000000000000084"),
-            RadrootsNostrSignerConnectionDraft::new(
-                public_key("0000000000000000000000000000000000000000000000000000000000000085"),
-                public_identity("0000000000000000000000000000000000000000000000000000000000000086"),
-            ),
+            public_identity(0x84),
+            RadrootsNostrSignerConnectionDraft::new(public_key(0x85), public_identity(0x86)),
             1,
         );
         pending_record.status = RadrootsNostrSignerConnectionStatus::Active;
         pending_record.auth_state = RadrootsNostrSignerAuthState::Pending;
-        pending_record.auth_challenge = Some(
-            RadrootsNostrSignerAuthChallenge::new("https://auth.example", 1).expect("challenge"),
-        );
+        pending_record.auth_challenge =
+            Some(RadrootsNostrSignerAuthChallenge::new(api_primary_https(), 1).expect("challenge"));
         let invalid_pending = evaluate_request_action(
             &mut pending_record,
             &request_message_with_request("   ", RadrootsNostrConnectRequest::Ping),
@@ -2708,11 +2557,8 @@ mod tests {
 
         let mut invalid_user_record = RadrootsNostrSignerConnectionRecord::new(
             RadrootsNostrSignerConnectionId::new_v7(),
-            public_identity("0000000000000000000000000000000000000000000000000000000000000087"),
-            RadrootsNostrSignerConnectionDraft::new(
-                public_key("0000000000000000000000000000000000000000000000000000000000000088"),
-                public_identity("0000000000000000000000000000000000000000000000000000000000000089"),
-            ),
+            public_identity(0x87),
+            RadrootsNostrSignerConnectionDraft::new(public_key(0x88), public_identity(0x89)),
             1,
         );
         invalid_user_record.status = RadrootsNostrSignerConnectionStatus::Active;

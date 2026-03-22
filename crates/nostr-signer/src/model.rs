@@ -640,21 +640,22 @@ fn normalize_optional_string(value: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nostr::{Keys, SecretKey};
-    use radroots_identity::RadrootsIdentity;
+    use crate::test_support::{
+        api_primary_https, fixture_alice_identity, fixture_bob_identity, fixture_carol_public_key,
+        primary_relay, synthetic_public_identity, synthetic_public_key,
+    };
+    use nostr::PublicKey;
+    use radroots_identity::RadrootsIdentityPublic;
     use serde_json::json;
     use std::str::FromStr;
     use tempfile::tempdir;
 
-    fn public_identity(secret_hex: &str) -> RadrootsIdentityPublic {
-        RadrootsIdentity::from_secret_key_str(secret_hex)
-            .expect("identity")
-            .to_public()
+    fn public_identity(index: u32) -> RadrootsIdentityPublic {
+        synthetic_public_identity(index)
     }
 
-    fn public_key(secret_hex: &str) -> PublicKey {
-        let secret = SecretKey::from_hex(secret_hex).expect("secret");
-        Keys::new(secret).public_key()
+    fn public_key(index: u32) -> PublicKey {
+        synthetic_public_key(index)
     }
 
     fn request_message(id: &str) -> RadrootsNostrConnectRequestMessage {
@@ -711,10 +712,10 @@ mod tests {
             RadrootsNostrConnectMethod::SignEvent,
             "kind:1",
         );
-        let relay = RelayUrl::parse("wss://relay.example").expect("relay");
+        let relay = primary_relay();
         let draft = RadrootsNostrSignerConnectionDraft::new(
-            public_key("0000000000000000000000000000000000000000000000000000000000000001"),
-            public_identity("0000000000000000000000000000000000000000000000000000000000000002"),
+            fixture_carol_public_key(),
+            fixture_bob_identity(),
         )
         .with_connect_secret(" secret ")
         .with_requested_permissions(vec![permission.clone()].into())
@@ -732,17 +733,13 @@ mod tests {
 
     #[test]
     fn connection_record_defaults_follow_approval_requirement_and_tracking_helpers() {
-        let signer_identity =
-            public_identity("0000000000000000000000000000000000000000000000000000000000000003");
-        let user_identity =
-            public_identity("0000000000000000000000000000000000000000000000000000000000000004");
+        let signer_identity = fixture_alice_identity();
+        let user_identity = fixture_bob_identity();
         let connection_id = RadrootsNostrSignerConnectionId::parse("conn-1").expect("id");
-        let draft = RadrootsNostrSignerConnectionDraft::new(
-            public_key("0000000000000000000000000000000000000000000000000000000000000005"),
-            user_identity,
-        )
-        .with_connect_secret(" secret ")
-        .with_approval_requirement(RadrootsNostrSignerApprovalRequirement::ExplicitUser);
+        let draft =
+            RadrootsNostrSignerConnectionDraft::new(fixture_carol_public_key(), user_identity)
+                .with_connect_secret(" secret ")
+                .with_approval_requirement(RadrootsNostrSignerApprovalRequirement::ExplicitUser);
         let mut record =
             RadrootsNostrSignerConnectionRecord::new(connection_id, signer_identity, draft, 10);
 
@@ -767,8 +764,11 @@ mod tests {
         record.mark_request(16);
         record.mark_connect_secret_consumed(17);
         record.require_auth_challenge(
-            RadrootsNostrSignerAuthChallenge::new("https://auth.example/path", 18)
-                .expect("auth challenge"),
+            RadrootsNostrSignerAuthChallenge::new(
+                format!("{}/path", api_primary_https()).as_str(),
+                18,
+            )
+            .expect("auth challenge"),
         );
         record.set_pending_request(
             RadrootsNostrSignerPendingRequest::new(request_message("req-1"), 20)
@@ -777,11 +777,8 @@ mod tests {
         let replay = record.authorize_auth_challenge(22).expect("replay");
         let no_challenge_replay = RadrootsNostrSignerConnectionRecord::new(
             RadrootsNostrSignerConnectionId::parse("conn-1b").expect("id"),
-            public_identity("0000000000000000000000000000000000000000000000000000000000000009"),
-            RadrootsNostrSignerConnectionDraft::new(
-                public_key("0000000000000000000000000000000000000000000000000000000000000010"),
-                public_identity("0000000000000000000000000000000000000000000000000000000000000011"),
-            ),
+            public_identity(0x9),
+            RadrootsNostrSignerConnectionDraft::new(public_key(0x10), public_identity(0x11)),
             24,
         )
         .authorize_auth_challenge(25);
@@ -834,11 +831,8 @@ mod tests {
         let grant = RadrootsNostrSignerPermissionGrant::new(permission.clone(), 42);
         let mut record = RadrootsNostrSignerConnectionRecord::new(
             RadrootsNostrSignerConnectionId::parse("conn-2").expect("id"),
-            public_identity("0000000000000000000000000000000000000000000000000000000000000006"),
-            RadrootsNostrSignerConnectionDraft::new(
-                public_key("0000000000000000000000000000000000000000000000000000000000000007"),
-                public_identity("0000000000000000000000000000000000000000000000000000000000000008"),
-            ),
+            public_identity(0x6),
+            RadrootsNostrSignerConnectionDraft::new(public_key(0x7), public_identity(0x8)),
             20,
         );
         record.granted_permissions = vec![grant];
@@ -872,12 +866,9 @@ mod tests {
         .into();
         let auto_record = RadrootsNostrSignerConnectionRecord::new(
             RadrootsNostrSignerConnectionId::new_v7(),
-            public_identity("0000000000000000000000000000000000000000000000000000000000000031"),
-            RadrootsNostrSignerConnectionDraft::new(
-                public_key("0000000000000000000000000000000000000000000000000000000000000032"),
-                public_identity("0000000000000000000000000000000000000000000000000000000000000033"),
-            )
-            .with_requested_permissions(requested.clone()),
+            public_identity(0x31),
+            RadrootsNostrSignerConnectionDraft::new(public_key(0x32), public_identity(0x33))
+                .with_requested_permissions(requested.clone()),
             1,
         );
         assert_eq!(auto_record.effective_permissions(), requested);
@@ -969,9 +960,10 @@ mod tests {
             .expect_err("invalid pending request id");
         assert!(invalid_pending.to_string().contains("invalid request id"));
 
+        let auth_url = format!(" {} ", api_primary_https());
         let challenge =
-            RadrootsNostrSignerAuthChallenge::new(" https://auth.example ", 31).expect("challenge");
-        assert_eq!(challenge.auth_url, "https://auth.example/");
+            RadrootsNostrSignerAuthChallenge::new(auth_url.as_str(), 31).expect("challenge");
+        assert_eq!(challenge.auth_url, format!("{}/", api_primary_https()));
 
         let invalid_challenge =
             RadrootsNostrSignerAuthChallenge::new("not-a-url", 31).expect_err("invalid challenge");
@@ -1056,9 +1048,9 @@ mod tests {
     fn connection_record_serde_migrates_legacy_connect_secret_and_validates_new_fields() {
         let record_json = json!({
             "connection_id": "conn-legacy",
-            "client_public_key": public_key("0000000000000000000000000000000000000000000000000000000000000009").to_hex(),
-            "signer_identity": public_identity("0000000000000000000000000000000000000000000000000000000000000010"),
-            "user_identity": public_identity("0000000000000000000000000000000000000000000000000000000000000011"),
+            "client_public_key": public_key(0x9).to_hex(),
+            "signer_identity": public_identity(0x10),
+            "user_identity": public_identity(0x11),
             "connect_secret": " legacy-secret ",
             "requested_permissions": "",
             "granted_permissions": [],
@@ -1073,12 +1065,12 @@ mod tests {
             "last_request_at_unix": null
         });
 
-        let decoded_without_secret: RadrootsNostrSignerConnectionRecord = serde_json::from_value(
-            json!({
+        let decoded_without_secret: RadrootsNostrSignerConnectionRecord =
+            serde_json::from_value(json!({
                 "connection_id": "conn-no-secret",
-                "client_public_key": public_key("0000000000000000000000000000000000000000000000000000000000000008").to_hex(),
-                "signer_identity": public_identity("0000000000000000000000000000000000000000000000000000000000000007"),
-                "user_identity": public_identity("0000000000000000000000000000000000000000000000000000000000000006"),
+                "client_public_key": public_key(0x8).to_hex(),
+                "signer_identity": public_identity(0x7),
+                "user_identity": public_identity(0x6),
                 "requested_permissions": "",
                 "granted_permissions": [],
                 "relays": [],
@@ -1089,9 +1081,8 @@ mod tests {
                 "updated_at_unix": 0,
                 "last_authenticated_at_unix": null,
                 "last_request_at_unix": null
-            }),
-        )
-        .expect("deserialize record without secret");
+            }))
+            .expect("deserialize record without secret");
         assert!(decoded_without_secret.connect_secret_hash.is_none());
         assert!(
             decoded_without_secret
@@ -1099,12 +1090,12 @@ mod tests {
                 .is_none()
         );
 
-        let decoded_with_null_secret: RadrootsNostrSignerConnectionRecord = serde_json::from_value(
-            json!({
+        let decoded_with_null_secret: RadrootsNostrSignerConnectionRecord =
+            serde_json::from_value(json!({
                 "connection_id": "conn-null-secret",
-                "client_public_key": public_key("0000000000000000000000000000000000000000000000000000000000000005").to_hex(),
-                "signer_identity": public_identity("0000000000000000000000000000000000000000000000000000000000000004"),
-                "user_identity": public_identity("0000000000000000000000000000000000000000000000000000000000000003"),
+                "client_public_key": public_key(0x5).to_hex(),
+                "signer_identity": public_identity(0x4),
+                "user_identity": public_identity(0x3),
                 "connect_secret_hash": null,
                 "requested_permissions": "",
                 "granted_permissions": [],
@@ -1116,9 +1107,8 @@ mod tests {
                 "updated_at_unix": 0,
                 "last_authenticated_at_unix": null,
                 "last_request_at_unix": null
-            }),
-        )
-        .expect("deserialize record with null secret");
+            }))
+            .expect("deserialize record with null secret");
         assert!(decoded_with_null_secret.connect_secret_hash.is_none());
         assert!(
             decoded_with_null_secret
@@ -1149,12 +1139,12 @@ mod tests {
 
         let valid_hash = RadrootsNostrSignerConnectSecretHash::from_secret("explicit-secret")
             .expect("valid hash");
-        let decoded_new_format: RadrootsNostrSignerConnectionRecord = serde_json::from_value(
-            json!({
+        let decoded_new_format: RadrootsNostrSignerConnectionRecord =
+            serde_json::from_value(json!({
                 "connection_id": "conn-new",
-                "client_public_key": public_key("0000000000000000000000000000000000000000000000000000000000000015").to_hex(),
-                "signer_identity": public_identity("0000000000000000000000000000000000000000000000000000000000000016"),
-                "user_identity": public_identity("0000000000000000000000000000000000000000000000000000000000000017"),
+                "client_public_key": public_key(0x15).to_hex(),
+                "signer_identity": public_identity(0x16),
+                "user_identity": public_identity(0x17),
                 "connect_secret_hash": {
                     "algorithm": "sha256",
                     "digest_hex": valid_hash.digest_hex
@@ -1170,9 +1160,8 @@ mod tests {
                 "updated_at_unix": 3,
                 "last_authenticated_at_unix": null,
                 "last_request_at_unix": null
-            }),
-        )
-        .expect("deserialize new-format record");
+            }))
+            .expect("deserialize new-format record");
         assert!(
             decoded_new_format
                 .connect_secret_hash
@@ -1187,9 +1176,9 @@ mod tests {
         let path = temp.path().join("connection-record.json");
         let reader_json = json!({
             "connection_id": "conn-reader",
-            "client_public_key": public_key("0000000000000000000000000000000000000000000000000000000000000021").to_hex(),
-            "signer_identity": public_identity("0000000000000000000000000000000000000000000000000000000000000022"),
-            "user_identity": public_identity("0000000000000000000000000000000000000000000000000000000000000023"),
+            "client_public_key": public_key(0x21).to_hex(),
+            "signer_identity": public_identity(0x22),
+            "user_identity": public_identity(0x23),
             "connect_secret_hash": {
                 "algorithm": "sha256",
                 "digest_hex": RadrootsNostrSignerConnectSecretHash::from_secret("reader-secret")
@@ -1203,7 +1192,7 @@ mod tests {
             "approval_state": "NotRequired",
             "auth_state": "Pending",
             "auth_challenge": {
-                "auth_url": "https://auth.example/reader",
+                "auth_url": format!("{}/reader", api_primary_https()),
                 "required_at_unix": 5
             },
             "status": "Active",
@@ -1234,14 +1223,14 @@ mod tests {
                 .as_ref()
                 .expect("reader auth challenge")
                 .auth_url,
-            "https://auth.example/reader"
+            format!("{}/reader", api_primary_https())
         );
 
         let invalid_hash_json = json!({
             "connection_id": "conn-invalid",
-            "client_public_key": public_key("0000000000000000000000000000000000000000000000000000000000000012").to_hex(),
-            "signer_identity": public_identity("0000000000000000000000000000000000000000000000000000000000000013"),
-            "user_identity": public_identity("0000000000000000000000000000000000000000000000000000000000000014"),
+            "client_public_key": public_key(0x12).to_hex(),
+            "signer_identity": public_identity(0x13),
+            "user_identity": public_identity(0x14),
             "connect_secret_hash": {
                 "algorithm": "sha256",
                 "digest_hex": "not-hex"
@@ -1254,7 +1243,7 @@ mod tests {
             "status": "Active",
             "auth_state": "Authorized",
             "auth_challenge": {
-                "auth_url": "https://auth.example",
+                "auth_url": api_primary_https(),
                 "required_at_unix": 2
             },
             "status_reason": null,
@@ -1272,12 +1261,12 @@ mod tests {
                 .contains("invalid connect secret digest")
         );
 
-        let invalid_nonhex_hash = serde_json::from_value::<RadrootsNostrSignerConnectionRecord>(
-            json!({
+        let invalid_nonhex_hash =
+            serde_json::from_value::<RadrootsNostrSignerConnectionRecord>(json!({
                 "connection_id": "conn-invalid-nonhex",
-                "client_public_key": public_key("0000000000000000000000000000000000000000000000000000000000000018").to_hex(),
-                "signer_identity": public_identity("0000000000000000000000000000000000000000000000000000000000000019"),
-                "user_identity": public_identity("0000000000000000000000000000000000000000000000000000000000000020"),
+                "client_public_key": public_key(0x18).to_hex(),
+                "signer_identity": public_identity(0x19),
+                "user_identity": public_identity(0x20),
                 "connect_secret_hash": {
                     "algorithm": "sha256",
                     "digest_hex": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
@@ -1292,9 +1281,8 @@ mod tests {
                 "updated_at_unix": 4,
                 "last_authenticated_at_unix": null,
                 "last_request_at_unix": null
-            }),
-        )
-        .expect_err("invalid nonhex hash");
+            }))
+            .expect_err("invalid nonhex hash");
         assert!(
             invalid_nonhex_hash
                 .to_string()
@@ -1304,9 +1292,9 @@ mod tests {
         let invalid_connect_secret_hash_type =
             serde_json::from_value::<RadrootsNostrSignerConnectionRecord>(json!({
                 "connection_id": "conn-invalid-type",
-                "client_public_key": public_key("0000000000000000000000000000000000000000000000000000000000000024").to_hex(),
-                "signer_identity": public_identity("0000000000000000000000000000000000000000000000000000000000000025"),
-                "user_identity": public_identity("0000000000000000000000000000000000000000000000000000000000000026"),
+                "client_public_key": public_key(0x24).to_hex(),
+                "signer_identity": public_identity(0x25),
+                "user_identity": public_identity(0x26),
                 "connect_secret_hash": 7,
                 "requested_permissions": "",
                 "granted_permissions": [],
@@ -1327,9 +1315,9 @@ mod tests {
             &invalid_connect_secret_hash_path,
             serde_json::to_vec(&json!({
                 "connection_id": "conn-invalid-type-reader",
-                "client_public_key": public_key("0000000000000000000000000000000000000000000000000000000000000027").to_hex(),
-                "signer_identity": public_identity("0000000000000000000000000000000000000000000000000000000000000028"),
-                "user_identity": public_identity("0000000000000000000000000000000000000000000000000000000000000029"),
+                "client_public_key": public_key(0x27).to_hex(),
+                "signer_identity": public_identity(0x28),
+                "user_identity": public_identity(0x29),
                 "connect_secret_hash": 9,
                 "requested_permissions": "",
                 "granted_permissions": [],

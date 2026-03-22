@@ -203,28 +203,26 @@ fn identity_public_key(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nostr::{Keys, SecretKey, Timestamp, UnsignedEvent};
-    use radroots_identity::RadrootsIdentity;
+    use crate::test_support::{
+        api_primary_https, fixture_alice_identity, fixture_alice_public_key, fixture_bob_identity,
+        fixture_carol_public_key, fixture_diego_identity, primary_relay, synthetic_public_identity,
+        synthetic_public_key,
+    };
+    use nostr::{PublicKey, Timestamp, UnsignedEvent};
+    use radroots_identity::RadrootsIdentityPublic;
     use serde_json::json;
 
-    fn public_identity(secret_hex: &str) -> RadrootsIdentityPublic {
-        RadrootsIdentity::from_secret_key_str(secret_hex)
-            .expect("identity")
-            .to_public()
+    fn public_identity(index: u32) -> RadrootsIdentityPublic {
+        synthetic_public_identity(index)
     }
 
-    fn public_key(secret_hex: &str) -> PublicKey {
-        let secret = SecretKey::from_hex(secret_hex).expect("secret");
-        Keys::new(secret).public_key()
-    }
-
-    fn relay(url: &str) -> RelayUrl {
-        RelayUrl::parse(url).expect("relay")
+    fn public_key(index: u32) -> PublicKey {
+        synthetic_public_key(index)
     }
 
     fn unsigned_event(kind: u16) -> UnsignedEvent {
         serde_json::from_value(json!({
-            "pubkey": public_key("0000000000000000000000000000000000000000000000000000000000000001").to_hex(),
+            "pubkey": fixture_alice_public_key().to_hex(),
             "created_at": Timestamp::from(1).as_secs(),
             "kind": kind,
             "tags": [],
@@ -236,12 +234,12 @@ mod tests {
     fn connection() -> RadrootsNostrSignerConnectionRecord {
         RadrootsNostrSignerConnectionRecord::new(
             crate::model::RadrootsNostrSignerConnectionId::new_v7(),
-            public_identity("0000000000000000000000000000000000000000000000000000000000000002"),
+            fixture_bob_identity(),
             RadrootsNostrSignerConnectionDraft::new(
-                public_key("0000000000000000000000000000000000000000000000000000000000000003"),
-                public_identity("0000000000000000000000000000000000000000000000000000000000000004"),
+                fixture_carol_public_key(),
+                fixture_diego_identity(),
             )
-            .with_relays(vec![relay("wss://relay.example")]),
+            .with_relays(vec![primary_relay()]),
             1,
         )
     }
@@ -283,30 +281,22 @@ mod tests {
             )]
             .into();
         let proposal = RadrootsNostrSignerConnectProposal {
-            client_public_key: public_key(
-                "0000000000000000000000000000000000000000000000000000000000000005",
-            ),
+            client_public_key: public_key(5),
             connect_secret: Some("secret".into()),
             requested_permissions: requested_permissions.clone(),
         };
 
-        let draft = proposal.into_connection_draft(public_identity(
-            "0000000000000000000000000000000000000000000000000000000000000006",
-        ));
+        let draft = proposal.into_connection_draft(fixture_alice_identity());
 
         assert_eq!(draft.connect_secret.as_deref(), Some("secret"));
         assert_eq!(draft.requested_permissions, requested_permissions);
 
         let no_secret = RadrootsNostrSignerConnectProposal {
-            client_public_key: public_key(
-                "0000000000000000000000000000000000000000000000000000000000000007",
-            ),
+            client_public_key: public_key(7),
             connect_secret: None,
             requested_permissions: RadrootsNostrConnectPermissions::default(),
         }
-        .into_connection_draft(public_identity(
-            "0000000000000000000000000000000000000000000000000000000000000008",
-        ));
+        .into_connection_draft(fixture_bob_identity());
         assert!(no_secret.connect_secret.is_none());
     }
 
@@ -317,7 +307,7 @@ mod tests {
         };
         let challenged = RadrootsNostrSignerRequestAction::Challenged {
             auth_challenge: crate::model::RadrootsNostrSignerAuthChallenge::new(
-                "https://auth.example",
+                api_primary_https(),
                 1,
             )
             .expect("challenge"),
@@ -387,9 +377,7 @@ mod tests {
         assert!(!request_allowed_by_permissions(
             &vec![sign_kind, nip44].into(),
             &RadrootsNostrConnectRequest::Nip04Encrypt {
-                public_key: public_key(
-                    "0000000000000000000000000000000000000000000000000000000000000007",
-                ),
+                public_key: public_key(7),
                 plaintext: "hello".into(),
             },
         ));
@@ -427,8 +415,7 @@ mod tests {
     #[test]
     fn required_permission_and_response_hint_cover_request_variants() {
         let connection = connection();
-        let public_key =
-            public_key("0000000000000000000000000000000000000000000000000000000000000008");
+        let public_key = public_key(8);
         let connect = RadrootsNostrConnectRequest::Connect {
             remote_signer_public_key: public_key,
             secret: Some("secret".into()),
@@ -510,14 +497,13 @@ mod tests {
         );
         assert_eq!(
             response_hint_for_request(&connection, &switch_relays).expect("relay hint"),
-            RadrootsNostrSignerRequestResponseHint::RelayList(vec![relay("wss://relay.example")])
+            RadrootsNostrSignerRequestResponseHint::RelayList(vec![primary_relay()])
         );
     }
 
     #[test]
     fn invalid_identity_public_key_returns_invalid_state() {
-        let mut identity =
-            public_identity("0000000000000000000000000000000000000000000000000000000000000009");
+        let mut identity = public_identity(9);
         identity.public_key_hex = "invalid".into();
 
         let err = identity_public_key(&identity).expect_err("invalid identity");
