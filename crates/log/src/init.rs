@@ -27,8 +27,7 @@ pub fn init_logging(opts: LoggingOptions) -> Result<()> {
         None
     };
 
-    let env = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(opts.default_level.as_deref().unwrap_or("info")));
+    let env = resolve_env_filter(opts.default_level.as_deref());
     let fmt_layer_file = writer.as_ref().map(|w| {
         fmt::layer()
             .with_writer(w.clone())
@@ -59,6 +58,13 @@ pub fn init_logging(opts: LoggingOptions) -> Result<()> {
     Ok(())
 }
 
+fn resolve_env_filter(default_level: Option<&str>) -> EnvFilter {
+    match default_level {
+        Some(level) => EnvFilter::new(level),
+        None => EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
+    }
+}
+
 pub fn init_stdout() -> Result<()> {
     init_logging(LoggingOptions {
         dir: None,
@@ -80,7 +86,7 @@ fn build_file_appender(dir: &std::path::Path, opts: &LoggingOptions) -> Result<R
 
 #[cfg(test)]
 mod tests {
-    use super::{build_file_appender, init_logging};
+    use super::{build_file_appender, init_logging, resolve_env_filter};
     use crate::{LogFileLayout, LoggingOptions};
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -178,5 +184,14 @@ mod tests {
         );
         assert!(first.is_ok());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn explicit_default_level_wins_over_ambient_rust_log() {
+        // Callers that pass an explicit service filter should not inherit the shell's RUST_LOG.
+        let env = resolve_env_filter(Some("info,myc=info"));
+        let rendered = env.to_string();
+        assert!(rendered.contains("info"));
+        assert!(rendered.contains("myc=info"));
     }
 }
