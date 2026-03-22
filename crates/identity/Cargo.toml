@@ -14,10 +14,11 @@ readme.workspace = true
 build = "build.rs"
 
 [features]
-default = ["std", "profile", "json-file"]
+default = ["std", "profile", "json-file", "nip49"]
 std = []
 profile = ["dep:radroots-events"]
 json-file = ["std", "dep:radroots-runtime"]
+nip49 = ["std", "nostr/nip49"]
 secrecy = ["dep:secrecy"]
 zeroize = ["dep:zeroize"]
 ts-rs = ["dep:ts-rs"]

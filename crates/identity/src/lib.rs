@@ -13,6 +13,10 @@ pub use identity::{
     DEFAULT_IDENTITY_PATH, RadrootsIdentity, RadrootsIdentityFile, RadrootsIdentityId,
     RadrootsIdentityProfile, RadrootsIdentityPublic, RadrootsIdentitySecretKeyFormat,
 };
+#[cfg(feature = "nip49")]
+pub use identity::{
+    RadrootsIdentityEncryptedSecretKeyOptions, RadrootsIdentityEncryptedSecretKeySecurity,
+};
 pub use username::{
     RADROOTS_USERNAME_MAX_LEN, RADROOTS_USERNAME_MIN_LEN, RADROOTS_USERNAME_REGEX,
     radroots_username_is_valid, radroots_username_normalize,

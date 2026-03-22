@@ -3,6 +3,10 @@ use radroots_identity::{
     DEFAULT_IDENTITY_PATH, IdentityError, RadrootsIdentity, RadrootsIdentityId,
     RadrootsIdentityProfile, RadrootsIdentityPublic, RadrootsIdentitySecretKeyFormat,
 };
+#[cfg(feature = "nip49")]
+use radroots_identity::{
+    RadrootsIdentityEncryptedSecretKeyOptions, RadrootsIdentityEncryptedSecretKeySecurity,
+};
 use std::path::PathBuf;
 
 fn profile_with_identifier(value: &str) -> RadrootsIdentityProfile {
@@ -265,6 +269,65 @@ fn identity_accessor_paths_and_secret_formats() {
     let from_keys: RadrootsIdentity = keys.clone().into();
     let roundtrip_keys = from_keys.clone().into_keys();
     assert_eq!(roundtrip_keys.public_key(), keys.public_key());
+}
+
+#[cfg(feature = "nip49")]
+#[test]
+fn encrypted_secret_key_round_trips_to_identity() {
+    let identity = RadrootsIdentity::generate();
+    let encrypted = identity
+        .encrypt_secret_key_ncryptsec("fixture-password")
+        .unwrap();
+    assert!(encrypted.starts_with("ncryptsec1"));
+
+    let decrypted =
+        RadrootsIdentity::from_encrypted_secret_key_str(&encrypted, "fixture-password").unwrap();
+    assert_eq!(decrypted.public_key(), identity.public_key());
+}
+
+#[cfg(feature = "nip49")]
+#[test]
+fn encrypted_secret_key_options_propagate_to_output() {
+    use nostr::nips::nip19::FromBech32;
+    use nostr::nips::nip49::{EncryptedSecretKey, KeySecurity};
+
+    let identity = RadrootsIdentity::generate();
+    let encrypted = identity
+        .encrypt_secret_key_ncryptsec_with_options(
+            "fixture-password",
+            RadrootsIdentityEncryptedSecretKeyOptions {
+                log_n: 15,
+                key_security: RadrootsIdentityEncryptedSecretKeySecurity::Medium,
+            },
+        )
+        .unwrap();
+    let parsed = EncryptedSecretKey::from_bech32(&encrypted).unwrap();
+    assert_eq!(parsed.log_n(), 15);
+    assert_eq!(parsed.key_security(), KeySecurity::Medium);
+}
+
+#[cfg(feature = "nip49")]
+#[test]
+fn encrypted_secret_key_rejects_invalid_and_wrong_password_inputs() {
+    let identity = RadrootsIdentity::generate();
+    let encrypted = identity
+        .encrypt_secret_key_ncryptsec("fixture-password")
+        .unwrap();
+
+    let invalid =
+        RadrootsIdentity::from_encrypted_secret_key_str("not-an-encrypted-secret", "password")
+            .unwrap_err();
+    assert!(matches!(
+        invalid,
+        IdentityError::InvalidEncryptedSecretKey(_)
+    ));
+
+    let wrong_password =
+        RadrootsIdentity::from_encrypted_secret_key_str(&encrypted, "wrong-password").unwrap_err();
+    assert!(matches!(
+        wrong_password,
+        IdentityError::DecryptEncryptedSecretKey(_)
+    ));
 }
 
 #[test]

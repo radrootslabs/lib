@@ -31,6 +31,18 @@ pub enum IdentityError {
     #[error("invalid secret key: {0}")]
     InvalidSecretKey(#[from] nostr::key::Error),
 
+    #[cfg(feature = "nip49")]
+    #[error("failed to encrypt secret key: {0}")]
+    EncryptSecretKey(String),
+
+    #[cfg(feature = "nip49")]
+    #[error("invalid encrypted secret key: {0}")]
+    InvalidEncryptedSecretKey(String),
+
+    #[cfg(feature = "nip49")]
+    #[error("failed to decrypt encrypted secret key: {0}")]
+    DecryptEncryptedSecretKey(String),
+
     #[error("invalid public key: {0}")]
     InvalidPublicKey(String),
 

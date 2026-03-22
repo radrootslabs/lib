@@ -2,6 +2,11 @@ use crate::error::IdentityError;
 use core::convert::Infallible;
 use core::fmt;
 use nostr::{Keys, SecretKey};
+#[cfg(feature = "nip49")]
+use nostr::{
+    nips::nip19::{FromBech32, ToBech32},
+    nips::nip49::{EncryptedSecretKey, KeySecurity},
+};
 #[cfg(feature = "profile")]
 use radroots_events::profile::RadrootsProfile;
 use serde::{Deserialize, Serialize};
@@ -68,6 +73,43 @@ pub struct RadrootsIdentityFile {
 pub enum RadrootsIdentitySecretKeyFormat {
     Hex,
     Nsec,
+}
+
+#[cfg(feature = "nip49")]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum RadrootsIdentityEncryptedSecretKeySecurity {
+    Weak,
+    Medium,
+    #[default]
+    Unknown,
+}
+
+#[cfg(feature = "nip49")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RadrootsIdentityEncryptedSecretKeyOptions {
+    pub log_n: u8,
+    pub key_security: RadrootsIdentityEncryptedSecretKeySecurity,
+}
+
+#[cfg(feature = "nip49")]
+impl Default for RadrootsIdentityEncryptedSecretKeyOptions {
+    fn default() -> Self {
+        Self {
+            log_n: 16,
+            key_security: RadrootsIdentityEncryptedSecretKeySecurity::Unknown,
+        }
+    }
+}
+
+#[cfg(feature = "nip49")]
+impl From<RadrootsIdentityEncryptedSecretKeySecurity> for KeySecurity {
+    fn from(value: RadrootsIdentityEncryptedSecretKeySecurity) -> Self {
+        match value {
+            RadrootsIdentityEncryptedSecretKeySecurity::Weak => Self::Weak,
+            RadrootsIdentityEncryptedSecretKeySecurity::Medium => Self::Medium,
+            RadrootsIdentityEncryptedSecretKeySecurity::Unknown => Self::Unknown,
+        }
+    }
 }
 
 impl RadrootsIdentityId {
@@ -221,6 +263,32 @@ impl RadrootsIdentity {
         self.secret_key_nsec()
     }
 
+    #[cfg(feature = "nip49")]
+    pub fn encrypt_secret_key_ncryptsec(&self, password: &str) -> Result<String, IdentityError> {
+        self.encrypt_secret_key_ncryptsec_with_options(
+            password,
+            RadrootsIdentityEncryptedSecretKeyOptions::default(),
+        )
+    }
+
+    #[cfg(feature = "nip49")]
+    pub fn encrypt_secret_key_ncryptsec_with_options(
+        &self,
+        password: &str,
+        options: RadrootsIdentityEncryptedSecretKeyOptions,
+    ) -> Result<String, IdentityError> {
+        let encrypted = EncryptedSecretKey::new(
+            self.keys.secret_key(),
+            password,
+            options.log_n,
+            options.key_security.into(),
+        )
+        .map_err(|source| IdentityError::EncryptSecretKey(source.to_string()))?;
+        encrypted
+            .to_bech32()
+            .map_err(|source| IdentityError::EncryptSecretKey(source.to_string()))
+    }
+
     pub fn secret_key_bytes(&self) -> [u8; SecretKey::LEN] {
         self.keys.secret_key().to_secret_bytes()
     }
@@ -326,6 +394,19 @@ impl RadrootsIdentity {
     #[cfg(feature = "std")]
     pub fn from_secret_key_str(secret_key: &str) -> Result<Self, IdentityError> {
         Ok(Self::new(Keys::parse(secret_key)?))
+    }
+
+    #[cfg(feature = "nip49")]
+    pub fn from_encrypted_secret_key_str(
+        secret_key: &str,
+        password: &str,
+    ) -> Result<Self, IdentityError> {
+        let encrypted = EncryptedSecretKey::from_bech32(secret_key)
+            .map_err(|source| IdentityError::InvalidEncryptedSecretKey(source.to_string()))?;
+        let secret_key = encrypted
+            .decrypt(password)
+            .map_err(|source| IdentityError::DecryptEncryptedSecretKey(source.to_string()))?;
+        Ok(Self::new(Keys::new(secret_key)))
     }
 
     #[cfg(feature = "std")]
