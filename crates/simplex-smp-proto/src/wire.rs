@@ -1,18 +1,24 @@
 use crate::error::RadrootsSimplexSmpProtoError;
 use crate::uri::RadrootsSimplexSmpQueueMode;
 use crate::version::{
+    RADROOTS_SIMPLEX_SMP_BLOCKED_ENTITY_TRANSPORT_VERSION,
     RADROOTS_SIMPLEX_SMP_CURRENT_TRANSPORT_VERSION, RADROOTS_SIMPLEX_SMP_INITIAL_TRANSPORT_VERSION,
     RADROOTS_SIMPLEX_SMP_NEW_NOTIFIER_CREDENTIALS_TRANSPORT_VERSION,
     RADROOTS_SIMPLEX_SMP_SENDER_AUTH_KEY_TRANSPORT_VERSION,
     RADROOTS_SIMPLEX_SMP_SERVICE_CERTS_TRANSPORT_VERSION,
-    RADROOTS_SIMPLEX_SMP_SHORT_LINKS_TRANSPORT_VERSION,
+    RADROOTS_SIMPLEX_SMP_SHORT_LINKS_TRANSPORT_VERSION, RadrootsSimplexSmpVersionRange,
 };
+use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 const TAG_NEW: &[u8] = b"NEW";
 const TAG_SUB: &[u8] = b"SUB";
+const TAG_SUBS: &[u8] = b"SUBS";
 const TAG_KEY: &[u8] = b"KEY";
+const TAG_RKEY: &[u8] = b"RKEY";
+const TAG_LSET: &[u8] = b"LSET";
+const TAG_LDEL: &[u8] = b"LDEL";
 const TAG_NKEY: &[u8] = b"NKEY";
 const TAG_NDEL: &[u8] = b"NDEL";
 const TAG_GET: &[u8] = b"GET";
@@ -23,19 +29,33 @@ const TAG_QUE: &[u8] = b"QUE";
 const TAG_SKEY: &[u8] = b"SKEY";
 const TAG_SEND: &[u8] = b"SEND";
 const TAG_PING: &[u8] = b"PING";
+const TAG_LKEY: &[u8] = b"LKEY";
+const TAG_LGET: &[u8] = b"LGET";
 const TAG_NSUB: &[u8] = b"NSUB";
+const TAG_NSUBS: &[u8] = b"NSUBS";
+const TAG_PRXY: &[u8] = b"PRXY";
+const TAG_PFWD: &[u8] = b"PFWD";
+const TAG_RFWD: &[u8] = b"RFWD";
 
 const TAG_IDS: &[u8] = b"IDS";
+const TAG_LNK: &[u8] = b"LNK";
+const TAG_SOK: &[u8] = b"SOK";
+const TAG_SOKS: &[u8] = b"SOKS";
 const TAG_NID: &[u8] = b"NID";
 const TAG_MSG: &[u8] = b"MSG";
 const TAG_NMSG: &[u8] = b"NMSG";
+const TAG_PKEY: &[u8] = b"PKEY";
+const TAG_RRES: &[u8] = b"RRES";
+const TAG_PRES: &[u8] = b"PRES";
 const TAG_END: &[u8] = b"END";
+const TAG_ENDS: &[u8] = b"ENDS";
 const TAG_DELD: &[u8] = b"DELD";
 const TAG_INFO: &[u8] = b"INFO";
 const TAG_OK: &[u8] = b"OK";
 const TAG_ERR: &[u8] = b"ERR";
 const TAG_PONG: &[u8] = b"PONG";
 
+const COMMAND_ERR_UNKNOWN: &[u8] = b"UNKNOWN";
 const COMMAND_ERR_SYNTAX: &[u8] = b"SYNTAX";
 const COMMAND_ERR_PROHIBITED: &[u8] = b"PROHIBITED";
 const COMMAND_ERR_NO_AUTH: &[u8] = b"NO_AUTH";
@@ -66,6 +86,85 @@ pub struct RadrootsSimplexSmpContactQueueRequest {
     pub link_id: Vec<u8>,
     pub sender_id: Vec<u8>,
     pub link_data: RadrootsSimplexSmpQueueLinkData,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RadrootsSimplexSmpKeyList {
+    pub first: Vec<u8>,
+    pub rest: Vec<Vec<u8>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RadrootsSimplexSmpProtocolServer {
+    pub hosts: Vec<String>,
+    pub port: String,
+    pub key_hash: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RadrootsSimplexSmpCertChainPublicKey {
+    pub certificate_chain: Vec<Vec<u8>>,
+    pub signed_public_key: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RadrootsSimplexSmpBlockingReason {
+    Spam,
+    Content,
+    Other(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RadrootsSimplexSmpBlockingInfo {
+    pub reason: RadrootsSimplexSmpBlockingReason,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RadrootsSimplexSmpHandshakeError {
+    Parse,
+    Identity,
+    BadAuth,
+    BadService,
+    Other(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RadrootsSimplexSmpTransportError {
+    Block,
+    Version,
+    LargeMsg,
+    Session,
+    NoAuth,
+    Handshake(RadrootsSimplexSmpHandshakeError),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RadrootsSimplexSmpNetworkError {
+    Connect(String),
+    Tls(String),
+    UnknownCa,
+    Failed,
+    Timeout,
+    Subscribe(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RadrootsSimplexSmpBrokerError {
+    Response(String),
+    Unexpected(String),
+    Network(RadrootsSimplexSmpNetworkError),
+    Host,
+    NoService,
+    Transport(RadrootsSimplexSmpTransportError),
+    Timeout,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RadrootsSimplexSmpProxyError {
+    Protocol(Box<RadrootsSimplexSmpError>),
+    Broker(RadrootsSimplexSmpBrokerError),
+    BasicAuth,
+    NoSession,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -152,7 +251,14 @@ pub struct RadrootsSimplexSmpSendCommand {
 pub enum RadrootsSimplexSmpCommand {
     New(RadrootsSimplexSmpNewQueueRequest),
     Sub,
+    Subs,
     Key(Vec<u8>),
+    RKey(RadrootsSimplexSmpKeyList),
+    LSet {
+        link_id: Vec<u8>,
+        link_data: RadrootsSimplexSmpQueueLinkData,
+    },
+    LDel,
     NKey {
         notifier_auth_public_key: Vec<u8>,
         recipient_notification_dh_public_key: Vec<u8>,
@@ -166,7 +272,20 @@ pub enum RadrootsSimplexSmpCommand {
     SKey(Vec<u8>),
     Send(RadrootsSimplexSmpSendCommand),
     Ping,
+    LKey(Vec<u8>),
+    LGet,
     NSub,
+    NSubs,
+    Prxy {
+        server: RadrootsSimplexSmpProtocolServer,
+        basic_auth: Option<String>,
+    },
+    PFwd {
+        relay_version: u16,
+        public_key: Vec<u8>,
+        encrypted_transmission: Vec<u8>,
+    },
+    RFwd(Vec<u8>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -203,6 +322,7 @@ pub struct RadrootsSimplexSmpReceivedMessage {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RadrootsSimplexSmpCommandError {
+    Unknown,
     Syntax,
     Prohibited,
     NoAuth,
@@ -216,11 +336,18 @@ pub enum RadrootsSimplexSmpError {
     Block,
     Session,
     Command(RadrootsSimplexSmpCommandError),
+    Proxy(RadrootsSimplexSmpProxyError),
     Auth,
+    Blocked(RadrootsSimplexSmpBlockingInfo),
+    Service,
+    Crypto,
     Quota,
+    Store(String),
     NoMsg,
     LargeMsg,
+    Expired,
     Internal,
+    Duplicate,
     Other(Vec<u8>),
 }
 
@@ -253,13 +380,27 @@ impl RadrootsSimplexSmpCorrelationId {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RadrootsSimplexSmpBrokerMessage {
     Ids(RadrootsSimplexSmpQueueIdsResponse),
+    Lnk {
+        sender_id: Vec<u8>,
+        link_data: RadrootsSimplexSmpQueueLinkData,
+    },
+    Sok(Option<Vec<u8>>),
+    Soks(i64),
     Nid(RadrootsSimplexSmpNotifierIdsResponse),
     Msg(RadrootsSimplexSmpReceivedMessage),
     NMsg {
         nonce: [u8; 24],
         encrypted_metadata: Vec<u8>,
     },
+    PKey {
+        session_id: Vec<u8>,
+        version_range: RadrootsSimplexSmpVersionRange,
+        cert_chain_public_key: RadrootsSimplexSmpCertChainPublicKey,
+    },
+    RRes(Vec<u8>),
+    PRes(Vec<u8>),
     End,
+    Ends(i64),
     Deld,
     Info(Vec<u8>),
     Ok,
@@ -296,11 +437,24 @@ impl RadrootsSimplexSmpCommand {
         match self {
             Self::New(request) => encode_new_request(&mut buffer, request, transport_version)?,
             Self::Sub => buffer.extend_from_slice(TAG_SUB),
+            Self::Subs => buffer.extend_from_slice(TAG_SUBS),
             Self::Key(sender_auth_public_key) => {
                 buffer.extend_from_slice(TAG_KEY);
                 buffer.push(b' ');
                 push_short_bytes(&mut buffer, sender_auth_public_key)?;
             }
+            Self::RKey(recipient_auth_public_keys) => {
+                buffer.extend_from_slice(TAG_RKEY);
+                buffer.push(b' ');
+                push_short_key_list(&mut buffer, recipient_auth_public_keys)?;
+            }
+            Self::LSet { link_id, link_data } => {
+                buffer.extend_from_slice(TAG_LSET);
+                buffer.push(b' ');
+                push_short_bytes(&mut buffer, link_id)?;
+                encode_queue_link_data(&mut buffer, link_data)?;
+            }
+            Self::LDel => buffer.extend_from_slice(TAG_LDEL),
             Self::NKey {
                 notifier_auth_public_key,
                 recipient_notification_dh_public_key,
@@ -334,7 +488,36 @@ impl RadrootsSimplexSmpCommand {
                 buffer.extend_from_slice(&send.message_body);
             }
             Self::Ping => buffer.extend_from_slice(TAG_PING),
+            Self::LKey(sender_auth_public_key) => {
+                buffer.extend_from_slice(TAG_LKEY);
+                buffer.push(b' ');
+                push_short_bytes(&mut buffer, sender_auth_public_key)?;
+            }
+            Self::LGet => buffer.extend_from_slice(TAG_LGET),
             Self::NSub => buffer.extend_from_slice(TAG_NSUB),
+            Self::NSubs => buffer.extend_from_slice(TAG_NSUBS),
+            Self::Prxy { server, basic_auth } => {
+                buffer.extend_from_slice(TAG_PRXY);
+                buffer.push(b' ');
+                encode_protocol_server(&mut buffer, server)?;
+                push_maybe_string(&mut buffer, basic_auth.as_deref())?;
+            }
+            Self::PFwd {
+                relay_version,
+                public_key,
+                encrypted_transmission,
+            } => {
+                buffer.extend_from_slice(TAG_PFWD);
+                buffer.push(b' ');
+                buffer.extend_from_slice(&relay_version.to_be_bytes());
+                push_short_bytes(&mut buffer, public_key)?;
+                buffer.extend_from_slice(encrypted_transmission);
+            }
+            Self::RFwd(encrypted_forward_transmission) => {
+                buffer.extend_from_slice(TAG_RFWD);
+                buffer.push(b' ');
+                buffer.extend_from_slice(encrypted_forward_transmission);
+            }
         }
         Ok(buffer)
     }
@@ -352,7 +535,14 @@ impl RadrootsSimplexSmpCommand {
         let command = match tag.as_slice() {
             TAG_NEW => Self::New(decode_new_request(&mut cursor, transport_version)?),
             TAG_SUB => Self::Sub,
+            TAG_SUBS => Self::Subs,
             TAG_KEY => Self::Key(cursor.read_short_bytes()?),
+            TAG_RKEY => Self::RKey(cursor.read_short_key_list()?),
+            TAG_LSET => Self::LSet {
+                link_id: cursor.read_short_bytes()?,
+                link_data: decode_queue_link_data(&mut cursor)?,
+            },
+            TAG_LDEL => Self::LDel,
             TAG_NKEY => Self::NKey {
                 notifier_auth_public_key: cursor.read_short_bytes()?,
                 recipient_notification_dh_public_key: cursor.read_short_bytes()?,
@@ -366,7 +556,20 @@ impl RadrootsSimplexSmpCommand {
             TAG_SKEY => Self::SKey(cursor.read_short_bytes()?),
             TAG_SEND => Self::Send(decode_send_payload(rest)?),
             TAG_PING => Self::Ping,
+            TAG_LKEY => Self::LKey(cursor.read_short_bytes()?),
+            TAG_LGET => Self::LGet,
             TAG_NSUB => Self::NSub,
+            TAG_NSUBS => Self::NSubs,
+            TAG_PRXY => Self::Prxy {
+                server: decode_protocol_server(&mut cursor)?,
+                basic_auth: cursor.read_maybe_string()?,
+            },
+            TAG_PFWD => Self::PFwd {
+                relay_version: u16::from_be_bytes(cursor.read_array::<2>()?),
+                public_key: cursor.read_short_bytes()?,
+                encrypted_transmission: cursor.read_remaining().to_vec(),
+            },
+            TAG_RFWD => Self::RFwd(cursor.read_remaining().to_vec()),
             _ => {
                 return Err(RadrootsSimplexSmpProtoError::UnsupportedTag(
                     String::from_utf8_lossy(&tag).into_owned(),
@@ -392,6 +595,29 @@ impl RadrootsSimplexSmpBrokerMessage {
         let mut buffer = Vec::new();
         match self {
             Self::Ids(response) => encode_ids_response(&mut buffer, response, transport_version)?,
+            Self::Lnk {
+                sender_id,
+                link_data,
+            } => {
+                buffer.extend_from_slice(TAG_LNK);
+                buffer.push(b' ');
+                push_short_bytes(&mut buffer, sender_id)?;
+                encode_queue_link_data(&mut buffer, link_data)?;
+            }
+            Self::Sok(service_id) => {
+                if transport_version >= RADROOTS_SIMPLEX_SMP_SERVICE_CERTS_TRANSPORT_VERSION {
+                    buffer.extend_from_slice(TAG_SOK);
+                    buffer.push(b' ');
+                    push_maybe_short_bytes(&mut buffer, service_id.as_deref())?;
+                } else {
+                    buffer.extend_from_slice(TAG_OK);
+                }
+            }
+            Self::Soks(queue_count) => {
+                buffer.extend_from_slice(TAG_SOKS);
+                buffer.push(b' ');
+                push_i64(&mut buffer, *queue_count);
+            }
             Self::Nid(response) => {
                 buffer.extend_from_slice(TAG_NID);
                 buffer.push(b' ');
@@ -413,7 +639,34 @@ impl RadrootsSimplexSmpBrokerMessage {
                 buffer.extend_from_slice(nonce);
                 buffer.extend_from_slice(encrypted_metadata);
             }
+            Self::PKey {
+                session_id,
+                version_range,
+                cert_chain_public_key,
+            } => {
+                buffer.extend_from_slice(TAG_PKEY);
+                buffer.push(b' ');
+                push_short_bytes(&mut buffer, session_id)?;
+                buffer.extend_from_slice(&version_range.min.to_be_bytes());
+                buffer.extend_from_slice(&version_range.max.to_be_bytes());
+                encode_cert_chain_public_key(&mut buffer, cert_chain_public_key)?;
+            }
+            Self::RRes(encrypted_forward_response) => {
+                buffer.extend_from_slice(TAG_RRES);
+                buffer.push(b' ');
+                buffer.extend_from_slice(encrypted_forward_response);
+            }
+            Self::PRes(encrypted_response) => {
+                buffer.extend_from_slice(TAG_PRES);
+                buffer.push(b' ');
+                buffer.extend_from_slice(encrypted_response);
+            }
             Self::End => buffer.extend_from_slice(TAG_END),
+            Self::Ends(queue_count) => {
+                buffer.extend_from_slice(TAG_ENDS);
+                buffer.push(b' ');
+                push_i64(&mut buffer, *queue_count);
+            }
             Self::Deld => buffer.extend_from_slice(TAG_DELD),
             Self::Info(info) => {
                 buffer.extend_from_slice(TAG_INFO);
@@ -424,7 +677,13 @@ impl RadrootsSimplexSmpBrokerMessage {
             Self::Err(error) => {
                 buffer.extend_from_slice(TAG_ERR);
                 buffer.push(b' ');
-                buffer.extend_from_slice(&encode_error(error));
+                if transport_version < RADROOTS_SIMPLEX_SMP_BLOCKED_ENTITY_TRANSPORT_VERSION
+                    && matches!(error, RadrootsSimplexSmpError::Blocked(_))
+                {
+                    buffer.extend_from_slice(b"AUTH");
+                } else {
+                    buffer.extend_from_slice(&encode_error(error));
+                }
             }
             Self::Pong => buffer.extend_from_slice(TAG_PONG),
         }
@@ -443,6 +702,12 @@ impl RadrootsSimplexSmpBrokerMessage {
         let mut cursor = Cursor::new(rest);
         let message = match tag.as_slice() {
             TAG_IDS => Self::Ids(decode_ids_response(&mut cursor, transport_version)?),
+            TAG_LNK => Self::Lnk {
+                sender_id: cursor.read_short_bytes()?,
+                link_data: decode_queue_link_data(&mut cursor)?,
+            },
+            TAG_SOK => Self::Sok(cursor.read_maybe(Cursor::read_short_bytes)?),
+            TAG_SOKS => Self::Soks(cursor.read_i64()?),
             TAG_NID => Self::Nid(RadrootsSimplexSmpNotifierIdsResponse {
                 notifier_id: cursor.read_short_bytes()?,
                 server_notification_dh_public_key: cursor.read_short_bytes()?,
@@ -463,7 +728,20 @@ impl RadrootsSimplexSmpBrokerMessage {
                     encrypted_metadata: cursor.read_remaining().to_vec(),
                 }
             }
+            TAG_PKEY => {
+                let session_id = cursor.read_short_bytes()?;
+                let min = u16::from_be_bytes(cursor.read_array::<2>()?);
+                let max = u16::from_be_bytes(cursor.read_array::<2>()?);
+                Self::PKey {
+                    session_id,
+                    version_range: RadrootsSimplexSmpVersionRange::new(min, max)?,
+                    cert_chain_public_key: decode_cert_chain_public_key(&mut cursor)?,
+                }
+            }
+            TAG_RRES => Self::RRes(cursor.read_remaining().to_vec()),
+            TAG_PRES => Self::PRes(cursor.read_remaining().to_vec()),
             TAG_END => Self::End,
+            TAG_ENDS => Self::Ends(cursor.read_i64()?),
             TAG_DELD => Self::Deld,
             TAG_INFO => Self::Info(cursor.read_remaining().to_vec()),
             TAG_OK => Self::Ok,
@@ -477,7 +755,12 @@ impl RadrootsSimplexSmpBrokerMessage {
         };
         if !matches!(
             message,
-            Self::Msg(_) | Self::NMsg { .. } | Self::Info(_) | Self::Err(_)
+            Self::Msg(_)
+                | Self::NMsg { .. }
+                | Self::RRes(_)
+                | Self::PRes(_)
+                | Self::Info(_)
+                | Self::Err(_)
         ) && !cursor.is_empty()
         {
             return Err(RadrootsSimplexSmpProtoError::TrailingBytes);
@@ -819,6 +1102,42 @@ fn decode_contact_queue_request(
     })
 }
 
+fn encode_protocol_server(
+    buffer: &mut Vec<u8>,
+    server: &RadrootsSimplexSmpProtocolServer,
+) -> Result<(), RadrootsSimplexSmpProtoError> {
+    push_short_string_list(buffer, &server.hosts)?;
+    push_short_string(buffer, &server.port)?;
+    push_short_bytes(buffer, &server.key_hash)
+}
+
+fn decode_protocol_server(
+    cursor: &mut Cursor<'_>,
+) -> Result<RadrootsSimplexSmpProtocolServer, RadrootsSimplexSmpProtoError> {
+    Ok(RadrootsSimplexSmpProtocolServer {
+        hosts: cursor.read_short_string_list()?,
+        port: cursor.read_short_string_lossy()?,
+        key_hash: cursor.read_short_bytes()?,
+    })
+}
+
+fn encode_cert_chain_public_key(
+    buffer: &mut Vec<u8>,
+    cert_chain_public_key: &RadrootsSimplexSmpCertChainPublicKey,
+) -> Result<(), RadrootsSimplexSmpProtoError> {
+    push_large_bytes_list(buffer, &cert_chain_public_key.certificate_chain)?;
+    push_large_bytes(buffer, &cert_chain_public_key.signed_public_key)
+}
+
+fn decode_cert_chain_public_key(
+    cursor: &mut Cursor<'_>,
+) -> Result<RadrootsSimplexSmpCertChainPublicKey, RadrootsSimplexSmpProtoError> {
+    Ok(RadrootsSimplexSmpCertChainPublicKey {
+        certificate_chain: cursor.read_large_bytes_list()?,
+        signed_public_key: cursor.read_large_bytes()?,
+    })
+}
+
 fn encode_queue_link_data(
     buffer: &mut Vec<u8>,
     link_data: &RadrootsSimplexSmpQueueLinkData,
@@ -965,6 +1284,7 @@ fn encode_error(error: &RadrootsSimplexSmpError) -> Vec<u8> {
         RadrootsSimplexSmpError::Command(command_error) => {
             let mut bytes = b"CMD ".to_vec();
             bytes.extend_from_slice(match command_error {
+                RadrootsSimplexSmpCommandError::Unknown => COMMAND_ERR_UNKNOWN,
                 RadrootsSimplexSmpCommandError::Syntax => COMMAND_ERR_SYNTAX,
                 RadrootsSimplexSmpCommandError::Prohibited => COMMAND_ERR_PROHIBITED,
                 RadrootsSimplexSmpCommandError::NoAuth => COMMAND_ERR_NO_AUTH,
@@ -974,11 +1294,30 @@ fn encode_error(error: &RadrootsSimplexSmpError) -> Vec<u8> {
             });
             bytes
         }
+        RadrootsSimplexSmpError::Proxy(proxy_error) => {
+            let mut bytes = b"PROXY ".to_vec();
+            bytes.extend_from_slice(&encode_proxy_error(proxy_error));
+            bytes
+        }
         RadrootsSimplexSmpError::Auth => b"AUTH".to_vec(),
+        RadrootsSimplexSmpError::Blocked(blocking_info) => {
+            let mut bytes = b"BLOCKED ".to_vec();
+            bytes.extend_from_slice(&encode_blocking_info(blocking_info));
+            bytes
+        }
+        RadrootsSimplexSmpError::Service => b"SERVICE".to_vec(),
+        RadrootsSimplexSmpError::Crypto => b"CRYPTO".to_vec(),
         RadrootsSimplexSmpError::Quota => b"QUOTA".to_vec(),
+        RadrootsSimplexSmpError::Store(store_error) => {
+            let mut bytes = b"STORE ".to_vec();
+            bytes.extend_from_slice(store_error.as_bytes());
+            bytes
+        }
         RadrootsSimplexSmpError::NoMsg => b"NO_MSG".to_vec(),
         RadrootsSimplexSmpError::LargeMsg => b"LARGE_MSG".to_vec(),
+        RadrootsSimplexSmpError::Expired => b"EXPIRED".to_vec(),
         RadrootsSimplexSmpError::Internal => b"INTERNAL".to_vec(),
+        RadrootsSimplexSmpError::Duplicate => b"DUPLICATE_".to_vec(),
         RadrootsSimplexSmpError::Other(raw) => raw.clone(),
     }
 }
@@ -993,8 +1332,19 @@ fn decode_error(bytes: &[u8]) -> Result<RadrootsSimplexSmpError, RadrootsSimplex
     if bytes == b"AUTH" {
         return Ok(RadrootsSimplexSmpError::Auth);
     }
+    if bytes == b"SERVICE" {
+        return Ok(RadrootsSimplexSmpError::Service);
+    }
+    if bytes == b"CRYPTO" {
+        return Ok(RadrootsSimplexSmpError::Crypto);
+    }
     if bytes == b"QUOTA" {
         return Ok(RadrootsSimplexSmpError::Quota);
+    }
+    if let Some(store_error) = bytes.strip_prefix(b"STORE ") {
+        return Ok(RadrootsSimplexSmpError::Store(
+            String::from_utf8_lossy(store_error).into_owned(),
+        ));
     }
     if bytes == b"NO_MSG" {
         return Ok(RadrootsSimplexSmpError::NoMsg);
@@ -1002,11 +1352,18 @@ fn decode_error(bytes: &[u8]) -> Result<RadrootsSimplexSmpError, RadrootsSimplex
     if bytes == b"LARGE_MSG" {
         return Ok(RadrootsSimplexSmpError::LargeMsg);
     }
+    if bytes == b"EXPIRED" {
+        return Ok(RadrootsSimplexSmpError::Expired);
+    }
     if bytes == b"INTERNAL" {
         return Ok(RadrootsSimplexSmpError::Internal);
     }
+    if bytes == b"DUPLICATE_" {
+        return Ok(RadrootsSimplexSmpError::Duplicate);
+    }
     if let Some(command) = bytes.strip_prefix(b"CMD ") {
         let command_error = match command {
+            COMMAND_ERR_UNKNOWN => RadrootsSimplexSmpCommandError::Unknown,
             COMMAND_ERR_SYNTAX => RadrootsSimplexSmpCommandError::Syntax,
             COMMAND_ERR_PROHIBITED => RadrootsSimplexSmpCommandError::Prohibited,
             COMMAND_ERR_NO_AUTH => RadrootsSimplexSmpCommandError::NoAuth,
@@ -1018,7 +1375,225 @@ fn decode_error(bytes: &[u8]) -> Result<RadrootsSimplexSmpError, RadrootsSimplex
         };
         return Ok(RadrootsSimplexSmpError::Command(command_error));
     }
+    if let Some(proxy_error) = bytes.strip_prefix(b"PROXY ") {
+        if let Some(proxy_error) = decode_proxy_error(proxy_error) {
+            return Ok(RadrootsSimplexSmpError::Proxy(proxy_error));
+        }
+    }
+    if let Some(blocking_info) = bytes.strip_prefix(b"BLOCKED ") {
+        if let Some(blocking_info) = decode_blocking_info(blocking_info) {
+            return Ok(RadrootsSimplexSmpError::Blocked(blocking_info));
+        }
+    }
     Ok(RadrootsSimplexSmpError::Other(bytes.to_vec()))
+}
+
+fn encode_proxy_error(error: &RadrootsSimplexSmpProxyError) -> Vec<u8> {
+    match error {
+        RadrootsSimplexSmpProxyError::Protocol(error) => {
+            let mut bytes = b"PROTOCOL ".to_vec();
+            bytes.extend_from_slice(&encode_error(error));
+            bytes
+        }
+        RadrootsSimplexSmpProxyError::Broker(error) => {
+            let mut bytes = b"BROKER ".to_vec();
+            bytes.extend_from_slice(&encode_broker_error(error));
+            bytes
+        }
+        RadrootsSimplexSmpProxyError::BasicAuth => b"BASIC_AUTH".to_vec(),
+        RadrootsSimplexSmpProxyError::NoSession => b"NO_SESSION".to_vec(),
+    }
+}
+
+fn decode_proxy_error(bytes: &[u8]) -> Option<RadrootsSimplexSmpProxyError> {
+    let (tag, rest) = parse_tag(bytes).ok()?;
+    match tag.as_slice() {
+        b"PROTOCOL" => Some(RadrootsSimplexSmpProxyError::Protocol(Box::new(
+            decode_error(rest).ok()?,
+        ))),
+        b"BROKER" => Some(RadrootsSimplexSmpProxyError::Broker(decode_broker_error(
+            rest,
+        )?)),
+        b"BASIC_AUTH" if rest.is_empty() => Some(RadrootsSimplexSmpProxyError::BasicAuth),
+        b"NO_SESSION" if rest.is_empty() => Some(RadrootsSimplexSmpProxyError::NoSession),
+        _ => None,
+    }
+}
+
+fn encode_broker_error(error: &RadrootsSimplexSmpBrokerError) -> Vec<u8> {
+    match error {
+        RadrootsSimplexSmpBrokerError::Response(response_error) => {
+            let mut bytes = b"RESPONSE ".to_vec();
+            push_short_string(&mut bytes, response_error)
+                .expect("response_error length is bounded by SMP short-string encoding");
+            bytes
+        }
+        RadrootsSimplexSmpBrokerError::Unexpected(response_error) => {
+            let mut bytes = b"UNEXPECTED ".to_vec();
+            push_short_string(&mut bytes, response_error)
+                .expect("response_error length is bounded by SMP short-string encoding");
+            bytes
+        }
+        RadrootsSimplexSmpBrokerError::Network(_) => b"NETWORK".to_vec(),
+        RadrootsSimplexSmpBrokerError::Host => b"HOST".to_vec(),
+        RadrootsSimplexSmpBrokerError::NoService => b"NO_SERVICE".to_vec(),
+        RadrootsSimplexSmpBrokerError::Transport(error) => {
+            let mut bytes = b"TRANSPORT ".to_vec();
+            bytes.extend_from_slice(&encode_transport_error(error));
+            bytes
+        }
+        RadrootsSimplexSmpBrokerError::Timeout => b"TIMEOUT".to_vec(),
+    }
+}
+
+fn decode_broker_error(bytes: &[u8]) -> Option<RadrootsSimplexSmpBrokerError> {
+    let (tag, rest) = parse_tag(bytes).ok()?;
+    match tag.as_slice() {
+        b"RESPONSE" => Some(RadrootsSimplexSmpBrokerError::Response(
+            decode_short_string_lossy(rest).ok()?,
+        )),
+        b"UNEXPECTED" => Some(RadrootsSimplexSmpBrokerError::Unexpected(
+            decode_short_string_lossy(rest).ok()?,
+        )),
+        b"TRANSPORT" => Some(RadrootsSimplexSmpBrokerError::Transport(
+            decode_transport_error(rest)?,
+        )),
+        b"NETWORK" if rest.is_empty() => Some(RadrootsSimplexSmpBrokerError::Network(
+            RadrootsSimplexSmpNetworkError::Failed,
+        )),
+        b"NETWORK" => Some(RadrootsSimplexSmpBrokerError::Network(
+            decode_network_error(rest)?,
+        )),
+        b"TIMEOUT" if rest.is_empty() => Some(RadrootsSimplexSmpBrokerError::Timeout),
+        b"HOST" if rest.is_empty() => Some(RadrootsSimplexSmpBrokerError::Host),
+        b"NO_SERVICE" if rest.is_empty() => Some(RadrootsSimplexSmpBrokerError::NoService),
+        _ => None,
+    }
+}
+
+fn encode_transport_error(error: &RadrootsSimplexSmpTransportError) -> Vec<u8> {
+    match error {
+        RadrootsSimplexSmpTransportError::Block => b"BLOCK".to_vec(),
+        RadrootsSimplexSmpTransportError::Version => b"VERSION".to_vec(),
+        RadrootsSimplexSmpTransportError::LargeMsg => b"LARGE_MSG".to_vec(),
+        RadrootsSimplexSmpTransportError::Session => b"SESSION".to_vec(),
+        RadrootsSimplexSmpTransportError::NoAuth => b"NO_AUTH".to_vec(),
+        RadrootsSimplexSmpTransportError::Handshake(error) => {
+            let mut bytes = b"HANDSHAKE ".to_vec();
+            bytes.extend_from_slice(&encode_handshake_error(error));
+            bytes
+        }
+    }
+}
+
+fn decode_transport_error(bytes: &[u8]) -> Option<RadrootsSimplexSmpTransportError> {
+    let (tag, rest) = parse_tag(bytes).ok()?;
+    match tag.as_slice() {
+        b"BLOCK" if rest.is_empty() => Some(RadrootsSimplexSmpTransportError::Block),
+        b"VERSION" if rest.is_empty() => Some(RadrootsSimplexSmpTransportError::Version),
+        b"LARGE_MSG" if rest.is_empty() => Some(RadrootsSimplexSmpTransportError::LargeMsg),
+        b"SESSION" if rest.is_empty() => Some(RadrootsSimplexSmpTransportError::Session),
+        b"NO_AUTH" if rest.is_empty() => Some(RadrootsSimplexSmpTransportError::NoAuth),
+        b"HANDSHAKE" => Some(RadrootsSimplexSmpTransportError::Handshake(
+            decode_handshake_error(rest),
+        )),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+fn encode_network_error(error: &RadrootsSimplexSmpNetworkError) -> Vec<u8> {
+    match error {
+        RadrootsSimplexSmpNetworkError::Connect(connect_error) => {
+            let mut bytes = b"CONNECT ".to_vec();
+            push_short_string(&mut bytes, connect_error)
+                .expect("connect_error length is bounded by SMP short-string encoding");
+            bytes
+        }
+        RadrootsSimplexSmpNetworkError::Tls(tls_error) => {
+            let mut bytes = b"TLS ".to_vec();
+            push_short_string(&mut bytes, tls_error)
+                .expect("tls_error length is bounded by SMP short-string encoding");
+            bytes
+        }
+        RadrootsSimplexSmpNetworkError::UnknownCa => b"UNKNOWNCA".to_vec(),
+        RadrootsSimplexSmpNetworkError::Failed => b"FAILED".to_vec(),
+        RadrootsSimplexSmpNetworkError::Timeout => b"TIMEOUT".to_vec(),
+        RadrootsSimplexSmpNetworkError::Subscribe(subscribe_error) => {
+            let mut bytes = b"SUBSCRIBE ".to_vec();
+            push_short_string(&mut bytes, subscribe_error)
+                .expect("subscribe_error length is bounded by SMP short-string encoding");
+            bytes
+        }
+    }
+}
+
+fn decode_network_error(bytes: &[u8]) -> Option<RadrootsSimplexSmpNetworkError> {
+    let (tag, rest) = parse_tag(bytes).ok()?;
+    match tag.as_slice() {
+        b"CONNECT" => Some(RadrootsSimplexSmpNetworkError::Connect(
+            decode_short_string_lossy(rest).ok()?,
+        )),
+        b"TLS" => Some(RadrootsSimplexSmpNetworkError::Tls(
+            decode_short_string_lossy(rest).ok()?,
+        )),
+        b"UNKNOWNCA" if rest.is_empty() => Some(RadrootsSimplexSmpNetworkError::UnknownCa),
+        b"FAILED" if rest.is_empty() => Some(RadrootsSimplexSmpNetworkError::Failed),
+        b"TIMEOUT" if rest.is_empty() => Some(RadrootsSimplexSmpNetworkError::Timeout),
+        b"SUBSCRIBE" => Some(RadrootsSimplexSmpNetworkError::Subscribe(
+            decode_short_string_lossy(rest).ok()?,
+        )),
+        _ => None,
+    }
+}
+
+fn encode_handshake_error(error: &RadrootsSimplexSmpHandshakeError) -> Vec<u8> {
+    match error {
+        RadrootsSimplexSmpHandshakeError::Parse => b"PARSE".to_vec(),
+        RadrootsSimplexSmpHandshakeError::Identity => b"IDENTITY".to_vec(),
+        RadrootsSimplexSmpHandshakeError::BadAuth => b"BAD_AUTH".to_vec(),
+        RadrootsSimplexSmpHandshakeError::BadService => b"BAD_SERVICE".to_vec(),
+        RadrootsSimplexSmpHandshakeError::Other(raw) => raw.as_bytes().to_vec(),
+    }
+}
+
+fn decode_handshake_error(bytes: &[u8]) -> RadrootsSimplexSmpHandshakeError {
+    match bytes {
+        b"PARSE" => RadrootsSimplexSmpHandshakeError::Parse,
+        b"IDENTITY" => RadrootsSimplexSmpHandshakeError::Identity,
+        b"BAD_AUTH" => RadrootsSimplexSmpHandshakeError::BadAuth,
+        b"BAD_SERVICE" => RadrootsSimplexSmpHandshakeError::BadService,
+        raw => RadrootsSimplexSmpHandshakeError::Other(String::from_utf8_lossy(raw).into_owned()),
+    }
+}
+
+fn encode_blocking_info(info: &RadrootsSimplexSmpBlockingInfo) -> Vec<u8> {
+    let mut bytes = b"reason=".to_vec();
+    bytes.extend_from_slice(match &info.reason {
+        RadrootsSimplexSmpBlockingReason::Spam => b"spam",
+        RadrootsSimplexSmpBlockingReason::Content => b"content",
+        RadrootsSimplexSmpBlockingReason::Other(reason) => reason.as_bytes(),
+    });
+    bytes
+}
+
+fn decode_blocking_info(bytes: &[u8]) -> Option<RadrootsSimplexSmpBlockingInfo> {
+    let reason = bytes.strip_prefix(b"reason=")?;
+    let reason = match reason {
+        b"spam" => RadrootsSimplexSmpBlockingReason::Spam,
+        b"content" => RadrootsSimplexSmpBlockingReason::Content,
+        raw => RadrootsSimplexSmpBlockingReason::Other(String::from_utf8_lossy(raw).into_owned()),
+    };
+    Some(RadrootsSimplexSmpBlockingInfo { reason })
+}
+
+fn decode_short_string_lossy(bytes: &[u8]) -> Result<String, RadrootsSimplexSmpProtoError> {
+    let mut cursor = Cursor::new(bytes);
+    let value = cursor.read_short_string_lossy()?;
+    if !cursor.is_empty() {
+        return Err(RadrootsSimplexSmpProtoError::TrailingBytes);
+    }
+    Ok(value)
 }
 
 fn parse_tag(bytes: &[u8]) -> Result<(Vec<u8>, &[u8]), RadrootsSimplexSmpProtoError> {
@@ -1063,6 +1638,10 @@ fn decode_bool(value: u8) -> Result<bool, RadrootsSimplexSmpProtoError> {
     }
 }
 
+fn push_i64(buffer: &mut Vec<u8>, value: i64) {
+    buffer.extend_from_slice(&value.to_be_bytes());
+}
+
 fn push_short_bytes(
     buffer: &mut Vec<u8>,
     bytes: &[u8],
@@ -1074,6 +1653,13 @@ fn push_short_bytes(
     Ok(())
 }
 
+fn push_short_string(
+    buffer: &mut Vec<u8>,
+    value: &str,
+) -> Result<(), RadrootsSimplexSmpProtoError> {
+    push_short_bytes(buffer, value.as_bytes())
+}
+
 fn push_large_bytes(
     buffer: &mut Vec<u8>,
     bytes: &[u8],
@@ -1082,6 +1668,53 @@ fn push_large_bytes(
         .map_err(|_| RadrootsSimplexSmpProtoError::InvalidLargeFieldLength(bytes.len()))?;
     buffer.extend_from_slice(&len.to_be_bytes());
     buffer.extend_from_slice(bytes);
+    Ok(())
+}
+
+fn push_short_key_list(
+    buffer: &mut Vec<u8>,
+    keys: &RadrootsSimplexSmpKeyList,
+) -> Result<(), RadrootsSimplexSmpProtoError> {
+    let len = 1 + keys.rest.len();
+    let len =
+        u8::try_from(len).map_err(|_| RadrootsSimplexSmpProtoError::InvalidListLength(len))?;
+    buffer.push(len);
+    push_short_bytes(buffer, &keys.first)?;
+    for key in &keys.rest {
+        push_short_bytes(buffer, key)?;
+    }
+    Ok(())
+}
+
+fn push_short_string_list(
+    buffer: &mut Vec<u8>,
+    values: &[String],
+) -> Result<(), RadrootsSimplexSmpProtoError> {
+    if values.is_empty() {
+        return Err(RadrootsSimplexSmpProtoError::InvalidListLength(0));
+    }
+    let len = u8::try_from(values.len())
+        .map_err(|_| RadrootsSimplexSmpProtoError::InvalidListLength(values.len()))?;
+    buffer.push(len);
+    for value in values {
+        push_short_string(buffer, value)?;
+    }
+    Ok(())
+}
+
+fn push_large_bytes_list(
+    buffer: &mut Vec<u8>,
+    values: &[Vec<u8>],
+) -> Result<(), RadrootsSimplexSmpProtoError> {
+    if values.is_empty() {
+        return Err(RadrootsSimplexSmpProtoError::InvalidListLength(0));
+    }
+    let len = u8::try_from(values.len())
+        .map_err(|_| RadrootsSimplexSmpProtoError::InvalidListLength(values.len()))?;
+    buffer.push(len);
+    for value in values {
+        push_large_bytes(buffer, value)?;
+    }
     Ok(())
 }
 
@@ -1203,9 +1836,56 @@ impl<'a> Cursor<'a> {
         Ok(self.read_exact(len)?.to_vec())
     }
 
+    fn read_short_string_lossy(&mut self) -> Result<String, RadrootsSimplexSmpProtoError> {
+        Ok(String::from_utf8_lossy(&self.read_short_bytes()?).into_owned())
+    }
+
+    fn read_short_key_list(
+        &mut self,
+    ) -> Result<RadrootsSimplexSmpKeyList, RadrootsSimplexSmpProtoError> {
+        let len = usize::from(self.read_byte()?);
+        if len == 0 {
+            return Err(RadrootsSimplexSmpProtoError::InvalidListLength(0));
+        }
+        let first = self.read_short_bytes()?;
+        let mut rest = Vec::with_capacity(len.saturating_sub(1));
+        for _ in 1..len {
+            rest.push(self.read_short_bytes()?);
+        }
+        Ok(RadrootsSimplexSmpKeyList { first, rest })
+    }
+
+    fn read_short_string_list(&mut self) -> Result<Vec<String>, RadrootsSimplexSmpProtoError> {
+        let len = usize::from(self.read_byte()?);
+        if len == 0 {
+            return Err(RadrootsSimplexSmpProtoError::InvalidListLength(0));
+        }
+        let mut values = Vec::with_capacity(len);
+        for _ in 0..len {
+            values.push(self.read_short_string_lossy()?);
+        }
+        Ok(values)
+    }
+
     fn read_large_bytes(&mut self) -> Result<Vec<u8>, RadrootsSimplexSmpProtoError> {
         let len = usize::from(u16::from_be_bytes(self.read_array::<2>()?));
         Ok(self.read_exact(len)?.to_vec())
+    }
+
+    fn read_large_bytes_list(&mut self) -> Result<Vec<Vec<u8>>, RadrootsSimplexSmpProtoError> {
+        let len = usize::from(self.read_byte()?);
+        if len == 0 {
+            return Err(RadrootsSimplexSmpProtoError::InvalidListLength(0));
+        }
+        let mut values = Vec::with_capacity(len);
+        for _ in 0..len {
+            values.push(self.read_large_bytes()?);
+        }
+        Ok(values)
+    }
+
+    fn read_i64(&mut self) -> Result<i64, RadrootsSimplexSmpProtoError> {
+        Ok(i64::from_be_bytes(self.read_array::<8>()?))
     }
 
     fn read_maybe_string(&mut self) -> Result<Option<String>, RadrootsSimplexSmpProtoError> {
@@ -1510,6 +2190,182 @@ mod tests {
         assert_eq!(
             encoded,
             b"NEW \x03\x01\x02\x03\x02\x04\x05A\x0bserver-passS".to_vec()
+        );
+    }
+
+    #[test]
+    fn round_trips_proxy_and_short_link_commands() {
+        let prxy = RadrootsSimplexSmpCommandTransmission {
+            authorization: Vec::new(),
+            correlation_id: Some(correlation_id(1)),
+            entity_id: Vec::new(),
+            command: RadrootsSimplexSmpCommand::Prxy {
+                server: RadrootsSimplexSmpProtocolServer {
+                    hosts: vec![
+                        "smp4.simplex.im".to_string(),
+                        "simplexabc.onion".to_string(),
+                    ],
+                    port: "5223".to_string(),
+                    key_hash: vec![0xaa, 0xbb, 0xcc],
+                },
+                basic_auth: Some("relay-pass".to_string()),
+            },
+        };
+
+        let rkey = RadrootsSimplexSmpCommandTransmission {
+            authorization: vec![0x42],
+            correlation_id: Some(correlation_id(2)),
+            entity_id: vec![0x11],
+            command: RadrootsSimplexSmpCommand::RKey(RadrootsSimplexSmpKeyList {
+                first: vec![0x01, 0x02],
+                rest: vec![vec![0x03, 0x04], vec![0x05, 0x06]],
+            }),
+        };
+
+        let pkey_encoded = prxy.encode().unwrap();
+        let pkey_decoded = RadrootsSimplexSmpCommandTransmission::decode(&pkey_encoded).unwrap();
+        assert_eq!(pkey_decoded, prxy);
+
+        let rkey_encoded = rkey.encode().unwrap();
+        let rkey_decoded = RadrootsSimplexSmpCommandTransmission::decode(&rkey_encoded).unwrap();
+        assert_eq!(rkey_decoded, rkey);
+    }
+
+    #[test]
+    fn round_trips_proxy_forward_commands() {
+        let pfwd = RadrootsSimplexSmpCommandTransmission {
+            authorization: Vec::new(),
+            correlation_id: Some(correlation_id(3)),
+            entity_id: vec![0x90, 0x91],
+            command: RadrootsSimplexSmpCommand::PFwd {
+                relay_version: 16,
+                public_key: vec![0x10, 0x11, 0x12],
+                encrypted_transmission: vec![0xde, 0xad, 0xbe, 0xef],
+            },
+        };
+        let rfwd = RadrootsSimplexSmpCommandTransmission {
+            authorization: Vec::new(),
+            correlation_id: Some(correlation_id(4)),
+            entity_id: Vec::new(),
+            command: RadrootsSimplexSmpCommand::RFwd(vec![0xca, 0xfe, 0xba, 0xbe]),
+        };
+
+        let pfwd_encoded = pfwd.encode().unwrap();
+        let pfwd_decoded = RadrootsSimplexSmpCommandTransmission::decode(&pfwd_encoded).unwrap();
+        assert_eq!(pfwd_decoded, pfwd);
+
+        let rfwd_encoded = rfwd.encode().unwrap();
+        let rfwd_decoded = RadrootsSimplexSmpCommandTransmission::decode(&rfwd_encoded).unwrap();
+        assert_eq!(rfwd_decoded, rfwd);
+    }
+
+    #[test]
+    fn round_trips_service_and_proxy_broker_messages() {
+        let service = RadrootsSimplexSmpBrokerTransmission {
+            authorization: Vec::new(),
+            correlation_id: Some(correlation_id(5)),
+            entity_id: vec![0x44],
+            message: RadrootsSimplexSmpBrokerMessage::Sok(Some(vec![0x20, 0x21])),
+        };
+        let proxy = RadrootsSimplexSmpBrokerTransmission {
+            authorization: Vec::new(),
+            correlation_id: None,
+            entity_id: Vec::new(),
+            message: RadrootsSimplexSmpBrokerMessage::PKey {
+                session_id: vec![0x31, 0x32],
+                version_range: RadrootsSimplexSmpVersionRange::new(8, 16).unwrap(),
+                cert_chain_public_key: RadrootsSimplexSmpCertChainPublicKey {
+                    certificate_chain: vec![vec![0x41, 0x42], vec![0x43, 0x44, 0x45]],
+                    signed_public_key: vec![0x51, 0x52, 0x53],
+                },
+            },
+        };
+
+        let service_encoded = service.encode().unwrap();
+        let service_decoded =
+            RadrootsSimplexSmpBrokerTransmission::decode(&service_encoded).unwrap();
+        assert_eq!(service_decoded, service);
+
+        let proxy_encoded = proxy.encode().unwrap();
+        let proxy_decoded = RadrootsSimplexSmpBrokerTransmission::decode(&proxy_encoded).unwrap();
+        assert_eq!(proxy_decoded, proxy);
+    }
+
+    #[test]
+    fn round_trips_proxy_and_blocked_errors() {
+        let proxy_error = RadrootsSimplexSmpBrokerTransmission {
+            authorization: Vec::new(),
+            correlation_id: Some(correlation_id(6)),
+            entity_id: vec![0x77],
+            message: RadrootsSimplexSmpBrokerMessage::Err(RadrootsSimplexSmpError::Proxy(
+                RadrootsSimplexSmpProxyError::Broker(RadrootsSimplexSmpBrokerError::Transport(
+                    RadrootsSimplexSmpTransportError::Handshake(
+                        RadrootsSimplexSmpHandshakeError::Identity,
+                    ),
+                )),
+            )),
+        };
+        let blocked_error = RadrootsSimplexSmpBrokerTransmission {
+            authorization: Vec::new(),
+            correlation_id: Some(correlation_id(7)),
+            entity_id: vec![0x88],
+            message: RadrootsSimplexSmpBrokerMessage::Err(RadrootsSimplexSmpError::Blocked(
+                RadrootsSimplexSmpBlockingInfo {
+                    reason: RadrootsSimplexSmpBlockingReason::Spam,
+                },
+            )),
+        };
+
+        let proxy_encoded = proxy_error.encode().unwrap();
+        let proxy_decoded = RadrootsSimplexSmpBrokerTransmission::decode(&proxy_encoded).unwrap();
+        assert_eq!(proxy_decoded, proxy_error);
+
+        let blocked_encoded = blocked_error.encode().unwrap();
+        let blocked_decoded =
+            RadrootsSimplexSmpBrokerTransmission::decode(&blocked_encoded).unwrap();
+        assert_eq!(blocked_decoded, blocked_error);
+    }
+
+    #[test]
+    fn service_ok_downgrades_to_ok_before_service_certs() {
+        let encoded = RadrootsSimplexSmpBrokerMessage::Sok(Some(vec![0x10]))
+            .encode_for_version(RADROOTS_SIMPLEX_SMP_SHORT_LINKS_TRANSPORT_VERSION)
+            .unwrap();
+
+        assert_eq!(encoded, b"OK".to_vec());
+    }
+
+    #[test]
+    fn blocked_error_downgrades_to_auth_before_blocked_entity_version() {
+        let encoded = RadrootsSimplexSmpBrokerMessage::Err(RadrootsSimplexSmpError::Blocked(
+            RadrootsSimplexSmpBlockingInfo {
+                reason: RadrootsSimplexSmpBlockingReason::Content,
+            },
+        ))
+        .encode_for_version(RADROOTS_SIMPLEX_SMP_SENDER_AUTH_KEY_TRANSPORT_VERSION)
+        .unwrap();
+
+        assert_eq!(encoded, b"ERR AUTH".to_vec());
+    }
+
+    #[test]
+    fn decodes_optional_network_detail_and_preserves_encode_behavior() {
+        let detailed = decode_broker_error(b"NETWORK CONNECT \x03dns").unwrap();
+        assert_eq!(
+            detailed,
+            RadrootsSimplexSmpBrokerError::Network(RadrootsSimplexSmpNetworkError::Connect(
+                "dns".to_string(),
+            ))
+        );
+
+        let encoded =
+            encode_network_error(&RadrootsSimplexSmpNetworkError::Connect("dns".to_string()));
+        assert_eq!(encoded, b"CONNECT \x03dns".to_vec());
+        assert_eq!(
+            encode_broker_error(&RadrootsSimplexSmpBrokerError::Network(
+                RadrootsSimplexSmpNetworkError::Connect("dns".to_string()),
+            )),
+            b"NETWORK".to_vec()
         );
     }
 }

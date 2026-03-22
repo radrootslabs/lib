@@ -26,6 +26,8 @@ pub enum RadrootsSimplexSmpProtoError {
 
     InvalidLargeFieldLength(usize),
 
+    InvalidListLength(usize),
+
     InvalidCorrelationIdLength(usize),
 
     InvalidNonceLength(usize),
@@ -61,6 +63,7 @@ impl fmt::Display for RadrootsSimplexSmpProtoError {
             Self::InvalidLargeFieldLength(length) => {
                 write!(f, "invalid SMP large field length {length}")
             }
+            Self::InvalidListLength(length) => write!(f, "invalid SMP list length {length}"),
             Self::InvalidCorrelationIdLength(length) => {
                 write!(f, "invalid SMP correlation id length {length}")
             }
