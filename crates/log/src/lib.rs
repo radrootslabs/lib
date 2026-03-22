@@ -14,7 +14,7 @@ pub use error::{Error, Result};
 #[cfg(feature = "std")]
 pub use init::{init_logging, init_stdout};
 #[cfg(feature = "std")]
-pub use options::LoggingOptions;
+pub use options::{LogFileLayout, LoggingOptions};
 
 use tracing::{debug, error, info};
 

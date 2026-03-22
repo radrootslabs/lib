@@ -16,6 +16,10 @@ pub enum Error {
     #[cfg(feature = "std")]
     #[error(transparent)]
     Io(#[from] std::io::Error),
+
+    #[cfg(feature = "std")]
+    #[error(transparent)]
+    RollingInit(#[from] tracing_appender::rolling::InitError),
 }
 
 pub type Result<T> = core::result::Result<T, Error>;
