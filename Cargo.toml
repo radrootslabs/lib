@@ -17,6 +17,7 @@ members = [
   "crates/nostr-ndb",
   "crates/nostr-runtime",
   "crates/runtime",
+  "crates/simplex-smp-proto",
   "crates/sql-wasm-bridge",
   "crates/sql-wasm-core",
   "crates/sql-core",
@@ -57,6 +58,7 @@ radroots-log = { path = "crates/log", version = "0.1.0-alpha.1", default-feature
 radroots-net = { path = "crates/net", version = "0.1.0-alpha.1", default-features = false }
 radroots-net-core = { path = "crates/net-core", version = "0.1.0-alpha.1", default-features = false }
 radroots-nostr-runtime = { path = "crates/nostr-runtime", version = "0.1.0-alpha.1", default-features = false }
+radroots-simplex-smp-proto = { path = "crates/simplex-smp-proto", version = "0.1.0-alpha.1", default-features = false }
 radroots-sql-wasm-bridge = { path = "crates/sql-wasm-bridge", version = "0.1.0-alpha.1" }
 radroots-sql-wasm-core = { path = "crates/sql-wasm-core", version = "0.1.0-alpha.1", default-features = false }
 radroots-sql-core = { path = "crates/sql-core", version = "0.1.0-alpha.1" }

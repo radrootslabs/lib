@@ -2395,6 +2395,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "radroots-simplex-smp-proto"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "base64 0.22.1",
+]
+
+[[package]]
 name = "radroots-sql-core"
 version = "0.1.0-alpha.1"
 dependencies = [
