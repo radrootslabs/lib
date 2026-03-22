@@ -135,8 +135,8 @@ impl RadrootsNostrSignerManager {
             .connections
             .iter()
             .find(|record| {
-                !record.is_terminal()
-                    && record.connect_secret_hash.as_ref() == Some(&connect_secret_hash)
+                record.connect_secret_hash.as_ref() == Some(&connect_secret_hash)
+                    && (!record.is_terminal() || record.connect_secret_is_consumed())
             })
             .cloned())
     }
@@ -248,8 +248,8 @@ impl RadrootsNostrSignerManager {
                 .and_then(RadrootsNostrSignerConnectSecretHash::from_secret);
             if let Some(secret_hash) = connect_secret_hash.as_ref() {
                 if state.connections.iter().any(|record| {
-                    !record.is_terminal()
-                        && record.connect_secret_hash.as_ref() == Some(secret_hash)
+                    record.connect_secret_hash.as_ref() == Some(secret_hash)
+                        && (!record.is_terminal() || record.connect_secret_is_consumed())
                 }) {
                     return Err(RadrootsNostrSignerError::ConnectSecretAlreadyInUse);
                 }
@@ -500,6 +500,23 @@ impl RadrootsNostrSignerManager {
             let authenticated_at_unix = now_unix_secs();
             let record = find_connection_mut(state, connection_id)?;
             record.mark_authenticated(authenticated_at_unix);
+            Ok(record.clone())
+        })
+    }
+
+    pub fn mark_connect_secret_consumed(
+        &self,
+        connection_id: &RadrootsNostrSignerConnectionId,
+    ) -> Result<RadrootsNostrSignerConnectionRecord, RadrootsNostrSignerError> {
+        self.update_state_with(|state| {
+            let consumed_at_unix = now_unix_secs();
+            let record = find_connection_mut(state, connection_id)?;
+            if record.connect_secret_hash.is_none() {
+                return Err(RadrootsNostrSignerError::InvalidState(
+                    "connection does not have a connect secret".into(),
+                ));
+            }
+            record.mark_connect_secret_consumed(consumed_at_unix);
             Ok(record.clone())
         })
     }
@@ -967,6 +984,10 @@ mod tests {
         assert_same_public_identity(&left.signer_identity, &right.signer_identity);
         assert_same_public_identity(&left.user_identity, &right.user_identity);
         assert_eq!(left.connect_secret_hash, right.connect_secret_hash);
+        assert_eq!(
+            left.connect_secret_consumed_at_unix,
+            right.connect_secret_consumed_at_unix
+        );
         assert_eq!(left.requested_permissions, right.requested_permissions);
         assert_eq!(left.granted_permissions, right.granted_permissions);
         assert_eq!(left.relays, right.relays);
@@ -1540,6 +1561,15 @@ mod tests {
             .expect("auth");
         assert!(authenticated.last_authenticated_at_unix.is_some());
 
+        let consumed = manager
+            .mark_connect_secret_consumed(&record.connection_id)
+            .expect_err("consume missing secret");
+        assert!(
+            consumed
+                .to_string()
+                .contains("connection does not have a connect secret")
+        );
+
         let audit = manager
             .record_request(
                 &record.connection_id,
@@ -1678,6 +1708,51 @@ mod tests {
             no_authorize
                 .to_string()
                 .contains("auth challenge not pending for connection")
+        );
+    }
+
+    #[test]
+    fn connect_secret_consumption_persists_and_remains_idempotent() {
+        let manager = RadrootsNostrSignerManager::new_in_memory();
+        manager
+            .set_signer_identity(public_identity(
+                "0000000000000000000000000000000000000000000000000000000000000037",
+            ))
+            .expect("set signer");
+        let record = manager
+            .register_connection(
+                RadrootsNostrSignerConnectionDraft::new(
+                    public_key("0000000000000000000000000000000000000000000000000000000000000038"),
+                    public_identity(
+                        "0000000000000000000000000000000000000000000000000000000000000039",
+                    ),
+                )
+                .with_connect_secret("one-shot-secret"),
+            )
+            .expect("register");
+
+        let consumed = manager
+            .mark_connect_secret_consumed(&record.connection_id)
+            .expect("consume secret");
+        assert!(consumed.connect_secret_is_consumed());
+        assert!(consumed.connect_secret_consumed_at_unix.is_some());
+
+        let consumed_again = manager
+            .mark_connect_secret_consumed(&record.connection_id)
+            .expect("consume secret again");
+        assert_eq!(
+            consumed_again.connect_secret_consumed_at_unix,
+            consumed.connect_secret_consumed_at_unix
+        );
+
+        let found = manager
+            .find_connection_by_connect_secret("one-shot-secret")
+            .expect("find consumed secret")
+            .expect("stored secret");
+        assert!(found.connect_secret_is_consumed());
+        assert_eq!(
+            found.connect_secret_consumed_at_unix,
+            consumed.connect_secret_consumed_at_unix
         );
     }
 
@@ -2017,7 +2092,7 @@ mod tests {
     }
 
     #[test]
-    fn helpers_cover_status_labels_and_terminal_secret_reuse() {
+    fn helpers_cover_status_labels_and_consumed_secret_reuse_rules() {
         assert_eq!(
             status_label(RadrootsNostrSignerConnectionStatus::Pending),
             "pending"
@@ -2077,6 +2152,30 @@ mod tests {
                 .expect("connect secret hash")
                 .matches_secret("reusable-secret")
         );
+
+        let consumed = manager
+            .mark_connect_secret_consumed(&reused.connection_id)
+            .expect("consume secret");
+        assert!(consumed.connect_secret_is_consumed());
+        manager
+            .reject_connection(&reused.connection_id, Some("closed".into()))
+            .expect("reject consumed");
+
+        let blocked_reuse = manager
+            .register_connection(
+                RadrootsNostrSignerConnectionDraft::new(
+                    public_key("0000000000000000000000000000000000000000000000000000000000000047"),
+                    public_identity(
+                        "0000000000000000000000000000000000000000000000000000000000000048",
+                    ),
+                )
+                .with_connect_secret("reusable-secret"),
+            )
+            .expect_err("block consumed secret reuse");
+        assert!(matches!(
+            blocked_reuse,
+            RadrootsNostrSignerError::ConnectSecretAlreadyInUse
+        ));
     }
 
     #[test]

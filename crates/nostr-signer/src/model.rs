@@ -122,6 +122,8 @@ pub struct RadrootsNostrSignerConnectionRecord {
         skip_serializing_if = "Option::is_none"
     )]
     pub connect_secret_hash: Option<RadrootsNostrSignerConnectSecretHash>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub connect_secret_consumed_at_unix: Option<u64>,
     pub requested_permissions: RadrootsNostrConnectPermissions,
     #[serde(default)]
     pub granted_permissions: Vec<RadrootsNostrSignerPermissionGrant>,
@@ -444,6 +446,7 @@ impl RadrootsNostrSignerConnectionRecord {
                 .connect_secret
                 .as_deref()
                 .and_then(RadrootsNostrSignerConnectSecretHash::from_secret),
+            connect_secret_consumed_at_unix: None,
             requested_permissions: draft.requested_permissions,
             granted_permissions: Vec::new(),
             relays: draft.relays,
@@ -488,6 +491,10 @@ impl RadrootsNostrSignerConnectionRecord {
         )
     }
 
+    pub fn connect_secret_is_consumed(&self) -> bool {
+        self.connect_secret_hash.is_some() && self.connect_secret_consumed_at_unix.is_some()
+    }
+
     pub fn touch_updated(&mut self, updated_at_unix: u64) {
         self.updated_at_unix = updated_at_unix;
     }
@@ -500,6 +507,14 @@ impl RadrootsNostrSignerConnectionRecord {
     pub fn mark_request(&mut self, request_at_unix: u64) {
         self.last_request_at_unix = Some(request_at_unix);
         self.updated_at_unix = request_at_unix;
+    }
+
+    pub fn mark_connect_secret_consumed(&mut self, consumed_at_unix: u64) {
+        if self.connect_secret_hash.is_none() || self.connect_secret_consumed_at_unix.is_some() {
+            return;
+        }
+        self.connect_secret_consumed_at_unix = Some(consumed_at_unix);
+        self.updated_at_unix = consumed_at_unix;
     }
 
     pub fn require_auth_challenge(&mut self, auth_challenge: RadrootsNostrSignerAuthChallenge) {
@@ -728,11 +743,13 @@ mod tests {
                 .expect("connect secret hash")
                 .matches_secret("secret")
         );
+        assert!(!record.connect_secret_is_consumed());
         assert!(!record.is_terminal());
 
         record.touch_updated(12);
         record.mark_authenticated(14);
         record.mark_request(16);
+        record.mark_connect_secret_consumed(17);
         record.require_auth_challenge(
             RadrootsNostrSignerAuthChallenge::new("https://auth.example/path", 18)
                 .expect("auth challenge"),
@@ -754,6 +771,8 @@ mod tests {
         .authorize_auth_challenge(25);
 
         assert_eq!(record.updated_at_unix, 22);
+        assert_eq!(record.connect_secret_consumed_at_unix, Some(17));
+        assert!(record.connect_secret_is_consumed());
         assert_eq!(record.auth_state, RadrootsNostrSignerAuthState::Authorized);
         assert_eq!(
             record
@@ -1035,6 +1054,11 @@ mod tests {
         )
         .expect("deserialize record without secret");
         assert!(decoded_without_secret.connect_secret_hash.is_none());
+        assert!(
+            decoded_without_secret
+                .connect_secret_consumed_at_unix
+                .is_none()
+        );
 
         let decoded_with_null_secret: RadrootsNostrSignerConnectionRecord = serde_json::from_value(
             json!({
@@ -1057,6 +1081,11 @@ mod tests {
         )
         .expect("deserialize record with null secret");
         assert!(decoded_with_null_secret.connect_secret_hash.is_none());
+        assert!(
+            decoded_with_null_secret
+                .connect_secret_consumed_at_unix
+                .is_none()
+        );
 
         let decoded: RadrootsNostrSignerConnectionRecord =
             serde_json::from_value(record_json).expect("deserialize legacy record");
@@ -1071,6 +1100,7 @@ mod tests {
         let encoded = serde_json::to_value(&decoded).expect("serialize record");
         assert!(encoded.get("connect_secret").is_none());
         assert!(encoded.get("connect_secret_hash").is_some());
+        assert!(encoded.get("connect_secret_consumed_at_unix").is_none());
         assert_eq!(
             encoded
                 .get("auth_state")
@@ -1090,6 +1120,7 @@ mod tests {
                     "algorithm": "sha256",
                     "digest_hex": valid_hash.digest_hex
                 },
+                "connect_secret_consumed_at_unix": 23,
                 "requested_permissions": "",
                 "granted_permissions": [],
                 "relays": [],
@@ -1110,6 +1141,8 @@ mod tests {
                 .expect("new-format hash")
                 .matches_secret("explicit-secret")
         );
+        assert_eq!(decoded_new_format.connect_secret_consumed_at_unix, Some(23));
+        assert!(decoded_new_format.connect_secret_is_consumed());
 
         let temp = tempdir().expect("tempdir");
         let path = temp.path().join("connection-record.json");
