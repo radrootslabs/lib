@@ -1,7 +1,7 @@
 use crate::error::RadrootsSimplexSmpProtoError;
 use crate::uri::RadrootsSimplexSmpQueueMode;
 use crate::version::{
-    RADROOTS_SIMPLEX_SMP_CURRENT_TRANSPORT_VERSION,
+    RADROOTS_SIMPLEX_SMP_CURRENT_TRANSPORT_VERSION, RADROOTS_SIMPLEX_SMP_INITIAL_TRANSPORT_VERSION,
     RADROOTS_SIMPLEX_SMP_NEW_NOTIFIER_CREDENTIALS_TRANSPORT_VERSION,
     RADROOTS_SIMPLEX_SMP_SENDER_AUTH_KEY_TRANSPORT_VERSION,
     RADROOTS_SIMPLEX_SMP_SERVICE_CERTS_TRANSPORT_VERSION,
@@ -561,7 +561,7 @@ fn encode_new_request(
     request: &RadrootsSimplexSmpNewQueueRequest,
     transport_version: u16,
 ) -> Result<(), RadrootsSimplexSmpProtoError> {
-    if transport_version < RADROOTS_SIMPLEX_SMP_SENDER_AUTH_KEY_TRANSPORT_VERSION {
+    if transport_version < RADROOTS_SIMPLEX_SMP_INITIAL_TRANSPORT_VERSION {
         return Err(RadrootsSimplexSmpProtoError::UnsupportedTransportVersion(
             transport_version,
         ));
@@ -571,10 +571,9 @@ fn encode_new_request(
     buffer.push(b' ');
     push_short_bytes(buffer, &request.recipient_auth_public_key)?;
     push_short_bytes(buffer, &request.recipient_dh_public_key)?;
-    push_maybe_string(buffer, request.basic_auth.as_deref())?;
-    buffer.push(encode_subscription_mode(request.subscription_mode));
-
     if transport_version >= RADROOTS_SIMPLEX_SMP_NEW_NOTIFIER_CREDENTIALS_TRANSPORT_VERSION {
+        push_maybe_string(buffer, request.basic_auth.as_deref())?;
+        buffer.push(encode_subscription_mode(request.subscription_mode));
         push_maybe(
             buffer,
             request.queue_request_data.as_ref(),
@@ -586,13 +585,20 @@ fn encode_new_request(
             encode_new_notifier_credentials,
         )?;
     } else if transport_version >= RADROOTS_SIMPLEX_SMP_SHORT_LINKS_TRANSPORT_VERSION {
+        push_maybe_string(buffer, request.basic_auth.as_deref())?;
+        buffer.push(encode_subscription_mode(request.subscription_mode));
         push_maybe(
             buffer,
             request.queue_request_data.as_ref(),
             encode_queue_request_data,
         )?;
-    } else {
+    } else if transport_version >= RADROOTS_SIMPLEX_SMP_SENDER_AUTH_KEY_TRANSPORT_VERSION {
+        push_maybe_string(buffer, request.basic_auth.as_deref())?;
+        buffer.push(encode_subscription_mode(request.subscription_mode));
         buffer.push(encode_bool(request.sender_can_secure()));
+    } else {
+        push_legacy_basic_auth(buffer, request.basic_auth.as_deref())?;
+        buffer.push(encode_subscription_mode(request.subscription_mode));
     }
 
     Ok(())
@@ -602,7 +608,7 @@ fn decode_new_request(
     cursor: &mut Cursor<'_>,
     transport_version: u16,
 ) -> Result<RadrootsSimplexSmpNewQueueRequest, RadrootsSimplexSmpProtoError> {
-    if transport_version < RADROOTS_SIMPLEX_SMP_SENDER_AUTH_KEY_TRANSPORT_VERSION {
+    if transport_version < RADROOTS_SIMPLEX_SMP_INITIAL_TRANSPORT_VERSION {
         return Err(RadrootsSimplexSmpProtoError::UnsupportedTransportVersion(
             transport_version,
         ));
@@ -610,24 +616,38 @@ fn decode_new_request(
 
     let recipient_auth_public_key = cursor.read_short_bytes()?;
     let recipient_dh_public_key = cursor.read_short_bytes()?;
-    let basic_auth = cursor.read_maybe_string()?;
-    let subscription_mode = decode_subscription_mode(cursor.read_byte()?)?;
-    let (queue_request_data, notifier_credentials) =
+    let (basic_auth, subscription_mode, queue_request_data, notifier_credentials) =
         if transport_version >= RADROOTS_SIMPLEX_SMP_NEW_NOTIFIER_CREDENTIALS_TRANSPORT_VERSION {
             (
+                cursor.read_maybe_string()?,
+                decode_subscription_mode(cursor.read_byte()?)?,
                 cursor.read_maybe(decode_queue_request_data)?,
                 cursor.read_maybe(decode_new_notifier_credentials)?,
             )
         } else if transport_version >= RADROOTS_SIMPLEX_SMP_SHORT_LINKS_TRANSPORT_VERSION {
-            (cursor.read_maybe(decode_queue_request_data)?, None)
-        } else {
+            (
+                cursor.read_maybe_string()?,
+                decode_subscription_mode(cursor.read_byte()?)?,
+                cursor.read_maybe(decode_queue_request_data)?,
+                None,
+            )
+        } else if transport_version >= RADROOTS_SIMPLEX_SMP_SENDER_AUTH_KEY_TRANSPORT_VERSION {
+            let basic_auth = cursor.read_maybe_string()?;
+            let subscription_mode = decode_subscription_mode(cursor.read_byte()?)?;
             let sender_can_secure = decode_bool(cursor.read_byte()?)?;
             let queue_request_data = Some(if sender_can_secure {
                 RadrootsSimplexSmpQueueRequestData::Messaging(None)
             } else {
                 RadrootsSimplexSmpQueueRequestData::Contact(None)
             });
-            (queue_request_data, None)
+            (basic_auth, subscription_mode, queue_request_data, None)
+        } else {
+            (
+                cursor.read_legacy_basic_auth()?,
+                decode_subscription_mode(cursor.read_byte()?)?,
+                None,
+                None,
+            )
         };
 
     Ok(RadrootsSimplexSmpNewQueueRequest {
@@ -1110,6 +1130,20 @@ fn push_maybe_string(
     }
 }
 
+fn push_legacy_basic_auth(
+    buffer: &mut Vec<u8>,
+    value: Option<&str>,
+) -> Result<(), RadrootsSimplexSmpProtoError> {
+    match value {
+        None => Ok(()),
+        Some(value) => {
+            validate_basic_auth(value)?;
+            buffer.push(b'A');
+            push_short_bytes(buffer, value.as_bytes())
+        }
+    }
+}
+
 fn validate_basic_auth(value: &str) -> Result<(), RadrootsSimplexSmpProtoError> {
     if value
         .bytes()
@@ -1182,6 +1216,22 @@ impl<'a> Cursor<'a> {
             validate_basic_auth(&string)?;
             Ok(string)
         })
+    }
+
+    fn read_legacy_basic_auth(&mut self) -> Result<Option<String>, RadrootsSimplexSmpProtoError> {
+        match self.bytes.get(self.offset).copied() {
+            Some(b'A') => {
+                self.offset += 1;
+                let value = self.read_short_bytes()?;
+                let string = String::from_utf8(value).map_err(|error| {
+                    RadrootsSimplexSmpProtoError::InvalidUtf8(error.to_string())
+                })?;
+                validate_basic_auth(&string)?;
+                Ok(Some(string))
+            }
+            Some(_) => Ok(None),
+            None => Err(RadrootsSimplexSmpProtoError::UnexpectedEof),
+        }
     }
 
     fn read_maybe<T, F>(&mut self, decode: F) -> Result<Option<T>, RadrootsSimplexSmpProtoError>
@@ -1270,6 +1320,33 @@ mod tests {
     }
 
     #[test]
+    fn round_trips_v6_new_command_transmission() {
+        let transmission = RadrootsSimplexSmpCommandTransmission {
+            authorization: vec![1, 2, 3],
+            correlation_id: Some(correlation_id(7)),
+            entity_id: Vec::new(),
+            command: RadrootsSimplexSmpCommand::New(RadrootsSimplexSmpNewQueueRequest {
+                recipient_auth_public_key: vec![0x01, 0x02, 0x03],
+                recipient_dh_public_key: vec![0x04, 0x05],
+                basic_auth: Some("server-pass".to_string()),
+                subscription_mode: RadrootsSimplexSmpSubscriptionMode::Subscribe,
+                queue_request_data: None,
+                notifier_credentials: None,
+            }),
+        };
+
+        let encoded = transmission
+            .encode_for_version(RADROOTS_SIMPLEX_SMP_INITIAL_TRANSPORT_VERSION)
+            .unwrap();
+        let decoded = RadrootsSimplexSmpCommandTransmission::decode_for_version(
+            RADROOTS_SIMPLEX_SMP_INITIAL_TRANSPORT_VERSION,
+            &encoded,
+        )
+        .unwrap();
+        assert_eq!(decoded, transmission);
+    }
+
+    #[test]
     fn round_trips_send_command_transmission() {
         let transmission = RadrootsSimplexSmpCommandTransmission {
             authorization: Vec::new(),
@@ -1286,6 +1363,41 @@ mod tests {
 
         let encoded = transmission.encode().unwrap();
         let decoded = RadrootsSimplexSmpCommandTransmission::decode(&encoded).unwrap();
+        assert_eq!(decoded, transmission);
+    }
+
+    #[test]
+    fn round_trips_v15_new_command_transmission() {
+        let transmission = RadrootsSimplexSmpCommandTransmission {
+            authorization: vec![1, 2, 3],
+            correlation_id: Some(correlation_id(7)),
+            entity_id: Vec::new(),
+            command: RadrootsSimplexSmpCommand::New(RadrootsSimplexSmpNewQueueRequest {
+                recipient_auth_public_key: vec![0x01, 0x02, 0x03],
+                recipient_dh_public_key: vec![0x04, 0x05],
+                basic_auth: Some("server-pass".to_string()),
+                subscription_mode: RadrootsSimplexSmpSubscriptionMode::Subscribe,
+                queue_request_data: Some(RadrootsSimplexSmpQueueRequestData::Messaging(Some(
+                    RadrootsSimplexSmpMessagingQueueRequest {
+                        sender_id: vec![0x10, 0x11],
+                        link_data: RadrootsSimplexSmpQueueLinkData {
+                            fixed_data: vec![0xaa, 0xbb],
+                            user_data: vec![0xcc, 0xdd, 0xee],
+                        },
+                    },
+                ))),
+                notifier_credentials: None,
+            }),
+        };
+
+        let encoded = transmission
+            .encode_for_version(RADROOTS_SIMPLEX_SMP_SHORT_LINKS_TRANSPORT_VERSION)
+            .unwrap();
+        let decoded = RadrootsSimplexSmpCommandTransmission::decode_for_version(
+            RADROOTS_SIMPLEX_SMP_SHORT_LINKS_TRANSPORT_VERSION,
+            &encoded,
+        )
+        .unwrap();
         assert_eq!(decoded, transmission);
     }
 
@@ -1375,5 +1487,29 @@ mod tests {
         let encoded = transmission.encode().unwrap();
         let decoded = RadrootsSimplexSmpBrokerTransmission::decode(&encoded).unwrap();
         assert_eq!(decoded, transmission);
+    }
+
+    #[test]
+    fn v6_new_command_uses_legacy_basic_auth_layout() {
+        let command = RadrootsSimplexSmpCommand::New(RadrootsSimplexSmpNewQueueRequest {
+            recipient_auth_public_key: vec![0x01, 0x02, 0x03],
+            recipient_dh_public_key: vec![0x04, 0x05],
+            basic_auth: Some("server-pass".to_string()),
+            subscription_mode: RadrootsSimplexSmpSubscriptionMode::Subscribe,
+            queue_request_data: Some(RadrootsSimplexSmpQueueRequestData::Messaging(None)),
+            notifier_credentials: Some(RadrootsSimplexSmpNewNotifierCredentials {
+                notifier_auth_public_key: vec![0x21, 0x22],
+                recipient_notification_dh_public_key: vec![0x23, 0x24],
+            }),
+        });
+
+        let encoded = command
+            .encode_for_version(RADROOTS_SIMPLEX_SMP_INITIAL_TRANSPORT_VERSION)
+            .unwrap();
+
+        assert_eq!(
+            encoded,
+            b"NEW \x03\x01\x02\x03\x02\x04\x05A\x0bserver-passS".to_vec()
+        );
     }
 }

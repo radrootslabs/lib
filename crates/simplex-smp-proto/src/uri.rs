@@ -1,5 +1,6 @@
 use crate::error::RadrootsSimplexSmpProtoError;
 use crate::version::{
+    RADROOTS_SIMPLEX_SMP_INITIAL_CLIENT_VERSION,
     RADROOTS_SIMPLEX_SMP_SERVER_HOSTNAMES_CLIENT_VERSION,
     RADROOTS_SIMPLEX_SMP_SHORT_LINKS_CLIENT_VERSION, RadrootsSimplexSmpVersionRange,
 };
@@ -66,65 +67,82 @@ impl RadrootsSimplexSmpQueueUri {
         validate_base64_url("sender_id", &sender_id)?;
         let (fragment_dh_public_key, query) = parse_fragment_query(fragment, value)?;
 
-        let mut version_range: Option<RadrootsSimplexSmpVersionRange> = None;
+        let mut version_range = if query.is_none() {
+            Some(RadrootsSimplexSmpVersionRange::single(
+                RADROOTS_SIMPLEX_SMP_INITIAL_CLIENT_VERSION,
+            ))
+        } else {
+            None
+        };
         let mut recipient_dh_public_key: Option<String> = fragment_dh_public_key;
         let mut queue_mode: Option<RadrootsSimplexSmpQueueMode> = None;
         let mut extra_hosts: Option<Vec<String>> = None;
 
-        for pair in query.split('&') {
-            if pair.is_empty() {
-                continue;
-            }
-
-            let (key, raw_value) = pair
-                .split_once('=')
-                .ok_or_else(|| RadrootsSimplexSmpProtoError::InvalidUri(value.to_string()))?;
-
-            match key {
-                "v" => {
-                    version_range = Some(raw_value.parse()?);
+        if let Some(query) = query {
+            version_range = None;
+            for pair in query.split('&') {
+                if pair.is_empty() {
+                    continue;
                 }
-                "dh" => {
-                    validate_base64_url("recipient_dh_public_key", raw_value)?;
-                    if recipient_dh_public_key
-                        .replace(raw_value.to_string())
-                        .is_some()
-                    {
-                        return Err(RadrootsSimplexSmpProtoError::InvalidUri(value.to_string()));
+
+                let (key, raw_value) = pair
+                    .split_once('=')
+                    .ok_or_else(|| RadrootsSimplexSmpProtoError::InvalidUri(value.to_string()))?;
+
+                match key {
+                    "v" => {
+                        version_range = Some(raw_value.parse()?);
                     }
-                }
-                "q" => {
-                    let next_mode = match raw_value {
-                        "m" => RadrootsSimplexSmpQueueMode::Messaging,
-                        "c" => RadrootsSimplexSmpQueueMode::Contact,
-                        _ => {
+                    "dh" => {
+                        validate_base64_url("recipient_dh_public_key", raw_value)?;
+                        if recipient_dh_public_key
+                            .replace(raw_value.to_string())
+                            .is_some()
+                        {
                             return Err(RadrootsSimplexSmpProtoError::InvalidUri(
                                 value.to_string(),
                             ));
                         }
-                    };
-                    if queue_mode.replace(next_mode).is_some() {
+                    }
+                    "q" => {
+                        let next_mode = match raw_value {
+                            "m" => RadrootsSimplexSmpQueueMode::Messaging,
+                            "c" => RadrootsSimplexSmpQueueMode::Contact,
+                            _ => {
+                                return Err(RadrootsSimplexSmpProtoError::InvalidUri(
+                                    value.to_string(),
+                                ));
+                            }
+                        };
+                        if queue_mode.replace(next_mode).is_some() {
+                            return Err(RadrootsSimplexSmpProtoError::InvalidUri(
+                                value.to_string(),
+                            ));
+                        }
+                    }
+                    "k" if raw_value == "s" => {
+                        if queue_mode
+                            .replace(RadrootsSimplexSmpQueueMode::Messaging)
+                            .is_some()
+                        {
+                            return Err(RadrootsSimplexSmpProtoError::InvalidUri(
+                                value.to_string(),
+                            ));
+                        }
+                    }
+                    "srv" => {
+                        if extra_hosts
+                            .replace(parse_host_list(raw_value, value)?)
+                            .is_some()
+                        {
+                            return Err(RadrootsSimplexSmpProtoError::InvalidUri(
+                                value.to_string(),
+                            ));
+                        }
+                    }
+                    _ => {
                         return Err(RadrootsSimplexSmpProtoError::InvalidUri(value.to_string()));
                     }
-                }
-                "k" if raw_value == "s" => {
-                    if queue_mode
-                        .replace(RadrootsSimplexSmpQueueMode::Messaging)
-                        .is_some()
-                    {
-                        return Err(RadrootsSimplexSmpProtoError::InvalidUri(value.to_string()));
-                    }
-                }
-                "srv" => {
-                    if extra_hosts
-                        .replace(parse_host_list(raw_value, value)?)
-                        .is_some()
-                    {
-                        return Err(RadrootsSimplexSmpProtoError::InvalidUri(value.to_string()));
-                    }
-                }
-                _ => {
-                    return Err(RadrootsSimplexSmpProtoError::InvalidUri(value.to_string()));
                 }
             }
         }
@@ -233,18 +251,22 @@ fn parse_server_address(
 fn parse_fragment_query<'a>(
     fragment: &'a str,
     original: &str,
-) -> Result<(Option<String>, &'a str), RadrootsSimplexSmpProtoError> {
+) -> Result<(Option<String>, Option<&'a str>), RadrootsSimplexSmpProtoError> {
     let fragment = fragment.strip_prefix('/').unwrap_or(fragment);
     if let Some(query) = fragment.strip_prefix('?') {
-        return Ok((None, query));
+        return Ok((None, Some(query)));
     }
     if let Some((dh_public_key, query)) = fragment.split_once("/?") {
         validate_base64_url("recipient_dh_public_key", dh_public_key)?;
-        return Ok((Some(dh_public_key.to_string()), query));
+        return Ok((Some(dh_public_key.to_string()), Some(query)));
     }
     if let Some((dh_public_key, query)) = fragment.split_once('?') {
         validate_base64_url("recipient_dh_public_key", dh_public_key)?;
-        return Ok((Some(dh_public_key.to_string()), query));
+        return Ok((Some(dh_public_key.to_string()), Some(query)));
+    }
+    if !fragment.is_empty() {
+        validate_base64_url("recipient_dh_public_key", fragment)?;
+        return Ok((Some(fragment.to_string()), None));
     }
     Err(RadrootsSimplexSmpProtoError::InvalidUri(
         original.to_string(),
@@ -341,6 +363,21 @@ mod tests {
         assert_eq!(
             uri.to_string(),
             "smp://YWJjZA@server1.example:5223/cXVldWU#/?v=1-3&dh=ZGhLZXk&k=s&srv=server2.example"
+        );
+    }
+
+    #[test]
+    fn parses_legacy_unversioned_queue_uri() {
+        let uri =
+            RadrootsSimplexSmpQueueUri::parse("smp://YWJjZA@server1.example/cXVldWU/#ZGhLZXk")
+                .unwrap();
+
+        assert_eq!(uri.version_range, RadrootsSimplexSmpVersionRange::single(1));
+        assert_eq!(uri.recipient_dh_public_key, "ZGhLZXk");
+        assert_eq!(uri.queue_mode, None);
+        assert_eq!(
+            uri.to_string(),
+            "smp://YWJjZA@server1.example/cXVldWU#/?v=1&dh=ZGhLZXk"
         );
     }
 }
