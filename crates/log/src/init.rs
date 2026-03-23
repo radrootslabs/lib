@@ -49,9 +49,8 @@ pub fn init_logging(opts: LoggingOptions) -> Result<()> {
     let _ = INIT.set(());
     info!(
         "logging initialized (file: {}, stdout: {})",
-        opts.dir
-            .as_ref()
-            .map(|d| d.join(&opts.file_name).display().to_string())
+        opts.resolved_current_log_file_path()
+            .map(|path| path.display().to_string())
             .unwrap_or_else(|| "<disabled>".into()),
         opts.also_stdout()
     );
@@ -75,7 +74,10 @@ pub fn init_stdout() -> Result<()> {
     })
 }
 
-fn build_file_appender(dir: &std::path::Path, opts: &LoggingOptions) -> Result<RollingFileAppender> {
+fn build_file_appender(
+    dir: &std::path::Path,
+    opts: &LoggingOptions,
+) -> Result<RollingFileAppender> {
     let builder = RollingFileAppender::builder().rotation(Rotation::DAILY);
     let builder = match opts.file_layout {
         LogFileLayout::PrefixedDate => builder.filename_prefix(opts.file_name.as_str()),
@@ -122,7 +124,13 @@ mod tests {
 
         let names: Vec<String> = std::fs::read_dir(&dir)
             .expect("read dir")
-            .map(|entry| entry.expect("entry").file_name().to_string_lossy().to_string())
+            .map(|entry| {
+                entry
+                    .expect("entry")
+                    .file_name()
+                    .to_string_lossy()
+                    .to_string()
+            })
             .collect();
         assert_eq!(names.len(), 1);
         assert!(names[0].starts_with("myc.log."));
@@ -149,7 +157,13 @@ mod tests {
 
         let names: Vec<String> = std::fs::read_dir(&dir)
             .expect("read dir")
-            .map(|entry| entry.expect("entry").file_name().to_string_lossy().to_string())
+            .map(|entry| {
+                entry
+                    .expect("entry")
+                    .file_name()
+                    .to_string_lossy()
+                    .to_string()
+            })
             .collect();
         assert_eq!(names.len(), 1);
         assert!(names[0].ends_with(".log"));
@@ -175,12 +189,12 @@ mod tests {
         let first = build_file_appender(
             &dir,
             &LoggingOptions {
-            dir: Some(dir.clone()),
-            file_name: "service".to_string(),
-            stdout: false,
-            default_level: Some("info".to_string()),
-            file_layout: LogFileLayout::DatedFileName,
-        },
+                dir: Some(dir.clone()),
+                file_name: "service".to_string(),
+                stdout: false,
+                default_level: Some("info".to_string()),
+                file_layout: LogFileLayout::DatedFileName,
+            },
         );
         assert!(first.is_ok());
         let _ = std::fs::remove_dir_all(&dir);

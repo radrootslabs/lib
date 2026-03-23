@@ -14,9 +14,15 @@ readme.workspace = true
 
 [features]
 default = ["std"]
-std = ["dep:thiserror", "dep:tracing-subscriber", "dep:tracing-appender"]
+std = [
+  "dep:chrono",
+  "dep:thiserror",
+  "dep:tracing-subscriber",
+  "dep:tracing-appender",
+]
 
 [dependencies]
+chrono = { workspace = true, optional = true }
 tracing = { workspace = true, default-features = false }
 thiserror = { workspace = true, optional = true }
 tracing-subscriber = { workspace = true, optional = true, features = [
