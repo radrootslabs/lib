@@ -34,9 +34,11 @@ pub mod prelude {
         RadrootsNostrSignerConnectSecretHash, RadrootsNostrSignerConnectionDraft,
         RadrootsNostrSignerConnectionId, RadrootsNostrSignerConnectionRecord,
         RadrootsNostrSignerConnectionStatus, RadrootsNostrSignerPendingRequest,
-        RadrootsNostrSignerPermissionGrant, RadrootsNostrSignerRequestAuditRecord,
-        RadrootsNostrSignerRequestDecision, RadrootsNostrSignerRequestId,
-        RadrootsNostrSignerSecretDigestAlgorithm, RadrootsNostrSignerStoreState,
+        RadrootsNostrSignerPermissionGrant, RadrootsNostrSignerPublishWorkflowKind,
+        RadrootsNostrSignerPublishWorkflowRecord, RadrootsNostrSignerPublishWorkflowState,
+        RadrootsNostrSignerRequestAuditRecord, RadrootsNostrSignerRequestDecision,
+        RadrootsNostrSignerRequestId, RadrootsNostrSignerSecretDigestAlgorithm,
+        RadrootsNostrSignerStoreState, RadrootsNostrSignerWorkflowId,
     };
     #[cfg(feature = "native")]
     pub use crate::sqlite::RadrootsNostrSignerSqliteDb;

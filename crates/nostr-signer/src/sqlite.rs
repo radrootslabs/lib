@@ -158,13 +158,18 @@ mod tests {
                 .iter()
                 .any(|name| name == "signer_request_audit")
         );
+        assert!(
+            table_names
+                .iter()
+                .any(|name| name == "signer_publish_workflow")
+        );
 
         let migration_count = query_single_i64(
             &db,
             "SELECT COUNT(*) AS applied_count FROM __migrations",
             "applied_count",
         );
-        assert_eq!(migration_count, 1);
+        assert_eq!(migration_count, 2);
 
         let store_version = query_single_i64(
             &db,
@@ -215,6 +220,6 @@ mod tests {
             "SELECT COUNT(*) AS applied_count FROM __migrations",
             "applied_count",
         );
-        assert_eq!(migration_count, 1);
+        assert_eq!(migration_count, 2);
     }
 }

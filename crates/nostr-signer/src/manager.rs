@@ -12,9 +12,10 @@ use crate::model::{
     RadrootsNostrSignerConnectSecretHash, RadrootsNostrSignerConnectionDraft,
     RadrootsNostrSignerConnectionId, RadrootsNostrSignerConnectionRecord,
     RadrootsNostrSignerConnectionStatus, RadrootsNostrSignerPendingRequest,
-    RadrootsNostrSignerPermissionGrant, RadrootsNostrSignerRequestAuditRecord,
-    RadrootsNostrSignerRequestDecision, RadrootsNostrSignerRequestId,
-    RadrootsNostrSignerStoreState,
+    RadrootsNostrSignerPermissionGrant, RadrootsNostrSignerPublishWorkflowKind,
+    RadrootsNostrSignerPublishWorkflowRecord, RadrootsNostrSignerPublishWorkflowState,
+    RadrootsNostrSignerRequestAuditRecord, RadrootsNostrSignerRequestDecision,
+    RadrootsNostrSignerRequestId, RadrootsNostrSignerStoreState, RadrootsNostrSignerWorkflowId,
 };
 use crate::store::{RadrootsNostrMemorySignerStore, RadrootsNostrSignerStore};
 use nostr::{PublicKey, RelayUrl};
@@ -98,6 +99,31 @@ impl RadrootsNostrSignerManager {
             .connections
             .iter()
             .find(|record| &record.connection_id == connection_id)
+            .cloned())
+    }
+
+    pub fn list_publish_workflows(
+        &self,
+    ) -> Result<Vec<RadrootsNostrSignerPublishWorkflowRecord>, RadrootsNostrSignerError> {
+        let guard = self
+            .state
+            .read()
+            .map_err(|_| RadrootsNostrSignerError::Store("signer state lock poisoned".into()))?;
+        Ok(guard.publish_workflows.clone())
+    }
+
+    pub fn get_publish_workflow(
+        &self,
+        workflow_id: &RadrootsNostrSignerWorkflowId,
+    ) -> Result<Option<RadrootsNostrSignerPublishWorkflowRecord>, RadrootsNostrSignerError> {
+        let guard = self
+            .state
+            .read()
+            .map_err(|_| RadrootsNostrSignerError::Store("signer state lock poisoned".into()))?;
+        Ok(guard
+            .publish_workflows
+            .iter()
+            .find(|record| &record.workflow_id == workflow_id)
             .cloned())
     }
 
@@ -522,6 +548,182 @@ impl RadrootsNostrSignerManager {
         })
     }
 
+    pub fn begin_connect_secret_publish_finalization(
+        &self,
+        connection_id: &RadrootsNostrSignerConnectionId,
+    ) -> Result<RadrootsNostrSignerPublishWorkflowRecord, RadrootsNostrSignerError> {
+        self.update_state_with(|state| {
+            let connection_index = find_connection_index(state, connection_id)?;
+            let record = &state.connections[connection_index];
+            if record.is_terminal() {
+                return Err(RadrootsNostrSignerError::InvalidState(format!(
+                    "cannot begin connect secret finalization for {} connection",
+                    status_label(record.status)
+                )));
+            }
+            if record.connect_secret_hash.is_none() {
+                return Err(RadrootsNostrSignerError::InvalidState(
+                    "connection does not have a connect secret".into(),
+                ));
+            }
+            if record.connect_secret_is_consumed() {
+                return Err(RadrootsNostrSignerError::InvalidState(
+                    "connect secret already consumed for connection".into(),
+                ));
+            }
+            ensure_no_active_publish_workflow(
+                state,
+                connection_id,
+                RadrootsNostrSignerPublishWorkflowKind::ConnectSecretFinalization,
+            )?;
+
+            let workflow =
+                RadrootsNostrSignerPublishWorkflowRecord::new_connect_secret_finalization(
+                    connection_id.clone(),
+                    now_unix_secs(),
+                );
+            state.publish_workflows.push(workflow.clone());
+            Ok(workflow)
+        })
+    }
+
+    pub fn begin_auth_replay_publish_finalization(
+        &self,
+        connection_id: &RadrootsNostrSignerConnectionId,
+    ) -> Result<RadrootsNostrSignerPublishWorkflowRecord, RadrootsNostrSignerError> {
+        self.update_state_with(|state| {
+            let authorized_at_unix = now_unix_secs();
+            let connection_index = find_connection_index(state, connection_id)?;
+            let record = &state.connections[connection_index];
+            if record.is_terminal() {
+                return Err(RadrootsNostrSignerError::InvalidState(format!(
+                    "cannot begin auth replay finalization for {} connection",
+                    status_label(record.status)
+                )));
+            }
+            if record.auth_state != RadrootsNostrSignerAuthState::Pending {
+                return Err(RadrootsNostrSignerError::InvalidState(
+                    "auth challenge not pending for connection".into(),
+                ));
+            }
+            if record.auth_challenge.is_none() {
+                return Err(RadrootsNostrSignerError::InvalidState(
+                    "auth challenge missing for connection".into(),
+                ));
+            }
+            let pending_request = record.pending_request.clone().ok_or_else(|| {
+                RadrootsNostrSignerError::InvalidState(
+                    "pending request missing for auth replay finalization".into(),
+                )
+            })?;
+            ensure_no_active_publish_workflow(
+                state,
+                connection_id,
+                RadrootsNostrSignerPublishWorkflowKind::AuthReplayFinalization,
+            )?;
+
+            let workflow = RadrootsNostrSignerPublishWorkflowRecord::new_auth_replay_finalization(
+                connection_id.clone(),
+                pending_request,
+                authorized_at_unix,
+            );
+            state.publish_workflows.push(workflow.clone());
+            Ok(workflow)
+        })
+    }
+
+    pub fn mark_publish_workflow_published(
+        &self,
+        workflow_id: &RadrootsNostrSignerWorkflowId,
+    ) -> Result<RadrootsNostrSignerPublishWorkflowRecord, RadrootsNostrSignerError> {
+        self.update_state_with(|state| {
+            let workflow = find_publish_workflow_mut(state, workflow_id)?;
+            workflow.mark_published(now_unix_secs());
+            Ok(workflow.clone())
+        })
+    }
+
+    pub fn finalize_publish_workflow(
+        &self,
+        workflow_id: &RadrootsNostrSignerWorkflowId,
+    ) -> Result<RadrootsNostrSignerConnectionRecord, RadrootsNostrSignerError> {
+        self.update_state_with(|state| {
+            let workflow_index = find_publish_workflow_index(state, workflow_id)?;
+            let workflow = state.publish_workflows[workflow_index].clone();
+            if workflow.state != RadrootsNostrSignerPublishWorkflowState::PublishedPendingFinalize {
+                return Err(RadrootsNostrSignerError::InvalidState(
+                    "publish workflow has not reached published state".into(),
+                ));
+            }
+
+            let record = find_connection_mut(state, &workflow.connection_id)?;
+            let finalized = match workflow.kind {
+                RadrootsNostrSignerPublishWorkflowKind::ConnectSecretFinalization => {
+                    if record.connect_secret_hash.is_none() {
+                        return Err(RadrootsNostrSignerError::InvalidState(
+                            "connection does not have a connect secret".into(),
+                        ));
+                    }
+                    if record.connect_secret_is_consumed() {
+                        return Err(RadrootsNostrSignerError::InvalidState(
+                            "connect secret already consumed for connection".into(),
+                        ));
+                    }
+                    record.mark_connect_secret_consumed(now_unix_secs());
+                    record.clone()
+                }
+                RadrootsNostrSignerPublishWorkflowKind::AuthReplayFinalization => {
+                    if record.auth_state != RadrootsNostrSignerAuthState::Pending {
+                        return Err(RadrootsNostrSignerError::InvalidState(
+                            "auth challenge not pending for connection".into(),
+                        ));
+                    }
+                    if record.auth_challenge.is_none() {
+                        return Err(RadrootsNostrSignerError::InvalidState(
+                            "auth challenge missing for connection".into(),
+                        ));
+                    }
+                    let expected_pending_request =
+                        workflow.pending_request.clone().ok_or_else(|| {
+                            RadrootsNostrSignerError::InvalidState(
+                                "auth replay workflow missing pending request".into(),
+                            )
+                        })?;
+                    if record.pending_request.as_ref() != Some(&expected_pending_request) {
+                        return Err(RadrootsNostrSignerError::InvalidState(
+                            "pending request does not match auth replay workflow".into(),
+                        ));
+                    }
+                    let authorized_at_unix = workflow.authorized_at_unix.ok_or_else(|| {
+                        RadrootsNostrSignerError::InvalidState(
+                            "auth replay workflow missing authorized timestamp".into(),
+                        )
+                    })?;
+                    let replay = record.authorize_auth_challenge(authorized_at_unix);
+                    if replay.as_ref() != Some(&expected_pending_request) {
+                        return Err(RadrootsNostrSignerError::InvalidState(
+                            "auth replay finalization returned unexpected pending request".into(),
+                        ));
+                    }
+                    record.clone()
+                }
+            };
+
+            state.publish_workflows.remove(workflow_index);
+            Ok(finalized)
+        })
+    }
+
+    pub fn cancel_publish_workflow(
+        &self,
+        workflow_id: &RadrootsNostrSignerWorkflowId,
+    ) -> Result<RadrootsNostrSignerPublishWorkflowRecord, RadrootsNostrSignerError> {
+        self.update_state_with(|state| {
+            let workflow_index = find_publish_workflow_index(state, workflow_id)?;
+            Ok(state.publish_workflows.remove(workflow_index))
+        })
+    }
+
     pub fn mark_authenticated(
         &self,
         connection_id: &RadrootsNostrSignerConnectionId,
@@ -690,6 +892,57 @@ fn find_connection_mut<'a>(
         .ok_or_else(|| RadrootsNostrSignerError::ConnectionNotFound(connection_id.to_string()))
 }
 
+fn find_connection_index(
+    state: &RadrootsNostrSignerStoreState,
+    connection_id: &RadrootsNostrSignerConnectionId,
+) -> Result<usize, RadrootsNostrSignerError> {
+    state
+        .connections
+        .iter()
+        .position(|record| &record.connection_id == connection_id)
+        .ok_or_else(|| RadrootsNostrSignerError::ConnectionNotFound(connection_id.to_string()))
+}
+
+fn find_publish_workflow_index(
+    state: &RadrootsNostrSignerStoreState,
+    workflow_id: &RadrootsNostrSignerWorkflowId,
+) -> Result<usize, RadrootsNostrSignerError> {
+    state
+        .publish_workflows
+        .iter()
+        .position(|record| &record.workflow_id == workflow_id)
+        .ok_or_else(|| RadrootsNostrSignerError::PublishWorkflowNotFound(workflow_id.to_string()))
+}
+
+fn find_publish_workflow_mut<'a>(
+    state: &'a mut RadrootsNostrSignerStoreState,
+    workflow_id: &RadrootsNostrSignerWorkflowId,
+) -> Result<&'a mut RadrootsNostrSignerPublishWorkflowRecord, RadrootsNostrSignerError> {
+    state
+        .publish_workflows
+        .iter_mut()
+        .find(|record| &record.workflow_id == workflow_id)
+        .ok_or_else(|| RadrootsNostrSignerError::PublishWorkflowNotFound(workflow_id.to_string()))
+}
+
+fn ensure_no_active_publish_workflow(
+    state: &RadrootsNostrSignerStoreState,
+    connection_id: &RadrootsNostrSignerConnectionId,
+    kind: RadrootsNostrSignerPublishWorkflowKind,
+) -> Result<(), RadrootsNostrSignerError> {
+    if state
+        .publish_workflows
+        .iter()
+        .any(|record| &record.connection_id == connection_id && record.kind == kind)
+    {
+        return Err(RadrootsNostrSignerError::InvalidState(format!(
+            "publish workflow already active for {}",
+            publish_workflow_kind_label(kind)
+        )));
+    }
+    Ok(())
+}
+
 fn validate_public_identity(
     identity: &RadrootsIdentityPublic,
 ) -> Result<(), RadrootsNostrSignerError> {
@@ -800,6 +1053,17 @@ fn status_label(status: RadrootsNostrSignerConnectionStatus) -> &'static str {
         RadrootsNostrSignerConnectionStatus::Active => "active",
         RadrootsNostrSignerConnectionStatus::Rejected => "rejected",
         RadrootsNostrSignerConnectionStatus::Revoked => "revoked",
+    }
+}
+
+fn publish_workflow_kind_label(kind: RadrootsNostrSignerPublishWorkflowKind) -> &'static str {
+    match kind {
+        RadrootsNostrSignerPublishWorkflowKind::ConnectSecretFinalization => {
+            "connect_secret_finalization"
+        }
+        RadrootsNostrSignerPublishWorkflowKind::AuthReplayFinalization => {
+            "auth_replay_finalization"
+        }
     }
 }
 
@@ -1760,6 +2024,244 @@ mod tests {
     }
 
     #[test]
+    fn connect_secret_publish_workflow_is_persisted_and_finalized() {
+        let manager = RadrootsNostrSignerManager::new_in_memory();
+        manager
+            .set_signer_identity(public_identity(0x237))
+            .expect("set signer");
+        let record = manager
+            .register_connection(
+                RadrootsNostrSignerConnectionDraft::new(public_key(0x238), public_identity(0x239))
+                    .with_connect_secret("workflow-secret"),
+            )
+            .expect("register");
+
+        let workflow = manager
+            .begin_connect_secret_publish_finalization(&record.connection_id)
+            .expect("begin workflow");
+        assert_eq!(
+            workflow.kind,
+            RadrootsNostrSignerPublishWorkflowKind::ConnectSecretFinalization
+        );
+        assert_eq!(
+            workflow.state,
+            RadrootsNostrSignerPublishWorkflowState::PendingPublish
+        );
+        assert!(workflow.pending_request.is_none());
+        assert!(
+            !manager
+                .get_connection(&record.connection_id)
+                .expect("get")
+                .expect("stored")
+                .connect_secret_is_consumed()
+        );
+        assert_eq!(
+            manager.list_publish_workflows().expect("list workflows"),
+            vec![workflow.clone()]
+        );
+
+        let published = manager
+            .mark_publish_workflow_published(&workflow.workflow_id)
+            .expect("mark published");
+        assert_eq!(
+            published.state,
+            RadrootsNostrSignerPublishWorkflowState::PublishedPendingFinalize
+        );
+
+        let finalized = manager
+            .finalize_publish_workflow(&workflow.workflow_id)
+            .expect("finalize workflow");
+        assert!(finalized.connect_secret_is_consumed());
+        assert!(
+            manager
+                .list_publish_workflows()
+                .expect("list workflows")
+                .is_empty()
+        );
+        assert!(
+            manager
+                .find_connection_by_connect_secret("workflow-secret")
+                .expect("find secret")
+                .expect("stored")
+                .connect_secret_is_consumed()
+        );
+    }
+
+    #[test]
+    fn auth_replay_publish_workflow_is_persisted_and_finalized() {
+        let manager = RadrootsNostrSignerManager::new_in_memory();
+        manager
+            .set_signer_identity(public_identity(0x23a))
+            .expect("set signer");
+        let record = manager
+            .register_connection(RadrootsNostrSignerConnectionDraft::new(
+                public_key(0x23b),
+                public_identity(0x23c),
+            ))
+            .expect("register");
+
+        manager
+            .require_auth_challenge(
+                &record.connection_id,
+                format!("{}/flow", api_primary_https()).as_str(),
+            )
+            .expect("require auth");
+        let pending = manager
+            .set_pending_request(&record.connection_id, request_message("req-auth-workflow"))
+            .expect("set pending");
+        let pending_request = pending.pending_request.expect("pending request");
+
+        let workflow = manager
+            .begin_auth_replay_publish_finalization(&record.connection_id)
+            .expect("begin auth replay workflow");
+        assert_eq!(
+            workflow.kind,
+            RadrootsNostrSignerPublishWorkflowKind::AuthReplayFinalization
+        );
+        assert_eq!(workflow.pending_request.as_ref(), Some(&pending_request));
+        assert!(workflow.authorized_at_unix.is_some());
+
+        let stored_before_publish = manager
+            .get_connection(&record.connection_id)
+            .expect("get")
+            .expect("stored");
+        assert_eq!(
+            stored_before_publish.auth_state,
+            RadrootsNostrSignerAuthState::Pending
+        );
+        assert_eq!(
+            stored_before_publish.pending_request.as_ref(),
+            Some(&pending_request)
+        );
+
+        manager
+            .mark_publish_workflow_published(&workflow.workflow_id)
+            .expect("mark published");
+        let finalized = manager
+            .finalize_publish_workflow(&workflow.workflow_id)
+            .expect("finalize auth replay");
+        assert_eq!(
+            finalized.auth_state,
+            RadrootsNostrSignerAuthState::Authorized
+        );
+        assert!(finalized.pending_request.is_none());
+        assert_eq!(
+            finalized
+                .auth_challenge
+                .as_ref()
+                .expect("challenge")
+                .authorized_at_unix,
+            workflow.authorized_at_unix
+        );
+        assert_eq!(
+            finalized.last_authenticated_at_unix,
+            workflow.authorized_at_unix
+        );
+        assert!(
+            manager
+                .list_publish_workflows()
+                .expect("list workflows")
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn canceling_auth_replay_publish_workflow_preserves_pending_request() {
+        let manager = RadrootsNostrSignerManager::new_in_memory();
+        manager
+            .set_signer_identity(public_identity(0x23d))
+            .expect("set signer");
+        let record = manager
+            .register_connection(RadrootsNostrSignerConnectionDraft::new(
+                public_key(0x23e),
+                public_identity(0x23f),
+            ))
+            .expect("register");
+
+        manager
+            .require_auth_challenge(
+                &record.connection_id,
+                format!("{}/flow", api_primary_https()).as_str(),
+            )
+            .expect("require auth");
+        let pending = manager
+            .set_pending_request(&record.connection_id, request_message("req-auth-cancel"))
+            .expect("set pending");
+        let pending_request = pending.pending_request.expect("pending request");
+
+        let workflow = manager
+            .begin_auth_replay_publish_finalization(&record.connection_id)
+            .expect("begin auth replay workflow");
+        let canceled = manager
+            .cancel_publish_workflow(&workflow.workflow_id)
+            .expect("cancel workflow");
+        assert_eq!(canceled.workflow_id, workflow.workflow_id);
+
+        let stored = manager
+            .get_connection(&record.connection_id)
+            .expect("get")
+            .expect("stored");
+        assert_eq!(stored.auth_state, RadrootsNostrSignerAuthState::Pending);
+        assert_eq!(stored.pending_request.as_ref(), Some(&pending_request));
+        assert!(
+            manager
+                .list_publish_workflows()
+                .expect("list workflows")
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn publish_workflow_duplicate_and_missing_paths_are_rejected() {
+        let manager = RadrootsNostrSignerManager::new_in_memory();
+        manager
+            .set_signer_identity(public_identity(0x240))
+            .expect("set signer");
+        let record = manager
+            .register_connection(
+                RadrootsNostrSignerConnectionDraft::new(public_key(0x241), public_identity(0x242))
+                    .with_connect_secret("duplicate-secret"),
+            )
+            .expect("register");
+
+        let workflow = manager
+            .begin_connect_secret_publish_finalization(&record.connection_id)
+            .expect("begin workflow");
+        let duplicate = manager
+            .begin_connect_secret_publish_finalization(&record.connection_id)
+            .expect_err("duplicate workflow");
+        assert!(
+            duplicate
+                .to_string()
+                .contains("publish workflow already active")
+        );
+
+        let missing_workflow_id = RadrootsNostrSignerWorkflowId::parse("wf-missing").expect("id");
+        let missing_mark = manager
+            .mark_publish_workflow_published(&missing_workflow_id)
+            .expect_err("missing mark");
+        let missing_finalize = manager
+            .finalize_publish_workflow(&missing_workflow_id)
+            .expect_err("missing finalize");
+        let missing_cancel = manager
+            .cancel_publish_workflow(&missing_workflow_id)
+            .expect_err("missing cancel");
+
+        for err in [missing_mark, missing_finalize, missing_cancel] {
+            assert!(err.to_string().contains("publish workflow not found"));
+        }
+
+        let unpublished_finalize = manager
+            .finalize_publish_workflow(&workflow.workflow_id)
+            .expect_err("unpublished finalize");
+        assert!(
+            unpublished_finalize
+                .to_string()
+                .contains("publish workflow has not reached published state")
+        );
+    }
+
+    #[test]
     fn manager_reports_missing_connections_and_save_failures() {
         let manager = RadrootsNostrSignerManager::new_in_memory();
         let missing_id = RadrootsNostrSignerConnectionId::parse("missing").expect("id");
@@ -1780,6 +2282,29 @@ mod tests {
             .set_signer_identity(public_identity(0x33))
             .expect_err("save error");
         assert!(err.to_string().contains("store save failed"));
+
+        let signer_identity = public_identity(0x243);
+        let connection = RadrootsNostrSignerConnectionRecord::new(
+            RadrootsNostrSignerConnectionId::parse("conn-save-error").expect("id"),
+            signer_identity.clone(),
+            RadrootsNostrSignerConnectionDraft::new(public_key(0x244), public_identity(0x245))
+                .with_connect_secret("save-error-secret"),
+            1,
+        );
+        let manager = RadrootsNostrSignerManager::new(Arc::new(SaveErrorStore::new(
+            RadrootsNostrSignerStoreState {
+                version: RADROOTS_NOSTR_SIGNER_STORE_VERSION,
+                signer_identity: Some(signer_identity),
+                connections: vec![connection.clone()],
+                audit_records: Vec::new(),
+                publish_workflows: Vec::new(),
+            },
+        )))
+        .expect("manager with preloaded state");
+        let workflow_err = manager
+            .begin_connect_secret_publish_finalization(&connection.connection_id)
+            .expect_err("workflow save error");
+        assert!(workflow_err.to_string().contains("store save failed"));
     }
 
     #[test]
@@ -1937,6 +2462,12 @@ mod tests {
         let audit_for_connection_err = manager
             .audit_records_for_connection(&connection_id)
             .expect_err("poisoned audit connection");
+        let workflow_list_err = manager
+            .list_publish_workflows()
+            .expect_err("poisoned workflow list");
+        let workflow_get_err = manager
+            .get_publish_workflow(&RadrootsNostrSignerWorkflowId::parse("wf-poison").expect("id"))
+            .expect_err("poisoned workflow get");
         let find_secret_err = manager
             .find_connection_by_connect_secret("secret")
             .expect_err("poisoned secret lookup");
@@ -1955,6 +2486,8 @@ mod tests {
             list_err,
             audit_list_err,
             audit_for_connection_err,
+            workflow_list_err,
+            workflow_get_err,
             find_secret_err,
             find_client_err,
             lookup_secret_err,
@@ -1998,6 +2531,7 @@ mod tests {
 
         let signer_identity = public_identity(0x48);
         let connection_id = RadrootsNostrSignerConnectionId::parse("conn-2").expect("id");
+        let workflow_id = RadrootsNostrSignerWorkflowId::parse("wf-2").expect("id");
         let connect_draft =
             RadrootsNostrSignerConnectionDraft::new(public_key(0x49), public_identity(0x50));
 
@@ -2034,6 +2568,21 @@ mod tests {
         let authorize_auth_err = manager
             .authorize_auth_challenge(&connection_id)
             .expect_err("poisoned authorize auth");
+        let begin_connect_workflow_err = manager
+            .begin_connect_secret_publish_finalization(&connection_id)
+            .expect_err("poisoned connect workflow");
+        let begin_auth_workflow_err = manager
+            .begin_auth_replay_publish_finalization(&connection_id)
+            .expect_err("poisoned auth workflow");
+        let mark_workflow_err = manager
+            .mark_publish_workflow_published(&workflow_id)
+            .expect_err("poisoned mark workflow");
+        let finalize_workflow_err = manager
+            .finalize_publish_workflow(&workflow_id)
+            .expect_err("poisoned finalize workflow");
+        let cancel_workflow_err = manager
+            .cancel_publish_workflow(&workflow_id)
+            .expect_err("poisoned cancel workflow");
         let auth_err = manager
             .mark_authenticated(&connection_id)
             .expect_err("poisoned auth");
@@ -2058,6 +2607,11 @@ mod tests {
             require_auth_err,
             set_pending_request_err,
             authorize_auth_err,
+            begin_connect_workflow_err,
+            begin_auth_workflow_err,
+            mark_workflow_err,
+            finalize_workflow_err,
+            cancel_workflow_err,
             auth_err,
             request_err,
         ] {

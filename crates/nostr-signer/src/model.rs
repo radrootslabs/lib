@@ -21,6 +21,9 @@ pub struct RadrootsNostrSignerConnectionId(String);
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct RadrootsNostrSignerRequestId(String);
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct RadrootsNostrSignerWorkflowId(String);
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RadrootsNostrSignerApprovalRequirement {
     NotRequired,
@@ -41,6 +44,20 @@ pub enum RadrootsNostrSignerConnectionStatus {
     Active,
     Rejected,
     Revoked,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RadrootsNostrSignerPublishWorkflowKind {
+    ConnectSecretFinalization,
+    AuthReplayFinalization,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RadrootsNostrSignerPublishWorkflowState {
+    PendingPublish,
+    PublishedPendingFinalize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -159,12 +176,28 @@ pub struct RadrootsNostrSignerRequestAuditRecord {
     pub created_at_unix: u64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RadrootsNostrSignerPublishWorkflowRecord {
+    pub workflow_id: RadrootsNostrSignerWorkflowId,
+    pub connection_id: RadrootsNostrSignerConnectionId,
+    pub kind: RadrootsNostrSignerPublishWorkflowKind,
+    pub state: RadrootsNostrSignerPublishWorkflowState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pending_request: Option<RadrootsNostrSignerPendingRequest>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub authorized_at_unix: Option<u64>,
+    pub created_at_unix: u64,
+    pub updated_at_unix: u64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RadrootsNostrSignerStoreState {
     pub version: u32,
     pub signer_identity: Option<RadrootsIdentityPublic>,
     pub connections: Vec<RadrootsNostrSignerConnectionRecord>,
     pub audit_records: Vec<RadrootsNostrSignerRequestAuditRecord>,
+    #[serde(default)]
+    pub publish_workflows: Vec<RadrootsNostrSignerPublishWorkflowRecord>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -237,6 +270,50 @@ impl RadrootsNostrSignerRequestId {
 
     pub fn into_string(self) -> String {
         self.0
+    }
+}
+
+impl RadrootsNostrSignerWorkflowId {
+    pub fn new_v7() -> Self {
+        Self(Uuid::now_v7().to_string())
+    }
+
+    pub fn parse(value: &str) -> Result<Self, RadrootsNostrSignerError> {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            return Err(RadrootsNostrSignerError::InvalidWorkflowId(
+                value.to_owned(),
+            ));
+        }
+        Ok(Self(trimmed.to_owned()))
+    }
+
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+
+    pub fn into_string(self) -> String {
+        self.0
+    }
+}
+
+impl fmt::Display for RadrootsNostrSignerWorkflowId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl AsRef<str> for RadrootsNostrSignerWorkflowId {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl FromStr for RadrootsNostrSignerWorkflowId {
+    type Err = RadrootsNostrSignerError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::parse(value)
     }
 }
 
@@ -579,6 +656,46 @@ impl RadrootsNostrSignerRequestAuditRecord {
     }
 }
 
+impl RadrootsNostrSignerPublishWorkflowRecord {
+    pub fn new_connect_secret_finalization(
+        connection_id: RadrootsNostrSignerConnectionId,
+        created_at_unix: u64,
+    ) -> Self {
+        Self {
+            workflow_id: RadrootsNostrSignerWorkflowId::new_v7(),
+            connection_id,
+            kind: RadrootsNostrSignerPublishWorkflowKind::ConnectSecretFinalization,
+            state: RadrootsNostrSignerPublishWorkflowState::PendingPublish,
+            pending_request: None,
+            authorized_at_unix: None,
+            created_at_unix,
+            updated_at_unix: created_at_unix,
+        }
+    }
+
+    pub fn new_auth_replay_finalization(
+        connection_id: RadrootsNostrSignerConnectionId,
+        pending_request: RadrootsNostrSignerPendingRequest,
+        authorized_at_unix: u64,
+    ) -> Self {
+        Self {
+            workflow_id: RadrootsNostrSignerWorkflowId::new_v7(),
+            connection_id,
+            kind: RadrootsNostrSignerPublishWorkflowKind::AuthReplayFinalization,
+            state: RadrootsNostrSignerPublishWorkflowState::PendingPublish,
+            pending_request: Some(pending_request),
+            authorized_at_unix: Some(authorized_at_unix),
+            created_at_unix: authorized_at_unix,
+            updated_at_unix: authorized_at_unix,
+        }
+    }
+
+    pub fn mark_published(&mut self, updated_at_unix: u64) {
+        self.state = RadrootsNostrSignerPublishWorkflowState::PublishedPendingFinalize;
+        self.updated_at_unix = updated_at_unix;
+    }
+}
+
 impl Default for RadrootsNostrSignerStoreState {
     fn default() -> Self {
         Self {
@@ -586,6 +703,7 @@ impl Default for RadrootsNostrSignerStoreState {
             signer_identity: None,
             connections: Vec::new(),
             audit_records: Vec::new(),
+            publish_workflows: Vec::new(),
         }
     }
 }
@@ -669,31 +787,41 @@ mod tests {
     fn connection_and_request_ids_parse_and_display() {
         let connection_id = RadrootsNostrSignerConnectionId::parse("conn-1").expect("connection");
         let request_id = RadrootsNostrSignerRequestId::parse("req-1").expect("request");
+        let workflow_id = RadrootsNostrSignerWorkflowId::parse("wf-1").expect("workflow");
 
         assert_eq!(connection_id.as_str(), "conn-1");
         assert_eq!(request_id.as_str(), "req-1");
+        assert_eq!(workflow_id.as_str(), "wf-1");
         assert_eq!(connection_id.as_ref(), "conn-1");
         assert_eq!(request_id.as_ref(), "req-1");
+        assert_eq!(workflow_id.as_ref(), "wf-1");
         assert_eq!(connection_id.to_string(), "conn-1");
         assert_eq!(request_id.to_string(), "req-1");
+        assert_eq!(workflow_id.to_string(), "wf-1");
         assert_eq!(connection_id.clone().into_string(), "conn-1");
         assert_eq!(request_id.clone().into_string(), "req-1");
+        assert_eq!(workflow_id.clone().into_string(), "wf-1");
 
         let parsed_connection =
             RadrootsNostrSignerConnectionId::from_str("conn-1").expect("from_str connection");
         let parsed_request =
             RadrootsNostrSignerRequestId::from_str("req-1").expect("from_str request");
+        let parsed_workflow =
+            RadrootsNostrSignerWorkflowId::from_str("wf-1").expect("from_str workflow");
         assert_eq!(parsed_connection, connection_id);
         assert_eq!(parsed_request, request_id);
+        assert_eq!(parsed_workflow, workflow_id);
     }
 
     #[test]
     fn generated_ids_are_non_empty() {
         let connection_id = RadrootsNostrSignerConnectionId::new_v7();
         let request_id = RadrootsNostrSignerRequestId::new_v7();
+        let workflow_id = RadrootsNostrSignerWorkflowId::new_v7();
 
         assert!(!connection_id.as_ref().is_empty());
         assert!(!request_id.as_ref().is_empty());
+        assert!(!workflow_id.as_ref().is_empty());
     }
 
     #[test]
@@ -701,9 +829,11 @@ mod tests {
         let connection_err =
             RadrootsNostrSignerConnectionId::parse("   ").expect_err("empty connection");
         let request_err = RadrootsNostrSignerRequestId::parse("").expect_err("empty request");
+        let workflow_err = RadrootsNostrSignerWorkflowId::parse(" ").expect_err("empty workflow");
 
         assert!(connection_err.to_string().contains("invalid connection id"));
         assert!(request_err.to_string().contains("invalid request id"));
+        assert!(workflow_err.to_string().contains("invalid workflow id"));
     }
 
     #[test]
@@ -856,6 +986,54 @@ mod tests {
             decoded.permission,
             RadrootsNostrConnectPermission::new(RadrootsNostrConnectMethod::Ping)
         );
+    }
+
+    #[test]
+    fn publish_workflow_records_cover_connect_secret_and_auth_replay_lifecycle() {
+        let connection_id = RadrootsNostrSignerConnectionId::parse("conn-workflow").expect("id");
+        let pending_request =
+            RadrootsNostrSignerPendingRequest::new(request_message("req-workflow"), 41)
+                .expect("pending request");
+
+        let connect_secret =
+            RadrootsNostrSignerPublishWorkflowRecord::new_connect_secret_finalization(
+                connection_id.clone(),
+                40,
+            );
+        assert_eq!(
+            connect_secret.kind,
+            RadrootsNostrSignerPublishWorkflowKind::ConnectSecretFinalization
+        );
+        assert_eq!(
+            connect_secret.state,
+            RadrootsNostrSignerPublishWorkflowState::PendingPublish
+        );
+        assert!(connect_secret.pending_request.is_none());
+        assert!(connect_secret.authorized_at_unix.is_none());
+
+        let mut auth_replay =
+            RadrootsNostrSignerPublishWorkflowRecord::new_auth_replay_finalization(
+                connection_id,
+                pending_request.clone(),
+                42,
+            );
+        assert_eq!(
+            auth_replay.kind,
+            RadrootsNostrSignerPublishWorkflowKind::AuthReplayFinalization
+        );
+        assert_eq!(
+            auth_replay.state,
+            RadrootsNostrSignerPublishWorkflowState::PendingPublish
+        );
+        assert_eq!(auth_replay.pending_request, Some(pending_request));
+        assert_eq!(auth_replay.authorized_at_unix, Some(42));
+
+        auth_replay.mark_published(43);
+        assert_eq!(
+            auth_replay.state,
+            RadrootsNostrSignerPublishWorkflowState::PublishedPendingFinalize
+        );
+        assert_eq!(auth_replay.updated_at_unix, 43);
     }
 
     #[test]

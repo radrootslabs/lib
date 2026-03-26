@@ -14,8 +14,9 @@ use crate::model::{
     RadrootsNostrSignerAuthChallenge, RadrootsNostrSignerAuthState,
     RadrootsNostrSignerConnectSecretHash, RadrootsNostrSignerConnectionRecord,
     RadrootsNostrSignerConnectionStatus, RadrootsNostrSignerPendingRequest,
-    RadrootsNostrSignerPermissionGrant, RadrootsNostrSignerRequestAuditRecord,
-    RadrootsNostrSignerRequestDecision,
+    RadrootsNostrSignerPermissionGrant, RadrootsNostrSignerPublishWorkflowKind,
+    RadrootsNostrSignerPublishWorkflowRecord, RadrootsNostrSignerPublishWorkflowState,
+    RadrootsNostrSignerRequestAuditRecord, RadrootsNostrSignerRequestDecision,
 };
 #[cfg(feature = "native")]
 use crate::sqlite::RadrootsNostrSignerSqliteDb;
@@ -161,6 +162,7 @@ impl RadrootsNostrSignerStore for RadrootsNostrSqliteSignerStore {
                 .transpose()?,
             connections: Vec::new(),
             audit_records: Vec::new(),
+            publish_workflows: Vec::new(),
         };
 
         let connection_rows: Vec<SignerConnectionRow> = query_rows(
@@ -266,6 +268,15 @@ impl RadrootsNostrSignerStore for RadrootsNostrSqliteSignerStore {
             .map(SignerRequestAuditRow::into_record)
             .collect::<Result<Vec<_>, _>>()?;
 
+        let workflow_rows: Vec<SignerPublishWorkflowRow> = query_rows(
+            self.db.as_ref(),
+            "SELECT workflow_id, connection_id, kind, state, pending_request_json, authorized_at_unix, created_at_unix, updated_at_unix FROM signer_publish_workflow ORDER BY created_at_unix, workflow_id",
+        )?;
+        state.publish_workflows = workflow_rows
+            .into_iter()
+            .map(SignerPublishWorkflowRow::into_record)
+            .collect::<Result<Vec<_>, _>>()?;
+
         Ok(state)
     }
 
@@ -273,6 +284,7 @@ impl RadrootsNostrSignerStore for RadrootsNostrSqliteSignerStore {
         let executor = self.db.executor();
         executor.begin()?;
         let result = (|| -> Result<(), RadrootsNostrSignerError> {
+            exec_json(executor, "DELETE FROM signer_publish_workflow", json!([]))?;
             exec_json(executor, "DELETE FROM signer_request_audit", json!([]))?;
             exec_json(executor, "DELETE FROM signer_connection", json!([]))?;
 
@@ -398,6 +410,27 @@ impl RadrootsNostrSignerStore for RadrootsNostrSqliteSignerStore {
                         request_decision_label(audit.decision),
                         audit.message.clone(),
                         audit.created_at_unix,
+                    ]),
+                )?;
+            }
+
+            for workflow in &state.publish_workflows {
+                exec_json(
+                    executor,
+                    "INSERT INTO signer_publish_workflow(workflow_id, connection_id, kind, state, pending_request_json, authorized_at_unix, created_at_unix, updated_at_unix) VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
+                    json!([
+                        workflow.workflow_id.as_str(),
+                        workflow.connection_id.as_str(),
+                        publish_workflow_kind_label(workflow.kind),
+                        publish_workflow_state_label(workflow.state),
+                        workflow
+                            .pending_request
+                            .as_ref()
+                            .map(serde_json::to_string)
+                            .transpose()?,
+                        workflow.authorized_at_unix,
+                        workflow.created_at_unix,
+                        workflow.updated_at_unix,
                     ]),
                 )?;
             }
@@ -567,6 +600,41 @@ impl SignerRequestAuditRow {
 }
 
 #[cfg(feature = "native")]
+#[derive(Debug, Deserialize)]
+struct SignerPublishWorkflowRow {
+    workflow_id: String,
+    connection_id: String,
+    kind: String,
+    state: String,
+    pending_request_json: Option<String>,
+    authorized_at_unix: Option<u64>,
+    created_at_unix: u64,
+    updated_at_unix: u64,
+}
+
+#[cfg(feature = "native")]
+impl SignerPublishWorkflowRow {
+    fn into_record(
+        self,
+    ) -> Result<RadrootsNostrSignerPublishWorkflowRecord, RadrootsNostrSignerError> {
+        Ok(RadrootsNostrSignerPublishWorkflowRecord {
+            workflow_id: self.workflow_id.parse()?,
+            connection_id: self.connection_id.parse()?,
+            kind: parse_publish_workflow_kind(self.kind.as_str())?,
+            state: parse_publish_workflow_state(self.state.as_str())?,
+            pending_request: self
+                .pending_request_json
+                .as_deref()
+                .map(parse_json_field::<RadrootsNostrSignerPendingRequest>)
+                .transpose()?,
+            authorized_at_unix: self.authorized_at_unix,
+            created_at_unix: self.created_at_unix,
+            updated_at_unix: self.updated_at_unix,
+        })
+    }
+}
+
+#[cfg(feature = "native")]
 fn query_rows<T: DeserializeOwned>(
     db: &RadrootsNostrSignerSqliteDb,
     sql: &str,
@@ -713,6 +781,60 @@ fn parse_request_decision(
 }
 
 #[cfg(feature = "native")]
+fn publish_workflow_kind_label(value: RadrootsNostrSignerPublishWorkflowKind) -> &'static str {
+    match value {
+        RadrootsNostrSignerPublishWorkflowKind::ConnectSecretFinalization => {
+            "connect_secret_finalization"
+        }
+        RadrootsNostrSignerPublishWorkflowKind::AuthReplayFinalization => {
+            "auth_replay_finalization"
+        }
+    }
+}
+
+#[cfg(feature = "native")]
+fn parse_publish_workflow_kind(
+    value: &str,
+) -> Result<RadrootsNostrSignerPublishWorkflowKind, RadrootsNostrSignerError> {
+    match value {
+        "connect_secret_finalization" => {
+            Ok(RadrootsNostrSignerPublishWorkflowKind::ConnectSecretFinalization)
+        }
+        "auth_replay_finalization" => {
+            Ok(RadrootsNostrSignerPublishWorkflowKind::AuthReplayFinalization)
+        }
+        other => Err(RadrootsNostrSignerError::Store(format!(
+            "unknown sqlite publish workflow kind `{other}`"
+        ))),
+    }
+}
+
+#[cfg(feature = "native")]
+fn publish_workflow_state_label(value: RadrootsNostrSignerPublishWorkflowState) -> &'static str {
+    match value {
+        RadrootsNostrSignerPublishWorkflowState::PendingPublish => "pending_publish",
+        RadrootsNostrSignerPublishWorkflowState::PublishedPendingFinalize => {
+            "published_pending_finalize"
+        }
+    }
+}
+
+#[cfg(feature = "native")]
+fn parse_publish_workflow_state(
+    value: &str,
+) -> Result<RadrootsNostrSignerPublishWorkflowState, RadrootsNostrSignerError> {
+    match value {
+        "pending_publish" => Ok(RadrootsNostrSignerPublishWorkflowState::PendingPublish),
+        "published_pending_finalize" => {
+            Ok(RadrootsNostrSignerPublishWorkflowState::PublishedPendingFinalize)
+        }
+        other => Err(RadrootsNostrSignerError::Store(format!(
+            "unknown sqlite publish workflow state `{other}`"
+        ))),
+    }
+}
+
+#[cfg(feature = "native")]
 fn secret_digest_algorithm_label(hash: &RadrootsNostrSignerConnectSecretHash) -> &'static str {
     match hash.algorithm {
         crate::model::RadrootsNostrSignerSecretDigestAlgorithm::Sha256 => "sha256",
@@ -739,8 +861,9 @@ mod tests {
         RadrootsNostrSignerApprovalRequirement, RadrootsNostrSignerAuthChallenge,
         RadrootsNostrSignerAuthState, RadrootsNostrSignerConnectionDraft,
         RadrootsNostrSignerConnectionId, RadrootsNostrSignerPendingRequest,
-        RadrootsNostrSignerPermissionGrant, RadrootsNostrSignerRequestAuditRecord,
-        RadrootsNostrSignerRequestDecision, RadrootsNostrSignerRequestId,
+        RadrootsNostrSignerPermissionGrant, RadrootsNostrSignerPublishWorkflowRecord,
+        RadrootsNostrSignerRequestAuditRecord, RadrootsNostrSignerRequestDecision,
+        RadrootsNostrSignerRequestId,
     };
     #[cfg(feature = "native")]
     use crate::test_support::{
@@ -923,6 +1046,21 @@ mod tests {
                 Some("permitted".to_owned()),
                 150,
             )],
+            publish_workflows: vec![
+                RadrootsNostrSignerPublishWorkflowRecord::new_connect_secret_finalization(
+                    connection.connection_id.clone(),
+                    151,
+                ),
+                RadrootsNostrSignerPublishWorkflowRecord::new_auth_replay_finalization(
+                    connection.connection_id.clone(),
+                    RadrootsNostrSignerPendingRequest::new(
+                        sample_request_message("req-replay"),
+                        152,
+                    )
+                    .expect("auth replay pending request"),
+                    153,
+                ),
+            ],
         }
     }
 

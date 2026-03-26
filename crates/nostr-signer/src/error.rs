@@ -36,6 +36,12 @@ pub enum RadrootsNostrSignerError {
 
     #[error("invalid request id `{0}`")]
     InvalidRequestId(String),
+
+    #[error("invalid workflow id `{0}`")]
+    InvalidWorkflowId(String),
+
+    #[error("publish workflow not found: {0}")]
+    PublishWorkflowNotFound(String),
 }
 
 impl From<radroots_runtime::RuntimeJsonError> for RadrootsNostrSignerError {

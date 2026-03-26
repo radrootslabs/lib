@@ -6,11 +6,18 @@ use radroots_sql_core::error::SqlError;
 use radroots_sql_core::migrations::{Migration, migrations_run_all_down, migrations_run_all_up};
 
 #[cfg(feature = "native")]
-pub static MIGRATIONS: &[Migration] = &[Migration {
-    name: "0000_init",
-    up_sql: include_str!("../migrations/0000_init.up.sql"),
-    down_sql: include_str!("../migrations/0000_init.down.sql"),
-}];
+pub static MIGRATIONS: &[Migration] = &[
+    Migration {
+        name: "0000_init",
+        up_sql: include_str!("../migrations/0000_init.up.sql"),
+        down_sql: include_str!("../migrations/0000_init.down.sql"),
+    },
+    Migration {
+        name: "0001_publish_workflows",
+        up_sql: include_str!("../migrations/0001_publish_workflows.up.sql"),
+        down_sql: include_str!("../migrations/0001_publish_workflows.down.sql"),
+    },
+];
 
 #[cfg(feature = "native")]
 pub fn run_all_up<E>(executor: &E) -> Result<(), SqlError>
