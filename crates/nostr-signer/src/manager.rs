@@ -796,6 +796,87 @@ impl RadrootsNostrSignerManager {
         })
     }
 
+    pub fn evaluate_auth_replay_publish_workflow(
+        &self,
+        workflow_id: &RadrootsNostrSignerWorkflowId,
+    ) -> Result<RadrootsNostrSignerRequestEvaluation, RadrootsNostrSignerError> {
+        self.update_state_with(|state| {
+            let request_at_unix = now_unix_secs();
+            let workflow = state
+                .publish_workflows
+                .iter()
+                .find(|record| &record.workflow_id == workflow_id)
+                .cloned()
+                .ok_or_else(|| {
+                    RadrootsNostrSignerError::PublishWorkflowNotFound(workflow_id.to_string())
+                })?;
+            if workflow.kind != RadrootsNostrSignerPublishWorkflowKind::AuthReplayFinalization {
+                return Err(RadrootsNostrSignerError::InvalidState(
+                    "publish workflow is not an auth replay finalization".into(),
+                ));
+            }
+
+            let pending_request = workflow.pending_request.clone().ok_or_else(|| {
+                RadrootsNostrSignerError::InvalidState(
+                    "auth replay workflow missing pending request".into(),
+                )
+            })?;
+            let request_message = pending_request.request_message();
+            let request_id = pending_request.request_id();
+            let method = request_message.request.method();
+
+            let record = find_connection_mut(state, &workflow.connection_id)?;
+            if record.is_terminal() {
+                return Err(RadrootsNostrSignerError::InvalidState(format!(
+                    "cannot evaluate auth replay workflow for {} connection",
+                    status_label(record.status)
+                )));
+            }
+            if record.auth_state != RadrootsNostrSignerAuthState::Pending {
+                return Err(RadrootsNostrSignerError::InvalidState(
+                    "auth challenge not pending for connection".into(),
+                ));
+            }
+            if record.pending_request.as_ref() != Some(&pending_request) {
+                return Err(RadrootsNostrSignerError::InvalidState(
+                    "pending request does not match auth replay workflow".into(),
+                ));
+            }
+
+            let mut effective_connection = record.clone();
+            effective_connection.auth_state = RadrootsNostrSignerAuthState::Authorized;
+            effective_connection.pending_request = None;
+            if let Some(auth_challenge) = effective_connection.auth_challenge.as_mut() {
+                auth_challenge.authorized_at_unix = workflow.authorized_at_unix;
+            }
+            let action = evaluate_request_action(
+                &mut effective_connection,
+                &request_message,
+                request_at_unix,
+            )?;
+            effective_connection.mark_request(request_at_unix);
+            record.mark_request(request_at_unix);
+
+            let audit = RadrootsNostrSignerRequestAuditRecord::new(
+                request_id.clone(),
+                workflow.connection_id.clone(),
+                method.clone(),
+                request_decision(&action),
+                action.audit_message(),
+                request_at_unix,
+            );
+            state.audit_records.push(audit.clone());
+
+            Ok(RadrootsNostrSignerRequestEvaluation {
+                request_id,
+                method,
+                connection: effective_connection,
+                audit,
+                action,
+            })
+        })
+    }
+
     pub fn record_request(
         &self,
         connection_id: &RadrootsNostrSignerConnectionId,
@@ -2209,6 +2290,71 @@ mod tests {
                 .expect("list workflows")
                 .is_empty()
         );
+    }
+
+    #[test]
+    fn evaluate_auth_replay_publish_workflow_uses_authorized_view_without_mutating_state() {
+        let manager = RadrootsNostrSignerManager::new_in_memory();
+        manager
+            .set_signer_identity(public_identity(0x240))
+            .expect("set signer");
+        let record = manager
+            .register_connection(RadrootsNostrSignerConnectionDraft::new(
+                public_key(0x241),
+                public_identity(0x242),
+            ))
+            .expect("register");
+
+        manager
+            .set_granted_permissions(
+                &record.connection_id,
+                vec!["get_public_key".parse().expect("permission")].into(),
+            )
+            .expect("grant permissions");
+        manager
+            .require_auth_challenge(
+                &record.connection_id,
+                format!("{}/flow", api_primary_https()).as_str(),
+            )
+            .expect("require auth");
+        let pending = manager
+            .set_pending_request(
+                &record.connection_id,
+                RadrootsNostrConnectRequestMessage::new(
+                    "req-auth-preview",
+                    RadrootsNostrConnectRequest::GetPublicKey,
+                ),
+            )
+            .expect("set pending");
+        let pending_request = pending.pending_request.expect("pending request");
+
+        let workflow = manager
+            .begin_auth_replay_publish_finalization(&record.connection_id)
+            .expect("begin auth replay workflow");
+        let evaluation = manager
+            .evaluate_auth_replay_publish_workflow(&workflow.workflow_id)
+            .expect("evaluate auth replay workflow");
+
+        assert_eq!(
+            evaluation.request_id.as_str(),
+            pending_request.request_id().as_str()
+        );
+        assert_eq!(
+            evaluation.connection.auth_state,
+            RadrootsNostrSignerAuthState::Authorized
+        );
+        assert!(evaluation.connection.pending_request.is_none());
+        assert!(matches!(
+            evaluation.action,
+            RadrootsNostrSignerRequestAction::Allowed { .. }
+        ));
+
+        let stored = manager
+            .get_connection(&record.connection_id)
+            .expect("get")
+            .expect("stored");
+        assert_eq!(stored.auth_state, RadrootsNostrSignerAuthState::Pending);
+        assert_eq!(stored.pending_request.as_ref(), Some(&pending_request));
     }
 
     #[test]
