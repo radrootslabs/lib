@@ -44,6 +44,12 @@ impl From<radroots_runtime::RuntimeJsonError> for RadrootsNostrSignerError {
     }
 }
 
+impl From<serde_json::Error> for RadrootsNostrSignerError {
+    fn from(value: serde_json::Error) -> Self {
+        Self::Store(value.to_string())
+    }
+}
+
 #[cfg(feature = "native")]
 impl From<radroots_sql_core::SqlError> for RadrootsNostrSignerError {
     fn from(value: radroots_sql_core::SqlError) -> Self {

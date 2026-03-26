@@ -40,6 +40,8 @@ pub mod prelude {
     };
     #[cfg(feature = "native")]
     pub use crate::sqlite::RadrootsNostrSignerSqliteDb;
+    #[cfg(feature = "native")]
+    pub use crate::store::RadrootsNostrSqliteSignerStore;
     pub use crate::store::{
         RadrootsNostrFileSignerStore, RadrootsNostrMemorySignerStore, RadrootsNostrSignerStore,
     };
