@@ -5,7 +5,11 @@ pub mod capability;
 pub mod error;
 pub mod evaluation;
 pub mod manager;
+#[cfg(feature = "native")]
+pub mod migrations;
 pub mod model;
+#[cfg(feature = "native")]
+pub mod sqlite;
 pub mod store;
 
 #[cfg(test)]
@@ -34,6 +38,8 @@ pub mod prelude {
         RadrootsNostrSignerRequestDecision, RadrootsNostrSignerRequestId,
         RadrootsNostrSignerSecretDigestAlgorithm, RadrootsNostrSignerStoreState,
     };
+    #[cfg(feature = "native")]
+    pub use crate::sqlite::RadrootsNostrSignerSqliteDb;
     pub use crate::store::{
         RadrootsNostrFileSignerStore, RadrootsNostrMemorySignerStore, RadrootsNostrSignerStore,
     };
