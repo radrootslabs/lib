@@ -3,8 +3,12 @@
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
 
+#[cfg(feature = "serde_json")]
+use radroots_events::{RadrootsNostrEvent, tags::TAG_D};
 use radroots_events::{RadrootsNostrEventPtr, kinds::KIND_PROFILE};
 use radroots_events_codec::d_tag::is_d_tag_base64url;
+#[cfg(feature = "serde_json")]
+use serde::de::DeserializeOwned;
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
 
@@ -16,7 +20,7 @@ use crate::listing::kinds::{
     KIND_TRADE_LISTING_ORDER_RES, KIND_TRADE_LISTING_ORDER_REVISION_REQ,
     KIND_TRADE_LISTING_ORDER_REVISION_RES, KIND_TRADE_LISTING_QUESTION_REQ,
     KIND_TRADE_LISTING_RECEIPT_REQ, KIND_TRADE_LISTING_VALIDATE_REQ,
-    KIND_TRADE_LISTING_VALIDATE_RES,
+    KIND_TRADE_LISTING_VALIDATE_RES, is_trade_listing_kind,
 };
 use crate::listing::order::{
     TradeAnswer, TradeDiscountDecision, TradeDiscountOffer, TradeDiscountRequest,
@@ -64,6 +68,34 @@ pub enum TradeListingMessageType {
 }
 
 impl TradeListingMessageType {
+    #[inline]
+    pub const fn from_kind(kind: u16) -> Option<Self> {
+        match kind {
+            KIND_TRADE_LISTING_VALIDATE_REQ => {
+                Some(TradeListingMessageType::ListingValidateRequest)
+            }
+            KIND_TRADE_LISTING_VALIDATE_RES => Some(TradeListingMessageType::ListingValidateResult),
+            KIND_TRADE_LISTING_ORDER_REQ => Some(TradeListingMessageType::OrderRequest),
+            KIND_TRADE_LISTING_ORDER_RES => Some(TradeListingMessageType::OrderResponse),
+            KIND_TRADE_LISTING_ORDER_REVISION_REQ => Some(TradeListingMessageType::OrderRevision),
+            KIND_TRADE_LISTING_ORDER_REVISION_RES => None,
+            KIND_TRADE_LISTING_QUESTION_REQ => Some(TradeListingMessageType::Question),
+            KIND_TRADE_LISTING_ANSWER_RES => Some(TradeListingMessageType::Answer),
+            KIND_TRADE_LISTING_DISCOUNT_REQ => Some(TradeListingMessageType::DiscountRequest),
+            KIND_TRADE_LISTING_DISCOUNT_OFFER_RES => Some(TradeListingMessageType::DiscountOffer),
+            KIND_TRADE_LISTING_DISCOUNT_ACCEPT_REQ => Some(TradeListingMessageType::DiscountAccept),
+            KIND_TRADE_LISTING_DISCOUNT_DECLINE_REQ => {
+                Some(TradeListingMessageType::DiscountDecline)
+            }
+            KIND_TRADE_LISTING_CANCEL_REQ => Some(TradeListingMessageType::Cancel),
+            KIND_TRADE_LISTING_FULFILLMENT_UPDATE_REQ => {
+                Some(TradeListingMessageType::FulfillmentUpdate)
+            }
+            KIND_TRADE_LISTING_RECEIPT_REQ => Some(TradeListingMessageType::Receipt),
+            _ => None,
+        }
+    }
+
     #[inline]
     pub const fn kind(self) -> u16 {
         match self {
@@ -232,6 +264,70 @@ impl core::fmt::Display for TradeListingEnvelopeError {
 #[cfg(feature = "std")]
 impl std::error::Error for TradeListingEnvelopeError {}
 
+#[cfg(feature = "serde_json")]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TradeListingEnvelopeParseError {
+    InvalidKind(u32),
+    InvalidJson,
+    InvalidEnvelope(TradeListingEnvelopeError),
+    MessageTypeKindMismatch {
+        event_kind: u32,
+        message_type: TradeListingMessageType,
+    },
+    MissingTag(&'static str),
+    InvalidTag(&'static str),
+    ListingAddrTagMismatch,
+    OrderIdTagMismatch,
+    InvalidListingAddr(TradeListingAddressError),
+}
+
+#[cfg(feature = "serde_json")]
+impl core::fmt::Display for TradeListingEnvelopeParseError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            TradeListingEnvelopeParseError::InvalidKind(kind) => {
+                write!(f, "invalid trade listing event kind: {kind}")
+            }
+            TradeListingEnvelopeParseError::InvalidJson => {
+                write!(f, "invalid trade listing envelope json")
+            }
+            TradeListingEnvelopeParseError::InvalidEnvelope(error) => write!(f, "{error}"),
+            TradeListingEnvelopeParseError::MessageTypeKindMismatch {
+                event_kind,
+                message_type,
+            } => write!(
+                f,
+                "trade listing envelope type {message_type:?} does not match event kind {event_kind}"
+            ),
+            TradeListingEnvelopeParseError::MissingTag(tag) => {
+                write!(f, "missing required trade listing tag: {tag}")
+            }
+            TradeListingEnvelopeParseError::InvalidTag(tag) => {
+                write!(f, "invalid trade listing tag: {tag}")
+            }
+            TradeListingEnvelopeParseError::ListingAddrTagMismatch => {
+                write!(f, "trade listing address tag does not match envelope")
+            }
+            TradeListingEnvelopeParseError::OrderIdTagMismatch => {
+                write!(f, "trade order id tag does not match envelope")
+            }
+            TradeListingEnvelopeParseError::InvalidListingAddr(error) => write!(f, "{error}"),
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+#[cfg(feature = "serde_json")]
+impl std::error::Error for TradeListingEnvelopeParseError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            TradeListingEnvelopeParseError::InvalidEnvelope(error) => Some(error),
+            TradeListingEnvelopeParseError::InvalidListingAddr(error) => Some(error),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TradeListingAddress {
     pub kind: u16,
@@ -292,6 +388,66 @@ impl core::fmt::Display for TradeListingAddressError {
 
 #[cfg(feature = "std")]
 impl std::error::Error for TradeListingAddressError {}
+
+#[cfg(feature = "serde_json")]
+fn required_tag_value<'a>(
+    tags: &'a [Vec<String>],
+    key: &'static str,
+) -> Result<&'a str, TradeListingEnvelopeParseError> {
+    let tag = tags
+        .iter()
+        .find(|tag| tag.first().map(|value| value.as_str()) == Some(key))
+        .ok_or(TradeListingEnvelopeParseError::MissingTag(key))?;
+    let value = tag
+        .get(1)
+        .map(|value| value.as_str())
+        .ok_or(TradeListingEnvelopeParseError::InvalidTag(key))?;
+    if value.trim().is_empty() {
+        return Err(TradeListingEnvelopeParseError::InvalidTag(key));
+    }
+    Ok(value)
+}
+
+#[cfg(feature = "serde_json")]
+impl<T> TradeListingEnvelope<T>
+where
+    T: DeserializeOwned,
+{
+    pub fn from_event(event: &RadrootsNostrEvent) -> Result<Self, TradeListingEnvelopeParseError> {
+        let event_kind = u16::try_from(event.kind)
+            .map_err(|_| TradeListingEnvelopeParseError::InvalidKind(event.kind))?;
+        if !is_trade_listing_kind(event_kind) {
+            return Err(TradeListingEnvelopeParseError::InvalidKind(event.kind));
+        }
+        let envelope = serde_json::from_str::<Self>(&event.content)
+            .map_err(|_| TradeListingEnvelopeParseError::InvalidJson)?;
+        envelope
+            .validate()
+            .map_err(TradeListingEnvelopeParseError::InvalidEnvelope)?;
+        if envelope.message_type.kind() != event_kind {
+            return Err(TradeListingEnvelopeParseError::MessageTypeKindMismatch {
+                event_kind: event.kind,
+                message_type: envelope.message_type,
+            });
+        }
+
+        let listing_addr = required_tag_value(&event.tags, "a")?;
+        if envelope.listing_addr != listing_addr {
+            return Err(TradeListingEnvelopeParseError::ListingAddrTagMismatch);
+        }
+        TradeListingAddress::parse(&envelope.listing_addr)
+            .map_err(TradeListingEnvelopeParseError::InvalidListingAddr)?;
+
+        if let Some(order_id) = envelope.order_id.as_deref() {
+            let tag_order_id = required_tag_value(&event.tags, TAG_D)?;
+            if tag_order_id != order_id {
+                return Err(TradeListingEnvelopeParseError::OrderIdTagMismatch);
+            }
+        }
+
+        Ok(envelope)
+    }
+}
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
@@ -372,9 +528,15 @@ pub enum TradeListingMessagePayload {
 mod tests {
     use super::{
         TradeListingAddress, TradeListingAddressError, TradeListingEnvelope,
-        TradeListingEnvelopeError, TradeListingMessageType, TradeListingValidateRequest,
+        TradeListingEnvelopeError, TradeListingEnvelopeParseError, TradeListingMessagePayload,
+        TradeListingMessageType, TradeListingValidateRequest, trade_listing_envelope_event_build,
     };
+    #[cfg(feature = "serde_json")]
+    use radroots_events::RadrootsNostrEvent;
     use radroots_events::kinds::KIND_LISTING;
+
+    #[cfg(feature = "serde_json")]
+    use crate::listing::order::{TradeOrder, TradeOrderItem, TradeOrderStatus};
 
     #[test]
     fn envelope_requires_listing_addr() {
@@ -479,6 +641,36 @@ mod tests {
     }
 
     #[test]
+    fn message_type_from_kind_roundtrips_supported_variants() {
+        for message_type in [
+            TradeListingMessageType::ListingValidateRequest,
+            TradeListingMessageType::ListingValidateResult,
+            TradeListingMessageType::OrderRequest,
+            TradeListingMessageType::OrderResponse,
+            TradeListingMessageType::OrderRevision,
+            TradeListingMessageType::Question,
+            TradeListingMessageType::Answer,
+            TradeListingMessageType::DiscountRequest,
+            TradeListingMessageType::DiscountOffer,
+            TradeListingMessageType::DiscountAccept,
+            TradeListingMessageType::DiscountDecline,
+            TradeListingMessageType::Cancel,
+            TradeListingMessageType::FulfillmentUpdate,
+            TradeListingMessageType::Receipt,
+        ] {
+            assert_eq!(
+                TradeListingMessageType::from_kind(message_type.kind()),
+                Some(message_type)
+            );
+        }
+        assert_eq!(
+            TradeListingMessageType::from_kind(super::KIND_TRADE_LISTING_ORDER_REVISION_RES),
+            None
+        );
+        assert_eq!(TradeListingMessageType::from_kind(5000), None);
+    }
+
+    #[test]
     fn envelope_validate_rejects_invalid_version() {
         let mut env = TradeListingEnvelope::new(
             TradeListingMessageType::ListingValidateRequest,
@@ -570,6 +762,51 @@ mod tests {
             TradeListingAddressError::InvalidFormat.to_string(),
             "invalid listing address format"
         );
+    }
+
+    #[cfg(feature = "serde_json")]
+    fn base_order() -> TradeOrder {
+        TradeOrder {
+            order_id: "order-1".into(),
+            listing_addr: format!("{KIND_LISTING}:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg"),
+            buyer_pubkey: "buyer-pubkey".into(),
+            seller_pubkey: "seller-pubkey".into(),
+            items: vec![TradeOrderItem {
+                bin_id: "bin-1".into(),
+                bin_count: 2,
+            }],
+            discounts: None,
+            notes: Some("deliver friday".into()),
+            status: TradeOrderStatus::Draft,
+        }
+    }
+
+    #[cfg(feature = "serde_json")]
+    fn base_event(
+        actor_pubkey: &str,
+        recipient_pubkey: &str,
+        message_type: TradeListingMessageType,
+        listing_addr: &str,
+        order_id: Option<&str>,
+        payload: &TradeListingMessagePayload,
+    ) -> RadrootsNostrEvent {
+        let built = trade_listing_envelope_event_build(
+            recipient_pubkey,
+            message_type,
+            listing_addr.to_string(),
+            order_id.map(str::to_string),
+            payload,
+        )
+        .expect("canonical envelope event");
+        RadrootsNostrEvent {
+            id: "event-id".into(),
+            author: actor_pubkey.into(),
+            created_at: 1_700_000_000,
+            kind: u32::from(built.kind),
+            tags: built.tags,
+            content: built.content,
+            sig: "sig".into(),
+        }
     }
 
     #[cfg(feature = "serde_json")]
@@ -665,5 +902,88 @@ mod tests {
         )
         .unwrap_err();
         assert!(err.to_string().contains("intentional"));
+    }
+
+    #[cfg(feature = "serde_json")]
+    #[test]
+    fn envelope_from_event_parses_canonical_order_request() {
+        let payload = TradeListingMessagePayload::OrderRequest(base_order());
+        let event = base_event(
+            "buyer-pubkey",
+            "seller-pubkey",
+            TradeListingMessageType::OrderRequest,
+            &format!("{KIND_LISTING}:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg"),
+            Some("order-1"),
+            &payload,
+        );
+
+        let envelope =
+            TradeListingEnvelope::<TradeListingMessagePayload>::from_event(&event).unwrap();
+        assert_eq!(envelope.message_type, TradeListingMessageType::OrderRequest);
+        assert_eq!(envelope.order_id.as_deref(), Some("order-1"));
+        assert_eq!(envelope.payload, payload);
+    }
+
+    #[cfg(feature = "serde_json")]
+    #[test]
+    fn envelope_from_event_rejects_kind_mismatch() {
+        let payload = TradeListingMessagePayload::OrderRequest(base_order());
+        let mut event = base_event(
+            "buyer-pubkey",
+            "seller-pubkey",
+            TradeListingMessageType::OrderRequest,
+            &format!("{KIND_LISTING}:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg"),
+            Some("order-1"),
+            &payload,
+        );
+        event.kind = u32::from(TradeListingMessageType::OrderResponse.kind());
+
+        let err = TradeListingEnvelope::<TradeListingMessagePayload>::from_event(&event)
+            .expect_err("kind mismatch should fail");
+        assert_eq!(
+            err,
+            TradeListingEnvelopeParseError::MessageTypeKindMismatch {
+                event_kind: u32::from(TradeListingMessageType::OrderResponse.kind()),
+                message_type: TradeListingMessageType::OrderRequest,
+            }
+        );
+    }
+
+    #[cfg(feature = "serde_json")]
+    #[test]
+    fn envelope_from_event_rejects_listing_addr_tag_mismatch() {
+        let payload = TradeListingMessagePayload::OrderRequest(base_order());
+        let mut event = base_event(
+            "buyer-pubkey",
+            "seller-pubkey",
+            TradeListingMessageType::OrderRequest,
+            &format!("{KIND_LISTING}:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg"),
+            Some("order-1"),
+            &payload,
+        );
+        event.tags[1][1] = format!("{KIND_LISTING}:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAw");
+
+        let err = TradeListingEnvelope::<TradeListingMessagePayload>::from_event(&event)
+            .expect_err("listing addr mismatch should fail");
+        assert_eq!(err, TradeListingEnvelopeParseError::ListingAddrTagMismatch);
+    }
+
+    #[cfg(feature = "serde_json")]
+    #[test]
+    fn envelope_from_event_rejects_order_id_tag_mismatch() {
+        let payload = TradeListingMessagePayload::OrderRequest(base_order());
+        let mut event = base_event(
+            "buyer-pubkey",
+            "seller-pubkey",
+            TradeListingMessageType::OrderRequest,
+            &format!("{KIND_LISTING}:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg"),
+            Some("order-1"),
+            &payload,
+        );
+        event.tags[2][1] = "order-2".into();
+
+        let err = TradeListingEnvelope::<TradeListingMessagePayload>::from_event(&event)
+            .expect_err("order id mismatch should fail");
+        assert_eq!(err, TradeListingEnvelopeParseError::OrderIdTagMismatch);
     }
 }

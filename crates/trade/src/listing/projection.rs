@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 
 use radroots_core::{RadrootsCoreDecimal, RadrootsCoreDiscount, RadrootsCoreDiscountValue};
 use radroots_events::{
+    RadrootsNostrEvent,
     kinds::KIND_LISTING,
     listing::{
         RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
@@ -20,7 +21,11 @@ use radroots_events::{
 use ts_rs::TS;
 
 use crate::listing::{
-    dvm::{TradeListingMessagePayload, TradeListingMessageType},
+    codec::{TradeListingParseError, listing_from_event_parts},
+    dvm::{
+        TradeListingEnvelope, TradeListingEnvelopeParseError, TradeListingMessagePayload,
+        TradeListingMessageType,
+    },
     model::RadrootsTradeListingTotal,
     order::{
         TradeFulfillmentStatus, TradeOrder, TradeOrderChange, TradeOrderItem, TradeOrderStatus,
@@ -175,6 +180,12 @@ pub struct RadrootsTradeReadIndex {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsTradeProjectionError {
+    InvalidListingKind {
+        kind: u32,
+    },
+    InvalidListingContract {
+        error: TradeListingParseError,
+    },
     MissingPrimaryBin(String),
     MissingOrderId,
     OrderIdMismatch,
@@ -189,11 +200,21 @@ pub enum RadrootsTradeProjectionError {
     InvalidRevisionResponse,
     NonOrderWorkflowMessage(TradeListingMessageType),
     UnauthorizedActor,
+    #[cfg(feature = "serde_json")]
+    InvalidWorkflowEvent {
+        error: TradeListingEnvelopeParseError,
+    },
 }
 
 impl core::fmt::Display for RadrootsTradeProjectionError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
+            RadrootsTradeProjectionError::InvalidListingKind { kind } => {
+                write!(f, "invalid listing event kind: {kind}")
+            }
+            RadrootsTradeProjectionError::InvalidListingContract { error } => {
+                write!(f, "invalid listing contract event: {error}")
+            }
             RadrootsTradeProjectionError::MissingPrimaryBin(bin_id) => {
                 write!(f, "missing primary bin: {bin_id}")
             }
@@ -221,14 +242,36 @@ impl core::fmt::Display for RadrootsTradeProjectionError {
                 write!(f, "non-order workflow message: {message_type:?}")
             }
             RadrootsTradeProjectionError::UnauthorizedActor => write!(f, "unauthorized actor"),
+            #[cfg(feature = "serde_json")]
+            RadrootsTradeProjectionError::InvalidWorkflowEvent { error } => write!(f, "{error}"),
         }
     }
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for RadrootsTradeProjectionError {}
+impl std::error::Error for RadrootsTradeProjectionError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            RadrootsTradeProjectionError::InvalidListingContract { error } => Some(error),
+            #[cfg(feature = "serde_json")]
+            RadrootsTradeProjectionError::InvalidWorkflowEvent { error } => Some(error),
+            _ => None,
+        }
+    }
+}
 
 impl RadrootsTradeListingProjection {
+    pub fn from_listing_event(
+        event: &RadrootsNostrEvent,
+    ) -> Result<Self, RadrootsTradeProjectionError> {
+        if event.kind != KIND_LISTING {
+            return Err(RadrootsTradeProjectionError::InvalidListingKind { kind: event.kind });
+        }
+        let listing = listing_from_event_parts(&event.tags, &event.content)
+            .map_err(|error| RadrootsTradeProjectionError::InvalidListingContract { error })?;
+        Self::from_listing_contract(event.author.clone(), &listing)
+    }
+
     pub fn from_listing_contract(
         seller_pubkey: impl Into<String>,
         listing: &RadrootsListing,
@@ -317,6 +360,17 @@ impl RadrootsTradeOrderWorkflowProjection {
 }
 
 impl RadrootsTradeOrderWorkflowMessage {
+    #[cfg(feature = "serde_json")]
+    pub fn from_event(event: &RadrootsNostrEvent) -> Result<Self, TradeListingEnvelopeParseError> {
+        let envelope = TradeListingEnvelope::<TradeListingMessagePayload>::from_event(event)?;
+        Ok(Self {
+            actor_pubkey: event.author.clone(),
+            listing_addr: envelope.listing_addr,
+            order_id: envelope.order_id,
+            payload: envelope.payload,
+        })
+    }
+
     pub fn message_type(&self) -> TradeListingMessageType {
         match &self.payload {
             TradeListingMessagePayload::ListingValidateRequest(_) => {
@@ -392,6 +446,20 @@ impl RadrootsTradeReadIndex {
             .expect("listing projection should exist after upsert"))
     }
 
+    pub fn upsert_listing_event(
+        &mut self,
+        event: &RadrootsNostrEvent,
+    ) -> Result<&RadrootsTradeListingProjection, RadrootsTradeProjectionError> {
+        let projection = RadrootsTradeListingProjection::from_listing_event(event)?;
+        let listing_addr = projection.listing_addr.clone();
+        self.listings.insert(listing_addr.clone(), projection);
+        self.refresh_listing_counts(&listing_addr);
+        Ok(self
+            .listings
+            .get(&listing_addr)
+            .expect("listing projection should exist after upsert"))
+    }
+
     pub fn apply_workflow_message(
         &mut self,
         message: &RadrootsTradeOrderWorkflowMessage,
@@ -408,6 +476,16 @@ impl RadrootsTradeReadIndex {
             .orders
             .get(&order_id)
             .expect("order projection should exist after workflow apply"))
+    }
+
+    #[cfg(feature = "serde_json")]
+    pub fn apply_workflow_event(
+        &mut self,
+        event: &RadrootsNostrEvent,
+    ) -> Result<&RadrootsTradeOrderWorkflowProjection, RadrootsTradeProjectionError> {
+        let message = RadrootsTradeOrderWorkflowMessage::from_event(event)
+            .map_err(|error| RadrootsTradeProjectionError::InvalidWorkflowEvent { error })?;
+        self.apply_workflow_message(&message)
     }
 
     fn apply_workflow_message_inner(
@@ -881,7 +959,11 @@ mod tests {
         radroots_trade_order_status_can_transition, radroots_trade_order_status_is_terminal,
     };
     use crate::listing::{
-        dvm::{TradeListingCancel, TradeListingMessagePayload, TradeOrderResponse},
+        codec::listing_tags_build,
+        dvm::{
+            TradeListingCancel, TradeListingEnvelopeParseError, TradeListingMessagePayload,
+            TradeOrderResponse, trade_listing_envelope_event_build,
+        },
         order::{
             TradeAnswer, TradeDiscountDecision, TradeDiscountOffer, TradeDiscountRequest,
             TradeFulfillmentStatus, TradeFulfillmentUpdate, TradeOrder, TradeOrderChange,
@@ -897,6 +979,7 @@ mod tests {
         RadrootsListingDeliveryMethod, RadrootsListingFarmRef, RadrootsListingLocation,
         RadrootsListingProduct, RadrootsListingStatus,
     };
+    use radroots_events::{RadrootsNostrEvent, kinds::KIND_LISTING};
 
     fn base_listing() -> RadrootsListing {
         RadrootsListing {
@@ -1019,6 +1102,45 @@ mod tests {
         }
     }
 
+    fn listing_event(seller_pubkey: &str, listing: &RadrootsListing) -> RadrootsNostrEvent {
+        RadrootsNostrEvent {
+            id: "listing-event-id".into(),
+            author: seller_pubkey.into(),
+            created_at: 1_700_000_000,
+            kind: KIND_LISTING,
+            tags: listing_tags_build(listing).expect("listing tags"),
+            content: serde_json::to_string(listing).expect("listing json"),
+            sig: "sig".into(),
+        }
+    }
+
+    fn workflow_event(
+        actor_pubkey: &str,
+        recipient_pubkey: &str,
+        message_type: crate::listing::dvm::TradeListingMessageType,
+        listing_addr: &str,
+        order_id: Option<&str>,
+        payload: &TradeListingMessagePayload,
+    ) -> RadrootsNostrEvent {
+        let built = trade_listing_envelope_event_build(
+            recipient_pubkey,
+            message_type,
+            listing_addr.to_string(),
+            order_id.map(str::to_string),
+            payload,
+        )
+        .expect("trade workflow event");
+        RadrootsNostrEvent {
+            id: "workflow-event-id".into(),
+            author: actor_pubkey.into(),
+            created_at: 1_700_000_000,
+            kind: u32::from(built.kind),
+            tags: built.tags,
+            content: built.content,
+            sig: "sig".into(),
+        }
+    }
+
     #[test]
     fn listing_projection_builds_query_friendly_view() {
         let mut index = RadrootsTradeReadIndex::new();
@@ -1040,6 +1162,46 @@ mod tests {
         assert_eq!(projection.order_count, 0);
         assert_eq!(projection.open_order_count, 0);
         assert_eq!(projection.terminal_order_count, 0);
+    }
+
+    #[test]
+    fn listing_projection_can_ingest_canonical_nostr_event() {
+        let mut index = RadrootsTradeReadIndex::new();
+        let event = listing_event("seller-pubkey", &base_listing());
+
+        let projection = index
+            .upsert_listing_event(&event)
+            .expect("listing event projection");
+
+        assert_eq!(
+            projection.listing_addr,
+            "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg"
+        );
+        assert_eq!(projection.bins.len(), 2);
+    }
+
+    #[test]
+    fn workflow_projection_can_ingest_canonical_trade_event() {
+        let mut index = RadrootsTradeReadIndex::new();
+        index
+            .upsert_listing_event(&listing_event("seller-pubkey", &base_listing()))
+            .expect("listing projection");
+        let event = workflow_event(
+            "buyer-pubkey",
+            "seller-pubkey",
+            crate::listing::dvm::TradeListingMessageType::OrderRequest,
+            "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+            Some("order-1"),
+            &TradeListingMessagePayload::OrderRequest(base_order()),
+        );
+
+        let order = index
+            .apply_workflow_event(&event)
+            .expect("workflow event projection");
+
+        assert_eq!(order.order_id, "order-1");
+        assert_eq!(order.status, TradeOrderStatus::Requested);
+        assert_eq!(order.last_actor_pubkey, "buyer-pubkey");
     }
 
     #[test]
@@ -1335,6 +1497,30 @@ mod tests {
         assert_eq!(
             err,
             RadrootsTradeProjectionError::MissingPrimaryBin("missing".into())
+        );
+    }
+
+    #[test]
+    fn workflow_projection_rejects_invalid_canonical_trade_event() {
+        let mut index = RadrootsTradeReadIndex::new();
+        let mut event = workflow_event(
+            "buyer-pubkey",
+            "seller-pubkey",
+            crate::listing::dvm::TradeListingMessageType::OrderRequest,
+            "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+            Some("order-1"),
+            &TradeListingMessagePayload::OrderRequest(base_order()),
+        );
+        event.tags[1][1] = "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAw".into();
+
+        let err = index
+            .apply_workflow_event(&event)
+            .expect_err("invalid workflow event should fail");
+        assert_eq!(
+            err,
+            RadrootsTradeProjectionError::InvalidWorkflowEvent {
+                error: TradeListingEnvelopeParseError::ListingAddrTagMismatch,
+            }
         );
     }
 
