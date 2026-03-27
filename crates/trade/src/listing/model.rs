@@ -4,7 +4,7 @@ use ts_rs::TS;
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeListingSubtotal {
     #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreMoney"))]
     pub price_amount: radroots_core::RadrootsCoreMoney,
@@ -19,7 +19,7 @@ pub struct RadrootsTradeListingSubtotal {
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeListingTotal {
     #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreMoney"))]
     pub price_amount: radroots_core::RadrootsCoreMoney,
