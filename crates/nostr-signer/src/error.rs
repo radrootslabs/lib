@@ -5,6 +5,9 @@ pub enum RadrootsNostrSignerError {
     #[error("store error: {0}")]
     Store(String),
 
+    #[error("sign error: {0}")]
+    Sign(String),
+
     #[error("missing signer identity")]
     MissingSignerIdentity,
 

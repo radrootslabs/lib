@@ -1,6 +1,7 @@
 #![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 #![forbid(unsafe_code)]
 
+pub mod backend;
 pub mod capability;
 pub mod error;
 pub mod evaluation;
@@ -16,6 +17,11 @@ pub mod store;
 mod test_support;
 
 pub mod prelude {
+    pub use crate::backend::{
+        RadrootsNostrEmbeddedSignerBackend, RadrootsNostrSignerBackend,
+        RadrootsNostrSignerBackendCapabilities, RadrootsNostrSignerPublishTransition,
+        RadrootsNostrSignerSignOutput,
+    };
     pub use crate::capability::{
         RadrootsNostrLocalSignerAvailability, RadrootsNostrLocalSignerCapability,
         RadrootsNostrRemoteSessionSignerCapability, RadrootsNostrSignerCapability,
