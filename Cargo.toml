@@ -21,6 +21,7 @@ members = [
   "crates/simplex-agent-runtime",
   "crates/simplex-agent-store",
   "crates/simplex-chat-proto",
+  "crates/simplex-interop-tests",
   "crates/simplex-smp-crypto",
   "crates/simplex-smp-proto",
   "crates/simplex-smp-transport",
@@ -69,6 +70,7 @@ radroots-simplex-agent-proto = { path = "crates/simplex-agent-proto", version = 
 radroots-simplex-agent-runtime = { path = "crates/simplex-agent-runtime", version = "0.1.0-alpha.1", default-features = false }
 radroots-simplex-agent-store = { path = "crates/simplex-agent-store", version = "0.1.0-alpha.1", default-features = false }
 radroots-simplex-chat-proto = { path = "crates/simplex-chat-proto", version = "0.1.0-alpha.1", default-features = false }
+radroots-simplex-interop-tests = { path = "crates/simplex-interop-tests", version = "0.1.0-alpha.1", default-features = false }
 radroots-simplex-smp-crypto = { path = "crates/simplex-smp-crypto", version = "0.1.0-alpha.1", default-features = false }
 radroots-simplex-smp-proto = { path = "crates/simplex-smp-proto", version = "0.1.0-alpha.1", default-features = false }
 radroots-simplex-smp-transport = { path = "crates/simplex-smp-transport", version = "0.1.0-alpha.1", default-features = false }

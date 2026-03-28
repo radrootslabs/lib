@@ -2454,6 +2454,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "radroots-simplex-interop-tests"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "radroots-simplex-agent-proto",
+ "radroots-simplex-agent-runtime",
+ "radroots-simplex-chat-proto",
+ "radroots-simplex-smp-crypto",
+ "radroots-simplex-smp-proto",
+ "radroots-simplex-smp-transport",
+ "serde_json",
+]
+
+[[package]]
 name = "radroots-simplex-smp-crypto"
 version = "0.1.0-alpha.1"
 dependencies = [
