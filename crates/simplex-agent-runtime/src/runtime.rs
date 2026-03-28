@@ -1,6 +1,7 @@
 use crate::error::RadrootsSimplexAgentRuntimeError;
 use crate::types::{RadrootsSimplexAgentCommandOutcome, RadrootsSimplexAgentRuntimeEvent};
 use alloc::collections::VecDeque;
+use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 use radroots_simplex_agent_proto::prelude::{
@@ -9,19 +10,38 @@ use radroots_simplex_agent_proto::prelude::{
     RadrootsSimplexAgentEncryptedPayload, RadrootsSimplexAgentEnvelope,
     RadrootsSimplexAgentMessage, RadrootsSimplexAgentMessageFrame,
     RadrootsSimplexAgentMessageHeader, RadrootsSimplexAgentMessageReceipt,
-    RadrootsSimplexAgentQueueDescriptor, RadrootsSimplexSmpRatchetState, encode_decrypted_message,
+    RadrootsSimplexAgentQueueDescriptor, encode_decrypted_message, encode_envelope,
 };
 use radroots_simplex_agent_store::prelude::{
-    RadrootsSimplexAgentPendingCommand, RadrootsSimplexAgentPendingCommandKind,
-    RadrootsSimplexAgentQueueRole, RadrootsSimplexAgentStore,
+    RadrootsSimplexAgentOutboundMessage, RadrootsSimplexAgentPendingCommand,
+    RadrootsSimplexAgentPendingCommandKind, RadrootsSimplexAgentQueueRole,
+    RadrootsSimplexAgentStore,
 };
-use radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpQueueUri;
+use radroots_simplex_smp_crypto::prelude::{
+    RadrootsSimplexSmpQueueAuthorizationMaterial, RadrootsSimplexSmpQueueAuthorizationScope,
+    RadrootsSimplexSmpRatchetState,
+};
+use radroots_simplex_smp_proto::prelude::{
+    RADROOTS_SIMPLEX_SMP_CURRENT_TRANSPORT_VERSION, RadrootsSimplexSmpBrokerMessage,
+    RadrootsSimplexSmpCommand, RadrootsSimplexSmpCorrelationId, RadrootsSimplexSmpMessageFlags,
+    RadrootsSimplexSmpNewQueueRequest, RadrootsSimplexSmpQueueMode,
+    RadrootsSimplexSmpQueueRequestData, RadrootsSimplexSmpQueueUri, RadrootsSimplexSmpSendCommand,
+    RadrootsSimplexSmpSubscriptionMode,
+};
+use radroots_simplex_smp_transport::prelude::{
+    RadrootsSimplexSmpCommandTransport, RadrootsSimplexSmpTransportRequest,
+    RadrootsSimplexSmpTransportResponse,
+};
 use sha2::{Digest, Sha256};
+#[cfg(feature = "std")]
+use std::path::{Path, PathBuf};
 
 pub struct RadrootsSimplexAgentRuntimeBuilder {
     store: Option<RadrootsSimplexAgentStore>,
     queue_capacity: usize,
     retry_delay_ms: u64,
+    #[cfg(feature = "std")]
+    persistent_store_path: Option<PathBuf>,
 }
 
 impl RadrootsSimplexAgentRuntimeBuilder {
@@ -33,11 +53,19 @@ impl RadrootsSimplexAgentRuntimeBuilder {
             store: None,
             queue_capacity: Self::DEFAULT_QUEUE_CAPACITY,
             retry_delay_ms: Self::DEFAULT_RETRY_DELAY_MS,
+            #[cfg(feature = "std")]
+            persistent_store_path: None,
         }
     }
 
     pub fn store(mut self, store: RadrootsSimplexAgentStore) -> Self {
         self.store = Some(store);
+        self
+    }
+
+    #[cfg(feature = "std")]
+    pub fn persistent_store_path(mut self, path: impl AsRef<Path>) -> Self {
+        self.persistent_store_path = Some(path.as_ref().to_path_buf());
         self
     }
 
@@ -57,8 +85,21 @@ impl RadrootsSimplexAgentRuntimeBuilder {
                 "queue_capacity",
             ));
         }
+        #[cfg(feature = "std")]
+        let store = match (self.store, self.persistent_store_path) {
+            (Some(mut store), Some(path)) => {
+                store.set_persistence_path(path);
+                store
+            }
+            (Some(store), None) => store,
+            (None, Some(path)) => RadrootsSimplexAgentStore::open(path)?,
+            (None, None) => RadrootsSimplexAgentStore::default(),
+        };
+        #[cfg(not(feature = "std"))]
+        let store = self.store.unwrap_or_default();
+
         Ok(RadrootsSimplexAgentRuntime {
-            store: self.store.unwrap_or_default(),
+            store,
             events: VecDeque::with_capacity(self.queue_capacity),
             retry_delay_ms: self.retry_delay_ms,
         })
@@ -85,8 +126,16 @@ impl RadrootsSimplexAgentRuntime {
         contact_address: bool,
         now: u64,
     ) -> Result<String, RadrootsSimplexAgentRuntimeError> {
+        let local_dh_public_key = derive_material(
+            b"connection-create-local-dh",
+            &[
+                invitation_queue.to_string().as_bytes(),
+                &e2e_public_key,
+                &now.to_be_bytes(),
+            ],
+        );
         let ratchet_state = RadrootsSimplexSmpRatchetState::initiator(
-            b"local-dh".to_vec(),
+            local_dh_public_key,
             invitation_queue.recipient_dh_public_key.as_bytes().to_vec(),
             None,
         )
@@ -139,6 +188,7 @@ impl RadrootsSimplexAgentRuntime {
                 connection_id: connection.id.clone(),
                 invitation,
             });
+        self.flush_store()?;
         Ok(connection.id)
     }
 
@@ -148,8 +198,16 @@ impl RadrootsSimplexAgentRuntime {
         reply_queue: RadrootsSimplexSmpQueueUri,
         now: u64,
     ) -> Result<String, RadrootsSimplexAgentRuntimeError> {
+        let local_dh_public_key = derive_material(
+            b"connection-join-local-dh",
+            &[
+                invitation.connection_id.as_slice(),
+                reply_queue.to_string().as_bytes(),
+                &now.to_be_bytes(),
+            ],
+        );
         let ratchet_state = RadrootsSimplexSmpRatchetState::responder(
-            b"reply-dh".to_vec(),
+            local_dh_public_key,
             invitation
                 .invitation_queue
                 .recipient_dh_public_key
@@ -168,7 +226,10 @@ impl RadrootsSimplexAgentRuntime {
             queue_uri: invitation.invitation_queue.clone(),
             replaced_queue: None,
             primary: true,
-            sender_key: Some(b"sender-auth".to_vec()),
+            sender_key: Some(derive_material(
+                b"join-sender-auth",
+                &[invitation.connection_id.as_slice(), &now.to_be_bytes()],
+            )),
         };
         let receive_descriptor = RadrootsSimplexAgentQueueDescriptor {
             queue_uri: reply_queue,
@@ -210,17 +271,17 @@ impl RadrootsSimplexAgentRuntime {
             },
             now,
         )?;
+        let confirmation_payload =
+            self.next_encrypted_payload(&connection.id, invitation.connection_id)?;
         self.store.enqueue_command(
             &connection.id,
             RadrootsSimplexAgentPendingCommandKind::SendEnvelope {
                 queue: send_descriptor.queue_address(),
                 envelope: RadrootsSimplexAgentEnvelope::Confirmation {
                     reply_queue: true,
-                    encrypted: RadrootsSimplexAgentEncryptedPayload {
-                        ratchet_header: None,
-                        ciphertext: invitation.connection_id,
-                    },
+                    encrypted: confirmation_payload,
                 },
+                delivery: None,
             },
             now,
         )?;
@@ -228,6 +289,7 @@ impl RadrootsSimplexAgentRuntime {
             .push_back(RadrootsSimplexAgentRuntimeEvent::ConfirmationRequired {
                 connection_id: connection.id.clone(),
             });
+        self.flush_store()?;
         Ok(connection.id)
     }
 
@@ -240,10 +302,7 @@ impl RadrootsSimplexAgentRuntime {
         self.store
             .set_status(connection_id, RadrootsSimplexAgentConnectionStatus::Allowed)?;
         let send_queue = self.store.primary_send_queue(connection_id)?;
-        let encrypted = RadrootsSimplexAgentEncryptedPayload {
-            ratchet_header: None,
-            ciphertext: local_info,
-        };
+        let encrypted = self.next_encrypted_payload(connection_id, local_info)?;
         self.store.enqueue_command(
             connection_id,
             RadrootsSimplexAgentPendingCommandKind::SendEnvelope {
@@ -252,9 +311,11 @@ impl RadrootsSimplexAgentRuntime {
                     reply_queue: false,
                     encrypted,
                 },
+                delivery: None,
             },
             now,
         )?;
+        self.flush_store()?;
         Ok(())
     }
 
@@ -276,6 +337,7 @@ impl RadrootsSimplexAgentRuntime {
             .push_back(RadrootsSimplexAgentRuntimeEvent::SubscriptionQueued {
                 connection_id: connection_id.into(),
             });
+        self.flush_store()?;
         Ok(())
     }
 
@@ -286,16 +348,20 @@ impl RadrootsSimplexAgentRuntime {
         now: u64,
     ) -> Result<u64, RadrootsSimplexAgentRuntimeError> {
         let send_queue = self.store.primary_send_queue(connection_id)?;
-        let previous_hash = self
-            .store
-            .connection(connection_id)?
+        let connection = self.store.connection(connection_id)?;
+        if connection.staged_outbound_message.is_some() {
+            return Err(RadrootsSimplexAgentRuntimeError::Store(
+                radroots_simplex_agent_store::prelude::RadrootsSimplexAgentStoreError::PendingOutboundMessage(
+                    connection_id.into(),
+                ),
+            ));
+        }
+        let previous_hash = connection
             .delivery_cursor
             .last_sent_message_hash
             .clone()
             .unwrap_or_default();
-        let message_id = self
-            .store
-            .connection(connection_id)?
+        let message_id = connection
             .delivery_cursor
             .last_sent_message_id
             .unwrap_or(0)
@@ -305,24 +371,25 @@ impl RadrootsSimplexAgentRuntime {
                 message_id,
                 previous_message_hash: previous_hash,
             },
-            message: RadrootsSimplexAgentMessage::UserMessage(body.clone()),
+            message: RadrootsSimplexAgentMessage::UserMessage(body),
             padding: Vec::new(),
         };
         let ciphertext =
             encode_decrypted_message(&RadrootsSimplexAgentDecryptedMessage::Message(frame))?;
         let message_hash = Sha256::digest(&ciphertext).to_vec();
-        self.store
-            .record_outbound_message(connection_id, message_id, message_hash)?;
+        let prepared = self
+            .store
+            .prepare_outbound_message(connection_id, message_hash.clone())?;
+        let encrypted = self.next_encrypted_payload(connection_id, ciphertext)?;
         self.store.enqueue_command(
             connection_id,
             RadrootsSimplexAgentPendingCommandKind::SendEnvelope {
                 queue: send_queue.descriptor.queue_address(),
-                envelope: RadrootsSimplexAgentEnvelope::Message(
-                    RadrootsSimplexAgentEncryptedPayload {
-                        ratchet_header: None,
-                        ciphertext,
-                    },
-                ),
+                envelope: RadrootsSimplexAgentEnvelope::Message(encrypted),
+                delivery: Some(RadrootsSimplexAgentOutboundMessage {
+                    message_id: prepared.message_id,
+                    message_hash: prepared.message_hash,
+                }),
             },
             now,
         )?;
@@ -331,6 +398,7 @@ impl RadrootsSimplexAgentRuntime {
                 connection_id: connection_id.into(),
                 message_id,
             });
+        self.flush_store()?;
         Ok(message_id)
     }
 
@@ -355,6 +423,7 @@ impl RadrootsSimplexAgentRuntime {
             },
             now,
         )?;
+        self.flush_store()?;
         Ok(())
     }
 
@@ -374,6 +443,7 @@ impl RadrootsSimplexAgentRuntime {
                     command_id: command.id,
                 });
         }
+        self.flush_store()?;
         Ok(())
     }
 
@@ -396,6 +466,7 @@ impl RadrootsSimplexAgentRuntime {
             .push_back(RadrootsSimplexAgentRuntimeEvent::QueueRotationQueued {
                 connection_id: connection_id.into(),
             });
+        self.flush_store()?;
         Ok(())
     }
 
@@ -490,6 +561,7 @@ impl RadrootsSimplexAgentRuntime {
                 }
             }
         }
+        self.flush_store()?;
         Ok(())
     }
 
@@ -500,7 +572,8 @@ impl RadrootsSimplexAgentRuntime {
     ) -> Result<(), RadrootsSimplexAgentRuntimeError> {
         match outcome {
             RadrootsSimplexAgentCommandOutcome::Delivered => {
-                let _ = self.store.mark_command_delivered(command_id)?;
+                let command = self.store.mark_command_delivered(command_id)?;
+                self.apply_delivery_side_effects(&command)?;
             }
             RadrootsSimplexAgentCommandOutcome::RetryAt { ready_at } => {
                 let command = self.store.mark_command_retry(command_id, ready_at)?;
@@ -512,6 +585,7 @@ impl RadrootsSimplexAgentRuntime {
             }
             RadrootsSimplexAgentCommandOutcome::Failed { message } => {
                 let command = self.store.mark_command_failed(command_id)?;
+                self.apply_failure_side_effects(&command)?;
                 self.events
                     .push_back(RadrootsSimplexAgentRuntimeEvent::Error {
                         connection_id: Some(command.connection_id),
@@ -519,6 +593,20 @@ impl RadrootsSimplexAgentRuntime {
                     });
             }
         }
+        self.flush_store()?;
+        Ok(())
+    }
+
+    pub fn execute_ready_commands<T: RadrootsSimplexSmpCommandTransport>(
+        &mut self,
+        transport: &mut T,
+        now: u64,
+        limit: usize,
+    ) -> Result<(), RadrootsSimplexAgentRuntimeError> {
+        for command in self.store.take_ready_commands(now, limit) {
+            self.dispatch_ready_command(transport, &command, now)?;
+        }
+        self.flush_store()?;
         Ok(())
     }
 
@@ -536,12 +624,309 @@ impl RadrootsSimplexAgentRuntime {
             .filter_map(|_| self.events.pop_front())
             .collect::<Vec<_>>()
     }
+
+    fn dispatch_ready_command<T: RadrootsSimplexSmpCommandTransport>(
+        &mut self,
+        transport: &mut T,
+        command: &RadrootsSimplexAgentPendingCommand,
+        now: u64,
+    ) -> Result<(), RadrootsSimplexAgentRuntimeError> {
+        match &command.kind {
+            RadrootsSimplexAgentPendingCommandKind::RotateQueues { descriptors } => {
+                for descriptor in descriptors.clone() {
+                    self.store.add_queue(
+                        &command.connection_id,
+                        descriptor,
+                        RadrootsSimplexAgentQueueRole::Receive,
+                        true,
+                    )?;
+                }
+                self.record_command_outcome(
+                    command.id,
+                    RadrootsSimplexAgentCommandOutcome::Delivered,
+                )
+            }
+            RadrootsSimplexAgentPendingCommandKind::TestQueues { queues } => {
+                for queue in queues {
+                    self.store
+                        .mark_queue_tested(&command.connection_id, queue)?;
+                }
+                self.record_command_outcome(
+                    command.id,
+                    RadrootsSimplexAgentCommandOutcome::Delivered,
+                )
+            }
+            _ => {
+                let request = self.build_transport_request(command)?;
+                match transport.execute(request) {
+                    Ok(response) => self.apply_transport_response(command, response),
+                    Err(error) => {
+                        self.events
+                            .push_back(RadrootsSimplexAgentRuntimeEvent::Error {
+                                connection_id: Some(command.connection_id.clone()),
+                                message: format!(
+                                    "SimpleX transport execution failed for command `{}`: {error}",
+                                    command.id
+                                ),
+                            });
+                        self.record_command_outcome(
+                            command.id,
+                            RadrootsSimplexAgentCommandOutcome::RetryAt {
+                                ready_at: now + self.retry_delay_ms,
+                            },
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    fn build_transport_request(
+        &self,
+        command: &RadrootsSimplexAgentPendingCommand,
+    ) -> Result<RadrootsSimplexSmpTransportRequest, RadrootsSimplexAgentRuntimeError> {
+        let (queue_address, smp_command) = self.command_transport_parts(command)?;
+        let queue = self
+            .store
+            .queue_record(&command.connection_id, &queue_address)?;
+        let auth = queue.auth_state.ok_or_else(|| {
+            RadrootsSimplexAgentRuntimeError::Store(
+                radroots_simplex_agent_store::prelude::RadrootsSimplexAgentStoreError::QueueAuthStateMissing(
+                    command.connection_id.clone(),
+                ),
+            )
+        })?;
+        let correlation_id = correlation_id_for_command(command.id);
+        let scope = RadrootsSimplexSmpQueueAuthorizationScope::new(
+            auth.session_identifier.clone(),
+            correlation_id,
+            queue_address.sender_id.clone(),
+        )
+        .map_err(|error| RadrootsSimplexAgentRuntimeError::Runtime(error.to_string()))?;
+        let material = RadrootsSimplexSmpQueueAuthorizationMaterial::for_command(
+            &scope,
+            &smp_command,
+            RADROOTS_SIMPLEX_SMP_CURRENT_TRANSPORT_VERSION,
+            auth.queue_key_material.clone(),
+            auth.server_session_key.clone(),
+        )
+        .map_err(|error| RadrootsSimplexAgentRuntimeError::Runtime(error.to_string()))?;
+        Ok(RadrootsSimplexSmpTransportRequest {
+            server: queue.descriptor.queue_uri.server.clone(),
+            transport_version: RADROOTS_SIMPLEX_SMP_CURRENT_TRANSPORT_VERSION,
+            transmission:
+                radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpCommandTransmission {
+                    authorization: material.authorized_digest.to_vec(),
+                    correlation_id: Some(correlation_id),
+                    entity_id: queue_address.sender_id,
+                    command: smp_command,
+                },
+        })
+    }
+
+    fn command_transport_parts(
+        &self,
+        command: &RadrootsSimplexAgentPendingCommand,
+    ) -> Result<
+        (
+            radroots_simplex_agent_proto::prelude::RadrootsSimplexAgentQueueAddress,
+            RadrootsSimplexSmpCommand,
+        ),
+        RadrootsSimplexAgentRuntimeError,
+    > {
+        match &command.kind {
+            RadrootsSimplexAgentPendingCommandKind::CreateQueue { descriptor } => Ok((
+                descriptor.queue_address(),
+                RadrootsSimplexSmpCommand::New(RadrootsSimplexSmpNewQueueRequest {
+                    recipient_auth_public_key: descriptor.queue_uri.sender_id.as_bytes().to_vec(),
+                    recipient_dh_public_key: descriptor
+                        .queue_uri
+                        .recipient_dh_public_key
+                        .as_bytes()
+                        .to_vec(),
+                    basic_auth: None,
+                    subscription_mode: RadrootsSimplexSmpSubscriptionMode::Subscribe,
+                    queue_request_data: Some(
+                        match descriptor
+                            .queue_uri
+                            .queue_mode
+                            .unwrap_or(RadrootsSimplexSmpQueueMode::Messaging)
+                        {
+                            RadrootsSimplexSmpQueueMode::Messaging => {
+                                RadrootsSimplexSmpQueueRequestData::Messaging(None)
+                            }
+                            RadrootsSimplexSmpQueueMode::Contact => {
+                                RadrootsSimplexSmpQueueRequestData::Contact(None)
+                            }
+                        },
+                    ),
+                    notifier_credentials: None,
+                }),
+            )),
+            RadrootsSimplexAgentPendingCommandKind::SecureQueue { queue, sender_key } => Ok((
+                queue.clone(),
+                RadrootsSimplexSmpCommand::SKey(sender_key.clone().unwrap_or_default()),
+            )),
+            RadrootsSimplexAgentPendingCommandKind::SendEnvelope {
+                queue, envelope, ..
+            } => Ok((
+                queue.clone(),
+                RadrootsSimplexSmpCommand::Send(RadrootsSimplexSmpSendCommand {
+                    flags: RadrootsSimplexSmpMessageFlags::notifications_enabled(),
+                    message_body: encode_envelope(envelope)?,
+                }),
+            )),
+            RadrootsSimplexAgentPendingCommandKind::SubscribeQueue { queue } => {
+                Ok((queue.clone(), RadrootsSimplexSmpCommand::Sub))
+            }
+            RadrootsSimplexAgentPendingCommandKind::AckInboxMessage { queue, receipt } => Ok((
+                queue.clone(),
+                RadrootsSimplexSmpCommand::Ack(receipt.message_id.to_be_bytes().to_vec()),
+            )),
+            RadrootsSimplexAgentPendingCommandKind::RotateQueues { descriptors } => Ok((
+                descriptors
+                    .first()
+                    .ok_or_else(|| {
+                        RadrootsSimplexAgentRuntimeError::Runtime(
+                            "queue rotation command requires at least one descriptor".into(),
+                        )
+                    })?
+                    .queue_address(),
+                RadrootsSimplexSmpCommand::Que,
+            )),
+            RadrootsSimplexAgentPendingCommandKind::TestQueues { queues } => Ok((
+                queues.first().cloned().ok_or_else(|| {
+                    RadrootsSimplexAgentRuntimeError::Runtime(
+                        "queue test command requires at least one queue".into(),
+                    )
+                })?,
+                RadrootsSimplexSmpCommand::Ping,
+            )),
+        }
+    }
+
+    fn apply_transport_response(
+        &mut self,
+        command: &RadrootsSimplexAgentPendingCommand,
+        response: RadrootsSimplexSmpTransportResponse,
+    ) -> Result<(), RadrootsSimplexAgentRuntimeError> {
+        match response.transmission.message {
+            RadrootsSimplexSmpBrokerMessage::Err(error) => self.record_command_outcome(
+                command.id,
+                RadrootsSimplexAgentCommandOutcome::Failed {
+                    message: format!(
+                        "SimpleX broker rejected command `{}`: {:?}",
+                        command.id, error
+                    ),
+                },
+            ),
+            _ => self
+                .record_command_outcome(command.id, RadrootsSimplexAgentCommandOutcome::Delivered),
+        }
+    }
+
+    fn apply_delivery_side_effects(
+        &mut self,
+        command: &RadrootsSimplexAgentPendingCommand,
+    ) -> Result<(), RadrootsSimplexAgentRuntimeError> {
+        match &command.kind {
+            RadrootsSimplexAgentPendingCommandKind::SendEnvelope {
+                delivery: Some(delivery),
+                ..
+            } => {
+                let _ = self
+                    .store
+                    .confirm_outbound_message(&command.connection_id, delivery.message_id)?;
+            }
+            RadrootsSimplexAgentPendingCommandKind::SubscribeQueue { queue } => {
+                self.store
+                    .mark_queue_subscribed(&command.connection_id, queue)?;
+            }
+            RadrootsSimplexAgentPendingCommandKind::TestQueues { queues } => {
+                for queue in queues {
+                    self.store
+                        .mark_queue_tested(&command.connection_id, queue)?;
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn apply_failure_side_effects(
+        &mut self,
+        command: &RadrootsSimplexAgentPendingCommand,
+    ) -> Result<(), RadrootsSimplexAgentRuntimeError> {
+        if let RadrootsSimplexAgentPendingCommandKind::SendEnvelope {
+            delivery: Some(delivery),
+            ..
+        } = &command.kind
+        {
+            let _ = self
+                .store
+                .clear_staged_outbound_message(&command.connection_id, delivery.message_id)?;
+        }
+        Ok(())
+    }
+
+    fn next_encrypted_payload(
+        &mut self,
+        connection_id: &str,
+        ciphertext: Vec<u8>,
+    ) -> Result<RadrootsSimplexAgentEncryptedPayload, RadrootsSimplexAgentRuntimeError> {
+        let ratchet_header = self
+            .store
+            .connection_mut(connection_id)?
+            .ratchet_state
+            .as_mut()
+            .map(|state| {
+                state
+                    .next_outbound_header()
+                    .map_err(|error| RadrootsSimplexAgentRuntimeError::Runtime(error.to_string()))
+            })
+            .transpose()?;
+        Ok(RadrootsSimplexAgentEncryptedPayload {
+            ratchet_header,
+            ciphertext,
+        })
+    }
+
+    #[cfg(feature = "std")]
+    fn flush_store(&self) -> Result<(), RadrootsSimplexAgentRuntimeError> {
+        self.store.flush().map_err(Into::into)
+    }
+
+    #[cfg(not(feature = "std"))]
+    fn flush_store(&self) -> Result<(), RadrootsSimplexAgentRuntimeError> {
+        Ok(())
+    }
+}
+
+fn derive_material(label: &[u8], parts: &[&[u8]]) -> Vec<u8> {
+    let mut hasher = Sha256::new();
+    hasher.update(label);
+    for part in parts {
+        hasher.update((*part).len().to_be_bytes());
+        hasher.update(*part);
+    }
+    hasher.finalize().to_vec()
+}
+
+fn correlation_id_for_command(command_id: u64) -> RadrootsSimplexSmpCorrelationId {
+    let digest = derive_material(b"simplex-command-correlation", &[&command_id.to_be_bytes()]);
+    let mut correlation = [0_u8; RadrootsSimplexSmpCorrelationId::LENGTH];
+    correlation.copy_from_slice(&digest[..RadrootsSimplexSmpCorrelationId::LENGTH]);
+    RadrootsSimplexSmpCorrelationId::new(correlation)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpQueueUri;
+    use alloc::collections::VecDeque;
+    use radroots_simplex_smp_proto::prelude::{
+        RadrootsSimplexSmpBrokerTransmission, RadrootsSimplexSmpQueueIdsResponse,
+    };
+    use radroots_simplex_smp_transport::prelude::RadrootsSimplexSmpTransportBlock;
 
     fn invitation_queue() -> RadrootsSimplexSmpQueueUri {
         RadrootsSimplexSmpQueueUri::parse(
@@ -557,17 +942,74 @@ mod tests {
         .unwrap()
     }
 
+    #[derive(Default)]
+    struct ScriptedTransport {
+        responses: VecDeque<RadrootsSimplexSmpBrokerMessage>,
+        requests: Vec<RadrootsSimplexSmpTransportRequest>,
+    }
+
+    impl ScriptedTransport {
+        fn with_responses(responses: Vec<RadrootsSimplexSmpBrokerMessage>) -> Self {
+            Self {
+                responses: responses.into(),
+                requests: Vec::new(),
+            }
+        }
+    }
+
+    impl RadrootsSimplexSmpCommandTransport for ScriptedTransport {
+        type Error = String;
+
+        fn execute(
+            &mut self,
+            request: RadrootsSimplexSmpTransportRequest,
+        ) -> Result<RadrootsSimplexSmpTransportResponse, Self::Error> {
+            let block =
+                RadrootsSimplexSmpTransportBlock::from_current_command_transmissions(&[request
+                    .transmission
+                    .clone()])
+                .map_err(|error| error.to_string())?;
+            let encoded = block.encode().map_err(|error| error.to_string())?;
+            let decoded = RadrootsSimplexSmpTransportBlock::decode(&encoded)
+                .map_err(|error| error.to_string())?;
+            let decoded_transmissions = decoded
+                .decode_command_transmissions(request.transport_version)
+                .map_err(|error| error.to_string())?;
+            assert_eq!(decoded_transmissions.len(), 1);
+            assert_eq!(decoded_transmissions[0], request.transmission);
+
+            let response_message = self
+                .responses
+                .pop_front()
+                .ok_or_else(|| "missing scripted transport response".to_owned())?;
+            let response_transmission = RadrootsSimplexSmpBrokerTransmission {
+                authorization: Vec::new(),
+                correlation_id: request.transmission.correlation_id,
+                entity_id: request.transmission.entity_id.clone(),
+                message: response_message,
+            };
+            let response_block = RadrootsSimplexSmpTransportBlock::from_broker_transmissions(
+                &[response_transmission.clone()],
+                request.transport_version,
+            )
+            .map_err(|error| error.to_string())?;
+            let response_encoded = response_block.encode().map_err(|error| error.to_string())?;
+            self.requests.push(request.clone());
+            Ok(RadrootsSimplexSmpTransportResponse {
+                server: request.server,
+                transport_version: request.transport_version,
+                transmission: response_transmission,
+                transport_hash: Sha256::digest(&response_encoded).to_vec(),
+            })
+        }
+    }
+
     #[test]
-    fn create_join_allow_send_and_retry_flow() {
+    fn create_and_join_commands_execute_through_transport() {
         let mut runtime = RadrootsSimplexAgentRuntimeBuilder::new().build().unwrap();
         let created = runtime
             .create_connection(invitation_queue(), b"e2e".to_vec(), false, 10)
             .unwrap();
-        assert!(matches!(
-            runtime.drain_events(10).remove(0),
-            RadrootsSimplexAgentRuntimeEvent::InvitationReady { .. }
-        ));
-
         let invitation = runtime
             .store
             .connection(&created)
@@ -578,79 +1020,292 @@ mod tests {
         let joined = runtime
             .join_connection(invitation, reply_queue(), 20)
             .unwrap();
+
+        let mut transport = ScriptedTransport::with_responses(vec![
+            RadrootsSimplexSmpBrokerMessage::Ids(RadrootsSimplexSmpQueueIdsResponse {
+                recipient_id: b"recipient".to_vec(),
+                sender_id: b"sender".to_vec(),
+                server_dh_public_key: b"server-dh".to_vec(),
+                queue_mode: Some(RadrootsSimplexSmpQueueMode::Messaging),
+                link_id: None,
+                service_id: None,
+                server_notification_credentials: None,
+            }),
+            RadrootsSimplexSmpBrokerMessage::Ok,
+            RadrootsSimplexSmpBrokerMessage::Ok,
+            RadrootsSimplexSmpBrokerMessage::Ids(RadrootsSimplexSmpQueueIdsResponse {
+                recipient_id: b"recipient-2".to_vec(),
+                sender_id: b"sender-2".to_vec(),
+                server_dh_public_key: b"server-dh-2".to_vec(),
+                queue_mode: Some(RadrootsSimplexSmpQueueMode::Messaging),
+                link_id: None,
+                service_id: None,
+                server_notification_credentials: None,
+            }),
+            RadrootsSimplexSmpBrokerMessage::Ok,
+            RadrootsSimplexSmpBrokerMessage::Ok,
+        ]);
         runtime
-            .allow_connection(&joined, b"local-info".to_vec(), 30)
+            .execute_ready_commands(&mut transport, 30, 16)
             .unwrap();
-        runtime.subscribe_connection(&joined, 40).unwrap();
-        let message_id = runtime
-            .send_message(&joined, b"hello simplex".to_vec(), 50)
-            .unwrap();
-        assert_eq!(message_id, 1);
-        runtime
-            .ack_message(
-                &joined,
-                message_id,
-                b"hash".to_vec(),
-                b"receipt".to_vec(),
-                60,
-            )
-            .unwrap();
-        runtime.reconnect_connection(&joined, 70).unwrap();
-        let ready = runtime.retry_pending(70 + 5_000, 64);
-        assert!(!ready.is_empty());
+
+        let created_queue = runtime.store.receive_queues(&created).unwrap();
+        assert!(created_queue[0].subscribed);
+        assert_eq!(transport.requests.len(), 6);
+        assert!(matches!(
+            runtime.drain_events(16).first(),
+            Some(RadrootsSimplexAgentRuntimeEvent::InvitationReady { .. })
+        ));
+        assert_eq!(
+            runtime.store.connection(&joined).unwrap().status,
+            RadrootsSimplexAgentConnectionStatus::JoinPending
+        );
     }
 
     #[test]
-    fn handles_inbound_hello_and_receipt_events() {
+    fn delivered_send_confirms_cursor_only_after_transport_success() {
         let mut runtime = RadrootsSimplexAgentRuntimeBuilder::new().build().unwrap();
-        let connection_id = runtime
+        let created = runtime
             .create_connection(invitation_queue(), b"e2e".to_vec(), false, 10)
             .unwrap();
-        runtime.drain_events(8);
-
-        runtime
-            .handle_inbound_decrypted_message(
-                &connection_id,
-                RadrootsSimplexAgentDecryptedMessage::Message(RadrootsSimplexAgentMessageFrame {
-                    header: RadrootsSimplexAgentMessageHeader {
-                        message_id: 1,
-                        previous_message_hash: Vec::new(),
-                    },
-                    message: RadrootsSimplexAgentMessage::Hello,
-                    padding: Vec::new(),
-                }),
-                b"transport-hash".to_vec(),
-            )
+        let invitation = runtime
+            .store
+            .connection(&created)
+            .unwrap()
+            .invitation
+            .clone()
             .unwrap();
-        runtime
-            .handle_inbound_decrypted_message(
-                &connection_id,
-                RadrootsSimplexAgentDecryptedMessage::Message(RadrootsSimplexAgentMessageFrame {
-                    header: RadrootsSimplexAgentMessageHeader {
-                        message_id: 2,
-                        previous_message_hash: b"transport-hash".to_vec(),
-                    },
-                    message: RadrootsSimplexAgentMessage::Receipt(
-                        RadrootsSimplexAgentMessageReceipt {
-                            message_id: 1,
-                            message_hash: b"transport-hash".to_vec(),
-                            receipt_info: Vec::new(),
-                        },
-                    ),
-                    padding: Vec::new(),
-                }),
-                b"transport-hash-2".to_vec(),
-            )
+        let joined = runtime
+            .join_connection(invitation, reply_queue(), 20)
             .unwrap();
 
-        let events = runtime.drain_events(16);
-        assert!(events.iter().any(|event| matches!(
-            event,
-            RadrootsSimplexAgentRuntimeEvent::ConnectionEstablished { .. }
-        )));
-        assert!(events.iter().any(|event| matches!(
-            event,
-            RadrootsSimplexAgentRuntimeEvent::MessageAcknowledged { message_id: 1, .. }
-        )));
+        let mut setup_transport = ScriptedTransport::with_responses(vec![
+            RadrootsSimplexSmpBrokerMessage::Ids(RadrootsSimplexSmpQueueIdsResponse {
+                recipient_id: b"recipient".to_vec(),
+                sender_id: b"sender".to_vec(),
+                server_dh_public_key: b"server-dh".to_vec(),
+                queue_mode: Some(RadrootsSimplexSmpQueueMode::Messaging),
+                link_id: None,
+                service_id: None,
+                server_notification_credentials: None,
+            }),
+            RadrootsSimplexSmpBrokerMessage::Ok,
+            RadrootsSimplexSmpBrokerMessage::Ok,
+            RadrootsSimplexSmpBrokerMessage::Ids(RadrootsSimplexSmpQueueIdsResponse {
+                recipient_id: b"recipient-2".to_vec(),
+                sender_id: b"sender-2".to_vec(),
+                server_dh_public_key: b"server-dh-2".to_vec(),
+                queue_mode: Some(RadrootsSimplexSmpQueueMode::Messaging),
+                link_id: None,
+                service_id: None,
+                server_notification_credentials: None,
+            }),
+            RadrootsSimplexSmpBrokerMessage::Ok,
+            RadrootsSimplexSmpBrokerMessage::Ok,
+        ]);
+        runtime
+            .execute_ready_commands(&mut setup_transport, 30, 16)
+            .unwrap();
+
+        let message_id = runtime
+            .send_message(&joined, b"hello simplex".to_vec(), 40)
+            .unwrap();
+        assert_eq!(message_id, 1);
+        assert_eq!(
+            runtime
+                .store
+                .connection(&joined)
+                .unwrap()
+                .delivery_cursor
+                .last_sent_message_id,
+            None
+        );
+
+        let mut delivery_transport =
+            ScriptedTransport::with_responses(vec![RadrootsSimplexSmpBrokerMessage::Ok]);
+        runtime
+            .execute_ready_commands(&mut delivery_transport, 50, 16)
+            .unwrap();
+
+        let cursor = &runtime.store.connection(&joined).unwrap().delivery_cursor;
+        assert_eq!(cursor.last_sent_message_id, Some(1));
+        assert!(cursor.last_sent_message_hash.is_some());
+        assert_eq!(
+            runtime
+                .store
+                .connection(&joined)
+                .unwrap()
+                .staged_outbound_message,
+            None
+        );
+    }
+
+    #[test]
+    fn transport_retry_keeps_staged_outbound_message() {
+        let mut runtime = RadrootsSimplexAgentRuntimeBuilder::new().build().unwrap();
+        let created = runtime
+            .create_connection(invitation_queue(), b"e2e".to_vec(), false, 10)
+            .unwrap();
+        let invitation = runtime
+            .store
+            .connection(&created)
+            .unwrap()
+            .invitation
+            .clone()
+            .unwrap();
+        let joined = runtime
+            .join_connection(invitation, reply_queue(), 20)
+            .unwrap();
+
+        let mut setup_transport = ScriptedTransport::with_responses(vec![
+            RadrootsSimplexSmpBrokerMessage::Ids(RadrootsSimplexSmpQueueIdsResponse {
+                recipient_id: b"recipient".to_vec(),
+                sender_id: b"sender".to_vec(),
+                server_dh_public_key: b"server-dh".to_vec(),
+                queue_mode: Some(RadrootsSimplexSmpQueueMode::Messaging),
+                link_id: None,
+                service_id: None,
+                server_notification_credentials: None,
+            }),
+            RadrootsSimplexSmpBrokerMessage::Ok,
+            RadrootsSimplexSmpBrokerMessage::Ok,
+            RadrootsSimplexSmpBrokerMessage::Ids(RadrootsSimplexSmpQueueIdsResponse {
+                recipient_id: b"recipient-2".to_vec(),
+                sender_id: b"sender-2".to_vec(),
+                server_dh_public_key: b"server-dh-2".to_vec(),
+                queue_mode: Some(RadrootsSimplexSmpQueueMode::Messaging),
+                link_id: None,
+                service_id: None,
+                server_notification_credentials: None,
+            }),
+            RadrootsSimplexSmpBrokerMessage::Ok,
+            RadrootsSimplexSmpBrokerMessage::Ok,
+        ]);
+        runtime
+            .execute_ready_commands(&mut setup_transport, 30, 16)
+            .unwrap();
+
+        runtime
+            .send_message(&joined, b"hello simplex".to_vec(), 40)
+            .unwrap();
+
+        struct FailingTransport;
+        impl RadrootsSimplexSmpCommandTransport for FailingTransport {
+            type Error = String;
+            fn execute(
+                &mut self,
+                _request: RadrootsSimplexSmpTransportRequest,
+            ) -> Result<RadrootsSimplexSmpTransportResponse, Self::Error> {
+                Err("synthetic failure".to_owned())
+            }
+        }
+
+        runtime
+            .execute_ready_commands(&mut FailingTransport, 50, 16)
+            .unwrap();
+
+        assert_eq!(
+            runtime
+                .store
+                .connection(&joined)
+                .unwrap()
+                .delivery_cursor
+                .last_sent_message_id,
+            None
+        );
+        assert_eq!(
+            runtime
+                .store
+                .connection(&joined)
+                .unwrap()
+                .staged_outbound_message
+                .as_ref()
+                .map(|message| message.message_id),
+            Some(1)
+        );
+        let ready_again = runtime.retry_pending(50 + 5_000, 16);
+        assert_eq!(ready_again.len(), 1);
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn builder_opens_persistent_store_path() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path().join("runtime-store.json");
+        let mut runtime = RadrootsSimplexAgentRuntimeBuilder::new()
+            .persistent_store_path(&path)
+            .build()
+            .unwrap();
+        runtime
+            .create_connection(invitation_queue(), b"e2e".to_vec(), false, 10)
+            .unwrap();
+        assert!(path.exists());
+    }
+
+    #[test]
+    fn manual_record_command_failure_clears_staged_delivery_state() {
+        let mut runtime = RadrootsSimplexAgentRuntimeBuilder::new().build().unwrap();
+        let created = runtime
+            .create_connection(invitation_queue(), b"e2e".to_vec(), false, 10)
+            .unwrap();
+        let invitation = runtime
+            .store
+            .connection(&created)
+            .unwrap()
+            .invitation
+            .clone()
+            .unwrap();
+        let joined = runtime
+            .join_connection(invitation, reply_queue(), 20)
+            .unwrap();
+
+        let mut setup_transport = ScriptedTransport::with_responses(vec![
+            RadrootsSimplexSmpBrokerMessage::Ids(RadrootsSimplexSmpQueueIdsResponse {
+                recipient_id: b"recipient".to_vec(),
+                sender_id: b"sender".to_vec(),
+                server_dh_public_key: b"server-dh".to_vec(),
+                queue_mode: Some(RadrootsSimplexSmpQueueMode::Messaging),
+                link_id: None,
+                service_id: None,
+                server_notification_credentials: None,
+            }),
+            RadrootsSimplexSmpBrokerMessage::Ok,
+            RadrootsSimplexSmpBrokerMessage::Ok,
+            RadrootsSimplexSmpBrokerMessage::Ids(RadrootsSimplexSmpQueueIdsResponse {
+                recipient_id: b"recipient-2".to_vec(),
+                sender_id: b"sender-2".to_vec(),
+                server_dh_public_key: b"server-dh-2".to_vec(),
+                queue_mode: Some(RadrootsSimplexSmpQueueMode::Messaging),
+                link_id: None,
+                service_id: None,
+                server_notification_credentials: None,
+            }),
+            RadrootsSimplexSmpBrokerMessage::Ok,
+            RadrootsSimplexSmpBrokerMessage::Ok,
+        ]);
+        runtime
+            .execute_ready_commands(&mut setup_transport, 30, 16)
+            .unwrap();
+
+        runtime
+            .send_message(&joined, b"hello simplex".to_vec(), 40)
+            .unwrap();
+        let command = runtime.retry_pending(40, 16).remove(0);
+        runtime
+            .record_command_outcome(
+                command.id,
+                RadrootsSimplexAgentCommandOutcome::Failed {
+                    message: "synthetic failure".into(),
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            runtime
+                .store
+                .connection(&joined)
+                .unwrap()
+                .staged_outbound_message,
+            None
+        );
     }
 }

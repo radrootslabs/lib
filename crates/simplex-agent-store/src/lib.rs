@@ -10,8 +10,10 @@ pub mod prelude {
     pub use crate::error::RadrootsSimplexAgentStoreError;
     pub use crate::store::{
         RadrootsSimplexAgentConnectionRecord, RadrootsSimplexAgentDeliveryCursor,
-        RadrootsSimplexAgentPendingCommand, RadrootsSimplexAgentPendingCommandKind,
-        RadrootsSimplexAgentQueueRecord, RadrootsSimplexAgentQueueRole,
-        RadrootsSimplexAgentRecentMessageRecord, RadrootsSimplexAgentStore,
+        RadrootsSimplexAgentOutboundMessage, RadrootsSimplexAgentPendingCommand,
+        RadrootsSimplexAgentPendingCommandKind, RadrootsSimplexAgentPreparedOutboundMessage,
+        RadrootsSimplexAgentQueueAuthState, RadrootsSimplexAgentQueueRecord,
+        RadrootsSimplexAgentQueueRole, RadrootsSimplexAgentRecentMessageRecord,
+        RadrootsSimplexAgentStore,
     };
 }

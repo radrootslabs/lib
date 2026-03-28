@@ -2433,6 +2433,7 @@ dependencies = [
  "radroots-simplex-smp-proto",
  "radroots-simplex-smp-transport",
  "sha2",
+ "tempfile",
 ]
 
 [[package]]
@@ -2441,6 +2442,10 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "radroots-simplex-agent-proto",
  "radroots-simplex-smp-proto",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
 ]
 
 [[package]]

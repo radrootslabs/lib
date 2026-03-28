@@ -14,8 +14,20 @@ readme.workspace = true
 
 [features]
 default = ["std"]
-std = ["radroots-simplex-agent-proto/std", "radroots-simplex-smp-proto/std"]
+std = [
+  "radroots-simplex-agent-proto/std",
+  "radroots-simplex-smp-proto/std",
+  "serde/std",
+  "serde_json/std",
+  "sha2/std",
+]
 
 [dependencies]
 radroots-simplex-agent-proto = { workspace = true, default-features = false }
 radroots-simplex-smp-proto = { workspace = true, default-features = false }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true, default-features = false }
+
+[dev-dependencies]
+tempfile = { workspace = true }

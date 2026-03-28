@@ -30,3 +30,6 @@ radroots-simplex-smp-crypto = { workspace = true, default-features = false }
 radroots-simplex-smp-proto = { workspace = true, default-features = false }
 radroots-simplex-smp-transport = { workspace = true, default-features = false }
 sha2 = { workspace = true, default-features = false }
+
+[dev-dependencies]
+tempfile = { workspace = true }

@@ -4,11 +4,16 @@
 extern crate alloc;
 
 pub mod error;
+pub mod executor;
 pub mod frame;
 pub mod handshake;
 
 pub mod prelude {
     pub use crate::error::RadrootsSimplexSmpTransportError;
+    pub use crate::executor::{
+        RadrootsSimplexSmpCommandTransport, RadrootsSimplexSmpTransportRequest,
+        RadrootsSimplexSmpTransportResponse,
+    };
     pub use crate::frame::{
         RADROOTS_SIMPLEX_SMP_TRANSPORT_BLOCK_SIZE, RADROOTS_SIMPLEX_SMP_TRANSPORT_PAD_BYTE,
         RadrootsSimplexSmpTransportBlock, decode_padded_bytes, encode_padded_bytes,
