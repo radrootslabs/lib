@@ -1,7 +1,8 @@
 use nostr::{Event, EventBuilder, Keys, PublicKey, RelayUrl, SecretKey, Timestamp, UnsignedEvent};
 use radroots_nostr_connect::prelude::{
-    RadrootsNostrConnectError, RadrootsNostrConnectMethod, RadrootsNostrConnectPermission,
-    RadrootsNostrConnectPermissions, RadrootsNostrConnectRequest,
+    RADROOTS_NOSTR_CONNECT_PENDING_CONNECTION_ERROR, RadrootsNostrConnectError,
+    RadrootsNostrConnectMethod, RadrootsNostrConnectPendingConnectionPollOutcome,
+    RadrootsNostrConnectPermission, RadrootsNostrConnectPermissions, RadrootsNostrConnectRequest,
     RadrootsNostrConnectRequestMessage, RadrootsNostrConnectResponse,
     RadrootsNostrConnectResponseEnvelope, RadrootsNostrConnectUri,
 };
@@ -1003,5 +1004,48 @@ fn response_surface_covers_success_and_error_paths() {
             },
         ),
         Err(RadrootsNostrConnectError::InvalidResponsePayload { .. })
+    ));
+}
+
+#[test]
+fn pending_connection_poll_outcome_uses_typed_variants() {
+    assert_eq!(
+        RadrootsNostrConnectResponse::Error {
+            result: None,
+            error: RADROOTS_NOSTR_CONNECT_PENDING_CONNECTION_ERROR.to_owned(),
+        }
+        .into_pending_connection_poll_outcome(),
+        RadrootsNostrConnectPendingConnectionPollOutcome::PendingApproval
+    );
+
+    assert_eq!(
+        RadrootsNostrConnectResponse::UserPublicKey(test_public_key())
+            .into_pending_connection_poll_outcome(),
+        RadrootsNostrConnectPendingConnectionPollOutcome::Approved(test_public_key())
+    );
+
+    assert_eq!(
+        RadrootsNostrConnectResponse::Error {
+            result: Some(json!("partial")),
+            error: "rejected".to_owned(),
+        }
+        .into_pending_connection_poll_outcome(),
+        RadrootsNostrConnectPendingConnectionPollOutcome::Rejected {
+            message: "rejected".to_owned(),
+        }
+    );
+
+    assert_eq!(
+        RadrootsNostrConnectResponse::AuthUrl("https://auth.example.com/challenge".to_owned())
+            .into_pending_connection_poll_outcome(),
+        RadrootsNostrConnectPendingConnectionPollOutcome::AuthChallenge {
+            url: "https://auth.example.com/challenge".to_owned(),
+        }
+    );
+
+    assert!(matches!(
+        RadrootsNostrConnectResponse::Pong.into_pending_connection_poll_outcome(),
+        RadrootsNostrConnectPendingConnectionPollOutcome::UnexpectedResponse { response }
+            if response == "Pong"
     ));
 }

@@ -9,7 +9,8 @@ pub mod uri;
 pub mod prelude {
     pub use crate::error::RadrootsNostrConnectError;
     pub use crate::message::{
-        RADROOTS_NOSTR_CONNECT_RPC_KIND, RadrootsNostrConnectRequest,
+        RADROOTS_NOSTR_CONNECT_PENDING_CONNECTION_ERROR, RADROOTS_NOSTR_CONNECT_RPC_KIND,
+        RadrootsNostrConnectPendingConnectionPollOutcome, RadrootsNostrConnectRequest,
         RadrootsNostrConnectRequestMessage, RadrootsNostrConnectResponse,
         RadrootsNostrConnectResponseEnvelope,
     };

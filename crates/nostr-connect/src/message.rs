@@ -241,6 +241,17 @@ pub struct RadrootsNostrConnectResponseEnvelope {
     pub error: Option<String>,
 }
 
+pub const RADROOTS_NOSTR_CONNECT_PENDING_CONNECTION_ERROR: &str = "connection is pending";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RadrootsNostrConnectPendingConnectionPollOutcome {
+    PendingApproval,
+    Approved(PublicKey),
+    Rejected { message: String },
+    AuthChallenge { url: String },
+    UnexpectedResponse { response: String },
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RadrootsNostrConnectResponse {
     ConnectAcknowledged,
@@ -266,6 +277,29 @@ pub enum RadrootsNostrConnectResponse {
 }
 
 impl RadrootsNostrConnectResponse {
+    pub fn into_pending_connection_poll_outcome(
+        self,
+    ) -> RadrootsNostrConnectPendingConnectionPollOutcome {
+        match self {
+            Self::UserPublicKey(public_key) => {
+                RadrootsNostrConnectPendingConnectionPollOutcome::Approved(public_key)
+            }
+            Self::Error { result, error } => {
+                if result.is_none() && error == RADROOTS_NOSTR_CONNECT_PENDING_CONNECTION_ERROR {
+                    RadrootsNostrConnectPendingConnectionPollOutcome::PendingApproval
+                } else {
+                    RadrootsNostrConnectPendingConnectionPollOutcome::Rejected { message: error }
+                }
+            }
+            Self::AuthUrl(url) => {
+                RadrootsNostrConnectPendingConnectionPollOutcome::AuthChallenge { url }
+            }
+            other => RadrootsNostrConnectPendingConnectionPollOutcome::UnexpectedResponse {
+                response: format!("{other:?}"),
+            },
+        }
+    }
+
     pub fn into_envelope(
         self,
         id: impl Into<String>,
