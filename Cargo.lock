@@ -2426,10 +2426,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "radroots-simplex-smp-crypto"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "radroots-simplex-smp-proto",
+ "sha2",
+]
+
+[[package]]
 name = "radroots-simplex-smp-proto"
 version = "0.1.0-alpha.1"
 dependencies = [
  "base64 0.22.1",
+]
+
+[[package]]
+name = "radroots-simplex-smp-transport"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "radroots-simplex-smp-proto",
 ]
 
 [[package]]

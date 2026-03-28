@@ -1,0 +1,21 @@
+[package]
+name = "radroots-simplex-smp-crypto"
+version = "0.1.0-alpha.1"
+edition.workspace = true
+authors = [
+  "Radroots Authors",
+]
+rust-version.workspace = true
+license.workspace = true
+description = "SimpleX SMP cryptography layer for Radroots"
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+
+[features]
+default = ["std"]
+std = ["radroots-simplex-smp-proto/std", "sha2/std"]
+
+[dependencies]
+radroots-simplex-smp-proto = { workspace = true, default-features = false }
+sha2 = { workspace = true, default-features = false }
