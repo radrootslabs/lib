@@ -295,6 +295,7 @@ fn validate_base64_url(
 ) -> Result<(), RadrootsSimplexSmpProtoError> {
     base64::engine::general_purpose::URL_SAFE_NO_PAD
         .decode(value)
+        .or_else(|_| base64::engine::general_purpose::URL_SAFE.decode(value))
         .map(|_| ())
         .map_err(|_| RadrootsSimplexSmpProtoError::InvalidBase64Url {
             field,
@@ -342,6 +343,18 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn parses_padded_server_identity_and_dh_public_key() {
+        let uri = RadrootsSimplexSmpQueueUri::parse(
+            "smp://YWJjZA==@server.example/cXVldWU=#/?v=4&dh=ZGhLZXk=",
+        )
+        .unwrap();
+
+        assert_eq!(uri.server.server_identity, "YWJjZA==");
+        assert_eq!(uri.sender_id, "cXVldWU=");
+        assert_eq!(uri.recipient_dh_public_key, "ZGhLZXk=");
     }
 
     #[test]

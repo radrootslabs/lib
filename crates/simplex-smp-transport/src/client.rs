@@ -11,7 +11,7 @@ use crate::handshake::{
     RadrootsSimplexSmpTlsHandshakeEvidence, RadrootsSimplexSmpTlsPolicy, validate_tls_handshake,
 };
 use base64::Engine as _;
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::engine::general_purpose::{URL_SAFE, URL_SAFE_NO_PAD};
 use radroots_simplex_smp_crypto::prelude::{
     RadrootsSimplexSmpQueueAuthorizationMaterial, RadrootsSimplexSmpQueueAuthorizationScope,
 };
@@ -247,7 +247,8 @@ fn connect_live_session_host(
         .to_vec();
     let server_hello = read_server_hello(&mut stream)?;
     let actual_identity = matching_server_identity(&peer_certs, &server.server_identity)?;
-    let mut policy = RadrootsSimplexSmpTlsPolicy::modern(server.server_identity.clone());
+    let expected_identity = canonical_server_identity(&server.server_identity)?;
+    let mut policy = RadrootsSimplexSmpTlsPolicy::modern(expected_identity);
     policy.require_tls_unique_binding = false;
     let transport_version = validate_tls_handshake(
         &policy,
@@ -297,6 +298,7 @@ fn matching_server_identity(
     chain: &[CertificateDer<'static>],
     expected_identity: &str,
 ) -> Result<String, RadrootsSimplexSmpTransportError> {
+    let expected_identity = canonical_server_identity(expected_identity)?;
     for certificate in chain {
         let identity = server_identity_from_certificate(certificate.as_ref())?;
         if identity == expected_identity {
@@ -324,6 +326,18 @@ fn server_identity_from_certificate(
         })?;
     let digest = Sha256::digest(certificate.tbs_certificate.subject_pki.raw);
     Ok(URL_SAFE_NO_PAD.encode(digest))
+}
+
+fn canonical_server_identity(value: &str) -> Result<String, RadrootsSimplexSmpTransportError> {
+    URL_SAFE_NO_PAD
+        .decode(value)
+        .or_else(|_| URL_SAFE.decode(value))
+        .map(|decoded| URL_SAFE_NO_PAD.encode(decoded))
+        .map_err(|_| {
+            RadrootsSimplexSmpTransportError::InvalidServerAddress(format!(
+                "invalid base64url server identity `{value}`"
+            ))
+        })
 }
 
 #[derive(Debug)]
@@ -369,5 +383,16 @@ impl ServerCertVerifier for PermissiveSimplexServerVerifier {
             SignatureScheme::RSA_PKCS1_SHA256,
             SignatureScheme::RSA_PKCS1_SHA384,
         ]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::canonical_server_identity;
+
+    #[test]
+    fn canonicalizes_padded_and_unpadded_server_identity() {
+        assert_eq!(canonical_server_identity("YWJjZA").unwrap(), "YWJjZA");
+        assert_eq!(canonical_server_identity("YWJjZA==").unwrap(), "YWJjZA");
     }
 }

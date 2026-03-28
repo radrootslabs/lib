@@ -491,6 +491,27 @@ impl RadrootsSimplexAgentRuntime {
         Ok(())
     }
 
+    pub fn ack_last_received_message(
+        &mut self,
+        connection_id: &str,
+        message_id: u64,
+        receipt_info: Vec<u8>,
+        now: u64,
+    ) -> Result<(), RadrootsSimplexAgentRuntimeError> {
+        let message_hash = self
+            .store
+            .connection(connection_id)?
+            .delivery_cursor
+            .last_received_message_hash
+            .clone()
+            .ok_or_else(|| {
+                RadrootsSimplexAgentRuntimeError::Runtime(format!(
+                    "SimpleX connection `{connection_id}` has no received message hash to acknowledge"
+                ))
+            })?;
+        self.ack_message(connection_id, message_id, message_hash, receipt_info, now)
+    }
+
     pub fn reconnect_connection(
         &mut self,
         connection_id: &str,
@@ -615,13 +636,15 @@ impl RadrootsSimplexAgentRuntime {
                             },
                         );
                     }
-                    _ => {
+                    RadrootsSimplexAgentMessage::UserMessage(body) => {
                         self.events
                             .push_back(RadrootsSimplexAgentRuntimeEvent::MessageReceived {
                                 connection_id: connection_id.into(),
                                 message_id: frame.header.message_id,
+                                body,
                             });
                     }
+                    _ => {}
                 }
             }
         }
