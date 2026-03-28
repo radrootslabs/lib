@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 
+use core::cmp::Ordering;
+
 #[cfg(not(feature = "std"))]
 use alloc::{collections::BTreeMap, format, string::String, vec::Vec};
 #[cfg(feature = "std")]
@@ -172,6 +174,222 @@ pub struct RadrootsTradeOrderWorkflowMessage {
     pub payload: TradeListingMessagePayload,
 }
 
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RadrootsTradeSortDirection {
+    Asc,
+    Desc,
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RadrootsTradeListingMarketStatus {
+    Unknown,
+    Window,
+    Active,
+    Sold,
+    Other { value: String },
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RadrootsTradeListingQuery {
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
+    pub seller_pubkey: Option<String>,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
+    pub farm_pubkey: Option<String>,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
+    pub farm_id: Option<String>,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
+    pub product_key: Option<String>,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
+    pub product_category: Option<String>,
+    #[cfg_attr(
+        feature = "ts-rs",
+        ts(optional, type = "RadrootsTradeListingMarketStatus | null")
+    )]
+    pub listing_status: Option<RadrootsTradeListingMarketStatus>,
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RadrootsTradeListingSortField {
+    ListingAddr,
+    ProductTitle,
+    ProductCategory,
+    SellerPubkey,
+    InventoryAvailable,
+    OpenOrderCount,
+    TotalOrderCount,
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RadrootsTradeListingSort {
+    pub field: RadrootsTradeListingSortField,
+    pub direction: RadrootsTradeSortDirection,
+}
+
+impl Default for RadrootsTradeListingSort {
+    fn default() -> Self {
+        Self {
+            field: RadrootsTradeListingSortField::ListingAddr,
+            direction: RadrootsTradeSortDirection::Asc,
+        }
+    }
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RadrootsTradeOrderQuery {
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
+    pub listing_addr: Option<String>,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
+    pub buyer_pubkey: Option<String>,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
+    pub seller_pubkey: Option<String>,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "TradeOrderStatus | null"))]
+    pub status: Option<TradeOrderStatus>,
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RadrootsTradeOrderSortField {
+    OrderId,
+    ListingAddr,
+    BuyerPubkey,
+    SellerPubkey,
+    Status,
+    LastMessageType,
+    TotalBinCount,
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RadrootsTradeOrderSort {
+    pub field: RadrootsTradeOrderSortField,
+    pub direction: RadrootsTradeSortDirection,
+}
+
+impl Default for RadrootsTradeOrderSort {
+    fn default() -> Self {
+        Self {
+            field: RadrootsTradeOrderSortField::OrderId,
+            direction: RadrootsTradeSortDirection::Asc,
+        }
+    }
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsTradeFacetCount {
+    pub key: String,
+    pub count: u32,
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsTradeListingFacets {
+    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsTradeFacetCount[]"))]
+    pub seller_pubkeys: Vec<RadrootsTradeFacetCount>,
+    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsTradeFacetCount[]"))]
+    pub farm_pubkeys: Vec<RadrootsTradeFacetCount>,
+    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsTradeFacetCount[]"))]
+    pub farm_ids: Vec<RadrootsTradeFacetCount>,
+    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsTradeFacetCount[]"))]
+    pub product_keys: Vec<RadrootsTradeFacetCount>,
+    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsTradeFacetCount[]"))]
+    pub product_categories: Vec<RadrootsTradeFacetCount>,
+    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsTradeFacetCount[]"))]
+    pub listing_statuses: Vec<RadrootsTradeFacetCount>,
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsTradeOrderFacets {
+    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsTradeFacetCount[]"))]
+    pub buyer_pubkeys: Vec<RadrootsTradeFacetCount>,
+    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsTradeFacetCount[]"))]
+    pub seller_pubkeys: Vec<RadrootsTradeFacetCount>,
+    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsTradeFacetCount[]"))]
+    pub listing_addrs: Vec<RadrootsTradeFacetCount>,
+    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsTradeFacetCount[]"))]
+    pub statuses: Vec<RadrootsTradeFacetCount>,
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsTradeMarketplaceListingSummary {
+    pub listing_addr: String,
+    pub seller_pubkey: String,
+    pub farm_pubkey: String,
+    pub farm_id: String,
+    pub product_key: String,
+    pub product_title: String,
+    pub product_category: String,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
+    pub product_summary: Option<String>,
+    pub listing_status: RadrootsTradeListingMarketStatus,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
+    pub location_primary: Option<String>,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "RadrootsCoreDecimal | null"))]
+    pub inventory_available: Option<RadrootsCoreDecimal>,
+    pub primary_bin_id: String,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
+    pub primary_bin_label: Option<String>,
+    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsTradeListingTotal"))]
+    pub primary_bin_total: RadrootsTradeListingTotal,
+    pub order_count: u32,
+    pub open_order_count: u32,
+    pub terminal_order_count: u32,
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsTradeMarketplaceOrderSummary {
+    pub order_id: String,
+    pub listing_addr: String,
+    pub buyer_pubkey: String,
+    pub seller_pubkey: String,
+    pub status: TradeOrderStatus,
+    pub last_message_type: TradeListingMessageType,
+    pub item_count: u32,
+    pub total_bin_count: u32,
+    pub has_requested_discounts: bool,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
+    pub last_reason: Option<String>,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct RadrootsTradeReadIndex {
     listings: BTreeMap<String, RadrootsTradeListingProjection>,
@@ -261,6 +479,60 @@ impl std::error::Error for RadrootsTradeProjectionError {
 }
 
 impl RadrootsTradeListingProjection {
+    pub fn market_status(&self) -> RadrootsTradeListingMarketStatus {
+        match &self.availability {
+            Some(RadrootsListingAvailability::Status { status }) => match status {
+                radroots_events::listing::RadrootsListingStatus::Active => {
+                    RadrootsTradeListingMarketStatus::Active
+                }
+                radroots_events::listing::RadrootsListingStatus::Sold => {
+                    RadrootsTradeListingMarketStatus::Sold
+                }
+                radroots_events::listing::RadrootsListingStatus::Other { value } => {
+                    RadrootsTradeListingMarketStatus::Other {
+                        value: value.clone(),
+                    }
+                }
+            },
+            Some(RadrootsListingAvailability::Window { .. }) => {
+                RadrootsTradeListingMarketStatus::Window
+            }
+            None => RadrootsTradeListingMarketStatus::Unknown,
+        }
+    }
+
+    pub fn primary_bin(&self) -> Option<&RadrootsTradeListingBinProjection> {
+        self.bins
+            .iter()
+            .find(|bin| bin.bin.bin_id == self.primary_bin_id)
+    }
+
+    pub fn marketplace_summary(&self) -> Option<RadrootsTradeMarketplaceListingSummary> {
+        let primary_bin = self.primary_bin()?;
+        Some(RadrootsTradeMarketplaceListingSummary {
+            listing_addr: self.listing_addr.clone(),
+            seller_pubkey: self.seller_pubkey.clone(),
+            farm_pubkey: self.farm.pubkey.clone(),
+            farm_id: self.farm.d_tag.clone(),
+            product_key: self.product.key.clone(),
+            product_title: self.product.title.clone(),
+            product_category: self.product.category.clone(),
+            product_summary: self.product.summary.clone(),
+            listing_status: self.market_status(),
+            location_primary: self
+                .location
+                .as_ref()
+                .map(|location| location.primary.clone()),
+            inventory_available: self.inventory_available.clone(),
+            primary_bin_id: self.primary_bin_id.clone(),
+            primary_bin_label: primary_bin.bin.display_label.clone(),
+            primary_bin_total: primary_bin.one_bin_total.clone(),
+            order_count: self.order_count,
+            open_order_count: self.open_order_count,
+            terminal_order_count: self.terminal_order_count,
+        })
+    }
+
     pub fn from_listing_event(
         event: &RadrootsNostrEvent,
     ) -> Result<Self, RadrootsTradeProjectionError> {
@@ -323,6 +595,34 @@ impl RadrootsTradeListingProjection {
 impl RadrootsTradeOrderWorkflowProjection {
     pub fn is_terminal(&self) -> bool {
         radroots_trade_order_status_is_terminal(&self.status)
+    }
+
+    pub fn item_count(&self) -> u32 {
+        u32::try_from(self.items.len()).unwrap_or(u32::MAX)
+    }
+
+    pub fn total_bin_count(&self) -> u32 {
+        self.items
+            .iter()
+            .fold(0u32, |total, item| total.saturating_add(item.bin_count))
+    }
+
+    pub fn marketplace_summary(&self) -> RadrootsTradeMarketplaceOrderSummary {
+        RadrootsTradeMarketplaceOrderSummary {
+            order_id: self.order_id.clone(),
+            listing_addr: self.listing_addr.clone(),
+            buyer_pubkey: self.buyer_pubkey.clone(),
+            seller_pubkey: self.seller_pubkey.clone(),
+            status: self.status.clone(),
+            last_message_type: self.last_message_type,
+            item_count: self.item_count(),
+            total_bin_count: self.total_bin_count(),
+            has_requested_discounts: self
+                .requested_discounts
+                .as_ref()
+                .is_some_and(|discounts| !discounts.is_empty()),
+            last_reason: self.last_reason.clone(),
+        }
     }
 
     fn from_order_request(order: &TradeOrder) -> Self {
@@ -428,6 +728,112 @@ impl RadrootsTradeReadIndex {
 
     pub fn order(&self, order_id: &str) -> Option<&RadrootsTradeOrderWorkflowProjection> {
         self.orders.get(order_id)
+    }
+
+    pub fn query_listings<'a>(
+        &'a self,
+        query: &RadrootsTradeListingQuery,
+        sort: RadrootsTradeListingSort,
+    ) -> Vec<&'a RadrootsTradeListingProjection> {
+        let mut listings = self
+            .listings
+            .values()
+            .filter(|listing| listing_matches_query(listing, query))
+            .collect::<Vec<_>>();
+        listings.sort_by(|left, right| compare_listings(left, right, sort));
+        listings
+    }
+
+    pub fn query_orders<'a>(
+        &'a self,
+        query: &RadrootsTradeOrderQuery,
+        sort: RadrootsTradeOrderSort,
+    ) -> Vec<&'a RadrootsTradeOrderWorkflowProjection> {
+        let mut orders = self
+            .orders
+            .values()
+            .filter(|order| order_matches_query(order, query))
+            .collect::<Vec<_>>();
+        orders.sort_by(|left, right| compare_orders(left, right, sort));
+        orders
+    }
+
+    pub fn listing_facets(&self, query: &RadrootsTradeListingQuery) -> RadrootsTradeListingFacets {
+        let mut seller_pubkeys = BTreeMap::<String, u32>::new();
+        let mut farm_pubkeys = BTreeMap::<String, u32>::new();
+        let mut farm_ids = BTreeMap::<String, u32>::new();
+        let mut product_keys = BTreeMap::<String, u32>::new();
+        let mut product_categories = BTreeMap::<String, u32>::new();
+        let mut listing_statuses = BTreeMap::<String, u32>::new();
+
+        for listing in self
+            .listings
+            .values()
+            .filter(|listing| listing_matches_query(listing, query))
+        {
+            increment_count(&mut seller_pubkeys, listing.seller_pubkey.clone());
+            increment_count(&mut farm_pubkeys, listing.farm.pubkey.clone());
+            increment_count(&mut farm_ids, listing.farm.d_tag.clone());
+            increment_count(&mut product_keys, listing.product.key.clone());
+            increment_count(&mut product_categories, listing.product.category.clone());
+            increment_count(&mut listing_statuses, listing.market_status().facet_key());
+        }
+
+        RadrootsTradeListingFacets {
+            seller_pubkeys: facet_counts_from_map(seller_pubkeys),
+            farm_pubkeys: facet_counts_from_map(farm_pubkeys),
+            farm_ids: facet_counts_from_map(farm_ids),
+            product_keys: facet_counts_from_map(product_keys),
+            product_categories: facet_counts_from_map(product_categories),
+            listing_statuses: facet_counts_from_map(listing_statuses),
+        }
+    }
+
+    pub fn order_facets(&self, query: &RadrootsTradeOrderQuery) -> RadrootsTradeOrderFacets {
+        let mut buyer_pubkeys = BTreeMap::<String, u32>::new();
+        let mut seller_pubkeys = BTreeMap::<String, u32>::new();
+        let mut listing_addrs = BTreeMap::<String, u32>::new();
+        let mut statuses = BTreeMap::<String, u32>::new();
+
+        for order in self
+            .orders
+            .values()
+            .filter(|order| order_matches_query(order, query))
+        {
+            increment_count(&mut buyer_pubkeys, order.buyer_pubkey.clone());
+            increment_count(&mut seller_pubkeys, order.seller_pubkey.clone());
+            increment_count(&mut listing_addrs, order.listing_addr.clone());
+            increment_count(&mut statuses, order_status_key(&order.status));
+        }
+
+        RadrootsTradeOrderFacets {
+            buyer_pubkeys: facet_counts_from_map(buyer_pubkeys),
+            seller_pubkeys: facet_counts_from_map(seller_pubkeys),
+            listing_addrs: facet_counts_from_map(listing_addrs),
+            statuses: facet_counts_from_map(statuses),
+        }
+    }
+
+    pub fn marketplace_listing_summaries(
+        &self,
+        query: &RadrootsTradeListingQuery,
+        sort: RadrootsTradeListingSort,
+    ) -> Vec<RadrootsTradeMarketplaceListingSummary> {
+        self.query_listings(query, sort)
+            .into_iter()
+            .filter_map(|listing| listing.marketplace_summary())
+            .collect()
+    }
+
+    pub fn marketplace_order_summaries(
+        &self,
+        query: &RadrootsTradeOrderQuery,
+        sort: RadrootsTradeOrderSort,
+    ) -> Vec<RadrootsTradeMarketplaceOrderSummary> {
+        self.query_orders(query, sort)
+            .into_iter()
+            .map(RadrootsTradeOrderWorkflowProjection::marketplace_summary)
+            .collect()
     }
 
     pub fn upsert_listing(
@@ -952,10 +1358,253 @@ fn trade_discount_decision_value(
     }
 }
 
+impl RadrootsTradeListingMarketStatus {
+    fn facet_key(&self) -> String {
+        match self {
+            Self::Unknown => "unknown".into(),
+            Self::Window => "window".into(),
+            Self::Active => "active".into(),
+            Self::Sold => "sold".into(),
+            Self::Other { value } => value.clone(),
+        }
+    }
+}
+
+fn order_status_key(status: &TradeOrderStatus) -> String {
+    match status {
+        TradeOrderStatus::Draft => "draft".into(),
+        TradeOrderStatus::Validated => "validated".into(),
+        TradeOrderStatus::Requested => "requested".into(),
+        TradeOrderStatus::Questioned => "questioned".into(),
+        TradeOrderStatus::Revised => "revised".into(),
+        TradeOrderStatus::Accepted => "accepted".into(),
+        TradeOrderStatus::Declined => "declined".into(),
+        TradeOrderStatus::Cancelled => "cancelled".into(),
+        TradeOrderStatus::Fulfilled => "fulfilled".into(),
+        TradeOrderStatus::Completed => "completed".into(),
+    }
+}
+
+fn message_type_key(message_type: TradeListingMessageType) -> &'static str {
+    match message_type {
+        TradeListingMessageType::ListingValidateRequest => "listing_validate_request",
+        TradeListingMessageType::ListingValidateResult => "listing_validate_result",
+        TradeListingMessageType::OrderRequest => "order_request",
+        TradeListingMessageType::OrderResponse => "order_response",
+        TradeListingMessageType::OrderRevision => "order_revision",
+        TradeListingMessageType::OrderRevisionAccept => "order_revision_accept",
+        TradeListingMessageType::OrderRevisionDecline => "order_revision_decline",
+        TradeListingMessageType::Question => "question",
+        TradeListingMessageType::Answer => "answer",
+        TradeListingMessageType::DiscountRequest => "discount_request",
+        TradeListingMessageType::DiscountOffer => "discount_offer",
+        TradeListingMessageType::DiscountAccept => "discount_accept",
+        TradeListingMessageType::DiscountDecline => "discount_decline",
+        TradeListingMessageType::Cancel => "cancel",
+        TradeListingMessageType::FulfillmentUpdate => "fulfillment_update",
+        TradeListingMessageType::Receipt => "receipt",
+    }
+}
+
+fn compare_direction(ordering: Ordering, direction: RadrootsTradeSortDirection) -> Ordering {
+    match direction {
+        RadrootsTradeSortDirection::Asc => ordering,
+        RadrootsTradeSortDirection::Desc => ordering.reverse(),
+    }
+}
+
+fn compare_option_decimal(
+    left: &Option<RadrootsCoreDecimal>,
+    right: &Option<RadrootsCoreDecimal>,
+) -> Ordering {
+    match (left, right) {
+        (Some(left), Some(right)) => left.partial_cmp(right).unwrap_or(Ordering::Equal),
+        (Some(_), None) => Ordering::Less,
+        (None, Some(_)) => Ordering::Greater,
+        (None, None) => Ordering::Equal,
+    }
+}
+
+fn compare_listings(
+    left: &RadrootsTradeListingProjection,
+    right: &RadrootsTradeListingProjection,
+    sort: RadrootsTradeListingSort,
+) -> Ordering {
+    let ordering = match sort.field {
+        RadrootsTradeListingSortField::ListingAddr => left.listing_addr.cmp(&right.listing_addr),
+        RadrootsTradeListingSortField::ProductTitle => left
+            .product
+            .title
+            .cmp(&right.product.title)
+            .then_with(|| left.listing_addr.cmp(&right.listing_addr)),
+        RadrootsTradeListingSortField::ProductCategory => left
+            .product
+            .category
+            .cmp(&right.product.category)
+            .then_with(|| left.listing_addr.cmp(&right.listing_addr)),
+        RadrootsTradeListingSortField::SellerPubkey => left
+            .seller_pubkey
+            .cmp(&right.seller_pubkey)
+            .then_with(|| left.listing_addr.cmp(&right.listing_addr)),
+        RadrootsTradeListingSortField::InventoryAvailable => {
+            compare_option_decimal(&left.inventory_available, &right.inventory_available)
+                .then_with(|| left.listing_addr.cmp(&right.listing_addr))
+        }
+        RadrootsTradeListingSortField::OpenOrderCount => left
+            .open_order_count
+            .cmp(&right.open_order_count)
+            .then_with(|| left.listing_addr.cmp(&right.listing_addr)),
+        RadrootsTradeListingSortField::TotalOrderCount => left
+            .order_count
+            .cmp(&right.order_count)
+            .then_with(|| left.listing_addr.cmp(&right.listing_addr)),
+    };
+    compare_direction(ordering, sort.direction)
+}
+
+fn compare_orders(
+    left: &RadrootsTradeOrderWorkflowProjection,
+    right: &RadrootsTradeOrderWorkflowProjection,
+    sort: RadrootsTradeOrderSort,
+) -> Ordering {
+    let ordering = match sort.field {
+        RadrootsTradeOrderSortField::OrderId => left.order_id.cmp(&right.order_id),
+        RadrootsTradeOrderSortField::ListingAddr => left
+            .listing_addr
+            .cmp(&right.listing_addr)
+            .then_with(|| left.order_id.cmp(&right.order_id)),
+        RadrootsTradeOrderSortField::BuyerPubkey => left
+            .buyer_pubkey
+            .cmp(&right.buyer_pubkey)
+            .then_with(|| left.order_id.cmp(&right.order_id)),
+        RadrootsTradeOrderSortField::SellerPubkey => left
+            .seller_pubkey
+            .cmp(&right.seller_pubkey)
+            .then_with(|| left.order_id.cmp(&right.order_id)),
+        RadrootsTradeOrderSortField::Status => order_status_key(&left.status)
+            .cmp(&order_status_key(&right.status))
+            .then_with(|| left.order_id.cmp(&right.order_id)),
+        RadrootsTradeOrderSortField::LastMessageType => message_type_key(left.last_message_type)
+            .cmp(message_type_key(right.last_message_type))
+            .then_with(|| left.order_id.cmp(&right.order_id)),
+        RadrootsTradeOrderSortField::TotalBinCount => left
+            .total_bin_count()
+            .cmp(&right.total_bin_count())
+            .then_with(|| left.order_id.cmp(&right.order_id)),
+    };
+    compare_direction(ordering, sort.direction)
+}
+
+fn listing_matches_query(
+    listing: &RadrootsTradeListingProjection,
+    query: &RadrootsTradeListingQuery,
+) -> bool {
+    if query
+        .seller_pubkey
+        .as_deref()
+        .is_some_and(|value| value != listing.seller_pubkey)
+    {
+        return false;
+    }
+    if query
+        .farm_pubkey
+        .as_deref()
+        .is_some_and(|value| value != listing.farm.pubkey)
+    {
+        return false;
+    }
+    if query
+        .farm_id
+        .as_deref()
+        .is_some_and(|value| value != listing.farm.d_tag)
+    {
+        return false;
+    }
+    if query
+        .product_key
+        .as_deref()
+        .is_some_and(|value| value != listing.product.key)
+    {
+        return false;
+    }
+    if query
+        .product_category
+        .as_deref()
+        .is_some_and(|value| value != listing.product.category)
+    {
+        return false;
+    }
+    if query
+        .listing_status
+        .as_ref()
+        .is_some_and(|value| value != &listing.market_status())
+    {
+        return false;
+    }
+    true
+}
+
+fn order_matches_query(
+    order: &RadrootsTradeOrderWorkflowProjection,
+    query: &RadrootsTradeOrderQuery,
+) -> bool {
+    if query
+        .listing_addr
+        .as_deref()
+        .is_some_and(|value| value != order.listing_addr)
+    {
+        return false;
+    }
+    if query
+        .buyer_pubkey
+        .as_deref()
+        .is_some_and(|value| value != order.buyer_pubkey)
+    {
+        return false;
+    }
+    if query
+        .seller_pubkey
+        .as_deref()
+        .is_some_and(|value| value != order.seller_pubkey)
+    {
+        return false;
+    }
+    if query
+        .status
+        .as_ref()
+        .is_some_and(|value| value != &order.status)
+    {
+        return false;
+    }
+    true
+}
+
+fn increment_count(counts: &mut BTreeMap<String, u32>, key: String) {
+    let count = counts.entry(key).or_insert(0);
+    *count = count.saturating_add(1);
+}
+
+fn facet_counts_from_map(counts: BTreeMap<String, u32>) -> Vec<RadrootsTradeFacetCount> {
+    let mut values = counts
+        .into_iter()
+        .map(|(key, count)| RadrootsTradeFacetCount { key, count })
+        .collect::<Vec<_>>();
+    values.sort_by(|left, right| {
+        right
+            .count
+            .cmp(&left.count)
+            .then_with(|| left.key.cmp(&right.key))
+    });
+    values
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        RadrootsTradeOrderWorkflowMessage, RadrootsTradeProjectionError, RadrootsTradeReadIndex,
+        RadrootsTradeListingMarketStatus, RadrootsTradeListingQuery, RadrootsTradeListingSort,
+        RadrootsTradeListingSortField, RadrootsTradeOrderQuery, RadrootsTradeOrderSort,
+        RadrootsTradeOrderSortField, RadrootsTradeOrderWorkflowMessage,
+        RadrootsTradeProjectionError, RadrootsTradeReadIndex, RadrootsTradeSortDirection,
         radroots_trade_order_status_can_transition, radroots_trade_order_status_is_terminal,
     };
     use crate::listing::{
@@ -1084,6 +1733,94 @@ mod tests {
                 RadrootsCorePercent::new(RadrootsCoreDecimal::from(10u32)),
             )]),
             notes: Some("deliver friday".into()),
+            status: TradeOrderStatus::Draft,
+        }
+    }
+
+    fn alternate_listing() -> RadrootsListing {
+        RadrootsListing {
+            d_tag: "AAAAAAAAAAAAAAAAAAAAAw".into(),
+            farm: RadrootsListingFarmRef {
+                pubkey: "farm-pubkey-2".into(),
+                d_tag: "AAAAAAAAAAAAAAAAAAAABA".into(),
+            },
+            product: RadrootsListingProduct {
+                key: "greens".into(),
+                title: "Greens".into(),
+                category: "vegetables".into(),
+                summary: Some("washed bunches".into()),
+                process: None,
+                lot: None,
+                location: None,
+                profile: None,
+                year: None,
+            },
+            primary_bin_id: "bin-1".into(),
+            bins: vec![RadrootsListingBin {
+                bin_id: "bin-1".into(),
+                quantity: RadrootsCoreQuantity::new(
+                    RadrootsCoreDecimal::from(500u32),
+                    RadrootsCoreUnit::MassG,
+                ),
+                price_per_canonical_unit: RadrootsCoreQuantityPrice::new(
+                    RadrootsCoreMoney::new(
+                        RadrootsCoreDecimal::from(4u32),
+                        RadrootsCoreCurrency::USD,
+                    ),
+                    RadrootsCoreQuantity::new(
+                        RadrootsCoreDecimal::from(1u32),
+                        RadrootsCoreUnit::MassG,
+                    ),
+                ),
+                display_amount: None,
+                display_unit: None,
+                display_label: Some("500g bunch".into()),
+                display_price: Some(RadrootsCoreMoney::new(
+                    RadrootsCoreDecimal::from(2000u32),
+                    RadrootsCoreCurrency::USD,
+                )),
+                display_price_unit: Some(RadrootsCoreUnit::Each),
+            }],
+            resource_area: None,
+            plot: None,
+            discounts: None,
+            inventory_available: Some(RadrootsCoreDecimal::from(4u32)),
+            availability: Some(RadrootsListingAvailability::Window {
+                start: Some(1_700_000_000),
+                end: Some(1_800_000_000),
+            }),
+            delivery_method: Some(RadrootsListingDeliveryMethod::Shipping),
+            location: Some(RadrootsListingLocation {
+                primary: "warehouse".into(),
+                city: Some("Louisville".into()),
+                region: Some("KY".into()),
+                country: Some("US".into()),
+                lat: None,
+                lng: None,
+                geohash: None,
+            }),
+            images: None,
+        }
+    }
+
+    fn alternate_order() -> TradeOrder {
+        TradeOrder {
+            order_id: "order-2".into(),
+            listing_addr: "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAw".into(),
+            buyer_pubkey: "buyer-pubkey-2".into(),
+            seller_pubkey: "seller-pubkey".into(),
+            items: vec![
+                TradeOrderItem {
+                    bin_id: "bin-1".into(),
+                    bin_count: 3,
+                },
+                TradeOrderItem {
+                    bin_id: "bin-2".into(),
+                    bin_count: 1,
+                },
+            ],
+            discounts: None,
+            notes: Some("expedite".into()),
             status: TradeOrderStatus::Draft,
         }
     }
@@ -1521,6 +2258,236 @@ mod tests {
             RadrootsTradeProjectionError::InvalidWorkflowEvent {
                 error: TradeListingEnvelopeParseError::ListingAddrTagMismatch,
             }
+        );
+    }
+
+    #[test]
+    fn listing_query_helpers_filter_sort_and_facet_marketplace_views() {
+        let mut index = RadrootsTradeReadIndex::new();
+        index
+            .upsert_listing("seller-pubkey", &base_listing())
+            .expect("base listing");
+        index
+            .upsert_listing("seller-pubkey", &alternate_listing())
+            .expect("alternate listing");
+
+        index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-1"),
+                TradeListingMessagePayload::OrderRequest(base_order()),
+            ))
+            .expect("open order");
+        index
+            .apply_workflow_message(&message(
+                "buyer-pubkey-2",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAw",
+                Some("order-2"),
+                TradeListingMessagePayload::OrderRequest(alternate_order()),
+            ))
+            .expect("second order request");
+        index
+            .apply_workflow_message(&message(
+                "seller-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAw",
+                Some("order-2"),
+                TradeListingMessagePayload::OrderResponse(TradeOrderResponse {
+                    accepted: true,
+                    reason: None,
+                }),
+            ))
+            .expect("order accepted");
+        index
+            .apply_workflow_message(&message(
+                "seller-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAw",
+                Some("order-2"),
+                TradeListingMessagePayload::FulfillmentUpdate(TradeFulfillmentUpdate {
+                    status: TradeFulfillmentStatus::Delivered,
+                    tracking: None,
+                    eta: None,
+                    notes: Some("shipped".into()),
+                }),
+            ))
+            .expect("order fulfilled");
+        index
+            .apply_workflow_message(&message(
+                "buyer-pubkey-2",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAw",
+                Some("order-2"),
+                TradeListingMessagePayload::Receipt(TradeReceipt {
+                    acknowledged: true,
+                    at: 1_700_000_010,
+                    note: Some("received".into()),
+                }),
+            ))
+            .expect("order receipt");
+
+        let coffee_query = RadrootsTradeListingQuery {
+            product_category: Some("coffee".into()),
+            ..Default::default()
+        };
+        let coffee_results = index.query_listings(
+            &coffee_query,
+            RadrootsTradeListingSort {
+                field: RadrootsTradeListingSortField::ProductTitle,
+                direction: RadrootsTradeSortDirection::Asc,
+            },
+        );
+        assert_eq!(coffee_results.len(), 1);
+        assert_eq!(coffee_results[0].listing_id, "AAAAAAAAAAAAAAAAAAAAAg");
+
+        let listing_summaries = index.marketplace_listing_summaries(
+            &RadrootsTradeListingQuery::default(),
+            RadrootsTradeListingSort {
+                field: RadrootsTradeListingSortField::OpenOrderCount,
+                direction: RadrootsTradeSortDirection::Desc,
+            },
+        );
+        assert_eq!(listing_summaries.len(), 2);
+        assert_eq!(listing_summaries[0].listing_addr, base_order().listing_addr);
+        assert_eq!(listing_summaries[0].open_order_count, 1);
+        assert_eq!(
+            listing_summaries[0].primary_bin_label.as_deref(),
+            Some("1kg bag")
+        );
+        assert_eq!(
+            listing_summaries[1].listing_status,
+            RadrootsTradeListingMarketStatus::Window
+        );
+        assert_eq!(
+            listing_summaries[1].location_primary.as_deref(),
+            Some("warehouse")
+        );
+
+        let facets = index.listing_facets(&RadrootsTradeListingQuery::default());
+        assert_eq!(facets.farm_pubkeys.len(), 2);
+        assert_eq!(facets.product_categories.len(), 2);
+        assert_eq!(
+            facets
+                .listing_statuses
+                .iter()
+                .map(|facet| (facet.key.as_str(), facet.count))
+                .collect::<Vec<_>>(),
+            vec![("active", 1), ("window", 1)]
+        );
+    }
+
+    #[test]
+    fn order_query_helpers_filter_sort_and_facet_marketplace_views() {
+        let mut index = RadrootsTradeReadIndex::new();
+        index
+            .upsert_listing("seller-pubkey", &base_listing())
+            .expect("base listing");
+        index
+            .upsert_listing("seller-pubkey", &alternate_listing())
+            .expect("alternate listing");
+
+        index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-1"),
+                TradeListingMessagePayload::OrderRequest(base_order()),
+            ))
+            .expect("first order");
+        index
+            .apply_workflow_message(&message(
+                "buyer-pubkey-2",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAw",
+                Some("order-2"),
+                TradeListingMessagePayload::OrderRequest(alternate_order()),
+            ))
+            .expect("second order");
+        index
+            .apply_workflow_message(&message(
+                "seller-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAw",
+                Some("order-2"),
+                TradeListingMessagePayload::OrderResponse(TradeOrderResponse {
+                    accepted: true,
+                    reason: Some("approved".into()),
+                }),
+            ))
+            .expect("accepted");
+        index
+            .apply_workflow_message(&message(
+                "seller-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAw",
+                Some("order-2"),
+                TradeListingMessagePayload::FulfillmentUpdate(TradeFulfillmentUpdate {
+                    status: TradeFulfillmentStatus::Delivered,
+                    tracking: Some("track-2".into()),
+                    eta: None,
+                    notes: Some("in transit".into()),
+                }),
+            ))
+            .expect("fulfilled");
+        index
+            .apply_workflow_message(&message(
+                "buyer-pubkey-2",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAw",
+                Some("order-2"),
+                TradeListingMessagePayload::Receipt(TradeReceipt {
+                    acknowledged: true,
+                    at: 1_700_000_020,
+                    note: Some("all good".into()),
+                }),
+            ))
+            .expect("completed");
+
+        let completed_query = RadrootsTradeOrderQuery {
+            seller_pubkey: Some("seller-pubkey".into()),
+            status: Some(TradeOrderStatus::Completed),
+            ..Default::default()
+        };
+        let completed_orders = index.query_orders(
+            &completed_query,
+            RadrootsTradeOrderSort {
+                field: RadrootsTradeOrderSortField::TotalBinCount,
+                direction: RadrootsTradeSortDirection::Desc,
+            },
+        );
+        assert_eq!(completed_orders.len(), 1);
+        assert_eq!(completed_orders[0].order_id, "order-2");
+        assert_eq!(completed_orders[0].total_bin_count(), 4);
+
+        let summaries = index.marketplace_order_summaries(
+            &RadrootsTradeOrderQuery {
+                seller_pubkey: Some("seller-pubkey".into()),
+                ..Default::default()
+            },
+            RadrootsTradeOrderSort {
+                field: RadrootsTradeOrderSortField::TotalBinCount,
+                direction: RadrootsTradeSortDirection::Desc,
+            },
+        );
+        assert_eq!(summaries.len(), 2);
+        assert_eq!(summaries[0].order_id, "order-2");
+        assert_eq!(summaries[0].item_count, 2);
+        assert_eq!(summaries[0].total_bin_count, 4);
+        assert!(!summaries[0].has_requested_discounts);
+        assert_eq!(summaries[0].last_reason.as_deref(), Some("all good"));
+        assert_eq!(summaries[1].order_id, "order-1");
+        assert!(summaries[1].has_requested_discounts);
+
+        let facets = index.order_facets(&RadrootsTradeOrderQuery::default());
+        assert_eq!(
+            facets
+                .statuses
+                .iter()
+                .map(|facet| (facet.key.as_str(), facet.count))
+                .collect::<Vec<_>>(),
+            vec![("completed", 1), ("requested", 1)]
+        );
+        assert_eq!(
+            facets
+                .buyer_pubkeys
+                .iter()
+                .map(|facet| (facet.key.as_str(), facet.count))
+                .collect::<Vec<_>>(),
+            vec![("buyer-pubkey", 1), ("buyer-pubkey-2", 1)]
         );
     }
 
