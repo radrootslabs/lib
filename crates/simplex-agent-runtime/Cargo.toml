@@ -1,0 +1,32 @@
+[package]
+name = "radroots-simplex-agent-runtime"
+version = "0.1.0-alpha.1"
+edition.workspace = true
+authors = [
+  "Radroots Authors",
+]
+rust-version.workspace = true
+license.workspace = true
+description = "SimpleX agent runtime layer for Radroots"
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+
+[features]
+default = ["std"]
+std = [
+  "radroots-simplex-agent-proto/std",
+  "radroots-simplex-agent-store/std",
+  "radroots-simplex-smp-crypto/std",
+  "radroots-simplex-smp-proto/std",
+  "radroots-simplex-smp-transport/std",
+  "sha2/std",
+]
+
+[dependencies]
+radroots-simplex-agent-proto = { workspace = true, default-features = false }
+radroots-simplex-agent-store = { workspace = true, default-features = false }
+radroots-simplex-smp-crypto = { workspace = true, default-features = false }
+radroots-simplex-smp-proto = { workspace = true, default-features = false }
+radroots-simplex-smp-transport = { workspace = true, default-features = false }
+sha2 = { workspace = true, default-features = false }

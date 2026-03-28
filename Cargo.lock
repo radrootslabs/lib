@@ -2416,6 +2416,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "radroots-simplex-agent-proto"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "radroots-simplex-smp-crypto",
+ "radroots-simplex-smp-proto",
+]
+
+[[package]]
+name = "radroots-simplex-agent-runtime"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "radroots-simplex-agent-proto",
+ "radroots-simplex-agent-store",
+ "radroots-simplex-smp-crypto",
+ "radroots-simplex-smp-proto",
+ "radroots-simplex-smp-transport",
+ "sha2",
+]
+
+[[package]]
+name = "radroots-simplex-agent-store"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "radroots-simplex-agent-proto",
+ "radroots-simplex-smp-proto",
+]
+
+[[package]]
 name = "radroots-simplex-chat-proto"
 version = "0.1.0-alpha.1"
 dependencies = [
