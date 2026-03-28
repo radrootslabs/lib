@@ -1,14 +1,18 @@
 use alloc::vec::Vec;
+use radroots_simplex_smp_crypto::prelude::RadrootsSimplexSmpCommandAuthorization;
 use radroots_simplex_smp_proto::prelude::{
-    RadrootsSimplexSmpBrokerTransmission, RadrootsSimplexSmpCommandTransmission,
-    RadrootsSimplexSmpServerAddress,
+    RadrootsSimplexSmpBrokerTransmission, RadrootsSimplexSmpCommand,
+    RadrootsSimplexSmpCorrelationId, RadrootsSimplexSmpServerAddress,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RadrootsSimplexSmpTransportRequest {
     pub server: RadrootsSimplexSmpServerAddress,
     pub transport_version: u16,
-    pub transmission: RadrootsSimplexSmpCommandTransmission,
+    pub correlation_id: Option<RadrootsSimplexSmpCorrelationId>,
+    pub entity_id: Vec<u8>,
+    pub command: RadrootsSimplexSmpCommand,
+    pub authorization: RadrootsSimplexSmpCommandAuthorization,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

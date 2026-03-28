@@ -14,7 +14,22 @@ readme.workspace = true
 
 [features]
 default = ["std"]
-std = ["radroots-simplex-smp-proto/std"]
+std = [
+  "base64/std",
+  "radroots-simplex-smp-crypto/std",
+  "radroots-simplex-smp-proto/std",
+  "rustls/std",
+  "sha2/std",
+  "x509-parser/verify",
+]
 
 [dependencies]
+base64 = { workspace = true }
+radroots-simplex-smp-crypto = { workspace = true, default-features = false }
 radroots-simplex-smp-proto = { workspace = true, default-features = false }
+rustls = { workspace = true, default-features = false }
+sha2 = { workspace = true, default-features = false }
+x509-parser = { workspace = true, default-features = false }
+
+[dev-dependencies]
+rcgen = { version = "0.14" }

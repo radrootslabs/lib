@@ -6,12 +6,16 @@ use radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpProtoError;
 pub enum RadrootsSimplexSmpCryptoError {
     Proto(RadrootsSimplexSmpProtoError),
     InvalidShortFieldLength(usize),
+    EntropyUnavailable,
     MissingRatchetKey(&'static str),
     IncompletePqHeader,
     RatchetMessageRegression { received: u32, current: u32 },
     InvalidSharedSecretLength(usize),
     InvalidCiphertextLength(usize),
     InvalidPublicKeyLength(usize),
+    InvalidPrivateKeyLength(usize),
+    InvalidSignatureLength(usize),
+    SignatureVerificationFailed,
     InvalidSessionIdentifier(String),
 }
 
@@ -27,6 +31,9 @@ impl fmt::Display for RadrootsSimplexSmpCryptoError {
             Self::Proto(error) => write!(f, "{error}"),
             Self::InvalidShortFieldLength(length) => {
                 write!(f, "invalid SMP short field length {length}")
+            }
+            Self::EntropyUnavailable => {
+                write!(f, "unable to obtain entropy for SimpleX SMP key generation")
             }
             Self::MissingRatchetKey(field) => write!(f, "missing SMP ratchet key `{field}`"),
             Self::IncompletePqHeader => {
@@ -49,6 +56,15 @@ impl fmt::Display for RadrootsSimplexSmpCryptoError {
             }
             Self::InvalidPublicKeyLength(length) => {
                 write!(f, "invalid SMP public key length {length}")
+            }
+            Self::InvalidPrivateKeyLength(length) => {
+                write!(f, "invalid SMP private key length {length}")
+            }
+            Self::InvalidSignatureLength(length) => {
+                write!(f, "invalid SMP signature length {length}")
+            }
+            Self::SignatureVerificationFailed => {
+                write!(f, "failed to verify SMP signature")
             }
             Self::InvalidSessionIdentifier(value) => {
                 write!(f, "invalid SMP session identifier `{value}`")

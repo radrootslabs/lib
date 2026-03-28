@@ -18,8 +18,7 @@ use radroots_simplex_agent_store::prelude::{
     RadrootsSimplexAgentStore,
 };
 use radroots_simplex_smp_crypto::prelude::{
-    RadrootsSimplexSmpQueueAuthorizationMaterial, RadrootsSimplexSmpQueueAuthorizationScope,
-    RadrootsSimplexSmpRatchetState,
+    RadrootsSimplexSmpCommandAuthorization, RadrootsSimplexSmpRatchetState,
 };
 use radroots_simplex_smp_proto::prelude::{
     RADROOTS_SIMPLEX_SMP_CURRENT_TRANSPORT_VERSION, RadrootsSimplexSmpBrokerMessage,
@@ -157,6 +156,7 @@ impl RadrootsSimplexAgentRuntime {
             contact_address,
         };
         self.store.connection_mut(&connection.id)?.invitation = Some(invitation.clone());
+        let receive_auth_state = self.store.generate_queue_auth_state()?;
         let descriptor = RadrootsSimplexAgentQueueDescriptor {
             queue_uri: invitation_queue,
             replaced_queue: None,
@@ -168,6 +168,7 @@ impl RadrootsSimplexAgentRuntime {
             descriptor.clone(),
             RadrootsSimplexAgentQueueRole::Receive,
             true,
+            receive_auth_state,
         )?;
         self.store.enqueue_command(
             &connection.id,
@@ -222,15 +223,14 @@ impl RadrootsSimplexAgentRuntime {
             Some(invitation.clone()),
             ratchet_state,
         );
+        let send_auth_state = self.store.generate_queue_auth_state()?;
         let send_descriptor = RadrootsSimplexAgentQueueDescriptor {
             queue_uri: invitation.invitation_queue.clone(),
             replaced_queue: None,
             primary: true,
-            sender_key: Some(derive_material(
-                b"join-sender-auth",
-                &[invitation.connection_id.as_slice(), &now.to_be_bytes()],
-            )),
+            sender_key: Some(send_auth_state.public_key.clone()),
         };
+        let receive_auth_state = self.store.generate_queue_auth_state()?;
         let receive_descriptor = RadrootsSimplexAgentQueueDescriptor {
             queue_uri: reply_queue,
             replaced_queue: None,
@@ -242,12 +242,14 @@ impl RadrootsSimplexAgentRuntime {
             send_descriptor.clone(),
             RadrootsSimplexAgentQueueRole::Send,
             true,
+            send_auth_state,
         )?;
         self.store.add_queue(
             &connection.id,
             receive_descriptor.clone(),
             RadrootsSimplexAgentQueueRole::Receive,
             true,
+            receive_auth_state,
         )?;
         self.store.enqueue_command(
             &connection.id,
@@ -486,11 +488,15 @@ impl RadrootsSimplexAgentRuntime {
             }
             RadrootsSimplexAgentDecryptedMessage::ConnectionInfoReply { reply_queues, info } => {
                 for descriptor in reply_queues {
+                    let auth_state = self.store.generate_queue_auth_state()?;
+                    let mut descriptor = descriptor;
+                    descriptor.sender_key = Some(auth_state.public_key.clone());
                     self.store.add_queue(
                         connection_id,
                         descriptor,
                         RadrootsSimplexAgentQueueRole::Send,
                         true,
+                        auth_state,
                     )?;
                 }
                 self.store.set_status(
@@ -634,11 +640,13 @@ impl RadrootsSimplexAgentRuntime {
         match &command.kind {
             RadrootsSimplexAgentPendingCommandKind::RotateQueues { descriptors } => {
                 for descriptor in descriptors.clone() {
+                    let auth_state = self.store.generate_queue_auth_state()?;
                     self.store.add_queue(
                         &command.connection_id,
                         descriptor,
                         RadrootsSimplexAgentQueueRole::Receive,
                         true,
+                        auth_state,
                     )?;
                 }
                 self.record_command_outcome(
@@ -697,30 +705,18 @@ impl RadrootsSimplexAgentRuntime {
             )
         })?;
         let correlation_id = correlation_id_for_command(command.id);
-        let scope = RadrootsSimplexSmpQueueAuthorizationScope::new(
-            auth.session_identifier.clone(),
-            correlation_id,
-            queue_address.sender_id.clone(),
-        )
-        .map_err(|error| RadrootsSimplexAgentRuntimeError::Runtime(error.to_string()))?;
-        let material = RadrootsSimplexSmpQueueAuthorizationMaterial::for_command(
-            &scope,
-            &smp_command,
-            RADROOTS_SIMPLEX_SMP_CURRENT_TRANSPORT_VERSION,
-            auth.queue_key_material.clone(),
-            auth.server_session_key.clone(),
-        )
-        .map_err(|error| RadrootsSimplexAgentRuntimeError::Runtime(error.to_string()))?;
         Ok(RadrootsSimplexSmpTransportRequest {
             server: queue.descriptor.queue_uri.server.clone(),
             transport_version: RADROOTS_SIMPLEX_SMP_CURRENT_TRANSPORT_VERSION,
-            transmission:
-                radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpCommandTransmission {
-                    authorization: material.authorized_digest.to_vec(),
-                    correlation_id: Some(correlation_id),
-                    entity_id: queue_address.sender_id,
-                    command: smp_command,
+            correlation_id: Some(correlation_id),
+            entity_id: queue_address.sender_id,
+            command: smp_command,
+            authorization: RadrootsSimplexSmpCommandAuthorization::Ed25519(
+                radroots_simplex_smp_crypto::prelude::RadrootsSimplexSmpEd25519Keypair {
+                    public_key: auth.public_key,
+                    private_key: auth.private_key,
                 },
+            ),
         })
     }
 
@@ -735,34 +731,39 @@ impl RadrootsSimplexAgentRuntime {
         RadrootsSimplexAgentRuntimeError,
     > {
         match &command.kind {
-            RadrootsSimplexAgentPendingCommandKind::CreateQueue { descriptor } => Ok((
-                descriptor.queue_address(),
-                RadrootsSimplexSmpCommand::New(RadrootsSimplexSmpNewQueueRequest {
-                    recipient_auth_public_key: descriptor.queue_uri.sender_id.as_bytes().to_vec(),
-                    recipient_dh_public_key: descriptor
-                        .queue_uri
-                        .recipient_dh_public_key
-                        .as_bytes()
-                        .to_vec(),
-                    basic_auth: None,
-                    subscription_mode: RadrootsSimplexSmpSubscriptionMode::Subscribe,
-                    queue_request_data: Some(
-                        match descriptor
+            RadrootsSimplexAgentPendingCommandKind::CreateQueue { descriptor } => {
+                let auth_state = self
+                    .store
+                    .queue_auth_state(&command.connection_id, &descriptor.queue_address())?;
+                Ok((
+                    descriptor.queue_address(),
+                    RadrootsSimplexSmpCommand::New(RadrootsSimplexSmpNewQueueRequest {
+                        recipient_auth_public_key: auth_state.public_key,
+                        recipient_dh_public_key: descriptor
                             .queue_uri
-                            .queue_mode
-                            .unwrap_or(RadrootsSimplexSmpQueueMode::Messaging)
-                        {
-                            RadrootsSimplexSmpQueueMode::Messaging => {
-                                RadrootsSimplexSmpQueueRequestData::Messaging(None)
-                            }
-                            RadrootsSimplexSmpQueueMode::Contact => {
-                                RadrootsSimplexSmpQueueRequestData::Contact(None)
-                            }
-                        },
-                    ),
-                    notifier_credentials: None,
-                }),
-            )),
+                            .recipient_dh_public_key
+                            .as_bytes()
+                            .to_vec(),
+                        basic_auth: None,
+                        subscription_mode: RadrootsSimplexSmpSubscriptionMode::Subscribe,
+                        queue_request_data: Some(
+                            match descriptor
+                                .queue_uri
+                                .queue_mode
+                                .unwrap_or(RadrootsSimplexSmpQueueMode::Messaging)
+                            {
+                                RadrootsSimplexSmpQueueMode::Messaging => {
+                                    RadrootsSimplexSmpQueueRequestData::Messaging(None)
+                                }
+                                RadrootsSimplexSmpQueueMode::Contact => {
+                                    RadrootsSimplexSmpQueueRequestData::Contact(None)
+                                }
+                            },
+                        ),
+                        notifier_credentials: None,
+                    }),
+                ))
+            }
             RadrootsSimplexAgentPendingCommandKind::SecureQueue { queue, sender_key } => Ok((
                 queue.clone(),
                 RadrootsSimplexSmpCommand::SKey(sender_key.clone().unwrap_or_default()),
@@ -923,6 +924,9 @@ fn correlation_id_for_command(command_id: u64) -> RadrootsSimplexSmpCorrelationI
 mod tests {
     use super::*;
     use alloc::collections::VecDeque;
+    use radroots_simplex_smp_crypto::prelude::{
+        RadrootsSimplexSmpQueueAuthorizationMaterial, RadrootsSimplexSmpQueueAuthorizationScope,
+    };
     use radroots_simplex_smp_proto::prelude::{
         RadrootsSimplexSmpBrokerTransmission, RadrootsSimplexSmpQueueIdsResponse,
     };
@@ -964,11 +968,33 @@ mod tests {
             &mut self,
             request: RadrootsSimplexSmpTransportRequest,
         ) -> Result<RadrootsSimplexSmpTransportResponse, Self::Error> {
-            let block =
-                RadrootsSimplexSmpTransportBlock::from_current_command_transmissions(&[request
-                    .transmission
-                    .clone()])
-                .map_err(|error| error.to_string())?;
+            let correlation_id = request
+                .correlation_id
+                .ok_or_else(|| "missing scripted transport correlation id".to_owned())?;
+            let scope = RadrootsSimplexSmpQueueAuthorizationScope::new(
+                b"scripted-session".to_vec(),
+                correlation_id,
+                request.entity_id.clone(),
+            )
+            .map_err(|error| error.to_string())?;
+            let material = RadrootsSimplexSmpQueueAuthorizationMaterial::for_command(
+                &scope,
+                &request.command,
+                request.transport_version,
+                &request.authorization,
+            )
+            .map_err(|error| error.to_string())?;
+            let transmission =
+                radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpCommandTransmission {
+                    authorization: material.authorization,
+                    correlation_id: Some(correlation_id),
+                    entity_id: request.entity_id.clone(),
+                    command: request.command.clone(),
+                };
+            let block = RadrootsSimplexSmpTransportBlock::from_current_command_transmissions(&[
+                transmission.clone(),
+            ])
+            .map_err(|error| error.to_string())?;
             let encoded = block.encode().map_err(|error| error.to_string())?;
             let decoded = RadrootsSimplexSmpTransportBlock::decode(&encoded)
                 .map_err(|error| error.to_string())?;
@@ -976,7 +1002,7 @@ mod tests {
                 .decode_command_transmissions(request.transport_version)
                 .map_err(|error| error.to_string())?;
             assert_eq!(decoded_transmissions.len(), 1);
-            assert_eq!(decoded_transmissions[0], request.transmission);
+            assert_eq!(decoded_transmissions[0], transmission);
 
             let response_message = self
                 .responses
@@ -984,8 +1010,8 @@ mod tests {
                 .ok_or_else(|| "missing scripted transport response".to_owned())?;
             let response_transmission = RadrootsSimplexSmpBrokerTransmission {
                 authorization: Vec::new(),
-                correlation_id: request.transmission.correlation_id,
-                entity_id: request.transmission.entity_id.clone(),
+                correlation_id: Some(correlation_id),
+                entity_id: request.entity_id.clone(),
                 message: response_message,
             };
             let response_block = RadrootsSimplexSmpTransportBlock::from_broker_transmissions(

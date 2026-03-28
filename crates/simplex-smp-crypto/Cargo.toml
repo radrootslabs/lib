@@ -14,8 +14,15 @@ readme.workspace = true
 
 [features]
 default = ["std"]
-std = ["radroots-simplex-smp-proto/std", "sha2/std"]
+std = [
+  "ed25519-dalek/std",
+  "getrandom/std",
+  "radroots-simplex-smp-proto/std",
+  "sha2/std",
+]
 
 [dependencies]
+ed25519-dalek = { workspace = true, default-features = false, features = ["alloc"] }
+getrandom = { workspace = true, default-features = false }
 radroots-simplex-smp-proto = { workspace = true, default-features = false }
 sha2 = { workspace = true, default-features = false }

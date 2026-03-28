@@ -1,10 +1,12 @@
 use alloc::string::String;
 use core::fmt;
+use radroots_simplex_smp_crypto::prelude::RadrootsSimplexSmpCryptoError;
 use radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpProtoError;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RadrootsSimplexSmpTransportError {
     Proto(RadrootsSimplexSmpProtoError),
+    Crypto(RadrootsSimplexSmpCryptoError),
     InvalidPaddedBlockLength { expected: usize, actual: usize },
     TransportPayloadTooLarge(usize),
     EmptyTransportBlock,
@@ -23,6 +25,12 @@ pub enum RadrootsSimplexSmpTransportError {
     MissingChannelBinding,
     SessionBindingMismatch,
     NoMutualTransportVersion { offered: String, supported: String },
+    MissingCorrelationId,
+    InvalidServerAddress(String),
+    LiveTransportIo(String),
+    MissingPeerCertificates,
+    UnexpectedBrokerTransmissionCount(usize),
+    CorrelationIdMismatch,
 }
 
 impl From<RadrootsSimplexSmpProtoError> for RadrootsSimplexSmpTransportError {
@@ -31,10 +39,17 @@ impl From<RadrootsSimplexSmpProtoError> for RadrootsSimplexSmpTransportError {
     }
 }
 
+impl From<RadrootsSimplexSmpCryptoError> for RadrootsSimplexSmpTransportError {
+    fn from(value: RadrootsSimplexSmpCryptoError) -> Self {
+        Self::Crypto(value)
+    }
+}
+
 impl fmt::Display for RadrootsSimplexSmpTransportError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Proto(error) => write!(f, "{error}"),
+            Self::Crypto(error) => write!(f, "{error}"),
             Self::InvalidPaddedBlockLength { expected, actual } => {
                 write!(
                     f,
@@ -97,6 +112,26 @@ impl fmt::Display for RadrootsSimplexSmpTransportError {
                 write!(
                     f,
                     "no mutual SMP transport version between `{offered}` and `{supported}`"
+                )
+            }
+            Self::MissingCorrelationId => {
+                write!(f, "SMP transport request is missing a correlation id")
+            }
+            Self::InvalidServerAddress(message) => write!(f, "{message}"),
+            Self::LiveTransportIo(message) => write!(f, "{message}"),
+            Self::MissingPeerCertificates => {
+                write!(f, "SMP TLS peer certificate chain is missing")
+            }
+            Self::UnexpectedBrokerTransmissionCount(count) => {
+                write!(
+                    f,
+                    "expected exactly one SMP broker transmission, got {count}"
+                )
+            }
+            Self::CorrelationIdMismatch => {
+                write!(
+                    f,
+                    "SMP broker response correlation id did not match the request"
                 )
             }
         }

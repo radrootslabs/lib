@@ -9,7 +9,9 @@ pub mod ratchet;
 
 pub mod prelude {
     pub use crate::auth::{
+        RadrootsSimplexSmpCommandAuthorization, RadrootsSimplexSmpEd25519Keypair,
         RadrootsSimplexSmpQueueAuthorizationMaterial, RadrootsSimplexSmpQueueAuthorizationScope,
+        verify_signature,
     };
     pub use crate::error::RadrootsSimplexSmpCryptoError;
     pub use crate::ratchet::{

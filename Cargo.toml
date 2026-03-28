@@ -93,7 +93,9 @@ chrono = { version = "0.4" }
 clap = { version = "4" }
 config = { version = "0.14" }
 directories = { version = "6" }
+ed25519-dalek = { version = "2.1.1", default-features = false }
 futures = { version = "0.3" }
+getrandom = { version = "0.2", default-features = false }
 hex = { version = "0.4" }
 js-sys = { version = "0.3" }
 keyring = { version = "3.6.3", default-features = false, features = [
@@ -115,6 +117,7 @@ serde_json = { version = "1", default-features = false, features = ["alloc"] }
 serde-wasm-bindgen = { version = "0.6" }
 sha2 = { version = "0.10", default-features = false }
 reqwest = { version = "0.12", default-features = false }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 rust_decimal = { version = "1", default-features = false }
 rust_decimal_macros = { version = "1" }
 sled = { version = "0.34" }
@@ -130,6 +133,7 @@ ts-rs = { version = "11.1" }
 typeshare = { version = "1" }
 url = { version = "2" }
 uuid = { version = "1.22.0", features = ["v4", "v7"] }
+x509-parser = { version = "0.17", default-features = false }
 zstd = { version = "0.13", default-features = false }
 zeroize = { version = "1" }
 uniffi = { version = "=0.29.4" }

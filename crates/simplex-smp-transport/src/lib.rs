@@ -3,12 +3,16 @@
 
 extern crate alloc;
 
+#[cfg(feature = "std")]
+pub mod client;
 pub mod error;
 pub mod executor;
 pub mod frame;
 pub mod handshake;
 
 pub mod prelude {
+    #[cfg(feature = "std")]
+    pub use crate::client::RadrootsSimplexSmpTlsCommandTransport;
     pub use crate::error::RadrootsSimplexSmpTransportError;
     pub use crate::executor::{
         RadrootsSimplexSmpCommandTransport, RadrootsSimplexSmpTransportRequest,

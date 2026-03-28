@@ -10,12 +10,12 @@ use radroots_simplex_agent_proto::prelude::{
     RadrootsSimplexSmpRatchetState, decode_connection_link, decode_envelope,
     encode_connection_link, encode_envelope,
 };
+use radroots_simplex_smp_crypto::prelude::RadrootsSimplexSmpEd25519Keypair;
 use radroots_simplex_smp_proto::prelude::{
     RadrootsSimplexSmpQueueUri, RadrootsSimplexSmpServerAddress,
 };
 #[cfg(feature = "std")]
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 #[cfg(feature = "std")]
 use std::fs;
 #[cfg(feature = "std")]
@@ -31,9 +31,8 @@ pub enum RadrootsSimplexAgentQueueRole {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub struct RadrootsSimplexAgentQueueAuthState {
-    pub session_identifier: Vec<u8>,
-    pub queue_key_material: Vec<u8>,
-    pub server_session_key: Vec<u8>,
+    pub public_key: Vec<u8>,
+    pub private_key: Vec<u8>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -400,8 +399,8 @@ impl RadrootsSimplexAgentStore {
         descriptor: RadrootsSimplexAgentQueueDescriptor,
         role: RadrootsSimplexAgentQueueRole,
         primary: bool,
+        auth_state: RadrootsSimplexAgentQueueAuthState,
     ) -> Result<(), RadrootsSimplexAgentStoreError> {
-        let derived_auth = derive_queue_auth_state(connection_id, &descriptor, role);
         let connection = self.connection_mut(connection_id)?;
         let address = descriptor.queue_address();
         if let Some(queue) = connection
@@ -412,9 +411,7 @@ impl RadrootsSimplexAgentStore {
             queue.descriptor = descriptor;
             queue.role = role;
             queue.primary = primary;
-            if queue.auth_state.is_none() {
-                queue.auth_state = Some(derived_auth);
-            }
+            queue.auth_state = Some(auth_state);
             return Ok(());
         }
         connection.queues.push(RadrootsSimplexAgentQueueRecord {
@@ -423,9 +420,23 @@ impl RadrootsSimplexAgentStore {
             subscribed: false,
             primary,
             tested: false,
-            auth_state: Some(derived_auth),
+            auth_state: Some(auth_state),
         });
         Ok(())
+    }
+
+    pub fn generate_queue_auth_state(
+        &self,
+    ) -> Result<RadrootsSimplexAgentQueueAuthState, RadrootsSimplexAgentStoreError> {
+        let keypair = RadrootsSimplexSmpEd25519Keypair::generate().map_err(|error| {
+            RadrootsSimplexAgentStoreError::Persistence(format!(
+                "failed to generate SimpleX queue auth keypair: {error}"
+            ))
+        })?;
+        Ok(RadrootsSimplexAgentQueueAuthState {
+            public_key: keypair.public_key,
+            private_key: keypair.private_key,
+        })
     }
 
     pub fn queue_record(
@@ -743,69 +754,6 @@ impl RadrootsSimplexAgentStore {
             persistence_path: None,
         })
     }
-}
-
-fn derive_queue_auth_state(
-    connection_id: &str,
-    descriptor: &RadrootsSimplexAgentQueueDescriptor,
-    role: RadrootsSimplexAgentQueueRole,
-) -> RadrootsSimplexAgentQueueAuthState {
-    let address = descriptor.queue_address();
-    let role_label = match role {
-        RadrootsSimplexAgentQueueRole::Receive => b"receive".as_slice(),
-        RadrootsSimplexAgentQueueRole::Send => b"send".as_slice(),
-    };
-    let session_identifier = hash_material(
-        b"session",
-        connection_id,
-        &address,
-        role_label,
-        descriptor.sender_key.as_deref(),
-    )[..24]
-        .to_vec();
-    let queue_key_material = hash_material(
-        b"queue-key",
-        connection_id,
-        &address,
-        role_label,
-        descriptor.sender_key.as_deref(),
-    );
-    let server_session_key = hash_material(
-        b"server-session",
-        connection_id,
-        &address,
-        role_label,
-        descriptor.sender_key.as_deref(),
-    );
-    RadrootsSimplexAgentQueueAuthState {
-        session_identifier,
-        queue_key_material,
-        server_session_key,
-    }
-}
-
-fn hash_material(
-    label: &[u8],
-    connection_id: &str,
-    address: &RadrootsSimplexAgentQueueAddress,
-    role_label: &[u8],
-    sender_key: Option<&[u8]>,
-) -> Vec<u8> {
-    let mut hasher = Sha256::new();
-    hasher.update(label);
-    hasher.update(connection_id.as_bytes());
-    hasher.update(address.server.server_identity.as_bytes());
-    for host in &address.server.hosts {
-        hasher.update(host.as_bytes());
-        hasher.update([0_u8]);
-    }
-    hasher.update(address.server.port.unwrap_or_default().to_be_bytes());
-    hasher.update(&address.sender_id);
-    hasher.update(role_label);
-    if let Some(sender_key) = sender_key {
-        hasher.update(sender_key);
-    }
-    hasher.finalize().to_vec()
 }
 
 #[cfg(feature = "std")]
@@ -1272,6 +1220,13 @@ mod tests {
         }
     }
 
+    fn sample_auth_state() -> RadrootsSimplexAgentQueueAuthState {
+        RadrootsSimplexAgentQueueAuthState {
+            public_key: vec![7_u8; 32],
+            private_key: vec![9_u8; 32],
+        }
+    }
+
     #[test]
     fn stores_connections_queues_and_retryable_commands() {
         let mut store = RadrootsSimplexAgentStore::new();
@@ -1287,6 +1242,7 @@ mod tests {
                 sample_descriptor(true),
                 RadrootsSimplexAgentQueueRole::Send,
                 true,
+                sample_auth_state(),
             )
             .unwrap();
         let command = store
@@ -1367,6 +1323,7 @@ mod tests {
                 sample_descriptor(true),
                 RadrootsSimplexAgentQueueRole::Send,
                 true,
+                sample_auth_state(),
             )
             .unwrap();
         let prepared = store
