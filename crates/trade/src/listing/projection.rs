@@ -1121,11 +1121,11 @@ impl RadrootsTradeReadIndex {
                 let order_id = required_order_id(message)?;
                 let order = self.order_mut_checked(order_id, &message.listing_addr)?;
                 ensure_actor(&order.seller_pubkey, &message.actor_pubkey)?;
-                radroots_trade_order_status_ensure_transition(
-                    order.status.clone(),
-                    TradeOrderStatus::Fulfilled,
-                )?;
-                order.status = TradeOrderStatus::Fulfilled;
+                if let Some(next_status) =
+                    trade_order_status_for_fulfillment_update(&order.status, &update.status)?
+                {
+                    order.status = next_status;
+                }
                 order.fulfillment_update_count = order.fulfillment_update_count.saturating_add(1);
                 order.last_fulfillment_status = Some(update.status.clone());
                 order.last_message_type = TradeListingMessageType::FulfillmentUpdate;
@@ -1137,11 +1137,11 @@ impl RadrootsTradeReadIndex {
                 let order_id = required_order_id(message)?;
                 let order = self.order_mut_checked(order_id, &message.listing_addr)?;
                 ensure_actor(&order.buyer_pubkey, &message.actor_pubkey)?;
-                radroots_trade_order_status_ensure_transition(
-                    order.status.clone(),
-                    TradeOrderStatus::Completed,
-                )?;
-                order.status = TradeOrderStatus::Completed;
+                if let Some(next_status) =
+                    trade_order_status_for_receipt(&order.status, receipt.acknowledged)?
+                {
+                    order.status = next_status;
+                }
                 order.receipt_count = order.receipt_count.saturating_add(1);
                 order.receipt_acknowledged = Some(receipt.acknowledged);
                 order.receipt_at = Some(receipt.at);
@@ -1281,6 +1281,60 @@ pub fn radroots_trade_order_status_is_terminal(status: &TradeOrderStatus) -> boo
         status,
         TradeOrderStatus::Declined | TradeOrderStatus::Cancelled | TradeOrderStatus::Completed
     )
+}
+
+fn trade_order_status_for_fulfillment_update(
+    current: &TradeOrderStatus,
+    fulfillment_status: &TradeFulfillmentStatus,
+) -> Result<Option<TradeOrderStatus>, RadrootsTradeProjectionError> {
+    match fulfillment_status {
+        TradeFulfillmentStatus::Preparing
+        | TradeFulfillmentStatus::Shipped
+        | TradeFulfillmentStatus::ReadyForPickup => {
+            if matches!(current, TradeOrderStatus::Accepted) {
+                Ok(None)
+            } else {
+                Err(RadrootsTradeProjectionError::InvalidTransition {
+                    from: current.clone(),
+                    to: TradeOrderStatus::Accepted,
+                })
+            }
+        }
+        TradeFulfillmentStatus::Delivered => {
+            radroots_trade_order_status_ensure_transition(
+                current.clone(),
+                TradeOrderStatus::Fulfilled,
+            )?;
+            Ok(Some(TradeOrderStatus::Fulfilled))
+        }
+        TradeFulfillmentStatus::Cancelled => {
+            radroots_trade_order_status_ensure_transition(
+                current.clone(),
+                TradeOrderStatus::Cancelled,
+            )?;
+            Ok(Some(TradeOrderStatus::Cancelled))
+        }
+    }
+}
+
+fn trade_order_status_for_receipt(
+    current: &TradeOrderStatus,
+    acknowledged: bool,
+) -> Result<Option<TradeOrderStatus>, RadrootsTradeProjectionError> {
+    if acknowledged {
+        radroots_trade_order_status_ensure_transition(
+            current.clone(),
+            TradeOrderStatus::Completed,
+        )?;
+        Ok(Some(TradeOrderStatus::Completed))
+    } else if matches!(current, TradeOrderStatus::Fulfilled) {
+        Ok(None)
+    } else {
+        Err(RadrootsTradeProjectionError::InvalidTransition {
+            from: current.clone(),
+            to: TradeOrderStatus::Fulfilled,
+        })
+    }
 }
 
 pub fn radroots_trade_order_status_ensure_transition(
@@ -2015,6 +2069,119 @@ mod tests {
             .expect("listing after receipt");
         assert_eq!(listing_after_receipt.open_order_count, 0);
         assert_eq!(listing_after_receipt.terminal_order_count, 1);
+    }
+
+    #[test]
+    fn workflow_projection_keeps_in_progress_fulfillment_as_accepted() {
+        let mut index = RadrootsTradeReadIndex::new();
+        index
+            .upsert_listing("seller-pubkey", &base_listing())
+            .expect("listing projection");
+        index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-1"),
+                TradeListingMessagePayload::OrderRequest(base_order()),
+            ))
+            .expect("order request");
+        index
+            .apply_workflow_message(&message(
+                "seller-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-1"),
+                TradeListingMessagePayload::OrderResponse(TradeOrderResponse {
+                    accepted: true,
+                    reason: None,
+                }),
+            ))
+            .expect("order response");
+        index
+            .apply_workflow_message(&message(
+                "seller-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-1"),
+                TradeListingMessagePayload::FulfillmentUpdate(TradeFulfillmentUpdate {
+                    status: TradeFulfillmentStatus::Shipped,
+                    tracking: Some("track-1".into()),
+                    eta: None,
+                    notes: Some("left warehouse".into()),
+                }),
+            ))
+            .expect("fulfillment update");
+
+        let order = index.order("order-1").expect("order");
+        assert_eq!(order.status, TradeOrderStatus::Accepted);
+        assert_eq!(
+            order.last_fulfillment_status,
+            Some(TradeFulfillmentStatus::Shipped)
+        );
+        let listing = index
+            .listing("30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg")
+            .expect("listing");
+        assert_eq!(listing.open_order_count, 1);
+        assert_eq!(listing.terminal_order_count, 0);
+    }
+
+    #[test]
+    fn workflow_projection_requires_acknowledged_receipt_for_completion() {
+        let mut index = RadrootsTradeReadIndex::new();
+        index
+            .upsert_listing("seller-pubkey", &base_listing())
+            .expect("listing projection");
+        index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-1"),
+                TradeListingMessagePayload::OrderRequest(base_order()),
+            ))
+            .expect("order request");
+        index
+            .apply_workflow_message(&message(
+                "seller-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-1"),
+                TradeListingMessagePayload::OrderResponse(TradeOrderResponse {
+                    accepted: true,
+                    reason: None,
+                }),
+            ))
+            .expect("order response");
+        index
+            .apply_workflow_message(&message(
+                "seller-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-1"),
+                TradeListingMessagePayload::FulfillmentUpdate(TradeFulfillmentUpdate {
+                    status: TradeFulfillmentStatus::Delivered,
+                    tracking: Some("track-1".into()),
+                    eta: None,
+                    notes: Some("left at dock".into()),
+                }),
+            ))
+            .expect("fulfilled");
+        index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-1"),
+                TradeListingMessagePayload::Receipt(TradeReceipt {
+                    acknowledged: false,
+                    at: 1_700_000_000,
+                    note: Some("received pending inspection".into()),
+                }),
+            ))
+            .expect("receipt");
+
+        let order = index.order("order-1").expect("order");
+        assert_eq!(order.status, TradeOrderStatus::Fulfilled);
+        assert_eq!(order.receipt_acknowledged, Some(false));
+        let listing = index
+            .listing("30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg")
+            .expect("listing");
+        assert_eq!(listing.open_order_count, 1);
+        assert_eq!(listing.terminal_order_count, 0);
     }
 
     #[test]
