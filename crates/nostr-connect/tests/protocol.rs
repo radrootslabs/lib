@@ -212,6 +212,21 @@ fn auth_url_response_parses_from_result_and_error_fields() {
 }
 
 #[test]
+fn get_public_key_pending_response_parses_as_typed_pending_connection() {
+    let response = RadrootsNostrConnectResponse::from_envelope(
+        &RadrootsNostrConnectMethod::GetPublicKey,
+        RadrootsNostrConnectResponseEnvelope {
+            id: "req-pending".to_owned(),
+            result: None,
+            error: Some(RADROOTS_NOSTR_CONNECT_PENDING_CONNECTION_ERROR.to_owned()),
+        },
+    )
+    .expect("parse pending get_public_key response");
+
+    assert_eq!(response, RadrootsNostrConnectResponse::PendingConnection);
+}
+
+#[test]
 fn sign_event_response_roundtrips_signed_event_json_string() {
     let keys = test_keys();
     let event = EventBuilder::text_note("hello world")

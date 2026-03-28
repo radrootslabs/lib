@@ -256,6 +256,7 @@ pub enum RadrootsNostrConnectPendingConnectionPollOutcome {
 pub enum RadrootsNostrConnectResponse {
     ConnectAcknowledged,
     ConnectSecretEcho(String),
+    PendingConnection,
     UserPublicKey(PublicKey),
     SignedEvent(Event),
     Pong,
@@ -281,15 +282,14 @@ impl RadrootsNostrConnectResponse {
         self,
     ) -> RadrootsNostrConnectPendingConnectionPollOutcome {
         match self {
+            Self::PendingConnection => {
+                RadrootsNostrConnectPendingConnectionPollOutcome::PendingApproval
+            }
             Self::UserPublicKey(public_key) => {
                 RadrootsNostrConnectPendingConnectionPollOutcome::Approved(public_key)
             }
-            Self::Error { result, error } => {
-                if result.is_none() && error == RADROOTS_NOSTR_CONNECT_PENDING_CONNECTION_ERROR {
-                    RadrootsNostrConnectPendingConnectionPollOutcome::PendingApproval
-                } else {
-                    RadrootsNostrConnectPendingConnectionPollOutcome::Rejected { message: error }
-                }
+            Self::Error { error, .. } => {
+                RadrootsNostrConnectPendingConnectionPollOutcome::Rejected { message: error }
             }
             Self::AuthUrl(url) => {
                 RadrootsNostrConnectPendingConnectionPollOutcome::AuthChallenge { url }
@@ -315,6 +315,11 @@ impl RadrootsNostrConnectResponse {
                 id,
                 result: Some(Value::String(secret)),
                 error: None,
+            },
+            Self::PendingConnection => RadrootsNostrConnectResponseEnvelope {
+                id,
+                result: None,
+                error: Some(RADROOTS_NOSTR_CONNECT_PENDING_CONNECTION_ERROR.to_owned()),
             },
             Self::UserPublicKey(public_key) => RadrootsNostrConnectResponseEnvelope {
                 id,
@@ -388,6 +393,12 @@ impl RadrootsNostrConnectResponse {
         }
 
         if let Some(error) = envelope.error {
+            if matches!(method, RadrootsNostrConnectMethod::GetPublicKey)
+                && envelope.result.is_none()
+                && error == RADROOTS_NOSTR_CONNECT_PENDING_CONNECTION_ERROR
+            {
+                return Ok(Self::PendingConnection);
+            }
             if let RadrootsNostrConnectMethod::Custom(_) = method {
                 return Ok(Self::Custom {
                     result: envelope.result,
