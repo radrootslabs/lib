@@ -19,6 +19,7 @@ std = [
   "getrandom/std",
   "radroots-simplex-smp-proto/std",
   "sha2/std",
+  "xsalsa20poly1305/std",
 ]
 
 [dependencies]
@@ -26,3 +27,5 @@ ed25519-dalek = { workspace = true, default-features = false, features = ["alloc
 getrandom = { workspace = true, default-features = false }
 radroots-simplex-smp-proto = { workspace = true, default-features = false }
 sha2 = { workspace = true, default-features = false }
+xsalsa20poly1305 = { workspace = true, default-features = false }
+x25519-dalek = { workspace = true, default-features = false, features = ["static_secrets"] }

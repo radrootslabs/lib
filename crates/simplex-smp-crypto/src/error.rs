@@ -12,6 +12,8 @@ pub enum RadrootsSimplexSmpCryptoError {
     RatchetMessageRegression { received: u32, current: u32 },
     InvalidSharedSecretLength(usize),
     InvalidCiphertextLength(usize),
+    InvalidNonceLength(usize),
+    InvalidMessageLength { actual: usize, padded: usize },
     InvalidPublicKeyLength(usize),
     InvalidPrivateKeyLength(usize),
     InvalidSignatureLength(usize),
@@ -53,6 +55,15 @@ impl fmt::Display for RadrootsSimplexSmpCryptoError {
             }
             Self::InvalidCiphertextLength(length) => {
                 write!(f, "invalid SMP ciphertext length {length}")
+            }
+            Self::InvalidNonceLength(length) => {
+                write!(f, "invalid SMP nonce length {length}")
+            }
+            Self::InvalidMessageLength { actual, padded } => {
+                write!(
+                    f,
+                    "invalid SMP padded message length: actual {actual}, padded {padded}"
+                )
             }
             Self::InvalidPublicKeyLength(length) => {
                 write!(f, "invalid SMP public key length {length}")

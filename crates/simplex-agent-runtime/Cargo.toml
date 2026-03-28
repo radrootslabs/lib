@@ -24,6 +24,7 @@ std = [
 ]
 
 [dependencies]
+base64 = { version = "0.22", default-features = false, features = ["alloc"] }
 radroots-simplex-agent-proto = { workspace = true, default-features = false }
 radroots-simplex-agent-store = { workspace = true, default-features = false }
 radroots-simplex-smp-crypto = { workspace = true, default-features = false }

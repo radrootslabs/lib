@@ -120,6 +120,8 @@ reqwest = { version = "0.12", default-features = false }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 rust_decimal = { version = "1", default-features = false }
 rust_decimal_macros = { version = "1" }
+xsalsa20poly1305 = { version = "0.9", default-features = false }
+x25519-dalek = { version = "2", default-features = false, features = ["static_secrets"] }
 sled = { version = "0.34" }
 tempfile = { version = "3" }
 thiserror = { version = "1" }

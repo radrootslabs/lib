@@ -38,11 +38,14 @@ pub struct RadrootsSimplexAgentQueueAuthState {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RadrootsSimplexAgentQueueRecord {
     pub descriptor: RadrootsSimplexAgentQueueDescriptor,
+    pub entity_id: Vec<u8>,
     pub role: RadrootsSimplexAgentQueueRole,
     pub subscribed: bool,
     pub primary: bool,
     pub tested: bool,
     pub auth_state: Option<RadrootsSimplexAgentQueueAuthState>,
+    pub delivery_private_key: Option<Vec<u8>>,
+    pub delivery_shared_secret: Option<Vec<u8>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -94,6 +97,7 @@ pub enum RadrootsSimplexAgentPendingCommandKind {
     },
     AckInboxMessage {
         queue: RadrootsSimplexAgentQueueAddress,
+        broker_message_id: Vec<u8>,
         receipt: RadrootsSimplexAgentMessageReceipt,
     },
     RotateQueues {
@@ -122,7 +126,12 @@ pub struct RadrootsSimplexAgentConnectionRecord {
     pub invitation: Option<RadrootsSimplexAgentConnectionLink>,
     pub queues: Vec<RadrootsSimplexAgentQueueRecord>,
     pub ratchet_state: Option<RadrootsSimplexSmpRatchetState>,
+    pub local_e2e_public_key: Option<Vec<u8>>,
+    pub local_e2e_private_key: Option<Vec<u8>>,
+    pub shared_secret: Option<Vec<u8>>,
     pub delivery_cursor: RadrootsSimplexAgentDeliveryCursor,
+    pub last_received_queue: Option<RadrootsSimplexAgentQueueAddress>,
+    pub last_received_broker_message_id: Option<Vec<u8>>,
     pub recent_messages: Vec<RadrootsSimplexAgentRecentMessageRecord>,
     pub staged_outbound_message: Option<RadrootsSimplexAgentOutboundMessage>,
 }
@@ -145,7 +154,12 @@ struct RadrootsSimplexAgentConnectionSnapshot {
     invitation: Option<Vec<u8>>,
     queues: Vec<RadrootsSimplexAgentQueueRecordSnapshot>,
     ratchet_state: Option<RadrootsSimplexAgentRatchetStateSnapshot>,
+    local_e2e_public_key: Option<Vec<u8>>,
+    local_e2e_private_key: Option<Vec<u8>>,
+    shared_secret: Option<Vec<u8>>,
     delivery_cursor: RadrootsSimplexAgentDeliveryCursor,
+    last_received_queue: Option<RadrootsSimplexAgentQueueAddressSnapshot>,
+    last_received_broker_message_id: Option<Vec<u8>>,
     recent_messages: Vec<RadrootsSimplexAgentRecentMessageRecord>,
     staged_outbound_message: Option<RadrootsSimplexAgentOutboundMessage>,
 }
@@ -154,11 +168,14 @@ struct RadrootsSimplexAgentConnectionSnapshot {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct RadrootsSimplexAgentQueueRecordSnapshot {
     descriptor: RadrootsSimplexAgentQueueDescriptorSnapshot,
+    entity_id: Vec<u8>,
     role: String,
     subscribed: bool,
     primary: bool,
     tested: bool,
     auth_state: Option<RadrootsSimplexAgentQueueAuthState>,
+    delivery_private_key: Option<Vec<u8>>,
+    delivery_shared_secret: Option<Vec<u8>>,
 }
 
 #[cfg(feature = "std")]
@@ -228,6 +245,7 @@ enum RadrootsSimplexAgentPendingCommandKindSnapshot {
     },
     AckInboxMessage {
         queue: RadrootsSimplexAgentQueueAddressSnapshot,
+        broker_message_id: Vec<u8>,
         receipt: RadrootsSimplexAgentMessageReceiptSnapshot,
     },
     RotateQueues {
@@ -353,12 +371,17 @@ impl RadrootsSimplexAgentStore {
             invitation,
             queues: Vec::new(),
             ratchet_state,
+            local_e2e_public_key: None,
+            local_e2e_private_key: None,
+            shared_secret: None,
             delivery_cursor: RadrootsSimplexAgentDeliveryCursor {
                 last_sent_message_id: None,
                 last_received_message_id: None,
                 last_sent_message_hash: None,
                 last_received_message_hash: None,
             },
+            last_received_queue: None,
+            last_received_broker_message_id: None,
             recent_messages: Vec::new(),
             staged_outbound_message: None,
         };
@@ -409,18 +432,22 @@ impl RadrootsSimplexAgentStore {
             .find(|queue| queue.descriptor.queue_address() == address)
         {
             queue.descriptor = descriptor;
+            queue.entity_id = address.sender_id.clone();
             queue.role = role;
             queue.primary = primary;
             queue.auth_state = Some(auth_state);
             return Ok(());
         }
         connection.queues.push(RadrootsSimplexAgentQueueRecord {
+            entity_id: address.sender_id.clone(),
             descriptor,
             role,
             subscribed: false,
             primary,
             tested: false,
             auth_state: Some(auth_state),
+            delivery_private_key: None,
+            delivery_shared_secret: None,
         });
         Ok(())
     }
@@ -617,12 +644,16 @@ impl RadrootsSimplexAgentStore {
     pub fn record_inbound_message(
         &mut self,
         connection_id: &str,
+        queue_address: RadrootsSimplexAgentQueueAddress,
+        broker_message_id: Vec<u8>,
         message_id: RadrootsSimplexAgentMessageId,
         message_hash: Vec<u8>,
     ) -> Result<(), RadrootsSimplexAgentStoreError> {
         let connection = self.connection_mut(connection_id)?;
         connection.delivery_cursor.last_received_message_id = Some(message_id);
         connection.delivery_cursor.last_received_message_hash = Some(message_hash.clone());
+        connection.last_received_queue = Some(queue_address);
+        connection.last_received_broker_message_id = Some(broker_message_id);
         connection
             .recent_messages
             .push(RadrootsSimplexAgentRecentMessageRecord {
@@ -780,7 +811,12 @@ fn connection_to_snapshot(
             .map(queue_record_to_snapshot)
             .collect::<Result<Vec<_>, _>>()?,
         ratchet_state: record.ratchet_state.map(ratchet_state_to_snapshot),
+        local_e2e_public_key: record.local_e2e_public_key,
+        local_e2e_private_key: record.local_e2e_private_key,
+        shared_secret: record.shared_secret,
         delivery_cursor: record.delivery_cursor,
+        last_received_queue: record.last_received_queue.map(queue_address_to_snapshot),
+        last_received_broker_message_id: record.last_received_broker_message_id,
         recent_messages: record.recent_messages,
         staged_outbound_message: record.staged_outbound_message,
     })
@@ -814,7 +850,15 @@ fn connection_from_snapshot(
             .ratchet_state
             .map(ratchet_state_from_snapshot)
             .transpose()?,
+        local_e2e_public_key: snapshot.local_e2e_public_key,
+        local_e2e_private_key: snapshot.local_e2e_private_key,
+        shared_secret: snapshot.shared_secret,
         delivery_cursor: snapshot.delivery_cursor,
+        last_received_queue: snapshot
+            .last_received_queue
+            .map(queue_address_from_snapshot)
+            .transpose()?,
+        last_received_broker_message_id: snapshot.last_received_broker_message_id,
         recent_messages: snapshot.recent_messages,
         staged_outbound_message: snapshot.staged_outbound_message,
     })
@@ -826,11 +870,14 @@ fn queue_record_to_snapshot(
 ) -> Result<RadrootsSimplexAgentQueueRecordSnapshot, RadrootsSimplexAgentStoreError> {
     Ok(RadrootsSimplexAgentQueueRecordSnapshot {
         descriptor: queue_descriptor_to_snapshot(record.descriptor),
+        entity_id: record.entity_id,
         role: encode_queue_role(record.role).into(),
         subscribed: record.subscribed,
         primary: record.primary,
         tested: record.tested,
         auth_state: record.auth_state,
+        delivery_private_key: record.delivery_private_key,
+        delivery_shared_secret: record.delivery_shared_secret,
     })
 }
 
@@ -840,11 +887,14 @@ fn queue_record_from_snapshot(
 ) -> Result<RadrootsSimplexAgentQueueRecord, RadrootsSimplexAgentStoreError> {
     Ok(RadrootsSimplexAgentQueueRecord {
         descriptor: queue_descriptor_from_snapshot(snapshot.descriptor)?,
+        entity_id: snapshot.entity_id,
         role: decode_queue_role(&snapshot.role)?,
         subscribed: snapshot.subscribed,
         primary: snapshot.primary,
         tested: snapshot.tested,
         auth_state: snapshot.auth_state,
+        delivery_private_key: snapshot.delivery_private_key,
+        delivery_shared_secret: snapshot.delivery_shared_secret,
     })
 }
 
@@ -1037,16 +1087,19 @@ fn command_kind_to_snapshot(
                 queue: queue_address_to_snapshot(queue),
             }
         }
-        RadrootsSimplexAgentPendingCommandKind::AckInboxMessage { queue, receipt } => {
-            RadrootsSimplexAgentPendingCommandKindSnapshot::AckInboxMessage {
-                queue: queue_address_to_snapshot(queue),
-                receipt: RadrootsSimplexAgentMessageReceiptSnapshot {
-                    message_id: receipt.message_id,
-                    message_hash: receipt.message_hash,
-                    receipt_info: receipt.receipt_info,
-                },
-            }
-        }
+        RadrootsSimplexAgentPendingCommandKind::AckInboxMessage {
+            queue,
+            broker_message_id,
+            receipt,
+        } => RadrootsSimplexAgentPendingCommandKindSnapshot::AckInboxMessage {
+            queue: queue_address_to_snapshot(queue),
+            broker_message_id,
+            receipt: RadrootsSimplexAgentMessageReceiptSnapshot {
+                message_id: receipt.message_id,
+                message_hash: receipt.message_hash,
+                receipt_info: receipt.receipt_info,
+            },
+        },
         RadrootsSimplexAgentPendingCommandKind::RotateQueues { descriptors } => {
             RadrootsSimplexAgentPendingCommandKindSnapshot::RotateQueues {
                 descriptors: descriptors
@@ -1097,16 +1150,19 @@ fn command_kind_from_snapshot(
                 queue: queue_address_from_snapshot(queue)?,
             }
         }
-        RadrootsSimplexAgentPendingCommandKindSnapshot::AckInboxMessage { queue, receipt } => {
-            RadrootsSimplexAgentPendingCommandKind::AckInboxMessage {
-                queue: queue_address_from_snapshot(queue)?,
-                receipt: RadrootsSimplexAgentMessageReceipt {
-                    message_id: receipt.message_id,
-                    message_hash: receipt.message_hash,
-                    receipt_info: receipt.receipt_info,
-                },
-            }
-        }
+        RadrootsSimplexAgentPendingCommandKindSnapshot::AckInboxMessage {
+            queue,
+            broker_message_id,
+            receipt,
+        } => RadrootsSimplexAgentPendingCommandKind::AckInboxMessage {
+            queue: queue_address_from_snapshot(queue)?,
+            broker_message_id,
+            receipt: RadrootsSimplexAgentMessageReceipt {
+                message_id: receipt.message_id,
+                message_hash: receipt.message_hash,
+                receipt_info: receipt.receipt_info,
+            },
+        },
         RadrootsSimplexAgentPendingCommandKindSnapshot::RotateQueues { descriptors } => {
             RadrootsSimplexAgentPendingCommandKind::RotateQueues {
                 descriptors: descriptors
