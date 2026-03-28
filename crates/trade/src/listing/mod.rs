@@ -3,6 +3,7 @@ pub mod dvm;
 pub mod kinds;
 pub mod model;
 pub mod order;
+pub mod overlay;
 pub mod price_ext;
 pub mod projection;
 pub mod tags;
