@@ -1169,6 +1169,10 @@ impl RadrootsTradeReadIndex {
             return Err(RadrootsTradeProjectionError::ListingAddrMismatch);
         }
         ensure_actor(&order.buyer_pubkey, &message.actor_pubkey)?;
+        radroots_trade_order_status_ensure_transition(
+            order.status.clone(),
+            TradeOrderStatus::Requested,
+        )?;
 
         if let Some(existing) = self.orders.get(&order.order_id) {
             if existing.listing_addr != order.listing_addr
@@ -1787,7 +1791,7 @@ mod tests {
                 RadrootsCorePercent::new(RadrootsCoreDecimal::from(10u32)),
             )]),
             notes: Some("deliver friday".into()),
-            status: TradeOrderStatus::Draft,
+            status: TradeOrderStatus::Requested,
         }
     }
 
@@ -1875,7 +1879,7 @@ mod tests {
             ],
             discounts: None,
             notes: Some("expedite".into()),
-            status: TradeOrderStatus::Draft,
+            status: TradeOrderStatus::Requested,
         }
     }
 
@@ -2401,6 +2405,25 @@ mod tests {
         assert_eq!(
             err,
             RadrootsTradeProjectionError::MissingPrimaryBin("missing".into())
+        );
+
+        let err = index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-1"),
+                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    status: TradeOrderStatus::Accepted,
+                    ..base_order()
+                }),
+            ))
+            .expect_err("non-requested order request should fail");
+        assert_eq!(
+            err,
+            RadrootsTradeProjectionError::InvalidTransition {
+                from: TradeOrderStatus::Accepted,
+                to: TradeOrderStatus::Requested,
+            }
         );
     }
 
