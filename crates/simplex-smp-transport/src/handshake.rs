@@ -7,7 +7,8 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use radroots_simplex_smp_proto::prelude::{
     RADROOTS_SIMPLEX_SMP_CURRENT_TRANSPORT_VERSION, RADROOTS_SIMPLEX_SMP_INITIAL_TRANSPORT_VERSION,
-    RadrootsSimplexSmpVersionRange,
+    RADROOTS_SIMPLEX_SMP_PROXY_SERVER_HANDSHAKE_TRANSPORT_VERSION,
+    RADROOTS_SIMPLEX_SMP_SERVICE_CERTS_TRANSPORT_VERSION, RadrootsSimplexSmpVersionRange,
 };
 
 pub const RADROOTS_SIMPLEX_SMP_TLS_ALPN_V1: &str = "smp/1";
@@ -32,7 +33,9 @@ pub struct RadrootsSimplexSmpServerHello {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RadrootsSimplexSmpClientHello {
     pub chosen_version: u16,
+    pub server_key_hash: Vec<u8>,
     pub client_key: Option<Vec<u8>>,
+    pub proxy_server: bool,
     pub ignored_part: Vec<u8>,
 }
 
@@ -79,10 +82,8 @@ impl RadrootsSimplexSmpServerHello {
         payload.extend_from_slice(&self.version_range.max.to_be_bytes());
         push_short_bytes(&mut payload, &self.session_identifier)?;
         if let Some(proof) = &self.server_proof {
-            payload.extend_from_slice(&(proof.certificate_payload.len() as u16).to_be_bytes());
             payload.extend_from_slice(&proof.certificate_payload);
-            payload.extend_from_slice(&(proof.signed_server_key.len() as u16).to_be_bytes());
-            payload.extend_from_slice(&proof.signed_server_key);
+            push_large_bytes(&mut payload, &proof.signed_server_key)?;
         }
         payload.extend_from_slice(&self.ignored_part);
         encode_padded_bytes(
@@ -130,8 +131,15 @@ impl RadrootsSimplexSmpClientHello {
     pub fn encode(&self) -> Result<Vec<u8>, RadrootsSimplexSmpTransportError> {
         let mut payload = Vec::new();
         payload.extend_from_slice(&self.chosen_version.to_be_bytes());
+        push_short_bytes(&mut payload, &self.server_key_hash)?;
         if let Some(client_key) = &self.client_key {
             push_short_bytes(&mut payload, client_key)?;
+        }
+        if self.chosen_version >= RADROOTS_SIMPLEX_SMP_PROXY_SERVER_HANDSHAKE_TRANSPORT_VERSION {
+            payload.push(if self.proxy_server { b'T' } else { b'F' });
+        }
+        if self.chosen_version >= RADROOTS_SIMPLEX_SMP_SERVICE_CERTS_TRANSPORT_VERSION {
+            payload.push(b'0');
         }
         payload.extend_from_slice(&self.ignored_part);
         encode_padded_bytes(
@@ -153,11 +161,57 @@ impl RadrootsSimplexSmpClientHello {
             ));
         };
         let chosen_version = u16::from_be_bytes([version_bytes[0], version_bytes[1]]);
-        let (client_key, ignored_part) = parse_optional_client_key(&payload[2..]);
+        let (server_key_hash, mut cursor) = read_short_bytes(&payload, 2)?;
+        let client_key = if chosen_version
+            >= RADROOTS_SIMPLEX_SMP_PROXY_SERVER_HANDSHAKE_TRANSPORT_VERSION
+            && matches!(payload.get(cursor), Some(b'T' | b'F'))
+        {
+            None
+        } else {
+            let (client_key, consumed) = parse_optional_client_key(&payload[cursor..]);
+            cursor += consumed;
+            client_key
+        };
+        let proxy_server =
+            if chosen_version >= RADROOTS_SIMPLEX_SMP_PROXY_SERVER_HANDSHAKE_TRANSPORT_VERSION {
+                let Some(value) = payload.get(cursor) else {
+                    return Err(RadrootsSimplexSmpTransportError::MissingHandshakeField(
+                        "proxy_server",
+                    ));
+                };
+                cursor += 1;
+                match *value {
+                    b'T' => true,
+                    b'F' => false,
+                    _ => {
+                        return Err(RadrootsSimplexSmpTransportError::MissingHandshakeField(
+                            "proxy_server",
+                        ));
+                    }
+                }
+            } else {
+                false
+            };
+        if chosen_version >= RADROOTS_SIMPLEX_SMP_SERVICE_CERTS_TRANSPORT_VERSION {
+            let Some(tag) = payload.get(cursor) else {
+                return Err(RadrootsSimplexSmpTransportError::MissingHandshakeField(
+                    "client_service",
+                ));
+            };
+            cursor += 1;
+            if *tag != b'0' {
+                return Err(RadrootsSimplexSmpTransportError::MissingHandshakeField(
+                    "client_service",
+                ));
+            }
+        }
+        let ignored_part = payload[cursor..].to_vec();
 
         Ok(Self {
             chosen_version,
+            server_key_hash,
             client_key,
+            proxy_server,
             ignored_part,
         })
     }
@@ -254,6 +308,18 @@ fn push_short_bytes(
     Ok(())
 }
 
+fn push_large_bytes(
+    buffer: &mut Vec<u8>,
+    bytes: &[u8],
+) -> Result<(), RadrootsSimplexSmpTransportError> {
+    let len = u16::try_from(bytes.len()).map_err(|_| {
+        RadrootsSimplexSmpTransportError::InvalidSessionIdentifierLength(bytes.len())
+    })?;
+    buffer.extend_from_slice(&len.to_be_bytes());
+    buffer.extend_from_slice(bytes);
+    Ok(())
+}
+
 fn read_short_bytes(
     payload: &[u8],
     offset: usize,
@@ -273,41 +339,63 @@ fn read_short_bytes(
     Ok((value.to_vec(), end))
 }
 
+fn read_large_bytes(
+    payload: &[u8],
+    offset: usize,
+) -> Result<(Vec<u8>, usize), RadrootsSimplexSmpTransportError> {
+    let Some(length_bytes) = payload.get(offset..offset + 2) else {
+        return Err(RadrootsSimplexSmpTransportError::MissingHandshakeField(
+            "large_field",
+        ));
+    };
+    let length = u16::from_be_bytes([length_bytes[0], length_bytes[1]]) as usize;
+    let start = offset + 2;
+    let end = start + length;
+    let Some(value) = payload.get(start..end) else {
+        return Err(
+            radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpProtoError::UnexpectedEof.into(),
+        );
+    };
+    Ok((value.to_vec(), end))
+}
+
 fn parse_optional_server_proof(
     remainder: &[u8],
 ) -> (Option<RadrootsSimplexSmpTransportServerProof>, Vec<u8>) {
-    if remainder.len() < 4 {
+    let Some(&cert_count) = remainder.first() else {
+        return (None, remainder.to_vec());
+    };
+    if cert_count == 0 {
         return (None, remainder.to_vec());
     }
-    let cert_len = u16::from_be_bytes([remainder[0], remainder[1]]) as usize;
-    let cert_end = 2 + cert_len;
-    if cert_len == 0 || cert_end + 2 > remainder.len() {
-        return (None, remainder.to_vec());
+    let mut cursor = 1;
+    for _ in 0..cert_count {
+        let Ok((_, next_cursor)) = read_large_bytes(remainder, cursor) else {
+            return (None, remainder.to_vec());
+        };
+        cursor = next_cursor;
     }
-    let key_len = u16::from_be_bytes([remainder[cert_end], remainder[cert_end + 1]]) as usize;
-    let key_start = cert_end + 2;
-    let key_end = key_start + key_len;
-    if key_len == 0 || key_end > remainder.len() {
+    let Ok((signed_server_key, cursor)) = read_large_bytes(remainder, cursor) else {
         return (None, remainder.to_vec());
-    }
+    };
     (
         Some(RadrootsSimplexSmpTransportServerProof {
-            certificate_payload: remainder[2..cert_end].to_vec(),
-            signed_server_key: remainder[key_start..key_end].to_vec(),
+            certificate_payload: remainder[..cursor - signed_server_key.len() - 2].to_vec(),
+            signed_server_key,
         }),
-        remainder[key_end..].to_vec(),
+        remainder[cursor..].to_vec(),
     )
 }
 
-fn parse_optional_client_key(remainder: &[u8]) -> (Option<Vec<u8>>, Vec<u8>) {
+fn parse_optional_client_key(remainder: &[u8]) -> (Option<Vec<u8>>, usize) {
     let Some(&length) = remainder.first() else {
-        return (None, Vec::new());
+        return (None, 0);
     };
     let end = 1 + length as usize;
     if length == 0 || end > remainder.len() {
-        return (None, remainder.to_vec());
+        return (None, remainder.len());
     }
-    (Some(remainder[1..end].to_vec()), remainder[end..].to_vec())
+    (Some(remainder[1..end].to_vec()), end)
 }
 
 #[cfg(test)]
@@ -320,7 +408,7 @@ mod tests {
             version_range: RadrootsSimplexSmpVersionRange::new(6, 17).unwrap(),
             session_identifier: b"tls-unique-binding".to_vec(),
             server_proof: Some(RadrootsSimplexSmpTransportServerProof {
-                certificate_payload: b"cert-chain".to_vec(),
+                certificate_payload: encode_certificate_chain_payload([b"cert-chain".as_slice()]),
                 signed_server_key: b"signed-key".to_vec(),
             }),
             ignored_part: b"ignored".to_vec(),
@@ -389,5 +477,18 @@ mod tests {
             error,
             RadrootsSimplexSmpTransportError::ServerIdentityMismatch { .. }
         ));
+    }
+
+    fn encode_certificate_chain_payload<'a, I>(certificates: I) -> Vec<u8>
+    where
+        I: IntoIterator<Item = &'a [u8]>,
+    {
+        let certificates: Vec<&[u8]> = certificates.into_iter().collect();
+        let mut payload = vec![certificates.len() as u8];
+        for certificate in certificates {
+            payload.extend_from_slice(&(certificate.len() as u16).to_be_bytes());
+            payload.extend_from_slice(certificate);
+        }
+        payload
     }
 }

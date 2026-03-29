@@ -48,7 +48,7 @@ impl RadrootsSimplexSmpTransportBlock {
     }
 
     pub fn encode(&self) -> Result<Vec<u8>, RadrootsSimplexSmpTransportError> {
-        let payload = encode_transport_payload(&self.transmissions)?;
+        let payload = self.encode_payload()?;
         encode_padded_bytes(
             &payload,
             RADROOTS_SIMPLEX_SMP_TRANSPORT_BLOCK_SIZE,
@@ -62,7 +62,15 @@ impl RadrootsSimplexSmpTransportBlock {
             RADROOTS_SIMPLEX_SMP_TRANSPORT_BLOCK_SIZE,
             RADROOTS_SIMPLEX_SMP_TRANSPORT_PAD_BYTE,
         )?;
-        let transmissions = decode_transport_payload(&payload)?;
+        Self::from_payload(&payload)
+    }
+
+    pub fn encode_payload(&self) -> Result<Vec<u8>, RadrootsSimplexSmpTransportError> {
+        encode_transport_payload(&self.transmissions)
+    }
+
+    pub fn from_payload(payload: &[u8]) -> Result<Self, RadrootsSimplexSmpTransportError> {
+        let transmissions = decode_transport_payload(payload)?;
         Self::new(transmissions)
     }
 
@@ -312,5 +320,14 @@ mod tests {
             error,
             RadrootsSimplexSmpTransportError::InvalidPadding { .. }
         ));
+    }
+
+    #[test]
+    fn roundtrips_transport_payload_without_padding() {
+        let block =
+            RadrootsSimplexSmpTransportBlock::new(vec![b"one".to_vec(), b"two".to_vec()]).unwrap();
+        let payload = block.encode_payload().unwrap();
+        let decoded = RadrootsSimplexSmpTransportBlock::from_payload(&payload).unwrap();
+        assert_eq!(decoded, block);
     }
 }

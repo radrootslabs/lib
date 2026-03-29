@@ -781,6 +781,7 @@ impl RadrootsSimplexSmpCommandTransmission {
         transport_version: u16,
     ) -> Result<Vec<u8>, RadrootsSimplexSmpProtoError> {
         encode_transmission(
+            transport_version,
             &self.authorization,
             self.correlation_id,
             &self.entity_id,
@@ -796,7 +797,8 @@ impl RadrootsSimplexSmpCommandTransmission {
         transport_version: u16,
         bytes: &[u8],
     ) -> Result<Self, RadrootsSimplexSmpProtoError> {
-        let (authorization, correlation_id, entity_id, frame) = decode_transmission(bytes)?;
+        let (authorization, correlation_id, entity_id, frame) =
+            decode_transmission(transport_version, bytes)?;
         Ok(Self {
             authorization,
             correlation_id,
@@ -816,6 +818,7 @@ impl RadrootsSimplexSmpBrokerTransmission {
         transport_version: u16,
     ) -> Result<Vec<u8>, RadrootsSimplexSmpProtoError> {
         encode_transmission(
+            transport_version,
             &self.authorization,
             self.correlation_id,
             &self.entity_id,
@@ -831,7 +834,8 @@ impl RadrootsSimplexSmpBrokerTransmission {
         transport_version: u16,
         bytes: &[u8],
     ) -> Result<Self, RadrootsSimplexSmpProtoError> {
-        let (authorization, correlation_id, entity_id, frame) = decode_transmission(bytes)?;
+        let (authorization, correlation_id, entity_id, frame) =
+            decode_transmission(transport_version, bytes)?;
         Ok(Self {
             authorization,
             correlation_id,
@@ -1295,6 +1299,7 @@ fn is_valid_domain_transport_host(host: &str) -> bool {
 }
 
 fn encode_transmission(
+    transport_version: u16,
     authorization: &[u8],
     correlation_id: Option<RadrootsSimplexSmpCorrelationId>,
     entity_id: &[u8],
@@ -1302,6 +1307,11 @@ fn encode_transmission(
 ) -> Result<Vec<u8>, RadrootsSimplexSmpProtoError> {
     let mut buffer = Vec::new();
     push_short_bytes(&mut buffer, authorization)?;
+    if transport_version >= RADROOTS_SIMPLEX_SMP_SERVICE_CERTS_TRANSPORT_VERSION
+        && !authorization.is_empty()
+    {
+        push_maybe_short_bytes(&mut buffer, None)?;
+    }
     push_short_bytes(
         &mut buffer,
         correlation_id
@@ -1315,6 +1325,7 @@ fn encode_transmission(
 }
 
 fn decode_transmission(
+    transport_version: u16,
     bytes: &[u8],
 ) -> Result<
     (
@@ -1327,6 +1338,11 @@ fn decode_transmission(
 > {
     let mut cursor = Cursor::new(bytes);
     let authorization = cursor.read_short_bytes()?;
+    if transport_version >= RADROOTS_SIMPLEX_SMP_SERVICE_CERTS_TRANSPORT_VERSION
+        && !authorization.is_empty()
+    {
+        let _ = cursor.read_maybe(Cursor::read_short_bytes)?;
+    }
     let correlation_id = match cursor.read_short_bytes()?.as_slice() {
         [] => None,
         value => Some(RadrootsSimplexSmpCorrelationId::from_slice(value)?),
@@ -2183,6 +2199,24 @@ mod tests {
             &encoded,
         )
         .unwrap();
+        assert_eq!(decoded, transmission);
+    }
+
+    #[test]
+    fn current_authenticated_transmission_encodes_absent_service_signature_as_maybe_none() {
+        let transmission = RadrootsSimplexSmpCommandTransmission {
+            authorization: vec![1, 2, 3],
+            correlation_id: Some(correlation_id(7)),
+            entity_id: Vec::new(),
+            command: RadrootsSimplexSmpCommand::Ping,
+        };
+
+        let encoded = transmission.encode().unwrap();
+        assert_eq!(encoded[0], 3);
+        assert_eq!(&encoded[1..4], &[1, 2, 3]);
+        assert_eq!(encoded[4], b'0');
+
+        let decoded = RadrootsSimplexSmpCommandTransmission::decode(&encoded).unwrap();
         assert_eq!(decoded, transmission);
     }
 

@@ -22,8 +22,9 @@ use radroots_simplex_agent_store::prelude::{
 };
 use radroots_simplex_smp_crypto::prelude::{
     RADROOTS_SIMPLEX_SMP_NONCE_LENGTH, RadrootsSimplexSmpCommandAuthorization,
-    RadrootsSimplexSmpRatchetState, RadrootsSimplexSmpX25519Keypair, decrypt_padded,
-    derive_shared_secret, encrypt_padded, random_nonce,
+    RadrootsSimplexSmpRatchetState, RadrootsSimplexSmpX25519Keypair, decode_x25519_public_key_x509,
+    decrypt_padded, derive_shared_secret, encode_ed25519_public_key_x509,
+    encode_x25519_public_key_x509, encrypt_padded, random_nonce,
 };
 use radroots_simplex_smp_proto::prelude::{
     RADROOTS_SIMPLEX_SMP_CURRENT_CLIENT_VERSION, RADROOTS_SIMPLEX_SMP_CURRENT_TRANSPORT_VERSION,
@@ -782,7 +783,7 @@ impl RadrootsSimplexAgentRuntime {
         &self,
         command: &RadrootsSimplexAgentPendingCommand,
     ) -> Result<RadrootsSimplexSmpTransportRequest, RadrootsSimplexAgentRuntimeError> {
-        let (queue_address, _entity_id, smp_command) = self.command_transport_parts(command)?;
+        let (queue_address, entity_id, smp_command) = self.command_transport_parts(command)?;
         let queue = self
             .store
             .queue_record(&command.connection_id, &queue_address)?;
@@ -815,7 +816,7 @@ impl RadrootsSimplexAgentRuntime {
             server: queue.descriptor.queue_uri.server.clone(),
             transport_version: RADROOTS_SIMPLEX_SMP_CURRENT_TRANSPORT_VERSION,
             correlation_id: Some(correlation_id),
-            entity_id: queue.entity_id,
+            entity_id,
             command: smp_command,
             authorization,
         })
@@ -850,14 +851,23 @@ impl RadrootsSimplexAgentRuntime {
                     descriptor.queue_address(),
                     Vec::new(),
                     RadrootsSimplexSmpCommand::New(RadrootsSimplexSmpNewQueueRequest {
-                        recipient_auth_public_key: auth_state.public_key,
-                        recipient_dh_public_key:
-                            RadrootsSimplexSmpX25519Keypair::public_key_from_private(
+                        recipient_auth_public_key: encode_ed25519_public_key_x509(
+                            &auth_state.public_key,
+                        )
+                        .map_err(|error| {
+                            RadrootsSimplexAgentRuntimeError::Runtime(error.to_string())
+                        })?,
+                        recipient_dh_public_key: encode_x25519_public_key_x509(
+                            &RadrootsSimplexSmpX25519Keypair::public_key_from_private(
                                 &delivery_private_key,
                             )
                             .map_err(|error| {
                                 RadrootsSimplexAgentRuntimeError::Runtime(error.to_string())
                             })?,
+                        )
+                        .map_err(|error| {
+                            RadrootsSimplexAgentRuntimeError::Runtime(error.to_string())
+                        })?,
                         basic_auth: None,
                         subscription_mode: RadrootsSimplexSmpSubscriptionMode::Subscribe,
                         queue_request_data: Some(
@@ -881,7 +891,12 @@ impl RadrootsSimplexAgentRuntime {
             RadrootsSimplexAgentPendingCommandKind::SecureQueue { queue, sender_key } => Ok((
                 queue.clone(),
                 queue.sender_id.clone(),
-                RadrootsSimplexSmpCommand::SKey(sender_key.clone().unwrap_or_default()),
+                RadrootsSimplexSmpCommand::SKey(
+                    encode_ed25519_public_key_x509(sender_key.as_deref().unwrap_or_default())
+                        .map_err(|error| {
+                            RadrootsSimplexAgentRuntimeError::Runtime(error.to_string())
+                        })?,
+                ),
             )),
             RadrootsSimplexAgentPendingCommandKind::SendEnvelope {
                 queue, envelope, ..
@@ -1095,8 +1110,10 @@ impl RadrootsSimplexAgentRuntime {
                     "SimpleX receive queue missing delivery private key".into(),
                 )
             })?;
+            let server_dh_public_key = decode_x25519_public_key_x509(&ids.server_dh_public_key)
+                .map_err(|error| RadrootsSimplexAgentRuntimeError::Runtime(error.to_string()))?;
             queue.delivery_shared_secret = Some(
-                derive_shared_secret(&delivery_private_key, &ids.server_dh_public_key).map_err(
+                derive_shared_secret(&delivery_private_key, &server_dh_public_key).map_err(
                     |error| RadrootsSimplexAgentRuntimeError::Runtime(error.to_string()),
                 )?,
             );

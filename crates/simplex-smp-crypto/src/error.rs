@@ -19,6 +19,8 @@ pub enum RadrootsSimplexSmpCryptoError {
     InvalidSignatureLength(usize),
     SignatureVerificationFailed,
     InvalidSessionIdentifier(String),
+    InvalidKeyDerivationLength(usize),
+    InvalidSecretBoxChainKeyLength(usize),
 }
 
 impl From<RadrootsSimplexSmpProtoError> for RadrootsSimplexSmpCryptoError {
@@ -79,6 +81,12 @@ impl fmt::Display for RadrootsSimplexSmpCryptoError {
             }
             Self::InvalidSessionIdentifier(value) => {
                 write!(f, "invalid SMP session identifier `{value}`")
+            }
+            Self::InvalidKeyDerivationLength(length) => {
+                write!(f, "invalid SMP key derivation length {length}")
+            }
+            Self::InvalidSecretBoxChainKeyLength(length) => {
+                write!(f, "invalid SMP secretbox chain key length {length}")
             }
         }
     }

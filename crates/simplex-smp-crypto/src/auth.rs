@@ -4,6 +4,17 @@ use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use radroots_simplex_smp_proto::prelude::{
     RadrootsSimplexSmpBrokerMessage, RadrootsSimplexSmpCommand, RadrootsSimplexSmpCorrelationId,
 };
+use x25519_dalek::PublicKey as X25519PublicKey;
+
+const ED25519_SPKI_DER_PREFIX: &[u8] = &[
+    0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x03, 0x21, 0x00,
+];
+const X25519_SPKI_DER_PREFIX: &[u8] = &[
+    0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x6e, 0x03, 0x21, 0x00,
+];
+const X25519_SPKI_DER_PREFIX_WRAPPED: &[u8] = &[
+    0x30, 0x2c, 0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x6e, 0x03, 0x21, 0x00,
+];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RadrootsSimplexSmpEd25519Keypair {
@@ -148,6 +159,49 @@ impl RadrootsSimplexSmpQueueAuthorizationMaterial {
     }
 }
 
+pub fn encode_ed25519_public_key_x509(
+    public_key: &[u8],
+) -> Result<Vec<u8>, RadrootsSimplexSmpCryptoError> {
+    let _: [u8; 32] = public_key
+        .try_into()
+        .map_err(|_| RadrootsSimplexSmpCryptoError::InvalidPublicKeyLength(public_key.len()))?;
+    let mut encoded = Vec::with_capacity(ED25519_SPKI_DER_PREFIX.len() + public_key.len());
+    encoded.extend_from_slice(ED25519_SPKI_DER_PREFIX);
+    encoded.extend_from_slice(public_key);
+    Ok(encoded)
+}
+
+pub fn encode_x25519_public_key_x509(
+    public_key: &[u8],
+) -> Result<Vec<u8>, RadrootsSimplexSmpCryptoError> {
+    let _: [u8; 32] = public_key
+        .try_into()
+        .map_err(|_| RadrootsSimplexSmpCryptoError::InvalidPublicKeyLength(public_key.len()))?;
+    let mut encoded = Vec::with_capacity(X25519_SPKI_DER_PREFIX.len() + public_key.len());
+    encoded.extend_from_slice(X25519_SPKI_DER_PREFIX);
+    encoded.extend_from_slice(public_key);
+    Ok(encoded)
+}
+
+pub fn decode_x25519_public_key_x509(
+    encoded: &[u8],
+) -> Result<Vec<u8>, RadrootsSimplexSmpCryptoError> {
+    if encoded.len() == 32 {
+        let key: [u8; 32] = encoded
+            .try_into()
+            .map_err(|_| RadrootsSimplexSmpCryptoError::InvalidPublicKeyLength(encoded.len()))?;
+        return Ok(X25519PublicKey::from(key).as_bytes().to_vec());
+    }
+    let raw = encoded
+        .strip_prefix(X25519_SPKI_DER_PREFIX)
+        .or_else(|| encoded.strip_prefix(X25519_SPKI_DER_PREFIX_WRAPPED))
+        .ok_or_else(|| RadrootsSimplexSmpCryptoError::InvalidPublicKeyLength(encoded.len()))?;
+    let key: [u8; 32] = raw
+        .try_into()
+        .map_err(|_| RadrootsSimplexSmpCryptoError::InvalidPublicKeyLength(encoded.len()))?;
+    Ok(X25519PublicKey::from(key).as_bytes().to_vec())
+}
+
 pub fn verify_signature(
     payload: &[u8],
     public_key: &[u8],
@@ -241,5 +295,35 @@ mod tests {
         .unwrap();
 
         assert!(material.authorization.is_empty());
+    }
+
+    #[test]
+    fn ed25519_public_key_x509_roundtrips_shape() {
+        let keypair = RadrootsSimplexSmpEd25519Keypair::generate().unwrap();
+        let encoded = encode_ed25519_public_key_x509(&keypair.public_key).unwrap();
+
+        assert_eq!(
+            &encoded[..ED25519_SPKI_DER_PREFIX.len()],
+            ED25519_SPKI_DER_PREFIX
+        );
+        assert_eq!(
+            &encoded[ED25519_SPKI_DER_PREFIX.len()..],
+            keypair.public_key
+        );
+    }
+
+    #[test]
+    fn x25519_public_key_x509_roundtrips_and_accepts_raw() {
+        let keypair = crate::message::RadrootsSimplexSmpX25519Keypair::generate().unwrap();
+        let encoded = encode_x25519_public_key_x509(&keypair.public_key).unwrap();
+
+        assert_eq!(
+            decode_x25519_public_key_x509(&encoded).unwrap(),
+            keypair.public_key
+        );
+        assert_eq!(
+            decode_x25519_public_key_x509(&keypair.public_key).unwrap(),
+            keypair.public_key
+        );
     }
 }

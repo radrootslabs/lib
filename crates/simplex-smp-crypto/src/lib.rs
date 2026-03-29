@@ -12,13 +12,15 @@ pub mod prelude {
     pub use crate::auth::{
         RadrootsSimplexSmpCommandAuthorization, RadrootsSimplexSmpEd25519Keypair,
         RadrootsSimplexSmpQueueAuthorizationMaterial, RadrootsSimplexSmpQueueAuthorizationScope,
-        verify_signature,
+        decode_x25519_public_key_x509, encode_ed25519_public_key_x509,
+        encode_x25519_public_key_x509, verify_signature,
     };
     pub use crate::error::RadrootsSimplexSmpCryptoError;
     pub use crate::message::{
         RADROOTS_SIMPLEX_SMP_NONCE_LENGTH, RADROOTS_SIMPLEX_SMP_SHARED_SECRET_LENGTH,
-        RadrootsSimplexSmpX25519Keypair, decrypt_no_pad, decrypt_padded, derive_shared_secret,
-        encrypt_no_pad, encrypt_padded, random_nonce,
+        RadrootsSimplexSmpSecretBoxChainKey, RadrootsSimplexSmpX25519Keypair,
+        advance_secretbox_chain, decrypt_no_pad, decrypt_padded, derive_shared_secret,
+        encrypt_no_pad, encrypt_padded, init_secretbox_chain, random_nonce,
     };
     pub use crate::ratchet::{
         RadrootsSimplexSmpRatchetHeader, RadrootsSimplexSmpRatchetRole,

@@ -1,7 +1,8 @@
 use crate::error::RadrootsSimplexSmpCryptoError;
 use alloc::vec::Vec;
 use getrandom::getrandom;
-use sha2::{Digest, Sha256};
+use hkdf::Hkdf;
+use sha2::{Digest, Sha256, Sha512};
 use x25519_dalek::{PublicKey, StaticSecret};
 use xsalsa20poly1305::aead::{AeadInPlace, KeyInit};
 use xsalsa20poly1305::{Tag, XSalsa20Poly1305};
@@ -9,6 +10,11 @@ use xsalsa20poly1305::{Tag, XSalsa20Poly1305};
 pub const RADROOTS_SIMPLEX_SMP_NONCE_LENGTH: usize = 24;
 pub const RADROOTS_SIMPLEX_SMP_SHARED_SECRET_LENGTH: usize = 32;
 const RADROOTS_SIMPLEX_SMP_AUTH_TAG_LENGTH: usize = 16;
+const RADROOTS_SIMPLEX_SMP_SECRETBOX_CHAIN_INIT_INFO: &[u8] = b"SimpleXSbChainInit";
+const RADROOTS_SIMPLEX_SMP_SECRETBOX_CHAIN_INFO: &[u8] = b"SimpleXSbChain";
+const RADROOTS_SIMPLEX_SMP_SECRETBOX_CHAIN_KEY_LENGTH: usize = 32;
+const RADROOTS_SIMPLEX_SMP_SECRETBOX_CHAIN_INIT_OUTPUT_LENGTH: usize = 64;
+const RADROOTS_SIMPLEX_SMP_SECRETBOX_CHAIN_STEP_OUTPUT_LENGTH: usize = 88;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RadrootsSimplexSmpX25519Keypair {
@@ -50,6 +56,74 @@ impl RadrootsSimplexSmpX25519Keypair {
             private_key: private.to_bytes().to_vec(),
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RadrootsSimplexSmpSecretBoxChainKey {
+    bytes: [u8; RADROOTS_SIMPLEX_SMP_SECRETBOX_CHAIN_KEY_LENGTH],
+}
+
+impl RadrootsSimplexSmpSecretBoxChainKey {
+    fn from_slice(value: &[u8]) -> Result<Self, RadrootsSimplexSmpCryptoError> {
+        let bytes: [u8; RADROOTS_SIMPLEX_SMP_SECRETBOX_CHAIN_KEY_LENGTH] =
+            value.try_into().map_err(|_| {
+                RadrootsSimplexSmpCryptoError::InvalidSecretBoxChainKeyLength(value.len())
+            })?;
+        Ok(Self { bytes })
+    }
+}
+
+pub fn init_secretbox_chain(
+    session_identifier: &[u8],
+    shared_secret: &[u8],
+) -> Result<
+    (
+        RadrootsSimplexSmpSecretBoxChainKey,
+        RadrootsSimplexSmpSecretBoxChainKey,
+    ),
+    RadrootsSimplexSmpCryptoError,
+> {
+    let output = hkdf_expand(
+        session_identifier,
+        shared_secret,
+        RADROOTS_SIMPLEX_SMP_SECRETBOX_CHAIN_INIT_INFO,
+        RADROOTS_SIMPLEX_SMP_SECRETBOX_CHAIN_INIT_OUTPUT_LENGTH,
+    )?;
+    let (first, second) = output.split_at(RADROOTS_SIMPLEX_SMP_SECRETBOX_CHAIN_KEY_LENGTH);
+    Ok((
+        RadrootsSimplexSmpSecretBoxChainKey::from_slice(first)?,
+        RadrootsSimplexSmpSecretBoxChainKey::from_slice(second)?,
+    ))
+}
+
+pub fn advance_secretbox_chain(
+    chain_key: &RadrootsSimplexSmpSecretBoxChainKey,
+) -> Result<
+    (
+        (Vec<u8>, [u8; RADROOTS_SIMPLEX_SMP_NONCE_LENGTH]),
+        RadrootsSimplexSmpSecretBoxChainKey,
+    ),
+    RadrootsSimplexSmpCryptoError,
+> {
+    let output = hkdf_expand(
+        b"",
+        &chain_key.bytes,
+        RADROOTS_SIMPLEX_SMP_SECRETBOX_CHAIN_INFO,
+        RADROOTS_SIMPLEX_SMP_SECRETBOX_CHAIN_STEP_OUTPUT_LENGTH,
+    )?;
+    let (next_chain_key, remainder) =
+        output.split_at(RADROOTS_SIMPLEX_SMP_SECRETBOX_CHAIN_KEY_LENGTH);
+    let (secretbox_key, nonce_bytes) =
+        remainder.split_at(RADROOTS_SIMPLEX_SMP_SHARED_SECRET_LENGTH);
+    Ok((
+        (
+            secretbox_key.to_vec(),
+            nonce_bytes.try_into().map_err(|_| {
+                RadrootsSimplexSmpCryptoError::InvalidNonceLength(nonce_bytes.len())
+            })?,
+        ),
+        RadrootsSimplexSmpSecretBoxChainKey::from_slice(next_chain_key)?,
+    ))
 }
 
 pub fn derive_shared_secret(
@@ -169,6 +243,19 @@ fn nonce_array(
         .map_err(|_| RadrootsSimplexSmpCryptoError::InvalidNonceLength(nonce.len()))
 }
 
+fn hkdf_expand(
+    salt: &[u8],
+    ikm: &[u8],
+    info: &[u8],
+    output_len: usize,
+) -> Result<Vec<u8>, RadrootsSimplexSmpCryptoError> {
+    let hkdf = Hkdf::<Sha512>::new(Some(salt), ikm);
+    let mut output = vec![0_u8; output_len];
+    hkdf.expand(info, &mut output)
+        .map_err(|_| RadrootsSimplexSmpCryptoError::InvalidKeyDerivationLength(output_len))?;
+    Ok(output)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -192,5 +279,22 @@ mod tests {
         let ciphertext = encrypt_padded(&alice_secret, &nonce, b"hello", 32).unwrap();
         let plaintext = decrypt_padded(&bob_secret, &nonce, &ciphertext).unwrap();
         assert_eq!(plaintext, b"hello");
+    }
+
+    #[test]
+    fn derives_repeatable_secretbox_chain_progression() {
+        let (rcv_first, snd_first) = init_secretbox_chain(b"session", b"shared-secret").unwrap();
+        let (rcv_second, snd_second) = init_secretbox_chain(b"session", b"shared-secret").unwrap();
+        assert_eq!(rcv_first, rcv_second);
+        assert_eq!(snd_first, snd_second);
+
+        let ((send_key, send_nonce), next_send) = advance_secretbox_chain(&snd_first).unwrap();
+        let ((recv_key, recv_nonce), next_recv) = advance_secretbox_chain(&rcv_first).unwrap();
+
+        assert_eq!(send_key.len(), RADROOTS_SIMPLEX_SMP_SHARED_SECRET_LENGTH);
+        assert_eq!(recv_key.len(), RADROOTS_SIMPLEX_SMP_SHARED_SECRET_LENGTH);
+        assert_ne!(send_nonce, recv_nonce);
+        assert_ne!(next_send, snd_first);
+        assert_ne!(next_recv, rcv_first);
     }
 }
