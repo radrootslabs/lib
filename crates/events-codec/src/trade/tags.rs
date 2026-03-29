@@ -1,5 +1,5 @@
 #[cfg(not(feature = "std"))]
-use alloc::{string::String, vec::Vec};
+use alloc::{borrow::ToOwned, string::String, vec::Vec};
 
 use radroots_events::tags::{TAG_D, TAG_E_PREV, TAG_E_ROOT};
 
@@ -93,10 +93,11 @@ pub fn validate_trade_chain(tags: &[Vec<String>]) -> Result<(), JobParseError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        push_trade_chain_tags, trade_envelope_tags, validate_trade_chain,
+    use super::{push_trade_chain_tags, trade_envelope_tags, validate_trade_chain};
+    use radroots_events::{
+        kinds::KIND_LISTING,
+        tags::{TAG_D, TAG_E_PREV, TAG_E_ROOT},
     };
-    use radroots_events::{kinds::KIND_LISTING, tags::{TAG_D, TAG_E_PREV, TAG_E_ROOT}};
 
     #[test]
     fn trade_envelope_tags_build_expected_tags() {

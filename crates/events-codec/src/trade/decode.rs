@@ -1,5 +1,5 @@
-#[cfg(not(feature = "std"))]
-use alloc::{format, string::String};
+#[cfg(all(not(feature = "std"), feature = "serde_json"))]
+use alloc::{borrow::ToOwned, format, string::String, vec::Vec};
 
 #[cfg(feature = "serde_json")]
 use radroots_events::{
@@ -188,8 +188,7 @@ pub fn trade_envelope_from_event<T: DeserializeOwned>(
 #[cfg(all(test, feature = "serde_json"))]
 mod tests {
     use super::{
-        RadrootsTradeEnvelopeParseError, RadrootsTradeListingAddress,
-        trade_envelope_from_event,
+        RadrootsTradeEnvelopeParseError, RadrootsTradeListingAddress, trade_envelope_from_event,
     };
     use crate::trade::encode::trade_envelope_event_build;
     use radroots_events::{
@@ -245,7 +244,10 @@ mod tests {
         };
         let envelope: RadrootsTradeEnvelope<RadrootsTradeMessagePayload> =
             trade_envelope_from_event(&event).expect("parse trade envelope");
-        assert_eq!(envelope.message_type, RadrootsTradeMessageType::OrderRequest);
+        assert_eq!(
+            envelope.message_type,
+            RadrootsTradeMessageType::OrderRequest
+        );
         assert_eq!(envelope.order_id.as_deref(), Some("order-1"));
     }
 

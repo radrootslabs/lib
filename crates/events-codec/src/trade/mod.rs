@@ -4,8 +4,8 @@ pub mod tags;
 
 #[cfg(feature = "serde_json")]
 pub use decode::{
-    RadrootsTradeEnvelopeParseError, RadrootsTradeListingAddress,
-    RadrootsTradeListingAddressError, trade_envelope_from_event,
+    RadrootsTradeEnvelopeParseError, RadrootsTradeListingAddress, RadrootsTradeListingAddressError,
+    trade_envelope_from_event,
 };
 #[cfg(feature = "serde_json")]
 pub use encode::trade_envelope_event_build;

@@ -25,8 +25,8 @@ use ts_rs::TS;
 use crate::listing::{
     codec::{TradeListingParseError, listing_from_event_parts},
     dvm::{
-        TradeListingEnvelope, TradeListingEnvelopeParseError, TradeListingMessagePayload,
-        TradeListingMessageType,
+        TradeListingEnvelopeParseError, TradeListingMessagePayload, TradeListingMessageType,
+        trade_listing_envelope_from_event,
     },
     model::RadrootsTradeListingTotal,
     order::{
@@ -109,7 +109,7 @@ pub struct RadrootsTradeOrderWorkflowProjection {
     pub listing_addr: String,
     pub buyer_pubkey: String,
     pub seller_pubkey: String,
-    #[cfg_attr(feature = "ts-rs", ts(type = "TradeOrderItem[]"))]
+    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsTradeOrderItem[]"))]
     pub items: Vec<TradeOrderItem>,
     #[cfg_attr(
         feature = "ts-rs",
@@ -136,7 +136,7 @@ pub struct RadrootsTradeOrderWorkflowProjection {
     pub accepted_discount: Option<RadrootsCoreDiscountValue>,
     #[cfg_attr(
         feature = "ts-rs",
-        ts(optional, type = "TradeFulfillmentStatus | null")
+        ts(optional, type = "RadrootsTradeFulfillmentStatus | null")
     )]
     pub last_fulfillment_status: Option<TradeFulfillmentStatus>,
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "bool | null"))]
@@ -170,7 +170,7 @@ pub struct RadrootsTradeOrderWorkflowMessage {
     pub listing_addr: String,
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub order_id: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(type = "TradeListingMessagePayload"))]
+    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsTradeMessagePayload"))]
     pub payload: TradeListingMessagePayload,
 }
 
@@ -263,7 +263,10 @@ pub struct RadrootsTradeOrderQuery {
     pub buyer_pubkey: Option<String>,
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub seller_pubkey: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "TradeOrderStatus | null"))]
+    #[cfg_attr(
+        feature = "ts-rs",
+        ts(optional, type = "RadrootsTradeOrderStatus | null")
+    )]
     pub status: Option<TradeOrderStatus>,
 }
 
@@ -662,7 +665,7 @@ impl RadrootsTradeOrderWorkflowProjection {
 impl RadrootsTradeOrderWorkflowMessage {
     #[cfg(feature = "serde_json")]
     pub fn from_event(event: &RadrootsNostrEvent) -> Result<Self, TradeListingEnvelopeParseError> {
-        let envelope = TradeListingEnvelope::<TradeListingMessagePayload>::from_event(event)?;
+        let envelope = trade_listing_envelope_from_event::<TradeListingMessagePayload>(event)?;
         Ok(Self {
             actor_pubkey: event.author.clone(),
             listing_addr: envelope.listing_addr,

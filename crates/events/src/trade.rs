@@ -51,11 +51,19 @@ impl std::error::Error for RadrootsTradeListingParseError {}
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsTradeListingValidationError {
-    InvalidKind { kind: u32 },
+    InvalidKind {
+        kind: u32,
+    },
     MissingListingId,
-    ListingEventNotFound { listing_addr: String },
-    ListingEventFetchFailed { listing_addr: String },
-    ParseError { error: RadrootsTradeListingParseError },
+    ListingEventNotFound {
+        listing_addr: String,
+    },
+    ListingEventFetchFailed {
+        listing_addr: String,
+    },
+    ParseError {
+        error: RadrootsTradeListingParseError,
+    },
     InvalidSeller,
     MissingFarmProfile,
     MissingFarmRecord,
@@ -309,10 +317,7 @@ pub struct RadrootsTradeListingValidateRequest {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeListingValidateResult {
     pub valid: bool,
-    #[cfg_attr(
-        feature = "ts-rs",
-        ts(type = "RadrootsTradeListingValidationError[]")
-    )]
+    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsTradeListingValidationError[]"))]
     pub errors: Vec<RadrootsTradeListingValidationError>,
 }
 
@@ -426,7 +431,10 @@ impl RadrootsTradeMessageType {
 
     #[inline]
     pub const fn requires_order_id(self) -> bool {
-        !matches!(self, Self::ListingValidateRequest | Self::ListingValidateResult)
+        !matches!(
+            self,
+            Self::ListingValidateRequest | Self::ListingValidateResult
+        )
     }
 
     #[inline]
@@ -516,7 +524,10 @@ impl core::fmt::Display for RadrootsTradeEnvelopeError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::InvalidVersion { expected, got } => {
-                write!(f, "invalid envelope version: expected {expected}, got {got}")
+                write!(
+                    f,
+                    "invalid envelope version: expected {expected}, got {got}"
+                )
             }
             Self::MissingOrderId => write!(f, "missing order_id for order-scoped message"),
             Self::MissingListingAddr => write!(f, "missing listing_addr"),

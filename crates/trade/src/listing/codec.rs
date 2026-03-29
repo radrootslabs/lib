@@ -17,11 +17,10 @@ use radroots_events::listing::{
 use radroots_events::plot::RadrootsPlotRef;
 use radroots_events::resource_area::RadrootsResourceAreaRef;
 use radroots_events::tags::TAG_D;
+pub(crate) use radroots_events::trade::RadrootsTradeListingParseError as TradeListingParseError;
 use radroots_events_codec::d_tag::is_d_tag_base64url;
 use radroots_events_codec::error::EventEncodeError;
-use radroots_events_codec::listing::tags::{ListingTagOptions, listing_tags_with_options};
-#[cfg(feature = "ts-rs")]
-use ts_rs::TS;
+use radroots_events_codec::listing::tags::listing_tags_full;
 
 const TAG_PRICE: &str = "price";
 const TAG_RADROOTS_BIN: &str = "radroots:bin";
@@ -40,39 +39,6 @@ const TAG_STATUS: &str = "status";
 const TAG_EXPIRES_AT: &str = "expires_at";
 const TAG_P: &str = "p";
 const TAG_A: &str = "a";
-
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TradeListingParseError {
-    MissingTag(String),
-    InvalidTag(String),
-    InvalidNumber(String),
-    InvalidUnit,
-    InvalidCurrency,
-    InvalidJson(String),
-    InvalidDiscount(String),
-}
-
-impl core::fmt::Display for TradeListingParseError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            TradeListingParseError::MissingTag(tag) => write!(f, "missing required tag: {tag}"),
-            TradeListingParseError::InvalidTag(tag) => write!(f, "invalid tag: {tag}"),
-            TradeListingParseError::InvalidNumber(field) => write!(f, "invalid number: {field}"),
-            TradeListingParseError::InvalidUnit => write!(f, "invalid unit"),
-            TradeListingParseError::InvalidCurrency => write!(f, "invalid currency"),
-            TradeListingParseError::InvalidJson(field) => write!(f, "invalid json: {field}"),
-            TradeListingParseError::InvalidDiscount(kind) => {
-                write!(f, "invalid discount data for {kind}")
-            }
-        }
-    }
-}
-
-#[cfg(feature = "std")]
-impl std::error::Error for TradeListingParseError {}
 
 fn parse_decimal(s: &str, field: &str) -> Result<RadrootsCoreDecimal, TradeListingParseError> {
     s.parse::<RadrootsCoreDecimal>()
@@ -171,13 +137,14 @@ pub fn listing_from_event_parts(
     listing_from_tags(tags, d_tag, farm_ref, farm_pubkey, resource_area, plot)
 }
 
+#[allow(dead_code)]
 pub fn listing_tags_build(
     listing: &RadrootsListing,
 ) -> Result<Vec<Vec<String>>, TradeListingParseError> {
-    let options = ListingTagOptions::with_trade_fields();
-    listing_tags_with_options(listing, options).map_err(map_listing_tags_error)
+    listing_tags_full(listing).map_err(map_listing_tags_error)
 }
 
+#[allow(dead_code)]
 fn map_listing_tags_error(err: EventEncodeError) -> TradeListingParseError {
     match err {
         EventEncodeError::EmptyRequiredField(field) => {

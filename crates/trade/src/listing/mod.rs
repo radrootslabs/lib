@@ -1,10 +1,12 @@
-pub mod codec;
-pub mod dvm;
-pub mod kinds;
+mod codec;
+pub(crate) mod contract;
 pub mod model;
-pub mod order;
 pub mod overlay;
 pub mod price_ext;
 pub mod projection;
-pub mod tags;
 pub mod validation;
+
+pub(crate) use self::contract as dvm;
+#[allow(unused_imports)]
+pub(crate) use self::contract as kinds;
+pub(crate) use self::contract as order;

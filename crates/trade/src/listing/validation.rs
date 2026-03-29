@@ -13,11 +13,12 @@ use radroots_events::{
         RadrootsListing, RadrootsListingAvailability, RadrootsListingDeliveryMethod,
         RadrootsListingLocation,
     },
+    trade::RadrootsTradeListingValidationError as TradeListingValidationError,
 };
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
 
-use crate::listing::codec::{TradeListingParseError, listing_from_event_parts};
+use crate::listing::codec::listing_from_event_parts;
 use crate::listing::dvm::TradeListingAddress;
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
@@ -46,97 +47,6 @@ pub struct RadrootsTradeListing {
     pub listing: RadrootsListing,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(
-    feature = "serde",
-    serde(rename_all = "snake_case", tag = "kind", content = "amount")
-)]
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum TradeListingValidationError {
-    InvalidKind { kind: u32 },
-    MissingListingId,
-    ListingEventNotFound { listing_addr: String },
-    ListingEventFetchFailed { listing_addr: String },
-    ParseError { error: TradeListingParseError },
-    InvalidSeller,
-    MissingFarmProfile,
-    MissingFarmRecord,
-    MissingTitle,
-    MissingDescription,
-    MissingProductType,
-    MissingBins,
-    MissingPrimaryBin,
-    InvalidBin,
-    MissingPrice,
-    InvalidPrice,
-    MissingInventory,
-    InvalidInventory,
-    MissingAvailability,
-    MissingLocation,
-    MissingDeliveryMethod,
-}
-
-impl core::fmt::Display for TradeListingValidationError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            TradeListingValidationError::InvalidKind { kind } => {
-                write!(f, "invalid listing kind: {kind}")
-            }
-            TradeListingValidationError::MissingListingId => write!(f, "missing listing id"),
-            TradeListingValidationError::ListingEventNotFound { listing_addr } => {
-                write!(f, "listing event not found: {listing_addr}")
-            }
-            TradeListingValidationError::ListingEventFetchFailed { listing_addr } => {
-                write!(f, "listing event fetch failed: {listing_addr}")
-            }
-            TradeListingValidationError::ParseError { error } => {
-                write!(f, "invalid listing data: {error}")
-            }
-            TradeListingValidationError::InvalidSeller => {
-                write!(f, "listing author does not match farm pubkey")
-            }
-            TradeListingValidationError::MissingFarmProfile => {
-                write!(f, "missing farm profile")
-            }
-            TradeListingValidationError::MissingFarmRecord => {
-                write!(f, "missing farm record")
-            }
-            TradeListingValidationError::MissingTitle => write!(f, "missing listing title"),
-            TradeListingValidationError::MissingDescription => {
-                write!(f, "missing listing description")
-            }
-            TradeListingValidationError::MissingProductType => {
-                write!(f, "missing listing product type")
-            }
-            TradeListingValidationError::MissingBins => write!(f, "missing listing bins"),
-            TradeListingValidationError::MissingPrimaryBin => {
-                write!(f, "missing primary listing bin")
-            }
-            TradeListingValidationError::InvalidBin => write!(f, "invalid listing bin"),
-            TradeListingValidationError::MissingPrice => write!(f, "missing listing price"),
-            TradeListingValidationError::InvalidPrice => write!(f, "invalid listing price"),
-            TradeListingValidationError::MissingInventory => {
-                write!(f, "missing listing inventory")
-            }
-            TradeListingValidationError::InvalidInventory => {
-                write!(f, "invalid listing inventory")
-            }
-            TradeListingValidationError::MissingAvailability => {
-                write!(f, "missing listing availability")
-            }
-            TradeListingValidationError::MissingLocation => write!(f, "missing listing location"),
-            TradeListingValidationError::MissingDeliveryMethod => {
-                write!(f, "missing listing delivery method")
-            }
-        }
-    }
-}
-
-#[cfg(feature = "std")]
-impl std::error::Error for TradeListingValidationError {}
-
 pub fn validate_listing_event(
     event: &RadrootsNostrEvent,
 ) -> Result<RadrootsTradeListing, TradeListingValidationError> {
@@ -153,7 +63,7 @@ pub fn validate_listing_event(
         return Err(TradeListingValidationError::InvalidSeller);
     }
     let listing_addr = TradeListingAddress {
-        kind: KIND_LISTING as u16,
+        kind: KIND_LISTING,
         seller_pubkey: seller_pubkey.clone(),
         listing_id: listing_id.clone(),
     }

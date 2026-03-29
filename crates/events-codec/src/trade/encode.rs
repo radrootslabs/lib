@@ -1,3 +1,6 @@
+#[cfg(all(not(feature = "std"), feature = "serde_json"))]
+use alloc::string::String;
+
 #[cfg(feature = "serde_json")]
 use radroots_events::trade::{RadrootsTradeEnvelope, RadrootsTradeMessageType};
 
