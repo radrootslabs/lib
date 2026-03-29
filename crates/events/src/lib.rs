@@ -37,6 +37,7 @@ pub mod resource_area;
 pub mod resource_cap;
 pub mod seal;
 pub mod tags;
+pub mod trade;
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]

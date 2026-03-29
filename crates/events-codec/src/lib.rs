@@ -32,6 +32,7 @@ pub mod seal;
 pub mod list;
 pub mod list_set;
 pub mod listing;
+pub mod trade;
 
 #[cfg(feature = "serde_json")]
 pub mod relay_document;
