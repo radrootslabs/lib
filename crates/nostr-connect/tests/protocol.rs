@@ -1,5 +1,6 @@
 use nostr::{EventBuilder, Keys, PublicKey, RelayUrl, SecretKey, Timestamp, UnsignedEvent};
 use radroots_nostr_connect::prelude::{
+    RADROOTS_NOSTR_CONNECT_PENDING_CONNECTION_ERROR,
     RadrootsNostrConnectMethod, RadrootsNostrConnectPermission, RadrootsNostrConnectPermissions,
     RadrootsNostrConnectRequest, RadrootsNostrConnectRequestMessage, RadrootsNostrConnectResponse,
     RadrootsNostrConnectResponseEnvelope, RadrootsNostrConnectUri,
