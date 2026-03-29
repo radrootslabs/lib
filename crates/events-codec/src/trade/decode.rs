@@ -4,7 +4,7 @@ use alloc::{borrow::ToOwned, format, string::String, vec::Vec};
 #[cfg(feature = "serde_json")]
 use radroots_events::{
     RadrootsNostrEvent,
-    kinds::{KIND_PROFILE, is_trade_listing_kind},
+    kinds::{KIND_PROFILE, is_trade_kind},
     tags::TAG_D,
     trade::{RadrootsTradeEnvelope, RadrootsTradeEnvelopeError, RadrootsTradeMessageType},
 };
@@ -35,18 +35,18 @@ pub enum RadrootsTradeEnvelopeParseError {
 impl core::fmt::Display for RadrootsTradeEnvelopeParseError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::InvalidKind(kind) => write!(f, "invalid trade listing event kind: {kind}"),
-            Self::InvalidJson => write!(f, "invalid trade listing envelope json"),
+            Self::InvalidKind(kind) => write!(f, "invalid trade event kind: {kind}"),
+            Self::InvalidJson => write!(f, "invalid trade envelope json"),
             Self::InvalidEnvelope(error) => write!(f, "{error}"),
             Self::MessageTypeKindMismatch {
                 event_kind,
                 message_type,
             } => write!(
                 f,
-                "trade listing envelope type {message_type:?} does not match event kind {event_kind}"
+                "trade envelope type {message_type:?} does not match event kind {event_kind}"
             ),
-            Self::MissingTag(tag) => write!(f, "missing required trade listing tag: {tag}"),
-            Self::InvalidTag(tag) => write!(f, "invalid trade listing tag: {tag}"),
+            Self::MissingTag(tag) => write!(f, "missing required trade tag: {tag}"),
+            Self::InvalidTag(tag) => write!(f, "invalid trade tag: {tag}"),
             Self::ListingAddrTagMismatch => {
                 write!(f, "trade listing address tag does not match envelope")
             }
@@ -153,7 +153,7 @@ fn required_tag_value<'a>(
 pub fn trade_envelope_from_event<T: DeserializeOwned>(
     event: &RadrootsNostrEvent,
 ) -> Result<RadrootsTradeEnvelope<T>, RadrootsTradeEnvelopeParseError> {
-    if !is_trade_listing_kind(event.kind) {
+    if !is_trade_kind(event.kind) {
         return Err(RadrootsTradeEnvelopeParseError::InvalidKind(event.kind));
     }
     let envelope = serde_json::from_str::<RadrootsTradeEnvelope<T>>(&event.content)

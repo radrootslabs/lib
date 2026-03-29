@@ -52,37 +52,74 @@ pub const KIND_APPLICATION_HANDLER: u32 = 31990;
 
 pub const KIND_TRADE_LISTING_VALIDATE_REQ: u32 = 5321;
 pub const KIND_TRADE_LISTING_VALIDATE_RES: u32 = 6321;
-pub const KIND_TRADE_LISTING_ORDER_REQ: u32 = 5322;
-pub const KIND_TRADE_LISTING_ORDER_RES: u32 = 6322;
-pub const KIND_TRADE_LISTING_ORDER_REVISION_REQ: u32 = 5323;
-pub const KIND_TRADE_LISTING_ORDER_REVISION_RES: u32 = 6323;
-pub const KIND_TRADE_LISTING_QUESTION_REQ: u32 = 5324;
-pub const KIND_TRADE_LISTING_ANSWER_RES: u32 = 6324;
-pub const KIND_TRADE_LISTING_DISCOUNT_REQ: u32 = 5325;
-pub const KIND_TRADE_LISTING_DISCOUNT_OFFER_RES: u32 = 6325;
-pub const KIND_TRADE_LISTING_DISCOUNT_ACCEPT_REQ: u32 = 5326;
-pub const KIND_TRADE_LISTING_DISCOUNT_DECLINE_REQ: u32 = 5327;
-pub const KIND_TRADE_LISTING_CANCEL_REQ: u32 = 5328;
-pub const KIND_TRADE_LISTING_FULFILLMENT_UPDATE_REQ: u32 = 5329;
-pub const KIND_TRADE_LISTING_RECEIPT_REQ: u32 = 5330;
+pub const KIND_TRADE_ORDER_REQUEST: u32 = 3422;
+pub const KIND_TRADE_ORDER_RESPONSE: u32 = 3423;
+pub const KIND_TRADE_ORDER_REVISION: u32 = 3424;
+pub const KIND_TRADE_ORDER_REVISION_RESPONSE: u32 = 3425;
+pub const KIND_TRADE_QUESTION: u32 = 3426;
+pub const KIND_TRADE_ANSWER: u32 = 3427;
+pub const KIND_TRADE_DISCOUNT_REQUEST: u32 = 3428;
+pub const KIND_TRADE_DISCOUNT_OFFER: u32 = 3429;
+pub const KIND_TRADE_DISCOUNT_ACCEPT: u32 = 3430;
+pub const KIND_TRADE_DISCOUNT_DECLINE: u32 = 3431;
+pub const KIND_TRADE_CANCEL: u32 = 3432;
+pub const KIND_TRADE_FULFILLMENT_UPDATE: u32 = 3433;
+pub const KIND_TRADE_RECEIPT: u32 = 3434;
 
-pub const TRADE_LISTING_KINDS: [u32; 15] = [
+pub const KIND_TRADE_LISTING_ORDER_REQ: u32 = KIND_TRADE_ORDER_REQUEST;
+pub const KIND_TRADE_LISTING_ORDER_RES: u32 = KIND_TRADE_ORDER_RESPONSE;
+pub const KIND_TRADE_LISTING_ORDER_REVISION_REQ: u32 = KIND_TRADE_ORDER_REVISION;
+pub const KIND_TRADE_LISTING_ORDER_REVISION_RES: u32 = KIND_TRADE_ORDER_REVISION_RESPONSE;
+pub const KIND_TRADE_LISTING_QUESTION_REQ: u32 = KIND_TRADE_QUESTION;
+pub const KIND_TRADE_LISTING_ANSWER_RES: u32 = KIND_TRADE_ANSWER;
+pub const KIND_TRADE_LISTING_DISCOUNT_REQ: u32 = KIND_TRADE_DISCOUNT_REQUEST;
+pub const KIND_TRADE_LISTING_DISCOUNT_OFFER_RES: u32 = KIND_TRADE_DISCOUNT_OFFER;
+pub const KIND_TRADE_LISTING_DISCOUNT_ACCEPT_REQ: u32 = KIND_TRADE_DISCOUNT_ACCEPT;
+pub const KIND_TRADE_LISTING_DISCOUNT_DECLINE_REQ: u32 = KIND_TRADE_DISCOUNT_DECLINE;
+pub const KIND_TRADE_LISTING_CANCEL_REQ: u32 = KIND_TRADE_CANCEL;
+pub const KIND_TRADE_LISTING_FULFILLMENT_UPDATE_REQ: u32 = KIND_TRADE_FULFILLMENT_UPDATE;
+pub const KIND_TRADE_LISTING_RECEIPT_REQ: u32 = KIND_TRADE_RECEIPT;
+
+pub const TRADE_SERVICE_KINDS: [u32; 2] = [
     KIND_TRADE_LISTING_VALIDATE_REQ,
     KIND_TRADE_LISTING_VALIDATE_RES,
-    KIND_TRADE_LISTING_ORDER_REQ,
-    KIND_TRADE_LISTING_ORDER_RES,
-    KIND_TRADE_LISTING_ORDER_REVISION_REQ,
-    KIND_TRADE_LISTING_ORDER_REVISION_RES,
-    KIND_TRADE_LISTING_QUESTION_REQ,
-    KIND_TRADE_LISTING_ANSWER_RES,
-    KIND_TRADE_LISTING_DISCOUNT_REQ,
-    KIND_TRADE_LISTING_DISCOUNT_OFFER_RES,
-    KIND_TRADE_LISTING_DISCOUNT_ACCEPT_REQ,
-    KIND_TRADE_LISTING_DISCOUNT_DECLINE_REQ,
-    KIND_TRADE_LISTING_CANCEL_REQ,
-    KIND_TRADE_LISTING_FULFILLMENT_UPDATE_REQ,
-    KIND_TRADE_LISTING_RECEIPT_REQ,
 ];
+
+pub const TRADE_PUBLIC_KINDS: [u32; 13] = [
+    KIND_TRADE_ORDER_REQUEST,
+    KIND_TRADE_ORDER_RESPONSE,
+    KIND_TRADE_ORDER_REVISION,
+    KIND_TRADE_ORDER_REVISION_RESPONSE,
+    KIND_TRADE_QUESTION,
+    KIND_TRADE_ANSWER,
+    KIND_TRADE_DISCOUNT_REQUEST,
+    KIND_TRADE_DISCOUNT_OFFER,
+    KIND_TRADE_DISCOUNT_ACCEPT,
+    KIND_TRADE_DISCOUNT_DECLINE,
+    KIND_TRADE_CANCEL,
+    KIND_TRADE_FULFILLMENT_UPDATE,
+    KIND_TRADE_RECEIPT,
+];
+
+pub const TRADE_KINDS: [u32; 15] = [
+    KIND_TRADE_LISTING_VALIDATE_REQ,
+    KIND_TRADE_LISTING_VALIDATE_RES,
+    KIND_TRADE_ORDER_REQUEST,
+    KIND_TRADE_ORDER_RESPONSE,
+    KIND_TRADE_ORDER_REVISION,
+    KIND_TRADE_ORDER_REVISION_RESPONSE,
+    KIND_TRADE_QUESTION,
+    KIND_TRADE_ANSWER,
+    KIND_TRADE_DISCOUNT_REQUEST,
+    KIND_TRADE_DISCOUNT_OFFER,
+    KIND_TRADE_DISCOUNT_ACCEPT,
+    KIND_TRADE_DISCOUNT_DECLINE,
+    KIND_TRADE_CANCEL,
+    KIND_TRADE_FULFILLMENT_UPDATE,
+    KIND_TRADE_RECEIPT,
+];
+
+pub const TRADE_LISTING_KINDS: [u32; 15] = TRADE_KINDS;
 
 pub const KIND_JOB_REQUEST_MIN: u32 = 5000;
 pub const KIND_JOB_REQUEST_MAX: u32 = 5999;
@@ -91,19 +128,59 @@ pub const KIND_JOB_RESULT_MAX: u32 = 6999;
 pub const KIND_JOB_FEEDBACK: u32 = 7000;
 
 #[inline]
+pub const fn is_trade_service_request_kind(kind: u32) -> bool {
+    kind == KIND_TRADE_LISTING_VALIDATE_REQ
+}
+
+#[inline]
+pub const fn is_trade_service_result_kind(kind: u32) -> bool {
+    kind == KIND_TRADE_LISTING_VALIDATE_RES
+}
+
+#[inline]
+pub const fn is_trade_service_kind(kind: u32) -> bool {
+    is_trade_service_request_kind(kind) || is_trade_service_result_kind(kind)
+}
+
+#[inline]
+pub const fn is_trade_public_kind(kind: u32) -> bool {
+    matches!(
+        kind,
+        KIND_TRADE_ORDER_REQUEST
+            | KIND_TRADE_ORDER_RESPONSE
+            | KIND_TRADE_ORDER_REVISION
+            | KIND_TRADE_ORDER_REVISION_RESPONSE
+            | KIND_TRADE_QUESTION
+            | KIND_TRADE_ANSWER
+            | KIND_TRADE_DISCOUNT_REQUEST
+            | KIND_TRADE_DISCOUNT_OFFER
+            | KIND_TRADE_DISCOUNT_ACCEPT
+            | KIND_TRADE_DISCOUNT_DECLINE
+            | KIND_TRADE_CANCEL
+            | KIND_TRADE_FULFILLMENT_UPDATE
+            | KIND_TRADE_RECEIPT
+    )
+}
+
+#[inline]
+pub const fn is_trade_kind(kind: u32) -> bool {
+    is_trade_service_kind(kind) || is_trade_public_kind(kind)
+}
+
+#[inline]
 pub const fn is_trade_listing_request_kind(kind: u32) -> bool {
     matches!(
         kind,
         KIND_TRADE_LISTING_VALIDATE_REQ
-            | KIND_TRADE_LISTING_ORDER_REQ
-            | KIND_TRADE_LISTING_ORDER_REVISION_REQ
-            | KIND_TRADE_LISTING_QUESTION_REQ
-            | KIND_TRADE_LISTING_DISCOUNT_REQ
-            | KIND_TRADE_LISTING_DISCOUNT_ACCEPT_REQ
-            | KIND_TRADE_LISTING_DISCOUNT_DECLINE_REQ
-            | KIND_TRADE_LISTING_CANCEL_REQ
-            | KIND_TRADE_LISTING_FULFILLMENT_UPDATE_REQ
-            | KIND_TRADE_LISTING_RECEIPT_REQ
+            | KIND_TRADE_ORDER_REQUEST
+            | KIND_TRADE_ORDER_REVISION
+            | KIND_TRADE_QUESTION
+            | KIND_TRADE_DISCOUNT_REQUEST
+            | KIND_TRADE_DISCOUNT_ACCEPT
+            | KIND_TRADE_DISCOUNT_DECLINE
+            | KIND_TRADE_CANCEL
+            | KIND_TRADE_FULFILLMENT_UPDATE
+            | KIND_TRADE_RECEIPT
     )
 }
 
@@ -112,26 +189,42 @@ pub const fn is_trade_listing_result_kind(kind: u32) -> bool {
     matches!(
         kind,
         KIND_TRADE_LISTING_VALIDATE_RES
-            | KIND_TRADE_LISTING_ORDER_RES
-            | KIND_TRADE_LISTING_ORDER_REVISION_RES
-            | KIND_TRADE_LISTING_ANSWER_RES
-            | KIND_TRADE_LISTING_DISCOUNT_OFFER_RES
+            | KIND_TRADE_ORDER_RESPONSE
+            | KIND_TRADE_ORDER_REVISION_RESPONSE
+            | KIND_TRADE_ANSWER
+            | KIND_TRADE_DISCOUNT_OFFER
     )
 }
 
 #[inline]
 pub const fn is_trade_listing_kind(kind: u32) -> bool {
-    is_trade_listing_request_kind(kind) || is_trade_listing_result_kind(kind)
+    is_trade_kind(kind)
+}
+
+#[inline]
+pub const fn trade_service_result_kind_for_request(kind: u32) -> Option<u32> {
+    match kind {
+        KIND_TRADE_LISTING_VALIDATE_REQ => Some(KIND_TRADE_LISTING_VALIDATE_RES),
+        _ => None,
+    }
+}
+
+#[inline]
+pub const fn trade_service_request_kind_for_result(kind: u32) -> Option<u32> {
+    match kind {
+        KIND_TRADE_LISTING_VALIDATE_RES => Some(KIND_TRADE_LISTING_VALIDATE_REQ),
+        _ => None,
+    }
 }
 
 #[inline]
 pub const fn trade_listing_result_kind_for_request(kind: u32) -> Option<u32> {
     match kind {
         KIND_TRADE_LISTING_VALIDATE_REQ => Some(KIND_TRADE_LISTING_VALIDATE_RES),
-        KIND_TRADE_LISTING_ORDER_REQ => Some(KIND_TRADE_LISTING_ORDER_RES),
-        KIND_TRADE_LISTING_ORDER_REVISION_REQ => Some(KIND_TRADE_LISTING_ORDER_REVISION_RES),
-        KIND_TRADE_LISTING_QUESTION_REQ => Some(KIND_TRADE_LISTING_ANSWER_RES),
-        KIND_TRADE_LISTING_DISCOUNT_REQ => Some(KIND_TRADE_LISTING_DISCOUNT_OFFER_RES),
+        KIND_TRADE_ORDER_REQUEST => Some(KIND_TRADE_ORDER_RESPONSE),
+        KIND_TRADE_ORDER_REVISION => Some(KIND_TRADE_ORDER_REVISION_RESPONSE),
+        KIND_TRADE_QUESTION => Some(KIND_TRADE_ANSWER),
+        KIND_TRADE_DISCOUNT_REQUEST => Some(KIND_TRADE_DISCOUNT_OFFER),
         _ => None,
     }
 }
@@ -140,10 +233,10 @@ pub const fn trade_listing_result_kind_for_request(kind: u32) -> Option<u32> {
 pub const fn trade_listing_request_kind_for_result(kind: u32) -> Option<u32> {
     match kind {
         KIND_TRADE_LISTING_VALIDATE_RES => Some(KIND_TRADE_LISTING_VALIDATE_REQ),
-        KIND_TRADE_LISTING_ORDER_RES => Some(KIND_TRADE_LISTING_ORDER_REQ),
-        KIND_TRADE_LISTING_ORDER_REVISION_RES => Some(KIND_TRADE_LISTING_ORDER_REVISION_REQ),
-        KIND_TRADE_LISTING_ANSWER_RES => Some(KIND_TRADE_LISTING_QUESTION_REQ),
-        KIND_TRADE_LISTING_DISCOUNT_OFFER_RES => Some(KIND_TRADE_LISTING_DISCOUNT_REQ),
+        KIND_TRADE_ORDER_RESPONSE => Some(KIND_TRADE_ORDER_REQUEST),
+        KIND_TRADE_ORDER_REVISION_RESPONSE => Some(KIND_TRADE_ORDER_REVISION),
+        KIND_TRADE_ANSWER => Some(KIND_TRADE_QUESTION),
+        KIND_TRADE_DISCOUNT_OFFER => Some(KIND_TRADE_DISCOUNT_REQUEST),
         _ => None,
     }
 }
@@ -315,6 +408,25 @@ mod kinds_constants_tests {
             "KIND_TRADE_LISTING_VALIDATE_RES",
             KIND_TRADE_LISTING_VALIDATE_RES,
         ),
+        ("KIND_TRADE_ORDER_REQUEST", KIND_TRADE_ORDER_REQUEST),
+        ("KIND_TRADE_ORDER_RESPONSE", KIND_TRADE_ORDER_RESPONSE),
+        ("KIND_TRADE_ORDER_REVISION", KIND_TRADE_ORDER_REVISION),
+        (
+            "KIND_TRADE_ORDER_REVISION_RESPONSE",
+            KIND_TRADE_ORDER_REVISION_RESPONSE,
+        ),
+        ("KIND_TRADE_QUESTION", KIND_TRADE_QUESTION),
+        ("KIND_TRADE_ANSWER", KIND_TRADE_ANSWER),
+        ("KIND_TRADE_DISCOUNT_REQUEST", KIND_TRADE_DISCOUNT_REQUEST),
+        ("KIND_TRADE_DISCOUNT_OFFER", KIND_TRADE_DISCOUNT_OFFER),
+        ("KIND_TRADE_DISCOUNT_ACCEPT", KIND_TRADE_DISCOUNT_ACCEPT),
+        ("KIND_TRADE_DISCOUNT_DECLINE", KIND_TRADE_DISCOUNT_DECLINE),
+        ("KIND_TRADE_CANCEL", KIND_TRADE_CANCEL),
+        (
+            "KIND_TRADE_FULFILLMENT_UPDATE",
+            KIND_TRADE_FULFILLMENT_UPDATE,
+        ),
+        ("KIND_TRADE_RECEIPT", KIND_TRADE_RECEIPT),
         ("KIND_TRADE_LISTING_ORDER_REQ", KIND_TRADE_LISTING_ORDER_REQ),
         ("KIND_TRADE_LISTING_ORDER_RES", KIND_TRADE_LISTING_ORDER_RES),
         (
@@ -446,10 +558,28 @@ mod kinds_constants_tests {
 
     #[test]
     fn classifies_trade_listing_kinds() {
+        assert!(is_trade_service_request_kind(
+            KIND_TRADE_LISTING_VALIDATE_REQ
+        ));
+        assert!(is_trade_service_result_kind(
+            KIND_TRADE_LISTING_VALIDATE_RES
+        ));
+        assert!(is_trade_service_kind(KIND_TRADE_LISTING_VALIDATE_REQ));
+        assert!(is_trade_public_kind(KIND_TRADE_ORDER_REQUEST));
+        assert!(is_trade_public_kind(KIND_TRADE_ORDER_RESPONSE));
+        assert!(is_trade_kind(KIND_TRADE_ORDER_REQUEST));
         assert!(is_trade_listing_request_kind(KIND_TRADE_LISTING_ORDER_REQ));
         assert!(is_trade_listing_result_kind(KIND_TRADE_LISTING_ORDER_RES));
         assert!(is_trade_listing_kind(KIND_TRADE_LISTING_RECEIPT_REQ));
         assert!(!is_trade_listing_kind(KIND_LISTING));
+        assert_eq!(
+            trade_service_result_kind_for_request(KIND_TRADE_LISTING_VALIDATE_REQ),
+            Some(KIND_TRADE_LISTING_VALIDATE_RES)
+        );
+        assert_eq!(
+            trade_service_request_kind_for_result(KIND_TRADE_LISTING_VALIDATE_RES),
+            Some(KIND_TRADE_LISTING_VALIDATE_REQ)
+        );
         assert_eq!(
             trade_listing_result_kind_for_request(KIND_TRADE_LISTING_ORDER_REQ),
             Some(KIND_TRADE_LISTING_ORDER_RES)

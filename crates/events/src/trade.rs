@@ -365,6 +365,16 @@ pub enum RadrootsTradeDomain {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RadrootsTradeTransportLane {
+    Service,
+    Public,
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsTradeMessageType {
     ListingValidateRequest,
     ListingValidateResult,
@@ -390,19 +400,19 @@ impl RadrootsTradeMessageType {
         match kind {
             KIND_TRADE_LISTING_VALIDATE_REQ => Some(Self::ListingValidateRequest),
             KIND_TRADE_LISTING_VALIDATE_RES => Some(Self::ListingValidateResult),
-            KIND_TRADE_LISTING_ORDER_REQ => Some(Self::OrderRequest),
-            KIND_TRADE_LISTING_ORDER_RES => Some(Self::OrderResponse),
-            KIND_TRADE_LISTING_ORDER_REVISION_REQ => Some(Self::OrderRevision),
-            KIND_TRADE_LISTING_ORDER_REVISION_RES => None,
-            KIND_TRADE_LISTING_QUESTION_REQ => Some(Self::Question),
-            KIND_TRADE_LISTING_ANSWER_RES => Some(Self::Answer),
-            KIND_TRADE_LISTING_DISCOUNT_REQ => Some(Self::DiscountRequest),
-            KIND_TRADE_LISTING_DISCOUNT_OFFER_RES => Some(Self::DiscountOffer),
-            KIND_TRADE_LISTING_DISCOUNT_ACCEPT_REQ => Some(Self::DiscountAccept),
-            KIND_TRADE_LISTING_DISCOUNT_DECLINE_REQ => Some(Self::DiscountDecline),
-            KIND_TRADE_LISTING_CANCEL_REQ => Some(Self::Cancel),
-            KIND_TRADE_LISTING_FULFILLMENT_UPDATE_REQ => Some(Self::FulfillmentUpdate),
-            KIND_TRADE_LISTING_RECEIPT_REQ => Some(Self::Receipt),
+            KIND_TRADE_ORDER_REQUEST => Some(Self::OrderRequest),
+            KIND_TRADE_ORDER_RESPONSE => Some(Self::OrderResponse),
+            KIND_TRADE_ORDER_REVISION => Some(Self::OrderRevision),
+            KIND_TRADE_ORDER_REVISION_RESPONSE => None,
+            KIND_TRADE_QUESTION => Some(Self::Question),
+            KIND_TRADE_ANSWER => Some(Self::Answer),
+            KIND_TRADE_DISCOUNT_REQUEST => Some(Self::DiscountRequest),
+            KIND_TRADE_DISCOUNT_OFFER => Some(Self::DiscountOffer),
+            KIND_TRADE_DISCOUNT_ACCEPT => Some(Self::DiscountAccept),
+            KIND_TRADE_DISCOUNT_DECLINE => Some(Self::DiscountDecline),
+            KIND_TRADE_CANCEL => Some(Self::Cancel),
+            KIND_TRADE_FULFILLMENT_UPDATE => Some(Self::FulfillmentUpdate),
+            KIND_TRADE_RECEIPT => Some(Self::Receipt),
             _ => None,
         }
     }
@@ -412,21 +422,54 @@ impl RadrootsTradeMessageType {
         match self {
             Self::ListingValidateRequest => KIND_TRADE_LISTING_VALIDATE_REQ,
             Self::ListingValidateResult => KIND_TRADE_LISTING_VALIDATE_RES,
-            Self::OrderRequest => KIND_TRADE_LISTING_ORDER_REQ,
-            Self::OrderResponse => KIND_TRADE_LISTING_ORDER_RES,
-            Self::OrderRevision => KIND_TRADE_LISTING_ORDER_REVISION_REQ,
-            Self::OrderRevisionAccept => KIND_TRADE_LISTING_ORDER_REVISION_RES,
-            Self::OrderRevisionDecline => KIND_TRADE_LISTING_ORDER_REVISION_RES,
-            Self::Question => KIND_TRADE_LISTING_QUESTION_REQ,
-            Self::Answer => KIND_TRADE_LISTING_ANSWER_RES,
-            Self::DiscountRequest => KIND_TRADE_LISTING_DISCOUNT_REQ,
-            Self::DiscountOffer => KIND_TRADE_LISTING_DISCOUNT_OFFER_RES,
-            Self::DiscountAccept => KIND_TRADE_LISTING_DISCOUNT_ACCEPT_REQ,
-            Self::DiscountDecline => KIND_TRADE_LISTING_DISCOUNT_DECLINE_REQ,
-            Self::Cancel => KIND_TRADE_LISTING_CANCEL_REQ,
-            Self::FulfillmentUpdate => KIND_TRADE_LISTING_FULFILLMENT_UPDATE_REQ,
-            Self::Receipt => KIND_TRADE_LISTING_RECEIPT_REQ,
+            Self::OrderRequest => KIND_TRADE_ORDER_REQUEST,
+            Self::OrderResponse => KIND_TRADE_ORDER_RESPONSE,
+            Self::OrderRevision => KIND_TRADE_ORDER_REVISION,
+            Self::OrderRevisionAccept => KIND_TRADE_ORDER_REVISION_RESPONSE,
+            Self::OrderRevisionDecline => KIND_TRADE_ORDER_REVISION_RESPONSE,
+            Self::Question => KIND_TRADE_QUESTION,
+            Self::Answer => KIND_TRADE_ANSWER,
+            Self::DiscountRequest => KIND_TRADE_DISCOUNT_REQUEST,
+            Self::DiscountOffer => KIND_TRADE_DISCOUNT_OFFER,
+            Self::DiscountAccept => KIND_TRADE_DISCOUNT_ACCEPT,
+            Self::DiscountDecline => KIND_TRADE_DISCOUNT_DECLINE,
+            Self::Cancel => KIND_TRADE_CANCEL,
+            Self::FulfillmentUpdate => KIND_TRADE_FULFILLMENT_UPDATE,
+            Self::Receipt => KIND_TRADE_RECEIPT,
         }
+    }
+
+    #[inline]
+    pub const fn lane(self) -> RadrootsTradeTransportLane {
+        match self {
+            Self::ListingValidateRequest | Self::ListingValidateResult => {
+                RadrootsTradeTransportLane::Service
+            }
+            Self::OrderRequest
+            | Self::OrderResponse
+            | Self::OrderRevision
+            | Self::OrderRevisionAccept
+            | Self::OrderRevisionDecline
+            | Self::Question
+            | Self::Answer
+            | Self::DiscountRequest
+            | Self::DiscountOffer
+            | Self::DiscountAccept
+            | Self::DiscountDecline
+            | Self::Cancel
+            | Self::FulfillmentUpdate
+            | Self::Receipt => RadrootsTradeTransportLane::Public,
+        }
+    }
+
+    #[inline]
+    pub const fn is_service(self) -> bool {
+        matches!(self.lane(), RadrootsTradeTransportLane::Service)
+    }
+
+    #[inline]
+    pub const fn is_public(self) -> bool {
+        matches!(self.lane(), RadrootsTradeTransportLane::Public)
     }
 
     #[inline]
@@ -579,6 +622,8 @@ mod tests {
             RadrootsTradeMessageType::from_kind(KIND_TRADE_LISTING_ORDER_RES),
             Some(RadrootsTradeMessageType::OrderResponse)
         );
+        assert!(RadrootsTradeMessageType::ListingValidateRequest.is_service());
+        assert!(RadrootsTradeMessageType::OrderRequest.is_public());
         assert!(RadrootsTradeMessageType::OrderRequest.is_request());
         assert!(RadrootsTradeMessageType::OrderResponse.is_result());
     }
