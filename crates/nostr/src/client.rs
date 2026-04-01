@@ -96,6 +96,20 @@ impl RadrootsNostrClientOptions {
 }
 
 impl RadrootsNostrClient {
+    pub fn new_signerless() -> Self {
+        Self {
+            inner: Client::new(),
+        }
+    }
+
+    pub fn new_signerless_with_options(
+        options: RadrootsNostrClientOptions,
+    ) -> Result<Self, RadrootsNostrError> {
+        let opts = options.to_client_options()?;
+        let inner = ClientBuilder::new().opts(opts).build();
+        Ok(Self { inner })
+    }
+
     pub fn new(keys: RadrootsNostrKeys) -> Self {
         Self {
             inner: Client::new(keys),
@@ -218,4 +232,28 @@ pub async fn radroots_nostr_fetch_event_by_id(
         .first()
         .ok_or_else(|| RadrootsNostrError::EventNotFound(event_id.to_hex()))?;
     Ok(event.clone())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{RadrootsNostrClient, RadrootsNostrClientOptions};
+
+    #[test]
+    fn signerless_client_has_no_signer() {
+        let client = RadrootsNostrClient::new_signerless();
+
+        assert!(client.signer().is_none());
+    }
+
+    #[test]
+    fn signerless_client_with_options_has_no_signer() {
+        let client = RadrootsNostrClient::new_signerless_with_options(
+            RadrootsNostrClientOptions::new()
+                .automatic_authentication(true)
+                .verify_subscriptions(true),
+        )
+        .expect("signerless client");
+
+        assert!(client.signer().is_none());
+    }
 }
