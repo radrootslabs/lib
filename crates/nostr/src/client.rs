@@ -98,7 +98,7 @@ impl RadrootsNostrClientOptions {
 impl RadrootsNostrClient {
     pub fn new_signerless() -> Self {
         Self {
-            inner: Client::new(),
+            inner: Client::default(),
         }
     }
 
@@ -238,15 +238,15 @@ pub async fn radroots_nostr_fetch_event_by_id(
 mod tests {
     use super::{RadrootsNostrClient, RadrootsNostrClientOptions};
 
-    #[test]
-    fn signerless_client_has_no_signer() {
+    #[tokio::test]
+    async fn signerless_client_has_no_signer() {
         let client = RadrootsNostrClient::new_signerless();
 
-        assert!(client.signer().is_none());
+        assert!(!client.has_signer().await);
     }
 
-    #[test]
-    fn signerless_client_with_options_has_no_signer() {
+    #[tokio::test]
+    async fn signerless_client_with_options_has_no_signer() {
         let client = RadrootsNostrClient::new_signerless_with_options(
             RadrootsNostrClientOptions::new()
                 .automatic_authentication(true)
@@ -254,6 +254,6 @@ mod tests {
         )
         .expect("signerless client");
 
-        assert!(client.signer().is_none());
+        assert!(!client.has_signer().await);
     }
 }
