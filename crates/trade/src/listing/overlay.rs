@@ -496,6 +496,8 @@ fn order_backoffice_matches_query(
 
 #[cfg(test)]
 mod tests {
+    use std::cell::RefCell;
+
     use super::{
         RadrootsTradeBackofficeOverlayError, RadrootsTradeBackofficeOverlayStore,
         RadrootsTradeFulfillmentException, RadrootsTradeFulfillmentExceptionSeverity,
@@ -524,11 +526,127 @@ mod tests {
         RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCorePercent,
         RadrootsCoreQuantity, RadrootsCoreQuantityPrice, RadrootsCoreUnit,
     };
+    use radroots_events::RadrootsNostrEventPtr;
     use radroots_events::listing::{
         RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
         RadrootsListingDeliveryMethod, RadrootsListingFarmRef, RadrootsListingLocation,
         RadrootsListingProduct, RadrootsListingStatus,
     };
+
+    #[derive(Clone, Debug)]
+    struct TestWorkflowChain {
+        buyer_pubkey: String,
+        seller_pubkey: String,
+        root_event_id: String,
+        last_event_id: String,
+        next_sequence: u32,
+    }
+
+    thread_local! {
+        static TEST_WORKFLOW_CHAINS: RefCell<std::collections::BTreeMap<String, TestWorkflowChain>> =
+            RefCell::new(std::collections::BTreeMap::new());
+    }
+
+    fn listing_snapshot(listing_addr: &str) -> RadrootsNostrEventPtr {
+        RadrootsNostrEventPtr {
+            id: format!("snapshot:{listing_addr}"),
+            relays: None,
+        }
+    }
+
+    fn seller_pubkey_from_listing_addr(listing_addr: &str) -> String {
+        listing_addr
+            .split(':')
+            .nth(1)
+            .unwrap_or_default()
+            .to_string()
+    }
+
+    fn workflow_refs(
+        actor_pubkey: &str,
+        listing_addr: &str,
+        order_id: Option<&str>,
+        payload: &TradeListingMessagePayload,
+    ) -> (
+        String,
+        String,
+        Option<RadrootsNostrEventPtr>,
+        Option<String>,
+        Option<String>,
+    ) {
+        let message_type = payload.message_type();
+        let listing_event = message_type
+            .requires_listing_snapshot()
+            .then(|| listing_snapshot(listing_addr));
+        let default_seller = seller_pubkey_from_listing_addr(listing_addr);
+
+        match (message_type, order_id) {
+            (_, None) => (
+                format!("event:no-order:{}:{actor_pubkey}", message_type.kind()),
+                default_seller,
+                listing_event,
+                None,
+                None,
+            ),
+            (crate::listing::dvm::TradeListingMessageType::OrderRequest, Some(order_id)) => {
+                let order = match payload {
+                    TradeListingMessagePayload::OrderRequest(order) => order,
+                    _ => unreachable!("order request payload should match message type"),
+                };
+                let event_id = format!("{order_id}:request");
+                TEST_WORKFLOW_CHAINS.with(|chains| {
+                    chains.borrow_mut().insert(
+                        order_id.to_string(),
+                        TestWorkflowChain {
+                            buyer_pubkey: order.buyer_pubkey.clone(),
+                            seller_pubkey: order.seller_pubkey.clone(),
+                            root_event_id: event_id.clone(),
+                            last_event_id: event_id.clone(),
+                            next_sequence: 1,
+                        },
+                    );
+                });
+                (
+                    event_id,
+                    order.seller_pubkey.clone(),
+                    listing_event,
+                    None,
+                    None,
+                )
+            }
+            (_, Some(order_id)) => TEST_WORKFLOW_CHAINS.with(|chains| {
+                let mut chains = chains.borrow_mut();
+                let chain =
+                    chains
+                        .entry(order_id.to_string())
+                        .or_insert_with(|| TestWorkflowChain {
+                            buyer_pubkey: String::from("buyer-pubkey"),
+                            seller_pubkey: default_seller.clone(),
+                            root_event_id: format!("{order_id}:root"),
+                            last_event_id: format!("{order_id}:root"),
+                            next_sequence: 1,
+                        });
+                let event_id =
+                    format!("{order_id}:{}:{}", message_type.kind(), chain.next_sequence);
+                chain.next_sequence += 1;
+                let counterparty_pubkey = if actor_pubkey == chain.seller_pubkey {
+                    chain.buyer_pubkey.clone()
+                } else {
+                    chain.seller_pubkey.clone()
+                };
+                let prev_event_id = chain.last_event_id.clone();
+                let root_event_id = chain.root_event_id.clone();
+                chain.last_event_id = event_id.clone();
+                (
+                    event_id,
+                    counterparty_pubkey,
+                    listing_event,
+                    Some(root_event_id),
+                    Some(prev_event_id),
+                )
+            }),
+        }
+    }
 
     fn base_listing() -> RadrootsListing {
         RadrootsListing {
@@ -673,8 +791,6 @@ mod tests {
             discounts: Some(vec![radroots_core::RadrootsCoreDiscountValue::Percent(
                 RadrootsCorePercent::new(RadrootsCoreDecimal::from(10u32)),
             )]),
-            notes: Some("deliver friday".into()),
-            status: TradeOrderStatus::Draft,
         }
     }
 
@@ -689,8 +805,6 @@ mod tests {
                 bin_count: 3,
             }],
             discounts: None,
-            notes: Some("expedite".into()),
-            status: TradeOrderStatus::Draft,
         }
     }
 
@@ -700,10 +814,17 @@ mod tests {
         order_id: Option<&str>,
         payload: TradeListingMessagePayload,
     ) -> RadrootsTradeOrderWorkflowMessage {
+        let (event_id, counterparty_pubkey, listing_event, root_event_id, prev_event_id) =
+            workflow_refs(actor_pubkey, listing_addr, order_id, &payload);
         RadrootsTradeOrderWorkflowMessage {
+            event_id,
             actor_pubkey: actor_pubkey.into(),
+            counterparty_pubkey,
             listing_addr: listing_addr.into(),
             order_id: order_id.map(str::to_string),
+            listing_event,
+            root_event_id,
+            prev_event_id,
             payload,
         }
     }
@@ -816,9 +937,6 @@ mod tests {
                 Some("order-2"),
                 TradeListingMessagePayload::FulfillmentUpdate(TradeFulfillmentUpdate {
                     status: TradeFulfillmentStatus::Delivered,
-                    tracking: Some("track-2".into()),
-                    eta: None,
-                    notes: Some("in transit".into()),
                 }),
             ))
             .expect("fulfilled");
@@ -830,7 +948,6 @@ mod tests {
                 TradeListingMessagePayload::Receipt(TradeReceipt {
                     acknowledged: true,
                     at: 1_700_000_020,
-                    note: Some("all good".into()),
                 }),
             ))
             .expect("completed");

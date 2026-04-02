@@ -3,9 +3,9 @@ use alloc::{borrow::ToOwned, format, string::String, vec::Vec};
 
 #[cfg(feature = "serde_json")]
 use radroots_events::{
-    RadrootsNostrEvent,
+    RadrootsNostrEvent, RadrootsNostrEventPtr,
     kinds::{KIND_PROFILE, is_trade_kind},
-    tags::TAG_D,
+    tags::{TAG_D, TAG_E_PREV, TAG_E_ROOT},
     trade::{RadrootsTradeEnvelope, RadrootsTradeEnvelopeError, RadrootsTradeMessageType},
 };
 #[cfg(feature = "serde_json")]
@@ -13,6 +13,11 @@ use serde::de::DeserializeOwned;
 
 #[cfg(feature = "serde_json")]
 use crate::d_tag::is_d_tag_base64url;
+#[cfg(feature = "serde_json")]
+use crate::trade::tags::{
+    TAG_LISTING_EVENT, parse_trade_counterparty_tag, parse_trade_listing_event_tag,
+    parse_trade_prev_tag, parse_trade_root_tag,
+};
 
 #[cfg(feature = "serde_json")]
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -65,6 +70,15 @@ impl std::error::Error for RadrootsTradeEnvelopeParseError {
             _ => None,
         }
     }
+}
+
+#[cfg(feature = "serde_json")]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsTradeEventContext {
+    pub counterparty_pubkey: String,
+    pub listing_event: Option<RadrootsNostrEventPtr>,
+    pub root_event_id: Option<String>,
+    pub prev_event_id: Option<String>,
 }
 
 #[cfg(feature = "serde_json")]
@@ -182,20 +196,81 @@ pub fn trade_envelope_from_event<T: DeserializeOwned>(
         }
     }
 
+    let message_type = envelope.message_type;
+    trade_event_context_from_tags(message_type, &event.tags)?;
+
     Ok(envelope)
+}
+
+#[cfg(feature = "serde_json")]
+pub fn trade_event_context_from_tags(
+    message_type: RadrootsTradeMessageType,
+    tags: &[Vec<String>],
+) -> Result<RadrootsTradeEventContext, RadrootsTradeEnvelopeParseError> {
+    let counterparty_pubkey =
+        parse_trade_counterparty_tag(tags).map_err(map_tag_parse_error_for_trade_envelope)?;
+    let listing_event =
+        parse_trade_listing_event_tag(tags).map_err(map_tag_parse_error_for_trade_envelope)?;
+    let root_event_id =
+        parse_trade_root_tag(tags).map_err(map_tag_parse_error_for_trade_envelope)?;
+    let prev_event_id =
+        parse_trade_prev_tag(tags).map_err(map_tag_parse_error_for_trade_envelope)?;
+
+    if message_type.requires_listing_snapshot() && listing_event.is_none() {
+        return Err(RadrootsTradeEnvelopeParseError::MissingTag(
+            TAG_LISTING_EVENT,
+        ));
+    }
+    if message_type.requires_trade_chain() {
+        if root_event_id.is_none() {
+            return Err(RadrootsTradeEnvelopeParseError::MissingTag(TAG_E_ROOT));
+        }
+        if prev_event_id.is_none() {
+            return Err(RadrootsTradeEnvelopeParseError::MissingTag(TAG_E_PREV));
+        }
+    }
+
+    Ok(RadrootsTradeEventContext {
+        counterparty_pubkey,
+        listing_event,
+        root_event_id,
+        prev_event_id,
+    })
+}
+
+#[cfg(feature = "serde_json")]
+fn map_tag_parse_error_for_trade_envelope(
+    error: crate::error::EventParseError,
+) -> RadrootsTradeEnvelopeParseError {
+    match error {
+        crate::error::EventParseError::MissingTag(tag) => {
+            RadrootsTradeEnvelopeParseError::MissingTag(tag)
+        }
+        crate::error::EventParseError::InvalidTag(tag) => {
+            RadrootsTradeEnvelopeParseError::InvalidTag(tag)
+        }
+        crate::error::EventParseError::InvalidKind { expected: _, got } => {
+            RadrootsTradeEnvelopeParseError::InvalidKind(got)
+        }
+        crate::error::EventParseError::InvalidNumber(tag, _)
+        | crate::error::EventParseError::InvalidJson(tag) => {
+            RadrootsTradeEnvelopeParseError::InvalidTag(tag)
+        }
+    }
 }
 
 #[cfg(all(test, feature = "serde_json"))]
 mod tests {
     use super::{
         RadrootsTradeEnvelopeParseError, RadrootsTradeListingAddress, trade_envelope_from_event,
+        trade_event_context_from_tags,
     };
     use crate::trade::encode::trade_envelope_event_build;
     use radroots_events::{
-        RadrootsNostrEvent,
+        RadrootsNostrEvent, RadrootsNostrEventPtr,
         trade::{
             RadrootsTradeEnvelope, RadrootsTradeMessagePayload, RadrootsTradeMessageType,
-            RadrootsTradeOrder, RadrootsTradeOrderItem, RadrootsTradeOrderStatus,
+            RadrootsTradeOrder, RadrootsTradeOrderItem,
         },
     };
 
@@ -210,8 +285,6 @@ mod tests {
                 bin_count: 3,
             }],
             discounts: None,
-            notes: None,
-            status: RadrootsTradeOrderStatus::Requested,
         }
     }
 
@@ -230,6 +303,12 @@ mod tests {
             RadrootsTradeMessageType::OrderRequest,
             "30402:seller:AAAAAAAAAAAAAAAAAAAAAg",
             Some("order-1".into()),
+            Some(&RadrootsNostrEventPtr {
+                id: "listing-snapshot".into(),
+                relays: None,
+            }),
+            None,
+            None,
             &payload,
         )
         .expect("build trade envelope");
@@ -259,6 +338,12 @@ mod tests {
             RadrootsTradeMessageType::OrderRequest,
             "30402:seller:AAAAAAAAAAAAAAAAAAAAAg",
             Some("order-1".into()),
+            Some(&RadrootsNostrEventPtr {
+                id: "listing-snapshot".into(),
+                relays: None,
+            }),
+            None,
+            None,
             &payload,
         )
         .expect("build trade envelope");
@@ -276,5 +361,95 @@ mod tests {
         };
         let err = trade_envelope_from_event::<serde_json::Value>(&event).unwrap_err();
         assert_eq!(err, RadrootsTradeEnvelopeParseError::ListingAddrTagMismatch);
+    }
+
+    #[test]
+    fn parse_rejects_missing_public_snapshot_tag() {
+        let payload = RadrootsTradeMessagePayload::OrderRequest(base_order());
+        let built = trade_envelope_event_build(
+            "seller",
+            RadrootsTradeMessageType::OrderRequest,
+            "30402:seller:AAAAAAAAAAAAAAAAAAAAAg",
+            Some("order-1".into()),
+            Some(&RadrootsNostrEventPtr {
+                id: "listing-snapshot".into(),
+                relays: None,
+            }),
+            None,
+            None,
+            &payload,
+        )
+        .expect("build trade envelope");
+        let mut event = RadrootsNostrEvent {
+            id: "id".into(),
+            author: "buyer".into(),
+            created_at: 1,
+            kind: built.kind,
+            tags: built.tags,
+            content: built.content,
+            sig: "sig".into(),
+        };
+        event
+            .tags
+            .retain(|tag| tag.first().map(|value| value.as_str()) != Some(TAG_LISTING_EVENT));
+        let err = trade_envelope_from_event::<RadrootsTradeMessagePayload>(&event).unwrap_err();
+        assert_eq!(
+            err,
+            RadrootsTradeEnvelopeParseError::MissingTag(TAG_LISTING_EVENT)
+        );
+    }
+
+    #[test]
+    fn parse_rejects_missing_public_chain_tags_after_order_request() {
+        let payload = RadrootsTradeMessagePayload::OrderResponse(
+            radroots_events::trade::RadrootsTradeOrderResponse {
+                accepted: true,
+                reason: None,
+            },
+        );
+        let built = trade_envelope_event_build(
+            "buyer",
+            RadrootsTradeMessageType::OrderResponse,
+            "30402:seller:AAAAAAAAAAAAAAAAAAAAAg",
+            Some("order-1".into()),
+            None,
+            Some("root"),
+            Some("prev"),
+            &payload,
+        )
+        .expect("build trade envelope");
+        let mut event = RadrootsNostrEvent {
+            id: "id".into(),
+            author: "seller".into(),
+            created_at: 1,
+            kind: built.kind,
+            tags: built.tags,
+            content: built.content,
+            sig: "sig".into(),
+        };
+        event
+            .tags
+            .retain(|tag| tag.first().map(|value| value.as_str()) != Some(TAG_E_PREV));
+        let err = trade_envelope_from_event::<RadrootsTradeMessagePayload>(&event).unwrap_err();
+        assert_eq!(err, RadrootsTradeEnvelopeParseError::MissingTag(TAG_E_PREV));
+    }
+
+    #[test]
+    fn parse_trade_event_context_extracts_public_refs() {
+        let context = trade_event_context_from_tags(
+            RadrootsTradeMessageType::OrderResponse,
+            &[
+                vec!["p".into(), "buyer".into()],
+                vec!["a".into(), "30402:seller:AAAAAAAAAAAAAAAAAAAAAg".into()],
+                vec![TAG_D.into(), "order-1".into()],
+                vec![TAG_E_ROOT.into(), "root-id".into()],
+                vec![TAG_E_PREV.into(), "prev-id".into()],
+            ],
+        )
+        .expect("event context");
+        assert_eq!(context.counterparty_pubkey, "buyer");
+        assert_eq!(context.root_event_id.as_deref(), Some("root-id"));
+        assert_eq!(context.prev_event_id.as_deref(), Some("prev-id"));
+        assert!(context.listing_event.is_none());
     }
 }

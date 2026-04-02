@@ -36,10 +36,7 @@ pub enum TradeOrderChange {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TradeOrderRevision {
     pub revision_id: String,
-    pub order_id: String,
     pub changes: Vec<TradeOrderChange>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
-    pub reason: Option<String>,
 }
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
@@ -57,9 +54,6 @@ pub struct TradeOrder {
         ts(optional, type = "RadrootsCoreDiscountValue[] | null")
     )]
     pub discounts: Option<Vec<RadrootsCoreDiscountValue>>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
-    pub notes: Option<String>,
-    pub status: TradeOrderStatus,
 }
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
@@ -86,11 +80,6 @@ pub enum TradeOrderStatus {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TradeQuestion {
     pub question_id: String,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
-    pub order_id: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
-    pub listing_addr: Option<String>,
-    pub question_text: String,
 }
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
@@ -99,11 +88,6 @@ pub struct TradeQuestion {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TradeAnswer {
     pub question_id: String,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
-    pub order_id: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
-    pub listing_addr: Option<String>,
-    pub answer_text: String,
 }
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
@@ -112,11 +96,8 @@ pub struct TradeAnswer {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TradeDiscountRequest {
     pub discount_id: String,
-    pub order_id: String,
     #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreDiscountValue"))]
     pub value: RadrootsCoreDiscountValue,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
-    pub conditions: Option<String>,
 }
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
@@ -125,11 +106,8 @@ pub struct TradeDiscountRequest {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TradeDiscountOffer {
     pub discount_id: String,
-    pub order_id: String,
     #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreDiscountValue"))]
     pub value: RadrootsCoreDiscountValue,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
-    pub conditions: Option<String>,
 }
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
@@ -173,12 +151,6 @@ pub enum TradeFulfillmentStatus {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TradeFulfillmentUpdate {
     pub status: TradeFulfillmentStatus,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
-    pub tracking: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
-    pub eta: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
-    pub notes: Option<String>,
 }
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
@@ -188,6 +160,4 @@ pub struct TradeFulfillmentUpdate {
 pub struct TradeReceipt {
     pub acknowledged: bool,
     pub at: u64,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
-    pub note: Option<String>,
 }

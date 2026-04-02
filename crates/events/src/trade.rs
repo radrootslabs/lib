@@ -146,10 +146,7 @@ pub enum RadrootsTradeOrderChange {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeOrderRevision {
     pub revision_id: String,
-    pub order_id: String,
     pub changes: Vec<RadrootsTradeOrderChange>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
-    pub reason: Option<String>,
 }
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
@@ -185,9 +182,6 @@ pub struct RadrootsTradeOrder {
         ts(optional, type = "RadrootsCoreDiscountValue[] | null")
     )]
     pub discounts: Option<Vec<RadrootsCoreDiscountValue>>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
-    pub notes: Option<String>,
-    pub status: RadrootsTradeOrderStatus,
 }
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
@@ -196,11 +190,6 @@ pub struct RadrootsTradeOrder {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeQuestion {
     pub question_id: String,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
-    pub order_id: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
-    pub listing_addr: Option<String>,
-    pub question_text: String,
 }
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
@@ -209,11 +198,6 @@ pub struct RadrootsTradeQuestion {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeAnswer {
     pub question_id: String,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
-    pub order_id: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
-    pub listing_addr: Option<String>,
-    pub answer_text: String,
 }
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
@@ -222,11 +206,8 @@ pub struct RadrootsTradeAnswer {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeDiscountRequest {
     pub discount_id: String,
-    pub order_id: String,
     #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreDiscountValue"))]
     pub value: RadrootsCoreDiscountValue,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
-    pub conditions: Option<String>,
 }
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
@@ -235,11 +216,8 @@ pub struct RadrootsTradeDiscountRequest {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeDiscountOffer {
     pub discount_id: String,
-    pub order_id: String,
     #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreDiscountValue"))]
     pub value: RadrootsCoreDiscountValue,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
-    pub conditions: Option<String>,
 }
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
@@ -283,12 +261,6 @@ pub enum RadrootsTradeFulfillmentStatus {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeFulfillmentUpdate {
     pub status: RadrootsTradeFulfillmentStatus,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
-    pub tracking: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
-    pub eta: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
-    pub notes: Option<String>,
 }
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
@@ -298,8 +270,6 @@ pub struct RadrootsTradeFulfillmentUpdate {
 pub struct RadrootsTradeReceipt {
     pub acknowledged: bool,
     pub at: u64,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
-    pub note: Option<String>,
 }
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
@@ -481,6 +451,19 @@ impl RadrootsTradeMessageType {
     }
 
     #[inline]
+    pub const fn requires_listing_snapshot(self) -> bool {
+        matches!(
+            self,
+            Self::OrderRequest | Self::OrderRevision | Self::DiscountRequest | Self::DiscountOffer
+        )
+    }
+
+    #[inline]
+    pub const fn requires_trade_chain(self) -> bool {
+        self.is_public() && !matches!(self, Self::OrderRequest)
+    }
+
+    #[inline]
     pub const fn is_request(self) -> bool {
         matches!(
             self,
@@ -608,6 +591,30 @@ pub enum RadrootsTradeMessagePayload {
     Receipt(RadrootsTradeReceipt),
 }
 
+impl RadrootsTradeMessagePayload {
+    #[inline]
+    pub const fn message_type(&self) -> RadrootsTradeMessageType {
+        match self {
+            Self::ListingValidateRequest(_) => RadrootsTradeMessageType::ListingValidateRequest,
+            Self::ListingValidateResult(_) => RadrootsTradeMessageType::ListingValidateResult,
+            Self::OrderRequest(_) => RadrootsTradeMessageType::OrderRequest,
+            Self::OrderResponse(_) => RadrootsTradeMessageType::OrderResponse,
+            Self::OrderRevision(_) => RadrootsTradeMessageType::OrderRevision,
+            Self::OrderRevisionAccept(_) => RadrootsTradeMessageType::OrderRevisionAccept,
+            Self::OrderRevisionDecline(_) => RadrootsTradeMessageType::OrderRevisionDecline,
+            Self::Question(_) => RadrootsTradeMessageType::Question,
+            Self::Answer(_) => RadrootsTradeMessageType::Answer,
+            Self::DiscountRequest(_) => RadrootsTradeMessageType::DiscountRequest,
+            Self::DiscountOffer(_) => RadrootsTradeMessageType::DiscountOffer,
+            Self::DiscountAccept(_) => RadrootsTradeMessageType::DiscountAccept,
+            Self::DiscountDecline(_) => RadrootsTradeMessageType::DiscountDecline,
+            Self::Cancel(_) => RadrootsTradeMessageType::Cancel,
+            Self::FulfillmentUpdate(_) => RadrootsTradeMessageType::FulfillmentUpdate,
+            Self::Receipt(_) => RadrootsTradeMessageType::Receipt,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -641,8 +648,6 @@ mod tests {
                 seller_pubkey: "seller".into(),
                 items: vec![],
                 discounts: None,
-                notes: None,
-                status: RadrootsTradeOrderStatus::Requested,
             }),
         );
         assert_eq!(
