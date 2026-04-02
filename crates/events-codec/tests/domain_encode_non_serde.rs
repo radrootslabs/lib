@@ -627,7 +627,7 @@ fn listing_encode_paths() {
             && tag.get(1).map(|v| v.as_str()) == Some("12")
     }));
     assert!(full_tags.iter().any(|tag| {
-        tag.first().map(|v| v.as_str()) == Some("published_at")
+        tag.first().map(|v| v.as_str()) == Some("radroots:availability_start")
             && tag.get(1).map(|v| v.as_str()) == Some("1")
     }));
     assert!(full_tags.iter().any(|tag| {
@@ -789,7 +789,7 @@ fn listing_encode_paths() {
     assert!(
         !no_availability_tags
             .iter()
-            .any(|tag| tag.first().map(|v| v.as_str()) == Some("published_at"))
+            .any(|tag| { tag.first().map(|v| v.as_str()) == Some("radroots:availability_start") })
     );
 
     let mut listing_pickup = sample_listing();

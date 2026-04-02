@@ -44,7 +44,7 @@ const TAG_DD_LAT: &str = "dd.lat";
 const TAG_DD_LON: &str = "dd.lon";
 const TAG_INVENTORY: &str = "inventory";
 const TAG_DELIVERY: &str = "delivery";
-const TAG_PUBLISHED_AT: &str = "published_at";
+const TAG_RADROOTS_AVAILABILITY_START: &str = "radroots:availability_start";
 const TAG_STATUS: &str = "status";
 const TAG_EXPIRES_AT: &str = "expires_at";
 const TAG_P: &str = "p";
@@ -167,8 +167,10 @@ pub fn listing_tags_with_options(
         let bin_tag = tag_listing_bin(bin)?;
         tags.push(bin_tag);
         tags.push(price_tag);
-        let total = bin_total_price(bin)?;
-        tags.push(tag_listing_price_generic(&total));
+        if bin.bin_id == listing.primary_bin_id {
+            let total = bin_total_price(bin)?;
+            tags.push(tag_listing_price_generic(&total));
+        }
     }
 
     #[cfg(feature = "serde_json")]
@@ -200,7 +202,10 @@ pub fn listing_tags_with_options(
                 }
                 RadrootsListingAvailability::Window { start, end } => {
                     if let Some(start) = start {
-                        tags.push(vec![TAG_PUBLISHED_AT.to_string(), start.to_string()]);
+                        tags.push(vec![
+                            TAG_RADROOTS_AVAILABILITY_START.to_string(),
+                            start.to_string(),
+                        ]);
                     }
                     if let Some(end) = end {
                         tags.push(vec![TAG_EXPIRES_AT.to_string(), end.to_string()]);
@@ -1284,7 +1289,7 @@ mod tests {
         assert!(find_tag(&tags, "radroots:price").is_some());
         assert!(find_tag(&tags, "price").is_some());
         assert!(find_tag(&tags, "inventory").is_some());
-        assert!(find_tag(&tags, "published_at").is_some());
+        assert!(find_tag(&tags, "radroots:availability_start").is_some());
         assert!(find_tag(&tags, "expires_at").is_some());
         assert!(find_tag(&tags, "delivery").is_some());
         assert!(find_tag(&tags, "location").is_some());
@@ -1330,7 +1335,7 @@ mod tests {
         )
         .expect("availability option without value");
         assert!(find_tag(&no_availability_tags, "status").is_none());
-        assert!(find_tag(&no_availability_tags, "published_at").is_none());
+        assert!(find_tag(&no_availability_tags, "radroots:availability_start").is_none());
         assert!(find_tag(&no_availability_tags, "expires_at").is_none());
 
         let mut empty_window_availability = base_listing();
@@ -1347,7 +1352,7 @@ mod tests {
             },
         )
         .expect("availability window without bounds");
-        assert!(find_tag(&empty_window_tags, "published_at").is_none());
+        assert!(find_tag(&empty_window_tags, "radroots:availability_start").is_none());
         assert!(find_tag(&empty_window_tags, "expires_at").is_none());
 
         let mut no_delivery = base_listing();

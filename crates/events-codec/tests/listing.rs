@@ -7,7 +7,7 @@ use radroots_core::{
 };
 use radroots_events::tags::TAG_D;
 use radroots_events::{
-    kinds::{KIND_LISTING, KIND_POST},
+    kinds::{KIND_LISTING, KIND_LISTING_DRAFT, KIND_POST},
     listing::{
         RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
         RadrootsListingDeliveryMethod, RadrootsListingFarmRef, RadrootsListingImage,
@@ -17,7 +17,9 @@ use radroots_events::{
 };
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
 use radroots_events_codec::listing::decode::listing_from_event;
-use radroots_events_codec::listing::encode::{listing_build_tags, to_wire_parts};
+use radroots_events_codec::listing::encode::{
+    listing_build_tags, to_wire_parts, to_wire_parts_with_kind,
+};
 use radroots_events_codec::listing::tags::{
     ListingTagOptions, listing_tags_full, listing_tags_with_options,
 };
@@ -161,6 +163,8 @@ fn listing_roundtrip_from_event() {
     let listing = sample_listing("AAAAAAAAAAAAAAAAAAAAAg");
     let parts = to_wire_parts(&listing).unwrap();
 
+    assert_eq!(parts.content, "# Widget");
+
     let decoded = listing_from_event(parts.kind, &parts.tags, &parts.content).unwrap();
     assert_eq!(decoded.d_tag, listing.d_tag);
     assert_eq!(decoded.product.key, listing.product.key);
@@ -170,60 +174,66 @@ fn listing_roundtrip_from_event() {
 }
 
 #[test]
-fn listing_from_event_fills_missing_d_tag() {
-    let listing = sample_listing("");
-    let content = serde_json::to_string(&listing).unwrap();
-    let tags = vec![
-        vec![TAG_D.to_string(), "FAAAAAAAAAAAAAAAAAAAAA".to_string()],
-        vec!["p".to_string(), "farm_pubkey".to_string()],
-        vec![
-            "a".to_string(),
-            "30340:farm_pubkey:AAAAAAAAAAAAAAAAAAAAAA".to_string(),
-        ],
-    ];
+fn listing_from_event_reconstructs_from_tags_with_markdown_content() {
+    let listing = sample_listing_full("FAAAAAAAAAAAAAAAAAAAAA");
+    let tags = listing_build_tags(&listing).unwrap();
 
-    let decoded = listing_from_event(KIND_LISTING, &tags, &content).unwrap();
-    assert_eq!(decoded.d_tag, "FAAAAAAAAAAAAAAAAAAAAA");
+    let decoded = listing_from_event(KIND_LISTING, &tags, "### Markdown listing").unwrap();
+    assert_eq!(decoded.d_tag, listing.d_tag);
+    assert_eq!(decoded.product.summary, listing.product.summary);
+    assert_eq!(decoded.primary_bin_id, listing.primary_bin_id);
+    assert_eq!(
+        decoded
+            .location
+            .as_ref()
+            .map(|location| location.primary.as_str()),
+        Some("Moyobamba")
+    );
 }
 
 #[test]
-fn listing_from_event_rejects_mismatched_d_tag() {
-    let listing = sample_listing("AAAAAAAAAAAAAAAAAAAAAg");
-    let content = serde_json::to_string(&listing).unwrap();
-    let tags = vec![
-        vec![TAG_D.to_string(), "AAAAAAAAAAAAAAAAAAAAAQ".to_string()],
-        vec!["p".to_string(), "farm_pubkey".to_string()],
-        vec![
-            "a".to_string(),
-            "30340:farm_pubkey:AAAAAAAAAAAAAAAAAAAAAA".to_string(),
-        ],
-    ];
+fn listing_from_event_rejects_invalid_d_tag() {
+    let mut tags = listing_build_tags(&sample_listing("AAAAAAAAAAAAAAAAAAAAAg")).unwrap();
+    let d_tag = tags
+        .iter_mut()
+        .find(|tag| tag.first().map(|value| value.as_str()) == Some(TAG_D))
+        .expect("d tag");
+    d_tag[1] = "invalid:tag".to_string();
 
-    let err = listing_from_event(KIND_LISTING, &tags, &content).unwrap_err();
+    let err = listing_from_event(KIND_LISTING, &tags, "# Widget").unwrap_err();
     assert!(matches!(err, EventParseError::InvalidTag(TAG_D)));
 }
 
 #[test]
 fn listing_from_event_rejects_wrong_kind() {
-    let listing = sample_listing("AAAAAAAAAAAAAAAAAAAAAg");
-    let content = serde_json::to_string(&listing).unwrap();
-    let tags = vec![
-        vec![TAG_D.to_string(), "AAAAAAAAAAAAAAAAAAAAAg".to_string()],
-        vec!["p".to_string(), "farm_pubkey".to_string()],
-        vec![
-            "a".to_string(),
-            "30340:farm_pubkey:AAAAAAAAAAAAAAAAAAAAAA".to_string(),
-        ],
-    ];
+    let tags = listing_build_tags(&sample_listing("AAAAAAAAAAAAAAAAAAAAAg")).unwrap();
 
-    let err = listing_from_event(KIND_POST, &tags, &content).unwrap_err();
+    let err = listing_from_event(KIND_POST, &tags, "# Widget").unwrap_err();
     assert!(matches!(
         err,
         EventParseError::InvalidKind {
-            expected: "30402",
+            expected: "30402 or 30403",
             got: KIND_POST
         }
     ));
+}
+
+#[test]
+fn draft_listing_roundtrip_from_event() {
+    let listing = sample_listing("AAAAAAAAAAAAAAAAAAAAAQ");
+    let parts = to_wire_parts_with_kind(&listing, KIND_LISTING_DRAFT).unwrap();
+
+    let decoded = listing_from_event(parts.kind, &parts.tags, &parts.content).unwrap();
+    assert_eq!(parts.kind, KIND_LISTING_DRAFT);
+    assert_eq!(parts.content, "# Widget");
+    assert_eq!(decoded.d_tag, listing.d_tag);
+}
+
+#[test]
+fn to_wire_parts_rejects_non_listing_kind() {
+    let err =
+        to_wire_parts_with_kind(&sample_listing("AAAAAAAAAAAAAAAAAAAAAg"), KIND_POST).unwrap_err();
+    assert!(matches!(err, EventEncodeError::InvalidKind(KIND_POST)));
 }
 
 #[test]
@@ -336,6 +346,48 @@ fn listing_build_tags_includes_listing_fields() {
 }
 
 #[test]
+fn listing_tags_full_uses_single_generic_price_for_primary_bin() {
+    let mut listing = sample_listing_full("AAAAAAAAAAAAAAAAAAAAAw");
+    listing.bins.push(RadrootsListingBin {
+        bin_id: "bin-2".to_string(),
+        quantity: RadrootsCoreQuantity::new(
+            RadrootsCoreDecimal::from_str("500").unwrap(),
+            RadrootsCoreUnit::MassG,
+        ),
+        price_per_canonical_unit: RadrootsCoreQuantityPrice::new(
+            RadrootsCoreMoney::new(
+                RadrootsCoreDecimal::from_str("0.02").unwrap(),
+                RadrootsCoreCurrency::USD,
+            ),
+            RadrootsCoreQuantity::new(RadrootsCoreDecimal::from(1u32), RadrootsCoreUnit::MassG),
+        ),
+        display_amount: Some(RadrootsCoreDecimal::from(500u32)),
+        display_unit: Some(RadrootsCoreUnit::MassG),
+        display_label: Some("sample".to_string()),
+        display_price: Some(RadrootsCoreMoney::new(
+            RadrootsCoreDecimal::from_str("10").unwrap(),
+            RadrootsCoreCurrency::USD,
+        )),
+        display_price_unit: Some(RadrootsCoreUnit::MassG),
+    });
+
+    let tags = listing_tags_full(&listing).unwrap();
+    let generic_price_tags: Vec<&Vec<String>> = tags
+        .iter()
+        .filter(|tag| tag.first().map(|value| value.as_str()) == Some("price"))
+        .collect();
+    assert_eq!(generic_price_tags.len(), 1);
+    assert_eq!(
+        generic_price_tags[0].get(1).map(|value| value.as_str()),
+        Some("10")
+    );
+    assert_eq!(
+        generic_price_tags[0].get(2).map(|value| value.as_str()),
+        Some("USD")
+    );
+}
+
+#[test]
 fn listing_tags_full_includes_trade_fields() {
     let mut listing = sample_listing("AAAAAAAAAAAAAAAAAAAAAg");
     let inventory = RadrootsCoreDecimal::from_str("12.5").unwrap();
@@ -354,7 +406,7 @@ fn listing_tags_full_includes_trade_fields() {
             && t.get(1).map(|s| s.as_str()) == Some(inventory_value.as_str())
     }));
     assert!(tags.iter().any(|t| {
-        t.get(0).map(|s| s.as_str()) == Some("published_at")
+        t.get(0).map(|s| s.as_str()) == Some("radroots:availability_start")
             && t.get(1).map(|s| s.as_str()) == Some("1730000000")
     }));
     assert!(tags.iter().any(|t| {

@@ -34,7 +34,7 @@ const TAG_IMAGE: &str = "image";
 const TAG_GEOHASH: &str = "g";
 const TAG_INVENTORY: &str = "inventory";
 const TAG_DELIVERY: &str = "delivery";
-const TAG_PUBLISHED_AT: &str = "published_at";
+const TAG_RADROOTS_AVAILABILITY_START: &str = "radroots:availability_start";
 const TAG_STATUS: &str = "status";
 const TAG_EXPIRES_AT: &str = "expires_at";
 const TAG_P: &str = "p";
@@ -379,12 +379,14 @@ fn listing_from_tags(
                     .ok_or_else(|| TradeListingParseError::InvalidTag(TAG_INVENTORY.to_string()))?;
                 inventory_available = Some(parse_decimal(value, TAG_INVENTORY)?);
             }
-            TAG_PUBLISHED_AT => {
+            TAG_RADROOTS_AVAILABILITY_START => {
                 let value = tag.get(1).ok_or_else(|| {
-                    TradeListingParseError::InvalidTag(TAG_PUBLISHED_AT.to_string())
+                    TradeListingParseError::InvalidTag(TAG_RADROOTS_AVAILABILITY_START.to_string())
                 })?;
                 availability_start = Some(value.parse::<u64>().map_err(|_| {
-                    TradeListingParseError::InvalidNumber(TAG_PUBLISHED_AT.to_string())
+                    TradeListingParseError::InvalidNumber(
+                        TAG_RADROOTS_AVAILABILITY_START.to_string(),
+                    )
                 })?);
             }
             TAG_EXPIRES_AT => {
@@ -1052,7 +1054,7 @@ mod tests {
         ]);
         tags.push(vec![TAG_GEOHASH.into(), "u6se".into()]);
         tags.push(vec![TAG_INVENTORY.into(), "8".into()]);
-        tags.push(vec![TAG_PUBLISHED_AT.into(), "10".into()]);
+        tags.push(vec![TAG_RADROOTS_AVAILABILITY_START.into(), "10".into()]);
         tags.push(vec![TAG_EXPIRES_AT.into(), "20".into()]);
         tags.push(vec![TAG_DELIVERY.into(), "other".into(), "drone".into()]);
         tags.push(vec![
@@ -1479,7 +1481,7 @@ mod tests {
         assert_eq!(parse_error_tag(err), TAG_INVENTORY.to_string());
 
         let mut tags = base_trade_tags();
-        tags.push(vec![TAG_PUBLISHED_AT.into(), "bad".into()]);
+        tags.push(vec![TAG_RADROOTS_AVAILABILITY_START.into(), "bad".into()]);
         let err = listing_from_tags(
             &tags,
             listing_d_tag(),
@@ -1489,7 +1491,10 @@ mod tests {
             None,
         )
         .unwrap_err();
-        assert_eq!(parse_error_tag(err), TAG_PUBLISHED_AT.to_string());
+        assert_eq!(
+            parse_error_tag(err),
+            TAG_RADROOTS_AVAILABILITY_START.to_string()
+        );
 
         let mut tags = base_trade_tags();
         tags.push(vec![TAG_EXPIRES_AT.into(), "bad".into()]);
@@ -1518,7 +1523,7 @@ mod tests {
         assert_eq!(parse_error_tag(err), TAG_RADROOTS_DISCOUNT.to_string());
 
         let mut tags = base_trade_tags();
-        tags.push(vec![TAG_PUBLISHED_AT.into()]);
+        tags.push(vec![TAG_RADROOTS_AVAILABILITY_START.into()]);
         let err = listing_from_tags(
             &tags,
             listing_d_tag(),
@@ -1528,7 +1533,10 @@ mod tests {
             None,
         )
         .unwrap_err();
-        assert_eq!(parse_error_tag(err), TAG_PUBLISHED_AT.to_string());
+        assert_eq!(
+            parse_error_tag(err),
+            TAG_RADROOTS_AVAILABILITY_START.to_string()
+        );
 
         let mut tags = base_trade_tags();
         tags.push(vec![TAG_EXPIRES_AT.into()]);

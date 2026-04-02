@@ -14,7 +14,7 @@ readme.workspace = true
 
 [features]
 default = ["std"]
-std = []
+std = ["radroots-core/std", "radroots-events/std"]
 serde = ["dep:serde", "radroots-core/serde", "radroots-events/serde"]
 serde_json = ["serde", "dep:serde_json"]
 nostr = ["dep:nostr", "std"]

@@ -8,7 +8,7 @@ use radroots_core::{
 };
 use radroots_events::{
     RadrootsNostrEvent,
-    kinds::KIND_LISTING,
+    kinds::is_listing_kind,
     listing::{
         RadrootsListing, RadrootsListingAvailability, RadrootsListingDeliveryMethod,
         RadrootsListingLocation,
@@ -50,7 +50,7 @@ pub struct RadrootsTradeListing {
 pub fn validate_listing_event(
     event: &RadrootsNostrEvent,
 ) -> Result<RadrootsTradeListing, TradeListingValidationError> {
-    if event.kind != KIND_LISTING {
+    if !is_listing_kind(event.kind) {
         return Err(TradeListingValidationError::InvalidKind { kind: event.kind });
     }
 
@@ -63,7 +63,7 @@ pub fn validate_listing_event(
         return Err(TradeListingValidationError::InvalidSeller);
     }
     let listing_addr = TradeListingAddress {
-        kind: KIND_LISTING,
+        kind: event.kind as _,
         seller_pubkey: seller_pubkey.clone(),
         listing_id: listing_id.clone(),
     }
@@ -179,7 +179,7 @@ mod tests {
     };
     use radroots_events::{
         RadrootsNostrEvent,
-        kinds::KIND_LISTING,
+        kinds::{KIND_LISTING, KIND_LISTING_DRAFT},
         listing::{
             RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
             RadrootsListingDeliveryMethod, RadrootsListingFarmRef, RadrootsListingLocation,
@@ -279,6 +279,18 @@ mod tests {
         let listing = base_listing();
         let event = base_event(&listing);
         assert!(validate_listing_event(&event).is_ok());
+    }
+
+    #[test]
+    fn validate_draft_listing_ok() {
+        let listing = base_listing();
+        let mut event = base_event(&listing);
+        event.kind = KIND_LISTING_DRAFT;
+        let validated = validate_listing_event(&event).expect("draft listing");
+        assert_eq!(
+            validated.listing_addr,
+            format!("30403:seller:{}", listing.d_tag)
+        );
     }
 
     #[test]

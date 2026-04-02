@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 use radroots_core::{RadrootsCoreDecimal, RadrootsCoreDiscount, RadrootsCoreDiscountValue};
 use radroots_events::{
     RadrootsNostrEvent,
-    kinds::KIND_LISTING,
+    kinds::{KIND_LISTING, is_listing_kind},
     listing::{
         RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
         RadrootsListingDeliveryMethod, RadrootsListingFarmRef, RadrootsListingImage,
@@ -539,12 +539,14 @@ impl RadrootsTradeListingProjection {
     pub fn from_listing_event(
         event: &RadrootsNostrEvent,
     ) -> Result<Self, RadrootsTradeProjectionError> {
-        if event.kind != KIND_LISTING {
+        if !is_listing_kind(event.kind) {
             return Err(RadrootsTradeProjectionError::InvalidListingKind { kind: event.kind });
         }
         let listing = listing_from_event_parts(&event.tags, &event.content)
             .map_err(|error| RadrootsTradeProjectionError::InvalidListingContract { error })?;
-        Self::from_listing_contract(event.author.clone(), &listing)
+        let mut projection = Self::from_listing_contract(event.author.clone(), &listing)?;
+        projection.listing_addr = format!("{}:{}:{}", event.kind, event.author, listing.d_tag);
+        Ok(projection)
     }
 
     pub fn from_listing_contract(

@@ -48,6 +48,7 @@ pub const KIND_RESOURCE_HARVEST_CAP: u32 = 30371;
 pub const KIND_ACCOUNT_CLAIM: u32 = 30380;
 pub const KIND_APP_DATA: u32 = 30078;
 pub const KIND_LISTING: u32 = 30402;
+pub const KIND_LISTING_DRAFT: u32 = 30403;
 pub const KIND_APPLICATION_HANDLER: u32 = 31990;
 
 pub const KIND_TRADE_LISTING_VALIDATE_REQ: u32 = 5321;
@@ -126,6 +127,11 @@ pub const KIND_JOB_REQUEST_MAX: u32 = 5999;
 pub const KIND_JOB_RESULT_MIN: u32 = 6000;
 pub const KIND_JOB_RESULT_MAX: u32 = 6999;
 pub const KIND_JOB_FEEDBACK: u32 = 7000;
+
+#[inline]
+pub const fn is_listing_kind(kind: u32) -> bool {
+    matches!(kind, KIND_LISTING | KIND_LISTING_DRAFT)
+}
 
 #[inline]
 pub const fn is_trade_service_request_kind(kind: u32) -> bool {

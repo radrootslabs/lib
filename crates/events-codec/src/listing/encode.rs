@@ -1,14 +1,18 @@
 #[cfg(not(feature = "std"))]
-use alloc::string::String;
-#[cfg(not(feature = "std"))]
-use alloc::vec::Vec;
+use alloc::{
+    format,
+    string::{String, ToString},
+    vec::Vec,
+};
 
 #[cfg(feature = "serde_json")]
-use radroots_events::kinds::KIND_LISTING;
+use radroots_events::kinds::{KIND_LISTING, is_listing_kind};
 use radroots_events::listing::RadrootsListing;
 
 use crate::error::EventEncodeError;
 use crate::listing::tags::listing_tags;
+#[cfg(feature = "serde_json")]
+use crate::listing::tags::listing_tags_full;
 #[cfg(feature = "serde_json")]
 use crate::wire::WireEventParts;
 
@@ -29,11 +33,32 @@ pub fn to_wire_parts_with_kind(
     listing: &RadrootsListing,
     kind: u32,
 ) -> Result<WireEventParts, EventEncodeError> {
-    let tags = listing_build_tags(listing)?;
-    let content = serde_json::to_string(listing).map_err(|_| EventEncodeError::Json)?;
+    if !is_listing_kind(kind) {
+        return Err(EventEncodeError::InvalidKind(kind));
+    }
+    let tags = listing_tags_full(listing)?;
+    let content = listing_markdown_content(listing);
     Ok(WireEventParts {
         kind,
         content,
         tags,
     })
+}
+
+#[cfg(feature = "serde_json")]
+fn listing_markdown_content(listing: &RadrootsListing) -> String {
+    let title = listing.product.title.trim();
+    let summary = listing
+        .product
+        .summary
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+
+    match (title.is_empty(), summary) {
+        (false, Some(summary)) => format!("# {title}\n\n{summary}"),
+        (false, None) => format!("# {title}"),
+        (true, Some(summary)) => summary.to_string(),
+        (true, None) => String::new(),
+    }
 }
