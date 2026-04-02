@@ -8,7 +8,7 @@ use nostr::{PublicKey, RelayUrl};
 use radroots_identity::RadrootsIdentityPublic;
 use radroots_nostr_connect::prelude::{
     RadrootsNostrConnectMethod, RadrootsNostrConnectPermission, RadrootsNostrConnectPermissions,
-    RadrootsNostrConnectRequest,
+    RadrootsNostrConnectRemoteSessionCapability, RadrootsNostrConnectRequest,
 };
 
 #[derive(Debug, Clone)]
@@ -36,6 +36,7 @@ pub enum RadrootsNostrSignerRequestResponseHint {
     None,
     Pong,
     UserPublicKey(PublicKey),
+    RemoteSessionCapability(RadrootsNostrConnectRemoteSessionCapability),
     RelayList(Vec<RelayUrl>),
 }
 
@@ -103,6 +104,7 @@ pub(crate) fn required_permission_for_request(
     match request {
         RadrootsNostrConnectRequest::Connect { .. }
         | RadrootsNostrConnectRequest::GetPublicKey
+        | RadrootsNostrConnectRequest::GetSessionCapability
         | RadrootsNostrConnectRequest::Ping => None,
         RadrootsNostrConnectRequest::SignEvent(unsigned_event) => {
             Some(RadrootsNostrConnectPermission::with_parameter(
@@ -155,6 +157,15 @@ pub(crate) fn response_hint_for_request(
                 identity_public_key(&connection.user_identity)?,
             ))
         }
+        RadrootsNostrConnectRequest::GetSessionCapability => Ok(
+            RadrootsNostrSignerRequestResponseHint::RemoteSessionCapability(
+                RadrootsNostrConnectRemoteSessionCapability {
+                    user_public_key: identity_public_key(&connection.user_identity)?,
+                    relays: connection.relays.clone(),
+                    permissions: connection.effective_permissions(),
+                },
+            ),
+        ),
         RadrootsNostrConnectRequest::Ping => Ok(RadrootsNostrSignerRequestResponseHint::Pong),
         RadrootsNostrConnectRequest::SwitchRelays => Ok(
             RadrootsNostrSignerRequestResponseHint::RelayList(connection.relays.clone()),
@@ -269,6 +280,27 @@ mod tests {
     fn assert_response_hint_user_public_key(hint: RadrootsNostrSignerRequestResponseHint) {
         match hint {
             RadrootsNostrSignerRequestResponseHint::UserPublicKey(_) => {}
+            other => panic!("unexpected response hint: {other:?}"),
+        }
+    }
+
+    #[cfg_attr(coverage_nightly, coverage(off))]
+    fn assert_response_hint_remote_session_capability(
+        hint: RadrootsNostrSignerRequestResponseHint,
+        expected_permissions: RadrootsNostrConnectPermissions,
+    ) {
+        match hint {
+            RadrootsNostrSignerRequestResponseHint::RemoteSessionCapability(capability) => {
+                let expected_public_key =
+                    PublicKey::parse(fixture_diego_identity().public_key_hex.as_str())
+                        .expect("user public key");
+                assert_eq!(
+                    capability.user_public_key.to_hex(),
+                    expected_public_key.to_hex()
+                );
+                assert_eq!(capability.relays, vec![primary_relay()]);
+                assert_eq!(capability.permissions, expected_permissions);
+            }
             other => panic!("unexpected response hint: {other:?}"),
         }
     }
@@ -423,6 +455,7 @@ mod tests {
         };
         let ping = RadrootsNostrConnectRequest::Ping;
         let get_public_key = RadrootsNostrConnectRequest::GetPublicKey;
+        let get_session_capability = RadrootsNostrConnectRequest::GetSessionCapability;
         let switch_relays = RadrootsNostrConnectRequest::SwitchRelays;
         let sign_event = RadrootsNostrConnectRequest::SignEvent(unsigned_event(7));
         let custom = RadrootsNostrConnectRequest::Custom {
@@ -433,6 +466,7 @@ mod tests {
         assert!(required_permission_for_request(&connect).is_none());
         assert!(required_permission_for_request(&ping).is_none());
         assert!(required_permission_for_request(&get_public_key).is_none());
+        assert!(required_permission_for_request(&get_session_capability).is_none());
         assert_eq!(
             required_permission_for_request(&RadrootsNostrConnectRequest::Nip04Decrypt {
                 public_key,
@@ -494,6 +528,11 @@ mod tests {
         );
         assert_response_hint_user_public_key(
             response_hint_for_request(&connection, &get_public_key).expect("pubkey hint"),
+        );
+        assert_response_hint_remote_session_capability(
+            response_hint_for_request(&connection, &get_session_capability)
+                .expect("capability hint"),
+            connection.effective_permissions(),
         );
         assert_eq!(
             response_hint_for_request(&connection, &switch_relays).expect("relay hint"),

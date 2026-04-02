@@ -9,6 +9,13 @@ use url::Url;
 
 pub const RADROOTS_NOSTR_CONNECT_RPC_KIND: u16 = 24_133;
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RadrootsNostrConnectRemoteSessionCapability {
+    pub user_public_key: PublicKey,
+    pub relays: Vec<RelayUrl>,
+    pub permissions: RadrootsNostrConnectPermissions,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RadrootsNostrConnectRequest {
     Connect {
@@ -17,6 +24,7 @@ pub enum RadrootsNostrConnectRequest {
         requested_permissions: RadrootsNostrConnectPermissions,
     },
     GetPublicKey,
+    GetSessionCapability,
     SignEvent(UnsignedEvent),
     Nip04Encrypt {
         public_key: PublicKey,
@@ -47,6 +55,7 @@ impl RadrootsNostrConnectRequest {
         match self {
             Self::Connect { .. } => RadrootsNostrConnectMethod::Connect,
             Self::GetPublicKey => RadrootsNostrConnectMethod::GetPublicKey,
+            Self::GetSessionCapability => RadrootsNostrConnectMethod::GetSessionCapability,
             Self::SignEvent(_) => RadrootsNostrConnectMethod::SignEvent,
             Self::Nip04Encrypt { .. } => RadrootsNostrConnectMethod::Nip04Encrypt,
             Self::Nip04Decrypt { .. } => RadrootsNostrConnectMethod::Nip04Decrypt,
@@ -75,7 +84,9 @@ impl RadrootsNostrConnectRequest {
                 }
                 params
             }
-            Self::GetPublicKey | Self::Ping | Self::SwitchRelays => Vec::new(),
+            Self::GetPublicKey | Self::GetSessionCapability | Self::Ping | Self::SwitchRelays => {
+                Vec::new()
+            }
             Self::SignEvent(unsigned_event) => vec![unsigned_event.as_json()],
             Self::Nip04Encrypt {
                 public_key,
@@ -128,6 +139,10 @@ impl RadrootsNostrConnectRequest {
             RadrootsNostrConnectMethod::GetPublicKey => {
                 expect_param_count(&method, &params, 0)?;
                 Ok(Self::GetPublicKey)
+            }
+            RadrootsNostrConnectMethod::GetSessionCapability => {
+                expect_param_count(&method, &params, 0)?;
+                Ok(Self::GetSessionCapability)
             }
             RadrootsNostrConnectMethod::SignEvent => {
                 expect_param_count(&method, &params, 1)?;
@@ -247,6 +262,7 @@ pub const RADROOTS_NOSTR_CONNECT_PENDING_CONNECTION_ERROR: &str = "connection is
 pub enum RadrootsNostrConnectPendingConnectionPollOutcome {
     PendingApproval,
     Approved(PublicKey),
+    ApprovedCapability(RadrootsNostrConnectRemoteSessionCapability),
     Rejected { message: String },
     AuthChallenge { url: String },
     UnexpectedResponse { response: String },
@@ -258,6 +274,7 @@ pub enum RadrootsNostrConnectResponse {
     ConnectSecretEcho(String),
     PendingConnection,
     UserPublicKey(PublicKey),
+    RemoteSessionCapability(RadrootsNostrConnectRemoteSessionCapability),
     SignedEvent(Event),
     Pong,
     Nip04Encrypt(String),
@@ -287,6 +304,9 @@ impl RadrootsNostrConnectResponse {
             }
             Self::UserPublicKey(public_key) => {
                 RadrootsNostrConnectPendingConnectionPollOutcome::Approved(public_key)
+            }
+            Self::RemoteSessionCapability(capability) => {
+                RadrootsNostrConnectPendingConnectionPollOutcome::ApprovedCapability(capability)
             }
             Self::Error { error, .. } => {
                 RadrootsNostrConnectPendingConnectionPollOutcome::Rejected { message: error }
@@ -324,6 +344,16 @@ impl RadrootsNostrConnectResponse {
             Self::UserPublicKey(public_key) => RadrootsNostrConnectResponseEnvelope {
                 id,
                 result: Some(Value::String(public_key.to_hex())),
+                error: None,
+            },
+            Self::RemoteSessionCapability(capability) => RadrootsNostrConnectResponseEnvelope {
+                id,
+                result: Some(serde_json::to_value(capability).map_err(|error| {
+                    RadrootsNostrConnectError::InvalidResponsePayload {
+                        method: RadrootsNostrConnectMethod::GetSessionCapability.to_string(),
+                        reason: error.to_string(),
+                    }
+                })?),
                 error: None,
             },
             Self::SignedEvent(event) => RadrootsNostrConnectResponseEnvelope {
@@ -424,6 +454,9 @@ impl RadrootsNostrConnectResponse {
                 let result = expect_string_result(method, envelope.result)?;
                 Ok(Self::UserPublicKey(parse_public_key(&result)?))
             }
+            RadrootsNostrConnectMethod::GetSessionCapability => Ok(Self::RemoteSessionCapability(
+                parse_json_string_result(method, envelope.result)?,
+            )),
             RadrootsNostrConnectMethod::SignEvent => {
                 let event = parse_json_string_result::<Event>(method, envelope.result)?;
                 Ok(Self::SignedEvent(event))
@@ -591,4 +624,73 @@ fn validate_url(value: &str) -> Result<String, RadrootsNostrConnectError> {
             value: value.to_owned(),
             reason: error.to_string(),
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::method::RadrootsNostrConnectMethod;
+    use crate::permission::RadrootsNostrConnectPermission;
+
+    fn relay(value: &str) -> RelayUrl {
+        RelayUrl::parse(value).expect("relay url")
+    }
+
+    fn public_key() -> PublicKey {
+        PublicKey::from_hex("4f355bdcb7cc0af728ef3cceb9615d90684bb5b2ca5f859ab0f0b704075871aa")
+            .expect("public key")
+    }
+
+    #[test]
+    fn get_session_capability_request_round_trips_without_params() {
+        let request = RadrootsNostrConnectRequest::GetSessionCapability;
+        let message = RadrootsNostrConnectRequestMessage::new("req-cap", request.clone());
+        let encoded = serde_json::to_string(&message).expect("encode request");
+        let decoded: RadrootsNostrConnectRequestMessage =
+            serde_json::from_str(&encoded).expect("decode request");
+
+        assert_eq!(decoded.request, request);
+        assert_eq!(
+            decoded.request.method(),
+            RadrootsNostrConnectMethod::GetSessionCapability
+        );
+    }
+
+    #[test]
+    fn get_session_capability_response_round_trips() {
+        let capability = RadrootsNostrConnectRemoteSessionCapability {
+            user_public_key: public_key(),
+            relays: vec![
+                relay("wss://relay.example.com"),
+                relay("wss://relay2.example.com"),
+            ],
+            permissions: vec![
+                RadrootsNostrConnectPermission::with_parameter(
+                    RadrootsNostrConnectMethod::SignEvent,
+                    "kind:1",
+                ),
+                RadrootsNostrConnectPermission::new(RadrootsNostrConnectMethod::SwitchRelays),
+            ]
+            .into(),
+        };
+        let response = RadrootsNostrConnectResponse::RemoteSessionCapability(capability.clone());
+        let envelope = response
+            .into_envelope("resp-cap")
+            .expect("encode response envelope");
+        let decoded = RadrootsNostrConnectResponse::from_envelope(
+            &RadrootsNostrConnectMethod::GetSessionCapability,
+            envelope,
+        )
+        .expect("decode capability response");
+
+        assert_eq!(
+            decoded,
+            RadrootsNostrConnectResponse::RemoteSessionCapability(capability.clone())
+        );
+        assert_eq!(
+            RadrootsNostrConnectResponse::RemoteSessionCapability(capability.clone())
+                .into_pending_connection_poll_outcome(),
+            RadrootsNostrConnectPendingConnectionPollOutcome::ApprovedCapability(capability)
+        );
+    }
 }

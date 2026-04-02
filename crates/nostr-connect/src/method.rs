@@ -7,6 +7,7 @@ use std::str::FromStr;
 pub enum RadrootsNostrConnectMethod {
     Connect,
     GetPublicKey,
+    GetSessionCapability,
     SignEvent,
     Nip04Encrypt,
     Nip04Decrypt,
@@ -22,6 +23,7 @@ impl RadrootsNostrConnectMethod {
         match self {
             Self::Connect => "connect",
             Self::GetPublicKey => "get_public_key",
+            Self::GetSessionCapability => "get_session_capability",
             Self::SignEvent => "sign_event",
             Self::Nip04Encrypt => "nip04_encrypt",
             Self::Nip04Decrypt => "nip04_decrypt",
@@ -47,6 +49,7 @@ impl FromStr for RadrootsNostrConnectMethod {
         match value {
             "connect" => Ok(Self::Connect),
             "get_public_key" => Ok(Self::GetPublicKey),
+            "get_session_capability" => Ok(Self::GetSessionCapability),
             "sign_event" => Ok(Self::SignEvent),
             "nip04_encrypt" => Ok(Self::Nip04Encrypt),
             "nip04_decrypt" => Ok(Self::Nip04Decrypt),
