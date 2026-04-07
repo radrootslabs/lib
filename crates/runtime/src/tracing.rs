@@ -47,16 +47,18 @@ fn log_name_from_path(exe: Option<PathBuf>) -> Option<String> {
 
 #[cfg(test)]
 mod test_hooks {
-    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::cell::Cell;
 
-    static IGNORE_ENV: AtomicBool = AtomicBool::new(false);
+    thread_local! {
+        static IGNORE_ENV: Cell<bool> = const { Cell::new(false) };
+    }
 
     pub fn set_ignore_env(ignore: bool) {
-        IGNORE_ENV.store(ignore, Ordering::SeqCst);
+        IGNORE_ENV.with(|state| state.set(ignore));
     }
 
     pub fn ignore_env() -> bool {
-        IGNORE_ENV.load(Ordering::SeqCst)
+        IGNORE_ENV.with(Cell::get)
     }
 }
 

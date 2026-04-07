@@ -5,6 +5,8 @@ use clap::{ArgAction, Args, ValueHint};
 #[cfg(feature = "cli")]
 use std::path::PathBuf;
 
+pub const DEFAULT_SERVICE_IDENTITY_PATH: &str = "identity.secret.json";
+
 #[cfg(feature = "cli")]
 #[derive(Args, Debug, Clone)]
 pub struct RadrootsServiceCliArgs {
@@ -21,14 +23,14 @@ pub struct RadrootsServiceCliArgs {
         long,
         value_name = "PATH",
         value_hint = ValueHint::FilePath,
-        help = "Path to the daemon identity file (json, txt, or raw 32-byte key; defaults to identity.json)"
+        help = "Path to the daemon encrypted identity envelope; generated identities default to identity.secret.json with a sibling .key wrapping key file"
     )]
     pub identity: Option<PathBuf>,
 
     #[arg(
         long,
         action = ArgAction::SetTrue,
-        help = "Allow generating a new identity file if missing; if not set and identity file is absent, the daemon will fail"
+        help = "Allow generating a new encrypted identity envelope when the configured path is missing; if not set and the identity is absent, the daemon will fail"
     )]
     pub allow_generate_identity: bool,
 }

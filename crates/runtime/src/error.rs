@@ -24,6 +24,42 @@ pub enum RuntimeTracingError {
 }
 
 #[derive(Debug, Error)]
+pub enum RuntimeProtectedFileError {
+    #[error("failed to create directory {path}: {source}")]
+    CreateDir {
+        path: std::path::PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("protected secret file io error at {path}: {source}")]
+    Io {
+        path: std::path::PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("failed to seal protected secret file {path}: {message}")]
+    Seal {
+        path: std::path::PathBuf,
+        message: String,
+    },
+    #[error("failed to decode protected secret file {path}: {message}")]
+    Decode {
+        path: std::path::PathBuf,
+        message: String,
+    },
+    #[error("failed to open protected secret file {path}: {message}")]
+    Open {
+        path: std::path::PathBuf,
+        message: String,
+    },
+    #[error("failed to update secret permissions for {path}: {message}")]
+    Permissions {
+        path: std::path::PathBuf,
+        message: String,
+    },
+}
+
+#[derive(Debug, Error)]
 pub enum RuntimeError {
     #[error(transparent)]
     Config(#[from] RuntimeConfigError),
@@ -38,7 +74,7 @@ pub enum RuntimeError {
 
 #[cfg(test)]
 mod tests {
-    use super::{RuntimeConfigError, RuntimeError, RuntimeTracingError};
+    use super::{RuntimeConfigError, RuntimeError, RuntimeProtectedFileError, RuntimeTracingError};
     use std::error::Error as _;
     use std::path::PathBuf;
 
@@ -69,5 +105,16 @@ mod tests {
         let runtime_from_tracing: RuntimeError = tracing.into();
         assert!(runtime_from_tracing.to_string().contains("log-failure"));
         assert!(runtime_from_tracing.source().is_none());
+    }
+
+    #[test]
+    fn protected_file_error_displays_path_and_message() {
+        let err = RuntimeProtectedFileError::Open {
+            path: PathBuf::from("identity.secret.json"),
+            message: "missing wrapping key".to_string(),
+        };
+        let display = err.to_string();
+        assert!(display.contains("identity.secret.json"));
+        assert!(display.contains("missing wrapping key"));
     }
 }

@@ -4,6 +4,7 @@ pub mod cli;
 pub mod config;
 pub mod error;
 pub mod json;
+pub mod secret_file;
 pub mod service;
 pub mod signals;
 pub mod tracing;
@@ -21,9 +22,12 @@ pub use config::{
 
 #[cfg(feature = "cli")]
 pub use error::RuntimeCliError;
+pub use error::RuntimeProtectedFileError;
 pub use error::{RuntimeConfigError, RuntimeError, RuntimeTracingError};
 
 pub use json::{JsonFile, JsonWriteOptions, RuntimeJsonError};
+pub use secret_file::{local_wrapping_key_path, open_local_secret_file, seal_local_secret_file};
+pub use service::DEFAULT_SERVICE_IDENTITY_PATH;
 pub use service::RadrootsNostrServiceConfig;
 #[cfg(feature = "cli")]
 pub use service::RadrootsServiceCliArgs;

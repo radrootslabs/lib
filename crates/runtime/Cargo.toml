@@ -18,13 +18,18 @@ cli = ["dep:clap"]
 
 [dependencies]
 anyhow = { workspace = true }
+chacha20poly1305 = { workspace = true }
 clap = { workspace = true, features = ["derive", "env"], optional = true }
 config = { workspace = true }
+getrandom = { workspace = true }
 radroots-log = { workspace = true, features = ["std"] }
+radroots-protected-store = { workspace = true, features = ["std"] }
+radroots-secret-vault = { workspace = true, features = ["std"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
+tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "signal"] }
 toml = { workspace = true }
 tracing = { workspace = true }
-tempfile = { workspace = true }
+zeroize = { workspace = true }
