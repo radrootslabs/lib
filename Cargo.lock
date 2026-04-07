@@ -2616,6 +2616,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "radroots-runtime-paths"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "radroots-secret-vault"
 version = "0.1.0-alpha.1"
 dependencies = [

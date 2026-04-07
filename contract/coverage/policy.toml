@@ -29,6 +29,7 @@ crates = [
   "radroots-nostr-runtime",
   "radroots-protected-store",
   "radroots-runtime",
+  "radroots-runtime-paths",
   "radroots-secret-vault",
   "radroots-simplex-chat-proto",
   "radroots-simplex-smp-proto",
