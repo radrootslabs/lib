@@ -1,0 +1,19 @@
+[package]
+name = "radroots-secret-vault"
+version = "0.1.0-alpha.1"
+edition.workspace = true
+authors = [
+  "Radroots Authors",
+]
+rust-version.workspace = true
+license.workspace = true
+description = "Secret storage model for Radroots"
+repository.workspace = true
+homepage.workspace = true
+readme = "README"
+
+[features]
+default = []
+std = []
+
+[dependencies]

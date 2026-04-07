@@ -2599,6 +2599,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "radroots-secret-vault"
+version = "0.1.0-alpha.1"
+
+[[package]]
 name = "radroots-simplex-agent-proto"
 version = "0.1.0-alpha.1"
 dependencies = [

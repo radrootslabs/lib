@@ -28,6 +28,7 @@ crates = [
   "radroots-nostr-ndb",
   "radroots-nostr-runtime",
   "radroots-runtime",
+  "radroots-secret-vault",
   "radroots-simplex-chat-proto",
   "radroots-simplex-smp-proto",
   "radroots-sql-core",

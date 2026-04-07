@@ -17,6 +17,7 @@ members = [
   "crates/nostr-ndb",
   "crates/nostr-runtime",
   "crates/runtime",
+  "crates/secret-vault",
   "crates/simplex-agent-proto",
   "crates/simplex-agent-runtime",
   "crates/simplex-agent-store",
@@ -85,6 +86,7 @@ radroots-replica-db-wasm = { path = "crates/replica-db-wasm", version = "0.1.0-a
 radroots-replica-sync-wasm = { path = "crates/replica-sync-wasm", version = "0.1.0-alpha.1" }
 radroots-trade = { path = "crates/trade", version = "0.1.0-alpha.1", default-features = false }
 radroots-types = { path = "crates/types", version = "0.1.0-alpha.1", default-features = false }
+radroots-secret-vault = { path = "crates/secret-vault", version = "0.1.0-alpha.1", default-features = false }
 
 anyhow = { version = "1" }
 base64 = { version = "0.22" }
