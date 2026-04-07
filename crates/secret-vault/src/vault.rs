@@ -1,4 +1,4 @@
-use alloc::string::{String, ToString};
+use alloc::{format, string::String};
 
 use crate::error::RadrootsSecretVaultAccessError;
 
@@ -31,7 +31,7 @@ impl RadrootsSecretVault for RadrootsSecretVaultMemory {
             .entries
             .write()
             .map_err(|_| RadrootsSecretVaultAccessError::Backend("memory vault poisoned".into()))?;
-        guard.insert(slot.to_string(), secret.to_string());
+        guard.insert(String::from(slot), String::from(secret));
         Ok(())
     }
 
@@ -80,28 +80,28 @@ impl Default for RadrootsSecretVaultOsKeyring {
 impl RadrootsSecretVault for RadrootsSecretVaultOsKeyring {
     fn store_secret(&self, slot: &str, secret: &str) -> Result<(), RadrootsSecretVaultAccessError> {
         let entry = keyring::Entry::new(self.service_name.as_str(), slot)
-            .map_err(|source| RadrootsSecretVaultAccessError::Backend(source.to_string()))?;
+            .map_err(|source| RadrootsSecretVaultAccessError::Backend(format!("{source}")))?;
         entry
             .set_password(secret)
-            .map_err(|source| RadrootsSecretVaultAccessError::Backend(source.to_string()))
+            .map_err(|source| RadrootsSecretVaultAccessError::Backend(format!("{source}")))
     }
 
     fn load_secret(&self, slot: &str) -> Result<Option<String>, RadrootsSecretVaultAccessError> {
         let entry = keyring::Entry::new(self.service_name.as_str(), slot)
-            .map_err(|source| RadrootsSecretVaultAccessError::Backend(source.to_string()))?;
+            .map_err(|source| RadrootsSecretVaultAccessError::Backend(format!("{source}")))?;
         match entry.get_password() {
             Ok(secret) => Ok(Some(secret)),
             Err(keyring::Error::NoEntry) => Ok(None),
-            Err(source) => Err(RadrootsSecretVaultAccessError::Backend(source.to_string())),
+            Err(source) => Err(RadrootsSecretVaultAccessError::Backend(format!("{source}"))),
         }
     }
 
     fn remove_secret(&self, slot: &str) -> Result<(), RadrootsSecretVaultAccessError> {
         let entry = keyring::Entry::new(self.service_name.as_str(), slot)
-            .map_err(|source| RadrootsSecretVaultAccessError::Backend(source.to_string()))?;
+            .map_err(|source| RadrootsSecretVaultAccessError::Backend(format!("{source}")))?;
         match entry.delete_credential() {
             Ok(_) | Err(keyring::Error::NoEntry) => Ok(()),
-            Err(source) => Err(RadrootsSecretVaultAccessError::Backend(source.to_string())),
+            Err(source) => Err(RadrootsSecretVaultAccessError::Backend(format!("{source}"))),
         }
     }
 }
