@@ -14,7 +14,7 @@ where
     FP: Fn(&Args) -> Option<&Path>,
 {
     let args = Args::try_parse().map_err(RuntimeCliError::from)?;
-    let path = resolve_path(path_of(&args));
+    let path = resolve_path(path_of(&args))?;
     let cfg = crate::config::load_required_file::<C>(&path)?;
     Ok((args, cfg))
 }
@@ -31,7 +31,7 @@ where
     FO: Fn(&Args) -> Option<Map<String, Value>>,
 {
     let args = Args::try_parse().map_err(RuntimeCliError::from)?;
-    let path = resolve_path(path_of(&args));
+    let path = resolve_path(path_of(&args))?;
     let cfg = crate::config::load_required_file_with_env_and_overrides::<C>(
         &path,
         env_prefix,
@@ -80,6 +80,27 @@ where
 }
 
 #[inline]
-fn resolve_path(p: Option<&Path>) -> PathBuf {
-    p.unwrap_or_else(|| Path::new("config.toml")).to_path_buf()
+fn resolve_path(p: Option<&Path>) -> Result<PathBuf, RuntimeCliError> {
+    p.map(Path::to_path_buf)
+        .ok_or(RuntimeCliError::MissingConfigPath)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use super::resolve_path;
+    use crate::RuntimeCliError;
+
+    #[test]
+    fn resolve_path_requires_explicit_path() {
+        let err = resolve_path(None).expect_err("missing path should error");
+        assert!(matches!(err, RuntimeCliError::MissingConfigPath));
+
+        let path = PathBuf::from("/tmp/config.toml");
+        assert_eq!(
+            resolve_path(Some(path.as_path())).expect("path should resolve"),
+            path
+        );
+    }
 }

@@ -55,4 +55,8 @@ pub enum IdentityError {
     #[cfg(all(feature = "std", feature = "json-file"))]
     #[error(transparent)]
     Store(#[from] RuntimeJsonError),
+
+    #[cfg(feature = "std")]
+    #[error(transparent)]
+    Paths(#[from] radroots_runtime_paths::RadrootsRuntimePathsError),
 }

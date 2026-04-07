@@ -1,11 +1,56 @@
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 #[cfg(feature = "cli")]
 use clap::{ArgAction, Args, ValueHint};
-#[cfg(feature = "cli")]
-use std::path::PathBuf;
+use radroots_runtime_paths::{
+    DEFAULT_SERVICE_IDENTITY_FILE_NAME, RadrootsBootstrapPaths, RadrootsPathOverrides,
+    RadrootsPathProfile, RadrootsPathResolver, RadrootsRuntimeNamespace, RadrootsRuntimePathsError,
+    default_namespaced_bootstrap_paths,
+};
 
-pub const DEFAULT_SERVICE_IDENTITY_PATH: &str = "identity.secret.json";
+pub const DEFAULT_SERVICE_IDENTITY_PATH: &str = DEFAULT_SERVICE_IDENTITY_FILE_NAME;
+
+pub fn service_bootstrap_paths_for(
+    resolver: &RadrootsPathResolver,
+    profile: RadrootsPathProfile,
+    overrides: &RadrootsPathOverrides,
+    runtime_id: &str,
+) -> Result<RadrootsBootstrapPaths, RadrootsRuntimePathsError> {
+    let namespace = RadrootsRuntimeNamespace::service(runtime_id)?;
+    default_namespaced_bootstrap_paths(
+        resolver,
+        profile,
+        overrides,
+        &namespace,
+        DEFAULT_SERVICE_IDENTITY_PATH,
+    )
+}
+
+pub fn default_service_bootstrap_paths(
+    runtime_id: &str,
+) -> Result<RadrootsBootstrapPaths, RadrootsRuntimePathsError> {
+    service_bootstrap_paths_for(
+        &RadrootsPathResolver::current(),
+        RadrootsPathProfile::InteractiveUser,
+        &RadrootsPathOverrides::default(),
+        runtime_id,
+    )
+}
+
+pub fn default_service_config_path(runtime_id: &str) -> Result<PathBuf, RadrootsRuntimePathsError> {
+    Ok(default_service_bootstrap_paths(runtime_id)?.config_path)
+}
+
+pub fn default_service_logs_dir(runtime_id: &str) -> Result<PathBuf, RadrootsRuntimePathsError> {
+    Ok(default_service_bootstrap_paths(runtime_id)?.logs_dir)
+}
+
+pub fn default_service_identity_path(
+    runtime_id: &str,
+) -> Result<PathBuf, RadrootsRuntimePathsError> {
+    Ok(default_service_bootstrap_paths(runtime_id)?.identity_path)
+}
 
 #[cfg(feature = "cli")]
 #[derive(Args, Debug, Clone)]
@@ -14,16 +59,15 @@ pub struct RadrootsServiceCliArgs {
         long,
         value_name = "PATH",
         value_hint = ValueHint::FilePath,
-        default_value = "config.toml",
-        help = "Path to the daemon configuration file (defaults to config.toml)"
+        help = "Path to the daemon configuration file; no implicit cwd-rooted default is used"
     )]
-    pub config: PathBuf,
+    pub config: Option<PathBuf>,
 
     #[arg(
         long,
         value_name = "PATH",
         value_hint = ValueHint::FilePath,
-        help = "Path to the daemon encrypted identity envelope; generated identities default to identity.secret.json with a sibling .key wrapping key file"
+        help = "Path to the daemon encrypted identity envelope; callers may resolve a canonical namespaced default ending in identity.secret.json with a sibling .key wrapping key file"
     )]
     pub identity: Option<PathBuf>,
 
@@ -48,7 +92,14 @@ pub struct RadrootsNostrServiceConfig {
 
 #[cfg(test)]
 mod tests {
-    use super::RadrootsNostrServiceConfig;
+    use std::path::PathBuf;
+
+    use radroots_runtime_paths::{
+        RadrootsHostEnvironment, RadrootsPathOverrides, RadrootsPathProfile, RadrootsPathResolver,
+        RadrootsPlatform,
+    };
+
+    use super::{RadrootsNostrServiceConfig, service_bootstrap_paths_for};
 
     #[test]
     fn service_config_defaults_optional_fields() {
@@ -63,5 +114,39 @@ logs_dir = "logs"
         assert!(cfg.relays.is_empty());
         assert_eq!(cfg.nip89_identifier, None);
         assert!(cfg.nip89_extra_tags.is_empty());
+    }
+
+    #[test]
+    fn service_bootstrap_paths_follow_runtime_paths_contract() {
+        let resolver = RadrootsPathResolver::new(
+            RadrootsPlatform::Linux,
+            RadrootsHostEnvironment {
+                home_dir: Some(PathBuf::from("/home/treesap")),
+                ..RadrootsHostEnvironment::default()
+            },
+        );
+
+        let paths = service_bootstrap_paths_for(
+            &resolver,
+            RadrootsPathProfile::InteractiveUser,
+            &RadrootsPathOverrides::default(),
+            "radrootsd",
+        )
+        .expect("service bootstrap paths should resolve");
+
+        assert_eq!(
+            paths.config_path,
+            PathBuf::from("/home/treesap/.radroots/config/services/radrootsd/config.toml")
+        );
+        assert_eq!(
+            paths.logs_dir,
+            PathBuf::from("/home/treesap/.radroots/logs/services/radrootsd")
+        );
+        assert_eq!(
+            paths.identity_path,
+            PathBuf::from(
+                "/home/treesap/.radroots/secrets/services/radrootsd/identity.secret.json"
+            )
+        );
     }
 }

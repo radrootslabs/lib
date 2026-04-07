@@ -7,6 +7,10 @@ use radroots_nostr::prelude::{
     RadrootsNostrKeys, RadrootsNostrSecp256k1SecretKey, RadrootsNostrSecretKey,
     RadrootsNostrToBech32,
 };
+#[cfg(all(feature = "nostr-client", feature = "fs-persistence"))]
+use radroots_runtime_paths::{
+    RadrootsPathOverrides, RadrootsPathProfile, RadrootsPathResolver, default_shared_identity_path,
+};
 #[cfg(feature = "nostr-client")]
 use serde::Deserialize;
 #[cfg(feature = "nostr-client")]
@@ -262,13 +266,16 @@ impl KeysManager {
         self.state.npub.clone()
     }
 
-    #[cfg(all(feature = "directories", feature = "fs-persistence"))]
+    #[cfg(feature = "fs-persistence")]
     pub fn default_key_path() -> Option<PathBuf> {
-        directories::ProjectDirs::from("com", "Radroots", "radroots")
-            .map(|d| d.config_dir().join("identity.json"))
+        default_key_path_for(
+            &RadrootsPathResolver::current(),
+            RadrootsPathProfile::InteractiveUser,
+            &RadrootsPathOverrides::default(),
+        )
     }
 
-    #[cfg(all(feature = "directories", feature = "fs-persistence"))]
+    #[cfg(feature = "fs-persistence")]
     pub fn persist_best_practice(&self) -> Result<PathBuf> {
         let path = Self::default_key_path().ok_or(NetError::PersistenceUnsupported)?;
         if path.exists() {
@@ -278,7 +285,7 @@ impl KeysManager {
         Ok(path)
     }
 
-    #[cfg(not(all(feature = "directories", feature = "fs-persistence")))]
+    #[cfg(not(feature = "fs-persistence"))]
     pub fn persist_best_practice(&self) -> Result<PathBuf> {
         Err(NetError::PersistenceUnsupported)
     }
@@ -288,11 +295,11 @@ impl KeysManager {
         let path = if let Some(p) = &cfg.path {
             p.clone()
         } else {
-            #[cfg(all(feature = "directories", feature = "fs-persistence"))]
+            #[cfg(feature = "fs-persistence")]
             {
                 Self::default_key_path().ok_or(NetError::PersistenceUnsupported)?
             }
-            #[cfg(not(all(feature = "directories", feature = "fs-persistence")))]
+            #[cfg(not(feature = "fs-persistence"))]
             {
                 return Err(NetError::PersistenceUnsupported);
             }
@@ -305,6 +312,15 @@ impl KeysManager {
     pub fn persist_with_config(&self, _cfg: &KeyPersistenceConfig) -> Result<PathBuf> {
         Err(NetError::PersistenceUnsupported)
     }
+}
+
+#[cfg(all(feature = "nostr-client", feature = "fs-persistence"))]
+fn default_key_path_for(
+    resolver: &RadrootsPathResolver,
+    profile: RadrootsPathProfile,
+    overrides: &RadrootsPathOverrides,
+) -> Option<PathBuf> {
+    default_shared_identity_path(resolver, profile, overrides).ok()
 }
 
 #[cfg(feature = "nostr-client")]
@@ -335,4 +351,45 @@ fn write_secret_atomically_noclobber(path: &Path, data: &[u8]) -> crate::error::
     }
 
     Ok(())
+}
+
+#[cfg(all(test, feature = "nostr-client", feature = "fs-persistence"))]
+mod tests {
+    use std::path::PathBuf;
+
+    use radroots_identity::RadrootsIdentity;
+    use radroots_runtime_paths::{
+        RadrootsHostEnvironment, RadrootsPathOverrides, RadrootsPathProfile, RadrootsPathResolver,
+        RadrootsPlatform,
+    };
+
+    use super::default_key_path_for;
+
+    #[test]
+    fn default_key_path_matches_identity_default_path() {
+        let resolver = RadrootsPathResolver::new(
+            RadrootsPlatform::Linux,
+            RadrootsHostEnvironment {
+                home_dir: Some(PathBuf::from("/home/treesap")),
+                ..RadrootsHostEnvironment::default()
+            },
+        );
+        let overrides = RadrootsPathOverrides::default();
+
+        let net_core_path =
+            default_key_path_for(&resolver, RadrootsPathProfile::InteractiveUser, &overrides)
+                .expect("net-core default key path should resolve");
+        let identity_path = RadrootsIdentity::default_path_for(
+            &resolver,
+            RadrootsPathProfile::InteractiveUser,
+            &overrides,
+        )
+        .expect("identity default path should resolve");
+
+        assert_eq!(net_core_path, identity_path);
+        assert_eq!(
+            net_core_path,
+            PathBuf::from("/home/treesap/.radroots/secrets/shared/identities/default.json")
+        );
+    }
 }

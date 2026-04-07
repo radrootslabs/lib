@@ -1,10 +1,16 @@
 #![forbid(unsafe_code)]
 
+pub mod conventions;
 pub mod error;
 pub mod namespace;
 pub mod platform;
 pub mod roots;
 
+pub use conventions::{
+    DEFAULT_CONFIG_FILE_NAME, DEFAULT_SERVICE_IDENTITY_FILE_NAME,
+    DEFAULT_SHARED_IDENTITY_FILE_NAME, RadrootsBootstrapPaths, default_namespaced_bootstrap_paths,
+    default_shared_identity_path, default_shared_runtime_logs_dir,
+};
 pub use error::RadrootsRuntimePathsError;
 pub use namespace::{RadrootsRuntimeNamespace, RadrootsRuntimeNamespaceKind};
 pub use platform::{RadrootsHostEnvironment, RadrootsPathProfile, RadrootsPlatform};

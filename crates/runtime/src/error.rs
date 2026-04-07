@@ -15,12 +15,18 @@ pub enum RuntimeConfigError {
 pub enum RuntimeCliError {
     #[error(transparent)]
     Parse(#[from] clap::Error),
+
+    #[error("configuration path is required; no implicit cwd-rooted default is used")]
+    MissingConfigPath,
 }
 
 #[derive(Debug, Error)]
 pub enum RuntimeTracingError {
     #[error(transparent)]
     Log(#[from] radroots_log::Error),
+
+    #[error(transparent)]
+    Paths(#[from] radroots_runtime_paths::RadrootsRuntimePathsError),
 }
 
 #[derive(Debug, Error)]
@@ -105,6 +111,15 @@ mod tests {
         let runtime_from_tracing: RuntimeError = tracing.into();
         assert!(runtime_from_tracing.to_string().contains("log-failure"));
         assert!(runtime_from_tracing.source().is_none());
+
+        let paths = RuntimeTracingError::from(
+            radroots_runtime_paths::RadrootsRuntimePathsError::MissingHomeDir {
+                platform: radroots_runtime_paths::RadrootsPlatform::Linux,
+            },
+        );
+        let runtime_from_paths: RuntimeError = paths.into();
+        assert!(runtime_from_paths.to_string().contains("home directory"));
+        assert!(runtime_from_paths.source().is_none());
     }
 
     #[test]

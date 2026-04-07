@@ -1,10 +1,31 @@
 use radroots_log::{LogFileLayout, LoggingOptions};
+use radroots_runtime_paths::{
+    RadrootsPathOverrides, RadrootsPathProfile, RadrootsPathResolver, RadrootsRuntimePathsError,
+    default_shared_runtime_logs_dir as resolve_shared_runtime_logs_dir,
+};
 use std::path::{Path, PathBuf};
 
 use crate::error::RuntimeTracingError;
 
 pub fn init() -> Result<(), RuntimeTracingError> {
-    init_with("logs", None)
+    let logs_dir = default_shared_runtime_logs_dir()?;
+    init_with(logs_dir, None)
+}
+
+pub fn default_shared_runtime_logs_dir() -> Result<PathBuf, RadrootsRuntimePathsError> {
+    default_shared_runtime_logs_dir_for(
+        &RadrootsPathResolver::current(),
+        RadrootsPathProfile::InteractiveUser,
+        &RadrootsPathOverrides::default(),
+    )
+}
+
+pub fn default_shared_runtime_logs_dir_for(
+    resolver: &RadrootsPathResolver,
+    profile: RadrootsPathProfile,
+    overrides: &RadrootsPathOverrides,
+) -> Result<PathBuf, RadrootsRuntimePathsError> {
+    resolve_shared_runtime_logs_dir(resolver, profile, overrides)
 }
 
 pub fn init_with(
@@ -113,9 +134,14 @@ fn resolve_default_level(env_level: Option<String>, default_level: Option<&str>)
 #[cfg(test)]
 mod tests {
     use super::{
-        default_log_file_name, default_log_file_name_from_exe_name, env_path, env_value, init,
-        init_with, log_name_from_path, log_name_from_stem, normalize_env_value,
-        resolve_default_level, resolve_log_dir, test_hooks,
+        default_log_file_name, default_log_file_name_from_exe_name,
+        default_shared_runtime_logs_dir_for, env_path, env_value, init_with, log_name_from_path,
+        log_name_from_stem, normalize_env_value, resolve_default_level, resolve_log_dir,
+        test_hooks,
+    };
+    use radroots_runtime_paths::{
+        RadrootsHostEnvironment, RadrootsPathOverrides, RadrootsPathProfile, RadrootsPathResolver,
+        RadrootsPlatform,
     };
     use std::path::{Path, PathBuf};
     use tempfile::tempdir;
@@ -192,6 +218,29 @@ mod tests {
     }
 
     #[test]
+    fn default_shared_runtime_logs_dir_uses_shared_namespace() {
+        let resolver = RadrootsPathResolver::new(
+            RadrootsPlatform::Macos,
+            RadrootsHostEnvironment {
+                home_dir: Some(PathBuf::from("/Users/treesap")),
+                ..RadrootsHostEnvironment::default()
+            },
+        );
+
+        let logs_dir = default_shared_runtime_logs_dir_for(
+            &resolver,
+            RadrootsPathProfile::InteractiveUser,
+            &RadrootsPathOverrides::default(),
+        )
+        .expect("default shared runtime logs dir should resolve");
+
+        assert_eq!(
+            logs_dir,
+            PathBuf::from("/Users/treesap/.radroots/logs/shared/runtime")
+        );
+    }
+
+    #[test]
     fn init_paths_execute() {
         let dir = tempdir().expect("tempdir");
         test_hooks::set_ignore_env(true);
@@ -210,7 +259,5 @@ mod tests {
         assert!(third.is_ok());
         let fourth = init_with("logs", Some("debug"));
         assert!(fourth.is_ok());
-        let second = init();
-        assert!(second.is_ok());
     }
 }

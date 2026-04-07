@@ -7,6 +7,10 @@ use radroots_identity::{
 use radroots_identity::{
     RadrootsIdentityEncryptedSecretKeyOptions, RadrootsIdentityEncryptedSecretKeySecurity,
 };
+use radroots_runtime_paths::{
+    RadrootsHostEnvironment, RadrootsPathOverrides, RadrootsPathProfile, RadrootsPathResolver,
+    RadrootsPlatform,
+};
 use radroots_test_fixtures::{ApprovedFixtureIdentity, FIXTURE_ALICE, FIXTURE_BOB};
 use std::path::PathBuf;
 
@@ -495,23 +499,43 @@ fn load_or_generate_reports_save_failure_when_parent_not_writable() {
 
 #[test]
 fn load_or_generate_uses_default_path_when_missing() {
-    let original = std::env::current_dir().unwrap();
-    let dir = tempfile::tempdir().unwrap();
-    std::env::set_current_dir(dir.path()).unwrap();
-
-    let denied = RadrootsIdentity::load_or_generate::<&std::path::Path>(None, false).unwrap_err();
-    assert!(
-        matches!(denied, IdentityError::GenerationNotAllowed(path) if path == PathBuf::from(DEFAULT_IDENTITY_PATH))
+    let resolver = RadrootsPathResolver::new(
+        RadrootsPlatform::Linux,
+        RadrootsHostEnvironment {
+            home_dir: Some(PathBuf::from("/home/treesap")),
+            ..RadrootsHostEnvironment::default()
+        },
     );
+    let default_path = RadrootsIdentity::default_path_for(
+        &resolver,
+        RadrootsPathProfile::InteractiveUser,
+        &RadrootsPathOverrides::default(),
+    )
+    .unwrap();
 
-    let generated = RadrootsIdentity::load_or_generate::<&std::path::Path>(None, true).unwrap();
+    let denied = RadrootsIdentity::load_or_generate::<&std::path::Path>(Some(&default_path), false)
+        .unwrap_err();
+    assert!(matches!(denied, IdentityError::GenerationNotAllowed(path) if path == default_path));
+    assert_eq!(
+        default_path.file_name().and_then(std::ffi::OsStr::to_str),
+        Some(DEFAULT_IDENTITY_PATH)
+    );
+    assert_eq!(
+        default_path,
+        PathBuf::from("/home/treesap/.radroots/secrets/shared/identities/default.json")
+    );
+}
+
+#[test]
+fn load_or_generate_creates_at_explicit_default_path() {
+    let dir = tempfile::tempdir().unwrap();
     let default_path = dir.path().join(DEFAULT_IDENTITY_PATH);
+    let generated =
+        RadrootsIdentity::load_or_generate::<&std::path::Path>(Some(&default_path), true).unwrap();
     assert!(default_path.exists());
 
     let loaded = RadrootsIdentity::load_from_path_auto(&default_path).unwrap();
     assert_eq!(generated.public_key(), loaded.public_key());
-
-    std::env::set_current_dir(original).unwrap();
 }
 
 #[test]

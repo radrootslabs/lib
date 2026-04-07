@@ -15,7 +15,7 @@ build = "build.rs"
 
 [features]
 default = ["std", "profile", "json-file", "nip49"]
-std = []
+std = ["dep:radroots-runtime-paths"]
 profile = ["dep:radroots-events"]
 json-file = ["std", "dep:radroots-runtime"]
 nip49 = ["std", "nostr/nip49"]
@@ -25,6 +25,7 @@ ts-rs = ["dep:ts-rs"]
 
 [dependencies]
 radroots-runtime = { workspace = true, optional = true }
+radroots-runtime-paths = { workspace = true, optional = true }
 radroots-events = { workspace = true, optional = true, default-features = false, features = [
   "serde",
 ] }

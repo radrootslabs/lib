@@ -15,12 +15,16 @@ use serde::{Deserialize, Serialize};
 use alloc::string::String;
 #[cfg(all(feature = "std", feature = "json-file"))]
 use radroots_runtime::JsonFile;
+#[cfg(feature = "std")]
+use radroots_runtime_paths::{
+    RadrootsPathOverrides, RadrootsPathProfile, RadrootsPathResolver, default_shared_identity_path,
+};
 #[cfg(all(feature = "std", feature = "json-file"))]
 use std::path::PathBuf;
 #[cfg(feature = "std")]
 use std::{fs, path::Path};
 
-pub const DEFAULT_IDENTITY_PATH: &str = "identity.json";
+pub const DEFAULT_IDENTITY_PATH: &str = "default.json";
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct RadrootsIdentityId(String);
@@ -438,6 +442,24 @@ impl RadrootsIdentity {
         parse_identity_bytes(&bytes)
     }
 
+    #[cfg(feature = "std")]
+    pub fn default_path() -> Result<PathBuf, IdentityError> {
+        Self::default_path_for(
+            &RadrootsPathResolver::current(),
+            RadrootsPathProfile::InteractiveUser,
+            &RadrootsPathOverrides::default(),
+        )
+    }
+
+    #[cfg(feature = "std")]
+    pub fn default_path_for(
+        resolver: &RadrootsPathResolver,
+        profile: RadrootsPathProfile,
+        overrides: &RadrootsPathOverrides,
+    ) -> Result<PathBuf, IdentityError> {
+        Ok(default_shared_identity_path(resolver, profile, overrides)?)
+    }
+
     #[cfg(all(feature = "std", feature = "json-file"))]
     pub fn load_or_generate<P: AsRef<Path>>(
         path: Option<P>,
@@ -445,7 +467,8 @@ impl RadrootsIdentity {
     ) -> Result<Self, IdentityError> {
         let path = path
             .map(|p| p.as_ref().to_path_buf())
-            .unwrap_or_else(|| PathBuf::from(DEFAULT_IDENTITY_PATH));
+            .map(Ok)
+            .unwrap_or_else(Self::default_path)?;
         if path.exists() {
             return Self::load_from_path_auto(&path);
         }

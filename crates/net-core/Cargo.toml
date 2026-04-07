@@ -30,7 +30,7 @@ nostr-client = [
   "dep:radroots-nostr",
 ]
 directories = ["std", "dep:directories"]
-fs-persistence = ["std"]
+fs-persistence = ["std", "dep:radroots-runtime-paths"]
 
 [dependencies]
 radroots-events = { workspace = true, optional = true, default-features = true, features = [
@@ -51,6 +51,7 @@ radroots-nostr = { workspace = true, optional = true, default-features = true, f
 ] }
 directories = { workspace = true, optional = true }
 hex = { workspace = true, optional = true }
+radroots-runtime-paths = { workspace = true, optional = true }
 secrecy = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true, optional = true }

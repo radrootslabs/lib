@@ -24,6 +24,7 @@ config = { workspace = true }
 getrandom = { workspace = true }
 radroots-log = { workspace = true, features = ["std"] }
 radroots-protected-store = { workspace = true, features = ["std"] }
+radroots-runtime-paths = { workspace = true }
 radroots-secret-vault = { workspace = true, features = ["std"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
