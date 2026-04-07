@@ -38,11 +38,19 @@ impl From<radroots_runtime::RuntimeJsonError> for RadrootsNostrAccountsError {
     }
 }
 
+#[cfg(feature = "std")]
+impl From<radroots_secret_vault::RadrootsSecretVaultAccessError> for RadrootsNostrAccountsError {
+    fn from(value: radroots_secret_vault::RadrootsSecretVaultAccessError) -> Self {
+        Self::Vault(value.to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use radroots_identity::IdentityError;
     use radroots_runtime::RuntimeJsonError;
+    use radroots_secret_vault::RadrootsSecretVaultAccessError;
     use std::path::PathBuf;
 
     #[test]
@@ -57,5 +65,12 @@ mod tests {
         let source = RuntimeJsonError::NotFound(PathBuf::from("accounts.json"));
         let converted: RadrootsNostrAccountsError = source.into();
         assert!(converted.to_string().starts_with("store error:"));
+    }
+
+    #[test]
+    fn converts_secret_vault_access_error() {
+        let source = RadrootsSecretVaultAccessError::Backend("vault failed".into());
+        let converted: RadrootsNostrAccountsError = source.into();
+        assert!(converted.to_string().starts_with("vault error:"));
     }
 }

@@ -20,14 +20,14 @@ std = [
   "dep:radroots-identity",
   "dep:radroots-nostr-signer",
   "dep:radroots-runtime",
+  "dep:radroots-secret-vault",
 ]
 file-store = ["std"]
-memory-vault = ["std"]
-os-keyring = ["std", "dep:keyring"]
+memory-vault = ["std", "radroots-secret-vault/memory-vault"]
+os-keyring = ["std", "radroots-secret-vault/os-keyring"]
 ndb-bridge = ["std", "dep:radroots-nostr-ndb"]
 
 [dependencies]
-keyring = { workspace = true, optional = true }
 radroots-identity = { workspace = true, optional = true, default-features = false, features = [
   "std",
   "profile",
@@ -38,6 +38,9 @@ radroots-nostr-ndb = { workspace = true, optional = true, default-features = fal
   "ndb",
   "giftwrap",
   "rt",
+] }
+radroots-secret-vault = { workspace = true, optional = true, default-features = false, features = [
+  "std",
 ] }
 radroots-runtime = { workspace = true, optional = true }
 serde = { workspace = true, optional = true, features = ["derive"] }

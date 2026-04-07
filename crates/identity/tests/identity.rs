@@ -330,6 +330,22 @@ fn encrypted_secret_key_rejects_invalid_and_wrong_password_inputs() {
     ));
 }
 
+#[cfg(feature = "nip49")]
+#[test]
+fn load_from_path_auto_rejects_nip49_export_format() {
+    let identity = fixture_identity(FIXTURE_ALICE);
+    let encrypted = identity
+        .encrypt_secret_key_ncryptsec("fixture-password")
+        .unwrap();
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("identity.ncryptsec");
+    std::fs::write(&path, encrypted).unwrap();
+
+    let err = RadrootsIdentity::load_from_path_auto(&path).unwrap_err();
+    assert!(matches!(err, IdentityError::InvalidSecretKey(_)));
+}
+
 #[test]
 fn parse_failures_cover_public_key_errors() {
     let err_empty = RadrootsIdentityId::parse("   ").unwrap_err();

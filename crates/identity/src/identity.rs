@@ -264,6 +264,10 @@ impl RadrootsIdentity {
     }
 
     #[cfg(feature = "nip49")]
+    /// Export the current secret key as a NIP-49 `ncryptsec` payload.
+    ///
+    /// This is an explicit operator-facing import or export format, not the
+    /// canonical local file-storage contract for Radroots runtimes.
     pub fn encrypt_secret_key_ncryptsec(&self, password: &str) -> Result<String, IdentityError> {
         self.encrypt_secret_key_ncryptsec_with_options(
             password,
@@ -272,6 +276,11 @@ impl RadrootsIdentity {
     }
 
     #[cfg(feature = "nip49")]
+    /// Export the current secret key as a NIP-49 `ncryptsec` payload with
+    /// explicit encryption options.
+    ///
+    /// This remains scoped to import or export behavior and must not become the
+    /// generic local secret-storage format.
     pub fn encrypt_secret_key_ncryptsec_with_options(
         &self,
         password: &str,
@@ -397,6 +406,10 @@ impl RadrootsIdentity {
     }
 
     #[cfg(feature = "nip49")]
+    /// Import a secret key from a NIP-49 `ncryptsec` payload.
+    ///
+    /// This path is explicit by design so encrypted exports do not become an
+    /// ambient local file-storage format.
     pub fn from_encrypted_secret_key_str(
         secret_key: &str,
         password: &str,

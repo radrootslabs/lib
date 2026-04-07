@@ -28,8 +28,10 @@ pub mod prelude {
     pub use crate::store::{
         RadrootsNostrAccountStore, RadrootsNostrFileAccountStore, RadrootsNostrMemoryAccountStore,
     };
+    #[cfg(feature = "memory-vault")]
+    pub use crate::vault::RadrootsNostrSecretVaultMemory;
     #[cfg(feature = "os-keyring")]
     pub use crate::vault::RadrootsNostrSecretVaultOsKeyring;
     #[cfg(feature = "std")]
-    pub use crate::vault::{RadrootsNostrSecretVault, RadrootsNostrSecretVaultMemory};
+    pub use crate::vault::{RadrootsSecretVault, account_secret_slot};
 }

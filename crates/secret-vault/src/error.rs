@@ -1,4 +1,5 @@
 use crate::backend::RadrootsSecretBackendKind;
+use alloc::string::String;
 use core::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -26,6 +27,11 @@ pub enum RadrootsSecretVaultError {
     },
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RadrootsSecretVaultAccessError {
+    Backend(String),
+}
+
 impl fmt::Display for RadrootsHostVaultRequirement {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let value = match self {
@@ -34,6 +40,14 @@ impl fmt::Display for RadrootsHostVaultRequirement {
             Self::HardwareBacked => "hardware_backed",
         };
         f.write_str(value)
+    }
+}
+
+impl fmt::Display for RadrootsSecretVaultAccessError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Backend(message) => write!(f, "secret vault access error: {message}"),
+        }
     }
 }
 
@@ -74,3 +88,6 @@ impl fmt::Display for RadrootsSecretBackendKind {
 
 #[cfg(feature = "std")]
 impl std::error::Error for RadrootsSecretVaultError {}
+
+#[cfg(feature = "std")]
+impl std::error::Error for RadrootsSecretVaultAccessError {}

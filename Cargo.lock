@@ -2436,11 +2436,11 @@ dependencies = [
 name = "radroots-nostr-accounts"
 version = "0.1.0-alpha.1"
 dependencies = [
- "keyring",
  "radroots-identity",
  "radroots-nostr-ndb",
  "radroots-nostr-signer",
  "radroots-runtime",
+ "radroots-secret-vault",
  "radroots-test-fixtures",
  "serde",
  "serde_json",
@@ -2613,6 +2613,9 @@ dependencies = [
 [[package]]
 name = "radroots-secret-vault"
 version = "0.1.0-alpha.1"
+dependencies = [
+ "keyring",
+]
 
 [[package]]
 name = "radroots-simplex-agent-proto"

@@ -2,8 +2,12 @@ use crate::error::RadrootsNostrAccountsError;
 use crate::model::{
     RadrootsNostrAccountRecord, RadrootsNostrAccountStoreState, RadrootsNostrSelectedAccountStatus,
 };
-use crate::store::{RadrootsNostrAccountStore, RadrootsNostrMemoryAccountStore};
-use crate::vault::{RadrootsNostrSecretVault, RadrootsNostrSecretVaultMemory};
+use crate::store::RadrootsNostrAccountStore;
+#[cfg(feature = "memory-vault")]
+use crate::store::RadrootsNostrMemoryAccountStore;
+#[cfg(feature = "memory-vault")]
+use crate::vault::RadrootsNostrSecretVaultMemory;
+use crate::vault::{RadrootsSecretVault, account_secret_slot};
 use radroots_identity::{RadrootsIdentity, RadrootsIdentityId, RadrootsIdentityPublic};
 use radroots_nostr_signer::prelude::{
     RadrootsNostrLocalSignerAvailability, RadrootsNostrLocalSignerCapability,
@@ -17,11 +21,12 @@ use zeroize::Zeroizing;
 #[derive(Clone)]
 pub struct RadrootsNostrAccountsManager {
     store: Arc<dyn RadrootsNostrAccountStore>,
-    vault: Arc<dyn RadrootsNostrSecretVault>,
+    vault: Arc<dyn RadrootsSecretVault>,
     state: Arc<RwLock<RadrootsNostrAccountStoreState>>,
 }
 
 impl RadrootsNostrAccountsManager {
+    #[cfg(feature = "memory-vault")]
     pub fn new_in_memory() -> Self {
         Self {
             store: Arc::new(RadrootsNostrMemoryAccountStore::new()),
@@ -32,7 +37,7 @@ impl RadrootsNostrAccountsManager {
 
     pub fn new(
         store: Arc<dyn RadrootsNostrAccountStore>,
-        vault: Arc<dyn RadrootsNostrSecretVault>,
+        vault: Arc<dyn RadrootsSecretVault>,
     ) -> Result<Self, RadrootsNostrAccountsError> {
         let mut state = store.load()?;
         if state.version != crate::model::RADROOTS_NOSTR_ACCOUNTS_STORE_VERSION {
@@ -194,8 +199,10 @@ impl RadrootsNostrAccountsManager {
     ) -> Result<RadrootsIdentityId, RadrootsNostrAccountsError> {
         let account_id = identity.id();
         let secret_key_hex = Zeroizing::new(identity.secret_key_hex());
-        self.vault
-            .store_secret_hex(&account_id, secret_key_hex.as_str())?;
+        self.vault.store_secret(
+            account_secret_slot(&account_id).as_str(),
+            secret_key_hex.as_str(),
+        )?;
 
         let public_identity = identity.to_public();
         self.upsert_public_identity(public_identity, label, make_selected)
@@ -294,7 +301,8 @@ impl RadrootsNostrAccountsManager {
             }
             Ok(())
         })?;
-        self.vault.remove_secret(&account_id)?;
+        self.vault
+            .remove_secret(account_secret_slot(&account_id).as_str())?;
         Ok(())
     }
 
@@ -302,7 +310,9 @@ impl RadrootsNostrAccountsManager {
         &self,
         account_id: &RadrootsIdentityId,
     ) -> Result<Option<String>, RadrootsNostrAccountsError> {
-        self.vault.load_secret_hex(account_id)
+        self.vault
+            .load_secret(account_secret_slot(account_id).as_str())
+            .map_err(Into::into)
     }
 
     pub fn migrate_legacy_identity_file(
@@ -319,7 +329,10 @@ impl RadrootsNostrAccountsManager {
         &self,
         record: RadrootsNostrAccountRecord,
     ) -> Result<Option<RadrootsIdentity>, RadrootsNostrAccountsError> {
-        let Some(secret_key_hex) = self.vault.load_secret_hex(&record.account_id)? else {
+        let Some(secret_key_hex) = self
+            .vault
+            .load_secret(account_secret_slot(&record.account_id).as_str())?
+        else {
             return Ok(None);
         };
         let secret_key_hex = Zeroizing::new(secret_key_hex);
@@ -351,7 +364,10 @@ impl RadrootsNostrAccountsManager {
         &self,
         record: &RadrootsNostrAccountRecord,
     ) -> Result<RadrootsNostrLocalSignerAvailability, RadrootsNostrAccountsError> {
-        let Some(secret_key_hex) = self.vault.load_secret_hex(&record.account_id)? else {
+        let Some(secret_key_hex) = self
+            .vault
+            .load_secret(account_secret_slot(&record.account_id).as_str())?
+        else {
             return Ok(RadrootsNostrLocalSignerAvailability::PublicOnly);
         };
 
@@ -393,8 +409,8 @@ mod tests {
     use crate::store::{
         RadrootsNostrAccountStore, RadrootsNostrFileAccountStore, RadrootsNostrMemoryAccountStore,
     };
-    use crate::vault::RadrootsNostrSecretVault;
     use crate::vault::RadrootsNostrSecretVaultMemory;
+    use crate::vault::RadrootsSecretVault;
     use radroots_identity::RadrootsIdentityProfile;
     use std::sync::Arc;
     use std::sync::RwLock;
@@ -449,111 +465,117 @@ mod tests {
 
     struct VaultStoreError;
 
-    impl RadrootsNostrSecretVault for VaultStoreError {
-        fn store_secret_hex(
+    impl RadrootsSecretVault for VaultStoreError {
+        fn store_secret(
             &self,
-            _account_id: &RadrootsIdentityId,
-            _secret_key_hex: &str,
-        ) -> Result<(), RadrootsNostrAccountsError> {
-            Err(RadrootsNostrAccountsError::Vault(
-                "vault store failed".into(),
-            ))
+            _slot: &str,
+            _secret: &str,
+        ) -> Result<(), radroots_secret_vault::RadrootsSecretVaultAccessError> {
+            Err(
+                radroots_secret_vault::RadrootsSecretVaultAccessError::Backend(
+                    "vault store failed".into(),
+                ),
+            )
         }
 
-        fn load_secret_hex(
+        fn load_secret(
             &self,
-            _account_id: &RadrootsIdentityId,
-        ) -> Result<Option<String>, RadrootsNostrAccountsError> {
+            _slot: &str,
+        ) -> Result<Option<String>, radroots_secret_vault::RadrootsSecretVaultAccessError> {
             Ok(None)
         }
 
         fn remove_secret(
             &self,
-            _account_id: &RadrootsIdentityId,
-        ) -> Result<(), RadrootsNostrAccountsError> {
+            _slot: &str,
+        ) -> Result<(), radroots_secret_vault::RadrootsSecretVaultAccessError> {
             Ok(())
         }
     }
 
     struct VaultLoadError;
 
-    impl RadrootsNostrSecretVault for VaultLoadError {
-        fn store_secret_hex(
+    impl RadrootsSecretVault for VaultLoadError {
+        fn store_secret(
             &self,
-            _account_id: &RadrootsIdentityId,
-            _secret_key_hex: &str,
-        ) -> Result<(), RadrootsNostrAccountsError> {
+            _slot: &str,
+            _secret: &str,
+        ) -> Result<(), radroots_secret_vault::RadrootsSecretVaultAccessError> {
             Ok(())
         }
 
-        fn load_secret_hex(
+        fn load_secret(
             &self,
-            _account_id: &RadrootsIdentityId,
-        ) -> Result<Option<String>, RadrootsNostrAccountsError> {
-            Err(RadrootsNostrAccountsError::Vault(
-                "vault load failed".into(),
-            ))
+            _slot: &str,
+        ) -> Result<Option<String>, radroots_secret_vault::RadrootsSecretVaultAccessError> {
+            Err(
+                radroots_secret_vault::RadrootsSecretVaultAccessError::Backend(
+                    "vault load failed".into(),
+                ),
+            )
         }
 
         fn remove_secret(
             &self,
-            _account_id: &RadrootsIdentityId,
-        ) -> Result<(), RadrootsNostrAccountsError> {
+            _slot: &str,
+        ) -> Result<(), radroots_secret_vault::RadrootsSecretVaultAccessError> {
             Ok(())
         }
     }
 
     struct VaultInvalidSecret;
 
-    impl RadrootsNostrSecretVault for VaultInvalidSecret {
-        fn store_secret_hex(
+    impl RadrootsSecretVault for VaultInvalidSecret {
+        fn store_secret(
             &self,
-            _account_id: &RadrootsIdentityId,
-            _secret_key_hex: &str,
-        ) -> Result<(), RadrootsNostrAccountsError> {
+            _slot: &str,
+            _secret: &str,
+        ) -> Result<(), radroots_secret_vault::RadrootsSecretVaultAccessError> {
             Ok(())
         }
 
-        fn load_secret_hex(
+        fn load_secret(
             &self,
-            _account_id: &RadrootsIdentityId,
-        ) -> Result<Option<String>, RadrootsNostrAccountsError> {
+            _slot: &str,
+        ) -> Result<Option<String>, radroots_secret_vault::RadrootsSecretVaultAccessError> {
             Ok(Some("invalid-secret".to_string()))
         }
 
         fn remove_secret(
             &self,
-            _account_id: &RadrootsIdentityId,
-        ) -> Result<(), RadrootsNostrAccountsError> {
+            _slot: &str,
+        ) -> Result<(), radroots_secret_vault::RadrootsSecretVaultAccessError> {
             Ok(())
         }
     }
 
     struct VaultRemoveError;
 
-    impl RadrootsNostrSecretVault for VaultRemoveError {
-        fn store_secret_hex(
+    impl RadrootsSecretVault for VaultRemoveError {
+        fn store_secret(
             &self,
-            _account_id: &RadrootsIdentityId,
-            _secret_key_hex: &str,
-        ) -> Result<(), RadrootsNostrAccountsError> {
+            _slot: &str,
+            _secret: &str,
+        ) -> Result<(), radroots_secret_vault::RadrootsSecretVaultAccessError> {
             Ok(())
         }
 
-        fn load_secret_hex(
+        fn load_secret(
             &self,
-            _account_id: &RadrootsIdentityId,
-        ) -> Result<Option<String>, RadrootsNostrAccountsError> {
+            _slot: &str,
+        ) -> Result<Option<String>, radroots_secret_vault::RadrootsSecretVaultAccessError> {
             Ok(None)
         }
 
         fn remove_secret(
             &self,
-            _account_id: &RadrootsIdentityId,
-        ) -> Result<(), RadrootsNostrAccountsError> {
-            Err(RadrootsNostrAccountsError::Vault(
-                "vault remove failed".into(),
-            ))
+            _slot: &str,
+        ) -> Result<(), radroots_secret_vault::RadrootsSecretVaultAccessError> {
+            Err(
+                radroots_secret_vault::RadrootsSecretVaultAccessError::Backend(
+                    "vault remove failed".into(),
+                ),
+            )
         }
     }
 
@@ -801,7 +823,7 @@ mod tests {
             .expect("generate");
         manager
             .vault
-            .remove_secret(&account_id)
+            .remove_secret(account_secret_slot(&account_id).as_str())
             .expect("remove secret");
 
         let status = manager
@@ -814,7 +836,10 @@ mod tests {
         let wrong_identity = RadrootsIdentity::generate();
         manager
             .vault
-            .store_secret_hex(&account_id, wrong_identity.secret_key_hex().as_str())
+            .store_secret(
+                account_secret_slot(&account_id).as_str(),
+                wrong_identity.secret_key_hex().as_str(),
+            )
             .expect("store wrong secret");
 
         let err = manager
@@ -1000,11 +1025,11 @@ mod tests {
         let public = RadrootsIdentity::generate().to_public();
         let account_id = public.id.clone();
         vault
-            .store_secret_hex(&account_id, "secret")
+            .store_secret(account_secret_slot(&account_id).as_str(), "secret")
             .expect("vault store");
         assert!(
             vault
-                .load_secret_hex(&account_id)
+                .load_secret(account_secret_slot(&account_id).as_str())
                 .expect("vault load")
                 .is_none()
         );
@@ -1032,7 +1057,10 @@ mod tests {
 
         let wrong_identity = RadrootsIdentity::generate();
         vault
-            .store_secret_hex(&mismatch_id, wrong_identity.secret_key_hex().as_str())
+            .store_secret(
+                account_secret_slot(&mismatch_id).as_str(),
+                wrong_identity.secret_key_hex().as_str(),
+            )
             .expect("vault store");
 
         let mismatch = manager
@@ -1254,26 +1282,28 @@ mod tests {
         let vault_store_error = VaultStoreError;
         assert!(
             vault_store_error
-                .load_secret_hex(&account_id)
+                .load_secret(account_secret_slot(&account_id).as_str())
                 .expect("load")
                 .is_none()
         );
         vault_store_error
-            .remove_secret(&account_id)
+            .remove_secret(account_secret_slot(&account_id).as_str())
             .expect("remove");
 
         let vault_load_error = VaultLoadError;
         vault_load_error
-            .store_secret_hex(&account_id, "secret")
+            .store_secret(account_secret_slot(&account_id).as_str(), "secret")
             .expect("store");
-        vault_load_error.remove_secret(&account_id).expect("remove");
+        vault_load_error
+            .remove_secret(account_secret_slot(&account_id).as_str())
+            .expect("remove");
 
         let vault_invalid_secret = VaultInvalidSecret;
         vault_invalid_secret
-            .store_secret_hex(&account_id, "secret")
+            .store_secret(account_secret_slot(&account_id).as_str(), "secret")
             .expect("store");
         vault_invalid_secret
-            .remove_secret(&account_id)
+            .remove_secret(account_secret_slot(&account_id).as_str())
             .expect("remove");
     }
 }
