@@ -27,6 +27,7 @@ crates = [
   "radroots-nostr-signer",
   "radroots-nostr-ndb",
   "radroots-nostr-runtime",
+  "radroots-protected-store",
   "radroots-runtime",
   "radroots-secret-vault",
   "radroots-simplex-chat-proto",

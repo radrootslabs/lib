@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 #![no_std]
 
+extern crate alloc;
 #[cfg(any(feature = "std", test))]
 extern crate std;
 
@@ -8,6 +9,7 @@ pub mod backend;
 pub mod error;
 pub mod policy;
 pub mod selection;
+pub mod wrap;
 
 pub mod prelude {
     pub use crate::backend::{RadrootsSecretBackend, RadrootsSecretBackendKind};
@@ -20,6 +22,7 @@ pub mod prelude {
         RadrootsResolvedSecretBackend, RadrootsSecretBackendAvailability,
         RadrootsSecretBackendSelection,
     };
+    pub use crate::wrap::RadrootsSecretKeyWrapping;
 }
 
 pub use backend::{RadrootsSecretBackend, RadrootsSecretBackendKind};
@@ -32,3 +35,4 @@ pub use selection::{
     RadrootsResolvedSecretBackend, RadrootsSecretBackendAvailability,
     RadrootsSecretBackendSelection,
 };
+pub use wrap::RadrootsSecretKeyWrapping;
