@@ -52,7 +52,7 @@ where
     FL: Fn(&C) -> &str,
 {
     let (args, cfg) = parse_and_load_path::<Args, C, FP>(path_of)?;
-    crate::tracing::init_with(logs_dir_of(&cfg), default_level)?;
+    crate::tracing::init_with_logs_dir(Path::new(logs_dir_of(&cfg)), default_level)?;
     Ok((args, cfg))
 }
 
@@ -75,7 +75,7 @@ where
         env_prefix,
         overrides_of,
     )?;
-    crate::tracing::init_with(logs_dir_of(&cfg), default_level)?;
+    crate::tracing::init_with_logs_dir(Path::new(logs_dir_of(&cfg)), default_level)?;
     Ok((args, cfg))
 }
 

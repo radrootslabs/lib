@@ -9,7 +9,7 @@ use crate::error::RuntimeTracingError;
 
 pub fn init() -> Result<(), RuntimeTracingError> {
     let logs_dir = default_shared_runtime_logs_dir()?;
-    init_with(logs_dir, None)
+    init_with_logs_dir(logs_dir, None)
 }
 
 pub fn default_shared_runtime_logs_dir() -> Result<PathBuf, RadrootsRuntimePathsError> {
@@ -28,17 +28,15 @@ pub fn default_shared_runtime_logs_dir_for(
     resolve_shared_runtime_logs_dir(resolver, profile, overrides)
 }
 
-pub fn init_with(
+pub fn init_with_logs_dir(
     logs_dir: impl AsRef<Path>,
     default_level: Option<&str>,
 ) -> Result<(), RuntimeTracingError> {
     let logs_dir = logs_dir.as_ref();
-    let env_dir = env_path("LOG_DIR").or_else(|| env_path("RADROOTS_LOG_DIR"));
     let env_file = env_value("LOG_FILE").or_else(|| env_value("RADROOTS_LOG_FILE"));
     let env_level = env_value("LOG_LEVEL").or_else(|| env_value("RUST_LOG"));
-    let dir = resolve_log_dir(logs_dir, env_dir);
     let opts = LoggingOptions {
-        dir,
+        dir: Some(logs_dir.to_path_buf()),
         file_name: env_file.unwrap_or_else(default_log_file_name),
         stdout: true,
         default_level: resolve_default_level(env_level, default_level),
@@ -100,10 +98,6 @@ fn env_value(key: &str) -> Option<String> {
     normalize_env_value(&value)
 }
 
-fn env_path(key: &str) -> Option<PathBuf> {
-    env_value(key).map(PathBuf::from)
-}
-
 fn normalize_env_value(value: &str) -> Option<String> {
     let trimmed = value.trim();
     if trimmed.is_empty() {
@@ -111,16 +105,6 @@ fn normalize_env_value(value: &str) -> Option<String> {
     } else {
         Some(trimmed.to_string())
     }
-}
-
-fn resolve_log_dir(logs_dir: &Path, env_dir: Option<PathBuf>) -> Option<PathBuf> {
-    env_dir.or_else(|| {
-        if logs_dir.as_os_str().is_empty() {
-            None
-        } else {
-            Some(logs_dir.to_path_buf())
-        }
-    })
 }
 
 fn resolve_default_level(env_level: Option<String>, default_level: Option<&str>) -> Option<String> {
@@ -135,15 +119,14 @@ fn resolve_default_level(env_level: Option<String>, default_level: Option<&str>)
 mod tests {
     use super::{
         default_log_file_name, default_log_file_name_from_exe_name,
-        default_shared_runtime_logs_dir_for, env_path, env_value, init_with, log_name_from_path,
-        log_name_from_stem, normalize_env_value, resolve_default_level, resolve_log_dir,
-        test_hooks,
+        default_shared_runtime_logs_dir_for, env_value, init_with_logs_dir, log_name_from_path,
+        log_name_from_stem, normalize_env_value, resolve_default_level, test_hooks,
     };
     use radroots_runtime_paths::{
         RadrootsHostEnvironment, RadrootsPathOverrides, RadrootsPathProfile, RadrootsPathResolver,
         RadrootsPlatform,
     };
-    use std::path::{Path, PathBuf};
+    use std::path::PathBuf;
     use tempfile::tempdir;
 
     #[test]
@@ -158,8 +141,6 @@ mod tests {
         assert_eq!(env_value("RADROOTS_RUNTIME_TEST_MISSING_KEY"), None);
         let home = env_value("HOME").expect("home env");
         assert!(!home.is_empty());
-        let home_path = env_path("HOME").expect("home path");
-        assert_eq!(home_path, PathBuf::from(home));
     }
 
     #[test]
@@ -192,19 +173,6 @@ mod tests {
             format!("{}.log", env!("CARGO_PKG_NAME"))
         );
         assert!(!default_log_file_name().trim().is_empty());
-    }
-
-    #[test]
-    fn resolve_log_dir_prefers_env_and_handles_empty_logs_dir() {
-        let fallback = resolve_log_dir(Path::new("logs"), None);
-        assert_eq!(fallback, Some(PathBuf::from("logs")));
-
-        let empty = resolve_log_dir(Path::new(""), None);
-        assert_eq!(empty, None);
-
-        let env_dir = PathBuf::from("env-logs");
-        let resolved = resolve_log_dir(Path::new("logs"), Some(env_dir.clone()));
-        assert_eq!(resolved, Some(env_dir));
     }
 
     #[test]
@@ -246,18 +214,16 @@ mod tests {
         test_hooks::set_ignore_env(true);
         let invalid = dir.path().join("not-a-dir");
         std::fs::write(&invalid, "file").expect("write invalid path");
-        let err_path = init_with(invalid.as_path(), Some("info"));
+        let err_path = init_with_logs_dir(invalid.as_path(), Some("info"));
         assert!(err_path.is_err());
         let invalid_str = invalid.to_string_lossy().to_string();
-        let err_str = init_with(invalid_str.as_str(), Some("info"));
+        let err_str = init_with_logs_dir(invalid_str.as_str(), Some("info"));
         assert!(err_str.is_err());
-        test_hooks::set_ignore_env(false);
-        let first = init_with(dir.path(), Some("info"));
+        let first = init_with_logs_dir(dir.path(), Some("info"));
         assert!(first.is_ok());
         let owned_path = dir.path().to_path_buf();
-        let third = init_with(owned_path.as_path(), None);
+        let third = init_with_logs_dir(owned_path.as_path(), None);
         assert!(third.is_ok());
-        let fourth = init_with("logs", Some("debug"));
-        assert!(fourth.is_ok());
+        test_hooks::set_ignore_env(false);
     }
 }

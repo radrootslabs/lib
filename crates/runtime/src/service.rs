@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+#[cfg(any(feature = "cli", test))]
 use std::path::PathBuf;
 
 #[cfg(feature = "cli")]
@@ -25,31 +26,6 @@ pub fn service_bootstrap_paths_for(
         &namespace,
         DEFAULT_SERVICE_IDENTITY_PATH,
     )
-}
-
-pub fn default_service_bootstrap_paths(
-    runtime_id: &str,
-) -> Result<RadrootsBootstrapPaths, RadrootsRuntimePathsError> {
-    service_bootstrap_paths_for(
-        &RadrootsPathResolver::current(),
-        RadrootsPathProfile::InteractiveUser,
-        &RadrootsPathOverrides::default(),
-        runtime_id,
-    )
-}
-
-pub fn default_service_config_path(runtime_id: &str) -> Result<PathBuf, RadrootsRuntimePathsError> {
-    Ok(default_service_bootstrap_paths(runtime_id)?.config_path)
-}
-
-pub fn default_service_logs_dir(runtime_id: &str) -> Result<PathBuf, RadrootsRuntimePathsError> {
-    Ok(default_service_bootstrap_paths(runtime_id)?.logs_dir)
-}
-
-pub fn default_service_identity_path(
-    runtime_id: &str,
-) -> Result<PathBuf, RadrootsRuntimePathsError> {
-    Ok(default_service_bootstrap_paths(runtime_id)?.identity_path)
 }
 
 #[cfg(feature = "cli")]

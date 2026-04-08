@@ -31,6 +31,9 @@ pub enum NetError {
     #[error("overwrite denied")]
     OverwriteDenied,
 
+    #[error("persistence path required")]
+    PersistencePathRequired,
+
     #[error("persistence unsupported")]
     PersistenceUnsupported,
 
@@ -59,6 +62,7 @@ impl Clone for NetError {
             NetError::InvalidKeyFile => NetError::InvalidKeyFile,
             NetError::KeyIo => NetError::KeyIo,
             NetError::OverwriteDenied => NetError::OverwriteDenied,
+            NetError::PersistencePathRequired => NetError::PersistencePathRequired,
             NetError::PersistenceUnsupported => NetError::PersistenceUnsupported,
             NetError::LoggingInit(s) => NetError::LoggingInit(s),
         }

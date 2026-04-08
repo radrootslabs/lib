@@ -30,11 +30,8 @@ pub use secret_file::{local_wrapping_key_path, open_local_secret_file, seal_loca
 pub use service::RadrootsNostrServiceConfig;
 #[cfg(feature = "cli")]
 pub use service::RadrootsServiceCliArgs;
-pub use service::{
-    DEFAULT_SERVICE_IDENTITY_PATH, default_service_bootstrap_paths, default_service_config_path,
-    default_service_identity_path, default_service_logs_dir, service_bootstrap_paths_for,
-};
+pub use service::{DEFAULT_SERVICE_IDENTITY_PATH, service_bootstrap_paths_for};
 pub use signals::shutdown_signal;
 pub use tracing::{
-    default_shared_runtime_logs_dir, default_shared_runtime_logs_dir_for, init, init_with,
+    default_shared_runtime_logs_dir, default_shared_runtime_logs_dir_for, init, init_with_logs_dir,
 };

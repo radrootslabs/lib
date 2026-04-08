@@ -7,10 +7,6 @@ use radroots_nostr::prelude::{
     RadrootsNostrKeys, RadrootsNostrSecp256k1SecretKey, RadrootsNostrSecretKey,
     RadrootsNostrToBech32,
 };
-#[cfg(all(feature = "nostr-client", feature = "fs-persistence"))]
-use radroots_runtime_paths::{
-    RadrootsPathOverrides, RadrootsPathProfile, RadrootsPathResolver, default_shared_identity_path,
-};
 #[cfg(feature = "nostr-client")]
 use serde::Deserialize;
 #[cfg(feature = "nostr-client")]
@@ -267,43 +263,8 @@ impl KeysManager {
     }
 
     #[cfg(feature = "fs-persistence")]
-    pub fn default_key_path() -> Option<PathBuf> {
-        default_key_path_for(
-            &RadrootsPathResolver::current(),
-            RadrootsPathProfile::InteractiveUser,
-            &RadrootsPathOverrides::default(),
-        )
-    }
-
-    #[cfg(feature = "fs-persistence")]
-    pub fn persist_best_practice(&self) -> Result<PathBuf> {
-        let path = Self::default_key_path().ok_or(NetError::PersistenceUnsupported)?;
-        if path.exists() {
-            return Err(NetError::OverwriteDenied);
-        }
-        self.save_to_path_with_format(&path, KeyFormat::Json, true)?;
-        Ok(path)
-    }
-
-    #[cfg(not(feature = "fs-persistence"))]
-    pub fn persist_best_practice(&self) -> Result<PathBuf> {
-        Err(NetError::PersistenceUnsupported)
-    }
-
-    #[cfg(feature = "fs-persistence")]
     pub fn persist_with_config(&self, cfg: &KeyPersistenceConfig) -> Result<PathBuf> {
-        let path = if let Some(p) = &cfg.path {
-            p.clone()
-        } else {
-            #[cfg(feature = "fs-persistence")]
-            {
-                Self::default_key_path().ok_or(NetError::PersistenceUnsupported)?
-            }
-            #[cfg(not(feature = "fs-persistence"))]
-            {
-                return Err(NetError::PersistenceUnsupported);
-            }
-        };
+        let path = cfg.path.clone().ok_or(NetError::PersistencePathRequired)?;
         self.save_to_path_with_format(&path, cfg.format, cfg.no_overwrite)?;
         Ok(path)
     }
@@ -312,15 +273,6 @@ impl KeysManager {
     pub fn persist_with_config(&self, _cfg: &KeyPersistenceConfig) -> Result<PathBuf> {
         Err(NetError::PersistenceUnsupported)
     }
-}
-
-#[cfg(all(feature = "nostr-client", feature = "fs-persistence"))]
-fn default_key_path_for(
-    resolver: &RadrootsPathResolver,
-    profile: RadrootsPathProfile,
-    overrides: &RadrootsPathOverrides,
-) -> Option<PathBuf> {
-    default_shared_identity_path(resolver, profile, overrides).ok()
 }
 
 #[cfg(feature = "nostr-client")]
@@ -355,41 +307,49 @@ fn write_secret_atomically_noclobber(path: &Path, data: &[u8]) -> crate::error::
 
 #[cfg(all(test, feature = "nostr-client", feature = "fs-persistence"))]
 mod tests {
-    use std::path::PathBuf;
+    use tempfile::tempdir;
 
-    use radroots_identity::RadrootsIdentity;
-    use radroots_runtime_paths::{
-        RadrootsHostEnvironment, RadrootsPathOverrides, RadrootsPathProfile, RadrootsPathResolver,
-        RadrootsPlatform,
+    use crate::{
+        config::{KeyFormat, KeyPersistenceConfig},
+        error::NetError,
     };
 
-    use super::default_key_path_for;
+    use super::KeysManager;
 
     #[test]
-    fn default_key_path_matches_identity_default_path() {
-        let resolver = RadrootsPathResolver::new(
-            RadrootsPlatform::Linux,
-            RadrootsHostEnvironment {
-                home_dir: Some(PathBuf::from("/home/treesap")),
-                ..RadrootsHostEnvironment::default()
-            },
-        );
-        let overrides = RadrootsPathOverrides::default();
+    fn persist_with_config_requires_explicit_path() {
+        let mut manager = KeysManager::new();
+        let _ = manager.generate_in_memory();
+        let cfg = KeyPersistenceConfig {
+            path: None,
+            format: KeyFormat::Json,
+            no_overwrite: true,
+        };
 
-        let net_core_path =
-            default_key_path_for(&resolver, RadrootsPathProfile::InteractiveUser, &overrides)
-                .expect("net-core default key path should resolve");
-        let identity_path = RadrootsIdentity::default_path_for(
-            &resolver,
-            RadrootsPathProfile::InteractiveUser,
-            &overrides,
-        )
-        .expect("identity default path should resolve");
+        let err = manager
+            .persist_with_config(&cfg)
+            .expect_err("implicit default persistence path should be rejected");
 
-        assert_eq!(net_core_path, identity_path);
-        assert_eq!(
-            net_core_path,
-            PathBuf::from("/home/treesap/.radroots/secrets/shared/identities/default.json")
-        );
+        assert!(matches!(err, NetError::PersistencePathRequired));
+    }
+
+    #[test]
+    fn persist_with_config_writes_only_to_explicit_path() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("keys.json");
+        let mut manager = KeysManager::new();
+        let _ = manager.generate_in_memory();
+        let cfg = KeyPersistenceConfig {
+            path: Some(path.clone()),
+            format: KeyFormat::Json,
+            no_overwrite: true,
+        };
+
+        let written = manager
+            .persist_with_config(&cfg)
+            .expect("explicit persistence path should succeed");
+
+        assert_eq!(written, path);
+        assert!(written.exists());
     }
 }
