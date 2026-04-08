@@ -37,6 +37,7 @@ members = [
   "crates/replica-db-wasm",
   "crates/runtime-paths",
   "crates/runtime-distribution",
+  "crates/runtime-manager",
   "crates/trade",
   "crates/types",
   "crates/protected-store",
@@ -68,6 +69,7 @@ radroots-nostr-ndb = { path = "crates/nostr-ndb", version = "0.1.0-alpha.1", def
 radroots-runtime = { path = "crates/runtime", version = "0.1.0-alpha.1", default-features = false }
 radroots-runtime-paths = { path = "crates/runtime-paths", version = "0.1.0-alpha.1", default-features = false }
 radroots-runtime-distribution = { path = "crates/runtime-distribution", version = "0.1.0-alpha.1", default-features = false }
+radroots-runtime-manager = { path = "crates/runtime-manager", version = "0.1.0-alpha.1", default-features = false }
 radroots-log = { path = "crates/log", version = "0.1.0-alpha.1", default-features = false }
 radroots-net = { path = "crates/net", version = "0.1.0-alpha.1", default-features = false }
 radroots-net-core = { path = "crates/net-core", version = "0.1.0-alpha.1", default-features = false }

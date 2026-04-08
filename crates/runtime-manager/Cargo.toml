@@ -1,0 +1,22 @@
+[package]
+name = "radroots-runtime-manager"
+version = "0.1.0-alpha.1"
+edition.workspace = true
+authors = [
+  "Radroots Authors",
+]
+rust-version.workspace = true
+license.workspace = true
+description = "Runtime lifecycle layer for Radroots"
+repository.workspace = true
+homepage.workspace = true
+readme = "README"
+
+[dependencies]
+radroots-runtime-paths = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+thiserror = { workspace = true }
+toml = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

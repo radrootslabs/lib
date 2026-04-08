@@ -31,6 +31,7 @@ crates = [
   "radroots-runtime",
   "radroots-runtime-paths",
   "radroots-runtime-distribution",
+  "radroots-runtime-manager",
   "radroots-secret-vault",
   "radroots-simplex-chat-proto",
   "radroots-simplex-smp-proto",

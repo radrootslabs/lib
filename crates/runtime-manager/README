@@ -1,0 +1,14 @@
+# radroots-runtime-manager
+
+Shared local managed-runtime paths, registry, and lifecycle boundary for Rad Roots runtimes.
+
+## Goals
+
+- parse the machine-readable runtime management contract
+- resolve shared manager roots and per-instance runtime-manager paths
+- persist one shared managed-runtime instance registry
+- define typed install and health state surfaces for CLI and app adoption later
+
+## License
+
+Licensed under AGPL-3.0. See LICENSE.

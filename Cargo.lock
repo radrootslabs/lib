@@ -2628,6 +2628,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "radroots-runtime-manager"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "radroots-runtime-paths",
+ "serde",
+ "tempfile",
+ "thiserror 1.0.69",
+ "toml",
+]
+
+[[package]]
 name = "radroots-runtime-paths"
 version = "0.1.0-alpha.1"
 dependencies = [
