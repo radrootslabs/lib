@@ -2619,6 +2619,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "radroots-runtime-distribution"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "thiserror 1.0.69",
+ "toml",
+]
+
+[[package]]
 name = "radroots-runtime-paths"
 version = "0.1.0-alpha.1"
 dependencies = [

@@ -1,0 +1,15 @@
+# radroots-runtime-distribution
+
+Contract parsing and artifact resolution for modular Rad Roots runtime distribution.
+
+## Goals
+
+- parse the machine-readable runtime distribution contract
+- resolve installable runtime artifacts by runtime id, channel, version, operating system, and
+  architecture
+- keep installer and runtime-manager selection logic out of ad hoc shell branches
+- give CLI and app clients one shared substrate for runtime release-unit resolution
+
+## License
+
+Licensed under AGPL-3.0. See LICENSE.
