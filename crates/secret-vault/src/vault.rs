@@ -1,4 +1,6 @@
-use alloc::{format, string::String};
+#[cfg(feature = "os-keyring")]
+use alloc::format;
+use alloc::string::String;
 
 use crate::error::RadrootsSecretVaultAccessError;
 
