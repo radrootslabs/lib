@@ -2,6 +2,7 @@
 
 pub mod conventions;
 pub mod error;
+pub mod migration;
 pub mod namespace;
 pub mod platform;
 pub mod roots;
@@ -12,6 +13,11 @@ pub use conventions::{
     default_shared_identity_path, default_shared_runtime_logs_dir,
 };
 pub use error::RadrootsRuntimePathsError;
+pub use migration::{
+    RADROOTS_MIGRATION_COMPATIBILITY_WINDOW, RADROOTS_MIGRATION_POSTURE,
+    RadrootsLegacyPathCandidate, RadrootsLegacyPathDetection, RadrootsMigrationReport,
+    inspect_legacy_paths,
+};
 pub use namespace::{RadrootsRuntimeNamespace, RadrootsRuntimeNamespaceKind};
 pub use platform::{RadrootsHostEnvironment, RadrootsPathProfile, RadrootsPlatform};
 pub use roots::{RadrootsPathOverrides, RadrootsPathResolver, RadrootsPaths};
