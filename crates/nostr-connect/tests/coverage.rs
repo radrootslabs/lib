@@ -765,6 +765,18 @@ fn response_surface_covers_success_and_error_paths() {
     );
     assert_eq!(
         RadrootsNostrConnectResponse::from_envelope(
+            &RadrootsNostrConnectMethod::GetSessionCapability,
+            RadrootsNostrConnectResponseEnvelope {
+                id: "req-pending-capability".to_owned(),
+                result: None,
+                error: Some(RADROOTS_NOSTR_CONNECT_PENDING_CONNECTION_ERROR.to_owned()),
+            },
+        )
+        .expect("parse typed pending capability response"),
+        RadrootsNostrConnectResponse::PendingConnection
+    );
+    assert_eq!(
+        RadrootsNostrConnectResponse::from_envelope(
             &RadrootsNostrConnectMethod::Ping,
             RadrootsNostrConnectResponseEnvelope {
                 id: "req-error".to_owned(),
@@ -1041,6 +1053,14 @@ fn pending_connection_poll_outcome_uses_typed_variants() {
         RadrootsNostrConnectPendingConnectionPollOutcome::Rejected {
             message: "rejected".to_owned(),
         }
+    );
+    assert_eq!(
+        RadrootsNostrConnectResponse::Error {
+            result: None,
+            error: RADROOTS_NOSTR_CONNECT_PENDING_CONNECTION_ERROR.to_owned(),
+        }
+        .into_pending_connection_poll_outcome(),
+        RadrootsNostrConnectPendingConnectionPollOutcome::PendingApproval
     );
 
     assert_eq!(

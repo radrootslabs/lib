@@ -308,6 +308,11 @@ impl RadrootsNostrConnectResponse {
             Self::RemoteSessionCapability(capability) => {
                 RadrootsNostrConnectPendingConnectionPollOutcome::ApprovedCapability(capability)
             }
+            Self::Error { error, .. }
+                if error == RADROOTS_NOSTR_CONNECT_PENDING_CONNECTION_ERROR =>
+            {
+                RadrootsNostrConnectPendingConnectionPollOutcome::PendingApproval
+            }
             Self::Error { error, .. } => {
                 RadrootsNostrConnectPendingConnectionPollOutcome::Rejected { message: error }
             }
@@ -423,8 +428,11 @@ impl RadrootsNostrConnectResponse {
         }
 
         if let Some(error) = envelope.error {
-            if matches!(method, RadrootsNostrConnectMethod::GetPublicKey)
-                && envelope.result.is_none()
+            if matches!(
+                method,
+                RadrootsNostrConnectMethod::GetPublicKey
+                    | RadrootsNostrConnectMethod::GetSessionCapability
+            ) && envelope.result.is_none()
                 && error == RADROOTS_NOSTR_CONNECT_PENDING_CONNECTION_ERROR
             {
                 return Ok(Self::PendingConnection);
