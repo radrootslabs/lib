@@ -1,7 +1,8 @@
 use super::{
-    default_log_file_name, default_log_file_name_from_exe_name, default_shared_runtime_logs_dir,
-    default_shared_runtime_logs_dir_for, env_value, init, init_with_logs_dir, log_name_from_path,
-    log_name_from_stem, normalize_env_value, resolve_default_level, test_hooks,
+    current_path_resolver, default_log_file_name, default_log_file_name_from_exe_name,
+    default_shared_runtime_logs_dir, default_shared_runtime_logs_dir_for, env_value, init,
+    init_with_logs_dir, log_name_from_path, log_name_from_stem, normalize_env_value,
+    resolve_default_level, test_hooks,
 };
 use radroots_runtime_paths::{
     RadrootsHostEnvironment, RadrootsPathOverrides, RadrootsPathProfile, RadrootsPathResolver,
@@ -113,6 +114,14 @@ fn default_shared_runtime_logs_dir_and_init_use_current_resolver() {
 
     test_hooks::set_ignore_env(false);
     test_hooks::set_current_resolver(None);
+}
+
+#[test]
+fn current_path_resolver_falls_back_when_no_override_is_set() {
+    test_hooks::set_current_resolver(None);
+    let expected = format!("{:?}", RadrootsPathResolver::current());
+    let actual = format!("{:?}", current_path_resolver());
+    assert_eq!(actual, expected);
 }
 
 #[test]

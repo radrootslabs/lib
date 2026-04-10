@@ -3,6 +3,13 @@ use super::{
     open_local_secret_file, seal_local_secret_file,
 };
 use radroots_secret_vault::RadrootsSecretKeyWrapping;
+use std::path::PathBuf;
+use std::sync::{Mutex, OnceLock};
+
+fn cwd_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+}
 
 #[test]
 fn secret_file_round_trips_with_sidecar_key() {
@@ -208,4 +215,40 @@ fn open_local_secret_file_reports_decode_error_for_invalid_payload() {
     if let RuntimeProtectedFileError::Decode { path: err_path, .. } = &err {
         assert_eq!(err_path, &path);
     }
+}
+
+#[test]
+fn local_wrapped_key_source_creates_key_for_parentless_paths() {
+    let _guard = cwd_lock().lock().expect("cwd lock");
+    let temp = tempfile::tempdir().expect("tempdir");
+    let original = std::env::current_dir().expect("current dir");
+    std::env::set_current_dir(temp.path()).expect("switch cwd");
+
+    let path = PathBuf::from("identity.secret.json");
+    let source = LocalWrappedKeySource::new(&path);
+    let loaded = source
+        .load_or_create_wrapping_key()
+        .expect("parentless path should create key");
+
+    assert_eq!(loaded.len(), super::RADROOTS_PROTECTED_STORE_KEY_LENGTH);
+    assert!(local_wrapping_key_path(&path).is_file());
+
+    std::env::set_current_dir(original).expect("restore cwd");
+}
+
+#[test]
+fn seal_local_secret_file_allows_parentless_paths() {
+    let _guard = cwd_lock().lock().expect("cwd lock");
+    let temp = tempfile::tempdir().expect("tempdir");
+    let original = std::env::current_dir().expect("current dir");
+    std::env::set_current_dir(temp.path()).expect("switch cwd");
+
+    let path = PathBuf::from("identity.secret.json");
+    seal_local_secret_file(&path, "runtime_test_identity", b"payload")
+        .expect("parentless path should seal");
+    let payload =
+        open_local_secret_file(&path, "runtime_test_identity").expect("parentless path opens");
+    assert_eq!(payload, b"payload");
+
+    std::env::set_current_dir(original).expect("restore cwd");
 }
