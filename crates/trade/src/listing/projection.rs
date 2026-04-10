@@ -1779,17 +1779,19 @@ mod tests {
     use std::cell::RefCell;
 
     use super::{
-        RadrootsTradeListingMarketStatus, RadrootsTradeListingQuery, RadrootsTradeListingSort,
-        RadrootsTradeListingSortField, RadrootsTradeOrderQuery, RadrootsTradeOrderSort,
-        RadrootsTradeOrderSortField, RadrootsTradeOrderWorkflowMessage,
-        RadrootsTradeProjectionError, RadrootsTradeReadIndex, RadrootsTradeSortDirection,
-        radroots_trade_order_status_can_transition, radroots_trade_order_status_is_terminal,
+        RadrootsTradeListingMarketStatus, RadrootsTradeListingProjection,
+        RadrootsTradeListingQuery, RadrootsTradeListingSort, RadrootsTradeListingSortField,
+        RadrootsTradeOrderQuery, RadrootsTradeOrderSort, RadrootsTradeOrderSortField,
+        RadrootsTradeOrderWorkflowMessage, RadrootsTradeProjectionError, RadrootsTradeReadIndex,
+        RadrootsTradeSortDirection, radroots_trade_order_status_can_transition,
+        radroots_trade_order_status_is_terminal,
     };
     use crate::listing::{
-        codec::listing_tags_build,
+        codec::{TradeListingParseError, listing_tags_build},
         dvm::{
-            TradeListingCancel, TradeListingEnvelopeParseError, TradeListingMessagePayload,
-            TradeOrderResponse, trade_listing_envelope_event_build,
+            TradeListingAddressError, TradeListingCancel, TradeListingEnvelopeParseError,
+            TradeListingMessagePayload, TradeListingMessageType, TradeOrderResponse,
+            trade_listing_envelope_event_build,
         },
         order::{
             TradeAnswer, TradeDiscountDecision, TradeDiscountOffer, TradeDiscountRequest,
@@ -2177,6 +2179,212 @@ mod tests {
             content: built.content,
             sig: "sig".into(),
         }
+    }
+
+    #[test]
+    fn projection_defaults_and_helper_errors_cover_paths() {
+        let listing_sort = RadrootsTradeListingSort::default();
+        assert_eq!(
+            listing_sort.field,
+            RadrootsTradeListingSortField::ListingAddr
+        );
+        assert_eq!(listing_sort.direction, RadrootsTradeSortDirection::Asc);
+
+        let order_sort = RadrootsTradeOrderSort::default();
+        assert_eq!(order_sort.field, RadrootsTradeOrderSortField::OrderId);
+        assert_eq!(order_sort.direction, RadrootsTradeSortDirection::Asc);
+
+        let mut listing = base_listing();
+        listing.availability = Some(RadrootsListingAvailability::Status {
+            status: RadrootsListingStatus::Other {
+                value: "archived".into(),
+            },
+        });
+        let projection =
+            RadrootsTradeListingProjection::from_listing_contract("seller-pubkey", &listing)
+                .expect("listing projection");
+        assert_eq!(
+            projection.market_status(),
+            RadrootsTradeListingMarketStatus::Other {
+                value: "archived".into(),
+            }
+        );
+
+        let mut index = RadrootsTradeReadIndex::new();
+        assert!(index.listings().is_empty());
+        assert!(index.orders().is_empty());
+        index
+            .upsert_listing("seller-pubkey", &base_listing())
+            .expect("listing");
+        index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-1"),
+                TradeListingMessagePayload::OrderRequest(base_order()),
+            ))
+            .expect("order request");
+        assert_eq!(index.listings().len(), 1);
+        assert_eq!(index.orders().len(), 1);
+
+        let cases = [
+            (
+                RadrootsTradeProjectionError::InvalidListingKind { kind: 7 },
+                "invalid listing event kind: 7",
+                false,
+            ),
+            (
+                RadrootsTradeProjectionError::InvalidListingContract {
+                    error: TradeListingParseError::InvalidTag("d".into()),
+                },
+                "invalid listing contract event: invalid tag: d",
+                true,
+            ),
+            (
+                RadrootsTradeProjectionError::MissingPrimaryBin("bin-9".into()),
+                "missing primary bin: bin-9",
+                false,
+            ),
+            (
+                RadrootsTradeProjectionError::MissingOrderId,
+                "missing order id",
+                false,
+            ),
+            (
+                RadrootsTradeProjectionError::OrderIdMismatch,
+                "order id mismatch",
+                false,
+            ),
+            (
+                RadrootsTradeProjectionError::ListingAddrMismatch,
+                "listing address mismatch",
+                false,
+            ),
+            (
+                RadrootsTradeProjectionError::MissingOrder("order-9".into()),
+                "missing order projection: order-9",
+                false,
+            ),
+            (
+                RadrootsTradeProjectionError::InvalidTransition {
+                    from: TradeOrderStatus::Draft,
+                    to: TradeOrderStatus::Accepted,
+                },
+                "invalid order transition: Draft -> Accepted",
+                false,
+            ),
+            (
+                RadrootsTradeProjectionError::InvalidItemIndex(3),
+                "invalid order item index: 3",
+                false,
+            ),
+            (
+                RadrootsTradeProjectionError::InvalidDiscountDecision,
+                "invalid discount decision payload",
+                false,
+            ),
+            (
+                RadrootsTradeProjectionError::InvalidRevisionResponse,
+                "invalid order revision response payload",
+                false,
+            ),
+            (
+                RadrootsTradeProjectionError::NonOrderWorkflowMessage(
+                    TradeListingMessageType::ListingValidateRequest,
+                ),
+                "non-order workflow message: ListingValidateRequest",
+                false,
+            ),
+            (
+                RadrootsTradeProjectionError::UnauthorizedActor,
+                "unauthorized actor",
+                false,
+            ),
+            (
+                RadrootsTradeProjectionError::CounterpartyMismatch,
+                "counterparty pubkey mismatch",
+                false,
+            ),
+            (
+                RadrootsTradeProjectionError::MissingListingSnapshot,
+                "missing listing snapshot",
+                false,
+            ),
+            (
+                RadrootsTradeProjectionError::MissingTradeRootEventId,
+                "missing trade root event id",
+                false,
+            ),
+            (
+                RadrootsTradeProjectionError::MissingTradePrevEventId,
+                "missing trade previous event id",
+                false,
+            ),
+            (
+                RadrootsTradeProjectionError::TradeThreadRootMismatch,
+                "trade thread root mismatch",
+                false,
+            ),
+            (
+                RadrootsTradeProjectionError::TradeThreadPrevMismatch,
+                "trade thread previous event mismatch",
+                false,
+            ),
+            (
+                RadrootsTradeProjectionError::InvalidWorkflowEvent {
+                    error: TradeListingEnvelopeParseError::InvalidListingAddr(
+                        TradeListingAddressError::InvalidFormat,
+                    ),
+                },
+                "invalid listing address format",
+                true,
+            ),
+        ];
+        for (error, expected, has_source) in cases {
+            assert_eq!(error.to_string(), expected);
+            assert_eq!(std::error::Error::source(&error).is_some(), has_source);
+        }
+    }
+
+    #[test]
+    fn listing_projection_from_event_rejects_invalid_kind_and_invalid_contract() {
+        let mut invalid_kind = listing_event("seller-pubkey", &base_listing());
+        invalid_kind.kind = 7;
+        assert!(matches!(
+            RadrootsTradeListingProjection::from_listing_event(&invalid_kind),
+            Err(RadrootsTradeProjectionError::InvalidListingKind { kind: 7 })
+        ));
+
+        let invalid_contract = RadrootsNostrEvent {
+            id: "bad-listing".into(),
+            author: "seller-pubkey".into(),
+            created_at: 1_700_000_000,
+            kind: KIND_LISTING,
+            tags: vec![],
+            content: "{}".into(),
+            sig: "sig".into(),
+        };
+        assert!(matches!(
+            RadrootsTradeListingProjection::from_listing_event(&invalid_contract),
+            Err(RadrootsTradeProjectionError::InvalidListingContract { .. })
+        ));
+    }
+
+    #[test]
+    fn message_helper_bootstraps_missing_chain_for_non_request_payload() {
+        let message = message(
+            "seller-pubkey",
+            "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+            Some("orphan-order"),
+            TradeListingMessagePayload::Cancel(TradeListingCancel {
+                reason: Some("cancelled".into()),
+            }),
+        );
+
+        assert_eq!(message.order_id.as_deref(), Some("orphan-order"));
+        assert_eq!(message.counterparty_pubkey, "buyer-pubkey");
+        assert_eq!(message.root_event_id.as_deref(), Some("orphan-order:root"));
+        assert_eq!(message.prev_event_id.as_deref(), Some("orphan-order:root"));
     }
 
     #[test]

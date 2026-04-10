@@ -508,7 +508,7 @@ mod tests {
         RadrootsTradeReviewPriority, RadrootsTradeReviewQueueEntry, RadrootsTradeReviewStatus,
     };
     use crate::listing::{
-        dvm::{TradeListingMessagePayload, TradeOrderResponse},
+        dvm::{TradeListingCancel, TradeListingMessagePayload, TradeOrderResponse},
         projection::RadrootsTradeOrderWorkflowMessage,
     };
     use crate::listing::{
@@ -827,6 +827,118 @@ mod tests {
             prev_event_id,
             payload,
         }
+    }
+
+    #[test]
+    fn overlay_helpers_and_store_accessors_cover_flags_and_errors() {
+        let review_entry = RadrootsTradeReviewQueueEntry {
+            queue: "queue".into(),
+            priority: RadrootsTradeReviewPriority::Normal,
+            status: RadrootsTradeReviewStatus::Resolved,
+            assigned_operator: None,
+            reason: None,
+        };
+        assert!(!review_entry.requires_review());
+
+        let listing_overlay = RadrootsTradeListingBackofficeOverlay {
+            listing_addr: "listing-1".into(),
+            review_queue: Some(review_entry),
+            moderation_flags: vec![
+                RadrootsTradeModerationFlag {
+                    code: "resolved".into(),
+                    severity: RadrootsTradeModerationSeverity::Notice,
+                    status: RadrootsTradeModerationStatus::Resolved,
+                    source: None,
+                    reason: None,
+                },
+                RadrootsTradeModerationFlag {
+                    code: "open".into(),
+                    severity: RadrootsTradeModerationSeverity::Warning,
+                    status: RadrootsTradeModerationStatus::Open,
+                    source: None,
+                    reason: None,
+                },
+            ],
+        };
+        assert!(!listing_overlay.requires_review());
+        assert_eq!(listing_overlay.open_moderation_flag_count(), 1);
+        assert!(listing_overlay.has_open_moderation_flags());
+
+        let order_overlay = RadrootsTradeOrderBackofficeOverlay {
+            order_id: "order-1".into(),
+            review_queue: Some(RadrootsTradeReviewQueueEntry {
+                queue: "queue".into(),
+                priority: RadrootsTradeReviewPriority::Low,
+                status: RadrootsTradeReviewStatus::Resolved,
+                assigned_operator: None,
+                reason: None,
+            }),
+            moderation_flags: vec![RadrootsTradeModerationFlag {
+                code: "resolved".into(),
+                severity: RadrootsTradeModerationSeverity::Notice,
+                status: RadrootsTradeModerationStatus::Resolved,
+                source: None,
+                reason: None,
+            }],
+            fulfillment_exceptions: vec![
+                RadrootsTradeFulfillmentException {
+                    code: "resolved".into(),
+                    severity: RadrootsTradeFulfillmentExceptionSeverity::Notice,
+                    status: RadrootsTradeFulfillmentExceptionStatus::Resolved,
+                    source: None,
+                    notes: None,
+                },
+                RadrootsTradeFulfillmentException {
+                    code: "open".into(),
+                    severity: RadrootsTradeFulfillmentExceptionSeverity::Blocking,
+                    status: RadrootsTradeFulfillmentExceptionStatus::Open,
+                    source: None,
+                    notes: None,
+                },
+            ],
+        };
+        assert!(!order_overlay.requires_review());
+        assert_eq!(order_overlay.open_moderation_flag_count(), 0);
+        assert!(!order_overlay.has_open_moderation_flags());
+        assert_eq!(order_overlay.open_fulfillment_exception_count(), 1);
+        assert!(order_overlay.has_open_fulfillment_exceptions());
+
+        let mut store = RadrootsTradeBackofficeOverlayStore::new();
+        assert!(store.listing_overlays().is_empty());
+        assert!(store.order_overlays().is_empty());
+        store
+            .upsert_listing_overlay(listing_overlay)
+            .expect("listing overlay");
+        store
+            .upsert_order_overlay(order_overlay)
+            .expect("order overlay");
+        assert_eq!(store.listing_overlays().len(), 1);
+        assert_eq!(store.order_overlays().len(), 1);
+        assert!(store.listing_overlay("listing-1").is_some());
+        assert!(store.order_overlay("order-1").is_some());
+
+        let missing_listing = RadrootsTradeBackofficeOverlayError::MissingListingAddr;
+        let missing_order = RadrootsTradeBackofficeOverlayError::MissingOrderId;
+        assert_eq!(missing_listing.to_string(), "missing listing address");
+        assert_eq!(missing_order.to_string(), "missing order id");
+        assert!(std::error::Error::source(&missing_listing).is_none());
+    }
+
+    #[test]
+    fn message_helper_bootstraps_missing_chain_for_non_request_payload() {
+        let message = message(
+            "seller-pubkey",
+            "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+            Some("orphan-order"),
+            TradeListingMessagePayload::Cancel(TradeListingCancel {
+                reason: Some("operator-cancelled".into()),
+            }),
+        );
+
+        assert_eq!(message.order_id.as_deref(), Some("orphan-order"));
+        assert_eq!(message.counterparty_pubkey, "buyer-pubkey");
+        assert_eq!(message.root_event_id.as_deref(), Some("orphan-order:root"));
+        assert_eq!(message.prev_event_id.as_deref(), Some("orphan-order:root"));
     }
 
     #[test]
