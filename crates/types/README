@@ -1,14 +1,21 @@
 # radroots_types
 
-Shared API result and error wrapper types for the Rad Roots SDK.
+This is the README for `radroots_types`, which provides shared result and error
+wrappers for the `radroots` core libraries.
 
-## Goals
+## Overview
 
-- define stable success and error envelope interfaces across SDK surfaces
-- keep envelope serialization behavior deterministic across API boundaries
-- support feature-gated type export for external SDK consumers
-- provide reusable wrapper primitives for higher-level Rad Roots crates
+ * `IError`, `IResult`, `IResultList`, and `IResultPass` wrapper types;
+ * small constructor helpers and status-label logic for pass and fail outcomes;
+ * optional `serde` and `ts-rs` support for API boundary serialization and
+   export;
+ * a compact support crate with no domain-specific business logic.
 
-## License
+## Copyright
 
-Licensed under AGPL-3.0. See LICENSE.
+Except as otherwise noted, all files in the `radroots_types` distribution are
+
+ Copyright (c) 2025 Tyson Lupul
+
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see LICENSE included in the `radroots_types` distribution.
