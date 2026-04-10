@@ -5,7 +5,9 @@ root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$root_dir"
 
 cargo check -q
-cargo test -q -p xtask
+# Keep synthetic xtask test workspaces isolated from any root release-policy env
+# that may be set by an outer monorepo preflight wrapper.
+env -u RADROOTS_MOUNTED_RUST_CRATE_PUBLISH_POLICY cargo test -q -p xtask
 cargo run -q -p xtask -- sdk validate
 
 required_file="$(mktemp)"
