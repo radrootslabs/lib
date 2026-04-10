@@ -1,14 +1,23 @@
 # radroots_net_core
 
-Network orchestration primitives and runtime interfaces for the Rad Roots SDK.
+This is the README for `radroots_net_core`, which provides network
+orchestration and runtime interfaces for the `radroots` core libraries.
 
-## Goals
+## Overview
 
-- define stable interfaces for network configuration, assembly, and control
-- keep network orchestration behavior deterministic across runtime environments
-- support feature-gated Nostr client, key, and persistence integration surfaces
-- provide reusable network primitives for higher-level Rad Roots crates
+ * `Net`, `NetHandle`, and `NetInfo` types for managing shared network state
+   and build metadata;
+ * runtime-aware wiring for accounts, signer state, relay sets, and the Nostr
+   runtime;
+ * key format and persistence configuration for local key material handling;
+ * feature-gated `std`, runtime, client, and filesystem persistence support.
 
-## License
+## Copyright
 
-Licensed under AGPL-3.0. See LICENSE.
+Except as otherwise noted, all files in the `radroots_net_core` distribution
+are
+
+ Copyright (c) 2025 Tyson Lupul
+
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see LICENSE included in the `radroots_net_core` distribution.
