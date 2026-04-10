@@ -10,7 +10,7 @@ license.workspace = true
 description = "Event codec layer for Radroots"
 repository.workspace = true
 homepage.workspace = true
-readme.workspace = true
+readme = "README"
 
 [features]
 default = ["std"]

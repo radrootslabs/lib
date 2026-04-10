@@ -1,14 +1,24 @@
 # radroots_events_codec
 
-Reference encoders and decoders for Rad Roots Nostr event payloads.
+This is the README for `radroots_events_codec`, which provides canonical event
+codecs and tag builders for the `radroots` core libraries.
 
-## Goals
+## Overview
 
-- define stable encoding and decoding interfaces for Rad Roots event payloads
-- keep parsing and validation behavior deterministic across supported event forms
-- support std and no_std builds with feature-gated `serde_json` and Nostr integration
-- provide reusable codec primitives for higher-level Rad Roots crates
+ * canonical decoders for event content, tags, job envelopes, profiles, and
+   wire representations;
+ * tag builder helpers for the same event families exposed by
+   `radroots_events`;
+ * parsed view and error types for codec-driven validation and routing;
+ * optional `serde_json` and `radroots_nostr` integration for JSON and wire
+   interop.
 
-## License
+## Copyright
 
-Licensed under AGPL-3.0. See LICENSE.
+Except as otherwise noted, all files in the `radroots_events_codec`
+distribution are
+
+ Copyright (c) 2025 Tyson Lupul
+
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see LICENSE included in the `radroots_events_codec` distribution.
