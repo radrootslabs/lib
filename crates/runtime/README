@@ -1,14 +1,22 @@
 # radroots_runtime
 
-Runtime configuration, I/O, and process primitives for Rad Roots services and apps.
+This is the README for `radroots_runtime`, which provides runtime configuration
+and service helpers for the `radroots` core libraries.
 
-## Goals
+## Overview
 
-- define stable runtime interfaces for config loading, JSON I/O, and process wiring
-- keep runtime behavior deterministic across development and production environments
-- support tracing, signal, and service configuration integration surfaces
-- provide reusable runtime primitives for higher-level Rad Roots crates
+ * config loaders, JSON file helpers, and structured runtime error types;
+ * protected secret-file seal and open helpers built on the workspace security
+   crates;
+ * service bootstrap, shutdown signal, backoff, and tracing initialization
+   utilities;
+ * an optional CLI layer for configuration parsing and process startup.
 
-## License
+## Copyright
 
-Licensed under AGPL-3.0. See LICENSE.
+Except as otherwise noted, all files in the `radroots_runtime` distribution are
+
+ Copyright (c) 2025 Tyson Lupul
+
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see LICENSE included in the `radroots_runtime` distribution.
