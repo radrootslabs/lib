@@ -36,15 +36,12 @@ impl LocalWrappedKeySource {
             return self.load_wrapping_key();
         }
 
-        if let Some(parent) = self.key_path.parent()
-            && !parent.as_os_str().is_empty()
-        {
+        if let Some(parent) = self.key_path.parent().filter(|p| !p.as_os_str().is_empty()) {
             fs::create_dir_all(parent).map_err(io_backend_error)?;
         }
 
         let mut key = [0_u8; RADROOTS_PROTECTED_STORE_KEY_LENGTH];
-        getrandom(&mut key)
-            .map_err(|_| RadrootsSecretVaultAccessError::Backend("entropy unavailable".into()))?;
+        getrandom(&mut key).map_err(entropy_unavailable_error)?;
         fs::write(&self.key_path, key.as_slice()).map_err(io_backend_error)?;
         set_secret_permissions(&self.key_path)?;
         Ok(key)
@@ -74,8 +71,7 @@ impl RadrootsSecretKeyWrapping for LocalWrappedKeySource {
     fn wrap_data_key(&self, key_slot: &str, plaintext_key: &[u8]) -> Result<Vec<u8>, Self::Error> {
         let mut master_key = self.load_or_create_wrapping_key()?;
         let mut nonce = [0_u8; RADROOTS_PROTECTED_STORE_NONCE_LENGTH];
-        getrandom(&mut nonce)
-            .map_err(|_| RadrootsSecretVaultAccessError::Backend("entropy unavailable".into()))?;
+        getrandom(&mut nonce).map_err(entropy_unavailable_error)?;
         let cipher = XChaCha20Poly1305::new(Key::from_slice(&master_key));
         let ciphertext = cipher
             .encrypt(
@@ -85,11 +81,7 @@ impl RadrootsSecretKeyWrapping for LocalWrappedKeySource {
                     aad: key_slot.as_bytes(),
                 },
             )
-            .map_err(|_| {
-                RadrootsSecretVaultAccessError::Backend(
-                    "failed to wrap protected secret data key".into(),
-                )
-            })?;
+            .map_err(wrap_data_key_error)?;
         master_key.zeroize();
 
         let mut encoded = Vec::with_capacity(1 + nonce.len() + ciphertext.len());
@@ -147,9 +139,7 @@ pub fn seal_local_secret_file(
     payload: &[u8],
 ) -> Result<(), RuntimeProtectedFileError> {
     let path = path.as_ref();
-    if let Some(parent) = path.parent()
-        && !parent.as_os_str().is_empty()
-    {
+    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
         fs::create_dir_all(parent).map_err(|source| RuntimeProtectedFileError::CreateDir {
             path: parent.to_path_buf(),
             source,
@@ -159,24 +149,15 @@ pub fn seal_local_secret_file(
     let key_source = LocalWrappedKeySource::new(path);
     let envelope =
         RadrootsProtectedStoreEnvelope::seal_with_wrapped_key(&key_source, key_slot, payload)
-            .map_err(|error| RuntimeProtectedFileError::Seal {
-                path: path.to_path_buf(),
-                message: error.to_string(),
-            })?;
+            .map_err(|error| seal_error(path, error.to_string()))?;
     let encoded = envelope
         .encode_json()
-        .map_err(|error| RuntimeProtectedFileError::Seal {
-            path: path.to_path_buf(),
-            message: error.to_string(),
-        })?;
+        .map_err(|error| seal_error(path, error.to_string()))?;
     fs::write(path, encoded).map_err(|source| RuntimeProtectedFileError::Io {
         path: path.to_path_buf(),
         source,
     })?;
-    set_secret_permissions(path).map_err(|error| RuntimeProtectedFileError::Permissions {
-        path: path.to_path_buf(),
-        message: error.to_string(),
-    })?;
+    set_secret_permissions(path).map_err(|error| permissions_error(path, error.to_string()))?;
     Ok(())
 }
 
@@ -215,6 +196,28 @@ pub fn open_local_secret_file(
 
 fn io_backend_error(source: std::io::Error) -> RadrootsSecretVaultAccessError {
     RadrootsSecretVaultAccessError::Backend(source.to_string())
+}
+
+fn entropy_unavailable_error(_: getrandom::Error) -> RadrootsSecretVaultAccessError {
+    RadrootsSecretVaultAccessError::Backend("entropy unavailable".into())
+}
+
+fn wrap_data_key_error(_: chacha20poly1305::Error) -> RadrootsSecretVaultAccessError {
+    RadrootsSecretVaultAccessError::Backend("failed to wrap protected secret data key".into())
+}
+
+fn seal_error(path: &Path, message: String) -> RuntimeProtectedFileError {
+    RuntimeProtectedFileError::Seal {
+        path: path.to_path_buf(),
+        message,
+    }
+}
+
+fn permissions_error(path: &Path, message: String) -> RuntimeProtectedFileError {
+    RuntimeProtectedFileError::Permissions {
+        path: path.to_path_buf(),
+        message,
+    }
 }
 
 #[cfg(unix)]
