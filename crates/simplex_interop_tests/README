@@ -1,0 +1,23 @@
+# radroots_simplex_interop_tests
+
+This is the README for `radroots_simplex_interop_tests`, which provides
+synthetic SimpleX interop fixtures for the `radroots` core libraries.
+
+## Overview
+
+ * approved fixture data and fixture-policy helpers for interop coverage;
+ * roundtrip and compatibility tests spanning the SMP, agent, and chat crates;
+ * opt-in checks against local upstream services when explicitly enabled;
+ * a non-published test support crate rather than a production runtime
+   component.
+
+## Copyright
+
+Except as otherwise noted, all files in the `radroots_simplex_interop_tests`
+distribution are
+
+ Copyright (c) 2025 Tyson Lupul
+
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see LICENSE included in the `radroots_simplex_interop_tests`
+distribution.
