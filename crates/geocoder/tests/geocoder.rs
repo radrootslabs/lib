@@ -3,6 +3,7 @@ use radroots_geocoder::{
 };
 use rusqlite::Connection;
 use std::fs;
+use std::path::Path;
 use tempfile::NamedTempFile;
 
 #[test]
@@ -95,6 +96,45 @@ fn open_bytes_supports_reverse_queries() {
 }
 
 #[test]
+fn open_path_supports_string_and_path_ref_inputs() {
+    let path = build_fixture_database();
+    let path_str = path.to_str().expect("utf-8 fixture path");
+
+    let geocoder_from_str = Geocoder::open_path(path_str).expect("open geocoder from string path");
+    let string_results = geocoder_from_str
+        .country("US")
+        .expect("country query from string-path geocoder");
+    assert_eq!(string_results.len(), 3);
+
+    let geocoder_from_path =
+        Geocoder::open_path(Path::new(path_str)).expect("open geocoder from path ref");
+    let path_results = geocoder_from_path
+        .country("US")
+        .expect("country query from path-ref geocoder");
+    assert_eq!(path_results.len(), 3);
+}
+
+#[test]
+fn open_path_supports_pathbuf_inputs() {
+    let temp_path = build_fixture_database();
+    let path = temp_path.to_path_buf();
+
+    let geocoder_from_pathbuf =
+        Geocoder::open_path(path.clone()).expect("open geocoder from pathbuf");
+    let pathbuf_results = geocoder_from_pathbuf
+        .country("US")
+        .expect("country query from pathbuf geocoder");
+    assert_eq!(pathbuf_results.len(), 3);
+
+    let geocoder_from_pathbuf_ref =
+        Geocoder::open_path(&path).expect("open geocoder from pathbuf ref");
+    let pathbuf_ref_results = geocoder_from_pathbuf_ref
+        .country("US")
+        .expect("country query from pathbuf-ref geocoder");
+    assert_eq!(pathbuf_ref_results.len(), 3);
+}
+
+#[test]
 fn country_returns_all_rows_for_requested_country() {
     let geocoder = open_fixture_geocoder();
 
@@ -146,6 +186,16 @@ fn country_center_returns_average_for_country() {
 }
 
 #[test]
+fn country_center_returns_not_found_for_missing_country() {
+    let geocoder = open_fixture_geocoder();
+
+    let err = geocoder
+        .country_center("ZZ")
+        .expect_err("missing country should return not found");
+    assert_country_center_not_found(err, "ZZ");
+}
+
+#[test]
 fn reverse_country_and_country_list_report_missing_schema_errors() {
     let geocoder = open_empty_geocoder();
 
@@ -169,6 +219,16 @@ fn reverse_country_and_country_list_report_missing_schema_errors() {
         .country_list()
         .expect_err("country_list should fail without schema");
     assert_sqlite_error_contains(country_list_err, "no such");
+}
+
+#[test]
+fn country_center_reports_missing_schema_errors() {
+    let geocoder = open_empty_geocoder();
+
+    let err = geocoder
+        .country_center("US")
+        .expect_err("country_center should fail without schema");
+    assert_sqlite_error_contains(err, "no such");
 }
 
 #[test]
@@ -426,5 +486,14 @@ fn assert_sqlite_error_contains(err: GeocoderError, needle: &str) {
             "expected sqlite error containing {needle:?}, got {inner}"
         ),
         other => panic!("expected sqlite error, got {other}"),
+    }
+}
+
+fn assert_country_center_not_found(err: GeocoderError, country_id: &str) {
+    match err {
+        GeocoderError::CountryCenterNotFound { country_id: actual } => {
+            assert_eq!(actual, country_id);
+        }
+        other => panic!("expected CountryCenterNotFound, got {other}"),
     }
 }
