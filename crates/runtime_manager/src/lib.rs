@@ -1,11 +1,17 @@
 #![forbid(unsafe_code)]
 
 pub mod error;
+pub mod lifecycle;
 pub mod model;
 pub mod paths;
 pub mod registry;
 
 pub use error::RadrootsRuntimeManagerError;
+pub use lifecycle::{
+    ensure_instance_layout, extract_binary_archive, install_binary, process_running,
+    read_secret_file, remove_instance_artifacts, start_process, stop_process,
+    write_instance_metadata, write_managed_file, write_secret_file,
+};
 pub use model::{
     BootstrapRuntimeContract, LifecycleContract, ManagedRuntimeHealthState,
     ManagedRuntimeInstallState, ManagedRuntimeInstanceRecord, ManagedRuntimeInstanceRegistry,
@@ -16,7 +22,7 @@ pub use paths::{
     ManagedRuntimeInstancePaths, ManagedRuntimeSharedPaths, bootstrap_runtime,
     resolve_instance_paths, resolve_shared_paths,
 };
-pub use registry::{instance, load_registry, save_registry, upsert_instance};
+pub use registry::{instance, load_registry, remove_instance, save_registry, upsert_instance};
 
 pub const RUNTIME_MANAGEMENT_SCHEMA: &str = "radroots-runtime-management";
 

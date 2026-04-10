@@ -12,8 +12,10 @@ homepage.workspace = true
 readme = "README"
 
 [dependencies]
+flate2 = { workspace = true }
 radroots_runtime_paths = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
+tar = { workspace = true }
 thiserror = { workspace = true }
 toml = { workspace = true }
 

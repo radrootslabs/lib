@@ -3,7 +3,7 @@ use crate::model::{
     ArtifactAdapter, RadrootsRuntimeDistributionContract, RuntimeDistributionEntry, TargetSpec,
 };
 
-pub const RUNTIME_DISTRIBUTION_SCHEMA: &str = "radroots_runtime_distribution";
+pub const RUNTIME_DISTRIBUTION_SCHEMA: &str = "radroots-runtime-distribution";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuntimeArtifactRequest<'a> {

@@ -79,3 +79,15 @@ pub fn instance<'a>(
         .iter()
         .find(|record| record.runtime_id == runtime_id && record.instance_id == instance_id)
 }
+
+pub fn remove_instance(
+    registry: &mut ManagedRuntimeInstanceRegistry,
+    runtime_id: &str,
+    instance_id: &str,
+) -> Option<ManagedRuntimeInstanceRecord> {
+    let index = registry
+        .instances
+        .iter()
+        .position(|record| record.runtime_id == runtime_id && record.instance_id == instance_id)?;
+    Some(registry.instances.remove(index))
+}

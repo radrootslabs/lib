@@ -41,6 +41,84 @@ pub enum RadrootsRuntimeManagerError {
         path: PathBuf,
         source: std::io::Error,
     },
+    #[error("create directory {path}: {source}")]
+    CreateDirectory {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    #[error("copy runtime binary from {from} to {to}: {source}")]
+    CopyBinary {
+        from: PathBuf,
+        to: PathBuf,
+        source: std::io::Error,
+    },
+    #[error("serialize runtime instance metadata: {0}")]
+    SerializeInstanceMetadata(String),
+    #[error("write runtime instance metadata {path}: {source}")]
+    WriteInstanceMetadata {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    #[error("write managed file {path}: {source}")]
+    WriteManagedFile {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    #[error("read managed file {path}: {source}")]
+    ReadManagedFile {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    #[error("open runtime log file {path}: {source}")]
+    OpenLogFile {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    #[error("spawn managed runtime process {binary_path}: {source}")]
+    SpawnProcess {
+        binary_path: PathBuf,
+        source: std::io::Error,
+    },
+    #[error("write pid file {path}: {source}")]
+    WritePidFile {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    #[error("read pid file {path}: {source}")]
+    ReadPidFile {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    #[error("parse pid file {path}: invalid contents `{contents}`")]
+    ParsePidFile { path: PathBuf, contents: String },
+    #[error("remove managed path {path}: {source}")]
+    RemovePath {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    #[error("set file permissions for {path}: {source}")]
+    SetPermissions {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    #[error("signal pid {pid} with {signal}: {source}")]
+    ExecuteProcessSignal {
+        pid: u32,
+        signal: String,
+        source: std::io::Error,
+    },
+    #[error("stop pid {pid}: {details}")]
+    StopProcess { pid: u32, details: String },
+    #[error("unsupported archive format `{archive_format}` for {archive_path}")]
+    UnsupportedArchiveFormat {
+        archive_path: PathBuf,
+        archive_format: String,
+    },
+    #[error("unpack archive {archive_path}: {source}")]
+    UnpackArchive {
+        archive_path: PathBuf,
+        source: std::io::Error,
+    },
     #[error(transparent)]
     RuntimePaths(#[from] RadrootsRuntimePathsError),
 }

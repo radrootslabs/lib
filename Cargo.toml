@@ -106,6 +106,7 @@ config = { version = "0.14" }
 directories = { version = "6" }
 ed25519-dalek = { version = "2.1.1", default-features = false }
 futures = { version = "0.3" }
+flate2 = { version = "1" }
 getrandom = { version = "0.2", default-features = false }
 hkdf = { version = "0.12", default-features = false }
 hex = { version = "0.4" }
@@ -136,6 +137,7 @@ xsalsa20poly1305 = { version = "0.9", default-features = false }
 x25519-dalek = { version = "2", default-features = false, features = ["static_secrets"] }
 sled = { version = "0.34" }
 tempfile = { version = "3" }
+tar = { version = "0.4" }
 thiserror = { version = "1" }
 tokio = { version = "1" }
 toml = { version = "0.8" }

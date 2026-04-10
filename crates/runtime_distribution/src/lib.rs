@@ -22,7 +22,7 @@ mod tests {
     };
 
     const CONTRACT: &str = r#"
-schema = "radroots_runtime_distribution"
+schema = "radroots-runtime-distribution"
 schema_version = 1
 owner_doc = "docs/migration/radroots-modular-runtime-management-bootstrap-rcl.md"
 runtime_registry = "registry.toml"
@@ -76,6 +76,8 @@ platforms = ["macos"]
 targets = [
   "x86_64-unknown-linux-gnu",
   "aarch64-unknown-linux-gnu",
+  "x86_64-apple-darwin",
+  "aarch64-apple-darwin",
 ]
 
 [target_sets.cli_default]
