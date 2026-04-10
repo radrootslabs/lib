@@ -1,14 +1,23 @@
 # radroots_trade
 
-Trade listing models and Nostr tag mappings for the Rad Roots SDK.
+This is the README for `radroots_trade`, which provides trade listing
+projections and validation models for the `radroots` core libraries.
 
-## Goals
+## Overview
 
-- define stable listing models and invariants for Rad Roots trade records
-- keep listing-to-tag mapping deterministic across supported targets
-- support feature-gated serialization and type export for SDK consumers
-- provide reusable trade primitives for higher-level Rad Roots crates
+ * listing model types such as subtotals and totals built on `radroots_core`
+   money, quantity, currency, and unit values;
+ * listing overlay, projection, and validation modules for trade-facing
+   workflows;
+ * optional `serde`, `serde_json`, and `ts-rs` support for shared model
+   serialization and export;
+ * portable shared-model support for both `std` and `no_std` builds.
 
-## License
+## Copyright
 
-Licensed under AGPL-3.0. See LICENSE.
+Except as otherwise noted, all files in the `radroots_trade` distribution are
+
+ Copyright (c) 2025 Tyson Lupul
+
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see LICENSE included in the `radroots_trade` distribution.

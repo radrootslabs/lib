@@ -10,7 +10,7 @@ license.workspace = true
 description = "Trade domain model for Radroots"
 repository.workspace = true
 homepage.workspace = true
-readme.workspace = true
+readme = "README"
 build = "build.rs"
 
 [features]
