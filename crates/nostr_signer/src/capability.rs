@@ -165,7 +165,7 @@ mod tests {
     use crate::model::{RadrootsNostrSignerConnectionDraft, RadrootsNostrSignerConnectionRecord};
     use crate::test_support::{
         fixture_alice_identity, fixture_bob_identity, fixture_carol_identity,
-        fixture_diego_public_key, primary_relay,
+        fixture_diego_public_key, primary_relay, secondary_relay,
     };
     use radroots_identity::RadrootsIdentityPublic;
     use radroots_nostr_connect::prelude::{
@@ -224,6 +224,7 @@ mod tests {
 
         let capability = record.remote_session_capability();
         assert_public_identity_matches(capability.public_identity(), &user_identity);
+        assert!(capability.local_account().is_none());
         let remote = capability.remote_session().expect("remote capability");
         assert_eq!(remote.connection_id, record.connection_id);
         assert_public_identity_matches(&remote.signer_identity, &signer_identity);
@@ -249,5 +250,96 @@ mod tests {
 
         assert_eq!(capability.permissions.as_slice().len(), 1);
         assert_eq!(capability.relays.len(), 1);
+    }
+
+    #[test]
+    fn capability_equality_accounts_for_identity_fields_and_variant_kind() {
+        let alice = fixture_alice_identity();
+        let mut alice_with_different_hex = alice.clone();
+        alice_with_different_hex.public_key_hex = fixture_bob_identity().public_key_hex;
+        let mut alice_with_different_npub = alice.clone();
+        alice_with_different_npub.public_key_npub = fixture_bob_identity().public_key_npub;
+
+        let local = RadrootsNostrLocalSignerCapability::new(
+            alice.id.clone(),
+            alice.clone(),
+            RadrootsNostrLocalSignerAvailability::SecretBacked,
+        );
+        let local_same = RadrootsNostrLocalSignerCapability::new(
+            alice.id.clone(),
+            alice.clone(),
+            RadrootsNostrLocalSignerAvailability::SecretBacked,
+        );
+        let local_changed_account = RadrootsNostrLocalSignerCapability::new(
+            fixture_bob_identity().id,
+            alice.clone(),
+            RadrootsNostrLocalSignerAvailability::SecretBacked,
+        );
+        let local_changed_availability = RadrootsNostrLocalSignerCapability::new(
+            alice.id.clone(),
+            alice.clone(),
+            RadrootsNostrLocalSignerAvailability::PublicOnly,
+        );
+        let local_changed_hex = RadrootsNostrLocalSignerCapability::new(
+            alice.id.clone(),
+            alice_with_different_hex,
+            RadrootsNostrLocalSignerAvailability::SecretBacked,
+        );
+        let local_changed = RadrootsNostrLocalSignerCapability::new(
+            alice.id.clone(),
+            alice_with_different_npub,
+            RadrootsNostrLocalSignerAvailability::SecretBacked,
+        );
+        assert_eq!(local, local_same);
+        assert_ne!(local, local_changed_account);
+        assert_ne!(local, local_changed_availability);
+        assert_ne!(local, local_changed_hex);
+        assert_ne!(local, local_changed);
+
+        let remote = RadrootsNostrRemoteSessionSignerCapability::new(
+            RadrootsNostrSignerConnectionId::new_v7(),
+            fixture_bob_identity(),
+            fixture_carol_identity(),
+        )
+        .with_relays(vec![primary_relay()]);
+        let remote_same = remote.clone();
+        let remote_changed_connection = RadrootsNostrRemoteSessionSignerCapability::new(
+            RadrootsNostrSignerConnectionId::new_v7(),
+            remote.signer_identity.clone(),
+            remote.user_identity.clone(),
+        )
+        .with_relays(remote.relays.clone())
+        .with_permissions(remote.permissions.clone());
+        let remote_changed_relays = remote.clone().with_relays(vec![secondary_relay()]);
+        let remote_changed_permissions = remote.clone().with_permissions(
+            vec![RadrootsNostrConnectPermission::new(
+                RadrootsNostrConnectMethod::Ping,
+            )]
+            .into(),
+        );
+        let mut remote_changed_signer = remote.clone();
+        remote_changed_signer.signer_identity.public_key_hex =
+            fixture_alice_identity().public_key_hex;
+        let mut remote_changed = remote.clone();
+        remote_changed.user_identity.public_key_npub = fixture_alice_identity().public_key_npub;
+        assert_eq!(remote, remote_same);
+        assert_ne!(remote, remote_changed_connection);
+        assert_ne!(remote, remote_changed_relays);
+        assert_ne!(remote, remote_changed_permissions);
+        assert_ne!(remote, remote_changed_signer);
+        assert_ne!(remote, remote_changed);
+
+        assert_eq!(
+            RadrootsNostrSignerCapability::LocalAccount(local.clone()),
+            RadrootsNostrSignerCapability::LocalAccount(local_same)
+        );
+        assert_eq!(
+            RadrootsNostrSignerCapability::RemoteSession(remote.clone()),
+            RadrootsNostrSignerCapability::RemoteSession(remote)
+        );
+        assert_ne!(
+            RadrootsNostrSignerCapability::LocalAccount(local),
+            RadrootsNostrSignerCapability::RemoteSession(remote_changed)
+        );
     }
 }

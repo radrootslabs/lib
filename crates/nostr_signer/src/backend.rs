@@ -650,25 +650,77 @@ fn parse_identity_public_key(
 mod tests {
     use super::{
         RadrootsNostrEmbeddedSignerBackend, RadrootsNostrSignerBackend,
-        RadrootsNostrSignerPublishTransition,
+        RadrootsNostrSignerBackendCapabilities, RadrootsNostrSignerPublishTransition,
+        parse_identity_public_key, same_public_identity_key,
     };
-    use crate::evaluation::RadrootsNostrSignerConnectEvaluation;
+    use crate::evaluation::{
+        RadrootsNostrSignerConnectEvaluation, RadrootsNostrSignerConnectProposal,
+        RadrootsNostrSignerRequestAction, RadrootsNostrSignerSessionLookup,
+    };
     use crate::manager::RadrootsNostrSignerManager;
-    use crate::model::{RadrootsNostrSignerConnectionDraft, RadrootsNostrSignerRequestDecision};
+    use crate::model::{
+        RadrootsNostrSignerApprovalRequirement, RadrootsNostrSignerConnectionDraft,
+        RadrootsNostrSignerConnectionRecord, RadrootsNostrSignerConnectionStatus,
+        RadrootsNostrSignerPublishWorkflowRecord, RadrootsNostrSignerRequestDecision,
+        RadrootsNostrSignerWorkflowId,
+    };
     use crate::test_support::{
-        fixture_bob_identity, primary_relay, synthetic_public_identity, synthetic_public_key,
-        synthetic_secret_hex,
+        fixture_bob_identity, primary_relay, secondary_relay, synthetic_public_identity,
+        synthetic_public_key, synthetic_secret_hex,
     };
     use nostr::{EventBuilder, Kind};
-    use radroots_identity::RadrootsIdentity;
+    use radroots_identity::{RadrootsIdentity, RadrootsIdentityPublic};
     use radroots_nostr_connect::prelude::{
         RadrootsNostrConnectMethod, RadrootsNostrConnectPermission, RadrootsNostrConnectRequest,
         RadrootsNostrConnectRequestMessage,
     };
+    use serde_json::json;
 
     fn embedded_identity(index: u32) -> RadrootsIdentity {
         RadrootsIdentity::from_secret_key_str(synthetic_secret_hex(index).as_str())
             .expect("identity")
+    }
+
+    fn expect_registration_required(
+        evaluation: RadrootsNostrSignerConnectEvaluation,
+    ) -> RadrootsNostrSignerConnectProposal {
+        match evaluation {
+            RadrootsNostrSignerConnectEvaluation::RegistrationRequired(proposal) => proposal,
+            other => panic!("unexpected connect evaluation: {other:?}"),
+        }
+    }
+
+    fn expect_lookup_connection(
+        lookup: RadrootsNostrSignerSessionLookup,
+    ) -> RadrootsNostrSignerConnectionRecord {
+        match lookup {
+            RadrootsNostrSignerSessionLookup::Connection(found) => found,
+            other => panic!("unexpected session lookup: {other:?}"),
+        }
+    }
+
+    fn expect_begun_workflow_id(
+        transition: RadrootsNostrSignerPublishTransition,
+    ) -> RadrootsNostrSignerWorkflowId {
+        match transition {
+            RadrootsNostrSignerPublishTransition::Begun(workflow) => workflow.workflow_id,
+            other => panic!("unexpected begin transition: {other:?}"),
+        }
+    }
+
+    fn expect_finalized_transition(
+        transition: RadrootsNostrSignerPublishTransition,
+    ) -> (
+        RadrootsNostrSignerWorkflowId,
+        RadrootsNostrSignerConnectionRecord,
+    ) {
+        match transition {
+            RadrootsNostrSignerPublishTransition::Finalized {
+                workflow_id,
+                connection,
+            } => (workflow_id, connection),
+            other => panic!("unexpected finalize transition: {other:?}"),
+        }
     }
 
     #[test]
@@ -689,6 +741,16 @@ mod tests {
         assert!(local.is_secret_backed());
         assert!(capabilities.remote_sessions.is_empty());
         assert_eq!(capabilities.all_signers().len(), 1);
+        let manager_identity = backend
+            .manager()
+            .signer_identity()
+            .expect("manager signer identity")
+            .expect("stored signer identity");
+        assert!(same_public_identity_key(
+            &manager_identity,
+            &identity.to_public()
+        ));
+        assert_eq!(backend.local_identity().public_key(), identity.public_key());
     }
 
     #[test]
@@ -706,6 +768,43 @@ mod tests {
                 .to_string()
                 .contains("embedded signer identity does not match")
         );
+    }
+
+    #[test]
+    fn embedded_backend_accepts_matching_manager_identity_and_setter_delegate() {
+        let identity = embedded_identity(0x97);
+        let manager = RadrootsNostrSignerManager::new_in_memory();
+        let public_identity = identity.to_public();
+        manager
+            .set_signer_identity(public_identity.clone())
+            .expect("prime manager identity");
+
+        let backend = RadrootsNostrEmbeddedSignerBackend::new(manager, identity.clone())
+            .expect("matching embedded backend");
+        let backend_trait: &dyn RadrootsNostrSignerBackend = &backend;
+
+        assert_eq!(backend.local_identity().public_key(), identity.public_key());
+        assert!(same_public_identity_key(
+            backend_trait
+                .signer_identity()
+                .expect("signer identity")
+                .as_ref()
+                .expect("present"),
+            &public_identity
+        ));
+
+        backend_trait
+            .set_signer_identity(public_identity.clone())
+            .expect("delegate set signer identity");
+        let manager_identity = backend
+            .manager()
+            .signer_identity()
+            .expect("manager signer identity")
+            .expect("stored signer identity");
+        assert!(same_public_identity_key(
+            &manager_identity,
+            &public_identity
+        ));
     }
 
     #[test]
@@ -728,10 +827,7 @@ mod tests {
                 },
             )
             .expect("connect evaluation");
-        let proposal = match evaluation {
-            RadrootsNostrSignerConnectEvaluation::RegistrationRequired(proposal) => proposal,
-            other => panic!("unexpected connect evaluation: {other:?}"),
-        };
+        let proposal = expect_registration_required(evaluation);
         let connection = backend
             .register_connection(
                 proposal
@@ -746,13 +842,11 @@ mod tests {
         let begun = backend
             .begin_connect_secret_publish_finalization(&connection.connection_id)
             .expect("begin workflow");
-        let workflow_id = match begun {
-            RadrootsNostrSignerPublishTransition::Begun(workflow) => {
-                assert_eq!(workflow.connection_id, connection.connection_id);
-                workflow.workflow_id
-            }
-            other => panic!("unexpected begin transition: {other:?}"),
-        };
+        let workflow_id = expect_begun_workflow_id(begun.clone());
+        assert_eq!(
+            begun.workflow().expect("begun workflow").connection_id,
+            connection.connection_id
+        );
 
         let published = backend
             .mark_publish_workflow_published(&workflow_id)
@@ -765,16 +859,9 @@ mod tests {
         let finalized = backend
             .finalize_publish_workflow(&workflow_id)
             .expect("finalize workflow");
-        match finalized {
-            RadrootsNostrSignerPublishTransition::Finalized {
-                workflow_id: finalized_workflow_id,
-                connection,
-            } => {
-                assert_eq!(finalized_workflow_id, workflow_id);
-                assert!(connection.connect_secret_is_consumed());
-            }
-            other => panic!("unexpected finalize transition: {other:?}"),
-        }
+        let (finalized_workflow_id, finalized_connection) = expect_finalized_transition(finalized);
+        assert_eq!(finalized_workflow_id, workflow_id);
+        assert!(finalized_connection.connect_secret_is_consumed());
 
         let audit = backend
             .record_request(
@@ -786,6 +873,278 @@ mod tests {
             )
             .expect("record request");
         assert_eq!(audit.method, RadrootsNostrConnectMethod::Ping);
+    }
+
+    #[test]
+    fn embedded_backend_delegates_lookup_state_and_auth_workflow_methods() {
+        let identity = embedded_identity(0xa0);
+        let backend = RadrootsNostrEmbeddedSignerBackend::new_in_memory(identity.clone())
+            .expect("embedded backend");
+        let backend_trait: &dyn RadrootsNostrSignerBackend = &backend;
+
+        let connect_evaluation = backend_trait
+            .evaluate_connect_request(
+                synthetic_public_key(0xa1),
+                RadrootsNostrConnectRequest::Connect {
+                    remote_signer_public_key: identity.public_key(),
+                    secret: Some("connect-secret-2".into()),
+                    requested_permissions: vec![RadrootsNostrConnectPermission::new(
+                        RadrootsNostrConnectMethod::Ping,
+                    )]
+                    .into(),
+                },
+            )
+            .expect("connect evaluation");
+        let connect_proposal = expect_registration_required(connect_evaluation);
+        let connection = backend_trait
+            .register_connection(
+                connect_proposal
+                    .into_connection_draft(synthetic_public_identity(0xa2))
+                    .with_relays(vec![primary_relay()]),
+            )
+            .expect("register connect-secret connection");
+
+        assert_eq!(backend_trait.list_connections().expect("list").len(), 1);
+        assert_eq!(
+            backend_trait
+                .get_connection(&connection.connection_id)
+                .expect("get connection")
+                .expect("stored connection")
+                .connection_id,
+            connection.connection_id
+        );
+        assert_eq!(
+            backend_trait
+                .find_connections_by_client_public_key(&connection.client_public_key)
+                .expect("find by client key")
+                .len(),
+            1
+        );
+        assert_eq!(
+            backend_trait
+                .find_connection_by_connect_secret("connect-secret-2")
+                .expect("find by secret")
+                .expect("stored by secret")
+                .connection_id,
+            connection.connection_id
+        );
+        let looked_up = expect_lookup_connection(
+            backend_trait
+                .lookup_session(&connection.client_public_key, Some("connect-secret-2"))
+                .expect("lookup session"),
+        );
+        assert_eq!(looked_up.connection_id, connection.connection_id);
+
+        let with_relays = backend_trait
+            .update_relays(
+                &connection.connection_id,
+                vec![primary_relay(), secondary_relay()],
+            )
+            .expect("update relays");
+        assert_eq!(with_relays.relays.len(), 2);
+
+        let evaluation = backend_trait
+            .evaluate_request(
+                &connection.connection_id,
+                RadrootsNostrConnectRequestMessage::new(
+                    "req-ping",
+                    RadrootsNostrConnectRequest::Ping,
+                ),
+            )
+            .expect("evaluate request");
+        assert!(matches!(
+            evaluation.action,
+            RadrootsNostrSignerRequestAction::Allowed { .. }
+        ));
+
+        let authenticated = backend_trait
+            .mark_authenticated(&connection.connection_id)
+            .expect("mark authenticated");
+        assert!(authenticated.last_authenticated_at_unix.is_some());
+
+        let pending_connection = backend_trait
+            .register_connection(
+                RadrootsNostrSignerConnectionDraft::new(
+                    synthetic_public_key(0xab),
+                    synthetic_public_identity(0xac),
+                )
+                .with_requested_permissions(
+                    vec![RadrootsNostrConnectPermission::new(
+                        RadrootsNostrConnectMethod::Ping,
+                    )]
+                    .into(),
+                )
+                .with_approval_requirement(RadrootsNostrSignerApprovalRequirement::ExplicitUser),
+            )
+            .expect("register pending connection");
+        let granted_permissions: radroots_nostr_connect::prelude::RadrootsNostrConnectPermissions =
+            vec![RadrootsNostrConnectPermission::new(
+                RadrootsNostrConnectMethod::Ping,
+            )]
+            .into();
+        let granted = backend_trait
+            .set_granted_permissions(
+                &pending_connection.connection_id,
+                granted_permissions.clone(),
+            )
+            .expect("set granted permissions");
+        assert_eq!(granted.connection_id, pending_connection.connection_id);
+
+        let approved = backend_trait
+            .approve_connection(&pending_connection.connection_id, granted_permissions)
+            .expect("approve connection");
+        assert_eq!(approved.status, RadrootsNostrSignerConnectionStatus::Active);
+
+        let begun = backend_trait
+            .begin_connect_secret_publish_finalization(&connection.connection_id)
+            .expect("begin connect workflow");
+        let workflow = begun.workflow().expect("begun workflow").clone();
+        assert!(begun.finalized_connection().is_none());
+        assert_eq!(
+            backend_trait
+                .list_publish_workflows()
+                .expect("list publish workflows")
+                .len(),
+            1
+        );
+        assert_eq!(
+            backend_trait
+                .get_publish_workflow(&workflow.workflow_id)
+                .expect("get publish workflow")
+                .expect("stored workflow")
+                .workflow_id,
+            workflow.workflow_id
+        );
+
+        let published = backend_trait
+            .mark_publish_workflow_published(&workflow.workflow_id)
+            .expect("mark publish workflow");
+        assert_eq!(
+            published
+                .workflow()
+                .expect("published workflow")
+                .workflow_id,
+            workflow.workflow_id
+        );
+
+        let finalized = backend_trait
+            .finalize_publish_workflow(&workflow.workflow_id)
+            .expect("finalize workflow");
+        assert!(finalized.workflow().is_none());
+        assert_eq!(
+            finalized
+                .finalized_connection()
+                .expect("finalized connection")
+                .connection_id,
+            connection.connection_id
+        );
+
+        let audit = backend_trait
+            .record_request(
+                &connection.connection_id,
+                "req-audit",
+                RadrootsNostrConnectMethod::Ping,
+                RadrootsNostrSignerRequestDecision::Allowed,
+                None,
+            )
+            .expect("record request");
+        assert_eq!(audit.connection_id, connection.connection_id);
+
+        let consumed_connection = backend_trait
+            .register_connection(
+                RadrootsNostrSignerConnectionDraft::new(
+                    synthetic_public_key(0xa3),
+                    synthetic_public_identity(0xa4),
+                )
+                .with_connect_secret("manual-secret"),
+            )
+            .expect("register consumed connection");
+        let consumed = backend_trait
+            .mark_connect_secret_consumed(&consumed_connection.connection_id)
+            .expect("mark connect secret consumed");
+        assert!(consumed.connect_secret_is_consumed());
+
+        let rejected = backend_trait
+            .register_connection(RadrootsNostrSignerConnectionDraft::new(
+                synthetic_public_key(0xa5),
+                synthetic_public_identity(0xa6),
+            ))
+            .expect("register rejected connection");
+        let rejected = backend_trait
+            .reject_connection(&rejected.connection_id, Some("rejected".into()))
+            .expect("reject connection");
+        assert_eq!(
+            rejected.status,
+            RadrootsNostrSignerConnectionStatus::Rejected
+        );
+
+        let auth_connection = backend_trait
+            .register_connection(
+                RadrootsNostrSignerConnectionDraft::new(
+                    synthetic_public_key(0xa7),
+                    synthetic_public_identity(0xa8),
+                )
+                .with_requested_permissions(
+                    vec![RadrootsNostrConnectPermission::new(
+                        RadrootsNostrConnectMethod::Ping,
+                    )]
+                    .into(),
+                ),
+            )
+            .expect("register auth connection");
+        backend_trait
+            .require_auth_challenge(
+                &auth_connection.connection_id,
+                "https://api.example.com/auth",
+            )
+            .expect("require auth challenge");
+        let pending = backend_trait
+            .set_pending_request(
+                &auth_connection.connection_id,
+                RadrootsNostrConnectRequestMessage::new(
+                    "req-auth-replay",
+                    RadrootsNostrConnectRequest::Ping,
+                ),
+            )
+            .expect("set pending request");
+        assert!(pending.pending_request.is_some());
+        let authorized = backend_trait
+            .authorize_auth_challenge(&auth_connection.connection_id)
+            .expect("authorize auth challenge");
+        let pending_request = authorized.pending_request.expect("pending request");
+        let restored = backend_trait
+            .restore_pending_auth_challenge(&auth_connection.connection_id, pending_request.clone())
+            .expect("restore pending auth challenge");
+        assert_eq!(restored.pending_request.as_ref(), Some(&pending_request));
+
+        let auth_workflow = backend_trait
+            .begin_auth_replay_publish_finalization(&auth_connection.connection_id)
+            .expect("begin auth replay")
+            .workflow()
+            .expect("auth replay workflow")
+            .clone();
+        let replay_evaluation = backend_trait
+            .evaluate_auth_replay_publish_workflow(&auth_workflow.workflow_id)
+            .expect("evaluate auth replay workflow");
+        assert_eq!(
+            replay_evaluation.connection.connection_id,
+            auth_connection.connection_id
+        );
+        let cancelled = backend_trait
+            .cancel_publish_workflow(&auth_workflow.workflow_id)
+            .expect("cancel auth workflow");
+        assert_eq!(
+            cancelled
+                .workflow()
+                .expect("cancelled workflow")
+                .workflow_id,
+            auth_workflow.workflow_id
+        );
+
+        let revoked = backend_trait
+            .revoke_connection(&auth_connection.connection_id, Some("revoked".into()))
+            .expect("revoke connection");
+        assert_eq!(revoked.status, RadrootsNostrSignerConnectionStatus::Revoked);
     }
 
     #[test]
@@ -854,5 +1213,91 @@ mod tests {
             cancelled,
             RadrootsNostrSignerPublishTransition::Cancelled(_)
         ));
+    }
+
+    #[test]
+    fn backend_capabilities_all_signers_supports_remote_only_and_identity_helpers() {
+        let remote = crate::capability::RadrootsNostrRemoteSessionSignerCapability::new(
+            crate::model::RadrootsNostrSignerConnectionId::new_v7(),
+            synthetic_public_identity(0xb0),
+            synthetic_public_identity(0xb1),
+        );
+        let capabilities = RadrootsNostrSignerBackendCapabilities::new(None, vec![remote.clone()]);
+
+        assert_eq!(
+            capabilities.all_signers(),
+            vec![crate::capability::RadrootsNostrSignerCapability::RemoteSession(remote)]
+        );
+
+        let valid_identity = synthetic_public_identity(0xb2);
+        assert!(same_public_identity_key(&valid_identity, &valid_identity));
+        assert_eq!(
+            parse_identity_public_key(&valid_identity).expect("valid public key"),
+            synthetic_public_key(0xb2)
+        );
+        let mut valid_identity_with_different_hex = valid_identity.clone();
+        valid_identity_with_different_hex.public_key_hex =
+            synthetic_public_identity(0xb3).public_key_hex;
+        assert!(!same_public_identity_key(
+            &valid_identity,
+            &valid_identity_with_different_hex
+        ));
+
+        let invalid_identity: RadrootsIdentityPublic = serde_json::from_value(json!({
+            "id": "not-a-public-key",
+            "public_key_hex": "not-a-public-key",
+            "public_key_npub": "npub1invalid"
+        }))
+        .expect("invalid identity payload");
+        let error = parse_identity_public_key(&invalid_identity)
+            .err()
+            .expect("invalid public identity");
+        assert!(error.to_string().contains("identity public key is invalid"));
+    }
+
+    #[test]
+    fn backend_test_helpers_reject_unexpected_variants() {
+        let connection = RadrootsNostrSignerConnectionRecord::new(
+            crate::model::RadrootsNostrSignerConnectionId::new_v7(),
+            synthetic_public_identity(0xb4),
+            RadrootsNostrSignerConnectionDraft::new(
+                synthetic_public_key(0xb5),
+                synthetic_public_identity(0xb6),
+            ),
+            1,
+        );
+        let workflow = RadrootsNostrSignerPublishWorkflowRecord::new_connect_secret_finalization(
+            connection.connection_id.clone(),
+            1,
+        );
+
+        assert!(
+            std::panic::catch_unwind(|| {
+                expect_registration_required(
+                    RadrootsNostrSignerConnectEvaluation::ExistingConnection(connection.clone()),
+                )
+            })
+            .is_err()
+        );
+        assert!(
+            std::panic::catch_unwind(|| {
+                expect_lookup_connection(RadrootsNostrSignerSessionLookup::None)
+            })
+            .is_err()
+        );
+        assert!(
+            std::panic::catch_unwind(|| {
+                expect_begun_workflow_id(RadrootsNostrSignerPublishTransition::cancelled(
+                    workflow.clone(),
+                ))
+            })
+            .is_err()
+        );
+        assert!(
+            std::panic::catch_unwind(|| {
+                expect_finalized_transition(RadrootsNostrSignerPublishTransition::begun(workflow))
+            })
+            .is_err()
+        );
     }
 }

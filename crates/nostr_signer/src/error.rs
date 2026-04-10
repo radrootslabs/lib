@@ -78,4 +78,20 @@ mod tests {
         let converted: RadrootsNostrSignerError = source.into();
         assert!(converted.to_string().starts_with("store error:"));
     }
+
+    #[test]
+    fn converts_serde_json_error() {
+        let source = serde_json::from_str::<serde_json::Value>("{not-json")
+            .err()
+            .expect("serde error");
+        let converted: RadrootsNostrSignerError = source.into();
+        assert!(converted.to_string().starts_with("store error:"));
+    }
+
+    #[cfg(feature = "native")]
+    #[test]
+    fn converts_sql_error() {
+        let converted: RadrootsNostrSignerError = radroots_sql_core::SqlError::Internal.into();
+        assert!(converted.to_string().starts_with("store error:"));
+    }
 }
