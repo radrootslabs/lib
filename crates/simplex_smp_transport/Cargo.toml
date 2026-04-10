@@ -3,9 +3,7 @@ name = "radroots_simplex_smp_transport"
 publish = false
 version = "0.1.0-alpha.1"
 edition.workspace = true
-authors = [
-  "Radroots Authors",
-]
+authors = ["Tyson Lupul <tyson@radroots.org>"]
 rust-version.workspace = true
 license.workspace = true
 description = "SimpleX SMP transport layer for Radroots"
