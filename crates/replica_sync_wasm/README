@@ -1,14 +1,25 @@
 # radroots_replica_sync_wasm
 
-Wasm bindings for replica synchronization interfaces in Rad Roots data layers.
+This is the README for `radroots_replica_sync_wasm`, which provides WebAssembly
+bindings for `radroots_replica_sync` in the `radroots` core libraries.
 
-## Goals
+## Overview
 
-- define stable wasm bindings for replica sync and ingest flows
-- keep request parsing and result marshaling deterministic in web runtimes
-- support integration with wasm SQL executor surfaces
-- provide reusable sync bridge primitives for higher-level Rad Roots crates
+ * wasm32 entry points for full sync and single-event ingest operations;
+ * integration with `WasmSqlExecutor` from `radroots_sql_core` for database
+   access;
+ * UUIDv7 id generation and JSON and base64 boundary handling for JavaScript
+   callers;
+ * a small target-specific wrapper around the Rust sync crate rather than a
+   separate sync engine.
 
-## License
+## Copyright
 
-Licensed under AGPL-3.0. See LICENSE.
+Except as otherwise noted, all files in the `radroots_replica_sync_wasm`
+distribution are
+
+ Copyright (c) 2025 Tyson Lupul
+
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see LICENSE included in the `radroots_replica_sync_wasm`
+distribution.
