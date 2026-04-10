@@ -1,0 +1,23 @@
+# radroots_simplex_chat_proto
+
+This is the README for `radroots_simplex_chat_proto`, which provides SimpleX
+chat protocol primitives for the `radroots` core libraries.
+
+## Overview
+
+ * encode and decode helpers for chat batches and versioned message payloads;
+ * message, contact, file, invite, status, scope, and link-preview model types;
+ * protocol version constants and compatibility helpers for chat exchanges;
+ * optional `zstd` compression support alongside shared serialization and
+   type-export features.
+
+## Copyright
+
+Except as otherwise noted, all files in the `radroots_simplex_chat_proto`
+distribution are
+
+ Copyright (c) 2025 Tyson Lupul
+
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see LICENSE included in the `radroots_simplex_chat_proto`
+distribution.
