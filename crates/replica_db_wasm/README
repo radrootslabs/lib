@@ -1,14 +1,25 @@
 # radroots_replica_db_wasm
 
-Wasm bindings for replica database runtime interfaces in Rad Roots data layers.
+This is the README for `radroots_replica_db_wasm`, which provides WebAssembly
+bindings for `radroots_replica_db` in the `radroots` core libraries.
 
-## Goals
+## Overview
 
-- define stable wasm bindings for replica CRUD, migration, backup, and export flows
-- keep export/import and manifest marshaling deterministic in web runtimes
-- support integration with wasm SQL executor surfaces
-- provide reusable data-layer wasm primitives for higher-level Rad Roots crates
+ * a wasm32-only wrapper around the replica database runtime surface;
+ * integration with `radroots_sql_wasm_core` for browser and worker SQL
+   execution;
+ * a small target-specific entry point layer rather than a separate database
+   implementation;
+ * intended for JavaScript-facing callers that need the replica database APIs
+   in wasm builds.
 
-## License
+## Copyright
 
-Licensed under AGPL-3.0. See LICENSE.
+Except as otherwise noted, all files in the `radroots_replica_db_wasm`
+distribution are
+
+ Copyright (c) 2025 Tyson Lupul
+
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see LICENSE included in the `radroots_replica_db_wasm`
+distribution.

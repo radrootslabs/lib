@@ -10,7 +10,7 @@ license.workspace = true
 description = "WASM boundary for Radroots replica database access"
 repository.workspace = true
 homepage.workspace = true
-readme.workspace = true
+readme = "README"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
