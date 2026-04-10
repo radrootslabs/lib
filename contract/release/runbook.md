@@ -2,7 +2,8 @@
 
 ## scope
 
-This runbook applies to the crates listed in `contract/release/publish-set.toml`.
+This runbook applies to the crates classified in the owning monorepo release policy at
+`contracts/release/mounted-rust-crates/publish-policy.toml`.
 
 ## preflight
 
@@ -22,12 +23,13 @@ The underlying source-repo preflight lane remains `./scripts/ci/release_prefligh
 
 ## release tag
 
-Create an annotated tag whose version matches `release.version` in `contract/release/publish-set.toml`.
+Create an annotated tag whose version matches `release.version` in
+`contracts/release/mounted-rust-crates/publish-policy.toml`.
 
 Recommended form:
 
 ```bash
-git tag -a "v$(awk -F '\"' '/^version = / { print $2; exit }' contract/release/publish-set.toml)" -m "release"
+git tag -a "v$(awk -F '\"' '/^version = / { print $2; exit }' ../../../../contracts/release/mounted-rust-crates/publish-policy.toml)" -m "release"
 ```
 
 ## publish simulation

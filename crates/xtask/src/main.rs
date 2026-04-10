@@ -259,6 +259,7 @@ resolver = "2"
             &root.join("crates").join("a").join("Cargo.toml"),
             r#"[package]
 name = "radroots_a"
+publish = ["crates-io"]
 version = "0.1.0"
 edition = "2024"
 description = "crate a"

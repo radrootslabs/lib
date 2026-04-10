@@ -64,8 +64,9 @@ Required Rust crates are gated at `100/100/100/100` (exec lines, functions, bran
 
 ## Release Policy
 
-Release crate set and publish order are defined in `contract/release/publish-set.toml`.
-Deterministic release workflow is defined in `contract/release/runbook.md`.
+Release crate classification and publish order are defined in the owning monorepo at
+`contracts/release/mounted-rust-crates/publish-policy.toml`.
+Deterministic release workflow is documented in `contract/release/runbook.md`.
 Release checklist is defined in `contract/release/checklist-0.1.0.md`.
 
 Primary commands:

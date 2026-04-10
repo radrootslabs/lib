@@ -171,7 +171,7 @@ Validation rules:
 
 Release discipline:
 
-- create annotated release tags that match `contract/release/publish-set.toml`
+- create annotated release tags that match the root release policy at `contracts/release/mounted-rust-crates/publish-policy.toml` in the owning monorepo
 - keep repo-owned release commands runnable without depending on GitHub-specific workflow files
 - when documenting release flow here, document the local repo contract rather than forge-specific orchestration
 

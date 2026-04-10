@@ -593,6 +593,7 @@ resolver = "2"
             &format!(
                 r#"[package]
 name = "radroots_a"
+publish = ["crates-io"]
 version = "0.1.0"
 edition = "2024"
 description = "crate a"

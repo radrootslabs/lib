@@ -3,8 +3,13 @@
 use crate::coverage::{CoverageThresholds, read_coverage_policy};
 use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet};
+use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
+
+const ROOT_RELEASE_POLICY_RELATIVE: &str =
+    "contracts/release/mounted-rust-crates/publish-policy.toml";
+const RELEASE_POLICY_ENV: &str = "RADROOTS_MOUNTED_RUST_CRATE_PUBLISH_POLICY";
 
 #[derive(Debug, Deserialize)]
 pub struct ContractManifest {
@@ -111,7 +116,7 @@ struct PackageSection {
     publish: Option<PackagePublish>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 #[serde(untagged)]
 enum PackagePublish {
     Bool(bool),
@@ -133,9 +138,27 @@ struct CoverageRequiredSection {
 #[derive(Debug, Deserialize)]
 struct ReleaseContractFile {
     release: ReleaseSection,
-    publish: ReleaseCrateSet,
-    internal: ReleaseCrateSet,
+    #[serde(default)]
+    classification: ReleaseClassification,
+    #[serde(default)]
+    publish: Option<ReleaseCrateSet>,
+    #[serde(default)]
+    internal: Option<ReleaseCrateSet>,
     publish_order: ReleaseCrateSet,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct ReleaseClassification {
+    #[serde(default)]
+    public: Vec<String>,
+    #[serde(default)]
+    internal: Vec<String>,
+    #[serde(default)]
+    deferred: Vec<String>,
+    #[serde(default)]
+    retired: Vec<String>,
+    #[serde(default)]
+    yank_only: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -146,6 +169,48 @@ struct ReleaseSection {
 #[derive(Debug, Deserialize)]
 struct ReleaseCrateSet {
     crates: Vec<String>,
+}
+
+impl ReleaseContractFile {
+    fn uses_classification(&self) -> bool {
+        !self.classification.public.is_empty()
+            || !self.classification.internal.is_empty()
+            || !self.classification.deferred.is_empty()
+            || !self.classification.retired.is_empty()
+            || !self.classification.yank_only.is_empty()
+    }
+
+    fn public_crates(&self) -> Vec<String> {
+        if self.uses_classification() {
+            return self.classification.public.clone();
+        }
+        self.publish
+            .as_ref()
+            .map(|set| set.crates.clone())
+            .unwrap_or_default()
+    }
+
+    fn internal_crates(&self) -> Vec<String> {
+        if self.uses_classification() {
+            return self.classification.internal.clone();
+        }
+        self.internal
+            .as_ref()
+            .map(|set| set.crates.clone())
+            .unwrap_or_default()
+    }
+
+    fn deferred_crates(&self) -> Vec<String> {
+        self.classification.deferred.clone()
+    }
+
+    fn retired_crates(&self) -> Vec<String> {
+        self.classification.retired.clone()
+    }
+
+    fn yank_only_crates(&self) -> Vec<String> {
+        self.classification.yank_only.clone()
+    }
 }
 
 fn parse_toml<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, String> {
@@ -169,6 +234,7 @@ struct WorkspacePackageRecord {
     #[cfg_attr(not(test), allow(dead_code))]
     manifest_path: PathBuf,
     publish_enabled: bool,
+    publish: Option<PackagePublish>,
     manifest_value: toml::Value,
 }
 
@@ -192,10 +258,12 @@ fn workspace_package_records(workspace_root: &Path) -> Result<Vec<WorkspacePacka
         };
         let name = package_manifest.package.name;
         let publish_enabled = package_publish_enabled(package_manifest.package.publish.as_ref());
+        let publish = package_manifest.package.publish.clone();
         records.push(WorkspacePackageRecord {
             name,
             manifest_path,
             publish_enabled,
+            publish,
             manifest_value,
         });
     }
@@ -229,8 +297,52 @@ fn load_coverage_policy(
     read_coverage_policy(&contract_root.join("coverage").join("policy.toml"))
 }
 
-fn load_release_contract(contract_root: &Path) -> Result<ReleaseContractFile, String> {
-    parse_toml::<ReleaseContractFile>(&contract_root.join("release").join("publish-set.toml"))
+fn legacy_release_contract_path(contract_root: &Path) -> PathBuf {
+    contract_root.join("release").join("publish-set.toml")
+}
+
+fn resolve_release_contract_path(
+    workspace_root: &Path,
+    contract_root: &Path,
+) -> Result<Option<PathBuf>, String> {
+    if let Some(raw) = env::var_os(RELEASE_POLICY_ENV) {
+        let path = PathBuf::from(raw);
+        if !path.is_file() {
+            return Err(format!(
+                "{RELEASE_POLICY_ENV} points to a missing release policy file: {}",
+                path.display()
+            ));
+        }
+        return Ok(Some(path));
+    }
+
+    for ancestor in workspace_root.ancestors() {
+        let candidate = ancestor.join(ROOT_RELEASE_POLICY_RELATIVE);
+        if candidate.is_file() {
+            return Ok(Some(candidate));
+        }
+    }
+
+    let legacy = legacy_release_contract_path(contract_root);
+    if legacy.is_file() {
+        return Ok(Some(legacy));
+    }
+
+    Ok(None)
+}
+
+fn load_release_contract(
+    workspace_root: &Path,
+    contract_root: &Path,
+) -> Result<ReleaseContractFile, String> {
+    let path = resolve_release_contract_path(workspace_root, contract_root)?.ok_or_else(|| {
+        format!(
+            "release publish policy not found; expected {} or legacy {}",
+            ROOT_RELEASE_POLICY_RELATIVE,
+            legacy_release_contract_path(contract_root).display()
+        )
+    })?;
+    parse_toml::<ReleaseContractFile>(&path)
 }
 
 fn package_publish_enabled(publish: Option<&PackagePublish>) -> bool {
@@ -241,6 +353,7 @@ fn package_publish_enabled(publish: Option<&PackagePublish>) -> bool {
     }
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn workspace_package_publish_flags(
     workspace_root: &Path,
 ) -> Result<BTreeMap<String, bool>, String> {
@@ -254,6 +367,21 @@ fn workspace_package_publish_flags(
         }
     }
     Ok(flags)
+}
+
+fn workspace_package_publish_configs(
+    workspace_root: &Path,
+) -> Result<BTreeMap<String, Option<PackagePublish>>, String> {
+    let mut configs = BTreeMap::new();
+    for record in workspace_package_records(workspace_root)? {
+        if configs
+            .insert(record.name.clone(), record.publish.clone())
+            .is_some()
+        {
+            return Err(format!("duplicate workspace package name {}", record.name));
+        }
+    }
+    Ok(configs)
 }
 
 fn read_workspace_package_dependencies(
@@ -592,12 +720,24 @@ fn validate_coverage_policy_parity(
     Ok(())
 }
 
+fn publish_config_is_public(publish: Option<&PackagePublish>) -> bool {
+    matches!(
+        publish,
+        Some(PackagePublish::Registries(registries))
+            if registries.len() == 1 && registries[0] == "crates-io"
+    )
+}
+
+fn publish_config_is_non_public(publish: Option<&PackagePublish>) -> bool {
+    matches!(publish, Some(PackagePublish::Bool(false)))
+}
+
 fn validate_release_publish_policy(
     workspace_root: &Path,
     contract_root: &Path,
     contract_version: &str,
 ) -> Result<(), String> {
-    let release = load_release_contract(contract_root)?;
+    let release = load_release_contract(workspace_root, contract_root)?;
     if release.release.version.trim().is_empty() {
         return Err("release.version must not be empty".to_string());
     }
@@ -611,26 +751,57 @@ fn validate_release_publish_policy(
     let workspace_packages = workspace_package_names(workspace_root)?
         .into_iter()
         .collect::<BTreeSet<_>>();
-    let publish_set = collect_unique_set(&release.publish.crates, "publish.crates")?;
-    let internal_set = collect_unique_set(&release.internal.crates, "internal.crates")?;
+    let uses_classification = release.uses_classification();
+    let public_field = if uses_classification {
+        "classification.public"
+    } else {
+        "publish.crates"
+    };
+    let internal_field = if uses_classification {
+        "classification.internal"
+    } else {
+        "internal.crates"
+    };
+
+    let public_set = collect_unique_set(&release.public_crates(), public_field)?;
+    let internal_set = collect_unique_set(&release.internal_crates(), internal_field)?;
+    let deferred_set = collect_unique_set(&release.deferred_crates(), "classification.deferred")?;
+    let retired_set = collect_unique_set(&release.retired_crates(), "classification.retired")?;
+    let yank_only_set =
+        collect_unique_set(&release.yank_only_crates(), "classification.yank_only")?;
     let publish_order = &release.publish_order.crates;
     let publish_order_set = collect_unique_set(publish_order, "publish_order.crates")?;
 
-    let overlap = publish_set
-        .intersection(&internal_set)
-        .cloned()
-        .collect::<BTreeSet<_>>();
-    if !overlap.is_empty() {
-        return Err(format!(
-            "release publish/internal overlap is not allowed: {}",
-            join_set(&overlap)
-        ));
+    let class_sets = [
+        ("public", &public_set),
+        ("internal", &internal_set),
+        ("deferred", &deferred_set),
+        ("retired", &retired_set),
+        ("yank-only", &yank_only_set),
+    ];
+    for idx in 0..class_sets.len() {
+        for other_idx in (idx + 1)..class_sets.len() {
+            let overlap = class_sets[idx]
+                .1
+                .intersection(class_sets[other_idx].1)
+                .cloned()
+                .collect::<BTreeSet<_>>();
+            if !overlap.is_empty() {
+                return Err(format!(
+                    "release classification overlap is not allowed between {} and {}: {}",
+                    class_sets[idx].0,
+                    class_sets[other_idx].0,
+                    join_set(&overlap)
+                ));
+            }
+        }
     }
 
-    let combined = publish_set
-        .union(&internal_set)
-        .cloned()
-        .collect::<BTreeSet<_>>();
+    let mut combined = public_set.clone();
+    combined.extend(internal_set.iter().cloned());
+    combined.extend(deferred_set.iter().cloned());
+    combined.extend(retired_set.iter().cloned());
+    combined.extend(yank_only_set.iter().cloned());
     if combined != workspace_packages {
         let missing = workspace_packages
             .difference(&combined)
@@ -641,19 +812,19 @@ fn validate_release_publish_policy(
             .cloned()
             .collect::<BTreeSet<_>>();
         return Err(format!(
-            "release publish/internal sets are missing workspace crates: {}; release publish/internal sets include unknown crates: {}",
+            "release classification sets are missing workspace crates: {}; release classification sets include unknown crates: {}",
             join_set(&missing),
             join_set(&extra)
         ));
     }
 
-    if publish_order_set != publish_set {
-        let missing = publish_set
+    if publish_order_set != public_set {
+        let missing = public_set
             .difference(&publish_order_set)
             .cloned()
             .collect::<BTreeSet<_>>();
         let extra = publish_order_set
-            .difference(&publish_set)
+            .difference(&public_set)
             .cloned()
             .collect::<BTreeSet<_>>();
         return Err(format!(
@@ -670,11 +841,11 @@ fn validate_release_publish_policy(
         .collect::<BTreeMap<_, _>>();
     let dependencies = read_workspace_package_dependencies(workspace_root)
         .expect("workspace package manifests were already parsed");
-    for crate_name in &publish_set {
+    for crate_name in &public_set {
         let crate_deps = &dependencies[crate_name];
         let crate_order = order_index[crate_name];
         for dep in crate_deps {
-            if !publish_set.contains(dep) {
+            if !public_set.contains(dep) {
                 continue;
             }
             let dep_order = order_index[dep];
@@ -687,22 +858,27 @@ fn validate_release_publish_policy(
         }
     }
 
-    let publish_flags = workspace_package_publish_flags(workspace_root)
-        .expect("workspace publish flags are stable");
-    for crate_name in &publish_set {
-        let flag = publish_flags[crate_name];
-        if !flag {
+    let publish_configs = workspace_package_publish_configs(workspace_root)
+        .expect("workspace publish configs are stable");
+    for crate_name in &public_set {
+        let publish = publish_configs[crate_name].as_ref();
+        if !publish_config_is_public(publish) {
             return Err(format!(
-                "publish crate {} must not set publish = false",
+                "public crate {} must set publish = [\"crates-io\"]",
                 crate_name
             ));
         }
     }
-    for crate_name in &internal_set {
-        let flag = publish_flags[crate_name];
-        if flag {
+    for crate_name in internal_set
+        .iter()
+        .chain(deferred_set.iter())
+        .chain(retired_set.iter())
+        .chain(yank_only_set.iter())
+    {
+        let publish = publish_configs[crate_name].as_ref();
+        if !publish_config_is_non_public(publish) {
             return Err(format!(
-                "internal crate {} must set publish = false",
+                "non-public crate {} must set publish = false",
                 crate_name
             ));
         }
@@ -714,12 +890,17 @@ fn validate_release_publish_policy(
 pub fn validate_release_preflight(workspace_root: &Path) -> Result<(), String> {
     let bundle = load_contract_bundle(workspace_root)?;
     validate_contract_bundle(&bundle)?;
-    let release =
-        load_release_contract(&bundle.root).expect("validated contract includes release metadata");
-    let policy =
-        load_coverage_policy(&bundle.root).expect("validated contract includes coverage metadata");
-    let publish_crates = collect_unique_set(&release.publish.crates, "publish.crates")
-        .expect("validated contract enforces unique publish.crates");
+    let release = load_release_contract(workspace_root, &bundle.root)?;
+    let policy = load_coverage_policy(&bundle.root)?;
+    let publish_crates = collect_unique_set(
+        &release.public_crates(),
+        if release.uses_classification() {
+            "classification.public"
+        } else {
+            "publish.crates"
+        },
+    )
+    .expect("validated contract enforces unique public crates");
     let required_crate_list = policy
         .required_crates()
         .expect("validated contract includes required crates");
@@ -854,11 +1035,13 @@ pub fn validate_contract_bundle(bundle: &ContractBundle) -> Result<(), String> {
         .expect("contract root must have a workspace parent");
     validate_core_unit_dimension_variant_order(workspace_root)?;
     validate_coverage_policy_parity(workspace_root, &bundle.root)?;
-    validate_release_publish_policy(
-        workspace_root,
-        &bundle.root,
-        bundle.version.contract.version.as_str(),
-    )?;
+    if resolve_release_contract_path(workspace_root, &bundle.root)?.is_some() {
+        validate_release_publish_policy(
+            workspace_root,
+            &bundle.root,
+            bundle.version.contract.version.as_str(),
+        )?;
+    }
     Ok(())
 }
 
@@ -916,6 +1099,7 @@ resolver = "2"
             &root.join("crates").join("a").join("Cargo.toml"),
             r#"[package]
 name = "radroots_a"
+publish = ["crates-io"]
 version = "0.1.0"
 edition = "2024"
 description = "crate a"
@@ -1726,6 +1910,7 @@ crates = ["radroots_a", "radroots_b"]
             &root.join("crates").join("a").join("Cargo.toml"),
             r#"[package]
 name = "radroots_a"
+publish = ["crates-io"]
 version = "0.1.0"
 edition = "2024"
 description = "crate a"
@@ -1823,12 +2008,13 @@ crates = ["radroots_a"]
         );
         let publish_flag = validate_release_publish_policy(&root, &contract_root, "1.0.0")
             .expect_err("publish crate must be publishable");
-        assert!(publish_flag.contains("must not set publish = false"));
+        assert!(publish_flag.contains("must set publish = [\"crates-io\"]"));
 
         write_file(
             &root.join("crates").join("a").join("Cargo.toml"),
             r#"[package]
 name = "radroots_a"
+publish = ["crates-io"]
 version = "0.1.0"
 edition = "2024"
 description = "crate a"
@@ -1848,7 +2034,7 @@ edition = "2024"
         );
         let internal_flag = validate_release_publish_policy(&root, &contract_root, "1.0.0")
             .expect_err("internal crate must be non-publishable");
-        assert!(internal_flag.contains("must set publish = false"));
+        assert!(internal_flag.contains("non-public crate"));
 
         let _ = fs::remove_dir_all(root);
     }
@@ -2373,6 +2559,7 @@ crates = ["radroots_a"]
             &publish_metadata.join("crates").join("a").join("Cargo.toml"),
             r#"[package]
 name = "radroots_a"
+publish = ["crates-io"]
 version = "0.1.0"
 edition = "2024"
 "#,
