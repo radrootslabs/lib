@@ -20,7 +20,6 @@ let
         ../Cargo.lock
         ../Makefile
         ../README.md
-        ../publish-crates.sh
         ../rust-toolchain.toml
         ../conformance
         ../contract

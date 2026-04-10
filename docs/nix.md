@@ -88,8 +88,6 @@ nix run .#coverage-report
 nix run .#wasm-builds
 nix run .#release-preflight
 nix run .#validate-sdk-typescript -- ./sdk-typescript
-nix run .#publish-dry-run
-nix run .#publish-crates -- --dry-run
 ```
 
 `nix flake check` is intentionally limited to pure surfaces:
@@ -121,7 +119,6 @@ nix run .#release-preflight
 
 - Flakes only see tracked files when the source is treated as a git checkout. If Nix appears to miss a new file, `git add` it first.
 - Do not put secrets in `flake.nix`.
-- `publish-crates.sh` reads `CARGO_REGISTRY_TOKEN` or `CRATES_IO_TOKEN` from your runtime environment.
 
 ## Deferred Infrastructure
 

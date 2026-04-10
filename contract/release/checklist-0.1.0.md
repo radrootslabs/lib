@@ -4,8 +4,8 @@
 - [ ] run `cargo check -q`
 - [ ] run `cargo test -q -p xtask`
 - [ ] run `./scripts/ci/release_preflight.sh`
-- [ ] run `./scripts/ci/release_publish_order.sh dry-run`
+- [ ] run `scripts/release/rr-rs-preflight.sh <release-tag> [crate-list]` from the owning monorepo
 - [ ] confirm crates.io owner and token access for the publish account
-- [ ] run `./scripts/ci/release_publish_order.sh publish`
+- [ ] run `scripts/release/rr-rs-publish.sh <release-tag> [crate-list]` from the owning monorepo
 - [ ] verify all publish-set crates are visible on crates.io at the configured release version
 - [ ] tag release in git and publish release notes

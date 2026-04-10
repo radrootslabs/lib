@@ -73,7 +73,7 @@ Primary commands:
 - `cargo run -q -p xtask -- sdk validate`
 - `cargo run -q -p xtask -- sdk release preflight`
 - `./scripts/ci/release_preflight.sh`
-- `./scripts/ci/release_publish_order.sh dry-run`
+- `scripts/release/rr-rs-preflight.sh <release-tag> [crate-list]` from the owning monorepo
 
 ## License
 

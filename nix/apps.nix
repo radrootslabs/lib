@@ -98,28 +98,6 @@ in
     '';
   };
 
-  publish-crates = mkRepoApp {
-    name = "publish-crates";
-    description = "Publish crates through the workspace release script";
-    runtimeInputs = [
-      pkgs.nix
-    ];
-    command = coverageShellExec ''./publish-crates.sh "$@"'';
-    env = common.exportCoverageEnv;
-    pathPrefix = coveragePath;
-  };
-
-  publish-dry-run = mkRepoApp {
-    name = "publish-dry-run";
-    description = "Run a dry-run crates publish through the workspace release script";
-    runtimeInputs = [
-      pkgs.nix
-    ];
-    command = coverageShellExec ''./publish-crates.sh --dry-run "$@"'';
-    env = common.exportCoverageEnv;
-    pathPrefix = coveragePath;
-  };
-
   release-preflight = mkRepoApp {
     name = "release-preflight";
     description = "Run release coverage refresh and preflight validation";
