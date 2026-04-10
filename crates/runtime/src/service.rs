@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-#[cfg(any(feature = "cli", test))]
+#[cfg(feature = "cli")]
 use std::path::PathBuf;
 
 #[cfg(feature = "cli")]
