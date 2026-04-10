@@ -1,14 +1,22 @@
 # radroots_identity
 
-Identity models and profile primitives for the Rad Roots SDK.
+This is the README for `radroots_identity`, which provides identity models and
+profile utilities for the `radroots` core libraries.
 
-## Goals
+## Overview
 
-- define stable identity interfaces for keys, profiles, and public projections
-- keep identity loading and serialization behavior deterministic across targets
-- support feature-gated secret handling and zeroization for secure runtimes
-- provide reusable identity primitives for higher-level Rad Roots crates
+ * public and private identity, profile, file, and identifier types;
+ * username validation, normalization, and parser helpers;
+ * default identity path constants and JSON file support behind feature flags;
+ * optional NIP-49, `secrecy`, `zeroize`, and `ts-rs` support for protected key
+   material and shared model export.
 
-## License
+## Copyright
 
-Licensed under AGPL-3.0. See LICENSE.
+Except as otherwise noted, all files in the `radroots_identity` distribution
+are
+
+ Copyright (c) 2025 Tyson Lupul
+
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see LICENSE included in the `radroots_identity` distribution.
