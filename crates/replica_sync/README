@@ -1,14 +1,25 @@
 # radroots_replica_sync
 
-Replica event ingest and synchronization interfaces for Rad Roots data layers.
+This is the README for `radroots_replica_sync`, which provides replica ingest
+and synchronization interfaces for the `radroots` core libraries.
 
-## Goals
+## Overview
 
-- define stable interfaces for event ingest, emit, and sync status
-- keep ingest and bundle assembly behavior deterministic across targets
-- support canonical transfer payloads for replica synchronization flows
-- provide reusable synchronization primitives for higher-level Rad Roots crates
+ * typed request, bundle, selector, and transfer-version models for replica
+   sync flows;
+ * event-emission helpers that materialize replica-facing events from local
+   state;
+ * ingest helpers, outcomes, and id-factory abstractions for applying incoming
+   events;
+ * a `std` feature that adds default id generation and higher-level ingest
+   entry points.
 
-## License
+## Copyright
 
-Licensed under AGPL-3.0. See LICENSE.
+Except as otherwise noted, all files in the `radroots_replica_sync`
+distribution are
+
+ Copyright (c) 2025 Tyson Lupul
+
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see LICENSE included in the `radroots_replica_sync` distribution.
