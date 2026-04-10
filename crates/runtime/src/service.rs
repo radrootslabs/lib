@@ -125,4 +125,25 @@ logs_dir = "logs"
             )
         );
     }
+
+    #[test]
+    fn service_bootstrap_paths_reject_invalid_runtime_ids() {
+        let resolver = RadrootsPathResolver::new(
+            RadrootsPlatform::Linux,
+            RadrootsHostEnvironment {
+                home_dir: Some(PathBuf::from("/home/treesap")),
+                ..RadrootsHostEnvironment::default()
+            },
+        );
+
+        let err = service_bootstrap_paths_for(
+            &resolver,
+            RadrootsPathProfile::InteractiveUser,
+            &RadrootsPathOverrides::default(),
+            "",
+        )
+        .expect_err("empty runtime ids must fail");
+
+        assert!(!err.to_string().is_empty());
+    }
 }
