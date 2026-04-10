@@ -240,7 +240,10 @@ mod tests {
         parse_trade_prev_tag, parse_trade_root_tag, push_trade_chain_tags, trade_envelope_tags,
         validate_trade_chain,
     };
-    use crate::error::EventEncodeError;
+    use crate::{
+        error::{EventEncodeError, EventParseError},
+        job::error::JobParseError,
+    };
     use radroots_events::{
         RadrootsNostrEventPtr,
         kinds::KIND_LISTING,
@@ -250,8 +253,15 @@ mod tests {
     #[test]
     fn trade_envelope_tags_build_expected_tags() {
         let listing_addr = format!("{KIND_LISTING}:pubkey:AAAAAAAAAAAAAAAAAAAAAg");
-        let tags = trade_envelope_tags("pubkey", &listing_addr, Some("order-1"), None, None, None)
-            .expect("trade tags");
+        let tags = trade_envelope_tags(
+            "pubkey",
+            listing_addr.as_str(),
+            Some("order-1"),
+            None,
+            None,
+            None,
+        )
+        .expect("trade tags");
         let expected: Vec<Vec<String>> = vec![
             vec![String::from("p"), String::from("pubkey")],
             vec![String::from("a"), listing_addr],
@@ -265,7 +275,7 @@ mod tests {
         let listing_addr = format!("{KIND_LISTING}:pubkey:AAAAAAAAAAAAAAAAAAAAAg");
         let tags = trade_envelope_tags(
             "buyer",
-            &listing_addr,
+            listing_addr.as_str(),
             Some("order-1"),
             Some(&RadrootsNostrEventPtr {
                 id: "listing-snapshot".into(),
@@ -300,7 +310,7 @@ mod tests {
         let listing_addr = format!("{KIND_LISTING}:pubkey:AAAAAAAAAAAAAAAAAAAAAg");
         let tags = trade_envelope_tags(
             "buyer",
-            &listing_addr,
+            listing_addr.as_str(),
             None::<&str>,
             Some(&RadrootsNostrEventPtr {
                 id: "listing-snapshot".into(),
@@ -325,10 +335,62 @@ mod tests {
     }
 
     #[test]
+    fn trade_envelope_tags_accept_str_listing_address() {
+        let listing_addr = format!("{KIND_LISTING}:pubkey:AAAAAAAAAAAAAAAAAAAAAg");
+        let tags = trade_envelope_tags(
+            "buyer",
+            listing_addr.as_str(),
+            Some("order-1"),
+            None::<&RadrootsNostrEventPtr>,
+            Some("root-event"),
+            Some("prev-event"),
+        )
+        .expect("trade tags with str listing address");
+        assert_eq!(
+            tags,
+            vec![
+                vec![String::from("p"), String::from("buyer")],
+                vec![String::from("a"), listing_addr],
+                vec![String::from(TAG_D), String::from("order-1")],
+                vec![String::from(TAG_E_ROOT), String::from("root-event")],
+                vec![String::from(TAG_E_PREV), String::from("prev-event")],
+            ]
+        );
+    }
+
+    #[test]
+    fn trade_envelope_tags_accept_str_listing_address_with_snapshot_only() {
+        let listing_addr = format!("{KIND_LISTING}:pubkey:AAAAAAAAAAAAAAAAAAAAAg");
+        let tags = trade_envelope_tags(
+            "buyer",
+            listing_addr.as_str(),
+            None::<&str>,
+            Some(&RadrootsNostrEventPtr {
+                id: "listing-snapshot".into(),
+                relays: None,
+            }),
+            None,
+            None,
+        )
+        .expect("trade tags with str listing address and snapshot only");
+        assert_eq!(
+            tags,
+            vec![
+                vec![String::from("p"), String::from("buyer")],
+                vec![String::from("a"), listing_addr],
+                vec![
+                    String::from(TAG_LISTING_EVENT),
+                    String::from("listing-snapshot"),
+                ],
+            ]
+        );
+    }
+
+    #[test]
     fn trade_envelope_tags_reject_empty_required_fields() {
         let listing_addr = format!("{KIND_LISTING}:pubkey:AAAAAAAAAAAAAAAAAAAAAg");
 
-        let err = trade_envelope_tags(" ", &listing_addr, None::<&str>, None, None, None)
+        let err = trade_envelope_tags(" ", listing_addr.as_str(), None::<&str>, None, None, None)
             .expect_err("blank recipient");
         assert!(matches!(
             err,
@@ -342,7 +404,7 @@ mod tests {
             EventEncodeError::EmptyRequiredField("listing_addr")
         ));
 
-        let err = trade_envelope_tags("buyer", &listing_addr, Some(" "), None, None, None)
+        let err = trade_envelope_tags("buyer", listing_addr.as_str(), Some(" "), None, None, None)
             .expect_err("blank order id");
         assert!(matches!(
             err,
@@ -351,7 +413,7 @@ mod tests {
 
         let err = trade_envelope_tags(
             "buyer",
-            &listing_addr,
+            listing_addr.as_str(),
             None::<&str>,
             Some(&RadrootsNostrEventPtr {
                 id: " ".into(),
@@ -368,7 +430,7 @@ mod tests {
 
         let err = trade_envelope_tags(
             "buyer",
-            &listing_addr,
+            listing_addr.as_str(),
             None::<&str>,
             Some(&RadrootsNostrEventPtr {
                 id: "listing-snapshot".into(),
@@ -383,15 +445,29 @@ mod tests {
             EventEncodeError::EmptyRequiredField("listing_event.relays")
         ));
 
-        let err = trade_envelope_tags("buyer", &listing_addr, None::<&str>, None, Some(" "), None)
-            .expect_err("blank root event id");
+        let err = trade_envelope_tags(
+            "buyer",
+            listing_addr.as_str(),
+            None::<&str>,
+            None,
+            Some(" "),
+            None,
+        )
+        .expect_err("blank root event id");
         assert!(matches!(
             err,
             EventEncodeError::EmptyRequiredField("root_event_id")
         ));
 
-        let err = trade_envelope_tags("buyer", &listing_addr, None::<&str>, None, None, Some(" "))
-            .expect_err("blank prev event id");
+        let err = trade_envelope_tags(
+            "buyer",
+            listing_addr.as_str(),
+            None::<&str>,
+            None,
+            None,
+            Some(" "),
+        )
+        .expect_err("blank prev event id");
         assert!(matches!(
             err,
             EventEncodeError::EmptyRequiredField("prev_event_id")
@@ -432,6 +508,77 @@ mod tests {
     }
 
     #[test]
+    fn trade_envelope_tag_parsers_cover_missing_and_invalid_context() {
+        assert_eq!(
+            parse_trade_listing_event_tag(&[]).expect("no snapshot"),
+            None
+        );
+        assert_eq!(parse_trade_root_tag(&[]).expect("no root"), None);
+        assert_eq!(parse_trade_prev_tag(&[]).expect("no prev"), None);
+
+        assert!(matches!(
+            parse_trade_counterparty_tag(&[]),
+            Err(EventParseError::MissingTag("p"))
+        ));
+        assert!(matches!(
+            parse_trade_counterparty_tag(&[vec![String::from("p")]]),
+            Err(EventParseError::InvalidTag("p"))
+        ));
+        assert!(matches!(
+            parse_trade_counterparty_tag(&[vec![String::from("p"), String::from(" ")]]),
+            Err(EventParseError::InvalidTag("p"))
+        ));
+
+        assert!(matches!(
+            parse_trade_listing_event_tag(&[vec![String::from(TAG_LISTING_EVENT)]]),
+            Err(EventParseError::InvalidTag(TAG_LISTING_EVENT))
+        ));
+        assert!(matches!(
+            parse_trade_listing_event_tag(&[vec![
+                String::from(TAG_LISTING_EVENT),
+                String::from(" "),
+            ]]),
+            Err(EventParseError::InvalidTag(TAG_LISTING_EVENT))
+        ));
+        assert!(matches!(
+            parse_trade_listing_event_tag(&[vec![
+                String::from(TAG_LISTING_EVENT),
+                String::from("snapshot"),
+                String::from(" "),
+            ]]),
+            Err(EventParseError::InvalidTag(TAG_LISTING_EVENT))
+        ));
+        assert_eq!(
+            parse_trade_listing_event_tag(&[vec![
+                String::from(TAG_LISTING_EVENT),
+                String::from("snapshot"),
+            ]])
+            .expect("snapshot without relay"),
+            Some(RadrootsNostrEventPtr {
+                id: "snapshot".into(),
+                relays: None,
+            })
+        );
+
+        assert!(matches!(
+            parse_trade_root_tag(&[vec![String::from(TAG_E_ROOT)]]),
+            Err(EventParseError::InvalidTag(TAG_E_ROOT))
+        ));
+        assert!(matches!(
+            parse_trade_root_tag(&[vec![String::from(TAG_E_ROOT), String::from(" ")]]),
+            Err(EventParseError::InvalidTag(TAG_E_ROOT))
+        ));
+        assert!(matches!(
+            parse_trade_prev_tag(&[vec![String::from(TAG_E_PREV)]]),
+            Err(EventParseError::InvalidTag(TAG_E_PREV))
+        ));
+        assert!(matches!(
+            parse_trade_prev_tag(&[vec![String::from(TAG_E_PREV), String::from(" ")]]),
+            Err(EventParseError::InvalidTag(TAG_E_PREV))
+        ));
+    }
+
+    #[test]
     fn push_trade_chain_tags_adds_root_prev_and_trade_id() {
         let mut tags = Vec::new();
         push_trade_chain_tags(&mut tags, "root", Some("prev"), Some("trade"));
@@ -446,6 +593,16 @@ mod tests {
     }
 
     #[test]
+    fn push_trade_chain_tags_supports_root_only() {
+        let mut tags = Vec::new();
+        push_trade_chain_tags(&mut tags, "root", None::<&str>, None::<&str>);
+        assert_eq!(
+            tags,
+            vec![vec![String::from(TAG_E_ROOT), String::from("root")]]
+        );
+    }
+
+    #[test]
     fn validate_trade_chain_requires_root_and_trade_id() {
         let ok = vec![
             vec![String::from(TAG_E_ROOT), String::from("root")],
@@ -454,5 +611,61 @@ mod tests {
         assert!(validate_trade_chain(&ok).is_ok());
         let missing = vec![vec![String::from(TAG_D), String::from("trade")]];
         assert!(validate_trade_chain(&missing).is_err());
+    }
+
+    #[test]
+    fn validate_trade_chain_rejects_invalid_tag_shapes_and_missing_trade_id() {
+        let root_only = vec![vec![String::from(TAG_E_ROOT), String::from("root")]];
+        assert!(matches!(
+            validate_trade_chain(&root_only),
+            Err(JobParseError::MissingChainTag(TAG_D))
+        ));
+
+        let invalid_root_shape = vec![vec![String::from(TAG_E_ROOT)]];
+        assert!(matches!(
+            validate_trade_chain(&invalid_root_shape),
+            Err(JobParseError::InvalidTag(TAG_E_ROOT))
+        ));
+
+        let invalid_root_value = vec![
+            vec![String::from(TAG_E_ROOT), String::from(" ")],
+            vec![String::from(TAG_D), String::from("trade")],
+        ];
+        assert!(matches!(
+            validate_trade_chain(&invalid_root_value),
+            Err(JobParseError::InvalidTag(TAG_E_ROOT))
+        ));
+
+        let invalid_trade_shape = vec![
+            vec![String::from(TAG_E_ROOT), String::from("root")],
+            vec![String::from(TAG_D)],
+        ];
+        assert!(matches!(
+            validate_trade_chain(&invalid_trade_shape),
+            Err(JobParseError::InvalidTag(TAG_D))
+        ));
+
+        let invalid_trade_value = vec![
+            vec![String::from(TAG_E_ROOT), String::from("root")],
+            vec![String::from(TAG_D), String::from(" ")],
+        ];
+        assert!(matches!(
+            validate_trade_chain(&invalid_trade_value),
+            Err(JobParseError::InvalidTag(TAG_D))
+        ));
+
+        let with_unrelated_tag = vec![
+            vec![String::from("x"), String::from("ignored")],
+            vec![String::from(TAG_E_ROOT), String::from("root")],
+            vec![String::from(TAG_D), String::from("trade")],
+        ];
+        assert!(validate_trade_chain(&with_unrelated_tag).is_ok());
+
+        let with_singleton_unrelated_tag = vec![
+            vec![String::from("x")],
+            vec![String::from(TAG_E_ROOT), String::from("root")],
+            vec![String::from(TAG_D), String::from("trade")],
+        ];
+        assert!(validate_trade_chain(&with_singleton_unrelated_tag).is_ok());
     }
 }
