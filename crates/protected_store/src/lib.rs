@@ -60,47 +60,61 @@ struct RadrootsProtectedStoreAad<'a> {
 }
 
 impl RadrootsProtectedStoreEnvelope {
-    pub fn seal_with_wrapped_key<V>(
+    #[inline(always)]
+    pub fn seal_with_wrapped_key<V: RadrootsSecretKeyWrapping>(
         vault: &V,
         key_slot: &str,
         plaintext: &[u8],
-    ) -> Result<Self, RadrootsProtectedStoreError>
-    where
-        V: RadrootsSecretKeyWrapping,
-    {
-        Self::seal_with_wrapped_key_with_entropy(vault, key_slot, plaintext, fill_random_bytes)
+    ) -> Result<Self, RadrootsProtectedStoreError> {
+        Self::seal_with_wrapped_key_internal(vault, key_slot, plaintext)
     }
 
-    fn seal_with_wrapped_key_with_entropy<V, F>(
+    #[inline(always)]
+    fn seal_with_wrapped_key_internal<V: RadrootsSecretKeyWrapping>(
         vault: &V,
         key_slot: &str,
         plaintext: &[u8],
-        mut fill_entropy: F,
-    ) -> Result<Self, RadrootsProtectedStoreError>
-    where
-        V: RadrootsSecretKeyWrapping,
-        F: FnMut(&mut [u8]) -> Result<(), RadrootsProtectedStoreError>,
-    {
+    ) -> Result<Self, RadrootsProtectedStoreError> {
         let mut store_key = [0_u8; RADROOTS_PROTECTED_STORE_KEY_LENGTH];
         let mut nonce = [0_u8; RADROOTS_PROTECTED_STORE_NONCE_LENGTH];
-        fill_entropy(&mut store_key)?;
-        fill_entropy(&mut nonce)?;
+        fill_random_bytes(&mut store_key)?;
+        fill_random_bytes(&mut nonce)?;
+        Self::seal_with_generated_material(vault, key_slot, plaintext, store_key, nonce)
+    }
+
+    fn seal_with_generated_material<V: RadrootsSecretKeyWrapping>(
+        vault: &V,
+        key_slot: &str,
+        plaintext: &[u8],
+        mut store_key: [u8; RADROOTS_PROTECTED_STORE_KEY_LENGTH],
+        nonce: [u8; RADROOTS_PROTECTED_STORE_NONCE_LENGTH],
+    ) -> Result<Self, RadrootsProtectedStoreError> {
         let result =
             Self::seal_with_wrapped_key_and_material(vault, key_slot, plaintext, store_key, nonce);
         store_key.zeroize();
         result
     }
 
-    pub fn seal_with_wrapped_key_and_material<V>(
+    #[cfg(test)]
+    #[inline(always)]
+    fn seal_with_entropy_results<V: RadrootsSecretKeyWrapping>(
+        vault: &V,
+        key_slot: &str,
+        plaintext: &[u8],
+        store_key: Result<[u8; RADROOTS_PROTECTED_STORE_KEY_LENGTH], RadrootsProtectedStoreError>,
+        nonce: Result<[u8; RADROOTS_PROTECTED_STORE_NONCE_LENGTH], RadrootsProtectedStoreError>,
+    ) -> Result<Self, RadrootsProtectedStoreError> {
+        Self::seal_with_generated_material(vault, key_slot, plaintext, store_key?, nonce?)
+    }
+
+    #[inline(always)]
+    pub fn seal_with_wrapped_key_and_material<V: RadrootsSecretKeyWrapping>(
         vault: &V,
         key_slot: &str,
         plaintext: &[u8],
         mut store_key: [u8; RADROOTS_PROTECTED_STORE_KEY_LENGTH],
         nonce: [u8; RADROOTS_PROTECTED_STORE_NONCE_LENGTH],
-    ) -> Result<Self, RadrootsProtectedStoreError>
-    where
-        V: RadrootsSecretKeyWrapping,
-    {
+    ) -> Result<Self, RadrootsProtectedStoreError> {
         let wrapped_key = vault
             .wrap_data_key(key_slot, &store_key)
             .map_err(|_| RadrootsProtectedStoreError::KeyWrapFailed)?;
@@ -133,13 +147,11 @@ impl RadrootsProtectedStoreEnvelope {
         })
     }
 
-    pub fn open_with_wrapped_key<V>(
+    #[inline(always)]
+    pub fn open_with_wrapped_key<V: RadrootsSecretKeyWrapping>(
         &self,
         vault: &V,
-    ) -> Result<Vec<u8>, RadrootsProtectedStoreError>
-    where
-        V: RadrootsSecretKeyWrapping,
-    {
+    ) -> Result<Vec<u8>, RadrootsProtectedStoreError> {
         self.validate_header()?;
         let mut store_key = vault
             .unwrap_data_key(&self.header.key_slot, &self.wrapped_key)
@@ -223,6 +235,7 @@ mod tests {
         unwrap_calls: Cell<usize>,
         fail_wrap: bool,
         fail_unwrap: bool,
+        unwrap_length: Option<usize>,
         last_slot: RefCell<Option<String>>,
     }
 
@@ -233,6 +246,7 @@ mod tests {
                 unwrap_calls: Cell::new(0),
                 fail_wrap: false,
                 fail_unwrap: false,
+                unwrap_length: None,
                 last_slot: RefCell::new(None),
             }
         }
@@ -247,6 +261,13 @@ mod tests {
         fn with_unwrap_failure() -> Self {
             Self {
                 fail_unwrap: true,
+                ..Self::new()
+            }
+        }
+
+        fn with_unwrap_length(length: usize) -> Self {
+            Self {
+                unwrap_length: Some(length),
                 ..Self::new()
             }
         }
@@ -287,10 +308,15 @@ mod tests {
                 return Err(());
             }
 
-            Ok(wrapped_key[separator + 1..]
+            let mut unwrapped = wrapped_key[separator + 1..]
                 .iter()
                 .map(|byte| byte ^ 0x5a)
-                .collect())
+                .collect::<Vec<_>>();
+            if let Some(length) = self.unwrap_length {
+                unwrapped.truncate(length);
+            }
+
+            Ok(unwrapped)
         }
     }
 
@@ -356,21 +382,46 @@ mod tests {
     #[test]
     fn seal_with_wrapped_key_reports_entropy_failure() {
         let vault = FakeVault::new();
-        let mut attempts = 0usize;
-        let err = RadrootsProtectedStoreEnvelope::seal_with_wrapped_key_with_entropy(
+        let err = RadrootsProtectedStoreEnvelope::seal_with_entropy_results(
             &vault,
             "drafts/default",
             b"secret draft body",
-            |_bytes| {
-                attempts += 1;
-                Err(RadrootsProtectedStoreError::EntropyUnavailable)
-            },
+            Err(RadrootsProtectedStoreError::EntropyUnavailable),
+            Ok([9_u8; RADROOTS_PROTECTED_STORE_NONCE_LENGTH]),
         )
         .expect_err("entropy failure must surface");
 
-        assert_eq!(attempts, 1);
         assert_eq!(err, RadrootsProtectedStoreError::EntropyUnavailable);
         assert_eq!(vault.wrap_calls.get(), 0);
+    }
+
+    #[test]
+    fn seal_with_wrapped_key_reports_entropy_failure_for_nonce_generation() {
+        let vault = FakeVault::new();
+        let err = RadrootsProtectedStoreEnvelope::seal_with_entropy_results(
+            &vault,
+            "drafts/default",
+            b"secret draft body",
+            Ok([7_u8; RADROOTS_PROTECTED_STORE_KEY_LENGTH]),
+            Err(RadrootsProtectedStoreError::EntropyUnavailable),
+        )
+        .expect_err("second entropy failure must surface");
+
+        assert_eq!(err, RadrootsProtectedStoreError::EntropyUnavailable);
+        assert_eq!(vault.wrap_calls.get(), 0);
+    }
+
+    #[test]
+    fn seal_with_wrapped_key_surfaces_wrap_failure_after_entropy() {
+        let vault = FakeVault::with_wrap_failure();
+        let err = RadrootsProtectedStoreEnvelope::seal_with_wrapped_key(
+            &vault,
+            "drafts/default",
+            b"secret draft body",
+        )
+        .expect_err("wrap failure must surface through public seal");
+
+        assert_eq!(err, RadrootsProtectedStoreError::KeyWrapFailed);
     }
 
     #[test]
@@ -448,6 +499,46 @@ mod tests {
         let err = envelope
             .open_with_wrapped_key(&open_vault)
             .expect_err("unwrap failure must surface");
+        assert_eq!(err, RadrootsProtectedStoreError::KeyUnwrapFailed);
+    }
+
+    #[test]
+    fn invalid_store_key_length_is_rejected_after_unwrap() {
+        let seal_vault = FakeVault::new();
+        let open_vault = FakeVault::with_unwrap_length(31);
+        let envelope = RadrootsProtectedStoreEnvelope::seal_with_wrapped_key_and_material(
+            &seal_vault,
+            "drafts/default",
+            b"secret draft body",
+            [7_u8; RADROOTS_PROTECTED_STORE_KEY_LENGTH],
+            [9_u8; RADROOTS_PROTECTED_STORE_NONCE_LENGTH],
+        )
+        .expect("seal succeeds");
+
+        let err = envelope
+            .open_with_wrapped_key(&open_vault)
+            .expect_err("short store key must fail");
+
+        assert_eq!(err, RadrootsProtectedStoreError::InvalidStoreKeyLength(31));
+    }
+
+    #[test]
+    fn wrapped_key_slot_mismatch_is_rejected_during_unwrap() {
+        let vault = FakeVault::new();
+        let mut envelope = RadrootsProtectedStoreEnvelope::seal_with_wrapped_key_and_material(
+            &vault,
+            "drafts/default",
+            b"secret draft body",
+            [7_u8; RADROOTS_PROTECTED_STORE_KEY_LENGTH],
+            [9_u8; RADROOTS_PROTECTED_STORE_NONCE_LENGTH],
+        )
+        .expect("seal succeeds");
+        envelope.header.key_slot = String::from("drafts/other");
+
+        let err = envelope
+            .open_with_wrapped_key(&vault)
+            .expect_err("mismatched key slot must fail");
+
         assert_eq!(err, RadrootsProtectedStoreError::KeyUnwrapFailed);
     }
 }
