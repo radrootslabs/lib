@@ -232,7 +232,12 @@ struct CoverageProfile {
     test_threads: Option<u32>,
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn read_summary(path: &Path) -> Result<CoverageSummary, String> {
+    read_summary_for_scope(path, None)
+}
+
+fn read_summary_for_scope(path: &Path, scope: Option<&str>) -> Result<CoverageSummary, String> {
     let raw = match fs::read_to_string(path) {
         Ok(raw) => raw,
         Err(err) => return Err(format!("failed to read summary {}: {err}", path.display())),
@@ -254,7 +259,7 @@ pub fn read_summary(path: &Path) -> Result<CoverageSummary, String> {
 
     let details_path = coverage_details_path(path);
     if details_path.exists() {
-        let normalized = read_detailed_summary(&details_path)?;
+        let normalized = read_detailed_summary(&details_path, scope)?;
         if (summary.functions_percent - 100.0).abs() < f64::EPSILON {
             summary.summary_regions_percent = normalized.regions_percent;
         }
@@ -270,7 +275,10 @@ fn coverage_details_path(summary_path: &Path) -> PathBuf {
         .join("coverage-details.json")
 }
 
-fn read_detailed_summary(path: &Path) -> Result<DetailedCoverageSummary, String> {
+fn read_detailed_summary(
+    path: &Path,
+    scope: Option<&str>,
+) -> Result<DetailedCoverageSummary, String> {
     let raw = match fs::read_to_string(path) {
         Ok(raw) => raw,
         Err(err) => {
@@ -331,9 +339,20 @@ fn read_detailed_summary(path: &Path) -> Result<DetailedCoverageSummary, String>
     let mut regions_total = 0_u64;
     let mut regions_covered = 0_u64;
     let mut source_cache: BTreeMap<String, Option<String>> = BTreeMap::new();
+    let scope_filter = scope.map(scope_path_fragment);
     for variants in functions_by_key.values() {
         if !variants.iter().any(|function| function.count > 0) {
             continue;
+        }
+        if let Some(scope_filter) = scope_filter.as_deref() {
+            if !variants.iter().any(|function| {
+                function
+                    .filenames
+                    .iter()
+                    .any(|filename| filename.contains(scope_filter))
+            }) {
+                continue;
+            }
         }
         let mut group_regions: BTreeMap<RegionCoverageKey, bool> = BTreeMap::new();
         for function in variants {
@@ -361,7 +380,7 @@ fn read_detailed_summary(path: &Path) -> Result<DetailedCoverageSummary, String>
         for (region, covered) in group_regions {
             if !covered
                 && primary_filename.is_some_and(|filename| {
-                    is_ignorable_question_mark_region(filename, &region, &mut source_cache)
+                    is_ignorable_synthetic_region(filename, &region, &mut source_cache)
                 })
             {
                 continue;
@@ -378,6 +397,11 @@ fn read_detailed_summary(path: &Path) -> Result<DetailedCoverageSummary, String>
     })
 }
 
+fn scope_path_fragment(scope: &str) -> String {
+    let crate_dir = scope.strip_prefix("radroots_").unwrap_or(scope);
+    format!("/crates/{crate_dir}/")
+}
+
 fn percentage(covered: u64, total: u64) -> f64 {
     if total == 0 {
         100.0
@@ -386,15 +410,12 @@ fn percentage(covered: u64, total: u64) -> f64 {
     }
 }
 
-fn is_ignorable_question_mark_region(
+fn is_ignorable_synthetic_region(
     filename: &str,
     region: &RegionCoverageKey,
     source_cache: &mut BTreeMap<String, Option<String>>,
 ) -> bool {
     if region.line_start != region.line_end {
-        return false;
-    }
-    if region.column_end != region.column_start + 1 {
         return false;
     }
     let source = source_cache
@@ -411,7 +432,15 @@ fn is_ignorable_question_mark_region(
     };
     let start = region.column_start.saturating_sub(1) as usize;
     let end = region.column_end.saturating_sub(1) as usize;
-    line.get(start..end) == Some("?")
+    let slice = line.get(start..end);
+    if region.column_end == region.column_start + 1 && slice == Some("?") {
+        return true;
+    }
+
+    let is_unexpected_panic_fallback = filename.ends_with("/tests.rs")
+        && line.contains("panic!(\"unexpected")
+        && matches!(slice, Some("other") | Some("panic!"));
+    is_unexpected_panic_fallback
 }
 
 impl CoveragePolicyFile {
@@ -1200,7 +1229,7 @@ fn report_gate_with_root(args: &[String], root: &Path) -> Result<(), String> {
         }
     };
 
-    let summary = read_summary(&summary_path)?;
+    let summary = read_summary_for_scope(&summary_path, Some(&scope))?;
     let lcov = read_lcov(&lcov_path)?;
     let gate = evaluate_gate(&summary, &lcov, thresholds);
 
@@ -1673,6 +1702,59 @@ mod tests {
     }
 
     #[test]
+    fn read_summary_for_scope_ignores_other_crate_detail_records() {
+        let root = temp_dir_path("summary_details_scope_filtered");
+        let summary_path = root.join("coverage-summary.json");
+        write_file(
+            &summary_path,
+            r#"{
+  "data": [
+    {
+      "totals": {
+        "functions": {"percent": 100.0},
+        "lines": {"percent": 88.5},
+        "regions": {"percent": 22.0}
+      }
+    }
+  ]
+}"#,
+        );
+        write_file(
+            &root.join("coverage-details.json"),
+            r#"{
+  "data": [
+    {
+      "functions": [
+        {
+          "count": 4,
+          "filenames": ["/workspace/crates/a/src/lib.rs"],
+          "regions": [
+            [10, 1, 12, 2, 4, 0, 0, 0]
+          ]
+        },
+        {
+          "count": 9,
+          "filenames": ["/workspace/crates/b/src/lib.rs"],
+          "regions": [
+            [20, 1, 20, 6, 0, 0, 0, 0]
+          ]
+        }
+      ]
+    }
+  ]
+}"#,
+        );
+
+        let summary =
+            read_summary_for_scope(&summary_path, Some("radroots_a")).expect("parse scope summary");
+        assert_eq!(summary.functions_percent, 100.0);
+        assert_eq!(summary.summary_lines_percent, 88.5);
+        assert_eq!(summary.summary_regions_percent, 100.0);
+
+        fs::remove_dir_all(root).expect("remove summary scope root");
+    }
+
+    #[test]
     fn read_summary_reports_read_and_parse_errors() {
         let missing = temp_file_path("summary_missing");
         let read_err = read_summary(&missing).expect_err("missing summary should fail");
@@ -1726,7 +1808,7 @@ mod tests {
             expanded_file_id: 0,
             kind: 0,
         };
-        assert!(is_ignorable_question_mark_region(
+        assert!(is_ignorable_synthetic_region(
             path.to_str().expect("utf-8 path"),
             &question_mark,
             &mut cache,
@@ -1741,13 +1823,67 @@ mod tests {
             expanded_file_id: 0,
             kind: 0,
         };
-        assert!(!is_ignorable_question_mark_region(
+        assert!(!is_ignorable_synthetic_region(
             path.to_str().expect("utf-8 path"),
             &not_question_mark,
             &mut cache,
         ));
 
         fs::remove_file(path).expect("remove question mark source");
+    }
+
+    #[test]
+    fn ignorable_unexpected_panic_regions_require_test_fallback_lines() {
+        let root = temp_dir_path("coverage_unexpected_panic_region");
+        let path = root.join("tests.rs");
+        write_file(
+            &path,
+            "match &err {\n    RuntimeProtectedFileError::Io { .. } => {}\n        other => panic!(\"unexpected io error: {other}\"),\n}\n",
+        );
+        let mut cache = BTreeMap::new();
+
+        let other_region = RegionCoverageKey {
+            line_start: 3,
+            column_start: 9,
+            line_end: 3,
+            column_end: 14,
+            file_id: 0,
+            expanded_file_id: 0,
+            kind: 0,
+        };
+        assert!(is_ignorable_synthetic_region(
+            path.to_str().expect("utf-8 path"),
+            &other_region,
+            &mut cache,
+        ));
+
+        let panic_region = RegionCoverageKey {
+            line_start: 3,
+            column_start: 18,
+            line_end: 3,
+            column_end: 24,
+            file_id: 0,
+            expanded_file_id: 0,
+            kind: 0,
+        };
+        assert!(is_ignorable_synthetic_region(
+            path.to_str().expect("utf-8 path"),
+            &panic_region,
+            &mut cache,
+        ));
+
+        let non_test_path = root.join("source.rs");
+        write_file(
+            &non_test_path,
+            "match &err {\n    RuntimeProtectedFileError::Io { .. } => {}\n        other => panic!(\"unexpected io error: {other}\"),\n}\n",
+        );
+        assert!(!is_ignorable_synthetic_region(
+            non_test_path.to_str().expect("utf-8 path"),
+            &other_region,
+            &mut cache,
+        ));
+
+        fs::remove_dir_all(root).expect("remove unexpected panic source");
     }
 
     #[test]
