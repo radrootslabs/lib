@@ -564,18 +564,65 @@ mod kinds_constants_tests {
 
     #[test]
     fn classifies_trade_listing_kinds() {
+        assert!(is_listing_kind(KIND_LISTING));
+        assert!(is_listing_kind(KIND_LISTING_DRAFT));
+        assert!(!is_listing_kind(KIND_PROFILE));
+
         assert!(is_trade_service_request_kind(
             KIND_TRADE_LISTING_VALIDATE_REQ
+        ));
+        assert!(!is_trade_service_request_kind(
+            KIND_TRADE_LISTING_VALIDATE_RES
         ));
         assert!(is_trade_service_result_kind(
             KIND_TRADE_LISTING_VALIDATE_RES
         ));
+        assert!(!is_trade_service_result_kind(
+            KIND_TRADE_LISTING_VALIDATE_REQ
+        ));
         assert!(is_trade_service_kind(KIND_TRADE_LISTING_VALIDATE_REQ));
+        assert!(is_trade_service_kind(KIND_TRADE_LISTING_VALIDATE_RES));
+        assert!(!is_trade_service_kind(KIND_TRADE_ORDER_REQUEST));
         assert!(is_trade_public_kind(KIND_TRADE_ORDER_REQUEST));
         assert!(is_trade_public_kind(KIND_TRADE_ORDER_RESPONSE));
+        assert!(is_trade_public_kind(KIND_TRADE_RECEIPT));
+        assert!(!is_trade_public_kind(KIND_TRADE_LISTING_VALIDATE_REQ));
         assert!(is_trade_kind(KIND_TRADE_ORDER_REQUEST));
+        assert!(is_trade_kind(KIND_TRADE_LISTING_VALIDATE_REQ));
+        assert!(!is_trade_kind(KIND_LISTING));
         assert!(is_trade_listing_request_kind(KIND_TRADE_LISTING_ORDER_REQ));
+        assert!(is_trade_listing_request_kind(
+            KIND_TRADE_LISTING_ORDER_REVISION_REQ
+        ));
+        assert!(is_trade_listing_request_kind(
+            KIND_TRADE_LISTING_QUESTION_REQ
+        ));
+        assert!(is_trade_listing_request_kind(
+            KIND_TRADE_LISTING_DISCOUNT_REQ
+        ));
+        assert!(is_trade_listing_request_kind(
+            KIND_TRADE_LISTING_DISCOUNT_ACCEPT_REQ
+        ));
+        assert!(is_trade_listing_request_kind(
+            KIND_TRADE_LISTING_DISCOUNT_DECLINE_REQ
+        ));
+        assert!(is_trade_listing_request_kind(KIND_TRADE_LISTING_CANCEL_REQ));
+        assert!(is_trade_listing_request_kind(
+            KIND_TRADE_LISTING_FULFILLMENT_UPDATE_REQ
+        ));
+        assert!(is_trade_listing_request_kind(
+            KIND_TRADE_LISTING_RECEIPT_REQ
+        ));
+        assert!(!is_trade_listing_request_kind(KIND_TRADE_LISTING_ORDER_RES));
         assert!(is_trade_listing_result_kind(KIND_TRADE_LISTING_ORDER_RES));
+        assert!(is_trade_listing_result_kind(
+            KIND_TRADE_LISTING_ORDER_REVISION_RES
+        ));
+        assert!(is_trade_listing_result_kind(KIND_TRADE_LISTING_ANSWER_RES));
+        assert!(is_trade_listing_result_kind(
+            KIND_TRADE_LISTING_DISCOUNT_OFFER_RES
+        ));
+        assert!(!is_trade_listing_result_kind(KIND_TRADE_LISTING_CANCEL_REQ));
         assert!(is_trade_listing_kind(KIND_TRADE_LISTING_RECEIPT_REQ));
         assert!(!is_trade_listing_kind(KIND_LISTING));
         assert_eq!(
@@ -583,16 +630,64 @@ mod kinds_constants_tests {
             Some(KIND_TRADE_LISTING_VALIDATE_RES)
         );
         assert_eq!(
+            trade_service_result_kind_for_request(KIND_TRADE_ORDER_REQUEST),
+            None
+        );
+        assert_eq!(
             trade_service_request_kind_for_result(KIND_TRADE_LISTING_VALIDATE_RES),
             Some(KIND_TRADE_LISTING_VALIDATE_REQ)
+        );
+        assert_eq!(
+            trade_service_request_kind_for_result(KIND_TRADE_ORDER_RESPONSE),
+            None
+        );
+        assert_eq!(
+            trade_listing_result_kind_for_request(KIND_TRADE_LISTING_VALIDATE_REQ),
+            Some(KIND_TRADE_LISTING_VALIDATE_RES)
         );
         assert_eq!(
             trade_listing_result_kind_for_request(KIND_TRADE_LISTING_ORDER_REQ),
             Some(KIND_TRADE_LISTING_ORDER_RES)
         );
         assert_eq!(
+            trade_listing_result_kind_for_request(KIND_TRADE_LISTING_ORDER_REVISION_REQ),
+            Some(KIND_TRADE_LISTING_ORDER_REVISION_RES)
+        );
+        assert_eq!(
+            trade_listing_result_kind_for_request(KIND_TRADE_LISTING_QUESTION_REQ),
+            Some(KIND_TRADE_LISTING_ANSWER_RES)
+        );
+        assert_eq!(
+            trade_listing_result_kind_for_request(KIND_TRADE_LISTING_DISCOUNT_REQ),
+            Some(KIND_TRADE_LISTING_DISCOUNT_OFFER_RES)
+        );
+        assert_eq!(
+            trade_listing_result_kind_for_request(KIND_TRADE_LISTING_CANCEL_REQ),
+            None
+        );
+        assert_eq!(
+            trade_listing_request_kind_for_result(KIND_TRADE_LISTING_VALIDATE_RES),
+            Some(KIND_TRADE_LISTING_VALIDATE_REQ)
+        );
+        assert_eq!(
             trade_listing_request_kind_for_result(KIND_TRADE_LISTING_ORDER_RES),
             Some(KIND_TRADE_LISTING_ORDER_REQ)
+        );
+        assert_eq!(
+            trade_listing_request_kind_for_result(KIND_TRADE_LISTING_ORDER_REVISION_RES),
+            Some(KIND_TRADE_LISTING_ORDER_REVISION_REQ)
+        );
+        assert_eq!(
+            trade_listing_request_kind_for_result(KIND_TRADE_LISTING_ANSWER_RES),
+            Some(KIND_TRADE_LISTING_QUESTION_REQ)
+        );
+        assert_eq!(
+            trade_listing_request_kind_for_result(KIND_TRADE_LISTING_DISCOUNT_OFFER_RES),
+            Some(KIND_TRADE_LISTING_DISCOUNT_REQ)
+        );
+        assert_eq!(
+            trade_listing_request_kind_for_result(KIND_TRADE_LISTING_RECEIPT_REQ),
+            None
         );
     }
 }
