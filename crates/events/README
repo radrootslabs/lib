@@ -1,14 +1,24 @@
 # radroots_events
 
-Nostr event models, kinds, and tag mappings for the Rad Roots SDK.
+This is the README for `radroots_events`, which provides typed `radroots` event
+models, kinds, and tag conventions for the `radroots` core libraries.
 
-## Goals
+## Overview
 
-- define stable event models for Rad Roots domain records
-- keep kind and tag mapping behavior deterministic across targets
-- support feature-gated serialization and type export for SDK consumers
-- provide reusable event primitives for higher-level Rad Roots crates
+ * typed content modules for accounts, app data, comments, coops, documents,
+   farms, jobs, lists, messages, posts, profiles, reactions, trades, and
+   related domains;
+ * shared event references, pointers, and kind and tag definitions used across
+   event-processing code;
+ * portable event model semantics for both `std` and `no_std` builds;
+ * optional integration with `serde`, `typeshare`, and `ts-rs` for
+   serialization and cross-language type export.
 
-## License
+## Copyright
 
-Licensed under AGPL-3.0. See LICENSE.
+Except as otherwise noted, all files in the `radroots_events` distribution are
+
+ Copyright (c) 2025 Tyson Lupul
+
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see LICENSE included in the `radroots_events` distribution.
