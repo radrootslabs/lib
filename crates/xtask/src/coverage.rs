@@ -1362,7 +1362,7 @@ mod tests {
         let non_finite = temp_file_path("coverage_policy_non_finite");
         write_file(
             &non_finite,
-            "[gate]\nfail_under_exec_lines = inf\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots-a\"]\n",
+            "[gate]\nfail_under_exec_lines = inf\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n",
         );
         let non_finite_err =
             read_coverage_policy(&non_finite).expect_err("non-finite threshold should fail");
@@ -1372,7 +1372,7 @@ mod tests {
         let out_of_range = temp_file_path("coverage_policy_out_of_range");
         write_file(
             &out_of_range,
-            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 101.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots-a\"]\n",
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 101.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n",
         );
         let out_of_range_err =
             read_coverage_policy(&out_of_range).expect_err("out-of-range threshold should fail");
@@ -1387,14 +1387,14 @@ mod tests {
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         write_file(
             &coverage_dir.join("policy.toml"),
-            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots-a\"]\n",
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n",
         );
         let out_path = root.join("gate-report.json");
 
         report_missing_gate_with_root(
             &[
                 "--scope".to_string(),
-                "radroots-a-blocking".to_string(),
+                "radroots_a_blocking".to_string(),
                 "--out".to_string(),
                 out_path.display().to_string(),
                 "--reason".to_string(),
@@ -1434,7 +1434,7 @@ mod tests {
         let missing_out = report_missing_gate_with_root(
             &[
                 "--scope".to_string(),
-                "radroots-a-blocking".to_string(),
+                "radroots_a_blocking".to_string(),
                 "--reason".to_string(),
                 "missing-coverage-artifacts".to_string(),
             ],
@@ -1446,7 +1446,7 @@ mod tests {
         let missing_reason = report_missing_gate_with_root(
             &[
                 "--scope".to_string(),
-                "radroots-a-blocking".to_string(),
+                "radroots_a_blocking".to_string(),
                 "--out".to_string(),
                 root.join("missing-gate.json").display().to_string(),
             ],
@@ -1458,7 +1458,7 @@ mod tests {
         let policy_err = report_missing_gate_with_root(
             &[
                 "--scope".to_string(),
-                "radroots-a-blocking".to_string(),
+                "radroots_a_blocking".to_string(),
                 "--out".to_string(),
                 root.join("missing-gate.json").display().to_string(),
                 "--reason".to_string(),
@@ -1473,14 +1473,14 @@ mod tests {
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         write_file(
             &coverage_dir.join("policy.toml"),
-            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots-a\"]\n",
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n",
         );
         let out_path = root.join("gate-report.json");
         fs::create_dir_all(&out_path).expect("create blocking output dir");
         let write_err = report_missing_gate_with_root(
             &[
                 "--scope".to_string(),
-                "radroots-a-blocking".to_string(),
+                "radroots_a_blocking".to_string(),
                 "--out".to_string(),
                 out_path.display().to_string(),
                 "--reason".to_string(),
@@ -1501,7 +1501,7 @@ mod tests {
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         write_file(
             &coverage_dir.join("policy.toml"),
-            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots-a\"]\n",
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n",
         );
 
         let reports_root = root.join("target").join("coverage");
@@ -1510,7 +1510,7 @@ mod tests {
         write_file(
             &crate_dir.join("gate-report.json"),
             r#"{
-  "scope": "radroots-a",
+  "scope": "radroots_a",
   "thresholds": {
     "executable_lines": 100.0,
     "functions": 100.0,
@@ -1563,11 +1563,11 @@ mod tests {
         let refresh = fs::read_to_string(&refresh_out).expect("read refresh summary");
         assert!(refresh.contains("crate\tstatus\texec\tfunc\tbranch\tregion\treport"));
         assert!(
-            refresh.contains("radroots-a\tpass\t100.000000\t100.000000\t100.000000\t97.500000\t")
+            refresh.contains("radroots_a\tpass\t100.000000\t100.000000\t100.000000\t97.500000\t")
         );
 
         let status = fs::read_to_string(&status_out).expect("read status summary");
-        assert_eq!(status, "crate\tstatus\nradroots-a\tpass\n");
+        assert_eq!(status, "crate\tstatus\nradroots_a\tpass\n");
 
         fs::remove_dir_all(root).expect("remove root");
 
@@ -1576,7 +1576,7 @@ mod tests {
         fs::create_dir_all(&defaults_coverage_dir).expect("create defaults coverage dir");
         write_file(
             &defaults_coverage_dir.join("policy.toml"),
-            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots-a\"]\n",
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n",
         );
         write_file(
             &defaults_root
@@ -1585,7 +1585,7 @@ mod tests {
                 .join("radroots_a")
                 .join("gate-report.json"),
             r#"{
-  "scope": "radroots-a",
+  "scope": "radroots_a",
   "thresholds": {
     "executable_lines": 100.0,
     "functions": 100.0,
@@ -1633,7 +1633,7 @@ mod tests {
         .expect("read defaults refresh summary");
         assert!(
             defaults_refresh
-                .contains("radroots-a\tfail\t100.000000\t100.000000\t100.000000\t100.000000\t")
+                .contains("radroots_a\tfail\t100.000000\t100.000000\t100.000000\t100.000000\t")
         );
 
         let dispatch_root = temp_dir_path("refresh_summary_parentless_root");
@@ -1641,7 +1641,7 @@ mod tests {
         fs::create_dir_all(&dispatch_coverage_dir).expect("create dispatch coverage dir");
         write_file(
             &dispatch_coverage_dir.join("policy.toml"),
-            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots-a\"]\n",
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n",
         );
         write_file(
             &dispatch_root.join("Cargo.toml"),
@@ -1654,7 +1654,7 @@ mod tests {
                 .join("radroots_a")
                 .join("gate-report.json"),
             r#"{
-  "scope": "radroots-a",
+  "scope": "radroots_a",
   "thresholds": {
     "executable_lines": 100.0,
     "functions": 100.0,
@@ -1692,7 +1692,7 @@ mod tests {
             &[
                 "report-missing".to_string(),
                 "--scope".to_string(),
-                "radroots-a-blocking".to_string(),
+                "radroots_a_blocking".to_string(),
                 "--out".to_string(),
                 "missing-gate.json".to_string(),
                 "--reason".to_string(),
@@ -1729,7 +1729,7 @@ mod tests {
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         write_file(
             &coverage_dir.join("policy.toml"),
-            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots-a\"]\n",
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n",
         );
         write_file(
             &root
@@ -1738,7 +1738,7 @@ mod tests {
                 .join("radroots_a")
                 .join("gate-report.json"),
             r#"{
-  "scope": "radroots-a",
+  "scope": "radroots_a",
   "thresholds": {
     "executable_lines": 100.0,
     "functions": 100.0,
@@ -1814,7 +1814,7 @@ mod tests {
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         write_file(
             &coverage_dir.join("policy.toml"),
-            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots-a\"]\n",
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n",
         );
         write_file(
             &root
@@ -1823,7 +1823,7 @@ mod tests {
                 .join("radroots_a")
                 .join("gate-report.json"),
             r#"{
-  "scope": "radroots-a",
+  "scope": "radroots_a",
   "thresholds": {
     "executable_lines": 100.0,
     "functions": 100.0,
@@ -1885,7 +1885,7 @@ mod tests {
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         write_file(
             &coverage_dir.join("policy.toml"),
-            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots-a\"]\n",
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n",
         );
         write_file(
             &root
@@ -1894,7 +1894,7 @@ mod tests {
                 .join("radroots_a")
                 .join("gate-report.json"),
             r#"{
-  "scope": "radroots-a",
+  "scope": "radroots_a",
   "thresholds": {
     "executable_lines": 100.0,
     "functions": 100.0,
@@ -1973,7 +1973,7 @@ mod tests {
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         write_file(
             &coverage_dir.join("policy.toml"),
-            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots-a\"]\n",
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n",
         );
         let gate_err = run_with_root(
             &[
@@ -2129,7 +2129,7 @@ mod tests {
     fn coverage_profiles_default_when_contract_file_is_missing() {
         let root = temp_dir_path("profile_missing");
         fs::create_dir_all(&root).expect("create root");
-        let profile = read_coverage_profile(&root, "radroots-log").expect("read profile");
+        let profile = read_coverage_profile(&root, "radroots_log").expect("read profile");
         assert!(!profile.no_default_features);
         assert!(profile.features.is_empty());
         assert_eq!(profile.test_threads, None);
@@ -2148,19 +2148,19 @@ no_default_features = false
 features = ["std"]
 test_threads = 2
 
-[profiles.crates."radroots-log"]
+[profiles.crates."radroots_log"]
 no_default_features = true
 features = ["rt"]
 "#,
         )
         .expect("write profiles");
 
-        let app_profile = read_coverage_profile(&root, "radroots-log").expect("app profile");
+        let app_profile = read_coverage_profile(&root, "radroots_log").expect("app profile");
         assert!(app_profile.no_default_features);
         assert_eq!(app_profile.features, vec!["rt".to_string()]);
         assert_eq!(app_profile.test_threads, Some(2));
 
-        let other_profile = read_coverage_profile(&root, "radroots-types").expect("other profile");
+        let other_profile = read_coverage_profile(&root, "radroots_types").expect("other profile");
         assert!(!other_profile.no_default_features);
         assert_eq!(other_profile.features, vec!["std".to_string()]);
         assert_eq!(other_profile.test_threads, Some(2));
@@ -2175,13 +2175,13 @@ features = ["rt"]
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         fs::write(
             coverage_dir.join("profiles.toml"),
-            r#"[profiles.crates."radroots-log"]
+            r#"[profiles.crates."radroots_log"]
 test_threads = 4
 "#,
         )
         .expect("write profiles");
         let profile =
-            read_coverage_profile(&root, "radroots-log").expect("valid positive thread profile");
+            read_coverage_profile(&root, "radroots_log").expect("valid positive thread profile");
         assert_eq!(profile.test_threads, Some(4));
         fs::remove_dir_all(root).expect("remove root");
     }
@@ -2193,14 +2193,14 @@ test_threads = 4
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         fs::write(
             coverage_dir.join("profiles.toml"),
-            r#"[profiles.crates."radroots-log"]
+            r#"[profiles.crates."radroots_log"]
 features = [""]
 test_threads = 0
 "#,
         )
         .expect("write profiles");
 
-        let err = read_coverage_profile(&root, "radroots-log").expect_err("invalid profile");
+        let err = read_coverage_profile(&root, "radroots_log").expect_err("invalid profile");
         assert!(
             err.contains("empty feature value"),
             "unexpected error: {err}"
@@ -2216,7 +2216,7 @@ test_threads = 0
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         fs::write(coverage_dir.join("profiles.toml"), "[profiles.default\n")
             .expect("write invalid profiles");
-        let err = read_coverage_profile(&root, "radroots-log").expect_err("invalid toml");
+        let err = read_coverage_profile(&root, "radroots_log").expect_err("invalid toml");
         assert!(err.contains("failed to parse"));
         fs::remove_dir_all(root).expect("remove root");
     }
@@ -2228,13 +2228,13 @@ test_threads = 0
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         fs::write(
             coverage_dir.join("profiles.toml"),
-            r#"[profiles.crates."radroots-log"]
+            r#"[profiles.crates."radroots_log"]
 test_threads = 0
 "#,
         )
         .expect("write profiles");
 
-        let err = read_coverage_profile(&root, "radroots-log").expect_err("invalid thread count");
+        let err = read_coverage_profile(&root, "radroots_log").expect_err("invalid thread count");
         assert!(err.contains("test_threads > 0"));
 
         fs::remove_dir_all(root).expect("remove root");
@@ -2433,10 +2433,10 @@ test_threads = 0
         let valid = temp_file_path("parse_toml_valid");
         write_file(
             &valid,
-            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots-core\"]\n",
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_core\"]\n",
         );
         let parsed = parse_toml::<CoveragePolicyFile>(&valid).expect("valid toml");
-        assert_eq!(parsed.required.crates, vec!["radroots-core".to_string()]);
+        assert_eq!(parsed.required.crates, vec!["radroots_core".to_string()]);
         fs::remove_file(valid).expect("remove valid toml");
     }
 
@@ -2600,7 +2600,7 @@ test_threads = 0
         let out = temp_dir_path("run_crate_runner");
         let args = vec![
             "--crate".to_string(),
-            "radroots-core".to_string(),
+            "radroots_core".to_string(),
             "--out".to_string(),
             out.display().to_string(),
             "--test-threads".to_string(),
@@ -2632,13 +2632,13 @@ test_threads = 0
         assert!(
             rendered_commands
                 .iter()
-                .filter(|rendered| rendered.contains("report -p radroots-core"))
+                .filter(|rendered| rendered.contains("report -p radroots_core"))
                 .all(|rendered| rendered.contains("--ignore-filename-regex"))
         );
         assert!(
             rendered_commands
                 .iter()
-                .filter(|rendered| rendered.contains("report -p radroots-core"))
+                .filter(|rendered| rendered.contains("report -p radroots_core"))
                 .all(|rendered| rendered.contains(COVERAGE_EXTERNAL_IGNORE_FILENAME_REGEX))
         );
         fs::remove_dir_all(out).expect("remove run crate output dir");
@@ -2648,7 +2648,7 @@ test_threads = 0
     fn coverage_ignore_filename_regex_excludes_external_and_sibling_workspace_paths() {
         let root = workspace_root();
         let ignore_regex =
-            coverage_ignore_filename_regex(&root, "radroots-core").expect("build ignore regex");
+            coverage_ignore_filename_regex(&root, "radroots_core").expect("build ignore regex");
         assert!(ignore_regex.contains(COVERAGE_EXTERNAL_IGNORE_FILENAME_REGEX));
         assert!(ignore_regex.contains("crates/identity"));
         assert!(!ignore_regex.contains("crates/core/"));
@@ -2808,7 +2808,7 @@ test_threads = 0
 
     #[test]
     fn run_crate_with_runner_uses_default_output_dir_when_out_is_missing() {
-        let args = vec!["--crate".to_string(), "radroots-core".to_string()];
+        let args = vec!["--crate".to_string(), "radroots_core".to_string()];
         let mut output_path_seen = false;
         let mut runner = |cmd: Command, _: &str| {
             let rendered = cmd
@@ -2835,7 +2835,7 @@ test_threads = 0
         let out = temp_dir_path("run_crate_runner_fail");
         let args = vec![
             "--crate".to_string(),
-            "radroots-core".to_string(),
+            "radroots_core".to_string(),
             "--out".to_string(),
             out.display().to_string(),
         ];
@@ -2848,7 +2848,7 @@ test_threads = 0
         write_file(&root.join("blocker"), "x");
         let args = vec![
             "--crate".to_string(),
-            "radroots-core".to_string(),
+            "radroots_core".to_string(),
             "--out".to_string(),
             root.join("blocker").join("nested").display().to_string(),
         ];
@@ -2874,7 +2874,7 @@ test_threads = 0
             );
             write_file(
                 &root.join("crates").join("core").join("Cargo.toml"),
-                "[package]\nname = \"radroots-core\"\nversion = \"0.1.0-alpha.1\"\nedition = \"2024\"\n",
+                "[package]\nname = \"radroots_core\"\nversion = \"0.1.0-alpha.1\"\nedition = \"2024\"\n",
             );
         };
 
@@ -2889,7 +2889,7 @@ test_threads = 0
         );
         let profile_args = vec![
             "--crate".to_string(),
-            "radroots-core".to_string(),
+            "radroots_core".to_string(),
             "--out".to_string(),
             profile_root.join("out").display().to_string(),
         ];
@@ -2904,7 +2904,7 @@ test_threads = 0
         write_minimal_workspace(&thread_root);
         let thread_args = vec![
             "--crate".to_string(),
-            "radroots-core".to_string(),
+            "radroots_core".to_string(),
             "--out".to_string(),
             thread_root.join("out").display().to_string(),
             "--test-threads".to_string(),
@@ -2921,7 +2921,7 @@ test_threads = 0
             write_minimal_workspace(&step_root);
             let step_args = vec![
                 "--crate".to_string(),
-                "radroots-core".to_string(),
+                "radroots_core".to_string(),
                 "--out".to_string(),
                 step_root.join("out").display().to_string(),
             ];
@@ -3358,10 +3358,10 @@ test_threads = 0
         );
         write_file(
             &root.join("crates").join("core").join("Cargo.toml"),
-            "[package]\nname = \"radroots-core\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+            "[package]\nname = \"radroots_core\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
         );
 
-        let err = coverage_ignore_filename_regex(&root, "radroots-missing")
+        let err = coverage_ignore_filename_regex(&root, "radroots_missing")
             .expect_err("unknown crate should fail");
         assert!(err.contains("could not resolve crate directory"));
 
@@ -3371,12 +3371,12 @@ test_threads = 0
     #[test]
     fn coverage_ignore_filename_regex_reports_workspace_manifest_errors() {
         let root = temp_dir_path("coverage_regex_workspace_error_root");
-        let read_err = coverage_ignore_filename_regex(&root, "radroots-core")
+        let read_err = coverage_ignore_filename_regex(&root, "radroots_core")
             .expect_err("missing workspace manifest should fail");
         assert!(read_err.contains("failed to read"));
 
         write_file(&root.join("Cargo.toml"), "[workspace");
-        let parse_err = coverage_ignore_filename_regex(&root, "radroots-core")
+        let parse_err = coverage_ignore_filename_regex(&root, "radroots_core")
             .expect_err("invalid workspace manifest should fail");
         assert!(parse_err.contains("failed to parse"));
 
@@ -3392,11 +3392,11 @@ test_threads = 0
         );
         write_file(
             &root.join("crates").join("other").join("Cargo.toml"),
-            "[package]\nname = \"radroots-other\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+            "[package]\nname = \"radroots_other\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
         );
         let args = vec![
             "--crate".to_string(),
-            "radroots-core".to_string(),
+            "radroots_core".to_string(),
             "--out".to_string(),
             root.join("target").join("coverage").display().to_string(),
         ];
@@ -3442,18 +3442,18 @@ test_threads = 0
         let mut output = Vec::new();
         write_crate_names_output(
             &mut output,
-            vec!["radroots-a".to_string(), "radroots-b".to_string()],
+            vec!["radroots_a".to_string(), "radroots_b".to_string()],
             "required crates",
         )
         .expect("write crate names");
         let rendered = String::from_utf8(output).expect("utf8");
-        assert!(rendered.contains("radroots-a"));
-        assert!(rendered.contains("radroots-b"));
+        assert!(rendered.contains("radroots_a"));
+        assert!(rendered.contains("radroots_b"));
 
         let mut failing = FailingWriter;
         let err = write_crate_names_output(
             &mut failing,
-            vec!["radroots-a".to_string()],
+            vec!["radroots_a".to_string()],
             "workspace crates",
         )
         .expect_err("writer failure");

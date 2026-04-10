@@ -99,7 +99,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("system time")
             .as_nanos();
-        let dir = std::env::temp_dir().join(format!("radroots-log-{name}-{nanos}"));
+        let dir = std::env::temp_dir().join(format!("radroots_log-{name}-{nanos}"));
         let _ = std::fs::remove_dir_all(&dir);
         dir
     }

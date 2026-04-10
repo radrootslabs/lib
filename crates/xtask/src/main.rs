@@ -258,7 +258,7 @@ resolver = "2"
         write_file(
             &root.join("crates").join("a").join("Cargo.toml"),
             r#"[package]
-name = "radroots-a"
+name = "radroots_a"
 version = "0.1.0"
 edition = "2024"
 description = "crate a"
@@ -298,7 +298,7 @@ mod tests {
         write_file(
             &root.join("crates").join("b").join("Cargo.toml"),
             r#"[package]
-name = "radroots-b"
+name = "radroots_b"
 version = "0.1.0"
 edition = "2024"
 publish = false
@@ -320,14 +320,14 @@ publish = false
         write_file(
             &root.join("contract").join("manifest.toml"),
             r#"[contract]
-name = "radroots-contract"
+name = "radroots_contract"
 version = "1.0.0"
 source = "synthetic"
 
 [surface]
-model_crates = ["radroots-a"]
-algorithm_crates = ["radroots-b"]
-wasm_crates = ["radroots-a-wasm"]
+model_crates = ["radroots_a"]
+algorithm_crates = ["radroots_b"]
+wasm_crates = ["radroots_a_wasm"]
 
 [policy]
 exclude_internal_workspace_crates = true
@@ -359,7 +359,7 @@ id = "ts"
 repository = "sdk-typescript"
 
 [packages]
-"radroots-a" = "@radroots/a"
+"radroots_a" = "@radroots/a"
 
 [artifacts]
 models_dir = "src/generated"
@@ -378,7 +378,7 @@ fail_under_branches = 100.0
 require_branches = true
 
 [required]
-crates = ["radroots-a", "radroots-b"]
+crates = ["radroots_a", "radroots_b"]
 "#,
         );
         write_file(
@@ -390,13 +390,13 @@ crates = ["radroots-a", "radroots-b"]
 version = "1.0.0"
 
 [publish]
-crates = ["radroots-a"]
+crates = ["radroots_a"]
 
 [internal]
-crates = ["radroots-b"]
+crates = ["radroots_b"]
 
 [publish_order]
-crates = ["radroots-a"]
+crates = ["radroots_a"]
 "#,
         );
         root
@@ -423,14 +423,14 @@ crates = ["radroots-a"]
         let parsed = parse_crate_out_dir(
             &[
                 "--crate".to_string(),
-                "radroots-core".to_string(),
+                "radroots_core".to_string(),
                 "--out".to_string(),
                 "my/out".to_string(),
             ],
             &root,
         )
         .expect("parsed crate out");
-        assert_eq!(parsed.0, "radroots-core".to_string());
+        assert_eq!(parsed.0, "radroots_core".to_string());
         assert_eq!(parsed.1, PathBuf::from("my/out"));
 
         let missing_crate = parse_crate_out_dir(&["--out".to_string(), "x".to_string()], &root)
@@ -440,7 +440,7 @@ crates = ["radroots-a"]
         let invalid_crate_args = parse_crate_out_dir(
             &[
                 "--crate".to_string(),
-                "radroots-core".to_string(),
+                "radroots_core".to_string(),
                 "--bad".to_string(),
             ],
             &root,
@@ -455,7 +455,7 @@ crates = ["radroots-a"]
         let missing_out_value = parse_crate_out_dir(
             &[
                 "--crate".to_string(),
-                "radroots-core".to_string(),
+                "radroots_core".to_string(),
                 "--out".to_string(),
             ],
             &root,

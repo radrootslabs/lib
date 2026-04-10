@@ -1,5 +1,5 @@
 [package]
-name = "radroots-net"
+name = "radroots_net"
 version = "0.1.0-alpha.1"
 edition.workspace = true
 authors = [
@@ -14,9 +14,9 @@ readme.workspace = true
 
 [features]
 default = ["std"]
-std = ["radroots-net-core/std"]
-rt = ["radroots-net-core/rt"]
+std = ["radroots_net_core/std"]
+rt = ["radroots_net_core/rt"]
 all = ["std", "rt"]
 
 [dependencies]
-radroots-net-core = { workspace = true, optional = false }
+radroots_net_core = { workspace = true, optional = false }

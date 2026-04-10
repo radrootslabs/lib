@@ -1,0 +1,42 @@
+[package]
+name = "radroots_nostr_signer"
+version = "0.1.0-alpha.1"
+edition.workspace = true
+authors = [
+  "Radroots Authors",
+]
+rust-version.workspace = true
+license.workspace = true
+description = "Signer state model for Radroots"
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+
+[features]
+default = []
+native = ["dep:radroots_sql_core", "radroots_sql_core/native"]
+
+[dependencies]
+hex = { workspace = true }
+nostr = { workspace = true }
+radroots_identity = { workspace = true, default-features = false, features = [
+  "std",
+  "profile",
+] }
+radroots_nostr_connect = { workspace = true }
+radroots_runtime = { workspace = true }
+radroots_sql_core = { workspace = true, optional = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+url = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+radroots_sql_core = { workspace = true, features = ["native"] }
+radroots_test_fixtures = { workspace = true }
+tempfile = { workspace = true }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage_nightly)'] }

@@ -1,5 +1,5 @@
 [package]
-name = "radroots-events"
+name = "radroots_events"
 version = "0.1.0-alpha.1"
 edition.workspace = true
 authors = [
@@ -15,13 +15,13 @@ build = "build.rs"
 
 [features]
 default = ["std", "serde", "ts-rs", "typeshare"]
-std = ["radroots-core/std"]
-serde = ["dep:serde", "radroots-core/serde"]
+std = ["radroots_core/std"]
+serde = ["dep:serde", "radroots_core/serde"]
 ts-rs = ["dep:ts-rs"]
-typeshare = ["dep:typeshare", "radroots-core/typeshare"]
+typeshare = ["dep:typeshare", "radroots_core/typeshare"]
 
 [dependencies]
-radroots-core = { workspace = true, default-features = false }
+radroots_core = { workspace = true, default-features = false }
 serde = { workspace = true, default-features = false, features = [
   "alloc",
   "derive",

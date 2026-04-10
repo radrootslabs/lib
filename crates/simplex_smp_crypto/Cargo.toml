@@ -1,0 +1,33 @@
+[package]
+name = "radroots_simplex_smp_crypto"
+publish = false
+version = "0.1.0-alpha.1"
+edition.workspace = true
+authors = [
+  "Radroots Authors",
+]
+rust-version.workspace = true
+license.workspace = true
+description = "SimpleX SMP cryptography layer for Radroots"
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+
+[features]
+default = ["std"]
+std = [
+  "ed25519-dalek/std",
+  "getrandom/std",
+  "radroots_simplex_smp_proto/std",
+  "sha2/std",
+  "xsalsa20poly1305/std",
+]
+
+[dependencies]
+ed25519-dalek = { workspace = true, default-features = false, features = ["alloc"] }
+getrandom = { workspace = true, default-features = false }
+hkdf = { workspace = true, default-features = false }
+radroots_simplex_smp_proto = { workspace = true, default-features = false }
+sha2 = { workspace = true, default-features = false }
+xsalsa20poly1305 = { workspace = true, default-features = false }
+x25519-dalek = { workspace = true, default-features = false, features = ["static_secrets"] }

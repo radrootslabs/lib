@@ -3,12 +3,12 @@ id = "ts"
 repository = "sdk-typescript"
 
 [packages]
-"radroots-core" = "@radroots/core"
-"radroots-types" = "@radroots/types"
-"radroots-events" = "@radroots/events"
-"radroots-trade" = "@radroots/trade"
-"radroots-identity" = "@radroots/identity"
-"radroots-events-codec-wasm" = "@radroots/events-codec-wasm"
+"radroots_core" = "@radroots/core"
+"radroots_types" = "@radroots/types"
+"radroots_events" = "@radroots/events"
+"radroots_trade" = "@radroots/trade"
+"radroots_identity" = "@radroots/identity"
+"radroots_events_codec_wasm" = "@radroots/events-codec-wasm"
 
 [artifacts]
 models_dir = "src/generated"

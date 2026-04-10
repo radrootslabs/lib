@@ -1,0 +1,29 @@
+[package]
+name = "radroots_events_indexed"
+version = "0.1.0-alpha.1"
+edition.workspace = true
+authors = [
+  "Radroots Authors",
+]
+rust-version.workspace = true
+license.workspace = true
+description = "Indexed event model for Radroots"
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+
+[features]
+default = ["serde", "typeshare"]
+serde = ["dep:serde"]
+typeshare = ["dep:typeshare"]
+std = []
+
+[dependencies]
+serde = { workspace = true, default-features = false, features = [
+  "alloc",
+  "derive",
+], optional = true }
+typeshare = { workspace = true, optional = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

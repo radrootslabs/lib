@@ -1,10 +1,10 @@
-# radroots-net
+# radroots_net
 
 Unified networking interface for the Rad Roots SDK.
 
 ## Goals
 
-- define a stable entry surface over `radroots-net-core` primitives
+- define a stable entry surface over `radroots_net_core` primitives
 - keep network dependency wiring deterministic across build targets
 - support a minimal integration path for SDK consumers
 - provide reusable networking entry points for higher-level Rad Roots crates

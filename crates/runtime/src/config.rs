@@ -137,7 +137,7 @@ enabled = false
 
     #[test]
     fn load_required_file_reports_missing_path() {
-        let path = std::path::PathBuf::from("/tmp/radroots-runtime-config-does-not-exist.toml");
+        let path = std::path::PathBuf::from("/tmp/radroots_runtime-config-does-not-exist.toml");
         let err = load_required_file::<RuntimeCfg>(&path).expect_err("missing config should fail");
         match err {
             RuntimeConfigError::Load { path: p, .. } => assert_eq!(p, path),
@@ -146,7 +146,7 @@ enabled = false
 
     #[test]
     fn load_required_file_reports_missing_path_for_number_cfg_owned_path() {
-        let path = std::path::PathBuf::from("/tmp/radroots-runtime-config-missing-number.toml");
+        let path = std::path::PathBuf::from("/tmp/radroots_runtime-config-missing-number.toml");
         let err =
             load_required_file::<NumberCfg>(path.clone()).expect_err("missing config should fail");
         match err {
@@ -187,7 +187,7 @@ enabled = true
     #[test]
     fn load_required_file_with_env_reports_missing_path() {
         let path =
-            std::path::PathBuf::from("/tmp/radroots-runtime-config-does-not-exist-with-env.toml");
+            std::path::PathBuf::from("/tmp/radroots_runtime-config-does-not-exist-with-env.toml");
         let err = load_required_file_with_env::<RuntimeCfg>(path.clone(), "RADROOTS_RUNTIME_TEST")
             .expect_err("missing config should fail");
         match err {
@@ -258,7 +258,7 @@ enabled = false
     #[test]
     fn load_required_file_with_env_and_overrides_reports_build_error() {
         let path = std::path::PathBuf::from(
-            "/tmp/radroots-runtime-config-does-not-exist-with-overrides.toml",
+            "/tmp/radroots_runtime-config-does-not-exist-with-overrides.toml",
         );
         let err = load_required_file_with_env_and_overrides::<RuntimeCfg>(path.clone(), None, None)
             .expect_err("missing config should fail");

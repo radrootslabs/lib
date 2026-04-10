@@ -1,5 +1,5 @@
 [package]
-name = "radroots-types"
+name = "radroots_types"
 version = "0.1.0-alpha.1"
 edition.workspace = true
 authors = [

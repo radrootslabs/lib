@@ -1,0 +1,23 @@
+[package]
+name = "radroots_nostr_connect"
+version = "0.1.0-alpha.1"
+edition.workspace = true
+authors = [
+  "Radroots Authors",
+]
+rust-version.workspace = true
+license.workspace = true
+description = "NIP-46 protocol model for Radroots"
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+
+[dependencies]
+nostr = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+url = { workspace = true }
+
+[dev-dependencies]
+radroots_test_fixtures = { workspace = true }

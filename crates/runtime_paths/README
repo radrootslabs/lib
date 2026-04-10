@@ -1,0 +1,15 @@
+# radroots_runtime_paths
+
+Canonical local filesystem path resolution for Rad Roots runtimes.
+
+## Goals
+
+- define the shared interactive-user, service-host, repo-local, and mobile-native path contract
+- keep Linux, macOS, and Windows path derivation deterministic and explicit
+- keep runtime namespaces explicit across apps, services, workers, and shared storage areas
+- give higher-level runtimes one reusable source of truth for config, data, cache, logs, run, and
+  secrets roots
+
+## License
+
+Licensed under AGPL-3.0. See LICENSE.

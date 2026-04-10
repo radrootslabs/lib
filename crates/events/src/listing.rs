@@ -304,9 +304,9 @@ mod constants_tests {
 
     #[test]
     fn resolves_export_dir_for_override_and_fallback() {
-        let override_dir = PathBuf::from("/tmp/radroots-events-ts-export");
+        let override_dir = PathBuf::from("/tmp/radroots_events-ts-export");
         assert_eq!(
-            ts_export_dir_from(Some("/tmp/radroots-events-ts-export")),
+            ts_export_dir_from(Some("/tmp/radroots_events-ts-export")),
             override_dir
         );
 

@@ -1,5 +1,5 @@
 [package]
-name = "radroots-nostr"
+name = "radroots_nostr"
 version = "0.1.0-alpha.1"
 edition.workspace = true
 authors = [
@@ -15,26 +15,26 @@ readme.workspace = true
 [features]
 default = ["std"]
 std = []
-client = ["std", "dep:nostr-sdk", "dep:radroots-identity"]
+client = ["std", "dep:nostr-sdk", "dep:radroots_identity"]
 codec = [
-  "dep:radroots-events",
-  "dep:radroots-events-codec",
-  "radroots-events-codec/nostr",
+  "dep:radroots_events",
+  "dep:radroots_events_codec",
+  "radroots_events_codec/nostr",
 ]
 events = [
-  "dep:radroots-events",
-  "dep:radroots-events-codec",
-  "radroots-events/std",
-  "radroots-events/serde",
-  "radroots-events-codec/std",
+  "dep:radroots_events",
+  "dep:radroots_events_codec",
+  "radroots_events/std",
+  "radroots_events/serde",
+  "radroots_events_codec/std",
 ]
 http = ["dep:reqwest"]
 nip17 = ["std", "codec", "nostr/nip44", "nostr/nip59"]
 
 [dependencies]
-radroots-events = { workspace = true, optional = true, default-features = false }
-radroots-events-codec = { workspace = true, optional = true, default-features = false }
-radroots-identity = { workspace = true, optional = true, default-features = true }
+radroots_events = { workspace = true, optional = true, default-features = false }
+radroots_events_codec = { workspace = true, optional = true, default-features = false }
+radroots_identity = { workspace = true, optional = true, default-features = true }
 nostr = { workspace = true, features = ["nip04"] }
 nostr-sdk = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true, default-features = false, features = [
@@ -46,5 +46,5 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
-radroots-test-fixtures = { workspace = true }
+radroots_test_fixtures = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

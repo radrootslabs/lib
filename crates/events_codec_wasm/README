@@ -1,0 +1,14 @@
+# radroots_events_codec_wasm
+
+Wasm bindings for Rad Roots event encoding and decoding.
+
+## Goals
+
+- define stable wasm bindings for `radroots_events_codec`
+- keep tag generation and JSON conversion behavior deterministic in web runtimes
+- support typed event-tag builders across listing, message, profile, and job flows
+- provide reusable codec bridge functions for JavaScript integrations
+
+## License
+
+Licensed under AGPL-3.0. See LICENSE.

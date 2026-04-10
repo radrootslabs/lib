@@ -4,11 +4,11 @@ version = "0.1.0"
 purpose = "offline-first local replica state and deterministic sync"
 
 [crate_family]
-schema = "radroots-replica-db-schema"
-storage = "radroots-replica-db"
-storage_wasm = "radroots-replica-db-wasm"
-sync = "radroots-replica-sync"
-sync_wasm = "radroots-replica-sync-wasm"
+schema = "radroots_replica_db_schema"
+storage = "radroots_replica_db"
+storage_wasm = "radroots_replica_db_wasm"
+sync = "radroots_replica_sync"
+sync_wasm = "radroots_replica_sync_wasm"
 
 [policy]
 transport_agnostic_sync_core = true

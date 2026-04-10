@@ -99,16 +99,16 @@ let
   ];
   sdkContractCrates = [
     "xtask"
-    "radroots-core"
-    "radroots-types"
-    "radroots-events"
-    "radroots-trade"
-    "radroots-identity"
-    "radroots-replica-db-schema"
-    "radroots-events-codec"
-    "radroots-events-codec-wasm"
-    "radroots-nostr-connect"
-    "radroots-nostr-signer"
+    "radroots_core"
+    "radroots_types"
+    "radroots_events"
+    "radroots_trade"
+    "radroots_identity"
+    "radroots_replica_db_schema"
+    "radroots_events_codec"
+    "radroots_events_codec_wasm"
+    "radroots_nostr_connect"
+    "radroots_nostr_signer"
   ];
   sdkContractCargoArgs = lib.concatStringsSep " " (map (crate: "-p ${crate}") sdkContractCrates);
   craneLib = (crane.mkLib pkgs).overrideToolchain toolchains.stable;

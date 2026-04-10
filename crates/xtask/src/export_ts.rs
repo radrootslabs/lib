@@ -27,6 +27,20 @@ fn to_package_dir(base: &Path, package_name: &str) -> PathBuf {
     base.join(stripped)
 }
 
+fn package_dir_name(package_name: &str) -> &str {
+    package_name
+        .strip_prefix("@radroots/")
+        .unwrap_or(package_name)
+}
+
+fn crate_dir_name(crate_name: &str) -> &str {
+    crate_name.strip_prefix("radroots_").unwrap_or(crate_name)
+}
+
+fn is_wasm_crate(crate_name: &str) -> bool {
+    crate_name.ends_with("_wasm")
+}
+
 fn ts_export_mapping(
     bundle: &contract::ContractBundle,
 ) -> Result<&contract::ExportMapping, String> {
@@ -62,8 +76,8 @@ fn selected_package_entries<'a>(
         {
             return Ok(vec![entry]);
         }
-        if !selector.starts_with("radroots-") {
-            let crate_candidate = format!("radroots-{selector}");
+        if !selector.starts_with("radroots_") {
+            let crate_candidate = format!("radroots_{selector}");
             if let Some(entry) = mapping.packages.get_key_value(&crate_candidate) {
                 return Ok(vec![entry]);
             }
@@ -261,8 +275,8 @@ fn export_ts_models_with_selector(
     let mut expected = 0usize;
     let mut copied = 0usize;
     for (crate_name, package_name) in selected_entries {
-        let crate_dir = crate_name.strip_prefix("radroots-").unwrap_or(crate_name);
-        if crate_name.ends_with("-wasm") {
+        let crate_dir = crate_dir_name(crate_name);
+        if is_wasm_crate(crate_name) {
             continue;
         }
         if !crate_supports_ts_rs(workspace_root, crate_dir)
@@ -271,7 +285,9 @@ fn export_ts_models_with_selector(
             continue;
         }
         expected += 1;
-        let src = source_root.join(crate_dir).join("types.ts");
+        let src = source_root
+            .join(package_dir_name(package_name))
+            .join("types.ts");
         let dst = to_package_dir(&ts_out_root, package_name)
             .join(models_dir)
             .join("types.ts");
@@ -318,9 +334,13 @@ fn export_ts_constants_with_selector(
     }
     let ts_out_root = out_dir.join("ts").join("packages");
     for (crate_name, package_name) in selected_entries {
-        let crate_dir = crate_name.strip_prefix("radroots-").unwrap_or(crate_name);
+        if is_wasm_crate(crate_name) {
+            continue;
+        }
         for filename in ["constants.ts", "kinds.ts"] {
-            let src = source_root.join(crate_dir).join(filename);
+            let src = source_root
+                .join(package_dir_name(package_name))
+                .join(filename);
             let dst = to_package_dir(&ts_out_root, package_name)
                 .join(constants_dir)
                 .join(filename);
@@ -357,10 +377,10 @@ fn export_ts_wasm_artifacts_with_selector(
     let ts_out_root = out_dir.join("ts").join("packages");
     let mut copied = 0usize;
     for (crate_name, package_name) in selected_entries {
-        if !crate_name.ends_with("-wasm") {
+        if !is_wasm_crate(crate_name) {
             continue;
         }
-        let crate_dir = crate_name.strip_prefix("radroots-").unwrap_or(crate_name);
+        let crate_dir = crate_dir_name(crate_name);
         let source_root = workspace_root
             .join("crates")
             .join(crate_dir)
@@ -437,10 +457,10 @@ fn generate_ts_rs_sources_with_selector(
     let mut expected = 0usize;
     let mut supports_ts_rs = BTreeMap::new();
     for (crate_name, _) in &selected_entries {
-        if crate_name.ends_with("-wasm") {
+        if is_wasm_crate(crate_name) {
             continue;
         }
-        let crate_dir = crate_name.strip_prefix("radroots-").unwrap_or(crate_name);
+        let crate_dir = crate_dir_name(crate_name);
         let supports = crate_supports_ts_rs(workspace_root, crate_dir)
             .expect("validated workspace crate manifests are readable");
         supports_ts_rs.insert(crate_name.as_str(), supports);
@@ -452,7 +472,7 @@ fn generate_ts_rs_sources_with_selector(
         return Ok(source_root);
     }
     for (crate_name, package_name) in selected_entries {
-        if crate_name.ends_with("-wasm") {
+        if is_wasm_crate(crate_name) {
             continue;
         }
         if !supports_ts_rs
@@ -572,7 +592,7 @@ resolver = "2"
             &root.join("crates").join("a").join("Cargo.toml"),
             &format!(
                 r#"[package]
-name = "radroots-a"
+name = "radroots_a"
 version = "0.1.0"
 edition = "2024"
 description = "crate a"
@@ -591,7 +611,7 @@ readme = "README.md"
         write_file(
             &root.join("crates").join("b").join("Cargo.toml"),
             r#"[package]
-name = "radroots-b"
+name = "radroots_b"
 version = "0.1.0"
 edition = "2024"
 publish = false
@@ -613,14 +633,14 @@ publish = false
         write_file(
             &root.join("contract").join("manifest.toml"),
             r#"[contract]
-name = "radroots-contract"
+name = "radroots_contract"
 version = "1.0.0"
 source = "synthetic"
 
 [surface]
-model_crates = ["radroots-a"]
-algorithm_crates = ["radroots-b"]
-wasm_crates = ["radroots-a-wasm"]
+model_crates = ["radroots_a"]
+algorithm_crates = ["radroots_b"]
+wasm_crates = ["radroots_a_wasm"]
 
 [policy]
 exclude_internal_workspace_crates = true
@@ -652,7 +672,7 @@ id = "ts"
 repository = "sdk-typescript"
 
 [packages]
-"radroots-a" = "@radroots/a"
+"radroots_a" = "@radroots/a"
 
 [artifacts]
 models_dir = "src/generated"
@@ -671,7 +691,7 @@ fail_under_branches = 100.0
 require_branches = true
 
 [required]
-crates = ["radroots-a", "radroots-b"]
+crates = ["radroots_a", "radroots_b"]
 "#,
         );
         write_file(
@@ -683,13 +703,13 @@ crates = ["radroots-a", "radroots-b"]
 version = "1.0.0"
 
 [publish]
-crates = ["radroots-a"]
+crates = ["radroots_a"]
 
 [internal]
-crates = ["radroots-b"]
+crates = ["radroots_b"]
 
 [publish_order]
-crates = ["radroots-a"]
+crates = ["radroots_a"]
 "#,
         );
         write_file(
@@ -697,7 +717,7 @@ crates = ["radroots-a"]
                 .join("target")
                 .join("coverage")
                 .join("coverage-refresh.tsv"),
-            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots-a\tpass\t100.0\t100.0\t100.0\t100.0\tfile\nradroots-b\tpass\t100.0\t100.0\t100.0\t100.0\tfile\n",
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots_a\tpass\t100.0\t100.0\t100.0\t100.0\tfile\nradroots_b\tpass\t100.0\t100.0\t100.0\t100.0\tfile\n",
         );
         root
     }
@@ -735,9 +755,9 @@ mod tests {
 
     fn test_ts_mapping() -> contract::ExportMapping {
         let mut packages = BTreeMap::new();
-        packages.insert("radroots-core".to_string(), "@radroots/core".to_string());
+        packages.insert("radroots_core".to_string(), "@radroots/core".to_string());
         packages.insert(
-            "radroots-events-codec-wasm".to_string(),
+            "radroots_events_codec_wasm".to_string(),
             "@radroots/events-codec-wasm".to_string(),
         );
         contract::ExportMapping {
@@ -762,9 +782,9 @@ mod tests {
         let all = selected_package_entries(&mapping, None).expect("select all");
         assert_eq!(all.len(), 2);
 
-        let by_crate = selected_package_entries(&mapping, Some("radroots-core")).expect("by crate");
+        let by_crate = selected_package_entries(&mapping, Some("radroots_core")).expect("by crate");
         assert_eq!(by_crate.len(), 1);
-        assert_eq!(by_crate[0].0.as_str(), "radroots-core");
+        assert_eq!(by_crate[0].0.as_str(), "radroots_core");
 
         let by_short = selected_package_entries(&mapping, Some("core")).expect("by short crate");
         assert_eq!(by_short.len(), 1);
@@ -773,11 +793,11 @@ mod tests {
         let by_package =
             selected_package_entries(&mapping, Some("@radroots/core")).expect("by package");
         assert_eq!(by_package.len(), 1);
-        assert_eq!(by_package[0].0.as_str(), "radroots-core");
+        assert_eq!(by_package[0].0.as_str(), "radroots_core");
 
         let wasm = selected_package_entries(&mapping, Some("events-codec-wasm")).expect("wasm");
         assert_eq!(wasm.len(), 1);
-        assert_eq!(wasm[0].0.as_str(), "radroots-events-codec-wasm");
+        assert_eq!(wasm[0].0.as_str(), "radroots_events_codec_wasm");
     }
 
     #[test]
@@ -790,7 +810,7 @@ mod tests {
     #[test]
     fn selected_package_entries_handle_prefixed_unknown_selectors() {
         let mapping = test_ts_mapping();
-        let by_crate = selected_package_entries(&mapping, Some("radroots-missing"))
+        let by_crate = selected_package_entries(&mapping, Some("radroots_missing"))
             .expect_err("unknown prefixed crate selector");
         assert!(by_crate.contains("unknown ts export crate selector"));
         let by_package = selected_package_entries(&mapping, Some("@radroots/missing"))
@@ -811,8 +831,8 @@ mod tests {
                     source: "source".to_string(),
                 },
                 surface: contract::Surface {
-                    model_crates: vec!["radroots-a".to_string()],
-                    algorithm_crates: vec!["radroots-b".to_string()],
+                    model_crates: vec!["radroots_a".to_string()],
+                    algorithm_crates: vec!["radroots_b".to_string()],
                     wasm_crates: vec![],
                 },
                 policy: contract::Policy {
@@ -843,7 +863,7 @@ mod tests {
         assert!(mapping_err.contains("missing ts export mapping"));
 
         let mut packages = BTreeMap::new();
-        packages.insert("radroots-a".to_string(), "@radroots/a".to_string());
+        packages.insert("radroots_a".to_string(), "@radroots/a".to_string());
         let no_artifacts = contract::ExportMapping {
             language: contract::ExportLanguage {
                 id: "ts".to_string(),
@@ -861,7 +881,7 @@ mod tests {
     fn selected_package_entries_supports_package_candidate_lookup() {
         let mut packages = BTreeMap::new();
         packages.insert(
-            "radroots-special".to_string(),
+            "radroots_special".to_string(),
             "@radroots/special-pkg".to_string(),
         );
         let mapping = contract::ExportMapping {
@@ -875,7 +895,7 @@ mod tests {
         let selected =
             selected_package_entries(&mapping, Some("special-pkg")).expect("package candidate");
         assert_eq!(selected.len(), 1);
-        assert_eq!(selected[0].0.as_str(), "radroots-special");
+        assert_eq!(selected[0].0.as_str(), "radroots_special");
         assert_eq!(selected[0].1.as_str(), "@radroots/special-pkg");
     }
 
@@ -1155,8 +1175,8 @@ id = "ts"
 repository = "sdk-typescript"
 
 [packages]
-"radroots-a" = "@radroots/a"
-"radroots-a-wasm" = "@radroots/a-wasm"
+"radroots_a" = "@radroots/a"
+"radroots_a_wasm" = "@radroots/a-wasm"
 
 [artifacts]
 models_dir = "src/generated"
@@ -1168,10 +1188,10 @@ manifest_file = "export-manifest.json"
         write_file(
             &root
                 .join("crates")
-                .join("a-wasm")
+                .join("a_wasm")
                 .join("pkg")
                 .join("dist")
-                .join("radroots-a-wasm.js"),
+                .join("radroots_a_wasm.js"),
             "export const probe = true;\n",
         );
         let out_dir = root.join("out");
@@ -1184,7 +1204,7 @@ manifest_file = "export-manifest.json"
                 .join("packages")
                 .join("a-wasm")
                 .join("dist")
-                .join("radroots-a-wasm.js")
+                .join("radroots_a_wasm.js")
                 .exists()
         );
 
@@ -1279,7 +1299,7 @@ id = "ts"
 repository = "sdk-typescript"
 
 [packages]
-"radroots-a" = "@radroots/a"
+"radroots_a" = "@radroots/a"
 
 [artifacts]
 models_dir = "src/generated"
@@ -1305,7 +1325,7 @@ id = "ts"
 repository = "sdk-typescript"
 
 [packages]
-"radroots-a" = "@radroots/a"
+"radroots_a" = "@radroots/a"
 
 [artifacts]
 models_dir = "src/generated"
@@ -1375,7 +1395,7 @@ manifest_file = "nested/export-manifest.json"
         );
         let command_fail_err = generate_ts_rs_sources(&root_command_fail)
             .expect_err("cargo test failure should surface");
-        assert!(command_fail_err.contains("cargo test failed for radroots-a"));
+        assert!(command_fail_err.contains("cargo test failed for radroots_a"));
         assert!(command_fail_err.contains("unclosed delimiter"));
         let _ = fs::remove_dir_all(root_command_fail);
     }
@@ -1391,8 +1411,8 @@ id = "ts"
 repository = "sdk-typescript"
 
 [packages]
-"radroots-a" = "@radroots/a"
-"radroots-b" = "@radroots/b"
+"radroots_a" = "@radroots/a"
+"radroots_b" = "@radroots/b"
 
 [artifacts]
 models_dir = "src/generated"
@@ -1422,8 +1442,8 @@ id = "ts"
 repository = "sdk-typescript"
 
 [packages]
-"radroots-a" = "@radroots/a"
-"radroots-b" = "@radroots/b"
+"radroots_a" = "@radroots/a"
+"radroots_b" = "@radroots/b"
 
 [artifacts]
 models_dir = "src/generated"
@@ -1469,7 +1489,7 @@ manifest_file = "export-manifest.json"
         let single_out = root.join("single-out");
         fs::create_dir_all(&single_out).expect("create single out");
         let single_manifest =
-            export_ts_bundle_for_crate(&root, &single_out, "radroots-a").expect("single bundle");
+            export_ts_bundle_for_crate(&root, &single_out, "radroots_a").expect("single bundle");
         assert!(single_manifest.exists());
         assert!(
             single_out
@@ -1511,7 +1531,7 @@ id = "ts"
 repository = "sdk-typescript"
 
 [packages]
-"radroots-a" = "@radroots/a"
+"radroots_a" = "@radroots/a"
 
 [artifacts]
 models_dir = "src/generated"
@@ -1536,8 +1556,8 @@ id = "ts"
 repository = "sdk-typescript"
 
 [packages]
-"radroots-a" = "@radroots/a"
-"radroots-a-wasm" = "@radroots/a-wasm"
+"radroots_a" = "@radroots/a"
+"radroots_a_wasm" = "@radroots/a-wasm"
 
 [artifacts]
 models_dir = "src/generated"
@@ -1550,7 +1570,7 @@ manifest_file = "export-manifest.json"
         write_file(
             &bundle_wasm
                 .join("crates")
-                .join("a-wasm")
+                .join("a_wasm")
                 .join("pkg")
                 .join("dist")
                 .join("nested")
@@ -1580,7 +1600,7 @@ manifest_file = "export-manifest.json"
             "blocker",
         );
         let crate_models_err =
-            export_ts_bundle_for_crate(&crate_models, &crate_models_out, "radroots-a")
+            export_ts_bundle_for_crate(&crate_models, &crate_models_out, "radroots_a")
                 .expect_err("crate models fail");
         assert!(crate_models_err.contains("create"));
         let _ = fs::remove_dir_all(&crate_models);
@@ -1596,7 +1616,7 @@ id = "ts"
 repository = "sdk-typescript"
 
 [packages]
-"radroots-a" = "@radroots/a"
+"radroots_a" = "@radroots/a"
 
 [artifacts]
 models_dir = "src/generated"
@@ -1609,7 +1629,7 @@ manifest_file = "export-manifest.json"
         let crate_constants_out = crate_constants.join("out");
         fs::create_dir_all(&crate_constants_out).expect("create crate constants out");
         let crate_constants_err =
-            export_ts_bundle_for_crate(&crate_constants, &crate_constants_out, "radroots-a")
+            export_ts_bundle_for_crate(&crate_constants, &crate_constants_out, "radroots_a")
                 .expect_err("crate constants fail");
         assert!(crate_constants_err.contains("create"));
         let _ = fs::remove_dir_all(&crate_constants);
@@ -1622,7 +1642,7 @@ id = "ts"
 repository = "sdk-typescript"
 
 [packages]
-"radroots-a-wasm" = "@radroots/a-wasm"
+"radroots_a_wasm" = "@radroots/a-wasm"
 
 [artifacts]
 models_dir = "src/generated"
@@ -1634,7 +1654,7 @@ manifest_file = "export-manifest.json"
         write_file(
             &crate_wasm
                 .join("crates")
-                .join("a-wasm")
+                .join("a_wasm")
                 .join("pkg")
                 .join("dist")
                 .join("nested")
@@ -1652,7 +1672,7 @@ manifest_file = "export-manifest.json"
             "blocker",
         );
         let crate_wasm_err =
-            export_ts_bundle_for_crate(&crate_wasm, &crate_wasm_out, "radroots-a-wasm")
+            export_ts_bundle_for_crate(&crate_wasm, &crate_wasm_out, "radroots_a_wasm")
                 .expect_err("crate wasm fail");
         assert!(crate_wasm_err.contains("create"));
         let _ = fs::remove_dir_all(&crate_wasm);
@@ -1670,7 +1690,7 @@ manifest_file = "export-manifest.json"
         assert!(write_ts_export_manifest(&missing_root, &missing_out).is_err());
         assert!(generate_ts_rs_sources(&missing_root).is_err());
         assert!(export_ts_bundle(&missing_root, &missing_out).is_err());
-        assert!(export_ts_bundle_for_crate(&missing_root, &missing_out, "radroots-a").is_err());
+        assert!(export_ts_bundle_for_crate(&missing_root, &missing_out, "radroots_a").is_err());
         let _ = fs::remove_dir_all(&missing_root);
 
         let invalid_contract = create_synthetic_workspace("wrapper_invalid_contract", true);
@@ -1682,9 +1702,9 @@ version = "1.0.0"
 source = "synthetic"
 
 [surface]
-model_crates = ["radroots-a"]
-algorithm_crates = ["radroots-b"]
-wasm_crates = ["radroots-a-wasm"]
+model_crates = ["radroots_a"]
+algorithm_crates = ["radroots_b"]
+wasm_crates = ["radroots_a_wasm"]
 
 [policy]
 exclude_internal_workspace_crates = true
@@ -1712,7 +1732,7 @@ id = "py"
 repository = "sdk-python"
 
 [packages]
-"radroots-a" = "radroots-a"
+"radroots_a" = "radroots_a"
 "#,
         );
         let missing_ts_out = missing_ts_export.join("out");
@@ -1763,7 +1783,7 @@ id = "ts"
 repository = "sdk-typescript"
 
 [packages]
-"radroots-a" = "@radroots/a"
+"radroots_a" = "@radroots/a"
 "#,
         );
         let missing_artifacts_out = missing_artifacts.join("out");
@@ -1785,7 +1805,7 @@ id = "ts"
 repository = "sdk-typescript"
 
 [packages]
-"radroots-a" = "@radroots/a"
+"radroots_a" = "@radroots/a"
 
 [artifacts]
 models_dir = ""
@@ -1813,7 +1833,7 @@ id = "ts"
 repository = "sdk-typescript"
 
 [packages]
-"radroots-a" = "@radroots/a"
+"radroots_a" = "@radroots/a"
 
 [artifacts]
 models_dir = "src/generated"
@@ -1841,7 +1861,7 @@ id = "ts"
 repository = "sdk-typescript"
 
 [packages]
-"radroots-a-wasm" = "@radroots/a-wasm"
+"radroots_a_wasm" = "@radroots/a-wasm"
 
 [artifacts]
 models_dir = "src/generated"
@@ -1869,7 +1889,7 @@ id = "ts"
 repository = "sdk-typescript"
 
 [packages]
-"radroots-a" = "@radroots/a"
+"radroots_a" = "@radroots/a"
 
 [artifacts]
 models_dir = "src/generated"
@@ -1944,7 +1964,7 @@ id = "ts"
 repository = "sdk-typescript"
 
 [packages]
-"radroots-a-wasm" = "@radroots/a-wasm"
+"radroots_a_wasm" = "@radroots/a-wasm"
 
 [artifacts]
 models_dir = "src/generated"
@@ -1956,7 +1976,7 @@ manifest_file = "export-manifest.json"
         write_file(
             &wasm_copy_err_root
                 .join("crates")
-                .join("a-wasm")
+                .join("a_wasm")
                 .join("pkg")
                 .join("dist")
                 .join("nested")

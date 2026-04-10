@@ -28,26 +28,26 @@ directory:
     crates/app-wasm: crate:app_wasm
     crates/core: crate:core
     crates/events: crate:events
-    crates/events-codec: crate:events_codec
-    crates/events-codec-wasm: crate:events_codec_wasm
-    crates/events-indexed: crate:events_indexed
+    crates/events_codec: crate:events_codec
+    crates/events_codec_wasm: crate:events_codec_wasm
+    crates/events_indexed: crate:events_indexed
     crates/identity: crate:identity
     crates/log: crate:log
     crates/net: crate:net
-    crates/net-core: crate:net_core
+    crates/net_core: crate:net_core
     crates/nostr: crate:nostr
-    crates/nostr-accounts: crate:nostr_accounts
-    crates/nostr-ndb: crate:nostr_ndb
-    crates/nostr-runtime: crate:nostr_runtime
+    crates/nostr_accounts: crate:nostr_accounts
+    crates/nostr_ndb: crate:nostr_ndb
+    crates/nostr_runtime: crate:nostr_runtime
     crates/runtime: crate:runtime
-    crates/sql-core: crate:sql_core
-    crates/sql-wasm-bridge: crate:sql_wasm_bridge
-    crates/sql-wasm-core: crate:sql_wasm_core
-    crates/replica-db-schema: crate:replica_db_schema
-    crates/replica-db: crate:replica_db
-    crates/replica-db-wasm: crate:replica_db_wasm
-    crates/replica-sync: crate:replica_sync
-    crates/replica-sync-wasm: crate:replica_sync_wasm
+    crates/sql_core: crate:sql_core
+    crates/sql_wasm_bridge: crate:sql_wasm_bridge
+    crates/sql_wasm_core: crate:sql_wasm_core
+    crates/replica_db_schema: crate:replica_db_schema
+    crates/replica_db: crate:replica_db
+    crates/replica_db_wasm: crate:replica_db_wasm
+    crates/replica_sync: crate:replica_sync
+    crates/replica_sync_wasm: crate:replica_sync_wasm
     crates/trade: crate:trade
     crates/types: crate:types
     crates/xtask: crate:xtask

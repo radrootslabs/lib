@@ -1,0 +1,27 @@
+[package]
+name = "radroots_replica_db_schema"
+version = "0.1.0-alpha.1"
+edition.workspace = true
+authors = [
+  "Radroots Authors",
+]
+rust-version.workspace = true
+license.workspace = true
+description = "Replica schema model for Radroots"
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+build = "build.rs"
+
+[lib]
+crate-type = ["rlib"]
+
+[features]
+default = []
+ts-rs = ["dep:ts-rs"]
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+ts-rs = { workspace = true, optional = true }
+radroots_types = { workspace = true }

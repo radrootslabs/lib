@@ -1,0 +1,22 @@
+[package]
+name = "radroots_secret_vault"
+version = "0.1.0-alpha.1"
+edition.workspace = true
+authors = [
+  "Radroots Authors",
+]
+rust-version.workspace = true
+license.workspace = true
+description = "Secret storage model for Radroots"
+repository.workspace = true
+homepage.workspace = true
+readme = "README"
+
+[features]
+default = []
+std = []
+memory-vault = ["std"]
+os-keyring = ["std", "dep:keyring"]
+
+[dependencies]
+keyring = { workspace = true, optional = true }

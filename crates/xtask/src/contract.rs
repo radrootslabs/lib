@@ -915,7 +915,7 @@ resolver = "2"
         write_file(
             &root.join("crates").join("a").join("Cargo.toml"),
             r#"[package]
-name = "radroots-a"
+name = "radroots_a"
 version = "0.1.0"
 edition = "2024"
 description = "crate a"
@@ -928,7 +928,7 @@ readme = "README.md"
         write_file(
             &root.join("crates").join("b").join("Cargo.toml"),
             r#"[package]
-name = "radroots-b"
+name = "radroots_b"
 version = "0.1.0"
 edition = "2024"
 publish = false
@@ -947,14 +947,14 @@ publish = false
         write_file(
             &root.join("contract").join("manifest.toml"),
             r#"[contract]
-name = "radroots-contract"
+name = "radroots_contract"
 version = "1.0.0"
 source = "synthetic"
 
 [surface]
-model_crates = ["radroots-a"]
-algorithm_crates = ["radroots-b"]
-wasm_crates = ["radroots-a-wasm"]
+model_crates = ["radroots_a"]
+algorithm_crates = ["radroots_b"]
+wasm_crates = ["radroots_a_wasm"]
 
 [policy]
 exclude_internal_workspace_crates = true
@@ -986,7 +986,7 @@ id = "ts"
 repository = "sdk-typescript"
 
 [packages]
-"radroots-a" = "@radroots/a"
+"radroots_a" = "@radroots/a"
 
 [artifacts]
 models_dir = "src/generated"
@@ -1005,7 +1005,7 @@ fail_under_branches = 100.0
 require_branches = true
 
 [required]
-crates = ["radroots-a", "radroots-b"]
+crates = ["radroots_a", "radroots_b"]
 "#,
         );
         write_file(
@@ -1017,13 +1017,13 @@ crates = ["radroots-a", "radroots-b"]
 version = "1.0.0"
 
 [publish]
-crates = ["radroots-a"]
+crates = ["radroots_a"]
 
 [internal]
-crates = ["radroots-b"]
+crates = ["radroots_b"]
 
 [publish_order]
-crates = ["radroots-a"]
+crates = ["radroots_a"]
 "#,
         );
         write_file(
@@ -1031,7 +1031,7 @@ crates = ["radroots-a"]
                 .join("target")
                 .join("coverage")
                 .join("coverage-refresh.tsv"),
-            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots-a\tpass\t100.0\t100.0\t100.0\t100.0\tfile\nradroots-b\tpass\t100.0\t100.0\t100.0\t100.0\tfile\n",
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots_a\tpass\t100.0\t100.0\t100.0\t100.0\tfile\nradroots_b\tpass\t100.0\t100.0\t100.0\t100.0\tfile\n",
         );
         root
     }
@@ -1185,7 +1185,7 @@ pub enum RadrootsCoreUnitDimension {
         let contract_root = duplicate_root.join("contract");
         write_file(
             &contract_root.join("coverage").join("policy.toml"),
-            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots-a\", \"radroots-a\"]\n",
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\", \"radroots_a\"]\n",
         );
         let duplicate_err =
             load_coverage_policy(&contract_root).expect_err("duplicate required crates");
@@ -1209,10 +1209,10 @@ pub enum RadrootsCoreUnitDimension {
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         fs::write(
             coverage_dir.join("coverage-refresh.tsv"),
-            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots-core\tpass\t100.0\t100.0\t100.0\t100.0\tfile\n",
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots_core\tpass\t100.0\t100.0\t100.0\t100.0\tfile\n",
         )
         .expect("write coverage file");
-        let required = ["radroots-core".to_string()]
+        let required = ["radroots_core".to_string()]
             .into_iter()
             .collect::<BTreeSet<_>>();
         validate_required_coverage_summary(&root, &required, strict_thresholds())
@@ -1220,7 +1220,7 @@ pub enum RadrootsCoreUnitDimension {
 
         fs::write(
             coverage_dir.join("coverage-refresh.tsv"),
-            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots-core\tpass\t100.0\t99.9\t100.0\t100.0\tfile\n",
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots_core\tpass\t100.0\t99.9\t100.0\t100.0\tfile\n",
         )
         .expect("write function coverage file");
         let func_err = validate_required_coverage_summary(&root, &required, strict_thresholds())
@@ -1229,7 +1229,7 @@ pub enum RadrootsCoreUnitDimension {
 
         fs::write(
             coverage_dir.join("coverage-refresh.tsv"),
-            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots-core\tpass\t100.0\t100.0\t99.9\t100.0\tfile\n",
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots_core\tpass\t100.0\t100.0\t99.9\t100.0\tfile\n",
         )
         .expect("write branch coverage file");
         let branch_err = validate_required_coverage_summary(&root, &required, strict_thresholds())
@@ -1238,7 +1238,7 @@ pub enum RadrootsCoreUnitDimension {
 
         fs::write(
             coverage_dir.join("coverage-refresh.tsv"),
-            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots-core\tpass\t100.0\t100.0\t100.0\t99.9\tfile\n",
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots_core\tpass\t100.0\t100.0\t100.0\t99.9\tfile\n",
         )
         .expect("write region coverage file");
         let region_err = validate_required_coverage_summary(&root, &required, strict_thresholds())
@@ -1261,17 +1261,17 @@ members = ["crates/a"]
         fs::write(
             root.join("crates").join("a").join("Cargo.toml"),
             r#"[package]
-name = "radroots-a"
+name = "radroots_a"
 version = "0.1.0"
 edition = "2024"
 repository = { workspace = true }
 homepage = { workspace = true }
-documentation = "https://docs.rs/radroots-a"
+documentation = "https://docs.rs/radroots_a"
 readme = { workspace = true }
 "#,
         )
         .expect("write package manifest");
-        let publish = ["radroots-a".to_string()]
+        let publish = ["radroots_a".to_string()]
             .into_iter()
             .collect::<BTreeSet<_>>();
         let err =
@@ -1356,14 +1356,14 @@ members = ["crates/a", "crates/b"]
 
         write_file(
             &coverage_dir.join("coverage-refresh.tsv"),
-            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots-a\tpass\tnot-a-number\t100\t100\t100\tfile\n",
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots_a\tpass\tnot-a-number\t100\t100\t100\tfile\n",
         );
         let bad_percent = load_coverage_refresh_rows(&root).expect_err("invalid coverage percent");
         assert!(bad_percent.contains("parse exec"));
 
         write_file(
             &coverage_dir.join("coverage-refresh.tsv"),
-            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots-a\tpass\t100\t100\t100\tnot-a-number\tfile\n",
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots_a\tpass\t100\t100\t100\tnot-a-number\tfile\n",
         );
         let bad_region =
             load_coverage_refresh_rows(&root).expect_err("invalid region coverage percent");
@@ -1371,16 +1371,16 @@ members = ["crates/a", "crates/b"]
 
         write_file(
             &coverage_dir.join("coverage-refresh.tsv"),
-            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots-a\tpass\t100\t100\t100\t100\tfile\nradroots-a\tpass\t100\t100\t100\t100\tfile\n",
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots_a\tpass\t100\t100\t100\t100\tfile\nradroots_a\tpass\t100\t100\t100\t100\tfile\n",
         );
         let duplicate_row = load_coverage_refresh_rows(&root).expect_err("duplicate coverage row");
         assert!(duplicate_row.contains("duplicate coverage row"));
 
         write_file(
             &coverage_dir.join("coverage-refresh.tsv"),
-            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots-a\tfail\t100\t100\t100\t100\tfile\n",
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots_a\tfail\t100\t100\t100\t100\tfile\n",
         );
-        let required = ["radroots-a".to_string()]
+        let required = ["radroots_a".to_string()]
             .into_iter()
             .collect::<BTreeSet<_>>();
         let non_pass = validate_required_coverage_summary(&root, &required, strict_thresholds())
@@ -1389,7 +1389,7 @@ members = ["crates/a", "crates/b"]
 
         write_file(
             &coverage_dir.join("coverage-refresh.tsv"),
-            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots-a\tpass\t99.9\t100\t100\t100\tfile\n",
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots_a\tpass\t99.9\t100\t100\t100\tfile\n",
         );
         let below_100 = validate_required_coverage_summary(&root, &required, strict_thresholds())
             .expect_err("coverage below 100");
@@ -1474,7 +1474,7 @@ fail_under_branches = 100.0
 require_branches = true
 
 [required]
-crates = ["radroots-a", "radroots-b"]
+crates = ["radroots_a", "radroots_b"]
 "#,
         );
         let invalid_gate = validate_coverage_policy_parity(&root, &contract_root)
@@ -1491,7 +1491,7 @@ fail_under_branches = 100.0
 require_branches = true
 
 [required]
-crates = ["radroots-a", "radroots-b"]
+crates = ["radroots_a", "radroots_b"]
 "#,
         );
         let invalid_functions = validate_coverage_policy_parity(&root, &contract_root)
@@ -1508,7 +1508,7 @@ fail_under_branches = 100.0
 require_branches = true
 
 [required]
-crates = ["radroots-a", "radroots-b"]
+crates = ["radroots_a", "radroots_b"]
 "#,
         );
         let invalid_regions = validate_coverage_policy_parity(&root, &contract_root)
@@ -1525,7 +1525,7 @@ fail_under_branches = 99.0
 require_branches = true
 
 [required]
-crates = ["radroots-a", "radroots-b"]
+crates = ["radroots_a", "radroots_b"]
 "#,
         );
         let invalid_branches = validate_coverage_policy_parity(&root, &contract_root)
@@ -1542,7 +1542,7 @@ fail_under_branches = 100.0
 require_branches = true
 
 [required]
-crates = ["radroots-a", "radroots-a"]
+crates = ["radroots_a", "radroots_a"]
 "#,
         );
         let duplicate_required = validate_coverage_policy_parity(&root, &contract_root)
@@ -1559,7 +1559,7 @@ fail_under_branches = 100.0
 require_branches = false
 
 [required]
-crates = ["radroots-a", "radroots-b"]
+crates = ["radroots_a", "radroots_b"]
 "#,
         );
         let branches_optional = validate_coverage_policy_parity(&root, &contract_root)
@@ -1576,7 +1576,7 @@ fail_under_branches = 100.0
 require_branches = true
 
 [required]
-crates = ["radroots-a"]
+crates = ["radroots_a"]
 "#,
         );
         let missing_workspace = validate_coverage_policy_parity(&root, &contract_root)
@@ -1614,13 +1614,13 @@ crates = ["unknown"]
 version = ""
 
 [publish]
-crates = ["radroots-a"]
+crates = ["radroots_a"]
 
 [internal]
-crates = ["radroots-b"]
+crates = ["radroots_b"]
 
 [publish_order]
-crates = ["radroots-a"]
+crates = ["radroots_a"]
 "#,
         );
         let empty_version = validate_release_publish_policy(&root, &contract_root, "1.0.0")
@@ -1633,13 +1633,13 @@ crates = ["radroots-a"]
 version = "2.0.0"
 
 [publish]
-crates = ["radroots-a"]
+crates = ["radroots_a"]
 
 [internal]
-crates = ["radroots-b"]
+crates = ["radroots_b"]
 
 [publish_order]
-crates = ["radroots-a"]
+crates = ["radroots_a"]
 "#,
         );
         let version_mismatch = validate_release_publish_policy(&root, &contract_root, "1.0.0")
@@ -1652,13 +1652,13 @@ crates = ["radroots-a"]
 version = "1.0.0"
 
 [publish]
-crates = ["radroots-a"]
+crates = ["radroots_a"]
 
 [internal]
-crates = ["radroots-a"]
+crates = ["radroots_a"]
 
 [publish_order]
-crates = ["radroots-a"]
+crates = ["radroots_a"]
 "#,
         );
         let overlap = validate_release_publish_policy(&root, &contract_root, "1.0.0")
@@ -1671,13 +1671,13 @@ crates = ["radroots-a"]
 version = "1.0.0"
 
 [publish]
-crates = ["radroots-a"]
+crates = ["radroots_a"]
 
 [internal]
 crates = []
 
 [publish_order]
-crates = ["radroots-a"]
+crates = ["radroots_a"]
 "#,
         );
         let missing_workspace = validate_release_publish_policy(&root, &contract_root, "1.0.0")
@@ -1690,10 +1690,10 @@ crates = ["radroots-a"]
 version = "1.0.0"
 
 [publish]
-crates = ["radroots-a"]
+crates = ["radroots_a"]
 
 [internal]
-crates = ["radroots-b"]
+crates = ["radroots_b"]
 
 [publish_order]
 crates = []
@@ -1709,13 +1709,13 @@ crates = []
 version = "1.0.0"
 
 [publish]
-crates = ["radroots-a"]
+crates = ["radroots_a"]
 
 [internal]
-crates = ["radroots-b"]
+crates = ["radroots_b"]
 
 [publish_order]
-crates = ["radroots-a", "radroots-b"]
+crates = ["radroots_a", "radroots_b"]
 "#,
         );
         let extra_publish_order = validate_release_publish_policy(&root, &contract_root, "1.0.0")
@@ -1725,7 +1725,7 @@ crates = ["radroots-a", "radroots-b"]
         write_file(
             &root.join("crates").join("a").join("Cargo.toml"),
             r#"[package]
-name = "radroots-a"
+name = "radroots_a"
 version = "0.1.0"
 edition = "2024"
 description = "crate a"
@@ -1735,13 +1735,13 @@ documentation = "https://docs.example.com/a"
 readme = "README.md"
 
 [dependencies]
-radroots-b = { path = "../b" }
+radroots_b = { path = "../b" }
 "#,
         );
         write_file(
             &root.join("crates").join("b").join("Cargo.toml"),
             r#"[package]
-name = "radroots-b"
+name = "radroots_b"
 version = "0.1.0"
 edition = "2024"
 description = "crate b"
@@ -1757,13 +1757,13 @@ readme = "README.md"
 version = "1.0.0"
 
 [publish]
-crates = ["radroots-a", "radroots-b"]
+crates = ["radroots_a", "radroots_b"]
 
 [internal]
 crates = []
 
 [publish_order]
-crates = ["radroots-a", "radroots-b"]
+crates = ["radroots_a", "radroots_b"]
 "#,
         );
         let dependency_order = validate_release_publish_policy(&root, &contract_root, "1.0.0")
@@ -1776,19 +1776,19 @@ crates = ["radroots-a", "radroots-b"]
 version = "1.0.0"
 
 [publish]
-crates = ["radroots-a"]
+crates = ["radroots_a"]
 
 [internal]
-crates = ["radroots-b"]
+crates = ["radroots_b"]
 
 [publish_order]
-crates = ["radroots-a"]
+crates = ["radroots_a"]
 "#,
         );
         write_file(
             &root.join("crates").join("b").join("Cargo.toml"),
             r#"[package]
-name = "radroots-b"
+name = "radroots_b"
 version = "0.1.0"
 edition = "2024"
 publish = false
@@ -1800,7 +1800,7 @@ publish = false
         write_file(
             &root.join("crates").join("a").join("Cargo.toml"),
             r#"[package]
-name = "radroots-a"
+name = "radroots_a"
 version = "0.1.0"
 edition = "2024"
 publish = false
@@ -1812,13 +1812,13 @@ publish = false
 version = "1.0.0"
 
 [publish]
-crates = ["radroots-a"]
+crates = ["radroots_a"]
 
 [internal]
-crates = ["radroots-b"]
+crates = ["radroots_b"]
 
 [publish_order]
-crates = ["radroots-a"]
+crates = ["radroots_a"]
 "#,
         );
         let publish_flag = validate_release_publish_policy(&root, &contract_root, "1.0.0")
@@ -1828,7 +1828,7 @@ crates = ["radroots-a"]
         write_file(
             &root.join("crates").join("a").join("Cargo.toml"),
             r#"[package]
-name = "radroots-a"
+name = "radroots_a"
 version = "0.1.0"
 edition = "2024"
 description = "crate a"
@@ -1841,7 +1841,7 @@ readme = "README.md"
         write_file(
             &root.join("crates").join("b").join("Cargo.toml"),
             r#"[package]
-name = "radroots-b"
+name = "radroots_b"
 version = "0.1.0"
 edition = "2024"
 "#,
@@ -2090,7 +2090,7 @@ members = ["crates/a"]
         let deps_err = read_workspace_package_dependencies(&root).expect_err("deps should fail");
         assert!(deps_err.contains("read"));
 
-        let publish = ["radroots-a".to_string()]
+        let publish = ["radroots_a".to_string()]
             .into_iter()
             .collect::<BTreeSet<_>>();
         let publish_err =
@@ -2123,13 +2123,13 @@ resolver = "2"
         let root = create_synthetic_workspace("workspace_manifest_success");
         let manifests = workspace_package_manifests(&root).expect("workspace manifests");
         assert_eq!(manifests.len(), 2);
-        assert!(manifests.contains_key("radroots-a"));
-        assert!(manifests.contains_key("radroots-b"));
+        assert!(manifests.contains_key("radroots_a"));
+        assert!(manifests.contains_key("radroots_b"));
 
         write_file(
             &root.join("crates").join("b").join("Cargo.toml"),
             r#"[package]
-name = "radroots-a"
+name = "radroots_a"
 version = "0.1.0"
 edition = "2024"
 description = "crate b duplicate name"
@@ -2140,7 +2140,7 @@ readme = "README.md"
 publish = false
 "#,
         );
-        let publish = ["radroots-a".to_string()]
+        let publish = ["radroots_a".to_string()]
             .into_iter()
             .collect::<BTreeSet<_>>();
         let duplicate_err =
@@ -2176,7 +2176,7 @@ fail_under_branches = 100.0
 require_branches = true
 
 [required]
-crates = ["radroots-a", "radroots-b"]
+crates = ["radroots_a", "radroots_b"]
 "#,
         );
 
@@ -2198,13 +2198,13 @@ crates = ["radroots-a", "radroots-b"]
 version = "1.0.0"
 
 [publish]
-crates = ["radroots-a", "radroots-a"]
+crates = ["radroots_a", "radroots_a"]
 
 [internal]
-crates = ["radroots-b"]
+crates = ["radroots_b"]
 
 [publish_order]
-crates = ["radroots-a"]
+crates = ["radroots_a"]
 "#,
         );
         let duplicate_publish = validate_release_publish_policy(&root, &contract_root, "1.0.0")
@@ -2217,13 +2217,13 @@ crates = ["radroots-a"]
 version = "1.0.0"
 
 [publish]
-crates = ["radroots-a"]
+crates = ["radroots_a"]
 
 [internal]
-crates = ["radroots-b", "radroots-b"]
+crates = ["radroots_b", "radroots_b"]
 
 [publish_order]
-crates = ["radroots-a"]
+crates = ["radroots_a"]
 "#,
         );
         let duplicate_internal = validate_release_publish_policy(&root, &contract_root, "1.0.0")
@@ -2236,13 +2236,13 @@ crates = ["radroots-a"]
 version = "1.0.0"
 
 [publish]
-crates = ["radroots-a"]
+crates = ["radroots_a"]
 
 [internal]
-crates = ["radroots-b"]
+crates = ["radroots_b"]
 
 [publish_order]
-crates = ["radroots-a", "radroots-a"]
+crates = ["radroots_a", "radroots_a"]
 "#,
         );
         let duplicate_order = validate_release_publish_policy(&root, &contract_root, "1.0.0")
@@ -2255,13 +2255,13 @@ crates = ["radroots-a", "radroots-a"]
 version = "1.0.0"
 
 [publish]
-crates = ["radroots-a"]
+crates = ["radroots_a"]
 
 [internal]
-crates = ["radroots-b"]
+crates = ["radroots_b"]
 
 [publish_order]
-crates = ["radroots-a"]
+crates = ["radroots_a"]
 "#,
         );
         write_file(
@@ -2287,14 +2287,14 @@ crates = ["radroots-a"]
         write_file(
             &invalid_bundle.join("contract").join("manifest.toml"),
             r#"[contract]
-name = "radroots-contract"
+name = "radroots_contract"
 version = "1.0.0"
 source = "synthetic"
 
 [surface]
-model_crates = ["radroots-a"]
-algorithm_crates = ["radroots-b"]
-wasm_crates = ["radroots-a-wasm"]
+model_crates = ["radroots_a"]
+algorithm_crates = ["radroots_b"]
+wasm_crates = ["radroots_a_wasm"]
 
 [policy]
 exclude_internal_workspace_crates = false
@@ -2341,13 +2341,13 @@ require_conformance_vectors = true
 version = "1.0.0"
 
 [publish]
-crates = ["radroots-a", "radroots-a"]
+crates = ["radroots_a", "radroots_a"]
 
 [internal]
-crates = ["radroots-b"]
+crates = ["radroots_b"]
 
 [publish_order]
-crates = ["radroots-a"]
+crates = ["radroots_a"]
 "#,
         );
         let duplicate_publish_err =
@@ -2361,7 +2361,7 @@ crates = ["radroots-a"]
                 .join("contract")
                 .join("coverage")
                 .join("policy.toml"),
-            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots-a\", \"radroots-a\"]\n",
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\", \"radroots_a\"]\n",
         );
         let duplicate_required_err =
             validate_release_preflight(&duplicate_required).expect_err("duplicate required crates");
@@ -2372,7 +2372,7 @@ crates = ["radroots-a"]
         write_file(
             &publish_metadata.join("crates").join("a").join("Cargo.toml"),
             r#"[package]
-name = "radroots-a"
+name = "radroots_a"
 version = "0.1.0"
 edition = "2024"
 "#,
@@ -2434,7 +2434,7 @@ id = "ts"
 repository = "sdk-typescript"
 
 [packages]
-"radroots-a" = "@radroots/a"
+"radroots_a" = "@radroots/a"
 
 [artifacts]
 models_dir = "src/generated"
@@ -2475,7 +2475,7 @@ fail_under_branches = 100.0
 require_branches = false
 
 [required]
-crates = ["radroots-a", "radroots-b"]
+crates = ["radroots_a", "radroots_b"]
 "#,
         );
         let policy_err = validate_contract_bundle(&bundle).expect_err("coverage policy validation");
@@ -2492,7 +2492,7 @@ crates = ["radroots-a", "radroots-b"]
                 .join("target")
                 .join("coverage")
                 .join("coverage-refresh.tsv"),
-            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots-a\tpass\t100\tbad\t100\t100\tfile\n",
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots_a\tpass\t100\tbad\t100\t100\tfile\n",
         );
         let func_err = load_coverage_refresh_rows(&coverage_root).expect_err("func parse error");
         assert!(func_err.contains("parse func"));
@@ -2501,7 +2501,7 @@ crates = ["radroots-a", "radroots-b"]
                 .join("target")
                 .join("coverage")
                 .join("coverage-refresh.tsv"),
-            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots-a\tpass\t100\t100\tbad\t100\tfile\n",
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots_a\tpass\t100\t100\tbad\t100\tfile\n",
         );
         let branch_err =
             load_coverage_refresh_rows(&coverage_root).expect_err("branch parse error");
@@ -2509,7 +2509,7 @@ crates = ["radroots-a", "radroots-b"]
         let _ = fs::remove_dir_all(&coverage_root);
 
         let missing_refresh_root = temp_root("coverage_summary_missing_refresh");
-        let required = ["radroots-a".to_string()]
+        let required = ["radroots_a".to_string()]
             .into_iter()
             .collect::<BTreeSet<_>>();
         let missing_refresh_err = validate_required_coverage_summary(
@@ -2548,7 +2548,7 @@ members = ["crates/a"]
         write_file(
             &root.join("crates").join("a").join("Cargo.toml"),
             r#"[package]
-name = "radroots-a"
+name = "radroots_a"
 version = "0.1.0"
 edition = "2024"
 description = "crate a"
@@ -2557,14 +2557,14 @@ homepage = { workspace = true }
 readme = { workspace = true }
 "#,
         );
-        let missing_manifest = ["radroots-b".to_string()]
+        let missing_manifest = ["radroots_b".to_string()]
             .into_iter()
             .collect::<BTreeSet<_>>();
         let missing_err = validate_publish_package_metadata(&root, &missing_manifest)
             .expect_err("missing workspace manifest");
         assert!(missing_err.contains("has no workspace manifest"));
 
-        let missing_field = ["radroots-a".to_string()]
+        let missing_field = ["radroots_a".to_string()]
             .into_iter()
             .collect::<BTreeSet<_>>();
         let field_err = validate_publish_package_metadata(&root, &missing_field)
@@ -2585,11 +2585,11 @@ readme = { workspace = true }
                 .join("target")
                 .join("coverage")
                 .join("coverage-refresh.tsv"),
-            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\n\nradroots-a\tpass\t100\t100\t100\t100\tfile\n",
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\n\nradroots_a\tpass\t100\t100\t100\t100\tfile\n",
         );
         let rows = load_coverage_refresh_rows(&root).expect("rows");
         assert_eq!(rows.len(), 1);
-        assert!(rows.contains_key("radroots-a"));
+        assert!(rows.contains_key("radroots_a"));
         let _ = fs::remove_dir_all(&root);
     }
 
@@ -2636,7 +2636,7 @@ fail_under_branches = 100.0
 require_branches = true
 
 [required]
-crates = ["radroots-a", "radroots-b", "radroots-extra"]
+crates = ["radroots_a", "radroots_b", "radroots_extra"]
 "#,
         );
         let coverage_extra = validate_coverage_policy_parity(&root, &contract_root)
@@ -2653,7 +2653,7 @@ fail_under_branches = 100.0
 require_branches = true
 
 [required]
-crates = ["radroots-a"]
+crates = ["radroots_a"]
 "#,
         );
         let required_list_mismatch = validate_coverage_policy_parity(&root, &contract_root)
@@ -2666,13 +2666,13 @@ crates = ["radroots-a"]
 version = "1.0.0"
 
 [publish]
-crates = ["radroots-a", "radroots-b", "radroots-extra"]
+crates = ["radroots_a", "radroots_b", "radroots_extra"]
 
 [internal]
 crates = []
 
 [publish_order]
-crates = ["radroots-a", "radroots-b"]
+crates = ["radroots_a", "radroots_b"]
 "#,
         );
         let release_extra = validate_release_publish_policy(&root, &contract_root, "1.0.0")
@@ -2685,13 +2685,13 @@ crates = ["radroots-a", "radroots-b"]
 version = "1.0.0"
 
 [publish]
-crates = ["radroots-a"]
+crates = ["radroots_a"]
 
 [internal]
-crates = ["radroots-b"]
+crates = ["radroots_b"]
 
 [publish_order]
-crates = ["radroots-a", "radroots-b"]
+crates = ["radroots_a", "radroots_b"]
 "#,
         );
         let publish_order_extra = validate_release_publish_policy(&root, &contract_root, "1.0.0")
@@ -2720,8 +2720,8 @@ id = "ts"
 repository = "sdk-typescript"
 
 [packages]
-radroots-a = "@radroots/a"
-radroots-b = "@radroots/b"
+radroots_a = "@radroots/a"
+radroots_b = "@radroots/b"
 
 [artifacts]
 models_dir = "src/generated"
@@ -2757,10 +2757,10 @@ manifest_file = "export-manifest.json"
 version = "1.0.0"
 
 [publish]
-crates = ["radroots-a"]
+crates = ["radroots_a"]
 
 [internal]
-crates = ["radroots-b"]
+crates = ["radroots_b"]
 
 [publish_order]
 crates = []

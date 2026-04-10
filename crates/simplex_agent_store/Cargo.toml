@@ -1,0 +1,36 @@
+[package]
+name = "radroots_simplex_agent_store"
+publish = false
+version = "0.1.0-alpha.1"
+edition.workspace = true
+authors = [
+  "Radroots Authors",
+]
+rust-version.workspace = true
+license.workspace = true
+description = "SimpleX agent storage model for Radroots"
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+
+[features]
+default = ["std"]
+std = [
+  "radroots_simplex_agent_proto/std",
+  "radroots_simplex_smp_crypto/std",
+  "radroots_simplex_smp_proto/std",
+  "serde/std",
+  "serde_json/std",
+  "sha2/std",
+]
+
+[dependencies]
+radroots_simplex_agent_proto = { workspace = true, default-features = false }
+radroots_simplex_smp_crypto = { workspace = true, default-features = false }
+radroots_simplex_smp_proto = { workspace = true, default-features = false }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true, default-features = false }
+
+[dev-dependencies]
+tempfile = { workspace = true }

@@ -11,9 +11,9 @@ It defines the public interoperability boundary for external integrators, keeps 
 
 Contract metadata is defined in `contract/manifest.toml` and currently includes:
 
-- model crates: `radroots-core`, `radroots-types`, `radroots-events`, `radroots-trade`, `radroots-identity`
-- algorithm crate: `radroots-events-codec`
-- wasm crate: `radroots-events-codec-wasm`
+- model crates: `radroots_core`, `radroots_types`, `radroots_events`, `radroots_trade`, `radroots_identity`
+- algorithm crate: `radroots_events_codec`
+- wasm crate: `radroots_events_codec_wasm`
 
 Public SDK exports are intentionally narrower than the full Rust workspace.
 
@@ -35,11 +35,11 @@ Replica contract metadata is defined in `contract/replica.toml`.
 
 Internal replica crate family:
 
-- `radroots-replica-db-schema`
-- `radroots-replica-db`
-- `radroots-replica-db-wasm`
-- `radroots-replica-sync`
-- `radroots-replica-sync-wasm`
+- `radroots_replica_db_schema`
+- `radroots_replica_db`
+- `radroots_replica_db_wasm`
+- `radroots_replica_sync`
+- `radroots_replica_sync_wasm`
 
 ## Governance
 

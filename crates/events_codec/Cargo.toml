@@ -1,0 +1,34 @@
+[package]
+name = "radroots_events_codec"
+version = "0.1.0-alpha.1"
+edition.workspace = true
+authors = [
+  "Radroots Authors",
+]
+rust-version.workspace = true
+license.workspace = true
+description = "Event codec layer for Radroots"
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+
+[features]
+default = ["std"]
+std = ["radroots_core/std", "radroots_events/std"]
+serde = ["dep:serde", "radroots_core/serde", "radroots_events/serde"]
+serde_json = ["serde", "dep:serde_json"]
+nostr = ["dep:nostr", "std"]
+
+[dependencies]
+radroots_core = { workspace = true, default-features = false }
+radroots_events = { workspace = true, default-features = false }
+serde = { workspace = true, default-features = false, features = [
+  "alloc",
+], optional = true }
+serde_json = { workspace = true, default-features = false, features = [
+  "alloc",
+], optional = true }
+nostr = { workspace = true, optional = true }
+
+[dev-dependencies]
+radroots_test_fixtures = { workspace = true }

@@ -1,0 +1,14 @@
+# radroots_replica_sync_wasm
+
+Wasm bindings for replica synchronization interfaces in Rad Roots data layers.
+
+## Goals
+
+- define stable wasm bindings for replica sync and ingest flows
+- keep request parsing and result marshaling deterministic in web runtimes
+- support integration with wasm SQL executor surfaces
+- provide reusable sync bridge primitives for higher-level Rad Roots crates
+
+## License
+
+Licensed under AGPL-3.0. See LICENSE.

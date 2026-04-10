@@ -3,11 +3,11 @@ id = "kotlin"
 repository = "sdk-kotlin"
 
 [packages]
-"radroots-core" = "radroots.core"
-"radroots-types" = "radroots.types"
-"radroots-events" = "radroots.events"
-"radroots-trade" = "radroots.trade"
-"radroots-identity" = "radroots.identity"
+"radroots_core" = "radroots.core"
+"radroots_types" = "radroots.types"
+"radroots_events" = "radroots.events"
+"radroots_trade" = "radroots.trade"
+"radroots_identity" = "radroots.identity"
 
 [artifacts]
 models_dir = "src/generated"

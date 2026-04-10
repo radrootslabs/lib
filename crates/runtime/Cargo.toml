@@ -1,5 +1,5 @@
 [package]
-name = "radroots-runtime"
+name = "radroots_runtime"
 version = "0.1.0-alpha.1"
 edition.workspace = true
 authors = [
@@ -22,10 +22,10 @@ chacha20poly1305 = { workspace = true }
 clap = { workspace = true, features = ["derive", "env"], optional = true }
 config = { workspace = true }
 getrandom = { workspace = true }
-radroots-log = { workspace = true, features = ["std"] }
-radroots-protected-store = { workspace = true, features = ["std"] }
-radroots-runtime-paths = { workspace = true }
-radroots-secret-vault = { workspace = true, features = ["std"] }
+radroots_log = { workspace = true, features = ["std"] }
+radroots_protected_store = { workspace = true, features = ["std"] }
+radroots_runtime_paths = { workspace = true }
+radroots_secret_vault = { workspace = true, features = ["std"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }

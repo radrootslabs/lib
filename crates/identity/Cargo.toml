@@ -1,5 +1,5 @@
 [package]
-name = "radroots-identity"
+name = "radroots_identity"
 version = "0.1.0-alpha.1"
 edition.workspace = true
 authors = [
@@ -15,18 +15,18 @@ build = "build.rs"
 
 [features]
 default = ["std", "profile", "json-file", "nip49"]
-std = ["dep:radroots-runtime-paths"]
-profile = ["dep:radroots-events"]
-json-file = ["std", "dep:radroots-runtime"]
+std = ["dep:radroots_runtime_paths"]
+profile = ["dep:radroots_events"]
+json-file = ["std", "dep:radroots_runtime"]
 nip49 = ["std", "nostr/nip49"]
 secrecy = ["dep:secrecy"]
 zeroize = ["dep:zeroize"]
 ts-rs = ["dep:ts-rs"]
 
 [dependencies]
-radroots-runtime = { workspace = true, optional = true }
-radroots-runtime-paths = { workspace = true, optional = true }
-radroots-events = { workspace = true, optional = true, default-features = false, features = [
+radroots_runtime = { workspace = true, optional = true }
+radroots_runtime_paths = { workspace = true, optional = true }
+radroots_events = { workspace = true, optional = true, default-features = false, features = [
   "serde",
 ] }
 nostr = { workspace = true }
@@ -39,5 +39,5 @@ ts-rs = { workspace = true, optional = true }
 zeroize = { workspace = true, optional = true }
 
 [dev-dependencies]
-radroots-test-fixtures = { workspace = true }
+radroots_test_fixtures = { workspace = true }
 tempfile = { workspace = true }

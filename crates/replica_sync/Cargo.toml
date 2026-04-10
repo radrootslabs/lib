@@ -1,0 +1,53 @@
+[package]
+name = "radroots_replica_sync"
+version = "0.1.0-alpha.1"
+edition.workspace = true
+authors = [
+  "Radroots Authors",
+]
+rust-version.workspace = true
+license.workspace = true
+description = "Replica synchronization layer for Radroots"
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+
+[lib]
+crate-type = ["rlib"]
+
+[features]
+default = ["std"]
+std = [
+  "radroots_events/std",
+  "radroots_events_codec/std",
+  "dep:base64",
+  "dep:uuid",
+]
+
+[dependencies]
+radroots_events = { workspace = true, default-features = false, features = [
+  "serde",
+] }
+radroots_events_codec = { workspace = true, default-features = false, features = [
+  "serde_json",
+] }
+radroots_sql_core = { workspace = true }
+radroots_replica_db_schema = { workspace = true }
+radroots_replica_db = { workspace = true }
+radroots_types = { workspace = true }
+hex = { workspace = true }
+serde = { workspace = true, default-features = false, features = [
+  "alloc",
+  "derive",
+] }
+serde_json = { workspace = true, default-features = false, features = [
+  "alloc",
+] }
+sha2 = { workspace = true, default-features = false }
+base64 = { workspace = true, optional = true }
+uuid = { workspace = true, optional = true }
+
+[dev-dependencies]
+radroots_sql_core = { workspace = true, features = ["native"] }
+radroots_replica_db = { workspace = true }
+serde_json = { workspace = true }

@@ -3,17 +3,17 @@ no_default_features = false
 features = []
 test_threads = 1
 
-[profiles.crates."radroots-log"]
+[profiles.crates."radroots_log"]
 no_default_features = true
 features = []
 test_threads = 1
 
-[profiles.crates."radroots-nostr-runtime"]
+[profiles.crates."radroots_nostr_runtime"]
 no_default_features = true
 features = ["std"]
 test_threads = 1
 
-[profiles.crates."radroots-sql-wasm-core"]
+[profiles.crates."radroots_sql_wasm_core"]
 no_default_features = true
 features = ["embedded"]
 test_threads = 1

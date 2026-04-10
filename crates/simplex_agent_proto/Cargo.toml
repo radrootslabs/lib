@@ -1,0 +1,22 @@
+[package]
+name = "radroots_simplex_agent_proto"
+publish = false
+version = "0.1.0-alpha.1"
+edition.workspace = true
+authors = [
+  "Radroots Authors",
+]
+rust-version.workspace = true
+license.workspace = true
+description = "SimpleX agent protocol model for Radroots"
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+
+[features]
+default = ["std"]
+std = ["radroots_simplex_smp_crypto/std", "radroots_simplex_smp_proto/std"]
+
+[dependencies]
+radroots_simplex_smp_crypto = { workspace = true, default-features = false }
+radroots_simplex_smp_proto = { workspace = true, default-features = false }

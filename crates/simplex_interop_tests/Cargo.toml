@@ -1,0 +1,35 @@
+[package]
+name = "radroots_simplex_interop_tests"
+publish = false
+version = "0.1.0-alpha.1"
+edition.workspace = true
+authors = [
+  "Radroots Authors",
+]
+rust-version.workspace = true
+license.workspace = true
+description = "SimpleX interoperability test library for Radroots"
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+
+[features]
+default = ["std"]
+std = [
+  "radroots_simplex_agent_proto/std",
+  "radroots_simplex_agent_runtime/std",
+  "radroots_simplex_chat_proto/std",
+  "radroots_simplex_smp_crypto/std",
+  "radroots_simplex_smp_proto/std",
+  "radroots_simplex_smp_transport/std",
+  "serde_json/std",
+]
+
+[dependencies]
+radroots_simplex_agent_proto = { workspace = true, default-features = false }
+radroots_simplex_agent_runtime = { workspace = true, default-features = false }
+radroots_simplex_chat_proto = { workspace = true, default-features = false }
+radroots_simplex_smp_crypto = { workspace = true, default-features = false }
+radroots_simplex_smp_proto = { workspace = true, default-features = false }
+radroots_simplex_smp_transport = { workspace = true, default-features = false }
+serde_json = { workspace = true, default-features = false, features = ["alloc"] }
