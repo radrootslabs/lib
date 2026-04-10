@@ -240,6 +240,7 @@ mod tests {
         parse_trade_prev_tag, parse_trade_root_tag, push_trade_chain_tags, trade_envelope_tags,
         validate_trade_chain,
     };
+    use crate::error::EventEncodeError;
     use radroots_events::{
         RadrootsNostrEventPtr,
         kinds::KIND_LISTING,
@@ -292,6 +293,109 @@ mod tests {
                 tag.as_slice() == [TAG_E_PREV.to_string(), "prev-event".to_string()]
             })
         );
+    }
+
+    #[test]
+    fn trade_envelope_tags_support_snapshot_without_relay() {
+        let listing_addr = format!("{KIND_LISTING}:pubkey:AAAAAAAAAAAAAAAAAAAAAg");
+        let tags = trade_envelope_tags(
+            "buyer",
+            &listing_addr,
+            None::<&str>,
+            Some(&RadrootsNostrEventPtr {
+                id: "listing-snapshot".into(),
+                relays: None,
+            }),
+            Some("root-event"),
+            None::<&str>,
+        )
+        .expect("trade tags");
+        assert_eq!(
+            tags,
+            vec![
+                vec![String::from("p"), String::from("buyer")],
+                vec![String::from("a"), listing_addr],
+                vec![
+                    String::from(TAG_LISTING_EVENT),
+                    String::from("listing-snapshot"),
+                ],
+                vec![String::from(TAG_E_ROOT), String::from("root-event")],
+            ]
+        );
+    }
+
+    #[test]
+    fn trade_envelope_tags_reject_empty_required_fields() {
+        let listing_addr = format!("{KIND_LISTING}:pubkey:AAAAAAAAAAAAAAAAAAAAAg");
+
+        let err = trade_envelope_tags(" ", &listing_addr, None::<&str>, None, None, None)
+            .expect_err("blank recipient");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("recipient_pubkey")
+        ));
+
+        let err = trade_envelope_tags("buyer", " ", None::<&str>, None, None, None)
+            .expect_err("blank listing address");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("listing_addr")
+        ));
+
+        let err = trade_envelope_tags("buyer", &listing_addr, Some(" "), None, None, None)
+            .expect_err("blank order id");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("order_id")
+        ));
+
+        let err = trade_envelope_tags(
+            "buyer",
+            &listing_addr,
+            None::<&str>,
+            Some(&RadrootsNostrEventPtr {
+                id: " ".into(),
+                relays: None,
+            }),
+            None,
+            None,
+        )
+        .expect_err("blank listing snapshot id");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("listing_event.id")
+        ));
+
+        let err = trade_envelope_tags(
+            "buyer",
+            &listing_addr,
+            None::<&str>,
+            Some(&RadrootsNostrEventPtr {
+                id: "listing-snapshot".into(),
+                relays: Some(" ".into()),
+            }),
+            None,
+            None,
+        )
+        .expect_err("blank listing snapshot relay");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("listing_event.relays")
+        ));
+
+        let err = trade_envelope_tags("buyer", &listing_addr, None::<&str>, None, Some(" "), None)
+            .expect_err("blank root event id");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("root_event_id")
+        ));
+
+        let err = trade_envelope_tags("buyer", &listing_addr, None::<&str>, None, None, Some(" "))
+            .expect_err("blank prev event id");
+        assert!(matches!(
+            err,
+            EventEncodeError::EmptyRequiredField("prev_event_id")
+        ));
     }
 
     #[test]
