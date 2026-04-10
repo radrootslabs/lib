@@ -1,14 +1,22 @@
 # radroots_replica_db
 
-Replica SQL runtime and migration interfaces for Rad Roots data layers.
+This is the README for `radroots_replica_db`, which provides replica SQL
+runtime interfaces for the `radroots` core libraries.
 
-## Goals
+## Overview
 
-- define stable SQL-backed interfaces for replica model operations
-- keep migration, backup, and restore behavior deterministic across targets
-- support export and manifest generation for synchronized replica snapshots
-- provide reusable database primitives for higher-level Rad Roots crates
+ * a generic `ReplicaSql<E>` facade over any `SqlExecutor` implementation;
+ * migration, backup, restore, and export helpers for replica database state;
+ * typed CRUD and query helpers over the shared replica schema models;
+ * feature-gated web, native, and embedded backend support through
+   `radroots_sql_core`.
 
-## License
+## Copyright
 
-Licensed under AGPL-3.0. See LICENSE.
+Except as otherwise noted, all files in the `radroots_replica_db` distribution
+are
+
+ Copyright (c) 2025 Tyson Lupul
+
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see LICENSE included in the `radroots_replica_db` distribution.
