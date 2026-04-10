@@ -12,7 +12,39 @@ use radroots_runtime_paths::{
     RadrootsPlatform,
 };
 use radroots_test_fixtures::{ApprovedFixtureIdentity, FIXTURE_ALICE, FIXTURE_BOB};
-use std::path::PathBuf;
+use std::{
+    ffi::OsString,
+    path::PathBuf,
+    sync::{Mutex, OnceLock},
+};
+
+fn home_env_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+}
+
+struct EnvVarGuard {
+    key: &'static str,
+    previous: Option<OsString>,
+}
+
+impl EnvVarGuard {
+    fn remove(key: &'static str) -> Self {
+        let previous = std::env::var_os(key);
+        unsafe { std::env::remove_var(key) };
+        Self { key, previous }
+    }
+}
+
+impl Drop for EnvVarGuard {
+    fn drop(&mut self) {
+        if let Some(value) = self.previous.as_ref() {
+            unsafe { std::env::set_var(self.key, value) };
+        } else {
+            unsafe { std::env::remove_var(self.key) };
+        }
+    }
+}
 
 fn fixture_keys(fixture: ApprovedFixtureIdentity) -> nostr::Keys {
     let secret = nostr::SecretKey::from_hex(fixture.secret_key_hex).unwrap();
@@ -312,6 +344,29 @@ fn encrypted_secret_key_options_propagate_to_output() {
 
 #[cfg(feature = "nip49")]
 #[test]
+fn encrypted_secret_key_weak_security_and_invalid_log_n_paths() {
+    use nostr::nips::nip49::KeySecurity;
+
+    assert_eq!(
+        KeySecurity::from(RadrootsIdentityEncryptedSecretKeySecurity::Weak),
+        KeySecurity::Weak
+    );
+
+    let identity = fixture_identity(FIXTURE_ALICE);
+    let err = identity
+        .encrypt_secret_key_ncryptsec_with_options(
+            "fixture-password",
+            RadrootsIdentityEncryptedSecretKeyOptions {
+                log_n: 255,
+                key_security: RadrootsIdentityEncryptedSecretKeySecurity::Weak,
+            },
+        )
+        .unwrap_err();
+    assert!(matches!(err, IdentityError::EncryptSecretKey(_)));
+}
+
+#[cfg(feature = "nip49")]
+#[test]
 fn encrypted_secret_key_rejects_invalid_and_wrong_password_inputs() {
     let identity = fixture_identity(FIXTURE_ALICE);
     let encrypted = identity
@@ -527,6 +582,40 @@ fn load_or_generate_uses_default_path_when_missing() {
 }
 
 #[test]
+fn default_path_matches_current_resolver_default_path() {
+    let expected = RadrootsIdentity::default_path_for(
+        &RadrootsPathResolver::current(),
+        RadrootsPathProfile::InteractiveUser,
+        &RadrootsPathOverrides::default(),
+    )
+    .unwrap();
+
+    assert_eq!(RadrootsIdentity::default_path().unwrap(), expected);
+}
+
+#[test]
+fn default_path_for_reports_missing_home_dir() {
+    let resolver =
+        RadrootsPathResolver::new(RadrootsPlatform::Linux, RadrootsHostEnvironment::default());
+    let err = RadrootsIdentity::default_path_for(
+        &resolver,
+        RadrootsPathProfile::InteractiveUser,
+        &RadrootsPathOverrides::default(),
+    )
+    .unwrap_err();
+    assert!(matches!(err, IdentityError::Paths(_)));
+}
+
+#[test]
+fn load_or_generate_without_explicit_path_propagates_default_path_errors() {
+    let _lock = home_env_lock().lock().unwrap();
+    let _guard = EnvVarGuard::remove("HOME");
+
+    let err = RadrootsIdentity::load_or_generate::<&std::path::Path>(None, false).unwrap_err();
+    assert!(matches!(err, IdentityError::Paths(_)));
+}
+
+#[test]
 fn load_or_generate_creates_at_explicit_default_path() {
     let dir = tempfile::tempdir().unwrap();
     let default_path = dir.path().join(DEFAULT_IDENTITY_PATH);
@@ -592,6 +681,88 @@ fn identity_profile_is_empty_checks_metadata_and_application_handler() {
         ..Default::default()
     };
     assert!(!profile_with_handler.is_empty());
+}
+
+#[test]
+fn identity_error_display_variants_are_exercised() {
+    let missing_path = PathBuf::from("/tmp/missing-identity.json");
+    assert_eq!(
+        IdentityError::NotFound(missing_path.clone()).to_string(),
+        format!("identity file missing at {}", missing_path.display())
+    );
+    assert_eq!(
+        IdentityError::GenerationNotAllowed(missing_path.clone()).to_string(),
+        format!(
+            "identity file missing at {} and generation is not permitted (pass --allow-generate-identity)",
+            missing_path.display()
+        )
+    );
+    assert!(
+        IdentityError::Read(missing_path.clone(), std::io::Error::other("boom"))
+            .to_string()
+            .contains("failed to read identity file")
+    );
+
+    let json_err = serde_json::from_str::<serde_json::Value>("{").unwrap_err();
+    assert!(
+        IdentityError::InvalidJson(json_err)
+            .to_string()
+            .contains("invalid identity JSON")
+    );
+
+    let secret_err = nostr::Keys::parse("not-a-secret-key").unwrap_err();
+    assert!(
+        IdentityError::InvalidSecretKey(secret_err)
+            .to_string()
+            .contains("invalid secret key")
+    );
+
+    #[cfg(feature = "nip49")]
+    {
+        assert_eq!(
+            IdentityError::EncryptSecretKey("encrypt failed".into()).to_string(),
+            "failed to encrypt secret key: encrypt failed"
+        );
+        assert_eq!(
+            IdentityError::InvalidEncryptedSecretKey("bad payload".into()).to_string(),
+            "invalid encrypted secret key: bad payload"
+        );
+        assert_eq!(
+            IdentityError::DecryptEncryptedSecretKey("bad password".into()).to_string(),
+            "failed to decrypt encrypted secret key: bad password"
+        );
+    }
+
+    assert_eq!(
+        IdentityError::InvalidPublicKey("bad-pubkey".into()).to_string(),
+        "invalid public key: bad-pubkey"
+    );
+    assert_eq!(
+        IdentityError::PublicKeyMismatch.to_string(),
+        "public key does not match secret key"
+    );
+    assert_eq!(
+        IdentityError::InvalidIdentityFormat.to_string(),
+        "unsupported identity file format"
+    );
+
+    #[cfg(all(feature = "std", feature = "json-file"))]
+    {
+        let store_err = fixture_identity(FIXTURE_ALICE)
+            .save_json(tempfile::tempdir().unwrap().path())
+            .unwrap_err();
+        assert!(!store_err.to_string().is_empty());
+    }
+
+    let paths_err = IdentityError::from(
+        radroots_runtime_paths::RadrootsRuntimePathsError::MissingHomeDir {
+            platform: RadrootsPlatform::Linux,
+        },
+    );
+    assert_eq!(
+        paths_err.to_string(),
+        "interactive_user on linux requires a home directory"
+    );
 }
 
 #[cfg(feature = "secrecy")]

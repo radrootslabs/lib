@@ -298,9 +298,10 @@ impl RadrootsIdentity {
             options.key_security.into(),
         )
         .map_err(|source| IdentityError::EncryptSecretKey(source.to_string()))?;
-        encrypted
+        // The ncryptsec HRP and payload shape are fixed here, so encoding should not fail.
+        Ok(encrypted
             .to_bech32()
-            .map_err(|source| IdentityError::EncryptSecretKey(source.to_string()))
+            .expect("ncryptsec bech32 encoding should succeed"))
     }
 
     pub fn secret_key_bytes(&self) -> [u8; SecretKey::LEN] {
@@ -462,14 +463,20 @@ impl RadrootsIdentity {
     }
 
     #[cfg(all(feature = "std", feature = "json-file"))]
-    pub fn load_or_generate<P: AsRef<Path>>(
+    fn resolve_load_or_generate_path<P: AsRef<Path>>(
         path: Option<P>,
+    ) -> Result<PathBuf, IdentityError> {
+        path.map(|p| p.as_ref().to_path_buf())
+            .map(Ok)
+            .unwrap_or_else(Self::default_path)
+    }
+
+    #[cfg(all(feature = "std", feature = "json-file"))]
+    fn load_or_generate_at(
+        path: Result<PathBuf, IdentityError>,
         allow_generate: bool,
     ) -> Result<Self, IdentityError> {
-        let path = path
-            .map(|p| p.as_ref().to_path_buf())
-            .map(Ok)
-            .unwrap_or_else(Self::default_path)?;
+        let path = path?;
         if path.exists() {
             return Self::load_from_path_auto(&path);
         }
@@ -479,6 +486,14 @@ impl RadrootsIdentity {
         let identity = Self::generate();
         identity.save_json(&path)?;
         Ok(identity)
+    }
+
+    #[cfg(all(feature = "std", feature = "json-file"))]
+    pub fn load_or_generate<P: AsRef<Path>>(
+        path: Option<P>,
+        allow_generate: bool,
+    ) -> Result<Self, IdentityError> {
+        Self::load_or_generate_at(Self::resolve_load_or_generate_path(path), allow_generate)
     }
 
     #[cfg(all(feature = "std", feature = "json-file"))]
