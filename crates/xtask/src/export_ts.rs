@@ -208,6 +208,24 @@ fn cargo_test_failure(crate_name: &str, output: &Output) -> String {
     }
 }
 
+fn run_ts_rs_export_test(
+    crate_name: &str,
+    workspace_root: &Path,
+    export_dir: &Path,
+) -> Result<Output, String> {
+    Command::new("cargo")
+        .arg("test")
+        .arg("-q")
+        .arg("-p")
+        .arg(crate_name)
+        .arg("--features")
+        .arg("ts-rs")
+        .env("RADROOTS_TS_RS_EXPORT_DIR", export_dir)
+        .current_dir(workspace_root)
+        .output()
+        .map_err(|e| format!("run cargo test for {crate_name}: {e}"))
+}
+
 fn collect_manifest_entries(
     root: &Path,
     current: &Path,
@@ -437,10 +455,14 @@ pub fn write_ts_export_manifest(workspace_root: &Path, out_dir: &Path) -> Result
     Ok(manifest_path)
 }
 
-fn generate_ts_rs_sources_with_selector(
+fn generate_ts_rs_sources_with_selector_and_runner<F>(
     workspace_root: &Path,
     selector: Option<&str>,
-) -> Result<PathBuf, String> {
+    mut run_export_test: F,
+) -> Result<PathBuf, String>
+where
+    F: FnMut(&str, &Path, &Path) -> Result<Output, String>,
+{
     let bundle = contract::load_contract_bundle(workspace_root)?;
     contract::validate_contract_bundle(&bundle)?;
     let ts_export = ts_export_mapping(&bundle)?;
@@ -487,25 +509,19 @@ fn generate_ts_rs_sources_with_selector(
             .unwrap_or(package_name);
         let export_dir = source_root.join(package_dir);
         let _ = fs::create_dir_all(&export_dir);
-        let output = Command::new("cargo")
-            .arg("test")
-            .arg("-q")
-            .arg("-p")
-            .arg(crate_name)
-            .arg("--features")
-            .arg("ts-rs")
-            .env("RADROOTS_TS_RS_EXPORT_DIR", &export_dir)
-            .current_dir(workspace_root)
-            .output();
-        let output = match output {
-            Ok(output) => output,
-            Err(e) => return Err(format!("run cargo test for {crate_name}: {e}")),
-        };
+        let output = run_export_test(crate_name, workspace_root, &export_dir)?;
         if !output.status.success() {
             return Err(cargo_test_failure(crate_name, &output));
         }
     }
     Ok(source_root)
+}
+
+fn generate_ts_rs_sources_with_selector(
+    workspace_root: &Path,
+    selector: Option<&str>,
+) -> Result<PathBuf, String> {
+    generate_ts_rs_sources_with_selector_and_runner(workspace_root, selector, run_ts_rs_export_test)
 }
 
 pub fn generate_ts_rs_sources(workspace_root: &Path) -> Result<PathBuf, String> {
@@ -544,8 +560,11 @@ mod tests {
     use super::*;
     use std::collections::BTreeMap;
     use std::path::Path;
+    use std::process::Command;
     use std::sync::{Mutex, OnceLock};
     use std::time::{SystemTime, UNIX_EPOCH};
+    #[cfg(unix)]
+    use std::{os::unix::process::ExitStatusExt, process::ExitStatus};
 
     fn workspace_root() -> PathBuf {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -774,6 +793,43 @@ mod tests {
                 manifest_file: Some("export-manifest.json".to_string()),
             }),
         }
+    }
+
+    #[test]
+    fn cargo_test_failure_covers_stdout_and_empty_output_paths() {
+        let stdout_only = Command::new("sh")
+            .arg("-c")
+            .arg("printf 'stdout only'; exit 7")
+            .output()
+            .expect("stdout-only command");
+        let stdout_msg = cargo_test_failure("radroots_a", &stdout_only);
+        assert!(stdout_msg.contains("cargo test failed for radroots_a (exit code 7): stdout only"));
+
+        let no_output = Command::new("sh")
+            .arg("-c")
+            .arg("exit 9")
+            .output()
+            .expect("silent command");
+        let no_output_msg = cargo_test_failure("radroots_b", &no_output);
+        assert_eq!(
+            no_output_msg,
+            "cargo test failed for radroots_b (exit code 9)"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cargo_test_failure_covers_signal_termination_status() {
+        let signal_output = Output {
+            status: ExitStatus::from_raw(9),
+            stdout: Vec::new(),
+            stderr: Vec::new(),
+        };
+        let signal_msg = cargo_test_failure("radroots_signal", &signal_output);
+        assert_eq!(
+            signal_msg,
+            "cargo test failed for radroots_signal (terminated by signal)"
+        );
     }
 
     #[test]
@@ -1399,6 +1455,43 @@ manifest_file = "nested/export-manifest.json"
         assert!(command_fail_err.contains("cargo test failed for radroots_a"));
         assert!(command_fail_err.contains("unclosed delimiter"));
         let _ = fs::remove_dir_all(root_command_fail);
+
+        let root_spawn_fail = create_synthetic_workspace("generate_spawn_fail", true);
+        let spawn_fail_err = generate_ts_rs_sources_with_selector_and_runner(
+            &root_spawn_fail,
+            None,
+            |crate_name, _workspace_root, _export_dir| {
+                Err(format!(
+                    "run cargo test for {crate_name}: synthetic spawn failure"
+                ))
+            },
+        )
+        .expect_err("cargo spawn failure should surface");
+        assert_eq!(
+            spawn_fail_err,
+            "run cargo test for radroots_a: synthetic spawn failure"
+        );
+        let _ = fs::remove_dir_all(root_spawn_fail);
+    }
+
+    #[test]
+    fn run_ts_rs_export_test_executes_successfully_for_ts_rs_crate() {
+        let _guard = workspace_lock().lock().expect("workspace lock");
+        let root = create_synthetic_workspace("run_ts_rs_export_test_success", true);
+        let export_dir = root.join("target").join("ts-rs").join("a");
+        let output =
+            run_ts_rs_export_test("radroots_a", &root, &export_dir).expect("cargo test success");
+        assert!(output.status.success());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn run_ts_rs_export_test_reports_spawn_failures() {
+        let missing_root = unique_temp_dir("run_ts_rs_export_test_missing_root");
+        let export_dir = missing_root.join("target").join("ts-rs").join("a");
+        let err = run_ts_rs_export_test("radroots_a", &missing_root, &export_dir)
+            .expect_err("missing current_dir should fail");
+        assert!(err.contains("run cargo test for radroots_a:"));
     }
 
     #[test]
