@@ -1,14 +1,23 @@
 # radroots_nostr_ndb
 
-Nostrdb adapter primitives and runtime interfaces for the Rad Roots SDK.
+This is the README for `radroots_nostr_ndb`, which provides nostrdb adapter
+primitives for the `radroots` core libraries.
 
-## Goals
+## Overview
 
-- define stable nostrdb config, ingest, query, and subscription interfaces
-- keep nostrdb storage and query behavior deterministic across runtimes
-- support runtime adapter surfaces for shared event store integration
-- provide reusable nostrdb primitives for higher-level Rad Roots crates
+ * configuration, filter, ingest, query, and subscription types for
+   nostrdb-backed workflows;
+ * runtime-adapter hooks that let higher layers drive a nostrdb event store;
+ * feature-gated support for the `nostrdb` crate, runtime glue, and gift-wrap
+   handling;
+ * a `std`-based integration crate with optional async runtime support.
 
-## License
+## Copyright
 
-Licensed under AGPL-3.0. See LICENSE.
+Except as otherwise noted, all files in the `radroots_nostr_ndb` distribution
+are
+
+ Copyright (c) 2025 Tyson Lupul
+
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see LICENSE included in the `radroots_nostr_ndb` distribution.
