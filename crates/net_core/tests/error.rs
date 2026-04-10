@@ -18,6 +18,7 @@ fn clone_covers_non_io_variants() {
         NetError::InvalidKeyFile,
         NetError::KeyIo,
         NetError::OverwriteDenied,
+        NetError::PersistencePathRequired,
         NetError::PersistenceUnsupported,
         NetError::LoggingInit("init"),
     ];
