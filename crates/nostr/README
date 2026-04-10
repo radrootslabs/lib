@@ -1,14 +1,22 @@
 # radroots_nostr
 
-Nostr protocol primitives and adapter interfaces for the Rad Roots SDK.
+This is the README for `radroots_nostr`, which provides shared Nostr protocol
+primitives for the `radroots` core libraries.
 
-## Goals
+## Overview
 
-- define stable interfaces for Nostr types, tags, filters, and parsing
-- keep event and identity adapter behavior deterministic across targets
-- support feature-gated client, codec, HTTP, and NIP integration surfaces
-- provide reusable Nostr primitives for higher-level Rad Roots crates
+ * typed filters, tags, events, relay metadata, parsers, and utility helpers;
+ * feature-gated client operations and relay-management helpers for active
+   network use;
+ * adapters between `radroots_events`, `radroots_events_codec`, and Nostr wire
+   representations;
+ * optional NIP-11 and NIP-17 support alongside `std` and `no_std` builds.
 
-## License
+## Copyright
 
-Licensed under AGPL-3.0. See LICENSE.
+Except as otherwise noted, all files in the `radroots_nostr` distribution are
+
+ Copyright (c) 2025 Tyson Lupul
+
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see LICENSE included in the `radroots_nostr` distribution.
