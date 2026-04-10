@@ -1,0 +1,22 @@
+# radroots_nostr_connect
+
+This is the README for `radroots_nostr_connect`, which provides NIP-46
+connection and URI models for the `radroots` core libraries.
+
+## Overview
+
+ * request and response message types for Nostr Connect exchanges;
+ * method, permission, and pending-connection outcome models;
+ * bunker and client URI parsing and formatting helpers;
+ * portable shared models with optional serialization and TypeScript export
+   support.
+
+## Copyright
+
+Except as otherwise noted, all files in the `radroots_nostr_connect`
+distribution are
+
+ Copyright (c) 2025 Tyson Lupul
+
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see LICENSE included in the `radroots_nostr_connect` distribution.
