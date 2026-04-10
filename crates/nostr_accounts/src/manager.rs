@@ -903,6 +903,41 @@ mod tests {
     }
 
     #[test]
+    fn signer_capability_paths_propagate_secret_parse_errors() {
+        let mut invalid_secret_state = RadrootsNostrAccountStoreState::default();
+        let invalid_secret_public = RadrootsIdentity::generate().to_public();
+        invalid_secret_state
+            .accounts
+            .push(RadrootsNostrAccountRecord::new(
+                invalid_secret_public.clone(),
+                Some("invalid".into()),
+                1,
+            ));
+        invalid_secret_state.selected_account_id = Some(invalid_secret_public.id.clone());
+        let invalid_secret_store = Arc::new(RadrootsNostrMemoryAccountStore::new());
+        invalid_secret_store
+            .save(&invalid_secret_state)
+            .expect("save state");
+        let invalid_secret_manager =
+            RadrootsNostrAccountsManager::new(invalid_secret_store, Arc::new(VaultInvalidSecret))
+                .expect("manager");
+
+        let selected_signer_error = invalid_secret_manager
+            .selected_signer_capability()
+            .expect_err("selected signer invalid secret");
+        assert!(
+            selected_signer_error
+                .to_string()
+                .starts_with("identity error:")
+        );
+
+        let signer_error = invalid_secret_manager
+            .get_signer_capability(&invalid_secret_public.id)
+            .expect_err("signer invalid secret");
+        assert!(signer_error.to_string().starts_with("identity error:"));
+    }
+
+    #[test]
     fn select_remove_export_and_lookup_paths() {
         let manager = RadrootsNostrAccountsManager::new_in_memory();
         let first_id = manager
