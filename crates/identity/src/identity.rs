@@ -20,7 +20,10 @@ use radroots_runtime_paths::{
     RadrootsPathOverrides, RadrootsPathProfile, RadrootsPathResolver, default_shared_identity_path,
 };
 #[cfg(feature = "std")]
-use std::{fs, path::{Path, PathBuf}};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 pub const DEFAULT_IDENTITY_PATH: &str = "default.json";
 
