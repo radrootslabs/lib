@@ -1,0 +1,24 @@
+# radroots_test_fixtures
+
+This is the README for `radroots_test_fixtures`, which provides deterministic
+fixture identities for the `radroots` core libraries.
+
+## Overview
+
+ * named fixture identities such as Alice, Bob, Carol, and Diego with fixed key
+   material;
+ * an approved fixture namespace and companion relay, app, API, and CDN
+   endpoint constants;
+ * stable test data shared across workspace tests and examples;
+ * a non-published support crate intended for deterministic local and CI
+   coverage.
+
+## Copyright
+
+Except as otherwise noted, all files in the `radroots_test_fixtures`
+distribution are
+
+ Copyright (c) 2025 Tyson Lupul
+
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see LICENSE included in the `radroots_test_fixtures` distribution.
