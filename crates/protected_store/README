@@ -1,3 +1,23 @@
 # radroots_protected_store
 
-Versioned authenticated local protected-store envelopes for Rad Roots runtimes.
+This is the README for `radroots_protected_store`, which provides authenticated
+local store envelopes for the `radroots` core libraries.
+
+## Overview
+
+ * versioned envelope and header types for protected local records;
+ * seal and open helpers built around XChaCha20Poly1305 and wrapped data keys;
+ * JSON encode and decode helpers for serialized protected payloads;
+ * portable core logic with optional `std` support through
+   `radroots_secret_vault`.
+
+## Copyright
+
+Except as otherwise noted, all files in the `radroots_protected_store`
+distribution are
+
+ Copyright (c) 2025 Tyson Lupul
+
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see LICENSE included in the `radroots_protected_store`
+distribution.
