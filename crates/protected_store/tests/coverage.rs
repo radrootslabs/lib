@@ -58,4 +58,34 @@ fn public_roundtrip_apis_cover_external_lib_regions() {
         .open_with_wrapped_key(&vault)
         .expect("deterministic envelope opens");
     assert_eq!(deterministic_plaintext, b"deterministic roundtrip");
+
+    let malformed = RadrootsProtectedStoreEnvelope {
+        header: decoded.header.clone(),
+        wrapped_key: vec![1, 2, 3, 4],
+        ciphertext: decoded.ciphertext.clone(),
+    };
+    let err = malformed
+        .open_with_wrapped_key(&vault)
+        .expect_err("wrapped key without separator must fail");
+    assert_eq!(
+        format!("{err:?}"),
+        "KeyUnwrapFailed",
+        "public wrapper should surface the vault unwrap failure",
+    );
+
+    let mismatched = RadrootsProtectedStoreEnvelope {
+        header: decoded.header.clone(),
+        wrapped_key: TestVault
+            .wrap_data_key("drafts/other", &[7_u8; RADROOTS_PROTECTED_STORE_KEY_LENGTH])
+            .expect("alternate slot wrap succeeds"),
+        ciphertext: decoded.ciphertext,
+    };
+    let err = mismatched
+        .open_with_wrapped_key(&vault)
+        .expect_err("wrapped key slot mismatch must fail");
+    assert_eq!(
+        format!("{err:?}"),
+        "KeyUnwrapFailed",
+        "public wrapper should surface the slot mismatch unwrap failure",
+    );
 }

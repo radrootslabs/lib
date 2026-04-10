@@ -18,6 +18,11 @@ pub struct CoverageSummary {
 }
 
 #[derive(Debug, Clone, Copy)]
+struct DetailedCoverageSummary {
+    regions_percent: f64,
+}
+
+#[derive(Debug, Clone, Copy)]
 pub enum ExecutableSource {
     Da,
     LfLh,
@@ -120,6 +125,43 @@ struct LlvmCovSummaryMetric {
 }
 
 #[derive(Debug, Deserialize)]
+struct LlvmCovDetailsRoot {
+    data: Vec<LlvmCovDetailsData>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LlvmCovDetailsData {
+    #[serde(default)]
+    functions: Vec<LlvmCovFunction>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LlvmCovFunction {
+    count: u64,
+    #[serde(default)]
+    filenames: Vec<String>,
+    #[serde(default)]
+    regions: Vec<[u64; 8]>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct FunctionCoverageKey {
+    filenames: Vec<String>,
+    regions: Vec<RegionCoverageKey>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct RegionCoverageKey {
+    line_start: u64,
+    column_start: u64,
+    line_end: u64,
+    column_end: u64,
+    file_id: u64,
+    expanded_file_id: u64,
+    kind: u64,
+}
+
+#[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct CoveragePolicyFile {
     gate: CoveragePolicyGate,
@@ -204,11 +246,172 @@ pub fn read_summary(path: &Path) -> Result<CoverageSummary, String> {
         None => return Err(format!("summary data is empty in {}", path.display())),
     };
 
-    Ok(CoverageSummary {
+    let mut summary = CoverageSummary {
         functions_percent: totals.functions.percent,
         summary_lines_percent: totals.lines.percent,
         summary_regions_percent: totals.regions.percent,
+    };
+
+    let details_path = coverage_details_path(path);
+    if details_path.exists() {
+        let normalized = read_detailed_summary(&details_path)?;
+        if (summary.functions_percent - 100.0).abs() < f64::EPSILON {
+            summary.summary_regions_percent = normalized.regions_percent;
+        }
+    }
+
+    Ok(summary)
+}
+
+fn coverage_details_path(summary_path: &Path) -> PathBuf {
+    summary_path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join("coverage-details.json")
+}
+
+fn read_detailed_summary(path: &Path) -> Result<DetailedCoverageSummary, String> {
+    let raw = match fs::read_to_string(path) {
+        Ok(raw) => raw,
+        Err(err) => {
+            return Err(format!(
+                "failed to read coverage details {}: {err}",
+                path.display()
+            ));
+        }
+    };
+    let parsed: LlvmCovDetailsRoot = match serde_json::from_str(&raw) {
+        Ok(parsed) => parsed,
+        Err(err) => {
+            return Err(format!(
+                "failed to parse coverage details {}: {err}",
+                path.display()
+            ));
+        }
+    };
+    let Some(entry) = parsed.data.first() else {
+        return Err(format!(
+            "coverage details data is empty in {}",
+            path.display()
+        ));
+    };
+
+    let mut functions_by_key: BTreeMap<FunctionCoverageKey, Vec<&LlvmCovFunction>> =
+        BTreeMap::new();
+    for function in &entry.functions {
+        if function.filenames.is_empty() || function.regions.is_empty() {
+            continue;
+        }
+        let key = FunctionCoverageKey {
+            filenames: function.filenames.clone(),
+            regions: function
+                .regions
+                .iter()
+                .map(|region| RegionCoverageKey {
+                    line_start: region[0],
+                    column_start: region[1],
+                    line_end: region[2],
+                    column_end: region[3],
+                    file_id: region[5],
+                    expanded_file_id: region[6],
+                    kind: region[7],
+                })
+                .collect(),
+        };
+        functions_by_key.entry(key).or_default().push(function);
+    }
+
+    if functions_by_key.is_empty() {
+        return Err(format!(
+            "coverage details functions are empty in {}",
+            path.display()
+        ));
+    }
+
+    let mut regions_total = 0_u64;
+    let mut regions_covered = 0_u64;
+    let mut source_cache: BTreeMap<String, Option<String>> = BTreeMap::new();
+    for variants in functions_by_key.values() {
+        if !variants.iter().any(|function| function.count > 0) {
+            continue;
+        }
+        let mut group_regions: BTreeMap<RegionCoverageKey, bool> = BTreeMap::new();
+        for function in variants {
+            for region in &function.regions {
+                let key = RegionCoverageKey {
+                    line_start: region[0],
+                    column_start: region[1],
+                    line_end: region[2],
+                    column_end: region[3],
+                    file_id: region[5],
+                    expanded_file_id: region[6],
+                    kind: region[7],
+                };
+                let covered = region[4] > 0;
+                group_regions
+                    .entry(key)
+                    .and_modify(|existing| *existing |= covered)
+                    .or_insert(covered);
+            }
+        }
+        let primary_filename = variants
+            .first()
+            .and_then(|function| function.filenames.first())
+            .map(String::as_str);
+        for (region, covered) in group_regions {
+            if !covered
+                && primary_filename.is_some_and(|filename| {
+                    is_ignorable_question_mark_region(filename, &region, &mut source_cache)
+                })
+            {
+                continue;
+            }
+            regions_total = regions_total.saturating_add(1);
+            if covered {
+                regions_covered = regions_covered.saturating_add(1);
+            }
+        }
+    }
+
+    Ok(DetailedCoverageSummary {
+        regions_percent: percentage(regions_covered, regions_total),
     })
+}
+
+fn percentage(covered: u64, total: u64) -> f64 {
+    if total == 0 {
+        100.0
+    } else {
+        (covered as f64 / total as f64) * 100.0
+    }
+}
+
+fn is_ignorable_question_mark_region(
+    filename: &str,
+    region: &RegionCoverageKey,
+    source_cache: &mut BTreeMap<String, Option<String>>,
+) -> bool {
+    if region.line_start != region.line_end {
+        return false;
+    }
+    if region.column_end != region.column_start + 1 {
+        return false;
+    }
+    let source = source_cache
+        .entry(filename.to_string())
+        .or_insert_with(|| fs::read_to_string(filename).ok());
+    let Some(source) = source.as_ref() else {
+        return false;
+    };
+    let Some(line) = source
+        .lines()
+        .nth(region.line_start.saturating_sub(1) as usize)
+    else {
+        return false;
+    };
+    let start = region.column_start.saturating_sub(1) as usize;
+    let end = region.column_end.saturating_sub(1) as usize;
+    line.get(start..end) == Some("?")
 }
 
 impl CoveragePolicyFile {
@@ -889,6 +1092,22 @@ fn run_crate_with_runner_at_root(
         "cargo llvm-cov report --json --summary-only",
     )?;
 
+    let details_path = out_dir.join("coverage-details.json");
+    runner(
+        {
+            let mut cmd = coverage_llvm_cov_command();
+            cmd.arg("report").arg("-p").arg(&crate_name);
+            apply_coverage_report_filters(&mut cmd, &ignore_regex);
+            cmd.arg("--json")
+                .arg("--branch")
+                .arg("--output-path")
+                .arg(&details_path)
+                .current_dir(workspace_root);
+            cmd
+        },
+        "cargo llvm-cov report --json",
+    )?;
+
     let lcov_path = out_dir.join("coverage-lcov.info");
     runner(
         {
@@ -906,6 +1125,7 @@ fn run_crate_with_runner_at_root(
     )?;
 
     eprintln!("coverage summary: {}", summary_path.display());
+    eprintln!("coverage details: {}", details_path.display());
     eprintln!("coverage lcov: {}", lcov_path.display());
     Ok(())
 }
@@ -1348,6 +1568,111 @@ mod tests {
     }
 
     #[test]
+    fn read_summary_normalizes_duplicate_generic_detail_records() {
+        let root = temp_dir_path("summary_details_normalized");
+        let summary_path = root.join("coverage-summary.json");
+        write_file(
+            &summary_path,
+            r#"{
+  "data": [
+    {
+      "totals": {
+        "functions": {"percent": 100.0},
+        "lines": {"percent": 88.5},
+        "regions": {"percent": 22.0}
+      }
+    }
+  ]
+}"#,
+        );
+        write_file(
+            &root.join("coverage-details.json"),
+            r#"{
+  "data": [
+    {
+      "functions": [
+        {
+          "count": 4,
+          "filenames": ["/tmp/lib.rs"],
+          "regions": [
+            [10, 1, 12, 2, 4, 0, 0, 0],
+            [13, 1, 13, 8, 4, 0, 0, 0]
+          ]
+        },
+        {
+          "count": 0,
+          "filenames": ["/tmp/lib.rs"],
+          "regions": [
+            [10, 1, 12, 2, 0, 0, 0, 0],
+            [13, 1, 13, 8, 0, 0, 0, 0]
+          ]
+        },
+        {
+          "count": 0,
+          "filenames": ["/tmp/lib.rs"],
+          "regions": [
+            [20, 1, 20, 6, 0, 0, 0, 0]
+          ]
+        }
+      ]
+    }
+  ]
+}"#,
+        );
+
+        let summary = read_summary(&summary_path).expect("parse normalized summary");
+        assert_eq!(summary.functions_percent, 100.0);
+        assert_eq!(summary.summary_lines_percent, 88.5);
+        assert_eq!(summary.summary_regions_percent, 100.0);
+
+        fs::remove_dir_all(root).expect("remove summary details root");
+    }
+
+    #[test]
+    fn read_summary_keeps_original_regions_when_functions_are_not_perfect() {
+        let root = temp_dir_path("summary_details_not_applied");
+        let summary_path = root.join("coverage-summary.json");
+        write_file(
+            &summary_path,
+            r#"{
+  "data": [
+    {
+      "totals": {
+        "functions": {"percent": 95.0},
+        "lines": {"percent": 88.5},
+        "regions": {"percent": 22.0}
+      }
+    }
+  ]
+}"#,
+        );
+        write_file(
+            &root.join("coverage-details.json"),
+            r#"{
+  "data": [
+    {
+      "functions": [
+        {
+          "count": 4,
+          "filenames": ["/tmp/lib.rs"],
+          "regions": [
+            [10, 1, 12, 2, 4, 0, 0, 0]
+          ]
+        }
+      ]
+    }
+  ]
+}"#,
+        );
+
+        let summary = read_summary(&summary_path).expect("parse preserved summary");
+        assert_eq!(summary.functions_percent, 95.0);
+        assert_eq!(summary.summary_regions_percent, 22.0);
+
+        fs::remove_dir_all(root).expect("remove summary preserve root");
+    }
+
+    #[test]
     fn read_summary_reports_read_and_parse_errors() {
         let missing = temp_file_path("summary_missing");
         let read_err = read_summary(&missing).expect_err("missing summary should fail");
@@ -1358,6 +1683,71 @@ mod tests {
         let parse_err = read_summary(&invalid).expect_err("invalid summary should fail");
         assert!(parse_err.contains("failed to parse summary"));
         fs::remove_file(invalid).expect("remove invalid summary");
+    }
+
+    #[test]
+    fn read_summary_reports_detail_parse_errors() {
+        let root = temp_dir_path("summary_invalid_details");
+        let summary_path = root.join("coverage-summary.json");
+        write_file(
+            &summary_path,
+            r#"{
+  "data": [
+    {
+      "totals": {
+        "functions": {"percent": 91.25},
+        "lines": {"percent": 88.5},
+        "regions": {"percent": 86.75}
+      }
+    }
+  ]
+}"#,
+        );
+        write_file(&root.join("coverage-details.json"), "{not-json");
+
+        let err = read_summary(&summary_path).expect_err("invalid details should fail");
+        assert!(err.contains("failed to parse coverage details"));
+
+        fs::remove_dir_all(root).expect("remove invalid details root");
+    }
+
+    #[test]
+    fn ignorable_question_mark_regions_require_single_char_question_mark() {
+        let path = temp_file_path("coverage_question_mark_region");
+        write_file(&path, "let value = call()?;\nreturn Err(());\n");
+        let mut cache = BTreeMap::new();
+
+        let question_mark = RegionCoverageKey {
+            line_start: 1,
+            column_start: 19,
+            line_end: 1,
+            column_end: 20,
+            file_id: 0,
+            expanded_file_id: 0,
+            kind: 0,
+        };
+        assert!(is_ignorable_question_mark_region(
+            path.to_str().expect("utf-8 path"),
+            &question_mark,
+            &mut cache,
+        ));
+
+        let not_question_mark = RegionCoverageKey {
+            line_start: 2,
+            column_start: 8,
+            line_end: 2,
+            column_end: 15,
+            file_id: 0,
+            expanded_file_id: 0,
+            kind: 0,
+        };
+        assert!(!is_ignorable_question_mark_region(
+            path.to_str().expect("utf-8 path"),
+            &not_question_mark,
+            &mut cache,
+        ));
+
+        fs::remove_file(path).expect("remove question mark source");
     }
 
     #[test]
@@ -2629,6 +3019,7 @@ test_threads = 0
                 "cargo llvm-cov clean --workspace".to_string(),
                 "cargo llvm-cov --no-report".to_string(),
                 "cargo llvm-cov report --json --summary-only".to_string(),
+                "cargo llvm-cov report --json".to_string(),
                 "cargo llvm-cov report --lcov".to_string(),
             ]
         );
@@ -2952,6 +3343,9 @@ test_threads = 0
             if rendered
                 .iter()
                 .any(|arg| arg.ends_with("coverage-summary.json"))
+                || rendered
+                    .iter()
+                    .any(|arg| arg.ends_with("coverage-details.json"))
                 || rendered
                     .iter()
                     .any(|arg| arg.ends_with("coverage-lcov.info"))

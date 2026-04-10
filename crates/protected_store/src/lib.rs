@@ -412,6 +412,24 @@ mod tests {
     }
 
     #[test]
+    fn seal_with_entropy_results_succeeds_when_material_is_provided() {
+        let vault = FakeVault::new();
+        let envelope = RadrootsProtectedStoreEnvelope::seal_with_entropy_results(
+            &vault,
+            "drafts/default",
+            b"entropy helper body",
+            Ok([7_u8; RADROOTS_PROTECTED_STORE_KEY_LENGTH]),
+            Ok([9_u8; RADROOTS_PROTECTED_STORE_NONCE_LENGTH]),
+        )
+        .expect("explicit material should succeed");
+
+        let plaintext = envelope
+            .open_with_wrapped_key(&vault)
+            .expect("helper envelope opens");
+        assert_eq!(plaintext, b"entropy helper body");
+    }
+
+    #[test]
     fn seal_with_wrapped_key_surfaces_wrap_failure_after_entropy() {
         let vault = FakeVault::with_wrap_failure();
         let err = RadrootsProtectedStoreEnvelope::seal_with_wrapped_key(
@@ -466,6 +484,38 @@ mod tests {
             err,
             RadrootsProtectedStoreError::UnsupportedEnvelopeVersion(2)
         );
+    }
+
+    #[test]
+    fn open_rejects_unsupported_version_before_unwrap() {
+        let vault = FakeVault::new();
+        let envelope = RadrootsProtectedStoreEnvelope {
+            header: RadrootsProtectedStoreHeader {
+                version: 2,
+                cipher: RadrootsProtectedStoreCipher::XChaCha20Poly1305,
+                key_source: RadrootsProtectedStoreKeySource::SecretVaultWrapped,
+                key_slot: String::from("drafts/default"),
+                nonce: [0_u8; RADROOTS_PROTECTED_STORE_NONCE_LENGTH],
+            },
+            wrapped_key: vec![1, 2, 3],
+            ciphertext: vec![4, 5, 6],
+        };
+
+        let err = envelope
+            .open_with_wrapped_key(&vault)
+            .expect_err("unsupported version must fail before unwrap");
+        assert_eq!(
+            err,
+            RadrootsProtectedStoreError::UnsupportedEnvelopeVersion(2)
+        );
+        assert_eq!(vault.unwrap_calls.get(), 0);
+    }
+
+    #[test]
+    fn decode_json_rejects_invalid_payloads() {
+        let err = RadrootsProtectedStoreEnvelope::decode_json(br#"{"header":"bad"}"#)
+            .expect_err("invalid payload must fail decode");
+        assert_eq!(err, RadrootsProtectedStoreError::EnvelopeDecodeFailed);
     }
 
     #[test]
@@ -539,6 +589,27 @@ mod tests {
             .open_with_wrapped_key(&vault)
             .expect_err("mismatched key slot must fail");
 
+        assert_eq!(err, RadrootsProtectedStoreError::KeyUnwrapFailed);
+    }
+
+    #[test]
+    fn wrapped_key_without_separator_is_rejected_during_unwrap() {
+        let vault = FakeVault::new();
+        let envelope = RadrootsProtectedStoreEnvelope {
+            header: RadrootsProtectedStoreHeader {
+                version: RADROOTS_PROTECTED_STORE_ENVELOPE_VERSION,
+                cipher: RadrootsProtectedStoreCipher::XChaCha20Poly1305,
+                key_source: RadrootsProtectedStoreKeySource::SecretVaultWrapped,
+                key_slot: String::from("drafts/default"),
+                nonce: [0_u8; RADROOTS_PROTECTED_STORE_NONCE_LENGTH],
+            },
+            wrapped_key: vec![1, 2, 3, 4],
+            ciphertext: vec![5, 6, 7],
+        };
+
+        let err = envelope
+            .open_with_wrapped_key(&vault)
+            .expect_err("missing separator must fail");
         assert_eq!(err, RadrootsProtectedStoreError::KeyUnwrapFailed);
     }
 }
