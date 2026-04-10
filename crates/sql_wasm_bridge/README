@@ -1,14 +1,24 @@
 # radroots_sql_wasm_bridge
 
-Wasm SQL bridge primitives for Rad Roots data layers.
+This is the README for `radroots_sql_wasm_bridge`, which provides a wasm SQL
+bridge ABI for the `radroots` core libraries.
 
-## Goals
+## Overview
 
-- define stable wasm bridge interfaces for SQL execute, query, export, and transactions
-- keep host interop behavior deterministic across wasm integrations
-- support a narrow integration boundary for SQL runtime crates
-- provide reusable wasm SQL bridge primitives for higher-level Rad Roots crates
+ * extern bridge hooks for SQL execution, query, and database export supplied
+   by the embedding host;
+ * transaction and savepoint helpers for begin, commit, and rollback flows;
+ * a wasm-first API surface with non-wasm shims used by tests;
+ * small bridge functions that return JavaScript values instead of defining a
+   database engine.
 
-## License
+## Copyright
 
-Licensed under AGPL-3.0. See LICENSE.
+Except as otherwise noted, all files in the `radroots_sql_wasm_bridge`
+distribution are
+
+ Copyright (c) 2025 Tyson Lupul
+
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see LICENSE included in the `radroots_sql_wasm_bridge`
+distribution.
