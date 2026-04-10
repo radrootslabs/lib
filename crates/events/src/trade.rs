@@ -618,6 +618,90 @@ impl RadrootsTradeMessagePayload {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use radroots_core::{
+        RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreDiscountValue, RadrootsCoreMoney,
+        RadrootsCorePercent,
+    };
+
+    fn sample_listing_addr() -> String {
+        "30402:pubkey:AAAAAAAAAAAAAAAAAAAAAg".into()
+    }
+
+    fn sample_discount_value() -> RadrootsCoreDiscountValue {
+        RadrootsCoreDiscountValue::MoneyPerBin(RadrootsCoreMoney::from_minor_units_u64(
+            250,
+            RadrootsCoreCurrency::USD,
+        ))
+    }
+
+    fn sample_percent_discount() -> RadrootsCoreDiscountValue {
+        RadrootsCoreDiscountValue::Percent(RadrootsCorePercent::new(RadrootsCoreDecimal::from(
+            10u32,
+        )))
+    }
+
+    fn sample_order() -> RadrootsTradeOrder {
+        RadrootsTradeOrder {
+            order_id: "order-1".into(),
+            listing_addr: sample_listing_addr(),
+            buyer_pubkey: "buyer".into(),
+            seller_pubkey: "seller".into(),
+            items: vec![RadrootsTradeOrderItem {
+                bin_id: "bin-1".into(),
+                bin_count: 2,
+            }],
+            discounts: Some(vec![sample_discount_value()]),
+        }
+    }
+
+    fn sample_order_revision() -> RadrootsTradeOrderRevision {
+        RadrootsTradeOrderRevision {
+            revision_id: "rev-1".into(),
+            changes: vec![
+                RadrootsTradeOrderChange::BinCount {
+                    item_index: 0,
+                    bin_count: 3,
+                },
+                RadrootsTradeOrderChange::ItemAdd {
+                    item: RadrootsTradeOrderItem {
+                        bin_id: "bin-2".into(),
+                        bin_count: 1,
+                    },
+                },
+                RadrootsTradeOrderChange::ItemRemove { item_index: 1 },
+            ],
+        }
+    }
+
+    fn sample_order_response(accepted: bool) -> RadrootsTradeOrderResponse {
+        RadrootsTradeOrderResponse {
+            accepted,
+            reason: (!accepted).then(|| "not today".into()),
+        }
+    }
+
+    fn sample_order_revision_response(accepted: bool) -> RadrootsTradeOrderRevisionResponse {
+        RadrootsTradeOrderRevisionResponse {
+            accepted,
+            reason: (!accepted).then(|| "needs changes".into()),
+        }
+    }
+
+    fn sample_validate_request() -> RadrootsTradeListingValidateRequest {
+        RadrootsTradeListingValidateRequest {
+            listing_event: Some(RadrootsNostrEventPtr {
+                id: "listing-event".into(),
+                relays: Some("wss://relay.example.com".into()),
+            }),
+        }
+    }
+
+    fn sample_validate_result() -> RadrootsTradeListingValidateResult {
+        RadrootsTradeListingValidateResult {
+            valid: false,
+            errors: vec![RadrootsTradeListingValidationError::MissingDeliveryMethod],
+        }
+    }
 
     #[test]
     fn message_type_classifies_request_and_result_kinds() {
@@ -636,23 +720,577 @@ mod tests {
     }
 
     #[test]
+    fn listing_parse_error_display_variants() {
+        assert_eq!(
+            RadrootsTradeListingParseError::MissingTag("price".into()).to_string(),
+            "missing required tag: price"
+        );
+        assert_eq!(
+            RadrootsTradeListingParseError::InvalidTag("farm".into()).to_string(),
+            "invalid tag: farm"
+        );
+        assert_eq!(
+            RadrootsTradeListingParseError::InvalidNumber("inventory".into()).to_string(),
+            "invalid number: inventory"
+        );
+        assert_eq!(
+            RadrootsTradeListingParseError::InvalidUnit.to_string(),
+            "invalid unit"
+        );
+        assert_eq!(
+            RadrootsTradeListingParseError::InvalidCurrency.to_string(),
+            "invalid currency"
+        );
+        assert_eq!(
+            RadrootsTradeListingParseError::InvalidJson("bins".into()).to_string(),
+            "invalid json: bins"
+        );
+        assert_eq!(
+            RadrootsTradeListingParseError::InvalidDiscount("offer".into()).to_string(),
+            "invalid discount data for offer"
+        );
+    }
+
+    #[test]
+    fn listing_validation_error_display_variants() {
+        assert_eq!(
+            (RadrootsTradeListingValidationError::InvalidKind { kind: KIND_PROFILE }).to_string(),
+            "invalid listing kind: 0"
+        );
+        assert_eq!(
+            RadrootsTradeListingValidationError::MissingListingId.to_string(),
+            "missing listing id"
+        );
+        assert_eq!(
+            RadrootsTradeListingValidationError::ListingEventNotFound {
+                listing_addr: "listing-1".into(),
+            }
+            .to_string(),
+            "listing event not found: listing-1"
+        );
+        assert_eq!(
+            RadrootsTradeListingValidationError::ListingEventFetchFailed {
+                listing_addr: "listing-2".into(),
+            }
+            .to_string(),
+            "listing event fetch failed: listing-2"
+        );
+        assert_eq!(
+            RadrootsTradeListingValidationError::ParseError {
+                error: RadrootsTradeListingParseError::InvalidJson("payload".into()),
+            }
+            .to_string(),
+            "invalid listing data: invalid json: payload"
+        );
+        assert_eq!(
+            RadrootsTradeListingValidationError::InvalidSeller.to_string(),
+            "listing author does not match farm pubkey"
+        );
+        assert_eq!(
+            RadrootsTradeListingValidationError::MissingFarmProfile.to_string(),
+            "missing farm profile"
+        );
+        assert_eq!(
+            RadrootsTradeListingValidationError::MissingFarmRecord.to_string(),
+            "missing farm record"
+        );
+        assert_eq!(
+            RadrootsTradeListingValidationError::MissingTitle.to_string(),
+            "missing listing title"
+        );
+        assert_eq!(
+            RadrootsTradeListingValidationError::MissingDescription.to_string(),
+            "missing listing description"
+        );
+        assert_eq!(
+            RadrootsTradeListingValidationError::MissingProductType.to_string(),
+            "missing listing product type"
+        );
+        assert_eq!(
+            RadrootsTradeListingValidationError::MissingBins.to_string(),
+            "missing listing bins"
+        );
+        assert_eq!(
+            RadrootsTradeListingValidationError::MissingPrimaryBin.to_string(),
+            "missing primary listing bin"
+        );
+        assert_eq!(
+            RadrootsTradeListingValidationError::InvalidBin.to_string(),
+            "invalid listing bin"
+        );
+        assert_eq!(
+            RadrootsTradeListingValidationError::MissingPrice.to_string(),
+            "missing listing price"
+        );
+        assert_eq!(
+            RadrootsTradeListingValidationError::InvalidPrice.to_string(),
+            "invalid listing price"
+        );
+        assert_eq!(
+            RadrootsTradeListingValidationError::MissingInventory.to_string(),
+            "missing listing inventory"
+        );
+        assert_eq!(
+            RadrootsTradeListingValidationError::InvalidInventory.to_string(),
+            "invalid listing inventory"
+        );
+        assert_eq!(
+            RadrootsTradeListingValidationError::MissingAvailability.to_string(),
+            "missing listing availability"
+        );
+        assert_eq!(
+            RadrootsTradeListingValidationError::MissingLocation.to_string(),
+            "missing listing location"
+        );
+        assert_eq!(
+            RadrootsTradeListingValidationError::MissingDeliveryMethod.to_string(),
+            "missing listing delivery method"
+        );
+    }
+
+    #[test]
+    fn message_type_maps_all_supported_kinds_and_helpers() {
+        let cases = [
+            (
+                RadrootsTradeMessageType::ListingValidateRequest,
+                KIND_TRADE_LISTING_VALIDATE_REQ,
+                true,
+                false,
+                false,
+                false,
+                false,
+                true,
+            ),
+            (
+                RadrootsTradeMessageType::ListingValidateResult,
+                KIND_TRADE_LISTING_VALIDATE_RES,
+                true,
+                false,
+                false,
+                false,
+                false,
+                false,
+            ),
+            (
+                RadrootsTradeMessageType::OrderRequest,
+                KIND_TRADE_ORDER_REQUEST,
+                false,
+                true,
+                true,
+                true,
+                false,
+                true,
+            ),
+            (
+                RadrootsTradeMessageType::OrderResponse,
+                KIND_TRADE_ORDER_RESPONSE,
+                false,
+                true,
+                true,
+                false,
+                true,
+                false,
+            ),
+            (
+                RadrootsTradeMessageType::OrderRevision,
+                KIND_TRADE_ORDER_REVISION,
+                false,
+                true,
+                true,
+                true,
+                true,
+                true,
+            ),
+            (
+                RadrootsTradeMessageType::OrderRevisionAccept,
+                KIND_TRADE_ORDER_REVISION_RESPONSE,
+                false,
+                true,
+                true,
+                false,
+                true,
+                false,
+            ),
+            (
+                RadrootsTradeMessageType::OrderRevisionDecline,
+                KIND_TRADE_ORDER_REVISION_RESPONSE,
+                false,
+                true,
+                true,
+                false,
+                true,
+                false,
+            ),
+            (
+                RadrootsTradeMessageType::Question,
+                KIND_TRADE_QUESTION,
+                false,
+                true,
+                true,
+                false,
+                true,
+                true,
+            ),
+            (
+                RadrootsTradeMessageType::Answer,
+                KIND_TRADE_ANSWER,
+                false,
+                true,
+                true,
+                false,
+                true,
+                false,
+            ),
+            (
+                RadrootsTradeMessageType::DiscountRequest,
+                KIND_TRADE_DISCOUNT_REQUEST,
+                false,
+                true,
+                true,
+                true,
+                true,
+                true,
+            ),
+            (
+                RadrootsTradeMessageType::DiscountOffer,
+                KIND_TRADE_DISCOUNT_OFFER,
+                false,
+                true,
+                true,
+                true,
+                true,
+                false,
+            ),
+            (
+                RadrootsTradeMessageType::DiscountAccept,
+                KIND_TRADE_DISCOUNT_ACCEPT,
+                false,
+                true,
+                true,
+                false,
+                true,
+                true,
+            ),
+            (
+                RadrootsTradeMessageType::DiscountDecline,
+                KIND_TRADE_DISCOUNT_DECLINE,
+                false,
+                true,
+                true,
+                false,
+                true,
+                true,
+            ),
+            (
+                RadrootsTradeMessageType::Cancel,
+                KIND_TRADE_CANCEL,
+                false,
+                true,
+                true,
+                false,
+                true,
+                true,
+            ),
+            (
+                RadrootsTradeMessageType::FulfillmentUpdate,
+                KIND_TRADE_FULFILLMENT_UPDATE,
+                false,
+                true,
+                true,
+                false,
+                true,
+                true,
+            ),
+            (
+                RadrootsTradeMessageType::Receipt,
+                KIND_TRADE_RECEIPT,
+                false,
+                true,
+                true,
+                false,
+                true,
+                true,
+            ),
+        ];
+
+        for (
+            message_type,
+            kind,
+            service,
+            public,
+            requires_order_id,
+            requires_listing_snapshot,
+            requires_trade_chain,
+            is_request,
+        ) in cases
+        {
+            assert_eq!(message_type.kind(), kind);
+            assert_eq!(message_type.is_service(), service);
+            assert_eq!(message_type.is_public(), public);
+            assert_eq!(message_type.requires_order_id(), requires_order_id);
+            assert_eq!(
+                message_type.requires_listing_snapshot(),
+                requires_listing_snapshot
+            );
+            assert_eq!(message_type.requires_trade_chain(), requires_trade_chain);
+            assert_eq!(message_type.is_request(), is_request);
+            assert_eq!(message_type.is_result(), !is_request);
+        }
+
+        assert_eq!(
+            RadrootsTradeMessageType::from_kind(KIND_TRADE_LISTING_VALIDATE_REQ),
+            Some(RadrootsTradeMessageType::ListingValidateRequest)
+        );
+        assert_eq!(
+            RadrootsTradeMessageType::from_kind(KIND_TRADE_LISTING_VALIDATE_RES),
+            Some(RadrootsTradeMessageType::ListingValidateResult)
+        );
+        assert_eq!(
+            RadrootsTradeMessageType::from_kind(KIND_TRADE_ORDER_REQUEST),
+            Some(RadrootsTradeMessageType::OrderRequest)
+        );
+        assert_eq!(
+            RadrootsTradeMessageType::from_kind(KIND_TRADE_ORDER_RESPONSE),
+            Some(RadrootsTradeMessageType::OrderResponse)
+        );
+        assert_eq!(
+            RadrootsTradeMessageType::from_kind(KIND_TRADE_ORDER_REVISION),
+            Some(RadrootsTradeMessageType::OrderRevision)
+        );
+        assert_eq!(
+            RadrootsTradeMessageType::from_kind(KIND_TRADE_ORDER_REVISION_RESPONSE),
+            None
+        );
+        assert_eq!(
+            RadrootsTradeMessageType::from_kind(KIND_TRADE_QUESTION),
+            Some(RadrootsTradeMessageType::Question)
+        );
+        assert_eq!(
+            RadrootsTradeMessageType::from_kind(KIND_TRADE_ANSWER),
+            Some(RadrootsTradeMessageType::Answer)
+        );
+        assert_eq!(
+            RadrootsTradeMessageType::from_kind(KIND_TRADE_DISCOUNT_REQUEST),
+            Some(RadrootsTradeMessageType::DiscountRequest)
+        );
+        assert_eq!(
+            RadrootsTradeMessageType::from_kind(KIND_TRADE_DISCOUNT_OFFER),
+            Some(RadrootsTradeMessageType::DiscountOffer)
+        );
+        assert_eq!(
+            RadrootsTradeMessageType::from_kind(KIND_TRADE_DISCOUNT_ACCEPT),
+            Some(RadrootsTradeMessageType::DiscountAccept)
+        );
+        assert_eq!(
+            RadrootsTradeMessageType::from_kind(KIND_TRADE_DISCOUNT_DECLINE),
+            Some(RadrootsTradeMessageType::DiscountDecline)
+        );
+        assert_eq!(
+            RadrootsTradeMessageType::from_kind(KIND_TRADE_CANCEL),
+            Some(RadrootsTradeMessageType::Cancel)
+        );
+        assert_eq!(
+            RadrootsTradeMessageType::from_kind(KIND_TRADE_FULFILLMENT_UPDATE),
+            Some(RadrootsTradeMessageType::FulfillmentUpdate)
+        );
+        assert_eq!(
+            RadrootsTradeMessageType::from_kind(KIND_TRADE_RECEIPT),
+            Some(RadrootsTradeMessageType::Receipt)
+        );
+        assert_eq!(RadrootsTradeMessageType::from_kind(KIND_PROFILE), None);
+    }
+
+    #[test]
     fn envelope_requires_order_id_for_order_scoped_messages() {
         let envelope = RadrootsTradeEnvelope::new(
             RadrootsTradeMessageType::OrderRequest,
-            "30402:pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+            sample_listing_addr(),
             None,
-            RadrootsTradeMessagePayload::OrderRequest(RadrootsTradeOrder {
-                order_id: "order-1".into(),
-                listing_addr: "30402:pubkey:AAAAAAAAAAAAAAAAAAAAAg".into(),
-                buyer_pubkey: "buyer".into(),
-                seller_pubkey: "seller".into(),
-                items: vec![],
-                discounts: None,
-            }),
+            RadrootsTradeMessagePayload::OrderRequest(sample_order()),
         );
         assert_eq!(
             envelope.validate().unwrap_err(),
             RadrootsTradeEnvelopeError::MissingOrderId
         );
+    }
+
+    #[test]
+    fn envelope_validation_covers_success_and_error_paths() {
+        let service_envelope = RadrootsTradeEnvelope::new(
+            RadrootsTradeMessageType::ListingValidateRequest,
+            sample_listing_addr(),
+            None,
+            RadrootsTradeMessagePayload::ListingValidateRequest(sample_validate_request()),
+        );
+        assert_eq!(service_envelope.validate(), Ok(()));
+
+        let public_envelope = RadrootsTradeEnvelope::new(
+            RadrootsTradeMessageType::OrderRequest,
+            sample_listing_addr(),
+            Some("order-1".into()),
+            RadrootsTradeMessagePayload::OrderRequest(sample_order()),
+        );
+        assert_eq!(public_envelope.validate(), Ok(()));
+
+        let invalid_version = RadrootsTradeEnvelope {
+            version: RADROOTS_TRADE_ENVELOPE_VERSION + 1,
+            domain: RadrootsTradeDomain::TradeListing,
+            message_type: RadrootsTradeMessageType::OrderRequest,
+            order_id: Some("order-1".into()),
+            listing_addr: sample_listing_addr(),
+            payload: RadrootsTradeMessagePayload::OrderRequest(sample_order()),
+        };
+        assert_eq!(
+            invalid_version.validate().unwrap_err(),
+            RadrootsTradeEnvelopeError::InvalidVersion {
+                expected: RADROOTS_TRADE_ENVELOPE_VERSION,
+                got: RADROOTS_TRADE_ENVELOPE_VERSION + 1,
+            }
+        );
+
+        let missing_listing_addr = RadrootsTradeEnvelope::new(
+            RadrootsTradeMessageType::ListingValidateRequest,
+            "   ",
+            None,
+            RadrootsTradeMessagePayload::ListingValidateRequest(sample_validate_request()),
+        );
+        assert_eq!(
+            missing_listing_addr.validate().unwrap_err(),
+            RadrootsTradeEnvelopeError::MissingListingAddr
+        );
+
+        let blank_order_id = RadrootsTradeEnvelope::new(
+            RadrootsTradeMessageType::OrderResponse,
+            sample_listing_addr(),
+            Some("  ".into()),
+            RadrootsTradeMessagePayload::OrderResponse(sample_order_response(true)),
+        );
+        assert_eq!(
+            blank_order_id.validate().unwrap_err(),
+            RadrootsTradeEnvelopeError::MissingOrderId
+        );
+    }
+
+    #[test]
+    fn envelope_error_display_variants() {
+        assert_eq!(
+            (RadrootsTradeEnvelopeError::InvalidVersion {
+                expected: 1,
+                got: 2,
+            })
+            .to_string(),
+            "invalid envelope version: expected 1, got 2"
+        );
+        assert_eq!(
+            RadrootsTradeEnvelopeError::MissingOrderId.to_string(),
+            "missing order_id for order-scoped message"
+        );
+        assert_eq!(
+            RadrootsTradeEnvelopeError::MissingListingAddr.to_string(),
+            "missing listing_addr"
+        );
+    }
+
+    #[test]
+    fn payload_message_type_covers_all_variants() {
+        let payloads = [
+            (
+                RadrootsTradeMessagePayload::ListingValidateRequest(sample_validate_request()),
+                RadrootsTradeMessageType::ListingValidateRequest,
+            ),
+            (
+                RadrootsTradeMessagePayload::ListingValidateResult(sample_validate_result()),
+                RadrootsTradeMessageType::ListingValidateResult,
+            ),
+            (
+                RadrootsTradeMessagePayload::OrderRequest(sample_order()),
+                RadrootsTradeMessageType::OrderRequest,
+            ),
+            (
+                RadrootsTradeMessagePayload::OrderResponse(sample_order_response(false)),
+                RadrootsTradeMessageType::OrderResponse,
+            ),
+            (
+                RadrootsTradeMessagePayload::OrderRevision(sample_order_revision()),
+                RadrootsTradeMessageType::OrderRevision,
+            ),
+            (
+                RadrootsTradeMessagePayload::OrderRevisionAccept(sample_order_revision_response(
+                    true,
+                )),
+                RadrootsTradeMessageType::OrderRevisionAccept,
+            ),
+            (
+                RadrootsTradeMessagePayload::OrderRevisionDecline(sample_order_revision_response(
+                    false,
+                )),
+                RadrootsTradeMessageType::OrderRevisionDecline,
+            ),
+            (
+                RadrootsTradeMessagePayload::Question(RadrootsTradeQuestion {
+                    question_id: "question-1".into(),
+                }),
+                RadrootsTradeMessageType::Question,
+            ),
+            (
+                RadrootsTradeMessagePayload::Answer(RadrootsTradeAnswer {
+                    question_id: "question-1".into(),
+                }),
+                RadrootsTradeMessageType::Answer,
+            ),
+            (
+                RadrootsTradeMessagePayload::DiscountRequest(RadrootsTradeDiscountRequest {
+                    discount_id: "discount-1".into(),
+                    value: sample_discount_value(),
+                }),
+                RadrootsTradeMessageType::DiscountRequest,
+            ),
+            (
+                RadrootsTradeMessagePayload::DiscountOffer(RadrootsTradeDiscountOffer {
+                    discount_id: "discount-1".into(),
+                    value: sample_percent_discount(),
+                }),
+                RadrootsTradeMessageType::DiscountOffer,
+            ),
+            (
+                RadrootsTradeMessagePayload::DiscountAccept(
+                    RadrootsTradeDiscountDecision::Accept {
+                        value: sample_discount_value(),
+                    },
+                ),
+                RadrootsTradeMessageType::DiscountAccept,
+            ),
+            (
+                RadrootsTradeMessagePayload::DiscountDecline(
+                    RadrootsTradeDiscountDecision::Decline {
+                        reason: Some("no thanks".into()),
+                    },
+                ),
+                RadrootsTradeMessageType::DiscountDecline,
+            ),
+            (
+                RadrootsTradeMessagePayload::Cancel(RadrootsTradeListingCancel {
+                    reason: Some("out of stock".into()),
+                }),
+                RadrootsTradeMessageType::Cancel,
+            ),
+            (
+                RadrootsTradeMessagePayload::FulfillmentUpdate(RadrootsTradeFulfillmentUpdate {
+                    status: RadrootsTradeFulfillmentStatus::Delivered,
+                }),
+                RadrootsTradeMessageType::FulfillmentUpdate,
+            ),
+            (
+                RadrootsTradeMessagePayload::Receipt(RadrootsTradeReceipt {
+                    acknowledged: true,
+                    at: 42,
+                }),
+                RadrootsTradeMessageType::Receipt,
+            ),
+        ];
+
+        for (payload, message_type) in payloads {
+            assert_eq!(payload.message_type(), message_type);
+        }
     }
 }
