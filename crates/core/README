@@ -1,14 +1,22 @@
 # radroots_core
 
-Core value types and unit semantics for the Rad Roots SDK.
+This is the README for `radroots_core`, which provides core value types and
+unit semantics for the `radroots` core libraries.
 
-## Goals
+## Overview
 
-- define stable value primitives for currency, quantity, pricing, and units
-- keep arithmetic and unit conversion deterministic across supported targets
-- support no_std and std builds with feature-gated serialization and type export
-- provide reusable core primitives for higher-level Rad Roots crates
+ * stable domain value types for currency, money, quantity, quantity pricing,
+   percent, discounts, and decimals;
+ * unit kinds, dimensions, parsing, and deterministic conversion helpers;
+ * portable core semantics for both `std` and `no_std` builds;
+ * optional integration with `serde`, `typeshare`, and `ts-rs` for
+   serialization and cross-language type export.
 
-## License
+## Copyright
 
-Licensed under AGPL-3.0. See LICENSE.
+Except as otherwise noted, all files in the `radroots_core` distribution are
+
+ Copyright (c) 2025 Tyson Lupul
+
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see LICENSE included in the `radroots_core` distribution.
