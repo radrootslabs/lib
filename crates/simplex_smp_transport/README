@@ -1,0 +1,22 @@
+# radroots_simplex_smp_transport
+
+This is the README for `radroots_simplex_smp_transport`, which defines SMP
+transport framing and TLS handshake policy for the `radroots` core libraries.
+
+## Overview
+
+ * request, response, and executor traits for SimpleX SMP command transport;
+ * padded transport block encoding and decoding helpers and related constants;
+ * TLS hello, server proof, evidence, and policy validation models;
+ * an optional `std` client transport built on `rustls` for active network use.
+
+## Copyright
+
+Except as otherwise noted, all files in the `radroots_simplex_smp_transport`
+distribution are
+
+ Copyright (c) 2025 Tyson Lupul
+
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see LICENSE included in the `radroots_simplex_smp_transport`
+distribution.
