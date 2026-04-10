@@ -301,12 +301,12 @@ fn legacy_release_contract_path(contract_root: &Path) -> PathBuf {
     contract_root.join("release").join("publish-set.toml")
 }
 
-fn resolve_release_contract_path(
+fn resolve_release_contract_path_with_override(
     workspace_root: &Path,
     contract_root: &Path,
+    release_policy_override: Option<PathBuf>,
 ) -> Result<Option<PathBuf>, String> {
-    if let Some(raw) = env::var_os(RELEASE_POLICY_ENV) {
-        let path = PathBuf::from(raw);
+    if let Some(path) = release_policy_override {
         if !path.is_file() {
             return Err(format!(
                 "{RELEASE_POLICY_ENV} points to a missing release policy file: {}",
@@ -329,6 +329,17 @@ fn resolve_release_contract_path(
     }
 
     Ok(None)
+}
+
+fn resolve_release_contract_path(
+    workspace_root: &Path,
+    contract_root: &Path,
+) -> Result<Option<PathBuf>, String> {
+    resolve_release_contract_path_with_override(
+        workspace_root,
+        contract_root,
+        env::var_os(RELEASE_POLICY_ENV).map(PathBuf::from),
+    )
 }
 
 fn load_release_contract(
@@ -1498,6 +1509,170 @@ readme = { workspace = true }
         let mut package = toml::value::Table::new();
         package.insert("description".to_string(), toml::Value::Integer(42));
         assert!(!package_field_configured(&package, "description"));
+
+        assert!(!publish_config_is_public(None));
+        assert!(!publish_config_is_public(Some(&PackagePublish::Bool(true))));
+        assert!(publish_config_is_public(Some(&PackagePublish::Registries(
+            vec!["crates-io".to_string(),]
+        ))));
+        assert!(!publish_config_is_public(Some(
+            &PackagePublish::Registries(vec!["crates-io".to_string(), "mirror".to_string(),])
+        )));
+        assert!(!publish_config_is_public(Some(
+            &PackagePublish::Registries(vec!["mirror".to_string(),])
+        )));
+
+        assert!(!publish_config_is_non_public(None));
+        assert!(!publish_config_is_non_public(Some(&PackagePublish::Bool(
+            true
+        ))));
+        assert!(publish_config_is_non_public(Some(&PackagePublish::Bool(
+            false
+        ))));
+        assert!(!publish_config_is_non_public(Some(
+            &PackagePublish::Registries(vec!["crates-io".to_string(),])
+        )));
+    }
+
+    #[test]
+    fn release_contract_helpers_cover_classification_and_env_override_paths() {
+        let release = ReleaseSection {
+            version: "1.0.0".to_string(),
+        };
+        let empty_order = ReleaseCrateSet { crates: Vec::new() };
+
+        let legacy = ReleaseContractFile {
+            release: ReleaseSection {
+                version: release.version.clone(),
+            },
+            classification: ReleaseClassification::default(),
+            publish: Some(ReleaseCrateSet {
+                crates: vec!["radroots_public".to_string()],
+            }),
+            internal: Some(ReleaseCrateSet {
+                crates: vec!["radroots_internal".to_string()],
+            }),
+            publish_order: ReleaseCrateSet {
+                crates: empty_order.crates.clone(),
+            },
+        };
+        assert!(!legacy.uses_classification());
+        assert_eq!(legacy.public_crates(), vec!["radroots_public".to_string()]);
+        assert_eq!(
+            legacy.internal_crates(),
+            vec!["radroots_internal".to_string()]
+        );
+
+        let empty_legacy = ReleaseContractFile {
+            release: ReleaseSection {
+                version: release.version.clone(),
+            },
+            classification: ReleaseClassification::default(),
+            publish: None,
+            internal: None,
+            publish_order: ReleaseCrateSet {
+                crates: empty_order.crates.clone(),
+            },
+        };
+        assert!(!empty_legacy.uses_classification());
+        assert_eq!(empty_legacy.public_crates(), Vec::<String>::new());
+        assert_eq!(empty_legacy.internal_crates(), Vec::<String>::new());
+
+        let internal = ReleaseContractFile {
+            release: ReleaseSection {
+                version: release.version.clone(),
+            },
+            classification: ReleaseClassification {
+                internal: vec!["radroots_internal_only".to_string()],
+                ..ReleaseClassification::default()
+            },
+            publish: None,
+            internal: None,
+            publish_order: ReleaseCrateSet {
+                crates: empty_order.crates.clone(),
+            },
+        };
+        assert!(internal.uses_classification());
+
+        let deferred = ReleaseContractFile {
+            release: ReleaseSection {
+                version: release.version.clone(),
+            },
+            classification: ReleaseClassification {
+                deferred: vec!["radroots_deferred".to_string()],
+                ..ReleaseClassification::default()
+            },
+            publish: None,
+            internal: None,
+            publish_order: ReleaseCrateSet {
+                crates: empty_order.crates.clone(),
+            },
+        };
+        assert!(deferred.uses_classification());
+        assert_eq!(
+            deferred.deferred_crates(),
+            vec!["radroots_deferred".to_string()]
+        );
+
+        let retired = ReleaseContractFile {
+            release: ReleaseSection {
+                version: release.version.clone(),
+            },
+            classification: ReleaseClassification {
+                retired: vec!["radroots_retired".to_string()],
+                ..ReleaseClassification::default()
+            },
+            publish: None,
+            internal: None,
+            publish_order: ReleaseCrateSet {
+                crates: empty_order.crates.clone(),
+            },
+        };
+        assert!(retired.uses_classification());
+        assert_eq!(
+            retired.retired_crates(),
+            vec!["radroots_retired".to_string()]
+        );
+
+        let yank_only = ReleaseContractFile {
+            release,
+            classification: ReleaseClassification {
+                yank_only: vec!["radroots_yank_only".to_string()],
+                ..ReleaseClassification::default()
+            },
+            publish: None,
+            internal: None,
+            publish_order: empty_order,
+        };
+        assert!(yank_only.uses_classification());
+        assert_eq!(
+            yank_only.yank_only_crates(),
+            vec!["radroots_yank_only".to_string()]
+        );
+
+        let root = create_synthetic_workspace("release_contract_env_override");
+        let contract_root = root.join("contract");
+        let policy_path = contract_root.join("release").join("publish-set.toml");
+        let resolved = resolve_release_contract_path_with_override(
+            &root,
+            &contract_root,
+            Some(policy_path.clone()),
+        )
+        .expect("existing override policy should resolve");
+        assert_eq!(resolved, Some(policy_path));
+
+        let missing_policy = root.join("missing-release-policy.toml");
+        let err = resolve_release_contract_path_with_override(
+            &root,
+            &contract_root,
+            Some(missing_policy.clone()),
+        )
+        .expect_err("missing env policy should fail");
+        assert!(err.contains(RELEASE_POLICY_ENV));
+        assert!(err.contains("missing release policy file"));
+        assert!(err.contains(&missing_policy.display().to_string()));
+
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]
@@ -2331,6 +2506,36 @@ publish = false
             .collect::<BTreeSet<_>>();
         let duplicate_err =
             validate_publish_package_metadata(&root, &publish).expect_err("duplicate package map");
+        assert!(duplicate_err.contains("duplicate workspace package name"));
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn workspace_package_publish_configs_cover_success_and_duplicate_names() {
+        let root = create_synthetic_workspace("workspace_publish_configs");
+        let flags = workspace_package_publish_flags(&root).expect("publish flags");
+        assert_eq!(flags["radroots_a"], true);
+        assert_eq!(flags["radroots_b"], false);
+
+        let configs = workspace_package_publish_configs(&root).expect("publish configs");
+        assert_eq!(
+            configs["radroots_a"],
+            Some(PackagePublish::Registries(vec!["crates-io".to_string()]))
+        );
+        assert_eq!(configs["radroots_b"], Some(PackagePublish::Bool(false)));
+
+        write_file(
+            &root.join("crates").join("b").join("Cargo.toml"),
+            r#"[package]
+name = "radroots_a"
+version = "0.1.0"
+edition = "2024"
+publish = false
+"#,
+        );
+        let duplicate_err = workspace_package_publish_configs(&root)
+            .expect_err("duplicate package name in publish configs");
         assert!(duplicate_err.contains("duplicate workspace package name"));
 
         let _ = fs::remove_dir_all(&root);
