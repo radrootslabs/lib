@@ -1,0 +1,24 @@
+# radroots_simplex_agent_store
+
+This is the README for `radroots_simplex_agent_store`, which provides agent
+queue persistence models for the `radroots` core libraries.
+
+## Overview
+
+ * connection, queue, and queue-authentication record types for stored agent
+   state;
+ * outbound command, pending work, and delivery cursor models used by the agent
+   runtime;
+ * typed store errors and shared serialization support for persisted records;
+ * a small support crate intended to be consumed by higher-level runtime code.
+
+## Copyright
+
+Except as otherwise noted, all files in the `radroots_simplex_agent_store`
+distribution are
+
+ Copyright (c) 2025 Tyson Lupul
+
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see LICENSE included in the `radroots_simplex_agent_store`
+distribution.
