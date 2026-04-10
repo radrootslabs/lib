@@ -9,3 +9,4 @@ homepage.workspace = true
 readme = "README"
 publish = false
 description = "Shared fixture library for Radroots"
+authors = ["Tyson Lupul <tyson@radroots.org>"]
