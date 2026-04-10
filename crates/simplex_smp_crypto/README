@@ -1,0 +1,22 @@
+# radroots_simplex_smp_crypto
+
+This is the README for `radroots_simplex_smp_crypto`, which provides queue
+authorization and ratchet cryptography for the `radroots` core libraries.
+
+## Overview
+
+ * Ed25519 and X25519 key material, signature, and shared-secret helpers;
+ * padded and unpadded encryption helpers and secretbox chain support;
+ * ratchet header, role, and state types for SimpleX SMP sessions;
+ * X.509 conversion helpers and related nonce and authentication constants.
+
+## Copyright
+
+Except as otherwise noted, all files in the `radroots_simplex_smp_crypto`
+distribution are
+
+ Copyright (c) 2025 Tyson Lupul
+
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see LICENSE included in the `radroots_simplex_smp_crypto`
+distribution.

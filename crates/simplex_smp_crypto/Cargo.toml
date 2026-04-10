@@ -11,7 +11,7 @@ license.workspace = true
 description = "SimpleX SMP cryptography layer for Radroots"
 repository.workspace = true
 homepage.workspace = true
-readme.workspace = true
+readme = "README"
 
 [features]
 default = ["std"]
