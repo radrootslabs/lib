@@ -1,14 +1,24 @@
 # radroots_runtime_manager
 
-Shared local managed-runtime paths, registry, and lifecycle boundary for Rad Roots runtimes.
+This is the README for `radroots_runtime_manager`, which provides managed
+runtime registry helpers for the `radroots` core libraries.
 
-## Goals
+## Overview
 
-- parse the machine-readable runtime management contract
-- resolve shared manager roots and per-instance runtime-manager paths
-- persist one shared managed-runtime instance registry
-- define typed install and health state surfaces for CLI and app adoption later
+ * schema-checked management contract parsing and shared management constants;
+ * shared and per-instance path resolution layered on `radroots_runtime_paths`;
+ * registry load, save, lookup, and upsert helpers for managed runtime
+   instances;
+ * model types for lifecycle, install state, health state, defaults, and
+   runtime grouping.
 
-## License
+## Copyright
 
-Licensed under AGPL-3.0. See LICENSE.
+Except as otherwise noted, all files in the `radroots_runtime_manager`
+distribution are
+
+ Copyright (c) 2025 Tyson Lupul
+
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see LICENSE included in the `radroots_runtime_manager`
+distribution.
