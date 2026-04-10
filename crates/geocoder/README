@@ -1,3 +1,24 @@
 # radroots_geocoder
 
-Offline geocoder queries for the Rad Roots `geonames.db` dataset.
+This is the README for `radroots_geocoder`, which provides offline geocoder
+queries for the `radroots` core libraries.
+
+## Overview
+
+ * a `Geocoder` type that opens prepared datasets from a filesystem path or
+   in-memory bytes;
+ * reverse-geocoding queries over point coordinates with caller-supplied
+   options;
+ * country lookup, country listing, and country center helpers backed by the
+   same dataset;
+ * a `std`-based implementation over bundled GeoNames-style SQLite data.
+
+## Copyright
+
+Except as otherwise noted, all files in the `radroots_geocoder` distribution
+are
+
+ Copyright (c) 2025 Tyson Lupul
+
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see LICENSE included in the `radroots_geocoder` distribution.
