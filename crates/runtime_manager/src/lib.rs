@@ -18,7 +18,7 @@ pub use paths::{
 };
 pub use registry::{instance, load_registry, save_registry, upsert_instance};
 
-pub const RUNTIME_MANAGEMENT_SCHEMA: &str = "radroots_runtime-management";
+pub const RUNTIME_MANAGEMENT_SCHEMA: &str = "radroots-runtime-management";
 
 pub fn parse_contract_str(
     raw: &str,
@@ -51,7 +51,7 @@ mod tests {
     };
 
     const CONTRACT: &str = r#"
-schema = "radroots_runtime-management"
+schema = "radroots-runtime-management"
 schema_version = 1
 owner_doc = "docs/migration/radroots-modular-runtime-management-bootstrap-rcl.md"
 runtime_registry = "registry.toml"
