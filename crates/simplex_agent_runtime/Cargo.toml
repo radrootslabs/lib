@@ -3,9 +3,7 @@ name = "radroots_simplex_agent_runtime"
 publish = false
 version = "0.1.0-alpha.1"
 edition.workspace = true
-authors = [
-  "Radroots Authors",
-]
+authors = ["Tyson Lupul <tyson@radroots.org>"]
 rust-version.workspace = true
 license.workspace = true
 description = "SimpleX agent runtime layer for Radroots"
