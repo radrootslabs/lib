@@ -1,0 +1,25 @@
+# radroots_simplex_agent_runtime
+
+This is the README for `radroots_simplex_agent_runtime`, which provides SimpleX
+agent runtime coordination for the `radroots` core libraries.
+
+## Overview
+
+ * runtime builder, command outcome, and runtime event types for agent
+   workflows;
+ * shared error and support types for coordinating agent protocol and store
+   layers;
+ * a `std`-based runtime integration crate used by higher-level services;
+ * designed to sit between protocol, storage, and transport crates without
+   redefining their wire formats.
+
+## Copyright
+
+Except as otherwise noted, all files in the `radroots_simplex_agent_runtime`
+distribution are
+
+ Copyright (c) 2025 Tyson Lupul
+
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see LICENSE included in the `radroots_simplex_agent_runtime`
+distribution.
