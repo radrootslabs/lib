@@ -1,9 +1,10 @@
 [package]
 name = "xtask"
-description = "Workspace task runner for Radroots Rust crates"
 version = "0.1.0-alpha.1"
 edition.workspace = true
 rust-version.workspace = true
+description = "Workspace task runner for Radroots Rust crates"
+readme = "README"
 license.workspace = true
 publish = false
 

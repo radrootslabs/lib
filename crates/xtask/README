@@ -1,25 +1,24 @@
 # xtask
 
-Workspace automation for Rad Roots SDK validation and export workflows.
+This is the README for `xtask`, which provides internal workspace automation
+tasks for the `radroots` core libraries.
 
-## Goals
+## Overview
 
-- enforce SDK contract consistency across crates
-- generate deterministic SDK export artifacts
-- preserve stable package and crate mapping rules
-- block release drift before publish operations
+ * an internal `cargo xtask` runner for workspace-oriented development and
+   release workflows;
+ * `sdk` subcommands that export TypeScript bundles, crate models, and related
+   artifacts;
+ * command-dispatch code used for manifest, contract, and artifact generation
+   paths inside the workspace;
+ * a non-published binary crate used as tooling rather than as a library
+   dependency.
 
-## Commands
+## Copyright
 
-- `cargo run -q -p xtask -- sdk validate`
-- `cargo run -q -p xtask -- sdk release preflight`
-- `cargo run -q -p xtask -- sdk export-ts`
-- `cargo run -q -p xtask -- sdk export-ts-crate --crate radroots_core`
-- `cargo run -q -p xtask -- sdk export-ts-models`
-- `cargo run -q -p xtask -- sdk export-ts-constants`
-- `cargo run -q -p xtask -- sdk export-ts-wasm`
-- `cargo run -q -p xtask -- sdk export-manifest`
+Except as otherwise noted, all files in the `xtask` distribution are
 
-## License
+ Copyright (c) 2025 Tyson Lupul
 
-Licensed under AGPL-3.0. See LICENSE.
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see LICENSE included in the `xtask` distribution.
