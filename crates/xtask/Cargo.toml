@@ -7,6 +7,7 @@ description = "Workspace task runner for Radroots Rust crates"
 readme = "README"
 license.workspace = true
 publish = false
+authors = ["Tyson Lupul <tyson@radroots.org>"]
 
 [dependencies]
 serde = { workspace = true, features = ["derive"] }
