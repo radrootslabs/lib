@@ -1,14 +1,22 @@
 # radroots_log
 
-Tracing logging primitives for the Rad Roots SDK.
+This is the README for `radroots_log`, which provides tracing-oriented logging
+primitives for the `radroots` core libraries.
 
-## Goals
+## Overview
 
-- define stable logging and initialization interfaces for runtime crates
-- keep logging behavior deterministic across std and no_std targets
-- support tracing integration for application and service surfaces
-- provide reusable logging primitives for higher-level Rad Roots crates
+ * basic `log_info`, `log_error`, and `log_debug` helpers available across
+   builds;
+ * typed error and result definitions for logging initialization paths;
+ * `std` initializers for default, stdout, and file-backed tracing setups;
+ * optional chrono- and tracing-subscriber-based formatting and rotation
+   support through feature gates.
 
-## License
+## Copyright
 
-Licensed under AGPL-3.0. See LICENSE.
+Except as otherwise noted, all files in the `radroots_log` distribution are
+
+ Copyright (c) 2025 Tyson Lupul
+
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see LICENSE included in the `radroots_log` distribution.
