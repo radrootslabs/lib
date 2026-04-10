@@ -63,6 +63,10 @@ fn error_method_and_permission_surfaces_cover_public_paths() {
     let methods = [
         (RadrootsNostrConnectMethod::Connect, "connect"),
         (RadrootsNostrConnectMethod::GetPublicKey, "get_public_key"),
+        (
+            RadrootsNostrConnectMethod::GetSessionCapability,
+            "get_session_capability",
+        ),
         (RadrootsNostrConnectMethod::SignEvent, "sign_event"),
         (RadrootsNostrConnectMethod::Nip04Encrypt, "nip04_encrypt"),
         (RadrootsNostrConnectMethod::Nip04Decrypt, "nip04_decrypt"),
@@ -325,6 +329,11 @@ fn request_surface_covers_variant_methods_serialization_and_validation() {
             Vec::new(),
         ),
         (
+            RadrootsNostrConnectRequest::GetSessionCapability,
+            RadrootsNostrConnectMethod::GetSessionCapability,
+            Vec::new(),
+        ),
+        (
             RadrootsNostrConnectRequest::SignEvent(unsigned_event()),
             RadrootsNostrConnectMethod::SignEvent,
             vec![serde_json::to_string(&unsigned_event()).expect("serialize unsigned event")],
@@ -421,6 +430,14 @@ fn request_surface_covers_variant_methods_serialization_and_validation() {
     );
     assert_eq!(
         RadrootsNostrConnectRequest::from_parts(
+            RadrootsNostrConnectMethod::GetSessionCapability,
+            Vec::new(),
+        )
+        .expect("get_session_capability from parts"),
+        RadrootsNostrConnectRequest::GetSessionCapability
+    );
+    assert_eq!(
+        RadrootsNostrConnectRequest::from_parts(
             RadrootsNostrConnectMethod::Nip04Encrypt,
             vec![test_public_key().to_hex(), "hello".to_owned()],
         )
@@ -480,6 +497,11 @@ fn request_surface_covers_variant_methods_serialization_and_validation() {
     for (method, params, expected_error) in [
         (
             RadrootsNostrConnectMethod::GetPublicKey,
+            vec!["oops".to_owned()],
+            "no params",
+        ),
+        (
+            RadrootsNostrConnectMethod::GetSessionCapability,
             vec!["oops".to_owned()],
             "no params",
         ),
@@ -622,6 +644,18 @@ fn request_surface_covers_variant_methods_serialization_and_validation() {
 #[test]
 fn response_surface_covers_success_and_error_paths() {
     let event = signed_event();
+    let remote_session_capability =
+        radroots_nostr_connect::prelude::RadrootsNostrConnectRemoteSessionCapability {
+            user_public_key: test_public_key(),
+            relays: vec![relay(RELAY_PRIMARY_WSS), relay(RELAY_SECONDARY_WSS)],
+            permissions: RadrootsNostrConnectPermissions::from(vec![
+                RadrootsNostrConnectPermission::new(RadrootsNostrConnectMethod::Ping),
+                RadrootsNostrConnectPermission::with_parameter(
+                    RadrootsNostrConnectMethod::SignEvent,
+                    "kind:1",
+                ),
+            ]),
+        };
     let cases = vec![
         (
             RadrootsNostrConnectResponse::ConnectAcknowledged,
@@ -637,6 +671,20 @@ fn response_surface_covers_success_and_error_paths() {
             RadrootsNostrConnectResponse::UserPublicKey(test_public_key()),
             RadrootsNostrConnectMethod::GetPublicKey,
             RadrootsNostrConnectResponse::UserPublicKey(test_public_key()),
+        ),
+        (
+            RadrootsNostrConnectResponse::PendingConnection,
+            RadrootsNostrConnectMethod::GetSessionCapability,
+            RadrootsNostrConnectResponse::PendingConnection,
+        ),
+        (
+            RadrootsNostrConnectResponse::RemoteSessionCapability(
+                remote_session_capability.clone(),
+            ),
+            RadrootsNostrConnectMethod::GetSessionCapability,
+            RadrootsNostrConnectResponse::RemoteSessionCapability(
+                remote_session_capability.clone(),
+            ),
         ),
         (
             RadrootsNostrConnectResponse::SignedEvent(event.clone()),
@@ -775,6 +823,75 @@ fn response_surface_covers_success_and_error_paths() {
         .expect("parse typed pending capability response"),
         RadrootsNostrConnectResponse::PendingConnection
     );
+    assert_eq!(
+        RadrootsNostrConnectResponse::from_envelope(
+            &RadrootsNostrConnectMethod::GetPublicKey,
+            RadrootsNostrConnectResponseEnvelope {
+                id: "req-nonpending-public-key".to_owned(),
+                result: None,
+                error: Some("denied".to_owned()),
+            },
+        )
+        .expect("parse non-pending public key error"),
+        RadrootsNostrConnectResponse::Error {
+            result: None,
+            error: "denied".to_owned(),
+        }
+    );
+    assert_eq!(
+        RadrootsNostrConnectResponse::from_envelope(
+            &RadrootsNostrConnectMethod::GetSessionCapability,
+            RadrootsNostrConnectResponseEnvelope {
+                id: "req-capability-error-with-result".to_owned(),
+                result: Some(json!({"code": "retry"})),
+                error: Some("denied".to_owned()),
+            },
+        )
+        .expect("parse capability error with result"),
+        RadrootsNostrConnectResponse::Error {
+            result: Some(json!({"code": "retry"})),
+            error: "denied".to_owned(),
+        }
+    );
+    assert!(matches!(
+        RadrootsNostrConnectResponse::from_envelope(
+            &RadrootsNostrConnectMethod::GetSessionCapability,
+            RadrootsNostrConnectResponseEnvelope {
+                id: "req-capability-invalid-result".to_owned(),
+                result: Some(json!({"permissions": "ping"})),
+                error: None,
+            },
+        ),
+        Err(RadrootsNostrConnectError::InvalidResponsePayload { method, .. })
+            if method == "get_session_capability"
+    ));
+    assert_eq!(
+        RadrootsNostrConnectResponse::from_envelope(
+            &RadrootsNostrConnectMethod::GetSessionCapability,
+            RadrootsNostrConnectResponseEnvelope {
+                id: "req-capability-string-result".to_owned(),
+                result: Some(json!(
+                    serde_json::to_string(&remote_session_capability)
+                        .expect("serialize remote session capability")
+                )),
+                error: None,
+            },
+        )
+        .expect("parse stringified capability result"),
+        RadrootsNostrConnectResponse::RemoteSessionCapability(remote_session_capability.clone(),)
+    );
+    assert!(matches!(
+        RadrootsNostrConnectResponse::from_envelope(
+            &RadrootsNostrConnectMethod::GetSessionCapability,
+            RadrootsNostrConnectResponseEnvelope {
+                id: "req-capability-invalid-string".to_owned(),
+                result: Some(json!("{")),
+                error: None,
+            },
+        ),
+        Err(RadrootsNostrConnectError::InvalidResponsePayload { method, .. })
+            if method == "get_session_capability"
+    ));
     assert_eq!(
         RadrootsNostrConnectResponse::from_envelope(
             &RadrootsNostrConnectMethod::Ping,
@@ -1033,6 +1150,19 @@ fn response_surface_covers_success_and_error_paths() {
 
 #[test]
 fn pending_connection_poll_outcome_uses_typed_variants() {
+    let remote_session_capability =
+        radroots_nostr_connect::prelude::RadrootsNostrConnectRemoteSessionCapability {
+            user_public_key: test_public_key(),
+            relays: vec![relay(RELAY_PRIMARY_WSS), relay(RELAY_SECONDARY_WSS)],
+            permissions: RadrootsNostrConnectPermissions::from(vec![
+                RadrootsNostrConnectPermission::new(RadrootsNostrConnectMethod::Ping),
+                RadrootsNostrConnectPermission::with_parameter(
+                    RadrootsNostrConnectMethod::SignEvent,
+                    "kind:1",
+                ),
+            ]),
+        };
+
     assert_eq!(
         RadrootsNostrConnectResponse::PendingConnection.into_pending_connection_poll_outcome(),
         RadrootsNostrConnectPendingConnectionPollOutcome::PendingApproval
@@ -1042,6 +1172,13 @@ fn pending_connection_poll_outcome_uses_typed_variants() {
         RadrootsNostrConnectResponse::UserPublicKey(test_public_key())
             .into_pending_connection_poll_outcome(),
         RadrootsNostrConnectPendingConnectionPollOutcome::Approved(test_public_key())
+    );
+    assert_eq!(
+        RadrootsNostrConnectResponse::RemoteSessionCapability(remote_session_capability.clone())
+            .into_pending_connection_poll_outcome(),
+        RadrootsNostrConnectPendingConnectionPollOutcome::ApprovedCapability(
+            remote_session_capability
+        )
     );
 
     assert_eq!(

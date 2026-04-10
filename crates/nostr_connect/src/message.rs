@@ -3,7 +3,7 @@ use crate::method::RadrootsNostrConnectMethod;
 use crate::permission::RadrootsNostrConnectPermissions;
 use nostr::{Event, JsonUtil, PublicKey, RelayUrl, UnsignedEvent};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use serde_json::Value;
+use serde_json::{Value, json};
 use std::str::FromStr;
 use url::Url;
 
@@ -353,12 +353,7 @@ impl RadrootsNostrConnectResponse {
             },
             Self::RemoteSessionCapability(capability) => RadrootsNostrConnectResponseEnvelope {
                 id,
-                result: Some(serde_json::to_value(capability).map_err(|error| {
-                    RadrootsNostrConnectError::InvalidResponsePayload {
-                        method: RadrootsNostrConnectMethod::GetSessionCapability.to_string(),
-                        reason: error.to_string(),
-                    }
-                })?),
+                result: Some(remote_session_capability_value(capability)),
                 error: None,
             },
             Self::SignedEvent(event) => RadrootsNostrConnectResponseEnvelope {
@@ -462,9 +457,10 @@ impl RadrootsNostrConnectResponse {
                 let result = expect_string_result(method, envelope.result)?;
                 Ok(Self::UserPublicKey(parse_public_key(&result)?))
             }
-            RadrootsNostrConnectMethod::GetSessionCapability => Ok(Self::RemoteSessionCapability(
-                parse_json_string_result(method, envelope.result)?,
-            )),
+            RadrootsNostrConnectMethod::GetSessionCapability => {
+                let capability = parse_json_string_result(method, envelope.result)?;
+                Ok(Self::RemoteSessionCapability(capability))
+            }
             RadrootsNostrConnectMethod::SignEvent => {
                 let event = parse_json_string_result::<Event>(method, envelope.result)?;
                 Ok(Self::SignedEvent(event))
@@ -500,6 +496,16 @@ impl RadrootsNostrConnectResponse {
             }),
         }
     }
+}
+
+fn remote_session_capability_value(
+    capability: RadrootsNostrConnectRemoteSessionCapability,
+) -> Value {
+    json!({
+        "user_public_key": capability.user_public_key,
+        "relays": capability.relays,
+        "permissions": capability.permissions,
+    })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -632,73 +638,4 @@ fn validate_url(value: &str) -> Result<String, RadrootsNostrConnectError> {
             value: value.to_owned(),
             reason: error.to_string(),
         })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::method::RadrootsNostrConnectMethod;
-    use crate::permission::RadrootsNostrConnectPermission;
-
-    fn relay(value: &str) -> RelayUrl {
-        RelayUrl::parse(value).expect("relay url")
-    }
-
-    fn public_key() -> PublicKey {
-        PublicKey::from_hex("4f355bdcb7cc0af728ef3cceb9615d90684bb5b2ca5f859ab0f0b704075871aa")
-            .expect("public key")
-    }
-
-    #[test]
-    fn get_session_capability_request_round_trips_without_params() {
-        let request = RadrootsNostrConnectRequest::GetSessionCapability;
-        let message = RadrootsNostrConnectRequestMessage::new("req-cap", request.clone());
-        let encoded = serde_json::to_string(&message).expect("encode request");
-        let decoded: RadrootsNostrConnectRequestMessage =
-            serde_json::from_str(&encoded).expect("decode request");
-
-        assert_eq!(decoded.request, request);
-        assert_eq!(
-            decoded.request.method(),
-            RadrootsNostrConnectMethod::GetSessionCapability
-        );
-    }
-
-    #[test]
-    fn get_session_capability_response_round_trips() {
-        let capability = RadrootsNostrConnectRemoteSessionCapability {
-            user_public_key: public_key(),
-            relays: vec![
-                relay("wss://relay.example.com"),
-                relay("wss://relay2.example.com"),
-            ],
-            permissions: vec![
-                RadrootsNostrConnectPermission::with_parameter(
-                    RadrootsNostrConnectMethod::SignEvent,
-                    "kind:1",
-                ),
-                RadrootsNostrConnectPermission::new(RadrootsNostrConnectMethod::SwitchRelays),
-            ]
-            .into(),
-        };
-        let response = RadrootsNostrConnectResponse::RemoteSessionCapability(capability.clone());
-        let envelope = response
-            .into_envelope("resp-cap")
-            .expect("encode response envelope");
-        let decoded = RadrootsNostrConnectResponse::from_envelope(
-            &RadrootsNostrConnectMethod::GetSessionCapability,
-            envelope,
-        )
-        .expect("decode capability response");
-
-        assert_eq!(
-            decoded,
-            RadrootsNostrConnectResponse::RemoteSessionCapability(capability.clone())
-        );
-        assert_eq!(
-            RadrootsNostrConnectResponse::RemoteSessionCapability(capability.clone())
-                .into_pending_connection_poll_outcome(),
-            RadrootsNostrConnectPendingConnectionPollOutcome::ApprovedCapability(capability)
-        );
-    }
 }

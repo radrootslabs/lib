@@ -28,6 +28,24 @@ fn logo_url() -> String {
     format!("{CDN_PRIMARY_HTTPS}/logo.png")
 }
 
+fn remote_session_capability()
+-> radroots_nostr_connect::prelude::RadrootsNostrConnectRemoteSessionCapability {
+    radroots_nostr_connect::prelude::RadrootsNostrConnectRemoteSessionCapability {
+        user_public_key: test_public_key(),
+        relays: vec![
+            RelayUrl::parse(RELAY_PRIMARY_WSS).expect("relay 1"),
+            RelayUrl::parse(RELAY_SECONDARY_WSS).expect("relay 2"),
+        ],
+        permissions: RadrootsNostrConnectPermissions::from(vec![
+            RadrootsNostrConnectPermission::new(RadrootsNostrConnectMethod::Ping),
+            RadrootsNostrConnectPermission::with_parameter(
+                RadrootsNostrConnectMethod::SignEvent,
+                "kind:1",
+            ),
+        ]),
+    }
+}
+
 #[test]
 fn parses_client_uri_with_current_spec_query_fields() {
     let uri = format!(
@@ -192,6 +210,33 @@ fn switch_relays_response_accepts_array_or_null() {
     )
     .expect("parse null relay result");
     assert_eq!(unchanged, RadrootsNostrConnectResponse::RelayListUnchanged);
+}
+
+#[test]
+fn get_session_capability_request_and_response_roundtrip() {
+    let request_message = RadrootsNostrConnectRequestMessage::new(
+        "req-cap",
+        RadrootsNostrConnectRequest::GetSessionCapability,
+    );
+    let encoded_request = serde_json::to_value(&request_message).expect("serialize request");
+    let decoded_request: RadrootsNostrConnectRequestMessage =
+        serde_json::from_value(encoded_request).expect("deserialize request");
+    assert_eq!(decoded_request, request_message);
+
+    let capability = remote_session_capability();
+    let response_envelope =
+        RadrootsNostrConnectResponse::RemoteSessionCapability(capability.clone())
+            .into_envelope("resp-cap")
+            .expect("serialize response");
+    let decoded_response = RadrootsNostrConnectResponse::from_envelope(
+        &RadrootsNostrConnectMethod::GetSessionCapability,
+        response_envelope,
+    )
+    .expect("deserialize response");
+    assert_eq!(
+        decoded_response,
+        RadrootsNostrConnectResponse::RemoteSessionCapability(capability)
+    );
 }
 
 #[test]
