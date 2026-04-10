@@ -1,14 +1,23 @@
 # radroots_nostr_runtime
 
-Nostr runtime primitives and orchestration interfaces for the Rad Roots SDK.
+This is the README for `radroots_nostr_runtime`, which provides Nostr runtime
+coordination for the `radroots` core libraries.
 
-## Goals
+## Overview
 
-- define stable runtime interfaces for events, subscriptions, and connections
-- keep runtime orchestration behavior deterministic across supported environments
-- support feature-gated client and async runtime integration surfaces
-- provide reusable runtime primitives for higher-level Rad Roots crates
+ * runtime builder, runtime events, and long-lived connection state types;
+ * subscription specifications, policies, handles, and traffic-light status
+   models;
+ * store abstractions and snapshot types used by higher-level network
+   orchestration;
+ * feature-gated integration with client, runtime, and nostrdb adapter crates.
 
-## License
+## Copyright
 
-Licensed under AGPL-3.0. See LICENSE.
+Except as otherwise noted, all files in the `radroots_nostr_runtime`
+distribution are
+
+ Copyright (c) 2025 Tyson Lupul
+
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see LICENSE included in the `radroots_nostr_runtime` distribution.
