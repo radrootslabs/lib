@@ -1,14 +1,23 @@
 # radroots_replica_db_schema
 
-Replica schema models and relational interfaces for Rad Roots data layers.
+This is the README for `radroots_replica_db_schema`, which provides replica
+schema models for the `radroots` core libraries.
 
-## Goals
+## Overview
 
-- define stable schema models and relation interfaces for replica data
-- keep schema serialization and type export deterministic across targets
-- support reusable schema contracts for database and wasm crates
-- provide reusable schema primitives for higher-level Rad Roots crates
+ * schema model types reexported from the `models` module;
+ * table- and record-oriented value types shared by replica database code;
+ * optional serialization and shared type export support through `serde`,
+   `typeshare`, and `ts-rs`;
+ * no runtime backend logic beyond the shared schema model layer.
 
-## License
+## Copyright
 
-Licensed under AGPL-3.0. See LICENSE.
+Except as otherwise noted, all files in the `radroots_replica_db_schema`
+distribution are
+
+ Copyright (c) 2025 Tyson Lupul
+
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see LICENSE included in the `radroots_replica_db_schema`
+distribution.
