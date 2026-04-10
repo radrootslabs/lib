@@ -346,7 +346,24 @@ fn load_release_contract(
     workspace_root: &Path,
     contract_root: &Path,
 ) -> Result<ReleaseContractFile, String> {
-    let path = resolve_release_contract_path(workspace_root, contract_root)?.ok_or_else(|| {
+    load_release_contract_with_override(
+        workspace_root,
+        contract_root,
+        env::var_os(RELEASE_POLICY_ENV).map(PathBuf::from),
+    )
+}
+
+fn load_release_contract_with_override(
+    workspace_root: &Path,
+    contract_root: &Path,
+    release_policy_override: Option<PathBuf>,
+) -> Result<ReleaseContractFile, String> {
+    let path = resolve_release_contract_path_with_override(
+        workspace_root,
+        contract_root,
+        release_policy_override,
+    )?
+    .ok_or_else(|| {
         format!(
             "release publish policy not found; expected {} or legacy {}",
             ROOT_RELEASE_POLICY_RELATIVE,
@@ -902,7 +919,8 @@ pub fn validate_release_preflight(workspace_root: &Path) -> Result<(), String> {
     let bundle = load_contract_bundle(workspace_root)?;
     validate_contract_bundle(&bundle)?;
     let release = load_release_contract(workspace_root, &bundle.root)?;
-    let policy = load_coverage_policy(&bundle.root)?;
+    let policy =
+        load_coverage_policy(&bundle.root).expect("validated contract includes coverage policy");
     let publish_crates = collect_unique_set(
         &release.public_crates(),
         if release.uses_classification() {
@@ -1046,7 +1064,10 @@ pub fn validate_contract_bundle(bundle: &ContractBundle) -> Result<(), String> {
         .expect("contract root must have a workspace parent");
     validate_core_unit_dimension_variant_order(workspace_root)?;
     validate_coverage_policy_parity(workspace_root, &bundle.root)?;
-    if resolve_release_contract_path(workspace_root, &bundle.root)?.is_some() {
+    if resolve_release_contract_path(workspace_root, &bundle.root)
+        .expect("validated release contract path resolution should not fail")
+        .is_some()
+    {
         validate_release_publish_policy(
             workspace_root,
             &bundle.root,
@@ -1229,6 +1250,58 @@ crates = ["radroots_a"]
             "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots_a\tpass\t100.0\t100.0\t100.0\t100.0\tfile\nradroots_b\tpass\t100.0\t100.0\t100.0\t100.0\tfile\n",
         );
         root
+    }
+
+    fn write_root_release_policy(root: &Path, raw: &str) {
+        write_file(&root.join(ROOT_RELEASE_POLICY_RELATIVE), raw);
+    }
+
+    fn configure_root_release_policy_workspace(root: &Path) {
+        write_file(
+            &root.join("Cargo.toml"),
+            r#"[workspace]
+members = ["crates/a", "crates/b", "crates/c", "crates/d", "crates/e"]
+resolver = "2"
+"#,
+        );
+        for crate_name in ["c", "d", "e"] {
+            write_file(
+                &root.join("crates").join(crate_name).join("Cargo.toml"),
+                &format!(
+                    r#"[package]
+name = "radroots_{crate_name}"
+version = "0.1.0"
+edition = "2024"
+publish = false
+"#
+                ),
+            );
+        }
+        write_file(
+            &root.join("contract").join("coverage").join("policy.toml"),
+            r#"[gate]
+fail_under_exec_lines = 100.0
+fail_under_functions = 100.0
+fail_under_regions = 100.0
+fail_under_branches = 100.0
+require_branches = true
+
+[required]
+crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
+"#,
+        );
+        write_file(
+            &root
+                .join("target")
+                .join("coverage")
+                .join("coverage-refresh.tsv"),
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots_a\tpass\t100.0\t100.0\t100.0\t100.0\tfile\nradroots_b\tpass\t100.0\t100.0\t100.0\t100.0\tfile\nradroots_c\tpass\t100.0\t100.0\t100.0\t100.0\tfile\nradroots_d\tpass\t100.0\t100.0\t100.0\t100.0\tfile\nradroots_e\tpass\t100.0\t100.0\t100.0\t100.0\tfile\n",
+        );
+        let _ = fs::remove_file(
+            root.join("contract")
+                .join("release")
+                .join("publish-set.toml"),
+        );
     }
 
     #[test]
@@ -2542,6 +2615,16 @@ publish = false
     }
 
     #[test]
+    fn workspace_package_publish_configs_report_workspace_record_errors() {
+        let root = temp_root("workspace_publish_configs_errors");
+        let err = workspace_package_publish_configs(&root)
+            .expect_err("missing workspace manifest should fail");
+        assert!(err.contains("Cargo.toml"));
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
     fn coverage_release_and_bundle_loaders_report_parse_and_read_errors() {
         let root = create_synthetic_workspace("coverage_release_loader_errors");
         let contract_root = root.join("contract");
@@ -2664,6 +2747,125 @@ crates = ["radroots_a"]
         assert!(dependency_err.contains("parse"));
 
         let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn load_release_contract_with_override_reports_override_and_missing_policy_errors() {
+        let root = create_synthetic_workspace("release_contract_loader_errors");
+        let contract_root = root.join("contract");
+
+        let missing_override = root.join("missing-release-policy.toml");
+        let override_err = load_release_contract_with_override(
+            &root,
+            &contract_root,
+            Some(missing_override.clone()),
+        )
+        .expect_err("missing override should fail");
+        assert!(override_err.contains(RELEASE_POLICY_ENV));
+        assert!(override_err.contains("missing release policy file"));
+
+        let _ = fs::remove_file(contract_root.join("release").join("publish-set.toml"));
+        let missing_policy_err = load_release_contract_with_override(&root, &contract_root, None)
+            .expect_err("missing release policy should fail");
+        assert!(missing_policy_err.contains("release publish policy not found"));
+        assert!(missing_policy_err.contains(ROOT_RELEASE_POLICY_RELATIVE));
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn root_release_policy_preflight_covers_classification_variants() {
+        let root = create_synthetic_workspace("root_release_policy_classifications");
+        configure_root_release_policy_workspace(&root);
+        write_root_release_policy(
+            &root,
+            r#"[release]
+version = "1.0.0"
+
+[classification]
+public = ["radroots_a"]
+internal = ["radroots_b"]
+deferred = ["radroots_c"]
+retired = ["radroots_d"]
+yank_only = ["radroots_e"]
+
+[publish_order]
+crates = ["radroots_a"]
+"#,
+        );
+
+        let bundle = load_contract_bundle(&root).expect("load root release policy bundle");
+        validate_contract_bundle(&bundle).expect("validate root release policy bundle");
+        validate_release_preflight(&root).expect("validate root release policy preflight");
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn root_release_policy_reports_deferred_retired_and_yank_only_errors() {
+        for (label, policy_body, expected) in [
+            (
+                "deferred",
+                r#"[release]
+version = "1.0.0"
+
+[classification]
+public = ["radroots_a"]
+internal = ["radroots_b"]
+deferred = ["radroots_c", "radroots_c"]
+retired = ["radroots_d"]
+yank_only = ["radroots_e"]
+
+[publish_order]
+crates = ["radroots_a"]
+"#,
+                "classification.deferred has duplicate crate radroots_c",
+            ),
+            (
+                "retired",
+                r#"[release]
+version = "1.0.0"
+
+[classification]
+public = ["radroots_a"]
+internal = ["radroots_b"]
+deferred = ["radroots_c"]
+retired = [""]
+yank_only = ["radroots_e"]
+
+[publish_order]
+crates = ["radroots_a"]
+"#,
+                "classification.retired contains an empty crate name",
+            ),
+            (
+                "yank_only",
+                r#"[release]
+version = "1.0.0"
+
+[classification]
+public = ["radroots_a"]
+internal = ["radroots_b"]
+deferred = ["radroots_c"]
+retired = ["radroots_d"]
+yank_only = ["radroots_e", "radroots_e"]
+
+[publish_order]
+crates = ["radroots_a"]
+"#,
+                "classification.yank_only has duplicate crate radroots_e",
+            ),
+        ] {
+            let root = create_synthetic_workspace(&format!("root_release_policy_{label}_error"));
+            configure_root_release_policy_workspace(&root);
+            write_root_release_policy(&root, policy_body);
+
+            let err = validate_release_publish_policy(&root, &root.join("contract"), "1.0.0")
+                .expect_err("invalid non-public classification should fail");
+            assert!(err.contains(expected), "{label} err: {err}");
+
+            let _ = fs::remove_dir_all(&root);
+        }
     }
 
     #[test]

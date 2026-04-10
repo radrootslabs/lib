@@ -455,14 +455,13 @@ pub fn write_ts_export_manifest(workspace_root: &Path, out_dir: &Path) -> Result
     Ok(manifest_path)
 }
 
-fn generate_ts_rs_sources_with_selector_and_runner<F>(
+type TsRsExportRunner = dyn FnMut(&str, &Path, &Path) -> Result<Output, String>;
+
+fn generate_ts_rs_sources_with_selector_and_runner(
     workspace_root: &Path,
     selector: Option<&str>,
-    mut run_export_test: F,
-) -> Result<PathBuf, String>
-where
-    F: FnMut(&str, &Path, &Path) -> Result<Output, String>,
-{
+    run_export_test: &mut TsRsExportRunner,
+) -> Result<PathBuf, String> {
     let bundle = contract::load_contract_bundle(workspace_root)?;
     contract::validate_contract_bundle(&bundle)?;
     let ts_export = ts_export_mapping(&bundle)?;
@@ -521,7 +520,8 @@ fn generate_ts_rs_sources_with_selector(
     workspace_root: &Path,
     selector: Option<&str>,
 ) -> Result<PathBuf, String> {
-    generate_ts_rs_sources_with_selector_and_runner(workspace_root, selector, run_ts_rs_export_test)
+    let mut run_export_test = run_ts_rs_export_test;
+    generate_ts_rs_sources_with_selector_and_runner(workspace_root, selector, &mut run_export_test)
 }
 
 pub fn generate_ts_rs_sources(workspace_root: &Path) -> Result<PathBuf, String> {
@@ -1457,14 +1457,16 @@ manifest_file = "nested/export-manifest.json"
         let _ = fs::remove_dir_all(root_command_fail);
 
         let root_spawn_fail = create_synthetic_workspace("generate_spawn_fail", true);
-        let spawn_fail_err = generate_ts_rs_sources_with_selector_and_runner(
-            &root_spawn_fail,
-            None,
-            |crate_name, _workspace_root, _export_dir| {
+        let mut spawn_fail_runner =
+            |crate_name: &str, _workspace_root: &Path, _export_dir: &Path| {
                 Err(format!(
                     "run cargo test for {crate_name}: synthetic spawn failure"
                 ))
-            },
+            };
+        let spawn_fail_err = generate_ts_rs_sources_with_selector_and_runner(
+            &root_spawn_fail,
+            None,
+            &mut spawn_fail_runner,
         )
         .expect_err("cargo spawn failure should surface");
         assert_eq!(

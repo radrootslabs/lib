@@ -756,11 +756,14 @@ fn coverage_cargo_command_with_override(override_binary: Option<&str>) -> Comman
     cmd
 }
 
+fn normalized_coverage_cargo_override(raw: Option<String>) -> Option<String> {
+    raw.map(|raw| raw.trim().to_string())
+        .filter(|raw| !raw.is_empty())
+}
+
 fn coverage_cargo_command() -> Command {
-    let override_binary = std::env::var("RADROOTS_COVERAGE_CARGO")
-        .ok()
-        .map(|raw| raw.trim().to_string())
-        .filter(|raw| !raw.is_empty());
+    let override_binary =
+        normalized_coverage_cargo_override(std::env::var("RADROOTS_COVERAGE_CARGO").ok());
     coverage_cargo_command_with_override(override_binary.as_deref())
 }
 
@@ -2677,6 +2680,137 @@ test_threads = 0
                 "cargo".to_string()
             ]
         );
+    }
+
+    #[test]
+    fn normalized_coverage_cargo_override_trims_and_filters_values() {
+        assert_eq!(
+            normalized_coverage_cargo_override(Some("  /tmp/cargo  ".to_string())),
+            Some("/tmp/cargo".to_string())
+        );
+        assert_eq!(
+            normalized_coverage_cargo_override(Some("   ".to_string())),
+            None
+        );
+        assert_eq!(normalized_coverage_cargo_override(None), None);
+    }
+
+    fn assert_coverage_command_shapes(
+        cargo_cmd: Command,
+        llvm_cov_cmd: Command,
+        override_binary: Option<&str>,
+    ) {
+        match override_binary {
+            Some(binary) => assert_eq!(cargo_cmd.get_program().to_string_lossy(), binary),
+            None => assert_eq!(cargo_cmd.get_program().to_string_lossy(), "rustup"),
+        }
+
+        let llvm_args = llvm_cov_cmd
+            .get_args()
+            .map(|arg| arg.to_string_lossy().to_string())
+            .collect::<Vec<_>>();
+        match override_binary {
+            Some(_) => assert_eq!(llvm_args, vec!["llvm-cov".to_string()]),
+            None => assert_eq!(
+                llvm_args,
+                vec![
+                    "run".to_string(),
+                    "nightly".to_string(),
+                    "cargo".to_string(),
+                    "llvm-cov".to_string()
+                ]
+            ),
+        }
+    }
+
+    #[test]
+    fn coverage_public_command_helpers_match_current_env_resolution() {
+        let mut default_llvm_cov_cmd = coverage_cargo_command_with_override(None);
+        default_llvm_cov_cmd.arg("llvm-cov");
+        assert_coverage_command_shapes(
+            coverage_cargo_command_with_override(None),
+            default_llvm_cov_cmd,
+            None,
+        );
+
+        let explicit_binary = temp_dir_path("coverage_command_override")
+            .join("nightly-cargo")
+            .to_string_lossy()
+            .to_string();
+        let mut explicit_llvm_cov_cmd =
+            coverage_cargo_command_with_override(Some(&explicit_binary));
+        explicit_llvm_cov_cmd.arg("llvm-cov");
+        assert_coverage_command_shapes(
+            coverage_cargo_command_with_override(Some(&explicit_binary)),
+            explicit_llvm_cov_cmd,
+            Some(explicit_binary.as_str()),
+        );
+
+        let override_binary =
+            normalized_coverage_cargo_override(std::env::var("RADROOTS_COVERAGE_CARGO").ok());
+        assert_coverage_command_shapes(
+            coverage_cargo_command(),
+            coverage_llvm_cov_command(),
+            override_binary.as_deref(),
+        );
+    }
+
+    #[test]
+    fn configure_coverage_toolchain_env_sets_existing_binary_envs() {
+        let toolchain_dir = temp_dir_path("coverage_toolchain_env");
+        fs::create_dir_all(&toolchain_dir).expect("create toolchain env dir");
+        for binary in ["rustc", "rustdoc", "llvm-cov", "llvm-profdata"] {
+            write_file(&toolchain_dir.join(binary), "");
+        }
+
+        let mut cmd = Command::new("cargo");
+        configure_coverage_toolchain_env(&mut cmd, &toolchain_dir);
+        let envs = collect_command_envs(&cmd);
+        assert_eq!(
+            envs.get("RUSTC"),
+            Some(&Some(
+                toolchain_dir.join("rustc").to_string_lossy().to_string()
+            ))
+        );
+        assert_eq!(
+            envs.get("RUSTDOC"),
+            Some(&Some(
+                toolchain_dir.join("rustdoc").to_string_lossy().to_string()
+            ))
+        );
+        assert_eq!(
+            envs.get("LLVM_COV"),
+            Some(&Some(
+                toolchain_dir.join("llvm-cov").to_string_lossy().to_string()
+            ))
+        );
+        assert_eq!(
+            envs.get("LLVM_PROFDATA"),
+            Some(&Some(
+                toolchain_dir
+                    .join("llvm-profdata")
+                    .to_string_lossy()
+                    .to_string()
+            ))
+        );
+
+        fs::remove_dir_all(toolchain_dir).expect("remove toolchain env dir");
+    }
+
+    #[test]
+    fn configure_coverage_toolchain_env_skips_missing_binary_envs() {
+        let toolchain_dir = temp_dir_path("coverage_toolchain_missing_env");
+        fs::create_dir_all(&toolchain_dir).expect("create missing env dir");
+
+        let mut cmd = Command::new("cargo");
+        configure_coverage_toolchain_env(&mut cmd, &toolchain_dir);
+        let envs = collect_command_envs(&cmd);
+        assert!(!envs.contains_key("RUSTC"));
+        assert!(!envs.contains_key("RUSTDOC"));
+        assert!(!envs.contains_key("LLVM_COV"));
+        assert!(!envs.contains_key("LLVM_PROFDATA"));
+
+        fs::remove_dir_all(toolchain_dir).expect("remove missing env dir");
     }
 
     #[test]
