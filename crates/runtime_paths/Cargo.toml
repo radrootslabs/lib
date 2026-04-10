@@ -2,9 +2,7 @@
 name = "radroots_runtime_paths"
 version = "0.1.0-alpha.1"
 edition.workspace = true
-authors = [
-  "Radroots Authors",
-]
+authors = ["Tyson Lupul <tyson@radroots.org>"]
 rust-version.workspace = true
 license.workspace = true
 description = "Runtime path model for Radroots"
