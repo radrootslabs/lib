@@ -1,3 +1,23 @@
 # radroots_secret_vault
 
-Canonical secret backend taxonomy and fail-closed backend-selection policy for Rad Roots runtimes.
+This is the README for `radroots_secret_vault`, which provides secret backend
+selection and wrapping semantics for the `radroots` core libraries.
+
+## Overview
+
+ * backend kinds, capability models, policy types, and selection outcomes for
+   secret storage;
+ * a fail-closed backend selection model that surfaces availability and policy
+   mismatches;
+ * secret-wrapping interfaces shared by higher-level protected storage crates;
+ * optional `std` vault implementations for memory and OS keyring backends.
+
+## Copyright
+
+Except as otherwise noted, all files in the `radroots_secret_vault`
+distribution are
+
+ Copyright (c) 2025 Tyson Lupul
+
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see LICENSE included in the `radroots_secret_vault` distribution.
