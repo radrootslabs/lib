@@ -580,7 +580,7 @@ mod tests {
             .then(|| listing_snapshot(listing_addr));
         let default_seller = seller_pubkey_from_listing_addr(listing_addr);
 
-        match (message_type, order_id) {
+        match (payload, order_id) {
             (_, None) => (
                 format!("event:no-order:{}:{actor_pubkey}", message_type.kind()),
                 default_seller,
@@ -588,11 +588,7 @@ mod tests {
                 None,
                 None,
             ),
-            (crate::listing::dvm::TradeListingMessageType::OrderRequest, Some(order_id)) => {
-                let order = match payload {
-                    TradeListingMessagePayload::OrderRequest(order) => order,
-                    _ => unreachable!("order request payload should match message type"),
-                };
+            (TradeListingMessagePayload::OrderRequest(order), Some(order_id)) => {
                 let event_id = format!("{order_id}:request");
                 TEST_WORKFLOW_CHAINS.with(|chains| {
                     chains.borrow_mut().insert(
@@ -926,7 +922,7 @@ mod tests {
 
     #[test]
     fn message_helper_bootstraps_missing_chain_for_non_request_payload() {
-        let message = message(
+        let orphan_message = message(
             "seller-pubkey",
             "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
             Some("orphan-order"),
@@ -935,10 +931,28 @@ mod tests {
             }),
         );
 
-        assert_eq!(message.order_id.as_deref(), Some("orphan-order"));
-        assert_eq!(message.counterparty_pubkey, "buyer-pubkey");
-        assert_eq!(message.root_event_id.as_deref(), Some("orphan-order:root"));
-        assert_eq!(message.prev_event_id.as_deref(), Some("orphan-order:root"));
+        assert_eq!(orphan_message.order_id.as_deref(), Some("orphan-order"));
+        assert_eq!(orphan_message.counterparty_pubkey, "buyer-pubkey");
+        assert_eq!(
+            orphan_message.root_event_id.as_deref(),
+            Some("orphan-order:root")
+        );
+        assert_eq!(
+            orphan_message.prev_event_id.as_deref(),
+            Some("orphan-order:root")
+        );
+
+        let no_order_message = message(
+            "seller-pubkey",
+            "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+            None,
+            TradeListingMessagePayload::Cancel(TradeListingCancel {
+                reason: Some("operator-cancelled".into()),
+            }),
+        );
+        assert!(no_order_message.order_id.is_none());
+        assert!(no_order_message.root_event_id.is_none());
+        assert!(no_order_message.prev_event_id.is_none());
     }
 
     #[test]
@@ -988,6 +1002,14 @@ mod tests {
         assert_eq!(views[0].listing.listing_addr, base_order().listing_addr);
         assert!(views[0].requires_review);
         assert_eq!(views[0].open_moderation_flag_count, 1);
+        assert!(!super::listing_backoffice_matches_query(
+            &views[0],
+            &RadrootsTradeListingBackofficeQuery {
+                requires_review: Some(false),
+                has_open_moderation_flags: Some(false),
+                ..Default::default()
+            }
+        ));
         assert_eq!(
             views[0]
                 .overlay
@@ -1135,6 +1157,15 @@ mod tests {
         assert_eq!(views[0].open_fulfillment_exception_count, 1);
         assert!(views[0].requires_review);
         assert_eq!(views[0].marketplace.status, TradeOrderStatus::Requested);
+        assert!(!super::order_backoffice_matches_query(
+            &views[0],
+            &RadrootsTradeOrderBackofficeQuery {
+                requires_review: Some(true),
+                has_open_moderation_flags: Some(false),
+                has_open_fulfillment_exceptions: Some(true),
+                ..Default::default()
+            }
+        ));
 
         let completed_order = index.order("order-2").expect("canonical completed order");
         assert_eq!(completed_order.status, TradeOrderStatus::Completed);

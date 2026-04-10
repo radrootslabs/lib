@@ -710,8 +710,7 @@ impl RadrootsTradeOrderWorkflowMessage {
     #[cfg(feature = "serde_json")]
     pub fn from_event(event: &RadrootsNostrEvent) -> Result<Self, TradeListingEnvelopeParseError> {
         let envelope = trade_listing_envelope_from_event::<TradeListingMessagePayload>(event)?;
-        let context = trade_event_context_from_tags(envelope.message_type, &event.tags)?;
-        Ok(Self {
+        trade_event_context_from_tags(envelope.message_type, &event.tags).map(|context| Self {
             event_id: event.id.clone(),
             actor_pubkey: event.author.clone(),
             counterparty_pubkey: context.counterparty_pubkey,
@@ -960,131 +959,96 @@ impl RadrootsTradeReadIndex {
                 self.apply_order_request(message, order)
             }
             TradeListingMessagePayload::OrderResponse(response) => {
-                let order_id = required_order_id(message)?;
-                let order = self.order_mut_checked(order_id, &message.listing_addr)?;
-                ensure_actor(&order.seller_pubkey, &message.actor_pubkey)?;
-                ensure_counterparty(&order.buyer_pubkey, &message.counterparty_pubkey)?;
-                ensure_trade_chain(order, message)?;
+                let (order_id, order) = self.order_mut_for_seller_action(message)?;
                 let next_status = if response.accepted {
                     TradeOrderStatus::Accepted
                 } else {
                     TradeOrderStatus::Declined
                 };
-                radroots_trade_order_status_ensure_transition(
-                    order.status.clone(),
-                    next_status.clone(),
-                )?;
+                let from_status = order.status.clone();
+                radroots_trade_order_status_ensure_transition(from_status, next_status.clone())?;
                 order.status = next_status;
                 order.last_message_type = TradeListingMessageType::OrderResponse;
                 order.last_actor_pubkey = message.actor_pubkey.clone();
                 order.last_reason = response.reason.clone();
                 order.last_event_id = message.event_id.clone();
-                Ok(order_id.to_string())
+                Ok(order_id)
             }
             TradeListingMessagePayload::OrderRevision(revision) => {
-                let order_id = required_order_id(message)?;
-                let order = self.order_mut_checked(order_id, &message.listing_addr)?;
-                ensure_actor(&order.seller_pubkey, &message.actor_pubkey)?;
-                ensure_counterparty(&order.buyer_pubkey, &message.counterparty_pubkey)?;
-                ensure_trade_chain(order, message)?;
-                radroots_trade_order_status_ensure_transition(
-                    order.status.clone(),
-                    TradeOrderStatus::Revised,
-                )?;
+                let (order_id, order) = self.order_mut_for_seller_action(message)?;
+                let next_status = TradeOrderStatus::Revised;
+                let from_status = order.status.clone();
+                radroots_trade_order_status_ensure_transition(from_status, next_status.clone())?;
                 for change in &revision.changes {
                     apply_order_change(&mut order.items, change)?;
                 }
                 order.listing_snapshot = Some(require_listing_snapshot(message)?);
-                order.status = TradeOrderStatus::Revised;
+                order.status = next_status;
                 order.revision_count = order.revision_count.saturating_add(1);
                 order.last_message_type = TradeListingMessageType::OrderRevision;
                 order.last_actor_pubkey = message.actor_pubkey.clone();
                 order.last_reason = None;
                 order.last_event_id = message.event_id.clone();
-                Ok(order_id.to_string())
+                Ok(order_id)
             }
             TradeListingMessagePayload::OrderRevisionAccept(response) => {
-                let order_id = required_order_id(message)?;
                 if !response.accepted {
                     return Err(RadrootsTradeProjectionError::InvalidRevisionResponse);
                 }
-                let order = self.order_mut_checked(order_id, &message.listing_addr)?;
-                ensure_actor(&order.buyer_pubkey, &message.actor_pubkey)?;
-                ensure_counterparty(&order.seller_pubkey, &message.counterparty_pubkey)?;
-                ensure_trade_chain(order, message)?;
-                radroots_trade_order_status_ensure_transition(
-                    order.status.clone(),
-                    TradeOrderStatus::Accepted,
-                )?;
-                order.status = TradeOrderStatus::Accepted;
+                let (order_id, order) = self.order_mut_for_buyer_action(message)?;
+                let next_status = TradeOrderStatus::Accepted;
+                let from_status = order.status.clone();
+                radroots_trade_order_status_ensure_transition(from_status, next_status.clone())?;
+                order.status = next_status;
                 order.last_message_type = TradeListingMessageType::OrderRevisionAccept;
                 order.last_actor_pubkey = message.actor_pubkey.clone();
                 order.last_reason = response.reason.clone();
                 order.last_event_id = message.event_id.clone();
-                Ok(order_id.to_string())
+                Ok(order_id)
             }
             TradeListingMessagePayload::OrderRevisionDecline(response) => {
-                let order_id = required_order_id(message)?;
                 if response.accepted {
                     return Err(RadrootsTradeProjectionError::InvalidRevisionResponse);
                 }
-                let order = self.order_mut_checked(order_id, &message.listing_addr)?;
-                ensure_actor(&order.buyer_pubkey, &message.actor_pubkey)?;
-                ensure_counterparty(&order.seller_pubkey, &message.counterparty_pubkey)?;
-                ensure_trade_chain(order, message)?;
-                radroots_trade_order_status_ensure_transition(
-                    order.status.clone(),
-                    TradeOrderStatus::Declined,
-                )?;
-                order.status = TradeOrderStatus::Declined;
+                let (order_id, order) = self.order_mut_for_buyer_action(message)?;
+                let next_status = TradeOrderStatus::Declined;
+                let from_status = order.status.clone();
+                radroots_trade_order_status_ensure_transition(from_status, next_status.clone())?;
+                order.status = next_status;
                 order.last_message_type = TradeListingMessageType::OrderRevisionDecline;
                 order.last_actor_pubkey = message.actor_pubkey.clone();
                 order.last_reason = response.reason.clone();
                 order.last_event_id = message.event_id.clone();
-                Ok(order_id.to_string())
+                Ok(order_id)
             }
             TradeListingMessagePayload::Question(question) => {
-                let order_id = required_order_id(message)?;
-                let order = self.order_mut_checked(order_id, &message.listing_addr)?;
-                ensure_actor(&order.buyer_pubkey, &message.actor_pubkey)?;
-                ensure_counterparty(&order.seller_pubkey, &message.counterparty_pubkey)?;
-                ensure_trade_chain(order, message)?;
-                radroots_trade_order_status_ensure_transition(
-                    order.status.clone(),
-                    TradeOrderStatus::Questioned,
-                )?;
-                order.status = TradeOrderStatus::Questioned;
+                let (order_id, order) = self.order_mut_for_buyer_action(message)?;
+                let next_status = TradeOrderStatus::Questioned;
+                let from_status = order.status.clone();
+                radroots_trade_order_status_ensure_transition(from_status, next_status.clone())?;
+                order.status = next_status;
                 order.question_count = order.question_count.saturating_add(1);
                 order.last_message_type = TradeListingMessageType::Question;
                 order.last_actor_pubkey = message.actor_pubkey.clone();
                 order.last_reason = Some(question.question_id.clone());
                 order.last_event_id = message.event_id.clone();
-                Ok(order_id.to_string())
+                Ok(order_id)
             }
             TradeListingMessagePayload::Answer(answer) => {
-                let order_id = required_order_id(message)?;
-                let order = self.order_mut_checked(order_id, &message.listing_addr)?;
-                ensure_actor(&order.seller_pubkey, &message.actor_pubkey)?;
-                ensure_counterparty(&order.buyer_pubkey, &message.counterparty_pubkey)?;
-                ensure_trade_chain(order, message)?;
-                radroots_trade_order_status_ensure_transition(
-                    order.status.clone(),
-                    TradeOrderStatus::Requested,
-                )?;
-                order.status = TradeOrderStatus::Requested;
+                let (order_id, order) = self.order_mut_for_seller_action(message)?;
+                let next_status = TradeOrderStatus::Requested;
+                let from_status = order.status.clone();
+                radroots_trade_order_status_ensure_transition(from_status, next_status.clone())?;
+                order.status = next_status;
                 order.answer_count = order.answer_count.saturating_add(1);
                 order.last_message_type = TradeListingMessageType::Answer;
                 order.last_actor_pubkey = message.actor_pubkey.clone();
                 order.last_reason = Some(answer.question_id.clone());
                 order.last_event_id = message.event_id.clone();
-                Ok(order_id.to_string())
+                Ok(order_id)
             }
             TradeListingMessagePayload::DiscountRequest(request) => {
-                let order_id = required_order_id(message)?;
-                let order = self.order_mut_checked(order_id, &message.listing_addr)?;
-                ensure_actor(&order.buyer_pubkey, &message.actor_pubkey)?;
-                ensure_counterparty(&order.seller_pubkey, &message.counterparty_pubkey)?;
-                ensure_trade_chain(order, message)?;
+                let (order_id, order) = self.order_mut_for_buyer_action(message)?;
                 order.discount_request_count = order.discount_request_count.saturating_add(1);
                 order.last_discount_request = Some(request.value.clone());
                 order.listing_snapshot = Some(require_listing_snapshot(message)?);
@@ -1092,19 +1056,14 @@ impl RadrootsTradeReadIndex {
                 order.last_actor_pubkey = message.actor_pubkey.clone();
                 order.last_reason = None;
                 order.last_event_id = message.event_id.clone();
-                Ok(order_id.to_string())
+                Ok(order_id)
             }
             TradeListingMessagePayload::DiscountOffer(offer) => {
-                let order_id = required_order_id(message)?;
-                let order = self.order_mut_checked(order_id, &message.listing_addr)?;
-                ensure_actor(&order.seller_pubkey, &message.actor_pubkey)?;
-                ensure_counterparty(&order.buyer_pubkey, &message.counterparty_pubkey)?;
-                ensure_trade_chain(order, message)?;
-                radroots_trade_order_status_ensure_transition(
-                    order.status.clone(),
-                    TradeOrderStatus::Revised,
-                )?;
-                order.status = TradeOrderStatus::Revised;
+                let (order_id, order) = self.order_mut_for_seller_action(message)?;
+                let next_status = TradeOrderStatus::Revised;
+                let from_status = order.status.clone();
+                radroots_trade_order_status_ensure_transition(from_status, next_status.clone())?;
+                order.status = next_status;
                 order.discount_offer_count = order.discount_offer_count.saturating_add(1);
                 order.last_discount_offer = Some(offer.value.clone());
                 order.listing_snapshot = Some(require_listing_snapshot(message)?);
@@ -1112,24 +1071,19 @@ impl RadrootsTradeReadIndex {
                 order.last_actor_pubkey = message.actor_pubkey.clone();
                 order.last_reason = None;
                 order.last_event_id = message.event_id.clone();
-                Ok(order_id.to_string())
+                Ok(order_id)
             }
             TradeListingMessagePayload::DiscountAccept(decision) => {
-                let order_id = required_order_id(message)?;
-                let order = self.order_mut_checked(order_id, &message.listing_addr)?;
-                ensure_actor(&order.buyer_pubkey, &message.actor_pubkey)?;
-                ensure_counterparty(&order.seller_pubkey, &message.counterparty_pubkey)?;
-                ensure_trade_chain(order, message)?;
+                let (order_id, order) = self.order_mut_for_buyer_action(message)?;
                 let TradeDiscountDecisionValue::Accepted(value) =
-                    trade_discount_decision_value(decision)?
+                    trade_discount_decision_value(decision)
                 else {
                     return Err(RadrootsTradeProjectionError::InvalidDiscountDecision);
                 };
-                radroots_trade_order_status_ensure_transition(
-                    order.status.clone(),
-                    TradeOrderStatus::Accepted,
-                )?;
-                order.status = TradeOrderStatus::Accepted;
+                let next_status = TradeOrderStatus::Accepted;
+                let from_status = order.status.clone();
+                radroots_trade_order_status_ensure_transition(from_status, next_status.clone())?;
+                order.status = next_status;
                 order.discount_accept_count = order.discount_accept_count.saturating_add(1);
                 order.accepted_discount = Some(value);
                 order.last_discount_decline_reason = None;
@@ -1137,65 +1091,42 @@ impl RadrootsTradeReadIndex {
                 order.last_actor_pubkey = message.actor_pubkey.clone();
                 order.last_reason = None;
                 order.last_event_id = message.event_id.clone();
-                Ok(order_id.to_string())
+                Ok(order_id)
             }
             TradeListingMessagePayload::DiscountDecline(decision) => {
-                let order_id = required_order_id(message)?;
-                let order = self.order_mut_checked(order_id, &message.listing_addr)?;
-                ensure_actor(&order.buyer_pubkey, &message.actor_pubkey)?;
-                ensure_counterparty(&order.seller_pubkey, &message.counterparty_pubkey)?;
-                ensure_trade_chain(order, message)?;
+                let (order_id, order) = self.order_mut_for_buyer_action(message)?;
                 let TradeDiscountDecisionValue::Declined(reason) =
-                    trade_discount_decision_value(decision)?
+                    trade_discount_decision_value(decision)
                 else {
                     return Err(RadrootsTradeProjectionError::InvalidDiscountDecision);
                 };
-                radroots_trade_order_status_ensure_transition(
-                    order.status.clone(),
-                    TradeOrderStatus::Requested,
-                )?;
-                order.status = TradeOrderStatus::Requested;
+                let next_status = TradeOrderStatus::Requested;
+                let from_status = order.status.clone();
+                radroots_trade_order_status_ensure_transition(from_status, next_status.clone())?;
+                order.status = next_status;
                 order.discount_decline_count = order.discount_decline_count.saturating_add(1);
                 order.last_discount_decline_reason = reason.clone();
                 order.last_message_type = TradeListingMessageType::DiscountDecline;
                 order.last_actor_pubkey = message.actor_pubkey.clone();
                 order.last_reason = reason;
                 order.last_event_id = message.event_id.clone();
-                Ok(order_id.to_string())
+                Ok(order_id)
             }
             TradeListingMessagePayload::Cancel(cancel) => {
-                let order_id = required_order_id(message)?;
-                let order = self.order_mut_checked(order_id, &message.listing_addr)?;
-                if order.buyer_pubkey != message.actor_pubkey
-                    && order.seller_pubkey != message.actor_pubkey
-                {
-                    return Err(RadrootsTradeProjectionError::UnauthorizedActor);
-                }
-                let expected_counterparty = if order.buyer_pubkey == message.actor_pubkey {
-                    &order.seller_pubkey
-                } else {
-                    &order.buyer_pubkey
-                };
-                ensure_counterparty(expected_counterparty, &message.counterparty_pubkey)?;
-                ensure_trade_chain(order, message)?;
-                radroots_trade_order_status_ensure_transition(
-                    order.status.clone(),
-                    TradeOrderStatus::Cancelled,
-                )?;
-                order.status = TradeOrderStatus::Cancelled;
+                let (order_id, order) = self.order_mut_for_participant_action(message)?;
+                let next_status = TradeOrderStatus::Cancelled;
+                let from_status = order.status.clone();
+                radroots_trade_order_status_ensure_transition(from_status, next_status.clone())?;
+                order.status = next_status;
                 order.cancellation_count = order.cancellation_count.saturating_add(1);
                 order.last_message_type = TradeListingMessageType::Cancel;
                 order.last_actor_pubkey = message.actor_pubkey.clone();
                 order.last_reason = cancel.reason.clone();
                 order.last_event_id = message.event_id.clone();
-                Ok(order_id.to_string())
+                Ok(order_id)
             }
             TradeListingMessagePayload::FulfillmentUpdate(update) => {
-                let order_id = required_order_id(message)?;
-                let order = self.order_mut_checked(order_id, &message.listing_addr)?;
-                ensure_actor(&order.seller_pubkey, &message.actor_pubkey)?;
-                ensure_counterparty(&order.buyer_pubkey, &message.counterparty_pubkey)?;
-                ensure_trade_chain(order, message)?;
+                let (order_id, order) = self.order_mut_for_seller_action(message)?;
                 if let Some(next_status) =
                     trade_order_status_for_fulfillment_update(&order.status, &update.status)?
                 {
@@ -1207,14 +1138,10 @@ impl RadrootsTradeReadIndex {
                 order.last_actor_pubkey = message.actor_pubkey.clone();
                 order.last_reason = None;
                 order.last_event_id = message.event_id.clone();
-                Ok(order_id.to_string())
+                Ok(order_id)
             }
             TradeListingMessagePayload::Receipt(receipt) => {
-                let order_id = required_order_id(message)?;
-                let order = self.order_mut_checked(order_id, &message.listing_addr)?;
-                ensure_actor(&order.buyer_pubkey, &message.actor_pubkey)?;
-                ensure_counterparty(&order.seller_pubkey, &message.counterparty_pubkey)?;
-                ensure_trade_chain(order, message)?;
+                let (order_id, order) = self.order_mut_for_buyer_action(message)?;
                 if let Some(next_status) =
                     trade_order_status_for_receipt(&order.status, receipt.acknowledged)?
                 {
@@ -1227,7 +1154,7 @@ impl RadrootsTradeReadIndex {
                 order.last_actor_pubkey = message.actor_pubkey.clone();
                 order.last_reason = None;
                 order.last_event_id = message.event_id.clone();
-                Ok(order_id.to_string())
+                Ok(order_id)
             }
         }
     }
@@ -1249,11 +1176,6 @@ impl RadrootsTradeReadIndex {
         }
         ensure_actor(&order.buyer_pubkey, &message.actor_pubkey)?;
         ensure_counterparty(&order.seller_pubkey, &message.counterparty_pubkey)?;
-        radroots_trade_order_status_ensure_transition(
-            TradeOrderStatus::Draft,
-            TradeOrderStatus::Requested,
-        )?;
-
         if let Some(existing) = self.orders.get(&order.order_id) {
             if existing.listing_addr != order.listing_addr
                 || existing.buyer_pubkey != order.buyer_pubkey
@@ -1284,6 +1206,53 @@ impl RadrootsTradeReadIndex {
             return Err(RadrootsTradeProjectionError::ListingAddrMismatch);
         }
         Ok(order)
+    }
+
+    fn order_mut_for_buyer_action(
+        &mut self,
+        message: &RadrootsTradeOrderWorkflowMessage,
+    ) -> Result<(String, &mut RadrootsTradeOrderWorkflowProjection), RadrootsTradeProjectionError>
+    {
+        let order_id = required_order_id(message)?.to_string();
+        let order = self.order_mut_checked(&order_id, &message.listing_addr)?;
+        ensure_actor(&order.buyer_pubkey, &message.actor_pubkey)?;
+        ensure_counterparty(&order.seller_pubkey, &message.counterparty_pubkey)?;
+        ensure_trade_chain(order, message)?;
+        Ok((order_id, order))
+    }
+
+    fn order_mut_for_seller_action(
+        &mut self,
+        message: &RadrootsTradeOrderWorkflowMessage,
+    ) -> Result<(String, &mut RadrootsTradeOrderWorkflowProjection), RadrootsTradeProjectionError>
+    {
+        let order_id = required_order_id(message)?.to_string();
+        let order = self.order_mut_checked(&order_id, &message.listing_addr)?;
+        ensure_actor(&order.seller_pubkey, &message.actor_pubkey)?;
+        ensure_counterparty(&order.buyer_pubkey, &message.counterparty_pubkey)?;
+        ensure_trade_chain(order, message)?;
+        Ok((order_id, order))
+    }
+
+    fn order_mut_for_participant_action(
+        &mut self,
+        message: &RadrootsTradeOrderWorkflowMessage,
+    ) -> Result<(String, &mut RadrootsTradeOrderWorkflowProjection), RadrootsTradeProjectionError>
+    {
+        let order_id = required_order_id(message)?.to_string();
+        let order = self.order_mut_checked(&order_id, &message.listing_addr)?;
+        if order.buyer_pubkey != message.actor_pubkey && order.seller_pubkey != message.actor_pubkey
+        {
+            return Err(RadrootsTradeProjectionError::UnauthorizedActor);
+        }
+        let expected_counterparty = if order.buyer_pubkey == message.actor_pubkey {
+            &order.seller_pubkey
+        } else {
+            &order.buyer_pubkey
+        };
+        ensure_counterparty(expected_counterparty, &message.counterparty_pubkey)?;
+        ensure_trade_chain(order, message)?;
+        Ok((order_id, order))
     }
 
     fn refresh_listing_counts(&mut self, listing_addr: &str) {
@@ -1324,26 +1293,28 @@ pub fn radroots_trade_order_status_can_transition(
     match from {
         TradeOrderStatus::Draft => matches!(to, TradeOrderStatus::Requested),
         TradeOrderStatus::Validated => matches!(to, TradeOrderStatus::Requested),
-        TradeOrderStatus::Requested => matches!(
-            to,
+        TradeOrderStatus::Requested => match to {
             TradeOrderStatus::Accepted
-                | TradeOrderStatus::Declined
-                | TradeOrderStatus::Questioned
-                | TradeOrderStatus::Revised
-                | TradeOrderStatus::Cancelled
-                | TradeOrderStatus::Requested
-        ),
-        TradeOrderStatus::Questioned => matches!(
-            to,
-            TradeOrderStatus::Requested | TradeOrderStatus::Revised | TradeOrderStatus::Cancelled
-        ),
-        TradeOrderStatus::Revised => matches!(
-            to,
+            | TradeOrderStatus::Declined
+            | TradeOrderStatus::Questioned
+            | TradeOrderStatus::Revised
+            | TradeOrderStatus::Cancelled
+            | TradeOrderStatus::Requested => true,
+            _ => false,
+        },
+        TradeOrderStatus::Questioned => match to {
+            TradeOrderStatus::Requested
+            | TradeOrderStatus::Revised
+            | TradeOrderStatus::Cancelled => true,
+            _ => false,
+        },
+        TradeOrderStatus::Revised => match to {
             TradeOrderStatus::Accepted
-                | TradeOrderStatus::Declined
-                | TradeOrderStatus::Cancelled
-                | TradeOrderStatus::Requested
-        ),
+            | TradeOrderStatus::Declined
+            | TradeOrderStatus::Cancelled
+            | TradeOrderStatus::Requested => true,
+            _ => false,
+        },
         TradeOrderStatus::Accepted => {
             matches!(
                 to,
@@ -1352,10 +1323,12 @@ pub fn radroots_trade_order_status_can_transition(
         }
         TradeOrderStatus::Declined => false,
         TradeOrderStatus::Cancelled => false,
-        TradeOrderStatus::Fulfilled => matches!(
-            to,
-            TradeOrderStatus::Completed | TradeOrderStatus::Fulfilled | TradeOrderStatus::Cancelled
-        ),
+        TradeOrderStatus::Fulfilled => match to {
+            TradeOrderStatus::Completed
+            | TradeOrderStatus::Fulfilled
+            | TradeOrderStatus::Cancelled => true,
+            _ => false,
+        },
         TradeOrderStatus::Completed => false,
     }
 }
@@ -1385,18 +1358,14 @@ fn trade_order_status_for_fulfillment_update(
             }
         }
         TradeFulfillmentStatus::Delivered => {
-            radroots_trade_order_status_ensure_transition(
-                current.clone(),
-                TradeOrderStatus::Fulfilled,
-            )?;
-            Ok(Some(TradeOrderStatus::Fulfilled))
+            let next_status = TradeOrderStatus::Fulfilled;
+            radroots_trade_order_status_ensure_transition(current.clone(), next_status.clone())?;
+            Ok(Some(next_status))
         }
         TradeFulfillmentStatus::Cancelled => {
-            radroots_trade_order_status_ensure_transition(
-                current.clone(),
-                TradeOrderStatus::Cancelled,
-            )?;
-            Ok(Some(TradeOrderStatus::Cancelled))
+            let next_status = TradeOrderStatus::Cancelled;
+            radroots_trade_order_status_ensure_transition(current.clone(), next_status.clone())?;
+            Ok(Some(next_status))
         }
     }
 }
@@ -1406,11 +1375,9 @@ fn trade_order_status_for_receipt(
     acknowledged: bool,
 ) -> Result<Option<TradeOrderStatus>, RadrootsTradeProjectionError> {
     if acknowledged {
-        radroots_trade_order_status_ensure_transition(
-            current.clone(),
-            TradeOrderStatus::Completed,
-        )?;
-        Ok(Some(TradeOrderStatus::Completed))
+        let next_status = TradeOrderStatus::Completed;
+        radroots_trade_order_status_ensure_transition(current.clone(), next_status.clone())?;
+        Ok(Some(next_status))
     } else if matches!(current, TradeOrderStatus::Fulfilled) {
         Ok(None)
     } else {
@@ -1496,8 +1463,7 @@ fn apply_order_change(
             item_index,
             bin_count,
         } => {
-            let index = usize::try_from(*item_index)
-                .map_err(|_| RadrootsTradeProjectionError::InvalidItemIndex(*item_index))?;
+            let index = *item_index as usize;
             let item = items
                 .get_mut(index)
                 .ok_or(RadrootsTradeProjectionError::InvalidItemIndex(*item_index))?;
@@ -1505,8 +1471,7 @@ fn apply_order_change(
         }
         TradeOrderChange::ItemAdd { item } => items.push(item.clone()),
         TradeOrderChange::ItemRemove { item_index } => {
-            let index = usize::try_from(*item_index)
-                .map_err(|_| RadrootsTradeProjectionError::InvalidItemIndex(*item_index))?;
+            let index = *item_index as usize;
             if index >= items.len() {
                 return Err(RadrootsTradeProjectionError::InvalidItemIndex(*item_index));
             }
@@ -1523,13 +1488,13 @@ enum TradeDiscountDecisionValue {
 
 fn trade_discount_decision_value(
     decision: &crate::listing::order::TradeDiscountDecision,
-) -> Result<TradeDiscountDecisionValue, RadrootsTradeProjectionError> {
+) -> TradeDiscountDecisionValue {
     match decision {
         crate::listing::order::TradeDiscountDecision::Accept { value } => {
-            Ok(TradeDiscountDecisionValue::Accepted(value.clone()))
+            TradeDiscountDecisionValue::Accepted(value.clone())
         }
         crate::listing::order::TradeDiscountDecision::Decline { reason } => {
-            Ok(TradeDiscountDecisionValue::Declined(reason.clone()))
+            TradeDiscountDecisionValue::Declined(reason.clone())
         }
     }
 }
@@ -1782,15 +1747,16 @@ mod tests {
         RadrootsTradeListingMarketStatus, RadrootsTradeListingProjection,
         RadrootsTradeListingQuery, RadrootsTradeListingSort, RadrootsTradeListingSortField,
         RadrootsTradeOrderQuery, RadrootsTradeOrderSort, RadrootsTradeOrderSortField,
-        RadrootsTradeOrderWorkflowMessage, RadrootsTradeProjectionError, RadrootsTradeReadIndex,
-        RadrootsTradeSortDirection, radroots_trade_order_status_can_transition,
-        radroots_trade_order_status_is_terminal,
+        RadrootsTradeOrderWorkflowMessage, RadrootsTradeOrderWorkflowProjection,
+        RadrootsTradeProjectionError, RadrootsTradeReadIndex, RadrootsTradeSortDirection,
+        radroots_trade_order_status_can_transition, radroots_trade_order_status_is_terminal,
     };
     use crate::listing::{
         codec::{TradeListingParseError, listing_tags_build},
         dvm::{
             TradeListingAddressError, TradeListingCancel, TradeListingEnvelopeParseError,
-            TradeListingMessagePayload, TradeListingMessageType, TradeOrderResponse,
+            TradeListingMessagePayload, TradeListingMessageType, TradeListingValidateRequest,
+            TradeListingValidateResult, TradeOrderResponse, TradeOrderRevisionResponse,
             trade_listing_envelope_event_build,
         },
         order::{
@@ -1857,7 +1823,7 @@ mod tests {
             .then(|| listing_snapshot(listing_addr));
         let default_seller = seller_pubkey_from_listing_addr(listing_addr);
 
-        match (message_type, order_id) {
+        match (payload, order_id) {
             (_, None) => (
                 format!("event:no-order:{}:{actor_pubkey}", message_type.kind()),
                 default_seller,
@@ -1865,11 +1831,7 @@ mod tests {
                 None,
                 None,
             ),
-            (crate::listing::dvm::TradeListingMessageType::OrderRequest, Some(order_id)) => {
-                let order = match payload {
-                    TradeListingMessagePayload::OrderRequest(order) => order,
-                    _ => unreachable!("order request payload should match message type"),
-                };
+            (TradeListingMessagePayload::OrderRequest(order), Some(order_id)) => {
                 let event_id = format!("{order_id}:request");
                 TEST_WORKFLOW_CHAINS.with(|chains| {
                     chains.borrow_mut().insert(
@@ -2209,6 +2171,21 @@ mod tests {
                 value: "archived".into(),
             }
         );
+        listing.availability = None;
+        let unknown_projection =
+            RadrootsTradeListingProjection::from_listing_contract("seller-pubkey", &listing)
+                .expect("unknown listing projection");
+        assert_eq!(
+            unknown_projection.market_status(),
+            RadrootsTradeListingMarketStatus::Unknown
+        );
+        let mut missing_primary_bin_projection = unknown_projection.clone();
+        missing_primary_bin_projection.primary_bin_id = "missing-bin".into();
+        assert!(
+            missing_primary_bin_projection
+                .marketplace_summary()
+                .is_none()
+        );
 
         let mut index = RadrootsTradeReadIndex::new();
         assert!(index.listings().is_empty());
@@ -2350,10 +2327,11 @@ mod tests {
     fn listing_projection_from_event_rejects_invalid_kind_and_invalid_contract() {
         let mut invalid_kind = listing_event("seller-pubkey", &base_listing());
         invalid_kind.kind = 7;
-        assert!(matches!(
-            RadrootsTradeListingProjection::from_listing_event(&invalid_kind),
-            Err(RadrootsTradeProjectionError::InvalidListingKind { kind: 7 })
-        ));
+        assert_eq!(
+            RadrootsTradeListingProjection::from_listing_event(&invalid_kind)
+                .expect_err("invalid kind"),
+            RadrootsTradeProjectionError::InvalidListingKind { kind: 7 }
+        );
 
         let invalid_contract = RadrootsNostrEvent {
             id: "bad-listing".into(),
@@ -2364,10 +2342,32 @@ mod tests {
             content: "{}".into(),
             sig: "sig".into(),
         };
-        assert!(matches!(
-            RadrootsTradeListingProjection::from_listing_event(&invalid_contract),
-            Err(RadrootsTradeProjectionError::InvalidListingContract { .. })
-        ));
+        let invalid_contract_error =
+            RadrootsTradeListingProjection::from_listing_event(&invalid_contract)
+                .expect_err("invalid contract");
+        let invalid_contract_source =
+            std::error::Error::source(&invalid_contract_error).expect("invalid contract source");
+        assert_eq!(
+            invalid_contract_error.to_string(),
+            format!("invalid listing contract event: {invalid_contract_source}")
+        );
+
+        let mut missing_primary_bin = base_listing();
+        missing_primary_bin.primary_bin_id = "missing-bin".into();
+        let missing_primary_bin_event = listing_event("seller-pubkey", &missing_primary_bin);
+        assert_eq!(
+            RadrootsTradeListingProjection::from_listing_event(&missing_primary_bin_event)
+                .expect_err("missing primary bin"),
+            RadrootsTradeProjectionError::MissingPrimaryBin("missing-bin".into())
+        );
+
+        let mut index = RadrootsTradeReadIndex::new();
+        assert_eq!(
+            index
+                .upsert_listing_event(&missing_primary_bin_event)
+                .expect_err("index missing primary bin"),
+            RadrootsTradeProjectionError::MissingPrimaryBin("missing-bin".into())
+        );
     }
 
     #[test]
@@ -2385,6 +2385,47 @@ mod tests {
         assert_eq!(message.counterparty_pubkey, "buyer-pubkey");
         assert_eq!(message.root_event_id.as_deref(), Some("orphan-order:root"));
         assert_eq!(message.prev_event_id.as_deref(), Some("orphan-order:root"));
+    }
+
+    #[test]
+    fn workflow_message_from_event_rejects_missing_trade_context_tags() {
+        let valid_event = workflow_event(
+            "seller-pubkey",
+            "buyer-pubkey",
+            crate::listing::dvm::TradeListingMessageType::OrderResponse,
+            "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+            Some("order-valid-tags"),
+            &TradeListingMessagePayload::OrderResponse(TradeOrderResponse {
+                accepted: true,
+                reason: None,
+            }),
+        );
+        let valid_message =
+            RadrootsTradeOrderWorkflowMessage::from_event(&valid_event).expect("valid workflow");
+        assert_eq!(valid_message.order_id.as_deref(), Some("order-valid-tags"));
+
+        let mut event = workflow_event(
+            "seller-pubkey",
+            "buyer-pubkey",
+            crate::listing::dvm::TradeListingMessageType::OrderResponse,
+            "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+            Some("order-missing-tags"),
+            &TradeListingMessagePayload::OrderResponse(TradeOrderResponse {
+                accepted: true,
+                reason: None,
+            }),
+        );
+        event.tags.retain(|tag| {
+            !matches!(
+                tag.first().map(String::as_str),
+                Some("e_root") | Some("e_prev")
+            )
+        });
+
+        assert_eq!(
+            RadrootsTradeOrderWorkflowMessage::from_event(&event),
+            Err(TradeListingEnvelopeParseError::MissingTag("e_root"))
+        );
     }
 
     #[test]
@@ -3006,6 +3047,413 @@ mod tests {
     }
 
     #[test]
+    fn projection_helper_comparators_and_queries_cover_remaining_paths() {
+        let listing_a =
+            RadrootsTradeListingProjection::from_listing_contract("seller-pubkey", &base_listing())
+                .expect("listing a");
+        let mut listing_b = listing_a.clone();
+        listing_b.listing_addr = "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAz".into();
+        listing_b.listing_id = "AAAAAAAAAAAAAAAAAAAAAz".into();
+
+        assert_eq!(
+            super::compare_option_decimal(
+                &Some(RadrootsCoreDecimal::from(10u32)),
+                &Some(RadrootsCoreDecimal::from(10u32)),
+            ),
+            core::cmp::Ordering::Equal
+        );
+        assert_eq!(
+            super::compare_option_decimal(&Some(RadrootsCoreDecimal::from(10u32)), &None),
+            core::cmp::Ordering::Less
+        );
+        assert_eq!(
+            super::compare_option_decimal(&None, &Some(RadrootsCoreDecimal::from(10u32))),
+            core::cmp::Ordering::Greater
+        );
+        assert_eq!(
+            super::compare_option_decimal(&None, &None),
+            core::cmp::Ordering::Equal
+        );
+
+        for field in [
+            RadrootsTradeListingSortField::ProductTitle,
+            RadrootsTradeListingSortField::ProductCategory,
+            RadrootsTradeListingSortField::SellerPubkey,
+            RadrootsTradeListingSortField::InventoryAvailable,
+            RadrootsTradeListingSortField::OpenOrderCount,
+            RadrootsTradeListingSortField::TotalOrderCount,
+        ] {
+            assert_eq!(
+                super::compare_listings(
+                    &listing_a,
+                    &listing_b,
+                    RadrootsTradeListingSort {
+                        field,
+                        direction: RadrootsTradeSortDirection::Asc,
+                    },
+                ),
+                core::cmp::Ordering::Less
+            );
+        }
+
+        assert!(super::listing_matches_query(
+            &listing_a,
+            &RadrootsTradeListingQuery::default()
+        ));
+        assert!(!super::listing_matches_query(
+            &listing_a,
+            &RadrootsTradeListingQuery {
+                seller_pubkey: Some("other-seller".into()),
+                ..Default::default()
+            }
+        ));
+        assert!(!super::listing_matches_query(
+            &listing_a,
+            &RadrootsTradeListingQuery {
+                farm_pubkey: Some("other-farm".into()),
+                ..Default::default()
+            }
+        ));
+        assert!(!super::listing_matches_query(
+            &listing_a,
+            &RadrootsTradeListingQuery {
+                farm_id: Some("other-farm-id".into()),
+                ..Default::default()
+            }
+        ));
+        assert!(!super::listing_matches_query(
+            &listing_a,
+            &RadrootsTradeListingQuery {
+                product_key: Some("other-key".into()),
+                ..Default::default()
+            }
+        ));
+        assert!(!super::listing_matches_query(
+            &listing_a,
+            &RadrootsTradeListingQuery {
+                product_category: Some("other-category".into()),
+                ..Default::default()
+            }
+        ));
+        assert!(!super::listing_matches_query(
+            &listing_a,
+            &RadrootsTradeListingQuery {
+                listing_status: Some(RadrootsTradeListingMarketStatus::Sold),
+                ..Default::default()
+            }
+        ));
+
+        let request_message = message(
+            "buyer-pubkey",
+            "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+            Some("order-1"),
+            TradeListingMessagePayload::OrderRequest(base_order()),
+        );
+        let order_a = RadrootsTradeOrderWorkflowProjection::from_order_request(
+            &request_message,
+            &base_order(),
+        )
+        .expect("order a");
+        let mut order_b = order_a.clone();
+        order_b.order_id = "order-2".into();
+
+        for field in [
+            RadrootsTradeOrderSortField::ListingAddr,
+            RadrootsTradeOrderSortField::BuyerPubkey,
+            RadrootsTradeOrderSortField::SellerPubkey,
+            RadrootsTradeOrderSortField::Status,
+            RadrootsTradeOrderSortField::LastMessageType,
+            RadrootsTradeOrderSortField::TotalBinCount,
+        ] {
+            assert_eq!(
+                super::compare_orders(
+                    &order_a,
+                    &order_b,
+                    RadrootsTradeOrderSort {
+                        field,
+                        direction: RadrootsTradeSortDirection::Asc,
+                    },
+                ),
+                core::cmp::Ordering::Less
+            );
+        }
+
+        let message_type_expectations = [
+            (
+                TradeListingMessageType::ListingValidateRequest,
+                "listing_validate_request",
+            ),
+            (
+                TradeListingMessageType::ListingValidateResult,
+                "listing_validate_result",
+            ),
+            (TradeListingMessageType::OrderRequest, "order_request"),
+            (TradeListingMessageType::OrderResponse, "order_response"),
+            (TradeListingMessageType::OrderRevision, "order_revision"),
+            (
+                TradeListingMessageType::OrderRevisionAccept,
+                "order_revision_accept",
+            ),
+            (
+                TradeListingMessageType::OrderRevisionDecline,
+                "order_revision_decline",
+            ),
+            (TradeListingMessageType::Question, "question"),
+            (TradeListingMessageType::Answer, "answer"),
+            (TradeListingMessageType::DiscountRequest, "discount_request"),
+            (TradeListingMessageType::DiscountOffer, "discount_offer"),
+            (TradeListingMessageType::DiscountAccept, "discount_accept"),
+            (TradeListingMessageType::DiscountDecline, "discount_decline"),
+            (TradeListingMessageType::Cancel, "cancel"),
+            (
+                TradeListingMessageType::FulfillmentUpdate,
+                "fulfillment_update",
+            ),
+            (TradeListingMessageType::Receipt, "receipt"),
+        ];
+        for (message_type, expected) in message_type_expectations {
+            assert_eq!(super::message_type_key(message_type), expected);
+        }
+
+        let message_type_cases = [
+            (
+                message(
+                    "seller-pubkey",
+                    "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                    None,
+                    TradeListingMessagePayload::ListingValidateRequest(
+                        TradeListingValidateRequest {
+                            listing_event: Some(listing_snapshot(
+                                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                            )),
+                        },
+                    ),
+                ),
+                TradeListingMessageType::ListingValidateRequest,
+            ),
+            (
+                message(
+                    "seller-pubkey",
+                    "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                    None,
+                    TradeListingMessagePayload::ListingValidateResult(TradeListingValidateResult {
+                        valid: true,
+                        errors: vec![],
+                    }),
+                ),
+                TradeListingMessageType::ListingValidateResult,
+            ),
+            (
+                message(
+                    "buyer-pubkey",
+                    "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                    Some("message-type-order-request"),
+                    TradeListingMessagePayload::OrderRequest(TradeOrder {
+                        order_id: "message-type-order-request".into(),
+                        ..base_order()
+                    }),
+                ),
+                TradeListingMessageType::OrderRequest,
+            ),
+            (
+                message(
+                    "seller-pubkey",
+                    "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                    Some("message-type-order-response"),
+                    TradeListingMessagePayload::OrderResponse(TradeOrderResponse {
+                        accepted: true,
+                        reason: None,
+                    }),
+                ),
+                TradeListingMessageType::OrderResponse,
+            ),
+            (
+                message(
+                    "seller-pubkey",
+                    "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                    Some("message-type-order-revision"),
+                    TradeListingMessagePayload::OrderRevision(TradeOrderRevision {
+                        revision_id: "revision-1".into(),
+                        changes: vec![TradeOrderChange::BinCount {
+                            item_index: 0,
+                            bin_count: 3,
+                        }],
+                    }),
+                ),
+                TradeListingMessageType::OrderRevision,
+            ),
+            (
+                message(
+                    "buyer-pubkey",
+                    "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                    Some("message-type-order-revision-accept"),
+                    TradeListingMessagePayload::OrderRevisionAccept(TradeOrderRevisionResponse {
+                        accepted: true,
+                        reason: None,
+                    }),
+                ),
+                TradeListingMessageType::OrderRevisionAccept,
+            ),
+            (
+                message(
+                    "buyer-pubkey",
+                    "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                    Some("message-type-order-revision-decline"),
+                    TradeListingMessagePayload::OrderRevisionDecline(TradeOrderRevisionResponse {
+                        accepted: false,
+                        reason: Some("no".into()),
+                    }),
+                ),
+                TradeListingMessageType::OrderRevisionDecline,
+            ),
+            (
+                message(
+                    "buyer-pubkey",
+                    "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                    Some("message-type-question"),
+                    TradeListingMessagePayload::Question(TradeQuestion {
+                        question_id: "question-1".into(),
+                    }),
+                ),
+                TradeListingMessageType::Question,
+            ),
+            (
+                message(
+                    "seller-pubkey",
+                    "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                    Some("message-type-answer"),
+                    TradeListingMessagePayload::Answer(TradeAnswer {
+                        question_id: "question-1".into(),
+                    }),
+                ),
+                TradeListingMessageType::Answer,
+            ),
+            (
+                message(
+                    "buyer-pubkey",
+                    "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                    Some("message-type-discount-request"),
+                    TradeListingMessagePayload::DiscountRequest(TradeDiscountRequest {
+                        discount_id: "discount-1".into(),
+                        value: radroots_core::RadrootsCoreDiscountValue::Percent(
+                            RadrootsCorePercent::new(RadrootsCoreDecimal::from(10u32)),
+                        ),
+                    }),
+                ),
+                TradeListingMessageType::DiscountRequest,
+            ),
+            (
+                message(
+                    "seller-pubkey",
+                    "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                    Some("message-type-discount-offer"),
+                    TradeListingMessagePayload::DiscountOffer(TradeDiscountOffer {
+                        discount_id: "discount-1".into(),
+                        value: radroots_core::RadrootsCoreDiscountValue::Percent(
+                            RadrootsCorePercent::new(RadrootsCoreDecimal::from(5u32)),
+                        ),
+                    }),
+                ),
+                TradeListingMessageType::DiscountOffer,
+            ),
+            (
+                message(
+                    "buyer-pubkey",
+                    "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                    Some("message-type-discount-accept"),
+                    TradeListingMessagePayload::DiscountAccept(TradeDiscountDecision::Accept {
+                        value: radroots_core::RadrootsCoreDiscountValue::Percent(
+                            RadrootsCorePercent::new(RadrootsCoreDecimal::from(5u32)),
+                        ),
+                    }),
+                ),
+                TradeListingMessageType::DiscountAccept,
+            ),
+            (
+                message(
+                    "buyer-pubkey",
+                    "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                    Some("message-type-discount-decline"),
+                    TradeListingMessagePayload::DiscountDecline(TradeDiscountDecision::Decline {
+                        reason: Some("no".into()),
+                    }),
+                ),
+                TradeListingMessageType::DiscountDecline,
+            ),
+            (
+                message(
+                    "buyer-pubkey",
+                    "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                    Some("message-type-cancel"),
+                    TradeListingMessagePayload::Cancel(TradeListingCancel {
+                        reason: Some("cancel".into()),
+                    }),
+                ),
+                TradeListingMessageType::Cancel,
+            ),
+            (
+                message(
+                    "seller-pubkey",
+                    "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                    Some("message-type-fulfillment"),
+                    TradeListingMessagePayload::FulfillmentUpdate(TradeFulfillmentUpdate {
+                        status: TradeFulfillmentStatus::Preparing,
+                    }),
+                ),
+                TradeListingMessageType::FulfillmentUpdate,
+            ),
+            (
+                message(
+                    "buyer-pubkey",
+                    "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                    Some("message-type-receipt"),
+                    TradeListingMessagePayload::Receipt(TradeReceipt {
+                        acknowledged: true,
+                        at: 1_700_000_000,
+                    }),
+                ),
+                TradeListingMessageType::Receipt,
+            ),
+        ];
+        for (message, expected) in message_type_cases {
+            assert_eq!(message.message_type(), expected);
+        }
+
+        assert!(super::order_matches_query(
+            &order_a,
+            &RadrootsTradeOrderQuery::default()
+        ));
+        assert!(!super::order_matches_query(
+            &order_a,
+            &RadrootsTradeOrderQuery {
+                listing_addr: Some("other-listing".into()),
+                ..Default::default()
+            }
+        ));
+        assert!(!super::order_matches_query(
+            &order_a,
+            &RadrootsTradeOrderQuery {
+                buyer_pubkey: Some("other-buyer".into()),
+                ..Default::default()
+            }
+        ));
+        assert!(!super::order_matches_query(
+            &order_a,
+            &RadrootsTradeOrderQuery {
+                seller_pubkey: Some("other-seller".into()),
+                ..Default::default()
+            }
+        ));
+        assert!(!super::order_matches_query(
+            &order_a,
+            &RadrootsTradeOrderQuery {
+                status: Some(TradeOrderStatus::Completed),
+                ..Default::default()
+            }
+        ));
+    }
+
+    #[test]
     fn order_query_helpers_filter_sort_and_facet_marketplace_views() {
         let mut index = RadrootsTradeReadIndex::new();
         index
@@ -3119,20 +3567,2190 @@ mod tests {
     }
 
     #[test]
+    fn workflow_projection_covers_remaining_error_branches() {
+        let mut index = RadrootsTradeReadIndex::new();
+        index
+            .upsert_listing("seller-pubkey", &base_listing())
+            .expect("listing");
+
+        assert_eq!(
+            index
+                .order_mut_checked("missing", "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",)
+                .expect_err("missing order"),
+            RadrootsTradeProjectionError::MissingOrder("missing".into())
+        );
+
+        index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-1"),
+                TradeListingMessagePayload::OrderRequest(base_order()),
+            ))
+            .expect("order request");
+
+        assert_eq!(
+            index
+                .order_mut_checked("order-1", "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAw",)
+                .expect_err("listing mismatch"),
+            RadrootsTradeProjectionError::ListingAddrMismatch
+        );
+        assert_eq!(
+            super::ensure_actor("seller-pubkey", "buyer-pubkey"),
+            Err(RadrootsTradeProjectionError::UnauthorizedActor)
+        );
+        assert_eq!(
+            super::ensure_counterparty("seller-pubkey", "buyer-pubkey"),
+            Err(RadrootsTradeProjectionError::CounterpartyMismatch)
+        );
+        assert!(radroots_trade_order_status_can_transition(
+            &TradeOrderStatus::Requested,
+            &TradeOrderStatus::Requested
+        ));
+        assert_eq!(
+            super::radroots_trade_order_status_ensure_transition(
+                TradeOrderStatus::Accepted,
+                TradeOrderStatus::Requested,
+            ),
+            Err(RadrootsTradeProjectionError::InvalidTransition {
+                from: TradeOrderStatus::Accepted,
+                to: TradeOrderStatus::Requested,
+            })
+        );
+
+        let existing_order = index.order("order-1").expect("existing order").clone();
+        let mut bad_root = message(
+            "seller-pubkey",
+            "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+            Some("order-1"),
+            TradeListingMessagePayload::OrderResponse(TradeOrderResponse {
+                accepted: true,
+                reason: None,
+            }),
+        );
+        bad_root.root_event_id = Some("wrong-root".into());
+        assert_eq!(
+            super::ensure_trade_chain(&existing_order, &bad_root),
+            Err(RadrootsTradeProjectionError::TradeThreadRootMismatch)
+        );
+        let mut bad_prev = bad_root.clone();
+        bad_prev.root_event_id = Some(existing_order.root_event_id.clone());
+        bad_prev.prev_event_id = Some("wrong-prev".into());
+        assert_eq!(
+            super::ensure_trade_chain(&existing_order, &bad_prev),
+            Err(RadrootsTradeProjectionError::TradeThreadPrevMismatch)
+        );
+
+        let mut items = vec![TradeOrderItem {
+            bin_id: "bin-1".into(),
+            bin_count: 1,
+        }];
+        assert_eq!(
+            super::apply_order_change(
+                &mut items,
+                &TradeOrderChange::BinCount {
+                    item_index: 7,
+                    bin_count: 2,
+                },
+            ),
+            Err(RadrootsTradeProjectionError::InvalidItemIndex(7))
+        );
+        assert_eq!(
+            super::apply_order_change(&mut items, &TradeOrderChange::ItemRemove { item_index: 7 },),
+            Err(RadrootsTradeProjectionError::InvalidItemIndex(7))
+        );
+
+        let mut decline_index = RadrootsTradeReadIndex::new();
+        decline_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-1"),
+                TradeListingMessagePayload::OrderRequest(base_order()),
+            ))
+            .expect("decline order request");
+        let declined = decline_index
+            .apply_workflow_message(&message(
+                "seller-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-1"),
+                TradeListingMessagePayload::OrderResponse(TradeOrderResponse {
+                    accepted: false,
+                    reason: Some("declined".into()),
+                }),
+            ))
+            .expect("declined order");
+        assert_eq!(declined.order_id, "order-1");
+        assert_eq!(
+            decline_index
+                .order("order-1")
+                .expect("declined order")
+                .status,
+            TradeOrderStatus::Declined
+        );
+
+        let mut invalid_accept_index = RadrootsTradeReadIndex::new();
+        invalid_accept_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-2"),
+                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    order_id: "order-2".into(),
+                    ..base_order()
+                }),
+            ))
+            .expect("second order");
+        assert_eq!(
+            invalid_accept_index
+                .apply_workflow_message(&message(
+                    "buyer-pubkey",
+                    "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                    Some("order-2"),
+                    TradeListingMessagePayload::OrderRevisionAccept(TradeOrderRevisionResponse {
+                        accepted: false,
+                        reason: None,
+                    }),
+                ))
+                .expect_err("invalid revision accept"),
+            RadrootsTradeProjectionError::InvalidRevisionResponse
+        );
+
+        let mut invalid_decline_index = RadrootsTradeReadIndex::new();
+        invalid_decline_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-2"),
+                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    order_id: "order-2".into(),
+                    ..base_order()
+                }),
+            ))
+            .expect("third order");
+        assert_eq!(
+            invalid_decline_index
+                .apply_workflow_message(&message(
+                    "buyer-pubkey",
+                    "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                    Some("order-2"),
+                    TradeListingMessagePayload::OrderRevisionDecline(TradeOrderRevisionResponse {
+                        accepted: true,
+                        reason: None,
+                    }),
+                ))
+                .expect_err("invalid revision decline"),
+            RadrootsTradeProjectionError::InvalidRevisionResponse
+        );
+
+        let mut invalid_discount_accept_index = RadrootsTradeReadIndex::new();
+        invalid_discount_accept_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-2"),
+                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    order_id: "order-2".into(),
+                    ..base_order()
+                }),
+            ))
+            .expect("fourth order");
+        assert_eq!(
+            invalid_discount_accept_index
+                .apply_workflow_message(&message(
+                    "buyer-pubkey",
+                    "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                    Some("order-2"),
+                    TradeListingMessagePayload::DiscountAccept(TradeDiscountDecision::Decline {
+                        reason: Some("wrong-shape".into()),
+                    }),
+                ))
+                .expect_err("invalid discount accept"),
+            RadrootsTradeProjectionError::InvalidDiscountDecision
+        );
+
+        let mut invalid_discount_decline_index = RadrootsTradeReadIndex::new();
+        invalid_discount_decline_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-2"),
+                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    order_id: "order-2".into(),
+                    ..base_order()
+                }),
+            ))
+            .expect("fifth order");
+        assert_eq!(
+            invalid_discount_decline_index
+                .apply_workflow_message(&message(
+                    "buyer-pubkey",
+                    "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                    Some("order-2"),
+                    TradeListingMessagePayload::DiscountDecline(TradeDiscountDecision::Accept {
+                        value: radroots_core::RadrootsCoreDiscountValue::Percent(
+                            RadrootsCorePercent::new(RadrootsCoreDecimal::from(10u32)),
+                        ),
+                    }),
+                ))
+                .expect_err("invalid discount decline"),
+            RadrootsTradeProjectionError::InvalidDiscountDecision
+        );
+
+        let mut mismatched_order = base_order();
+        mismatched_order.order_id = "order-3".into();
+        assert_eq!(
+            index
+                .apply_workflow_message(&message(
+                    "buyer-pubkey",
+                    "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                    Some("wrong-order-id"),
+                    TradeListingMessagePayload::OrderRequest(mismatched_order.clone()),
+                ))
+                .expect_err("order id mismatch"),
+            RadrootsTradeProjectionError::OrderIdMismatch
+        );
+        mismatched_order.listing_addr = "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAw".into();
+        assert_eq!(
+            index
+                .apply_workflow_message(&message(
+                    "buyer-pubkey",
+                    "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                    Some("order-3"),
+                    TradeListingMessagePayload::OrderRequest(mismatched_order),
+                ))
+                .expect_err("listing addr mismatch"),
+            RadrootsTradeProjectionError::ListingAddrMismatch
+        );
+
+        let mut duplicate_order = TradeOrder {
+            order_id: "order-1".into(),
+            ..base_order()
+        };
+        duplicate_order.buyer_pubkey = "buyer-pubkey-2".into();
+        assert_eq!(
+            index
+                .apply_workflow_message(&message(
+                    "buyer-pubkey-2",
+                    "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                    Some("order-1"),
+                    TradeListingMessagePayload::OrderRequest(duplicate_order),
+                ))
+                .expect_err("duplicate order identity mismatch"),
+            RadrootsTradeProjectionError::ListingAddrMismatch
+        );
+
+        let duplicate_listing_mismatch_order = TradeOrder {
+            order_id: "order-1".into(),
+            listing_addr: "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAw".into(),
+            ..base_order()
+        };
+        let duplicate_listing_mismatch_message = RadrootsTradeOrderWorkflowMessage {
+            event_id: "order-1:duplicate-listing".into(),
+            actor_pubkey: "buyer-pubkey".into(),
+            counterparty_pubkey: "seller-pubkey".into(),
+            listing_addr: duplicate_listing_mismatch_order.listing_addr.clone(),
+            order_id: Some("order-1".into()),
+            listing_event: Some(listing_snapshot(
+                &duplicate_listing_mismatch_order.listing_addr,
+            )),
+            root_event_id: None,
+            prev_event_id: None,
+            payload: TradeListingMessagePayload::OrderRequest(duplicate_listing_mismatch_order),
+        };
+        assert_eq!(
+            index
+                .apply_workflow_message(&duplicate_listing_mismatch_message)
+                .expect_err("duplicate listing mismatch"),
+            RadrootsTradeProjectionError::ListingAddrMismatch
+        );
+
+        let duplicate_same = index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-1"),
+                TradeListingMessagePayload::OrderRequest(base_order()),
+            ))
+            .expect("duplicate same order");
+        assert_eq!(duplicate_same.order_id, "order-1");
+
+        let duplicate_seller_mismatch_message = RadrootsTradeOrderWorkflowMessage {
+            event_id: "order-1:duplicate-seller".into(),
+            actor_pubkey: "buyer-pubkey".into(),
+            counterparty_pubkey: "other-seller".into(),
+            listing_addr: "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg".into(),
+            order_id: Some("order-1".into()),
+            listing_event: Some(listing_snapshot(
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+            )),
+            root_event_id: None,
+            prev_event_id: None,
+            payload: TradeListingMessagePayload::OrderRequest(TradeOrder {
+                order_id: "order-1".into(),
+                seller_pubkey: "other-seller".into(),
+                ..base_order()
+            }),
+        };
+        assert_eq!(
+            index
+                .apply_workflow_message(&duplicate_seller_mismatch_message)
+                .expect_err("duplicate seller mismatch"),
+            RadrootsTradeProjectionError::ListingAddrMismatch
+        );
+
+        let mut cancel_index = RadrootsTradeReadIndex::new();
+        cancel_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-4"),
+                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    order_id: "order-4".into(),
+                    ..base_order()
+                }),
+            ))
+            .expect("cancel order request");
+        assert_eq!(
+            cancel_index
+                .apply_workflow_message(&message(
+                    "intruder",
+                    "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                    Some("order-4"),
+                    TradeListingMessagePayload::Cancel(TradeListingCancel {
+                        reason: Some("bad-actor".into()),
+                    }),
+                ))
+                .expect_err("unauthorized cancel"),
+            RadrootsTradeProjectionError::UnauthorizedActor
+        );
+
+        let mut buyer_cancel_index = RadrootsTradeReadIndex::new();
+        buyer_cancel_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-4"),
+                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    order_id: "order-4".into(),
+                    ..base_order()
+                }),
+            ))
+            .expect("buyer cancel order request");
+        buyer_cancel_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-4"),
+                TradeListingMessagePayload::Cancel(TradeListingCancel {
+                    reason: Some("buyer-cancel".into()),
+                }),
+            ))
+            .expect("buyer cancel");
+        assert_eq!(
+            buyer_cancel_index
+                .order("order-4")
+                .expect("cancelled order")
+                .status,
+            TradeOrderStatus::Cancelled
+        );
+    }
+
+    #[test]
+    fn workflow_projection_rejects_order_request_identity_mismatches() {
+        let listing_addr = "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg";
+        let mut unauthorized_index = RadrootsTradeReadIndex::new();
+        assert_eq!(
+            unauthorized_index
+                .apply_workflow_message(&message(
+                    "intruder",
+                    listing_addr,
+                    Some("order-request-actor"),
+                    TradeListingMessagePayload::OrderRequest(TradeOrder {
+                        order_id: "order-request-actor".into(),
+                        ..base_order()
+                    }),
+                ))
+                .expect_err("unauthorized order request"),
+            RadrootsTradeProjectionError::UnauthorizedActor
+        );
+
+        let mut wrong_counterparty = message(
+            "buyer-pubkey",
+            listing_addr,
+            Some("order-request-counterparty"),
+            TradeListingMessagePayload::OrderRequest(TradeOrder {
+                order_id: "order-request-counterparty".into(),
+                ..base_order()
+            }),
+        );
+        wrong_counterparty.counterparty_pubkey = "wrong-seller".into();
+        let mut counterparty_index = RadrootsTradeReadIndex::new();
+        assert_eq!(
+            counterparty_index
+                .apply_workflow_message(&wrong_counterparty)
+                .expect_err("counterparty mismatch"),
+            RadrootsTradeProjectionError::CounterpartyMismatch
+        );
+    }
+
+    #[test]
+    fn workflow_action_helpers_cover_remaining_error_paths() {
+        let listing_addr = "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg";
+        let mut index = RadrootsTradeReadIndex::new();
+        index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                listing_addr,
+                Some("order-helper"),
+                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    order_id: "order-helper".into(),
+                    ..base_order()
+                }),
+            ))
+            .expect("seed order");
+
+        let missing_buyer_order = message(
+            "buyer-pubkey",
+            listing_addr,
+            Some("missing-order"),
+            TradeListingMessagePayload::OrderRevisionAccept(TradeOrderRevisionResponse {
+                accepted: true,
+                reason: None,
+            }),
+        );
+        assert_eq!(
+            index
+                .order_mut_for_buyer_action(&missing_buyer_order)
+                .expect_err("missing buyer order"),
+            RadrootsTradeProjectionError::MissingOrder("missing-order".into())
+        );
+
+        let wrong_buyer_actor = message(
+            "intruder",
+            listing_addr,
+            Some("order-helper"),
+            TradeListingMessagePayload::OrderRevisionAccept(TradeOrderRevisionResponse {
+                accepted: true,
+                reason: None,
+            }),
+        );
+        assert_eq!(
+            index
+                .order_mut_for_buyer_action(&wrong_buyer_actor)
+                .expect_err("wrong buyer actor"),
+            RadrootsTradeProjectionError::UnauthorizedActor
+        );
+
+        let mut wrong_buyer_counterparty = message(
+            "buyer-pubkey",
+            listing_addr,
+            Some("order-helper"),
+            TradeListingMessagePayload::OrderRevisionAccept(TradeOrderRevisionResponse {
+                accepted: true,
+                reason: None,
+            }),
+        );
+        wrong_buyer_counterparty.counterparty_pubkey = "wrong-seller".into();
+        assert_eq!(
+            index
+                .order_mut_for_buyer_action(&wrong_buyer_counterparty)
+                .expect_err("wrong buyer counterparty"),
+            RadrootsTradeProjectionError::CounterpartyMismatch
+        );
+
+        let mut missing_buyer_root = message(
+            "buyer-pubkey",
+            listing_addr,
+            Some("order-helper"),
+            TradeListingMessagePayload::OrderRevisionAccept(TradeOrderRevisionResponse {
+                accepted: true,
+                reason: None,
+            }),
+        );
+        missing_buyer_root.root_event_id = None;
+        assert_eq!(
+            index
+                .order_mut_for_buyer_action(&missing_buyer_root)
+                .expect_err("missing buyer root"),
+            RadrootsTradeProjectionError::MissingTradeRootEventId
+        );
+
+        let mut missing_buyer_prev = message(
+            "buyer-pubkey",
+            listing_addr,
+            Some("order-helper"),
+            TradeListingMessagePayload::OrderRevisionAccept(TradeOrderRevisionResponse {
+                accepted: true,
+                reason: None,
+            }),
+        );
+        missing_buyer_prev.prev_event_id = None;
+        assert_eq!(
+            index
+                .order_mut_for_buyer_action(&missing_buyer_prev)
+                .expect_err("missing buyer prev"),
+            RadrootsTradeProjectionError::MissingTradePrevEventId
+        );
+
+        let missing_seller_order = message(
+            "seller-pubkey",
+            listing_addr,
+            Some("missing-order"),
+            TradeListingMessagePayload::OrderResponse(TradeOrderResponse {
+                accepted: true,
+                reason: None,
+            }),
+        );
+        assert_eq!(
+            index
+                .order_mut_for_seller_action(&missing_seller_order)
+                .expect_err("missing seller order"),
+            RadrootsTradeProjectionError::MissingOrder("missing-order".into())
+        );
+
+        let missing_seller_order_id = RadrootsTradeOrderWorkflowMessage {
+            order_id: None,
+            ..message(
+                "seller-pubkey",
+                listing_addr,
+                Some("order-helper"),
+                TradeListingMessagePayload::OrderResponse(TradeOrderResponse {
+                    accepted: true,
+                    reason: None,
+                }),
+            )
+        };
+        assert_eq!(
+            index
+                .order_mut_for_seller_action(&missing_seller_order_id)
+                .expect_err("missing seller order id"),
+            RadrootsTradeProjectionError::MissingOrderId
+        );
+
+        let wrong_seller_actor = message(
+            "intruder",
+            listing_addr,
+            Some("order-helper"),
+            TradeListingMessagePayload::OrderResponse(TradeOrderResponse {
+                accepted: true,
+                reason: None,
+            }),
+        );
+        assert_eq!(
+            index
+                .order_mut_for_seller_action(&wrong_seller_actor)
+                .expect_err("wrong seller actor"),
+            RadrootsTradeProjectionError::UnauthorizedActor
+        );
+
+        let mut wrong_seller_counterparty = message(
+            "seller-pubkey",
+            listing_addr,
+            Some("order-helper"),
+            TradeListingMessagePayload::OrderResponse(TradeOrderResponse {
+                accepted: true,
+                reason: None,
+            }),
+        );
+        wrong_seller_counterparty.counterparty_pubkey = "wrong-buyer".into();
+        assert_eq!(
+            index
+                .order_mut_for_seller_action(&wrong_seller_counterparty)
+                .expect_err("wrong seller counterparty"),
+            RadrootsTradeProjectionError::CounterpartyMismatch
+        );
+
+        let mut missing_seller_root = message(
+            "seller-pubkey",
+            listing_addr,
+            Some("order-helper"),
+            TradeListingMessagePayload::OrderResponse(TradeOrderResponse {
+                accepted: true,
+                reason: None,
+            }),
+        );
+        missing_seller_root.root_event_id = None;
+        assert_eq!(
+            index
+                .order_mut_for_seller_action(&missing_seller_root)
+                .expect_err("missing seller root"),
+            RadrootsTradeProjectionError::MissingTradeRootEventId
+        );
+
+        let mut missing_seller_prev = message(
+            "seller-pubkey",
+            listing_addr,
+            Some("order-helper"),
+            TradeListingMessagePayload::OrderResponse(TradeOrderResponse {
+                accepted: true,
+                reason: None,
+            }),
+        );
+        missing_seller_prev.prev_event_id = None;
+        assert_eq!(
+            index
+                .order_mut_for_seller_action(&missing_seller_prev)
+                .expect_err("missing seller prev"),
+            RadrootsTradeProjectionError::MissingTradePrevEventId
+        );
+
+        let missing_participant_order = message(
+            "buyer-pubkey",
+            listing_addr,
+            Some("missing-order"),
+            TradeListingMessagePayload::Cancel(TradeListingCancel { reason: None }),
+        );
+        assert_eq!(
+            index
+                .order_mut_for_participant_action(&missing_participant_order)
+                .expect_err("missing participant order"),
+            RadrootsTradeProjectionError::MissingOrder("missing-order".into())
+        );
+
+        let missing_participant_order_id = RadrootsTradeOrderWorkflowMessage {
+            order_id: None,
+            ..message(
+                "buyer-pubkey",
+                listing_addr,
+                Some("order-helper"),
+                TradeListingMessagePayload::Cancel(TradeListingCancel { reason: None }),
+            )
+        };
+        assert_eq!(
+            index
+                .order_mut_for_participant_action(&missing_participant_order_id)
+                .expect_err("missing participant order id"),
+            RadrootsTradeProjectionError::MissingOrderId
+        );
+
+        let mut wrong_participant_counterparty = message(
+            "buyer-pubkey",
+            listing_addr,
+            Some("order-helper"),
+            TradeListingMessagePayload::Cancel(TradeListingCancel { reason: None }),
+        );
+        wrong_participant_counterparty.counterparty_pubkey = "wrong-seller".into();
+        assert_eq!(
+            index
+                .order_mut_for_participant_action(&wrong_participant_counterparty)
+                .expect_err("wrong participant counterparty"),
+            RadrootsTradeProjectionError::CounterpartyMismatch
+        );
+
+        let mut missing_participant_root = message(
+            "buyer-pubkey",
+            listing_addr,
+            Some("order-helper"),
+            TradeListingMessagePayload::Cancel(TradeListingCancel { reason: None }),
+        );
+        missing_participant_root.root_event_id = None;
+        assert_eq!(
+            index
+                .order_mut_for_participant_action(&missing_participant_root)
+                .expect_err("missing participant root"),
+            RadrootsTradeProjectionError::MissingTradeRootEventId
+        );
+
+        let mut missing_participant_prev = message(
+            "buyer-pubkey",
+            listing_addr,
+            Some("order-helper"),
+            TradeListingMessagePayload::Cancel(TradeListingCancel { reason: None }),
+        );
+        missing_participant_prev.prev_event_id = None;
+        assert_eq!(
+            index
+                .order_mut_for_participant_action(&missing_participant_prev)
+                .expect_err("missing participant prev"),
+            RadrootsTradeProjectionError::MissingTradePrevEventId
+        );
+
+        let existing_order = index.order("order-helper").expect("helper order").clone();
+        let mut missing_root = message(
+            "seller-pubkey",
+            listing_addr,
+            Some("order-helper"),
+            TradeListingMessagePayload::OrderResponse(TradeOrderResponse {
+                accepted: true,
+                reason: None,
+            }),
+        );
+        missing_root.root_event_id = None;
+        assert_eq!(
+            super::ensure_trade_chain(&existing_order, &missing_root),
+            Err(RadrootsTradeProjectionError::MissingTradeRootEventId)
+        );
+
+        let mut missing_prev = message(
+            "seller-pubkey",
+            listing_addr,
+            Some("order-helper"),
+            TradeListingMessagePayload::OrderResponse(TradeOrderResponse {
+                accepted: true,
+                reason: None,
+            }),
+        );
+        missing_prev.prev_event_id = None;
+        assert_eq!(
+            super::ensure_trade_chain(&existing_order, &missing_prev),
+            Err(RadrootsTradeProjectionError::MissingTradePrevEventId)
+        );
+    }
+
+    #[test]
     fn workflow_helpers_cover_transition_and_terminal_tables() {
+        assert!(radroots_trade_order_status_can_transition(
+            &TradeOrderStatus::Draft,
+            &TradeOrderStatus::Requested
+        ));
+        assert!(!radroots_trade_order_status_can_transition(
+            &TradeOrderStatus::Draft,
+            &TradeOrderStatus::Accepted
+        ));
+        assert!(radroots_trade_order_status_can_transition(
+            &TradeOrderStatus::Validated,
+            &TradeOrderStatus::Requested
+        ));
+        assert!(!radroots_trade_order_status_can_transition(
+            &TradeOrderStatus::Validated,
+            &TradeOrderStatus::Accepted
+        ));
         assert!(radroots_trade_order_status_can_transition(
             &TradeOrderStatus::Requested,
             &TradeOrderStatus::Accepted
+        ));
+        assert!(radroots_trade_order_status_can_transition(
+            &TradeOrderStatus::Requested,
+            &TradeOrderStatus::Declined
+        ));
+        assert!(radroots_trade_order_status_can_transition(
+            &TradeOrderStatus::Requested,
+            &TradeOrderStatus::Questioned
+        ));
+        assert!(radroots_trade_order_status_can_transition(
+            &TradeOrderStatus::Requested,
+            &TradeOrderStatus::Revised
+        ));
+        assert!(radroots_trade_order_status_can_transition(
+            &TradeOrderStatus::Requested,
+            &TradeOrderStatus::Cancelled
+        ));
+        assert!(radroots_trade_order_status_can_transition(
+            &TradeOrderStatus::Questioned,
+            &TradeOrderStatus::Requested
+        ));
+        assert!(radroots_trade_order_status_can_transition(
+            &TradeOrderStatus::Questioned,
+            &TradeOrderStatus::Revised
+        ));
+        assert!(radroots_trade_order_status_can_transition(
+            &TradeOrderStatus::Questioned,
+            &TradeOrderStatus::Cancelled
+        ));
+        assert!(radroots_trade_order_status_can_transition(
+            &TradeOrderStatus::Revised,
+            &TradeOrderStatus::Accepted
+        ));
+        assert!(radroots_trade_order_status_can_transition(
+            &TradeOrderStatus::Revised,
+            &TradeOrderStatus::Declined
+        ));
+        assert!(radroots_trade_order_status_can_transition(
+            &TradeOrderStatus::Revised,
+            &TradeOrderStatus::Cancelled
+        ));
+        assert!(radroots_trade_order_status_can_transition(
+            &TradeOrderStatus::Revised,
+            &TradeOrderStatus::Requested
+        ));
+        assert!(radroots_trade_order_status_can_transition(
+            &TradeOrderStatus::Accepted,
+            &TradeOrderStatus::Fulfilled
+        ));
+        assert!(radroots_trade_order_status_can_transition(
+            &TradeOrderStatus::Accepted,
+            &TradeOrderStatus::Cancelled
+        ));
+        assert!(radroots_trade_order_status_can_transition(
+            &TradeOrderStatus::Fulfilled,
+            &TradeOrderStatus::Completed
+        ));
+        assert!(radroots_trade_order_status_can_transition(
+            &TradeOrderStatus::Fulfilled,
+            &TradeOrderStatus::Fulfilled
+        ));
+        assert!(radroots_trade_order_status_can_transition(
+            &TradeOrderStatus::Fulfilled,
+            &TradeOrderStatus::Cancelled
         ));
         assert!(!radroots_trade_order_status_can_transition(
             &TradeOrderStatus::Accepted,
             &TradeOrderStatus::Requested
         ));
+        assert!(!radroots_trade_order_status_can_transition(
+            &TradeOrderStatus::Requested,
+            &TradeOrderStatus::Fulfilled
+        ));
+        assert!(!radroots_trade_order_status_can_transition(
+            &TradeOrderStatus::Questioned,
+            &TradeOrderStatus::Accepted
+        ));
+        assert!(!radroots_trade_order_status_can_transition(
+            &TradeOrderStatus::Revised,
+            &TradeOrderStatus::Completed
+        ));
+        assert!(!radroots_trade_order_status_can_transition(
+            &TradeOrderStatus::Declined,
+            &TradeOrderStatus::Accepted
+        ));
+        assert!(!radroots_trade_order_status_can_transition(
+            &TradeOrderStatus::Cancelled,
+            &TradeOrderStatus::Accepted
+        ));
+        assert!(!radroots_trade_order_status_can_transition(
+            &TradeOrderStatus::Completed,
+            &TradeOrderStatus::Accepted
+        ));
+        assert!(!radroots_trade_order_status_can_transition(
+            &TradeOrderStatus::Fulfilled,
+            &TradeOrderStatus::Accepted
+        ));
         assert!(radroots_trade_order_status_is_terminal(
             &TradeOrderStatus::Completed
+        ));
+        assert!(radroots_trade_order_status_is_terminal(
+            &TradeOrderStatus::Declined
+        ));
+        assert!(radroots_trade_order_status_is_terminal(
+            &TradeOrderStatus::Cancelled
         ));
         assert!(!radroots_trade_order_status_is_terminal(
             &TradeOrderStatus::Fulfilled
         ));
+
+        assert_eq!(
+            super::trade_order_status_for_fulfillment_update(
+                &TradeOrderStatus::Accepted,
+                &TradeFulfillmentStatus::Preparing,
+            ),
+            Ok(None)
+        );
+        assert_eq!(
+            super::trade_order_status_for_fulfillment_update(
+                &TradeOrderStatus::Accepted,
+                &TradeFulfillmentStatus::Shipped,
+            ),
+            Ok(None)
+        );
+        assert_eq!(
+            super::trade_order_status_for_fulfillment_update(
+                &TradeOrderStatus::Accepted,
+                &TradeFulfillmentStatus::ReadyForPickup,
+            ),
+            Ok(None)
+        );
+        assert_eq!(
+            super::trade_order_status_for_fulfillment_update(
+                &TradeOrderStatus::Requested,
+                &TradeFulfillmentStatus::Preparing,
+            ),
+            Err(RadrootsTradeProjectionError::InvalidTransition {
+                from: TradeOrderStatus::Requested,
+                to: TradeOrderStatus::Accepted,
+            })
+        );
+        assert_eq!(
+            super::trade_order_status_for_fulfillment_update(
+                &TradeOrderStatus::Accepted,
+                &TradeFulfillmentStatus::Delivered,
+            ),
+            Ok(Some(TradeOrderStatus::Fulfilled))
+        );
+        assert_eq!(
+            super::trade_order_status_for_fulfillment_update(
+                &TradeOrderStatus::Requested,
+                &TradeFulfillmentStatus::Delivered,
+            ),
+            Err(RadrootsTradeProjectionError::InvalidTransition {
+                from: TradeOrderStatus::Requested,
+                to: TradeOrderStatus::Fulfilled,
+            })
+        );
+        assert_eq!(
+            super::trade_order_status_for_fulfillment_update(
+                &TradeOrderStatus::Accepted,
+                &TradeFulfillmentStatus::Cancelled,
+            ),
+            Ok(Some(TradeOrderStatus::Cancelled))
+        );
+        assert_eq!(
+            super::trade_order_status_for_fulfillment_update(
+                &TradeOrderStatus::Completed,
+                &TradeFulfillmentStatus::Cancelled,
+            ),
+            Err(RadrootsTradeProjectionError::InvalidTransition {
+                from: TradeOrderStatus::Completed,
+                to: TradeOrderStatus::Cancelled,
+            })
+        );
+
+        assert_eq!(
+            super::trade_order_status_for_receipt(&TradeOrderStatus::Fulfilled, true),
+            Ok(Some(TradeOrderStatus::Completed))
+        );
+        assert_eq!(
+            super::trade_order_status_for_receipt(&TradeOrderStatus::Accepted, true),
+            Err(RadrootsTradeProjectionError::InvalidTransition {
+                from: TradeOrderStatus::Accepted,
+                to: TradeOrderStatus::Completed,
+            })
+        );
+        assert_eq!(
+            super::trade_order_status_for_receipt(&TradeOrderStatus::Fulfilled, false),
+            Ok(None)
+        );
+        assert_eq!(
+            super::trade_order_status_for_receipt(&TradeOrderStatus::Accepted, false),
+            Err(RadrootsTradeProjectionError::InvalidTransition {
+                from: TradeOrderStatus::Accepted,
+                to: TradeOrderStatus::Fulfilled,
+            })
+        );
+
+        let facet_expectations = [
+            (RadrootsTradeListingMarketStatus::Unknown, "unknown"),
+            (RadrootsTradeListingMarketStatus::Window, "window"),
+            (RadrootsTradeListingMarketStatus::Active, "active"),
+            (RadrootsTradeListingMarketStatus::Sold, "sold"),
+            (
+                RadrootsTradeListingMarketStatus::Other {
+                    value: "archived".into(),
+                },
+                "archived",
+            ),
+        ];
+        for (status, expected) in facet_expectations {
+            assert_eq!(status.facet_key(), expected);
+        }
+
+        let order_status_expectations = [
+            (TradeOrderStatus::Draft, "draft"),
+            (TradeOrderStatus::Validated, "validated"),
+            (TradeOrderStatus::Requested, "requested"),
+            (TradeOrderStatus::Questioned, "questioned"),
+            (TradeOrderStatus::Revised, "revised"),
+            (TradeOrderStatus::Accepted, "accepted"),
+            (TradeOrderStatus::Declined, "declined"),
+            (TradeOrderStatus::Cancelled, "cancelled"),
+            (TradeOrderStatus::Fulfilled, "fulfilled"),
+            (TradeOrderStatus::Completed, "completed"),
+        ];
+        for (status, expected) in order_status_expectations {
+            assert_eq!(super::order_status_key(&status), expected);
+        }
+    }
+
+    #[test]
+    fn workflow_projection_rejects_follow_up_messages_with_wrong_actor_or_missing_snapshot() {
+        let listing_addr = "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg";
+
+        let mut response_index = RadrootsTradeReadIndex::new();
+        response_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                listing_addr,
+                Some("order-response-actor"),
+                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    order_id: "order-response-actor".into(),
+                    ..base_order()
+                }),
+            ))
+            .expect("seed response order");
+        assert_eq!(
+            response_index
+                .apply_workflow_message(&message(
+                    "intruder",
+                    listing_addr,
+                    Some("order-response-actor"),
+                    TradeListingMessagePayload::OrderResponse(TradeOrderResponse {
+                        accepted: true,
+                        reason: None,
+                    }),
+                ))
+                .expect_err("response wrong actor"),
+            RadrootsTradeProjectionError::UnauthorizedActor
+        );
+
+        let mut revision_index = RadrootsTradeReadIndex::new();
+        revision_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                listing_addr,
+                Some("order-revision-actor"),
+                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    order_id: "order-revision-actor".into(),
+                    ..base_order()
+                }),
+            ))
+            .expect("seed revision order");
+        assert_eq!(
+            revision_index
+                .apply_workflow_message(&message(
+                    "intruder",
+                    listing_addr,
+                    Some("order-revision-actor"),
+                    TradeListingMessagePayload::OrderRevision(TradeOrderRevision {
+                        revision_id: "rev-invalid-actor".into(),
+                        changes: vec![TradeOrderChange::BinCount {
+                            item_index: 0,
+                            bin_count: 3,
+                        }],
+                    }),
+                ))
+                .expect_err("revision wrong actor"),
+            RadrootsTradeProjectionError::UnauthorizedActor
+        );
+        let seeded_revision_order = revision_index
+            .order("order-revision-actor")
+            .expect("seeded revision order")
+            .clone();
+        let empty_revision = RadrootsTradeOrderWorkflowMessage {
+            event_id: "order-revision-actor:empty-revision".into(),
+            actor_pubkey: "seller-pubkey".into(),
+            counterparty_pubkey: "buyer-pubkey".into(),
+            listing_addr: listing_addr.into(),
+            order_id: Some("order-revision-actor".into()),
+            listing_event: Some(listing_snapshot(listing_addr)),
+            root_event_id: Some(seeded_revision_order.root_event_id.clone()),
+            prev_event_id: Some(seeded_revision_order.last_event_id.clone()),
+            payload: TradeListingMessagePayload::OrderRevision(TradeOrderRevision {
+                revision_id: "rev-empty".into(),
+                changes: vec![],
+            }),
+        };
+        revision_index
+            .apply_workflow_message(&empty_revision)
+            .expect("empty revision");
+        let revised_order = revision_index
+            .order("order-revision-actor")
+            .expect("revised order")
+            .clone();
+        let mut missing_revision_snapshot = empty_revision.clone();
+        missing_revision_snapshot.event_id = "order-revision-actor:missing-snapshot".into();
+        missing_revision_snapshot.listing_event = None;
+        missing_revision_snapshot.prev_event_id = Some(revised_order.last_event_id.clone());
+        assert_eq!(
+            revision_index
+                .apply_workflow_message(&missing_revision_snapshot)
+                .expect_err("revision missing snapshot"),
+            RadrootsTradeProjectionError::MissingListingSnapshot
+        );
+
+        let mut revision_accept_index = RadrootsTradeReadIndex::new();
+        revision_accept_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                listing_addr,
+                Some("order-revision-accept-actor"),
+                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    order_id: "order-revision-accept-actor".into(),
+                    ..base_order()
+                }),
+            ))
+            .expect("seed revision accept order");
+        assert_eq!(
+            revision_accept_index
+                .apply_workflow_message(&message(
+                    "intruder",
+                    listing_addr,
+                    Some("order-revision-accept-actor"),
+                    TradeListingMessagePayload::OrderRevisionAccept(TradeOrderRevisionResponse {
+                        accepted: true,
+                        reason: None,
+                    },),
+                ))
+                .expect_err("revision accept wrong actor"),
+            RadrootsTradeProjectionError::UnauthorizedActor
+        );
+
+        let mut revision_decline_index = RadrootsTradeReadIndex::new();
+        revision_decline_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                listing_addr,
+                Some("order-revision-decline-actor"),
+                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    order_id: "order-revision-decline-actor".into(),
+                    ..base_order()
+                }),
+            ))
+            .expect("seed revision decline order");
+        assert_eq!(
+            revision_decline_index
+                .apply_workflow_message(&message(
+                    "intruder",
+                    listing_addr,
+                    Some("order-revision-decline-actor"),
+                    TradeListingMessagePayload::OrderRevisionDecline(TradeOrderRevisionResponse {
+                        accepted: false,
+                        reason: None,
+                    },),
+                ))
+                .expect_err("revision decline wrong actor"),
+            RadrootsTradeProjectionError::UnauthorizedActor
+        );
+
+        let mut answer_index = RadrootsTradeReadIndex::new();
+        answer_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                listing_addr,
+                Some("order-answer-actor"),
+                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    order_id: "order-answer-actor".into(),
+                    ..base_order()
+                }),
+            ))
+            .expect("seed answer order");
+        answer_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                listing_addr,
+                Some("order-answer-actor"),
+                TradeListingMessagePayload::Question(TradeQuestion {
+                    question_id: "question-1".into(),
+                }),
+            ))
+            .expect("seed answer question");
+        assert_eq!(
+            answer_index
+                .apply_workflow_message(&message(
+                    "intruder",
+                    listing_addr,
+                    Some("order-answer-actor"),
+                    TradeListingMessagePayload::Answer(TradeAnswer {
+                        question_id: "question-1".into(),
+                    }),
+                ))
+                .expect_err("answer wrong actor"),
+            RadrootsTradeProjectionError::UnauthorizedActor
+        );
+
+        let mut discount_request_index = RadrootsTradeReadIndex::new();
+        discount_request_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                listing_addr,
+                Some("order-discount-request-actor"),
+                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    order_id: "order-discount-request-actor".into(),
+                    ..base_order()
+                }),
+            ))
+            .expect("seed discount request order");
+        assert_eq!(
+            discount_request_index
+                .apply_workflow_message(&message(
+                    "intruder",
+                    listing_addr,
+                    Some("order-discount-request-actor"),
+                    TradeListingMessagePayload::DiscountRequest(TradeDiscountRequest {
+                        discount_id: "discount-request-invalid-actor".into(),
+                        value: radroots_core::RadrootsCoreDiscountValue::Percent(
+                            RadrootsCorePercent::new(RadrootsCoreDecimal::from(5u32)),
+                        ),
+                    }),
+                ))
+                .expect_err("discount request wrong actor"),
+            RadrootsTradeProjectionError::UnauthorizedActor
+        );
+        let discount_request_order = discount_request_index
+            .order("order-discount-request-actor")
+            .expect("discount request order")
+            .clone();
+        let missing_discount_request_snapshot = RadrootsTradeOrderWorkflowMessage {
+            event_id: "order-discount-request-actor:missing-snapshot".into(),
+            actor_pubkey: "buyer-pubkey".into(),
+            counterparty_pubkey: "seller-pubkey".into(),
+            listing_addr: listing_addr.into(),
+            order_id: Some("order-discount-request-actor".into()),
+            listing_event: None,
+            root_event_id: Some(discount_request_order.root_event_id.clone()),
+            prev_event_id: Some(discount_request_order.last_event_id.clone()),
+            payload: TradeListingMessagePayload::DiscountRequest(TradeDiscountRequest {
+                discount_id: "discount-request-missing-snapshot".into(),
+                value: radroots_core::RadrootsCoreDiscountValue::Percent(RadrootsCorePercent::new(
+                    RadrootsCoreDecimal::from(5u32),
+                )),
+            }),
+        };
+        assert_eq!(
+            discount_request_index
+                .apply_workflow_message(&missing_discount_request_snapshot)
+                .expect_err("discount request missing snapshot"),
+            RadrootsTradeProjectionError::MissingListingSnapshot
+        );
+
+        let mut discount_offer_index = RadrootsTradeReadIndex::new();
+        discount_offer_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                listing_addr,
+                Some("order-discount-offer-actor"),
+                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    order_id: "order-discount-offer-actor".into(),
+                    ..base_order()
+                }),
+            ))
+            .expect("seed discount offer order");
+        assert_eq!(
+            discount_offer_index
+                .apply_workflow_message(&message(
+                    "intruder",
+                    listing_addr,
+                    Some("order-discount-offer-actor"),
+                    TradeListingMessagePayload::DiscountOffer(TradeDiscountOffer {
+                        discount_id: "discount-offer-invalid-actor".into(),
+                        value: radroots_core::RadrootsCoreDiscountValue::Percent(
+                            RadrootsCorePercent::new(RadrootsCoreDecimal::from(5u32)),
+                        ),
+                    }),
+                ))
+                .expect_err("discount offer wrong actor"),
+            RadrootsTradeProjectionError::UnauthorizedActor
+        );
+        let discount_offer_order = discount_offer_index
+            .order("order-discount-offer-actor")
+            .expect("discount offer order")
+            .clone();
+        let missing_discount_offer_snapshot = RadrootsTradeOrderWorkflowMessage {
+            event_id: "order-discount-offer-actor:missing-snapshot".into(),
+            actor_pubkey: "seller-pubkey".into(),
+            counterparty_pubkey: "buyer-pubkey".into(),
+            listing_addr: listing_addr.into(),
+            order_id: Some("order-discount-offer-actor".into()),
+            listing_event: None,
+            root_event_id: Some(discount_offer_order.root_event_id.clone()),
+            prev_event_id: Some(discount_offer_order.last_event_id.clone()),
+            payload: TradeListingMessagePayload::DiscountOffer(TradeDiscountOffer {
+                discount_id: "discount-offer-missing-snapshot".into(),
+                value: radroots_core::RadrootsCoreDiscountValue::Percent(RadrootsCorePercent::new(
+                    RadrootsCoreDecimal::from(5u32),
+                )),
+            }),
+        };
+        assert_eq!(
+            discount_offer_index
+                .apply_workflow_message(&missing_discount_offer_snapshot)
+                .expect_err("discount offer missing snapshot"),
+            RadrootsTradeProjectionError::MissingListingSnapshot
+        );
+
+        let mut discount_accept_index = RadrootsTradeReadIndex::new();
+        discount_accept_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                listing_addr,
+                Some("order-discount-accept-actor"),
+                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    order_id: "order-discount-accept-actor".into(),
+                    ..base_order()
+                }),
+            ))
+            .expect("seed discount accept order");
+        assert_eq!(
+            discount_accept_index
+                .apply_workflow_message(&message(
+                    "intruder",
+                    listing_addr,
+                    Some("order-discount-accept-actor"),
+                    TradeListingMessagePayload::DiscountAccept(TradeDiscountDecision::Accept {
+                        value: radroots_core::RadrootsCoreDiscountValue::Percent(
+                            RadrootsCorePercent::new(RadrootsCoreDecimal::from(5u32)),
+                        ),
+                    }),
+                ))
+                .expect_err("discount accept wrong actor"),
+            RadrootsTradeProjectionError::UnauthorizedActor
+        );
+
+        let mut discount_decline_index = RadrootsTradeReadIndex::new();
+        discount_decline_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                listing_addr,
+                Some("order-discount-decline-actor"),
+                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    order_id: "order-discount-decline-actor".into(),
+                    ..base_order()
+                }),
+            ))
+            .expect("seed discount decline order");
+        assert_eq!(
+            discount_decline_index
+                .apply_workflow_message(&message(
+                    "intruder",
+                    listing_addr,
+                    Some("order-discount-decline-actor"),
+                    TradeListingMessagePayload::DiscountDecline(TradeDiscountDecision::Decline {
+                        reason: Some("no".into()),
+                    },),
+                ))
+                .expect_err("discount decline wrong actor"),
+            RadrootsTradeProjectionError::UnauthorizedActor
+        );
+
+        let mut fulfillment_index = RadrootsTradeReadIndex::new();
+        fulfillment_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                listing_addr,
+                Some("order-fulfillment-actor"),
+                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    order_id: "order-fulfillment-actor".into(),
+                    ..base_order()
+                }),
+            ))
+            .expect("seed fulfillment order");
+        assert_eq!(
+            fulfillment_index
+                .apply_workflow_message(&message(
+                    "intruder",
+                    listing_addr,
+                    Some("order-fulfillment-actor"),
+                    TradeListingMessagePayload::FulfillmentUpdate(TradeFulfillmentUpdate {
+                        status: TradeFulfillmentStatus::Preparing,
+                    }),
+                ))
+                .expect_err("fulfillment wrong actor"),
+            RadrootsTradeProjectionError::UnauthorizedActor
+        );
+
+        let mut receipt_index = RadrootsTradeReadIndex::new();
+        receipt_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                listing_addr,
+                Some("order-receipt-actor"),
+                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    order_id: "order-receipt-actor".into(),
+                    ..base_order()
+                }),
+            ))
+            .expect("seed receipt order");
+        assert_eq!(
+            receipt_index
+                .apply_workflow_message(&message(
+                    "intruder",
+                    listing_addr,
+                    Some("order-receipt-actor"),
+                    TradeListingMessagePayload::Receipt(TradeReceipt {
+                        acknowledged: false,
+                        at: 1_700_000_123,
+                    }),
+                ))
+                .expect_err("receipt wrong actor"),
+            RadrootsTradeProjectionError::UnauthorizedActor
+        );
+    }
+
+    #[test]
+    fn workflow_projection_rejects_follow_up_messages_with_invalid_transitions() {
+        let listing_addr = "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg";
+
+        let mut response_index = RadrootsTradeReadIndex::new();
+        response_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                listing_addr,
+                Some("order-response-transition"),
+                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    order_id: "order-response-transition".into(),
+                    ..base_order()
+                }),
+            ))
+            .expect("seed response transition");
+        response_index
+            .orders
+            .get_mut("order-response-transition")
+            .expect("response order")
+            .status = TradeOrderStatus::Completed;
+        assert_eq!(
+            response_index
+                .apply_workflow_message(&message(
+                    "seller-pubkey",
+                    listing_addr,
+                    Some("order-response-transition"),
+                    TradeListingMessagePayload::OrderResponse(TradeOrderResponse {
+                        accepted: true,
+                        reason: None,
+                    }),
+                ))
+                .expect_err("response invalid transition"),
+            RadrootsTradeProjectionError::InvalidTransition {
+                from: TradeOrderStatus::Completed,
+                to: TradeOrderStatus::Accepted,
+            }
+        );
+
+        let mut revision_index = RadrootsTradeReadIndex::new();
+        revision_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                listing_addr,
+                Some("order-revision-transition"),
+                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    order_id: "order-revision-transition".into(),
+                    ..base_order()
+                }),
+            ))
+            .expect("seed revision transition");
+        revision_index
+            .orders
+            .get_mut("order-revision-transition")
+            .expect("revision order")
+            .status = TradeOrderStatus::Completed;
+        assert_eq!(
+            revision_index
+                .apply_workflow_message(&message(
+                    "seller-pubkey",
+                    listing_addr,
+                    Some("order-revision-transition"),
+                    TradeListingMessagePayload::OrderRevision(TradeOrderRevision {
+                        revision_id: "rev-invalid-transition".into(),
+                        changes: vec![TradeOrderChange::BinCount {
+                            item_index: 0,
+                            bin_count: 3,
+                        }],
+                    }),
+                ))
+                .expect_err("revision invalid transition"),
+            RadrootsTradeProjectionError::InvalidTransition {
+                from: TradeOrderStatus::Completed,
+                to: TradeOrderStatus::Revised,
+            }
+        );
+
+        let mut revision_accept_index = RadrootsTradeReadIndex::new();
+        revision_accept_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                listing_addr,
+                Some("order-revision-accept-transition"),
+                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    order_id: "order-revision-accept-transition".into(),
+                    ..base_order()
+                }),
+            ))
+            .expect("seed revision accept transition");
+        revision_accept_index
+            .orders
+            .get_mut("order-revision-accept-transition")
+            .expect("revision accept order")
+            .status = TradeOrderStatus::Completed;
+        assert_eq!(
+            revision_accept_index
+                .apply_workflow_message(&message(
+                    "buyer-pubkey",
+                    listing_addr,
+                    Some("order-revision-accept-transition"),
+                    TradeListingMessagePayload::OrderRevisionAccept(TradeOrderRevisionResponse {
+                        accepted: true,
+                        reason: None,
+                    },),
+                ))
+                .expect_err("revision accept invalid transition"),
+            RadrootsTradeProjectionError::InvalidTransition {
+                from: TradeOrderStatus::Completed,
+                to: TradeOrderStatus::Accepted,
+            }
+        );
+
+        let mut revision_decline_index = RadrootsTradeReadIndex::new();
+        revision_decline_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                listing_addr,
+                Some("order-revision-decline-transition"),
+                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    order_id: "order-revision-decline-transition".into(),
+                    ..base_order()
+                }),
+            ))
+            .expect("seed revision decline transition");
+        revision_decline_index
+            .orders
+            .get_mut("order-revision-decline-transition")
+            .expect("revision decline order")
+            .status = TradeOrderStatus::Completed;
+        assert_eq!(
+            revision_decline_index
+                .apply_workflow_message(&message(
+                    "buyer-pubkey",
+                    listing_addr,
+                    Some("order-revision-decline-transition"),
+                    TradeListingMessagePayload::OrderRevisionDecline(TradeOrderRevisionResponse {
+                        accepted: false,
+                        reason: None,
+                    },),
+                ))
+                .expect_err("revision decline invalid transition"),
+            RadrootsTradeProjectionError::InvalidTransition {
+                from: TradeOrderStatus::Completed,
+                to: TradeOrderStatus::Declined,
+            }
+        );
+
+        let mut question_index = RadrootsTradeReadIndex::new();
+        question_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                listing_addr,
+                Some("order-question-transition"),
+                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    order_id: "order-question-transition".into(),
+                    ..base_order()
+                }),
+            ))
+            .expect("seed question transition");
+        question_index
+            .orders
+            .get_mut("order-question-transition")
+            .expect("question order")
+            .status = TradeOrderStatus::Completed;
+        assert_eq!(
+            question_index
+                .apply_workflow_message(&message(
+                    "buyer-pubkey",
+                    listing_addr,
+                    Some("order-question-transition"),
+                    TradeListingMessagePayload::Question(TradeQuestion {
+                        question_id: "question-1".into(),
+                    }),
+                ))
+                .expect_err("question invalid transition"),
+            RadrootsTradeProjectionError::InvalidTransition {
+                from: TradeOrderStatus::Completed,
+                to: TradeOrderStatus::Questioned,
+            }
+        );
+
+        let mut answer_index = RadrootsTradeReadIndex::new();
+        answer_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                listing_addr,
+                Some("order-answer-transition"),
+                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    order_id: "order-answer-transition".into(),
+                    ..base_order()
+                }),
+            ))
+            .expect("seed answer transition");
+        answer_index
+            .orders
+            .get_mut("order-answer-transition")
+            .expect("answer order")
+            .status = TradeOrderStatus::Accepted;
+        assert_eq!(
+            answer_index
+                .apply_workflow_message(&message(
+                    "seller-pubkey",
+                    listing_addr,
+                    Some("order-answer-transition"),
+                    TradeListingMessagePayload::Answer(TradeAnswer {
+                        question_id: "question-1".into(),
+                    }),
+                ))
+                .expect_err("answer invalid transition"),
+            RadrootsTradeProjectionError::InvalidTransition {
+                from: TradeOrderStatus::Accepted,
+                to: TradeOrderStatus::Requested,
+            }
+        );
+
+        let mut discount_offer_index = RadrootsTradeReadIndex::new();
+        discount_offer_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                listing_addr,
+                Some("order-discount-offer-transition"),
+                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    order_id: "order-discount-offer-transition".into(),
+                    ..base_order()
+                }),
+            ))
+            .expect("seed discount offer transition");
+        discount_offer_index
+            .orders
+            .get_mut("order-discount-offer-transition")
+            .expect("discount offer order")
+            .status = TradeOrderStatus::Completed;
+        assert_eq!(
+            discount_offer_index
+                .apply_workflow_message(&message(
+                    "seller-pubkey",
+                    listing_addr,
+                    Some("order-discount-offer-transition"),
+                    TradeListingMessagePayload::DiscountOffer(TradeDiscountOffer {
+                        discount_id: "discount-offer-invalid-transition".into(),
+                        value: radroots_core::RadrootsCoreDiscountValue::Percent(
+                            RadrootsCorePercent::new(RadrootsCoreDecimal::from(5u32)),
+                        ),
+                    }),
+                ))
+                .expect_err("discount offer invalid transition"),
+            RadrootsTradeProjectionError::InvalidTransition {
+                from: TradeOrderStatus::Completed,
+                to: TradeOrderStatus::Revised,
+            }
+        );
+
+        let mut discount_accept_index = RadrootsTradeReadIndex::new();
+        discount_accept_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                listing_addr,
+                Some("order-discount-accept-transition"),
+                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    order_id: "order-discount-accept-transition".into(),
+                    ..base_order()
+                }),
+            ))
+            .expect("seed discount accept transition");
+        discount_accept_index
+            .orders
+            .get_mut("order-discount-accept-transition")
+            .expect("discount accept order")
+            .status = TradeOrderStatus::Completed;
+        assert_eq!(
+            discount_accept_index
+                .apply_workflow_message(&message(
+                    "buyer-pubkey",
+                    listing_addr,
+                    Some("order-discount-accept-transition"),
+                    TradeListingMessagePayload::DiscountAccept(TradeDiscountDecision::Accept {
+                        value: radroots_core::RadrootsCoreDiscountValue::Percent(
+                            RadrootsCorePercent::new(RadrootsCoreDecimal::from(5u32)),
+                        ),
+                    }),
+                ))
+                .expect_err("discount accept invalid transition"),
+            RadrootsTradeProjectionError::InvalidTransition {
+                from: TradeOrderStatus::Completed,
+                to: TradeOrderStatus::Accepted,
+            }
+        );
+
+        let mut discount_decline_index = RadrootsTradeReadIndex::new();
+        discount_decline_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                listing_addr,
+                Some("order-discount-decline-transition"),
+                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    order_id: "order-discount-decline-transition".into(),
+                    ..base_order()
+                }),
+            ))
+            .expect("seed discount decline transition");
+        discount_decline_index
+            .orders
+            .get_mut("order-discount-decline-transition")
+            .expect("discount decline order")
+            .status = TradeOrderStatus::Completed;
+        assert_eq!(
+            discount_decline_index
+                .apply_workflow_message(&message(
+                    "buyer-pubkey",
+                    listing_addr,
+                    Some("order-discount-decline-transition"),
+                    TradeListingMessagePayload::DiscountDecline(TradeDiscountDecision::Decline {
+                        reason: Some("no".into()),
+                    },),
+                ))
+                .expect_err("discount decline invalid transition"),
+            RadrootsTradeProjectionError::InvalidTransition {
+                from: TradeOrderStatus::Completed,
+                to: TradeOrderStatus::Requested,
+            }
+        );
+
+        let mut cancel_index = RadrootsTradeReadIndex::new();
+        cancel_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                listing_addr,
+                Some("order-cancel-transition"),
+                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    order_id: "order-cancel-transition".into(),
+                    ..base_order()
+                }),
+            ))
+            .expect("seed cancel transition");
+        cancel_index
+            .orders
+            .get_mut("order-cancel-transition")
+            .expect("cancel order")
+            .status = TradeOrderStatus::Completed;
+        assert_eq!(
+            cancel_index
+                .apply_workflow_message(&message(
+                    "buyer-pubkey",
+                    listing_addr,
+                    Some("order-cancel-transition"),
+                    TradeListingMessagePayload::Cancel(TradeListingCancel {
+                        reason: Some("late cancel".into()),
+                    }),
+                ))
+                .expect_err("cancel invalid transition"),
+            RadrootsTradeProjectionError::InvalidTransition {
+                from: TradeOrderStatus::Completed,
+                to: TradeOrderStatus::Cancelled,
+            }
+        );
+
+        let mut fulfillment_index = RadrootsTradeReadIndex::new();
+        fulfillment_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                listing_addr,
+                Some("order-fulfillment-transition"),
+                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    order_id: "order-fulfillment-transition".into(),
+                    ..base_order()
+                }),
+            ))
+            .expect("seed fulfillment transition");
+        assert_eq!(
+            fulfillment_index
+                .apply_workflow_message(&message(
+                    "seller-pubkey",
+                    listing_addr,
+                    Some("order-fulfillment-transition"),
+                    TradeListingMessagePayload::FulfillmentUpdate(TradeFulfillmentUpdate {
+                        status: TradeFulfillmentStatus::Delivered,
+                    }),
+                ))
+                .expect_err("fulfillment invalid transition"),
+            RadrootsTradeProjectionError::InvalidTransition {
+                from: TradeOrderStatus::Requested,
+                to: TradeOrderStatus::Fulfilled,
+            }
+        );
+
+        let mut receipt_index = RadrootsTradeReadIndex::new();
+        receipt_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                listing_addr,
+                Some("order-receipt-transition"),
+                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    order_id: "order-receipt-transition".into(),
+                    ..base_order()
+                }),
+            ))
+            .expect("seed receipt transition");
+        receipt_index
+            .orders
+            .get_mut("order-receipt-transition")
+            .expect("receipt order")
+            .status = TradeOrderStatus::Accepted;
+        assert_eq!(
+            receipt_index
+                .apply_workflow_message(&message(
+                    "buyer-pubkey",
+                    listing_addr,
+                    Some("order-receipt-transition"),
+                    TradeListingMessagePayload::Receipt(TradeReceipt {
+                        acknowledged: true,
+                        at: 1_700_000_123,
+                    }),
+                ))
+                .expect_err("receipt invalid transition"),
+            RadrootsTradeProjectionError::InvalidTransition {
+                from: TradeOrderStatus::Accepted,
+                to: TradeOrderStatus::Completed,
+            }
+        );
+    }
+
+    #[test]
+    fn workflow_projection_rejects_invalid_revision_change_indices() {
+        let listing_addr = "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg";
+        let mut index = RadrootsTradeReadIndex::new();
+        index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                listing_addr,
+                Some("order-revision-invalid-change"),
+                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    order_id: "order-revision-invalid-change".into(),
+                    ..base_order()
+                }),
+            ))
+            .expect("seed invalid revision order");
+
+        assert_eq!(
+            index
+                .apply_workflow_message(&message(
+                    "seller-pubkey",
+                    listing_addr,
+                    Some("order-revision-invalid-change"),
+                    TradeListingMessagePayload::OrderRevision(TradeOrderRevision {
+                        revision_id: "rev-invalid-index".into(),
+                        changes: vec![TradeOrderChange::BinCount {
+                            item_index: 7,
+                            bin_count: 3,
+                        }],
+                    }),
+                ))
+                .expect_err("invalid revision change"),
+            RadrootsTradeProjectionError::InvalidItemIndex(7)
+        );
+    }
+
+    #[test]
+    fn workflow_projection_covers_successful_follow_up_paths() {
+        let mut question_index = RadrootsTradeReadIndex::new();
+        question_index
+            .upsert_listing("seller-pubkey", &base_listing())
+            .expect("question listing");
+        question_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-question"),
+                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    order_id: "order-question".into(),
+                    ..base_order()
+                }),
+            ))
+            .expect("question order");
+        question_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-question"),
+                TradeListingMessagePayload::Question(TradeQuestion {
+                    question_id: "question-1".into(),
+                }),
+            ))
+            .expect("question");
+        let answered = question_index
+            .apply_workflow_message(&message(
+                "seller-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-question"),
+                TradeListingMessagePayload::Answer(TradeAnswer {
+                    question_id: "question-1".into(),
+                }),
+            ))
+            .expect("answer");
+        assert_eq!(answered.status, TradeOrderStatus::Requested);
+        assert_eq!(answered.answer_count, 1);
+
+        let mut revision_accept_index = RadrootsTradeReadIndex::new();
+        revision_accept_index
+            .upsert_listing("seller-pubkey", &base_listing())
+            .expect("revision accept listing");
+        revision_accept_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-revision-accept"),
+                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    order_id: "order-revision-accept".into(),
+                    ..base_order()
+                }),
+            ))
+            .expect("revision accept request");
+        revision_accept_index
+            .apply_workflow_message(&message(
+                "seller-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-revision-accept"),
+                TradeListingMessagePayload::OrderRevision(TradeOrderRevision {
+                    revision_id: "revision-accept".into(),
+                    changes: vec![TradeOrderChange::ItemAdd {
+                        item: TradeOrderItem {
+                            bin_id: "bin-2".into(),
+                            bin_count: 1,
+                        },
+                    }],
+                }),
+            ))
+            .expect("revision");
+        let accepted_revision = revision_accept_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-revision-accept"),
+                TradeListingMessagePayload::OrderRevisionAccept(TradeOrderRevisionResponse {
+                    accepted: true,
+                    reason: Some("works".into()),
+                }),
+            ))
+            .expect("revision accept");
+        assert_eq!(accepted_revision.status, TradeOrderStatus::Accepted);
+        assert_eq!(
+            accepted_revision.last_message_type,
+            TradeListingMessageType::OrderRevisionAccept
+        );
+
+        let mut revision_decline_index = RadrootsTradeReadIndex::new();
+        revision_decline_index
+            .upsert_listing("seller-pubkey", &base_listing())
+            .expect("revision decline listing");
+        revision_decline_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-revision-decline"),
+                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    order_id: "order-revision-decline".into(),
+                    ..base_order()
+                }),
+            ))
+            .expect("revision decline request");
+        revision_decline_index
+            .apply_workflow_message(&message(
+                "seller-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-revision-decline"),
+                TradeListingMessagePayload::OrderRevision(TradeOrderRevision {
+                    revision_id: "revision-decline".into(),
+                    changes: vec![TradeOrderChange::ItemRemove { item_index: 0 }],
+                }),
+            ))
+            .expect("revision decline");
+        let declined_revision = revision_decline_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-revision-decline"),
+                TradeListingMessagePayload::OrderRevisionDecline(TradeOrderRevisionResponse {
+                    accepted: false,
+                    reason: Some("no thanks".into()),
+                }),
+            ))
+            .expect("revision decline");
+        assert_eq!(declined_revision.status, TradeOrderStatus::Declined);
+        assert_eq!(
+            declined_revision.last_message_type,
+            TradeListingMessageType::OrderRevisionDecline
+        );
+
+        let mut discount_index = RadrootsTradeReadIndex::new();
+        discount_index
+            .upsert_listing("seller-pubkey", &base_listing())
+            .expect("discount listing");
+        discount_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-discount"),
+                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    order_id: "order-discount".into(),
+                    ..base_order()
+                }),
+            ))
+            .expect("discount request order");
+        discount_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-discount"),
+                TradeListingMessagePayload::DiscountRequest(TradeDiscountRequest {
+                    discount_id: "discount-request".into(),
+                    value: radroots_core::RadrootsCoreDiscountValue::Percent(
+                        RadrootsCorePercent::new(RadrootsCoreDecimal::from(10u32)),
+                    ),
+                }),
+            ))
+            .expect("discount request");
+        discount_index
+            .apply_workflow_message(&message(
+                "seller-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-discount"),
+                TradeListingMessagePayload::DiscountOffer(TradeDiscountOffer {
+                    discount_id: "discount-request".into(),
+                    value: radroots_core::RadrootsCoreDiscountValue::Percent(
+                        RadrootsCorePercent::new(RadrootsCoreDecimal::from(5u32)),
+                    ),
+                }),
+            ))
+            .expect("discount offer");
+        let accepted_discount = discount_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-discount"),
+                TradeListingMessagePayload::DiscountAccept(TradeDiscountDecision::Accept {
+                    value: radroots_core::RadrootsCoreDiscountValue::Percent(
+                        RadrootsCorePercent::new(RadrootsCoreDecimal::from(5u32)),
+                    ),
+                }),
+            ))
+            .expect("discount accept");
+        assert_eq!(accepted_discount.status, TradeOrderStatus::Accepted);
+        assert_eq!(accepted_discount.discount_accept_count, 1);
+
+        let mut discount_decline_index = RadrootsTradeReadIndex::new();
+        discount_decline_index
+            .upsert_listing("seller-pubkey", &base_listing())
+            .expect("discount decline listing");
+        discount_decline_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-discount-decline"),
+                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    order_id: "order-discount-decline".into(),
+                    ..base_order()
+                }),
+            ))
+            .expect("discount decline request order");
+        discount_decline_index
+            .apply_workflow_message(&message(
+                "seller-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-discount-decline"),
+                TradeListingMessagePayload::DiscountOffer(TradeDiscountOffer {
+                    discount_id: "discount-decline".into(),
+                    value: radroots_core::RadrootsCoreDiscountValue::Percent(
+                        RadrootsCorePercent::new(RadrootsCoreDecimal::from(7u32)),
+                    ),
+                }),
+            ))
+            .expect("discount decline offer");
+        let declined_discount = discount_decline_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-discount-decline"),
+                TradeListingMessagePayload::DiscountDecline(TradeDiscountDecision::Decline {
+                    reason: Some("still too high".into()),
+                }),
+            ))
+            .expect("discount decline");
+        assert_eq!(declined_discount.status, TradeOrderStatus::Requested);
+        assert_eq!(declined_discount.discount_decline_count, 1);
+
+        let mut seller_cancel_index = RadrootsTradeReadIndex::new();
+        seller_cancel_index
+            .upsert_listing("seller-pubkey", &base_listing())
+            .expect("seller cancel listing");
+        seller_cancel_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-seller-cancel"),
+                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    order_id: "order-seller-cancel".into(),
+                    ..base_order()
+                }),
+            ))
+            .expect("seller cancel order");
+        let seller_cancelled = seller_cancel_index
+            .apply_workflow_message(&message(
+                "seller-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-seller-cancel"),
+                TradeListingMessagePayload::Cancel(TradeListingCancel {
+                    reason: Some("seller-cancel".into()),
+                }),
+            ))
+            .expect("seller cancel");
+        assert_eq!(seller_cancelled.status, TradeOrderStatus::Cancelled);
+
+        let mut preparing_index = RadrootsTradeReadIndex::new();
+        preparing_index
+            .upsert_listing("seller-pubkey", &base_listing())
+            .expect("preparing listing");
+        preparing_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-preparing"),
+                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    order_id: "order-preparing".into(),
+                    ..base_order()
+                }),
+            ))
+            .expect("preparing request");
+        preparing_index
+            .apply_workflow_message(&message(
+                "seller-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-preparing"),
+                TradeListingMessagePayload::OrderResponse(TradeOrderResponse {
+                    accepted: true,
+                    reason: None,
+                }),
+            ))
+            .expect("preparing accepted");
+        let preparing = preparing_index
+            .apply_workflow_message(&message(
+                "seller-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-preparing"),
+                TradeListingMessagePayload::FulfillmentUpdate(TradeFulfillmentUpdate {
+                    status: TradeFulfillmentStatus::Preparing,
+                }),
+            ))
+            .expect("preparing update");
+        assert_eq!(preparing.status, TradeOrderStatus::Accepted);
+
+        let mut receipt_index = RadrootsTradeReadIndex::new();
+        receipt_index
+            .upsert_listing("seller-pubkey", &base_listing())
+            .expect("receipt listing");
+        receipt_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-receipt"),
+                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    order_id: "order-receipt".into(),
+                    ..base_order()
+                }),
+            ))
+            .expect("receipt request");
+        receipt_index
+            .apply_workflow_message(&message(
+                "seller-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-receipt"),
+                TradeListingMessagePayload::OrderResponse(TradeOrderResponse {
+                    accepted: true,
+                    reason: None,
+                }),
+            ))
+            .expect("receipt accepted");
+        receipt_index
+            .apply_workflow_message(&message(
+                "seller-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-receipt"),
+                TradeListingMessagePayload::FulfillmentUpdate(TradeFulfillmentUpdate {
+                    status: TradeFulfillmentStatus::Delivered,
+                }),
+            ))
+            .expect("receipt fulfilled");
+        let receipt = receipt_index
+            .apply_workflow_message(&message(
+                "buyer-pubkey",
+                "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+                Some("order-receipt"),
+                TradeListingMessagePayload::Receipt(TradeReceipt {
+                    acknowledged: false,
+                    at: 1_700_000_040,
+                }),
+            ))
+            .expect("receipt pending");
+        assert_eq!(receipt.status, TradeOrderStatus::Fulfilled);
     }
 }
