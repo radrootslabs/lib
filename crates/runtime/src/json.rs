@@ -331,6 +331,14 @@ mod tests {
     }
 
     #[test]
+    fn serialize_toggle_load_reports_not_found_for_missing_path() {
+        let (_dir, path) = payload_path("missing-toggle.json");
+        let err =
+            JsonFile::<SerializeToggle>::load(path.clone()).expect_err("missing path should fail");
+        assert!(err.to_string().contains(path.to_string_lossy().as_ref()));
+    }
+
+    #[test]
     fn load_reports_file_open_error_for_directory() {
         let dir = tempdir().expect("tempdir");
         let err = JsonFile::<Payload>::load(dir.path().to_path_buf())
@@ -366,6 +374,46 @@ mod tests {
         std::fs::write(&path, "{invalid json").expect("write invalid json");
         let err = JsonFile::<Payload>::load(path.clone()).expect_err("invalid json should fail");
         assert!(err.to_string().contains("Failed to parse JSON"));
+    }
+
+    #[test]
+    fn serialize_toggle_load_reports_file_open_error_for_directory() {
+        let dir = tempdir().expect("tempdir");
+        let err = JsonFile::<SerializeToggle>::load(dir.path().to_path_buf())
+            .expect_err("directory path should fail");
+        assert!(err.to_string().contains("Failed to parse JSON"));
+        assert!(
+            err.to_string()
+                .contains(dir.path().to_string_lossy().as_ref())
+        );
+    }
+
+    #[test]
+    fn serialize_toggle_load_reports_file_parse_error_for_invalid_json() {
+        let (_dir, path) = payload_path("invalid-toggle.json");
+        std::fs::write(&path, "{invalid json").expect("write invalid json");
+        let err =
+            JsonFile::<SerializeToggle>::load(path.clone()).expect_err("invalid json should fail");
+        assert!(err.to_string().contains("Failed to parse JSON"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn serialize_toggle_load_reports_file_open_error_for_unreadable_file_path() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("unreadable-toggle.json");
+        std::fs::write(&path, r#"{"fail":false,"label":"ok"}"#).expect("write json");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o000))
+            .expect("set unreadable permission");
+
+        let err =
+            JsonFile::<SerializeToggle>::load(path.clone()).expect_err("owned path should fail");
+        assert!(err.to_string().contains("Failed to open JSON file"));
+
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
+            .expect("restore permission");
     }
 
     #[test]

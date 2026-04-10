@@ -150,14 +150,18 @@ pub fn seal_local_secret_file(
     let envelope =
         RadrootsProtectedStoreEnvelope::seal_with_wrapped_key(&key_source, key_slot, payload)
             .map_err(|error| seal_error(path, error.to_string()))?;
-    let encoded = envelope
-        .encode_json()
-        .map_err(|error| seal_error(path, error.to_string()))?;
+    let encoded = match encode_secret_envelope(&envelope) {
+        Ok(encoded) => encoded,
+        Err(error) => return Err(seal_error(path, error.to_string())),
+    };
     fs::write(path, encoded).map_err(|source| RuntimeProtectedFileError::Io {
         path: path.to_path_buf(),
         source,
     })?;
-    set_secret_permissions(path).map_err(|error| permissions_error(path, error.to_string()))?;
+    match set_secret_permissions(path) {
+        Ok(()) => {}
+        Err(error) => return Err(permissions_error(path, error.to_string())),
+    }
     Ok(())
 }
 
@@ -220,9 +224,99 @@ fn permissions_error(path: &Path, message: String) -> RuntimeProtectedFileError 
     }
 }
 
+fn encode_secret_envelope(
+    envelope: &RadrootsProtectedStoreEnvelope,
+) -> Result<Vec<u8>, radroots_protected_store::error::RadrootsProtectedStoreError> {
+    #[cfg(test)]
+    if test_hooks::take_encode() {
+        return Err(
+            radroots_protected_store::error::RadrootsProtectedStoreError::EnvelopeEncodeFailed,
+        );
+    }
+
+    envelope.encode_json()
+}
+
+#[cfg(test)]
+mod test_hooks {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+    use std::thread::{self, ThreadId};
+
+    const FAIL_ENCODE: u8 = 1;
+    const FAIL_PERMS: u8 = 2;
+
+    static FAIL_POINTS: OnceLock<Mutex<HashMap<ThreadId, u8>>> = OnceLock::new();
+
+    pub struct FailGuard {
+        thread_id: ThreadId,
+    }
+
+    impl Drop for FailGuard {
+        fn drop(&mut self) {
+            clear(self.thread_id);
+        }
+    }
+
+    pub fn fail_encode() -> FailGuard {
+        set(FAIL_ENCODE)
+    }
+
+    pub fn fail_perms() -> FailGuard {
+        set(FAIL_PERMS)
+    }
+
+    pub fn take_encode() -> bool {
+        take(FAIL_ENCODE)
+    }
+
+    pub fn take_perms() -> bool {
+        take(FAIL_PERMS)
+    }
+
+    fn set(point: u8) -> FailGuard {
+        let thread_id = thread::current().id();
+        fail_map()
+            .lock()
+            .expect("lock fail hooks")
+            .insert(thread_id, point);
+        FailGuard { thread_id }
+    }
+
+    fn clear(thread_id: ThreadId) {
+        fail_map()
+            .lock()
+            .expect("lock clear hooks")
+            .remove(&thread_id);
+    }
+
+    fn take(point: u8) -> bool {
+        let thread_id = thread::current().id();
+        let mut map = fail_map().lock().expect("lock take hooks");
+        match map.get(&thread_id).copied() {
+            Some(current_point) if current_point == point => {
+                map.remove(&thread_id);
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn fail_map() -> &'static Mutex<HashMap<ThreadId, u8>> {
+        FAIL_POINTS.get_or_init(|| Mutex::new(HashMap::new()))
+    }
+}
+
 #[cfg(unix)]
 fn set_secret_permissions(path: &Path) -> Result<(), RadrootsSecretVaultAccessError> {
     use std::os::unix::fs::PermissionsExt;
+
+    #[cfg(test)]
+    if test_hooks::take_perms() {
+        return Err(io_backend_error(std::io::Error::other(
+            "forced permissions failure",
+        )));
+    }
 
     let permissions = std::fs::Permissions::from_mode(0o600);
     fs::set_permissions(path, permissions).map_err(io_backend_error)

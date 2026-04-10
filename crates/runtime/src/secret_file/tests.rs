@@ -2,6 +2,7 @@ use super::{
     LocalWrappedKeySource, RuntimeProtectedFileError, WRAPPED_KEY_VERSION, local_wrapping_key_path,
     open_local_secret_file, seal_local_secret_file,
 };
+use chacha20poly1305::aead::Error as AeadError;
 use radroots_secret_vault::RadrootsSecretKeyWrapping;
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
@@ -147,9 +148,11 @@ fn seal_local_secret_file_reports_create_dir_failure() {
     let err = seal_local_secret_file(&path, "runtime_test_identity", b"payload")
         .expect_err("parent file must block directory creation");
 
-    assert!(matches!(err, RuntimeProtectedFileError::CreateDir { .. }));
-    if let RuntimeProtectedFileError::CreateDir { path: err_path, .. } = &err {
-        assert_eq!(err_path, &blocked_parent);
+    match &err {
+        RuntimeProtectedFileError::CreateDir { path: err_path, .. } => {
+            assert_eq!(err_path, &blocked_parent);
+        }
+        other => panic!("unexpected create-dir error: {other}"),
     }
 }
 
@@ -162,14 +165,15 @@ fn seal_local_secret_file_reports_seal_failure_for_invalid_existing_wrapping_key
     let err = seal_local_secret_file(&path, "runtime_test_identity", b"payload")
         .expect_err("invalid sidecar should fail sealing");
 
-    assert!(matches!(err, RuntimeProtectedFileError::Seal { .. }));
-    if let RuntimeProtectedFileError::Seal {
-        path: err_path,
-        message,
-    } = &err
-    {
-        assert_eq!(err_path, &path);
-        assert!(!message.is_empty());
+    match &err {
+        RuntimeProtectedFileError::Seal {
+            path: err_path,
+            message,
+        } => {
+            assert_eq!(err_path, &path);
+            assert!(!message.is_empty());
+        }
+        other => panic!("unexpected seal error: {other}"),
     }
 }
 
@@ -182,9 +186,59 @@ fn seal_local_secret_file_reports_io_error_when_target_is_directory() {
     let err = seal_local_secret_file(&path, "runtime_test_identity", b"payload")
         .expect_err("directory target must fail write");
 
-    assert!(matches!(err, RuntimeProtectedFileError::Io { .. }));
-    if let RuntimeProtectedFileError::Io { path: err_path, .. } = &err {
-        assert_eq!(err_path, &path);
+    match &err {
+        RuntimeProtectedFileError::Io { path: err_path, .. } => {
+            assert_eq!(err_path, &path);
+        }
+        other => panic!("unexpected io error: {other}"),
+    }
+}
+
+#[test]
+fn seal_local_secret_file_reports_encode_failure() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let path = temp.path().join("identity.secret.json");
+    let _guard = super::test_hooks::fail_encode();
+
+    let err = seal_local_secret_file(&path, "runtime_test_identity", b"payload")
+        .expect_err("forced encode failure must surface");
+
+    match &err {
+        RuntimeProtectedFileError::Seal {
+            path: err_path,
+            message,
+        } => {
+            assert_eq!(err_path, &path);
+            assert!(!message.is_empty());
+        }
+        other => panic!("unexpected encode error: {other}"),
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn seal_local_secret_file_reports_permissions_failure_for_payload_file() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let path = temp.path().join("identity.secret.json");
+    std::fs::write(
+        local_wrapping_key_path(&path),
+        [7_u8; super::RADROOTS_PROTECTED_STORE_KEY_LENGTH],
+    )
+    .expect("write existing sidecar key");
+    let _guard = super::test_hooks::fail_perms();
+
+    let err = seal_local_secret_file(&path, "runtime_test_identity", b"payload")
+        .expect_err("forced permissions failure must surface");
+
+    match &err {
+        RuntimeProtectedFileError::Permissions {
+            path: err_path,
+            message,
+        } => {
+            assert_eq!(err_path, &path);
+            assert!(!message.is_empty());
+        }
+        other => panic!("unexpected permissions error: {other}"),
     }
 }
 
@@ -196,9 +250,11 @@ fn open_local_secret_file_reports_io_error_for_missing_payload_file() {
     let err =
         open_local_secret_file(&path, "runtime_test_identity").expect_err("missing file must fail");
 
-    assert!(matches!(err, RuntimeProtectedFileError::Io { .. }));
-    if let RuntimeProtectedFileError::Io { path: err_path, .. } = &err {
-        assert_eq!(err_path, &path);
+    match &err {
+        RuntimeProtectedFileError::Io { path: err_path, .. } => {
+            assert_eq!(err_path, &path);
+        }
+        other => panic!("unexpected open io error: {other}"),
     }
 }
 
@@ -211,9 +267,11 @@ fn open_local_secret_file_reports_decode_error_for_invalid_payload() {
     let err = open_local_secret_file(&path, "runtime_test_identity")
         .expect_err("invalid json payload must fail");
 
-    assert!(matches!(err, RuntimeProtectedFileError::Decode { .. }));
-    if let RuntimeProtectedFileError::Decode { path: err_path, .. } = &err {
-        assert_eq!(err_path, &path);
+    match &err {
+        RuntimeProtectedFileError::Decode { path: err_path, .. } => {
+            assert_eq!(err_path, &path);
+        }
+        other => panic!("unexpected decode error: {other}"),
     }
 }
 
@@ -251,4 +309,48 @@ fn seal_local_secret_file_allows_parentless_paths() {
     assert_eq!(payload, b"payload");
 
     std::env::set_current_dir(original).expect("restore cwd");
+}
+
+#[test]
+fn secret_file_helper_errors_preserve_expected_messages() {
+    let entropy = super::entropy_unavailable_error(getrandom::Error::UNSUPPORTED);
+    assert_eq!(
+        entropy.to_string(),
+        "secret vault access error: entropy unavailable"
+    );
+
+    let wrap = super::wrap_data_key_error(AeadError);
+    assert_eq!(
+        wrap.to_string(),
+        "secret vault access error: failed to wrap protected secret data key"
+    );
+}
+
+#[test]
+fn secret_file_runtime_error_helpers_preserve_path_and_message() {
+    let path = PathBuf::from("identity.secret.json");
+
+    let seal = super::seal_error(&path, "seal failed".to_string());
+    match seal {
+        RuntimeProtectedFileError::Seal {
+            path: err_path,
+            message,
+        } => {
+            assert_eq!(err_path, path);
+            assert_eq!(message, "seal failed");
+        }
+        other => panic!("unexpected seal helper error: {other}"),
+    }
+
+    let permissions = super::permissions_error(&path, "chmod failed".to_string());
+    match permissions {
+        RuntimeProtectedFileError::Permissions {
+            path: err_path,
+            message,
+        } => {
+            assert_eq!(err_path, path);
+            assert_eq!(message, "chmod failed");
+        }
+        other => panic!("unexpected permissions helper error: {other}"),
+    }
 }
