@@ -1,14 +1,22 @@
 # radroots_events_indexed
 
-Indexed manifest and checkpoint models for Rad Roots event archives.
+This is the README for `radroots_events_indexed`, which provides indexed
+manifest and checkpoint models for the `radroots` core libraries.
 
-## Goals
+## Overview
 
-- define stable manifest, checkpoint, and shard range models
-- keep shard metadata and id-range validation deterministic across targets
-- support no_std and std builds with feature-gated serialization and type export
-- provide reusable indexed archive primitives for higher-level Rad Roots crates
+ * manifest and checkpoint value types for indexed event shards;
+ * shard identifiers, id ranges, and shard metadata validation helpers;
+ * portable model semantics for both `std` and `no_std` builds;
+ * optional integration with `serde` and `typeshare` for serialization and
+   shared type export.
 
-## License
+## Copyright
 
-Licensed under AGPL-3.0. See LICENSE.
+Except as otherwise noted, all files in the `radroots_events_indexed`
+distribution are
+
+ Copyright (c) 2025 Tyson Lupul
+
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see LICENSE included in the `radroots_events_indexed` distribution.
