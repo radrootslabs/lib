@@ -342,4 +342,24 @@ mod tests {
             RadrootsNostrSignerCapability::RemoteSession(remote_changed)
         );
     }
+
+    #[test]
+    fn public_identity_eq_covers_field_level_short_circuits() {
+        let alice = fixture_alice_identity();
+        let bob = fixture_bob_identity();
+
+        let mut different_id = alice.clone();
+        different_id.id = bob.id.clone();
+        assert!(!public_identity_eq(&alice, &different_id));
+
+        let mut different_hex = alice.clone();
+        different_hex.public_key_hex = bob.public_key_hex.clone();
+        assert!(!public_identity_eq(&alice, &different_hex));
+
+        let mut different_npub = alice.clone();
+        different_npub.public_key_npub = bob.public_key_npub.clone();
+        assert!(!public_identity_eq(&alice, &different_npub));
+
+        assert!(public_identity_eq(&alice, &alice));
+    }
 }

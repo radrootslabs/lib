@@ -59,6 +59,12 @@ impl From<serde_json::Error> for RadrootsNostrSignerError {
     }
 }
 
+impl From<nostr::event::Error> for RadrootsNostrSignerError {
+    fn from(value: nostr::event::Error) -> Self {
+        Self::Sign(value.to_string())
+    }
+}
+
 #[cfg(feature = "native")]
 impl From<radroots_sql_core::SqlError> for RadrootsNostrSignerError {
     fn from(value: radroots_sql_core::SqlError) -> Self {
@@ -86,6 +92,12 @@ mod tests {
             .expect("serde error");
         let converted: RadrootsNostrSignerError = source.into();
         assert!(converted.to_string().starts_with("store error:"));
+    }
+
+    #[test]
+    fn converts_nostr_event_error() {
+        let converted: RadrootsNostrSignerError = nostr::event::Error::InvalidId.into();
+        assert!(converted.to_string().starts_with("sign error:"));
     }
 
     #[cfg(feature = "native")]

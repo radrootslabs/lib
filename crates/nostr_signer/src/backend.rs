@@ -315,7 +315,8 @@ impl RadrootsNostrEmbeddedSignerBackend {
         signer_identity: RadrootsIdentity,
     ) -> Result<Self, RadrootsNostrSignerError> {
         let public_identity = signer_identity.to_public();
-        if let Some(existing_identity) = manager.signer_identity()? {
+        let existing_identity = manager.signer_identity()?;
+        if let Some(existing_identity) = existing_identity {
             if !same_public_identity_key(&existing_identity, &public_identity) {
                 return Err(RadrootsNostrSignerError::InvalidState(
                     "embedded signer identity does not match signer manager identity".into(),
@@ -370,13 +371,12 @@ impl RadrootsNostrSignerBackend for RadrootsNostrEmbeddedSignerBackend {
     fn capabilities(
         &self,
     ) -> Result<RadrootsNostrSignerBackendCapabilities, RadrootsNostrSignerError> {
-        let remote_sessions = self
-            .manager
-            .list_connections()?
-            .into_iter()
-            .filter(|record| record.status == RadrootsNostrSignerConnectionStatus::Active)
-            .map(|record| RadrootsNostrRemoteSessionSignerCapability::from(&record))
-            .collect();
+        let mut remote_sessions = Vec::new();
+        for record in self.manager.list_connections()? {
+            if record.status == RadrootsNostrSignerConnectionStatus::Active {
+                remote_sessions.push(RadrootsNostrRemoteSessionSignerCapability::from(&record));
+            }
+        }
         Ok(RadrootsNostrSignerBackendCapabilities::new(
             Some(self.local_signer_capability()),
             remote_sessions,
@@ -529,28 +529,29 @@ impl RadrootsNostrSignerBackend for RadrootsNostrEmbeddedSignerBackend {
         &self,
         connection_id: &RadrootsNostrSignerConnectionId,
     ) -> Result<RadrootsNostrSignerPublishTransition, RadrootsNostrSignerError> {
-        Ok(RadrootsNostrSignerPublishTransition::begun(
-            self.manager
-                .begin_connect_secret_publish_finalization(connection_id)?,
-        ))
+        let workflow = self
+            .manager
+            .begin_connect_secret_publish_finalization(connection_id)?;
+        Ok(RadrootsNostrSignerPublishTransition::begun(workflow))
     }
 
     fn begin_auth_replay_publish_finalization(
         &self,
         connection_id: &RadrootsNostrSignerConnectionId,
     ) -> Result<RadrootsNostrSignerPublishTransition, RadrootsNostrSignerError> {
-        Ok(RadrootsNostrSignerPublishTransition::begun(
-            self.manager
-                .begin_auth_replay_publish_finalization(connection_id)?,
-        ))
+        let workflow = self
+            .manager
+            .begin_auth_replay_publish_finalization(connection_id)?;
+        Ok(RadrootsNostrSignerPublishTransition::begun(workflow))
     }
 
     fn mark_publish_workflow_published(
         &self,
         workflow_id: &RadrootsNostrSignerWorkflowId,
     ) -> Result<RadrootsNostrSignerPublishTransition, RadrootsNostrSignerError> {
+        let workflow = self.manager.mark_publish_workflow_published(workflow_id)?;
         Ok(RadrootsNostrSignerPublishTransition::marked_published(
-            self.manager.mark_publish_workflow_published(workflow_id)?,
+            workflow,
         ))
     }
 
@@ -558,9 +559,10 @@ impl RadrootsNostrSignerBackend for RadrootsNostrEmbeddedSignerBackend {
         &self,
         workflow_id: &RadrootsNostrSignerWorkflowId,
     ) -> Result<RadrootsNostrSignerPublishTransition, RadrootsNostrSignerError> {
+        let connection = self.manager.finalize_publish_workflow(workflow_id)?;
         Ok(RadrootsNostrSignerPublishTransition::finalized(
             workflow_id.clone(),
-            self.manager.finalize_publish_workflow(workflow_id)?,
+            connection,
         ))
     }
 
@@ -568,9 +570,8 @@ impl RadrootsNostrSignerBackend for RadrootsNostrEmbeddedSignerBackend {
         &self,
         workflow_id: &RadrootsNostrSignerWorkflowId,
     ) -> Result<RadrootsNostrSignerPublishTransition, RadrootsNostrSignerError> {
-        Ok(RadrootsNostrSignerPublishTransition::cancelled(
-            self.manager.cancel_publish_workflow(workflow_id)?,
-        ))
+        let workflow = self.manager.cancel_publish_workflow(workflow_id)?;
+        Ok(RadrootsNostrSignerPublishTransition::cancelled(workflow))
     }
 
     fn mark_authenticated(
@@ -620,9 +621,7 @@ impl RadrootsNostrSignerBackend for RadrootsNostrEmbeddedSignerBackend {
         &self,
         unsigned_event: UnsignedEvent,
     ) -> Result<RadrootsNostrSignerSignOutput, RadrootsNostrSignerError> {
-        let event = unsigned_event
-            .sign_with_keys(self.signer_identity.keys())
-            .map_err(|error| RadrootsNostrSignerError::Sign(error.to_string()))?;
+        let event = unsigned_event.sign_with_keys(self.signer_identity.keys())?;
         Ok(RadrootsNostrSignerSignOutput::new(
             RadrootsNostrSignerCapability::LocalAccount(self.local_signer_capability()),
             event,
@@ -647,12 +646,14 @@ fn parse_identity_public_key(
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::{
         RadrootsNostrEmbeddedSignerBackend, RadrootsNostrSignerBackend,
         RadrootsNostrSignerBackendCapabilities, RadrootsNostrSignerPublishTransition,
         parse_identity_public_key, same_public_identity_key,
     };
+    use crate::error::RadrootsNostrSignerError;
     use crate::evaluation::{
         RadrootsNostrSignerConnectEvaluation, RadrootsNostrSignerConnectProposal,
         RadrootsNostrSignerRequestAction, RadrootsNostrSignerSessionLookup,
@@ -662,19 +663,24 @@ mod tests {
         RadrootsNostrSignerApprovalRequirement, RadrootsNostrSignerConnectionDraft,
         RadrootsNostrSignerConnectionRecord, RadrootsNostrSignerConnectionStatus,
         RadrootsNostrSignerPublishWorkflowRecord, RadrootsNostrSignerRequestDecision,
-        RadrootsNostrSignerWorkflowId,
+        RadrootsNostrSignerStoreState, RadrootsNostrSignerWorkflowId,
     };
+    use crate::store::RadrootsNostrSignerStore;
     use crate::test_support::{
         fixture_bob_identity, primary_relay, secondary_relay, synthetic_public_identity,
         synthetic_public_key, synthetic_secret_hex,
     };
-    use nostr::{EventBuilder, Kind};
+    use nostr::{EventBuilder, EventId, Kind};
     use radroots_identity::{RadrootsIdentity, RadrootsIdentityPublic};
     use radroots_nostr_connect::prelude::{
         RadrootsNostrConnectMethod, RadrootsNostrConnectPermission, RadrootsNostrConnectRequest,
         RadrootsNostrConnectRequestMessage,
     };
     use serde_json::json;
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+    use std::sync::Arc;
+    use std::sync::RwLock;
+    use std::sync::atomic::{AtomicU8, Ordering};
 
     fn embedded_identity(index: u32) -> RadrootsIdentity {
         RadrootsIdentity::from_secret_key_str(synthetic_secret_hex(index).as_str())
@@ -720,6 +726,299 @@ mod tests {
                 connection,
             } => (workflow_id, connection),
             other => panic!("unexpected finalize transition: {other:?}"),
+        }
+    }
+
+    struct StubBackend {
+        signer_identity: Option<RadrootsIdentityPublic>,
+        signer_identity_error: Option<&'static str>,
+        sign_error_message: Option<&'static str>,
+    }
+
+    #[derive(Default)]
+    struct ToggleSaveStore {
+        state: RwLock<RadrootsNostrSignerStoreState>,
+        mode: AtomicU8,
+    }
+
+    impl ToggleSaveStore {
+        fn set_mode(&self, mode: u8) {
+            self.mode.store(mode, Ordering::SeqCst);
+        }
+    }
+
+    impl RadrootsNostrSignerStore for ToggleSaveStore {
+        fn load(&self) -> Result<RadrootsNostrSignerStoreState, RadrootsNostrSignerError> {
+            let guard = self.state.read().map_err(|_| {
+                RadrootsNostrSignerError::Store("toggle store lock poisoned".into())
+            })?;
+            Ok(guard.clone())
+        }
+
+        fn save(
+            &self,
+            state: &RadrootsNostrSignerStoreState,
+        ) -> Result<(), RadrootsNostrSignerError> {
+            match self.mode.load(Ordering::SeqCst) {
+                1 => Err(RadrootsNostrSignerError::Store("save failed".into())),
+                2 => panic!("toggle save panic"),
+                _ => {
+                    let mut guard = self.state.write().map_err(|_| {
+                        RadrootsNostrSignerError::Store("toggle store lock poisoned".into())
+                    })?;
+                    *guard = state.clone();
+                    Ok(())
+                }
+            }
+        }
+    }
+
+    impl RadrootsNostrSignerBackend for StubBackend {
+        fn signer_identity(
+            &self,
+        ) -> Result<Option<RadrootsIdentityPublic>, RadrootsNostrSignerError> {
+            if let Some(message) = self.signer_identity_error {
+                return Err(RadrootsNostrSignerError::InvalidState(message.into()));
+            }
+            Ok(self.signer_identity.clone())
+        }
+
+        fn set_signer_identity(
+            &self,
+            _signer_identity: RadrootsIdentityPublic,
+        ) -> Result<(), RadrootsNostrSignerError> {
+            unreachable!("set_signer_identity not used in tests")
+        }
+
+        fn capabilities(
+            &self,
+        ) -> Result<RadrootsNostrSignerBackendCapabilities, RadrootsNostrSignerError> {
+            unreachable!("capabilities not used in tests")
+        }
+
+        fn list_connections(
+            &self,
+        ) -> Result<Vec<RadrootsNostrSignerConnectionRecord>, RadrootsNostrSignerError> {
+            unreachable!("list_connections not used in tests")
+        }
+
+        fn get_connection(
+            &self,
+            _connection_id: &crate::model::RadrootsNostrSignerConnectionId,
+        ) -> Result<Option<RadrootsNostrSignerConnectionRecord>, RadrootsNostrSignerError> {
+            unreachable!("get_connection not used in tests")
+        }
+
+        fn list_publish_workflows(
+            &self,
+        ) -> Result<Vec<RadrootsNostrSignerPublishWorkflowRecord>, RadrootsNostrSignerError>
+        {
+            unreachable!("list_publish_workflows not used in tests")
+        }
+
+        fn get_publish_workflow(
+            &self,
+            _workflow_id: &RadrootsNostrSignerWorkflowId,
+        ) -> Result<Option<RadrootsNostrSignerPublishWorkflowRecord>, RadrootsNostrSignerError>
+        {
+            unreachable!("get_publish_workflow not used in tests")
+        }
+
+        fn find_connections_by_client_public_key(
+            &self,
+            _client_public_key: &nostr::PublicKey,
+        ) -> Result<Vec<RadrootsNostrSignerConnectionRecord>, RadrootsNostrSignerError> {
+            unreachable!("find_connections_by_client_public_key not used in tests")
+        }
+
+        fn find_connection_by_connect_secret(
+            &self,
+            _connect_secret: &str,
+        ) -> Result<Option<RadrootsNostrSignerConnectionRecord>, RadrootsNostrSignerError> {
+            unreachable!("find_connection_by_connect_secret not used in tests")
+        }
+
+        fn lookup_session(
+            &self,
+            _client_public_key: &nostr::PublicKey,
+            _connect_secret: Option<&str>,
+        ) -> Result<RadrootsNostrSignerSessionLookup, RadrootsNostrSignerError> {
+            unreachable!("lookup_session not used in tests")
+        }
+
+        fn evaluate_connect_request(
+            &self,
+            _client_public_key: nostr::PublicKey,
+            _request: RadrootsNostrConnectRequest,
+        ) -> Result<RadrootsNostrSignerConnectEvaluation, RadrootsNostrSignerError> {
+            unreachable!("evaluate_connect_request not used in tests")
+        }
+
+        fn register_connection(
+            &self,
+            _draft: RadrootsNostrSignerConnectionDraft,
+        ) -> Result<RadrootsNostrSignerConnectionRecord, RadrootsNostrSignerError> {
+            unreachable!("register_connection not used in tests")
+        }
+
+        fn set_granted_permissions(
+            &self,
+            _connection_id: &crate::model::RadrootsNostrSignerConnectionId,
+            _granted_permissions: radroots_nostr_connect::prelude::RadrootsNostrConnectPermissions,
+        ) -> Result<RadrootsNostrSignerConnectionRecord, RadrootsNostrSignerError> {
+            unreachable!("set_granted_permissions not used in tests")
+        }
+
+        fn approve_connection(
+            &self,
+            _connection_id: &crate::model::RadrootsNostrSignerConnectionId,
+            _granted_permissions: radroots_nostr_connect::prelude::RadrootsNostrConnectPermissions,
+        ) -> Result<RadrootsNostrSignerConnectionRecord, RadrootsNostrSignerError> {
+            unreachable!("approve_connection not used in tests")
+        }
+
+        fn reject_connection(
+            &self,
+            _connection_id: &crate::model::RadrootsNostrSignerConnectionId,
+            _reason: Option<String>,
+        ) -> Result<RadrootsNostrSignerConnectionRecord, RadrootsNostrSignerError> {
+            unreachable!("reject_connection not used in tests")
+        }
+
+        fn revoke_connection(
+            &self,
+            _connection_id: &crate::model::RadrootsNostrSignerConnectionId,
+            _reason: Option<String>,
+        ) -> Result<RadrootsNostrSignerConnectionRecord, RadrootsNostrSignerError> {
+            unreachable!("revoke_connection not used in tests")
+        }
+
+        fn update_relays(
+            &self,
+            _connection_id: &crate::model::RadrootsNostrSignerConnectionId,
+            _relays: Vec<nostr::RelayUrl>,
+        ) -> Result<RadrootsNostrSignerConnectionRecord, RadrootsNostrSignerError> {
+            unreachable!("update_relays not used in tests")
+        }
+
+        fn require_auth_challenge(
+            &self,
+            _connection_id: &crate::model::RadrootsNostrSignerConnectionId,
+            _auth_url: &str,
+        ) -> Result<RadrootsNostrSignerConnectionRecord, RadrootsNostrSignerError> {
+            unreachable!("require_auth_challenge not used in tests")
+        }
+
+        fn set_pending_request(
+            &self,
+            _connection_id: &crate::model::RadrootsNostrSignerConnectionId,
+            _request_message: RadrootsNostrConnectRequestMessage,
+        ) -> Result<RadrootsNostrSignerConnectionRecord, RadrootsNostrSignerError> {
+            unreachable!("set_pending_request not used in tests")
+        }
+
+        fn authorize_auth_challenge(
+            &self,
+            _connection_id: &crate::model::RadrootsNostrSignerConnectionId,
+        ) -> Result<crate::model::RadrootsNostrSignerAuthorizationOutcome, RadrootsNostrSignerError>
+        {
+            unreachable!("authorize_auth_challenge not used in tests")
+        }
+
+        fn restore_pending_auth_challenge(
+            &self,
+            _connection_id: &crate::model::RadrootsNostrSignerConnectionId,
+            _pending_request: crate::model::RadrootsNostrSignerPendingRequest,
+        ) -> Result<RadrootsNostrSignerConnectionRecord, RadrootsNostrSignerError> {
+            unreachable!("restore_pending_auth_challenge not used in tests")
+        }
+
+        fn begin_connect_secret_publish_finalization(
+            &self,
+            _connection_id: &crate::model::RadrootsNostrSignerConnectionId,
+        ) -> Result<RadrootsNostrSignerPublishTransition, RadrootsNostrSignerError> {
+            unreachable!("begin_connect_secret_publish_finalization not used in tests")
+        }
+
+        fn begin_auth_replay_publish_finalization(
+            &self,
+            _connection_id: &crate::model::RadrootsNostrSignerConnectionId,
+        ) -> Result<RadrootsNostrSignerPublishTransition, RadrootsNostrSignerError> {
+            unreachable!("begin_auth_replay_publish_finalization not used in tests")
+        }
+
+        fn mark_publish_workflow_published(
+            &self,
+            _workflow_id: &RadrootsNostrSignerWorkflowId,
+        ) -> Result<RadrootsNostrSignerPublishTransition, RadrootsNostrSignerError> {
+            unreachable!("mark_publish_workflow_published not used in tests")
+        }
+
+        fn finalize_publish_workflow(
+            &self,
+            _workflow_id: &RadrootsNostrSignerWorkflowId,
+        ) -> Result<RadrootsNostrSignerPublishTransition, RadrootsNostrSignerError> {
+            unreachable!("finalize_publish_workflow not used in tests")
+        }
+
+        fn cancel_publish_workflow(
+            &self,
+            _workflow_id: &RadrootsNostrSignerWorkflowId,
+        ) -> Result<RadrootsNostrSignerPublishTransition, RadrootsNostrSignerError> {
+            unreachable!("cancel_publish_workflow not used in tests")
+        }
+
+        fn mark_authenticated(
+            &self,
+            _connection_id: &crate::model::RadrootsNostrSignerConnectionId,
+        ) -> Result<RadrootsNostrSignerConnectionRecord, RadrootsNostrSignerError> {
+            unreachable!("mark_authenticated not used in tests")
+        }
+
+        fn mark_connect_secret_consumed(
+            &self,
+            _connection_id: &crate::model::RadrootsNostrSignerConnectionId,
+        ) -> Result<RadrootsNostrSignerConnectionRecord, RadrootsNostrSignerError> {
+            unreachable!("mark_connect_secret_consumed not used in tests")
+        }
+
+        fn evaluate_request(
+            &self,
+            _connection_id: &crate::model::RadrootsNostrSignerConnectionId,
+            _request_message: RadrootsNostrConnectRequestMessage,
+        ) -> Result<crate::evaluation::RadrootsNostrSignerRequestEvaluation, RadrootsNostrSignerError>
+        {
+            unreachable!("evaluate_request not used in tests")
+        }
+
+        fn evaluate_auth_replay_publish_workflow(
+            &self,
+            _workflow_id: &RadrootsNostrSignerWorkflowId,
+        ) -> Result<crate::evaluation::RadrootsNostrSignerRequestEvaluation, RadrootsNostrSignerError>
+        {
+            unreachable!("evaluate_auth_replay_publish_workflow not used in tests")
+        }
+
+        fn record_request(
+            &self,
+            _connection_id: &crate::model::RadrootsNostrSignerConnectionId,
+            _request_id: &str,
+            _method: RadrootsNostrConnectMethod,
+            _decision: RadrootsNostrSignerRequestDecision,
+            _message: Option<String>,
+        ) -> Result<crate::model::RadrootsNostrSignerRequestAuditRecord, RadrootsNostrSignerError>
+        {
+            unreachable!("record_request not used in tests")
+        }
+
+        fn sign_unsigned_event(
+            &self,
+            _unsigned_event: nostr::UnsignedEvent,
+        ) -> Result<super::RadrootsNostrSignerSignOutput, RadrootsNostrSignerError> {
+            match self.sign_error_message {
+                Some(message) => Err(RadrootsNostrSignerError::InvalidState(message.into())),
+                None => unreachable!("sign_unsigned_event success path not used in tests"),
+            }
         }
     }
 
@@ -805,6 +1104,211 @@ mod tests {
             &manager_identity,
             &public_identity
         ));
+    }
+
+    #[test]
+    fn sign_event_builder_propagates_identity_and_sign_errors() {
+        let missing_identity_backend = StubBackend {
+            signer_identity: None,
+            signer_identity_error: None,
+            sign_error_message: Some("sign should not be called"),
+        };
+        let err = missing_identity_backend
+            .sign_event_builder(EventBuilder::new(Kind::TextNote, "missing"))
+            .expect_err("missing identity");
+        assert!(matches!(
+            err,
+            RadrootsNostrSignerError::MissingSignerIdentity
+        ));
+
+        let identity_error_backend = StubBackend {
+            signer_identity: None,
+            signer_identity_error: Some("stub signer identity failure"),
+            sign_error_message: Some("sign should not be called"),
+        };
+        let err = identity_error_backend
+            .sign_event_builder(EventBuilder::new(Kind::TextNote, "identity-error"))
+            .expect_err("signer identity error");
+        assert!(err.to_string().contains("stub signer identity failure"));
+
+        let mut invalid_identity = synthetic_public_identity(0xaa);
+        invalid_identity.public_key_hex = "invalid".into();
+        let invalid_identity_backend = StubBackend {
+            signer_identity: Some(invalid_identity),
+            signer_identity_error: None,
+            sign_error_message: Some("sign should not be called"),
+        };
+        let err = invalid_identity_backend
+            .sign_event_builder(EventBuilder::new(Kind::TextNote, "invalid"))
+            .expect_err("invalid signer identity");
+        assert!(err.to_string().contains("identity public key is invalid"));
+
+        let signing_error_backend = StubBackend {
+            signer_identity: Some(synthetic_public_identity(0xab)),
+            signer_identity_error: None,
+            sign_error_message: Some("stub sign failure"),
+        };
+        let err = signing_error_backend
+            .sign_event_builder(EventBuilder::new(Kind::TextNote, "sign-failure"))
+            .expect_err("sign failure");
+        assert!(err.to_string().contains("stub sign failure"));
+    }
+
+    #[test]
+    fn capabilities_only_include_active_remote_sessions() {
+        let identity = embedded_identity(0xac);
+        let backend = RadrootsNostrEmbeddedSignerBackend::new_in_memory(identity.clone())
+            .expect("embedded backend");
+        let backend_trait: &dyn RadrootsNostrSignerBackend = &backend;
+
+        let active = backend_trait
+            .register_connection(RadrootsNostrSignerConnectionDraft::new(
+                synthetic_public_key(0xad),
+                synthetic_public_identity(0xae),
+            ))
+            .expect("register active");
+
+        let pending = backend_trait
+            .register_connection(
+                RadrootsNostrSignerConnectionDraft::new(
+                    synthetic_public_key(0xaf),
+                    synthetic_public_identity(0xb0),
+                )
+                .with_approval_requirement(RadrootsNostrSignerApprovalRequirement::ExplicitUser),
+            )
+            .expect("register pending");
+        let rejected = backend_trait
+            .register_connection(RadrootsNostrSignerConnectionDraft::new(
+                synthetic_public_key(0xb1),
+                synthetic_public_identity(0xb2),
+            ))
+            .expect("register rejected");
+        backend_trait
+            .reject_connection(&rejected.connection_id, Some("rejected".into()))
+            .expect("reject connection");
+
+        let capabilities = backend_trait.capabilities().expect("capabilities");
+        assert_eq!(capabilities.remote_sessions.len(), 1);
+        assert_eq!(
+            capabilities.remote_sessions[0].connection_id,
+            active.connection_id
+        );
+        assert_ne!(
+            capabilities.remote_sessions[0].connection_id,
+            pending.connection_id
+        );
+    }
+
+    #[test]
+    fn embedded_backend_propagates_missing_publish_targets() {
+        let identity = embedded_identity(0xb3);
+        let backend =
+            RadrootsNostrEmbeddedSignerBackend::new_in_memory(identity).expect("embedded backend");
+        let backend_trait: &dyn RadrootsNostrSignerBackend = &backend;
+
+        let missing_connection_id =
+            crate::model::RadrootsNostrSignerConnectionId::parse("conn-backend-missing")
+                .expect("connection id");
+        let missing_workflow_id =
+            RadrootsNostrSignerWorkflowId::parse("wf-backend-missing").expect("workflow id");
+
+        assert!(
+            backend_trait
+                .begin_connect_secret_publish_finalization(&missing_connection_id)
+                .expect_err("missing connect workflow")
+                .to_string()
+                .contains("connection not found")
+        );
+        assert!(
+            backend_trait
+                .begin_auth_replay_publish_finalization(&missing_connection_id)
+                .expect_err("missing auth workflow")
+                .to_string()
+                .contains("connection not found")
+        );
+        assert!(
+            backend_trait
+                .mark_publish_workflow_published(&missing_workflow_id)
+                .expect_err("missing published workflow")
+                .to_string()
+                .contains("publish workflow not found")
+        );
+        assert!(
+            backend_trait
+                .finalize_publish_workflow(&missing_workflow_id)
+                .expect_err("missing finalized workflow")
+                .to_string()
+                .contains("publish workflow not found")
+        );
+        assert!(
+            backend_trait
+                .cancel_publish_workflow(&missing_workflow_id)
+                .expect_err("missing cancelled workflow")
+                .to_string()
+                .contains("publish workflow not found")
+        );
+    }
+
+    #[test]
+    fn embedded_backend_reports_manager_read_and_save_failures() {
+        let save_fail_store = Arc::new(ToggleSaveStore::default());
+        save_fail_store.set_mode(1);
+        let save_fail_manager =
+            RadrootsNostrSignerManager::new(save_fail_store).expect("save-fail manager");
+        let err = match RadrootsNostrEmbeddedSignerBackend::new(
+            save_fail_manager,
+            embedded_identity(0xb4),
+        ) {
+            Ok(_) => panic!("expected save failure"),
+            Err(err) => err,
+        };
+        assert!(err.to_string().contains("save failed"));
+
+        let poisoned_store = Arc::new(ToggleSaveStore::default());
+        let poisoned_manager =
+            RadrootsNostrSignerManager::new(poisoned_store.clone()).expect("poison manager");
+        let backend = RadrootsNostrEmbeddedSignerBackend::new(
+            poisoned_manager.clone(),
+            embedded_identity(0xb5),
+        )
+        .expect("embedded backend");
+        poisoned_store.set_mode(2);
+        assert!(
+            catch_unwind(AssertUnwindSafe(|| {
+                let _ = backend
+                    .manager()
+                    .set_signer_identity(fixture_bob_identity());
+            }))
+            .is_err()
+        );
+
+        let err = backend.capabilities().expect_err("poisoned capabilities");
+        assert!(err.to_string().contains("signer state lock poisoned"));
+
+        let err = match RadrootsNostrEmbeddedSignerBackend::new(
+            poisoned_manager,
+            embedded_identity(0xb5),
+        ) {
+            Ok(_) => panic!("expected poisoned new failure"),
+            Err(err) => err,
+        };
+        assert!(err.to_string().contains("signer state lock poisoned"));
+    }
+
+    #[test]
+    fn embedded_backend_sign_unsigned_event_rejects_invalid_precomputed_id() {
+        let identity = embedded_identity(0xb6);
+        let backend = RadrootsNostrEmbeddedSignerBackend::new_in_memory(identity.clone())
+            .expect("embedded backend");
+        let backend_trait: &dyn RadrootsNostrSignerBackend = &backend;
+
+        let mut unsigned_event =
+            EventBuilder::new(Kind::TextNote, "hello").build(identity.public_key());
+        unsigned_event.id = Some(EventId::all_zeros());
+        let err = backend_trait
+            .sign_unsigned_event(unsigned_event)
+            .expect_err("invalid precomputed id");
+        assert!(err.to_string().starts_with("sign error:"));
     }
 
     #[test]
@@ -1152,13 +1656,20 @@ mod tests {
         let identity = embedded_identity(0x95);
         let backend = RadrootsNostrEmbeddedSignerBackend::new_in_memory(identity.clone())
             .expect("embedded backend");
-        let backend: &dyn RadrootsNostrSignerBackend = &backend;
+        let backend_trait: &dyn RadrootsNostrSignerBackend = &backend;
 
-        let output = backend
+        let output = backend_trait
             .sign_event_builder(EventBuilder::new(Kind::TextNote, "hello"))
             .expect("sign event builder");
+        let direct_output =
+            <RadrootsNostrEmbeddedSignerBackend as RadrootsNostrSignerBackend>::sign_unsigned_event(
+                &backend,
+                EventBuilder::new(Kind::TextNote, "hello-direct").build(identity.public_key()),
+            )
+            .expect("sign unsigned event");
 
         assert_eq!(output.event.pubkey, identity.public_key());
+        assert_eq!(direct_output.event.pubkey, identity.public_key());
         let local = output.signer.local_account().expect("local signer");
         assert_eq!(local.public_identity.id, identity.to_public().id);
         assert!(local.is_secret_backed());
@@ -1201,10 +1712,11 @@ mod tests {
         let begun = backend
             .begin_auth_replay_publish_finalization(&connection.connection_id)
             .expect("begin auth replay");
-        let workflow_id = match begun {
-            RadrootsNostrSignerPublishTransition::Begun(workflow) => workflow.workflow_id,
-            other => panic!("unexpected begin transition: {other:?}"),
-        };
+        let workflow_id = begun
+            .workflow()
+            .expect("begun auth replay workflow")
+            .workflow_id
+            .clone();
 
         let cancelled = backend
             .cancel_publish_workflow(&workflow_id)

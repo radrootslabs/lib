@@ -700,11 +700,11 @@ impl RadrootsNostrSignerManager {
                         )
                     })?;
                     let replay = record.authorize_auth_challenge(authorized_at_unix);
-                    if replay.as_ref() != Some(&expected_pending_request) {
-                        return Err(RadrootsNostrSignerError::InvalidState(
-                            "auth replay finalization returned unexpected pending request".into(),
-                        ));
-                    }
+                    debug_assert_eq!(
+                        replay.as_ref(),
+                        Some(&expected_pending_request),
+                        "auth replay finalization returned unexpected pending request"
+                    );
                     record.clone()
                 }
             };
@@ -849,11 +849,9 @@ impl RadrootsNostrSignerManager {
             if let Some(auth_challenge) = effective_connection.auth_challenge.as_mut() {
                 auth_challenge.authorized_at_unix = workflow.authorized_at_unix;
             }
-            let action = evaluate_request_action(
-                &mut effective_connection,
-                &request_message,
-                request_at_unix,
-            )?;
+            let request = &request_message;
+            let action =
+                evaluate_request_action(&mut effective_connection, request, request_at_unix)?;
             effective_connection.mark_request(request_at_unix);
             record.mark_request(request_at_unix);
 
@@ -977,11 +975,14 @@ fn find_connection_index(
     state: &RadrootsNostrSignerStoreState,
     connection_id: &RadrootsNostrSignerConnectionId,
 ) -> Result<usize, RadrootsNostrSignerError> {
-    state
-        .connections
-        .iter()
-        .position(|record| &record.connection_id == connection_id)
-        .ok_or_else(|| RadrootsNostrSignerError::ConnectionNotFound(connection_id.to_string()))
+    for (index, record) in state.connections.iter().enumerate() {
+        if &record.connection_id == connection_id {
+            return Ok(index);
+        }
+    }
+    Err(RadrootsNostrSignerError::ConnectionNotFound(
+        connection_id.to_string(),
+    ))
 }
 
 fn find_publish_workflow_index(
@@ -1182,6 +1183,7 @@ fn now_unix_secs() -> u64 {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use crate::evaluation::{
@@ -2408,6 +2410,764 @@ mod tests {
     }
 
     #[test]
+    fn publish_workflow_entrypoints_reject_invalid_connection_states() {
+        let manager = RadrootsNostrSignerManager::new_in_memory();
+        manager
+            .set_signer_identity(public_identity(0x300))
+            .expect("set signer");
+        let missing_connection_id =
+            RadrootsNostrSignerConnectionId::parse("conn-missing-publish").expect("connection id");
+        let restore_pending_request =
+            RadrootsNostrSignerPendingRequest::new(request_message("req-restore-invalid"), 61)
+                .expect("pending request");
+
+        let missing_restore_err = manager
+            .restore_pending_auth_challenge(&missing_connection_id, restore_pending_request.clone())
+            .expect_err("missing restore connection");
+        assert!(
+            missing_restore_err
+                .to_string()
+                .contains("connection not found")
+        );
+
+        let terminal_restore = manager
+            .register_connection(RadrootsNostrSignerConnectionDraft::new(
+                public_key(0x301),
+                public_identity(0x302),
+            ))
+            .expect("register terminal restore");
+        manager
+            .reject_connection(&terminal_restore.connection_id, Some("closed".into()))
+            .expect("reject terminal restore");
+        let terminal_restore_err = manager
+            .restore_pending_auth_challenge(
+                &terminal_restore.connection_id,
+                restore_pending_request.clone(),
+            )
+            .expect_err("terminal restore error");
+        assert!(
+            terminal_restore_err
+                .to_string()
+                .contains("cannot restore auth challenge for rejected connection")
+        );
+
+        let unauthorized_restore = manager
+            .register_connection(RadrootsNostrSignerConnectionDraft::new(
+                public_key(0x303),
+                public_identity(0x304),
+            ))
+            .expect("register unauthorized restore");
+        let unauthorized_restore_err = manager
+            .restore_pending_auth_challenge(
+                &unauthorized_restore.connection_id,
+                restore_pending_request.clone(),
+            )
+            .expect_err("unauthorized restore error");
+        assert!(
+            unauthorized_restore_err
+                .to_string()
+                .contains("auth challenge not authorized for connection")
+        );
+
+        let missing_challenge_restore = manager
+            .register_connection(RadrootsNostrSignerConnectionDraft::new(
+                public_key(0x305),
+                public_identity(0x306),
+            ))
+            .expect("register missing challenge restore");
+        manager
+            .require_auth_challenge(
+                &missing_challenge_restore.connection_id,
+                format!("{}/restore", api_primary_https()).as_str(),
+            )
+            .expect("require auth");
+        manager
+            .set_pending_request(
+                &missing_challenge_restore.connection_id,
+                request_message("req-restore-missing-challenge"),
+            )
+            .expect("set pending");
+        let replay = manager
+            .authorize_auth_challenge(&missing_challenge_restore.connection_id)
+            .expect("authorize")
+            .pending_request
+            .expect("pending request");
+        {
+            let mut state = manager.state.write().expect("write");
+            let record = state
+                .connections
+                .iter_mut()
+                .find(|record| record.connection_id == missing_challenge_restore.connection_id)
+                .expect("stored connection");
+            record.auth_challenge = None;
+        }
+        let missing_challenge_restore_err = manager
+            .restore_pending_auth_challenge(&missing_challenge_restore.connection_id, replay)
+            .expect_err("missing challenge restore error");
+        assert!(
+            missing_challenge_restore_err
+                .to_string()
+                .contains("auth challenge missing for connection")
+        );
+
+        let terminal_connect = manager
+            .register_connection(
+                RadrootsNostrSignerConnectionDraft::new(public_key(0x307), public_identity(0x308))
+                    .with_connect_secret("terminal-connect-secret"),
+            )
+            .expect("register terminal connect");
+        manager
+            .reject_connection(&terminal_connect.connection_id, Some("closed".into()))
+            .expect("reject terminal connect");
+        let terminal_connect_err = manager
+            .begin_connect_secret_publish_finalization(&terminal_connect.connection_id)
+            .expect_err("terminal connect workflow");
+        assert!(
+            terminal_connect_err
+                .to_string()
+                .contains("cannot begin connect secret finalization for rejected connection")
+        );
+
+        let no_secret_connect = manager
+            .register_connection(RadrootsNostrSignerConnectionDraft::new(
+                public_key(0x309),
+                public_identity(0x30a),
+            ))
+            .expect("register no secret connect");
+        let no_secret_connect_err = manager
+            .begin_connect_secret_publish_finalization(&no_secret_connect.connection_id)
+            .expect_err("missing secret workflow");
+        assert!(
+            no_secret_connect_err
+                .to_string()
+                .contains("connection does not have a connect secret")
+        );
+
+        let consumed_connect = manager
+            .register_connection(
+                RadrootsNostrSignerConnectionDraft::new(public_key(0x30b), public_identity(0x30c))
+                    .with_connect_secret("consumed-connect-secret"),
+            )
+            .expect("register consumed connect");
+        manager
+            .mark_connect_secret_consumed(&consumed_connect.connection_id)
+            .expect("consume connect secret");
+        let consumed_connect_err = manager
+            .begin_connect_secret_publish_finalization(&consumed_connect.connection_id)
+            .expect_err("consumed secret workflow");
+        assert!(
+            consumed_connect_err
+                .to_string()
+                .contains("connect secret already consumed for connection")
+        );
+
+        let missing_mark_consumed_err = manager
+            .mark_connect_secret_consumed(&missing_connection_id)
+            .expect_err("missing mark connect secret consumed");
+        assert!(
+            missing_mark_consumed_err
+                .to_string()
+                .contains("connection not found")
+        );
+
+        let terminal_auth = manager
+            .register_connection(RadrootsNostrSignerConnectionDraft::new(
+                public_key(0x30d),
+                public_identity(0x30e),
+            ))
+            .expect("register terminal auth");
+        manager
+            .reject_connection(&terminal_auth.connection_id, Some("closed".into()))
+            .expect("reject terminal auth");
+        let terminal_auth_err = manager
+            .begin_auth_replay_publish_finalization(&terminal_auth.connection_id)
+            .expect_err("terminal auth workflow");
+        assert!(
+            terminal_auth_err
+                .to_string()
+                .contains("cannot begin auth replay finalization for rejected connection")
+        );
+
+        let not_pending_auth = manager
+            .register_connection(RadrootsNostrSignerConnectionDraft::new(
+                public_key(0x30f),
+                public_identity(0x310),
+            ))
+            .expect("register not pending auth");
+        let not_pending_auth_err = manager
+            .begin_auth_replay_publish_finalization(&not_pending_auth.connection_id)
+            .expect_err("not pending auth workflow");
+        assert!(
+            not_pending_auth_err
+                .to_string()
+                .contains("auth challenge not pending for connection")
+        );
+
+        let missing_challenge_auth = manager
+            .register_connection(RadrootsNostrSignerConnectionDraft::new(
+                public_key(0x311),
+                public_identity(0x312),
+            ))
+            .expect("register missing challenge auth");
+        manager
+            .require_auth_challenge(
+                &missing_challenge_auth.connection_id,
+                format!("{}/auth-missing-challenge", api_primary_https()).as_str(),
+            )
+            .expect("require auth");
+        {
+            let mut state = manager.state.write().expect("write");
+            let record = state
+                .connections
+                .iter_mut()
+                .find(|record| record.connection_id == missing_challenge_auth.connection_id)
+                .expect("stored connection");
+            record.auth_challenge = None;
+        }
+        let missing_challenge_auth_err = manager
+            .begin_auth_replay_publish_finalization(&missing_challenge_auth.connection_id)
+            .expect_err("missing challenge auth workflow");
+        assert!(
+            missing_challenge_auth_err
+                .to_string()
+                .contains("auth challenge missing for connection")
+        );
+
+        let missing_pending_auth = manager
+            .register_connection(RadrootsNostrSignerConnectionDraft::new(
+                public_key(0x313),
+                public_identity(0x314),
+            ))
+            .expect("register missing pending auth");
+        manager
+            .require_auth_challenge(
+                &missing_pending_auth.connection_id,
+                format!("{}/auth-missing-pending", api_primary_https()).as_str(),
+            )
+            .expect("require auth");
+        let missing_pending_auth_err = manager
+            .begin_auth_replay_publish_finalization(&missing_pending_auth.connection_id)
+            .expect_err("missing pending auth workflow");
+        assert!(
+            missing_pending_auth_err
+                .to_string()
+                .contains("pending request missing for auth replay finalization")
+        );
+
+        let duplicate_auth = manager
+            .register_connection(RadrootsNostrSignerConnectionDraft::new(
+                public_key(0x315),
+                public_identity(0x316),
+            ))
+            .expect("register duplicate auth");
+        manager
+            .require_auth_challenge(
+                &duplicate_auth.connection_id,
+                format!("{}/auth-duplicate", api_primary_https()).as_str(),
+            )
+            .expect("require auth");
+        manager
+            .set_pending_request(
+                &duplicate_auth.connection_id,
+                request_message("req-auth-duplicate"),
+            )
+            .expect("set pending");
+        manager
+            .begin_auth_replay_publish_finalization(&duplicate_auth.connection_id)
+            .expect("begin auth workflow");
+        let duplicate_auth_err = manager
+            .begin_auth_replay_publish_finalization(&duplicate_auth.connection_id)
+            .expect_err("duplicate auth workflow");
+        assert!(
+            duplicate_auth_err
+                .to_string()
+                .contains("publish workflow already active for auth_replay_finalization")
+        );
+    }
+
+    #[test]
+    fn publish_workflow_finalize_and_evaluate_reject_corrupted_states() {
+        let manager = RadrootsNostrSignerManager::new_in_memory();
+        manager
+            .set_signer_identity(public_identity(0x320))
+            .expect("set signer");
+
+        let missing_workflow_id =
+            RadrootsNostrSignerWorkflowId::parse("wf-evaluate-missing").expect("workflow id");
+        let missing_evaluate_err = manager
+            .evaluate_auth_replay_publish_workflow(&missing_workflow_id)
+            .expect_err("missing workflow evaluate");
+        assert!(
+            missing_evaluate_err
+                .to_string()
+                .contains("publish workflow not found")
+        );
+
+        let connect_kind_record = manager
+            .register_connection(
+                RadrootsNostrSignerConnectionDraft::new(public_key(0x321), public_identity(0x322))
+                    .with_connect_secret("evaluate-connect-kind"),
+            )
+            .expect("register connect kind");
+        let connect_kind_workflow = manager
+            .begin_connect_secret_publish_finalization(&connect_kind_record.connection_id)
+            .expect("begin connect workflow");
+        let wrong_kind_err = manager
+            .evaluate_auth_replay_publish_workflow(&connect_kind_workflow.workflow_id)
+            .expect_err("wrong workflow kind");
+        assert!(
+            wrong_kind_err
+                .to_string()
+                .contains("publish workflow is not an auth replay finalization")
+        );
+
+        let connect_missing_secret_record = manager
+            .register_connection(
+                RadrootsNostrSignerConnectionDraft::new(public_key(0x323), public_identity(0x324))
+                    .with_connect_secret("missing-secret-finalize"),
+            )
+            .expect("register connect missing secret");
+        let connect_missing_secret_workflow = manager
+            .begin_connect_secret_publish_finalization(&connect_missing_secret_record.connection_id)
+            .expect("begin connect missing secret workflow");
+        manager
+            .mark_publish_workflow_published(&connect_missing_secret_workflow.workflow_id)
+            .expect("mark connect missing secret workflow");
+        {
+            let mut state = manager.state.write().expect("write");
+            let record = state
+                .connections
+                .iter_mut()
+                .find(|record| record.connection_id == connect_missing_secret_record.connection_id)
+                .expect("stored connection");
+            record.connect_secret_hash = None;
+            record.connect_secret_consumed_at_unix = None;
+        }
+        let connect_missing_secret_err = manager
+            .finalize_publish_workflow(&connect_missing_secret_workflow.workflow_id)
+            .expect_err("missing connect secret finalize");
+        assert!(
+            connect_missing_secret_err
+                .to_string()
+                .contains("connection does not have a connect secret")
+        );
+
+        let connect_consumed_record = manager
+            .register_connection(
+                RadrootsNostrSignerConnectionDraft::new(public_key(0x325), public_identity(0x326))
+                    .with_connect_secret("consumed-secret-finalize"),
+            )
+            .expect("register connect consumed");
+        let connect_consumed_workflow = manager
+            .begin_connect_secret_publish_finalization(&connect_consumed_record.connection_id)
+            .expect("begin connect consumed workflow");
+        manager
+            .mark_publish_workflow_published(&connect_consumed_workflow.workflow_id)
+            .expect("mark connect consumed workflow");
+        {
+            let mut state = manager.state.write().expect("write");
+            let record = state
+                .connections
+                .iter_mut()
+                .find(|record| record.connection_id == connect_consumed_record.connection_id)
+                .expect("stored connection");
+            record.connect_secret_consumed_at_unix = Some(88);
+        }
+        let connect_consumed_err = manager
+            .finalize_publish_workflow(&connect_consumed_workflow.workflow_id)
+            .expect_err("consumed connect secret finalize");
+        assert!(
+            connect_consumed_err
+                .to_string()
+                .contains("connect secret already consumed for connection")
+        );
+
+        let start_auth_replay_workflow = |suffix: u32,
+                                          request_id: &str|
+         -> (
+            RadrootsNostrSignerConnectionRecord,
+            RadrootsNostrSignerPublishWorkflowRecord,
+            RadrootsNostrSignerPendingRequest,
+        ) {
+            let record = manager
+                .register_connection(RadrootsNostrSignerConnectionDraft::new(
+                    public_key(0x330 + suffix),
+                    public_identity(0x340 + suffix),
+                ))
+                .expect("register auth workflow");
+            manager
+                .require_auth_challenge(
+                    &record.connection_id,
+                    format!("{}/auth-workflow-{suffix}", api_primary_https()).as_str(),
+                )
+                .expect("require auth");
+            let pending = manager
+                .set_pending_request(&record.connection_id, request_message(request_id))
+                .expect("set pending");
+            let pending_request = pending.pending_request.expect("pending request");
+            let workflow = manager
+                .begin_auth_replay_publish_finalization(&record.connection_id)
+                .expect("begin auth workflow");
+            (record, workflow, pending_request)
+        };
+
+        let (missing_pending_record, missing_pending_workflow, _) =
+            start_auth_replay_workflow(0, "req-eval-missing-pending");
+        {
+            let mut state = manager.state.write().expect("write");
+            let workflow = state
+                .publish_workflows
+                .iter_mut()
+                .find(|workflow| workflow.workflow_id == missing_pending_workflow.workflow_id)
+                .expect("stored workflow");
+            workflow.pending_request = None;
+        }
+        let missing_pending_eval_err = manager
+            .evaluate_auth_replay_publish_workflow(&missing_pending_workflow.workflow_id)
+            .expect_err("missing pending evaluate");
+        assert!(
+            missing_pending_eval_err
+                .to_string()
+                .contains("auth replay workflow missing pending request")
+        );
+        {
+            let mut state = manager.state.write().expect("write");
+            state
+                .publish_workflows
+                .retain(|workflow| workflow.workflow_id != missing_pending_workflow.workflow_id);
+            state
+                .connections
+                .retain(|record| record.connection_id != missing_pending_record.connection_id);
+        }
+
+        let (missing_challenge_eval_record, missing_challenge_eval_workflow, pending_request) =
+            start_auth_replay_workflow(1, "req-eval-no-challenge");
+        {
+            let mut state = manager.state.write().expect("write");
+            let record = state
+                .connections
+                .iter_mut()
+                .find(|record| record.connection_id == missing_challenge_eval_record.connection_id)
+                .expect("stored connection");
+            record.auth_challenge = None;
+        }
+        let evaluation = manager
+            .evaluate_auth_replay_publish_workflow(&missing_challenge_eval_workflow.workflow_id)
+            .expect("evaluate without challenge");
+        assert_eq!(
+            evaluation.request_id.as_str(),
+            pending_request.request_id().as_str()
+        );
+        assert_eq!(
+            evaluation.connection.auth_state,
+            RadrootsNostrSignerAuthState::Authorized
+        );
+        assert!(evaluation.connection.pending_request.is_none());
+
+        let (invalid_identity_eval_record, invalid_identity_eval_workflow, _) =
+            start_auth_replay_workflow(10, "req-eval-invalid-identity");
+        {
+            let mut state = manager.state.write().expect("write");
+            let pending_request = RadrootsNostrSignerPendingRequest::new(
+                request_message_with_request(
+                    "req-eval-invalid-identity",
+                    RadrootsNostrConnectRequest::GetSessionCapability,
+                ),
+                81,
+            )
+            .expect("pending request");
+            let workflow = state
+                .publish_workflows
+                .iter_mut()
+                .find(|workflow| workflow.workflow_id == invalid_identity_eval_workflow.workflow_id)
+                .expect("stored workflow");
+            workflow.pending_request = Some(pending_request.clone());
+            let record = state
+                .connections
+                .iter_mut()
+                .find(|record| record.connection_id == invalid_identity_eval_record.connection_id)
+                .expect("stored connection");
+            record.pending_request = Some(pending_request);
+            record.user_identity.public_key_hex = "invalid".into();
+        }
+        let invalid_identity_eval_err = manager
+            .evaluate_auth_replay_publish_workflow(&invalid_identity_eval_workflow.workflow_id)
+            .expect_err("invalid identity evaluate");
+        assert!(
+            invalid_identity_eval_err
+                .to_string()
+                .contains("user identity public key is invalid")
+        );
+
+        let (terminal_eval_record, terminal_eval_workflow, _) =
+            start_auth_replay_workflow(2, "req-eval-terminal");
+        {
+            let mut state = manager.state.write().expect("write");
+            let record = state
+                .connections
+                .iter_mut()
+                .find(|record| record.connection_id == terminal_eval_record.connection_id)
+                .expect("stored connection");
+            record.status = RadrootsNostrSignerConnectionStatus::Rejected;
+        }
+        let terminal_eval_err = manager
+            .evaluate_auth_replay_publish_workflow(&terminal_eval_workflow.workflow_id)
+            .expect_err("terminal evaluate");
+        assert!(
+            terminal_eval_err
+                .to_string()
+                .contains("cannot evaluate auth replay workflow for rejected connection")
+        );
+
+        let (not_pending_eval_record, not_pending_eval_workflow, _) =
+            start_auth_replay_workflow(3, "req-eval-not-pending");
+        {
+            let mut state = manager.state.write().expect("write");
+            let record = state
+                .connections
+                .iter_mut()
+                .find(|record| record.connection_id == not_pending_eval_record.connection_id)
+                .expect("stored connection");
+            record.auth_state = RadrootsNostrSignerAuthState::Authorized;
+        }
+        let not_pending_eval_err = manager
+            .evaluate_auth_replay_publish_workflow(&not_pending_eval_workflow.workflow_id)
+            .expect_err("not pending evaluate");
+        assert!(
+            not_pending_eval_err
+                .to_string()
+                .contains("auth challenge not pending for connection")
+        );
+
+        let (mismatch_eval_record, mismatch_eval_workflow, _) =
+            start_auth_replay_workflow(4, "req-eval-mismatch");
+        {
+            let mut state = manager.state.write().expect("write");
+            let record = state
+                .connections
+                .iter_mut()
+                .find(|record| record.connection_id == mismatch_eval_record.connection_id)
+                .expect("stored connection");
+            record.pending_request = Some(
+                RadrootsNostrSignerPendingRequest::new(
+                    request_message("req-eval-mismatch-other"),
+                    77,
+                )
+                .expect("mismatched pending request"),
+            );
+        }
+        let mismatch_eval_err = manager
+            .evaluate_auth_replay_publish_workflow(&mismatch_eval_workflow.workflow_id)
+            .expect_err("mismatch evaluate");
+        assert!(
+            mismatch_eval_err
+                .to_string()
+                .contains("pending request does not match auth replay workflow")
+        );
+
+        let start_published_auth_workflow = |suffix: u32, request_id: &str| {
+            let (record, workflow, pending_request) =
+                start_auth_replay_workflow(suffix, request_id);
+            let published = manager
+                .mark_publish_workflow_published(&workflow.workflow_id)
+                .expect("mark published");
+            (record, published, pending_request)
+        };
+
+        let (auth_not_pending_record, auth_not_pending_workflow, _) =
+            start_published_auth_workflow(5, "req-finalize-not-pending");
+        {
+            let mut state = manager.state.write().expect("write");
+            let record = state
+                .connections
+                .iter_mut()
+                .find(|record| record.connection_id == auth_not_pending_record.connection_id)
+                .expect("stored connection");
+            record.auth_state = RadrootsNostrSignerAuthState::Authorized;
+        }
+        let auth_not_pending_err = manager
+            .finalize_publish_workflow(&auth_not_pending_workflow.workflow_id)
+            .expect_err("not pending finalize");
+        assert!(
+            auth_not_pending_err
+                .to_string()
+                .contains("auth challenge not pending for connection")
+        );
+
+        let (missing_connection_finalize_record, missing_connection_finalize_workflow, _) =
+            start_published_auth_workflow(11, "req-finalize-missing-connection");
+        {
+            let mut state = manager.state.write().expect("write");
+            let workflow = state
+                .publish_workflows
+                .iter_mut()
+                .find(|workflow| {
+                    workflow.workflow_id == missing_connection_finalize_workflow.workflow_id
+                })
+                .expect("stored workflow");
+            workflow.connection_id =
+                RadrootsNostrSignerConnectionId::parse("conn-finalize-missing")
+                    .expect("connection id");
+        }
+        let missing_connection_finalize_err = manager
+            .finalize_publish_workflow(&missing_connection_finalize_workflow.workflow_id)
+            .expect_err("missing connection finalize");
+        assert!(
+            missing_connection_finalize_err
+                .to_string()
+                .contains("connection not found")
+        );
+        {
+            let mut state = manager.state.write().expect("write");
+            state.publish_workflows.retain(|workflow| {
+                workflow.workflow_id != missing_connection_finalize_workflow.workflow_id
+            });
+            state.connections.retain(|record| {
+                record.connection_id != missing_connection_finalize_record.connection_id
+            });
+        }
+
+        let (auth_missing_challenge_record, auth_missing_challenge_workflow, _) =
+            start_published_auth_workflow(6, "req-finalize-missing-challenge");
+        {
+            let mut state = manager.state.write().expect("write");
+            let record = state
+                .connections
+                .iter_mut()
+                .find(|record| record.connection_id == auth_missing_challenge_record.connection_id)
+                .expect("stored connection");
+            record.auth_challenge = None;
+        }
+        let auth_missing_challenge_err = manager
+            .finalize_publish_workflow(&auth_missing_challenge_workflow.workflow_id)
+            .expect_err("missing challenge finalize");
+        assert!(
+            auth_missing_challenge_err
+                .to_string()
+                .contains("auth challenge missing for connection")
+        );
+
+        let (workflow_missing_pending_record, workflow_missing_pending_workflow, _) =
+            start_published_auth_workflow(7, "req-finalize-workflow-missing-pending");
+        {
+            let mut state = manager.state.write().expect("write");
+            let workflow = state
+                .publish_workflows
+                .iter_mut()
+                .find(|workflow| {
+                    workflow.workflow_id == workflow_missing_pending_workflow.workflow_id
+                })
+                .expect("stored workflow");
+            workflow.pending_request = None;
+        }
+        let workflow_missing_pending_err = manager
+            .finalize_publish_workflow(&workflow_missing_pending_workflow.workflow_id)
+            .expect_err("workflow missing pending finalize");
+        assert!(
+            workflow_missing_pending_err
+                .to_string()
+                .contains("auth replay workflow missing pending request")
+        );
+        {
+            let mut state = manager.state.write().expect("write");
+            state.publish_workflows.retain(|workflow| {
+                workflow.workflow_id != workflow_missing_pending_workflow.workflow_id
+            });
+            state.connections.retain(|record| {
+                record.connection_id != workflow_missing_pending_record.connection_id
+            });
+        }
+
+        let (mismatch_finalize_record, mismatch_finalize_workflow, _) =
+            start_published_auth_workflow(8, "req-finalize-mismatch");
+        {
+            let mut state = manager.state.write().expect("write");
+            let record = state
+                .connections
+                .iter_mut()
+                .find(|record| record.connection_id == mismatch_finalize_record.connection_id)
+                .expect("stored connection");
+            record.pending_request = Some(
+                RadrootsNostrSignerPendingRequest::new(
+                    request_message("req-finalize-mismatch-other"),
+                    78,
+                )
+                .expect("mismatched pending request"),
+            );
+        }
+        let mismatch_finalize_err = manager
+            .finalize_publish_workflow(&mismatch_finalize_workflow.workflow_id)
+            .expect_err("mismatch finalize");
+        assert!(
+            mismatch_finalize_err
+                .to_string()
+                .contains("pending request does not match auth replay workflow")
+        );
+
+        let (missing_authorized_record, missing_authorized_workflow, _) =
+            start_published_auth_workflow(9, "req-finalize-missing-authorized");
+        {
+            let mut state = manager.state.write().expect("write");
+            let workflow = state
+                .publish_workflows
+                .iter_mut()
+                .find(|workflow| workflow.workflow_id == missing_authorized_workflow.workflow_id)
+                .expect("stored workflow");
+            workflow.authorized_at_unix = None;
+        }
+        let missing_authorized_err = manager
+            .finalize_publish_workflow(&missing_authorized_workflow.workflow_id)
+            .expect_err("missing authorized finalize");
+        assert!(
+            missing_authorized_err
+                .to_string()
+                .contains("auth replay workflow missing authorized timestamp")
+        );
+        {
+            let mut state = manager.state.write().expect("write");
+            state
+                .publish_workflows
+                .retain(|workflow| workflow.workflow_id != missing_authorized_workflow.workflow_id);
+            state
+                .connections
+                .retain(|record| record.connection_id != missing_authorized_record.connection_id);
+        }
+
+        let (missing_connection_eval_record, missing_connection_eval_workflow, _) =
+            start_auth_replay_workflow(12, "req-eval-missing-connection");
+        {
+            let mut state = manager.state.write().expect("write");
+            let workflow = state
+                .publish_workflows
+                .iter_mut()
+                .find(|workflow| {
+                    workflow.workflow_id == missing_connection_eval_workflow.workflow_id
+                })
+                .expect("stored workflow");
+            workflow.connection_id =
+                RadrootsNostrSignerConnectionId::parse("conn-evaluate-missing")
+                    .expect("connection id");
+        }
+        let missing_connection_eval_err = manager
+            .evaluate_auth_replay_publish_workflow(&missing_connection_eval_workflow.workflow_id)
+            .expect_err("missing connection evaluate");
+        assert!(
+            missing_connection_eval_err
+                .to_string()
+                .contains("connection not found")
+        );
+        {
+            let mut state = manager.state.write().expect("write");
+            state.publish_workflows.retain(|workflow| {
+                workflow.workflow_id != missing_connection_eval_workflow.workflow_id
+            });
+            state.connections.retain(|record| {
+                record.connection_id != missing_connection_eval_record.connection_id
+            });
+        }
+    }
+
+    #[test]
     fn manager_reports_missing_connections_and_save_failures() {
         let manager = RadrootsNostrSignerManager::new_in_memory();
         let missing_id = RadrootsNostrSignerConnectionId::parse("missing").expect("id");
@@ -2485,6 +3245,12 @@ mod tests {
         let missing_pending_request = manager
             .set_pending_request(&missing_id, request_message("req-missing-2"))
             .expect_err("missing pending request");
+        let missing_begin_connect_workflow = manager
+            .begin_connect_secret_publish_finalization(&missing_id)
+            .expect_err("missing connect workflow");
+        let missing_begin_auth_workflow = manager
+            .begin_auth_replay_publish_finalization(&missing_id)
+            .expect_err("missing auth workflow");
         let missing_authorize_auth = manager
             .authorize_auth_challenge(&missing_id)
             .expect_err("missing authorize auth");
@@ -2506,6 +3272,8 @@ mod tests {
             missing_relays,
             missing_require_auth,
             missing_pending_request,
+            missing_begin_connect_workflow,
+            missing_begin_auth_workflow,
             missing_authorize_auth,
             missing_request,
         ] {

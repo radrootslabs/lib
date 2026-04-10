@@ -956,6 +956,77 @@ mod tests {
     }
 
     #[test]
+    fn connection_record_noop_consumption_and_restore_paths_preserve_state() {
+        let mut no_secret_record = RadrootsNostrSignerConnectionRecord::new(
+            RadrootsNostrSignerConnectionId::parse("conn-no-secret").expect("id"),
+            public_identity(0x12),
+            RadrootsNostrSignerConnectionDraft::new(public_key(0x13), public_identity(0x14)),
+            30,
+        );
+        let no_secret_updated_at = no_secret_record.updated_at_unix;
+        assert!(!no_secret_record.connect_secret_is_consumed());
+
+        no_secret_record.mark_connect_secret_consumed(31);
+
+        assert_eq!(no_secret_record.connect_secret_consumed_at_unix, None);
+        assert_eq!(no_secret_record.updated_at_unix, no_secret_updated_at);
+        assert!(!no_secret_record.connect_secret_is_consumed());
+
+        let restored_without_challenge =
+            RadrootsNostrSignerPendingRequest::new(request_message("req-no-challenge"), 32)
+                .expect("pending request");
+        no_secret_record.last_authenticated_at_unix = Some(29);
+        no_secret_record.restore_pending_auth_challenge(restored_without_challenge.clone(), 33);
+
+        assert_eq!(no_secret_record.last_authenticated_at_unix, Some(29));
+        assert_eq!(
+            no_secret_record.pending_request.as_ref(),
+            Some(&restored_without_challenge)
+        );
+        assert_eq!(no_secret_record.updated_at_unix, 33);
+
+        let mut restored_record = RadrootsNostrSignerConnectionRecord::new(
+            RadrootsNostrSignerConnectionId::parse("conn-restore-preserve").expect("id"),
+            public_identity(0x15),
+            RadrootsNostrSignerConnectionDraft::new(public_key(0x16), public_identity(0x17)),
+            40,
+        );
+        restored_record.require_auth_challenge(
+            RadrootsNostrSignerAuthChallenge::new(
+                format!("{}/preserve", api_primary_https()).as_str(),
+                41,
+            )
+            .expect("auth challenge"),
+        );
+        restored_record.set_pending_request(
+            RadrootsNostrSignerPendingRequest::new(request_message("req-preserve"), 42)
+                .expect("pending request"),
+        );
+        let replay = restored_record
+            .authorize_auth_challenge(43)
+            .expect("authorize challenge");
+        restored_record.last_authenticated_at_unix = Some(99);
+
+        restored_record.restore_pending_auth_challenge(replay.clone(), 44);
+
+        assert_eq!(
+            restored_record.auth_state,
+            RadrootsNostrSignerAuthState::Pending
+        );
+        assert_eq!(restored_record.last_authenticated_at_unix, Some(99));
+        assert_eq!(
+            restored_record
+                .auth_challenge
+                .as_ref()
+                .expect("restored challenge")
+                .authorized_at_unix,
+            None
+        );
+        assert_eq!(restored_record.pending_request.as_ref(), Some(&replay));
+        assert_eq!(restored_record.updated_at_unix, 44);
+    }
+
+    #[test]
     fn granted_permissions_and_request_audit_build_correctly() {
         let permission = RadrootsNostrConnectPermission::new(RadrootsNostrConnectMethod::Ping);
         let grant = RadrootsNostrSignerPermissionGrant::new(permission.clone(), 42);

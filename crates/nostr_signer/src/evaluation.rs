@@ -212,6 +212,7 @@ fn identity_public_key(
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use crate::test_support::{
@@ -558,6 +559,16 @@ mod tests {
             &RadrootsNostrConnectRequest::GetPublicKey,
         )
         .expect_err("invalid get_public_key response hint");
+        assert!(
+            err.to_string()
+                .contains("user identity public key is invalid")
+        );
+
+        let err = response_hint_for_request(
+            &invalid_connection,
+            &RadrootsNostrConnectRequest::GetSessionCapability,
+        )
+        .expect_err("invalid get_session_capability response hint");
         assert!(
             err.to_string()
                 .contains("user identity public key is invalid")
