@@ -1,14 +1,23 @@
 # radroots_nostr_accounts
 
-Nostr protocol account primitives and vault interfaces for the Rad Roots SDK.
+This is the README for `radroots_nostr_accounts`, which provides account models
+and vault-backed stores for the `radroots` core libraries.
 
-## Goals
+## Overview
 
-- define stable account, manager, store, and vault interfaces
-- keep account selection and persistence behavior deterministic across environments
-- support pluggable secret vault backends for local and keyring runtimes
-- provide reusable account primitives for higher-level Rad Roots crates
+ * account, selection, and store-state models for working Nostr identities;
+ * manager and store layers for file-backed and in-memory account persistence
+   under `std`;
+ * vault integrations through `radroots_secret_vault`, including memory and OS
+   keyring backends;
+ * optional nostrdb bridge helpers for account registration and lookup.
 
-## License
+## Copyright
 
-Licensed under AGPL-3.0. See LICENSE.
+Except as otherwise noted, all files in the `radroots_nostr_accounts`
+distribution are
+
+ Copyright (c) 2025 Tyson Lupul
+
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see LICENSE included in the `radroots_nostr_accounts` distribution.
