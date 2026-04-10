@@ -1,0 +1,26 @@
+# radroots_simplex_agent_proto
+
+This is the README for `radroots_simplex_agent_proto`, which provides SimpleX
+agent envelopes and queue models for the `radroots` core libraries.
+
+## Overview
+
+ * encode and decode helpers for agent frames, envelopes, connection links, and
+   decrypted payloads;
+ * connection mode, status, queue address, queue descriptor, and receipt model
+   types;
+ * shared ratchet header and state integration from
+   `radroots_simplex_smp_crypto`;
+ * portable shared models with optional serialization and shared type export
+   support.
+
+## Copyright
+
+Except as otherwise noted, all files in the `radroots_simplex_agent_proto`
+distribution are
+
+ Copyright (c) 2025 Tyson Lupul
+
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see LICENSE included in the `radroots_simplex_agent_proto`
+distribution.
