@@ -1,0 +1,23 @@
+# radroots_nostr_signer
+
+This is the README for `radroots_nostr_signer`, which provides transport-
+neutral signer models and stores for the `radroots` core libraries.
+
+## Overview
+
+ * backend, capability, approval, authentication, and audit models for signer
+   workflows;
+ * manager and evaluation helpers for request review and signer policy
+   decisions;
+ * file, memory, and native SQLite stores for persisted signer state;
+ * optional shared-model export through `serde` and `ts-rs` feature gates.
+
+## Copyright
+
+Except as otherwise noted, all files in the `radroots_nostr_signer`
+distribution are
+
+ Copyright (c) 2025 Tyson Lupul
+
+For information on usage and redistribution, and for a DISCLAIMER OF ALL
+WARRANTIES, see LICENSE included in the `radroots_nostr_signer` distribution.
