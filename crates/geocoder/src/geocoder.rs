@@ -50,16 +50,14 @@ impl Geocoder {
             LIMIT :limit
             "#,
         )?;
-        let rows = stmt.query_map(
-            named_params! {
-                ":lat": point.lat,
-                ":lng": point.lng,
-                ":degree_offset": options.degree_offset,
-                ":lng_weight": lng_weight,
-                ":limit": options.limit as i64,
-            },
-            map_reverse_row,
-        )?;
+        let params = named_params! {
+            ":lat": point.lat,
+            ":lng": point.lng,
+            ":degree_offset": options.degree_offset,
+            ":lng_weight": lng_weight,
+            ":limit": options.limit as i64,
+        };
+        let rows = stmt.query_map(params, map_reverse_row)?;
         rows.collect::<Result<Vec<_>, _>>()
             .map_err(GeocoderError::from)
     }
@@ -81,12 +79,7 @@ impl Geocoder {
             ORDER BY id ASC
             "#,
         )?;
-        let rows = stmt.query_map(
-            named_params! {
-                ":country_id": country_id,
-            },
-            map_reverse_row,
-        )?;
+        let rows = stmt.query_map(named_params! { ":country_id": country_id }, map_reverse_row)?;
         rows.collect::<Result<Vec<_>, _>>()
             .map_err(GeocoderError::from)
     }

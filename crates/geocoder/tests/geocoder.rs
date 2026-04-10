@@ -1,5 +1,5 @@
 use radroots_geocoder::{
-    Geocoder, GeocoderCountryListResult, GeocoderPoint, GeocoderReverseOptions,
+    Geocoder, GeocoderCountryListResult, GeocoderError, GeocoderPoint, GeocoderReverseOptions,
 };
 use rusqlite::Connection;
 use std::fs;
@@ -145,6 +145,66 @@ fn country_center_returns_average_for_country() {
     ));
 }
 
+#[test]
+fn reverse_country_and_country_list_report_missing_schema_errors() {
+    let geocoder = open_empty_geocoder();
+
+    let reverse_err = geocoder
+        .reverse(
+            GeocoderPoint {
+                lat: 37.7749,
+                lng: -122.4194,
+            },
+            None,
+        )
+        .expect_err("reverse should fail without schema");
+    assert_sqlite_error_contains(reverse_err, "no such");
+
+    let country_err = geocoder
+        .country("US")
+        .expect_err("country should fail without schema");
+    assert_sqlite_error_contains(country_err, "no such");
+
+    let country_list_err = geocoder
+        .country_list()
+        .expect_err("country_list should fail without schema");
+    assert_sqlite_error_contains(country_list_err, "no such");
+}
+
+#[test]
+fn reverse_and_country_propagate_row_mapping_errors() {
+    let geocoder = open_reverse_country_row_error_geocoder();
+
+    let reverse_err = geocoder
+        .reverse(
+            GeocoderPoint {
+                lat: 37.7749,
+                lng: -122.4194,
+            },
+            Some(GeocoderReverseOptions {
+                limit: 1,
+                degree_offset: 10.0,
+            }),
+        )
+        .expect_err("reverse should fail on invalid row mapping");
+    assert_sqlite_error_contains(reverse_err, "Invalid column type");
+
+    let country_err = geocoder
+        .country("US")
+        .expect_err("country should fail on invalid row mapping");
+    assert_sqlite_error_contains(country_err, "Invalid column type");
+}
+
+#[test]
+fn country_list_propagates_aggregate_row_mapping_errors() {
+    let geocoder = open_country_list_row_error_geocoder();
+
+    let err = geocoder
+        .country_list()
+        .expect_err("country_list should fail on null aggregate row");
+    assert_sqlite_error_contains(err, "Invalid column type");
+}
+
 fn open_fixture_geocoder() -> Geocoder {
     let path = build_fixture_database();
     Geocoder::open_path(&path).expect("open geocoder")
@@ -153,6 +213,26 @@ fn open_fixture_geocoder() -> Geocoder {
 fn open_high_latitude_geocoder() -> Geocoder {
     let path = build_high_latitude_database();
     Geocoder::open_path(&path).expect("open geocoder")
+}
+
+fn open_empty_geocoder() -> Geocoder {
+    let temp = NamedTempFile::new().expect("temp db");
+    let path = temp.into_temp_path();
+    Geocoder::open_path(&path).expect("open empty geocoder")
+}
+
+fn open_reverse_country_row_error_geocoder() -> Geocoder {
+    let temp = NamedTempFile::new().expect("temp db");
+    let path = temp.into_temp_path();
+    seed_reverse_country_row_error_database(path.to_str().expect("utf-8 temp path"));
+    Geocoder::open_path(&path).expect("open invalid row geocoder")
+}
+
+fn open_country_list_row_error_geocoder() -> Geocoder {
+    let temp = NamedTempFile::new().expect("temp db");
+    let path = temp.into_temp_path();
+    seed_country_list_row_error_database(path.to_str().expect("utf-8 temp path"));
+    Geocoder::open_path(&path).expect("open aggregate error geocoder")
 }
 
 fn build_fixture_database() -> tempfile::TempPath {
@@ -195,6 +275,60 @@ fn seed_high_latitude_database(path: &str) {
 
     insert_feature(&conn, 1, "Polar East", "NO", 1, 75.02, 0.10);
     insert_feature(&conn, 2, "Polar North", "NO", 1, 75.05, 0.05);
+}
+
+fn seed_reverse_country_row_error_database(path: &str) {
+    let conn = Connection::open(path).expect("open invalid row fixture database");
+    conn.execute_batch(
+        r#"
+        CREATE TABLE geonames(
+          id INTEGER,
+          name TEXT,
+          admin1_id INTEGER,
+          admin1_name TEXT,
+          country_id TEXT,
+          country_name TEXT,
+          latitude REAL,
+          longitude REAL
+        );
+        CREATE TABLE coordinates(
+          feature_id INTEGER,
+          latitude REAL,
+          longitude REAL
+        );
+        "#,
+    )
+    .expect("create invalid row schema");
+    conn.execute(
+        "INSERT INTO geonames (id, name, admin1_id, admin1_name, country_id, country_name, latitude, longitude) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        rusqlite::params![1_i64, Option::<String>::None, Option::<i64>::None, Option::<String>::None, "US", "United States", 37.7749_f64, -122.4194_f64],
+    )
+    .expect("insert invalid reverse/country row");
+    conn.execute(
+        "INSERT INTO coordinates (feature_id, latitude, longitude) VALUES (?1, ?2, ?3)",
+        (1_i64, 37.7749_f64, -122.4194_f64),
+    )
+    .expect("insert invalid reverse/country coordinate");
+}
+
+fn seed_country_list_row_error_database(path: &str) {
+    let conn = Connection::open(path).expect("open aggregate error fixture database");
+    conn.execute_batch(
+        r#"
+        CREATE TABLE geonames(
+          country_id TEXT,
+          country_name TEXT,
+          latitude REAL,
+          longitude REAL
+        );
+        "#,
+    )
+    .expect("create aggregate error schema");
+    conn.execute(
+        "INSERT INTO geonames (country_id, country_name, latitude, longitude) VALUES (?1, ?2, ?3, ?4)",
+        rusqlite::params!["US", "United States", Option::<f64>::None, Option::<f64>::None],
+    )
+    .expect("insert aggregate error row");
 }
 
 fn seed_schema(conn: &Connection) {
@@ -283,4 +417,14 @@ fn insert_feature(
 
 fn approx_eq(left: f64, right: f64) -> bool {
     (left - right).abs() < 0.000_001
+}
+
+fn assert_sqlite_error_contains(err: GeocoderError, needle: &str) {
+    match err {
+        GeocoderError::Sqlite(inner) => assert!(
+            inner.to_string().contains(needle),
+            "expected sqlite error containing {needle:?}, got {inner}"
+        ),
+        other => panic!("expected sqlite error, got {other}"),
+    }
 }
