@@ -166,6 +166,8 @@ struct RegionCoverageKey {
 pub(crate) struct CoveragePolicyFile {
     gate: CoveragePolicyGate,
     required: CoverageRequiredList,
+    #[serde(default)]
+    overrides: BTreeMap<String, CoveragePolicyOverride>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -182,6 +184,18 @@ pub(crate) struct CoveragePolicyGate {
 #[serde(deny_unknown_fields)]
 pub(crate) struct CoverageRequiredList {
     crates: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CoveragePolicyOverride {
+    fail_under_exec_lines: Option<f64>,
+    fail_under_functions: Option<f64>,
+    fail_under_regions: Option<f64>,
+    fail_under_branches: Option<f64>,
+    require_branches: Option<bool>,
+    temporary: bool,
+    reason: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -454,6 +468,30 @@ impl CoveragePolicyFile {
         }
     }
 
+    pub(crate) fn thresholds_for_scope(&self, scope: &str) -> CoverageThresholds {
+        let base = self.thresholds();
+        let Some(override_policy) = self.overrides.get(scope) else {
+            return base;
+        };
+        CoverageThresholds {
+            fail_under_exec_lines: override_policy
+                .fail_under_exec_lines
+                .unwrap_or(base.fail_under_exec_lines),
+            fail_under_functions: override_policy
+                .fail_under_functions
+                .unwrap_or(base.fail_under_functions),
+            fail_under_regions: override_policy
+                .fail_under_regions
+                .unwrap_or(base.fail_under_regions),
+            fail_under_branches: override_policy
+                .fail_under_branches
+                .unwrap_or(base.fail_under_branches),
+            require_branches: override_policy
+                .require_branches
+                .unwrap_or(base.require_branches),
+        }
+    }
+
     pub(crate) fn required_crates(&self) -> Result<Vec<String>, String> {
         if self.required.crates.is_empty() {
             return Err("coverage required crates list must not be empty".to_string());
@@ -474,9 +512,89 @@ impl CoveragePolicyFile {
         Ok(self.required.crates.clone())
     }
 
+    fn validate_overrides(&self) -> Result<(), String> {
+        let required_crates = self.required_crates()?;
+        let required_set: BTreeSet<_> = required_crates.into_iter().collect();
+        let base = self.thresholds();
+        for (crate_name, override_policy) in &self.overrides {
+            if !required_set.contains(crate_name) {
+                return Err(format!(
+                    "coverage override {crate_name} must target a required crate"
+                ));
+            }
+            if !override_policy.temporary {
+                return Err(format!(
+                    "coverage override {crate_name} must set temporary = true"
+                ));
+            }
+            if override_policy.reason.trim().is_empty() {
+                return Err(format!(
+                    "coverage override {crate_name} must include a non-empty reason"
+                ));
+            }
+            validate_override_threshold(
+                crate_name,
+                "fail_under_exec_lines",
+                override_policy.fail_under_exec_lines,
+                base.fail_under_exec_lines,
+            )?;
+            validate_override_threshold(
+                crate_name,
+                "fail_under_functions",
+                override_policy.fail_under_functions,
+                base.fail_under_functions,
+            )?;
+            validate_override_threshold(
+                crate_name,
+                "fail_under_regions",
+                override_policy.fail_under_regions,
+                base.fail_under_regions,
+            )?;
+            validate_override_threshold(
+                crate_name,
+                "fail_under_branches",
+                override_policy.fail_under_branches,
+                base.fail_under_branches,
+            )?;
+            if override_policy.require_branches == Some(true) && !base.require_branches {
+                return Err(format!(
+                    "coverage override {crate_name} require_branches cannot be stricter than the global gate"
+                ));
+            }
+        }
+        Ok(())
+    }
+
     pub(crate) fn required_crate_entries(&self) -> &[String] {
         &self.required.crates
     }
+}
+
+fn validate_override_threshold(
+    crate_name: &str,
+    label: &str,
+    value: Option<f64>,
+    global: f64,
+) -> Result<(), String> {
+    let Some(value) = value else {
+        return Ok(());
+    };
+    if !value.is_finite() {
+        return Err(format!(
+            "coverage override {crate_name} {label} must be finite"
+        ));
+    }
+    if !(0.0..=100.0).contains(&value) {
+        return Err(format!(
+            "coverage override {crate_name} {label} must be within 0..=100"
+        ));
+    }
+    if value > global {
+        return Err(format!(
+            "coverage override {crate_name} {label} must not exceed the global gate"
+        ));
+    }
+    Ok(())
 }
 
 pub(crate) fn coverage_policy_path(root: &Path) -> PathBuf {
@@ -517,6 +635,7 @@ pub(crate) fn read_coverage_policy(path: &Path) -> Result<CoveragePolicyFile, St
         }
     }
     parsed.required_crates()?;
+    parsed.validate_overrides()?;
     Ok(parsed)
 }
 
@@ -1194,7 +1313,8 @@ fn report_gate_with_root(args: &[String], root: &Path) -> Result<(), String> {
                     .to_string(),
             );
         }
-        read_coverage_policy(&coverage_policy_path(root))?.thresholds()
+        let policy = read_coverage_policy(&coverage_policy_path(root))?;
+        policy.thresholds_for_scope(&scope)
     } else {
         let Some(fail_under_exec_lines) = explicit_exec else {
             return Err(
@@ -1312,7 +1432,8 @@ fn report_missing_gate_with_root(args: &[String], root: &Path) -> Result<(), Str
     let scope = parse_string_arg(args, "scope")?;
     let out_path = PathBuf::from(parse_string_arg(args, "out")?);
     let reason = parse_string_arg(args, "reason")?;
-    let thresholds = read_coverage_policy(&coverage_policy_path(root))?.thresholds();
+    let policy = read_coverage_policy(&coverage_policy_path(root))?;
+    let thresholds = policy.thresholds_for_scope(&scope);
 
     let report = CoverageGateReport {
         scope: scope.clone(),
@@ -1910,6 +2031,74 @@ mod tests {
     }
 
     #[test]
+    fn coverage_policy_resolves_scope_specific_temporary_overrides() {
+        let path = temp_file_path("coverage_policy_override_scope");
+        write_file(
+            &path,
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\", \"radroots_b\"]\n\n[overrides.radroots_a]\nfail_under_exec_lines = 88.5\nfail_under_functions = 77.5\nfail_under_regions = 66.5\nfail_under_branches = 55.5\nrequire_branches = false\ntemporary = true\nreason = \"temporary publish unblocker\"\n",
+        );
+        let policy = read_coverage_policy(&path).expect("parse scoped override policy");
+        let override_thresholds = policy.thresholds_for_scope("radroots_a");
+        assert_eq!(override_thresholds.fail_under_exec_lines, 88.5);
+        assert_eq!(override_thresholds.fail_under_functions, 77.5);
+        assert_eq!(override_thresholds.fail_under_regions, 66.5);
+        assert_eq!(override_thresholds.fail_under_branches, 55.5);
+        assert!(!override_thresholds.require_branches);
+
+        let default_thresholds = policy.thresholds_for_scope("radroots_b");
+        assert_eq!(default_thresholds.fail_under_exec_lines, 100.0);
+        assert_eq!(default_thresholds.fail_under_functions, 100.0);
+        assert_eq!(default_thresholds.fail_under_regions, 100.0);
+        assert_eq!(default_thresholds.fail_under_branches, 100.0);
+        assert!(default_thresholds.require_branches);
+
+        fs::remove_file(path).expect("remove override scope policy");
+    }
+
+    #[test]
+    fn read_coverage_policy_rejects_invalid_override_shapes() {
+        let non_required = temp_file_path("coverage_policy_override_non_required");
+        write_file(
+            &non_required,
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n\n[overrides.radroots_b]\nfail_under_exec_lines = 90.0\ntemporary = true\nreason = \"temporary publish unblocker\"\n",
+        );
+        let non_required_err =
+            read_coverage_policy(&non_required).expect_err("non-required override should fail");
+        assert!(non_required_err.contains("must target a required crate"));
+        fs::remove_file(non_required).expect("remove non-required override policy");
+
+        let missing_temporary = temp_file_path("coverage_policy_override_missing_temporary");
+        write_file(
+            &missing_temporary,
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n\n[overrides.radroots_a]\nfail_under_exec_lines = 90.0\ntemporary = false\nreason = \"temporary publish unblocker\"\n",
+        );
+        let missing_temporary_err = read_coverage_policy(&missing_temporary)
+            .expect_err("override without temporary=true should fail");
+        assert!(missing_temporary_err.contains("temporary = true"));
+        fs::remove_file(missing_temporary).expect("remove temporary override policy");
+
+        let missing_reason = temp_file_path("coverage_policy_override_missing_reason");
+        write_file(
+            &missing_reason,
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n\n[overrides.radroots_a]\nfail_under_exec_lines = 90.0\ntemporary = true\nreason = \"  \"\n",
+        );
+        let missing_reason_err =
+            read_coverage_policy(&missing_reason).expect_err("blank override reason should fail");
+        assert!(missing_reason_err.contains("non-empty reason"));
+        fs::remove_file(missing_reason).expect("remove missing reason policy");
+
+        let stricter = temp_file_path("coverage_policy_override_stricter");
+        write_file(
+            &stricter,
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n\n[overrides.radroots_a]\nfail_under_exec_lines = 100.1\ntemporary = true\nreason = \"temporary publish unblocker\"\n",
+        );
+        let stricter_err =
+            read_coverage_policy(&stricter).expect_err("stricter override should fail");
+        assert!(stricter_err.contains("must be within 0..=100"));
+        fs::remove_file(stricter).expect("remove stricter override policy");
+    }
+
+    #[test]
     fn report_missing_gate_uses_policy_thresholds() {
         let root = temp_dir_path("report_missing_gate_root");
         let coverage_dir = root.join("contract").join("coverage");
@@ -1951,6 +2140,57 @@ mod tests {
         );
 
         fs::remove_dir_all(root).expect("remove root");
+    }
+
+    #[test]
+    fn report_missing_gate_uses_scope_specific_override_thresholds() {
+        let root = temp_dir_path("report_missing_gate_override_root");
+        let coverage_dir = root.join("contract").join("coverage");
+        fs::create_dir_all(&coverage_dir).expect("create coverage dir");
+        write_file(
+            &coverage_dir.join("policy.toml"),
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n\n[overrides.radroots_a]\nfail_under_exec_lines = 88.5\nfail_under_functions = 77.5\nfail_under_regions = 66.5\nfail_under_branches = 55.5\nrequire_branches = false\ntemporary = true\nreason = \"temporary publish unblocker\"\n",
+        );
+        let out_path = root.join("gate-report.json");
+
+        report_missing_gate_with_root(
+            &[
+                "--scope".to_string(),
+                "radroots_a".to_string(),
+                "--out".to_string(),
+                out_path.display().to_string(),
+                "--reason".to_string(),
+                "missing-coverage-artifacts".to_string(),
+            ],
+            &root,
+        )
+        .expect("report missing gate with override");
+
+        let report_raw = fs::read_to_string(&out_path).expect("read gate report");
+        let report_json: serde_json::Value =
+            serde_json::from_str(&report_raw).expect("parse gate report json");
+        assert_eq!(
+            report_json["thresholds"]["executable_lines"],
+            serde_json::json!(88.5)
+        );
+        assert_eq!(
+            report_json["thresholds"]["functions"],
+            serde_json::json!(77.5)
+        );
+        assert_eq!(
+            report_json["thresholds"]["regions"],
+            serde_json::json!(66.5)
+        );
+        assert_eq!(
+            report_json["thresholds"]["branches"],
+            serde_json::json!(55.5)
+        );
+        assert_eq!(
+            report_json["thresholds"]["branches_required"],
+            serde_json::json!(false)
+        );
+
+        fs::remove_dir_all(root).expect("remove override root");
     }
 
     #[test]
@@ -3633,6 +3873,50 @@ test_threads = 0
         assert!(report_raw.contains("\"regions\": 100.0"));
         assert!(report_raw.contains("\"pass\": true"));
         fs::remove_dir_all(root).expect("remove report gate success root");
+    }
+
+    #[test]
+    fn report_gate_with_root_uses_scope_specific_override_thresholds() {
+        let root = temp_dir_path("report_gate_override_success");
+        let coverage_dir = root.join("contract").join("coverage");
+        fs::create_dir_all(&coverage_dir).expect("create coverage dir");
+        write_file(
+            &coverage_dir.join("policy.toml"),
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n\n[overrides.radroots_a]\nfail_under_exec_lines = 88.5\nfail_under_functions = 77.5\nfail_under_regions = 66.5\nfail_under_branches = 55.5\nrequire_branches = false\ntemporary = true\nreason = \"temporary publish unblocker\"\n",
+        );
+
+        let summary_path = root.join("summary.json");
+        let lcov_path = root.join("coverage.info");
+        let out_path = root.join("gate-report.json");
+        write_file(
+            &summary_path,
+            r#"{"data":[{"totals":{"functions":{"percent":80.0},"lines":{"percent":88.5},"regions":{"percent":70.0}}}]}"#,
+        );
+        write_file(&lcov_path, "DA:1,1\nLF:1\nLH:1\nBRDA:1,0,0,1\n");
+
+        report_gate_with_root(
+            &[
+                "--scope".to_string(),
+                "radroots_a".to_string(),
+                "--summary".to_string(),
+                summary_path.display().to_string(),
+                "--lcov".to_string(),
+                lcov_path.display().to_string(),
+                "--out".to_string(),
+                out_path.display().to_string(),
+                "--policy-gate".to_string(),
+            ],
+            &root,
+        )
+        .expect("report gate should honor override");
+
+        let report_raw = fs::read_to_string(&out_path).expect("read override report");
+        assert!(report_raw.contains("\"functions\": 77.5"));
+        assert!(report_raw.contains("\"regions\": 66.5"));
+        assert!(report_raw.contains("\"branches_required\": false"));
+        assert!(report_raw.contains("\"pass\": true"));
+
+        fs::remove_dir_all(root).expect("remove report gate override root");
     }
 
     #[test]
