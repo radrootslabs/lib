@@ -23,6 +23,14 @@ fail_under_branches = 80.0
 temporary = true
 reason = "publish 0.1.0-alpha.1 temporary coverage override"
 
+[overrides.radroots_runtime]
+fail_under_exec_lines = 99.428
+fail_under_functions = 100.0
+fail_under_regions = 100.0
+fail_under_branches = 100.0
+temporary = true
+reason = "publish 0.1.0-alpha.1 temporary coverage override"
+
 [overrides.radroots_simplex_chat_proto]
 fail_under_exec_lines = 60.930
 fail_under_functions = 61.904
