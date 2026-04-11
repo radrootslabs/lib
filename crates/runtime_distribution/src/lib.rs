@@ -16,6 +16,8 @@ pub use resolve::{
 
 #[cfg(test)]
 mod tests {
+    use toml::Value;
+
     use super::{
         RUNTIME_DISTRIBUTION_SCHEMA, RadrootsRuntimeDistributionError,
         RadrootsRuntimeDistributionResolver, RuntimeArtifactRequest,
@@ -184,6 +186,24 @@ default_channel = "stable"
 human_installable = false
 "#;
 
+    fn contract_value() -> Value {
+        toml::from_str(CONTRACT).expect("parse contract value")
+    }
+
+    fn resolver_from_value(value: Value) -> RadrootsRuntimeDistributionResolver {
+        let raw = toml::to_string(&value).expect("serialize contract");
+        RadrootsRuntimeDistributionResolver::parse_str(&raw).expect("parse resolver")
+    }
+
+    fn resolve_error(
+        resolver: &RadrootsRuntimeDistributionResolver,
+        request: RuntimeArtifactRequest<'_>,
+    ) -> RadrootsRuntimeDistributionError {
+        resolver
+            .resolve_artifact(&request)
+            .expect_err("request should fail")
+    }
+
     #[test]
     fn parse_str_accepts_the_expected_schema() {
         let resolver =
@@ -191,6 +211,34 @@ human_installable = false
 
         assert_eq!(resolver.contract().schema, RUNTIME_DISTRIBUTION_SCHEMA);
         assert_eq!(resolver.contract().runtime.len(), 5);
+    }
+
+    #[test]
+    fn parse_str_rejects_invalid_toml() {
+        let err = RadrootsRuntimeDistributionResolver::parse_str("schema = [")
+            .expect_err("invalid toml should fail");
+        assert_eq!(
+            std::mem::discriminant(&err),
+            std::mem::discriminant(&RadrootsRuntimeDistributionError::Parse(String::new()))
+        );
+    }
+
+    #[test]
+    fn new_rejects_unexpected_schema() {
+        let mut contract = contract_value();
+        contract["schema"] = Value::String("wrong-schema".to_string());
+
+        let raw = toml::to_string(&contract).expect("serialize contract");
+        let err = RadrootsRuntimeDistributionResolver::parse_str(&raw)
+            .expect_err("unexpected schema should fail");
+
+        assert_eq!(
+            err,
+            RadrootsRuntimeDistributionError::UnexpectedSchema {
+                expected: RUNTIME_DISTRIBUTION_SCHEMA,
+                found: "wrong-schema".to_string(),
+            }
+        );
     }
 
     #[test]
@@ -322,6 +370,50 @@ human_installable = false
     }
 
     #[test]
+    fn rejects_unknown_runtime() {
+        let resolver =
+            RadrootsRuntimeDistributionResolver::parse_str(CONTRACT).expect("parse contract");
+
+        let err = resolve_error(
+            &resolver,
+            RuntimeArtifactRequest {
+                runtime_id: "missing-runtime",
+                os: "linux",
+                arch: "amd64",
+                version: "0.1.0-alpha.1",
+                channel: Some("stable"),
+            },
+        );
+
+        assert_eq!(
+            err,
+            RadrootsRuntimeDistributionError::UnknownRuntime("missing-runtime".to_string())
+        );
+    }
+
+    #[test]
+    fn rejects_unknown_channel() {
+        let resolver =
+            RadrootsRuntimeDistributionResolver::parse_str(CONTRACT).expect("parse contract");
+
+        let err = resolve_error(
+            &resolver,
+            RuntimeArtifactRequest {
+                runtime_id: "cli",
+                os: "linux",
+                arch: "amd64",
+                version: "0.1.0-alpha.1",
+                channel: Some("beta"),
+            },
+        );
+
+        assert_eq!(
+            err,
+            RadrootsRuntimeDistributionError::UnknownChannel("beta".to_string())
+        );
+    }
+
+    #[test]
     fn rejects_unsupported_platform() {
         let resolver =
             RadrootsRuntimeDistributionResolver::parse_str(CONTRACT).expect("parse contract");
@@ -342,6 +434,209 @@ human_installable = false
                 runtime_id: "radrootsd".to_string(),
                 os: "windows".to_string(),
                 arch: "amd64".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn rejects_runtime_with_missing_target_set() {
+        let mut contract = contract_value();
+        let runtime = contract["runtime"]
+            .as_array_mut()
+            .expect("runtime array")
+            .iter_mut()
+            .find(|runtime| runtime["id"].as_str() == Some("community-app-ios"))
+            .expect("ios runtime");
+        runtime["human_installable"] = Value::Boolean(true);
+
+        let resolver = resolver_from_value(contract);
+        let err = resolve_error(
+            &resolver,
+            RuntimeArtifactRequest {
+                runtime_id: "community-app-ios",
+                os: "ios",
+                arch: "arm64",
+                version: "0.1.0-alpha.1",
+                channel: Some("stable"),
+            },
+        );
+
+        assert_eq!(
+            err,
+            RadrootsRuntimeDistributionError::MissingTargetSet("community-app-ios".to_string())
+        );
+    }
+
+    #[test]
+    fn rejects_unknown_artifact_adapter() {
+        let mut contract = contract_value();
+        let runtime = contract["runtime"]
+            .as_array_mut()
+            .expect("runtime array")
+            .iter_mut()
+            .find(|runtime| runtime["id"].as_str() == Some("cli"))
+            .expect("cli runtime");
+        runtime["artifact_adapter"] = Value::String("missing_adapter".to_string());
+
+        let resolver = resolver_from_value(contract);
+        let err = resolve_error(
+            &resolver,
+            RuntimeArtifactRequest {
+                runtime_id: "cli",
+                os: "linux",
+                arch: "amd64",
+                version: "0.1.0-alpha.1",
+                channel: Some("stable"),
+            },
+        );
+
+        assert_eq!(
+            err,
+            RadrootsRuntimeDistributionError::UnknownArtifactAdapter {
+                runtime_id: "cli".to_string(),
+                adapter_id: "missing_adapter".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn rejects_missing_target_set_definition() {
+        let mut contract = contract_value();
+        let runtime = contract["runtime"]
+            .as_array_mut()
+            .expect("runtime array")
+            .iter_mut()
+            .find(|runtime| runtime["id"].as_str() == Some("cli"))
+            .expect("cli runtime");
+        runtime["target_set"] = Value::String("missing-target-set".to_string());
+
+        let resolver = resolver_from_value(contract);
+        let err = resolve_error(
+            &resolver,
+            RuntimeArtifactRequest {
+                runtime_id: "cli",
+                os: "linux",
+                arch: "amd64",
+                version: "0.1.0-alpha.1",
+                channel: Some("stable"),
+            },
+        );
+
+        assert_eq!(
+            err,
+            RadrootsRuntimeDistributionError::UnsupportedPlatform {
+                runtime_id: "cli".to_string(),
+                os: "linux".to_string(),
+                arch: "amd64".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn rejects_target_set_with_unknown_target() {
+        let mut contract = contract_value();
+        contract["target_sets"]["cli_default"]["targets"] =
+            Value::Array(vec![Value::String("missing-target".to_string())]);
+
+        let resolver = resolver_from_value(contract);
+        let err = resolve_error(
+            &resolver,
+            RuntimeArtifactRequest {
+                runtime_id: "cli",
+                os: "linux",
+                arch: "amd64",
+                version: "0.1.0-alpha.1",
+                channel: Some("stable"),
+            },
+        );
+
+        assert_eq!(
+            err,
+            RadrootsRuntimeDistributionError::UnknownTarget {
+                runtime_id: "cli".to_string(),
+                target_set_id: "cli_default".to_string(),
+                target_id: "missing-target".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn infers_archive_format_from_single_supported_adapter_format() {
+        let mut contract = contract_value();
+        contract["targets"]["x86_64-unknown-linux-gnu"]
+            .as_table_mut()
+            .expect("target table")
+            .remove("archive_format");
+        contract["artifact_adapters"]["rust_binary_archive"]["supported_archive_formats"] =
+            Value::Array(vec![Value::String("tar.gz".to_string())]);
+
+        let resolver = resolver_from_value(contract);
+        let artifact = resolver
+            .resolve_artifact(&RuntimeArtifactRequest {
+                runtime_id: "cli",
+                os: "linux",
+                arch: "amd64",
+                version: "0.1.0-alpha.1",
+                channel: Some("stable"),
+            })
+            .expect("single supported format should be inferred");
+
+        assert_eq!(artifact.archive_format, "tar.gz");
+        assert_eq!(artifact.archive_extension, ".tar.gz");
+    }
+
+    #[test]
+    fn rejects_unknown_archive_format_reference() {
+        let mut contract = contract_value();
+        contract["targets"]["x86_64-unknown-linux-gnu"]["archive_format"] =
+            Value::String("tar.xz".to_string());
+
+        let resolver = resolver_from_value(contract);
+        let err = resolve_error(
+            &resolver,
+            RuntimeArtifactRequest {
+                runtime_id: "cli",
+                os: "linux",
+                arch: "amd64",
+                version: "0.1.0-alpha.1",
+                channel: Some("stable"),
+            },
+        );
+
+        assert_eq!(
+            err,
+            RadrootsRuntimeDistributionError::UnknownArchiveFormat {
+                target_id: "x86_64-unknown-linux-gnu".to_string(),
+                archive_format_id: "tar.xz".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn rejects_missing_archive_format_when_adapter_is_ambiguous() {
+        let mut contract = contract_value();
+        contract["targets"]["aarch64-apple-darwin"]
+            .as_table_mut()
+            .expect("target table")
+            .remove("archive_format");
+
+        let resolver = resolver_from_value(contract);
+        let err = resolve_error(
+            &resolver,
+            RuntimeArtifactRequest {
+                runtime_id: "community-app-desktop",
+                os: "macos",
+                arch: "arm64",
+                version: "0.1.0-alpha.1",
+                channel: Some("stable"),
+            },
+        );
+
+        assert_eq!(
+            err,
+            RadrootsRuntimeDistributionError::MissingArchiveFormat {
+                runtime_id: "community-app-desktop".to_string(),
+                target_id: "aarch64-apple-darwin".to_string(),
             }
         );
     }
