@@ -13,6 +13,11 @@ const ROOT_RELEASE_POLICY_RELATIVE: &str =
 const CONFORMANCE_ROOT_RELATIVE: &str = "spec/conformance";
 const CONFORMANCE_SCHEMA_RELATIVE: &str = "spec/conformance/schema/vector.schema.json";
 const RELEASE_POLICY_ENV: &str = "RADROOTS_MOUNTED_RUST_CRATE_PUBLISH_POLICY";
+const EVENT_BOUNDARY_MATRIX_ENV: &str = "RADROOTS_EVENT_BOUNDARY_MATRIX";
+const EVENT_BOUNDARY_MATRIX_RELATIVES: [&str; 2] = [
+    "dev/docs/radroots/radrootsd/spec-coverage.md",
+    "docs/radroots/radrootsd/spec-coverage.md",
+];
 
 #[derive(Debug, Deserialize)]
 pub struct ContractManifest {
@@ -225,6 +230,637 @@ struct CoverageRequiredSection {
     crates: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct EventBoundaryRow {
+    domain: String,
+    kind: String,
+    radroots_type: String,
+    rpc_methods: BTreeSet<String>,
+}
+
+#[derive(Clone, Copy)]
+struct EventBoundarySourceWitness {
+    relative_path: &'static str,
+    required_fragments: &'static [&'static str],
+}
+
+#[derive(Clone, Copy)]
+struct EventBoundaryExpectation {
+    domain: &'static str,
+    kind: &'static str,
+    radroots_type: &'static str,
+    rpc_methods: &'static [&'static str],
+    witnesses: &'static [EventBoundarySourceWitness],
+}
+
+const PROFILE_WITNESSES: [EventBoundarySourceWitness; 2] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/profile.rs",
+        required_fragments: &["pub struct RadrootsProfile"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/kinds.rs",
+        required_fragments: &["pub const KIND_PROFILE: u32 = 0;"],
+    },
+];
+
+const FOLLOW_WITNESSES: [EventBoundarySourceWitness; 2] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/follow.rs",
+        required_fragments: &["pub struct RadrootsFollow"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/kinds.rs",
+        required_fragments: &["pub const KIND_FOLLOW: u32 = 3;"],
+    },
+];
+
+const POST_WITNESSES: [EventBoundarySourceWitness; 2] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/post.rs",
+        required_fragments: &["pub struct RadrootsPost"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/kinds.rs",
+        required_fragments: &["pub const KIND_POST: u32 = 1;"],
+    },
+];
+
+const COMMENT_WITNESSES: [EventBoundarySourceWitness; 2] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/comment.rs",
+        required_fragments: &["pub struct RadrootsComment"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/kinds.rs",
+        required_fragments: &["pub const KIND_COMMENT: u32 = 1111;"],
+    },
+];
+
+const REACTION_WITNESSES: [EventBoundarySourceWitness; 2] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/reaction.rs",
+        required_fragments: &["pub struct RadrootsReaction"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/kinds.rs",
+        required_fragments: &["pub const KIND_REACTION: u32 = 7;"],
+    },
+];
+
+const SEAL_WITNESSES: [EventBoundarySourceWitness; 2] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/seal.rs",
+        required_fragments: &["pub struct RadrootsSeal"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/kinds.rs",
+        required_fragments: &["pub const KIND_SEAL: u32 = 13;"],
+    },
+];
+
+const MESSAGE_WITNESSES: [EventBoundarySourceWitness; 4] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/message.rs",
+        required_fragments: &["pub struct RadrootsMessage"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/kinds.rs",
+        required_fragments: &["pub const KIND_MESSAGE: u32 = 14;"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/nostr/src/nip17.rs",
+        required_fragments: &[
+            "pub async fn radroots_nostr_wrap_message<T>(",
+            "KIND_MESSAGE =>",
+        ],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/nostr/src/lib.rs",
+        required_fragments: &["radroots_nostr_wrap_message"],
+    },
+];
+
+const MESSAGE_FILE_WITNESSES: [EventBoundarySourceWitness; 4] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/message_file.rs",
+        required_fragments: &["pub struct RadrootsMessageFile"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/kinds.rs",
+        required_fragments: &["pub const KIND_MESSAGE_FILE: u32 = 15;"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/nostr/src/nip17.rs",
+        required_fragments: &[
+            "pub async fn radroots_nostr_wrap_message_file<T>(",
+            "KIND_MESSAGE_FILE =>",
+        ],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/nostr/src/lib.rs",
+        required_fragments: &["radroots_nostr_wrap_message_file"],
+    },
+];
+
+const GIFT_WRAP_WITNESSES: [EventBoundarySourceWitness; 4] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/gift_wrap.rs",
+        required_fragments: &["pub struct RadrootsGiftWrap"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/kinds.rs",
+        required_fragments: &["pub const KIND_GIFT_WRAP: u32 = 1059;"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/nostr/src/nip17.rs",
+        required_fragments: &["pub async fn radroots_nostr_unwrap_gift_wrap<T>("],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/nostr/src/lib.rs",
+        required_fragments: &["radroots_nostr_unwrap_gift_wrap"],
+    },
+];
+
+const LIST_WITNESSES: [EventBoundarySourceWitness; 2] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/list.rs",
+        required_fragments: &["pub struct RadrootsList"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/kinds.rs",
+        required_fragments: &[
+            "pub const KIND_LIST_MUTE: u32 = 10000;",
+            "pub const KIND_LIST_GOOD_WIKI_RELAYS: u32 = 10102;",
+        ],
+    },
+];
+
+const LIST_SET_WITNESSES: [EventBoundarySourceWitness; 2] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/list_set.rs",
+        required_fragments: &["pub struct RadrootsListSet"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/kinds.rs",
+        required_fragments: &[
+            "pub const KIND_LIST_SET_FOLLOW: u32 = 30000;",
+            "pub const KIND_LIST_SET_MEDIA_STARTER_PACK: u32 = 39092;",
+        ],
+    },
+];
+
+const APP_DATA_WITNESSES: [EventBoundarySourceWitness; 2] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/app_data.rs",
+        required_fragments: &["pub struct RadrootsAppData"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/kinds.rs",
+        required_fragments: &["pub const KIND_APP_DATA: u32 = 30078;"],
+    },
+];
+
+const APP_HANDLER_WITNESSES: [EventBoundarySourceWitness; 2] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/kinds.rs",
+        required_fragments: &["pub const KIND_APPLICATION_HANDLER: u32 = 31990;"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/nostr/src/events/application_handler.rs",
+        required_fragments: &["pub fn radroots_nostr_build_application_handler_event("],
+    },
+];
+
+const FARM_WITNESSES: [EventBoundarySourceWitness; 2] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/farm.rs",
+        required_fragments: &["pub struct RadrootsFarm"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/kinds.rs",
+        required_fragments: &["pub const KIND_FARM: u32 = 30340;"],
+    },
+];
+
+const PLOT_WITNESSES: [EventBoundarySourceWitness; 2] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/plot.rs",
+        required_fragments: &["pub struct RadrootsPlot"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/kinds.rs",
+        required_fragments: &["pub const KIND_PLOT: u32 = 30350;"],
+    },
+];
+
+const COOP_WITNESSES: [EventBoundarySourceWitness; 2] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/coop.rs",
+        required_fragments: &["pub struct RadrootsCoop"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/kinds.rs",
+        required_fragments: &["pub const KIND_COOP: u32 = 30360;"],
+    },
+];
+
+const DOCUMENT_WITNESSES: [EventBoundarySourceWitness; 2] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/document.rs",
+        required_fragments: &["pub struct RadrootsDocument"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/kinds.rs",
+        required_fragments: &["pub const KIND_DOCUMENT: u32 = 30361;"],
+    },
+];
+
+const RESOURCE_AREA_WITNESSES: [EventBoundarySourceWitness; 2] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/resource_area.rs",
+        required_fragments: &["pub struct RadrootsResourceArea"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/kinds.rs",
+        required_fragments: &["pub const KIND_RESOURCE_AREA: u32 = 30370;"],
+    },
+];
+
+const RESOURCE_CAP_WITNESSES: [EventBoundarySourceWitness; 2] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/resource_cap.rs",
+        required_fragments: &["pub struct RadrootsResourceHarvestCap"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/kinds.rs",
+        required_fragments: &["pub const KIND_RESOURCE_HARVEST_CAP: u32 = 30371;"],
+    },
+];
+
+const LISTING_WITNESSES: [EventBoundarySourceWitness; 2] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/listing.rs",
+        required_fragments: &["pub struct RadrootsListing"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/kinds.rs",
+        required_fragments: &["pub const KIND_LISTING: u32 = 30402;"],
+    },
+];
+
+const LISTING_DRAFT_WITNESSES: [EventBoundarySourceWitness; 2] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/listing.rs",
+        required_fragments: &["pub struct RadrootsListing"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/kinds.rs",
+        required_fragments: &["pub const KIND_LISTING_DRAFT: u32 = 30403;"],
+    },
+];
+
+const DVM_REQUEST_WITNESSES: [EventBoundarySourceWitness; 2] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/job_request.rs",
+        required_fragments: &["pub struct RadrootsJobRequest"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/kinds.rs",
+        required_fragments: &[
+            "pub const KIND_JOB_REQUEST_MIN: u32 = 5000;",
+            "pub const KIND_JOB_REQUEST_MAX: u32 = 5999;",
+        ],
+    },
+];
+
+const DVM_RESULT_WITNESSES: [EventBoundarySourceWitness; 2] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/job_result.rs",
+        required_fragments: &["pub struct RadrootsJobResult"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/kinds.rs",
+        required_fragments: &[
+            "pub const KIND_JOB_RESULT_MIN: u32 = 6000;",
+            "pub const KIND_JOB_RESULT_MAX: u32 = 6999;",
+        ],
+    },
+];
+
+const DVM_FEEDBACK_WITNESSES: [EventBoundarySourceWitness; 2] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/job_feedback.rs",
+        required_fragments: &["pub struct RadrootsJobFeedback"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/kinds.rs",
+        required_fragments: &["pub const KIND_JOB_FEEDBACK: u32 = 7000;"],
+    },
+];
+
+const TRADE_LISTING_WITNESSES: [EventBoundarySourceWitness; 4] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/trade/src/listing/dvm.rs",
+        required_fragments: &["pub struct TradeListingEnvelope<T>"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/trade/src/listing/kinds.rs",
+        required_fragments: &[
+            "pub const KIND_TRADE_LISTING_VALIDATE_REQ: u16 = 5321;",
+            "pub const KIND_TRADE_LISTING_VALIDATE_RES: u16 = 6321;",
+            "pub const KIND_TRADE_LISTING_ORDER_REQ: u16 = 5322;",
+            "pub const KIND_TRADE_LISTING_ORDER_RES: u16 = 6322;",
+        ],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/trade.rs",
+        required_fragments: &["pub struct RadrootsTradeEnvelope<T>"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/kinds.rs",
+        required_fragments: &[
+            "pub const KIND_TRADE_LISTING_VALIDATE_REQ: u32 = 5321;",
+            "pub const KIND_TRADE_LISTING_ORDER_REQ: u32 = KIND_TRADE_ORDER_REQUEST;",
+        ],
+    },
+];
+
+const RELAY_DOC_WITNESSES: [EventBoundarySourceWitness; 2] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/relay_document.rs",
+        required_fragments: &["pub struct RadrootsRelayDocument"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/nostr/src/nip11.rs",
+        required_fragments: &[
+            "pub async fn fetch_nip11(ws_url: &str) -> Option<RadrootsRelayDocument>",
+        ],
+    },
+];
+
+const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 26] = [
+    EventBoundaryExpectation {
+        domain: "profile",
+        kind: "0",
+        radroots_type: "RadrootsProfile",
+        rpc_methods: &[
+            "events.profile.publish",
+            "events.profile.list",
+            "events.profile.get",
+        ],
+        witnesses: &PROFILE_WITNESSES,
+    },
+    EventBoundaryExpectation {
+        domain: "follow",
+        kind: "3",
+        radroots_type: "RadrootsFollow",
+        rpc_methods: &[
+            "events.follow.publish",
+            "events.follow.list",
+            "events.follow.get",
+        ],
+        witnesses: &FOLLOW_WITNESSES,
+    },
+    EventBoundaryExpectation {
+        domain: "post",
+        kind: "1",
+        radroots_type: "RadrootsPost",
+        rpc_methods: &["events.post.publish", "events.post.list", "events.post.get"],
+        witnesses: &POST_WITNESSES,
+    },
+    EventBoundaryExpectation {
+        domain: "comment",
+        kind: "1111",
+        radroots_type: "RadrootsComment",
+        rpc_methods: &[
+            "events.comment.publish",
+            "events.comment.list",
+            "events.comment.get",
+        ],
+        witnesses: &COMMENT_WITNESSES,
+    },
+    EventBoundaryExpectation {
+        domain: "reaction",
+        kind: "7",
+        radroots_type: "RadrootsReaction",
+        rpc_methods: &[
+            "events.reaction.publish",
+            "events.reaction.list",
+            "events.reaction.get",
+        ],
+        witnesses: &REACTION_WITNESSES,
+    },
+    EventBoundaryExpectation {
+        domain: "seal",
+        kind: "13",
+        radroots_type: "RadrootsSeal",
+        rpc_methods: &["events.seal.encode", "events.seal.decode"],
+        witnesses: &SEAL_WITNESSES,
+    },
+    EventBoundaryExpectation {
+        domain: "message",
+        kind: "14",
+        radroots_type: "RadrootsMessage",
+        rpc_methods: &[
+            "events.message.publish",
+            "events.message.list",
+            "events.message.get",
+        ],
+        witnesses: &MESSAGE_WITNESSES,
+    },
+    EventBoundaryExpectation {
+        domain: "message_file",
+        kind: "15",
+        radroots_type: "RadrootsMessageFile",
+        rpc_methods: &[
+            "events.message_file.publish",
+            "events.message_file.list",
+            "events.message_file.get",
+        ],
+        witnesses: &MESSAGE_FILE_WITNESSES,
+    },
+    EventBoundaryExpectation {
+        domain: "gift_wrap",
+        kind: "1059",
+        radroots_type: "RadrootsGiftWrap",
+        rpc_methods: &[
+            "events.gift_wrap.publish",
+            "events.gift_wrap.list",
+            "events.gift_wrap.get",
+        ],
+        witnesses: &GIFT_WRAP_WITNESSES,
+    },
+    EventBoundaryExpectation {
+        domain: "list",
+        kind: "10000..10102",
+        radroots_type: "RadrootsList",
+        rpc_methods: &["events.list.publish", "events.list.list", "events.list.get"],
+        witnesses: &LIST_WITNESSES,
+    },
+    EventBoundaryExpectation {
+        domain: "list_set",
+        kind: "30000..39092",
+        radroots_type: "RadrootsListSet",
+        rpc_methods: &[
+            "events.list_set.publish",
+            "events.list_set.list",
+            "events.list_set.get",
+        ],
+        witnesses: &LIST_SET_WITNESSES,
+    },
+    EventBoundaryExpectation {
+        domain: "app_data",
+        kind: "30078",
+        radroots_type: "RadrootsAppData",
+        rpc_methods: &[
+            "events.app_data.publish",
+            "events.app_data.list",
+            "events.app_data.get",
+        ],
+        witnesses: &APP_DATA_WITNESSES,
+    },
+    EventBoundaryExpectation {
+        domain: "app_handler",
+        kind: "31990",
+        radroots_type: "KIND_APPLICATION_HANDLER",
+        rpc_methods: &[
+            "events.app_handler.publish",
+            "events.app_handler.list",
+            "events.app_handler.get",
+        ],
+        witnesses: &APP_HANDLER_WITNESSES,
+    },
+    EventBoundaryExpectation {
+        domain: "farm",
+        kind: "30340",
+        radroots_type: "RadrootsFarm",
+        rpc_methods: &["events.farm.publish", "events.farm.list", "events.farm.get"],
+        witnesses: &FARM_WITNESSES,
+    },
+    EventBoundaryExpectation {
+        domain: "plot",
+        kind: "30350",
+        radroots_type: "RadrootsPlot",
+        rpc_methods: &["events.plot.publish", "events.plot.list", "events.plot.get"],
+        witnesses: &PLOT_WITNESSES,
+    },
+    EventBoundaryExpectation {
+        domain: "coop",
+        kind: "30360",
+        radroots_type: "RadrootsCoop",
+        rpc_methods: &["events.coop.publish", "events.coop.list", "events.coop.get"],
+        witnesses: &COOP_WITNESSES,
+    },
+    EventBoundaryExpectation {
+        domain: "document",
+        kind: "30361",
+        radroots_type: "RadrootsDocument",
+        rpc_methods: &[
+            "events.document.publish",
+            "events.document.list",
+            "events.document.get",
+        ],
+        witnesses: &DOCUMENT_WITNESSES,
+    },
+    EventBoundaryExpectation {
+        domain: "resource_area",
+        kind: "30370",
+        radroots_type: "RadrootsResourceArea",
+        rpc_methods: &[
+            "events.resource_area.publish",
+            "events.resource_area.list",
+            "events.resource_area.get",
+        ],
+        witnesses: &RESOURCE_AREA_WITNESSES,
+    },
+    EventBoundaryExpectation {
+        domain: "resource_cap",
+        kind: "30371",
+        radroots_type: "RadrootsResourceHarvestCap",
+        rpc_methods: &[
+            "events.resource_cap.publish",
+            "events.resource_cap.list",
+            "events.resource_cap.get",
+        ],
+        witnesses: &RESOURCE_CAP_WITNESSES,
+    },
+    EventBoundaryExpectation {
+        domain: "listing",
+        kind: "30402",
+        radroots_type: "RadrootsListing",
+        rpc_methods: &[
+            "events.listing.publish",
+            "events.listing.list",
+            "events.listing.get",
+        ],
+        witnesses: &LISTING_WITNESSES,
+    },
+    EventBoundaryExpectation {
+        domain: "listing_draft",
+        kind: "30403",
+        radroots_type: "RadrootsListing",
+        rpc_methods: &[
+            "events.listing_draft.publish",
+            "events.listing_draft.list",
+            "events.listing_draft.get",
+        ],
+        witnesses: &LISTING_DRAFT_WITNESSES,
+    },
+    EventBoundaryExpectation {
+        domain: "dvm_request",
+        kind: "5000-5999",
+        radroots_type: "RadrootsJobRequest",
+        rpc_methods: &[
+            "events.dvm_request.publish",
+            "events.dvm_request.list",
+            "events.dvm_request.get",
+        ],
+        witnesses: &DVM_REQUEST_WITNESSES,
+    },
+    EventBoundaryExpectation {
+        domain: "dvm_result",
+        kind: "6000-6999",
+        radroots_type: "RadrootsJobResult",
+        rpc_methods: &[
+            "events.dvm_result.publish",
+            "events.dvm_result.list",
+            "events.dvm_result.get",
+        ],
+        witnesses: &DVM_RESULT_WITNESSES,
+    },
+    EventBoundaryExpectation {
+        domain: "dvm_feedback",
+        kind: "7000",
+        radroots_type: "RadrootsJobFeedback",
+        rpc_methods: &[
+            "events.dvm_feedback.publish",
+            "events.dvm_feedback.list",
+            "events.dvm_feedback.get",
+        ],
+        witnesses: &DVM_FEEDBACK_WITNESSES,
+    },
+    EventBoundaryExpectation {
+        domain: "trade:listing",
+        kind: "5321/6321/5322/6322",
+        radroots_type: "TradeListingEnvelope",
+        rpc_methods: &[
+            "domains.trade.listing.validate",
+            "domains.trade.listing.order",
+            "domains.trade.listing.series.get",
+            "domains.trade.listing.dvm.list",
+        ],
+        witnesses: &TRADE_LISTING_WITNESSES,
+    },
+    EventBoundaryExpectation {
+        domain: "relay_doc",
+        kind: "N/A",
+        radroots_type: "RadrootsRelayDocument",
+        rpc_methods: &["system.relay_doc.get"],
+        witnesses: &RELAY_DOC_WITNESSES,
+    },
+];
+
 #[derive(Debug, Deserialize)]
 struct ReleaseContractFile {
     release: ReleaseSection,
@@ -341,6 +977,214 @@ fn parse_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, String> {
         Ok(parsed) => Ok(parsed),
         Err(e) => Err(format!("parse {}: {e}", path.display())),
     }
+}
+
+fn resolve_event_boundary_matrix_path_with_override(
+    workspace_root: &Path,
+    event_boundary_override: Option<PathBuf>,
+) -> Result<PathBuf, String> {
+    if let Some(path) = event_boundary_override {
+        if !path.is_file() {
+            return Err(format!(
+                "{EVENT_BOUNDARY_MATRIX_ENV} points to a missing canonical event matrix file: {}",
+                path.display()
+            ));
+        }
+        return Ok(path);
+    }
+
+    for ancestor in workspace_root.ancestors() {
+        for relative in EVENT_BOUNDARY_MATRIX_RELATIVES {
+            let candidate = ancestor.join(relative);
+            if candidate.is_file() {
+                return Ok(candidate);
+            }
+        }
+    }
+
+    Err(format!(
+        "canonical event matrix not found; set {EVENT_BOUNDARY_MATRIX_ENV} or provide one of: {}",
+        EVENT_BOUNDARY_MATRIX_RELATIVES.join(", ")
+    ))
+}
+
+fn parse_event_boundary_matrix(path: &Path) -> Result<BTreeMap<String, EventBoundaryRow>, String> {
+    let raw = match fs::read_to_string(path) {
+        Ok(raw) => raw,
+        Err(e) => return Err(format!("read {}: {e}", path.display())),
+    };
+    let mut rows = BTreeMap::new();
+    let mut in_table = false;
+    for line in raw.lines() {
+        let trimmed = line.trim();
+        if trimmed == "| Domain | Kind | Radroots Type | RPC Methods | Notes |" {
+            in_table = true;
+            continue;
+        }
+        if !in_table {
+            continue;
+        }
+        if trimmed.is_empty() {
+            break;
+        }
+        if trimmed == "| --- | --- | --- | --- | --- |" {
+            continue;
+        }
+        if !trimmed.starts_with('|') {
+            break;
+        }
+        let columns = trimmed
+            .trim_matches('|')
+            .split('|')
+            .map(|part| part.trim())
+            .collect::<Vec<_>>();
+        if columns.len() != 5 {
+            return Err(format!(
+                "canonical event matrix row in {} must have exactly 5 columns: {}",
+                path.display(),
+                trimmed
+            ));
+        }
+        let domain = columns[0].to_string();
+        if domain.is_empty() {
+            return Err(format!(
+                "canonical event matrix row in {} must define a non-empty domain",
+                path.display()
+            ));
+        }
+        let rpc_methods = columns[3]
+            .split(',')
+            .map(str::trim)
+            .filter(|item| !item.is_empty())
+            .map(|item| item.to_string())
+            .collect::<BTreeSet<_>>();
+        if rpc_methods.is_empty() {
+            return Err(format!(
+                "canonical event matrix row {} in {} must define rpc methods",
+                domain,
+                path.display()
+            ));
+        }
+        let row = EventBoundaryRow {
+            domain: domain.clone(),
+            kind: columns[1].to_string(),
+            radroots_type: columns[2].to_string(),
+            rpc_methods,
+        };
+        if rows.insert(domain.clone(), row).is_some() {
+            return Err(format!(
+                "canonical event matrix {} has duplicate domain row {}",
+                path.display(),
+                domain
+            ));
+        }
+    }
+
+    if rows.is_empty() {
+        return Err(format!(
+            "canonical event matrix {} does not contain the coverage table",
+            path.display()
+        ));
+    }
+
+    Ok(rows)
+}
+
+fn validate_event_boundary_source_witness(
+    workspace_root: &Path,
+    domain: &str,
+    witness: &EventBoundarySourceWitness,
+) -> Result<(), String> {
+    let path = workspace_root.join(witness.relative_path);
+    let source = match fs::read_to_string(&path) {
+        Ok(source) => source,
+        Err(e) => return Err(format!("read {}: {e}", path.display())),
+    };
+    for fragment in witness.required_fragments {
+        if !source.contains(fragment) {
+            return Err(format!(
+                "canonical event row {} is missing required implementation fragment {} in {}",
+                domain,
+                fragment,
+                path.display()
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_canonical_event_boundary_with_override(
+    workspace_root: &Path,
+    event_boundary_override: Option<PathBuf>,
+) -> Result<(), String> {
+    let matrix_path =
+        resolve_event_boundary_matrix_path_with_override(workspace_root, event_boundary_override)?;
+    let rows = parse_event_boundary_matrix(&matrix_path)?;
+    let expected_domains = CANONICAL_EVENT_BOUNDARY_EXPECTATIONS
+        .iter()
+        .map(|row| row.domain.to_string())
+        .collect::<BTreeSet<_>>();
+    let actual_domains = rows.keys().cloned().collect::<BTreeSet<_>>();
+    if actual_domains != expected_domains {
+        let missing = expected_domains
+            .difference(&actual_domains)
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        let extra = actual_domains
+            .difference(&expected_domains)
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        return Err(format!(
+            "canonical event matrix {} is missing rows: {}; and includes unexpected rows: {}",
+            matrix_path.display(),
+            join_set(&missing),
+            join_set(&extra)
+        ));
+    }
+
+    for expectation in CANONICAL_EVENT_BOUNDARY_EXPECTATIONS {
+        let row = rows.get(expectation.domain).ok_or_else(|| {
+            format!(
+                "canonical event matrix {} is missing required row {}",
+                matrix_path.display(),
+                expectation.domain
+            )
+        })?;
+        if row.kind != expectation.kind {
+            return Err(format!(
+                "canonical event row {} kind drift: expected {}, got {}",
+                expectation.domain, expectation.kind, row.kind
+            ));
+        }
+        if row.radroots_type != expectation.radroots_type {
+            return Err(format!(
+                "canonical event row {} type drift: expected {}, got {}",
+                expectation.domain, expectation.radroots_type, row.radroots_type
+            ));
+        }
+        let expected_methods = expectation
+            .rpc_methods
+            .iter()
+            .map(|method| (*method).to_string())
+            .collect::<BTreeSet<_>>();
+        if row.rpc_methods != expected_methods {
+            return Err(format!(
+                "canonical event row {} rpc drift: expected {}, got {}",
+                expectation.domain,
+                join_set(&expected_methods),
+                join_set(&row.rpc_methods)
+            ));
+        }
+        for witness in expectation.witnesses {
+            validate_event_boundary_source_witness(workspace_root, expectation.domain, witness)?;
+        }
+    }
+
+    Ok(())
+}
+
+pub fn validate_canonical_event_boundary(workspace_root: &Path) -> Result<(), String> {
+    validate_canonical_event_boundary_with_override(workspace_root, None)
 }
 
 fn contract_root(workspace_root: &Path) -> PathBuf {
@@ -2648,6 +3492,34 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
         let root = workspace_root();
         let bundle = load_contract_bundle(&root).expect("load contract");
         validate_contract_bundle(&bundle).expect("validate contract");
+    }
+
+    #[test]
+    fn validate_current_canonical_event_boundary() {
+        let root = workspace_root();
+        validate_canonical_event_boundary(&root).expect("validate canonical event boundary");
+    }
+
+    #[test]
+    fn canonical_event_boundary_reports_row_drift() {
+        let root = workspace_root();
+        let matrix_path =
+            resolve_event_boundary_matrix_path_with_override(&root, None).expect("matrix path");
+        let raw = fs::read_to_string(&matrix_path).expect("read matrix");
+        let drifted = raw.replacen(
+            "| message | 14 | RadrootsMessage |",
+            "| message | 999 | RadrootsMessage |",
+            1,
+        );
+        let temp = temp_root("event_boundary_drift");
+        let override_path = temp.join("spec-coverage.md");
+        write_file(&override_path, &drifted);
+
+        let err = validate_canonical_event_boundary_with_override(&root, Some(override_path))
+            .expect_err("message kind drift should fail");
+        assert!(err.contains("message kind drift"));
+
+        let _ = fs::remove_dir_all(temp);
     }
 
     #[test]

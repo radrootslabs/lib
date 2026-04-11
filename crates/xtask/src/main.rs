@@ -47,6 +47,7 @@ fn validate_contract() -> Result<(), String> {
     let root = workspace_root();
     contract::load_contract_bundle(&root)
         .and_then(|bundle| contract::validate_contract_bundle(&bundle))
+        .and_then(|_| contract::validate_canonical_event_boundary(&root))
 }
 
 fn release_preflight() -> Result<(), String> {
