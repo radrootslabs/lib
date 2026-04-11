@@ -44,13 +44,13 @@ Internal replica crate family:
 ## Governance
 
 Versioning and compatibility policy is defined in `spec/version.toml`.
-Contract evolution is semver-governed and requires conformance updates, export manifest validation, and release notes.
+Contract evolution is semver-governed and requires conformance updates, export target validation, and release notes.
 
 Repository guards also enforce:
 
 - deterministic export requirements
 - strict no-legacy identifier policy for replica surfaces
-- no committed generated TypeScript artifacts in repo export directories (`target/ts-rs/` and `target/sdk-export-ci/`)
+- no committed generated TypeScript artifacts under `target/ts-rs/`
 
 ## Coverage Policy
 

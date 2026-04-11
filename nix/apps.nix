@@ -53,7 +53,7 @@ in
 
   contract = mkRepoApp {
     name = "contract";
-    description = "Run the sdk contract lane and export validation";
+    description = "Run the sdk contract lane";
     runtimeInputs = common.runtimeInputs.stable;
     command = common.contractCommand;
   };
