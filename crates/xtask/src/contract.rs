@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use crate::coverage::{CoverageThresholds, read_coverage_policy};
+use crate::coverage::{CoveragePolicyFile, CoverageThresholds, read_coverage_policy};
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -2170,6 +2170,7 @@ fn load_coverage_refresh_rows(
     Ok(rows)
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn validate_required_coverage_summary(
     workspace_root: &Path,
     required_crates: &BTreeSet<String>,
@@ -2189,6 +2190,48 @@ fn validate_required_coverage_summary(
                 crate_name, status
             ));
         }
+        if *exec < thresholds.fail_under_exec_lines
+            || *func < thresholds.fail_under_functions
+            || *branch < thresholds.fail_under_branches
+            || *region < thresholds.fail_under_regions
+        {
+            return Err(format!(
+                "required coverage crate {} must satisfy coverage policy {},{},{},{}, found {}/{}/{}/{}",
+                crate_name,
+                thresholds.fail_under_exec_lines,
+                thresholds.fail_under_functions,
+                thresholds.fail_under_branches,
+                thresholds.fail_under_regions,
+                exec,
+                func,
+                branch,
+                region
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_required_coverage_summary_with_policy(
+    workspace_root: &Path,
+    required_crates: &BTreeSet<String>,
+    policy: &CoveragePolicyFile,
+) -> Result<(), String> {
+    let rows = load_coverage_refresh_rows(workspace_root)?;
+    for crate_name in required_crates {
+        let (status, exec, func, branch, region) = rows.get(crate_name).ok_or_else(|| {
+            format!(
+                "required coverage crate {} missing from coverage-refresh.tsv",
+                crate_name
+            )
+        })?;
+        if status != "pass" {
+            return Err(format!(
+                "required coverage crate {} has non-pass status {}",
+                crate_name, status
+            ));
+        }
+        let thresholds = policy.thresholds_for_scope(crate_name);
         if *exec < thresholds.fail_under_exec_lines
             || *func < thresholds.fail_under_functions
             || *branch < thresholds.fail_under_branches
@@ -2550,7 +2593,7 @@ pub fn validate_release_preflight_with_override(
     let required_crates = collect_unique_set(&required_crate_list, "required.crates")
         .expect("validated contract enforces unique required.crates");
     validate_publish_package_metadata(workspace_root, &publish_crates)?;
-    validate_required_coverage_summary(workspace_root, &required_crates, policy.thresholds())?;
+    validate_required_coverage_summary_with_policy(workspace_root, &required_crates, &policy)?;
     Ok(())
 }
 
@@ -3630,12 +3673,9 @@ pub enum RadrootsCoreUnitDimension {
     #[test]
     fn coverage_policy_matches_public_release_crates() {
         let root = workspace_root();
-        let release = load_release_contract(&root, &root.join("spec"))
-            .expect("root release policy");
-        let public_names = release
-            .public_crates()
-            .into_iter()
-            .collect::<BTreeSet<_>>();
+        let release =
+            load_release_contract(&root, &root.join("spec")).expect("root release policy");
+        let public_names = release.public_crates().into_iter().collect::<BTreeSet<_>>();
         let policy = load_coverage_policy(&root.join("spec")).expect("coverage policy");
         let required_names = policy
             .required_crates()
@@ -3741,6 +3781,33 @@ pub enum RadrootsCoreUnitDimension {
         let region_err = validate_required_coverage_summary(&root, &required, strict_thresholds())
             .expect_err("region coverage below 100");
         assert!(region_err.contains("must satisfy coverage policy"));
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn validate_required_coverage_summary_with_policy_honors_scope_override() {
+        let root = temp_root("coverage_summary_override");
+        let coverage_dir = root.join("target").join("coverage");
+        fs::create_dir_all(&coverage_dir).expect("create coverage dir");
+        fs::write(
+            coverage_dir.join("coverage-refresh.tsv"),
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots_events_codec\tpass\t100.0\t100.0\t100.0\t99.946385\tfile\n",
+        )
+        .expect("write coverage file");
+        let policy_dir = root.join("policy").join("coverage");
+        fs::create_dir_all(&policy_dir).expect("create policy dir");
+        fs::write(
+            policy_dir.join("policy.toml"),
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[overrides.radroots_events_codec]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 99.946\nfail_under_branches = 100.0\ntemporary = true\nreason = \"publish 0.1.0-alpha.1 temporary coverage override\"\n\n[required]\ncrates = [\"radroots_events_codec\"]\n",
+        )
+        .expect("write coverage policy");
+        let required = ["radroots_events_codec".to_string()]
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+        let policy = read_coverage_policy(&policy_dir.join("policy.toml"))
+            .expect("parse override coverage policy");
+        validate_required_coverage_summary_with_policy(&root, &required, &policy)
+            .expect("coverage summary should honor override");
         let _ = fs::remove_dir_all(&root);
     }
 
@@ -4949,8 +5016,9 @@ publish = false
         let release_policy_path = root_release_policy_path(&root);
 
         let missing_workspace = temp_root("coverage_missing_workspace_manifest");
-        let policy_workspace_err = validate_coverage_policy_parity(&missing_workspace, &contract_root)
-            .expect_err("coverage release policy lookup error");
+        let policy_workspace_err =
+            validate_coverage_policy_parity(&missing_workspace, &contract_root)
+                .expect_err("coverage release policy lookup error");
         assert!(policy_workspace_err.contains("release publish policy not found"));
         let _ = fs::remove_dir_all(&missing_workspace);
 
