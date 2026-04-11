@@ -12,18 +12,38 @@ pub enum RadrootsPlatform {
 
 impl RadrootsPlatform {
     #[must_use]
+    #[cfg(target_os = "android")]
     pub fn current() -> Self {
-        if cfg!(target_os = "android") {
-            Self::Android
-        } else if cfg!(target_os = "ios") {
-            Self::Ios
-        } else if cfg!(target_os = "macos") {
-            Self::Macos
-        } else if cfg!(target_os = "windows") {
-            Self::Windows
-        } else {
-            Self::Linux
-        }
+        Self::Android
+    }
+
+    #[must_use]
+    #[cfg(target_os = "ios")]
+    pub fn current() -> Self {
+        Self::Ios
+    }
+
+    #[must_use]
+    #[cfg(target_os = "macos")]
+    pub fn current() -> Self {
+        Self::Macos
+    }
+
+    #[must_use]
+    #[cfg(target_os = "windows")]
+    pub fn current() -> Self {
+        Self::Windows
+    }
+
+    #[must_use]
+    #[cfg(all(
+        not(target_os = "android"),
+        not(target_os = "ios"),
+        not(target_os = "macos"),
+        not(target_os = "windows")
+    ))]
+    pub fn current() -> Self {
+        Self::Linux
     }
 
     #[must_use]
@@ -80,5 +100,80 @@ impl RadrootsHostEnvironment {
             localappdata_dir: std::env::var_os("LOCALAPPDATA").map(PathBuf::from),
             programdata_dir: std::env::var_os("ProgramData").map(PathBuf::from),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use super::{RadrootsHostEnvironment, RadrootsPathProfile, RadrootsPlatform};
+
+    #[test]
+    fn current_matches_compiled_target_platform() {
+        #[cfg(target_os = "android")]
+        let expected = RadrootsPlatform::Android;
+        #[cfg(target_os = "ios")]
+        let expected = RadrootsPlatform::Ios;
+        #[cfg(target_os = "macos")]
+        let expected = RadrootsPlatform::Macos;
+        #[cfg(target_os = "windows")]
+        let expected = RadrootsPlatform::Windows;
+        #[cfg(all(
+            not(target_os = "android"),
+            not(target_os = "ios"),
+            not(target_os = "macos"),
+            not(target_os = "windows")
+        ))]
+        let expected = RadrootsPlatform::Linux;
+
+        assert_eq!(RadrootsPlatform::current(), expected);
+    }
+
+    #[test]
+    fn unix_like_classification_is_explicit() {
+        assert!(RadrootsPlatform::Linux.is_unix_like());
+        assert!(RadrootsPlatform::Macos.is_unix_like());
+        assert!(!RadrootsPlatform::Windows.is_unix_like());
+        assert!(!RadrootsPlatform::Android.is_unix_like());
+        assert!(!RadrootsPlatform::Ios.is_unix_like());
+    }
+
+    #[test]
+    fn display_uses_canonical_labels() {
+        assert_eq!(RadrootsPlatform::Linux.to_string(), "linux");
+        assert_eq!(RadrootsPlatform::Macos.to_string(), "macos");
+        assert_eq!(RadrootsPlatform::Windows.to_string(), "windows");
+        assert_eq!(RadrootsPlatform::Android.to_string(), "android");
+        assert_eq!(RadrootsPlatform::Ios.to_string(), "ios");
+
+        assert_eq!(
+            RadrootsPathProfile::InteractiveUser.to_string(),
+            "interactive_user"
+        );
+        assert_eq!(RadrootsPathProfile::ServiceHost.to_string(), "service_host");
+        assert_eq!(RadrootsPathProfile::RepoLocal.to_string(), "repo_local");
+        assert_eq!(
+            RadrootsPathProfile::MobileNative.to_string(),
+            "mobile_native"
+        );
+    }
+
+    #[test]
+    fn host_environment_reads_current_process_variables() {
+        let env = RadrootsHostEnvironment::from_current_process();
+        assert_eq!(env.home_dir, std::env::var_os("HOME").map(PathBuf::from));
+        assert_eq!(
+            env.appdata_dir,
+            std::env::var_os("APPDATA").map(PathBuf::from)
+        );
+        assert_eq!(
+            env.localappdata_dir,
+            std::env::var_os("LOCALAPPDATA").map(PathBuf::from)
+        );
+        assert_eq!(
+            env.programdata_dir,
+            std::env::var_os("ProgramData").map(PathBuf::from)
+        );
     }
 }

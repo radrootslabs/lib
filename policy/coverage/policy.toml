@@ -15,14 +15,6 @@ require_branches = true
 # temporary = true
 # reason = "publish 0.1.0-alpha.1 blocker"
 
-[overrides.radroots_runtime_paths]
-fail_under_exec_lines = 88.322
-fail_under_functions = 79.245
-fail_under_regions = 87.735
-fail_under_branches = 66.666
-temporary = true
-reason = "publish 0.1.0-alpha.1 temporary coverage override"
-
 [overrides.radroots_runtime_distribution]
 fail_under_exec_lines = 87.279
 fail_under_functions = 74.074

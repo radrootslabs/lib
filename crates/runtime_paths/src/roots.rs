@@ -197,3 +197,119 @@ impl RadrootsPathResolver {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use super::{RadrootsPathOverrides, RadrootsPathResolver, RadrootsPaths};
+    use crate::{
+        RadrootsHostEnvironment, RadrootsPathProfile, RadrootsPlatform, RadrootsRuntimePathsError,
+    };
+
+    #[test]
+    fn path_override_helpers_only_populate_their_owned_slot() {
+        let repo_local = RadrootsPathOverrides::repo_local("/repo/.local/radroots");
+        assert_eq!(
+            repo_local.repo_local_root,
+            Some(PathBuf::from("/repo/.local/radroots"))
+        );
+        assert!(repo_local.mobile_roots.is_none());
+
+        let mobile_roots = RadrootsPaths::from_base_root("/sandbox");
+        let mobile = RadrootsPathOverrides::mobile(mobile_roots.clone());
+        assert!(mobile.repo_local_root.is_none());
+        assert_eq!(mobile.mobile_roots, Some(mobile_roots));
+    }
+
+    #[test]
+    fn resolver_current_uses_process_platform_and_environment() {
+        let resolver = RadrootsPathResolver::current();
+        assert_eq!(resolver.platform(), RadrootsPlatform::current());
+        assert_eq!(
+            resolver,
+            RadrootsPathResolver::new(
+                RadrootsPlatform::current(),
+                RadrootsHostEnvironment::from_current_process()
+            )
+        );
+    }
+
+    #[test]
+    fn mobile_profile_is_rejected_on_non_mobile_platforms() {
+        let resolver =
+            RadrootsPathResolver::new(RadrootsPlatform::Linux, RadrootsHostEnvironment::default());
+
+        let err = resolver
+            .resolve(
+                RadrootsPathProfile::MobileNative,
+                &RadrootsPathOverrides::default(),
+            )
+            .expect_err("mobile profile should be rejected on linux");
+
+        assert_eq!(
+            err,
+            RadrootsRuntimePathsError::UnsupportedProfilePlatform {
+                profile: RadrootsPathProfile::MobileNative,
+                platform: RadrootsPlatform::Linux,
+            }
+        );
+    }
+
+    #[test]
+    fn interactive_user_is_rejected_on_mobile_platforms() {
+        for platform in [RadrootsPlatform::Android, RadrootsPlatform::Ios] {
+            let resolver = RadrootsPathResolver::new(platform, RadrootsHostEnvironment::default());
+            let err = resolver
+                .resolve(
+                    RadrootsPathProfile::InteractiveUser,
+                    &RadrootsPathOverrides::default(),
+                )
+                .expect_err("interactive_user should be unsupported on mobile");
+            assert_eq!(
+                err,
+                RadrootsRuntimePathsError::UnsupportedProfilePlatform {
+                    profile: RadrootsPathProfile::InteractiveUser,
+                    platform,
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn service_host_windows_requires_programdata() {
+        let resolver = RadrootsPathResolver::new(
+            RadrootsPlatform::Windows,
+            RadrootsHostEnvironment::default(),
+        );
+
+        let err = resolver
+            .resolve(
+                RadrootsPathProfile::ServiceHost,
+                &RadrootsPathOverrides::default(),
+            )
+            .expect_err("service_host on windows should require programdata");
+
+        assert_eq!(err, RadrootsRuntimePathsError::MissingWindowsProgramDataDir);
+    }
+
+    #[test]
+    fn service_host_is_rejected_on_mobile_platforms() {
+        for platform in [RadrootsPlatform::Android, RadrootsPlatform::Ios] {
+            let resolver = RadrootsPathResolver::new(platform, RadrootsHostEnvironment::default());
+            let err = resolver
+                .resolve(
+                    RadrootsPathProfile::ServiceHost,
+                    &RadrootsPathOverrides::default(),
+                )
+                .expect_err("service_host should be unsupported on mobile");
+            assert_eq!(
+                err,
+                RadrootsRuntimePathsError::UnsupportedProfilePlatform {
+                    profile: RadrootsPathProfile::ServiceHost,
+                    platform,
+                }
+            );
+        }
+    }
+}

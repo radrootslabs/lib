@@ -102,7 +102,7 @@ mod tests {
 
     use super::{
         RADROOTS_MIGRATION_COMPATIBILITY_WINDOW, RADROOTS_MIGRATION_POSTURE,
-        RadrootsLegacyPathCandidate, inspect_legacy_paths,
+        RadrootsLegacyPathCandidate, RadrootsMigrationReport, inspect_legacy_paths,
     };
 
     fn unique_test_dir() -> PathBuf {
@@ -167,5 +167,18 @@ mod tests {
         assert_eq!(report.state, "ready");
         assert!(report.detected_legacy_paths.is_empty());
         std::fs::remove_dir_all(temp).expect("remove temp test dir");
+    }
+
+    #[test]
+    fn empty_report_matches_ready_state() {
+        let report = RadrootsMigrationReport::empty();
+        assert_eq!(report.posture, RADROOTS_MIGRATION_POSTURE);
+        assert_eq!(report.state, "ready");
+        assert!(!report.silent_startup_relocation);
+        assert_eq!(
+            report.compatibility_window,
+            RADROOTS_MIGRATION_COMPATIBILITY_WINDOW
+        );
+        assert!(report.detected_legacy_paths.is_empty());
     }
 }

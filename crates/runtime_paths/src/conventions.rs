@@ -133,4 +133,62 @@ mod tests {
             PathBuf::from("/Users/treesap/.radroots/logs/shared/runtime")
         );
     }
+
+    #[test]
+    fn namespaced_bootstrap_paths_propagate_resolver_errors() {
+        let resolver =
+            crate::RadrootsPathResolver::new(RadrootsPlatform::Linux, Default::default());
+        let namespace =
+            RadrootsRuntimeNamespace::service("radrootsd").expect("service namespace should parse");
+
+        let err = default_namespaced_bootstrap_paths(
+            &resolver,
+            crate::RadrootsPathProfile::InteractiveUser,
+            &crate::RadrootsPathOverrides::default(),
+            &namespace,
+            DEFAULT_SERVICE_IDENTITY_FILE_NAME,
+        )
+        .expect_err("interactive user should require a home dir");
+
+        assert_eq!(
+            err,
+            crate::RadrootsRuntimePathsError::MissingHomeDir {
+                platform: RadrootsPlatform::Linux,
+            }
+        );
+    }
+
+    #[test]
+    fn shared_defaults_propagate_profile_errors() {
+        let resolver =
+            crate::RadrootsPathResolver::new(RadrootsPlatform::Android, Default::default());
+
+        let identity_err = default_shared_identity_path(
+            &resolver,
+            crate::RadrootsPathProfile::InteractiveUser,
+            &crate::RadrootsPathOverrides::default(),
+        )
+        .expect_err("interactive_user should be unsupported on android");
+        assert_eq!(
+            identity_err,
+            crate::RadrootsRuntimePathsError::UnsupportedProfilePlatform {
+                profile: crate::RadrootsPathProfile::InteractiveUser,
+                platform: RadrootsPlatform::Android,
+            }
+        );
+
+        let logs_err = default_shared_runtime_logs_dir(
+            &resolver,
+            crate::RadrootsPathProfile::ServiceHost,
+            &crate::RadrootsPathOverrides::default(),
+        )
+        .expect_err("service_host should be unsupported on android");
+        assert_eq!(
+            logs_err,
+            crate::RadrootsRuntimePathsError::UnsupportedProfilePlatform {
+                profile: crate::RadrootsPathProfile::ServiceHost,
+                platform: RadrootsPlatform::Android,
+            }
+        );
+    }
 }
