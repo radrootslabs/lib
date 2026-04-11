@@ -397,13 +397,31 @@ fn set_secret_mode(_path: &Path) -> Result<(), RadrootsRuntimeManagerError> {
 
 #[cfg(unix)]
 fn process_running_for_pid(pid: u32) -> bool {
-    Command::new("kill")
-        .args(["-0", pid.to_string().as_str()])
+    let pid_arg = pid.to_string();
+    let running = Command::new("kill")
+        .args(["-0", pid_arg.as_str()])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
         .map(|status| status.success())
-        .unwrap_or(false)
+        .unwrap_or(false);
+    if !running {
+        return false;
+    }
+
+    Command::new("ps")
+        .args(["-o", "stat=", "-p", pid_arg.as_str()])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .output()
+        .map(|output| {
+            if !output.status.success() {
+                return true;
+            }
+            let state = String::from_utf8_lossy(output.stdout.as_slice());
+            !state.trim_start().starts_with('Z')
+        })
+        .unwrap_or(true)
 }
 
 #[cfg(windows)]
@@ -598,6 +616,8 @@ mod tests {
             )
             .expect("append path");
         builder.finish().expect("finish archive");
+        let encoder = builder.into_inner().expect("into encoder");
+        encoder.finish().expect("finish gzip");
 
         let paths = sample_paths(dir.path());
         let installed =
@@ -610,7 +630,7 @@ mod tests {
     fn start_and_stop_process_manage_pid_file() {
         let dir = tempdir().expect("tempdir");
         let binary = dir.path().join("sleepy.sh");
-        fs::write(&binary, "#!/bin/sh\nsleep 30\n").expect("script");
+        fs::write(&binary, "#!/bin/sh\nexec sleep 30\n").expect("script");
         let paths = sample_paths(dir.path());
         let installed = install_binary(&binary, &paths, "sleepy.sh").expect("install");
         let pid = start_process(&installed, &Vec::new(), &Vec::new(), &paths).expect("start");
