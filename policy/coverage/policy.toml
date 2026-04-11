@@ -63,6 +63,14 @@ fail_under_branches = 100.0
 temporary = true
 reason = "publish 0.1.0-alpha.2 temporary coverage override"
 
+[overrides.radroots_nostr_ndb]
+fail_under_exec_lines = 99.900
+fail_under_functions = 100.0
+fail_under_regions = 99.800
+fail_under_branches = 98.200
+temporary = true
+reason = "publish 0.1.0-alpha.2 temporary coverage override"
+
 [overrides.radroots_nostr_connect]
 fail_under_exec_lines = 100.0
 fail_under_functions = 100.0

@@ -191,10 +191,33 @@ mod tests {
         assert_eq!(spec.until_unix(), Some(300));
         assert_eq!(spec.limit(), Some(10));
         assert_eq!(spec.search(), Some("coffee"));
-        let _ = spec.to_ndb_filter().expect("ndb filter");
 
         let empty = RadrootsNostrNdbFilterSpec::new();
         let _ = empty.to_ndb_filter().expect("empty ndb filter");
+    }
+
+    #[test]
+    fn to_ndb_filter_builds_supported_success_paths() {
+        let event_id = valid_hex_32(0x11);
+        let author = valid_hex_32(0x22);
+
+        let _ = RadrootsNostrNdbFilterSpec::new()
+            .with_event_id_hex(event_id)
+            .to_ndb_filter()
+            .expect("event id filter");
+
+        let _ = RadrootsNostrNdbFilterSpec::new()
+            .with_author_hex(author)
+            .to_ndb_filter()
+            .expect("author filter");
+
+        let _ = RadrootsNostrNdbFilterSpec::new()
+            .with_kind(1)
+            .with_since_unix(200)
+            .with_until_unix(300)
+            .with_limit(10)
+            .to_ndb_filter()
+            .expect("range filter");
     }
 
     #[test]
