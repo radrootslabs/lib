@@ -9,7 +9,7 @@ It defines the public interoperability boundary for external integrators, keeps 
 
 ## Contract Surface
 
-Contract metadata is defined in `contract/manifest.toml` and currently includes:
+Contract metadata is defined in `spec/manifest.toml` and currently includes:
 
 - model crates: `radroots_core`, `radroots_types`, `radroots_events`, `radroots_trade`, `radroots_identity`
 - algorithm crate: `radroots_events_codec`
@@ -19,19 +19,19 @@ Public SDK exports are intentionally narrower than the full Rust workspace.
 
 ## Export Targets
 
-Language export mappings and artifact layout rules are defined under `contract/exports/`:
+Language export mappings and artifact layout rules are defined under `spec/exports/`:
 
-- `contract/exports/ts.toml`
-- `contract/exports/py.toml`
-- `contract/exports/swift.toml`
-- `contract/exports/kotlin.toml`
+- `spec/exports/ts.toml`
+- `spec/exports/py.toml`
+- `spec/exports/swift.toml`
+- `spec/exports/kotlin.toml`
 
 Each export target defines package naming, artifact directories, and runtime expectations.
 
 ## Internal Replica Contract
 
 Offline-first replica crates are internal contract surfaces and are not public SDK exports.
-Replica contract metadata is defined in `contract/replica.toml`.
+Replica contract metadata is defined in `spec/replica.toml`.
 
 Internal replica crate family:
 
@@ -43,7 +43,7 @@ Internal replica crate family:
 
 ## Governance
 
-Versioning and compatibility policy is defined in `contract/version.toml`.
+Versioning and compatibility policy is defined in `spec/version.toml`.
 Contract evolution is semver-governed and requires conformance updates, export manifest validation, and release notes.
 
 Repository guards also enforce:
@@ -54,11 +54,11 @@ Repository guards also enforce:
 
 ## Coverage Policy
 
-Coverage governance is defined under `contract/coverage/`:
+Coverage governance is defined under `policy/coverage/`:
 
-- machine-readable policy: `contract/coverage/policy.toml`
-- human policy notes: `contract/coverage/POLICY.md`
-- per-crate profiles: `contract/coverage/profiles.toml`
+- machine-readable policy: `policy/coverage/policy.toml`
+- human policy notes: `policy/coverage/POLICY.md`
+- per-crate profiles: `policy/coverage/profiles.toml`
 
 Required Rust crates are gated at `100/100/100/100` (exec lines, functions, branches, regions), with branch records required.
 

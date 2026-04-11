@@ -22,7 +22,8 @@ let
         ../README
         ../rust-toolchain.toml
         ../conformance
-        ../contract
+        ../spec
+        ../policy
         ../crates
         ../scripts
       ]

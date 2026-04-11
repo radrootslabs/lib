@@ -40,7 +40,7 @@ Before editing code:
 
 - Read `AGENTS.md`.
 - Read this file.
-- Read `README`, `docs/nix.md`, and `contract/README.md` when the change touches workflow, exports, or public surfaces.
+- Read `README`, `docs/nix.md`, and `spec/README.md` when the change touches workflow, exports, or public surfaces.
 - Read the relevant crate manifest, implementation files, and nearby tests before proposing a new structure.
 - Check `git status --short`.
 
@@ -63,7 +63,7 @@ Use this mental model:
 - `crates/`
   - library crates and workspace tooling crates
   - keep domain logic inside the correct crate rather than spreading it across the workspace
-- `contract/`
+- `spec/`
   - public SDK contract metadata, export policy, release policy, and coverage governance
 - `conformance/`
   - cross-language and cross-surface vector expectations
@@ -74,7 +74,7 @@ Use this mental model:
 - `scripts/`
   - repo-owned automation used by canonical lanes
 
-Do not duplicate contract knowledge between crates when `contract/`, `conformance/`, or `xtask` already owns it.
+Do not duplicate contract knowledge between crates when `spec/`, `conformance/`, or `xtask` already owns it.
 
 ## 5. Rust engineering standards
 
@@ -134,7 +134,7 @@ Do not duplicate contract knowledge between crates when `contract/`, `conformanc
 
 ## 6. Contract, conformance, and release workflow
 
-`contract/`, `conformance/`, and `crates/xtask` are first-class parts of the product surface, not secondary metadata.
+`spec/`, `conformance/`, and `crates/xtask` are first-class parts of the product surface, not secondary metadata.
 
 When a change affects exported models, transforms, identifiers, or public runtime expectations:
 

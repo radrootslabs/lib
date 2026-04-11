@@ -10,7 +10,7 @@ Canonical source: Rust remains the canonical implementation and conformance sour
 
 This document defines the approved operation-first design for the Radroots cross-language SDK contract.
 
-It replaces the crate-first mental model currently expressed in `contract/manifest.toml` with a public contract shaped around external integration tasks:
+It replaces the crate-first mental model currently expressed in `spec/manifest.toml` with a public contract shaped around external integration tasks:
 
 - produce Radroots-compliant Nostr events
 - parse Radroots-compliant Nostr events
@@ -874,4 +874,4 @@ This design is implemented successfully when:
 
 ## Repository Notes
 
-This document intentionally does not modify the current crate-keyed contract files in place. The repository currently contains user edits in several existing files, including `contract/README`. The recommended implementation path is to add the new operation-first contract artifacts alongside the current files first, then migrate validation and export tooling incrementally.
+This document intentionally does not modify the current crate-keyed contract files in place. The repository currently contains user edits in several existing files, including `spec/README`. The recommended implementation path is to add the new operation-first contract artifacts alongside the current files first, then migrate validation and export tooling incrementally.

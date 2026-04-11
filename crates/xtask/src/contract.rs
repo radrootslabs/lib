@@ -336,7 +336,7 @@ fn parse_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, String> {
 }
 
 fn contract_root(workspace_root: &Path) -> PathBuf {
-    workspace_root.join("contract")
+    workspace_root.join("spec")
 }
 
 fn base_contract_version(version: &str) -> &str {
@@ -409,16 +409,24 @@ fn workspace_package_manifests(workspace_root: &Path) -> Result<BTreeMap<String,
 fn load_coverage_policy(
     contract_root: &Path,
 ) -> Result<crate::coverage::CoveragePolicyFile, String> {
-    read_coverage_policy(&contract_root.join("coverage").join("policy.toml"))
+    read_coverage_policy(&coverage_root(contract_root).join("policy.toml"))
 }
 
-fn legacy_release_contract_path(contract_root: &Path) -> PathBuf {
-    contract_root.join("release").join("publish-set.toml")
+fn coverage_root(contract_root: &Path) -> PathBuf {
+    contract_root
+        .parent()
+        .unwrap_or(contract_root)
+        .join("policy")
+        .join("coverage")
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+fn root_release_policy_path(workspace_root: &Path) -> PathBuf {
+    workspace_root.join(ROOT_RELEASE_POLICY_RELATIVE)
 }
 
 fn resolve_release_contract_path_with_override(
     workspace_root: &Path,
-    contract_root: &Path,
     release_policy_override: Option<PathBuf>,
 ) -> Result<Option<PathBuf>, String> {
     if let Some(path) = release_policy_override {
@@ -438,21 +446,12 @@ fn resolve_release_contract_path_with_override(
         }
     }
 
-    let legacy = legacy_release_contract_path(contract_root);
-    if legacy.is_file() {
-        return Ok(Some(legacy));
-    }
-
     Ok(None)
 }
 
-fn resolve_release_contract_path(
-    workspace_root: &Path,
-    contract_root: &Path,
-) -> Result<Option<PathBuf>, String> {
+fn resolve_release_contract_path(workspace_root: &Path) -> Result<Option<PathBuf>, String> {
     resolve_release_contract_path_with_override(
         workspace_root,
-        contract_root,
         env::var_os(RELEASE_POLICY_ENV).map(PathBuf::from),
     )
 }
@@ -470,21 +469,17 @@ fn load_release_contract(
 
 fn load_release_contract_with_override(
     workspace_root: &Path,
-    contract_root: &Path,
+    _contract_root: &Path,
     release_policy_override: Option<PathBuf>,
 ) -> Result<ReleaseContractFile, String> {
-    let path = resolve_release_contract_path_with_override(
-        workspace_root,
-        contract_root,
-        release_policy_override,
-    )?
-    .ok_or_else(|| {
-        format!(
-            "release publish policy not found; expected {} or legacy {}",
-            ROOT_RELEASE_POLICY_RELATIVE,
-            legacy_release_contract_path(contract_root).display()
-        )
-    })?;
+    let path =
+        resolve_release_contract_path_with_override(workspace_root, release_policy_override)?
+            .ok_or_else(|| {
+                format!(
+                    "release publish policy not found; expected {}",
+                    ROOT_RELEASE_POLICY_RELATIVE
+                )
+            })?;
     parse_toml::<ReleaseContractFile>(&path)
 }
 
@@ -1499,13 +1494,9 @@ fn validate_contract_bundle_with_release_policy_override(
     }
     validate_core_unit_dimension_variant_order(workspace_root)?;
     validate_coverage_policy_parity(workspace_root, &bundle.root)?;
-    if resolve_release_contract_path_with_override(
-        workspace_root,
-        &bundle.root,
-        release_policy_override.clone(),
-    )
-    .expect("validated release contract path resolution should not fail")
-    .is_some()
+    if resolve_release_contract_path_with_override(workspace_root, release_policy_override.clone())
+        .expect("validated release contract path resolution should not fail")
+        .is_some()
     {
         validate_release_publish_policy_with_override(
             workspace_root,
@@ -1917,7 +1908,7 @@ pub fn validate_contract_bundle(bundle: &ContractBundle) -> Result<(), String> {
     }
     validate_core_unit_dimension_variant_order(workspace_root)?;
     validate_coverage_policy_parity(workspace_root, &bundle.root)?;
-    if resolve_release_contract_path(workspace_root, &bundle.root)
+    if resolve_release_contract_path(workspace_root)
         .expect("validated release contract path resolution should not fail")
         .is_some()
     {
@@ -2014,7 +2005,7 @@ publish = false
         );
 
         write_file(
-            &root.join("contract").join("manifest.toml"),
+            &root.join("spec").join("manifest.toml"),
             r#"[contract]
 name = "radroots_contract"
 version = "1.0.0"
@@ -2032,7 +2023,7 @@ require_conformance_vectors = true
 "#,
         );
         write_file(
-            &root.join("contract").join("version.toml"),
+            &root.join("spec").join("version.toml"),
             r#"[contract]
 version = "1.0.0"
 stability = "alpha"
@@ -2049,7 +2040,7 @@ requires_release_notes = true
 "#,
         );
         write_file(
-            &root.join("contract").join("exports").join("ts.toml"),
+            &root.join("spec").join("exports").join("ts.toml"),
             r#"[language]
 id = "ts"
 repository = "sdk-typescript"
@@ -2065,7 +2056,7 @@ manifest_file = "export-manifest.json"
 "#,
         );
         write_file(
-            &root.join("contract").join("coverage").join("policy.toml"),
+            &root.join("policy").join("coverage").join("policy.toml"),
             r#"[gate]
 fail_under_exec_lines = 100.0
 fail_under_functions = 100.0
@@ -2078,10 +2069,7 @@ crates = ["radroots_a", "radroots_b"]
 "#,
         );
         write_file(
-            &root
-                .join("contract")
-                .join("release")
-                .join("publish-set.toml"),
+            &root_release_policy_path(&root),
             r#"[release]
 version = "1.0.0"
 
@@ -2107,7 +2095,7 @@ crates = ["radroots_a"]
 
     fn add_operation_contract_files(root: &Path) {
         write_file(
-            &root.join("contract").join("operations.toml"),
+            &root.join("spec").join("operations.toml"),
             r#"[contract]
 name = "radroots_contract"
 version = "1.0.0"
@@ -2175,7 +2163,7 @@ vector = "conformance/vectors/listing/build_draft.v1.json"
 "#,
         );
         write_file(
-            &root.join("contract").join("sdk-exports").join("ts.toml"),
+            &root.join("spec").join("sdk-exports").join("ts.toml"),
             r#"[language]
 id = "ts"
 repository = "sdk-typescript"
@@ -2272,7 +2260,7 @@ publish = false
             );
         }
         write_file(
-            &root.join("contract").join("coverage").join("policy.toml"),
+            &root.join("policy").join("coverage").join("policy.toml"),
             r#"[gate]
 fail_under_exec_lines = 100.0
 fail_under_functions = 100.0
@@ -2291,11 +2279,7 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
                 .join("coverage-refresh.tsv"),
             "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots_a\tpass\t100.0\t100.0\t100.0\t100.0\tfile\nradroots_b\tpass\t100.0\t100.0\t100.0\t100.0\tfile\nradroots_c\tpass\t100.0\t100.0\t100.0\t100.0\tfile\nradroots_d\tpass\t100.0\t100.0\t100.0\t100.0\tfile\nradroots_e\tpass\t100.0\t100.0\t100.0\t100.0\tfile\n",
         );
-        let _ = fs::remove_file(
-            root.join("contract")
-                .join("release")
-                .join("publish-set.toml"),
-        );
+        let _ = fs::remove_file(root_release_policy_path(&root));
     }
 
     #[test]
@@ -2411,7 +2395,7 @@ pub enum RadrootsCoreUnitDimension {
             .expect("workspace crates")
             .into_iter()
             .collect::<BTreeSet<_>>();
-        let policy = load_coverage_policy(&root.join("contract")).expect("coverage policy");
+        let policy = load_coverage_policy(&root.join("spec")).expect("coverage policy");
         let required_names = policy
             .required_crates()
             .expect("required crates")
@@ -2423,7 +2407,7 @@ pub enum RadrootsCoreUnitDimension {
     #[test]
     fn coverage_required_crates_match_policy_required_status() {
         let root = workspace_root();
-        let contract_root = root.join("contract");
+        let contract_root = root.join("spec");
         let policy = load_coverage_policy(&contract_root).expect("coverage policy");
         let required = CoverageRequiredFile {
             required: CoverageRequiredSection {
@@ -2453,9 +2437,10 @@ pub enum RadrootsCoreUnitDimension {
 
         let duplicate_root =
             create_synthetic_workspace("load_coverage_required_duplicate_required");
-        let contract_root = duplicate_root.join("contract");
+        let contract_root = duplicate_root.join("spec");
+        let coverage_root = coverage_root(&contract_root);
         write_file(
-            &contract_root.join("coverage").join("policy.toml"),
+            &coverage_root.join("policy.toml"),
             "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\", \"radroots_a\"]\n",
         );
         let duplicate_err =
@@ -2727,23 +2712,15 @@ readme = { workspace = true }
         );
 
         let root = create_synthetic_workspace("release_contract_env_override");
-        let contract_root = root.join("contract");
-        let policy_path = contract_root.join("release").join("publish-set.toml");
-        let resolved = resolve_release_contract_path_with_override(
-            &root,
-            &contract_root,
-            Some(policy_path.clone()),
-        )
-        .expect("existing override policy should resolve");
+        let policy_path = root_release_policy_path(&root);
+        let resolved =
+            resolve_release_contract_path_with_override(&root, Some(policy_path.clone()))
+                .expect("existing override policy should resolve");
         assert_eq!(resolved, Some(policy_path));
 
         let missing_policy = root.join("missing-release-policy.toml");
-        let err = resolve_release_contract_path_with_override(
-            &root,
-            &contract_root,
-            Some(missing_policy.clone()),
-        )
-        .expect_err("missing env policy should fail");
+        let err = resolve_release_contract_path_with_override(&root, Some(missing_policy.clone()))
+            .expect_err("missing env policy should fail");
         assert!(err.contains(RELEASE_POLICY_ENV));
         assert!(err.contains("missing release policy file"));
         assert!(err.contains(&missing_policy.display().to_string()));
@@ -2880,10 +2857,11 @@ members = ["crates/a", "crates/b"]
     #[test]
     fn coverage_policy_parity_reports_contract_errors() {
         let root = create_synthetic_workspace("coverage_policy_errors");
-        let contract_root = root.join("contract");
+        let contract_root = root.join("spec");
+        let coverage_root = coverage_root(&contract_root);
 
         write_file(
-            &contract_root.join("coverage").join("policy.toml"),
+            &coverage_root.join("policy.toml"),
             r#"[gate]
 fail_under_exec_lines = 100.0
 fail_under_functions = 100.0
@@ -2900,7 +2878,7 @@ crates = []
         assert!(empty_required.contains("required crates list must not be empty"));
 
         write_file(
-            &contract_root.join("coverage").join("policy.toml"),
+            &coverage_root.join("policy.toml"),
             r#"[gate]
 fail_under_exec_lines = 99.0
 fail_under_functions = 100.0
@@ -2917,7 +2895,7 @@ crates = ["radroots_a", "radroots_b"]
         assert!(invalid_gate.contains("100/100/100/100"));
 
         write_file(
-            &contract_root.join("coverage").join("policy.toml"),
+            &coverage_root.join("policy.toml"),
             r#"[gate]
 fail_under_exec_lines = 100.0
 fail_under_functions = 99.0
@@ -2934,7 +2912,7 @@ crates = ["radroots_a", "radroots_b"]
         assert!(invalid_functions.contains("100/100/100/100"));
 
         write_file(
-            &contract_root.join("coverage").join("policy.toml"),
+            &coverage_root.join("policy.toml"),
             r#"[gate]
 fail_under_exec_lines = 100.0
 fail_under_functions = 100.0
@@ -2951,7 +2929,7 @@ crates = ["radroots_a", "radroots_b"]
         assert!(invalid_regions.contains("100/100/100/100"));
 
         write_file(
-            &contract_root.join("coverage").join("policy.toml"),
+            &coverage_root.join("policy.toml"),
             r#"[gate]
 fail_under_exec_lines = 100.0
 fail_under_functions = 100.0
@@ -2968,7 +2946,7 @@ crates = ["radroots_a", "radroots_b"]
         assert!(invalid_branches.contains("100/100/100/100"));
 
         write_file(
-            &contract_root.join("coverage").join("policy.toml"),
+            &coverage_root.join("policy.toml"),
             r#"[gate]
 fail_under_exec_lines = 100.0
 fail_under_functions = 100.0
@@ -2985,7 +2963,7 @@ crates = ["radroots_a", "radroots_a"]
         assert!(duplicate_required.contains("duplicate crate"));
 
         write_file(
-            &contract_root.join("coverage").join("policy.toml"),
+            &coverage_root.join("policy.toml"),
             r#"[gate]
 fail_under_exec_lines = 100.0
 fail_under_functions = 100.0
@@ -3002,7 +2980,7 @@ crates = ["radroots_a", "radroots_b"]
         assert!(branches_optional.contains("required branches"));
 
         write_file(
-            &contract_root.join("coverage").join("policy.toml"),
+            &coverage_root.join("policy.toml"),
             r#"[gate]
 fail_under_exec_lines = 100.0
 fail_under_functions = 100.0
@@ -3019,7 +2997,7 @@ crates = ["radroots_a"]
         assert!(missing_workspace.contains("missing workspace crates"));
 
         write_file(
-            &contract_root.join("coverage").join("policy.toml"),
+            &coverage_root.join("policy.toml"),
             r#"[gate]
 fail_under_exec_lines = 100.0
 fail_under_functions = 100.0
@@ -3041,10 +3019,11 @@ crates = ["unknown"]
     #[test]
     fn release_publish_policy_reports_contract_errors() {
         let root = create_synthetic_workspace("release_policy_errors");
-        let contract_root = root.join("contract");
+        let contract_root = root.join("spec");
+        let release_policy_path = root_release_policy_path(&root);
 
         write_file(
-            &contract_root.join("release").join("publish-set.toml"),
+            &release_policy_path,
             r#"[release]
 version = ""
 
@@ -3063,7 +3042,7 @@ crates = ["radroots_a"]
         assert!(empty_version.contains("must not be empty"));
 
         write_file(
-            &contract_root.join("release").join("publish-set.toml"),
+            &release_policy_path,
             r#"[release]
 version = "2.0.0"
 
@@ -3082,7 +3061,7 @@ crates = ["radroots_a"]
         assert!(version_mismatch.contains("must match contract version"));
 
         write_file(
-            &contract_root.join("release").join("publish-set.toml"),
+            &release_policy_path,
             r#"[release]
 version = "1.0.0"
 
@@ -3101,7 +3080,7 @@ crates = ["radroots_a"]
         assert!(overlap.contains("overlap is not allowed"));
 
         write_file(
-            &contract_root.join("release").join("publish-set.toml"),
+            &release_policy_path,
             r#"[release]
 version = "1.0.0"
 
@@ -3120,7 +3099,7 @@ crates = ["radroots_a"]
         assert!(missing_workspace.contains("missing workspace crates"));
 
         write_file(
-            &contract_root.join("release").join("publish-set.toml"),
+            &release_policy_path,
             r#"[release]
 version = "1.0.0"
 
@@ -3139,7 +3118,7 @@ crates = []
         assert!(missing_publish_order.contains("missing publish crates"));
 
         write_file(
-            &contract_root.join("release").join("publish-set.toml"),
+            &release_policy_path,
             r#"[release]
 version = "1.0.0"
 
@@ -3188,7 +3167,7 @@ readme = "README"
 "#,
         );
         write_file(
-            &contract_root.join("release").join("publish-set.toml"),
+            &release_policy_path,
             r#"[release]
 version = "1.0.0"
 
@@ -3207,7 +3186,7 @@ crates = ["radroots_a", "radroots_b"]
         assert!(dependency_order.contains("must place dependency"));
 
         write_file(
-            &contract_root.join("release").join("publish-set.toml"),
+            &release_policy_path,
             r#"[release]
 version = "1.0.0"
 
@@ -3243,7 +3222,7 @@ publish = false
 "#,
         );
         write_file(
-            &contract_root.join("release").join("publish-set.toml"),
+            &release_policy_path,
             r#"[release]
 version = "1.0.0"
 
@@ -3669,7 +3648,9 @@ publish = false
     #[test]
     fn coverage_release_and_bundle_loaders_report_parse_and_read_errors() {
         let root = create_synthetic_workspace("coverage_release_loader_errors");
-        let contract_root = root.join("contract");
+        let contract_root = root.join("spec");
+        let coverage_root = coverage_root(&contract_root);
+        let release_policy_path = root_release_policy_path(&root);
 
         let missing_workspace = temp_root("coverage_missing_workspace_manifest");
         let policy_workspace_err =
@@ -3678,12 +3659,12 @@ publish = false
         assert!(policy_workspace_err.contains("Cargo.toml"));
         let _ = fs::remove_dir_all(&missing_workspace);
 
-        let _ = fs::remove_file(contract_root.join("coverage").join("policy.toml"));
+        let _ = fs::remove_file(coverage_root.join("policy.toml"));
         let policy_load_err = validate_coverage_policy_parity(&root, &contract_root)
             .expect_err("coverage policy read error");
         assert!(policy_load_err.contains("policy.toml"));
         write_file(
-            &contract_root.join("coverage").join("policy.toml"),
+            &coverage_root.join("policy.toml"),
             r#"[gate]
 fail_under_exec_lines = 100.0
 fail_under_functions = 100.0
@@ -3697,19 +3678,34 @@ crates = ["radroots_a", "radroots_b"]
         );
 
         let missing_release = temp_root("release_missing_workspace_manifest");
+        write_root_release_policy(
+            &missing_release,
+            r#"[release]
+version = "1.0.0"
+
+[publish]
+crates = ["radroots_a"]
+
+[internal]
+crates = ["radroots_b"]
+
+[publish_order]
+crates = ["radroots_a"]
+"#,
+        );
         let release_workspace_err =
             validate_release_publish_policy(&missing_release, &contract_root, "1.0.0")
                 .expect_err("release workspace read error");
         assert!(release_workspace_err.contains("Cargo.toml"));
         let _ = fs::remove_dir_all(&missing_release);
 
-        let _ = fs::remove_file(contract_root.join("release").join("publish-set.toml"));
+        let _ = fs::remove_file(&release_policy_path);
         let release_load_err = validate_release_publish_policy(&root, &contract_root, "1.0.0")
             .expect_err("release contract read error");
-        assert!(release_load_err.contains("publish-set.toml"));
+        assert!(release_load_err.contains(ROOT_RELEASE_POLICY_RELATIVE));
 
         write_file(
-            &contract_root.join("release").join("publish-set.toml"),
+            &release_policy_path,
             r#"[release]
 version = "1.0.0"
 
@@ -3728,7 +3724,7 @@ crates = ["radroots_a"]
         assert!(duplicate_publish.contains("publish.crates has duplicate crate"));
 
         write_file(
-            &contract_root.join("release").join("publish-set.toml"),
+            &release_policy_path,
             r#"[release]
 version = "1.0.0"
 
@@ -3747,7 +3743,7 @@ crates = ["radroots_a"]
         assert!(duplicate_internal.contains("internal.crates has duplicate crate"));
 
         write_file(
-            &contract_root.join("release").join("publish-set.toml"),
+            &release_policy_path,
             r#"[release]
 version = "1.0.0"
 
@@ -3766,7 +3762,7 @@ crates = ["radroots_a", "radroots_a"]
         assert!(duplicate_order.contains("publish_order.crates has duplicate crate"));
 
         write_file(
-            &contract_root.join("release").join("publish-set.toml"),
+            &release_policy_path,
             r#"[release]
 version = "1.0.0"
 
@@ -3794,7 +3790,7 @@ crates = ["radroots_a"]
     #[test]
     fn load_release_contract_with_override_reports_override_and_missing_policy_errors() {
         let root = create_synthetic_workspace("release_contract_loader_errors");
-        let contract_root = root.join("contract");
+        let contract_root = root.join("spec");
 
         let missing_override = root.join("missing-release-policy.toml");
         let override_err = load_release_contract_with_override(
@@ -3806,7 +3802,7 @@ crates = ["radroots_a"]
         assert!(override_err.contains(RELEASE_POLICY_ENV));
         assert!(override_err.contains("missing release policy file"));
 
-        let _ = fs::remove_file(contract_root.join("release").join("publish-set.toml"));
+        let _ = fs::remove_file(root_release_policy_path(&root));
         let missing_policy_err = load_release_contract_with_override(&root, &contract_root, None)
             .expect_err("missing release policy should fail");
         assert!(missing_policy_err.contains("release publish policy not found"));
@@ -3902,7 +3898,7 @@ crates = ["radroots_a"]
             configure_root_release_policy_workspace(&root);
             write_root_release_policy(&root, policy_body);
 
-            let err = validate_release_publish_policy(&root, &root.join("contract"), "1.0.0")
+            let err = validate_release_publish_policy(&root, &root.join("spec"), "1.0.0")
                 .expect_err("invalid non-public classification should fail");
             assert!(err.contains(expected), "{label} err: {err}");
 
@@ -3920,7 +3916,7 @@ crates = ["radroots_a"]
 
         let invalid_bundle = create_synthetic_workspace("preflight_invalid_bundle");
         write_file(
-            &invalid_bundle.join("contract").join("manifest.toml"),
+            &invalid_bundle.join("spec").join("manifest.toml"),
             r#"[contract]
 name = "radroots_contract"
 version = "1.0.0"
@@ -3943,21 +3939,16 @@ require_conformance_vectors = true
         let _ = fs::remove_dir_all(&invalid_bundle);
 
         let missing_release = create_synthetic_workspace("preflight_missing_release");
-        let _ = fs::remove_file(
-            missing_release
-                .join("contract")
-                .join("release")
-                .join("publish-set.toml"),
-        );
+        let _ = fs::remove_file(root_release_policy_path(&missing_release));
         let missing_release_err =
             validate_release_preflight(&missing_release).expect_err("missing release");
-        assert!(missing_release_err.contains("publish-set.toml"));
+        assert!(missing_release_err.contains(ROOT_RELEASE_POLICY_RELATIVE));
         let _ = fs::remove_dir_all(&missing_release);
 
         let missing_required = create_synthetic_workspace("preflight_missing_required");
         let _ = fs::remove_file(
             missing_required
-                .join("contract")
+                .join("policy")
                 .join("coverage")
                 .join("policy.toml"),
         );
@@ -3968,10 +3959,7 @@ require_conformance_vectors = true
 
         let duplicate_publish = create_synthetic_workspace("preflight_duplicate_publish");
         write_file(
-            &duplicate_publish
-                .join("contract")
-                .join("release")
-                .join("publish-set.toml"),
+            &root_release_policy_path(&duplicate_publish),
             r#"[release]
 version = "1.0.0"
 
@@ -3993,7 +3981,7 @@ crates = ["radroots_a"]
         let duplicate_required = create_synthetic_workspace("preflight_duplicate_required");
         write_file(
             &duplicate_required
-                .join("contract")
+                .join("policy")
                 .join("coverage")
                 .join("policy.toml"),
             "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\", \"radroots_a\"]\n",
@@ -4035,12 +4023,12 @@ edition = "2024"
     #[test]
     fn load_contract_bundle_and_validation_report_version_export_and_coverage_errors() {
         let root = create_synthetic_workspace("bundle_version_export_and_coverage_errors");
-        write_file(&root.join("contract").join("version.toml"), "[contract");
+        write_file(&root.join("spec").join("version.toml"), "[contract");
         let version_parse_err = load_contract_bundle(&root).expect_err("invalid version file");
         assert!(version_parse_err.contains("version.toml"));
 
         write_file(
-            &root.join("contract").join("version.toml"),
+            &root.join("spec").join("version.toml"),
             r#"[contract]
 version = "1.0.0"
 stability = "alpha"
@@ -4057,14 +4045,14 @@ requires_release_notes = true
 "#,
         );
         write_file(
-            &root.join("contract").join("exports").join("ts.toml"),
+            &root.join("spec").join("exports").join("ts.toml"),
             "[language",
         );
         let export_parse_err = load_contract_bundle(&root).expect_err("invalid export mapping");
         assert!(export_parse_err.contains("ts.toml"));
 
         write_file(
-            &root.join("contract").join("exports").join("ts.toml"),
+            &root.join("spec").join("exports").join("ts.toml"),
             r#"[language]
 id = "ts"
 repository = "sdk-typescript"
@@ -4102,7 +4090,7 @@ Volume,
 "#,
         );
         write_file(
-            &root.join("contract").join("coverage").join("policy.toml"),
+            &root.join("policy").join("coverage").join("policy.toml"),
             r#"[gate]
 fail_under_exec_lines = 100.0
 fail_under_functions = 100.0
@@ -4260,10 +4248,12 @@ Volume,
     #[test]
     fn coverage_and_release_additional_error_branches_are_reported() {
         let root = create_synthetic_workspace("coverage_release_extra_errors");
-        let contract_root = root.join("contract");
+        let contract_root = root.join("spec");
+        let coverage_root = coverage_root(&contract_root);
+        let release_policy_path = root_release_policy_path(&root);
 
         write_file(
-            &contract_root.join("coverage").join("policy.toml"),
+            &coverage_root.join("policy.toml"),
             r#"[gate]
 fail_under_exec_lines = 100.0
 fail_under_functions = 100.0
@@ -4280,7 +4270,7 @@ crates = ["radroots_a", "radroots_b", "radroots_extra"]
         assert!(coverage_extra.contains("includes unknown crates"));
 
         write_file(
-            &contract_root.join("coverage").join("policy.toml"),
+            &coverage_root.join("policy.toml"),
             r#"[gate]
 fail_under_exec_lines = 100.0
 fail_under_functions = 100.0
@@ -4297,7 +4287,7 @@ crates = ["radroots_a"]
         assert!(required_list_mismatch.contains("missing workspace crates"));
 
         write_file(
-            &contract_root.join("release").join("publish-set.toml"),
+            &release_policy_path,
             r#"[release]
 version = "1.0.0"
 
@@ -4316,7 +4306,7 @@ crates = ["radroots_a", "radroots_b"]
         assert!(release_extra.contains("include unknown crates"));
 
         write_file(
-            &contract_root.join("release").join("publish-set.toml"),
+            &release_policy_path,
             r#"[release]
 version = "1.0.0"
 
@@ -4340,7 +4330,7 @@ crates = ["radroots_a", "radroots_b"]
     #[test]
     fn load_contract_bundle_reports_exports_dir_errors_and_skips_non_toml() {
         let root = create_synthetic_workspace("bundle_exports_dir_errors");
-        let exports_dir = root.join("contract").join("exports");
+        let exports_dir = root.join("spec").join("exports");
         let _ = fs::remove_dir_all(&exports_dir);
         write_file(&exports_dir, "not-a-dir");
 
@@ -4385,10 +4375,7 @@ manifest_file = "export-manifest.json"
 
         let release_error_root = create_synthetic_workspace("bundle_release_policy_error");
         write_file(
-            &release_error_root
-                .join("contract")
-                .join("release")
-                .join("publish-set.toml"),
+            &root_release_policy_path(&release_error_root),
             r#"[release]
 version = "1.0.0"
 

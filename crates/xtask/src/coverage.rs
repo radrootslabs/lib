@@ -598,7 +598,7 @@ fn validate_override_threshold(
 }
 
 pub(crate) fn coverage_policy_path(root: &Path) -> PathBuf {
-    root.join("contract").join("coverage").join("policy.toml")
+    root.join("policy").join("coverage").join("policy.toml")
 }
 
 pub(crate) fn read_coverage_policy(path: &Path) -> Result<CoveragePolicyFile, String> {
@@ -704,7 +704,7 @@ fn read_coverage_profile(
     crate_name: &str,
 ) -> Result<CoverageProfile, String> {
     let path = workspace_root
-        .join("contract")
+        .join("policy")
         .join("coverage")
         .join("profiles.toml");
     if !path.exists() {
@@ -2101,7 +2101,7 @@ mod tests {
     #[test]
     fn report_missing_gate_uses_policy_thresholds() {
         let root = temp_dir_path("report_missing_gate_root");
-        let coverage_dir = root.join("contract").join("coverage");
+        let coverage_dir = root.join("policy").join("coverage");
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         write_file(
             &coverage_dir.join("policy.toml"),
@@ -2145,7 +2145,7 @@ mod tests {
     #[test]
     fn report_missing_gate_uses_scope_specific_override_thresholds() {
         let root = temp_dir_path("report_missing_gate_override_root");
-        let coverage_dir = root.join("contract").join("coverage");
+        let coverage_dir = root.join("policy").join("coverage");
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         write_file(
             &coverage_dir.join("policy.toml"),
@@ -2238,7 +2238,7 @@ mod tests {
         .expect_err("missing policy should fail");
         assert!(policy_err.contains("failed to read coverage policy"));
 
-        let coverage_dir = root.join("contract").join("coverage");
+        let coverage_dir = root.join("policy").join("coverage");
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         write_file(
             &coverage_dir.join("policy.toml"),
@@ -2266,7 +2266,7 @@ mod tests {
     #[test]
     fn refresh_summary_uses_measured_gate_report_values() {
         let root = temp_dir_path("refresh_summary_root");
-        let coverage_dir = root.join("contract").join("coverage");
+        let coverage_dir = root.join("policy").join("coverage");
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         write_file(
             &coverage_dir.join("policy.toml"),
@@ -2341,7 +2341,7 @@ mod tests {
         fs::remove_dir_all(root).expect("remove root");
 
         let defaults_root = temp_dir_path("refresh_summary_defaults_root");
-        let defaults_coverage_dir = defaults_root.join("contract").join("coverage");
+        let defaults_coverage_dir = defaults_root.join("policy").join("coverage");
         fs::create_dir_all(&defaults_coverage_dir).expect("create defaults coverage dir");
         write_file(
             &defaults_coverage_dir.join("policy.toml"),
@@ -2406,7 +2406,7 @@ mod tests {
         );
 
         let dispatch_root = temp_dir_path("refresh_summary_parentless_root");
-        let dispatch_coverage_dir = dispatch_root.join("contract").join("coverage");
+        let dispatch_coverage_dir = dispatch_root.join("policy").join("coverage");
         fs::create_dir_all(&dispatch_coverage_dir).expect("create dispatch coverage dir");
         write_file(
             &dispatch_coverage_dir.join("policy.toml"),
@@ -2494,7 +2494,7 @@ mod tests {
     #[test]
     fn refresh_summary_rejects_empty_output_paths() {
         let root = temp_dir_path("refresh_summary_empty_paths_root");
-        let coverage_dir = root.join("contract").join("coverage");
+        let coverage_dir = root.join("policy").join("coverage");
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         write_file(
             &coverage_dir.join("policy.toml"),
@@ -2579,7 +2579,7 @@ mod tests {
     #[test]
     fn refresh_summary_reports_output_parent_creation_failure() {
         let root = temp_dir_path("refresh_summary_out_parent_fail");
-        let coverage_dir = root.join("contract").join("coverage");
+        let coverage_dir = root.join("policy").join("coverage");
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         write_file(
             &coverage_dir.join("policy.toml"),
@@ -2650,7 +2650,7 @@ mod tests {
     #[test]
     fn refresh_summary_reports_status_output_parent_creation_failure() {
         let root = temp_dir_path("refresh_summary_status_parent_fail");
-        let coverage_dir = root.join("contract").join("coverage");
+        let coverage_dir = root.join("policy").join("coverage");
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         write_file(
             &coverage_dir.join("policy.toml"),
@@ -2738,7 +2738,7 @@ mod tests {
         .expect_err("missing policy should fail");
         assert!(policy_err.contains("failed to read coverage policy"));
 
-        let coverage_dir = root.join("contract").join("coverage");
+        let coverage_dir = root.join("policy").join("coverage");
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         write_file(
             &coverage_dir.join("policy.toml"),
@@ -2908,7 +2908,7 @@ mod tests {
     #[test]
     fn coverage_profiles_merge_defaults_and_crate_overrides() {
         let root = temp_dir_path("profile_merge");
-        let coverage_dir = root.join("contract").join("coverage");
+        let coverage_dir = root.join("policy").join("coverage");
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         fs::write(
             coverage_dir.join("profiles.toml"),
@@ -2940,7 +2940,7 @@ features = ["rt"]
     #[test]
     fn coverage_profiles_accept_positive_test_threads() {
         let root = temp_dir_path("profile_positive_threads");
-        let coverage_dir = root.join("contract").join("coverage");
+        let coverage_dir = root.join("policy").join("coverage");
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         fs::write(
             coverage_dir.join("profiles.toml"),
@@ -2958,7 +2958,7 @@ test_threads = 4
     #[test]
     fn coverage_profiles_reject_invalid_feature_and_thread_values() {
         let root = temp_dir_path("profile_invalid");
-        let coverage_dir = root.join("contract").join("coverage");
+        let coverage_dir = root.join("policy").join("coverage");
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         fs::write(
             coverage_dir.join("profiles.toml"),
@@ -2981,7 +2981,7 @@ test_threads = 0
     #[test]
     fn coverage_profiles_reject_invalid_toml() {
         let root = temp_dir_path("profile_invalid_toml");
-        let coverage_dir = root.join("contract").join("coverage");
+        let coverage_dir = root.join("policy").join("coverage");
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         fs::write(coverage_dir.join("profiles.toml"), "[profiles.default\n")
             .expect("write invalid profiles");
@@ -2993,7 +2993,7 @@ test_threads = 0
     #[test]
     fn coverage_profiles_reject_zero_test_threads_without_feature_error() {
         let root = temp_dir_path("profile_invalid_threads");
-        let coverage_dir = root.join("contract").join("coverage");
+        let coverage_dir = root.join("policy").join("coverage");
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         fs::write(
             coverage_dir.join("profiles.toml"),
@@ -3786,7 +3786,7 @@ test_threads = 0
         write_minimal_workspace(&profile_root);
         write_file(
             &profile_root
-                .join("contract")
+                .join("policy")
                 .join("coverage")
                 .join("profiles.toml"),
             "[profiles.default]\nfeatures = [\"\"]\n",
@@ -3878,7 +3878,7 @@ test_threads = 0
     #[test]
     fn report_gate_with_root_uses_scope_specific_override_thresholds() {
         let root = temp_dir_path("report_gate_override_success");
-        let coverage_dir = root.join("contract").join("coverage");
+        let coverage_dir = root.join("policy").join("coverage");
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         write_file(
             &coverage_dir.join("policy.toml"),

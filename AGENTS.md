@@ -25,7 +25,7 @@ This file exists for compatibility with tools that look for AGENTS.md.
 
 Before editing code:
 
-- Read this file, `AGENT_INSTRUCTIONS.md`, `README`, `docs/nix.md`, and `contract/README.md`.
+- Read this file, `AGENT_INSTRUCTIONS.md`, `README`, `docs/nix.md`, and `spec/README.md`.
 - Enter the canonical environment with `nix develop` or `direnv allow` before targeted cargo work.
 - Discover commands from checked-in repo surfaces; do not invent ad hoc workflows.
 - Read the current implementation and nearby tests before designing a change.
@@ -57,7 +57,7 @@ Before editing code:
 
 ## 6. Contract and release discipline
 
-- `contract/`, `conformance/`, and `crates/xtask` are authoritative for public SDK contract, export, and release governance.
+- `spec/`, `conformance/`, and `crates/xtask` are authoritative for public SDK contract, export, and release governance.
 - Behavior changes that affect public surfaces must update the relevant contract metadata, conformance vectors, export rules, or validation flows in the same change.
 - Keep pure flake checks and repo-aware command apps aligned with the documented Nix command map.
 

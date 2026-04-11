@@ -340,7 +340,7 @@ publish = false
 "#,
         );
         write_file(
-            &root.join("contract").join("manifest.toml"),
+            &root.join("spec").join("manifest.toml"),
             r#"[contract]
 name = "radroots_contract"
 version = "1.0.0"
@@ -358,7 +358,7 @@ require_conformance_vectors = true
 "#,
         );
         write_file(
-            &root.join("contract").join("version.toml"),
+            &root.join("spec").join("version.toml"),
             r#"[contract]
 version = "1.0.0"
 stability = "alpha"
@@ -375,7 +375,7 @@ requires_release_notes = true
 "#,
         );
         write_file(
-            &root.join("contract").join("exports").join("ts.toml"),
+            &root.join("spec").join("exports").join("ts.toml"),
             r#"[language]
 id = "ts"
 repository = "sdk-typescript"
@@ -391,7 +391,7 @@ manifest_file = "export-manifest.json"
 "#,
         );
         write_file(
-            &root.join("contract").join("coverage").join("policy.toml"),
+            &root.join("policy").join("coverage").join("policy.toml"),
             r#"[gate]
 fail_under_exec_lines = 100.0
 fail_under_functions = 100.0
@@ -405,9 +405,10 @@ crates = ["radroots_a", "radroots_b"]
         );
         write_file(
             &root
-                .join("contract")
+                .join("contracts")
                 .join("release")
-                .join("publish-set.toml"),
+                .join("mounted-rust-crates")
+                .join("publish-policy.toml"),
             r#"[release]
 version = "1.0.0"
 
@@ -580,7 +581,7 @@ crates = ["radroots_a"]
         let parent = coverage_refresh_path.parent().expect("coverage parent");
         fs::create_dir_all(parent).expect("create coverage parent");
         let required_raw =
-            fs::read_to_string(root.join("contract").join("coverage").join("policy.toml"))
+            fs::read_to_string(root.join("policy").join("coverage").join("policy.toml"))
                 .expect("read coverage policy contract");
         let required_toml =
             toml::from_str::<toml::Value>(&required_raw).expect("parse coverage policy contract");

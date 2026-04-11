@@ -651,7 +651,7 @@ publish = false
 "#,
         );
         write_file(
-            &root.join("contract").join("manifest.toml"),
+            &root.join("spec").join("manifest.toml"),
             r#"[contract]
 name = "radroots_contract"
 version = "1.0.0"
@@ -669,7 +669,7 @@ require_conformance_vectors = true
 "#,
         );
         write_file(
-            &root.join("contract").join("version.toml"),
+            &root.join("spec").join("version.toml"),
             r#"[contract]
 version = "1.0.0"
 stability = "alpha"
@@ -686,7 +686,7 @@ requires_release_notes = true
 "#,
         );
         write_file(
-            &root.join("contract").join("exports").join("ts.toml"),
+            &root.join("spec").join("exports").join("ts.toml"),
             r#"[language]
 id = "ts"
 repository = "sdk-typescript"
@@ -702,7 +702,7 @@ manifest_file = "export-manifest.json"
 "#,
         );
         write_file(
-            &root.join("contract").join("coverage").join("policy.toml"),
+            &root.join("policy").join("coverage").join("policy.toml"),
             r#"[gate]
 fail_under_exec_lines = 100.0
 fail_under_functions = 100.0
@@ -716,9 +716,10 @@ crates = ["radroots_a", "radroots_b"]
         );
         write_file(
             &root
-                .join("contract")
+                .join("contracts")
                 .join("release")
-                .join("publish-set.toml"),
+                .join("mounted-rust-crates")
+                .join("publish-policy.toml"),
             r#"[release]
 version = "1.0.0"
 
@@ -1228,7 +1229,7 @@ mod tests {
     fn export_ts_wasm_artifacts_copies_selected_wasm_package_dist() {
         let root = create_synthetic_workspace("export_ts_with_wasm_dist", false);
         write_file(
-            &root.join("contract").join("exports").join("ts.toml"),
+            &root.join("spec").join("exports").join("ts.toml"),
             r#"[language]
 id = "ts"
 repository = "sdk-typescript"
@@ -1352,7 +1353,7 @@ manifest_file = "export-manifest.json"
     fn write_manifest_reports_write_failures() {
         let root = create_synthetic_workspace("manifest_write_failure", false);
         write_file(
-            &root.join("contract").join("exports").join("ts.toml"),
+            &root.join("spec").join("exports").join("ts.toml"),
             r#"[language]
 id = "ts"
 repository = "sdk-typescript"
@@ -1378,7 +1379,7 @@ manifest_file = "packages"
     fn write_manifest_reports_parent_create_failures() {
         let root = create_synthetic_workspace("manifest_create_failure", false);
         write_file(
-            &root.join("contract").join("exports").join("ts.toml"),
+            &root.join("spec").join("exports").join("ts.toml"),
             r#"[language]
 id = "ts"
 repository = "sdk-typescript"
@@ -1503,7 +1504,7 @@ manifest_file = "nested/export-manifest.json"
         let _guard = workspace_lock().lock().expect("workspace lock");
         let root = create_synthetic_workspace("generate_skip_non_ts_rs", true);
         write_file(
-            &root.join("contract").join("exports").join("ts.toml"),
+            &root.join("spec").join("exports").join("ts.toml"),
             r#"[language]
 id = "ts"
 repository = "sdk-typescript"
@@ -1534,7 +1535,7 @@ manifest_file = "export-manifest.json"
         let _guard = workspace_lock().lock().expect("workspace lock");
         let root = create_synthetic_workspace("wrapper_bundle_success", true);
         write_file(
-            &root.join("contract").join("exports").join("ts.toml"),
+            &root.join("spec").join("exports").join("ts.toml"),
             r#"[language]
 id = "ts"
 repository = "sdk-typescript"
@@ -1621,7 +1622,7 @@ manifest_file = "export-manifest.json"
         let bundle_constants = create_synthetic_workspace("wrapper_bundle_constants_fail", true);
         write_file(
             &bundle_constants
-                .join("contract")
+                .join("spec")
                 .join("exports")
                 .join("ts.toml"),
             r#"[language]
@@ -1648,7 +1649,7 @@ manifest_file = "export-manifest.json"
 
         let bundle_wasm = create_synthetic_workspace("wrapper_bundle_wasm_fail", true);
         write_file(
-            &bundle_wasm.join("contract").join("exports").join("ts.toml"),
+            &bundle_wasm.join("spec").join("exports").join("ts.toml"),
             r#"[language]
 id = "ts"
 repository = "sdk-typescript"
@@ -1705,10 +1706,7 @@ manifest_file = "export-manifest.json"
 
         let crate_constants = create_synthetic_workspace("wrapper_crate_constants_fail", true);
         write_file(
-            &crate_constants
-                .join("contract")
-                .join("exports")
-                .join("ts.toml"),
+            &crate_constants.join("spec").join("exports").join("ts.toml"),
             r#"[language]
 id = "ts"
 repository = "sdk-typescript"
@@ -1734,7 +1732,7 @@ manifest_file = "export-manifest.json"
 
         let crate_wasm = create_synthetic_workspace("wrapper_crate_wasm_fail", true);
         write_file(
-            &crate_wasm.join("contract").join("exports").join("ts.toml"),
+            &crate_wasm.join("spec").join("exports").join("ts.toml"),
             r#"[language]
 id = "ts"
 repository = "sdk-typescript"
@@ -1793,7 +1791,7 @@ manifest_file = "export-manifest.json"
 
         let invalid_contract = create_synthetic_workspace("wrapper_invalid_contract", true);
         write_file(
-            &invalid_contract.join("contract").join("manifest.toml"),
+            &invalid_contract.join("spec").join("manifest.toml"),
             r#"[contract]
 name = ""
 version = "1.0.0"
@@ -1822,7 +1820,7 @@ require_conformance_vectors = true
         let missing_ts_export = create_synthetic_workspace("wrapper_missing_ts_export", true);
         write_file(
             &missing_ts_export
-                .join("contract")
+                .join("spec")
                 .join("exports")
                 .join("ts.toml"),
             r#"[language]
@@ -1873,7 +1871,7 @@ repository = "sdk-python"
         let missing_artifacts = create_synthetic_workspace("wrapper_missing_artifacts", true);
         write_file(
             &missing_artifacts
-                .join("contract")
+                .join("spec")
                 .join("exports")
                 .join("ts.toml"),
             r#"[language]
@@ -1895,7 +1893,7 @@ repository = "sdk-typescript"
         let missing_models_dir = create_synthetic_workspace("wrapper_missing_models_dir", true);
         write_file(
             &missing_models_dir
-                .join("contract")
+                .join("spec")
                 .join("exports")
                 .join("ts.toml"),
             r#"[language]
@@ -1923,7 +1921,7 @@ manifest_file = "export-manifest.json"
             create_synthetic_workspace("wrapper_missing_constants_dir", true);
         write_file(
             &missing_constants_dir
-                .join("contract")
+                .join("spec")
                 .join("exports")
                 .join("ts.toml"),
             r#"[language]
@@ -1951,7 +1949,7 @@ manifest_file = "export-manifest.json"
         let missing_wasm_dir = create_synthetic_workspace("wrapper_missing_wasm_dir", true);
         write_file(
             &missing_wasm_dir
-                .join("contract")
+                .join("spec")
                 .join("exports")
                 .join("ts.toml"),
             r#"[language]
@@ -1979,7 +1977,7 @@ manifest_file = "export-manifest.json"
             create_synthetic_workspace("wrapper_missing_manifest_file", true);
         write_file(
             &missing_manifest_file
-                .join("contract")
+                .join("spec")
                 .join("exports")
                 .join("ts.toml"),
             r#"[language]
@@ -2054,7 +2052,7 @@ manifest_file = ""
         let wasm_copy_err_root = create_synthetic_workspace("wrapper_wasm_copy_err", true);
         write_file(
             &wasm_copy_err_root
-                .join("contract")
+                .join("spec")
                 .join("exports")
                 .join("ts.toml"),
             r#"[language]
