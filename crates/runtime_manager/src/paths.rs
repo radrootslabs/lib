@@ -44,35 +44,33 @@ pub fn resolve_shared_paths(
         .paths
         .get(mode_id)
         .ok_or_else(|| RadrootsRuntimeManagerError::MissingPathSpec(mode_id.to_string()))?;
+    let root = |root_class: &str, rel: &str| root_class_path(&roots, root_class, rel);
+
+    let instance_registry_path = root(
+        &path_spec.instance_registry_root_class,
+        &path_spec.instance_registry_rel,
+    )?;
+    let artifact_cache_dir = root(
+        &path_spec.artifact_cache_root_class,
+        &path_spec.artifact_cache_rel,
+    )?;
+    let install_root = root(&path_spec.install_root_class, &path_spec.install_root_rel)?;
+    let state_root = root(&path_spec.state_root_class, &path_spec.state_root_rel)?;
+    let logs_root = root(&path_spec.logs_root_class, &path_spec.logs_root_rel)?;
+    let run_root = root(&path_spec.run_root_class, &path_spec.run_root_rel)?;
+    let secrets_root = root(
+        &path_spec.secrets_root_class,
+        &path_spec.secrets_namespace_rel,
+    )?;
 
     Ok(ManagedRuntimeSharedPaths {
-        instance_registry_path: root_class_path(
-            &roots,
-            &path_spec.instance_registry_root_class,
-            &path_spec.instance_registry_rel,
-        )?,
-        artifact_cache_dir: root_class_path(
-            &roots,
-            &path_spec.artifact_cache_root_class,
-            &path_spec.artifact_cache_rel,
-        )?,
-        install_root: root_class_path(
-            &roots,
-            &path_spec.install_root_class,
-            &path_spec.install_root_rel,
-        )?,
-        state_root: root_class_path(
-            &roots,
-            &path_spec.state_root_class,
-            &path_spec.state_root_rel,
-        )?,
-        logs_root: root_class_path(&roots, &path_spec.logs_root_class, &path_spec.logs_root_rel)?,
-        run_root: root_class_path(&roots, &path_spec.run_root_class, &path_spec.run_root_rel)?,
-        secrets_root: root_class_path(
-            &roots,
-            &path_spec.secrets_root_class,
-            &path_spec.secrets_namespace_rel,
-        )?,
+        instance_registry_path,
+        artifact_cache_dir,
+        install_root,
+        state_root,
+        logs_root,
+        run_root,
+        secrets_root,
     })
 }
 

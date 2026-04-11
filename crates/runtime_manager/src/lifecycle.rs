@@ -1,6 +1,6 @@
 use std::fs::{self, File, OpenOptions};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Command, ExitStatus, Output, Stdio};
 use std::thread;
 use std::time::Duration;
 
@@ -96,9 +96,7 @@ pub fn write_instance_metadata(
     record: &ManagedRuntimeInstanceRecord,
 ) -> Result<(), RadrootsRuntimeManagerError> {
     ensure_instance_layout(paths)?;
-    let raw = toml::to_string_pretty(record).map_err(|details| {
-        RadrootsRuntimeManagerError::SerializeInstanceMetadata(details.to_string())
-    })?;
+    let raw = serialize_instance_metadata(record)?;
     fs::write(&paths.metadata_path, raw).map_err(|source| {
         RadrootsRuntimeManagerError::WriteInstanceMetadata {
             path: paths.metadata_path.clone(),
@@ -192,28 +190,14 @@ pub fn stop_process(
         return Ok(false);
     }
 
-    terminate_process(pid)?;
-    for _ in 0..20 {
-        if !process_running_for_pid(pid) {
-            remove_pid_file(paths)?;
-            return Ok(true);
-        }
-        thread::sleep(Duration::from_millis(100));
-    }
-
-    force_kill_process(pid)?;
-    for _ in 0..20 {
-        if !process_running_for_pid(pid) {
-            remove_pid_file(paths)?;
-            return Ok(true);
-        }
-        thread::sleep(Duration::from_millis(100));
-    }
-
-    Err(RadrootsRuntimeManagerError::StopProcess {
+    stop_process_for_pid(
+        paths,
         pid,
-        details: "process did not exit after terminate and force-kill attempts".to_owned(),
-    })
+        process_running_for_pid,
+        terminate_process,
+        force_kill_process,
+        thread::sleep,
+    )
 }
 
 pub fn remove_instance_artifacts(
@@ -229,6 +213,59 @@ pub fn remove_instance_artifacts(
         remove_path_if_exists(path)?;
     }
     Ok(())
+}
+
+fn serialize_instance_metadata(
+    record: &ManagedRuntimeInstanceRecord,
+) -> Result<String, RadrootsRuntimeManagerError> {
+    serialize_instance_metadata_with(record, toml::to_string_pretty)
+}
+
+fn serialize_instance_metadata_with(
+    record: &ManagedRuntimeInstanceRecord,
+    serializer: fn(&ManagedRuntimeInstanceRecord) -> Result<String, toml::ser::Error>,
+) -> Result<String, RadrootsRuntimeManagerError> {
+    serializer(record).map_err(|details| {
+        RadrootsRuntimeManagerError::SerializeInstanceMetadata(details.to_string())
+    })
+}
+
+fn stop_process_for_pid<IsRunning, Terminate, ForceKill, Sleep>(
+    paths: &ManagedRuntimeInstancePaths,
+    pid: u32,
+    mut is_running: IsRunning,
+    terminate: Terminate,
+    force_kill: ForceKill,
+    mut sleep: Sleep,
+) -> Result<bool, RadrootsRuntimeManagerError>
+where
+    IsRunning: FnMut(u32) -> bool,
+    Terminate: FnOnce(u32) -> Result<(), RadrootsRuntimeManagerError>,
+    ForceKill: FnOnce(u32) -> Result<(), RadrootsRuntimeManagerError>,
+    Sleep: FnMut(Duration),
+{
+    terminate(pid)?;
+    for _ in 0..20 {
+        if !is_running(pid) {
+            remove_pid_file(paths)?;
+            return Ok(true);
+        }
+        sleep(Duration::from_millis(100));
+    }
+
+    force_kill(pid)?;
+    for _ in 0..20 {
+        if !is_running(pid) {
+            remove_pid_file(paths)?;
+            return Ok(true);
+        }
+        sleep(Duration::from_millis(100));
+    }
+
+    Err(RadrootsRuntimeManagerError::StopProcess {
+        pid,
+        details: "process did not exit after terminate and force-kill attempts".to_owned(),
+    })
 }
 
 fn unpack_tar_gz_archive(
@@ -328,18 +365,41 @@ fn remove_pid_file(paths: &ManagedRuntimeInstancePaths) -> Result<(), RadrootsRu
 }
 
 fn remove_path_if_exists(path: &Path) -> Result<(), RadrootsRuntimeManagerError> {
-    match fs::metadata(path) {
-        Ok(metadata) if metadata.is_dir() => {
-            fs::remove_dir_all(path).map_err(|source| RadrootsRuntimeManagerError::RemovePath {
+    let state = match fs::metadata(path) {
+        Ok(metadata) if metadata.is_dir() => Ok(Some(ExistingPathKind::Directory)),
+        Ok(_) => Ok(Some(ExistingPathKind::File)),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(source) => Err(source),
+    };
+    remove_path_from_state(path, state, remove_dir_all_path, remove_file_path)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ExistingPathKind {
+    Directory,
+    File,
+}
+
+fn remove_path_from_state(
+    path: &Path,
+    state: Result<Option<ExistingPathKind>, std::io::Error>,
+    remove_dir_all: fn(&Path) -> std::io::Result<()>,
+    remove_file: fn(&Path) -> std::io::Result<()>,
+) -> Result<(), RadrootsRuntimeManagerError> {
+    match state {
+        Ok(Some(ExistingPathKind::Directory)) => {
+            remove_dir_all(path).map_err(|source| RadrootsRuntimeManagerError::RemovePath {
                 path: path.to_path_buf(),
                 source,
             })
         }
-        Ok(_) => fs::remove_file(path).map_err(|source| RadrootsRuntimeManagerError::RemovePath {
-            path: path.to_path_buf(),
-            source,
-        }),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Ok(Some(ExistingPathKind::File)) => {
+            remove_file(path).map_err(|source| RadrootsRuntimeManagerError::RemovePath {
+                path: path.to_path_buf(),
+                source,
+            })
+        }
+        Ok(None) => Ok(()),
         Err(source) => Err(RadrootsRuntimeManagerError::ReadManagedFile {
             path: path.to_path_buf(),
             source,
@@ -347,23 +407,17 @@ fn remove_path_if_exists(path: &Path) -> Result<(), RadrootsRuntimeManagerError>
     }
 }
 
+fn remove_dir_all_path(path: &Path) -> std::io::Result<()> {
+    fs::remove_dir_all(path)
+}
+
+fn remove_file_path(path: &Path) -> std::io::Result<()> {
+    fs::remove_file(path)
+}
+
 #[cfg(unix)]
 fn set_executable_mode(path: &Path) -> Result<(), RadrootsRuntimeManagerError> {
-    use std::os::unix::fs::PermissionsExt;
-
-    let metadata =
-        fs::metadata(path).map_err(|source| RadrootsRuntimeManagerError::ReadManagedFile {
-            path: path.to_path_buf(),
-            source,
-        })?;
-    let mut permissions = metadata.permissions();
-    permissions.set_mode(0o755);
-    fs::set_permissions(path, permissions).map_err(|source| {
-        RadrootsRuntimeManagerError::SetPermissions {
-            path: path.to_path_buf(),
-            source,
-        }
-    })
+    apply_mode(path, 0o755, set_permissions_path)
 }
 
 #[cfg(not(unix))]
@@ -373,6 +427,15 @@ fn set_executable_mode(_path: &Path) -> Result<(), RadrootsRuntimeManagerError> 
 
 #[cfg(unix)]
 fn set_secret_mode(path: &Path) -> Result<(), RadrootsRuntimeManagerError> {
+    apply_mode(path, 0o600, set_permissions_path)
+}
+
+#[cfg(unix)]
+fn apply_mode(
+    path: &Path,
+    mode: u32,
+    set_permissions: fn(&Path, fs::Permissions) -> std::io::Result<()>,
+) -> Result<(), RadrootsRuntimeManagerError> {
     use std::os::unix::fs::PermissionsExt;
 
     let metadata =
@@ -381,13 +444,18 @@ fn set_secret_mode(path: &Path) -> Result<(), RadrootsRuntimeManagerError> {
             source,
         })?;
     let mut permissions = metadata.permissions();
-    permissions.set_mode(0o600);
-    fs::set_permissions(path, permissions).map_err(|source| {
+    permissions.set_mode(mode);
+    set_permissions(path, permissions).map_err(|source| {
         RadrootsRuntimeManagerError::SetPermissions {
             path: path.to_path_buf(),
             source,
         }
     })
+}
+
+#[cfg(unix)]
+fn set_permissions_path(path: &Path, permissions: fs::Permissions) -> std::io::Result<()> {
+    fs::set_permissions(path, permissions)
 }
 
 #[cfg(not(unix))]
@@ -409,19 +477,27 @@ fn process_running_for_pid(pid: u32) -> bool {
         return false;
     }
 
+    ps_output_for_pid(pid_arg.as_str())
+        .map(process_running_state_from_ps_output)
+        .unwrap_or(true)
+}
+
+#[cfg(unix)]
+fn ps_output_for_pid(pid_arg: &str) -> std::io::Result<Output> {
     Command::new("ps")
-        .args(["-o", "stat=", "-p", pid_arg.as_str()])
+        .args(["-o", "stat=", "-p", pid_arg])
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .output()
-        .map(|output| {
-            if !output.status.success() {
-                return true;
-            }
-            let state = String::from_utf8_lossy(output.stdout.as_slice());
-            !state.trim_start().starts_with('Z')
-        })
-        .unwrap_or(true)
+}
+
+#[cfg(unix)]
+fn process_running_state_from_ps_output(output: Output) -> bool {
+    if !output.status.success() {
+        return true;
+    }
+    let state = String::from_utf8_lossy(output.stdout.as_slice());
+    !state.trim_start().starts_with('Z')
 }
 
 #[cfg(windows)]
@@ -456,16 +532,31 @@ fn force_kill_process(pid: u32) -> Result<(), RadrootsRuntimeManagerError> {
 
 #[cfg(unix)]
 fn signal_process(pid: u32, signal: &str) -> Result<(), RadrootsRuntimeManagerError> {
-    let status = Command::new("kill")
+    signal_process_with(pid, signal, execute_signal_command)
+}
+
+#[cfg(unix)]
+fn execute_signal_command(pid: u32, signal: &str) -> std::io::Result<ExitStatus> {
+    Command::new("kill")
         .args([signal, pid.to_string().as_str()])
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
         .status()
-        .map_err(|source| RadrootsRuntimeManagerError::ExecuteProcessSignal {
+}
+
+#[cfg(unix)]
+fn signal_process_with(
+    pid: u32,
+    signal: &str,
+    runner: fn(u32, &str) -> std::io::Result<ExitStatus>,
+) -> Result<(), RadrootsRuntimeManagerError> {
+    let status = runner(pid, signal).map_err(|source| {
+        RadrootsRuntimeManagerError::ExecuteProcessSignal {
             pid,
             signal: signal.to_owned(),
             source,
-        })?;
+        }
+    })?;
     if status.success() {
         Ok(())
     } else {
@@ -523,19 +614,28 @@ fn force_kill_process(pid: u32) -> Result<(), RadrootsRuntimeManagerError> {
 mod tests {
     use std::fs;
     use std::fs::File;
+    use std::io;
     use std::path::Path;
+    use std::process::ExitStatus;
     use std::thread;
     use std::time::Duration;
 
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
+
+    #[cfg(unix)]
+    use serde::ser::Error as _;
     use tempfile::tempdir;
 
     use super::{
-        ensure_instance_layout, ensure_parent_dir, extract_binary_archive, find_binary_with_name,
-        force_kill_process, install_binary, open_log_file, process_running,
-        process_running_for_pid, read_pid, read_secret_file, remove_instance_artifacts,
-        remove_path_if_exists, set_executable_mode, set_secret_mode, signal_process, start_process,
-        stop_process, terminate_process, write_instance_metadata, write_managed_file,
-        write_secret_file,
+        ExistingPathKind, apply_mode, ensure_instance_layout, ensure_parent_dir,
+        extract_binary_archive, find_binary_with_name, force_kill_process, install_binary,
+        open_log_file, process_running, process_running_for_pid,
+        process_running_state_from_ps_output, read_pid, read_secret_file,
+        remove_instance_artifacts, remove_path_from_state, remove_path_if_exists,
+        serialize_instance_metadata_with, set_executable_mode, set_secret_mode, signal_process,
+        signal_process_with, start_process, stop_process, stop_process_for_pid, terminate_process,
+        write_instance_metadata, write_managed_file, write_secret_file,
     };
     use crate::error::RadrootsRuntimeManagerError;
     use crate::model::{ManagedRuntimeInstallState, ManagedRuntimeInstanceRecord};
@@ -565,6 +665,53 @@ mod tests {
         }
     }
 
+    fn sample_record(paths: &ManagedRuntimeInstancePaths) -> ManagedRuntimeInstanceRecord {
+        ManagedRuntimeInstanceRecord {
+            runtime_id: "radrootsd".to_owned(),
+            instance_id: "local".to_owned(),
+            management_mode: "interactive_user_managed".to_owned(),
+            install_state: ManagedRuntimeInstallState::Configured,
+            binary_path: paths.install_dir.join("radrootsd"),
+            config_path: paths.state_dir.join("config.toml"),
+            logs_path: paths.logs_dir.clone(),
+            run_path: paths.run_dir.clone(),
+            installed_version: "0.1.0".to_owned(),
+            health_endpoint: Some("http://127.0.0.1:7070".to_owned()),
+            secret_material_ref: Some(paths.secrets_dir.join("token.txt").display().to_string()),
+            last_started_at: None,
+            last_stopped_at: None,
+            notes: Some("test".to_owned()),
+        }
+    }
+
+    #[cfg(unix)]
+    fn exit_status(code: i32) -> ExitStatus {
+        std::process::Command::new("sh")
+            .args(["-c", &format!("exit {code}")])
+            .status()
+            .expect("exit status")
+    }
+
+    #[cfg(unix)]
+    fn output_with_status(status: ExitStatus, stdout: &[u8]) -> std::process::Output {
+        std::process::Output {
+            status,
+            stdout: stdout.to_vec(),
+            stderr: Vec::new(),
+        }
+    }
+
+    fn ok_remove_path(_path: &Path) -> io::Result<()> {
+        Ok(())
+    }
+
+    fn deny_remove_path(_path: &Path) -> io::Result<()> {
+        Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "remove path denied",
+        ))
+    }
+
     #[test]
     fn layout_and_metadata_helpers_write_expected_files() {
         let dir = tempdir().expect("tempdir");
@@ -572,28 +719,7 @@ mod tests {
         ensure_instance_layout(&paths).expect("layout");
         write_managed_file(paths.state_dir.join("config.toml"), "value = true").expect("config");
         write_secret_file(paths.secrets_dir.join("token.txt"), "secret").expect("secret");
-        write_instance_metadata(
-            &paths,
-            &ManagedRuntimeInstanceRecord {
-                runtime_id: "radrootsd".to_owned(),
-                instance_id: "local".to_owned(),
-                management_mode: "interactive_user_managed".to_owned(),
-                install_state: ManagedRuntimeInstallState::Configured,
-                binary_path: paths.install_dir.join("radrootsd"),
-                config_path: paths.state_dir.join("config.toml"),
-                logs_path: paths.logs_dir.clone(),
-                run_path: paths.run_dir.clone(),
-                installed_version: "0.1.0".to_owned(),
-                health_endpoint: Some("http://127.0.0.1:7070".to_owned()),
-                secret_material_ref: Some(
-                    paths.secrets_dir.join("token.txt").display().to_string(),
-                ),
-                last_started_at: None,
-                last_stopped_at: None,
-                notes: Some("test".to_owned()),
-            },
-        )
-        .expect("metadata");
+        write_instance_metadata(&paths, &sample_record(&paths)).expect("metadata");
         assert_eq!(
             read_secret_file(paths.secrets_dir.join("token.txt")).expect("read secret"),
             "secret"
@@ -852,20 +978,10 @@ mod tests {
         let err = write_instance_metadata(
             &paths,
             &ManagedRuntimeInstanceRecord {
-                runtime_id: "radrootsd".to_owned(),
-                instance_id: "local".to_owned(),
-                management_mode: "interactive_user_managed".to_owned(),
-                install_state: ManagedRuntimeInstallState::Configured,
-                binary_path: paths.install_dir.join("radrootsd"),
-                config_path: paths.state_dir.join("config.toml"),
-                logs_path: paths.logs_dir.clone(),
-                run_path: paths.run_dir.clone(),
-                installed_version: "0.1.0".to_owned(),
                 health_endpoint: None,
                 secret_material_ref: None,
-                last_started_at: None,
-                last_stopped_at: None,
                 notes: None,
+                ..sample_record(&paths)
             },
         )
         .expect_err("metadata dir target should fail");
@@ -874,6 +990,23 @@ mod tests {
             &[
                 paths.metadata_path.to_string_lossy().as_ref(),
                 "write runtime instance metadata",
+            ],
+        );
+    }
+
+    #[test]
+    fn serialize_instance_metadata_reports_serializer_errors() {
+        let dir = tempdir().expect("tempdir");
+        let paths = sample_paths(dir.path());
+        let err = serialize_instance_metadata_with(&sample_record(&paths), |_| {
+            Err(toml::ser::Error::custom("forced serializer failure"))
+        })
+        .expect_err("serializer should fail");
+        assert_error_contains(
+            &err,
+            &[
+                "serialize runtime instance metadata",
+                "forced serializer failure",
             ],
         );
     }
@@ -944,6 +1077,57 @@ mod tests {
 
         assert!(!stop_process(&paths).expect("stale pid should return false"));
         assert!(!paths.pid_file_path.exists());
+    }
+
+    #[test]
+    fn stop_process_for_pid_uses_force_kill_after_terminate_attempts() {
+        let dir = tempdir().expect("tempdir");
+        let paths = sample_paths(dir.path());
+        ensure_instance_layout(&paths).expect("layout");
+        fs::write(&paths.pid_file_path, "42").expect("write pid");
+
+        let mut polls = 0_u32;
+        let stopped = stop_process_for_pid(
+            &paths,
+            42,
+            |_pid| {
+                polls += 1;
+                polls <= 20
+            },
+            |_pid| Ok(()),
+            |_pid| Ok(()),
+            |_duration| {},
+        )
+        .expect("force-kill path should stop");
+
+        assert!(stopped);
+        assert!(!paths.pid_file_path.exists());
+        assert_eq!(polls, 21);
+    }
+
+    #[test]
+    fn stop_process_for_pid_reports_failure_after_force_kill_attempts() {
+        let dir = tempdir().expect("tempdir");
+        let paths = sample_paths(dir.path());
+        ensure_instance_layout(&paths).expect("layout");
+        fs::write(&paths.pid_file_path, "42").expect("write pid");
+
+        let mut sleeps = 0_u32;
+        let err = stop_process_for_pid(
+            &paths,
+            42,
+            |_pid| true,
+            |_pid| Ok(()),
+            |_pid| Ok(()),
+            |_duration| {
+                sleeps += 1;
+            },
+        )
+        .expect_err("force-kill exhaustion should fail");
+
+        assert_error_contains(&err, &["42", "did not exit after terminate and force-kill"]);
+        assert_eq!(sleeps, 40);
+        assert!(paths.pid_file_path.exists());
     }
 
     #[test]
@@ -1031,6 +1215,57 @@ mod tests {
     }
 
     #[test]
+    fn remove_path_from_state_reports_dir_file_and_metadata_errors() {
+        let dir = tempdir().expect("tempdir");
+        let dir_path = dir.path().join("subdir");
+        let file_path = dir.path().join("file.txt");
+        let metadata_path = dir.path().join("metadata");
+        ok_remove_path(Path::new("/")).expect("noop remove path");
+
+        let dir_err = remove_path_from_state(
+            &dir_path,
+            Ok(Some(ExistingPathKind::Directory)),
+            deny_remove_path,
+            ok_remove_path,
+        )
+        .expect_err("directory removal should fail");
+        assert_error_contains(
+            &dir_err,
+            &[dir_path.to_string_lossy().as_ref(), "remove managed path"],
+        );
+
+        let file_err = remove_path_from_state(
+            &file_path,
+            Ok(Some(ExistingPathKind::File)),
+            ok_remove_path,
+            deny_remove_path,
+        )
+        .expect_err("file removal should fail");
+        assert_error_contains(
+            &file_err,
+            &[file_path.to_string_lossy().as_ref(), "remove managed path"],
+        );
+
+        let metadata_err = remove_path_from_state(
+            &metadata_path,
+            Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "metadata lookup failed",
+            )),
+            ok_remove_path,
+            ok_remove_path,
+        )
+        .expect_err("metadata lookup should fail");
+        assert_error_contains(
+            &metadata_err,
+            &[
+                metadata_path.to_string_lossy().as_ref(),
+                "read managed file",
+            ],
+        );
+    }
+
+    #[test]
     fn remove_pid_file_reports_directory_errors() {
         let dir = tempdir().expect("tempdir");
         let mut paths = sample_paths(dir.path());
@@ -1045,6 +1280,13 @@ mod tests {
                 "remove managed path",
             ],
         );
+    }
+
+    #[test]
+    fn remove_pid_file_accepts_missing_pid_paths() {
+        let dir = tempdir().expect("tempdir");
+        let paths = sample_paths(dir.path());
+        super::remove_pid_file(&paths).expect("missing pid file should be ignored");
     }
 
     #[cfg(unix)]
@@ -1068,6 +1310,49 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn apply_mode_reports_set_permissions_errors() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("radrootsd");
+        fs::write(&path, "binary").expect("binary");
+
+        let err = apply_mode(&path, 0o755, |_path, _permissions| {
+            Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "set permissions failed",
+            ))
+        })
+        .expect_err("set permissions should fail");
+        assert_error_contains(&err, &[path.to_string_lossy().as_ref(), "set permissions"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn remove_path_if_exists_reports_metadata_errors() {
+        let dir = tempdir().expect("tempdir");
+        let restricted = dir.path().join("restricted");
+        fs::create_dir(&restricted).expect("restricted dir");
+        let blocked_path = restricted.join("child");
+
+        let mut permissions = fs::metadata(&restricted).expect("metadata").permissions();
+        permissions.set_mode(0);
+        fs::set_permissions(&restricted, permissions).expect("restrict permissions");
+
+        let err = remove_path_if_exists(&blocked_path).expect_err("metadata lookup should fail");
+
+        let mut restore = fs::metadata(&restricted)
+            .expect("restricted metadata")
+            .permissions();
+        restore.set_mode(0o755);
+        fs::set_permissions(&restricted, restore).expect("restore permissions");
+
+        assert_error_contains(
+            &err,
+            &[blocked_path.to_string_lossy().as_ref(), "read managed file"],
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn signal_helpers_cover_failure_paths() {
         let missing_pid = 999_999_u32;
         assert!(!process_running_for_pid(missing_pid));
@@ -1080,5 +1365,35 @@ mod tests {
 
         let err = signal_process(missing_pid, "-BOGUS").expect_err("invalid signal should fail");
         assert_error_contains(&err, &[&missing_pid.to_string(), "stop pid"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn signal_process_with_reports_execution_errors() {
+        let err = signal_process_with(42, "-TERM", |_pid, _signal| {
+            Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "kill executable missing",
+            ))
+        })
+        .expect_err("signal execution should fail");
+        assert_error_contains(&err, &["42", "-TERM", "kill executable missing"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn process_running_state_from_ps_output_handles_non_success_and_zombies() {
+        assert!(process_running_state_from_ps_output(output_with_status(
+            exit_status(1),
+            b"",
+        )));
+        assert!(!process_running_state_from_ps_output(output_with_status(
+            exit_status(0),
+            b"Z+",
+        )));
+        assert!(process_running_state_from_ps_output(output_with_status(
+            exit_status(0),
+            b"S+",
+        )));
     }
 }

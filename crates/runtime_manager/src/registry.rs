@@ -34,14 +34,7 @@ pub fn save_registry(
     registry: &ManagedRuntimeInstanceRegistry,
 ) -> Result<(), RadrootsRuntimeManagerError> {
     let path = path.as_ref();
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|source| {
-            RadrootsRuntimeManagerError::CreateRegistryParent {
-                path: parent.to_path_buf(),
-                source,
-            }
-        })?;
-    }
+    ensure_registry_parent(path)?;
 
     let raw = toml::to_string_pretty(registry)
         .map_err(|err| RadrootsRuntimeManagerError::SerializeRegistry(err.to_string()))?;
@@ -92,14 +85,30 @@ pub fn remove_instance(
     Some(registry.instances.remove(index))
 }
 
+fn ensure_registry_parent(path: &Path) -> Result<(), RadrootsRuntimeManagerError> {
+    let Some(parent) = path.parent() else {
+        return Ok(());
+    };
+    if parent.as_os_str().is_empty() {
+        return Ok(());
+    }
+    fs::create_dir_all(parent).map_err(|source| RadrootsRuntimeManagerError::CreateRegistryParent {
+        path: parent.to_path_buf(),
+        source,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     use tempfile::tempdir;
 
-    use super::{instance, load_registry, remove_instance, save_registry, upsert_instance};
+    use super::{
+        ensure_registry_parent, instance, load_registry, remove_instance, save_registry,
+        upsert_instance,
+    };
     use crate::{
         ManagedRuntimeInstallState, ManagedRuntimeInstanceRecord, ManagedRuntimeInstanceRegistry,
         RadrootsRuntimeManagerError,
@@ -203,6 +212,12 @@ mod tests {
                 "create runtime instance registry parent",
             ],
         );
+    }
+
+    #[test]
+    fn ensure_registry_parent_accepts_parentless_relative_paths() {
+        ensure_registry_parent(Path::new("instances.toml")).expect("relative path parentless");
+        ensure_registry_parent(Path::new("/")).expect("root path parentless");
     }
 
     #[test]
