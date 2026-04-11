@@ -2305,10 +2305,8 @@ fn validate_coverage_policy_parity(
     workspace_root: &Path,
     contract_root: &Path,
 ) -> Result<(), String> {
-    let workspace_packages = workspace_package_names(workspace_root)?
-        .into_iter()
-        .collect::<BTreeSet<_>>();
     let policy = load_coverage_policy(contract_root)?;
+    let release = load_release_contract(workspace_root, contract_root)?;
     let thresholds = policy.thresholds();
     if thresholds.fail_under_exec_lines != 100.0
         || thresholds.fail_under_functions != 100.0
@@ -2326,17 +2324,25 @@ fn validate_coverage_policy_parity(
         .iter()
         .cloned()
         .collect::<BTreeSet<_>>();
-    if workspace_packages != required_packages {
-        let missing = workspace_packages
+    let public_packages = collect_unique_set(
+        &release.public_crates(),
+        if release.uses_classification() {
+            "classification.public"
+        } else {
+            "publish.crates"
+        },
+    )?;
+    if public_packages != required_packages {
+        let missing = public_packages
             .difference(&required_packages)
             .cloned()
             .collect::<BTreeSet<_>>();
         let extra = required_packages
-            .difference(&workspace_packages)
+            .difference(&public_packages)
             .cloned()
             .collect::<BTreeSet<_>>();
         return Err(format!(
-            "coverage policy missing workspace crates: {}; coverage policy includes unknown crates: {}",
+            "coverage policy missing public crates: {}; coverage policy includes non-public crates: {}",
             join_set(&missing),
             join_set(&extra)
         ));
@@ -3222,7 +3228,7 @@ fail_under_branches = 100.0
 require_branches = true
 
 [required]
-crates = ["radroots_a", "radroots_b"]
+crates = ["radroots_a"]
 "#,
         );
         write_file(
@@ -3474,7 +3480,7 @@ fail_under_branches = 100.0
 require_branches = true
 
 [required]
-crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
+crates = ["radroots_a"]
 "#,
         );
         write_file(
@@ -3622,10 +3628,12 @@ pub enum RadrootsCoreUnitDimension {
     }
 
     #[test]
-    fn coverage_policy_includes_workspace_crates() {
+    fn coverage_policy_matches_public_release_crates() {
         let root = workspace_root();
-        let workspace_names = workspace_package_names(&root)
-            .expect("workspace crates")
+        let release = load_release_contract(&root, &root.join("spec"))
+            .expect("root release policy");
+        let public_names = release
+            .public_crates()
             .into_iter()
             .collect::<BTreeSet<_>>();
         let policy = load_coverage_policy(&root.join("spec")).expect("coverage policy");
@@ -3634,7 +3642,7 @@ pub enum RadrootsCoreUnitDimension {
             .expect("required crates")
             .into_iter()
             .collect::<BTreeSet<_>>();
-        assert_eq!(workspace_names, required_names);
+        assert_eq!(public_names, required_names);
     }
 
     #[test]
@@ -4120,7 +4128,7 @@ fail_under_branches = 100.0
 require_branches = true
 
 [required]
-crates = ["radroots_a", "radroots_b"]
+crates = ["radroots_a"]
 "#,
         );
         let invalid_gate = validate_coverage_policy_parity(&root, &contract_root)
@@ -4137,7 +4145,7 @@ fail_under_branches = 100.0
 require_branches = true
 
 [required]
-crates = ["radroots_a", "radroots_b"]
+crates = ["radroots_a"]
 "#,
         );
         let invalid_functions = validate_coverage_policy_parity(&root, &contract_root)
@@ -4154,7 +4162,7 @@ fail_under_branches = 100.0
 require_branches = true
 
 [required]
-crates = ["radroots_a", "radroots_b"]
+crates = ["radroots_a"]
 "#,
         );
         let invalid_regions = validate_coverage_policy_parity(&root, &contract_root)
@@ -4171,7 +4179,7 @@ fail_under_branches = 99.0
 require_branches = true
 
 [required]
-crates = ["radroots_a", "radroots_b"]
+crates = ["radroots_a"]
 "#,
         );
         let invalid_branches = validate_coverage_policy_parity(&root, &contract_root)
@@ -4205,7 +4213,7 @@ fail_under_branches = 100.0
 require_branches = false
 
 [required]
-crates = ["radroots_a", "radroots_b"]
+crates = ["radroots_a"]
 "#,
         );
         let branches_optional = validate_coverage_policy_parity(&root, &contract_root)
@@ -4222,12 +4230,12 @@ fail_under_branches = 100.0
 require_branches = true
 
 [required]
-crates = ["radroots_a"]
+crates = ["radroots_b"]
 "#,
         );
         let missing_workspace = validate_coverage_policy_parity(&root, &contract_root)
-            .expect_err("missing workspace crate in policy");
-        assert!(missing_workspace.contains("missing workspace crates"));
+            .expect_err("missing public crate in policy");
+        assert!(missing_workspace.contains("missing public crates"));
 
         write_file(
             &coverage_root.join("policy.toml"),
@@ -4243,8 +4251,8 @@ crates = ["unknown"]
 "#,
         );
         let required_unknown = validate_coverage_policy_parity(&root, &contract_root)
-            .expect_err("unknown required crate");
-        assert!(required_unknown.contains("includes unknown crates"));
+            .expect_err("non-public required crate");
+        assert!(required_unknown.contains("includes non-public crates"));
 
         let _ = fs::remove_dir_all(root);
     }
@@ -4941,10 +4949,9 @@ publish = false
         let release_policy_path = root_release_policy_path(&root);
 
         let missing_workspace = temp_root("coverage_missing_workspace_manifest");
-        let policy_workspace_err =
-            validate_coverage_policy_parity(&missing_workspace, &contract_root)
-                .expect_err("coverage workspace manifest read error");
-        assert!(policy_workspace_err.contains("Cargo.toml"));
+        let policy_workspace_err = validate_coverage_policy_parity(&missing_workspace, &contract_root)
+            .expect_err("coverage release policy lookup error");
+        assert!(policy_workspace_err.contains("release publish policy not found"));
         let _ = fs::remove_dir_all(&missing_workspace);
 
         let _ = fs::remove_file(coverage_root.join("policy.toml"));
@@ -5554,8 +5561,8 @@ crates = ["radroots_a", "radroots_b", "radroots_extra"]
 "#,
         );
         let coverage_extra = validate_coverage_policy_parity(&root, &contract_root)
-            .expect_err("coverage unknown crate");
-        assert!(coverage_extra.contains("includes unknown crates"));
+            .expect_err("coverage non-public crate");
+        assert!(coverage_extra.contains("includes non-public crates"));
 
         write_file(
             &coverage_root.join("policy.toml"),
@@ -5567,12 +5574,12 @@ fail_under_branches = 100.0
 require_branches = true
 
 [required]
-crates = ["radroots_a"]
+crates = ["radroots_b"]
 "#,
         );
         let required_list_mismatch = validate_coverage_policy_parity(&root, &contract_root)
-            .expect_err("required list must match workspace crates");
-        assert!(required_list_mismatch.contains("missing workspace crates"));
+            .expect_err("required list must match public crates");
+        assert!(required_list_mismatch.contains("missing public crates"));
 
         write_file(
             &release_policy_path,

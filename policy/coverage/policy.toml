@@ -39,46 +39,6 @@ fail_under_branches = 68.695
 temporary = true
 reason = "publish 0.1.0-alpha.1 temporary coverage override"
 
-[overrides.radroots_identity]
-fail_under_regions = 98.608
-temporary = true
-reason = "publish 0.1.0-alpha.1 temporary coverage override"
-
-[overrides.radroots_events_codec]
-fail_under_regions = 99.946
-temporary = true
-reason = "publish 0.1.0-alpha.1 temporary coverage override"
-
-[overrides.radroots_geocoder]
-fail_under_regions = 99.728
-temporary = true
-reason = "publish 0.1.0-alpha.1 temporary coverage override"
-
-[overrides.radroots_nostr]
-fail_under_regions = 99.419
-temporary = true
-reason = "publish 0.1.0-alpha.1 temporary coverage override"
-
-[overrides.radroots_nostr_connect]
-fail_under_regions = 98.423
-temporary = true
-reason = "publish 0.1.0-alpha.1 temporary coverage override"
-
-[overrides.radroots_sql_core]
-fail_under_regions = 98.171
-temporary = true
-reason = "publish 0.1.0-alpha.1 temporary coverage override"
-
-[overrides.radroots_replica_db]
-fail_under_regions = 99.859
-temporary = true
-reason = "publish 0.1.0-alpha.1 temporary coverage override"
-
-[overrides.radroots_replica_sync]
-fail_under_regions = 99.989
-temporary = true
-reason = "publish 0.1.0-alpha.1 temporary coverage override"
-
 [required]
 crates = [
   "radroots_core",
