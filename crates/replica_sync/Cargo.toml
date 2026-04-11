@@ -1,7 +1,7 @@
 [package]
 name = "radroots_replica_sync"
 publish = ["crates-io"]
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 edition.workspace = true
 authors = ["Tyson Lupul <tyson@radroots.org>"]
 rust-version.workspace = true

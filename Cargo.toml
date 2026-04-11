@@ -55,46 +55,46 @@ homepage = "https://radroots.org"
 readme = "README"
 
 [workspace.dependencies]
-radroots_core = { path = "crates/core", version = "0.1.0-alpha.1", default-features = false }
-radroots_events = { path = "crates/events", version = "0.1.0-alpha.1", default-features = false }
-radroots_events_codec = { path = "crates/events_codec", version = "0.1.0-alpha.1", default-features = false }
-radroots_events_indexed = { path = "crates/events_indexed", version = "0.1.0-alpha.1", default-features = false }
-radroots_geocoder = { path = "crates/geocoder", version = "0.1.0-alpha.1" }
-radroots_identity = { path = "crates/identity", version = "0.1.0-alpha.1", default-features = false }
-radroots_nostr = { path = "crates/nostr", version = "0.1.0-alpha.1", default-features = false }
-radroots_nostr_accounts = { path = "crates/nostr_accounts", version = "0.1.0-alpha.1", default-features = false }
-radroots_nostr_connect = { path = "crates/nostr_connect", version = "0.1.0-alpha.1", default-features = false }
-radroots_nostr_signer = { path = "crates/nostr_signer", version = "0.1.0-alpha.1", default-features = false }
-radroots_nostr_ndb = { path = "crates/nostr_ndb", version = "0.1.0-alpha.1", default-features = false }
-radroots_runtime = { path = "crates/runtime", version = "0.1.0-alpha.1", default-features = false }
-radroots_runtime_paths = { path = "crates/runtime_paths", version = "0.1.0-alpha.1", default-features = false }
-radroots_runtime_distribution = { path = "crates/runtime_distribution", version = "0.1.0-alpha.1", default-features = false }
-radroots_runtime_manager = { path = "crates/runtime_manager", version = "0.1.0-alpha.1", default-features = false }
-radroots_log = { path = "crates/log", version = "0.1.0-alpha.1", default-features = false }
-radroots_net = { path = "crates/net", version = "0.1.0-alpha.1", default-features = false }
-radroots_net_core = { path = "crates/net_core", version = "0.1.0-alpha.1", default-features = false }
-radroots_nostr_runtime = { path = "crates/nostr_runtime", version = "0.1.0-alpha.1", default-features = false }
+radroots_core = { path = "crates/core", version = "0.1.0-alpha.2", default-features = false }
+radroots_events = { path = "crates/events", version = "0.1.0-alpha.2", default-features = false }
+radroots_events_codec = { path = "crates/events_codec", version = "0.1.0-alpha.2", default-features = false }
+radroots_events_indexed = { path = "crates/events_indexed", version = "0.1.0-alpha.2", default-features = false }
+radroots_geocoder = { path = "crates/geocoder", version = "0.1.0-alpha.2" }
+radroots_identity = { path = "crates/identity", version = "0.1.0-alpha.2", default-features = false }
+radroots_nostr = { path = "crates/nostr", version = "0.1.0-alpha.2", default-features = false }
+radroots_nostr_accounts = { path = "crates/nostr_accounts", version = "0.1.0-alpha.2", default-features = false }
+radroots_nostr_connect = { path = "crates/nostr_connect", version = "0.1.0-alpha.2", default-features = false }
+radroots_nostr_signer = { path = "crates/nostr_signer", version = "0.1.0-alpha.2", default-features = false }
+radroots_nostr_ndb = { path = "crates/nostr_ndb", version = "0.1.0-alpha.2", default-features = false }
+radroots_runtime = { path = "crates/runtime", version = "0.1.0-alpha.2", default-features = false }
+radroots_runtime_paths = { path = "crates/runtime_paths", version = "0.1.0-alpha.2", default-features = false }
+radroots_runtime_distribution = { path = "crates/runtime_distribution", version = "0.1.0-alpha.2", default-features = false }
+radroots_runtime_manager = { path = "crates/runtime_manager", version = "0.1.0-alpha.2", default-features = false }
+radroots_log = { path = "crates/log", version = "0.1.0-alpha.2", default-features = false }
+radroots_net = { path = "crates/net", version = "0.1.0-alpha.2", default-features = false }
+radroots_net_core = { path = "crates/net_core", version = "0.1.0-alpha.2", default-features = false }
+radroots_nostr_runtime = { path = "crates/nostr_runtime", version = "0.1.0-alpha.2", default-features = false }
 radroots_simplex_agent_proto = { path = "crates/simplex_agent_proto", version = "0.1.0-alpha.1", default-features = false }
 radroots_simplex_agent_runtime = { path = "crates/simplex_agent_runtime", version = "0.1.0-alpha.1", default-features = false }
 radroots_simplex_agent_store = { path = "crates/simplex_agent_store", version = "0.1.0-alpha.1", default-features = false }
-radroots_simplex_chat_proto = { path = "crates/simplex_chat_proto", version = "0.1.0-alpha.1", default-features = false }
+radroots_simplex_chat_proto = { path = "crates/simplex_chat_proto", version = "0.1.0-alpha.2", default-features = false }
 radroots_simplex_interop_tests = { path = "crates/simplex_interop_tests", version = "0.1.0-alpha.1", default-features = false }
 radroots_simplex_smp_crypto = { path = "crates/simplex_smp_crypto", version = "0.1.0-alpha.1", default-features = false }
-radroots_simplex_smp_proto = { path = "crates/simplex_smp_proto", version = "0.1.0-alpha.1", default-features = false }
+radroots_simplex_smp_proto = { path = "crates/simplex_smp_proto", version = "0.1.0-alpha.2", default-features = false }
 radroots_simplex_smp_transport = { path = "crates/simplex_smp_transport", version = "0.1.0-alpha.1", default-features = false }
-radroots_sql_wasm_bridge = { path = "crates/sql_wasm_bridge", version = "0.1.0-alpha.1" }
-radroots_sql_wasm_core = { path = "crates/sql_wasm_core", version = "0.1.0-alpha.1", default-features = false }
-radroots_sql_core = { path = "crates/sql_core", version = "0.1.0-alpha.1" }
+radroots_sql_wasm_bridge = { path = "crates/sql_wasm_bridge", version = "0.1.0-alpha.2" }
+radroots_sql_wasm_core = { path = "crates/sql_wasm_core", version = "0.1.0-alpha.2", default-features = false }
+radroots_sql_core = { path = "crates/sql_core", version = "0.1.0-alpha.2" }
 radroots_test_fixtures = { path = "crates/test_fixtures", version = "0.1.0-alpha.1" }
-radroots_replica_db_schema = { path = "crates/replica_db_schema", version = "0.1.0-alpha.1", default-features = false }
-radroots_replica_sync = { path = "crates/replica_sync", version = "0.1.0-alpha.1", default-features = false }
-radroots_replica_db = { path = "crates/replica_db", version = "0.1.0-alpha.1", default-features = false }
-radroots_replica_db_wasm = { path = "crates/replica_db_wasm", version = "0.1.0-alpha.1" }
-radroots_replica_sync_wasm = { path = "crates/replica_sync_wasm", version = "0.1.0-alpha.1" }
-radroots_trade = { path = "crates/trade", version = "0.1.0-alpha.1", default-features = false }
-radroots_types = { path = "crates/types", version = "0.1.0-alpha.1", default-features = false }
-radroots_protected_store = { path = "crates/protected_store", version = "0.1.0-alpha.1", default-features = false }
-radroots_secret_vault = { path = "crates/secret_vault", version = "0.1.0-alpha.1", default-features = false }
+radroots_replica_db_schema = { path = "crates/replica_db_schema", version = "0.1.0-alpha.2", default-features = false }
+radroots_replica_sync = { path = "crates/replica_sync", version = "0.1.0-alpha.2", default-features = false }
+radroots_replica_db = { path = "crates/replica_db", version = "0.1.0-alpha.2", default-features = false }
+radroots_replica_db_wasm = { path = "crates/replica_db_wasm", version = "0.1.0-alpha.2" }
+radroots_replica_sync_wasm = { path = "crates/replica_sync_wasm", version = "0.1.0-alpha.2" }
+radroots_trade = { path = "crates/trade", version = "0.1.0-alpha.2", default-features = false }
+radroots_types = { path = "crates/types", version = "0.1.0-alpha.2", default-features = false }
+radroots_protected_store = { path = "crates/protected_store", version = "0.1.0-alpha.2", default-features = false }
+radroots_secret_vault = { path = "crates/secret_vault", version = "0.1.0-alpha.2", default-features = false }
 
 anyhow = { version = "1" }
 base64 = { version = "0.22" }
