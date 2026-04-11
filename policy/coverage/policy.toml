@@ -13,7 +13,7 @@ require_branches = true
 # fail_under_branches = 66.666667
 # require_branches = false
 # temporary = true
-# reason = "publish 0.1.0-alpha.1 blocker"
+# reason = "publish 0.1.0-alpha.2 blocker"
 
 [overrides.radroots_secret_vault]
 fail_under_exec_lines = 82.108
@@ -21,7 +21,7 @@ fail_under_functions = 75.0
 fail_under_regions = 76.494
 fail_under_branches = 80.0
 temporary = true
-reason = "publish 0.1.0-alpha.1 temporary coverage override"
+reason = "publish 0.1.0-alpha.2 temporary coverage override"
 
 [overrides.radroots_runtime]
 fail_under_exec_lines = 99.428
@@ -29,7 +29,7 @@ fail_under_functions = 100.0
 fail_under_regions = 100.0
 fail_under_branches = 100.0
 temporary = true
-reason = "publish 0.1.0-alpha.1 temporary coverage override"
+reason = "publish 0.1.0-alpha.2 temporary coverage override"
 
 [overrides.radroots_identity]
 fail_under_exec_lines = 100.0
@@ -37,7 +37,7 @@ fail_under_functions = 100.0
 fail_under_regions = 98.608
 fail_under_branches = 100.0
 temporary = true
-reason = "publish 0.1.0-alpha.1 temporary coverage override"
+reason = "publish 0.1.0-alpha.2 temporary coverage override"
 
 [overrides.radroots_events_codec]
 fail_under_exec_lines = 100.0
@@ -45,7 +45,7 @@ fail_under_functions = 100.0
 fail_under_regions = 99.946
 fail_under_branches = 100.0
 temporary = true
-reason = "publish 0.1.0-alpha.1 temporary coverage override"
+reason = "publish 0.1.0-alpha.2 temporary coverage override"
 
 [overrides.radroots_geocoder]
 fail_under_exec_lines = 100.0
@@ -53,7 +53,7 @@ fail_under_functions = 100.0
 fail_under_regions = 99.728
 fail_under_branches = 100.0
 temporary = true
-reason = "publish 0.1.0-alpha.1 temporary coverage override"
+reason = "publish 0.1.0-alpha.2 temporary coverage override"
 
 [overrides.radroots_nostr]
 fail_under_exec_lines = 100.0
@@ -61,7 +61,7 @@ fail_under_functions = 100.0
 fail_under_regions = 99.419
 fail_under_branches = 100.0
 temporary = true
-reason = "publish 0.1.0-alpha.1 temporary coverage override"
+reason = "publish 0.1.0-alpha.2 temporary coverage override"
 
 [overrides.radroots_nostr_connect]
 fail_under_exec_lines = 100.0
@@ -69,7 +69,7 @@ fail_under_functions = 100.0
 fail_under_regions = 98.423
 fail_under_branches = 100.0
 temporary = true
-reason = "publish 0.1.0-alpha.1 temporary coverage override"
+reason = "publish 0.1.0-alpha.2 temporary coverage override"
 
 [overrides.radroots_sql_core]
 fail_under_exec_lines = 100.0
@@ -77,7 +77,7 @@ fail_under_functions = 100.0
 fail_under_regions = 98.171
 fail_under_branches = 100.0
 temporary = true
-reason = "publish 0.1.0-alpha.1 temporary coverage override"
+reason = "publish 0.1.0-alpha.2 temporary coverage override"
 
 [overrides.radroots_replica_db]
 fail_under_exec_lines = 100.0
@@ -85,7 +85,7 @@ fail_under_functions = 100.0
 fail_under_regions = 99.859
 fail_under_branches = 100.0
 temporary = true
-reason = "publish 0.1.0-alpha.1 temporary coverage override"
+reason = "publish 0.1.0-alpha.2 temporary coverage override"
 
 [overrides.radroots_replica_sync]
 fail_under_exec_lines = 100.0
@@ -93,7 +93,7 @@ fail_under_functions = 100.0
 fail_under_regions = 99.989
 fail_under_branches = 100.0
 temporary = true
-reason = "publish 0.1.0-alpha.1 temporary coverage override"
+reason = "publish 0.1.0-alpha.2 temporary coverage override"
 
 [overrides.radroots_simplex_chat_proto]
 fail_under_exec_lines = 60.930
@@ -101,7 +101,7 @@ fail_under_functions = 61.904
 fail_under_regions = 55.086
 fail_under_branches = 61.290
 temporary = true
-reason = "publish 0.1.0-alpha.1 temporary coverage override"
+reason = "publish 0.1.0-alpha.2 temporary coverage override"
 
 [overrides.radroots_simplex_smp_proto]
 fail_under_exec_lines = 80.742
@@ -109,7 +109,7 @@ fail_under_functions = 84.263
 fail_under_regions = 71.491
 fail_under_branches = 68.695
 temporary = true
-reason = "publish 0.1.0-alpha.1 temporary coverage override"
+reason = "publish 0.1.0-alpha.2 temporary coverage override"
 
 [required]
 crates = [
