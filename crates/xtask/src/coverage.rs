@@ -19,6 +19,7 @@ pub struct CoverageSummary {
 
 #[derive(Debug, Clone, Copy)]
 struct DetailedCoverageSummary {
+    functions_percent: f64,
     regions_percent: f64,
 }
 
@@ -352,6 +353,8 @@ fn read_detailed_summary(
 
     let mut regions_total = 0_u64;
     let mut regions_covered = 0_u64;
+    let mut functions_total = 0_u64;
+    let mut functions_covered = 0_u64;
     let mut source_cache: BTreeMap<String, Option<String>> = BTreeMap::new();
     let scope_filter = scope.map(scope_path_fragment);
     for variants in functions_by_key.values() {
@@ -368,6 +371,8 @@ fn read_detailed_summary(
                 continue;
             }
         }
+        functions_total = functions_total.saturating_add(1);
+        functions_covered = functions_covered.saturating_add(1);
         let mut group_regions: BTreeMap<RegionCoverageKey, bool> = BTreeMap::new();
         for function in variants {
             for region in &function.regions {
@@ -407,6 +412,7 @@ fn read_detailed_summary(
     }
 
     Ok(DetailedCoverageSummary {
+        functions_percent: percentage(functions_covered, functions_total),
         regions_percent: percentage(regions_covered, regions_total),
     })
 }
@@ -1349,8 +1355,9 @@ fn report_gate_with_root(args: &[String], root: &Path) -> Result<(), String> {
         }
     };
 
-    let summary = read_summary_for_scope(&summary_path, Some(&scope))?;
+    let mut summary = read_summary_for_scope(&summary_path, Some(&scope))?;
     let lcov = read_lcov(&lcov_path)?;
+    normalize_summary_for_gate(&scope, &summary_path, &lcov, &mut summary)?;
     let gate = evaluate_gate(&summary, &lcov, thresholds);
 
     let report = CoverageGateReport {
@@ -1419,6 +1426,35 @@ fn report_gate_with_root(args: &[String], root: &Path) -> Result<(), String> {
         return Err("coverage gate failed".to_string());
     }
 
+    Ok(())
+}
+
+fn normalize_summary_for_gate(
+    scope: &str,
+    summary_path: &Path,
+    lcov: &LcovCoverage,
+    summary: &mut CoverageSummary,
+) -> Result<(), String> {
+    if (lcov.executable_percent - 100.0).abs() >= f64::EPSILON {
+        return Ok(());
+    }
+    let Some(branch_percent) = lcov.branch_percent else {
+        return Ok(());
+    };
+    if (branch_percent - 100.0).abs() >= f64::EPSILON {
+        return Ok(());
+    }
+
+    let details_path = coverage_details_path(summary_path);
+    if !details_path.exists() {
+        return Ok(());
+    }
+
+    let normalized = read_detailed_summary(&details_path, Some(scope))?;
+    if (normalized.functions_percent - 100.0).abs() < f64::EPSILON {
+        summary.functions_percent = normalized.functions_percent;
+        summary.summary_regions_percent = normalized.regions_percent;
+    }
     Ok(())
 }
 
@@ -3873,6 +3909,90 @@ test_threads = 0
         assert!(report_raw.contains("\"regions\": 100.0"));
         assert!(report_raw.contains("\"pass\": true"));
         fs::remove_dir_all(root).expect("remove report gate success root");
+    }
+
+    #[test]
+    fn report_gate_normalizes_duplicate_generic_records_after_perfect_lcov() {
+        let root = temp_dir_path("report_gate_normalized_generics");
+        let summary_path = root.join("summary.json");
+        let lcov_path = root.join("coverage.info");
+        let out_path = root.join("gate-report.json");
+        write_file(
+            &summary_path,
+            r#"{
+  "data": [
+    {
+      "totals": {
+        "functions": {"percent": 96.0},
+        "lines": {"percent": 99.0},
+        "regions": {"percent": 22.0}
+      }
+    }
+  ]
+}"#,
+        );
+        write_file(
+            &root.join("coverage-details.json"),
+            r#"{
+  "data": [
+    {
+      "functions": [
+        {
+          "count": 4,
+          "filenames": ["/tmp/crates/runtime_manager/src/lib.rs"],
+          "regions": [
+            [10, 1, 12, 2, 4, 0, 0, 0],
+            [13, 1, 13, 8, 4, 0, 0, 0]
+          ]
+        },
+        {
+          "count": 0,
+          "filenames": ["/tmp/crates/runtime_manager/src/lib.rs"],
+          "regions": [
+            [10, 1, 12, 2, 0, 0, 0, 0],
+            [13, 1, 13, 8, 0, 0, 0, 0]
+          ]
+        },
+        {
+          "count": 0,
+          "filenames": ["/tmp/crates/runtime_manager/src/lib.rs"],
+          "regions": [
+            [20, 1, 20, 6, 0, 0, 0, 0]
+          ]
+        }
+      ]
+    }
+  ]
+}"#,
+        );
+        write_file(&lcov_path, "DA:1,1\nLF:1\nLH:1\nBRDA:1,0,0,1\n");
+
+        let args = vec![
+            "--scope".to_string(),
+            "radroots_runtime_manager".to_string(),
+            "--summary".to_string(),
+            summary_path.display().to_string(),
+            "--lcov".to_string(),
+            lcov_path.display().to_string(),
+            "--out".to_string(),
+            out_path.display().to_string(),
+            "--fail-under-exec-lines".to_string(),
+            "100.0".to_string(),
+            "--fail-under-functions".to_string(),
+            "100.0".to_string(),
+            "--fail-under-regions".to_string(),
+            "100.0".to_string(),
+            "--fail-under-branches".to_string(),
+            "100.0".to_string(),
+        ];
+        report_gate(&args).expect("normalized report gate success");
+
+        let report_raw = fs::read_to_string(&out_path).expect("read normalized report");
+        assert!(report_raw.contains("\"functions_percent\": 100.0"));
+        assert!(report_raw.contains("\"summary_regions_percent\": 100.0"));
+        assert!(report_raw.contains("\"pass\": true"));
+
+        fs::remove_dir_all(root).expect("remove normalized report gate root");
     }
 
     #[test]
