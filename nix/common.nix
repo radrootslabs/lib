@@ -21,7 +21,6 @@ let
         ../Makefile
         ../README
         ../rust-toolchain.toml
-        ../conformance
         ../spec
         ../policy
         ../crates

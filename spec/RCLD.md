@@ -531,7 +531,7 @@ rust_modules = ["crates/events_codec/src/profile/encode.rs"]
 rust_types = ["radroots_events::profile::RadrootsProfile"]
 
 [operations.profile_build_draft.conformance]
-vector = "conformance/vectors/profile/build_draft.v1.json"
+vector = "spec/conformance/vectors/profile/build_draft.v1.json"
 
 [operations.listing_build_draft]
 domain = "listing"
@@ -552,7 +552,7 @@ rust_modules = [
 ]
 
 [operations.listing_build_draft.conformance]
-vector = "conformance/vectors/listing/build_draft.v1.json"
+vector = "spec/conformance/vectors/listing/build_draft.v1.json"
 ```
 
 ### Provenance Section
@@ -666,7 +666,7 @@ Conformance becomes the real multi-language product gate for the public contract
 ### Recommended Vector Layout
 
 ```text
-conformance/
+spec/conformance/
   vectors/
     profile/
       build_draft.v1.json

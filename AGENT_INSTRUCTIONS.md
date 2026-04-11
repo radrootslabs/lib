@@ -65,7 +65,7 @@ Use this mental model:
   - keep domain logic inside the correct crate rather than spreading it across the workspace
 - `spec/`
   - public SDK contract metadata, export policy, release policy, and coverage governance
-- `conformance/`
+- `spec/conformance/`
   - cross-language and cross-surface vector expectations
 - `docs/`
   - durable workflow and environment documentation
@@ -74,7 +74,7 @@ Use this mental model:
 - `scripts/`
   - repo-owned automation used by canonical lanes
 
-Do not duplicate contract knowledge between crates when `spec/`, `conformance/`, or `xtask` already owns it.
+Do not duplicate contract knowledge between crates when `spec/`, `spec/conformance/`, or `xtask` already owns it.
 
 ## 5. Rust engineering standards
 
@@ -134,7 +134,7 @@ Do not duplicate contract knowledge between crates when `spec/`, `conformance/`,
 
 ## 6. Contract, conformance, and release workflow
 
-`spec/`, `conformance/`, and `crates/xtask` are first-class parts of the product surface, not secondary metadata.
+`spec/`, `spec/conformance/`, and `crates/xtask` are first-class parts of the product surface, not secondary metadata.
 
 When a change affects exported models, transforms, identifiers, or public runtime expectations:
 

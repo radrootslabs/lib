@@ -2,6 +2,7 @@
 
 use crate::coverage::{CoverageThresholds, read_coverage_policy};
 use serde::Deserialize;
+use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fs;
@@ -9,6 +10,8 @@ use std::path::{Path, PathBuf};
 
 const ROOT_RELEASE_POLICY_RELATIVE: &str =
     "contracts/release/mounted-rust-crates/publish-policy.toml";
+const CONFORMANCE_ROOT_RELATIVE: &str = "spec/conformance";
+const CONFORMANCE_SCHEMA_RELATIVE: &str = "spec/conformance/schema/vector.schema.json";
 const RELEASE_POLICY_ENV: &str = "RADROOTS_MOUNTED_RUST_CRATE_PUBLISH_POLICY";
 
 #[derive(Debug, Deserialize)]
@@ -259,16 +262,21 @@ struct ReleaseCrateSet {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ConformanceVectorFile {
     suite: String,
     contract_version: String,
     vectors: Vec<ConformanceVectorEntry>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ConformanceVectorEntry {
     id: String,
     kind: String,
+    input: Value,
+    expected: Value,
 }
 
 impl ReleaseContractFile {
@@ -337,6 +345,292 @@ fn parse_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, String> {
 
 fn contract_root(workspace_root: &Path) -> PathBuf {
     workspace_root.join("spec")
+}
+
+fn conformance_root(workspace_root: &Path) -> PathBuf {
+    workspace_root.join(CONFORMANCE_ROOT_RELATIVE)
+}
+
+fn conformance_schema_path(workspace_root: &Path) -> PathBuf {
+    workspace_root.join(CONFORMANCE_SCHEMA_RELATIVE)
+}
+
+fn required_field_set(value: &Value, field: &str, path: &Path) -> Result<BTreeSet<String>, String> {
+    let required = value
+        .as_array()
+        .ok_or_else(|| format!("{field} in {} must be an array", path.display()))?;
+    let mut names = BTreeSet::new();
+    for item in required {
+        let name = item
+            .as_str()
+            .ok_or_else(|| format!("{field} in {} must contain strings", path.display()))?;
+        if name.trim().is_empty() {
+            return Err(format!(
+                "{field} in {} must not contain empty names",
+                path.display()
+            ));
+        }
+        names.insert(name.to_string());
+    }
+    Ok(names)
+}
+
+fn validate_string_schema_property(
+    property: &Value,
+    field: &str,
+    path: &Path,
+    min_length: Option<u64>,
+    pattern: Option<&str>,
+) -> Result<(), String> {
+    let property = property
+        .as_object()
+        .ok_or_else(|| format!("{field} schema in {} must be an object", path.display()))?;
+    let kind = property
+        .get("type")
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("{field} schema in {} must declare type", path.display()))?;
+    if kind != "string" {
+        return Err(format!(
+            "{field} schema in {} must use type=string",
+            path.display()
+        ));
+    }
+    if let Some(expected) = min_length {
+        let actual = property
+            .get("minLength")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| format!("{field} schema in {} must set minLength", path.display()))?;
+        if actual != expected {
+            return Err(format!(
+                "{field} schema in {} must set minLength={expected}",
+                path.display()
+            ));
+        }
+    }
+    if let Some(expected) = pattern {
+        let actual = property
+            .get("pattern")
+            .and_then(Value::as_str)
+            .ok_or_else(|| format!("{field} schema in {} must set pattern", path.display()))?;
+        if actual != expected {
+            return Err(format!(
+                "{field} schema in {} must set pattern {}",
+                path.display(),
+                expected
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_conformance_schema(workspace_root: &Path) -> Result<(), String> {
+    let path = conformance_schema_path(workspace_root);
+    let schema = parse_json::<Value>(&path)?;
+    let schema_obj = schema.as_object().ok_or_else(|| {
+        format!(
+            "conformance schema {} must be a JSON object",
+            path.display()
+        )
+    })?;
+    let schema_type = schema_obj
+        .get("type")
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("conformance schema {} must declare type", path.display()))?;
+    if schema_type != "object" {
+        return Err(format!(
+            "conformance schema {} must use type=object",
+            path.display()
+        ));
+    }
+    let additional = schema_obj
+        .get("additionalProperties")
+        .and_then(Value::as_bool)
+        .ok_or_else(|| {
+            format!(
+                "conformance schema {} must declare additionalProperties",
+                path.display()
+            )
+        })?;
+    if additional {
+        return Err(format!(
+            "conformance schema {} must disallow additionalProperties",
+            path.display()
+        ));
+    }
+    let root_required = required_field_set(
+        schema_obj.get("required").ok_or_else(|| {
+            format!(
+                "conformance schema {} missing required list",
+                path.display()
+            )
+        })?,
+        "required",
+        &path,
+    )?;
+    let expected_root_required = BTreeSet::from([
+        "suite".to_string(),
+        "contract_version".to_string(),
+        "vectors".to_string(),
+    ]);
+    if root_required != expected_root_required {
+        return Err(format!(
+            "conformance schema {} must require suite, contract_version, and vectors",
+            path.display()
+        ));
+    }
+    let properties = schema_obj
+        .get("properties")
+        .and_then(Value::as_object)
+        .ok_or_else(|| {
+            format!(
+                "conformance schema {} missing properties map",
+                path.display()
+            )
+        })?;
+    validate_string_schema_property(
+        properties.get("suite").ok_or_else(|| {
+            format!(
+                "conformance schema {} missing suite property",
+                path.display()
+            )
+        })?,
+        "suite",
+        &path,
+        Some(1),
+        None,
+    )?;
+    validate_string_schema_property(
+        properties.get("contract_version").ok_or_else(|| {
+            format!(
+                "conformance schema {} missing contract_version property",
+                path.display()
+            )
+        })?,
+        "contract_version",
+        &path,
+        None,
+        Some("^[0-9]+\\.[0-9]+\\.[0-9]+$"),
+    )?;
+    let vectors = properties
+        .get("vectors")
+        .and_then(Value::as_object)
+        .ok_or_else(|| {
+            format!(
+                "conformance schema {} missing vectors property",
+                path.display()
+            )
+        })?;
+    let vectors_type = vectors
+        .get("type")
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("vectors schema in {} must declare type", path.display()))?;
+    if vectors_type != "array" {
+        return Err(format!(
+            "vectors schema in {} must use type=array",
+            path.display()
+        ));
+    }
+    let items = vectors
+        .get("items")
+        .and_then(Value::as_object)
+        .ok_or_else(|| format!("vectors schema in {} must define items", path.display()))?;
+    let items_type = items
+        .get("type")
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("vector item schema in {} must declare type", path.display()))?;
+    if items_type != "object" {
+        return Err(format!(
+            "vector item schema in {} must use type=object",
+            path.display()
+        ));
+    }
+    let items_additional = items
+        .get("additionalProperties")
+        .and_then(Value::as_bool)
+        .ok_or_else(|| {
+            format!(
+                "vector item schema in {} must declare additionalProperties",
+                path.display()
+            )
+        })?;
+    if items_additional {
+        return Err(format!(
+            "vector item schema in {} must disallow additionalProperties",
+            path.display()
+        ));
+    }
+    let item_required = required_field_set(
+        items.get("required").ok_or_else(|| {
+            format!(
+                "vector item schema in {} missing required list",
+                path.display()
+            )
+        })?,
+        "required",
+        &path,
+    )?;
+    let expected_item_required = BTreeSet::from([
+        "expected".to_string(),
+        "id".to_string(),
+        "input".to_string(),
+        "kind".to_string(),
+    ]);
+    if item_required != expected_item_required {
+        return Err(format!(
+            "vector item schema in {} must require id, kind, input, and expected",
+            path.display()
+        ));
+    }
+    let item_properties = items
+        .get("properties")
+        .and_then(Value::as_object)
+        .ok_or_else(|| {
+            format!(
+                "vector item schema in {} missing properties",
+                path.display()
+            )
+        })?;
+    validate_string_schema_property(
+        item_properties.get("id").ok_or_else(|| {
+            format!(
+                "vector item schema in {} missing id property",
+                path.display()
+            )
+        })?,
+        "id",
+        &path,
+        Some(1),
+        None,
+    )?;
+    validate_string_schema_property(
+        item_properties.get("kind").ok_or_else(|| {
+            format!(
+                "vector item schema in {} missing kind property",
+                path.display()
+            )
+        })?,
+        "kind",
+        &path,
+        Some(1),
+        None,
+    )?;
+    for field in ["input", "expected"] {
+        let property = item_properties.get(field).ok_or_else(|| {
+            format!(
+                "vector item schema in {} missing {} property",
+                path.display(),
+                field
+            )
+        })?;
+        if !property.is_object() {
+            return Err(format!(
+                "vector item schema in {} must define {} as an object schema",
+                path.display(),
+                field
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn base_contract_version(version: &str) -> &str {
@@ -589,6 +883,8 @@ fn validate_operations_contract(
     operations_manifest: &OperationsContractManifest,
     workspace_root: &Path,
 ) -> Result<(), String> {
+    validate_conformance_schema(workspace_root)?;
+    let conformance_root = conformance_root(workspace_root);
     if operations_manifest.contract.name.trim().is_empty() {
         return Err("operations contract name is required".to_string());
     }
@@ -754,7 +1050,24 @@ fn validate_operations_contract(
                 operation.id
             ));
         }
+        if !operation
+            .conformance
+            .vector
+            .starts_with("spec/conformance/")
+        {
+            return Err(format!(
+                "operation {} conformance.vector must live under spec/conformance/",
+                operation.id
+            ));
+        }
         let vector_path = workspace_root.join(&operation.conformance.vector);
+        if !vector_path.starts_with(&conformance_root) {
+            return Err(format!(
+                "operation {} conformance.vector must resolve under {}",
+                operation.id,
+                conformance_root.display()
+            ));
+        }
         let vector = parse_json::<ConformanceVectorFile>(&vector_path)?;
         if vector.suite.trim().is_empty() {
             return Err(format!(
@@ -2141,7 +2454,7 @@ rust_modules = ["crates/core/src/unit.rs"]
 rust_types = ["radroots_events::profile::RadrootsProfile"]
 
 [operations.profile_build_draft.conformance]
-vector = "conformance/vectors/profile/build_draft.v1.json"
+vector = "spec/conformance/vectors/profile/build_draft.v1.json"
 
 [operations.listing_build_draft]
 domain = "listing"
@@ -2159,7 +2472,7 @@ rust_modules = ["crates/core/src/unit.rs"]
 rust_types = ["radroots_events::listing::RadrootsListing"]
 
 [operations.listing_build_draft.conformance]
-vector = "conformance/vectors/listing/build_draft.v1.json"
+vector = "spec/conformance/vectors/listing/build_draft.v1.json"
 "#,
         );
         write_file(
@@ -2194,6 +2507,53 @@ manifest_file = "export-manifest.json"
         );
         write_file(
             &root
+                .join("spec")
+                .join("conformance")
+                .join("schema")
+                .join("vector.schema.json"),
+            r#"{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://radroots.org/sdk/conformance/vector.schema.json",
+  "title": "radroots sdk conformance vector",
+  "type": "object",
+  "required": ["suite", "contract_version", "vectors"],
+  "properties": {
+    "suite": {
+      "type": "string",
+      "minLength": 1
+    },
+    "contract_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "vectors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "input", "expected"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "type": "string",
+            "minLength": 1
+          },
+          "input": {},
+          "expected": {}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}
+"#,
+        );
+        write_file(
+            &root
+                .join("spec")
                 .join("conformance")
                 .join("vectors")
                 .join("profile")
@@ -2214,6 +2574,7 @@ manifest_file = "export-manifest.json"
         );
         write_file(
             &root
+                .join("spec")
                 .join("conformance")
                 .join("vectors")
                 .join("listing")
@@ -3423,6 +3784,61 @@ edition = "2024"
             },
         );
 
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn validate_contract_bundle_requires_real_conformance_assets() {
+        let missing_schema_root = create_synthetic_workspace("operation_contract_missing_schema");
+        add_operation_contract_files(&missing_schema_root);
+        let _ = fs::remove_file(conformance_schema_path(&missing_schema_root));
+        let bundle = load_contract_bundle(&missing_schema_root).expect("load bundle");
+        let err = validate_contract_bundle(&bundle).expect_err("missing schema should fail");
+        assert!(err.contains("vector.schema.json"));
+        let _ = fs::remove_dir_all(&missing_schema_root);
+
+        let invalid_vector_root = create_synthetic_workspace("operation_contract_invalid_vector");
+        add_operation_contract_files(&invalid_vector_root);
+        write_file(
+            &invalid_vector_root
+                .join("spec")
+                .join("conformance")
+                .join("vectors")
+                .join("profile")
+                .join("build_draft.v1.json"),
+            r#"{
+  "suite": "profile",
+  "contract_version": "1.0.0",
+  "vectors": [
+    {
+      "id": "profile_build_draft_minimal_001",
+      "kind": "profile.build_draft",
+      "input": {}
+    }
+  ]
+}
+"#,
+        );
+        let bundle = load_contract_bundle(&invalid_vector_root).expect("load bundle");
+        let err = validate_contract_bundle(&bundle).expect_err("invalid vector should fail");
+        assert!(err.contains("build_draft.v1.json"));
+        assert!(err.contains("parse"));
+        let _ = fs::remove_dir_all(&invalid_vector_root);
+
+        let root = create_synthetic_workspace("operation_contract_vector_path");
+        add_operation_contract_files(&root);
+        let mut bundle = load_contract_bundle(&root).expect("load bundle");
+        bundle
+            .operations_manifest
+            .as_mut()
+            .expect("operations manifest")
+            .operations
+            .get_mut("profile_build_draft")
+            .expect("profile operation")
+            .conformance
+            .vector = "conformance/vectors/profile/build_draft.v1.json".to_string();
+        let err = validate_contract_bundle(&bundle).expect_err("legacy path should fail");
+        assert!(err.contains("must live under spec/conformance/"));
         let _ = fs::remove_dir_all(root);
     }
 

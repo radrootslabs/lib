@@ -57,7 +57,7 @@ Before editing code:
 
 ## 6. Contract and release discipline
 
-- `spec/`, `conformance/`, and `crates/xtask` are authoritative for public SDK contract, export, and release governance.
+- `spec/` (including `spec/conformance/`) and `crates/xtask` are authoritative for public SDK contract, export, and release governance.
 - Behavior changes that affect public surfaces must update the relevant contract metadata, conformance vectors, export rules, or validation flows in the same change.
 - Keep pure flake checks and repo-aware command apps aligned with the documented Nix command map.
 

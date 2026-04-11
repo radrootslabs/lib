@@ -50,7 +50,7 @@ rust_modules = ["crates/events_codec/src/profile/encode.rs"]
 rust_types = ["radroots_events::profile::RadrootsProfile"]
 
 [operations.profile_build_draft.conformance]
-vector = "conformance/vectors/profile/build_draft.v1.json"
+vector = "spec/conformance/vectors/profile/build_draft.v1.json"
 
 [operations.farm_build_draft]
 domain = "farm"
@@ -68,7 +68,7 @@ rust_modules = ["crates/events_codec/src/farm/encode.rs"]
 rust_types = ["radroots_events::farm::RadrootsFarm"]
 
 [operations.farm_build_draft.conformance]
-vector = "conformance/vectors/farm/build_draft.v1.json"
+vector = "spec/conformance/vectors/farm/build_draft.v1.json"
 
 [operations.listing_build_tags]
 domain = "listing"
@@ -89,7 +89,7 @@ rust_modules = [
 rust_types = ["radroots_events::listing::RadrootsListing"]
 
 [operations.listing_build_tags.conformance]
-vector = "conformance/vectors/listing/build_tags.v1.json"
+vector = "spec/conformance/vectors/listing/build_tags.v1.json"
 
 [operations.listing_build_draft]
 domain = "listing"
@@ -110,7 +110,7 @@ rust_modules = [
 rust_types = ["radroots_events::listing::RadrootsListing"]
 
 [operations.listing_build_draft.conformance]
-vector = "conformance/vectors/listing/build_draft.v1.json"
+vector = "spec/conformance/vectors/listing/build_draft.v1.json"
 
 [operations.listing_parse_event]
 domain = "listing"
@@ -131,7 +131,7 @@ rust_types = [
 ]
 
 [operations.listing_parse_event.conformance]
-vector = "conformance/vectors/listing/parse_event.v1.json"
+vector = "spec/conformance/vectors/listing/parse_event.v1.json"
 
 [operations.trade_build_envelope_draft]
 domain = "trade"
@@ -158,7 +158,7 @@ rust_modules = ["crates/events_codec/src/trade/encode.rs"]
 rust_types = ["radroots_events::trade::RadrootsTradeEnvelope"]
 
 [operations.trade_build_envelope_draft.conformance]
-vector = "conformance/vectors/trade/build_envelope_draft.v1.json"
+vector = "spec/conformance/vectors/trade/build_envelope_draft.v1.json"
 
 [operations.trade_parse_envelope]
 domain = "trade"
@@ -179,7 +179,7 @@ rust_types = [
 ]
 
 [operations.trade_parse_envelope.conformance]
-vector = "conformance/vectors/trade/parse_envelope.v1.json"
+vector = "spec/conformance/vectors/trade/parse_envelope.v1.json"
 
 [operations.trade_parse_listing_address]
 domain = "trade"
@@ -199,7 +199,7 @@ rust_types = [
 ]
 
 [operations.trade_parse_listing_address.conformance]
-vector = "conformance/vectors/trade/parse_listing_address.v1.json"
+vector = "spec/conformance/vectors/trade/parse_listing_address.v1.json"
 
 [operations.trade_validate_listing_event]
 domain = "trade"
@@ -220,4 +220,4 @@ rust_types = [
 ]
 
 [operations.trade_validate_listing_event.conformance]
-vector = "conformance/vectors/trade/validate_listing_event.v1.json"
+vector = "spec/conformance/vectors/trade/validate_listing_event.v1.json"
