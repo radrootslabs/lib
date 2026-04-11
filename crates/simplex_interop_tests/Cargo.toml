@@ -30,4 +30,6 @@ radroots_simplex_chat_proto = { workspace = true, default-features = false }
 radroots_simplex_smp_crypto = { workspace = true, default-features = false }
 radroots_simplex_smp_proto = { workspace = true, default-features = false }
 radroots_simplex_smp_transport = { workspace = true, default-features = false }
-serde_json = { workspace = true, default-features = false, features = ["alloc"] }
+serde_json = { workspace = true, default-features = false, features = [
+  "alloc",
+] }

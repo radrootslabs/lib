@@ -17,6 +17,11 @@ std = ["serde/std", "serde_json/std", "dep:zstd"]
 
 [dependencies]
 base64 = { version = "0.22", default-features = false, features = ["alloc"] }
-serde = { workspace = true, default-features = false, features = ["alloc", "derive"] }
-serde_json = { workspace = true, default-features = false, features = ["alloc"] }
+serde = { workspace = true, default-features = false, features = [
+  "alloc",
+  "derive",
+] }
+serde_json = { workspace = true, default-features = false, features = [
+  "alloc",
+] }
 zstd = { workspace = true, optional = true }

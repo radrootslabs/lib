@@ -21,11 +21,7 @@ serde = [
   "radroots_events/serde",
   "radroots_events_codec/serde",
 ]
-serde_json = [
-  "serde",
-  "dep:serde_json",
-  "radroots_events_codec/serde_json",
-]
+serde_json = ["serde", "dep:serde_json", "radroots_events_codec/serde_json"]
 ts-rs = ["dep:ts-rs", "radroots_events/ts-rs", "radroots_events/std"]
 
 [dependencies]
