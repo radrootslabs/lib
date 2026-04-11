@@ -1,0 +1,23 @@
+{
+  "suite": "farm",
+  "contract_version": "0.1.0",
+  "vectors": [
+    {
+      "id": "farm_build_draft_minimal_001",
+      "kind": "farm.build_draft",
+      "input": {
+        "farm": {
+          "d_tag": "AAAAAAAAAAAAAAAAAAAAAA",
+          "name": "example farm"
+        }
+      },
+      "expected": {
+        "wire_parts": {
+          "kind": "farm",
+          "content_shape": "farm_json",
+          "tags_shape": "d_tag_required"
+        }
+      }
+    }
+  ]
+}

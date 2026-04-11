@@ -1,0 +1,223 @@
+[contract]
+name = "radroots-sdk-contract"
+version = "0.1.0-alpha.1"
+source = "rust"
+
+[public]
+domains = ["profile", "farm", "listing", "trade"]
+
+[shared_types]
+public = [
+  "WireEventParts",
+  "UnsignedEventDraft",
+  "RadrootsNostrEvent",
+  "RadrootsNostrEventRef",
+  "RadrootsNostrEventPtr",
+  "RadrootsTradeListingAddress",
+  "RadrootsProfile",
+  "RadrootsFarm",
+  "RadrootsListing",
+  "RadrootsTradeEnvelope",
+]
+
+[errors]
+classes = ["encode_error", "parse_error", "validation_error", "address_error"]
+
+[implementation_provenance]
+model_crates = [
+  "radroots_core",
+  "radroots_types",
+  "radroots_events",
+  "radroots_trade",
+  "radroots_identity",
+]
+algorithm_crates = ["radroots_events_codec"]
+wasm_crates = ["radroots_events_codec_wasm"]
+
+[operations.profile_build_draft]
+domain = "profile"
+id = "profile.build_draft"
+stability = "beta"
+inputs = ["RadrootsProfile", "RadrootsProfileType?"]
+outputs = ["WireEventParts"]
+error_class = "encode_error"
+deterministic = true
+signing = "native"
+transport = "native"
+
+[operations.profile_build_draft.implementation]
+rust_modules = ["crates/events_codec/src/profile/encode.rs"]
+rust_types = ["radroots_events::profile::RadrootsProfile"]
+
+[operations.profile_build_draft.conformance]
+vector = "conformance/vectors/profile/build_draft.v1.json"
+
+[operations.farm_build_draft]
+domain = "farm"
+id = "farm.build_draft"
+stability = "beta"
+inputs = ["RadrootsFarm"]
+outputs = ["WireEventParts"]
+error_class = "encode_error"
+deterministic = true
+signing = "native"
+transport = "native"
+
+[operations.farm_build_draft.implementation]
+rust_modules = ["crates/events_codec/src/farm/encode.rs"]
+rust_types = ["radroots_events::farm::RadrootsFarm"]
+
+[operations.farm_build_draft.conformance]
+vector = "conformance/vectors/farm/build_draft.v1.json"
+
+[operations.listing_build_tags]
+domain = "listing"
+id = "listing.build_tags"
+stability = "beta"
+inputs = ["RadrootsListing"]
+outputs = ["NostrTags"]
+error_class = "encode_error"
+deterministic = true
+signing = "native"
+transport = "native"
+
+[operations.listing_build_tags.implementation]
+rust_modules = [
+  "crates/events_codec/src/listing/encode.rs",
+  "crates/events_codec/src/listing/tags.rs",
+]
+rust_types = ["radroots_events::listing::RadrootsListing"]
+
+[operations.listing_build_tags.conformance]
+vector = "conformance/vectors/listing/build_tags.v1.json"
+
+[operations.listing_build_draft]
+domain = "listing"
+id = "listing.build_draft"
+stability = "beta"
+inputs = ["RadrootsListing"]
+outputs = ["WireEventParts"]
+error_class = "encode_error"
+deterministic = true
+signing = "native"
+transport = "native"
+
+[operations.listing_build_draft.implementation]
+rust_modules = [
+  "crates/events_codec/src/listing/encode.rs",
+  "crates/events_codec/src/wire.rs",
+]
+rust_types = ["radroots_events::listing::RadrootsListing"]
+
+[operations.listing_build_draft.conformance]
+vector = "conformance/vectors/listing/build_draft.v1.json"
+
+[operations.listing_parse_event]
+domain = "listing"
+id = "listing.parse_event"
+stability = "beta"
+inputs = ["RadrootsNostrEvent"]
+outputs = ["RadrootsListing"]
+error_class = "parse_error"
+deterministic = true
+signing = "native"
+transport = "native"
+
+[operations.listing_parse_event.implementation]
+rust_modules = ["crates/trade/src/listing/codec.rs"]
+rust_types = [
+  "radroots_events::RadrootsNostrEvent",
+  "radroots_events::listing::RadrootsListing",
+]
+
+[operations.listing_parse_event.conformance]
+vector = "conformance/vectors/listing/parse_event.v1.json"
+
+[operations.trade_build_envelope_draft]
+domain = "trade"
+id = "trade.build_envelope_draft"
+stability = "beta"
+inputs = [
+  "recipient_pubkey",
+  "message_type",
+  "listing_addr",
+  "order_id?",
+  "listing_event?",
+  "root_event_id?",
+  "prev_event_id?",
+  "RadrootsTradeMessagePayload",
+]
+outputs = ["WireEventParts"]
+error_class = "encode_error"
+deterministic = true
+signing = "native"
+transport = "native"
+
+[operations.trade_build_envelope_draft.implementation]
+rust_modules = ["crates/events_codec/src/trade/encode.rs"]
+rust_types = ["radroots_events::trade::RadrootsTradeEnvelope"]
+
+[operations.trade_build_envelope_draft.conformance]
+vector = "conformance/vectors/trade/build_envelope_draft.v1.json"
+
+[operations.trade_parse_envelope]
+domain = "trade"
+id = "trade.parse_envelope"
+stability = "beta"
+inputs = ["RadrootsNostrEvent"]
+outputs = ["RadrootsTradeEnvelope"]
+error_class = "parse_error"
+deterministic = true
+signing = "native"
+transport = "native"
+
+[operations.trade_parse_envelope.implementation]
+rust_modules = ["crates/events_codec/src/trade/decode.rs"]
+rust_types = [
+  "radroots_events::RadrootsNostrEvent",
+  "radroots_events::trade::RadrootsTradeEnvelope",
+]
+
+[operations.trade_parse_envelope.conformance]
+vector = "conformance/vectors/trade/parse_envelope.v1.json"
+
+[operations.trade_parse_listing_address]
+domain = "trade"
+id = "trade.parse_listing_address"
+stability = "beta"
+inputs = ["listing_addr"]
+outputs = ["RadrootsTradeListingAddress"]
+error_class = "address_error"
+deterministic = true
+signing = "native"
+transport = "native"
+
+[operations.trade_parse_listing_address.implementation]
+rust_modules = ["crates/events_codec/src/trade/decode.rs"]
+rust_types = [
+  "radroots_events_codec::trade::decode::RadrootsTradeListingAddress",
+]
+
+[operations.trade_parse_listing_address.conformance]
+vector = "conformance/vectors/trade/parse_listing_address.v1.json"
+
+[operations.trade_validate_listing_event]
+domain = "trade"
+id = "trade.validate_listing_event"
+stability = "beta"
+inputs = ["RadrootsNostrEvent"]
+outputs = ["TradeListingValidateResult"]
+error_class = "validation_error"
+deterministic = true
+signing = "native"
+transport = "native"
+
+[operations.trade_validate_listing_event.implementation]
+rust_modules = ["crates/trade/src/listing/validation.rs"]
+rust_types = [
+  "radroots_events::RadrootsNostrEvent",
+  "radroots_trade::listing::validation::RadrootsTradeListing",
+]
+
+[operations.trade_validate_listing_event.conformance]
+vector = "conformance/vectors/trade/validate_listing_event.v1.json"

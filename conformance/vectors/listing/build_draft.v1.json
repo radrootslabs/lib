@@ -1,0 +1,33 @@
+{
+  "suite": "listing",
+  "contract_version": "0.1.0",
+  "vectors": [
+    {
+      "id": "listing_build_draft_minimal_001",
+      "kind": "listing.build_draft",
+      "input": {
+        "listing": {
+          "d_tag": "AAAAAAAAAAAAAAAAAAAAAg",
+          "farm": {
+            "pubkey": "farm_pubkey",
+            "d_tag": "AAAAAAAAAAAAAAAAAAAAAA"
+          },
+          "product": {
+            "key": "sku",
+            "title": "widget",
+            "category": "tools"
+          },
+          "primary_bin_id": "bin-1",
+          "bins": []
+        }
+      },
+      "expected": {
+        "wire_parts": {
+          "kind": "listing",
+          "content_shape": "listing_markdown_or_empty",
+          "tags_shape": "listing_tags_full"
+        }
+      }
+    }
+  ]
+}

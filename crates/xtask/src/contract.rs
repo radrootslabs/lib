@@ -40,6 +40,65 @@ pub struct Policy {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct OperationsContractManifest {
+    pub contract: ManifestContract,
+    pub public: PublicContract,
+    pub shared_types: SharedTypesContract,
+    pub errors: ErrorClassesContract,
+    pub operations: BTreeMap<String, PublicOperationContract>,
+    pub implementation_provenance: Option<ImplementationProvenance>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PublicContract {
+    pub domains: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SharedTypesContract {
+    pub public: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ErrorClassesContract {
+    pub classes: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ImplementationProvenance {
+    pub model_crates: Vec<String>,
+    pub algorithm_crates: Vec<String>,
+    pub wasm_crates: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PublicOperationContract {
+    pub domain: String,
+    pub id: String,
+    pub stability: String,
+    pub inputs: Vec<String>,
+    pub outputs: Vec<String>,
+    pub error_class: String,
+    #[allow(dead_code)]
+    pub deterministic: bool,
+    pub signing: String,
+    pub transport: String,
+    pub implementation: PublicOperationImplementation,
+    pub conformance: PublicOperationConformance,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PublicOperationImplementation {
+    pub rust_modules: Vec<String>,
+    pub rust_types: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PublicOperationConformance {
+    pub vector: String,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct VersionPolicy {
     pub contract: VersionContract,
     pub semver: SemverRules,
@@ -87,12 +146,40 @@ pub struct ExportArtifacts {
     pub manifest_file: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct SdkExportMapping {
+    pub language: ExportLanguage,
+    pub sdk: SdkExportSdk,
+    pub operations: BTreeMap<String, String>,
+    pub shared_types: BTreeMap<String, String>,
+    pub artifacts: Option<SdkExportArtifacts>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SdkExportSdk {
+    pub package: String,
+    pub module_format: Option<String>,
+    pub deterministic_codec: String,
+    pub signing: String,
+    pub networking: String,
+}
+
+#[derive(Debug, Deserialize, Default)]
+pub struct SdkExportArtifacts {
+    pub models_dir: Option<String>,
+    pub runtime_dir: Option<String>,
+    pub wasm_dist_dir: Option<String>,
+    pub manifest_file: Option<String>,
+}
+
 #[derive(Debug)]
 pub struct ContractBundle {
     pub root: PathBuf,
     pub manifest: ContractManifest,
     pub version: VersionPolicy,
     pub exports: Vec<ExportMapping>,
+    pub operations_manifest: Option<OperationsContractManifest>,
+    pub sdk_exports: Vec<SdkExportMapping>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -171,6 +258,19 @@ struct ReleaseCrateSet {
     crates: Vec<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct ConformanceVectorFile {
+    suite: String,
+    contract_version: String,
+    vectors: Vec<ConformanceVectorEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ConformanceVectorEntry {
+    id: String,
+    kind: String,
+}
+
 impl ReleaseContractFile {
     fn uses_classification(&self) -> bool {
         !self.classification.public.is_empty()
@@ -224,8 +324,23 @@ fn parse_toml<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, String> {
     }
 }
 
+fn parse_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, String> {
+    let raw = match fs::read_to_string(path) {
+        Ok(raw) => raw,
+        Err(e) => return Err(format!("read {}: {e}", path.display())),
+    };
+    match serde_json::from_str::<T>(&raw) {
+        Ok(parsed) => Ok(parsed),
+        Err(e) => Err(format!("parse {}: {e}", path.display())),
+    }
+}
+
 fn contract_root(workspace_root: &Path) -> PathBuf {
     workspace_root.join("contract")
+}
+
+fn base_contract_version(version: &str) -> &str {
+    version.split_once('-').map_or(version, |(base, _)| base)
 }
 
 #[derive(Debug)]
@@ -459,6 +574,336 @@ fn collect_unique_set(items: &[String], field: &str) -> Result<BTreeSet<String>,
         }
     }
     Ok(set)
+}
+
+fn collect_non_empty_set(items: &[String], field: &str) -> Result<BTreeSet<String>, String> {
+    let mut set = BTreeSet::new();
+    for item in items {
+        if item.trim().is_empty() {
+            return Err(format!("{field} contains an empty value"));
+        }
+        if !set.insert(item.clone()) {
+            return Err(format!("{field} has duplicate value {}", item));
+        }
+    }
+    Ok(set)
+}
+
+fn validate_operations_contract(
+    bundle: &ContractBundle,
+    operations_manifest: &OperationsContractManifest,
+    workspace_root: &Path,
+) -> Result<(), String> {
+    if operations_manifest.contract.name.trim().is_empty() {
+        return Err("operations contract name is required".to_string());
+    }
+    if operations_manifest.contract.version.trim().is_empty() {
+        return Err("operations contract version is required".to_string());
+    }
+    if operations_manifest.contract.source.trim().is_empty() {
+        return Err("operations contract source is required".to_string());
+    }
+    if operations_manifest.contract.name != bundle.manifest.contract.name {
+        return Err("operations contract name must match manifest contract name".to_string());
+    }
+    if operations_manifest.contract.version != bundle.manifest.contract.version {
+        return Err("operations contract version must match manifest contract version".to_string());
+    }
+    if operations_manifest.contract.source != bundle.manifest.contract.source {
+        return Err("operations contract source must match manifest contract source".to_string());
+    }
+
+    let domains = collect_non_empty_set(&operations_manifest.public.domains, "public.domains")?;
+    if domains.is_empty() {
+        return Err("public.domains must not be empty".to_string());
+    }
+    let shared_types = collect_non_empty_set(
+        &operations_manifest.shared_types.public,
+        "shared_types.public",
+    )?;
+    if shared_types.is_empty() {
+        return Err("shared_types.public must not be empty".to_string());
+    }
+    let error_classes =
+        collect_non_empty_set(&operations_manifest.errors.classes, "errors.classes")?;
+    if error_classes.is_empty() {
+        return Err("errors.classes must not be empty".to_string());
+    }
+    if operations_manifest.operations.is_empty() {
+        return Err("operations map must not be empty".to_string());
+    }
+
+    if let Some(provenance) = &operations_manifest.implementation_provenance {
+        let manifest_models = collect_unique_set(
+            &bundle.manifest.surface.model_crates,
+            "surface.model_crates",
+        )?;
+        let manifest_algorithms = collect_unique_set(
+            &bundle.manifest.surface.algorithm_crates,
+            "surface.algorithm_crates",
+        )?;
+        let manifest_wasm =
+            collect_unique_set(&bundle.manifest.surface.wasm_crates, "surface.wasm_crates")?;
+        let provenance_models = collect_unique_set(
+            &provenance.model_crates,
+            "implementation_provenance.model_crates",
+        )?;
+        let provenance_algorithms = collect_unique_set(
+            &provenance.algorithm_crates,
+            "implementation_provenance.algorithm_crates",
+        )?;
+        let provenance_wasm = collect_unique_set(
+            &provenance.wasm_crates,
+            "implementation_provenance.wasm_crates",
+        )?;
+        if provenance_models != manifest_models
+            || provenance_algorithms != manifest_algorithms
+            || provenance_wasm != manifest_wasm
+        {
+            return Err(
+                "operations implementation_provenance must match manifest surface crates"
+                    .to_string(),
+            );
+        }
+    }
+
+    let mut operation_ids = BTreeSet::new();
+    for (operation_key, operation) in &operations_manifest.operations {
+        if operation_key.trim().is_empty() {
+            return Err("operations map contains an empty key".to_string());
+        }
+        if operation.domain.trim().is_empty() {
+            return Err(format!("operation {} domain is required", operation_key));
+        }
+        if !domains.contains(&operation.domain) {
+            return Err(format!(
+                "operation {} references unknown domain {}",
+                operation_key, operation.domain
+            ));
+        }
+        if operation.id.trim().is_empty() {
+            return Err(format!("operation {} id is required", operation_key));
+        }
+        if !operation_ids.insert(operation.id.clone()) {
+            return Err(format!("operations has duplicate id {}", operation.id));
+        }
+        if operation.stability.trim().is_empty() {
+            return Err(format!("operation {} stability is required", operation.id));
+        }
+        if !operation.deterministic {
+            return Err(format!(
+                "operation {} deterministic must be true for the public contract",
+                operation.id
+            ));
+        }
+        if operation.inputs.is_empty() {
+            return Err(format!(
+                "operation {} inputs must not be empty",
+                operation.id
+            ));
+        }
+        let _ = collect_non_empty_set(
+            &operation.inputs,
+            &format!("operation {} inputs", operation.id),
+        )?;
+        if operation.outputs.is_empty() {
+            return Err(format!(
+                "operation {} outputs must not be empty",
+                operation.id
+            ));
+        }
+        let _ = collect_non_empty_set(
+            &operation.outputs,
+            &format!("operation {} outputs", operation.id),
+        )?;
+        if !error_classes.contains(&operation.error_class) {
+            return Err(format!(
+                "operation {} references unknown error class {}",
+                operation.id, operation.error_class
+            ));
+        }
+        if operation.signing.trim().is_empty() {
+            return Err(format!("operation {} signing is required", operation.id));
+        }
+        if operation.transport.trim().is_empty() {
+            return Err(format!("operation {} transport is required", operation.id));
+        }
+        if operation.implementation.rust_modules.is_empty() {
+            return Err(format!(
+                "operation {} implementation.rust_modules must not be empty",
+                operation.id
+            ));
+        }
+        let _ = collect_non_empty_set(
+            &operation.implementation.rust_types,
+            &format!("operation {} implementation.rust_types", operation.id),
+        )?;
+        for rust_module in &operation.implementation.rust_modules {
+            if rust_module.trim().is_empty() {
+                return Err(format!(
+                    "operation {} implementation.rust_modules contains an empty value",
+                    operation.id
+                ));
+            }
+            let path = workspace_root.join(rust_module);
+            if !path.is_file() {
+                return Err(format!(
+                    "operation {} references missing rust module {}",
+                    operation.id, rust_module
+                ));
+            }
+        }
+        if operation.conformance.vector.trim().is_empty() {
+            return Err(format!(
+                "operation {} conformance.vector is required",
+                operation.id
+            ));
+        }
+        let vector_path = workspace_root.join(&operation.conformance.vector);
+        let vector = parse_json::<ConformanceVectorFile>(&vector_path)?;
+        if vector.suite.trim().is_empty() {
+            return Err(format!(
+                "operation {} conformance vector suite must not be empty",
+                operation.id
+            ));
+        }
+        if vector.vectors.is_empty() {
+            return Err(format!(
+                "operation {} conformance vector must contain at least one vector",
+                operation.id
+            ));
+        }
+        if vector.contract_version != base_contract_version(&operations_manifest.contract.version) {
+            return Err(format!(
+                "operation {} conformance vector version {} must match contract version {}",
+                operation.id,
+                vector.contract_version,
+                base_contract_version(&operations_manifest.contract.version)
+            ));
+        }
+        for entry in vector.vectors {
+            if entry.id.trim().is_empty() || entry.kind.trim().is_empty() {
+                return Err(format!(
+                    "operation {} conformance vector entries must define non-empty id and kind",
+                    operation.id
+                ));
+            }
+        }
+    }
+
+    if bundle.sdk_exports.is_empty() {
+        return Err(
+            "sdk-exports must define at least one operation-based language mapping".to_string(),
+        );
+    }
+
+    let mut has_ts_mapping = false;
+    for mapping in &bundle.sdk_exports {
+        if mapping.language.id.trim().is_empty() {
+            return Err("sdk export language.id is required".to_string());
+        }
+        if mapping.language.repository.trim().is_empty() {
+            return Err(format!(
+                "sdk export language.repository is required for {}",
+                mapping.language.id
+            ));
+        }
+        if mapping.language.id == "ts" {
+            has_ts_mapping = true;
+        }
+        if mapping.sdk.package.trim().is_empty() {
+            return Err(format!(
+                "sdk export package is required for {}",
+                mapping.language.id
+            ));
+        }
+        if mapping.sdk.deterministic_codec.trim().is_empty()
+            || mapping.sdk.signing.trim().is_empty()
+            || mapping.sdk.networking.trim().is_empty()
+        {
+            return Err(format!(
+                "sdk runtime fields must be non-empty for {}",
+                mapping.language.id
+            ));
+        }
+        if let Some(module_format) = mapping.sdk.module_format.as_deref() {
+            if module_format.trim().is_empty() {
+                return Err(format!(
+                    "sdk module_format must be non-empty for {}",
+                    mapping.language.id
+                ));
+            }
+        }
+        if mapping.operations.is_empty() {
+            return Err(format!(
+                "sdk export operations map is required for {}",
+                mapping.language.id
+            ));
+        }
+        for (operation_id, symbol) in &mapping.operations {
+            if !operation_ids.contains(operation_id) {
+                return Err(format!(
+                    "sdk export {} references unknown operation {}",
+                    mapping.language.id, operation_id
+                ));
+            }
+            if symbol.trim().is_empty() {
+                return Err(format!(
+                    "sdk export {} must map operation {} to a non-empty symbol",
+                    mapping.language.id, operation_id
+                ));
+            }
+        }
+        if mapping.shared_types.is_empty() {
+            return Err(format!(
+                "sdk export shared_types map is required for {}",
+                mapping.language.id
+            ));
+        }
+        for (shared_type, symbol) in &mapping.shared_types {
+            if !shared_types.contains(shared_type) {
+                return Err(format!(
+                    "sdk export {} references unknown shared type {}",
+                    mapping.language.id, shared_type
+                ));
+            }
+            if symbol.trim().is_empty() {
+                return Err(format!(
+                    "sdk export {} must map shared type {} to a non-empty symbol",
+                    mapping.language.id, shared_type
+                ));
+            }
+        }
+        if mapping.language.id == "ts" {
+            if operation_ids != mapping.operations.keys().cloned().collect::<BTreeSet<_>>() {
+                return Err(
+                    "sdk export ts must cover every public operation in operations.toml"
+                        .to_string(),
+                );
+            }
+            let artifacts = mapping
+                .artifacts
+                .as_ref()
+                .ok_or_else(|| "sdk export artifacts map is required for ts".to_string())?;
+            for (field, value) in [
+                ("models_dir", artifacts.models_dir.as_ref()),
+                ("runtime_dir", artifacts.runtime_dir.as_ref()),
+                ("wasm_dist_dir", artifacts.wasm_dist_dir.as_ref()),
+                ("manifest_file", artifacts.manifest_file.as_ref()),
+            ] {
+                if value.is_none_or(|raw| raw.trim().is_empty()) {
+                    return Err(format!(
+                        "sdk export artifacts.{field} must be non-empty for ts"
+                    ));
+                }
+            }
+        }
+    }
+    if !has_ts_mapping {
+        return Err("sdk-exports must include a ts mapping".to_string());
+    }
+
+    Ok(())
 }
 
 fn package_field_configured(table: &toml::value::Table, field: &str) -> bool {
@@ -916,9 +1361,20 @@ fn validate_release_publish_policy(
 }
 
 pub fn validate_release_preflight(workspace_root: &Path) -> Result<(), String> {
+    validate_release_preflight_with_override(workspace_root, None)
+}
+
+pub fn validate_release_preflight_with_override(
+    workspace_root: &Path,
+    release_policy_override: Option<PathBuf>,
+) -> Result<(), String> {
     let bundle = load_contract_bundle(workspace_root)?;
-    validate_contract_bundle(&bundle)?;
-    let release = load_release_contract(workspace_root, &bundle.root)?;
+    validate_contract_bundle_with_release_policy_override(
+        &bundle,
+        release_policy_override.clone(),
+    )?;
+    let release =
+        load_release_contract_with_override(workspace_root, &bundle.root, release_policy_override)?;
     let policy =
         load_coverage_policy(&bundle.root).expect("validated contract includes coverage policy");
     let publish_crates = collect_unique_set(
@@ -940,10 +1396,379 @@ pub fn validate_release_preflight(workspace_root: &Path) -> Result<(), String> {
     Ok(())
 }
 
+fn validate_contract_bundle_with_release_policy_override(
+    bundle: &ContractBundle,
+    release_policy_override: Option<PathBuf>,
+) -> Result<(), String> {
+    if bundle.manifest.contract.name.trim().is_empty() {
+        return Err("contract name is required".to_string());
+    }
+    if bundle.manifest.contract.version.trim().is_empty() {
+        return Err("contract version is required".to_string());
+    }
+    if bundle.manifest.contract.source.trim().is_empty() {
+        return Err("contract source is required".to_string());
+    }
+    if bundle.manifest.surface.model_crates.is_empty() {
+        return Err("contract surface.model_crates must not be empty".to_string());
+    }
+    if bundle.manifest.surface.algorithm_crates.is_empty() {
+        return Err("contract surface.algorithm_crates must not be empty".to_string());
+    }
+    if bundle.manifest.surface.wasm_crates.is_empty() {
+        return Err("contract surface.wasm_crates must not be empty".to_string());
+    }
+    if bundle.exports.is_empty() {
+        return Err("at least one language export mapping is required".to_string());
+    }
+    for mapping in &bundle.exports {
+        if mapping.language.id.trim().is_empty() {
+            return Err("language.id is required".to_string());
+        }
+        if mapping.language.repository.trim().is_empty() {
+            return Err(format!(
+                "language.repository is required for {}",
+                mapping.language.id
+            ));
+        }
+        if mapping.packages.is_empty() {
+            return Err(format!(
+                "packages map is required for {}",
+                mapping.language.id
+            ));
+        }
+        if mapping.language.id == "ts" {
+            let artifacts = match mapping.artifacts.as_ref() {
+                Some(artifacts) => artifacts,
+                None => return Err("artifacts map is required for ts".to_string()),
+            };
+            if artifacts
+                .models_dir
+                .as_deref()
+                .is_none_or(|value| value.trim().is_empty())
+                || artifacts
+                    .constants_dir
+                    .as_deref()
+                    .is_none_or(|value| value.trim().is_empty())
+                || artifacts
+                    .wasm_dist_dir
+                    .as_deref()
+                    .is_none_or(|value| value.trim().is_empty())
+                || artifacts
+                    .manifest_file
+                    .as_deref()
+                    .is_none_or(|value| value.trim().is_empty())
+            {
+                return Err("artifacts fields must be non-empty for ts".to_string());
+            }
+        }
+    }
+    if bundle.version.contract.version.trim().is_empty() {
+        return Err("version.contract.version is required".to_string());
+    }
+    if bundle.version.contract.stability.trim().is_empty() {
+        return Err("version.contract.stability is required".to_string());
+    }
+    if bundle.version.semver.major_on.is_empty()
+        || bundle.version.semver.minor_on.is_empty()
+        || bundle.version.semver.patch_on.is_empty()
+    {
+        return Err("version.semver rules must all be non-empty".to_string());
+    }
+    if !bundle.version.compatibility.requires_conformance_pass {
+        return Err("compatibility.requires_conformance_pass must be true".to_string());
+    }
+    if !bundle.version.compatibility.requires_export_manifest_diff {
+        return Err("compatibility.requires_export_manifest_diff must be true".to_string());
+    }
+    if !bundle.version.compatibility.requires_release_notes {
+        return Err("compatibility.requires_release_notes must be true".to_string());
+    }
+    if !bundle.manifest.policy.exclude_internal_workspace_crates
+        || !bundle.manifest.policy.require_reproducible_exports
+        || !bundle.manifest.policy.require_conformance_vectors
+    {
+        return Err("contract policy flags must all be true".to_string());
+    }
+    let workspace_root = bundle
+        .root
+        .parent()
+        .expect("contract root must have a workspace parent");
+    if let Some(operations_manifest) = bundle.operations_manifest.as_ref() {
+        validate_operations_contract(bundle, operations_manifest, workspace_root)?;
+    }
+    validate_core_unit_dimension_variant_order(workspace_root)?;
+    validate_coverage_policy_parity(workspace_root, &bundle.root)?;
+    if resolve_release_contract_path_with_override(
+        workspace_root,
+        &bundle.root,
+        release_policy_override.clone(),
+    )
+    .expect("validated release contract path resolution should not fail")
+    .is_some()
+    {
+        validate_release_publish_policy_with_override(
+            workspace_root,
+            &bundle.root,
+            bundle.version.contract.version.as_str(),
+            release_policy_override,
+        )?;
+    }
+    Ok(())
+}
+
+fn validate_release_publish_policy_with_override(
+    workspace_root: &Path,
+    contract_root: &Path,
+    contract_version: &str,
+    release_policy_override: Option<PathBuf>,
+) -> Result<(), String> {
+    let release = load_release_contract_with_override(
+        workspace_root,
+        contract_root,
+        release_policy_override,
+    )?;
+    if release.release.version.trim().is_empty() {
+        return Err("release.version must not be empty".to_string());
+    }
+    if release.release.version != contract_version {
+        return Err(format!(
+            "release.version {} must match contract version {}",
+            release.release.version, contract_version
+        ));
+    }
+
+    let workspace_packages = workspace_package_names(workspace_root)?
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+    let uses_classification = release.uses_classification();
+    let public_field = if uses_classification {
+        "classification.public"
+    } else {
+        "publish.crates"
+    };
+    let internal_field = if uses_classification {
+        "classification.internal"
+    } else {
+        "internal.crates"
+    };
+
+    let public_set = collect_unique_set(&release.public_crates(), public_field)?;
+    let internal_set = collect_unique_set(&release.internal_crates(), internal_field)?;
+    let deferred_set = collect_unique_set(&release.deferred_crates(), "classification.deferred")?;
+    let retired_set = collect_unique_set(&release.retired_crates(), "classification.retired")?;
+    let yank_only_set =
+        collect_unique_set(&release.yank_only_crates(), "classification.yank_only")?;
+    let publish_order = &release.publish_order.crates;
+    let publish_order_set = collect_unique_set(publish_order, "publish_order.crates")?;
+
+    let class_sets = [
+        ("public", &public_set),
+        ("internal", &internal_set),
+        ("deferred", &deferred_set),
+        ("retired", &retired_set),
+        ("yank-only", &yank_only_set),
+    ];
+    for idx in 0..class_sets.len() {
+        for other_idx in (idx + 1)..class_sets.len() {
+            let overlap = class_sets[idx]
+                .1
+                .intersection(class_sets[other_idx].1)
+                .cloned()
+                .collect::<BTreeSet<_>>();
+            if !overlap.is_empty() {
+                return Err(format!(
+                    "release classification overlap is not allowed between {} and {}: {}",
+                    class_sets[idx].0,
+                    class_sets[other_idx].0,
+                    join_set(&overlap)
+                ));
+            }
+        }
+    }
+
+    let mut combined = public_set.clone();
+    combined.extend(internal_set.iter().cloned());
+    combined.extend(deferred_set.iter().cloned());
+    combined.extend(retired_set.iter().cloned());
+    combined.extend(yank_only_set.iter().cloned());
+    if combined != workspace_packages {
+        let missing = workspace_packages
+            .difference(&combined)
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        let extra = combined
+            .difference(&workspace_packages)
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        return Err(format!(
+            "release classification sets are missing workspace crates: {}; release classification sets include unknown crates: {}",
+            join_set(&missing),
+            join_set(&extra)
+        ));
+    }
+
+    if publish_order_set != public_set {
+        let missing = public_set
+            .difference(&publish_order_set)
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        let extra = publish_order_set
+            .difference(&public_set)
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        return Err(format!(
+            "publish_order.crates is missing publish crates: {}; publish_order.crates has non-publish crates: {}",
+            join_set(&missing),
+            join_set(&extra)
+        ));
+    }
+
+    let order_index = publish_order
+        .iter()
+        .enumerate()
+        .map(|(idx, name)| (name.clone(), idx))
+        .collect::<BTreeMap<_, _>>();
+    let dependencies = read_workspace_package_dependencies(workspace_root)
+        .expect("workspace package manifests were already parsed");
+    for crate_name in &public_set {
+        let crate_deps = &dependencies[crate_name];
+        let crate_order = order_index[crate_name];
+        for dep in crate_deps {
+            if !public_set.contains(dep) {
+                continue;
+            }
+            let dep_order = order_index[dep];
+            if dep_order >= crate_order {
+                return Err(format!(
+                    "publish order must place dependency {} before {}",
+                    dep, crate_name
+                ));
+            }
+        }
+    }
+
+    let publish_configs = workspace_package_publish_configs(workspace_root)
+        .expect("workspace publish configs are stable");
+    for crate_name in &public_set {
+        let publish = publish_configs[crate_name].as_ref();
+        if !publish_config_is_public(publish) {
+            return Err(format!(
+                "public crate {} must set publish = [\"crates-io\"]",
+                crate_name
+            ));
+        }
+    }
+    for crate_name in internal_set
+        .iter()
+        .chain(deferred_set.iter())
+        .chain(retired_set.iter())
+        .chain(yank_only_set.iter())
+    {
+        let publish = publish_configs[crate_name].as_ref();
+        if !publish_config_is_non_public(publish) {
+            return Err(format!(
+                "non-public crate {} must set publish = false",
+                crate_name
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+pub fn synthetic_release_policy_for_workspace(workspace_root: &Path) -> Result<String, String> {
+    let bundle = load_contract_bundle(workspace_root)?;
+    let publish_configs = workspace_package_publish_configs(workspace_root)?;
+    let dependencies = read_workspace_package_dependencies(workspace_root)?;
+
+    let mut public = BTreeSet::new();
+    let mut internal = BTreeSet::new();
+    for (crate_name, publish) in &publish_configs {
+        if publish_config_is_public(publish.as_ref()) {
+            public.insert(crate_name.clone());
+        } else {
+            internal.insert(crate_name.clone());
+        }
+    }
+
+    let mut in_degree = BTreeMap::new();
+    let mut dependents = BTreeMap::<String, BTreeSet<String>>::new();
+    for crate_name in &public {
+        in_degree.insert(crate_name.clone(), 0usize);
+        dependents.insert(crate_name.clone(), BTreeSet::new());
+    }
+    for crate_name in &public {
+        for dep in &dependencies[crate_name] {
+            if !public.contains(dep) {
+                continue;
+            }
+            *in_degree
+                .get_mut(crate_name)
+                .expect("public crate present in indegree map") += 1;
+            dependents
+                .get_mut(dep)
+                .expect("public dependency present in dependents map")
+                .insert(crate_name.clone());
+        }
+    }
+
+    let mut ready = in_degree
+        .iter()
+        .filter(|(_, degree)| **degree == 0)
+        .map(|(crate_name, _)| crate_name.clone())
+        .collect::<BTreeSet<_>>();
+    let mut publish_order = Vec::new();
+    while let Some(crate_name) = ready.pop_first() {
+        publish_order.push(crate_name.clone());
+        for dependent in dependents[&crate_name].clone() {
+            let degree = in_degree
+                .get_mut(&dependent)
+                .expect("dependent crate present in indegree map");
+            *degree -= 1;
+            if *degree == 0 {
+                ready.insert(dependent);
+            }
+        }
+    }
+    if publish_order.len() != public.len() {
+        return Err("public crate dependency graph contains a cycle".to_string());
+    }
+
+    let public = public.into_iter().collect::<Vec<_>>();
+    let internal = internal.into_iter().collect::<Vec<_>>();
+    Ok(format!(
+        "[release]\nversion = \"{}\"\n\n[classification]\npublic = {}\ninternal = {}\ndeferred = []\nretired = []\nyank_only = []\n\n[publish_order]\ncrates = {}\n",
+        bundle.version.contract.version,
+        toml_inline_array(&public),
+        toml_inline_array(&internal),
+        toml_inline_array(&publish_order),
+    ))
+}
+
+#[cfg(test)]
+fn toml_inline_array(values: &[String]) -> String {
+    let joined = values
+        .iter()
+        .map(|value| format!("\"{value}\""))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("[{joined}]")
+}
+
 pub fn load_contract_bundle(workspace_root: &Path) -> Result<ContractBundle, String> {
     let root = contract_root(workspace_root);
     let manifest = parse_toml::<ContractManifest>(&root.join("manifest.toml"))?;
     let version = parse_toml::<VersionPolicy>(&root.join("version.toml"))?;
+    let operations_manifest_path = root.join("operations.toml");
+    let operations_manifest = if operations_manifest_path.is_file() {
+        Some(parse_toml::<OperationsContractManifest>(
+            &operations_manifest_path,
+        )?)
+    } else {
+        None
+    };
     let exports_dir = root.join("exports");
     let mut exports = Vec::new();
     let read_dir = match fs::read_dir(&exports_dir) {
@@ -959,12 +1784,37 @@ pub fn load_contract_bundle(workspace_root: &Path) -> Result<ContractBundle, Str
         }
         exports.push(parse_toml::<ExportMapping>(&path)?);
     }
+    let sdk_exports = load_sdk_exports(&root)?;
     Ok(ContractBundle {
         root,
         manifest,
         version,
         exports,
+        operations_manifest,
+        sdk_exports,
     })
+}
+
+fn load_sdk_exports(contract_root: &Path) -> Result<Vec<SdkExportMapping>, String> {
+    let exports_dir = contract_root.join("sdk-exports");
+    if !exports_dir.exists() {
+        return Ok(Vec::new());
+    }
+    let read_dir = match fs::read_dir(&exports_dir) {
+        Ok(read_dir) => read_dir,
+        Err(e) => return Err(format!("read dir {}: {e}", exports_dir.display())),
+    };
+    let mut entries = read_dir.filter_map(Result::ok).collect::<Vec<_>>();
+    entries.sort_by_key(|entry| entry.file_name());
+    let mut mappings = Vec::new();
+    for entry in entries {
+        let path = entry.path();
+        if path.extension().and_then(|ext| ext.to_str()) != Some("toml") {
+            continue;
+        }
+        mappings.push(parse_toml::<SdkExportMapping>(&path)?);
+    }
+    Ok(mappings)
 }
 
 pub fn validate_contract_bundle(bundle: &ContractBundle) -> Result<(), String> {
@@ -1062,6 +1912,9 @@ pub fn validate_contract_bundle(bundle: &ContractBundle) -> Result<(), String> {
         .root
         .parent()
         .expect("contract root must have a workspace parent");
+    if let Some(operations_manifest) = bundle.operations_manifest.as_ref() {
+        validate_operations_contract(bundle, operations_manifest, workspace_root)?;
+    }
     validate_core_unit_dimension_variant_order(workspace_root)?;
     validate_coverage_policy_parity(workspace_root, &bundle.root)?;
     if resolve_release_contract_path(workspace_root, &bundle.root)
@@ -1252,6 +2105,147 @@ crates = ["radroots_a"]
         root
     }
 
+    fn add_operation_contract_files(root: &Path) {
+        write_file(
+            &root.join("contract").join("operations.toml"),
+            r#"[contract]
+name = "radroots_contract"
+version = "1.0.0"
+source = "synthetic"
+
+[public]
+domains = ["profile", "farm", "listing", "trade"]
+
+[shared_types]
+public = [
+  "WireEventParts",
+  "UnsignedEventDraft",
+  "RadrootsNostrEvent",
+  "RadrootsNostrEventRef",
+  "RadrootsNostrEventPtr",
+  "RadrootsTradeListingAddress",
+  "RadrootsProfile",
+  "RadrootsFarm",
+  "RadrootsListing",
+]
+
+[errors]
+classes = ["encode_error", "parse_error", "validation_error", "address_error"]
+
+[implementation_provenance]
+model_crates = ["radroots_a"]
+algorithm_crates = ["radroots_b"]
+wasm_crates = ["radroots_a_wasm"]
+
+[operations.profile_build_draft]
+domain = "profile"
+id = "profile.build_draft"
+stability = "beta"
+inputs = ["RadrootsProfile", "RadrootsProfileType?"]
+outputs = ["WireEventParts"]
+error_class = "encode_error"
+deterministic = true
+signing = "native"
+transport = "native"
+
+[operations.profile_build_draft.implementation]
+rust_modules = ["crates/core/src/unit.rs"]
+rust_types = ["radroots_events::profile::RadrootsProfile"]
+
+[operations.profile_build_draft.conformance]
+vector = "conformance/vectors/profile/build_draft.v1.json"
+
+[operations.listing_build_draft]
+domain = "listing"
+id = "listing.build_draft"
+stability = "beta"
+inputs = ["RadrootsListing"]
+outputs = ["WireEventParts"]
+error_class = "encode_error"
+deterministic = true
+signing = "native"
+transport = "native"
+
+[operations.listing_build_draft.implementation]
+rust_modules = ["crates/core/src/unit.rs"]
+rust_types = ["radroots_events::listing::RadrootsListing"]
+
+[operations.listing_build_draft.conformance]
+vector = "conformance/vectors/listing/build_draft.v1.json"
+"#,
+        );
+        write_file(
+            &root.join("contract").join("sdk-exports").join("ts.toml"),
+            r#"[language]
+id = "ts"
+repository = "sdk-typescript"
+
+[sdk]
+package = "@radroots/sdk"
+module_format = "esm"
+deterministic_codec = "wasm"
+signing = "native"
+networking = "native"
+
+[operations]
+"profile.build_draft" = "profile.buildDraft"
+"listing.build_draft" = "listing.buildDraft"
+
+[shared_types]
+"WireEventParts" = "WireEventParts"
+"UnsignedEventDraft" = "UnsignedEventDraft"
+"RadrootsNostrEvent" = "RadrootsNostrEvent"
+"RadrootsListing" = "RadrootsListing"
+
+[artifacts]
+models_dir = "src/generated"
+runtime_dir = "src/runtime"
+wasm_dist_dir = "dist"
+manifest_file = "export-manifest.json"
+"#,
+        );
+        write_file(
+            &root
+                .join("conformance")
+                .join("vectors")
+                .join("profile")
+                .join("build_draft.v1.json"),
+            r#"{
+  "suite": "profile",
+  "contract_version": "1.0.0",
+  "vectors": [
+    {
+      "id": "profile_build_draft_minimal_001",
+      "kind": "profile.build_draft",
+      "input": {},
+      "expected": {}
+    }
+  ]
+}
+"#,
+        );
+        write_file(
+            &root
+                .join("conformance")
+                .join("vectors")
+                .join("listing")
+                .join("build_draft.v1.json"),
+            r#"{
+  "suite": "listing",
+  "contract_version": "1.0.0",
+  "vectors": [
+    {
+      "id": "listing_build_draft_minimal_001",
+      "kind": "listing.build_draft",
+      "input": {},
+      "expected": {}
+    }
+  ]
+}
+"#,
+        );
+    }
+
     fn write_root_release_policy(root: &Path, raw: &str) {
         write_file(&root.join(ROOT_RELEASE_POLICY_RELATIVE), raw);
     }
@@ -1309,6 +2303,15 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
         let root = workspace_root();
         let bundle = load_contract_bundle(&root).expect("load contract");
         validate_contract_bundle(&bundle).expect("validate contract");
+    }
+
+    #[test]
+    fn validate_synthetic_operation_contract_bundle() {
+        let root = create_synthetic_workspace("operation_contract_bundle");
+        add_operation_contract_files(&root);
+        let bundle = load_contract_bundle(&root).expect("load contract");
+        validate_contract_bundle(&bundle).expect("validate contract");
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]
@@ -2401,6 +3404,45 @@ edition = "2024"
         assert_bundle_error("contract policy flags must all be true", |bundle| {
             bundle.manifest.policy.require_conformance_vectors = false;
         });
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn validate_contract_bundle_reports_operation_contract_errors() {
+        let root = create_synthetic_workspace("operation_contract_bundle_errors");
+        add_operation_contract_files(&root);
+
+        let assert_bundle_error = |expected: &str, mutator: fn(&mut ContractBundle)| {
+            let mut bundle = load_contract_bundle(&root).expect("load bundle");
+            mutator(&mut bundle);
+            let err = validate_contract_bundle(&bundle).expect_err("bundle validation error");
+            assert!(err.contains(expected), "expected `{expected}` in `{err}`");
+        };
+
+        assert_bundle_error("public.domains must not be empty", |bundle| {
+            bundle
+                .operations_manifest
+                .as_mut()
+                .expect("operations manifest")
+                .public
+                .domains
+                .clear();
+        });
+        assert_bundle_error(
+            "sdk-exports must define at least one operation-based language mapping",
+            |bundle| {
+                bundle.sdk_exports.clear();
+            },
+        );
+        assert_bundle_error(
+            "sdk export ts must cover every public operation",
+            |bundle| {
+                bundle.sdk_exports[0]
+                    .operations
+                    .remove("listing.build_draft");
+            },
+        );
 
         let _ = fs::remove_dir_all(root);
     }

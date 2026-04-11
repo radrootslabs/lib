@@ -1,0 +1,20 @@
+{
+  "suite": "trade",
+  "contract_version": "0.1.0",
+  "vectors": [
+    {
+      "id": "trade_parse_envelope_minimal_001",
+      "kind": "trade.parse_envelope",
+      "input": {
+        "event": {
+          "kind": "trade",
+          "content_shape": "trade_envelope_json",
+          "tags_shape": "trade_envelope_tags"
+        }
+      },
+      "expected": {
+        "envelope_shape": "trade_envelope"
+      }
+    }
+  ]
+}

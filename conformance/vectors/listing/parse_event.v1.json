@@ -1,0 +1,20 @@
+{
+  "suite": "listing",
+  "contract_version": "0.1.0",
+  "vectors": [
+    {
+      "id": "listing_parse_event_minimal_001",
+      "kind": "listing.parse_event",
+      "input": {
+        "event": {
+          "kind": "listing",
+          "content_shape": "listing_json_or_markdown",
+          "tags_shape": "listing_tags_full"
+        }
+      },
+      "expected": {
+        "listing_shape": "radroots_listing"
+      }
+    }
+  ]
+}

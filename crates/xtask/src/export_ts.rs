@@ -915,6 +915,8 @@ mod tests {
                 },
             },
             exports: Vec::new(),
+            operations_manifest: None,
+            sdk_exports: Vec::new(),
         };
         let mapping_err = ts_export_mapping(&bundle).expect_err("missing ts mapping");
         assert!(mapping_err.contains("missing ts export mapping"));

@@ -1,0 +1,29 @@
+{
+  "suite": "listing",
+  "contract_version": "0.1.0",
+  "vectors": [
+    {
+      "id": "listing_build_tags_minimal_001",
+      "kind": "listing.build_tags",
+      "input": {
+        "listing": {
+          "d_tag": "AAAAAAAAAAAAAAAAAAAAAg",
+          "farm": {
+            "pubkey": "farm_pubkey",
+            "d_tag": "AAAAAAAAAAAAAAAAAAAAAA"
+          },
+          "product": {
+            "key": "sku",
+            "title": "widget",
+            "category": "tools"
+          },
+          "primary_bin_id": "bin-1",
+          "bins": []
+        }
+      },
+      "expected": {
+        "tags_shape": "listing_tags"
+      }
+    }
+  ]
+}

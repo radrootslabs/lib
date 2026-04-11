@@ -245,6 +245,27 @@ mod tests {
         fs::write(path, content).expect("write file");
     }
 
+    fn release_preflight_with_override(release_policy_path: Option<&Path>) -> Result<(), String> {
+        contract::validate_release_preflight_with_override(
+            &workspace_root(),
+            release_policy_path.map(PathBuf::from),
+        )
+    }
+
+    fn run_sdk_with_release_policy_override(
+        args: &[String],
+        release_policy_path: Option<&Path>,
+    ) -> Result<(), String> {
+        match args.first().map(String::as_str) {
+            Some("release") => match args.get(1).map(String::as_str) {
+                Some("preflight") => release_preflight_with_override(release_policy_path),
+                Some(other) => Err(format!("unknown release subcommand: {other}")),
+                None => Err("missing release subcommand".to_string()),
+            },
+            _ => run_sdk(args),
+        }
+    }
+
     fn create_synthetic_export_workspace(prefix: &str) -> PathBuf {
         let root = unique_temp_dir(prefix);
         fs::create_dir_all(&root).expect("create root");
@@ -543,6 +564,10 @@ crates = ["radroots_a"]
         let root = workspace_root();
         let out_dir = unique_temp_dir("coverage_dispatch");
         fs::create_dir_all(&out_dir).expect("create out dir");
+        let release_policy_path = out_dir.join("publish-policy.toml");
+        let release_policy = contract::synthetic_release_policy_for_workspace(&root)
+            .expect("synthetic release policy");
+        write_file(&release_policy_path, &release_policy);
 
         let coverage_refresh_path = root
             .join("target")
@@ -575,7 +600,7 @@ crates = ["radroots_a"]
         fs::write(&coverage_refresh_path, rows).expect("write coverage refresh");
 
         validate_contract().expect("validate contract");
-        release_preflight().expect("release preflight");
+        release_preflight_with_override(Some(&release_policy_path)).expect("release preflight");
         run_sdk(&["coverage".to_string(), "help".to_string()]).expect("coverage help");
         run_sdk(&["coverage".to_string(), "required-crates".to_string()])
             .expect("coverage required crates");
@@ -606,7 +631,11 @@ crates = ["radroots_a"]
         ])
         .expect("coverage report");
 
-        run_sdk(&["release".to_string(), "preflight".to_string()]).expect("sdk release preflight");
+        run_sdk_with_release_policy_override(
+            &["release".to_string(), "preflight".to_string()],
+            Some(&release_policy_path),
+        )
+        .expect("sdk release preflight");
 
         run(&[
             "sdk".to_string(),

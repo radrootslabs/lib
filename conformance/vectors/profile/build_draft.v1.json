@@ -1,0 +1,23 @@
+{
+  "suite": "profile",
+  "contract_version": "0.1.0",
+  "vectors": [
+    {
+      "id": "profile_build_draft_minimal_001",
+      "kind": "profile.build_draft",
+      "input": {
+        "profile": {
+          "name": "radroots user"
+        },
+        "profile_type": "farmer"
+      },
+      "expected": {
+        "wire_parts": {
+          "kind": "profile",
+          "content_shape": "metadata_json",
+          "tags_shape": "profile_type_optional"
+        }
+      }
+    }
+  ]
+}
