@@ -67,15 +67,6 @@ in
     pathPrefix = coveragePath;
   };
 
-  export-ts = mkRepoApp {
-    name = "export-ts";
-    description = "Export generated typescript sdk artifacts";
-    runtimeInputs = common.runtimeInputs.stable;
-    command = ''
-      cargo run -q -p xtask -- sdk export-ts "$@"
-    '';
-  };
-
   guards = mkRepoApp {
     name = "guards";
     description = "Run repository guard scripts";
@@ -107,13 +98,6 @@ in
     command = coverageShellExec common.releasePreflightCommand;
     env = common.exportCoverageEnv;
     pathPrefix = coveragePath;
-  };
-
-  validate-sdk-typescript = mkRepoApp {
-    name = "validate-sdk-typescript";
-    description = "Validate the synced sdk-typescript checkout with bun";
-    runtimeInputs = common.runtimeInputs.sync;
-    command = common.validateSdkTypescriptCommand;
   };
 
   wasm-builds = mkRepoApp {

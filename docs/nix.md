@@ -83,11 +83,9 @@ Repo-aware command apps:
 nix run .#fmt
 nix run .#check
 nix run .#contract
-nix run .#export-ts
 nix run .#coverage-report
 nix run .#wasm-builds
 nix run .#release-preflight
-nix run .#validate-sdk-typescript -- ./sdk-typescript
 ```
 
 `nix flake check` is intentionally limited to pure surfaces:
@@ -99,8 +97,6 @@ nix run .#validate-sdk-typescript -- ./sdk-typescript
 
 Repo-aware flows stay behind `nix run` apps because they need a real checkout:
 
-- `sdk export-ts` writes into repo-local `target/`
-- sdk sync validation runs `bun` against a checked-out `sdk-typescript` repo path
 - coverage refresh and release preflight produce repo-local artifacts derived from measured per-crate gate reports
 - wasm packaging writes package output directories
 - publish commands read runtime tokens and the live checkout state

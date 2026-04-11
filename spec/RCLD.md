@@ -744,8 +744,8 @@ This facade should:
 
 - parses a crate-keyed surface
 - validates crate-keyed export coverage
-- exports TypeScript by iterating crate-to-package mappings
-- has tests that assert TypeScript export coverage matches model plus wasm crates
+- retains TypeScript export metadata as part of the spec surface
+- no longer owns downstream SDK packaging or repo-sync orchestration
 
 ### Required Changes
 
@@ -758,25 +758,21 @@ This facade should:
 - conformance vector presence for each public operation
 - language export manifests mapping approved operations
 4. replace crate-coverage assertions with operation-coverage assertions
-5. update export manifest generation to report operation coverage
-6. keep current crate provenance checks only as implementation validation
+5. keep current crate provenance checks only as implementation validation
 
 ### Recommended `xtask` Command Evolution
 
-Keep existing commands temporarily:
+Keep only the validation commands in the mounted repo:
 
-- `sdk export-ts`
 - `sdk validate`
 
-Add new migration-aware behavior behind the same commands:
+Add migration-aware behavior behind the retained validation command:
 
 - `sdk validate` validates both old and new contract surfaces
-- `sdk export-ts` assembles an operation-first TypeScript SDK package from approved operations
 
 Optional additive commands:
 
 - `sdk validate-operations`
-- `sdk export-ts-sdk`
 - `sdk conformance check --language <id>`
 
 ## Language SDK Strategy
@@ -838,9 +834,9 @@ Implementation recommendation:
 
 ### Phase 4: Migrate TypeScript Export
 
-- shift `xtask export-ts` to operation-first packaging
+- move TypeScript package assembly to the owning downstream SDK repo or monorepo control plane
 - ship one main external TypeScript SDK package
-- keep transitional generated artifacts internal if necessary
+- keep only the spec metadata needed to describe that package here
 
 ### Phase 5: Introduce Python
 

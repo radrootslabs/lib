@@ -1,4 +1,4 @@
-.PHONY: all build clean help export-ts-sdk-bindings \
+.PHONY: all build clean help \
 	build-events-codec-wasm build-replica-db-wasm build-replica-sync-wasm
 
 SHELL := /bin/bash
@@ -21,12 +21,8 @@ help:
 	@echo "  make all"
 	@echo "  make build"
 	@echo "  make clean"
-	@echo "  make export-ts-sdk-bindings"
 	@echo "  make help"
 	@printf "%s\n" $(BUILD_TARGETS)
-
-export-ts-sdk-bindings:
-	cargo run -q -p xtask -- sdk export-ts
 
 build-replica-db-wasm:
 	wasm-pack build crates/replica_db_wasm --release --target web \
