@@ -530,10 +530,14 @@ mod tests {
     use tempfile::tempdir;
 
     use super::{
-        ensure_instance_layout, extract_binary_archive, install_binary, process_running,
-        read_secret_file, remove_instance_artifacts, start_process, stop_process,
-        write_instance_metadata, write_managed_file, write_secret_file,
+        ensure_instance_layout, ensure_parent_dir, extract_binary_archive, find_binary_with_name,
+        force_kill_process, install_binary, open_log_file, process_running,
+        process_running_for_pid, read_pid, read_secret_file, remove_instance_artifacts,
+        remove_path_if_exists, set_executable_mode, set_secret_mode, signal_process, start_process,
+        stop_process, terminate_process, write_instance_metadata, write_managed_file,
+        write_secret_file,
     };
+    use crate::error::RadrootsRuntimeManagerError;
     use crate::model::{ManagedRuntimeInstallState, ManagedRuntimeInstanceRecord};
     use crate::paths::ManagedRuntimeInstancePaths;
 
@@ -548,6 +552,16 @@ mod tests {
             stdout_log_path: root.join("logs/stdout.log"),
             stderr_log_path: root.join("logs/stderr.log"),
             metadata_path: root.join("state/instance.toml"),
+        }
+    }
+
+    fn assert_error_contains(err: &RadrootsRuntimeManagerError, parts: &[&str]) {
+        let rendered = err.to_string();
+        for part in parts {
+            assert!(
+                rendered.contains(part),
+                "expected `{rendered}` to contain `{part}`"
+            );
         }
     }
 
@@ -627,6 +641,30 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn extract_binary_archive_uses_direct_binary_when_present_at_root() {
+        let dir = tempdir().expect("tempdir");
+        let archive_root = dir.path().join("archive");
+        fs::create_dir_all(&archive_root).expect("archive dir");
+        fs::write(archive_root.join("radrootsd"), "#!/bin/sh\nexit 0\n").expect("binary");
+        let archive_path = dir.path().join("radrootsd.tar.gz");
+        let file = File::create(&archive_path).expect("archive file");
+        let encoder = flate2::write::GzEncoder::new(file, flate2::Compression::default());
+        let mut builder = tar::Builder::new(encoder);
+        builder
+            .append_path_with_name(archive_root.join("radrootsd"), "radrootsd")
+            .expect("append path");
+        builder.finish().expect("finish archive");
+        let encoder = builder.into_inner().expect("into encoder");
+        encoder.finish().expect("finish gzip");
+
+        let paths = sample_paths(dir.path());
+        let installed =
+            extract_binary_archive(&archive_path, "tar.gz", &paths, "radrootsd").expect("extract");
+        assert_eq!(installed, paths.install_dir.join("radrootsd"));
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn start_and_stop_process_manage_pid_file() {
         let dir = tempdir().expect("tempdir");
         let binary = dir.path().join("sleepy.sh");
@@ -653,5 +691,394 @@ mod tests {
         assert!(!paths.logs_dir.exists());
         assert!(!paths.run_dir.exists());
         assert!(!paths.secrets_dir.exists());
+    }
+
+    #[test]
+    fn ensure_instance_layout_reports_directory_errors() {
+        let dir = tempdir().expect("tempdir");
+        let paths = sample_paths(dir.path());
+        fs::write(&paths.install_dir, "occupied").expect("file");
+
+        let err = ensure_instance_layout(&paths).expect_err("file path should fail");
+        assert_error_contains(
+            &err,
+            &[
+                paths.install_dir.to_string_lossy().as_ref(),
+                "create directory",
+            ],
+        );
+    }
+
+    #[test]
+    fn install_binary_reports_copy_errors() {
+        let dir = tempdir().expect("tempdir");
+        let paths = sample_paths(dir.path());
+        let err = install_binary(dir.path().join("missing"), &paths, "radrootsd")
+            .expect_err("missing source should fail");
+        assert_error_contains(
+            &err,
+            &[
+                dir.path().join("missing").to_string_lossy().as_ref(),
+                paths
+                    .install_dir
+                    .join("radrootsd")
+                    .to_string_lossy()
+                    .as_ref(),
+                "copy runtime binary",
+            ],
+        );
+    }
+
+    #[test]
+    fn extract_binary_archive_reports_unsupported_format() {
+        let dir = tempdir().expect("tempdir");
+        let paths = sample_paths(dir.path());
+        let archive_path = dir.path().join("radrootsd.zip");
+
+        let err = extract_binary_archive(&archive_path, "zip", &paths, "radrootsd")
+            .expect_err("unsupported archive format should fail");
+        assert_error_contains(&err, &[archive_path.to_string_lossy().as_ref(), "zip"]);
+    }
+
+    #[test]
+    fn extract_binary_archive_reports_missing_archive() {
+        let dir = tempdir().expect("tempdir");
+        let paths = sample_paths(dir.path());
+        let archive_path = dir.path().join("missing.tar.gz");
+
+        let err = extract_binary_archive(&archive_path, "tar.gz", &paths, "radrootsd")
+            .expect_err("missing archive should fail");
+        assert_error_contains(
+            &err,
+            &[archive_path.to_string_lossy().as_ref(), "read managed file"],
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn extract_binary_archive_reports_missing_binary_in_archive() {
+        let dir = tempdir().expect("tempdir");
+        let archive_root = dir.path().join("archive");
+        fs::create_dir_all(archive_root.join("bin")).expect("archive dir");
+        fs::write(archive_root.join("bin/other"), "#!/bin/sh\nexit 0\n").expect("binary");
+        let archive_path = dir.path().join("radrootsd.tar.gz");
+        let file = File::create(&archive_path).expect("archive file");
+        let encoder = flate2::write::GzEncoder::new(file, flate2::Compression::default());
+        let mut builder = tar::Builder::new(encoder);
+        builder
+            .append_path_with_name(archive_root.join("bin/other"), "radrootsd/bin/other")
+            .expect("append path");
+        builder.finish().expect("finish archive");
+        let encoder = builder.into_inner().expect("into encoder");
+        encoder.finish().expect("finish gzip");
+
+        let paths = sample_paths(dir.path());
+        let err = extract_binary_archive(&archive_path, "tar.gz", &paths, "radrootsd")
+            .expect_err("archive should not resolve missing binary");
+        assert_error_contains(
+            &err,
+            &[
+                paths
+                    .install_dir
+                    .join("radrootsd")
+                    .to_string_lossy()
+                    .as_ref(),
+                "did not produce",
+            ],
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn extract_binary_archive_reports_unpack_errors() {
+        let dir = tempdir().expect("tempdir");
+        let archive_path = dir.path().join("invalid.tar.gz");
+        fs::write(&archive_path, "not a gzip archive").expect("write archive");
+        let paths = sample_paths(dir.path());
+
+        let err = extract_binary_archive(&archive_path, "tar.gz", &paths, "radrootsd")
+            .expect_err("invalid archive should fail");
+        assert_error_contains(
+            &err,
+            &[archive_path.to_string_lossy().as_ref(), "unpack archive"],
+        );
+    }
+
+    #[test]
+    fn write_managed_file_reports_write_errors() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("as-dir");
+        fs::create_dir(&path).expect("create directory target");
+
+        let err = write_managed_file(&path, "value").expect_err("directory write should fail");
+        assert_error_contains(
+            &err,
+            &[path.to_string_lossy().as_ref(), "write managed file"],
+        );
+    }
+
+    #[test]
+    fn write_secret_file_reports_write_errors() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("as-dir");
+        fs::create_dir(&path).expect("create directory target");
+
+        let err = write_secret_file(&path, "secret").expect_err("directory write should fail");
+        assert_error_contains(
+            &err,
+            &[path.to_string_lossy().as_ref(), "write managed file"],
+        );
+    }
+
+    #[test]
+    fn read_secret_file_reports_missing_path() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("missing.secret");
+        let err = read_secret_file(&path).expect_err("missing secret should fail");
+        assert_error_contains(
+            &err,
+            &[path.to_string_lossy().as_ref(), "read managed file"],
+        );
+    }
+
+    #[test]
+    fn write_instance_metadata_reports_write_errors() {
+        let dir = tempdir().expect("tempdir");
+        let mut paths = sample_paths(dir.path());
+        ensure_instance_layout(&paths).expect("layout");
+        fs::create_dir_all(&paths.metadata_path).expect("create metadata dir");
+        paths.metadata_path = paths.metadata_path.clone();
+
+        let err = write_instance_metadata(
+            &paths,
+            &ManagedRuntimeInstanceRecord {
+                runtime_id: "radrootsd".to_owned(),
+                instance_id: "local".to_owned(),
+                management_mode: "interactive_user_managed".to_owned(),
+                install_state: ManagedRuntimeInstallState::Configured,
+                binary_path: paths.install_dir.join("radrootsd"),
+                config_path: paths.state_dir.join("config.toml"),
+                logs_path: paths.logs_dir.clone(),
+                run_path: paths.run_dir.clone(),
+                installed_version: "0.1.0".to_owned(),
+                health_endpoint: None,
+                secret_material_ref: None,
+                last_started_at: None,
+                last_stopped_at: None,
+                notes: None,
+            },
+        )
+        .expect_err("metadata dir target should fail");
+        assert_error_contains(
+            &err,
+            &[
+                paths.metadata_path.to_string_lossy().as_ref(),
+                "write runtime instance metadata",
+            ],
+        );
+    }
+
+    #[test]
+    fn start_process_reports_spawn_errors() {
+        let dir = tempdir().expect("tempdir");
+        let paths = sample_paths(dir.path());
+        let err = start_process(dir.path().join("missing"), &[], &[], &paths)
+            .expect_err("missing binary should fail");
+        assert_error_contains(
+            &err,
+            &[
+                dir.path().join("missing").to_string_lossy().as_ref(),
+                "spawn managed runtime process",
+            ],
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn start_process_reports_pid_file_write_errors() {
+        let dir = tempdir().expect("tempdir");
+        let binary = dir.path().join("sleepy.sh");
+        fs::write(&binary, "#!/bin/sh\nexec sleep 1\n").expect("script");
+        let mut paths = sample_paths(dir.path());
+        paths.pid_file_path = paths.run_dir.clone();
+        let installed =
+            install_binary(&binary, &sample_paths(dir.path()), "sleepy.sh").expect("install");
+
+        let err =
+            start_process(&installed, &[], &[], &paths).expect_err("pid file write should fail");
+        assert_error_contains(
+            &err,
+            &[paths.run_dir.to_string_lossy().as_ref(), "write pid file"],
+        );
+    }
+
+    #[test]
+    fn process_running_and_stop_process_handle_missing_pid_file() {
+        let dir = tempdir().expect("tempdir");
+        let paths = sample_paths(dir.path());
+
+        assert!(!process_running(&paths).expect("missing pid should be false"));
+        assert!(!stop_process(&paths).expect("missing pid stop should be false"));
+    }
+
+    #[test]
+    fn process_running_reports_invalid_pid_file() {
+        let dir = tempdir().expect("tempdir");
+        let paths = sample_paths(dir.path());
+        ensure_instance_layout(&paths).expect("layout");
+        fs::write(&paths.pid_file_path, "not-a-pid").expect("write pid");
+
+        let err = process_running(&paths).expect_err("invalid pid should fail");
+        assert_error_contains(
+            &err,
+            &[paths.pid_file_path.to_string_lossy().as_ref(), "not-a-pid"],
+        );
+    }
+
+    #[test]
+    fn stop_process_clears_stale_pid_file() {
+        let dir = tempdir().expect("tempdir");
+        let paths = sample_paths(dir.path());
+        ensure_instance_layout(&paths).expect("layout");
+        fs::write(&paths.pid_file_path, "999999").expect("write pid");
+
+        assert!(!stop_process(&paths).expect("stale pid should return false"));
+        assert!(!paths.pid_file_path.exists());
+    }
+
+    #[test]
+    fn ensure_parent_dir_without_parent_is_a_noop() {
+        ensure_parent_dir(Path::new("/")).expect("root path should have no parent");
+    }
+
+    #[test]
+    fn ensure_parent_dir_reports_directory_creation_errors() {
+        let dir = tempdir().expect("tempdir");
+        let file_parent = dir.path().join("occupied");
+        fs::write(&file_parent, "file").expect("parent file");
+
+        let err =
+            ensure_parent_dir(&file_parent.join("child")).expect_err("file parent should fail");
+        assert_error_contains(
+            &err,
+            &[file_parent.to_string_lossy().as_ref(), "create directory"],
+        );
+    }
+
+    #[test]
+    fn find_binary_with_name_handles_nested_and_missing_files() {
+        let dir = tempdir().expect("tempdir");
+        fs::create_dir_all(dir.path().join("nested")).expect("nested dir");
+        fs::write(dir.path().join("nested/radrootsd"), "binary").expect("binary");
+
+        assert_eq!(
+            find_binary_with_name(dir.path(), "radrootsd"),
+            Some(dir.path().join("nested/radrootsd"))
+        );
+        assert_eq!(find_binary_with_name(dir.path(), "missing"), None);
+    }
+
+    #[test]
+    fn open_log_file_creates_file_and_reports_directory_errors() {
+        let dir = tempdir().expect("tempdir");
+        let file_path = dir.path().join("logs/stdout.log");
+        let file = open_log_file(&file_path).expect("open log");
+        drop(file);
+        assert!(file_path.is_file());
+
+        let bad_path = dir.path().join("bad");
+        fs::create_dir(&bad_path).expect("create dir");
+        let err = open_log_file(&bad_path).expect_err("directory open should fail");
+        assert_error_contains(
+            &err,
+            &[bad_path.to_string_lossy().as_ref(), "open runtime log file"],
+        );
+    }
+
+    #[test]
+    fn read_pid_handles_empty_missing_and_read_error_cases() {
+        let dir = tempdir().expect("tempdir");
+        let mut paths = sample_paths(dir.path());
+
+        assert_eq!(read_pid(&paths).expect("missing pid"), None);
+
+        ensure_instance_layout(&paths).expect("layout");
+        fs::write(&paths.pid_file_path, "   ").expect("write pid");
+        assert_eq!(read_pid(&paths).expect("empty pid"), None);
+
+        paths.pid_file_path = paths.run_dir.clone();
+        let err = read_pid(&paths).expect_err("directory pid file should fail");
+        assert_error_contains(
+            &err,
+            &[paths.run_dir.to_string_lossy().as_ref(), "read pid file"],
+        );
+    }
+
+    #[test]
+    fn remove_path_if_exists_handles_files_directories_and_missing_paths() {
+        let dir = tempdir().expect("tempdir");
+        let file_path = dir.path().join("file.txt");
+        let dir_path = dir.path().join("subdir");
+        fs::write(&file_path, "data").expect("file");
+        fs::create_dir(&dir_path).expect("dir");
+
+        remove_path_if_exists(&file_path).expect("remove file");
+        remove_path_if_exists(&dir_path).expect("remove dir");
+        remove_path_if_exists(dir.path().join("missing").as_path()).expect("remove missing");
+
+        assert!(!file_path.exists());
+        assert!(!dir_path.exists());
+    }
+
+    #[test]
+    fn remove_pid_file_reports_directory_errors() {
+        let dir = tempdir().expect("tempdir");
+        let mut paths = sample_paths(dir.path());
+        ensure_instance_layout(&paths).expect("layout");
+        paths.pid_file_path = paths.run_dir.clone();
+
+        let err = super::remove_pid_file(&paths).expect_err("directory pid path should fail");
+        assert_error_contains(
+            &err,
+            &[
+                paths.run_dir.to_string_lossy().as_ref(),
+                "remove managed path",
+            ],
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn set_mode_helpers_report_missing_path_errors() {
+        let dir = tempdir().expect("tempdir");
+        let missing = dir.path().join("missing");
+
+        let err = set_executable_mode(&missing).expect_err("missing executable should fail");
+        assert_error_contains(
+            &err,
+            &[missing.to_string_lossy().as_ref(), "read managed file"],
+        );
+
+        let err = set_secret_mode(&missing).expect_err("missing secret should fail");
+        assert_error_contains(
+            &err,
+            &[missing.to_string_lossy().as_ref(), "read managed file"],
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn signal_helpers_cover_failure_paths() {
+        let missing_pid = 999_999_u32;
+        assert!(!process_running_for_pid(missing_pid));
+
+        let err = terminate_process(missing_pid).expect_err("terminate should fail");
+        assert_error_contains(&err, &[&missing_pid.to_string(), "stop pid"]);
+
+        let err = force_kill_process(missing_pid).expect_err("force kill should fail");
+        assert_error_contains(&err, &[&missing_pid.to_string(), "stop pid"]);
+
+        let err = signal_process(missing_pid, "-BOGUS").expect_err("invalid signal should fail");
+        assert_error_contains(&err, &[&missing_pid.to_string(), "stop pid"]);
     }
 }

@@ -155,3 +155,230 @@ fn root_class_path(
     };
     Ok(base.join(rel))
 }
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use radroots_runtime_paths::{
+        RadrootsHostEnvironment, RadrootsPathOverrides, RadrootsPathProfile, RadrootsPathResolver,
+        RadrootsPaths, RadrootsPlatform,
+    };
+
+    use super::{bootstrap_runtime, resolve_shared_paths, root_class_path};
+    use crate::{
+        RadrootsRuntimeManagerError, model::RadrootsRuntimeManagementContract, parse_contract_str,
+    };
+
+    const CONTRACT: &str = r#"
+schema = "radroots-runtime-management"
+schema_version = 1
+owner_doc = "docs/migration/radroots-modular-runtime-management-bootstrap-rcl.md"
+runtime_registry = "registry.toml"
+distribution_contract = "distribution.toml"
+capabilities_contract = "capabilities.toml"
+
+[defaults]
+instance_cardinality = "single_default_instance"
+managed_runtime_lookup = "shared_instance_registry"
+explicit_runtime_endpoint_overrides_precede_managed_instance_binding = true
+global_path_mutation_forbidden = true
+
+[management_clients]
+active = ["cli"]
+defined = ["community-app-desktop"]
+
+[managed_runtime_targets]
+active = ["radrootsd"]
+defined = ["myc", "rhi"]
+bootstrap_only = ["hyf"]
+
+[lifecycle]
+actions = ["install", "uninstall", "start"]
+destructive_actions = ["uninstall"]
+health_states = ["not_installed", "running"]
+
+[mode.interactive_user_managed]
+contract_state = "active"
+platforms = ["linux", "macos", "windows"]
+supported_profiles = ["interactive_user", "repo_local"]
+service_manager_integration = false
+uses_absolute_binary_paths = true
+requires_explicit_pid_tracking = true
+requires_explicit_log_tracking = true
+default_instance_cardinality = "single_default_instance"
+
+[mode.service_host_managed]
+contract_state = "defined"
+platforms = ["linux", "macos", "windows"]
+supported_profiles = ["service_host"]
+service_manager_integration = true
+uses_absolute_binary_paths = true
+default_instance_cardinality = "single_default_instance"
+
+[paths.interactive_user_managed]
+shared_namespace = "shared/runtime-manager"
+instance_registry_root_class = "config"
+instance_registry_rel = "shared/runtime-manager/instances.toml"
+artifact_cache_root_class = "cache"
+artifact_cache_rel = "shared/runtime-manager/artifacts"
+install_root_class = "data"
+install_root_rel = "shared/runtime-manager/installs"
+state_root_class = "data"
+state_root_rel = "shared/runtime-manager/state"
+logs_root_class = "logs"
+logs_root_rel = "shared/runtime-manager"
+run_root_class = "run"
+run_root_rel = "shared/runtime-manager"
+secrets_root_class = "secrets"
+secrets_namespace_rel = "shared/runtime-manager"
+
+[instance_metadata]
+required_fields = ["runtime_id"]
+optional_fields = ["notes"]
+
+[bootstrap.radrootsd]
+runtime_id = "radrootsd"
+management_mode = "interactive_user_managed"
+default_instance_id = "local"
+install_strategy = "archive_unpack"
+config_format = "toml"
+requires_bootstrap_secret = true
+requires_config_bootstrap = true
+requires_signer_provider = false
+health_surface = "jsonrpc_status"
+preferred_cli_binding = true
+"#;
+
+    fn contract() -> RadrootsRuntimeManagementContract {
+        parse_contract_str(CONTRACT).expect("parse contract")
+    }
+
+    fn assert_error_contains(err: &RadrootsRuntimeManagerError, parts: &[&str]) {
+        let rendered = err.to_string();
+        for part in parts {
+            assert!(
+                rendered.contains(part),
+                "expected `{rendered}` to contain `{part}`"
+            );
+        }
+    }
+
+    fn linux_resolver() -> RadrootsPathResolver {
+        RadrootsPathResolver::new(
+            RadrootsPlatform::Linux,
+            RadrootsHostEnvironment {
+                home_dir: Some(PathBuf::from("/home/treesap")),
+                ..RadrootsHostEnvironment::default()
+            },
+        )
+    }
+
+    #[test]
+    fn bootstrap_lookup_reports_unknown_runtime() {
+        let err = bootstrap_runtime(&contract(), "missing-runtime").expect_err("missing runtime");
+        assert_error_contains(&err, &["missing-runtime", "no bootstrap entry"]);
+    }
+
+    #[test]
+    fn resolve_shared_paths_reports_unknown_management_mode() {
+        let err = resolve_shared_paths(
+            &contract(),
+            &linux_resolver(),
+            RadrootsPathProfile::InteractiveUser,
+            &RadrootsPathOverrides::default(),
+            "missing-mode",
+        )
+        .expect_err("missing mode should fail");
+        assert_error_contains(&err, &["management mode `missing-mode`"]);
+    }
+
+    #[test]
+    fn resolve_shared_paths_reports_unsupported_profile() {
+        let err = resolve_shared_paths(
+            &contract(),
+            &linux_resolver(),
+            RadrootsPathProfile::ServiceHost,
+            &RadrootsPathOverrides::default(),
+            "interactive_user_managed",
+        )
+        .expect_err("service_host should be unsupported for interactive mode");
+        assert_error_contains(&err, &["interactive_user_managed", "service_host"]);
+    }
+
+    #[test]
+    fn resolve_shared_paths_reports_missing_path_spec() {
+        let mut contract = contract();
+        contract.paths.remove("interactive_user_managed");
+
+        let err = resolve_shared_paths(
+            &contract,
+            &linux_resolver(),
+            RadrootsPathProfile::InteractiveUser,
+            &RadrootsPathOverrides::default(),
+            "interactive_user_managed",
+        )
+        .expect_err("missing path spec should fail");
+        assert_error_contains(
+            &err,
+            &["interactive_user_managed", "no shared path specification"],
+        );
+    }
+
+    #[test]
+    fn resolve_shared_paths_reports_unknown_root_class() {
+        let mut contract = contract();
+        contract
+            .paths
+            .get_mut("interactive_user_managed")
+            .expect("path spec")
+            .instance_registry_root_class = "bogus".to_string();
+
+        let err = resolve_shared_paths(
+            &contract,
+            &linux_resolver(),
+            RadrootsPathProfile::InteractiveUser,
+            &RadrootsPathOverrides::default(),
+            "interactive_user_managed",
+        )
+        .expect_err("unknown root class should fail");
+        assert_error_contains(&err, &["unknown root class `bogus`"]);
+    }
+
+    #[test]
+    fn root_class_path_maps_all_known_classes() {
+        let roots = RadrootsPaths {
+            config: PathBuf::from("/roots/config"),
+            data: PathBuf::from("/roots/data"),
+            cache: PathBuf::from("/roots/cache"),
+            logs: PathBuf::from("/roots/logs"),
+            run: PathBuf::from("/roots/run"),
+            secrets: PathBuf::from("/roots/secrets"),
+        };
+
+        assert_eq!(
+            root_class_path(&roots, "config", "a/b").expect("config root"),
+            PathBuf::from("/roots/config/a/b")
+        );
+        assert_eq!(
+            root_class_path(&roots, "data", "a/b").expect("data root"),
+            PathBuf::from("/roots/data/a/b")
+        );
+        assert_eq!(
+            root_class_path(&roots, "cache", "a/b").expect("cache root"),
+            PathBuf::from("/roots/cache/a/b")
+        );
+        assert_eq!(
+            root_class_path(&roots, "logs", "a/b").expect("logs root"),
+            PathBuf::from("/roots/logs/a/b")
+        );
+        assert_eq!(
+            root_class_path(&roots, "run", "a/b").expect("run root"),
+            PathBuf::from("/roots/run/a/b")
+        );
+        assert_eq!(
+            root_class_path(&roots, "secrets", "a/b").expect("secrets root"),
+            PathBuf::from("/roots/secrets/a/b")
+        );
+    }
+}

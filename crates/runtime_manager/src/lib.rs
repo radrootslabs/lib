@@ -56,6 +56,16 @@ mod tests {
         resolve_shared_paths, save_registry, upsert_instance,
     };
 
+    fn assert_error_contains(err: &crate::RadrootsRuntimeManagerError, parts: &[&str]) {
+        let rendered = err.to_string();
+        for part in parts {
+            assert!(
+                rendered.contains(part),
+                "expected `{rendered}` to contain `{part}`"
+            );
+        }
+    }
+
     const CONTRACT: &str = r#"
 schema = "radroots-runtime-management"
 schema_version = 1
@@ -160,6 +170,22 @@ preferred_cli_binding = true
     }
 
     #[test]
+    fn parse_contract_reports_invalid_toml() {
+        let err = parse_contract_str("schema = [").expect_err("invalid toml should fail");
+        assert_error_contains(&err, &["parse runtime management contract"]);
+    }
+
+    #[test]
+    fn parse_contract_rejects_unexpected_schema() {
+        let err = parse_contract_str(&CONTRACT.replace(
+            "schema = \"radroots-runtime-management\"",
+            "schema = \"wrong-schema\"",
+        ))
+        .expect_err("unexpected schema should fail");
+        assert_error_contains(&err, &["wrong-schema", crate::RUNTIME_MANAGEMENT_SCHEMA]);
+    }
+
+    #[test]
     fn resolve_shared_paths_uses_interactive_user_roots() {
         let contract = parse_contract_str(CONTRACT).expect("parse contract");
         let resolver = RadrootsPathResolver::new(
@@ -188,8 +214,24 @@ preferred_cli_binding = true
             PathBuf::from("/home/treesap/.radroots/data/shared/runtime-manager/installs")
         );
         assert_eq!(
+            paths.artifact_cache_dir,
+            PathBuf::from("/home/treesap/.radroots/cache/shared/runtime-manager/artifacts")
+        );
+        assert_eq!(
+            paths.state_root,
+            PathBuf::from("/home/treesap/.radroots/data/shared/runtime-manager/state")
+        );
+        assert_eq!(
             paths.logs_root,
             PathBuf::from("/home/treesap/.radroots/logs/shared/runtime-manager")
+        );
+        assert_eq!(
+            paths.run_root,
+            PathBuf::from("/home/treesap/.radroots/run/shared/runtime-manager")
+        );
+        assert_eq!(
+            paths.secrets_root,
+            PathBuf::from("/home/treesap/.radroots/secrets/shared/runtime-manager")
         );
     }
 
