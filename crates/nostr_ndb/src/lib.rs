@@ -6,6 +6,9 @@ compile_error!("radroots_nostr_ndb requires the std feature");
 
 extern crate alloc;
 
+#[cfg(test)]
+mod test_fixtures;
+
 #[cfg(feature = "ndb")]
 pub mod config;
 pub mod error;

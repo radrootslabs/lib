@@ -1,3 +1,6 @@
+#[path = "../src/test_fixtures.rs"]
+mod test_fixtures;
+
 use radroots_events::RadrootsNostrEvent;
 use radroots_events::job::{JobFeedbackStatus, JobInputType, JobPaymentRequest};
 use radroots_events::job_feedback::RadrootsJobFeedback;
@@ -8,7 +11,7 @@ use radroots_events_codec::job::feedback::encode::to_wire_parts as to_feedback_w
 use radroots_events_codec::job::request::encode::to_wire_parts as to_request_wire_parts;
 use radroots_events_codec::job::result::encode::to_wire_parts as to_result_wire_parts;
 use radroots_events_codec::job::traits::{BorrowedEventAdapter, JobEventLike};
-use radroots_test_fixtures::{FIXTURE_ALICE_PUBLIC_KEY_HEX, RELAY_PRIMARY_WSS};
+use test_fixtures::{FIXTURE_ALICE_PUBLIC_KEY_HEX, RELAY_PRIMARY_WSS};
 
 fn sample_request() -> RadrootsJobRequest {
     RadrootsJobRequest {

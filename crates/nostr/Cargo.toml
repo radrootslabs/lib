@@ -45,5 +45,4 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
-radroots_test_fixtures = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

@@ -14,6 +14,8 @@ pub mod sqlite;
 pub mod store;
 
 #[cfg(test)]
+mod test_fixtures;
+#[cfg(test)]
 mod test_support;
 
 pub mod prelude {

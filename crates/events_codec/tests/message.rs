@@ -1,3 +1,6 @@
+#[path = "../src/test_fixtures.rs"]
+mod test_fixtures;
+
 use radroots_events::{
     RadrootsNostrEventPtr,
     kinds::{KIND_MESSAGE, KIND_POST},
@@ -8,7 +11,7 @@ use radroots_events_codec::message::decode::{
     data_from_event, message_from_tags, parsed_from_event,
 };
 use radroots_events_codec::message::encode::{message_build_tags, to_wire_parts};
-use radroots_test_fixtures::{RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS};
+use test_fixtures::{RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS};
 
 #[test]
 fn message_build_tags_requires_recipients() {

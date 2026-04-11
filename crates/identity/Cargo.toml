@@ -38,5 +38,4 @@ ts-rs = { workspace = true, optional = true }
 zeroize = { workspace = true, optional = true }
 
 [dev-dependencies]
-radroots_test_fixtures = { workspace = true }
 tempfile = { workspace = true }

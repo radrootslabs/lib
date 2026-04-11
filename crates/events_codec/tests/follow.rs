@@ -1,3 +1,6 @@
+#[path = "../src/test_fixtures.rs"]
+mod test_fixtures;
+
 use radroots_events::{
     follow::{RadrootsFollow, RadrootsFollowProfile},
     kinds::{KIND_FOLLOW, KIND_POST},
@@ -9,7 +12,7 @@ use radroots_events_codec::follow::encode::{
     FollowMutation, follow_apply, follow_to_wire_parts_after, to_wire_parts,
     to_wire_parts_with_kind,
 };
-use radroots_test_fixtures::{RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS};
+use test_fixtures::{RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS};
 
 #[test]
 fn follow_to_wire_parts_builds_p_tags() {

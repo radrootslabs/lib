@@ -15,6 +15,9 @@ pub mod tags;
 pub mod types;
 pub mod util;
 
+#[cfg(test)]
+mod test_fixtures;
+
 #[cfg(feature = "codec")]
 pub mod codec_adapters;
 

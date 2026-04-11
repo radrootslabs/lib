@@ -36,6 +36,5 @@ thiserror = { workspace = true }
 tokio = { workspace = true, optional = true, features = ["rt", "sync", "time"] }
 
 [dev-dependencies]
-radroots_test_fixtures = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt", "sync", "time"] }
 tempfile = { workspace = true }

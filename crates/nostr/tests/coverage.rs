@@ -1,3 +1,6 @@
+#[path = "../src/test_fixtures.rs"]
+mod test_fixtures;
+
 use std::borrow::Cow;
 
 use nostr::nips::nip04;
@@ -31,7 +34,7 @@ use radroots_nostr::types::{
 use radroots_nostr::util::{
     created_at_u32_saturating, event_created_at_u32_saturating, radroots_nostr_npub_string,
 };
-use radroots_test_fixtures::RELAY_PRIMARY_WSS;
+use test_fixtures::RELAY_PRIMARY_WSS;
 
 fn make_keys() -> RadrootsNostrKeys {
     RadrootsNostrKeys::generate()

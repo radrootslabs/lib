@@ -1,3 +1,6 @@
+#[path = "../src/test_fixtures.rs"]
+mod test_fixtures;
+
 use radroots_events::{
     kinds::{KIND_LIST_SET_FOLLOW, KIND_POST},
     list::RadrootsListEntry,
@@ -8,7 +11,7 @@ use radroots_events_codec::list_set::decode::{
     data_from_event, list_set_from_tags, parsed_from_event,
 };
 use radroots_events_codec::list_set::encode::{list_set_build_tags, to_wire_parts_with_kind};
-use radroots_test_fixtures::APP_PRIMARY_HTTPS;
+use test_fixtures::APP_PRIMARY_HTTPS;
 
 fn app_url(path: &str) -> String {
     format!("{APP_PRIMARY_HTTPS}/{path}")

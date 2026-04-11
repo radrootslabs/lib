@@ -34,6 +34,9 @@ pub mod list_set;
 pub mod listing;
 pub mod trade;
 
+#[cfg(test)]
+mod test_fixtures;
+
 #[cfg(feature = "serde_json")]
 pub mod relay_document;
 

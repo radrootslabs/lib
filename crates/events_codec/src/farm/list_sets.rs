@@ -215,7 +215,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use radroots_test_fixtures::FIXTURE_ALICE_PUBLIC_KEY_HEX;
+    use crate::test_fixtures::FIXTURE_ALICE_PUBLIC_KEY_HEX;
 
     #[test]
     fn farm_list_set_id_validates_farm_id() {

@@ -19,4 +19,3 @@ thiserror = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
-radroots_test_fixtures = { workspace = true }

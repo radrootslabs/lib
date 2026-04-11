@@ -617,6 +617,9 @@ mod tests {
     use super::*;
     use core::str::FromStr;
 
+    use crate::test_fixtures::{
+        CDN_PRIMARY_HTTPS, FIXTURE_ALICE_NPUB, FIXTURE_ALICE_PUBLIC_KEY_HEX,
+    };
     use radroots_core::{
         RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreDiscountScope,
         RadrootsCoreDiscountThreshold, RadrootsCoreDiscountValue, RadrootsCoreQuantity,
@@ -624,9 +627,6 @@ mod tests {
     };
     use radroots_events::listing::{
         RadrootsListingImageSize, RadrootsListingProduct, RadrootsListingStatus,
-    };
-    use radroots_test_fixtures::{
-        CDN_PRIMARY_HTTPS, FIXTURE_ALICE_NPUB, FIXTURE_ALICE_PUBLIC_KEY_HEX,
     };
 
     const TEST_NPUB: &str = FIXTURE_ALICE_NPUB;

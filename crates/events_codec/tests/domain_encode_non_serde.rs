@@ -1,3 +1,6 @@
+#[path = "../src/test_fixtures.rs"]
+mod test_fixtures;
+
 use std::str::FromStr;
 
 use radroots_core::{
@@ -39,7 +42,7 @@ use radroots_events_codec::resource_area::list_sets::{
     resource_area_stewards_list_set,
 };
 use radroots_events_codec::resource_cap::encode::resource_harvest_cap_build_tags;
-use radroots_test_fixtures::FIXTURE_ALICE_PUBLIC_KEY_HEX;
+use test_fixtures::FIXTURE_ALICE_PUBLIC_KEY_HEX;
 
 const VALID_PUBKEY: &str = FIXTURE_ALICE_PUBLIC_KEY_HEX;
 const VALID_FARM_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAA";

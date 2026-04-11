@@ -30,4 +30,3 @@ serde_json = { workspace = true, default-features = false, features = [
 nostr = { workspace = true, optional = true }
 
 [dev-dependencies]
-radroots_test_fixtures = { workspace = true }

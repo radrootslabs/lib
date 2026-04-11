@@ -105,10 +105,10 @@ pub fn to_wire_parts_with_kind(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_fixtures::FIXTURE_ALICE_PUBLIC_KEY_HEX;
     use radroots_core::{RadrootsCoreDecimal, RadrootsCoreQuantity, RadrootsCoreUnit};
     use radroots_events::resource_area::RadrootsResourceAreaRef;
     use radroots_events::resource_cap::RadrootsResourceHarvestProduct;
-    use radroots_test_fixtures::FIXTURE_ALICE_PUBLIC_KEY_HEX;
 
     fn sample_cap_with_category(category: Option<&str>) -> RadrootsResourceHarvestCap {
         RadrootsResourceHarvestCap {

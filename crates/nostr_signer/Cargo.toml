@@ -34,7 +34,6 @@ uuid = { workspace = true }
 
 [dev-dependencies]
 radroots_sql_core = { workspace = true, features = ["native"] }
-radroots_test_fixtures = { workspace = true }
 tempfile = { workspace = true }
 
 [lints.rust]

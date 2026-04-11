@@ -1,4 +1,6 @@
 mod common;
+#[path = "../src/test_fixtures.rs"]
+mod test_fixtures;
 
 use radroots_events::job::{JobInputType, JobPaymentRequest};
 use radroots_events::job_request::RadrootsJobInput;
@@ -8,7 +10,7 @@ use radroots_events_codec::job::encode::JobEncodeError;
 use radroots_events_codec::job::error::JobParseError;
 use radroots_events_codec::job::result::decode::{job_result_from_tags, parsed_from_event};
 use radroots_events_codec::job::result::encode::to_wire_parts;
-use radroots_test_fixtures::{APP_PRIMARY_HTTPS, RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS};
+use test_fixtures::{APP_PRIMARY_HTTPS, RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS};
 
 fn sample_result() -> RadrootsJobResult {
     RadrootsJobResult {

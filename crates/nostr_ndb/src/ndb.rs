@@ -351,10 +351,10 @@ mod tests {
     use crate::filter::RadrootsNostrNdbFilterSpec;
     use crate::ingest::RadrootsNostrNdbIngestSource;
     use crate::query::RadrootsNostrNdbQuerySpec;
+    use crate::test_fixtures::{FIXTURE_ALICE_EMAIL, FIXTURE_ALICE_USERNAME};
     use futures::StreamExt;
     use radroots_nostr::prelude::{RadrootsNostrEventBuilder, RadrootsNostrKeys};
     use radroots_nostr::prelude::{RadrootsNostrMetadata, radroots_nostr_build_metadata_event};
-    use radroots_test_fixtures::{FIXTURE_ALICE_EMAIL, FIXTURE_ALICE_USERNAME};
     use std::sync::atomic::Ordering;
     use std::sync::{Mutex, OnceLock};
     use std::time::Duration;

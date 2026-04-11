@@ -1,4 +1,6 @@
 mod common;
+#[path = "../src/test_fixtures.rs"]
+mod test_fixtures;
 
 use radroots_events::kinds::KIND_POST;
 use radroots_events_codec::error::EventParseError;
@@ -6,7 +8,7 @@ use radroots_events_codec::event_ref::{
     build_event_ref_tag, find_event_ref_tag, parse_event_ref_tag, parse_nip10_ref_tags,
     push_nip10_ref_tags,
 };
-use radroots_test_fixtures::{RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS, RELAY_TERTIARY_WSS};
+use test_fixtures::{RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS, RELAY_TERTIARY_WSS};
 
 #[test]
 fn build_and_parse_roundtrip_with_d_tag_and_relays() {

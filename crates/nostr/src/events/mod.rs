@@ -39,8 +39,8 @@ pub fn radroots_nostr_build_event(
 #[cfg(test)]
 mod tests {
     use super::radroots_nostr_build_event;
+    use crate::test_fixtures::FIXTURE_ALICE_PUBLIC_KEY_HEX;
     use crate::types::{RadrootsNostrPublicKey, RadrootsNostrTagKind};
-    use radroots_test_fixtures::FIXTURE_ALICE_PUBLIC_KEY_HEX;
 
     #[test]
     fn build_event_preserves_self_p_tag() {

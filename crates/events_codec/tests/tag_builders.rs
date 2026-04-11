@@ -1,3 +1,6 @@
+#[path = "../src/test_fixtures.rs"]
+mod test_fixtures;
+
 use radroots_core::{
     RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreDiscount, RadrootsCoreDiscountScope,
     RadrootsCoreDiscountThreshold, RadrootsCoreDiscountValue, RadrootsCoreMoney,
@@ -46,7 +49,7 @@ use radroots_events_codec::job::encode::JobEncodeError;
 use radroots_events_codec::listing::encode::listing_build_tags;
 use radroots_events_codec::listing::tags::{ListingTagOptions, listing_tags_with_options};
 use radroots_events_codec::tag_builders::RadrootsEventTagBuilder;
-use radroots_test_fixtures::{
+use test_fixtures::{
     CDN_PRIMARY_HTTPS, FIXTURE_ALICE_NPUB, FIXTURE_ALICE_PUBLIC_KEY_HEX, RELAY_PRIMARY_WSS,
 };
 

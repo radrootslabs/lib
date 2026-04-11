@@ -1,5 +1,8 @@
 #![cfg(feature = "serde_json")]
 
+#[path = "../src/test_fixtures.rs"]
+mod test_fixtures;
+
 use radroots_core::{RadrootsCoreDecimal, RadrootsCoreQuantity, RadrootsCoreUnit};
 use radroots_events::coop::RadrootsCoop;
 use radroots_events::document::{RadrootsDocument, RadrootsDocumentSubject};
@@ -42,7 +45,7 @@ use radroots_events_codec::resource_cap::decode::{
     data_from_event as resource_cap_metadata_from_event,
     parsed_from_event as resource_cap_index_from_event, resource_harvest_cap_from_event,
 };
-use radroots_test_fixtures::{FIXTURE_ALICE_NPUB, FIXTURE_ALICE_PUBLIC_KEY_HEX};
+use test_fixtures::{FIXTURE_ALICE_NPUB, FIXTURE_ALICE_PUBLIC_KEY_HEX};
 
 const TEST_NPUB: &str = FIXTURE_ALICE_NPUB;
 const TEST_PUBKEY_HEX: &str = FIXTURE_ALICE_PUBLIC_KEY_HEX;

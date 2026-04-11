@@ -1,3 +1,6 @@
+#[path = "../src/test_fixtures.rs"]
+mod test_fixtures;
+
 use nostr::{EventBuilder, Keys, PublicKey, RelayUrl, SecretKey, Timestamp, UnsignedEvent};
 use radroots_nostr_connect::prelude::{
     RADROOTS_NOSTR_CONNECT_PENDING_CONNECTION_ERROR, RadrootsNostrConnectMethod,
@@ -5,11 +8,11 @@ use radroots_nostr_connect::prelude::{
     RadrootsNostrConnectRequestMessage, RadrootsNostrConnectResponse,
     RadrootsNostrConnectResponseEnvelope, RadrootsNostrConnectUri,
 };
-use radroots_test_fixtures::{
+use serde_json::{Value, json};
+use test_fixtures::{
     APP_PRIMARY_HTTPS, CDN_PRIMARY_HTTPS, FIXTURE_ALICE, RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS,
     RELAY_TERTIARY_WSS,
 };
-use serde_json::{Value, json};
 
 fn test_public_key() -> PublicKey {
     PublicKey::parse(FIXTURE_ALICE.public_key_hex).expect("public key")

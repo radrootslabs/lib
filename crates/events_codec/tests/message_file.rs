@@ -1,3 +1,6 @@
+#[path = "../src/test_fixtures.rs"]
+mod test_fixtures;
+
 use radroots_events::RadrootsNostrEventPtr;
 use radroots_events::kinds::{KIND_MESSAGE, KIND_MESSAGE_FILE};
 use radroots_events::message::RadrootsMessageRecipient;
@@ -10,7 +13,7 @@ use radroots_events_codec::message_file::decode::{
 use radroots_events_codec::message_file::encode::{
     message_file_build_tags, to_wire_parts, to_wire_parts_with_kind,
 };
-use radroots_test_fixtures::{CDN_PRIMARY_HTTPS, RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS};
+use test_fixtures::{CDN_PRIMARY_HTTPS, RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS};
 
 fn file_url(path: &str) -> String {
     format!("{CDN_PRIMARY_HTTPS}/{path}")

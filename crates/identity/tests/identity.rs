@@ -1,3 +1,6 @@
+#[path = "../src/test_fixtures.rs"]
+mod test_fixtures;
+
 use radroots_events::profile::RadrootsProfile;
 use radroots_identity::{
     DEFAULT_IDENTITY_PATH, IdentityError, RadrootsIdentity, RadrootsIdentityId,
@@ -11,12 +14,12 @@ use radroots_runtime_paths::{
     RadrootsHostEnvironment, RadrootsPathOverrides, RadrootsPathProfile, RadrootsPathResolver,
     RadrootsPlatform,
 };
-use radroots_test_fixtures::{ApprovedFixtureIdentity, FIXTURE_ALICE, FIXTURE_BOB};
 use std::{
     ffi::OsString,
     path::PathBuf,
     sync::{Mutex, OnceLock},
 };
+use test_fixtures::{ApprovedFixtureIdentity, FIXTURE_ALICE, FIXTURE_BOB};
 
 fn home_env_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();

@@ -90,8 +90,8 @@ pub fn to_wire_parts_with_kind(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_fixtures::FIXTURE_ALICE_PUBLIC_KEY_HEX;
     use radroots_events::document::RadrootsDocumentSubject;
-    use radroots_test_fixtures::FIXTURE_ALICE_PUBLIC_KEY_HEX;
 
     fn sample_document_address() -> String {
         format!("30340:{FIXTURE_ALICE_PUBLIC_KEY_HEX}:AAAAAAAAAAAAAAAAAAAAAA")

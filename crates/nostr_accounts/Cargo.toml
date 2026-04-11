@@ -48,5 +48,4 @@ thiserror = { workspace = true }
 zeroize = { workspace = true }
 
 [dev-dependencies]
-radroots_test_fixtures = { workspace = true }
 tempfile = { workspace = true }

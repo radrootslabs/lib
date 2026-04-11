@@ -1,3 +1,6 @@
+#[path = "../src/test_fixtures.rs"]
+mod test_fixtures;
+
 use radroots_events::job::{JobFeedbackStatus, JobInputType};
 use radroots_events_codec::job::error::JobParseError;
 use radroots_events_codec::job::util::{
@@ -5,7 +8,7 @@ use radroots_events_codec::job::util::{
     parse_amount_tag_sat, parse_bid_tag_sat, parse_bool_encrypted, parse_i_tags, parse_params,
     push_amount_tag_msat, push_bid_tag_sat,
 };
-use radroots_test_fixtures::{APP_PRIMARY_HTTPS, RELAY_PRIMARY_WSS};
+use test_fixtures::{APP_PRIMARY_HTTPS, RELAY_PRIMARY_WSS};
 
 #[test]
 fn parse_bool_encrypted_detects_tag() {

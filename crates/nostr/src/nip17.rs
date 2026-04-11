@@ -214,10 +214,10 @@ where
 #[cfg(all(test, feature = "nip17"))]
 mod tests {
     use super::*;
+    use crate::test_fixtures::{FIXTURE_ALICE, FIXTURE_BOB};
     use nostr::{Keys, SecretKey};
     use radroots_events::message::{RadrootsMessage, RadrootsMessageRecipient};
     use radroots_events::message_file::{RadrootsMessageFile, RadrootsMessageFileDimensions};
-    use radroots_test_fixtures::{FIXTURE_ALICE, FIXTURE_BOB};
 
     fn sender_keys() -> Keys {
         Keys::new(SecretKey::from_hex(FIXTURE_ALICE.secret_key_hex).unwrap())

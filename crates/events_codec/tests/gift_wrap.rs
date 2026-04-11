@@ -1,3 +1,6 @@
+#[path = "../src/test_fixtures.rs"]
+mod test_fixtures;
+
 use radroots_events::gift_wrap::{RadrootsGiftWrap, RadrootsGiftWrapRecipient};
 use radroots_events::kinds::{KIND_GIFT_WRAP, KIND_MESSAGE};
 
@@ -8,7 +11,7 @@ use radroots_events_codec::gift_wrap::decode::{
 use radroots_events_codec::gift_wrap::encode::{
     gift_wrap_build_tags, to_wire_parts, to_wire_parts_with_kind,
 };
-use radroots_test_fixtures::RELAY_PRIMARY_WSS;
+use test_fixtures::RELAY_PRIMARY_WSS;
 
 fn sample_gift_wrap() -> RadrootsGiftWrap {
     RadrootsGiftWrap {

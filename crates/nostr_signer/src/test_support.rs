@@ -1,9 +1,9 @@
-use nostr::{Keys, PublicKey, RelayUrl, SecretKey};
-use radroots_identity::{RadrootsIdentity, RadrootsIdentityPublic};
-use radroots_test_fixtures::{
+use crate::test_fixtures::{
     API_PRIMARY_HTTPS, ApprovedFixtureIdentity, FIXTURE_ALICE, FIXTURE_BOB, FIXTURE_CAROL,
     FIXTURE_DIEGO, RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS, RELAY_TERTIARY_WSS,
 };
+use nostr::{Keys, PublicKey, RelayUrl, SecretKey};
+use radroots_identity::{RadrootsIdentity, RadrootsIdentityPublic};
 
 fn approved_public_identity(identity: ApprovedFixtureIdentity) -> RadrootsIdentityPublic {
     RadrootsIdentity::from_secret_key_str(identity.secret_key_hex)

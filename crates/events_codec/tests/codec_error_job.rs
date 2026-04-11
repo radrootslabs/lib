@@ -1,3 +1,6 @@
+#[path = "../src/test_fixtures.rs"]
+mod test_fixtures;
+
 use std::error::Error as _;
 
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
@@ -7,11 +10,11 @@ use radroots_events_codec::job::encode::{
 };
 use radroots_events_codec::job::error::JobParseError;
 use radroots_events_codec::profile::error::ProfileEncodeError;
-use radroots_test_fixtures::{FIXTURE_ALICE_PUBLIC_KEY_HEX, RELAY_PRIMARY_WSS};
 #[cfg(feature = "serde_json")]
 use serde::Serialize;
 #[cfg(feature = "serde_json")]
 use serde::ser::{Error as _, Serializer};
+use test_fixtures::{FIXTURE_ALICE_PUBLIC_KEY_HEX, RELAY_PRIMARY_WSS};
 
 #[test]
 fn parse_error_display_and_source_cover_variants() {
