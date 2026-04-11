@@ -266,7 +266,7 @@ description = "crate a"
 repository = "https://example.com/a"
 homepage = "https://example.com/a"
 documentation = "https://docs.example.com/a"
-readme = "README.md"
+readme = "README"
 
 [features]
 ts-rs = []

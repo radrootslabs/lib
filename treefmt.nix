@@ -4,7 +4,6 @@
   settings.global.excludes = [
     ".direnv/**"
     "target/**"
-    "crates/*/bindings/**"
   ];
 
   programs.nixfmt.enable = true;

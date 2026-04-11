@@ -19,7 +19,7 @@ let
         ../Cargo.toml
         ../Cargo.lock
         ../Makefile
-        ../README.md
+        ../README
         ../rust-toolchain.toml
         ../conformance
         ../contract

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-tracked_artifacts="$(git ls-files 'crates/*/bindings/**')"
+tracked_artifacts="$(git ls-files 'target/ts-rs/**' 'target/sdk-export-ci/**')"
 
 if [[ -n $tracked_artifacts ]]; then
-  echo "committed ts artifacts are not allowed under crates/*/bindings/**"
+  echo "committed generated typescript artifacts are not allowed under target/ts-rs or target/sdk-export-ci"
   echo "$tracked_artifacts"
   exit 1
 fi
 
-echo "no committed ts artifacts found under crates/*/bindings/**"
+echo "no committed generated typescript artifacts found under target/ts-rs or target/sdk-export-ci"

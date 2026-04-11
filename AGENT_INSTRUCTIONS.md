@@ -1,6 +1,6 @@
 # Radroots Core Libraries - Agent Instructions
 
-**For repository overview and setup, see [README.md](README.md). For repository rules, see [AGENTS.md](AGENTS.md).**
+**For repository overview and setup, see [README](README). For repository rules, see [AGENTS.md](AGENTS.md).**
 
 This document contains detailed operational instructions for contributors and coding agents working on development, testing, and releases in the Radroots Core Libraries repository.
 
@@ -40,7 +40,7 @@ Before editing code:
 
 - Read `AGENTS.md`.
 - Read this file.
-- Read `README.md`, `docs/nix.md`, and `contract/README.md` when the change touches workflow, exports, or public surfaces.
+- Read `README`, `docs/nix.md`, and `contract/README.md` when the change touches workflow, exports, or public surfaces.
 - Read the relevant crate manifest, implementation files, and nearby tests before proposing a new structure.
 - Check `git status --short`.
 

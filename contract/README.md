@@ -50,7 +50,7 @@ Repository guards also enforce:
 
 - deterministic export requirements
 - strict no-legacy identifier policy for replica surfaces
-- no committed generated TypeScript artifacts under crate bindings
+- no committed generated TypeScript artifacts in repo export directories (`target/ts-rs/` and `target/sdk-export-ci/`)
 
 ## Coverage Policy
 

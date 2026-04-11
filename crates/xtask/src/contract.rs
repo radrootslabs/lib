@@ -1138,7 +1138,7 @@ description = "crate a"
 repository = "https://example.com/a"
 homepage = "https://example.com/a"
 documentation = "https://docs.example.com/a"
-readme = "README.md"
+readme = "README"
 "#,
         );
         write_file(
@@ -2165,7 +2165,7 @@ description = "crate a"
 repository = "https://example.com/a"
 homepage = "https://example.com/a"
 documentation = "https://docs.example.com/a"
-readme = "README.md"
+readme = "README"
 
 [dependencies]
 radroots_b = { path = "../b" }
@@ -2181,7 +2181,7 @@ description = "crate b"
 repository = "https://example.com/b"
 homepage = "https://example.com/b"
 documentation = "https://docs.example.com/b"
-readme = "README.md"
+readme = "README"
 "#,
         );
         write_file(
@@ -2269,7 +2269,7 @@ description = "crate a"
 repository = "https://example.com/a"
 homepage = "https://example.com/a"
 documentation = "https://docs.example.com/a"
-readme = "README.md"
+readme = "README"
 "#,
         );
         write_file(
@@ -2570,7 +2570,7 @@ description = "crate b duplicate name"
 repository = "https://example.com/b"
 homepage = "https://example.com/b"
 documentation = "https://docs.example.com/b"
-readme = "README.md"
+readme = "README"
 publish = false
 "#,
         );
