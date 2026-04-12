@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use radroots_runtime_paths::RadrootsRuntimePathsError;
+use radroots_runtime_paths::{RadrootsRuntimePathSelectionError, RadrootsRuntimePathsError};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -121,4 +121,6 @@ pub enum RadrootsRuntimeManagerError {
     },
     #[error(transparent)]
     RuntimePaths(#[from] RadrootsRuntimePathsError),
+    #[error(transparent)]
+    RuntimePathSelection(#[from] RadrootsRuntimePathSelectionError),
 }

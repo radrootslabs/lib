@@ -14,8 +14,12 @@ pub use lifecycle::{
     write_instance_metadata, write_managed_file, write_secret_file,
 };
 pub use managed::{
-    active_management_mode_for_profile, load_management_context, resolve_runtime_target,
-    runtime_group, ManagedRuntimeContext, ManagedRuntimeGroup, ManagedRuntimeTarget,
+    ManagedRuntimeActionInspection, ManagedRuntimeConfigInspection, ManagedRuntimeContext,
+    ManagedRuntimeGroup, ManagedRuntimeInspection, ManagedRuntimeInspectionAvailability,
+    ManagedRuntimeLifecycleAction, ManagedRuntimeLogsInspection, ManagedRuntimeStatusInspection,
+    ManagedRuntimeTarget, active_management_mode_for_profile, inspect_runtime_action,
+    inspect_runtime_config, inspect_runtime_logs, inspect_runtime_status, load_management_context,
+    load_management_context_with_selection, resolve_runtime_target, runtime_group,
 };
 pub use model::{
     BootstrapRuntimeContract, LifecycleContract, ManagedRuntimeHealthState,
@@ -24,8 +28,8 @@ pub use model::{
     RadrootsRuntimeManagementContract, RuntimeGroups,
 };
 pub use paths::{
-    bootstrap_runtime, resolve_instance_paths, resolve_shared_paths, ManagedRuntimeInstancePaths,
-    ManagedRuntimeSharedPaths,
+    ManagedRuntimeInstancePaths, ManagedRuntimeSharedPaths, bootstrap_runtime,
+    resolve_instance_paths, resolve_shared_paths,
 };
 pub use registry::{instance, load_registry, remove_instance, save_registry, upsert_instance};
 
@@ -56,9 +60,9 @@ mod tests {
     use tempfile::tempdir;
 
     use crate::{
+        ManagedRuntimeHealthState, ManagedRuntimeInstallState, ManagedRuntimeInstanceRecord,
         bootstrap_runtime, instance, load_registry, parse_contract_str, resolve_instance_paths,
-        resolve_shared_paths, save_registry, upsert_instance, ManagedRuntimeHealthState,
-        ManagedRuntimeInstallState, ManagedRuntimeInstanceRecord,
+        resolve_shared_paths, save_registry, upsert_instance,
     };
 
     fn assert_error_contains(err: &crate::RadrootsRuntimeManagerError, parts: &[&str]) {

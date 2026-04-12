@@ -9,19 +9,25 @@ pub mod roots;
 pub mod service;
 
 pub use conventions::{
-    default_namespaced_bootstrap_paths, default_shared_identity_path,
-    default_shared_runtime_logs_dir, RadrootsBootstrapPaths, DEFAULT_CONFIG_FILE_NAME,
-    DEFAULT_SERVICE_IDENTITY_FILE_NAME, DEFAULT_SHARED_IDENTITY_FILE_NAME,
+    DEFAULT_CONFIG_FILE_NAME, DEFAULT_SERVICE_IDENTITY_FILE_NAME,
+    DEFAULT_SHARED_IDENTITY_FILE_NAME, RadrootsBootstrapPaths, default_namespaced_bootstrap_paths,
+    default_shared_identity_path, default_shared_runtime_logs_dir,
 };
 pub use error::RadrootsRuntimePathsError;
 pub use migration::{
-    inspect_legacy_paths, RadrootsLegacyPathCandidate, RadrootsLegacyPathDetection,
-    RadrootsMigrationReport, RADROOTS_MIGRATION_COMPATIBILITY_WINDOW, RADROOTS_MIGRATION_POSTURE,
+    RADROOTS_MIGRATION_COMPATIBILITY_WINDOW, RADROOTS_MIGRATION_POSTURE,
+    RadrootsLegacyPathCandidate, RadrootsLegacyPathDetection, RadrootsMigrationReport,
+    inspect_legacy_paths,
 };
 pub use namespace::{RadrootsRuntimeNamespace, RadrootsRuntimeNamespaceKind};
 pub use platform::{RadrootsHostEnvironment, RadrootsPathProfile, RadrootsPlatform};
 pub use roots::{RadrootsPathOverrides, RadrootsPathResolver, RadrootsPaths};
-pub use service::{RadrootsRuntimePathSelection, RadrootsRuntimePathSelectionError};
+pub use service::{
+    RadrootsRuntimeLegacyPathContract, RadrootsRuntimeMigrationContract,
+    RadrootsRuntimePathPolicyContract, RadrootsRuntimePathSelection,
+    RadrootsRuntimePathSelectionError, RadrootsRuntimeSelectionContract,
+    RadrootsRuntimeSelectionOverrideContract, runtime_migration_contract,
+};
 
 #[cfg(test)]
 mod tests {

@@ -2484,6 +2484,7 @@ dependencies = [
  "hex",
  "nostr",
  "radroots_identity",
+ "radroots_nostr",
  "radroots_nostr_connect",
  "radroots_runtime",
  "radroots_sql_core",
@@ -2505,6 +2506,7 @@ dependencies = [
  "radroots_secret_vault",
  "serde",
  "serde_json",
+ "tempfile",
  "zeroize",
 ]
 
@@ -2631,6 +2633,7 @@ dependencies = [
 name = "radroots_runtime_paths"
 version = "0.1.0-alpha.2"
 dependencies = [
+ "serde",
  "thiserror 1.0.69",
 ]
 
