@@ -6,7 +6,6 @@ pub enum RadrootsSecretBackendKind {
     EncryptedFile,
     ExternalCommand,
     Memory,
-    PlaintextFile,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -15,7 +14,6 @@ pub enum RadrootsSecretBackend {
     EncryptedFile,
     ExternalCommand,
     Memory,
-    PlaintextFile,
 }
 
 impl RadrootsSecretBackend {
@@ -26,7 +24,6 @@ impl RadrootsSecretBackend {
             Self::EncryptedFile => RadrootsSecretBackendKind::EncryptedFile,
             Self::ExternalCommand => RadrootsSecretBackendKind::ExternalCommand,
             Self::Memory => RadrootsSecretBackendKind::Memory,
-            Self::PlaintextFile => RadrootsSecretBackendKind::PlaintextFile,
         }
     }
 }

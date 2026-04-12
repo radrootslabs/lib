@@ -18,6 +18,7 @@ std = [
   "dep:serde_json",
   "dep:radroots_identity",
   "dep:radroots_nostr_signer",
+  "dep:radroots_protected_store",
   "dep:radroots_runtime",
   "dep:radroots_secret_vault",
 ]
@@ -37,6 +38,9 @@ radroots_nostr_ndb = { workspace = true, optional = true, default-features = fal
   "ndb",
   "giftwrap",
   "rt",
+] }
+radroots_protected_store = { workspace = true, optional = true, default-features = false, features = [
+  "std",
 ] }
 radroots_secret_vault = { workspace = true, optional = true, default-features = false, features = [
   "std",

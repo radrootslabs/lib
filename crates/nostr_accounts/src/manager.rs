@@ -7,11 +7,18 @@ use crate::store::RadrootsNostrMemoryAccountStore;
 use crate::store::{RadrootsNostrAccountStore, RadrootsNostrFileAccountStore};
 #[cfg(feature = "memory-vault")]
 use crate::vault::RadrootsNostrSecretVaultMemory;
+#[cfg(feature = "os-keyring")]
+use crate::vault::RadrootsNostrSecretVaultOsKeyring;
 use crate::vault::{RadrootsSecretVault, account_secret_slot};
 use radroots_identity::{RadrootsIdentity, RadrootsIdentityId, RadrootsIdentityPublic};
 use radroots_nostr_signer::prelude::{
     RadrootsNostrLocalSignerAvailability, RadrootsNostrLocalSignerCapability,
     RadrootsNostrSignerCapability,
+};
+use radroots_protected_store::RadrootsProtectedFileSecretVault;
+use radroots_secret_vault::{
+    RadrootsResolvedSecretBackend, RadrootsSecretBackend, RadrootsSecretBackendAvailability,
+    RadrootsSecretBackendSelection, RadrootsSecretVaultError,
 };
 use std::path::Path;
 use std::sync::{Arc, RwLock};
@@ -82,6 +89,31 @@ impl RadrootsNostrAccountsManager {
         V: RadrootsSecretVault + 'static,
     {
         Self::new_file_backed(path, Arc::new(vault))
+    }
+
+    pub fn resolve_local_backend(
+        selection: RadrootsSecretBackendSelection,
+        availability: RadrootsSecretBackendAvailability,
+    ) -> Result<RadrootsResolvedSecretBackend, RadrootsSecretVaultError> {
+        selection.resolve(availability)
+    }
+
+    pub fn new_local_file_backed(
+        path: impl AsRef<Path>,
+        secrets_dir: impl AsRef<Path>,
+        selection: RadrootsSecretBackendSelection,
+        availability: RadrootsSecretBackendAvailability,
+        host_vault_service_name: impl Into<String>,
+    ) -> Result<(Self, RadrootsResolvedSecretBackend), RadrootsNostrAccountsError> {
+        let resolved = Self::resolve_local_backend(selection, availability)
+            .map_err(|error| RadrootsNostrAccountsError::Vault(error.to_string()))?;
+        let vault = local_file_backed_secret_vault(
+            resolved.backend,
+            secrets_dir.as_ref(),
+            host_vault_service_name.into(),
+        )?;
+        let manager = Self::new_file_backed(path, vault)?;
+        Ok((manager, resolved))
     }
 
     pub fn list_accounts(
@@ -416,6 +448,35 @@ impl RadrootsNostrAccountsManager {
     }
 }
 
+fn local_file_backed_secret_vault(
+    backend: RadrootsSecretBackend,
+    secrets_dir: &Path,
+    _host_vault_service_name: String,
+) -> Result<Arc<dyn RadrootsSecretVault>, RadrootsNostrAccountsError> {
+    match backend {
+        #[cfg(feature = "os-keyring")]
+        RadrootsSecretBackend::HostVault(_) => Ok(Arc::new(
+            RadrootsNostrSecretVaultOsKeyring::new(_host_vault_service_name),
+        )),
+        #[cfg(not(feature = "os-keyring"))]
+        RadrootsSecretBackend::HostVault(_) => Err(RadrootsNostrAccountsError::Vault(
+            "host_vault backend requires radroots_nostr_accounts os-keyring support".into(),
+        )),
+        RadrootsSecretBackend::EncryptedFile => {
+            Ok(Arc::new(RadrootsProtectedFileSecretVault::new(secrets_dir)))
+        }
+        #[cfg(feature = "memory-vault")]
+        RadrootsSecretBackend::Memory => Ok(Arc::new(RadrootsNostrSecretVaultMemory::new())),
+        #[cfg(not(feature = "memory-vault"))]
+        RadrootsSecretBackend::Memory => Err(RadrootsNostrAccountsError::Vault(
+            "memory backend requires radroots_nostr_accounts memory-vault support".into(),
+        )),
+        RadrootsSecretBackend::ExternalCommand => Err(RadrootsNostrAccountsError::Vault(
+            "external_command secret backend is not supported for local accounts".into(),
+        )),
+    }
+}
+
 fn now_unix_secs() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -432,6 +493,10 @@ mod tests {
     use crate::vault::RadrootsNostrSecretVaultMemory;
     use crate::vault::RadrootsSecretVault;
     use radroots_identity::RadrootsIdentityProfile;
+    use radroots_secret_vault::{
+        RadrootsHostVaultCapabilities, RadrootsSecretBackend, RadrootsSecretBackendAvailability,
+        RadrootsSecretBackendSelection,
+    };
     use std::sync::Arc;
     use std::sync::RwLock;
     use std::thread;
@@ -684,6 +749,55 @@ mod tests {
             Some(account_id)
         );
         assert_eq!(reloaded.list_accounts().expect("accounts").len(), 1);
+    }
+
+    #[test]
+    fn resolve_local_backend_applies_shared_fallback_policy() {
+        let resolved = RadrootsNostrAccountsManager::resolve_local_backend(
+            RadrootsSecretBackendSelection {
+                primary: RadrootsSecretBackend::HostVault(
+                    radroots_secret_vault::RadrootsHostVaultPolicy::desktop(),
+                ),
+                fallback: Some(RadrootsSecretBackend::EncryptedFile),
+            },
+            RadrootsSecretBackendAvailability {
+                host_vault: RadrootsHostVaultCapabilities::unavailable(),
+                encrypted_file: true,
+                external_command: false,
+                memory: false,
+            },
+        )
+        .expect("fallback resolves");
+
+        assert_eq!(resolved.backend, RadrootsSecretBackend::EncryptedFile);
+        assert!(resolved.used_fallback);
+    }
+
+    #[test]
+    fn new_local_file_backed_rejects_external_command_backend() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let err = RadrootsNostrAccountsManager::new_local_file_backed(
+            temp.path().join("accounts.json"),
+            temp.path().join("secrets"),
+            RadrootsSecretBackendSelection {
+                primary: RadrootsSecretBackend::ExternalCommand,
+                fallback: None,
+            },
+            RadrootsSecretBackendAvailability {
+                host_vault: RadrootsHostVaultCapabilities::unavailable(),
+                encrypted_file: true,
+                external_command: true,
+                memory: false,
+            },
+            "org.radroots.test.local-account",
+        )
+        .err()
+        .expect("external command must be rejected");
+
+        assert_eq!(
+            err.to_string(),
+            "vault error: external_command secret backend is not supported for local accounts"
+        );
     }
 
     #[test]

@@ -80,7 +80,6 @@ impl fmt::Display for RadrootsSecretBackendKind {
             Self::EncryptedFile => "encrypted_file",
             Self::ExternalCommand => "external_command",
             Self::Memory => "memory",
-            Self::PlaintextFile => "plaintext_file",
         };
         f.write_str(value)
     }

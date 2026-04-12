@@ -2432,6 +2432,7 @@ dependencies = [
  "radroots_identity",
  "radroots_nostr_ndb",
  "radroots_nostr_signer",
+ "radroots_protected_store",
  "radroots_runtime",
  "radroots_secret_vault",
  "serde",

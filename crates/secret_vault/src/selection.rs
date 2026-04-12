@@ -14,7 +14,6 @@ pub struct RadrootsSecretBackendAvailability {
     pub encrypted_file: bool,
     pub external_command: bool,
     pub memory: bool,
-    pub plaintext_file: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -76,7 +75,6 @@ impl RadrootsSecretBackendAvailability {
             RadrootsSecretBackend::EncryptedFile if self.encrypted_file => Ok(()),
             RadrootsSecretBackend::ExternalCommand if self.external_command => Ok(()),
             RadrootsSecretBackend::Memory if self.memory => Ok(()),
-            RadrootsSecretBackend::PlaintextFile if self.plaintext_file => Ok(()),
             _ => Err(RadrootsSecretVaultError::BackendUnavailable {
                 backend: backend.kind(),
             }),
@@ -118,7 +116,6 @@ mod tests {
                 encrypted_file: true,
                 external_command: false,
                 memory: false,
-                plaintext_file: false,
             })
             .expect("host vault resolves");
 
@@ -144,7 +141,6 @@ mod tests {
                 encrypted_file: true,
                 external_command: false,
                 memory: false,
-                plaintext_file: false,
             })
             .expect("encrypted file fallback resolves");
 
@@ -170,7 +166,6 @@ mod tests {
                 encrypted_file: true,
                 external_command: false,
                 memory: false,
-                plaintext_file: false,
             })
             .expect_err("missing fallback must fail");
 
@@ -199,7 +194,6 @@ mod tests {
                 encrypted_file: true,
                 external_command: false,
                 memory: false,
-                plaintext_file: false,
             })
             .expect_err("unsupported host policy must fail");
 
@@ -207,32 +201,6 @@ mod tests {
             err,
             RadrootsSecretVaultError::HostVaultPolicyUnsupported {
                 requirement: RadrootsHostVaultRequirement::DeviceLocalOnly,
-            }
-        );
-    }
-
-    #[test]
-    fn encrypted_file_may_not_downgrade_to_plaintext_file() {
-        let selection = RadrootsSecretBackendSelection {
-            primary: RadrootsSecretBackend::EncryptedFile,
-            fallback: Some(RadrootsSecretBackend::PlaintextFile),
-        };
-
-        let err = selection
-            .resolve(RadrootsSecretBackendAvailability {
-                host_vault: RadrootsHostVaultCapabilities::unavailable(),
-                encrypted_file: false,
-                external_command: false,
-                memory: false,
-                plaintext_file: true,
-            })
-            .expect_err("plaintext downgrade must fail");
-
-        assert_eq!(
-            err,
-            RadrootsSecretVaultError::FallbackDisallowed {
-                primary: RadrootsSecretBackendKind::EncryptedFile,
-                fallback: RadrootsSecretBackendKind::PlaintextFile,
             }
         );
     }
@@ -250,7 +218,6 @@ mod tests {
                 encrypted_file: true,
                 external_command: false,
                 memory: false,
-                plaintext_file: false,
             })
             .expect_err("external command downgrade must fail");
 
@@ -259,32 +226,6 @@ mod tests {
             RadrootsSecretVaultError::FallbackDisallowed {
                 primary: RadrootsSecretBackendKind::ExternalCommand,
                 fallback: RadrootsSecretBackendKind::EncryptedFile,
-            }
-        );
-    }
-
-    #[test]
-    fn explicit_plaintext_file_selection_stays_explicit() {
-        let selection = RadrootsSecretBackendSelection {
-            primary: RadrootsSecretBackend::PlaintextFile,
-            fallback: None,
-        };
-
-        let resolved = selection
-            .resolve(RadrootsSecretBackendAvailability {
-                host_vault: RadrootsHostVaultCapabilities::unavailable(),
-                encrypted_file: false,
-                external_command: false,
-                memory: false,
-                plaintext_file: true,
-            })
-            .expect("explicit plaintext file selection resolves");
-
-        assert_eq!(
-            resolved,
-            RadrootsResolvedSecretBackend {
-                backend: RadrootsSecretBackend::PlaintextFile,
-                used_fallback: false,
             }
         );
     }
@@ -302,7 +243,6 @@ mod tests {
                 encrypted_file: false,
                 external_command: false,
                 memory: true,
-                plaintext_file: false,
             })
             .expect("memory backend resolves");
 
@@ -328,7 +268,6 @@ mod tests {
                 encrypted_file: false,
                 external_command: false,
                 memory: false,
-                plaintext_file: false,
             })
             .expect_err("unavailable fallback must fail");
 
