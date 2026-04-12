@@ -4,7 +4,6 @@ repository = "sdk-typescript"
 
 [packages]
 "radroots_core" = "@radroots/core"
-"radroots_types" = "@radroots/types"
 "radroots_events" = "@radroots/events"
 "radroots_trade" = "@radroots/trade"
 "radroots_identity" = "@radroots/identity"

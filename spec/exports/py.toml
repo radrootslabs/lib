@@ -4,7 +4,6 @@ repository = "sdk-python"
 
 [packages]
 "radroots_core" = "radroots_core"
-"radroots_types" = "radroots_types"
 "radroots_events" = "radroots_events"
 "radroots_trade" = "radroots_trade"
 "radroots_identity" = "radroots_identity"

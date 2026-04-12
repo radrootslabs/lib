@@ -11,22 +11,43 @@ It defines the public interoperability boundary for external integrators, keeps 
 
 Contract metadata is defined in `spec/manifest.toml` and currently includes:
 
-- model crates: `radroots_core`, `radroots_types`, `radroots_events`, `radroots_trade`, `radroots_identity`
+- model crates: `radroots_core`, `radroots_events`, `radroots_trade`, `radroots_identity`
 - algorithm crate: `radroots_events_codec`
 - wasm crate: `radroots_events_codec_wasm`
+
+The curated public Rust entrypoint is `radroots_sdk`.
+The crate list above records implementation provenance for the contract surface;
+it is not a promise that every listed crate is a first-class end-user SDK
+package.
 
 Public SDK exports are intentionally narrower than the full Rust workspace.
 
 ## Export Targets
 
-Language export mappings and artifact layout rules are defined under `spec/exports/`:
+Language export metadata is split into two layers:
+
+- `spec/sdk-exports/`: curated public SDK package definitions, operation maps,
+  and shared-type maps
+- `spec/exports/`: lower-level package and artifact provenance mappings used by
+  tooling and generated artifact layout
+
+Curated public SDK package definitions are defined under `spec/sdk-exports/`:
+
+- `spec/sdk-exports/ts.toml`
+- `spec/sdk-exports/swift.toml`
+- `spec/sdk-exports/kotlin.toml`
+- `spec/sdk-exports/py.toml`
+
+Lower-level language package mappings and artifact layout rules remain defined
+under `spec/exports/`:
 
 - `spec/exports/ts.toml`
 - `spec/exports/py.toml`
 - `spec/exports/swift.toml`
 - `spec/exports/kotlin.toml`
 
-Each export target defines package naming, artifact directories, and runtime expectations.
+The `sdk-exports` files are the authoritative public package model.
+The `exports` files remain the lower-level substrate and artifact mapping layer.
 
 ## Internal Replica Contract
 

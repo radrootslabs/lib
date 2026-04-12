@@ -26,13 +26,17 @@ classes = ["encode_error", "parse_error", "validation_error", "address_error"]
 [implementation_provenance]
 model_crates = [
   "radroots_core",
-  "radroots_types",
   "radroots_events",
   "radroots_trade",
   "radroots_identity",
 ]
 algorithm_crates = ["radroots_events_codec"]
 wasm_crates = ["radroots_events_codec_wasm"]
+
+[sdk]
+rust_package = "radroots_sdk"
+primary_domains = ["profile", "farm", "listing", "trade"]
+public_surface = "operation_first"
 
 [operations.profile_build_draft]
 domain = "profile"

@@ -6,13 +6,17 @@ source = "rust"
 [surface]
 model_crates = [
   "radroots_core",
-  "radroots_types",
   "radroots_events",
   "radroots_trade",
   "radroots_identity",
 ]
 algorithm_crates = ["radroots_events_codec"]
 wasm_crates = ["radroots_events_codec_wasm"]
+
+[sdk]
+rust_package = "radroots_sdk"
+public_surface = "operation_first"
+website_ingest_contract = true
 
 [surface.internal_replica_crates]
 schema = "radroots_replica_db_schema"
@@ -22,14 +26,7 @@ sync = "radroots_replica_sync"
 sync_wasm = "radroots_replica_sync_wasm"
 
 [export.ts]
-packages = [
-  "@radroots/core",
-  "@radroots/types",
-  "@radroots/events",
-  "@radroots/trade",
-  "@radroots/identity",
-  "@radroots/events-codec-wasm",
-]
+packages = ["@radroots/sdk"]
 
 [policy]
 exclude_internal_workspace_crates = true

@@ -1,0 +1,32 @@
+[language]
+id = "py"
+repository = "sdk-python"
+
+[sdk]
+package = "radroots_sdk"
+deterministic_codec = "native_or_wasm"
+signing = "native"
+networking = "native"
+
+[operations]
+"profile.build_draft" = "profile_build_draft"
+"farm.build_draft" = "farm_build_draft"
+"listing.build_tags" = "listing_build_tags"
+"listing.build_draft" = "listing_build_draft"
+"listing.parse_event" = "listing_parse_event"
+"trade.build_envelope_draft" = "trade_build_envelope_draft"
+"trade.parse_envelope" = "trade_parse_envelope"
+"trade.parse_listing_address" = "trade_parse_listing_address"
+"trade.validate_listing_event" = "trade_validate_listing_event"
+
+[shared_types]
+"WireEventParts" = "WireEventParts"
+"UnsignedEventDraft" = "UnsignedEventDraft"
+"RadrootsNostrEvent" = "RadrootsNostrEvent"
+"RadrootsNostrEventRef" = "RadrootsNostrEventRef"
+"RadrootsNostrEventPtr" = "RadrootsNostrEventPtr"
+"RadrootsTradeListingAddress" = "TradeListingAddress"
+"RadrootsProfile" = "RadrootsProfile"
+"RadrootsFarm" = "RadrootsFarm"
+"RadrootsListing" = "RadrootsListing"
+"RadrootsTradeEnvelope" = "TradeEnvelope"

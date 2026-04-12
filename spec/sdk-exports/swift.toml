@@ -1,0 +1,32 @@
+[language]
+id = "swift"
+repository = "sdk-swift"
+
+[sdk]
+package = "RadrootsSDK"
+deterministic_codec = "native_or_wasm"
+signing = "native"
+networking = "native"
+
+[operations]
+"profile.build_draft" = "profile.buildDraft"
+"farm.build_draft" = "farm.buildDraft"
+"listing.build_tags" = "listing.buildTags"
+"listing.build_draft" = "listing.buildDraft"
+"listing.parse_event" = "listing.parseEvent"
+"trade.build_envelope_draft" = "trade.buildEnvelopeDraft"
+"trade.parse_envelope" = "trade.parseEnvelope"
+"trade.parse_listing_address" = "trade.parseListingAddress"
+"trade.validate_listing_event" = "trade.validateListingEvent"
+
+[shared_types]
+"WireEventParts" = "WireEventParts"
+"UnsignedEventDraft" = "UnsignedEventDraft"
+"RadrootsNostrEvent" = "RadrootsNostrEvent"
+"RadrootsNostrEventRef" = "RadrootsNostrEventRef"
+"RadrootsNostrEventPtr" = "RadrootsNostrEventPtr"
+"RadrootsTradeListingAddress" = "TradeListingAddress"
+"RadrootsProfile" = "RadrootsProfile"
+"RadrootsFarm" = "RadrootsFarm"
+"RadrootsListing" = "RadrootsListing"
+"RadrootsTradeEnvelope" = "TradeEnvelope"
