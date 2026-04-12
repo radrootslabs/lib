@@ -1,0 +1,34 @@
+[package]
+name = "radroots_sdk"
+publish = ["crates-io"]
+version.workspace = true
+edition.workspace = true
+authors = ["Tyson Lupul <tyson@radroots.org>"]
+rust-version.workspace = true
+license.workspace = true
+description = "Public Rust SDK for Radroots"
+repository.workspace = true
+homepage.workspace = true
+readme = "README"
+
+[features]
+default = ["std", "serde", "serde_json"]
+std = ["radroots_events/std", "radroots_events_codec/std", "radroots_trade/std"]
+serde = ["radroots_events/serde", "radroots_trade/serde"]
+serde_json = [
+  "serde",
+  "nostr",
+  "radroots_events_codec/serde_json",
+  "radroots_trade/serde_json",
+]
+nostr = ["radroots_events_codec/nostr"]
+ts-rs = ["radroots_events/ts-rs", "radroots_trade/ts-rs"]
+typeshare = ["radroots_events/typeshare"]
+
+[dependencies]
+radroots_events = { workspace = true, default-features = false }
+radroots_events_codec = { workspace = true, default-features = false }
+radroots_trade = { workspace = true, default-features = false }
+
+[dev-dependencies]
+radroots_core = { workspace = true, default-features = false, features = ["std"] }

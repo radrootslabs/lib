@@ -1,0 +1,8 @@
+# radroots_sdk
+
+Curated Rad Roots Rust SDK for the public marketplace event contract.
+
+This crate provides the recommended Rust entrypoint for building, parsing, and
+validating Rad Roots profile, farm, listing, and trade events. It is a thin
+facade over the underlying `rr-rs` substrate crates and does not duplicate the
+core event or trade implementations.

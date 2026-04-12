@@ -37,6 +37,7 @@ members = [
   "crates/runtime_paths",
   "crates/runtime_distribution",
   "crates/runtime_manager",
+  "crates/sdk",
   "crates/trade",
   "crates/types",
   "crates/protected_store",
@@ -69,6 +70,7 @@ radroots_runtime = { path = "crates/runtime", version = "0.1.0-alpha.2", default
 radroots_runtime_paths = { path = "crates/runtime_paths", version = "0.1.0-alpha.2", default-features = false }
 radroots_runtime_distribution = { path = "crates/runtime_distribution", version = "0.1.0-alpha.2", default-features = false }
 radroots_runtime_manager = { path = "crates/runtime_manager", version = "0.1.0-alpha.2", default-features = false }
+radroots_sdk = { path = "crates/sdk", version = "0.1.0-alpha.2", default-features = false }
 radroots_log = { path = "crates/log", version = "0.1.0-alpha.2", default-features = false }
 radroots_net = { path = "crates/net", version = "0.1.0-alpha.2", default-features = false }
 radroots_nostr_runtime = { path = "crates/nostr_runtime", version = "0.1.0-alpha.2", default-features = false }

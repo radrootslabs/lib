@@ -1,0 +1,22 @@
+pub use radroots_events::listing::*;
+pub use radroots_events::trade::{
+    RadrootsTradeListingParseError, RadrootsTradeListingValidationError,
+};
+pub use radroots_events_codec::error::EventEncodeError;
+pub use radroots_trade::listing::validation::RadrootsTradeListing as TradeListingValidateResult;
+
+use crate::{NostrTags, RadrootsNostrEvent, WireEventParts};
+
+pub fn build_tags(listing: &RadrootsListing) -> Result<NostrTags, EventEncodeError> {
+    radroots_events_codec::listing::encode::listing_build_tags(listing)
+}
+
+#[cfg(feature = "serde_json")]
+pub fn build_draft(listing: &RadrootsListing) -> Result<WireEventParts, EventEncodeError> {
+    radroots_events_codec::listing::encode::to_wire_parts(listing)
+}
+
+#[cfg(feature = "serde_json")]
+pub fn parse_event(event: &RadrootsNostrEvent) -> Result<RadrootsListing, RadrootsTradeListingParseError> {
+    radroots_trade::listing::parse_listing_event(event)
+}

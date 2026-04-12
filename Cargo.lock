@@ -2641,6 +2641,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "radroots_sdk"
+version = "0.1.0-alpha.2"
+dependencies = [
+ "radroots_core",
+ "radroots_events",
+ "radroots_events_codec",
+ "radroots_trade",
+]
+
+[[package]]
 name = "radroots_secret_vault"
 version = "0.1.0-alpha.2"
 dependencies = [
