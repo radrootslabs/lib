@@ -63,14 +63,6 @@ fail_under_branches = 100.0
 temporary = true
 reason = "publish 0.1.0-alpha.2 temporary coverage override"
 
-[overrides.radroots_nostr_ndb]
-fail_under_exec_lines = 99.900
-fail_under_functions = 100.0
-fail_under_regions = 99.800
-fail_under_branches = 98.200
-temporary = true
-reason = "publish 0.1.0-alpha.2 temporary coverage override"
-
 [overrides.radroots_nostr_connect]
 fail_under_exec_lines = 100.0
 fail_under_functions = 100.0
@@ -103,26 +95,9 @@ fail_under_branches = 100.0
 temporary = true
 reason = "publish 0.1.0-alpha.2 temporary coverage override"
 
-[overrides.radroots_simplex_chat_proto]
-fail_under_exec_lines = 60.930
-fail_under_functions = 61.904
-fail_under_regions = 55.086
-fail_under_branches = 61.290
-temporary = true
-reason = "publish 0.1.0-alpha.2 temporary coverage override"
-
-[overrides.radroots_simplex_smp_proto]
-fail_under_exec_lines = 80.742
-fail_under_functions = 84.263
-fail_under_regions = 71.491
-fail_under_branches = 68.695
-temporary = true
-reason = "publish 0.1.0-alpha.2 temporary coverage override"
-
 [required]
 crates = [
   "radroots_core",
-  "radroots_types",
   "radroots_events",
   "radroots_log",
   "radroots_protected_store",
@@ -131,28 +106,18 @@ crates = [
   "radroots_runtime_distribution",
   "radroots_runtime_manager",
   "radroots_sdk",
-  "radroots_secret_vault",
-  "radroots_simplex_chat_proto",
-  "radroots_simplex_smp_proto",
   "radroots_identity",
+  "radroots_secret_vault",
   "radroots_trade",
   "radroots_events_codec",
-  "radroots_events_codec_wasm",
   "radroots_events_indexed",
   "radroots_geocoder",
   "radroots_nostr",
-  "radroots_nostr_connect",
-  "radroots_sql_core",
-  "radroots_nostr_signer",
-  "radroots_replica_db_schema",
-  "radroots_sql_wasm_bridge",
-  "radroots_nostr_runtime",
-  "radroots_nostr_ndb",
-  "radroots_replica_db",
-  "radroots_sql_wasm_core",
   "radroots_nostr_accounts",
+  "radroots_nostr_connect",
+  "radroots_nostr_signer",
+  "radroots_sql_core",
+  "radroots_replica_db_schema",
+  "radroots_replica_db",
   "radroots_replica_sync",
-  "radroots_replica_db_wasm",
-  "radroots_replica_sync_wasm",
-  "radroots_net",
 ]

@@ -22,6 +22,53 @@ package.
 
 Public SDK exports are intentionally narrower than the full Rust workspace.
 
+## Rust Crate Tiers
+
+The public Rust story is tiered explicitly.
+
+- Curated SDK entrypoint:
+  - `radroots_sdk`
+- Advanced substrate crates:
+  - `radroots_core`
+  - `radroots_events`
+  - `radroots_events_codec`
+  - `radroots_trade`
+  - `radroots_identity`
+  - `radroots_nostr`
+  - `radroots_nostr_connect`
+  - `radroots_nostr_signer`
+  - `radroots_nostr_accounts`
+  - `radroots_secret_vault`
+  - `radroots_protected_store`
+  - `radroots_runtime_paths`
+- Published support crates:
+  - `radroots_log`
+  - `radroots_runtime`
+  - `radroots_runtime_distribution`
+  - `radroots_runtime_manager`
+  - `radroots_geocoder`
+  - `radroots_events_indexed`
+  - `radroots_sql_core`
+  - `radroots_replica_db_schema`
+  - `radroots_replica_db`
+  - `radroots_replica_sync`
+- Deferred crates.io publication:
+  - `radroots_types`
+  - `radroots_events_codec_wasm`
+  - `radroots_net`
+  - `radroots_nostr_runtime`
+  - `radroots_nostr_ndb`
+  - `radroots_sql_wasm_bridge`
+  - `radroots_sql_wasm_core`
+  - `radroots_replica_db_wasm`
+  - `radroots_replica_sync_wasm`
+  - `radroots_simplex_chat_proto`
+  - `radroots_simplex_smp_proto`
+
+This tiering is the curated product posture for crates.io. A crate may remain
+open source and part of the `rr-rs` workspace without being a recommended
+external SDK entrypoint or an active crates.io publication target.
+
 ## Export Targets
 
 Language export metadata is split into two layers:

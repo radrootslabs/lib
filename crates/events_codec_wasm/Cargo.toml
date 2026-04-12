@@ -1,6 +1,6 @@
 [package]
 name = "radroots_events_codec_wasm"
-publish = ["crates-io"]
+publish = false
 version = "0.1.0-alpha.2"
 edition.workspace = true
 authors = ["Tyson Lupul <tyson@radroots.org>"]
