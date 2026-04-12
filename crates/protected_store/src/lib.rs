@@ -6,6 +6,8 @@ extern crate alloc;
 extern crate std;
 
 pub mod error;
+#[cfg(feature = "std")]
+pub mod file;
 
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -48,6 +50,9 @@ pub struct RadrootsProtectedStoreEnvelope {
     pub wrapped_key: Vec<u8>,
     pub ciphertext: Vec<u8>,
 }
+
+#[cfg(feature = "std")]
+pub use file::{RadrootsProtectedFileKeySource, RadrootsProtectedFileSecretVault, sidecar_path};
 
 #[derive(Debug, Serialize)]
 struct RadrootsProtectedStoreAad<'a> {

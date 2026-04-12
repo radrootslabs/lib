@@ -2,9 +2,9 @@ use crate::error::RadrootsNostrAccountsError;
 use crate::model::{
     RadrootsNostrAccountRecord, RadrootsNostrAccountStoreState, RadrootsNostrSelectedAccountStatus,
 };
-use crate::store::RadrootsNostrAccountStore;
 #[cfg(feature = "memory-vault")]
 use crate::store::RadrootsNostrMemoryAccountStore;
+use crate::store::{RadrootsNostrAccountStore, RadrootsNostrFileAccountStore};
 #[cfg(feature = "memory-vault")]
 use crate::vault::RadrootsNostrSecretVaultMemory;
 use crate::vault::{RadrootsSecretVault, account_secret_slot};
@@ -62,6 +62,26 @@ impl RadrootsNostrAccountsManager {
             vault,
             state: Arc::new(RwLock::new(state)),
         })
+    }
+
+    pub fn new_file_backed(
+        path: impl AsRef<Path>,
+        vault: Arc<dyn RadrootsSecretVault>,
+    ) -> Result<Self, RadrootsNostrAccountsError> {
+        Self::new(
+            Arc::new(RadrootsNostrFileAccountStore::new(path.as_ref())),
+            vault,
+        )
+    }
+
+    pub fn new_file_backed_with_vault<V>(
+        path: impl AsRef<Path>,
+        vault: V,
+    ) -> Result<Self, RadrootsNostrAccountsError>
+    where
+        V: RadrootsSecretVault + 'static,
+    {
+        Self::new_file_backed(path, Arc::new(vault))
     }
 
     pub fn list_accounts(
@@ -637,6 +657,33 @@ mod tests {
                 .expect("signing")
                 .is_some()
         );
+    }
+
+    #[test]
+    fn new_file_backed_with_vault_persists_selection() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let path = temp.path().join("accounts.json");
+        let manager = RadrootsNostrAccountsManager::new_file_backed_with_vault(
+            &path,
+            RadrootsNostrSecretVaultMemory::new(),
+        )
+        .expect("manager");
+        let identity = RadrootsIdentity::generate();
+        let account_id = manager
+            .upsert_identity(&identity, Some("primary".into()), true)
+            .expect("upsert");
+
+        let reloaded = RadrootsNostrAccountsManager::new_file_backed_with_vault(
+            &path,
+            RadrootsNostrSecretVaultMemory::new(),
+        )
+        .expect("reloaded");
+
+        assert_eq!(
+            reloaded.selected_account_id().expect("selected"),
+            Some(account_id)
+        );
+        assert_eq!(reloaded.list_accounts().expect("accounts").len(), 1);
     }
 
     #[test]
