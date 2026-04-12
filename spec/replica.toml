@@ -1,5 +1,5 @@
 [replica]
-name = "radroots-replica-contract"
+name = "radroots_replica_contract"
 version = "0.1.0"
 purpose = "offline-first local replica state and deterministic sync"
 

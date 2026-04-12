@@ -9,7 +9,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 const ROOT_RELEASE_POLICY_RELATIVE: &str =
-    "contracts/release/mounted-rust-crates/publish-policy.toml";
+    "contracts/release/mounted_rust_crates/publish-policy.toml";
 const CONFORMANCE_ROOT_RELATIVE: &str = "spec/conformance";
 const CONFORMANCE_SCHEMA_RELATIVE: &str = "spec/conformance/schema/vector.schema.json";
 const RELEASE_POLICY_ENV: &str = "RADROOTS_MOUNTED_RUST_CRATE_PUBLISH_POLICY";

@@ -491,7 +491,7 @@ The operation-keyed schema should become the public source of truth. Crate metad
 
 ```toml
 [contract]
-name = "radroots-sdk-contract"
+name = "radroots_sdk_contract"
 version = "0.2.0-alpha.1"
 source = "rust"
 stability = "draft"

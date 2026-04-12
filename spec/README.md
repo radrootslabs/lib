@@ -1,4 +1,4 @@
-# radroots-sdk-contract
+# radroots_sdk_contract
 
 Core contract for the Rad Roots cross-language SDK.
 
@@ -65,11 +65,11 @@ Required Rust crates are gated at `100/100/100/100` (exec lines, functions, bran
 ## Release Policy
 
 Release crate classification and publish order are defined in the owning monorepo at
-`contracts/release/mounted-rust-crates/publish-policy.toml`.
+`contracts/release/mounted_rust_crates/publish-policy.toml`.
 Operator workflow is root-owned and documented in:
 
-- `contracts/release/mounted-rust-crates/runbook.md`
-- `contracts/release/mounted-rust-crates/checklist.md`
+- `contracts/release/mounted_rust_crates/runbook.md`
+- `contracts/release/mounted_rust_crates/checklist.md`
 
 Primary commands:
 
