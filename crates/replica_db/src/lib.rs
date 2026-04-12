@@ -124,7 +124,7 @@ pub mod query;
 pub use backup::{DatabaseBackup, MigrationBackup, SchemaEntry};
 #[cfg(not(feature = "coverage-minimal"))]
 pub use export::{
-    export_manifest, ReplicaDbExportManifestRs, TableCount, REPLICA_DB_EXPORT_VERSION,
+    REPLICA_DB_EXPORT_VERSION, ReplicaDbExportManifestRs, TableCount, export_manifest,
 };
 #[cfg(not(feature = "coverage-minimal"))]
 pub use models::*;
@@ -137,11 +137,7 @@ pub struct ReplicaSql<E: SqlExecutor> {
 
 impl<E: SqlExecutor> ReplicaSql<E> {
     pub fn coverage_branch_probe(enabled: bool) -> &'static str {
-        if enabled {
-            "enabled"
-        } else {
-            "disabled"
-        }
+        if enabled { "enabled" } else { "disabled" }
     }
 }
 
