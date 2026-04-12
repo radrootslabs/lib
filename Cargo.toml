@@ -9,7 +9,6 @@ members = [
   "crates/identity",
   "crates/log",
   "crates/net",
-  "crates/net_core",
   "crates/nostr",
   "crates/nostr_accounts",
   "crates/nostr_connect",
@@ -72,7 +71,6 @@ radroots_runtime_distribution = { path = "crates/runtime_distribution", version 
 radroots_runtime_manager = { path = "crates/runtime_manager", version = "0.1.0-alpha.2", default-features = false }
 radroots_log = { path = "crates/log", version = "0.1.0-alpha.2", default-features = false }
 radroots_net = { path = "crates/net", version = "0.1.0-alpha.2", default-features = false }
-radroots_net_core = { path = "crates/net_core", version = "0.1.0-alpha.2", default-features = false }
 radroots_nostr_runtime = { path = "crates/nostr_runtime", version = "0.1.0-alpha.2", default-features = false }
 radroots_simplex_agent_proto = { path = "crates/simplex_agent_proto", version = "0.1.0-alpha.1", default-features = false }
 radroots_simplex_agent_runtime = { path = "crates/simplex_agent_runtime", version = "0.1.0-alpha.1", default-features = false }

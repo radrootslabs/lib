@@ -1,4 +1,4 @@
-use radroots_net_core::error::NetError;
+use radroots_net::error::NetError;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 #[test]

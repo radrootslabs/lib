@@ -1,26 +1,20 @@
-pub use radroots_net_core as core;
+#![cfg_attr(not(feature = "std"), no_std)]
 
-pub fn coverage_core_alias_available() -> bool {
-    let _ = core::config::NetConfig::default();
-    true
-}
+extern crate alloc;
 
-pub fn coverage_branch_probe(input: bool) -> bool {
-    if input { true } else { false }
-}
+pub mod error;
+pub mod net;
 
-#[cfg(test)]
-mod tests {
-    use super::{coverage_branch_probe, coverage_core_alias_available};
+#[cfg(feature = "std")]
+pub mod logging;
 
-    #[test]
-    fn core_alias_probe_is_callable() {
-        assert!(coverage_core_alias_available());
-    }
+pub mod builder;
+pub mod config;
 
-    #[test]
-    fn coverage_branch_probe_hits_both_paths() {
-        assert!(coverage_branch_probe(true));
-        assert!(!coverage_branch_probe(false));
-    }
-}
+#[cfg(feature = "nostr-client")]
+pub mod keys;
+
+#[cfg(feature = "nostr-client")]
+pub mod nostr_client;
+
+pub use net::{Net, NetHandle, NetInfo};

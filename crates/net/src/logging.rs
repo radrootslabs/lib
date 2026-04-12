@@ -13,7 +13,7 @@ impl Default for LoggingOptions {
     fn default() -> Self {
         Self {
             dir: None,
-            file_name: "radroots_net_core.log".into(),
+            file_name: "radroots_net.log".into(),
             also_stdout: true,
         }
     }
@@ -53,7 +53,7 @@ mod tests {
     fn logging_options_default_values_are_stable() {
         let defaults = LoggingOptions::default();
         assert_eq!(defaults.dir, None);
-        assert_eq!(defaults.file_name, "radroots_net_core.log");
+        assert_eq!(defaults.file_name, "radroots_net.log");
         assert!(defaults.also_stdout);
     }
 
@@ -67,7 +67,7 @@ mod tests {
         assert!(matches!(invalid, Err(NetError::LoggingInit("init"))));
 
         let valid_with_dir = init_logging(LoggingOptions {
-            dir: Some(std::env::temp_dir().join("radroots_net_core-log-tests")),
+            dir: Some(std::env::temp_dir().join("radroots_net-log-tests")),
             file_name: "ok.log".to_string(),
             also_stdout: false,
         });

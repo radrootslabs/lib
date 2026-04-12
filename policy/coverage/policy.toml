@@ -151,7 +151,6 @@ crates = [
   "radroots_sql_wasm_core",
   "radroots_nostr_accounts",
   "radroots_replica_sync",
-  "radroots_net_core",
   "radroots_replica_db_wasm",
   "radroots_replica_sync_wasm",
   "radroots_net",

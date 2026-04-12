@@ -1,16 +1,14 @@
 # radroots_net
 
-This is the README for `radroots_net`, which re-exports the unified networking
-facade from `radroots_net_core` for the `radroots` core libraries.
+This is the README for `radroots_net`, which provides network orchestration and
+runtime interfaces for the `radroots` core libraries.
 
 ## Overview
 
- * reexports `radroots_net_core` as the public `core` module;
- * forwards the `std`, `rt`, and aggregate feature surface used by networking
-   consumers;
- * adds no additional networking logic beyond the reexport layer;
- * keeps the workspace-facing network entry point separate from the lower-level
-   implementation crate.
+ * networking configuration and builders;
+ * runtime-aware network handle and lifecycle support;
+ * optional Nostr client integration and key management helpers;
+ * optional logging and runtime-path persistence integration.
 
 ## Copyright
 

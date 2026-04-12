@@ -2389,13 +2389,6 @@ dependencies = [
 name = "radroots_net"
 version = "0.1.0-alpha.2"
 dependencies = [
- "radroots_net_core",
-]
-
-[[package]]
-name = "radroots_net_core"
-version = "0.1.0-alpha.2"
-dependencies = [
  "directories",
  "futures",
  "hex",
