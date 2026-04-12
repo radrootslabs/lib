@@ -50,7 +50,9 @@ pub mod prelude {
         RadrootsNostrSignerStoreState, RadrootsNostrSignerWorkflowId,
     };
     pub use crate::nip46::{
-        RadrootsNostrSignerHandledRequest, RadrootsNostrSignerNip46Codec,
+        RadrootsNostrSignerHandledRequest, RadrootsNostrSignerHandledRequestOutcome,
+        RadrootsNostrSignerNip46Codec, RadrootsNostrSignerNip46ConnectDecision,
+        RadrootsNostrSignerNip46Handler, RadrootsNostrSignerNip46Policy,
         RadrootsNostrSignerNip46Signer, connect_response_outcome, handled_request_for_action,
         response_from_hint,
     };
