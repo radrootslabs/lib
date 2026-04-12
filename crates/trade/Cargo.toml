@@ -35,4 +35,5 @@ serde = { workspace = true, default-features = false, features = [
 serde_json = { workspace = true, default-features = false, features = [
   "alloc",
 ], optional = true }
+thiserror = { workspace = true }
 ts-rs = { workspace = true, optional = true }

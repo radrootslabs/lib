@@ -4,6 +4,7 @@ pub mod model;
 pub mod overlay;
 pub mod price_ext;
 pub mod projection;
+pub mod publish;
 pub mod validation;
 
 pub(crate) use self::contract as dvm;
