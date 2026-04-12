@@ -6,21 +6,22 @@ pub mod migration;
 pub mod namespace;
 pub mod platform;
 pub mod roots;
+pub mod service;
 
 pub use conventions::{
-    DEFAULT_CONFIG_FILE_NAME, DEFAULT_SERVICE_IDENTITY_FILE_NAME,
-    DEFAULT_SHARED_IDENTITY_FILE_NAME, RadrootsBootstrapPaths, default_namespaced_bootstrap_paths,
-    default_shared_identity_path, default_shared_runtime_logs_dir,
+    default_namespaced_bootstrap_paths, default_shared_identity_path,
+    default_shared_runtime_logs_dir, RadrootsBootstrapPaths, DEFAULT_CONFIG_FILE_NAME,
+    DEFAULT_SERVICE_IDENTITY_FILE_NAME, DEFAULT_SHARED_IDENTITY_FILE_NAME,
 };
 pub use error::RadrootsRuntimePathsError;
 pub use migration::{
-    RADROOTS_MIGRATION_COMPATIBILITY_WINDOW, RADROOTS_MIGRATION_POSTURE,
-    RadrootsLegacyPathCandidate, RadrootsLegacyPathDetection, RadrootsMigrationReport,
-    inspect_legacy_paths,
+    inspect_legacy_paths, RadrootsLegacyPathCandidate, RadrootsLegacyPathDetection,
+    RadrootsMigrationReport, RADROOTS_MIGRATION_COMPATIBILITY_WINDOW, RADROOTS_MIGRATION_POSTURE,
 };
 pub use namespace::{RadrootsRuntimeNamespace, RadrootsRuntimeNamespaceKind};
 pub use platform::{RadrootsHostEnvironment, RadrootsPathProfile, RadrootsPlatform};
 pub use roots::{RadrootsPathOverrides, RadrootsPathResolver, RadrootsPaths};
+pub use service::{RadrootsRuntimePathSelection, RadrootsRuntimePathSelectionError};
 
 #[cfg(test)]
 mod tests {
