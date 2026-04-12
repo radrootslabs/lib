@@ -25,6 +25,14 @@ pub enum IdentityError {
     #[error("failed to read identity file at {0}: {1}")]
     Read(PathBuf, #[source] io::Error),
 
+    #[cfg(feature = "std")]
+    #[error("failed to create identity directory {0}: {1}")]
+    CreateDir(PathBuf, #[source] io::Error),
+
+    #[cfg(feature = "std")]
+    #[error("failed to write identity file at {0}: {1}")]
+    Write(PathBuf, #[source] io::Error),
+
     #[error("invalid identity JSON: {0}")]
     InvalidJson(#[from] serde_json::Error),
 
@@ -59,4 +67,8 @@ pub enum IdentityError {
     #[cfg(feature = "std")]
     #[error(transparent)]
     Paths(#[from] radroots_runtime_paths::RadrootsRuntimePathsError),
+
+    #[cfg(feature = "std")]
+    #[error("protected identity storage error at {path}: {message}")]
+    ProtectedStorage { path: PathBuf, message: String },
 }
