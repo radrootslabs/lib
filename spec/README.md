@@ -48,6 +48,8 @@ under `spec/exports/`:
 
 The `sdk-exports` files are the authoritative public package model.
 The `exports` files remain the lower-level substrate and artifact mapping layer.
+For TypeScript, that lower-level provenance still resolves to the single
+curated `@radroots/sdk` package rather than a crate-mirrored npm package set.
 
 ## Internal Replica Contract
 

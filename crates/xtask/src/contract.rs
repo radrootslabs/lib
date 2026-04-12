@@ -24,6 +24,7 @@ pub struct ContractManifest {
     pub contract: ManifestContract,
     pub surface: Surface,
     pub policy: Policy,
+    pub export: Option<ManifestExports>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -45,6 +46,16 @@ pub struct Policy {
     pub exclude_internal_workspace_crates: bool,
     pub require_reproducible_exports: bool,
     pub require_conformance_vectors: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ManifestExports {
+    pub ts: Option<ManifestLanguagePackages>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ManifestLanguagePackages {
+    pub packages: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1722,6 +1733,20 @@ fn collect_non_empty_set(items: &[String], field: &str) -> Result<BTreeSet<Strin
     Ok(set)
 }
 
+fn ts_curated_package_set(bundle: &ContractBundle) -> Result<Option<BTreeSet<String>>, String> {
+    let Some(export_targets) = bundle.manifest.export.as_ref() else {
+        return Ok(None);
+    };
+    let Some(ts_export) = export_targets.ts.as_ref() else {
+        return Ok(None);
+    };
+    let packages = collect_non_empty_set(&ts_export.packages, "manifest export.ts.packages")?;
+    if packages.is_empty() {
+        return Err("manifest export.ts.packages must not be empty".to_string());
+    }
+    Ok(Some(packages))
+}
+
 fn validate_operations_contract(
     bundle: &ContractBundle,
     operations_manifest: &OperationsContractManifest,
@@ -1949,6 +1974,7 @@ fn validate_operations_contract(
         );
     }
 
+    let ts_packages = ts_curated_package_set(bundle)?;
     let mut has_ts_mapping = false;
     for mapping in &bundle.sdk_exports {
         if mapping.language.id.trim().is_empty() {
@@ -2032,6 +2058,24 @@ fn validate_operations_contract(
                     "sdk export ts must cover every public operation in operations.toml"
                         .to_string(),
                 );
+            }
+            if let Some(expected_packages) = ts_packages.as_ref() {
+                if expected_packages.len() != 1 {
+                    return Err(
+                        "manifest export.ts.packages must define exactly one curated ts package"
+                            .to_string(),
+                    );
+                }
+                let expected_package = expected_packages
+                    .iter()
+                    .next()
+                    .expect("single-package ts export set");
+                if mapping.sdk.package != *expected_package {
+                    return Err(format!(
+                        "sdk export ts package {} must match manifest export.ts.packages {}",
+                        mapping.sdk.package, expected_package
+                    ));
+                }
             }
             let artifacts = mapping
                 .artifacts
@@ -2622,6 +2666,7 @@ fn validate_contract_bundle_with_release_policy_override(
     if bundle.exports.is_empty() {
         return Err("at least one language export mapping is required".to_string());
     }
+    let ts_packages = ts_curated_package_set(bundle)?;
     for mapping in &bundle.exports {
         if mapping.language.id.trim().is_empty() {
             return Err("language.id is required".to_string());
@@ -2661,6 +2706,16 @@ fn validate_contract_bundle_with_release_policy_override(
                     .is_none_or(|value| value.trim().is_empty())
             {
                 return Err("artifacts fields must be non-empty for ts".to_string());
+            }
+            if let Some(expected_packages) = ts_packages.as_ref() {
+                let mapped_packages = mapping.packages.values().cloned().collect::<BTreeSet<_>>();
+                if mapped_packages != *expected_packages {
+                    return Err(format!(
+                        "ts export packages {} must match manifest export.ts.packages {}",
+                        join_set(&mapped_packages),
+                        join_set(expected_packages)
+                    ));
+                }
             }
         }
     }
@@ -3036,6 +3091,7 @@ pub fn validate_contract_bundle(bundle: &ContractBundle) -> Result<(), String> {
     if bundle.exports.is_empty() {
         return Err("at least one language export mapping is required".to_string());
     }
+    let ts_packages = ts_curated_package_set(bundle)?;
     for mapping in &bundle.exports {
         if mapping.language.id.trim().is_empty() {
             return Err("language.id is required".to_string());
@@ -3075,6 +3131,16 @@ pub fn validate_contract_bundle(bundle: &ContractBundle) -> Result<(), String> {
                     .is_none_or(|value| value.trim().is_empty())
             {
                 return Err("artifacts fields must be non-empty for ts".to_string());
+            }
+            if let Some(expected_packages) = ts_packages.as_ref() {
+                let mapped_packages = mapping.packages.values().cloned().collect::<BTreeSet<_>>();
+                if mapped_packages != *expected_packages {
+                    return Err(format!(
+                        "ts export packages {} must match manifest export.ts.packages {}",
+                        join_set(&mapped_packages),
+                        join_set(expected_packages)
+                    ));
+                }
             }
         }
     }
@@ -3222,6 +3288,9 @@ model_crates = ["radroots_a"]
 algorithm_crates = ["radroots_b"]
 wasm_crates = ["radroots_a_wasm"]
 
+[export.ts]
+packages = ["@radroots/sdk"]
+
 [policy]
 exclude_internal_workspace_crates = true
 require_reproducible_exports = true
@@ -3252,7 +3321,7 @@ id = "ts"
 repository = "sdk-typescript"
 
 [packages]
-"radroots_a" = "@radroots/a"
+"radroots_a" = "@radroots/sdk"
 
 [artifacts]
 models_dir = "src/generated"
@@ -3607,9 +3676,11 @@ crates = ["radroots_a"]
         let bundle = load_contract_bundle(&root).expect("load contract");
         for mapping in &bundle.exports {
             if mapping.language.id == "ts" {
-                for package in mapping.packages.values() {
-                    assert!(package.starts_with("@radroots/"));
-                }
+                let packages = mapping.packages.values().cloned().collect::<BTreeSet<_>>();
+                assert_eq!(
+                    packages,
+                    ["@radroots/sdk".to_string()].into_iter().collect()
+                );
             } else {
                 for package in mapping.packages.values() {
                     assert!(!package.trim().is_empty());
@@ -5290,6 +5361,9 @@ model_crates = ["radroots_a"]
 algorithm_crates = ["radroots_b"]
 wasm_crates = ["radroots_a_wasm"]
 
+[export.ts]
+packages = ["@radroots/sdk"]
+
 [policy]
 exclude_internal_workspace_crates = false
 require_reproducible_exports = true
@@ -5421,7 +5495,7 @@ id = "ts"
 repository = "sdk-typescript"
 
 [packages]
-"radroots_a" = "@radroots/a"
+"radroots_a" = "@radroots/sdk"
 
 [artifacts]
 models_dir = "src/generated"
@@ -5709,8 +5783,8 @@ id = "ts"
 repository = "sdk-typescript"
 
 [packages]
-radroots_a = "@radroots/a"
-radroots_b = "@radroots/b"
+radroots_a = "@radroots/sdk"
+radroots_b = "@radroots/sdk"
 
 [artifacts]
 models_dir = "src/generated"
@@ -5735,6 +5809,29 @@ manifest_file = "export-manifest.json"
             validate_contract_bundle(&no_artifacts_bundle).expect_err("missing ts artifacts");
         assert!(artifacts_err.contains("artifacts map is required for ts"));
         let _ = fs::remove_dir_all(&missing_artifacts);
+
+        let curated_package_mismatch = create_synthetic_workspace("bundle_ts_package_mismatch");
+        let mut mismatch_bundle =
+            load_contract_bundle(&curated_package_mismatch).expect("load mismatch bundle");
+        mismatch_bundle.exports[0]
+            .packages
+            .insert("radroots_a".to_string(), "@radroots/other".to_string());
+        assert_eq!(
+            ts_curated_package_set(&mismatch_bundle).expect("ts package set"),
+            Some(["@radroots/sdk".to_string()].into_iter().collect())
+        );
+        assert_eq!(
+            mismatch_bundle.exports[0]
+                .packages
+                .values()
+                .cloned()
+                .collect::<BTreeSet<_>>(),
+            ["@radroots/other".to_string()].into_iter().collect()
+        );
+        let package_err =
+            validate_contract_bundle(&mismatch_bundle).expect_err("ts package mismatch");
+        assert!(package_err.contains("must match manifest export.ts.packages"));
+        let _ = fs::remove_dir_all(&curated_package_mismatch);
 
         let release_error_root = create_synthetic_workspace("bundle_release_policy_error");
         write_file(
