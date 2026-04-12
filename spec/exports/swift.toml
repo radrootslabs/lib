@@ -3,10 +3,10 @@ id = "swift"
 repository = "sdk-swift"
 
 [packages]
-"radroots_core" = "RadrootsCore"
-"radroots_events" = "RadrootsEvents"
-"radroots_trade" = "RadrootsTrade"
-"radroots_identity" = "RadrootsIdentity"
+"radroots_core" = "RadrootsSDK"
+"radroots_events" = "RadrootsSDK"
+"radroots_trade" = "RadrootsSDK"
+"radroots_identity" = "RadrootsSDK"
 
 [artifacts]
 models_dir = "Sources/Generated"

@@ -3,10 +3,10 @@ id = "py"
 repository = "sdk-python"
 
 [packages]
-"radroots_core" = "radroots_core"
-"radroots_events" = "radroots_events"
-"radroots_trade" = "radroots_trade"
-"radroots_identity" = "radroots_identity"
+"radroots_core" = "radroots_sdk"
+"radroots_events" = "radroots_sdk"
+"radroots_trade" = "radroots_sdk"
+"radroots_identity" = "radroots_sdk"
 
 [artifacts]
 models_dir = "src/generated"

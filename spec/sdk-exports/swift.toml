@@ -8,6 +8,10 @@ deterministic_codec = "native_or_wasm"
 signing = "native"
 networking = "native"
 
+[rollout]
+stage = "next"
+order = 2
+
 [operations]
 "profile.build_draft" = "profile.buildDraft"
 "farm.build_draft" = "farm.buildDraft"

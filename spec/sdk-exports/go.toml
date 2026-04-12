@@ -1,9 +1,9 @@
 [language]
-id = "py"
-repository = "sdk-python"
+id = "go"
+repository = "sdk-go"
 
 [sdk]
-package = "radroots_sdk"
+package = "github.com/radrootslabs/sdk-go"
 deterministic_codec = "native_or_wasm"
 signing = "native"
 networking = "native"
@@ -13,15 +13,15 @@ stage = "deferred"
 order = 3
 
 [operations]
-"profile.build_draft" = "profile_build_draft"
-"farm.build_draft" = "farm_build_draft"
-"listing.build_tags" = "listing_build_tags"
-"listing.build_draft" = "listing_build_draft"
-"listing.parse_event" = "listing_parse_event"
-"trade.build_envelope_draft" = "trade_build_envelope_draft"
-"trade.parse_envelope" = "trade_parse_envelope"
-"trade.parse_listing_address" = "trade_parse_listing_address"
-"trade.validate_listing_event" = "trade_validate_listing_event"
+"profile.build_draft" = "profile.BuildDraft"
+"farm.build_draft" = "farm.BuildDraft"
+"listing.build_tags" = "listing.BuildTags"
+"listing.build_draft" = "listing.BuildDraft"
+"listing.parse_event" = "listing.ParseEvent"
+"trade.build_envelope_draft" = "trade.BuildEnvelopeDraft"
+"trade.parse_envelope" = "trade.ParseEnvelope"
+"trade.parse_listing_address" = "trade.ParseListingAddress"
+"trade.validate_listing_event" = "trade.ValidateListingEvent"
 
 [shared_types]
 "WireEventParts" = "WireEventParts"

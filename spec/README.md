@@ -84,6 +84,7 @@ Curated public SDK package definitions are defined under `spec/sdk-exports/`:
 - `spec/sdk-exports/swift.toml`
 - `spec/sdk-exports/kotlin.toml`
 - `spec/sdk-exports/py.toml`
+- `spec/sdk-exports/go.toml`
 
 Lower-level language package mappings and artifact layout rules remain defined
 under `spec/exports/`:
@@ -92,11 +93,19 @@ under `spec/exports/`:
 - `spec/exports/py.toml`
 - `spec/exports/swift.toml`
 - `spec/exports/kotlin.toml`
+- `spec/exports/go.toml`
 
 The `sdk-exports` files are the authoritative public package model.
 The `exports` files remain the lower-level substrate and artifact mapping layer.
-For TypeScript, that lower-level provenance still resolves to the single
-curated `@radroots/sdk` package rather than a crate-mirrored npm package set.
+For every language target, that lower-level provenance must still resolve to
+the same single curated SDK package defined in `sdk-exports/`, rather than a
+crate-mirrored package set.
+
+Rollout order is also explicit in `sdk-exports/`:
+
+- TypeScript is active now
+- Swift and Kotlin are next
+- Python and Go remain deferred until the Rust and TypeScript lines are proven
 
 ## Internal Replica Contract
 
