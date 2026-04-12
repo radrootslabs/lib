@@ -95,6 +95,94 @@ fn open_db() -> ReplicaSql<SqliteExecutor> {
 }
 
 #[test]
+fn full_mode_shaped_query_helpers_cover_cli_reads() {
+    let db = open_db();
+
+    let farm: IFarmCreate = parse_json(json!({
+        "d_tag": "farm-a",
+        "pubkey": hex64('a'),
+        "name": "farm a"
+    }));
+    db.farm_create(&farm).expect("farm create");
+
+    let gcs_location: IGcsLocationCreate = parse_json(json!({
+        "d_tag": "gcs-a",
+        "lat": 59.33,
+        "lng": 18.06,
+        "geohash": "u6sce4f",
+        "point": "POINT(18.06 59.33)",
+        "polygon": "POLYGON((18.06 59.33,18.07 59.33,18.07 59.34,18.06 59.34,18.06 59.33))",
+        "label": "stockholm"
+    }));
+    let gcs_created = db.gcs_location_create(&gcs_location).expect("gcs create").result;
+
+    let trade_product: ITradeProductCreate = parse_json(json!({
+        "key": "product-a",
+        "category": "coffee",
+        "title": "coffee a",
+        "summary": "washed lot",
+        "process": "washed",
+        "lot": "lot-a",
+        "profile": "floral",
+        "year": 2024,
+        "qty_amt": 100,
+        "qty_unit": "kg",
+        "qty_label": "bags",
+        "qty_avail": 2,
+        "price_amt": 7.5,
+        "price_currency": "USD",
+        "price_qty_amt": 1,
+        "price_qty_unit": "kg",
+        "notes": "fresh coffee"
+    }));
+    let trade_product_created = db
+        .trade_product_create(&trade_product)
+        .expect("trade product create")
+        .result;
+
+    let product_location_rel: ITradeProductLocationRelation = parse_json(json!({
+        "trade_product": { "id": trade_product_created.id },
+        "gcs_location": { "id": gcs_created.id }
+    }));
+    db.trade_product_location_set(&product_location_rel)
+        .expect("product location set");
+
+    let nostr_event_state: INostrEventStateCreate = parse_json(json!({
+        "key": "state-a",
+        "kind": 30023,
+        "pubkey": hex64('d'),
+        "d_tag": "listing-a",
+        "last_event_id": hex64('e'),
+        "last_created_at": 42,
+        "content_hash": "hash-a"
+    }));
+    db.nostr_event_state_create(&nostr_event_state)
+        .expect("nostr event state create");
+
+    let rows = db
+        .trade_product_search(&["coffee".to_owned()])
+        .expect("trade product search");
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].key, "product-a");
+    assert_eq!(rows[0].location_primary.as_deref(), Some("stockholm"));
+
+    let lookup_rows = db.trade_product_lookup("product-a").expect("trade product lookup");
+    assert_eq!(lookup_rows.len(), 1);
+    assert_eq!(lookup_rows[0].id, trade_product_created.id);
+
+    assert_eq!(db.trade_product_search(&[]).expect("empty search"), Vec::new());
+    assert_eq!(
+        db.farm_unique_d_tag_by_pubkey(hex64('a').as_str())
+            .expect("farm unique d tag"),
+        Some("farm-a".to_owned())
+    );
+    assert_eq!(
+        db.nostr_event_last_created_at().expect("nostr event freshness"),
+        Some(42)
+    );
+}
+
+#[test]
 fn full_mode_crud_and_relation_paths() {
     let db = open_db();
 
