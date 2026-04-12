@@ -9,7 +9,9 @@ local store envelopes for the `radroots` core libraries.
  * seal and open helpers built around XChaCha20Poly1305 and wrapped data keys;
  * JSON encode and decode helpers for serialized protected payloads;
  * portable core logic with optional `std` support through
-   `radroots_secret_vault`.
+   `radroots_secret_vault`;
+ * file-backed wrapped-key helpers for protected local identity and account
+   storage flows.
 
 ## Copyright
 

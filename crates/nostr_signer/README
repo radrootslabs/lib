@@ -1,7 +1,8 @@
 # radroots_nostr_signer
 
 This is the README for `radroots_nostr_signer`, which provides transport-
-neutral signer models and stores for the `radroots` core libraries.
+neutral signer stores and NIP-46 handler primitives for the `radroots` core
+libraries.
 
 ## Overview
 
@@ -9,8 +10,10 @@ neutral signer models and stores for the `radroots` core libraries.
    workflows;
  * manager and evaluation helpers for request review and signer policy
    decisions;
+ * shared NIP-46 codec, response, and request-session handler helpers for
+   reusable signer services;
  * file, memory, and native SQLite stores for persisted signer state;
- * optional shared-model export through `serde` and `ts-rs` feature gates.
+ * optional native SQLite support for persistent signer services.
 
 ## Copyright
 

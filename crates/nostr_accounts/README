@@ -8,6 +8,8 @@ and vault-backed stores for the `radroots` core libraries.
  * account, selection, and store-state models for working Nostr identities;
  * manager and store layers for file-backed and in-memory account persistence
    under `std`;
+ * shared bootstrap helpers for local account stores backed by protected files
+   and runtime-selected secret vaults;
  * vault integrations through `radroots_secret_vault`, including memory and OS
    keyring backends;
  * optional nostrdb bridge helpers for account registration and lookup.

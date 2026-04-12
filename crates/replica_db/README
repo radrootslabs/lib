@@ -1,13 +1,14 @@
 # radroots_replica_db
 
 This is the README for `radroots_replica_db`, which provides replica SQL
-runtime interfaces for the `radroots` core libraries.
+facades and shaped query helpers for the `radroots` core libraries.
 
 ## Overview
 
  * a generic `ReplicaSql<E>` facade over any `SqlExecutor` implementation;
  * migration, backup, restore, and export helpers for replica database state;
- * typed CRUD and query helpers over the shared replica schema models;
+ * typed CRUD helpers over the shared replica schema models;
+ * shaped query helpers for common trade, farm, and event freshness lookups;
  * feature-gated web, native, and embedded backend support through
    `radroots_sql_core`.
 

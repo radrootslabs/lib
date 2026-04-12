@@ -1,15 +1,18 @@
 # radroots_runtime_paths
 
-This is the README for `radroots_runtime_paths`, which provides canonical local
-path resolution for the `radroots` core libraries.
+This is the README for `radroots_runtime_paths`, which provides canonical
+runtime path selection and contract helpers for the `radroots` core libraries.
 
 ## Overview
 
  * default file-name and bootstrap-path helpers for local runtime layouts;
  * platform, host-environment, namespace, and path-profile types for path
    decisions;
- * resolver and override types that produce structured `RadrootsPaths` outputs;
- * legacy-path inspection and migration constants for compatibility handling.
+ * resolver, override, and runtime-selection helpers that produce structured
+   `RadrootsPaths` outputs;
+ * service and app contract helpers for active profile, override, and root
+   selection reporting;
+ * migration and legacy-path inspection helpers for runtime relocation audits.
 
 ## Copyright
 

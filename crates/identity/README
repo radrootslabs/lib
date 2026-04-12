@@ -1,13 +1,16 @@
 # radroots_identity
 
-This is the README for `radroots_identity`, which provides identity models and
-profile utilities for the `radroots` core libraries.
+This is the README for `radroots_identity`, which provides identity models,
+encrypted file storage, and profile utilities for the `radroots` core
+libraries.
 
 ## Overview
 
  * public and private identity, profile, file, and identifier types;
  * username validation, normalization, and parser helpers;
  * default identity path constants and JSON file support behind feature flags;
+ * encrypted identity-file and public-profile storage helpers for local runtime
+   consumers;
  * optional NIP-49, `secrecy`, `zeroize`, and `ts-rs` support for protected key
    material and shared model export.
 

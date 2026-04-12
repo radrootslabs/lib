@@ -1,7 +1,7 @@
 # radroots_runtime_manager
 
 This is the README for `radroots_runtime_manager`, which provides managed
-runtime registry helpers for the `radroots` core libraries.
+runtime lifecycle and inspection helpers for the `radroots` core libraries.
 
 ## Overview
 
@@ -9,8 +9,10 @@ runtime registry helpers for the `radroots` core libraries.
  * shared and per-instance path resolution layered on `radroots_runtime_paths`;
  * registry load, save, lookup, and upsert helpers for managed runtime
    instances;
- * model types for lifecycle, install state, health state, defaults, and
-   runtime grouping.
+ * lifecycle helpers for archive install, process start and stop, managed-file
+   writes, and secret-file handling;
+ * managed runtime inspection and target-resolution helpers for status, logs,
+   config, and action availability.
 
 ## Copyright
 

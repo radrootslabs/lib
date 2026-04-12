@@ -1,14 +1,15 @@
 # radroots_trade
 
-This is the README for `radroots_trade`, which provides trade listing
-projections and validation models for the `radroots` core libraries.
+This is the README for `radroots_trade`, which provides shared trade workflow
+helpers for the `radroots` core libraries.
 
 ## Overview
 
  * listing model types such as subtotals and totals built on `radroots_core`
    money, quantity, currency, and unit values;
- * listing overlay, projection, and validation modules for trade-facing
-   workflows;
+ * listing publish helpers for canonical address normalization, author checks,
+   and event-shaping workflows;
+ * order and public-trade helpers for shared request validation and projection;
  * optional `serde`, `serde_json`, and `ts-rs` support for shared model
    serialization and export;
  * portable shared-model support for both `std` and `no_std` builds.
