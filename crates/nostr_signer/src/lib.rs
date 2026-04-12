@@ -9,6 +9,7 @@ pub mod manager;
 #[cfg(feature = "native")]
 pub mod migrations;
 pub mod model;
+pub mod nip46;
 #[cfg(feature = "native")]
 pub mod sqlite;
 pub mod store;
@@ -47,6 +48,11 @@ pub mod prelude {
         RadrootsNostrSignerRequestAuditRecord, RadrootsNostrSignerRequestDecision,
         RadrootsNostrSignerRequestId, RadrootsNostrSignerSecretDigestAlgorithm,
         RadrootsNostrSignerStoreState, RadrootsNostrSignerWorkflowId,
+    };
+    pub use crate::nip46::{
+        RadrootsNostrSignerHandledRequest, RadrootsNostrSignerNip46Codec,
+        RadrootsNostrSignerNip46Signer, connect_response_outcome, handled_request_for_action,
+        response_from_hint,
     };
     #[cfg(feature = "native")]
     pub use crate::sqlite::RadrootsNostrSignerSqliteDb;

@@ -22,6 +22,7 @@ radroots_identity = { workspace = true, default-features = false, features = [
   "std",
   "profile",
 ] }
+radroots_nostr = { workspace = true, features = ["std"] }
 radroots_nostr_connect = { workspace = true }
 radroots_runtime = { workspace = true }
 radroots_sql_core = { workspace = true, optional = true }
