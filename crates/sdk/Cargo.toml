@@ -22,7 +22,11 @@ serde_json = [
   "radroots_trade/serde_json",
 ]
 nostr = ["radroots_events_codec/nostr"]
-identity-models = ["dep:radroots_identity", "radroots_identity/profile"]
+identity-models = [
+  "dep:radroots_identity",
+  "radroots_identity/profile",
+  "radroots_identity/std",
+]
 identity-storage = ["identity-models", "std", "radroots_identity/std"]
 signing = ["dep:radroots_nostr", "nostr"]
 relay-client = ["signing", "std", "radroots_nostr/client"]
@@ -47,5 +51,9 @@ radroots_nostr_signer = { workspace = true, optional = true, default-features = 
 
 [dev-dependencies]
 radroots_core = { workspace = true, default-features = false, features = ["std"] }
+radroots_replica_db = { workspace = true, default-features = false, features = ["native"] }
+radroots_replica_db_schema = { workspace = true }
+radroots_replica_sync = { workspace = true, features = ["std"] }
+radroots_sql_core = { workspace = true, features = ["native"] }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
