@@ -10,9 +10,17 @@ use std::{string::String, vec::Vec};
 use alloc::{string::String, vec::Vec};
 
 pub mod farm;
+#[cfg(feature = "identity-models")]
+pub mod identity;
 pub mod listing;
 pub mod profile;
 pub mod trade;
+#[cfg(any(
+    feature = "signing",
+    feature = "relay-client",
+    feature = "signer-adapters"
+))]
+pub mod adapters;
 
 pub use radroots_events::{
     RadrootsNostrEvent, RadrootsNostrEventPtr, RadrootsNostrEventRef,

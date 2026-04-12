@@ -6,3 +6,18 @@ This crate provides the recommended Rust entrypoint for building, parsing, and
 validating Rad Roots profile, farm, listing, and trade events. It is a thin
 facade over the underlying `rr-rs` substrate crates and does not duplicate the
 core event or trade implementations.
+
+The deterministic event contract lives at the crate root:
+
+- `profile`
+- `farm`
+- `listing`
+- `trade`
+
+Optional advanced substrate is explicitly feature-scoped:
+
+- `identity-models`: identity data types without local storage coupling
+- `identity-storage`: encrypted identity-file helpers
+- `signing`: Nostr builder and local signing adapters
+- `relay-client`: relay client and publish adapters
+- `signer-adapters`: NIP-46 and signer-session primitives

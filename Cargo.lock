@@ -2647,7 +2647,13 @@ dependencies = [
  "radroots_core",
  "radroots_events",
  "radroots_events_codec",
+ "radroots_identity",
+ "radroots_nostr",
+ "radroots_nostr_connect",
+ "radroots_nostr_signer",
  "radroots_trade",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]
