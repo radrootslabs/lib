@@ -321,7 +321,7 @@ preferred_cli_binding = true
                 config_path: PathBuf::from("/tmp/config.toml"),
                 logs_path: PathBuf::from("/tmp/logs"),
                 run_path: PathBuf::from("/tmp/run"),
-                installed_version: "0.1.0-alpha.1".to_string(),
+                installed_version: "0.1.0-alpha.2".to_string(),
                 health_endpoint: Some("jsonrpc_status".to_string()),
                 secret_material_ref: Some(
                     "shared/runtime-manager/radrootsd/local/token".to_string(),

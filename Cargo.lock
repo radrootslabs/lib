@@ -2649,7 +2649,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_simplex_agent_proto"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "radroots_simplex_smp_crypto",
  "radroots_simplex_smp_proto",
@@ -2657,7 +2657,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_simplex_agent_runtime"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "base64 0.22.1",
  "radroots_simplex_agent_proto",
@@ -2671,7 +2671,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_simplex_agent_store"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "radroots_simplex_agent_proto",
  "radroots_simplex_smp_crypto",
@@ -2694,7 +2694,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_simplex_interop_tests"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "radroots_simplex_agent_proto",
  "radroots_simplex_agent_runtime",
@@ -2707,7 +2707,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_simplex_smp_crypto"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "ed25519-dalek",
  "getrandom 0.2.17",
@@ -2727,7 +2727,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_simplex_smp_transport"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "base64 0.22.1",
  "radroots_simplex_smp_crypto",
@@ -2781,7 +2781,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_test_fixtures"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 
 [[package]]
 name = "radroots_trade"
@@ -4722,7 +4722,7 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "hex",
  "serde",

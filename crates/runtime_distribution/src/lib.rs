@@ -251,7 +251,7 @@ human_installable = false
                 runtime_id: "cli",
                 os: "linux",
                 arch: "amd64",
-                version: "0.1.0-alpha.1",
+                version: "0.1.0-alpha.2",
                 channel: Some("stable"),
             })
             .expect("resolve cli artifact");
@@ -261,7 +261,7 @@ human_installable = false
         assert_eq!(artifact.archive_extension, ".tar.gz");
         assert_eq!(
             artifact.artifact_file_name,
-            "cli-0.1.0-alpha.1-x86_64-unknown-linux-gnu.tar.gz"
+            "cli-0.1.0-alpha.2-x86_64-unknown-linux-gnu.tar.gz"
         );
     }
 
@@ -275,7 +275,7 @@ human_installable = false
                 runtime_id: "radrootsd",
                 os: "linux",
                 arch: "arm64",
-                version: "0.1.0-alpha.1",
+                version: "0.1.0-alpha.2",
                 channel: None,
             })
             .expect("resolve radrootsd artifact");
@@ -295,7 +295,7 @@ human_installable = false
                 runtime_id: "community-app-desktop",
                 os: "macos",
                 arch: "arm64",
-                version: "0.1.0-alpha.1",
+                version: "0.1.0-alpha.2",
                 channel: Some("stable"),
             })
             .expect("resolve desktop artifact");
@@ -314,7 +314,7 @@ human_installable = false
                 runtime_id: "community-app-ios",
                 os: "macos",
                 arch: "arm64",
-                version: "0.1.0-alpha.1",
+                version: "0.1.0-alpha.2",
                 channel: Some("stable"),
             })
             .expect_err("mobile runtime should not be installable");
@@ -358,7 +358,7 @@ human_installable = false
                 runtime_id: "cli",
                 os: "linux",
                 arch: "amd64",
-                version: "0.1.0-alpha.1",
+                version: "0.1.0-alpha.2",
                 channel: Some("candidate"),
             })
             .expect_err("candidate channel should be inactive");
@@ -380,7 +380,7 @@ human_installable = false
                 runtime_id: "missing-runtime",
                 os: "linux",
                 arch: "amd64",
-                version: "0.1.0-alpha.1",
+                version: "0.1.0-alpha.2",
                 channel: Some("stable"),
             },
         );
@@ -402,7 +402,7 @@ human_installable = false
                 runtime_id: "cli",
                 os: "linux",
                 arch: "amd64",
-                version: "0.1.0-alpha.1",
+                version: "0.1.0-alpha.2",
                 channel: Some("beta"),
             },
         );
@@ -423,7 +423,7 @@ human_installable = false
                 runtime_id: "radrootsd",
                 os: "windows",
                 arch: "amd64",
-                version: "0.1.0-alpha.1",
+                version: "0.1.0-alpha.2",
                 channel: Some("stable"),
             })
             .expect_err("windows target should be unsupported");
@@ -456,7 +456,7 @@ human_installable = false
                 runtime_id: "community-app-ios",
                 os: "ios",
                 arch: "arm64",
-                version: "0.1.0-alpha.1",
+                version: "0.1.0-alpha.2",
                 channel: Some("stable"),
             },
         );
@@ -485,7 +485,7 @@ human_installable = false
                 runtime_id: "cli",
                 os: "linux",
                 arch: "amd64",
-                version: "0.1.0-alpha.1",
+                version: "0.1.0-alpha.2",
                 channel: Some("stable"),
             },
         );
@@ -517,7 +517,7 @@ human_installable = false
                 runtime_id: "cli",
                 os: "linux",
                 arch: "amd64",
-                version: "0.1.0-alpha.1",
+                version: "0.1.0-alpha.2",
                 channel: Some("stable"),
             },
         );
@@ -545,7 +545,7 @@ human_installable = false
                 runtime_id: "cli",
                 os: "linux",
                 arch: "amd64",
-                version: "0.1.0-alpha.1",
+                version: "0.1.0-alpha.2",
                 channel: Some("stable"),
             },
         );
@@ -576,7 +576,7 @@ human_installable = false
                 runtime_id: "cli",
                 os: "linux",
                 arch: "amd64",
-                version: "0.1.0-alpha.1",
+                version: "0.1.0-alpha.2",
                 channel: Some("stable"),
             })
             .expect("single supported format should be inferred");
@@ -598,7 +598,7 @@ human_installable = false
                 runtime_id: "cli",
                 os: "linux",
                 arch: "amd64",
-                version: "0.1.0-alpha.1",
+                version: "0.1.0-alpha.2",
                 channel: Some("stable"),
             },
         );
@@ -627,7 +627,7 @@ human_installable = false
                 runtime_id: "community-app-desktop",
                 os: "macos",
                 arch: "arm64",
-                version: "0.1.0-alpha.1",
+                version: "0.1.0-alpha.2",
                 channel: Some("stable"),
             },
         );

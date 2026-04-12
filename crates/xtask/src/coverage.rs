@@ -3814,7 +3814,7 @@ test_threads = 0
             );
             write_file(
                 &root.join("crates").join("core").join("Cargo.toml"),
-                "[package]\nname = \"radroots_core\"\nversion = \"0.1.0-alpha.1\"\nedition = \"2024\"\n",
+                "[package]\nname = \"radroots_core\"\nversion = \"0.1.0-alpha.2\"\nedition = \"2024\"\n",
             );
         };
 
