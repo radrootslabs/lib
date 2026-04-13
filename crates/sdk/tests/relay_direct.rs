@@ -17,8 +17,8 @@ use radroots_sdk::listing::{
     RadrootsListingProduct, RadrootsListingStatus,
 };
 use radroots_sdk::{
-    RadrootsSdkClient, RadrootsSdkConfig, RadrootsdAuth, RadrootsdConfig, RelayConfig,
-    SdkEnvironment, SdkPublishError, SdkTransportMode, SdkTransportReceipt, SignerConfig,
+    RadrootsSdkClient, RadrootsSdkConfig, RelayConfig, SdkEnvironment, SdkPublishError,
+    SdkTransportMode, SdkTransportReceipt, SignerConfig,
 };
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
@@ -170,10 +170,6 @@ async fn relay_direct_listing_publish_accepts_sdk_built_draft() -> TestResult<()
     config.relay = RelayConfig {
         urls: vec![relay.url().to_owned()],
     };
-    config.radrootsd = RadrootsdConfig {
-        endpoint: Some("https://rpc.radroots.org/jsonrpc".into()),
-        auth: RadrootsdAuth::None,
-    };
     let client = RadrootsSdkClient::from_config(config)?;
     let draft = client.listing().build_draft(&sample_listing())?;
 
@@ -234,10 +230,6 @@ async fn relay_direct_publish_rejects_draft_only_signer_mode() -> TestResult<()>
     config.relay = RelayConfig {
         urls: vec![relay.url().to_owned()],
     };
-    config.radrootsd = RadrootsdConfig {
-        endpoint: Some("https://rpc.radroots.org/jsonrpc".into()),
-        auth: RadrootsdAuth::None,
-    };
     let client = RadrootsSdkClient::from_config(config)?;
 
     let error = client
@@ -268,10 +260,6 @@ async fn relay_direct_publish_rejects_nip46_signer_mode() -> TestResult<()> {
     config.signer = SignerConfig::Nip46;
     config.relay = RelayConfig {
         urls: vec![relay.url().to_owned()],
-    };
-    config.radrootsd = RadrootsdConfig {
-        endpoint: Some("https://rpc.radroots.org/jsonrpc".into()),
-        auth: RadrootsdAuth::None,
     };
     let client = RadrootsSdkClient::from_config(config)?;
 

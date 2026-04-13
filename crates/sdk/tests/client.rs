@@ -111,6 +111,7 @@ fn client_default_config_uses_production_relay_direct() {
 #[test]
 fn client_rejects_invalid_config_on_construction() {
     let mut config = RadrootsSdkConfig::custom();
+    config.transport = SdkTransportMode::RelayDirect;
     config.relay = RelayConfig {
         urls: vec!["https://radroots.org".into()],
     };
@@ -120,6 +121,26 @@ fn client_rejects_invalid_config_on_construction() {
         error,
         SdkConfigError::InvalidRelayUrl("https://radroots.org".into())
     );
+}
+
+#[test]
+fn client_allows_custom_relay_without_radrootsd_endpoint() {
+    let mut config = RadrootsSdkConfig::custom();
+    config.transport = SdkTransportMode::RelayDirect;
+    config.relay = RelayConfig {
+        urls: vec!["wss://radroots.org".into()],
+    };
+
+    RadrootsSdkClient::from_config(config).expect("relay-only sdk client");
+}
+
+#[test]
+fn client_allows_custom_radrootsd_without_relay_urls() {
+    let mut config = RadrootsSdkConfig::custom();
+    config.transport = SdkTransportMode::Radrootsd;
+    config.radrootsd.endpoint = Some("https://rpc.radroots.org/jsonrpc".into());
+
+    RadrootsSdkClient::from_config(config).expect("radrootsd-only sdk client");
 }
 
 #[test]

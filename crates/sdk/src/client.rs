@@ -158,8 +158,14 @@ pub struct RadrootsSdkClient {
 
 impl RadrootsSdkClient {
     pub fn from_config(config: RadrootsSdkConfig) -> Result<Self, SdkConfigError> {
-        config.resolved_relay_urls()?;
-        config.resolved_radrootsd_endpoint()?;
+        match config.transport {
+            SdkTransportMode::RelayDirect => {
+                config.resolved_relay_urls()?;
+            }
+            SdkTransportMode::Radrootsd => {
+                config.resolved_radrootsd_endpoint()?;
+            }
+        }
         Ok(Self { config })
     }
 
