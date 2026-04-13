@@ -34,6 +34,8 @@ pub fn build_draft(listing: &RadrootsListing) -> Result<RadrootsListingDraft, Ev
 }
 
 #[cfg(feature = "serde_json")]
-pub fn parse_event(event: &RadrootsNostrEvent) -> Result<RadrootsListing, RadrootsTradeListingParseError> {
+pub fn parse_event(
+    event: &RadrootsNostrEvent,
+) -> Result<RadrootsListing, RadrootsTradeListingParseError> {
     radroots_trade::listing::parse_listing_event(event)
 }

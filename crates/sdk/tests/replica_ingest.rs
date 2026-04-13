@@ -57,7 +57,14 @@ fn ingest_farm(replica: &ReplicaSql<SqliteExecutor>) -> RadrootsNostrEvent {
     let farm_value = sample_farm();
     let author = seller_pubkey();
     let parts = farm::build_draft(&farm_value).expect("farm draft");
-    let event = sdk_event(1, &author, 1_720_000_000, parts.kind, parts.content, parts.tags);
+    let event = sdk_event(
+        1,
+        &author,
+        1_720_000_000,
+        parts.kind,
+        parts.content,
+        parts.tags,
+    );
     let outcome = radroots_replica_ingest_event(replica.executor(), &event).expect("ingest farm");
     assert_eq!(outcome, RadrootsReplicaIngestOutcome::Applied);
     event

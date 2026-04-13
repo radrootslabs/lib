@@ -13,9 +13,7 @@ use radroots_events::listing::{
 };
 use radroots_events::profile::{RadrootsProfile, RadrootsProfileType};
 use radroots_events::trade::{RadrootsTradeListingValidateRequest, RadrootsTradeMessagePayload};
-use radroots_sdk::{
-    RadrootsNostrEvent, farm, listing, profile, trade,
-};
+use radroots_sdk::{RadrootsNostrEvent, farm, listing, profile, trade};
 
 fn sample_profile() -> RadrootsProfile {
     RadrootsProfile {
@@ -137,10 +135,12 @@ fn farm_build_draft_wraps_farm_encoder() {
     let parts = farm::build_draft(&sample_farm()).expect("farm");
 
     assert_eq!(parts.kind, KIND_FARM);
-    assert!(parts
-        .tags
-        .iter()
-        .any(|tag| tag.first().map(|value| value.as_str()) == Some("d")));
+    assert!(
+        parts
+            .tags
+            .iter()
+            .any(|tag| tag.first().map(|value| value.as_str()) == Some("d"))
+    );
 }
 
 #[test]
@@ -166,7 +166,9 @@ fn listing_parse_rejects_non_listing_kind() {
 
     assert!(matches!(
         listing::parse_event(&event),
-        Err(listing::RadrootsTradeListingParseError::InvalidKind(KIND_PROFILE))
+        Err(listing::RadrootsTradeListingParseError::InvalidKind(
+            KIND_PROFILE
+        ))
     ));
 }
 

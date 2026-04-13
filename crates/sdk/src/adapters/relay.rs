@@ -4,8 +4,8 @@ use crate::WireEventParts;
 use crate::adapters::signing::{SignedNostrEvent, event_builder_from_parts};
 use crate::identity::RadrootsIdentity;
 use radroots_nostr::prelude::{
-    RadrootsNostrClient, RadrootsNostrClientOptions, RadrootsNostrError,
-    RadrootsNostrEventId, RadrootsNostrOutput,
+    RadrootsNostrClient, RadrootsNostrClientOptions, RadrootsNostrError, RadrootsNostrEventId,
+    RadrootsNostrOutput,
 };
 
 pub type RelayClient = RadrootsNostrClient;
@@ -55,7 +55,9 @@ pub async fn publish_parts(
     client: &RelayClient,
     parts: WireEventParts,
 ) -> Result<RelayOutput<RelayEventId>, RelayError> {
-    client.send_event_builder(event_builder_from_parts(parts)?).await
+    client
+        .send_event_builder(event_builder_from_parts(parts)?)
+        .await
 }
 
 pub async fn publish_signed_event(
