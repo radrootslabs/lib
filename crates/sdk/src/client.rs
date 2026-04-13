@@ -280,6 +280,12 @@ impl fmt::Debug for SdkRadrootsdSignerSessionRef {
 
 #[cfg(feature = "radrootsd-client")]
 impl SdkRadrootsdSignerSessionRef {
+    pub fn from_session_id(session_id: impl Into<String>) -> Self {
+        Self {
+            session_id: session_id.into(),
+        }
+    }
+
     pub(crate) fn session_id(&self) -> &str {
         self.session_id.as_str()
     }
