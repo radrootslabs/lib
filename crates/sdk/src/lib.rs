@@ -26,11 +26,6 @@ pub mod profile;
 pub mod trade;
 
 #[cfg(feature = "radrootsd-client")]
-pub use crate::adapters::radrootsd::{
-    SdkRadrootsdBridgeJob, SdkRadrootsdBridgePublishResponse, SdkRadrootsdListingPublishRequest,
-    SdkRadrootsdSignerAuthority,
-};
-#[cfg(feature = "radrootsd-client")]
 pub use crate::client::SdkRadrootsdListingPublishOptions;
 pub use crate::client::{
     FarmClient, ListingClient, ProfileClient, RadrootsSdkClient, SdkPublishError,

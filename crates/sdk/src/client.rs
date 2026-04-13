@@ -500,14 +500,6 @@ impl<'a> ListingClient<'a> {
     }
 
     #[cfg(feature = "radrootsd-client")]
-    pub async fn publish_via_radrootsd(
-        &self,
-        request: &radrootsd::SdkRadrootsdListingPublishRequest,
-    ) -> Result<SdkPublishReceipt, SdkPublishError> {
-        self.client.publish_listing_via_radrootsd(request).await
-    }
-
-    #[cfg(feature = "radrootsd-client")]
     pub async fn publish_listing_via_radrootsd(
         &self,
         listing_value: &listing::RadrootsListing,
