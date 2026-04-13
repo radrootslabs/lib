@@ -1,10 +1,11 @@
 use core::fmt;
 use core::time::Duration;
 
-use crate::RadrootsNostrEvent;
 use crate::config::RadrootsdAuth;
 use crate::listing;
 use crate::listing::RadrootsListing;
+use crate::trade;
+use crate::{RadrootsNostrEvent, RadrootsNostrEventPtr};
 use radroots_events::kinds::KIND_LISTING;
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
@@ -130,6 +131,136 @@ impl fmt::Debug for SdkRadrootsdListingPublishRequest {
         debug.field("signer_session_id", &"<redacted>");
         debug.field("signer_authority", &self.signer_authority);
         debug.field("idempotency_key", &self.idempotency_key);
+        debug.finish()
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct SdkRadrootsdOrderRequestPublishRequest {
+    pub order: trade::RadrootsTradeOrder,
+    pub signer_session_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signer_authority: Option<SdkRadrootsdSignerAuthority>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub idempotency_key: Option<String>,
+}
+
+impl fmt::Debug for SdkRadrootsdOrderRequestPublishRequest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut debug = f.debug_struct("SdkRadrootsdOrderRequestPublishRequest");
+        debug.field("order", &self.order);
+        debug.field("signer_session_id", &"<redacted>");
+        debug.field("signer_authority", &self.signer_authority);
+        debug.field("idempotency_key", &self.idempotency_key);
+        debug.finish()
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, Serialize)]
+pub struct SdkRadrootsdPublicTradePublishRequest {
+    pub listing_addr: String,
+    pub order_id: String,
+    pub counterparty_pubkey: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub listing_event: Option<RadrootsNostrEventPtr>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub root_event_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prev_event_id: Option<String>,
+    pub payload: trade::RadrootsTradeMessagePayload,
+}
+
+impl SdkRadrootsdPublicTradePublishRequest {
+    pub fn new(
+        listing_addr: impl Into<String>,
+        order_id: impl Into<String>,
+        counterparty_pubkey: impl Into<String>,
+        payload: trade::RadrootsTradeMessagePayload,
+    ) -> Self {
+        Self {
+            listing_addr: listing_addr.into(),
+            order_id: order_id.into(),
+            counterparty_pubkey: counterparty_pubkey.into(),
+            listing_event: None,
+            root_event_id: None,
+            prev_event_id: None,
+            payload,
+        }
+    }
+
+    pub fn with_listing_event(mut self, listing_event: RadrootsNostrEventPtr) -> Self {
+        self.listing_event = Some(listing_event);
+        self
+    }
+
+    pub fn with_trade_chain(
+        mut self,
+        root_event_id: impl Into<String>,
+        prev_event_id: impl Into<String>,
+    ) -> Self {
+        self.root_event_id = Some(root_event_id.into());
+        self.prev_event_id = Some(prev_event_id.into());
+        self
+    }
+
+    pub fn message_type(&self) -> Option<trade::RadrootsTradeMessageType> {
+        match &self.payload {
+            trade::RadrootsTradeMessagePayload::ListingValidateRequest(_) => None,
+            trade::RadrootsTradeMessagePayload::ListingValidateResult(_) => None,
+            trade::RadrootsTradeMessagePayload::OrderRequest(_) => None,
+            trade::RadrootsTradeMessagePayload::OrderResponse(_) => {
+                Some(trade::RadrootsTradeMessageType::OrderResponse)
+            }
+            trade::RadrootsTradeMessagePayload::OrderRevision(_) => {
+                Some(trade::RadrootsTradeMessageType::OrderRevision)
+            }
+            trade::RadrootsTradeMessagePayload::OrderRevisionAccept(_) => {
+                Some(trade::RadrootsTradeMessageType::OrderRevisionAccept)
+            }
+            trade::RadrootsTradeMessagePayload::OrderRevisionDecline(_) => {
+                Some(trade::RadrootsTradeMessageType::OrderRevisionDecline)
+            }
+            trade::RadrootsTradeMessagePayload::Question(_) => {
+                Some(trade::RadrootsTradeMessageType::Question)
+            }
+            trade::RadrootsTradeMessagePayload::Answer(_) => {
+                Some(trade::RadrootsTradeMessageType::Answer)
+            }
+            trade::RadrootsTradeMessagePayload::DiscountRequest(_) => {
+                Some(trade::RadrootsTradeMessageType::DiscountRequest)
+            }
+            trade::RadrootsTradeMessagePayload::DiscountOffer(_) => {
+                Some(trade::RadrootsTradeMessageType::DiscountOffer)
+            }
+            trade::RadrootsTradeMessagePayload::DiscountAccept(_) => {
+                Some(trade::RadrootsTradeMessageType::DiscountAccept)
+            }
+            trade::RadrootsTradeMessagePayload::DiscountDecline(_) => {
+                Some(trade::RadrootsTradeMessageType::DiscountDecline)
+            }
+            trade::RadrootsTradeMessagePayload::Cancel(_) => {
+                Some(trade::RadrootsTradeMessageType::Cancel)
+            }
+            trade::RadrootsTradeMessagePayload::FulfillmentUpdate(_) => {
+                Some(trade::RadrootsTradeMessageType::FulfillmentUpdate)
+            }
+            trade::RadrootsTradeMessagePayload::Receipt(_) => {
+                Some(trade::RadrootsTradeMessageType::Receipt)
+            }
+        }
+    }
+}
+
+impl fmt::Debug for SdkRadrootsdPublicTradePublishRequest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut debug = f.debug_struct("SdkRadrootsdPublicTradePublishRequest");
+        debug.field("listing_addr", &self.listing_addr);
+        debug.field("order_id", &self.order_id);
+        debug.field("counterparty_pubkey", &self.counterparty_pubkey);
+        debug.field("listing_event", &self.listing_event);
+        debug.field("root_event_id", &self.root_event_id);
+        debug.field("prev_event_id", &self.prev_event_id);
+        debug.field("payload", &self.payload);
         debug.finish()
     }
 }
@@ -430,6 +561,23 @@ struct SdkRadrootsdBridgeJobParams<'a> {
     job_id: &'a str,
 }
 
+#[derive(Clone, Serialize)]
+struct SdkRadrootsdPublicTradePublishParams<T> {
+    listing_addr: String,
+    order_id: String,
+    counterparty_pubkey: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    listing_event: Option<RadrootsNostrEventPtr>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    root_event_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    prev_event_id: Option<String>,
+    payload: T,
+    signer_session_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    idempotency_key: Option<String>,
+}
+
 pub async fn publish_listing(
     endpoint: &str,
     auth: &RadrootsdAuth,
@@ -445,6 +593,209 @@ pub async fn publish_listing(
         timeout,
     )
     .await
+}
+
+pub(crate) async fn publish_order_request(
+    endpoint: &str,
+    auth: &RadrootsdAuth,
+    request: &SdkRadrootsdOrderRequestPublishRequest,
+    timeout: Duration,
+) -> Result<SdkRadrootsdBridgePublishResponse, RadrootsdError> {
+    jsonrpc_call(
+        endpoint,
+        auth,
+        "radroots-sdk-order-request-publish",
+        "bridge.order.request",
+        request,
+        timeout,
+    )
+    .await
+}
+
+pub(crate) async fn publish_public_trade(
+    endpoint: &str,
+    auth: &RadrootsdAuth,
+    request: &SdkRadrootsdPublicTradePublishRequest,
+    signer_session_id: &str,
+    idempotency_key: Option<&str>,
+    timeout: Duration,
+) -> Result<SdkRadrootsdBridgePublishResponse, RadrootsdError> {
+    match &request.payload {
+        trade::RadrootsTradeMessagePayload::OrderResponse(payload) => {
+            public_trade_call(
+                endpoint,
+                auth,
+                "bridge.order.response",
+                request,
+                payload,
+                signer_session_id,
+                idempotency_key,
+                timeout,
+            )
+            .await
+        }
+        trade::RadrootsTradeMessagePayload::OrderRevision(payload) => {
+            public_trade_call(
+                endpoint,
+                auth,
+                "bridge.order.revision",
+                request,
+                payload,
+                signer_session_id,
+                idempotency_key,
+                timeout,
+            )
+            .await
+        }
+        trade::RadrootsTradeMessagePayload::OrderRevisionAccept(payload) => {
+            public_trade_call(
+                endpoint,
+                auth,
+                "bridge.order.revision.accept",
+                request,
+                payload,
+                signer_session_id,
+                idempotency_key,
+                timeout,
+            )
+            .await
+        }
+        trade::RadrootsTradeMessagePayload::OrderRevisionDecline(payload) => {
+            public_trade_call(
+                endpoint,
+                auth,
+                "bridge.order.revision.decline",
+                request,
+                payload,
+                signer_session_id,
+                idempotency_key,
+                timeout,
+            )
+            .await
+        }
+        trade::RadrootsTradeMessagePayload::Question(payload) => {
+            public_trade_call(
+                endpoint,
+                auth,
+                "bridge.order.question",
+                request,
+                payload,
+                signer_session_id,
+                idempotency_key,
+                timeout,
+            )
+            .await
+        }
+        trade::RadrootsTradeMessagePayload::Answer(payload) => {
+            public_trade_call(
+                endpoint,
+                auth,
+                "bridge.order.answer",
+                request,
+                payload,
+                signer_session_id,
+                idempotency_key,
+                timeout,
+            )
+            .await
+        }
+        trade::RadrootsTradeMessagePayload::DiscountRequest(payload) => {
+            public_trade_call(
+                endpoint,
+                auth,
+                "bridge.order.discount.request",
+                request,
+                payload,
+                signer_session_id,
+                idempotency_key,
+                timeout,
+            )
+            .await
+        }
+        trade::RadrootsTradeMessagePayload::DiscountOffer(payload) => {
+            public_trade_call(
+                endpoint,
+                auth,
+                "bridge.order.discount.offer",
+                request,
+                payload,
+                signer_session_id,
+                idempotency_key,
+                timeout,
+            )
+            .await
+        }
+        trade::RadrootsTradeMessagePayload::DiscountAccept(payload) => {
+            public_trade_call(
+                endpoint,
+                auth,
+                "bridge.order.discount.accept",
+                request,
+                payload,
+                signer_session_id,
+                idempotency_key,
+                timeout,
+            )
+            .await
+        }
+        trade::RadrootsTradeMessagePayload::DiscountDecline(payload) => {
+            public_trade_call(
+                endpoint,
+                auth,
+                "bridge.order.discount.decline",
+                request,
+                payload,
+                signer_session_id,
+                idempotency_key,
+                timeout,
+            )
+            .await
+        }
+        trade::RadrootsTradeMessagePayload::Cancel(payload) => {
+            public_trade_call(
+                endpoint,
+                auth,
+                "bridge.order.cancel",
+                request,
+                payload,
+                signer_session_id,
+                idempotency_key,
+                timeout,
+            )
+            .await
+        }
+        trade::RadrootsTradeMessagePayload::FulfillmentUpdate(payload) => {
+            public_trade_call(
+                endpoint,
+                auth,
+                "bridge.order.fulfillment.update",
+                request,
+                payload,
+                signer_session_id,
+                idempotency_key,
+                timeout,
+            )
+            .await
+        }
+        trade::RadrootsTradeMessagePayload::Receipt(payload) => {
+            public_trade_call(
+                endpoint,
+                auth,
+                "bridge.order.receipt",
+                request,
+                payload,
+                signer_session_id,
+                idempotency_key,
+                timeout,
+            )
+            .await
+        }
+        trade::RadrootsTradeMessagePayload::ListingValidateRequest(_)
+        | trade::RadrootsTradeMessagePayload::ListingValidateResult(_)
+        | trade::RadrootsTradeMessagePayload::OrderRequest(_) => {
+            unreachable!("unsupported trade payload should be rejected by the curated client")
+        }
+    }
 }
 
 pub(crate) async fn connect_signer_session(
@@ -622,6 +973,41 @@ pub fn bridge_listing_publish_request_json(
             "serialize radrootsd listing publish request: {err}"
         ))
     })
+}
+
+async fn public_trade_call<T>(
+    endpoint: &str,
+    auth: &RadrootsdAuth,
+    method: &'static str,
+    request: &SdkRadrootsdPublicTradePublishRequest,
+    payload: &T,
+    signer_session_id: &str,
+    idempotency_key: Option<&str>,
+    timeout: Duration,
+) -> Result<SdkRadrootsdBridgePublishResponse, RadrootsdError>
+where
+    T: Serialize + Clone,
+{
+    let params = SdkRadrootsdPublicTradePublishParams {
+        listing_addr: request.listing_addr.clone(),
+        order_id: request.order_id.clone(),
+        counterparty_pubkey: request.counterparty_pubkey.clone(),
+        listing_event: request.listing_event.clone(),
+        root_event_id: request.root_event_id.clone(),
+        prev_event_id: request.prev_event_id.clone(),
+        payload: payload.clone(),
+        signer_session_id: signer_session_id.to_owned(),
+        idempotency_key: idempotency_key.map(str::to_owned),
+    };
+    jsonrpc_call(
+        endpoint,
+        auth,
+        "radroots-sdk-public-trade-publish",
+        method,
+        &params,
+        timeout,
+    )
+    .await
 }
 
 async fn jsonrpc_call<P, R>(

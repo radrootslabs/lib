@@ -675,6 +675,116 @@ impl fmt::Debug for SdkRadrootsdListingPublishOptions {
     }
 }
 
+#[cfg(feature = "radrootsd-client")]
+#[derive(Clone, PartialEq, Eq)]
+pub struct SdkRadrootsdOrderRequestPublishOptions {
+    session: SdkRadrootsdSignerSessionRef,
+    idempotency_key: Option<String>,
+    signer_authority: Option<radrootsd::SdkRadrootsdSignerAuthority>,
+}
+
+#[cfg(feature = "radrootsd-client")]
+impl SdkRadrootsdOrderRequestPublishOptions {
+    pub fn from_signer_session(session: &SdkRadrootsdSignerSessionHandle) -> Self {
+        Self {
+            session: session.session().clone(),
+            idempotency_key: None,
+            signer_authority: None,
+        }
+    }
+
+    pub fn from_signer_session_ref(session: &SdkRadrootsdSignerSessionRef) -> Self {
+        Self {
+            session: session.clone(),
+            idempotency_key: None,
+            signer_authority: None,
+        }
+    }
+
+    pub fn with_idempotency_key(mut self, idempotency_key: impl Into<String>) -> Self {
+        self.idempotency_key = Some(idempotency_key.into());
+        self
+    }
+
+    pub fn with_signer_authority(
+        mut self,
+        signer_authority: radrootsd::SdkRadrootsdSignerAuthority,
+    ) -> Self {
+        self.signer_authority = Some(signer_authority);
+        self
+    }
+
+    pub fn session(&self) -> &SdkRadrootsdSignerSessionRef {
+        &self.session
+    }
+
+    pub fn idempotency_key(&self) -> Option<&str> {
+        self.idempotency_key.as_deref()
+    }
+
+    pub fn signer_authority(&self) -> Option<&radrootsd::SdkRadrootsdSignerAuthority> {
+        self.signer_authority.as_ref()
+    }
+}
+
+#[cfg(feature = "radrootsd-client")]
+impl fmt::Debug for SdkRadrootsdOrderRequestPublishOptions {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut debug = f.debug_struct("SdkRadrootsdOrderRequestPublishOptions");
+        debug.field("session", &self.session);
+        debug.field("idempotency_key", &self.idempotency_key);
+        debug.field("signer_authority", &self.signer_authority);
+        debug.finish()
+    }
+}
+
+#[cfg(feature = "radrootsd-client")]
+#[derive(Clone, PartialEq, Eq)]
+pub struct SdkRadrootsdPublicTradePublishOptions {
+    session: SdkRadrootsdSignerSessionRef,
+    idempotency_key: Option<String>,
+}
+
+#[cfg(feature = "radrootsd-client")]
+impl SdkRadrootsdPublicTradePublishOptions {
+    pub fn from_signer_session(session: &SdkRadrootsdSignerSessionHandle) -> Self {
+        Self {
+            session: session.session().clone(),
+            idempotency_key: None,
+        }
+    }
+
+    pub fn from_signer_session_ref(session: &SdkRadrootsdSignerSessionRef) -> Self {
+        Self {
+            session: session.clone(),
+            idempotency_key: None,
+        }
+    }
+
+    pub fn with_idempotency_key(mut self, idempotency_key: impl Into<String>) -> Self {
+        self.idempotency_key = Some(idempotency_key.into());
+        self
+    }
+
+    pub fn session(&self) -> &SdkRadrootsdSignerSessionRef {
+        &self.session
+    }
+
+    pub fn idempotency_key(&self) -> Option<&str> {
+        self.idempotency_key.as_deref()
+    }
+}
+
+#[cfg(feature = "radrootsd-client")]
+impl fmt::Debug for SdkRadrootsdPublicTradePublishOptions {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut debug = f.debug_struct("SdkRadrootsdPublicTradePublishOptions");
+        debug.field("session", &self.session);
+        debug.field("idempotency_key", &self.idempotency_key);
+        debug.finish()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RadrootsSdkClient {
     config: RadrootsSdkConfig,
@@ -837,9 +947,83 @@ impl RadrootsSdkClient {
         )
         .await
         .map_err(|err| SdkPublishError::Radrootsd(err.to_string()))?;
-        Ok(sdk_publish_receipt_from_radrootsd_listing_response(
-            response,
-        ))
+        Ok(sdk_publish_receipt_from_radrootsd_bridge_response(response))
+    }
+
+    #[cfg(feature = "radrootsd-client")]
+    async fn publish_order_request_via_radrootsd(
+        &self,
+        request: &radrootsd::SdkRadrootsdOrderRequestPublishRequest,
+    ) -> Result<SdkPublishReceipt, SdkPublishError> {
+        if self.transport() != SdkTransportMode::Radrootsd {
+            return Err(SdkPublishError::UnsupportedTransport {
+                transport: self.transport(),
+                operation: "trade.publish_order_request_via_radrootsd",
+            });
+        }
+        self.require_signer_mode(
+            SignerConfig::Nip46,
+            "trade.publish_order_request_via_radrootsd",
+        )?;
+
+        let endpoint = match &self.resolved_transport_target {
+            SdkResolvedTransportTarget::Radrootsd { endpoint } => endpoint.as_str(),
+            SdkResolvedTransportTarget::RelayDirect { .. } => {
+                return Err(SdkPublishError::UnsupportedTransport {
+                    transport: self.transport(),
+                    operation: "trade.publish_order_request_via_radrootsd",
+                });
+            }
+        };
+        let response = radrootsd::publish_order_request(
+            endpoint,
+            &self.config.radrootsd.auth,
+            request,
+            Duration::from_millis(self.config.network.timeout_ms),
+        )
+        .await
+        .map_err(|err| SdkPublishError::Radrootsd(err.to_string()))?;
+        Ok(sdk_publish_receipt_from_radrootsd_bridge_response(response))
+    }
+
+    #[cfg(feature = "radrootsd-client")]
+    async fn publish_public_trade_via_radrootsd(
+        &self,
+        request: &radrootsd::SdkRadrootsdPublicTradePublishRequest,
+        signer_session: &SdkRadrootsdSignerSessionRef,
+        idempotency_key: Option<&str>,
+    ) -> Result<SdkPublishReceipt, SdkPublishError> {
+        if self.transport() != SdkTransportMode::Radrootsd {
+            return Err(SdkPublishError::UnsupportedTransport {
+                transport: self.transport(),
+                operation: "trade.publish_public_message_via_radrootsd",
+            });
+        }
+        self.require_signer_mode(
+            SignerConfig::Nip46,
+            "trade.publish_public_message_via_radrootsd",
+        )?;
+
+        let endpoint = match &self.resolved_transport_target {
+            SdkResolvedTransportTarget::Radrootsd { endpoint } => endpoint.as_str(),
+            SdkResolvedTransportTarget::RelayDirect { .. } => {
+                return Err(SdkPublishError::UnsupportedTransport {
+                    transport: self.transport(),
+                    operation: "trade.publish_public_message_via_radrootsd",
+                });
+            }
+        };
+        let response = radrootsd::publish_public_trade(
+            endpoint,
+            &self.config.radrootsd.auth,
+            request,
+            signer_session.session_id(),
+            idempotency_key,
+            Duration::from_millis(self.config.network.timeout_ms),
+        )
+        .await
+        .map_err(|err| SdkPublishError::Radrootsd(err.to_string()))?;
+        Ok(sdk_publish_receipt_from_radrootsd_bridge_response(response))
     }
 
     #[cfg(feature = "radrootsd-client")]
@@ -1503,6 +1687,71 @@ impl<'a> TradeClient<'a> {
     ) -> Result<TradeListingValidateResult, trade::RadrootsTradeListingValidationError> {
         trade::validate_listing_event(event)
     }
+
+    #[cfg(feature = "radrootsd-client")]
+    pub async fn publish_order_request_via_radrootsd(
+        &self,
+        order: &trade::RadrootsTradeOrder,
+        session: &SdkRadrootsdSignerSessionHandle,
+    ) -> Result<SdkPublishReceipt, SdkPublishError> {
+        self.publish_order_request_via_radrootsd_with_options(
+            order,
+            &SdkRadrootsdOrderRequestPublishOptions::from_signer_session(session),
+        )
+        .await
+    }
+
+    #[cfg(feature = "radrootsd-client")]
+    pub async fn publish_order_request_via_radrootsd_with_options(
+        &self,
+        order: &trade::RadrootsTradeOrder,
+        options: &SdkRadrootsdOrderRequestPublishOptions,
+    ) -> Result<SdkPublishReceipt, SdkPublishError> {
+        let request = radrootsd::SdkRadrootsdOrderRequestPublishRequest {
+            order: order.clone(),
+            signer_session_id: options.session().session_id().to_owned(),
+            signer_authority: options.signer_authority().cloned(),
+            idempotency_key: options.idempotency_key().map(str::to_owned),
+        };
+        self.client
+            .publish_order_request_via_radrootsd(&request)
+            .await
+    }
+
+    #[cfg(feature = "radrootsd-client")]
+    pub async fn publish_public_message_via_radrootsd(
+        &self,
+        request: &radrootsd::SdkRadrootsdPublicTradePublishRequest,
+        session: &SdkRadrootsdSignerSessionHandle,
+    ) -> Result<SdkPublishReceipt, SdkPublishError> {
+        self.publish_public_message_via_radrootsd_with_options(
+            request,
+            &SdkRadrootsdPublicTradePublishOptions::from_signer_session(session),
+        )
+        .await
+    }
+
+    #[cfg(feature = "radrootsd-client")]
+    pub async fn publish_public_message_via_radrootsd_with_options(
+        &self,
+        request: &radrootsd::SdkRadrootsdPublicTradePublishRequest,
+        options: &SdkRadrootsdPublicTradePublishOptions,
+    ) -> Result<SdkPublishReceipt, SdkPublishError> {
+        match request.message_type() {
+            Some(_) => {
+                self.client
+                    .publish_public_trade_via_radrootsd(
+                        request,
+                        options.session(),
+                        options.idempotency_key(),
+                    )
+                    .await
+            }
+            None => Err(SdkPublishError::Encode(
+                "trade.publish_public_message_via_radrootsd requires a bridge.order.* public trade payload; use trade.publish_order_request_via_radrootsd for order requests".to_owned(),
+            )),
+        }
+    }
 }
 
 #[cfg(all(
@@ -1550,7 +1799,7 @@ fn sdk_publish_receipt_from_relay_output(
 }
 
 #[cfg(feature = "radrootsd-client")]
-fn sdk_publish_receipt_from_radrootsd_listing_response(
+fn sdk_publish_receipt_from_radrootsd_bridge_response(
     response: radrootsd::SdkRadrootsdBridgePublishResponse,
 ) -> SdkPublishReceipt {
     let job = response.job;
