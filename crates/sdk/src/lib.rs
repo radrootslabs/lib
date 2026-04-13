@@ -15,6 +15,7 @@ use std::{string::String, vec::Vec};
     feature = "signer-adapters"
 ))]
 pub mod adapters;
+pub mod client;
 pub mod config;
 pub mod farm;
 #[cfg(feature = "identity-models")]
@@ -29,6 +30,9 @@ pub use crate::config::{
     RADROOTS_SDK_STAGING_RADROOTSD_ENDPOINT, RADROOTS_SDK_STAGING_RELAY_URL, RadrootsSdkConfig,
     RadrootsdAuth, RadrootsdConfig, RelayConfig, RetryPolicy, SdkConfigError, SdkEnvironment,
     SdkTransportMode, SignerConfig,
+};
+pub use crate::client::{
+    FarmClient, ListingClient, ProfileClient, RadrootsSdkClient, TradeClient,
 };
 pub use radroots_events::{
     RadrootsNostrEvent, RadrootsNostrEventPtr, RadrootsNostrEventRef,
