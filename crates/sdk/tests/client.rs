@@ -11,9 +11,9 @@ use radroots_events::listing::{
 };
 use radroots_events::trade::{RadrootsTradeListingValidateRequest, RadrootsTradeMessagePayload};
 use radroots_sdk::{
-    RADROOTS_SDK_PRODUCTION_RADROOTSD_ENDPOINT, RADROOTS_SDK_PRODUCTION_RELAY_URL,
-    RadrootsNostrEvent, RadrootsSdkClient, RadrootsSdkConfig, RelayConfig, SdkConfigError,
-    SdkEnvironment, SdkTransportMode, SignerConfig,
+    RADROOTS_SDK_PRODUCTION_RELAY_URL, RadrootsNostrEvent, RadrootsSdkClient, RadrootsSdkConfig,
+    RelayConfig, SdkConfigError, SdkEnvironment, SdkResolvedTransportTarget, SdkTransportMode,
+    SignerConfig,
 };
 
 fn sample_farm() -> RadrootsFarm {
@@ -97,14 +97,10 @@ fn client_default_config_uses_production_relay_direct() {
 
     assert_eq!(client.transport(), SdkTransportMode::RelayDirect);
     assert_eq!(
-        client.resolved_relay_urls().expect("resolved relays"),
-        vec![RADROOTS_SDK_PRODUCTION_RELAY_URL.to_string()]
-    );
-    assert_eq!(
-        client
-            .resolved_radrootsd_endpoint()
-            .expect("resolved radrootsd"),
-        RADROOTS_SDK_PRODUCTION_RADROOTSD_ENDPOINT
+        client.resolved_transport_target(),
+        &SdkResolvedTransportTarget::RelayDirect {
+            relay_urls: vec![RADROOTS_SDK_PRODUCTION_RELAY_URL.to_string()],
+        }
     );
 }
 
@@ -131,16 +127,29 @@ fn client_allows_custom_relay_without_radrootsd_endpoint() {
         urls: vec!["wss://radroots.org".into()],
     };
 
-    RadrootsSdkClient::from_config(config).expect("relay-only sdk client");
+    let client = RadrootsSdkClient::from_config(config).expect("relay-only sdk client");
+    assert_eq!(
+        client.resolved_transport_target(),
+        &SdkResolvedTransportTarget::RelayDirect {
+            relay_urls: vec!["wss://radroots.org".to_string()],
+        }
+    );
 }
 
 #[test]
 fn client_allows_custom_radrootsd_without_relay_urls() {
+    let endpoint = "https://custom.radroots.org/jsonrpc";
     let mut config = RadrootsSdkConfig::custom();
     config.transport = SdkTransportMode::Radrootsd;
-    config.radrootsd.endpoint = Some("https://rpc.radroots.org/jsonrpc".into());
+    config.radrootsd.endpoint = Some(endpoint.into());
 
-    RadrootsSdkClient::from_config(config).expect("radrootsd-only sdk client");
+    let client = RadrootsSdkClient::from_config(config).expect("radrootsd-only sdk client");
+    assert_eq!(
+        client.resolved_transport_target(),
+        &SdkResolvedTransportTarget::Radrootsd {
+            endpoint: endpoint.to_string(),
+        }
+    );
 }
 
 #[test]

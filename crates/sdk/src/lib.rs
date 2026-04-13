@@ -34,8 +34,8 @@ pub use crate::config::{
 };
 pub use crate::client::{
     FarmClient, ListingClient, ProfileClient, RadrootsSdkClient, SdkPublishError,
-    SdkPublishReceipt, SdkRadrootsdPublishReceipt, SdkRelayFailure, SdkRelayPublishReceipt,
-    SdkTransportReceipt, TradeClient,
+    SdkPublishReceipt, SdkRadrootsdPublishReceipt, SdkRelayFailure,
+    SdkRelayPublishReceipt, SdkResolvedTransportTarget, SdkTransportReceipt, TradeClient,
 };
 #[cfg(feature = "radrootsd-client")]
 pub use crate::adapters::radrootsd::{

@@ -154,19 +154,29 @@ impl std::error::Error for SdkPublishError {}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RadrootsSdkClient {
     config: RadrootsSdkConfig,
+    resolved_transport_target: SdkResolvedTransportTarget,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SdkResolvedTransportTarget {
+    RelayDirect { relay_urls: Vec<String> },
+    Radrootsd { endpoint: String },
 }
 
 impl RadrootsSdkClient {
     pub fn from_config(config: RadrootsSdkConfig) -> Result<Self, SdkConfigError> {
-        match config.transport {
-            SdkTransportMode::RelayDirect => {
-                config.resolved_relay_urls()?;
-            }
-            SdkTransportMode::Radrootsd => {
-                config.resolved_radrootsd_endpoint()?;
-            }
-        }
-        Ok(Self { config })
+        let resolved_transport_target = match config.transport {
+            SdkTransportMode::RelayDirect => SdkResolvedTransportTarget::RelayDirect {
+                relay_urls: config.resolved_relay_urls()?,
+            },
+            SdkTransportMode::Radrootsd => SdkResolvedTransportTarget::Radrootsd {
+                endpoint: config.resolved_radrootsd_endpoint()?,
+            },
+        };
+        Ok(Self {
+            config,
+            resolved_transport_target,
+        })
     }
 
     pub fn config(&self) -> &RadrootsSdkConfig {
@@ -181,12 +191,8 @@ impl RadrootsSdkClient {
         self.config.signer
     }
 
-    pub fn resolved_relay_urls(&self) -> Result<Vec<String>, SdkConfigError> {
-        self.config.resolved_relay_urls()
-    }
-
-    pub fn resolved_radrootsd_endpoint(&self) -> Result<String, SdkConfigError> {
-        self.config.resolved_radrootsd_endpoint()
+    pub fn resolved_transport_target(&self) -> &SdkResolvedTransportTarget {
+        &self.resolved_transport_target
     }
 
     pub fn profile(&self) -> ProfileClient<'_> {
@@ -250,7 +256,15 @@ impl RadrootsSdkClient {
         self.require_signer_mode(SignerConfig::LocalIdentity, operation)?;
 
         let event_kind = u32::from(parts.kind);
-        let relay_urls = self.resolved_relay_urls()?;
+        let relay_urls = match &self.resolved_transport_target {
+            SdkResolvedTransportTarget::RelayDirect { relay_urls } => relay_urls.clone(),
+            SdkResolvedTransportTarget::Radrootsd { .. } => {
+                return Err(SdkPublishError::UnsupportedTransport {
+                    transport: self.transport(),
+                    operation,
+                });
+            }
+        };
         let client = relay::connected_client_from_identity(
             identity,
             &relay_urls,
@@ -277,9 +291,17 @@ impl RadrootsSdkClient {
         }
         self.require_signer_mode(SignerConfig::Nip46, "listing.publish_via_radrootsd")?;
 
-        let endpoint = self.resolved_radrootsd_endpoint()?;
+        let endpoint = match &self.resolved_transport_target {
+            SdkResolvedTransportTarget::Radrootsd { endpoint } => endpoint.as_str(),
+            SdkResolvedTransportTarget::RelayDirect { .. } => {
+                return Err(SdkPublishError::UnsupportedTransport {
+                    transport: self.transport(),
+                    operation: "listing.publish_via_radrootsd",
+                });
+            }
+        };
         let response = radrootsd::publish_listing(
-            endpoint.as_str(),
+            endpoint,
             &self.config.radrootsd.auth,
             request,
             Duration::from_millis(self.config.network.timeout_ms),
