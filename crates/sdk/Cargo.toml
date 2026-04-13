@@ -50,6 +50,8 @@ radroots_nostr_connect = { workspace = true, optional = true }
 radroots_nostr_signer = { workspace = true, optional = true, default-features = false }
 
 [dev-dependencies]
+futures = { workspace = true }
+nostr = { workspace = true }
 radroots_core = { workspace = true, default-features = false, features = ["std"] }
 radroots_replica_db = { workspace = true, default-features = false, features = ["native"] }
 radroots_replica_db_schema = { workspace = true }
@@ -57,3 +59,4 @@ radroots_replica_sync = { workspace = true, features = ["std"] }
 radroots_sql_core = { workspace = true, features = ["native"] }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tokio-tungstenite = "0.26.2"

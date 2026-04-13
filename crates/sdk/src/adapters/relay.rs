@@ -1,3 +1,5 @@
+use core::time::Duration;
+
 use crate::WireEventParts;
 use crate::adapters::signing::{SignedNostrEvent, event_builder_from_parts};
 use crate::identity::RadrootsIdentity;
@@ -24,6 +26,29 @@ pub fn signerless_client_with_options(
 
 pub fn client_from_identity(identity: &RadrootsIdentity) -> RelayClient {
     RelayClient::from_identity(identity)
+}
+
+pub async fn configure_write_relays(
+    client: &RelayClient,
+    relay_urls: &[String],
+    connect_timeout: Duration,
+) -> Result<(), RelayError> {
+    for relay_url in relay_urls {
+        client.add_write_relay(relay_url).await?;
+    }
+    client.connect().await;
+    client.wait_for_connection(connect_timeout).await;
+    Ok(())
+}
+
+pub async fn connected_client_from_identity(
+    identity: &RadrootsIdentity,
+    relay_urls: &[String],
+    connect_timeout: Duration,
+) -> Result<RelayClient, RelayError> {
+    let client = client_from_identity(identity);
+    configure_write_relays(&client, relay_urls, connect_timeout).await?;
+    Ok(client)
 }
 
 pub async fn publish_parts(

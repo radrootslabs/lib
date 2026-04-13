@@ -32,7 +32,9 @@ pub use crate::config::{
     SdkTransportMode, SignerConfig,
 };
 pub use crate::client::{
-    FarmClient, ListingClient, ProfileClient, RadrootsSdkClient, TradeClient,
+    FarmClient, ListingClient, ProfileClient, RadrootsSdkClient, SdkPublishError,
+    SdkPublishReceipt, SdkRadrootsdPublishReceipt, SdkRelayFailure, SdkRelayPublishReceipt,
+    SdkTransportReceipt, TradeClient,
 };
 pub use radroots_events::{
     RadrootsNostrEvent, RadrootsNostrEventPtr, RadrootsNostrEventRef,

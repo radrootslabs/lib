@@ -2644,6 +2644,8 @@ dependencies = [
 name = "radroots_sdk"
 version = "0.1.0-alpha.2"
 dependencies = [
+ "futures",
+ "nostr",
  "radroots_core",
  "radroots_events",
  "radroots_events_codec",
@@ -2658,6 +2660,7 @@ dependencies = [
  "radroots_trade",
  "tempfile",
  "tokio",
+ "tokio-tungstenite",
 ]
 
 [[package]]
