@@ -156,7 +156,7 @@ pub enum RadrootsdAuth {
     BearerToken(String),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SignerConfig {
     #[default]
     DraftOnly,
@@ -225,6 +225,16 @@ impl fmt::Display for SdkConfigError {
 
 #[cfg(feature = "std")]
 impl std::error::Error for SdkConfigError {}
+
+impl fmt::Display for SignerConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::DraftOnly => f.write_str("draft_only"),
+            Self::LocalIdentity => f.write_str("local_identity"),
+            Self::Nip46 => f.write_str("nip46"),
+        }
+    }
+}
 
 fn normalize_relay_urls(values: &[String]) -> Result<Vec<String>, SdkConfigError> {
     let mut normalized = Vec::new();

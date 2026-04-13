@@ -12,6 +12,7 @@ use radroots_sdk::listing::{
 use radroots_sdk::{
     RadrootsSdkClient, RadrootsSdkConfig, RadrootsdAuth, RadrootsdConfig, SdkEnvironment,
     SdkPublishError, SdkRadrootsdListingPublishRequest, SdkTransportMode, SdkTransportReceipt,
+    SignerConfig,
 };
 use serde_json::{Value, json};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -267,6 +268,7 @@ async fn radrootsd_listing_publish_returns_normalized_receipt() -> TestResult<()
 
     let mut config = RadrootsSdkConfig::for_environment(SdkEnvironment::Production);
     config.transport = SdkTransportMode::Radrootsd;
+    config.signer = SignerConfig::Nip46;
     config.radrootsd = RadrootsdConfig {
         endpoint: Some(server.endpoint().to_owned()),
         auth: RadrootsdAuth::BearerToken("sdk-secret".to_owned()),
@@ -280,16 +282,16 @@ async fn radrootsd_listing_publish_returns_normalized_receipt() -> TestResult<()
         idempotency_key: Some("idem-1".to_owned()),
     };
 
-    let receipt = client
-        .listing()
-        .publish_via_radrootsd(&request)
-        .await?;
+    let receipt = client.listing().publish_via_radrootsd(&request).await?;
     let request_json = request_rx.await?;
 
     assert_eq!(request_json["method"], "bridge.listing.publish");
     assert_eq!(request_json["params"]["signer_session_id"], "session-123");
     assert_eq!(request_json["params"]["idempotency_key"], "idem-1");
-    assert_eq!(request_json["params"]["listing"]["d_tag"], "AAAAAAAAAAAAAAAAAAAAAg");
+    assert_eq!(
+        request_json["params"]["listing"]["d_tag"],
+        "AAAAAAAAAAAAAAAAAAAAAg"
+    );
 
     assert_eq!(receipt.transport, SdkTransportMode::Radrootsd);
     assert_eq!(receipt.event_kind, Some(30402));
@@ -300,13 +302,85 @@ async fn radrootsd_listing_publish_returns_normalized_receipt() -> TestResult<()
             assert!(!rpc_receipt.deduplicated);
             assert_eq!(rpc_receipt.job_id.as_deref(), Some("job-1"));
             assert_eq!(rpc_receipt.status.as_deref(), Some("published"));
-            assert_eq!(rpc_receipt.signer_session_id.as_deref(), Some("session-123"));
-            assert_eq!(rpc_receipt.event_addr.as_deref(), Some("30402:seller:listing-1"));
+            assert_eq!(
+                rpc_receipt.signer_session_id.as_deref(),
+                Some("session-123")
+            );
+            assert_eq!(
+                rpc_receipt.event_addr.as_deref(),
+                Some("30402:seller:listing-1")
+            );
             assert_eq!(rpc_receipt.relay_count, Some(1));
             assert_eq!(rpc_receipt.acknowledged_relay_count, Some(1));
         }
         SdkTransportReceipt::RelayDirect(_) => panic!("unexpected relay receipt"),
     }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn radrootsd_listing_publish_rejects_draft_only_signer_mode() -> TestResult<()> {
+    let mut config = RadrootsSdkConfig::for_environment(SdkEnvironment::Production);
+    config.transport = SdkTransportMode::Radrootsd;
+    config.signer = SignerConfig::DraftOnly;
+    let client = RadrootsSdkClient::from_config(config)?;
+    let request = SdkRadrootsdListingPublishRequest {
+        listing: sample_listing(),
+        kind: None,
+        signer_session_id: "session-123".to_owned(),
+        signer_authority: None,
+        idempotency_key: None,
+    };
+
+    let error = client
+        .listing()
+        .publish_via_radrootsd(&request)
+        .await
+        .expect_err("unsupported signer mode");
+
+    assert!(matches!(
+        error,
+        SdkPublishError::UnsupportedSignerMode {
+            transport: SdkTransportMode::Radrootsd,
+            signer: SignerConfig::DraftOnly,
+            required: SignerConfig::Nip46,
+            operation: "listing.publish_via_radrootsd",
+        }
+    ));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn radrootsd_listing_publish_rejects_local_identity_signer_mode() -> TestResult<()> {
+    let mut config = RadrootsSdkConfig::for_environment(SdkEnvironment::Production);
+    config.transport = SdkTransportMode::Radrootsd;
+    config.signer = SignerConfig::LocalIdentity;
+    let client = RadrootsSdkClient::from_config(config)?;
+    let request = SdkRadrootsdListingPublishRequest {
+        listing: sample_listing(),
+        kind: None,
+        signer_session_id: "session-123".to_owned(),
+        signer_authority: None,
+        idempotency_key: None,
+    };
+
+    let error = client
+        .listing()
+        .publish_via_radrootsd(&request)
+        .await
+        .expect_err("unsupported signer mode");
+
+    assert!(matches!(
+        error,
+        SdkPublishError::UnsupportedSignerMode {
+            transport: SdkTransportMode::Radrootsd,
+            signer: SignerConfig::LocalIdentity,
+            required: SignerConfig::Nip46,
+            operation: "listing.publish_via_radrootsd",
+        }
+    ));
 
     Ok(())
 }

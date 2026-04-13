@@ -116,7 +116,10 @@ fn client_rejects_invalid_config_on_construction() {
     };
 
     let error = RadrootsSdkClient::from_config(config).expect_err("invalid config");
-    assert_eq!(error, SdkConfigError::InvalidRelayUrl("https://radroots.org".into()));
+    assert_eq!(
+        error,
+        SdkConfigError::InvalidRelayUrl("https://radroots.org".into())
+    );
 }
 
 #[test]
@@ -132,6 +135,11 @@ fn namespace_clients_reflect_explicit_transport_mode() {
     assert_eq!(client.farm().transport(), SdkTransportMode::Radrootsd);
     assert_eq!(client.listing().transport(), SdkTransportMode::Radrootsd);
     assert_eq!(client.trade().transport(), SdkTransportMode::Radrootsd);
+    assert_eq!(client.signer(), SignerConfig::LocalIdentity);
+    assert_eq!(client.profile().signer(), SignerConfig::LocalIdentity);
+    assert_eq!(client.farm().signer(), SignerConfig::LocalIdentity);
+    assert_eq!(client.listing().signer(), SignerConfig::LocalIdentity);
+    assert_eq!(client.trade().signer(), SignerConfig::LocalIdentity);
 }
 
 #[test]

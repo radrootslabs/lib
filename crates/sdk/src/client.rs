@@ -5,11 +5,20 @@ use std::{string::String, vec::Vec};
 
 #[cfg(feature = "radrootsd-client")]
 use crate::adapters::radrootsd;
-#[cfg(all(feature = "identity-models", feature = "relay-client", feature = "signing"))]
+#[cfg(all(
+    feature = "identity-models",
+    feature = "relay-client",
+    feature = "signing"
+))]
 use crate::adapters::relay;
-#[cfg(all(feature = "identity-models", feature = "relay-client", feature = "signing"))]
-use crate::identity::RadrootsIdentity;
+use crate::config::SignerConfig;
 use crate::config::{RadrootsSdkConfig, SdkConfigError, SdkTransportMode};
+#[cfg(all(
+    feature = "identity-models",
+    feature = "relay-client",
+    feature = "signing"
+))]
+use crate::identity::RadrootsIdentity;
 use crate::{
     NostrTags, RadrootsNostrEvent, RadrootsNostrEventPtr, RadrootsProfile, RadrootsProfileType,
     RadrootsTradeEnvelope, TradeListingValidateResult, WireEventParts, farm, listing, profile,
@@ -17,7 +26,11 @@ use crate::{
 };
 #[cfg(any(
     feature = "radrootsd-client",
-    all(feature = "identity-models", feature = "relay-client", feature = "signing")
+    all(
+        feature = "identity-models",
+        feature = "relay-client",
+        feature = "signing"
+    )
 ))]
 use core::time::Duration;
 
@@ -68,6 +81,12 @@ pub enum SdkPublishError {
         transport: SdkTransportMode,
         operation: &'static str,
     },
+    UnsupportedSignerMode {
+        transport: SdkTransportMode,
+        signer: SignerConfig,
+        required: SignerConfig,
+        operation: &'static str,
+    },
     Relay(String),
     RelayNotAcknowledged {
         transport: SdkTransportMode,
@@ -96,6 +115,15 @@ impl core::fmt::Display for SdkPublishError {
                     "{operation} requires a different sdk transport mode than {transport:?}"
                 )
             }
+            Self::UnsupportedSignerMode {
+                transport,
+                signer,
+                required,
+                operation,
+            } => write!(
+                f,
+                "{operation} requires signer mode `{required}` for {transport:?} transport, got `{signer}`"
+            ),
             Self::Relay(message) => write!(f, "{message}"),
             Self::RelayNotAcknowledged {
                 transport,
@@ -143,6 +171,10 @@ impl RadrootsSdkClient {
         self.config.transport
     }
 
+    pub fn signer(&self) -> SignerConfig {
+        self.config.signer
+    }
+
     pub fn resolved_relay_urls(&self) -> Result<Vec<String>, SdkConfigError> {
         self.config.resolved_relay_urls()
     }
@@ -167,7 +199,28 @@ impl RadrootsSdkClient {
         TradeClient { client: self }
     }
 
-    #[cfg(all(feature = "identity-models", feature = "relay-client", feature = "signing"))]
+    fn require_signer_mode(
+        &self,
+        required: SignerConfig,
+        operation: &'static str,
+    ) -> Result<(), SdkPublishError> {
+        let signer = self.signer();
+        if signer == required {
+            return Ok(());
+        }
+        Err(SdkPublishError::UnsupportedSignerMode {
+            transport: self.transport(),
+            signer,
+            required,
+            operation,
+        })
+    }
+
+    #[cfg(all(
+        feature = "identity-models",
+        feature = "relay-client",
+        feature = "signing"
+    ))]
     async fn publish_parts_via_relay_with_identity(
         &self,
         identity: &RadrootsIdentity,
@@ -180,6 +233,7 @@ impl RadrootsSdkClient {
                 operation,
             });
         }
+        self.require_signer_mode(SignerConfig::LocalIdentity, operation)?;
 
         let event_kind = u32::from(parts.kind);
         let relay_urls = self.resolved_relay_urls()?;
@@ -207,6 +261,7 @@ impl RadrootsSdkClient {
                 operation: "listing.publish_via_radrootsd",
             });
         }
+        self.require_signer_mode(SignerConfig::Nip46, "listing.publish_via_radrootsd")?;
 
         let endpoint = self.resolved_radrootsd_endpoint()?;
         let response = radrootsd::publish_listing(
@@ -237,6 +292,10 @@ impl<'a> ProfileClient<'a> {
         self.client.transport()
     }
 
+    pub fn signer(&self) -> SignerConfig {
+        self.client.signer()
+    }
+
     #[cfg(feature = "serde_json")]
     pub fn build_draft(
         &self,
@@ -259,6 +318,10 @@ impl<'a> FarmClient<'a> {
 
     pub fn transport(&self) -> SdkTransportMode {
         self.client.transport()
+    }
+
+    pub fn signer(&self) -> SignerConfig {
+        self.client.signer()
     }
 
     #[cfg(feature = "serde_json")]
@@ -284,6 +347,10 @@ impl<'a> ListingClient<'a> {
         self.client.transport()
     }
 
+    pub fn signer(&self) -> SignerConfig {
+        self.client.signer()
+    }
+
     pub fn build_tags(
         &self,
         listing_value: &listing::RadrootsListing,
@@ -307,7 +374,11 @@ impl<'a> ListingClient<'a> {
         listing::parse_event(event)
     }
 
-    #[cfg(all(feature = "identity-models", feature = "relay-client", feature = "signing"))]
+    #[cfg(all(
+        feature = "identity-models",
+        feature = "relay-client",
+        feature = "signing"
+    ))]
     pub async fn publish_with_identity(
         &self,
         identity: &RadrootsIdentity,
@@ -315,12 +386,9 @@ impl<'a> ListingClient<'a> {
     ) -> Result<SdkPublishReceipt, SdkPublishError> {
         let parts = listing::build_draft(listing_value)
             .map_err(|err| SdkPublishError::Encode(err.to_string()))?;
-        self.client.publish_parts_via_relay_with_identity(
-            identity,
-            parts,
-            "listing.publish_with_identity",
-        )
-        .await
+        self.client
+            .publish_parts_via_relay_with_identity(identity, parts, "listing.publish_with_identity")
+            .await
     }
 
     #[cfg(feature = "radrootsd-client")]
@@ -344,6 +412,10 @@ impl<'a> TradeClient<'a> {
 
     pub fn transport(&self) -> SdkTransportMode {
         self.client.transport()
+    }
+
+    pub fn signer(&self) -> SignerConfig {
+        self.client.signer()
     }
 
     #[cfg(feature = "serde_json")]
@@ -396,7 +468,11 @@ impl<'a> TradeClient<'a> {
     }
 }
 
-#[cfg(all(feature = "identity-models", feature = "relay-client", feature = "signing"))]
+#[cfg(all(
+    feature = "identity-models",
+    feature = "relay-client",
+    feature = "signing"
+))]
 fn sdk_publish_receipt_from_relay_output(
     event_kind: u32,
     output: relay::RelayOutput<relay::RelayEventId>,
@@ -459,7 +535,12 @@ fn sdk_publish_receipt_from_radrootsd_listing_response(
     }
 }
 
-#[cfg(all(test, feature = "identity-models", feature = "relay-client", feature = "signing"))]
+#[cfg(all(
+    test,
+    feature = "identity-models",
+    feature = "relay-client",
+    feature = "signing"
+))]
 mod tests {
     use super::{
         SdkPublishError, SdkRelayFailure, SdkTransportMode, sdk_publish_receipt_from_relay_output,
