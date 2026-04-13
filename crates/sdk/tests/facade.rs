@@ -159,6 +159,18 @@ fn listing_facade_wraps_build_parse_and_validate() {
 }
 
 #[test]
+fn listing_parse_rejects_non_listing_kind() {
+    let listing_value = sample_listing();
+    let mut event = listing_event(&listing_value);
+    event.kind = KIND_PROFILE;
+
+    assert!(matches!(
+        listing::parse_event(&event),
+        Err(listing::RadrootsTradeListingParseError::InvalidKind(KIND_PROFILE))
+    ));
+}
+
+#[test]
 fn trade_facade_wraps_build_parse_and_address_ops() {
     let listing_value = sample_listing();
     let listing_addr = format!("{KIND_LISTING}:seller:{}", listing_value.d_tag);

@@ -4,6 +4,7 @@ use crate::RadrootsNostrEvent;
 use crate::config::RadrootsdAuth;
 use crate::listing;
 use crate::listing::RadrootsListing;
+use radroots_events::kinds::KIND_LISTING;
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -35,6 +36,11 @@ impl SdkRadrootsdListingPublishRequest {
         signer_authority: Option<SdkRadrootsdSignerAuthority>,
         idempotency_key: Option<String>,
     ) -> Result<Self, listing::RadrootsTradeListingParseError> {
+        if event.kind != KIND_LISTING {
+            return Err(listing::RadrootsTradeListingParseError::InvalidKind(
+                event.kind,
+            ));
+        }
         Ok(Self {
             listing: listing::parse_event(event)?,
             kind: Some(event.kind),

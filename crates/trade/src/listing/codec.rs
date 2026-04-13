@@ -154,7 +154,7 @@ fn map_listing_tags_error(err: EventEncodeError) -> TradeListingParseError {
             TradeListingParseError::InvalidTag(field.to_string())
         }
         EventEncodeError::Json => TradeListingParseError::InvalidJson("discount".to_string()),
-        EventEncodeError::InvalidKind(_) => TradeListingParseError::InvalidTag("kind".to_string()),
+        EventEncodeError::InvalidKind(kind) => TradeListingParseError::InvalidKind(kind),
     }
 }
 
@@ -698,6 +698,7 @@ mod tests {
 
     fn parse_error_tag(error: TradeListingParseError) -> String {
         match error {
+            TradeListingParseError::InvalidKind(_) => "kind".to_string(),
             TradeListingParseError::MissingTag(tag) => tag,
             TradeListingParseError::InvalidTag(tag) => tag,
             TradeListingParseError::InvalidNumber(field) => field,

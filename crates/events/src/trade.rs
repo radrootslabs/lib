@@ -16,6 +16,7 @@ pub const RADROOTS_TRADE_ENVELOPE_VERSION: u16 = 1;
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsTradeListingParseError {
+    InvalidKind(u32),
     MissingTag(String),
     InvalidTag(String),
     InvalidNumber(String),
@@ -28,6 +29,7 @@ pub enum RadrootsTradeListingParseError {
 impl core::fmt::Display for RadrootsTradeListingParseError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
+            Self::InvalidKind(kind) => write!(f, "invalid listing kind: {kind}"),
             Self::MissingTag(tag) => write!(f, "missing required tag: {tag}"),
             Self::InvalidTag(tag) => write!(f, "invalid tag: {tag}"),
             Self::InvalidNumber(field) => write!(f, "invalid number: {field}"),
@@ -721,6 +723,10 @@ mod tests {
 
     #[test]
     fn listing_parse_error_display_variants() {
+        assert_eq!(
+            RadrootsTradeListingParseError::InvalidKind(KIND_PROFILE).to_string(),
+            "invalid listing kind: 0"
+        );
         assert_eq!(
             RadrootsTradeListingParseError::MissingTag("price".into()).to_string(),
             "missing required tag: price"

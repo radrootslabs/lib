@@ -4,10 +4,11 @@ use radroots_core::{
     RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
     RadrootsCoreQuantityPrice, RadrootsCoreUnit,
 };
+use radroots_events::kinds::KIND_LISTING_DRAFT;
 use radroots_sdk::listing::{
     RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
     RadrootsListingDeliveryMethod, RadrootsListingFarmRef, RadrootsListingLocation,
-    RadrootsListingProduct, RadrootsListingStatus,
+    RadrootsListingProduct, RadrootsListingStatus, RadrootsTradeListingParseError,
 };
 use radroots_sdk::{
     RadrootsNostrEvent, RadrootsSdkClient, RadrootsSdkConfig, RadrootsdAuth, RadrootsdConfig,
@@ -427,6 +428,20 @@ async fn radrootsd_listing_publish_rejects_relay_transport_mode() -> TestResult<
             transport: SdkTransportMode::RelayDirect,
             operation: "listing.publish_via_radrootsd",
         }
+    ));
+
+    Ok(())
+}
+
+#[test]
+fn radrootsd_listing_request_from_event_rejects_listing_draft_kind() -> TestResult<()> {
+    let draft = radroots_sdk::listing::build_draft(&sample_listing())?;
+    let mut event = sdk_event("seller", 1_720_000_000, draft);
+    event.kind = KIND_LISTING_DRAFT;
+
+    assert!(matches!(
+        SdkRadrootsdListingPublishRequest::from_event(&event, "session-123", None, None),
+        Err(RadrootsTradeListingParseError::InvalidKind(KIND_LISTING_DRAFT))
     ));
 
     Ok(())
