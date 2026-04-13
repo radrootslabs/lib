@@ -49,6 +49,22 @@ pub enum SdkRadrootsdSignerSessionRole {
     OutboundRemoteSigner,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SdkRadrootsdBridgeDeliveryPolicy {
+    Any,
+    Quorum,
+    All,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SdkRadrootsdBridgeJobStatus {
+    Accepted,
+    Published,
+    Failed,
+}
+
 #[derive(Clone, PartialEq, Eq, Serialize)]
 pub struct SdkRadrootsdSignerSessionConnectRequest {
     pub url: String,
@@ -219,6 +235,40 @@ pub struct SdkRadrootsdBridgePublishResponse {
     pub job: SdkRadrootsdBridgeJob,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub struct SdkRadrootsdBridgeStatusResponse {
+    pub enabled: bool,
+    pub ready: bool,
+    pub auth_mode: String,
+    pub signer_mode: String,
+    pub default_signer_mode: String,
+    pub supported_signer_modes: Vec<String>,
+    pub available_nip46_signer_sessions: usize,
+    pub relay_count: usize,
+    pub delivery_policy: SdkRadrootsdBridgeDeliveryPolicy,
+    #[serde(default)]
+    pub delivery_quorum: Option<usize>,
+    pub publish_max_attempts: usize,
+    pub publish_initial_backoff_millis: u64,
+    pub publish_max_backoff_millis: u64,
+    pub job_status_retention: usize,
+    pub retained_jobs: usize,
+    pub retained_idempotency_keys: usize,
+    pub accepted_jobs: usize,
+    pub published_jobs: usize,
+    pub failed_jobs: usize,
+    pub recovered_failed_jobs: usize,
+    pub methods: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SdkRadrootsdBridgeRelayPublishResult {
+    pub relay_url: String,
+    pub acknowledged: bool,
+    #[serde(default)]
+    pub detail: Option<String>,
+}
+
 #[derive(Clone, PartialEq, Eq, Deserialize)]
 pub struct SdkRadrootsdBridgeJob {
     pub job_id: String,
@@ -256,6 +306,75 @@ impl fmt::Debug for SdkRadrootsdBridgeJob {
         debug.field("event_addr", &self.event_addr);
         debug.field("relay_count", &self.relay_count);
         debug.field("acknowledged_relay_count", &self.acknowledged_relay_count);
+        debug.finish()
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, Deserialize)]
+pub struct SdkRadrootsdBridgeJobView {
+    pub job_id: String,
+    pub command: String,
+    #[serde(default)]
+    pub idempotency_key: Option<String>,
+    pub status: SdkRadrootsdBridgeJobStatus,
+    pub terminal: bool,
+    pub recovered_after_restart: bool,
+    pub requested_at_unix: u64,
+    #[serde(default)]
+    pub completed_at_unix: Option<u64>,
+    pub signer_mode: String,
+    #[serde(default)]
+    pub signer_session_id: Option<String>,
+    pub event_kind: u32,
+    #[serde(default)]
+    pub event_id: Option<String>,
+    #[serde(default)]
+    pub event_addr: Option<String>,
+    pub delivery_policy: SdkRadrootsdBridgeDeliveryPolicy,
+    #[serde(default)]
+    pub delivery_quorum: Option<usize>,
+    pub relay_count: usize,
+    pub acknowledged_relay_count: usize,
+    pub required_acknowledged_relay_count: usize,
+    pub attempt_count: usize,
+    #[serde(default)]
+    pub attempt_summaries: Vec<String>,
+    #[serde(default)]
+    pub relay_results: Vec<SdkRadrootsdBridgeRelayPublishResult>,
+    pub relay_outcome_summary: String,
+}
+
+impl fmt::Debug for SdkRadrootsdBridgeJobView {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut debug = f.debug_struct("SdkRadrootsdBridgeJobView");
+        debug.field("job_id", &self.job_id);
+        debug.field("command", &self.command);
+        debug.field("idempotency_key", &self.idempotency_key);
+        debug.field("status", &self.status);
+        debug.field("terminal", &self.terminal);
+        debug.field("recovered_after_restart", &self.recovered_after_restart);
+        debug.field("requested_at_unix", &self.requested_at_unix);
+        debug.field("completed_at_unix", &self.completed_at_unix);
+        debug.field("signer_mode", &self.signer_mode.as_str());
+        debug.field(
+            "signer_session_id",
+            &self.signer_session_id.as_ref().map(|_| "<redacted>"),
+        );
+        debug.field("event_kind", &self.event_kind);
+        debug.field("event_id", &self.event_id);
+        debug.field("event_addr", &self.event_addr);
+        debug.field("delivery_policy", &self.delivery_policy);
+        debug.field("delivery_quorum", &self.delivery_quorum);
+        debug.field("relay_count", &self.relay_count);
+        debug.field("acknowledged_relay_count", &self.acknowledged_relay_count);
+        debug.field(
+            "required_acknowledged_relay_count",
+            &self.required_acknowledged_relay_count,
+        );
+        debug.field("attempt_count", &self.attempt_count);
+        debug.field("attempt_summaries", &self.attempt_summaries);
+        debug.field("relay_results", &self.relay_results);
+        debug.field("relay_outcome_summary", &self.relay_outcome_summary);
         debug.finish()
     }
 }
@@ -304,6 +423,11 @@ struct SdkRadrootsdSignerSessionParams<'a> {
 struct SdkRadrootsdSignerSessionRequireAuthParams<'a> {
     session_id: &'a str,
     auth_url: &'a str,
+}
+
+#[derive(Debug, Serialize)]
+struct SdkRadrootsdBridgeJobParams<'a> {
+    job_id: &'a str,
 }
 
 pub async fn publish_listing(
@@ -423,6 +547,55 @@ pub(crate) async fn close_signer_session(
         "radroots-sdk-nip46-session-close",
         "nip46.session.close",
         &SdkRadrootsdSignerSessionParams { session_id },
+        timeout,
+    )
+    .await
+}
+
+pub(crate) async fn bridge_status(
+    endpoint: &str,
+    auth: &RadrootsdAuth,
+    timeout: Duration,
+) -> Result<SdkRadrootsdBridgeStatusResponse, RadrootsdError> {
+    jsonrpc_call(
+        endpoint,
+        auth,
+        "radroots-sdk-bridge-status",
+        "bridge.status",
+        &json!({}),
+        timeout,
+    )
+    .await
+}
+
+pub(crate) async fn bridge_job_status(
+    endpoint: &str,
+    auth: &RadrootsdAuth,
+    job_id: &str,
+    timeout: Duration,
+) -> Result<SdkRadrootsdBridgeJobView, RadrootsdError> {
+    jsonrpc_call(
+        endpoint,
+        auth,
+        "radroots-sdk-bridge-job-status",
+        "bridge.job.status",
+        &SdkRadrootsdBridgeJobParams { job_id },
+        timeout,
+    )
+    .await
+}
+
+pub(crate) async fn list_bridge_jobs(
+    endpoint: &str,
+    auth: &RadrootsdAuth,
+    timeout: Duration,
+) -> Result<Vec<SdkRadrootsdBridgeJobView>, RadrootsdError> {
+    jsonrpc_call(
+        endpoint,
+        auth,
+        "radroots-sdk-bridge-job-list",
+        "bridge.job.list",
+        &json!({}),
         timeout,
     )
     .await

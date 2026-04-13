@@ -17,7 +17,8 @@ use radroots_sdk::listing::{
 };
 use radroots_sdk::{
     RadrootsNostrEvent, RadrootsSdkClient, RadrootsSdkConfig, RadrootsdAuth, RadrootsdConfig,
-    SdkConfigError, SdkEnvironment, SdkPublishError, SdkRadrootsdListingPublishOptions,
+    SdkConfigError, SdkEnvironment, SdkPublishError, SdkRadrootsdBridgeDeliveryPolicy,
+    SdkRadrootsdBridgeError, SdkRadrootsdBridgeJobStatus, SdkRadrootsdListingPublishOptions,
     SdkRadrootsdPublishReceipt, SdkRadrootsdSessionError, SdkRadrootsdSignerSessionHandle,
     SdkRadrootsdSignerSessionRole, SdkRadrootsdSignerSessionView, SdkTransportMode,
     SdkTransportReceipt, SignerConfig,
@@ -295,6 +296,70 @@ fn sample_session_view_json(session_id: &str) -> Value {
             "account_identity_id": "identity-1",
             "provider_signer_session_id": "provider-session-123"
         }
+    })
+}
+
+fn sample_bridge_status_json() -> Value {
+    json!({
+        "enabled": true,
+        "ready": true,
+        "auth_mode": "bearer_token",
+        "signer_mode": "selectable_per_request",
+        "default_signer_mode": "embedded_service_identity",
+        "supported_signer_modes": ["embedded_service_identity", "nip46_session"],
+        "available_nip46_signer_sessions": 2,
+        "relay_count": 1,
+        "delivery_policy": "quorum",
+        "delivery_quorum": 1,
+        "publish_max_attempts": 3,
+        "publish_initial_backoff_millis": 250,
+        "publish_max_backoff_millis": 4000,
+        "job_status_retention": 64,
+        "retained_jobs": 4,
+        "retained_idempotency_keys": 2,
+        "accepted_jobs": 1,
+        "published_jobs": 2,
+        "failed_jobs": 1,
+        "recovered_failed_jobs": 0,
+        "methods": ["bridge.status", "bridge.job.status", "bridge.job.list", "bridge.listing.publish"]
+    })
+}
+
+fn sample_bridge_job_json(job_id: &str) -> Value {
+    json!({
+        "job_id": job_id,
+        "command": "bridge.listing.publish",
+        "idempotency_key": "idem-bridge-1",
+        "status": "published",
+        "terminal": true,
+        "recovered_after_restart": false,
+        "requested_at_unix": 1720000000u64,
+        "completed_at_unix": 1720000001u64,
+        "signer_mode": "nip46_session",
+        "signer_session_id": "session-123",
+        "event_kind": 30402,
+        "event_id": "event-bridge-1",
+        "event_addr": "30402:seller:listing-bridge-1",
+        "delivery_policy": "quorum",
+        "delivery_quorum": 1,
+        "relay_count": 2,
+        "acknowledged_relay_count": 1,
+        "required_acknowledged_relay_count": 1,
+        "attempt_count": 1,
+        "attempt_summaries": ["attempt 1: 1/2 relays acknowledged"],
+        "relay_results": [
+            {
+                "relay_url": "wss://radroots.org",
+                "acknowledged": true,
+                "detail": null
+            },
+            {
+                "relay_url": "wss://backup.radroots.org",
+                "acknowledged": false,
+                "detail": "timeout"
+            }
+        ],
+        "relay_outcome_summary": "quorum satisfied with 1/2 relay acknowledgements"
     })
 }
 
@@ -1083,6 +1148,159 @@ async fn radrootsd_listing_publish_rejects_relay_transport_mode() -> TestResult<
         SdkPublishError::UnsupportedTransport {
             transport: SdkTransportMode::RelayDirect,
             operation: "listing.publish_via_radrootsd",
+        }
+    ));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn radrootsd_bridge_status_returns_typed_status() -> TestResult<()> {
+    let (server, request_rx) = JsonRpcServer::spawn(
+        Some("Bearer sdk-secret"),
+        json!({
+            "jsonrpc": "2.0",
+            "id": "radroots-sdk-bridge-status",
+            "result": sample_bridge_status_json()
+        }),
+    )
+    .await?;
+    let client = radrootsd_test_client(server.endpoint())?;
+    let status = client.radrootsd().bridge().status().await?;
+    let request_json = request_rx.await?;
+
+    assert_eq!(request_json["method"], "bridge.status");
+    assert!(status.enabled);
+    assert!(status.ready);
+    assert_eq!(
+        status.delivery_policy,
+        SdkRadrootsdBridgeDeliveryPolicy::Quorum
+    );
+    assert_eq!(status.delivery_quorum, Some(1));
+    assert_eq!(status.available_nip46_signer_sessions, 2);
+    assert!(
+        status
+            .methods
+            .contains(&"bridge.listing.publish".to_owned())
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn radrootsd_bridge_job_status_accepts_typed_job_ref_from_publish_receipt() -> TestResult<()>
+{
+    let (publish_server, publish_request_rx) = JsonRpcServer::spawn(
+        Some("Bearer sdk-secret"),
+        json!({
+            "jsonrpc": "2.0",
+            "id": "radroots-sdk-listing-publish",
+            "result": {
+                "deduplicated": false,
+                "job": {
+                    "job_id": "job-bridge-1",
+                    "command": "bridge.listing.publish",
+                    "status": "published",
+                    "terminal": true,
+                    "recovered_after_restart": false,
+                    "signer_mode": "nip46_session:session-123",
+                    "signer_session_id": "session-123",
+                    "event_kind": 30402,
+                    "event_id": "event-bridge-1",
+                    "event_addr": "30402:seller:listing-bridge-1",
+                    "relay_count": 1,
+                    "acknowledged_relay_count": 1
+                }
+            }
+        }),
+    )
+    .await?;
+    let handle = connected_bunker_session_handle("session-123").await?;
+    let publish_client = radrootsd_test_client(publish_server.endpoint())?;
+    let publish_receipt = publish_client
+        .listing()
+        .publish_listing_via_radrootsd(&sample_listing(), &handle)
+        .await?;
+    let publish_request_json = publish_request_rx.await?;
+    assert_eq!(publish_request_json["method"], "bridge.listing.publish");
+
+    let job = match &publish_receipt.transport_receipt {
+        SdkTransportReceipt::Radrootsd(receipt) => receipt.job(),
+        SdkTransportReceipt::RelayDirect(_) => None,
+    }
+    .expect("publish receipt should expose a bridge job ref");
+
+    let (job_server, request_rx) = JsonRpcServer::spawn(
+        Some("Bearer sdk-secret"),
+        json!({
+            "jsonrpc": "2.0",
+            "id": "radroots-sdk-bridge-job-status",
+            "result": sample_bridge_job_json("job-bridge-1")
+        }),
+    )
+    .await?;
+    let job_client = radrootsd_test_client(job_server.endpoint())?;
+    let job_view = job_client.radrootsd().bridge().job(&job).await?;
+    let request_json = request_rx.await?;
+
+    assert_eq!(request_json["method"], "bridge.job.status");
+    assert_eq!(request_json["params"]["job_id"], "job-bridge-1");
+    assert_eq!(job_view.job().job_id(), "job-bridge-1");
+    assert_eq!(job_view.status, SdkRadrootsdBridgeJobStatus::Published);
+    assert_eq!(
+        job_view.delivery_policy,
+        SdkRadrootsdBridgeDeliveryPolicy::Quorum
+    );
+    assert_eq!(job_view.attempt_count, 1);
+    assert_eq!(job_view.relay_results.len(), 2);
+    assert_eq!(job_view.relay_results[0].relay_url, "wss://radroots.org");
+    assert!(job_view.relay_results[0].acknowledged);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn radrootsd_bridge_job_list_returns_typed_views() -> TestResult<()> {
+    let (server, request_rx) = JsonRpcServer::spawn(
+        Some("Bearer sdk-secret"),
+        json!({
+            "jsonrpc": "2.0",
+            "id": "radroots-sdk-bridge-job-list",
+            "result": [
+                sample_bridge_job_json("job-bridge-1"),
+                sample_bridge_job_json("job-bridge-2")
+            ]
+        }),
+    )
+    .await?;
+    let client = radrootsd_test_client(server.endpoint())?;
+    let jobs = client.radrootsd().bridge().jobs().await?;
+    let request_json = request_rx.await?;
+
+    assert_eq!(request_json["method"], "bridge.job.list");
+    assert_eq!(jobs.len(), 2);
+    assert_eq!(jobs[0].job().job_id(), "job-bridge-1");
+    assert_eq!(jobs[1].job().job_id(), "job-bridge-2");
+    assert_eq!(jobs[0].status, SdkRadrootsdBridgeJobStatus::Published);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn radrootsd_bridge_status_rejects_relay_transport_mode() -> TestResult<()> {
+    let client = RadrootsSdkClient::from_config(RadrootsSdkConfig::production())?;
+    let error = client
+        .radrootsd()
+        .bridge()
+        .status()
+        .await
+        .expect_err("unsupported transport");
+
+    assert!(matches!(
+        error,
+        SdkRadrootsdBridgeError::UnsupportedTransport {
+            transport: SdkTransportMode::RelayDirect,
+            operation: "radrootsd.bridge.status",
         }
     ));
 

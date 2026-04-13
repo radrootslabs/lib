@@ -98,6 +98,15 @@ impl fmt::Debug for SdkRadrootsdPublishReceipt {
     }
 }
 
+#[cfg(feature = "radrootsd-client")]
+impl SdkRadrootsdPublishReceipt {
+    pub fn job(&self) -> Option<SdkRadrootsdBridgeJobRef> {
+        self.job_id
+            .as_ref()
+            .map(|job_id| SdkRadrootsdBridgeJobRef::new(job_id.clone()))
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SdkPublishError {
     Config(SdkConfigError),
@@ -217,6 +226,44 @@ impl fmt::Display for SdkRadrootsdSessionError {
 impl std::error::Error for SdkRadrootsdSessionError {}
 
 #[cfg(feature = "radrootsd-client")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SdkRadrootsdBridgeError {
+    Config(SdkConfigError),
+    UnsupportedTransport {
+        transport: SdkTransportMode,
+        operation: &'static str,
+    },
+    Radrootsd(String),
+}
+
+#[cfg(feature = "radrootsd-client")]
+impl From<SdkConfigError> for SdkRadrootsdBridgeError {
+    fn from(value: SdkConfigError) -> Self {
+        Self::Config(value)
+    }
+}
+
+#[cfg(feature = "radrootsd-client")]
+impl fmt::Display for SdkRadrootsdBridgeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Config(err) => write!(f, "{err}"),
+            Self::UnsupportedTransport {
+                transport,
+                operation,
+            } => write!(
+                f,
+                "{operation} requires a different sdk transport mode than {transport:?}"
+            ),
+            Self::Radrootsd(message) => write!(f, "{message}"),
+        }
+    }
+}
+
+#[cfg(all(feature = "radrootsd-client", feature = "std"))]
+impl std::error::Error for SdkRadrootsdBridgeError {}
+
+#[cfg(feature = "radrootsd-client")]
 #[derive(Clone, PartialEq, Eq)]
 pub struct SdkRadrootsdSignerSessionRef {
     session_id: String,
@@ -235,6 +282,144 @@ impl fmt::Debug for SdkRadrootsdSignerSessionRef {
 impl SdkRadrootsdSignerSessionRef {
     pub(crate) fn session_id(&self) -> &str {
         self.session_id.as_str()
+    }
+}
+
+#[cfg(feature = "radrootsd-client")]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SdkRadrootsdBridgeJobRef {
+    job_id: String,
+}
+
+#[cfg(feature = "radrootsd-client")]
+impl SdkRadrootsdBridgeJobRef {
+    pub fn new(job_id: impl Into<String>) -> Self {
+        Self {
+            job_id: job_id.into(),
+        }
+    }
+
+    pub fn job_id(&self) -> &str {
+        self.job_id.as_str()
+    }
+}
+
+#[cfg(feature = "radrootsd-client")]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SdkRadrootsdBridgeStatus {
+    pub enabled: bool,
+    pub ready: bool,
+    pub auth_mode: String,
+    pub signer_mode: String,
+    pub default_signer_mode: String,
+    pub supported_signer_modes: Vec<String>,
+    pub available_nip46_signer_sessions: usize,
+    pub relay_count: usize,
+    pub delivery_policy: radrootsd::SdkRadrootsdBridgeDeliveryPolicy,
+    pub delivery_quorum: Option<usize>,
+    pub publish_max_attempts: usize,
+    pub publish_initial_backoff_millis: u64,
+    pub publish_max_backoff_millis: u64,
+    pub job_status_retention: usize,
+    pub retained_jobs: usize,
+    pub retained_idempotency_keys: usize,
+    pub accepted_jobs: usize,
+    pub published_jobs: usize,
+    pub failed_jobs: usize,
+    pub recovered_failed_jobs: usize,
+    pub methods: Vec<String>,
+}
+
+#[cfg(feature = "radrootsd-client")]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SdkRadrootsdBridgeJobView {
+    job: SdkRadrootsdBridgeJobRef,
+    pub command: String,
+    pub idempotency_key: Option<String>,
+    pub status: radrootsd::SdkRadrootsdBridgeJobStatus,
+    pub terminal: bool,
+    pub recovered_after_restart: bool,
+    pub requested_at_unix: u64,
+    pub completed_at_unix: Option<u64>,
+    pub signer_mode: String,
+    pub signer_session_id: Option<String>,
+    pub event_kind: u32,
+    pub event_id: Option<String>,
+    pub event_addr: Option<String>,
+    pub delivery_policy: radrootsd::SdkRadrootsdBridgeDeliveryPolicy,
+    pub delivery_quorum: Option<usize>,
+    pub relay_count: usize,
+    pub acknowledged_relay_count: usize,
+    pub required_acknowledged_relay_count: usize,
+    pub attempt_count: usize,
+    pub attempt_summaries: Vec<String>,
+    pub relay_results: Vec<radrootsd::SdkRadrootsdBridgeRelayPublishResult>,
+    pub relay_outcome_summary: String,
+}
+
+#[cfg(feature = "radrootsd-client")]
+impl SdkRadrootsdBridgeJobView {
+    pub fn job(&self) -> &SdkRadrootsdBridgeJobRef {
+        &self.job
+    }
+}
+
+#[cfg(feature = "radrootsd-client")]
+impl From<radrootsd::SdkRadrootsdBridgeStatusResponse> for SdkRadrootsdBridgeStatus {
+    fn from(value: radrootsd::SdkRadrootsdBridgeStatusResponse) -> Self {
+        Self {
+            enabled: value.enabled,
+            ready: value.ready,
+            auth_mode: value.auth_mode,
+            signer_mode: value.signer_mode,
+            default_signer_mode: value.default_signer_mode,
+            supported_signer_modes: value.supported_signer_modes,
+            available_nip46_signer_sessions: value.available_nip46_signer_sessions,
+            relay_count: value.relay_count,
+            delivery_policy: value.delivery_policy,
+            delivery_quorum: value.delivery_quorum,
+            publish_max_attempts: value.publish_max_attempts,
+            publish_initial_backoff_millis: value.publish_initial_backoff_millis,
+            publish_max_backoff_millis: value.publish_max_backoff_millis,
+            job_status_retention: value.job_status_retention,
+            retained_jobs: value.retained_jobs,
+            retained_idempotency_keys: value.retained_idempotency_keys,
+            accepted_jobs: value.accepted_jobs,
+            published_jobs: value.published_jobs,
+            failed_jobs: value.failed_jobs,
+            recovered_failed_jobs: value.recovered_failed_jobs,
+            methods: value.methods,
+        }
+    }
+}
+
+#[cfg(feature = "radrootsd-client")]
+impl From<radrootsd::SdkRadrootsdBridgeJobView> for SdkRadrootsdBridgeJobView {
+    fn from(value: radrootsd::SdkRadrootsdBridgeJobView) -> Self {
+        Self {
+            job: SdkRadrootsdBridgeJobRef::new(value.job_id),
+            command: value.command,
+            idempotency_key: value.idempotency_key,
+            status: value.status,
+            terminal: value.terminal,
+            recovered_after_restart: value.recovered_after_restart,
+            requested_at_unix: value.requested_at_unix,
+            completed_at_unix: value.completed_at_unix,
+            signer_mode: value.signer_mode,
+            signer_session_id: value.signer_session_id,
+            event_kind: value.event_kind,
+            event_id: value.event_id,
+            event_addr: value.event_addr,
+            delivery_policy: value.delivery_policy,
+            delivery_quorum: value.delivery_quorum,
+            relay_count: value.relay_count,
+            acknowledged_relay_count: value.acknowledged_relay_count,
+            required_acknowledged_relay_count: value.required_acknowledged_relay_count,
+            attempt_count: value.attempt_count,
+            attempt_summaries: value.attempt_summaries,
+            relay_results: value.relay_results,
+            relay_outcome_summary: value.relay_outcome_summary,
+        }
     }
 }
 
@@ -811,6 +996,87 @@ impl RadrootsSdkClient {
         .map_err(|err| SdkRadrootsdSessionError::Radrootsd(err.to_string()))?;
         Ok(response.into())
     }
+
+    #[cfg(feature = "radrootsd-client")]
+    fn require_radrootsd_bridge_endpoint(
+        &self,
+        operation: &'static str,
+    ) -> Result<&str, SdkRadrootsdBridgeError> {
+        match &self.resolved_transport_target {
+            SdkResolvedTransportTarget::Radrootsd { endpoint } => Ok(endpoint.as_str()),
+            SdkResolvedTransportTarget::RelayDirect { .. } => {
+                Err(SdkRadrootsdBridgeError::UnsupportedTransport {
+                    transport: self.transport(),
+                    operation,
+                })
+            }
+        }
+    }
+
+    #[cfg(feature = "radrootsd-client")]
+    async fn radrootsd_bridge_status(
+        &self,
+    ) -> Result<SdkRadrootsdBridgeStatus, SdkRadrootsdBridgeError> {
+        if self.transport() != SdkTransportMode::Radrootsd {
+            return Err(SdkRadrootsdBridgeError::UnsupportedTransport {
+                transport: self.transport(),
+                operation: "radrootsd.bridge.status",
+            });
+        }
+
+        let response = radrootsd::bridge_status(
+            self.require_radrootsd_bridge_endpoint("radrootsd.bridge.status")?,
+            &self.config.radrootsd.auth,
+            Duration::from_millis(self.config.network.timeout_ms),
+        )
+        .await
+        .map_err(|err| SdkRadrootsdBridgeError::Radrootsd(err.to_string()))?;
+        Ok(response.into())
+    }
+
+    #[cfg(feature = "radrootsd-client")]
+    async fn radrootsd_bridge_job_status(
+        &self,
+        job: &SdkRadrootsdBridgeJobRef,
+    ) -> Result<SdkRadrootsdBridgeJobView, SdkRadrootsdBridgeError> {
+        if self.transport() != SdkTransportMode::Radrootsd {
+            return Err(SdkRadrootsdBridgeError::UnsupportedTransport {
+                transport: self.transport(),
+                operation: "radrootsd.bridge.job",
+            });
+        }
+
+        let response = radrootsd::bridge_job_status(
+            self.require_radrootsd_bridge_endpoint("radrootsd.bridge.job")?,
+            &self.config.radrootsd.auth,
+            job.job_id(),
+            Duration::from_millis(self.config.network.timeout_ms),
+        )
+        .await
+        .map_err(|err| SdkRadrootsdBridgeError::Radrootsd(err.to_string()))?;
+        Ok(response.into())
+    }
+
+    #[cfg(feature = "radrootsd-client")]
+    async fn radrootsd_bridge_jobs(
+        &self,
+    ) -> Result<Vec<SdkRadrootsdBridgeJobView>, SdkRadrootsdBridgeError> {
+        if self.transport() != SdkTransportMode::Radrootsd {
+            return Err(SdkRadrootsdBridgeError::UnsupportedTransport {
+                transport: self.transport(),
+                operation: "radrootsd.bridge.jobs",
+            });
+        }
+
+        let response = radrootsd::list_bridge_jobs(
+            self.require_radrootsd_bridge_endpoint("radrootsd.bridge.jobs")?,
+            &self.config.radrootsd.auth,
+            Duration::from_millis(self.config.network.timeout_ms),
+        )
+        .await
+        .map_err(|err| SdkRadrootsdBridgeError::Radrootsd(err.to_string()))?;
+        Ok(response.into_iter().map(Into::into).collect())
+    }
 }
 
 #[cfg(feature = "radrootsd-client")]
@@ -835,6 +1101,12 @@ impl<'a> RadrootsdClient<'a> {
 
     pub fn signer_sessions(&self) -> RadrootsdSignerSessionClient<'a> {
         RadrootsdSignerSessionClient {
+            client: self.client,
+        }
+    }
+
+    pub fn bridge(&self) -> RadrootsdBridgeClient<'a> {
+        RadrootsdBridgeClient {
             client: self.client,
         }
     }
@@ -924,6 +1196,42 @@ impl<'a> RadrootsdSignerSessionClient<'a> {
         session: &SdkRadrootsdSignerSessionRef,
     ) -> Result<SdkRadrootsdSignerSessionCloseResult, SdkRadrootsdSessionError> {
         self.client.close_radrootsd_signer_session(session).await
+    }
+}
+
+#[cfg(feature = "radrootsd-client")]
+#[derive(Debug, Clone, Copy)]
+pub struct RadrootsdBridgeClient<'a> {
+    client: &'a RadrootsSdkClient,
+}
+
+#[cfg(feature = "radrootsd-client")]
+impl<'a> RadrootsdBridgeClient<'a> {
+    pub fn sdk(&self) -> &'a RadrootsSdkClient {
+        self.client
+    }
+
+    pub fn transport(&self) -> SdkTransportMode {
+        self.client.transport()
+    }
+
+    pub fn signer(&self) -> SignerConfig {
+        self.client.signer()
+    }
+
+    pub async fn status(&self) -> Result<SdkRadrootsdBridgeStatus, SdkRadrootsdBridgeError> {
+        self.client.radrootsd_bridge_status().await
+    }
+
+    pub async fn job(
+        &self,
+        job: &SdkRadrootsdBridgeJobRef,
+    ) -> Result<SdkRadrootsdBridgeJobView, SdkRadrootsdBridgeError> {
+        self.client.radrootsd_bridge_job_status(job).await
+    }
+
+    pub async fn jobs(&self) -> Result<Vec<SdkRadrootsdBridgeJobView>, SdkRadrootsdBridgeError> {
+        self.client.radrootsd_bridge_jobs().await
     }
 }
 

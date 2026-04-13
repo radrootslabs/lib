@@ -27,8 +27,10 @@ pub mod trade;
 
 #[cfg(feature = "radrootsd-client")]
 pub use crate::adapters::radrootsd::{
-    SdkRadrootsdSignerAuthority, SdkRadrootsdSignerSessionConnectRequest,
-    SdkRadrootsdSignerSessionMode, SdkRadrootsdSignerSessionRole,
+    SdkRadrootsdBridgeDeliveryPolicy, SdkRadrootsdBridgeJobStatus,
+    SdkRadrootsdBridgeRelayPublishResult, SdkRadrootsdSignerAuthority,
+    SdkRadrootsdSignerSessionConnectRequest, SdkRadrootsdSignerSessionMode,
+    SdkRadrootsdSignerSessionRole,
 };
 pub use crate::client::{
     FarmClient, ListingClient, ProfileClient, RadrootsSdkClient, SdkPublishError,
@@ -37,11 +39,12 @@ pub use crate::client::{
 };
 #[cfg(feature = "radrootsd-client")]
 pub use crate::client::{
-    RadrootsdClient, RadrootsdSignerSessionClient, SdkRadrootsdListingPublishOptions,
-    SdkRadrootsdSessionError, SdkRadrootsdSignerSessionAuthorizeResult,
-    SdkRadrootsdSignerSessionCloseResult, SdkRadrootsdSignerSessionHandle,
-    SdkRadrootsdSignerSessionRef, SdkRadrootsdSignerSessionRequireAuthResult,
-    SdkRadrootsdSignerSessionView,
+    RadrootsdBridgeClient, RadrootsdClient, RadrootsdSignerSessionClient, SdkRadrootsdBridgeError,
+    SdkRadrootsdBridgeJobRef, SdkRadrootsdBridgeJobView, SdkRadrootsdBridgeStatus,
+    SdkRadrootsdListingPublishOptions, SdkRadrootsdSessionError,
+    SdkRadrootsdSignerSessionAuthorizeResult, SdkRadrootsdSignerSessionCloseResult,
+    SdkRadrootsdSignerSessionHandle, SdkRadrootsdSignerSessionRef,
+    SdkRadrootsdSignerSessionRequireAuthResult, SdkRadrootsdSignerSessionView,
 };
 pub use crate::config::{
     NetworkConfig, RADROOTS_SDK_LOCAL_RADROOTSD_ENDPOINT, RADROOTS_SDK_LOCAL_RELAY_URL,
