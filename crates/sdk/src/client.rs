@@ -1743,20 +1743,16 @@ impl<'a> TradeClient<'a> {
         request: &radrootsd::SdkRadrootsdPublicTradePublishRequest,
         options: &SdkRadrootsdPublicTradePublishOptions,
     ) -> Result<SdkPublishReceipt, SdkPublishError> {
-        match request.message_type() {
-            Some(_) => {
-                self.client
-                    .publish_public_trade_via_radrootsd(
-                        request,
-                        options.session(),
-                        options.idempotency_key(),
-                    )
-                    .await
-            }
-            None => Err(SdkPublishError::Encode(
-                "trade.publish_public_message_via_radrootsd requires a bridge.order.* public trade payload; use trade.publish_order_request_via_radrootsd for order requests".to_owned(),
-            )),
-        }
+        request
+            .validate_for_publish()
+            .map_err(|err| SdkPublishError::Encode(err.to_string()))?;
+        self.client
+            .publish_public_trade_via_radrootsd(
+                request,
+                options.session(),
+                options.idempotency_key(),
+            )
+            .await
     }
 }
 

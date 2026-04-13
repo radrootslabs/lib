@@ -29,8 +29,9 @@ pub mod trade;
 pub use crate::adapters::radrootsd::{
     SdkRadrootsdBridgeDeliveryPolicy, SdkRadrootsdBridgeJobStatus,
     SdkRadrootsdBridgeRelayPublishResult, SdkRadrootsdPublicTradePublishRequest,
+    SdkRadrootsdPublicTradePublishValidationError, SdkRadrootsdPublicTradeRoute,
     SdkRadrootsdSignerAuthority, SdkRadrootsdSignerSessionConnectRequest,
-    SdkRadrootsdSignerSessionMode, SdkRadrootsdSignerSessionRole,
+    SdkRadrootsdSignerSessionMode, SdkRadrootsdSignerSessionRole, SdkRadrootsdTradeChain,
 };
 pub use crate::client::{
     FarmClient, ListingClient, ProfileClient, RadrootsSdkClient, SdkPublishError,

@@ -170,6 +170,128 @@ pub struct SdkRadrootsdPublicTradePublishRequest {
     pub payload: trade::RadrootsTradeMessagePayload,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SdkRadrootsdPublicTradeRoute {
+    listing_addr: String,
+    order_id: String,
+    counterparty_pubkey: String,
+}
+
+impl SdkRadrootsdPublicTradeRoute {
+    pub fn new(
+        listing_addr: impl Into<String>,
+        order_id: impl Into<String>,
+        counterparty_pubkey: impl Into<String>,
+    ) -> Result<Self, SdkRadrootsdPublicTradePublishValidationError> {
+        let listing_addr = normalize_required_string(listing_addr, "listing_addr")?;
+        let order_id = normalize_required_string(order_id, "order_id")?;
+        let counterparty_pubkey =
+            normalize_required_string(counterparty_pubkey, "counterparty_pubkey")?;
+        Ok(Self {
+            listing_addr,
+            order_id,
+            counterparty_pubkey,
+        })
+    }
+
+    fn listing_addr(&self) -> &str {
+        self.listing_addr.as_str()
+    }
+
+    fn order_id(&self) -> &str {
+        self.order_id.as_str()
+    }
+
+    fn counterparty_pubkey(&self) -> &str {
+        self.counterparty_pubkey.as_str()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SdkRadrootsdTradeChain {
+    root_event_id: String,
+    prev_event_id: String,
+}
+
+impl SdkRadrootsdTradeChain {
+    pub fn new(
+        root_event_id: impl Into<String>,
+        prev_event_id: impl Into<String>,
+    ) -> Result<Self, SdkRadrootsdPublicTradePublishValidationError> {
+        let root_event_id = normalize_required_string(root_event_id, "root_event_id")?;
+        let prev_event_id = normalize_required_string(prev_event_id, "prev_event_id")?;
+        Ok(Self {
+            root_event_id,
+            prev_event_id,
+        })
+    }
+
+    fn root_event_id(&self) -> &str {
+        self.root_event_id.as_str()
+    }
+
+    fn prev_event_id(&self) -> &str {
+        self.prev_event_id.as_str()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SdkRadrootsdPublicTradePublishValidationError {
+    UnsupportedPayload(trade::RadrootsTradeMessageType),
+    MissingListingSnapshot(trade::RadrootsTradeMessageType),
+    ListingSnapshotRelaysEmpty,
+    MissingTradeChain(trade::RadrootsTradeMessageType),
+    InvalidOrderRevisionAcceptPayload,
+    InvalidOrderRevisionDeclinePayload,
+    InvalidDiscountAcceptPayload,
+    InvalidDiscountDeclinePayload,
+    EmptyField(&'static str),
+}
+
+impl fmt::Display for SdkRadrootsdPublicTradePublishValidationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::UnsupportedPayload(message_type) => match message_type {
+                trade::RadrootsTradeMessageType::OrderRequest => f.write_str(
+                    "trade public publish does not support payload `OrderRequest`; use trade.publish_order_request_via_radrootsd for order requests",
+                ),
+                trade::RadrootsTradeMessageType::ListingValidateRequest
+                | trade::RadrootsTradeMessageType::ListingValidateResult => f.write_str(
+                    "trade public publish does not support listing validation payloads; use trade.validate_listing_event for listing validation",
+                ),
+                _ => write!(
+                    f,
+                    "trade public publish does not support payload `{message_type:?}`",
+                ),
+            },
+            Self::MissingListingSnapshot(message_type) => write!(
+                f,
+                "trade public publish requires listing_event for `{message_type:?}`"
+            ),
+            Self::ListingSnapshotRelaysEmpty => {
+                f.write_str("trade public publish listing_event.relays must not be empty")
+            }
+            Self::MissingTradeChain(message_type) => write!(
+                f,
+                "trade public publish requires root_event_id and prev_event_id for `{message_type:?}`"
+            ),
+            Self::InvalidOrderRevisionAcceptPayload => f.write_str(
+                "trade public publish order revision accept payload must set accepted = true",
+            ),
+            Self::InvalidOrderRevisionDeclinePayload => f.write_str(
+                "trade public publish order revision decline payload must set accepted = false",
+            ),
+            Self::InvalidDiscountAcceptPayload => f.write_str(
+                "trade public publish discount accept payload must be an accept decision",
+            ),
+            Self::InvalidDiscountDeclinePayload => f.write_str(
+                "trade public publish discount decline payload must be a decline decision",
+            ),
+            Self::EmptyField(field) => write!(f, "trade public publish field `{field}` must not be empty"),
+        }
+    }
+}
+
 impl SdkRadrootsdPublicTradePublishRequest {
     pub fn new(
         listing_addr: impl Into<String>,
@@ -249,6 +371,283 @@ impl SdkRadrootsdPublicTradePublishRequest {
             }
         }
     }
+
+    pub fn order_response(
+        route: &SdkRadrootsdPublicTradeRoute,
+        chain: &SdkRadrootsdTradeChain,
+        payload: trade::RadrootsTradeOrderResponse,
+    ) -> Result<Self, SdkRadrootsdPublicTradePublishValidationError> {
+        Self::from_components(
+            route,
+            Some(chain),
+            None,
+            trade::RadrootsTradeMessagePayload::OrderResponse(payload),
+        )
+    }
+
+    pub fn order_revision(
+        route: &SdkRadrootsdPublicTradeRoute,
+        listing_event: RadrootsNostrEventPtr,
+        chain: &SdkRadrootsdTradeChain,
+        payload: trade::RadrootsTradeOrderRevision,
+    ) -> Result<Self, SdkRadrootsdPublicTradePublishValidationError> {
+        Self::from_components(
+            route,
+            Some(chain),
+            Some(listing_event),
+            trade::RadrootsTradeMessagePayload::OrderRevision(payload),
+        )
+    }
+
+    pub fn order_revision_accept(
+        route: &SdkRadrootsdPublicTradeRoute,
+        chain: &SdkRadrootsdTradeChain,
+        payload: trade::RadrootsTradeOrderRevisionResponse,
+    ) -> Result<Self, SdkRadrootsdPublicTradePublishValidationError> {
+        Self::from_components(
+            route,
+            Some(chain),
+            None,
+            trade::RadrootsTradeMessagePayload::OrderRevisionAccept(payload),
+        )
+    }
+
+    pub fn order_revision_decline(
+        route: &SdkRadrootsdPublicTradeRoute,
+        chain: &SdkRadrootsdTradeChain,
+        payload: trade::RadrootsTradeOrderRevisionResponse,
+    ) -> Result<Self, SdkRadrootsdPublicTradePublishValidationError> {
+        Self::from_components(
+            route,
+            Some(chain),
+            None,
+            trade::RadrootsTradeMessagePayload::OrderRevisionDecline(payload),
+        )
+    }
+
+    pub fn question(
+        route: &SdkRadrootsdPublicTradeRoute,
+        chain: &SdkRadrootsdTradeChain,
+        payload: trade::RadrootsTradeQuestion,
+    ) -> Result<Self, SdkRadrootsdPublicTradePublishValidationError> {
+        Self::from_components(
+            route,
+            Some(chain),
+            None,
+            trade::RadrootsTradeMessagePayload::Question(payload),
+        )
+    }
+
+    pub fn answer(
+        route: &SdkRadrootsdPublicTradeRoute,
+        chain: &SdkRadrootsdTradeChain,
+        payload: trade::RadrootsTradeAnswer,
+    ) -> Result<Self, SdkRadrootsdPublicTradePublishValidationError> {
+        Self::from_components(
+            route,
+            Some(chain),
+            None,
+            trade::RadrootsTradeMessagePayload::Answer(payload),
+        )
+    }
+
+    pub fn discount_request(
+        route: &SdkRadrootsdPublicTradeRoute,
+        listing_event: RadrootsNostrEventPtr,
+        chain: &SdkRadrootsdTradeChain,
+        payload: trade::RadrootsTradeDiscountRequest,
+    ) -> Result<Self, SdkRadrootsdPublicTradePublishValidationError> {
+        Self::from_components(
+            route,
+            Some(chain),
+            Some(listing_event),
+            trade::RadrootsTradeMessagePayload::DiscountRequest(payload),
+        )
+    }
+
+    pub fn discount_offer(
+        route: &SdkRadrootsdPublicTradeRoute,
+        listing_event: RadrootsNostrEventPtr,
+        chain: &SdkRadrootsdTradeChain,
+        payload: trade::RadrootsTradeDiscountOffer,
+    ) -> Result<Self, SdkRadrootsdPublicTradePublishValidationError> {
+        Self::from_components(
+            route,
+            Some(chain),
+            Some(listing_event),
+            trade::RadrootsTradeMessagePayload::DiscountOffer(payload),
+        )
+    }
+
+    pub fn discount_accept(
+        route: &SdkRadrootsdPublicTradeRoute,
+        chain: &SdkRadrootsdTradeChain,
+        payload: trade::RadrootsTradeDiscountDecision,
+    ) -> Result<Self, SdkRadrootsdPublicTradePublishValidationError> {
+        Self::from_components(
+            route,
+            Some(chain),
+            None,
+            trade::RadrootsTradeMessagePayload::DiscountAccept(payload),
+        )
+    }
+
+    pub fn discount_decline(
+        route: &SdkRadrootsdPublicTradeRoute,
+        chain: &SdkRadrootsdTradeChain,
+        payload: trade::RadrootsTradeDiscountDecision,
+    ) -> Result<Self, SdkRadrootsdPublicTradePublishValidationError> {
+        Self::from_components(
+            route,
+            Some(chain),
+            None,
+            trade::RadrootsTradeMessagePayload::DiscountDecline(payload),
+        )
+    }
+
+    pub fn cancel(
+        route: &SdkRadrootsdPublicTradeRoute,
+        chain: &SdkRadrootsdTradeChain,
+        payload: trade::RadrootsTradeListingCancel,
+    ) -> Result<Self, SdkRadrootsdPublicTradePublishValidationError> {
+        Self::from_components(
+            route,
+            Some(chain),
+            None,
+            trade::RadrootsTradeMessagePayload::Cancel(payload),
+        )
+    }
+
+    pub fn fulfillment_update(
+        route: &SdkRadrootsdPublicTradeRoute,
+        chain: &SdkRadrootsdTradeChain,
+        payload: trade::RadrootsTradeFulfillmentUpdate,
+    ) -> Result<Self, SdkRadrootsdPublicTradePublishValidationError> {
+        Self::from_components(
+            route,
+            Some(chain),
+            None,
+            trade::RadrootsTradeMessagePayload::FulfillmentUpdate(payload),
+        )
+    }
+
+    pub fn receipt(
+        route: &SdkRadrootsdPublicTradeRoute,
+        chain: &SdkRadrootsdTradeChain,
+        payload: trade::RadrootsTradeReceipt,
+    ) -> Result<Self, SdkRadrootsdPublicTradePublishValidationError> {
+        Self::from_components(
+            route,
+            Some(chain),
+            None,
+            trade::RadrootsTradeMessagePayload::Receipt(payload),
+        )
+    }
+
+    pub fn validate_for_publish(
+        &self,
+    ) -> Result<trade::RadrootsTradeMessageType, SdkRadrootsdPublicTradePublishValidationError>
+    {
+        normalize_required_string(self.listing_addr.as_str(), "listing_addr")?;
+        normalize_required_string(self.order_id.as_str(), "order_id")?;
+        normalize_required_string(self.counterparty_pubkey.as_str(), "counterparty_pubkey")?;
+
+        let message_type = self.payload.message_type();
+        if !message_type.is_public()
+            || matches!(message_type, trade::RadrootsTradeMessageType::OrderRequest)
+        {
+            return Err(
+                SdkRadrootsdPublicTradePublishValidationError::UnsupportedPayload(message_type),
+            );
+        }
+
+        if message_type.requires_listing_snapshot() {
+            let Some(listing_event) = self.listing_event.as_ref() else {
+                return Err(
+                    SdkRadrootsdPublicTradePublishValidationError::MissingListingSnapshot(
+                        message_type,
+                    ),
+                );
+            };
+            if listing_event
+                .relays
+                .as_ref()
+                .is_some_and(|relay| relay.trim().is_empty())
+            {
+                return Err(
+                    SdkRadrootsdPublicTradePublishValidationError::ListingSnapshotRelaysEmpty,
+                );
+            }
+        }
+
+        if message_type.requires_trade_chain() {
+            let Some(root_event_id) = self.root_event_id.as_deref() else {
+                return Err(
+                    SdkRadrootsdPublicTradePublishValidationError::MissingTradeChain(message_type),
+                );
+            };
+            let Some(prev_event_id) = self.prev_event_id.as_deref() else {
+                return Err(
+                    SdkRadrootsdPublicTradePublishValidationError::MissingTradeChain(message_type),
+                );
+            };
+            normalize_required_string(root_event_id, "root_event_id")?;
+            normalize_required_string(prev_event_id, "prev_event_id")?;
+        }
+
+        match &self.payload {
+            trade::RadrootsTradeMessagePayload::OrderRevisionAccept(response)
+                if !response.accepted =>
+            {
+                return Err(
+                    SdkRadrootsdPublicTradePublishValidationError::InvalidOrderRevisionAcceptPayload,
+                )
+            }
+            trade::RadrootsTradeMessagePayload::OrderRevisionDecline(response)
+                if response.accepted =>
+            {
+                return Err(
+                    SdkRadrootsdPublicTradePublishValidationError::InvalidOrderRevisionDeclinePayload,
+                )
+            }
+            trade::RadrootsTradeMessagePayload::DiscountAccept(
+                trade::RadrootsTradeDiscountDecision::Decline { .. },
+            ) => {
+                return Err(
+                    SdkRadrootsdPublicTradePublishValidationError::InvalidDiscountAcceptPayload,
+                )
+            }
+            trade::RadrootsTradeMessagePayload::DiscountDecline(
+                trade::RadrootsTradeDiscountDecision::Accept { .. },
+            ) => {
+                return Err(
+                    SdkRadrootsdPublicTradePublishValidationError::InvalidDiscountDeclinePayload,
+                )
+            }
+            _ => {}
+        }
+
+        Ok(message_type)
+    }
+
+    fn from_components(
+        route: &SdkRadrootsdPublicTradeRoute,
+        chain: Option<&SdkRadrootsdTradeChain>,
+        listing_event: Option<RadrootsNostrEventPtr>,
+        payload: trade::RadrootsTradeMessagePayload,
+    ) -> Result<Self, SdkRadrootsdPublicTradePublishValidationError> {
+        let request = Self {
+            listing_addr: route.listing_addr().to_owned(),
+            order_id: route.order_id().to_owned(),
+            counterparty_pubkey: route.counterparty_pubkey().to_owned(),
+            listing_event,
+            root_event_id: chain.map(|chain| chain.root_event_id().to_owned()),
+            prev_event_id: chain.map(|chain| chain.prev_event_id().to_owned()),
+            payload,
+        };
+        request.validate_for_publish()?;
+        Ok(request)
+    }
 }
 
 impl fmt::Debug for SdkRadrootsdPublicTradePublishRequest {
@@ -263,6 +662,19 @@ impl fmt::Debug for SdkRadrootsdPublicTradePublishRequest {
         debug.field("payload", &self.payload);
         debug.finish()
     }
+}
+
+fn normalize_required_string(
+    value: impl Into<String>,
+    field: &'static str,
+) -> Result<String, SdkRadrootsdPublicTradePublishValidationError> {
+    let value = value.into().trim().to_owned();
+    if value.is_empty() {
+        return Err(SdkRadrootsdPublicTradePublishValidationError::EmptyField(
+            field,
+        ));
+    }
+    Ok(value)
 }
 
 impl SdkRadrootsdListingPublishRequest {

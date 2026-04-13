@@ -16,17 +16,19 @@ use radroots_sdk::listing::{
     RadrootsListingProduct, RadrootsListingStatus, RadrootsTradeListingParseError,
 };
 use radroots_sdk::trade::{
-    RadrootsTradeMessagePayload, RadrootsTradeMessageType, RadrootsTradeOrder,
-    RadrootsTradeOrderItem, RadrootsTradeOrderResponse,
+    RadrootsTradeDiscountDecision, RadrootsTradeMessagePayload, RadrootsTradeMessageType,
+    RadrootsTradeOrder, RadrootsTradeOrderItem, RadrootsTradeOrderResponse,
+    RadrootsTradeOrderRevision, RadrootsTradeOrderRevisionResponse,
 };
 use radroots_sdk::{
-    RadrootsNostrEvent, RadrootsSdkClient, RadrootsSdkConfig, RadrootsdAuth, RadrootsdConfig,
-    SdkConfigError, SdkEnvironment, SdkPublishError, SdkRadrootsdBridgeDeliveryPolicy,
-    SdkRadrootsdBridgeError, SdkRadrootsdBridgeJobStatus, SdkRadrootsdListingPublishOptions,
-    SdkRadrootsdOrderRequestPublishOptions, SdkRadrootsdPublicTradePublishOptions,
-    SdkRadrootsdPublishReceipt, SdkRadrootsdSessionError, SdkRadrootsdSignerSessionHandle,
-    SdkRadrootsdSignerSessionRole, SdkRadrootsdSignerSessionView, SdkTransportMode,
-    SdkTransportReceipt, SignerConfig,
+    RadrootsNostrEvent, RadrootsNostrEventPtr, RadrootsSdkClient, RadrootsSdkConfig, RadrootsdAuth,
+    RadrootsdConfig, SdkConfigError, SdkEnvironment, SdkPublishError,
+    SdkRadrootsdBridgeDeliveryPolicy, SdkRadrootsdBridgeError, SdkRadrootsdBridgeJobStatus,
+    SdkRadrootsdListingPublishOptions, SdkRadrootsdOrderRequestPublishOptions,
+    SdkRadrootsdPublicTradePublishOptions, SdkRadrootsdPublicTradePublishValidationError,
+    SdkRadrootsdPublicTradeRoute, SdkRadrootsdPublishReceipt, SdkRadrootsdSessionError,
+    SdkRadrootsdSignerSessionHandle, SdkRadrootsdSignerSessionRole, SdkRadrootsdSignerSessionView,
+    SdkRadrootsdTradeChain, SdkTransportMode, SdkTransportReceipt, SignerConfig,
 };
 use serde_json::{Value, json};
 use std::collections::VecDeque;
@@ -390,16 +392,36 @@ fn sample_trade_order() -> RadrootsTradeOrder {
 }
 
 fn sample_public_trade_request() -> SdkRadrootsdPublicTradePublishRequest {
-    SdkRadrootsdPublicTradePublishRequest::new(
+    SdkRadrootsdPublicTradePublishRequest::order_response(
+        &sample_public_trade_route(),
+        &sample_trade_chain(),
+        RadrootsTradeOrderResponse {
+            accepted: true,
+            reason: None,
+        },
+    )
+    .expect("sample order response request should be valid")
+}
+
+fn sample_public_trade_route() -> SdkRadrootsdPublicTradeRoute {
+    SdkRadrootsdPublicTradeRoute::new(
         format!("{KIND_LISTING}:seller:AAAAAAAAAAAAAAAAAAAAAg"),
         "order-1",
         "buyer",
-        RadrootsTradeMessagePayload::OrderResponse(RadrootsTradeOrderResponse {
-            accepted: true,
-            reason: None,
-        }),
     )
-    .with_trade_chain("root-event-1", "prev-event-1")
+    .expect("sample public trade route should be valid")
+}
+
+fn sample_trade_chain() -> SdkRadrootsdTradeChain {
+    SdkRadrootsdTradeChain::new("root-event-1", "prev-event-1")
+        .expect("sample trade chain should be valid")
+}
+
+fn listing_event_ptr_with_relays(relays: Option<&str>) -> RadrootsNostrEventPtr {
+    RadrootsNostrEventPtr {
+        id: "listing-event-1".to_owned(),
+        relays: relays.map(str::to_owned),
+    }
 }
 
 fn sdk_event(
@@ -1471,6 +1493,104 @@ async fn radrootsd_trade_public_message_publish_rejects_order_request_payload() 
     );
 
     Ok(())
+}
+
+#[test]
+fn public_trade_request_validation_requires_listing_snapshot_for_order_revision() {
+    let error = SdkRadrootsdPublicTradePublishRequest::new(
+        format!("{KIND_LISTING}:seller:AAAAAAAAAAAAAAAAAAAAAg"),
+        "order-1",
+        "buyer",
+        RadrootsTradeMessagePayload::OrderRevision(RadrootsTradeOrderRevision {
+            revision_id: "revision-1".to_owned(),
+            changes: Vec::new(),
+        }),
+    )
+    .validate_for_publish()
+    .expect_err("order revision without listing snapshot should be rejected");
+
+    assert_eq!(
+        error,
+        SdkRadrootsdPublicTradePublishValidationError::MissingListingSnapshot(
+            RadrootsTradeMessageType::OrderRevision,
+        )
+    );
+}
+
+#[test]
+fn public_trade_request_validation_requires_trade_chain_for_order_response() {
+    let error = SdkRadrootsdPublicTradePublishRequest::new(
+        format!("{KIND_LISTING}:seller:AAAAAAAAAAAAAAAAAAAAAg"),
+        "order-1",
+        "buyer",
+        RadrootsTradeMessagePayload::OrderResponse(RadrootsTradeOrderResponse {
+            accepted: true,
+            reason: None,
+        }),
+    )
+    .validate_for_publish()
+    .expect_err("order response without trade chain should be rejected");
+
+    assert_eq!(
+        error,
+        SdkRadrootsdPublicTradePublishValidationError::MissingTradeChain(
+            RadrootsTradeMessageType::OrderResponse,
+        )
+    );
+}
+
+#[test]
+fn public_trade_request_validation_rejects_blank_listing_snapshot_relays() {
+    let error = SdkRadrootsdPublicTradePublishRequest::order_revision(
+        &sample_public_trade_route(),
+        listing_event_ptr_with_relays(Some("   ")),
+        &sample_trade_chain(),
+        RadrootsTradeOrderRevision {
+            revision_id: "revision-1".to_owned(),
+            changes: Vec::new(),
+        },
+    )
+    .expect_err("blank listing_event relays should be rejected");
+
+    assert_eq!(
+        error,
+        SdkRadrootsdPublicTradePublishValidationError::ListingSnapshotRelaysEmpty
+    );
+}
+
+#[test]
+fn public_trade_request_validation_rejects_invalid_order_revision_accept_payload() {
+    let error = SdkRadrootsdPublicTradePublishRequest::order_revision_accept(
+        &sample_public_trade_route(),
+        &sample_trade_chain(),
+        RadrootsTradeOrderRevisionResponse {
+            accepted: false,
+            reason: Some("not accepted".to_owned()),
+        },
+    )
+    .expect_err("order revision accept must require accepted = true");
+
+    assert_eq!(
+        error,
+        SdkRadrootsdPublicTradePublishValidationError::InvalidOrderRevisionAcceptPayload
+    );
+}
+
+#[test]
+fn public_trade_request_validation_rejects_invalid_discount_accept_payload() {
+    let error = SdkRadrootsdPublicTradePublishRequest::discount_accept(
+        &sample_public_trade_route(),
+        &sample_trade_chain(),
+        RadrootsTradeDiscountDecision::Decline {
+            reason: Some("declined".to_owned()),
+        },
+    )
+    .expect_err("discount accept must use an accept decision");
+
+    assert_eq!(
+        error,
+        SdkRadrootsdPublicTradePublishValidationError::InvalidDiscountAcceptPayload
+    );
 }
 
 #[tokio::test]
