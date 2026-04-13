@@ -36,8 +36,8 @@ pub use crate::config::{
     NetworkConfig, RADROOTS_SDK_LOCAL_RADROOTSD_ENDPOINT, RADROOTS_SDK_LOCAL_RELAY_URL,
     RADROOTS_SDK_PRODUCTION_RADROOTSD_ENDPOINT, RADROOTS_SDK_PRODUCTION_RELAY_URL,
     RADROOTS_SDK_STAGING_RADROOTSD_ENDPOINT, RADROOTS_SDK_STAGING_RELAY_URL, RadrootsSdkConfig,
-    RadrootsdAuth, RadrootsdConfig, RelayConfig, RetryPolicy, SdkConfigError, SdkEnvironment,
-    SdkTransportMode, SignerConfig,
+    RadrootsdAuth, RadrootsdConfig, RelayConfig, SdkConfigError, SdkEnvironment, SdkTransportMode,
+    SignerConfig,
 };
 pub use radroots_events::{
     RadrootsNostrEvent, RadrootsNostrEventPtr, RadrootsNostrEventRef,

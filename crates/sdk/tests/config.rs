@@ -2,7 +2,7 @@ use radroots_sdk::{
     NetworkConfig, RADROOTS_SDK_LOCAL_RADROOTSD_ENDPOINT, RADROOTS_SDK_LOCAL_RELAY_URL,
     RADROOTS_SDK_PRODUCTION_RADROOTSD_ENDPOINT, RADROOTS_SDK_PRODUCTION_RELAY_URL,
     RADROOTS_SDK_STAGING_RADROOTSD_ENDPOINT, RADROOTS_SDK_STAGING_RELAY_URL, RadrootsSdkConfig,
-    RadrootsdAuth, RetryPolicy, SdkConfigError, SdkEnvironment, SdkTransportMode, SignerConfig,
+    RadrootsdAuth, SdkConfigError, SdkEnvironment, SdkTransportMode, SignerConfig,
 };
 
 #[test]
@@ -143,13 +143,6 @@ fn invalid_coordinate_schemes_fail_loudly() {
             .expect_err("endpoint scheme error"),
         SdkConfigError::InvalidRadrootsdEndpoint("wss://rpc.bad".to_owned())
     );
-}
-
-#[test]
-fn retry_policy_is_explicit_and_non_ambient() {
-    let config = RadrootsSdkConfig::default();
-
-    assert_eq!(config.network.retry_policy, RetryPolicy::None);
 }
 
 #[test]

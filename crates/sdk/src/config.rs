@@ -176,26 +176,14 @@ pub enum SignerConfig {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NetworkConfig {
     pub timeout_ms: u64,
-    pub retry_policy: RetryPolicy,
 }
 
 impl Default for NetworkConfig {
     fn default() -> Self {
         Self {
             timeout_ms: RADROOTS_SDK_DEFAULT_TIMEOUT_MS,
-            retry_policy: RetryPolicy::default(),
         }
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub enum RetryPolicy {
-    #[default]
-    None,
-    Fixed {
-        max_attempts: u32,
-        backoff_ms: u64,
-    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
