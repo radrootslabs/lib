@@ -29,9 +29,10 @@ use radroots_sdk::{
     SdkTransportReceipt, SignerConfig,
 };
 use serde_json::{Value, json};
+use std::collections::VecDeque;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
-use tokio::sync::oneshot;
+use tokio::sync::{mpsc, oneshot};
 
 type TestResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -137,6 +138,128 @@ impl JsonRpcServer {
 
     fn endpoint(&self) -> &str {
         self.endpoint.as_str()
+    }
+}
+
+struct JsonRpcSequenceServer {
+    endpoint: String,
+    shutdown_tx: Option<oneshot::Sender<()>>,
+}
+
+impl JsonRpcSequenceServer {
+    async fn spawn(
+        expected_auth: Option<&str>,
+        response_bodies: Vec<Value>,
+    ) -> TestResult<(Self, mpsc::UnboundedReceiver<Value>)> {
+        let listener = TcpListener::bind("127.0.0.1:0").await?;
+        let addr = listener.local_addr()?;
+        let endpoint = format!("http://{addr}/jsonrpc");
+        let (shutdown_tx, mut shutdown_rx) = oneshot::channel();
+        let (request_tx, request_rx) = mpsc::unbounded_channel();
+        let expected_auth = expected_auth.map(str::to_owned);
+        let mut response_texts = response_bodies
+            .into_iter()
+            .map(|value| value.to_string())
+            .collect::<VecDeque<_>>();
+
+        tokio::spawn(async move {
+            loop {
+                if response_texts.is_empty() {
+                    break;
+                }
+
+                tokio::select! {
+                    _ = &mut shutdown_rx => break,
+                    accept = listener.accept() => {
+                        let Ok((mut stream, _)) = accept else {
+                            break;
+                        };
+                        let mut buffer = Vec::new();
+                        let mut chunk = [0_u8; 4096];
+                        let header_end = loop {
+                            let Ok(read) = stream.read(&mut chunk).await else {
+                                return;
+                            };
+                            if read == 0 {
+                                return;
+                            }
+                            buffer.extend_from_slice(&chunk[..read]);
+                            if let Some(index) = find_headers_end(&buffer) {
+                                break index;
+                            }
+                        };
+
+                        let headers = String::from_utf8_lossy(&buffer[..header_end]).into_owned();
+                        let content_length = parse_content_length(headers.as_str()).unwrap_or(0);
+                        let body_start = header_end + 4;
+                        while buffer.len().saturating_sub(body_start) < content_length {
+                            let Ok(read) = stream.read(&mut chunk).await else {
+                                return;
+                            };
+                            if read == 0 {
+                                break;
+                            }
+                            buffer.extend_from_slice(&chunk[..read]);
+                        }
+
+                        if let Some(expected_auth) = expected_auth.as_deref() {
+                            let actual_auth = parse_authorization(headers.as_str());
+                            if actual_auth.as_deref() != Some(expected_auth) {
+                                let _ = write_http_response(
+                                    &mut stream,
+                                    401,
+                                    json!({
+                                        "jsonrpc": "2.0",
+                                        "id": "sdk-test",
+                                        "error": {
+                                            "code": -32001,
+                                            "message": format!(
+                                                "unexpected authorization header: {:?}",
+                                                actual_auth
+                                            ),
+                                        }
+                                    })
+                                    .to_string()
+                                    .as_str(),
+                                )
+                                .await;
+                                return;
+                            }
+                        }
+
+                        let body = &buffer[body_start..body_start + content_length];
+                        let Ok(request_json) = serde_json::from_slice::<Value>(body) else {
+                            return;
+                        };
+                        let _ = request_tx.send(request_json);
+                        let Some(response_text) = response_texts.pop_front() else {
+                            return;
+                        };
+                        let _ = write_http_response(&mut stream, 200, response_text.as_str()).await;
+                    }
+                }
+            }
+        });
+
+        Ok((
+            Self {
+                endpoint,
+                shutdown_tx: Some(shutdown_tx),
+            },
+            request_rx,
+        ))
+    }
+
+    fn endpoint(&self) -> &str {
+        self.endpoint.as_str()
+    }
+}
+
+impl Drop for JsonRpcSequenceServer {
+    fn drop(&mut self) {
+        if let Some(shutdown_tx) = self.shutdown_tx.take() {
+            let _ = shutdown_tx.send(());
+        }
     }
 }
 
@@ -358,9 +481,13 @@ fn sample_bridge_status_json() -> Value {
 }
 
 fn sample_bridge_job_json(job_id: &str) -> Value {
+    sample_bridge_job_json_for(job_id, "bridge.listing.publish", 30402)
+}
+
+fn sample_bridge_job_json_for(job_id: &str, command: &str, event_kind: u32) -> Value {
     json!({
         "job_id": job_id,
-        "command": "bridge.listing.publish",
+        "command": command,
         "idempotency_key": "idem-bridge-1",
         "status": "published",
         "terminal": true,
@@ -369,7 +496,7 @@ fn sample_bridge_job_json(job_id: &str) -> Value {
         "completed_at_unix": 1720000001u64,
         "signer_mode": "nip46_session",
         "signer_session_id": "session-123",
-        "event_kind": 30402,
+        "event_kind": event_kind,
         "event_id": "event-bridge-1",
         "event_addr": "30402:seller:listing-bridge-1",
         "delivery_policy": "quorum",
@@ -1342,6 +1469,136 @@ async fn radrootsd_trade_public_message_publish_rejects_order_request_payload() 
             .contains("trade.publish_order_request_via_radrootsd"),
         "unexpected error: {error}"
     );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn radrootsd_sdk_workflow_chains_session_listing_trade_and_bridge_job() -> TestResult<()> {
+    let (server, mut request_rx) = JsonRpcSequenceServer::spawn(
+        Some("Bearer sdk-secret"),
+        vec![
+            json!({
+                "jsonrpc": "2.0",
+                "id": "radroots-sdk-nip46-connect",
+                "result": {
+                    "session_id": "session-workflow-1",
+                    "mode": "Bunker",
+                    "remote_signer_pubkey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "client_pubkey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "relays": ["wss://radroots.org"]
+                }
+            }),
+            json!({
+                "jsonrpc": "2.0",
+                "id": "radroots-sdk-listing-publish",
+                "result": {
+                    "deduplicated": false,
+                    "job": {
+                        "job_id": "job-workflow-listing",
+                        "command": "bridge.listing.publish",
+                        "status": "published",
+                        "terminal": true,
+                        "recovered_after_restart": false,
+                        "signer_mode": "nip46_session:session-workflow-1",
+                        "signer_session_id": "session-workflow-1",
+                        "event_kind": 30402,
+                        "event_id": "event-workflow-listing",
+                        "event_addr": "30402:seller:listing-workflow-1",
+                        "relay_count": 1,
+                        "acknowledged_relay_count": 1
+                    }
+                }
+            }),
+            json!({
+                "jsonrpc": "2.0",
+                "id": "radroots-sdk-order-request-publish",
+                "result": {
+                    "deduplicated": false,
+                    "job": {
+                        "job_id": "job-workflow-order",
+                        "command": "bridge.order.request",
+                        "status": "published",
+                        "terminal": true,
+                        "recovered_after_restart": false,
+                        "signer_mode": "nip46_session:session-workflow-1",
+                        "signer_session_id": "session-workflow-1",
+                        "event_kind": RadrootsTradeMessageType::OrderRequest.kind(),
+                        "event_id": "event-workflow-order",
+                        "event_addr": format!("{KIND_LISTING}:seller:AAAAAAAAAAAAAAAAAAAAAg"),
+                        "relay_count": 1,
+                        "acknowledged_relay_count": 1
+                    }
+                }
+            }),
+            json!({
+                "jsonrpc": "2.0",
+                "id": "radroots-sdk-bridge-job-status",
+                "result": sample_bridge_job_json_for(
+                    "job-workflow-order",
+                    "bridge.order.request",
+                    RadrootsTradeMessageType::OrderRequest.kind(),
+                )
+            }),
+        ],
+    )
+    .await?;
+
+    let client = radrootsd_test_client(server.endpoint())?;
+    let handle = client
+        .radrootsd()
+        .signer_sessions()
+        .connect_bunker(
+            "bunker://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa?relay=wss%3A%2F%2Fradroots.org&secret=shared-secret",
+        )
+        .await?;
+    assert_eq!(handle.mode(), SdkRadrootsdSignerSessionMode::Bunker);
+
+    let connect_request = request_rx.recv().await.expect("connect request");
+    assert_eq!(connect_request["method"], "nip46.connect");
+
+    let listing_receipt = client
+        .listing()
+        .publish_listing_via_radrootsd(&sample_listing(), &handle)
+        .await?;
+    let listing_request = request_rx.recv().await.expect("listing publish request");
+    assert_eq!(listing_request["method"], "bridge.listing.publish");
+    assert_eq!(
+        listing_request["params"]["signer_session_id"],
+        "session-workflow-1"
+    );
+
+    let trade_receipt = client
+        .trade()
+        .publish_order_request_via_radrootsd(&sample_trade_order(), &handle)
+        .await?;
+    let trade_request = request_rx.recv().await.expect("trade publish request");
+    assert_eq!(trade_request["method"], "bridge.order.request");
+    assert_eq!(
+        trade_request["params"]["signer_session_id"],
+        "session-workflow-1"
+    );
+    assert_eq!(trade_request["params"]["order"]["order_id"], "order-1");
+
+    let trade_job = match &trade_receipt.transport_receipt {
+        SdkTransportReceipt::Radrootsd(receipt) => receipt.job(),
+        SdkTransportReceipt::RelayDirect(_) => None,
+    }
+    .expect("trade publish receipt should expose a bridge job ref");
+
+    let job_view = client.radrootsd().bridge().job(&trade_job).await?;
+    let job_request = request_rx.recv().await.expect("bridge job request");
+    assert_eq!(job_request["method"], "bridge.job.status");
+    assert_eq!(job_request["params"]["job_id"], "job-workflow-order");
+
+    assert_eq!(listing_receipt.event_kind, Some(30402));
+    assert_eq!(
+        trade_receipt.event_kind,
+        Some(RadrootsTradeMessageType::OrderRequest.kind())
+    );
+    assert_eq!(job_view.job().job_id(), "job-workflow-order");
+    assert_eq!(job_view.command, "bridge.order.request");
+    assert_eq!(job_view.status, SdkRadrootsdBridgeJobStatus::Published);
 
     Ok(())
 }
