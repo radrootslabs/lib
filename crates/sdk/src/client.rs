@@ -218,8 +218,30 @@ impl std::error::Error for SdkRadrootsdSessionError {}
 
 #[cfg(feature = "radrootsd-client")]
 #[derive(Clone, PartialEq, Eq)]
-pub struct SdkRadrootsdSignerSessionHandle {
+pub struct SdkRadrootsdSignerSessionRef {
     session_id: String,
+}
+
+#[cfg(feature = "radrootsd-client")]
+impl fmt::Debug for SdkRadrootsdSignerSessionRef {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SdkRadrootsdSignerSessionRef")
+            .field("session_id", &"<redacted>")
+            .finish()
+    }
+}
+
+#[cfg(feature = "radrootsd-client")]
+impl SdkRadrootsdSignerSessionRef {
+    pub(crate) fn session_id(&self) -> &str {
+        self.session_id.as_str()
+    }
+}
+
+#[cfg(feature = "radrootsd-client")]
+#[derive(Clone, PartialEq, Eq)]
+pub struct SdkRadrootsdSignerSessionHandle {
+    session: SdkRadrootsdSignerSessionRef,
     mode: radrootsd::SdkRadrootsdSignerSessionMode,
     remote_signer_pubkey: String,
     client_pubkey: String,
@@ -227,10 +249,138 @@ pub struct SdkRadrootsdSignerSessionHandle {
 }
 
 #[cfg(feature = "radrootsd-client")]
+#[derive(Clone, PartialEq, Eq)]
+pub struct SdkRadrootsdSignerSessionView {
+    session: SdkRadrootsdSignerSessionRef,
+    pub role: radrootsd::SdkRadrootsdSignerSessionRole,
+    pub client_pubkey: String,
+    pub signer_pubkey: String,
+    pub user_pubkey: Option<String>,
+    pub relays: Vec<String>,
+    pub permissions: Vec<String>,
+    pub name: Option<String>,
+    pub url: Option<String>,
+    pub image: Option<String>,
+    pub auth_required: bool,
+    pub authorized: bool,
+    pub auth_url: Option<String>,
+    pub expires_in_secs: Option<u64>,
+    pub signer_authority: Option<radrootsd::SdkRadrootsdSignerAuthority>,
+}
+
+#[cfg(feature = "radrootsd-client")]
+impl fmt::Debug for SdkRadrootsdSignerSessionView {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut debug = f.debug_struct("SdkRadrootsdSignerSessionView");
+        debug.field("session", &self.session);
+        debug.field("role", &self.role);
+        debug.field("client_pubkey", &self.client_pubkey);
+        debug.field("signer_pubkey", &self.signer_pubkey);
+        debug.field("user_pubkey", &self.user_pubkey);
+        debug.field("relays", &self.relays);
+        debug.field("permissions", &self.permissions);
+        debug.field("name", &self.name);
+        debug.field("url", &self.url);
+        debug.field("image", &self.image);
+        debug.field("auth_required", &self.auth_required);
+        debug.field("authorized", &self.authorized);
+        debug.field("auth_url", &self.auth_url);
+        debug.field("expires_in_secs", &self.expires_in_secs);
+        debug.field("signer_authority", &self.signer_authority);
+        debug.finish()
+    }
+}
+
+#[cfg(feature = "radrootsd-client")]
+impl SdkRadrootsdSignerSessionView {
+    pub fn session(&self) -> &SdkRadrootsdSignerSessionRef {
+        &self.session
+    }
+}
+
+#[cfg(feature = "radrootsd-client")]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SdkRadrootsdSignerSessionAuthorizeResult {
+    pub authorized: bool,
+    pub replayed: bool,
+}
+
+#[cfg(feature = "radrootsd-client")]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SdkRadrootsdSignerSessionRequireAuthResult {
+    pub required: bool,
+}
+
+#[cfg(feature = "radrootsd-client")]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SdkRadrootsdSignerSessionCloseResult {
+    pub closed: bool,
+}
+
+#[cfg(feature = "radrootsd-client")]
+impl From<radrootsd::SdkRadrootsdSignerSessionViewResponse> for SdkRadrootsdSignerSessionView {
+    fn from(value: radrootsd::SdkRadrootsdSignerSessionViewResponse) -> Self {
+        Self {
+            session: SdkRadrootsdSignerSessionRef {
+                session_id: value.session_id,
+            },
+            role: value.role,
+            client_pubkey: value.client_pubkey,
+            signer_pubkey: value.signer_pubkey,
+            user_pubkey: value.user_pubkey,
+            relays: value.relays,
+            permissions: value.permissions,
+            name: value.name,
+            url: value.url,
+            image: value.image,
+            auth_required: value.auth_required,
+            authorized: value.authorized,
+            auth_url: value.auth_url,
+            expires_in_secs: value.expires_in_secs,
+            signer_authority: value.signer_authority,
+        }
+    }
+}
+
+#[cfg(feature = "radrootsd-client")]
+impl From<radrootsd::SdkRadrootsdSignerSessionAuthorizeResponse>
+    for SdkRadrootsdSignerSessionAuthorizeResult
+{
+    fn from(value: radrootsd::SdkRadrootsdSignerSessionAuthorizeResponse) -> Self {
+        Self {
+            authorized: value.authorized,
+            replayed: value.replayed,
+        }
+    }
+}
+
+#[cfg(feature = "radrootsd-client")]
+impl From<radrootsd::SdkRadrootsdSignerSessionRequireAuthResponse>
+    for SdkRadrootsdSignerSessionRequireAuthResult
+{
+    fn from(value: radrootsd::SdkRadrootsdSignerSessionRequireAuthResponse) -> Self {
+        Self {
+            required: value.required,
+        }
+    }
+}
+
+#[cfg(feature = "radrootsd-client")]
+impl From<radrootsd::SdkRadrootsdSignerSessionCloseResponse>
+    for SdkRadrootsdSignerSessionCloseResult
+{
+    fn from(value: radrootsd::SdkRadrootsdSignerSessionCloseResponse) -> Self {
+        Self {
+            closed: value.closed,
+        }
+    }
+}
+
+#[cfg(feature = "radrootsd-client")]
 impl fmt::Debug for SdkRadrootsdSignerSessionHandle {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut debug = f.debug_struct("SdkRadrootsdSignerSessionHandle");
-        debug.field("session_id", &"<redacted>");
+        debug.field("session", &self.session);
         debug.field("mode", &self.mode);
         debug.field("remote_signer_pubkey", &self.remote_signer_pubkey);
         debug.field("client_pubkey", &self.client_pubkey);
@@ -241,6 +391,10 @@ impl fmt::Debug for SdkRadrootsdSignerSessionHandle {
 
 #[cfg(feature = "radrootsd-client")]
 impl SdkRadrootsdSignerSessionHandle {
+    pub fn session(&self) -> &SdkRadrootsdSignerSessionRef {
+        &self.session
+    }
+
     pub fn mode(&self) -> radrootsd::SdkRadrootsdSignerSessionMode {
         self.mode
     }
@@ -258,7 +412,7 @@ impl SdkRadrootsdSignerSessionHandle {
     }
 
     pub(crate) fn session_id(&self) -> &str {
-        self.session_id.as_str()
+        self.session.session_id()
     }
 }
 
@@ -266,7 +420,9 @@ impl SdkRadrootsdSignerSessionHandle {
 impl From<radrootsd::SdkRadrootsdSignerSessionConnectResponse> for SdkRadrootsdSignerSessionHandle {
     fn from(value: radrootsd::SdkRadrootsdSignerSessionConnectResponse) -> Self {
         Self {
-            session_id: value.session_id,
+            session: SdkRadrootsdSignerSessionRef {
+                session_id: value.session_id,
+            },
             mode: value.mode,
             remote_signer_pubkey: value.remote_signer_pubkey,
             client_pubkey: value.client_pubkey,
@@ -485,19 +641,142 @@ impl RadrootsSdkClient {
             });
         }
 
-        let endpoint = match &self.resolved_transport_target {
-            SdkResolvedTransportTarget::Radrootsd { endpoint } => endpoint.as_str(),
-            SdkResolvedTransportTarget::RelayDirect { .. } => {
-                return Err(SdkRadrootsdSessionError::UnsupportedTransport {
-                    transport: self.transport(),
-                    operation: "radrootsd.signer_sessions.connect",
-                });
-            }
-        };
+        let endpoint = self.require_radrootsd_endpoint("radrootsd.signer_sessions.connect")?;
         let response = radrootsd::connect_signer_session(
             endpoint,
             &self.config.radrootsd.auth,
             request,
+            Duration::from_millis(self.config.network.timeout_ms),
+        )
+        .await
+        .map_err(|err| SdkRadrootsdSessionError::Radrootsd(err.to_string()))?;
+        Ok(response.into())
+    }
+
+    #[cfg(feature = "radrootsd-client")]
+    fn require_radrootsd_endpoint(
+        &self,
+        operation: &'static str,
+    ) -> Result<&str, SdkRadrootsdSessionError> {
+        match &self.resolved_transport_target {
+            SdkResolvedTransportTarget::Radrootsd { endpoint } => Ok(endpoint.as_str()),
+            SdkResolvedTransportTarget::RelayDirect { .. } => {
+                Err(SdkRadrootsdSessionError::UnsupportedTransport {
+                    transport: self.transport(),
+                    operation,
+                })
+            }
+        }
+    }
+
+    #[cfg(feature = "radrootsd-client")]
+    async fn radrootsd_signer_session_status(
+        &self,
+        session: &SdkRadrootsdSignerSessionRef,
+    ) -> Result<SdkRadrootsdSignerSessionView, SdkRadrootsdSessionError> {
+        if self.transport() != SdkTransportMode::Radrootsd {
+            return Err(SdkRadrootsdSessionError::UnsupportedTransport {
+                transport: self.transport(),
+                operation: "radrootsd.signer_sessions.status",
+            });
+        }
+
+        let response = radrootsd::signer_session_status(
+            self.require_radrootsd_endpoint("radrootsd.signer_sessions.status")?,
+            &self.config.radrootsd.auth,
+            session.session_id(),
+            Duration::from_millis(self.config.network.timeout_ms),
+        )
+        .await
+        .map_err(|err| SdkRadrootsdSessionError::Radrootsd(err.to_string()))?;
+        Ok(response.into())
+    }
+
+    #[cfg(feature = "radrootsd-client")]
+    async fn radrootsd_list_signer_sessions(
+        &self,
+    ) -> Result<Vec<SdkRadrootsdSignerSessionView>, SdkRadrootsdSessionError> {
+        if self.transport() != SdkTransportMode::Radrootsd {
+            return Err(SdkRadrootsdSessionError::UnsupportedTransport {
+                transport: self.transport(),
+                operation: "radrootsd.signer_sessions.list",
+            });
+        }
+
+        let response = radrootsd::list_signer_sessions(
+            self.require_radrootsd_endpoint("radrootsd.signer_sessions.list")?,
+            &self.config.radrootsd.auth,
+            Duration::from_millis(self.config.network.timeout_ms),
+        )
+        .await
+        .map_err(|err| SdkRadrootsdSessionError::Radrootsd(err.to_string()))?;
+        Ok(response.into_iter().map(Into::into).collect())
+    }
+
+    #[cfg(feature = "radrootsd-client")]
+    async fn authorize_radrootsd_signer_session(
+        &self,
+        session: &SdkRadrootsdSignerSessionRef,
+    ) -> Result<SdkRadrootsdSignerSessionAuthorizeResult, SdkRadrootsdSessionError> {
+        if self.transport() != SdkTransportMode::Radrootsd {
+            return Err(SdkRadrootsdSessionError::UnsupportedTransport {
+                transport: self.transport(),
+                operation: "radrootsd.signer_sessions.authorize",
+            });
+        }
+
+        let response = radrootsd::authorize_signer_session(
+            self.require_radrootsd_endpoint("radrootsd.signer_sessions.authorize")?,
+            &self.config.radrootsd.auth,
+            session.session_id(),
+            Duration::from_millis(self.config.network.timeout_ms),
+        )
+        .await
+        .map_err(|err| SdkRadrootsdSessionError::Radrootsd(err.to_string()))?;
+        Ok(response.into())
+    }
+
+    #[cfg(feature = "radrootsd-client")]
+    async fn require_radrootsd_signer_session_auth(
+        &self,
+        session: &SdkRadrootsdSignerSessionRef,
+        auth_url: &str,
+    ) -> Result<SdkRadrootsdSignerSessionRequireAuthResult, SdkRadrootsdSessionError> {
+        if self.transport() != SdkTransportMode::Radrootsd {
+            return Err(SdkRadrootsdSessionError::UnsupportedTransport {
+                transport: self.transport(),
+                operation: "radrootsd.signer_sessions.require_auth",
+            });
+        }
+
+        let response = radrootsd::require_signer_session_auth(
+            self.require_radrootsd_endpoint("radrootsd.signer_sessions.require_auth")?,
+            &self.config.radrootsd.auth,
+            session.session_id(),
+            auth_url,
+            Duration::from_millis(self.config.network.timeout_ms),
+        )
+        .await
+        .map_err(|err| SdkRadrootsdSessionError::Radrootsd(err.to_string()))?;
+        Ok(response.into())
+    }
+
+    #[cfg(feature = "radrootsd-client")]
+    async fn close_radrootsd_signer_session(
+        &self,
+        session: &SdkRadrootsdSignerSessionRef,
+    ) -> Result<SdkRadrootsdSignerSessionCloseResult, SdkRadrootsdSessionError> {
+        if self.transport() != SdkTransportMode::Radrootsd {
+            return Err(SdkRadrootsdSessionError::UnsupportedTransport {
+                transport: self.transport(),
+                operation: "radrootsd.signer_sessions.close",
+            });
+        }
+
+        let response = radrootsd::close_signer_session(
+            self.require_radrootsd_endpoint("radrootsd.signer_sessions.close")?,
+            &self.config.radrootsd.auth,
+            session.session_id(),
             Duration::from_millis(self.config.network.timeout_ms),
         )
         .await
@@ -578,6 +857,45 @@ impl<'a> RadrootsdSignerSessionClient<'a> {
             client_secret_key,
         );
         self.connect(&request).await
+    }
+
+    pub async fn status(
+        &self,
+        session: &SdkRadrootsdSignerSessionRef,
+    ) -> Result<SdkRadrootsdSignerSessionView, SdkRadrootsdSessionError> {
+        self.client.radrootsd_signer_session_status(session).await
+    }
+
+    pub async fn list(
+        &self,
+    ) -> Result<Vec<SdkRadrootsdSignerSessionView>, SdkRadrootsdSessionError> {
+        self.client.radrootsd_list_signer_sessions().await
+    }
+
+    pub async fn authorize(
+        &self,
+        session: &SdkRadrootsdSignerSessionRef,
+    ) -> Result<SdkRadrootsdSignerSessionAuthorizeResult, SdkRadrootsdSessionError> {
+        self.client
+            .authorize_radrootsd_signer_session(session)
+            .await
+    }
+
+    pub async fn require_auth(
+        &self,
+        session: &SdkRadrootsdSignerSessionRef,
+        auth_url: impl AsRef<str>,
+    ) -> Result<SdkRadrootsdSignerSessionRequireAuthResult, SdkRadrootsdSessionError> {
+        self.client
+            .require_radrootsd_signer_session_auth(session, auth_url.as_ref())
+            .await
+    }
+
+    pub async fn close(
+        &self,
+        session: &SdkRadrootsdSignerSessionRef,
+    ) -> Result<SdkRadrootsdSignerSessionCloseResult, SdkRadrootsdSessionError> {
+        self.client.close_radrootsd_signer_session(session).await
     }
 }
 

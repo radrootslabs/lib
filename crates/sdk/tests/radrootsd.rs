@@ -17,8 +17,10 @@ use radroots_sdk::listing::{
 };
 use radroots_sdk::{
     RadrootsNostrEvent, RadrootsSdkClient, RadrootsSdkConfig, RadrootsdAuth, RadrootsdConfig,
-    SdkEnvironment, SdkPublishError, SdkRadrootsdListingPublishOptions, SdkRadrootsdPublishReceipt,
-    SdkRadrootsdSessionError, SdkTransportMode, SdkTransportReceipt, SignerConfig,
+    SdkConfigError, SdkEnvironment, SdkPublishError, SdkRadrootsdListingPublishOptions,
+    SdkRadrootsdPublishReceipt, SdkRadrootsdSessionError, SdkRadrootsdSignerSessionHandle,
+    SdkRadrootsdSignerSessionRole, SdkRadrootsdSignerSessionView, SdkTransportMode,
+    SdkTransportReceipt, SignerConfig,
 };
 use serde_json::{Value, json};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -261,6 +263,41 @@ fn sdk_event(
     }
 }
 
+fn radrootsd_test_client(endpoint: &str) -> Result<RadrootsSdkClient, SdkConfigError> {
+    let mut config = RadrootsSdkConfig::for_environment(SdkEnvironment::Production);
+    config.transport = SdkTransportMode::Radrootsd;
+    config.signer = SignerConfig::Nip46;
+    config.radrootsd = RadrootsdConfig {
+        endpoint: Some(endpoint.to_owned()),
+        auth: RadrootsdAuth::BearerToken("sdk-secret".to_owned()),
+    };
+    RadrootsSdkClient::from_config(config)
+}
+
+fn sample_session_view_json(session_id: &str) -> Value {
+    json!({
+        "session_id": session_id,
+        "role": "outbound_remote_signer",
+        "client_pubkey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "signer_pubkey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "user_pubkey": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "relays": ["wss://radroots.org"],
+        "permissions": ["sign_event:30402"],
+        "name": "Radroots Signer",
+        "url": "https://radroots.org/signers/demo",
+        "image": "https://radroots.org/signers/demo.png",
+        "auth_required": false,
+        "authorized": true,
+        "auth_url": null,
+        "expires_in_secs": 120,
+        "signer_authority": {
+            "provider_runtime_id": "runtime-1",
+            "account_identity_id": "identity-1",
+            "provider_signer_session_id": "provider-session-123"
+        }
+    })
+}
+
 #[test]
 fn radrootsd_debug_redacts_signer_session_values() {
     let signer_authority = SdkRadrootsdSignerAuthority {
@@ -373,7 +410,7 @@ async fn radrootsd_signer_session_connect_returns_opaque_handle() -> TestResult<
         "client-secret-key",
     );
 
-    let handle = client
+    let handle: SdkRadrootsdSignerSessionHandle = client
         .radrootsd()
         .signer_sessions()
         .connect(&request)
@@ -408,6 +445,331 @@ async fn radrootsd_signer_session_connect_returns_opaque_handle() -> TestResult<
     let options_debug = format!("{options:?}");
     assert!(!options_debug.contains("session-123"));
     assert!(options_debug.contains("<redacted>"));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn radrootsd_signer_session_connect_bunker_supports_bunker_mode() -> TestResult<()> {
+    let (server, request_rx) = JsonRpcServer::spawn(
+        Some("Bearer sdk-secret"),
+        json!({
+            "jsonrpc": "2.0",
+            "id": "radroots-sdk-nip46-connect",
+            "result": {
+                "session_id": "session-bunker",
+                "mode": "Bunker",
+                "remote_signer_pubkey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "client_pubkey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "relays": ["wss://radroots.org"]
+            }
+        }),
+    )
+    .await?;
+
+    let client = radrootsd_test_client(server.endpoint())?;
+    let handle: SdkRadrootsdSignerSessionHandle = client
+        .radrootsd()
+        .signer_sessions()
+        .connect_bunker(
+            "bunker://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa?relay=wss%3A%2F%2Fradroots.org&secret=shared-secret",
+        )
+        .await?;
+    let request_json = request_rx.await?;
+
+    assert_eq!(request_json["method"], "nip46.connect");
+    assert_eq!(
+        request_json["params"]["url"],
+        "bunker://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa?relay=wss%3A%2F%2Fradroots.org&secret=shared-secret"
+    );
+    assert!(request_json["params"]["client_secret_key"].is_null());
+    assert_eq!(handle.mode(), SdkRadrootsdSignerSessionMode::Bunker);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn radrootsd_signer_session_status_returns_typed_view() -> TestResult<()> {
+    let (connect_server, _) = JsonRpcServer::spawn(
+        Some("Bearer sdk-secret"),
+        json!({
+            "jsonrpc": "2.0",
+            "id": "radroots-sdk-nip46-connect",
+            "result": {
+                "session_id": "session-123",
+                "mode": "Nostrconnect",
+                "remote_signer_pubkey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "client_pubkey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "relays": ["wss://radroots.org"]
+            }
+        }),
+    )
+    .await?;
+    let connect_client = radrootsd_test_client(connect_server.endpoint())?;
+    let handle: SdkRadrootsdSignerSessionHandle = connect_client
+        .radrootsd()
+        .signer_sessions()
+        .connect_nostrconnect(
+            "nostrconnect://bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb?relay=wss%3A%2F%2Fradroots.org&secret=shared-secret",
+            "client-secret-key",
+        )
+        .await?;
+
+    let (status_server, request_rx) = JsonRpcServer::spawn(
+        Some("Bearer sdk-secret"),
+        json!({
+            "jsonrpc": "2.0",
+            "id": "radroots-sdk-nip46-session-status",
+            "result": sample_session_view_json("session-123")
+        }),
+    )
+    .await?;
+    let status_client = radrootsd_test_client(status_server.endpoint())?;
+    let session: SdkRadrootsdSignerSessionView = status_client
+        .radrootsd()
+        .signer_sessions()
+        .status(handle.session())
+        .await?;
+    let request_json = request_rx.await?;
+
+    assert_eq!(request_json["method"], "nip46.session.status");
+    assert_eq!(request_json["params"]["session_id"], "session-123");
+    assert_eq!(session.session(), handle.session());
+    assert_eq!(
+        session.role,
+        SdkRadrootsdSignerSessionRole::OutboundRemoteSigner
+    );
+    assert_eq!(
+        session.client_pubkey,
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    );
+    assert_eq!(
+        session.signer_pubkey,
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    );
+    assert_eq!(
+        session.user_pubkey.as_deref(),
+        Some("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc")
+    );
+    assert_eq!(session.relays, vec!["wss://radroots.org".to_owned()]);
+    assert_eq!(session.permissions, vec!["sign_event:30402".to_owned()]);
+    assert_eq!(session.name.as_deref(), Some("Radroots Signer"));
+    assert_eq!(
+        session.url.as_deref(),
+        Some("https://radroots.org/signers/demo")
+    );
+    assert_eq!(
+        session.image.as_deref(),
+        Some("https://radroots.org/signers/demo.png")
+    );
+    assert!(session.authorized);
+    assert!(!session.auth_required);
+    assert_eq!(session.expires_in_secs, Some(120));
+    assert_eq!(
+        session
+            .signer_authority
+            .as_ref()
+            .map(|value| value.provider_runtime_id.as_str()),
+        Some("runtime-1")
+    );
+
+    let debug = format!("{session:?}");
+    assert!(!debug.contains("session-123"));
+    assert!(debug.contains("<redacted>"));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn radrootsd_signer_session_list_returns_typed_views() -> TestResult<()> {
+    let (server, request_rx) = JsonRpcServer::spawn(
+        Some("Bearer sdk-secret"),
+        json!({
+            "jsonrpc": "2.0",
+            "id": "radroots-sdk-nip46-session-list",
+            "result": [
+                sample_session_view_json("session-123"),
+                sample_session_view_json("session-456")
+            ]
+        }),
+    )
+    .await?;
+    let client = radrootsd_test_client(server.endpoint())?;
+    let sessions: Vec<SdkRadrootsdSignerSessionView> =
+        client.radrootsd().signer_sessions().list().await?;
+    let request_json = request_rx.await?;
+
+    assert_eq!(request_json["method"], "nip46.session.list");
+    assert_eq!(sessions.len(), 2);
+    assert_eq!(
+        sessions[0].role,
+        SdkRadrootsdSignerSessionRole::OutboundRemoteSigner
+    );
+    let debug = format!("{:?}", sessions[0].session());
+    assert!(!debug.contains("session-123"));
+    assert!(debug.contains("<redacted>"));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn radrootsd_signer_session_authorize_returns_typed_result() -> TestResult<()> {
+    let (connect_server, _) = JsonRpcServer::spawn(
+        Some("Bearer sdk-secret"),
+        json!({
+            "jsonrpc": "2.0",
+            "id": "radroots-sdk-nip46-connect",
+            "result": {
+                "session_id": "session-123",
+                "mode": "Bunker",
+                "remote_signer_pubkey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "client_pubkey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "relays": ["wss://radroots.org"]
+            }
+        }),
+    )
+    .await?;
+    let connect_client = radrootsd_test_client(connect_server.endpoint())?;
+    let handle: SdkRadrootsdSignerSessionHandle = connect_client
+        .radrootsd()
+        .signer_sessions()
+        .connect_bunker(
+            "bunker://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa?relay=wss%3A%2F%2Fradroots.org&secret=shared-secret",
+        )
+        .await?;
+
+    let (server, request_rx) = JsonRpcServer::spawn(
+        Some("Bearer sdk-secret"),
+        json!({
+            "jsonrpc": "2.0",
+            "id": "radroots-sdk-nip46-session-authorize",
+            "result": {
+                "authorized": true,
+                "replayed": true
+            }
+        }),
+    )
+    .await?;
+    let client = radrootsd_test_client(server.endpoint())?;
+    let result = client
+        .radrootsd()
+        .signer_sessions()
+        .authorize(handle.session())
+        .await?;
+    let request_json = request_rx.await?;
+
+    assert_eq!(request_json["method"], "nip46.session.authorize");
+    assert_eq!(request_json["params"]["session_id"], "session-123");
+    assert!(result.authorized);
+    assert!(result.replayed);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn radrootsd_signer_session_require_auth_returns_typed_result() -> TestResult<()> {
+    let (connect_server, _) = JsonRpcServer::spawn(
+        Some("Bearer sdk-secret"),
+        json!({
+            "jsonrpc": "2.0",
+            "id": "radroots-sdk-nip46-connect",
+            "result": {
+                "session_id": "session-123",
+                "mode": "Bunker",
+                "remote_signer_pubkey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "client_pubkey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "relays": ["wss://radroots.org"]
+            }
+        }),
+    )
+    .await?;
+    let connect_client = radrootsd_test_client(connect_server.endpoint())?;
+    let handle: SdkRadrootsdSignerSessionHandle = connect_client
+        .radrootsd()
+        .signer_sessions()
+        .connect_bunker(
+            "bunker://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa?relay=wss%3A%2F%2Fradroots.org&secret=shared-secret",
+        )
+        .await?;
+
+    let (server, request_rx) = JsonRpcServer::spawn(
+        Some("Bearer sdk-secret"),
+        json!({
+            "jsonrpc": "2.0",
+            "id": "radroots-sdk-nip46-session-require-auth",
+            "result": {
+                "required": true
+            }
+        }),
+    )
+    .await?;
+    let client = radrootsd_test_client(server.endpoint())?;
+    let result = client
+        .radrootsd()
+        .signer_sessions()
+        .require_auth(handle.session(), "https://radroots.org/auth")
+        .await?;
+    let request_json = request_rx.await?;
+
+    assert_eq!(request_json["method"], "nip46.session.require_auth");
+    assert_eq!(request_json["params"]["session_id"], "session-123");
+    assert_eq!(
+        request_json["params"]["auth_url"],
+        "https://radroots.org/auth"
+    );
+    assert!(result.required);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn radrootsd_signer_session_close_returns_typed_result() -> TestResult<()> {
+    let (connect_server, _) = JsonRpcServer::spawn(
+        Some("Bearer sdk-secret"),
+        json!({
+            "jsonrpc": "2.0",
+            "id": "radroots-sdk-nip46-connect",
+            "result": {
+                "session_id": "session-123",
+                "mode": "Bunker",
+                "remote_signer_pubkey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "client_pubkey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "relays": ["wss://radroots.org"]
+            }
+        }),
+    )
+    .await?;
+    let connect_client = radrootsd_test_client(connect_server.endpoint())?;
+    let handle: SdkRadrootsdSignerSessionHandle = connect_client
+        .radrootsd()
+        .signer_sessions()
+        .connect_bunker(
+            "bunker://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa?relay=wss%3A%2F%2Fradroots.org&secret=shared-secret",
+        )
+        .await?;
+
+    let (server, request_rx) = JsonRpcServer::spawn(
+        Some("Bearer sdk-secret"),
+        json!({
+            "jsonrpc": "2.0",
+            "id": "radroots-sdk-nip46-session-close",
+            "result": {
+                "closed": true
+            }
+        }),
+    )
+    .await?;
+    let client = radrootsd_test_client(server.endpoint())?;
+    let result = client
+        .radrootsd()
+        .signer_sessions()
+        .close(handle.session())
+        .await?;
+    let request_json = request_rx.await?;
+
+    assert_eq!(request_json["method"], "nip46.session.close");
+    assert_eq!(request_json["params"]["session_id"], "session-123");
+    assert!(result.closed);
 
     Ok(())
 }
