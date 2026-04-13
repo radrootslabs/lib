@@ -165,11 +165,15 @@ fn namespace_clients_reflect_explicit_transport_mode() {
     assert_eq!(client.farm().transport(), SdkTransportMode::Radrootsd);
     assert_eq!(client.listing().transport(), SdkTransportMode::Radrootsd);
     assert_eq!(client.trade().transport(), SdkTransportMode::Radrootsd);
+    #[cfg(feature = "radrootsd-client")]
+    assert_eq!(client.radrootsd().transport(), SdkTransportMode::Radrootsd);
     assert_eq!(client.signer(), SignerConfig::LocalIdentity);
     assert_eq!(client.profile().signer(), SignerConfig::LocalIdentity);
     assert_eq!(client.farm().signer(), SignerConfig::LocalIdentity);
     assert_eq!(client.listing().signer(), SignerConfig::LocalIdentity);
     assert_eq!(client.trade().signer(), SignerConfig::LocalIdentity);
+    #[cfg(feature = "radrootsd-client")]
+    assert_eq!(client.radrootsd().signer(), SignerConfig::LocalIdentity);
 }
 
 #[test]

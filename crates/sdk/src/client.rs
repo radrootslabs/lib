@@ -177,6 +177,105 @@ impl core::fmt::Display for SdkPublishError {
 impl std::error::Error for SdkPublishError {}
 
 #[cfg(feature = "radrootsd-client")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SdkRadrootsdSessionError {
+    Config(SdkConfigError),
+    UnsupportedTransport {
+        transport: SdkTransportMode,
+        operation: &'static str,
+    },
+    Radrootsd(String),
+}
+
+#[cfg(feature = "radrootsd-client")]
+impl From<SdkConfigError> for SdkRadrootsdSessionError {
+    fn from(value: SdkConfigError) -> Self {
+        Self::Config(value)
+    }
+}
+
+#[cfg(feature = "radrootsd-client")]
+impl fmt::Display for SdkRadrootsdSessionError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Config(err) => write!(f, "{err}"),
+            Self::UnsupportedTransport {
+                transport,
+                operation,
+            } => {
+                write!(
+                    f,
+                    "{operation} requires a different sdk transport mode than {transport:?}"
+                )
+            }
+            Self::Radrootsd(message) => write!(f, "{message}"),
+        }
+    }
+}
+
+#[cfg(all(feature = "radrootsd-client", feature = "std"))]
+impl std::error::Error for SdkRadrootsdSessionError {}
+
+#[cfg(feature = "radrootsd-client")]
+#[derive(Clone, PartialEq, Eq)]
+pub struct SdkRadrootsdSignerSessionHandle {
+    session_id: String,
+    mode: radrootsd::SdkRadrootsdSignerSessionMode,
+    remote_signer_pubkey: String,
+    client_pubkey: String,
+    relays: Vec<String>,
+}
+
+#[cfg(feature = "radrootsd-client")]
+impl fmt::Debug for SdkRadrootsdSignerSessionHandle {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut debug = f.debug_struct("SdkRadrootsdSignerSessionHandle");
+        debug.field("session_id", &"<redacted>");
+        debug.field("mode", &self.mode);
+        debug.field("remote_signer_pubkey", &self.remote_signer_pubkey);
+        debug.field("client_pubkey", &self.client_pubkey);
+        debug.field("relays", &self.relays);
+        debug.finish()
+    }
+}
+
+#[cfg(feature = "radrootsd-client")]
+impl SdkRadrootsdSignerSessionHandle {
+    pub fn mode(&self) -> radrootsd::SdkRadrootsdSignerSessionMode {
+        self.mode
+    }
+
+    pub fn remote_signer_pubkey(&self) -> &str {
+        self.remote_signer_pubkey.as_str()
+    }
+
+    pub fn client_pubkey(&self) -> &str {
+        self.client_pubkey.as_str()
+    }
+
+    pub fn relays(&self) -> &[String] {
+        self.relays.as_slice()
+    }
+
+    pub(crate) fn session_id(&self) -> &str {
+        self.session_id.as_str()
+    }
+}
+
+#[cfg(feature = "radrootsd-client")]
+impl From<radrootsd::SdkRadrootsdSignerSessionConnectResponse> for SdkRadrootsdSignerSessionHandle {
+    fn from(value: radrootsd::SdkRadrootsdSignerSessionConnectResponse) -> Self {
+        Self {
+            session_id: value.session_id,
+            mode: value.mode,
+            remote_signer_pubkey: value.remote_signer_pubkey,
+            client_pubkey: value.client_pubkey,
+            relays: value.relays,
+        }
+    }
+}
+
+#[cfg(feature = "radrootsd-client")]
 #[derive(Clone, PartialEq, Eq)]
 pub struct SdkRadrootsdListingPublishOptions {
     pub signer_session_id: String,
@@ -190,6 +289,10 @@ impl SdkRadrootsdListingPublishOptions {
             signer_session_id: signer_session_id.into(),
             idempotency_key: None,
         }
+    }
+
+    pub fn from_signer_session(session: &SdkRadrootsdSignerSessionHandle) -> Self {
+        Self::new(session.session_id())
     }
 }
 
@@ -261,6 +364,11 @@ impl RadrootsSdkClient {
 
     pub fn trade(&self) -> TradeClient<'_> {
         TradeClient { client: self }
+    }
+
+    #[cfg(feature = "radrootsd-client")]
+    pub fn radrootsd(&self) -> RadrootsdClient<'_> {
+        RadrootsdClient { client: self }
     }
 
     #[cfg(any(
@@ -363,6 +471,113 @@ impl RadrootsSdkClient {
         Ok(sdk_publish_receipt_from_radrootsd_listing_response(
             response,
         ))
+    }
+
+    #[cfg(feature = "radrootsd-client")]
+    async fn connect_radrootsd_signer_session(
+        &self,
+        request: &radrootsd::SdkRadrootsdSignerSessionConnectRequest,
+    ) -> Result<SdkRadrootsdSignerSessionHandle, SdkRadrootsdSessionError> {
+        if self.transport() != SdkTransportMode::Radrootsd {
+            return Err(SdkRadrootsdSessionError::UnsupportedTransport {
+                transport: self.transport(),
+                operation: "radrootsd.signer_sessions.connect",
+            });
+        }
+
+        let endpoint = match &self.resolved_transport_target {
+            SdkResolvedTransportTarget::Radrootsd { endpoint } => endpoint.as_str(),
+            SdkResolvedTransportTarget::RelayDirect { .. } => {
+                return Err(SdkRadrootsdSessionError::UnsupportedTransport {
+                    transport: self.transport(),
+                    operation: "radrootsd.signer_sessions.connect",
+                });
+            }
+        };
+        let response = radrootsd::connect_signer_session(
+            endpoint,
+            &self.config.radrootsd.auth,
+            request,
+            Duration::from_millis(self.config.network.timeout_ms),
+        )
+        .await
+        .map_err(|err| SdkRadrootsdSessionError::Radrootsd(err.to_string()))?;
+        Ok(response.into())
+    }
+}
+
+#[cfg(feature = "radrootsd-client")]
+#[derive(Debug, Clone, Copy)]
+pub struct RadrootsdClient<'a> {
+    client: &'a RadrootsSdkClient,
+}
+
+#[cfg(feature = "radrootsd-client")]
+impl<'a> RadrootsdClient<'a> {
+    pub fn sdk(&self) -> &'a RadrootsSdkClient {
+        self.client
+    }
+
+    pub fn transport(&self) -> SdkTransportMode {
+        self.client.transport()
+    }
+
+    pub fn signer(&self) -> SignerConfig {
+        self.client.signer()
+    }
+
+    pub fn signer_sessions(&self) -> RadrootsdSignerSessionClient<'a> {
+        RadrootsdSignerSessionClient {
+            client: self.client,
+        }
+    }
+}
+
+#[cfg(feature = "radrootsd-client")]
+#[derive(Debug, Clone, Copy)]
+pub struct RadrootsdSignerSessionClient<'a> {
+    client: &'a RadrootsSdkClient,
+}
+
+#[cfg(feature = "radrootsd-client")]
+impl<'a> RadrootsdSignerSessionClient<'a> {
+    pub fn sdk(&self) -> &'a RadrootsSdkClient {
+        self.client
+    }
+
+    pub fn transport(&self) -> SdkTransportMode {
+        self.client.transport()
+    }
+
+    pub fn signer(&self) -> SignerConfig {
+        self.client.signer()
+    }
+
+    pub async fn connect(
+        &self,
+        request: &radrootsd::SdkRadrootsdSignerSessionConnectRequest,
+    ) -> Result<SdkRadrootsdSignerSessionHandle, SdkRadrootsdSessionError> {
+        self.client.connect_radrootsd_signer_session(request).await
+    }
+
+    pub async fn connect_bunker(
+        &self,
+        url: impl Into<String>,
+    ) -> Result<SdkRadrootsdSignerSessionHandle, SdkRadrootsdSessionError> {
+        let request = radrootsd::SdkRadrootsdSignerSessionConnectRequest::bunker(url);
+        self.connect(&request).await
+    }
+
+    pub async fn connect_nostrconnect(
+        &self,
+        url: impl Into<String>,
+        client_secret_key: impl Into<String>,
+    ) -> Result<SdkRadrootsdSignerSessionHandle, SdkRadrootsdSessionError> {
+        let request = radrootsd::SdkRadrootsdSignerSessionConnectRequest::nostrconnect(
+            url,
+            client_secret_key,
+        );
+        self.connect(&request).await
     }
 }
 

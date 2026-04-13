@@ -7,7 +7,8 @@ use radroots_core::{
 use radroots_events::kinds::KIND_LISTING_DRAFT;
 use radroots_sdk::adapters::radrootsd::{
     SdkRadrootsdBridgeJob, SdkRadrootsdBridgePublishResponse, SdkRadrootsdListingPublishRequest,
-    SdkRadrootsdSignerAuthority,
+    SdkRadrootsdSignerAuthority, SdkRadrootsdSignerSessionConnectRequest,
+    SdkRadrootsdSignerSessionMode,
 };
 use radroots_sdk::listing::{
     RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
@@ -17,7 +18,7 @@ use radroots_sdk::listing::{
 use radroots_sdk::{
     RadrootsNostrEvent, RadrootsSdkClient, RadrootsSdkConfig, RadrootsdAuth, RadrootsdConfig,
     SdkEnvironment, SdkPublishError, SdkRadrootsdListingPublishOptions, SdkRadrootsdPublishReceipt,
-    SdkTransportMode, SdkTransportReceipt, SignerConfig,
+    SdkRadrootsdSessionError, SdkTransportMode, SdkTransportReceipt, SignerConfig,
 };
 use serde_json::{Value, json};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -325,6 +326,115 @@ fn radrootsd_debug_redacts_signer_session_values() {
     let options_debug = format!("{options:?}");
     assert!(!options_debug.contains("session-123"));
     assert!(options_debug.contains("<redacted>"));
+
+    let connect_request = SdkRadrootsdSignerSessionConnectRequest::nostrconnect(
+        "nostrconnect://bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb?relay=wss%3A%2F%2Fradroots.org&secret=shared-secret",
+        "client-secret-key",
+    )
+    .with_signer_authority(SdkRadrootsdSignerAuthority {
+        provider_runtime_id: "runtime-1".to_owned(),
+        account_identity_id: "identity-1".to_owned(),
+        provider_signer_session_id: Some("provider-session-123".to_owned()),
+    });
+    let connect_request_debug = format!("{connect_request:?}");
+    assert!(!connect_request_debug.contains("client-secret-key"));
+    assert!(!connect_request_debug.contains("provider-session-123"));
+    assert!(connect_request_debug.contains("<redacted>"));
+}
+
+#[tokio::test]
+async fn radrootsd_signer_session_connect_returns_opaque_handle() -> TestResult<()> {
+    let (server, request_rx) = JsonRpcServer::spawn(
+        Some("Bearer sdk-secret"),
+        json!({
+            "jsonrpc": "2.0",
+            "id": "radroots-sdk-nip46-connect",
+            "result": {
+                "session_id": "session-123",
+                "mode": "Nostrconnect",
+                "remote_signer_pubkey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "client_pubkey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "relays": ["wss://radroots.org"]
+            }
+        }),
+    )
+    .await?;
+
+    let mut config = RadrootsSdkConfig::for_environment(SdkEnvironment::Production);
+    config.transport = SdkTransportMode::Radrootsd;
+    config.signer = SignerConfig::Nip46;
+    config.radrootsd = RadrootsdConfig {
+        endpoint: Some(server.endpoint().to_owned()),
+        auth: RadrootsdAuth::BearerToken("sdk-secret".to_owned()),
+    };
+    let client = RadrootsSdkClient::from_config(config)?;
+    let request = SdkRadrootsdSignerSessionConnectRequest::nostrconnect(
+        "nostrconnect://bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb?relay=wss%3A%2F%2Fradroots.org&secret=shared-secret",
+        "client-secret-key",
+    );
+
+    let handle = client
+        .radrootsd()
+        .signer_sessions()
+        .connect(&request)
+        .await?;
+    let request_json = request_rx.await?;
+
+    assert_eq!(request_json["method"], "nip46.connect");
+    assert_eq!(
+        request_json["params"]["url"],
+        "nostrconnect://bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb?relay=wss%3A%2F%2Fradroots.org&secret=shared-secret"
+    );
+    assert_eq!(
+        request_json["params"]["client_secret_key"],
+        "client-secret-key"
+    );
+    assert_eq!(handle.mode(), SdkRadrootsdSignerSessionMode::Nostrconnect);
+    assert_eq!(
+        handle.remote_signer_pubkey(),
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    );
+    assert_eq!(
+        handle.client_pubkey(),
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    );
+    assert_eq!(handle.relays(), &["wss://radroots.org".to_owned()]);
+
+    let handle_debug = format!("{handle:?}");
+    assert!(!handle_debug.contains("session-123"));
+    assert!(handle_debug.contains("<redacted>"));
+
+    let options = SdkRadrootsdListingPublishOptions::from_signer_session(&handle);
+    let options_debug = format!("{options:?}");
+    assert!(!options_debug.contains("session-123"));
+    assert!(options_debug.contains("<redacted>"));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn radrootsd_signer_session_connect_rejects_relay_transport_mode() -> TestResult<()> {
+    let client = RadrootsSdkClient::from_config(RadrootsSdkConfig::production())?;
+    let request = SdkRadrootsdSignerSessionConnectRequest::bunker(
+        "bunker://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa?relay=wss%3A%2F%2Fradroots.org&secret=shared-secret",
+    );
+
+    let error = client
+        .radrootsd()
+        .signer_sessions()
+        .connect(&request)
+        .await
+        .expect_err("unsupported transport");
+
+    assert!(matches!(
+        error,
+        SdkRadrootsdSessionError::UnsupportedTransport {
+            transport: SdkTransportMode::RelayDirect,
+            operation: "radrootsd.signer_sessions.connect",
+        }
+    ));
+
+    Ok(())
 }
 
 #[tokio::test]

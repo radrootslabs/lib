@@ -7,7 +7,7 @@ use crate::listing;
 use crate::listing::RadrootsListing;
 use radroots_events::kinds::KIND_LISTING;
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderValue};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::{Value, json};
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -30,6 +30,59 @@ impl fmt::Debug for SdkRadrootsdSignerAuthority {
                 .as_ref()
                 .map(|_| "<redacted>"),
         );
+        debug.finish()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SdkRadrootsdSignerSessionMode {
+    #[serde(alias = "bunker")]
+    Bunker,
+    #[serde(alias = "nostrconnect")]
+    Nostrconnect,
+}
+
+#[derive(Clone, PartialEq, Eq, Serialize)]
+pub struct SdkRadrootsdSignerSessionConnectRequest {
+    pub url: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_secret_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signer_authority: Option<SdkRadrootsdSignerAuthority>,
+}
+
+impl SdkRadrootsdSignerSessionConnectRequest {
+    pub fn bunker(url: impl Into<String>) -> Self {
+        Self {
+            url: url.into(),
+            client_secret_key: None,
+            signer_authority: None,
+        }
+    }
+
+    pub fn nostrconnect(url: impl Into<String>, client_secret_key: impl Into<String>) -> Self {
+        Self {
+            url: url.into(),
+            client_secret_key: Some(client_secret_key.into()),
+            signer_authority: None,
+        }
+    }
+
+    pub fn with_signer_authority(mut self, signer_authority: SdkRadrootsdSignerAuthority) -> Self {
+        self.signer_authority = Some(signer_authority);
+        self
+    }
+}
+
+impl fmt::Debug for SdkRadrootsdSignerSessionConnectRequest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut debug = f.debug_struct("SdkRadrootsdSignerSessionConnectRequest");
+        debug.field("url", &self.url);
+        debug.field(
+            "client_secret_key",
+            &self.client_secret_key.as_ref().map(|_| "<redacted>"),
+        );
+        debug.field("signer_authority", &self.signer_authority);
         debug.finish()
     }
 }
@@ -78,6 +131,15 @@ impl SdkRadrootsdListingPublishRequest {
             idempotency_key,
         })
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub(crate) struct SdkRadrootsdSignerSessionConnectResponse {
+    pub session_id: String,
+    pub mode: SdkRadrootsdSignerSessionMode,
+    pub remote_signer_pubkey: String,
+    pub client_pubkey: String,
+    pub relays: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -168,59 +230,32 @@ pub async fn publish_listing(
     request: &SdkRadrootsdListingPublishRequest,
     timeout: Duration,
 ) -> Result<SdkRadrootsdBridgePublishResponse, RadrootsdError> {
-    let client = reqwest::Client::builder()
-        .timeout(timeout)
-        .build()
-        .map_err(|err| RadrootsdError::Http(format!("build radrootsd client: {err}")))?;
-    let mut request_builder = client
-        .post(endpoint)
-        .headers(auth_headers(auth)?)
-        .json(&json!({
-            "jsonrpc": "2.0",
-            "id": "radroots-sdk-listing-publish",
-            "method": "bridge.listing.publish",
-            "params": request,
-        }));
+    jsonrpc_call(
+        endpoint,
+        auth,
+        "radroots-sdk-listing-publish",
+        "bridge.listing.publish",
+        request,
+        timeout,
+    )
+    .await
+}
 
-    request_builder = request_builder.header(CONTENT_TYPE, "application/json");
-
-    let response = request_builder.send().await.map_err(|err| {
-        RadrootsdError::Http(format!("send radrootsd listing publish request: {err}"))
-    })?;
-    let status = response.status();
-    let body = response
-        .text()
-        .await
-        .map_err(|err| RadrootsdError::Http(format!("read radrootsd response body: {err}")))?;
-
-    if !status.is_success() {
-        return Err(RadrootsdError::Http(format!(
-            "radrootsd returned http {}: {}",
-            status.as_u16(),
-            body
-        )));
-    }
-
-    let envelope: JsonRpcEnvelope<SdkRadrootsdBridgePublishResponse> =
-        serde_json::from_str(body.as_str()).map_err(|err| {
-            RadrootsdError::MalformedResponse(format!(
-                "decode radrootsd bridge.listing.publish response: {err}"
-            ))
-        })?;
-    match (envelope.result, envelope.error) {
-        (Some(result), None) => Ok(result),
-        (None, Some(error)) => Err(RadrootsdError::JsonRpc(format!(
-            "radrootsd bridge.listing.publish failed {}: {}",
-            error.code, error.message
-        ))),
-        (Some(_), Some(error)) => Err(RadrootsdError::MalformedResponse(format!(
-            "radrootsd bridge.listing.publish returned result and error: {} {}",
-            error.code, error.message
-        ))),
-        (None, None) => Err(RadrootsdError::MalformedResponse(
-            "radrootsd bridge.listing.publish returned neither result nor error".to_owned(),
-        )),
-    }
+pub(crate) async fn connect_signer_session(
+    endpoint: &str,
+    auth: &RadrootsdAuth,
+    request: &SdkRadrootsdSignerSessionConnectRequest,
+    timeout: Duration,
+) -> Result<SdkRadrootsdSignerSessionConnectResponse, RadrootsdError> {
+    jsonrpc_call(
+        endpoint,
+        auth,
+        "radroots-sdk-nip46-connect",
+        "nip46.connect",
+        request,
+        timeout,
+    )
+    .await
 }
 
 fn auth_headers(auth: &RadrootsdAuth) -> Result<HeaderMap, RadrootsdError> {
@@ -244,4 +279,69 @@ pub fn bridge_listing_publish_request_json(
             "serialize radrootsd listing publish request: {err}"
         ))
     })
+}
+
+async fn jsonrpc_call<P, R>(
+    endpoint: &str,
+    auth: &RadrootsdAuth,
+    request_id: &str,
+    method: &str,
+    params: &P,
+    timeout: Duration,
+) -> Result<R, RadrootsdError>
+where
+    P: Serialize + ?Sized,
+    R: DeserializeOwned,
+{
+    let client = reqwest::Client::builder()
+        .timeout(timeout)
+        .build()
+        .map_err(|err| RadrootsdError::Http(format!("build radrootsd client: {err}")))?;
+    let mut request_builder = client
+        .post(endpoint)
+        .headers(auth_headers(auth)?)
+        .json(&json!({
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "method": method,
+            "params": params,
+        }));
+
+    request_builder = request_builder.header(CONTENT_TYPE, "application/json");
+
+    let response = request_builder
+        .send()
+        .await
+        .map_err(|err| RadrootsdError::Http(format!("send radrootsd {method} request: {err}")))?;
+    let status = response.status();
+    let body = response
+        .text()
+        .await
+        .map_err(|err| RadrootsdError::Http(format!("read radrootsd response body: {err}")))?;
+
+    if !status.is_success() {
+        return Err(RadrootsdError::Http(format!(
+            "radrootsd returned http {}: {}",
+            status.as_u16(),
+            body
+        )));
+    }
+
+    let envelope: JsonRpcEnvelope<R> = serde_json::from_str(body.as_str()).map_err(|err| {
+        RadrootsdError::MalformedResponse(format!("decode radrootsd {method} response: {err}"))
+    })?;
+    match (envelope.result, envelope.error) {
+        (Some(result), None) => Ok(result),
+        (None, Some(error)) => Err(RadrootsdError::JsonRpc(format!(
+            "radrootsd {method} failed {}: {}",
+            error.code, error.message
+        ))),
+        (Some(_), Some(error)) => Err(RadrootsdError::MalformedResponse(format!(
+            "radrootsd {method} returned result and error: {} {}",
+            error.code, error.message
+        ))),
+        (None, None) => Err(RadrootsdError::MalformedResponse(format!(
+            "radrootsd {method} returned neither result nor error"
+        ))),
+    }
 }
