@@ -113,9 +113,9 @@ fn listing_event(listing_value: &RadrootsListing) -> RadrootsNostrEvent {
         id: "event-1".into(),
         author: "seller".into(),
         created_at: 1,
-        kind: parts.kind,
-        tags: parts.tags,
-        content: parts.content,
+        kind: parts.as_wire_parts().kind,
+        tags: parts.as_wire_parts().tags.clone(),
+        content: parts.as_wire_parts().content.clone(),
         sig: String::new(),
     }
 }

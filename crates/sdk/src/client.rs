@@ -370,7 +370,7 @@ impl<'a> ListingClient<'a> {
     pub fn build_draft(
         &self,
         listing_value: &listing::RadrootsListing,
-    ) -> Result<WireEventParts, listing::EventEncodeError> {
+    ) -> Result<listing::RadrootsListingDraft, listing::EventEncodeError> {
         listing::build_draft(listing_value)
     }
 
@@ -393,7 +393,8 @@ impl<'a> ListingClient<'a> {
         listing_value: &listing::RadrootsListing,
     ) -> Result<SdkPublishReceipt, SdkPublishError> {
         let parts = listing::build_draft(listing_value)
-            .map_err(|err| SdkPublishError::Encode(err.to_string()))?;
+            .map_err(|err| SdkPublishError::Encode(err.to_string()))?
+            .into_wire_parts();
         self.client
             .publish_parts_via_relay_with_identity(identity, parts, "listing.publish_with_identity")
             .await
@@ -407,12 +408,12 @@ impl<'a> ListingClient<'a> {
     pub async fn publish_draft_with_identity(
         &self,
         identity: &RadrootsIdentity,
-        draft: WireEventParts,
+        draft: listing::RadrootsListingDraft,
     ) -> Result<SdkPublishReceipt, SdkPublishError> {
         self.client
             .publish_parts_via_relay_with_identity(
                 identity,
-                draft,
+                draft.into_wire_parts(),
                 "listing.publish_draft_with_identity",
             )
             .await

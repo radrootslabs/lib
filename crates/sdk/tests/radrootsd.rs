@@ -12,7 +12,7 @@ use radroots_sdk::listing::{
 use radroots_sdk::{
     RadrootsNostrEvent, RadrootsSdkClient, RadrootsSdkConfig, RadrootsdAuth, RadrootsdConfig,
     SdkEnvironment, SdkPublishError, SdkRadrootsdListingPublishRequest, SdkTransportMode,
-    SdkTransportReceipt, SignerConfig, WireEventParts,
+    SdkTransportReceipt, SignerConfig,
 };
 use serde_json::{Value, json};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -238,7 +238,12 @@ fn sample_listing() -> RadrootsListing {
     }
 }
 
-fn sdk_event(author: &str, created_at: u32, parts: WireEventParts) -> RadrootsNostrEvent {
+fn sdk_event(
+    author: &str,
+    created_at: u32,
+    draft: radroots_sdk::listing::RadrootsListingDraft,
+) -> RadrootsNostrEvent {
+    let parts = draft.into_wire_parts();
     RadrootsNostrEvent {
         id: "event-1".to_owned(),
         author: author.to_owned(),

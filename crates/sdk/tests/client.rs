@@ -157,15 +157,15 @@ fn listing_and_trade_clients_wrap_existing_sdk_facades() {
         .listing()
         .build_draft(&listing_value)
         .expect("listing draft");
-    assert_eq!(draft.kind, KIND_LISTING);
+    assert_eq!(draft.as_wire_parts().kind, KIND_LISTING);
 
     let event = RadrootsNostrEvent {
         id: "listing-1".into(),
         author: "seller".into(),
         created_at: 1,
-        kind: draft.kind,
-        tags: draft.tags,
-        content: draft.content,
+        kind: draft.as_wire_parts().kind,
+        tags: draft.as_wire_parts().tags.clone(),
+        content: draft.as_wire_parts().content.clone(),
         sig: String::new(),
     };
     let parsed = client
