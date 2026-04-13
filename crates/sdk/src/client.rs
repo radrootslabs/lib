@@ -410,10 +410,6 @@ impl SdkRadrootsdSignerSessionHandle {
     pub fn relays(&self) -> &[String] {
         self.relays.as_slice()
     }
-
-    pub(crate) fn session_id(&self) -> &str {
-        self.session.session_id()
-    }
 }
 
 #[cfg(feature = "radrootsd-client")]
@@ -434,21 +430,52 @@ impl From<radrootsd::SdkRadrootsdSignerSessionConnectResponse> for SdkRadrootsdS
 #[cfg(feature = "radrootsd-client")]
 #[derive(Clone, PartialEq, Eq)]
 pub struct SdkRadrootsdListingPublishOptions {
-    pub signer_session_id: String,
-    pub idempotency_key: Option<String>,
+    session: SdkRadrootsdSignerSessionRef,
+    idempotency_key: Option<String>,
+    signer_authority: Option<radrootsd::SdkRadrootsdSignerAuthority>,
 }
 
 #[cfg(feature = "radrootsd-client")]
 impl SdkRadrootsdListingPublishOptions {
-    pub fn new(signer_session_id: impl Into<String>) -> Self {
+    pub fn from_signer_session(session: &SdkRadrootsdSignerSessionHandle) -> Self {
         Self {
-            signer_session_id: signer_session_id.into(),
+            session: session.session().clone(),
             idempotency_key: None,
+            signer_authority: None,
         }
     }
 
-    pub fn from_signer_session(session: &SdkRadrootsdSignerSessionHandle) -> Self {
-        Self::new(session.session_id())
+    pub fn from_signer_session_ref(session: &SdkRadrootsdSignerSessionRef) -> Self {
+        Self {
+            session: session.clone(),
+            idempotency_key: None,
+            signer_authority: None,
+        }
+    }
+
+    pub fn with_idempotency_key(mut self, idempotency_key: impl Into<String>) -> Self {
+        self.idempotency_key = Some(idempotency_key.into());
+        self
+    }
+
+    pub fn with_signer_authority(
+        mut self,
+        signer_authority: radrootsd::SdkRadrootsdSignerAuthority,
+    ) -> Self {
+        self.signer_authority = Some(signer_authority);
+        self
+    }
+
+    pub fn session(&self) -> &SdkRadrootsdSignerSessionRef {
+        &self.session
+    }
+
+    pub fn idempotency_key(&self) -> Option<&str> {
+        self.idempotency_key.as_deref()
+    }
+
+    pub fn signer_authority(&self) -> Option<&radrootsd::SdkRadrootsdSignerAuthority> {
+        self.signer_authority.as_ref()
     }
 }
 
@@ -456,8 +483,9 @@ impl SdkRadrootsdListingPublishOptions {
 impl fmt::Debug for SdkRadrootsdListingPublishOptions {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut debug = f.debug_struct("SdkRadrootsdListingPublishOptions");
-        debug.field("signer_session_id", &"<redacted>");
+        debug.field("session", &self.session);
         debug.field("idempotency_key", &self.idempotency_key);
+        debug.field("signer_authority", &self.signer_authority);
         debug.finish()
     }
 }
@@ -1036,20 +1064,46 @@ impl<'a> ListingClient<'a> {
     pub async fn publish_listing_via_radrootsd(
         &self,
         listing_value: &listing::RadrootsListing,
+        session: &SdkRadrootsdSignerSessionHandle,
+    ) -> Result<SdkPublishReceipt, SdkPublishError> {
+        self.publish_listing_via_radrootsd_with_options(
+            listing_value,
+            &SdkRadrootsdListingPublishOptions::from_signer_session(session),
+        )
+        .await
+    }
+
+    #[cfg(feature = "radrootsd-client")]
+    pub async fn publish_listing_via_radrootsd_with_options(
+        &self,
+        listing_value: &listing::RadrootsListing,
         options: &SdkRadrootsdListingPublishOptions,
     ) -> Result<SdkPublishReceipt, SdkPublishError> {
         let request = radrootsd::SdkRadrootsdListingPublishRequest {
             listing: listing_value.clone(),
             kind: Some(KIND_LISTING),
-            signer_session_id: options.signer_session_id.clone(),
-            signer_authority: None,
-            idempotency_key: options.idempotency_key.clone(),
+            signer_session_id: options.session().session_id().to_owned(),
+            signer_authority: options.signer_authority().cloned(),
+            idempotency_key: options.idempotency_key().map(str::to_owned),
         };
         self.client.publish_listing_via_radrootsd(&request).await
     }
 
     #[cfg(feature = "radrootsd-client")]
     pub async fn publish_draft_via_radrootsd(
+        &self,
+        draft: listing::RadrootsListingDraft,
+        session: &SdkRadrootsdSignerSessionHandle,
+    ) -> Result<SdkPublishReceipt, SdkPublishError> {
+        self.publish_draft_via_radrootsd_with_options(
+            draft,
+            &SdkRadrootsdListingPublishOptions::from_signer_session(session),
+        )
+        .await
+    }
+
+    #[cfg(feature = "radrootsd-client")]
+    pub async fn publish_draft_via_radrootsd_with_options(
         &self,
         draft: listing::RadrootsListingDraft,
         options: &SdkRadrootsdListingPublishOptions,
@@ -1066,9 +1120,9 @@ impl<'a> ListingClient<'a> {
         };
         let request = radrootsd::SdkRadrootsdListingPublishRequest::from_event(
             &event,
-            options.signer_session_id.clone(),
-            None,
-            options.idempotency_key.clone(),
+            options.session().session_id().to_owned(),
+            options.signer_authority().cloned(),
+            options.idempotency_key().map(str::to_owned),
         )
         .map_err(|err| SdkPublishError::Encode(err.to_string()))?;
         self.client.publish_listing_via_radrootsd(&request).await
