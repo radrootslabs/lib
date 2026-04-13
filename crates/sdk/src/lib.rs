@@ -4,24 +4,32 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
-#[cfg(feature = "std")]
-use std::{string::String, vec::Vec};
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
+#[cfg(feature = "std")]
+use std::{string::String, vec::Vec};
 
-pub mod farm;
-#[cfg(feature = "identity-models")]
-pub mod identity;
-pub mod listing;
-pub mod profile;
-pub mod trade;
 #[cfg(any(
     feature = "signing",
     feature = "relay-client",
     feature = "signer-adapters"
 ))]
 pub mod adapters;
+pub mod config;
+pub mod farm;
+#[cfg(feature = "identity-models")]
+pub mod identity;
+pub mod listing;
+pub mod profile;
+pub mod trade;
 
+pub use crate::config::{
+    NetworkConfig, RADROOTS_SDK_LOCAL_RADROOTSD_ENDPOINT, RADROOTS_SDK_LOCAL_RELAY_URL,
+    RADROOTS_SDK_PRODUCTION_RADROOTSD_ENDPOINT, RADROOTS_SDK_PRODUCTION_RELAY_URL,
+    RADROOTS_SDK_STAGING_RADROOTSD_ENDPOINT, RADROOTS_SDK_STAGING_RELAY_URL, RadrootsSdkConfig,
+    RadrootsdAuth, RadrootsdConfig, RelayConfig, RetryPolicy, SdkConfigError, SdkEnvironment,
+    SdkTransportMode, SignerConfig,
+};
 pub use radroots_events::{
     RadrootsNostrEvent, RadrootsNostrEventPtr, RadrootsNostrEventRef,
     farm::RadrootsFarm,
@@ -31,8 +39,7 @@ pub use radroots_events::{
 };
 #[cfg(feature = "serde_json")]
 pub use radroots_events_codec::trade::{
-    RadrootsTradeEnvelopeParseError, RadrootsTradeListingAddress,
-    RadrootsTradeListingAddressError,
+    RadrootsTradeEnvelopeParseError, RadrootsTradeListingAddress, RadrootsTradeListingAddressError,
 };
 pub use radroots_events_codec::wire::{EventDraft as UnsignedEventDraft, WireEventParts};
 pub use radroots_trade::listing::validation::RadrootsTradeListing as TradeListingValidateResult;
