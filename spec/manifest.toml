@@ -1,5 +1,5 @@
 [contract]
-name = "radroots_sdk_contract"
+name = "radroots_sdk"
 version = "0.1.0-alpha.2"
 source = "rust"
 

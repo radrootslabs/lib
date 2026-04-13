@@ -1,15 +1,18 @@
-# radroots_sdk_contract
+# radroots_sdk
 
-Core contract for the Rad Roots cross-language SDK.
+Curated SDK contract for the Rad Roots cross-language SDK.
 
 ## Purpose
 
-This directory defines the Rad Roots SDK contract used to align Rust, TypeScript, Python, Swift, and Kotlin surfaces.
-It defines the public interoperability boundary for external integrators, keeps Rust as the canonical source for exported models and transforms, and enforces deterministic, machine-verifiable governance for contract changes and releases.
+This directory defines the `radroots_sdk` contract used to align Rust,
+TypeScript, Python, Swift, and Kotlin surfaces. It defines the public
+interoperability boundary for external integrators, keeps Rust as the canonical
+source for exported models and transforms, and enforces deterministic,
+machine-verifiable governance for contract changes and releases.
 
 ## Contract Surface
 
-Contract metadata is defined in `spec/manifest.toml` and currently includes:
+SDK contract metadata is defined in `spec/manifest.toml` and currently includes:
 
 - model crates: `radroots_core`, `radroots_events`, `radroots_trade`, `radroots_identity`
 - algorithm crate: `radroots_events_codec`
