@@ -1,3 +1,5 @@
+#[cfg(feature = "radrootsd-client")]
+pub mod radrootsd;
 #[cfg(feature = "relay-client")]
 pub mod relay;
 #[cfg(feature = "signing")]

@@ -10,6 +10,7 @@ use alloc::{string::String, vec::Vec};
 use std::{string::String, vec::Vec};
 
 #[cfg(any(
+    feature = "radrootsd-client",
     feature = "signing",
     feature = "relay-client",
     feature = "signer-adapters"
@@ -35,6 +36,11 @@ pub use crate::client::{
     FarmClient, ListingClient, ProfileClient, RadrootsSdkClient, SdkPublishError,
     SdkPublishReceipt, SdkRadrootsdPublishReceipt, SdkRelayFailure, SdkRelayPublishReceipt,
     SdkTransportReceipt, TradeClient,
+};
+#[cfg(feature = "radrootsd-client")]
+pub use crate::adapters::radrootsd::{
+    SdkRadrootsdBridgeJob, SdkRadrootsdBridgePublishResponse,
+    SdkRadrootsdListingPublishRequest, SdkRadrootsdSignerAuthority,
 };
 pub use radroots_events::{
     RadrootsNostrEvent, RadrootsNostrEventPtr, RadrootsNostrEventRef,

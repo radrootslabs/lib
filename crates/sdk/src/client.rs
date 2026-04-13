@@ -3,6 +3,8 @@ use alloc::{string::String, vec::Vec};
 #[cfg(feature = "std")]
 use std::{string::String, vec::Vec};
 
+#[cfg(feature = "radrootsd-client")]
+use crate::adapters::radrootsd;
 #[cfg(all(feature = "identity-models", feature = "relay-client", feature = "signing"))]
 use crate::adapters::relay;
 #[cfg(all(feature = "identity-models", feature = "relay-client", feature = "signing"))]
@@ -13,14 +15,17 @@ use crate::{
     RadrootsTradeEnvelope, TradeListingValidateResult, WireEventParts, farm, listing, profile,
     trade,
 };
-#[cfg(all(feature = "identity-models", feature = "relay-client", feature = "signing"))]
+#[cfg(any(
+    feature = "radrootsd-client",
+    all(feature = "identity-models", feature = "relay-client", feature = "signing")
+))]
 use core::time::Duration;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SdkPublishReceipt {
     pub transport: SdkTransportMode,
-    pub event_kind: u32,
-    pub event_id: String,
+    pub event_kind: Option<u32>,
+    pub event_id: Option<String>,
     pub transport_receipt: SdkTransportReceipt,
 }
 
@@ -45,8 +50,14 @@ pub struct SdkRelayFailure {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SdkRadrootsdPublishReceipt {
     pub accepted: bool,
+    pub deduplicated: bool,
     pub job_id: Option<String>,
-    pub details: Option<String>,
+    pub status: Option<String>,
+    pub signer_mode: Option<String>,
+    pub signer_session_id: Option<String>,
+    pub event_addr: Option<String>,
+    pub relay_count: Option<usize>,
+    pub acknowledged_relay_count: Option<usize>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -62,6 +73,7 @@ pub enum SdkPublishError {
         transport: SdkTransportMode,
         failed_relays: Vec<SdkRelayFailure>,
     },
+    Radrootsd(String),
 }
 
 impl From<SdkConfigError> for SdkPublishError {
@@ -103,6 +115,7 @@ impl core::fmt::Display for SdkPublishError {
                     )
                 }
             }
+            Self::Radrootsd(message) => write!(f, "{message}"),
         }
     }
 }
@@ -181,6 +194,32 @@ impl RadrootsSdkClient {
             .await
             .map_err(|err| SdkPublishError::Relay(err.to_string()))?;
         sdk_publish_receipt_from_relay_output(event_kind, output)
+    }
+
+    #[cfg(feature = "radrootsd-client")]
+    async fn publish_listing_via_radrootsd(
+        &self,
+        request: &radrootsd::SdkRadrootsdListingPublishRequest,
+    ) -> Result<SdkPublishReceipt, SdkPublishError> {
+        if self.transport() != SdkTransportMode::Radrootsd {
+            return Err(SdkPublishError::UnsupportedTransport {
+                transport: self.transport(),
+                operation: "listing.publish_via_radrootsd",
+            });
+        }
+
+        let endpoint = self.resolved_radrootsd_endpoint()?;
+        let response = radrootsd::publish_listing(
+            endpoint.as_str(),
+            &self.config.radrootsd.auth,
+            request,
+            Duration::from_millis(self.config.network.timeout_ms),
+        )
+        .await
+        .map_err(|err| SdkPublishError::Radrootsd(err.to_string()))?;
+        Ok(sdk_publish_receipt_from_radrootsd_listing_response(
+            response,
+        ))
     }
 }
 
@@ -283,6 +322,14 @@ impl<'a> ListingClient<'a> {
         )
         .await
     }
+
+    #[cfg(feature = "radrootsd-client")]
+    pub async fn publish_via_radrootsd(
+        &self,
+        request: &radrootsd::SdkRadrootsdListingPublishRequest,
+    ) -> Result<SdkPublishReceipt, SdkPublishError> {
+        self.client.publish_listing_via_radrootsd(request).await
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -380,13 +427,36 @@ fn sdk_publish_receipt_from_relay_output(
 
     Ok(SdkPublishReceipt {
         transport: SdkTransportMode::RelayDirect,
-        event_kind,
-        event_id: output.val.to_string(),
+        event_kind: Some(event_kind),
+        event_id: Some(output.val.to_string()),
         transport_receipt: SdkTransportReceipt::RelayDirect(SdkRelayPublishReceipt {
             acknowledged_relays,
             failed_relays,
         }),
     })
+}
+
+#[cfg(feature = "radrootsd-client")]
+fn sdk_publish_receipt_from_radrootsd_listing_response(
+    response: radrootsd::SdkRadrootsdBridgePublishResponse,
+) -> SdkPublishReceipt {
+    let job = response.job;
+    SdkPublishReceipt {
+        transport: SdkTransportMode::Radrootsd,
+        event_kind: Some(job.event_kind),
+        event_id: job.event_id.clone(),
+        transport_receipt: SdkTransportReceipt::Radrootsd(SdkRadrootsdPublishReceipt {
+            accepted: true,
+            deduplicated: response.deduplicated,
+            job_id: Some(job.job_id),
+            status: Some(job.status),
+            signer_mode: Some(job.signer_mode),
+            signer_session_id: job.signer_session_id,
+            event_addr: job.event_addr,
+            relay_count: Some(job.relay_count),
+            acknowledged_relay_count: Some(job.acknowledged_relay_count),
+        }),
+    }
 }
 
 #[cfg(all(test, feature = "identity-models", feature = "relay-client", feature = "signing"))]
@@ -418,10 +488,10 @@ mod tests {
         let receipt = sdk_publish_receipt_from_relay_output(30402, output).expect("receipt");
 
         assert_eq!(receipt.transport, SdkTransportMode::RelayDirect);
-        assert_eq!(receipt.event_kind, 30402);
+        assert_eq!(receipt.event_kind, Some(30402));
         assert_eq!(
             receipt.event_id,
-            "5f3cf27d85c9571a2dca28269f6547f625364a7e06e5e853ee1bc74d2c4aa3d4"
+            Some("5f3cf27d85c9571a2dca28269f6547f625364a7e06e5e853ee1bc74d2c4aa3d4".to_owned())
         );
     }
 

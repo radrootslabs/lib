@@ -177,8 +177,8 @@ async fn relay_direct_listing_publish_returns_normalized_receipt() -> TestResult
         .await?;
 
     assert_eq!(receipt.transport, SdkTransportMode::RelayDirect);
-    assert_eq!(receipt.event_kind, 30402);
-    assert!(!receipt.event_id.is_empty());
+    assert_eq!(receipt.event_kind, Some(30402));
+    assert!(receipt.event_id.is_some());
     match receipt.transport_receipt {
         SdkTransportReceipt::RelayDirect(relay_receipt) => {
             assert_eq!(relay_receipt.acknowledged_relays, vec![relay.url().to_owned()]);

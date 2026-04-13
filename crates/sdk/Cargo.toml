@@ -14,8 +14,9 @@ readme = "README"
 [features]
 default = ["std", "serde", "serde_json", "identity-models"]
 std = ["radroots_events/std", "radroots_events_codec/std", "radroots_trade/std"]
-serde = ["radroots_events/serde", "radroots_trade/serde"]
+serde = ["dep:serde", "radroots_events/serde", "radroots_trade/serde"]
 serde_json = [
+  "dep:serde_json",
   "serde",
   "nostr",
   "radroots_events_codec/serde_json",
@@ -30,6 +31,7 @@ identity-models = [
 identity-storage = ["identity-models", "std", "radroots_identity/std"]
 signing = ["dep:radroots_nostr", "nostr"]
 relay-client = ["signing", "std", "radroots_nostr/client"]
+radrootsd-client = ["std", "serde_json", "dep:reqwest"]
 signer-adapters = [
   "identity-models",
   "signing",
@@ -48,6 +50,9 @@ radroots_identity = { workspace = true, optional = true, default-features = fals
 radroots_nostr = { workspace = true, optional = true, default-features = false }
 radroots_nostr_connect = { workspace = true, optional = true }
 radroots_nostr_signer = { workspace = true, optional = true, default-features = false }
+reqwest = { workspace = true, optional = true, default-features = false, features = ["json", "rustls-tls"] }
+serde = { workspace = true, optional = true, default-features = false, features = ["derive", "alloc"] }
+serde_json = { workspace = true, optional = true, default-features = false, features = ["alloc"] }
 
 [dev-dependencies]
 futures = { workspace = true }
