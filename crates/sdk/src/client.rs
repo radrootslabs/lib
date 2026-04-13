@@ -1270,6 +1270,196 @@ impl RadrootsSdkClient {
 }
 
 #[cfg(feature = "radrootsd-client")]
+#[derive(Clone, PartialEq, Eq)]
+pub struct SdkRadrootsdPublicTradeMessage {
+    request: radrootsd::SdkRadrootsdPublicTradePublishRequest,
+}
+
+#[cfg(feature = "radrootsd-client")]
+impl SdkRadrootsdPublicTradeMessage {
+    pub fn order_response(
+        route: &radrootsd::SdkRadrootsdPublicTradeRoute,
+        chain: &radrootsd::SdkRadrootsdTradeChain,
+        payload: trade::RadrootsTradeOrderResponse,
+    ) -> Result<Self, radrootsd::SdkRadrootsdPublicTradePublishValidationError> {
+        Ok(Self {
+            request: radrootsd::SdkRadrootsdPublicTradePublishRequest::order_response(
+                route, chain, payload,
+            )?,
+        })
+    }
+
+    pub fn order_revision(
+        route: &radrootsd::SdkRadrootsdPublicTradeRoute,
+        listing_event: RadrootsNostrEventPtr,
+        chain: &radrootsd::SdkRadrootsdTradeChain,
+        payload: trade::RadrootsTradeOrderRevision,
+    ) -> Result<Self, radrootsd::SdkRadrootsdPublicTradePublishValidationError> {
+        Ok(Self {
+            request: radrootsd::SdkRadrootsdPublicTradePublishRequest::order_revision(
+                route,
+                listing_event,
+                chain,
+                payload,
+            )?,
+        })
+    }
+
+    pub fn order_revision_accept(
+        route: &radrootsd::SdkRadrootsdPublicTradeRoute,
+        chain: &radrootsd::SdkRadrootsdTradeChain,
+        payload: trade::RadrootsTradeOrderRevisionResponse,
+    ) -> Result<Self, radrootsd::SdkRadrootsdPublicTradePublishValidationError> {
+        Ok(Self {
+            request: radrootsd::SdkRadrootsdPublicTradePublishRequest::order_revision_accept(
+                route, chain, payload,
+            )?,
+        })
+    }
+
+    pub fn order_revision_decline(
+        route: &radrootsd::SdkRadrootsdPublicTradeRoute,
+        chain: &radrootsd::SdkRadrootsdTradeChain,
+        payload: trade::RadrootsTradeOrderRevisionResponse,
+    ) -> Result<Self, radrootsd::SdkRadrootsdPublicTradePublishValidationError> {
+        Ok(Self {
+            request: radrootsd::SdkRadrootsdPublicTradePublishRequest::order_revision_decline(
+                route, chain, payload,
+            )?,
+        })
+    }
+
+    pub fn question(
+        route: &radrootsd::SdkRadrootsdPublicTradeRoute,
+        chain: &radrootsd::SdkRadrootsdTradeChain,
+        payload: trade::RadrootsTradeQuestion,
+    ) -> Result<Self, radrootsd::SdkRadrootsdPublicTradePublishValidationError> {
+        Ok(Self {
+            request: radrootsd::SdkRadrootsdPublicTradePublishRequest::question(
+                route, chain, payload,
+            )?,
+        })
+    }
+
+    pub fn answer(
+        route: &radrootsd::SdkRadrootsdPublicTradeRoute,
+        chain: &radrootsd::SdkRadrootsdTradeChain,
+        payload: trade::RadrootsTradeAnswer,
+    ) -> Result<Self, radrootsd::SdkRadrootsdPublicTradePublishValidationError> {
+        Ok(Self {
+            request: radrootsd::SdkRadrootsdPublicTradePublishRequest::answer(
+                route, chain, payload,
+            )?,
+        })
+    }
+
+    pub fn discount_request(
+        route: &radrootsd::SdkRadrootsdPublicTradeRoute,
+        listing_event: RadrootsNostrEventPtr,
+        chain: &radrootsd::SdkRadrootsdTradeChain,
+        payload: trade::RadrootsTradeDiscountRequest,
+    ) -> Result<Self, radrootsd::SdkRadrootsdPublicTradePublishValidationError> {
+        Ok(Self {
+            request: radrootsd::SdkRadrootsdPublicTradePublishRequest::discount_request(
+                route,
+                listing_event,
+                chain,
+                payload,
+            )?,
+        })
+    }
+
+    pub fn discount_offer(
+        route: &radrootsd::SdkRadrootsdPublicTradeRoute,
+        listing_event: RadrootsNostrEventPtr,
+        chain: &radrootsd::SdkRadrootsdTradeChain,
+        payload: trade::RadrootsTradeDiscountOffer,
+    ) -> Result<Self, radrootsd::SdkRadrootsdPublicTradePublishValidationError> {
+        Ok(Self {
+            request: radrootsd::SdkRadrootsdPublicTradePublishRequest::discount_offer(
+                route,
+                listing_event,
+                chain,
+                payload,
+            )?,
+        })
+    }
+
+    pub fn discount_accept(
+        route: &radrootsd::SdkRadrootsdPublicTradeRoute,
+        chain: &radrootsd::SdkRadrootsdTradeChain,
+        payload: trade::RadrootsTradeDiscountDecision,
+    ) -> Result<Self, radrootsd::SdkRadrootsdPublicTradePublishValidationError> {
+        Ok(Self {
+            request: radrootsd::SdkRadrootsdPublicTradePublishRequest::discount_accept(
+                route, chain, payload,
+            )?,
+        })
+    }
+
+    pub fn discount_decline(
+        route: &radrootsd::SdkRadrootsdPublicTradeRoute,
+        chain: &radrootsd::SdkRadrootsdTradeChain,
+        payload: trade::RadrootsTradeDiscountDecision,
+    ) -> Result<Self, radrootsd::SdkRadrootsdPublicTradePublishValidationError> {
+        Ok(Self {
+            request: radrootsd::SdkRadrootsdPublicTradePublishRequest::discount_decline(
+                route, chain, payload,
+            )?,
+        })
+    }
+
+    pub fn cancel(
+        route: &radrootsd::SdkRadrootsdPublicTradeRoute,
+        chain: &radrootsd::SdkRadrootsdTradeChain,
+        payload: trade::RadrootsTradeListingCancel,
+    ) -> Result<Self, radrootsd::SdkRadrootsdPublicTradePublishValidationError> {
+        Ok(Self {
+            request: radrootsd::SdkRadrootsdPublicTradePublishRequest::cancel(
+                route, chain, payload,
+            )?,
+        })
+    }
+
+    pub fn fulfillment_update(
+        route: &radrootsd::SdkRadrootsdPublicTradeRoute,
+        chain: &radrootsd::SdkRadrootsdTradeChain,
+        payload: trade::RadrootsTradeFulfillmentUpdate,
+    ) -> Result<Self, radrootsd::SdkRadrootsdPublicTradePublishValidationError> {
+        Ok(Self {
+            request: radrootsd::SdkRadrootsdPublicTradePublishRequest::fulfillment_update(
+                route, chain, payload,
+            )?,
+        })
+    }
+
+    pub fn receipt(
+        route: &radrootsd::SdkRadrootsdPublicTradeRoute,
+        chain: &radrootsd::SdkRadrootsdTradeChain,
+        payload: trade::RadrootsTradeReceipt,
+    ) -> Result<Self, radrootsd::SdkRadrootsdPublicTradePublishValidationError> {
+        Ok(Self {
+            request: radrootsd::SdkRadrootsdPublicTradePublishRequest::receipt(
+                route, chain, payload,
+            )?,
+        })
+    }
+
+    pub(crate) fn as_request(&self) -> &radrootsd::SdkRadrootsdPublicTradePublishRequest {
+        &self.request
+    }
+}
+
+#[cfg(feature = "radrootsd-client")]
+impl fmt::Debug for SdkRadrootsdPublicTradeMessage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SdkRadrootsdPublicTradeMessage")
+            .field("request", &self.request)
+            .finish()
+    }
+}
+
+#[cfg(feature = "radrootsd-client")]
 #[derive(Debug, Clone, Copy)]
 pub struct RadrootsdClient<'a> {
     client: &'a RadrootsSdkClient,
@@ -1727,11 +1917,11 @@ impl<'a> TradeClient<'a> {
     #[cfg(feature = "radrootsd-client")]
     pub async fn publish_public_message_via_radrootsd(
         &self,
-        request: &radrootsd::SdkRadrootsdPublicTradePublishRequest,
+        message: &SdkRadrootsdPublicTradeMessage,
         session: &SdkRadrootsdSignerSessionHandle,
     ) -> Result<SdkPublishReceipt, SdkPublishError> {
         self.publish_public_message_via_radrootsd_with_options(
-            request,
+            message,
             &SdkRadrootsdPublicTradePublishOptions::from_signer_session(session),
         )
         .await
@@ -1740,15 +1930,12 @@ impl<'a> TradeClient<'a> {
     #[cfg(feature = "radrootsd-client")]
     pub async fn publish_public_message_via_radrootsd_with_options(
         &self,
-        request: &radrootsd::SdkRadrootsdPublicTradePublishRequest,
+        message: &SdkRadrootsdPublicTradeMessage,
         options: &SdkRadrootsdPublicTradePublishOptions,
     ) -> Result<SdkPublishReceipt, SdkPublishError> {
-        request
-            .validate_for_publish()
-            .map_err(|err| SdkPublishError::Encode(err.to_string()))?;
         self.client
             .publish_public_trade_via_radrootsd(
-                request,
+                message.as_request(),
                 options.session(),
                 options.idempotency_key(),
             )

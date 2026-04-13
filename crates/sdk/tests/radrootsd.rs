@@ -25,10 +25,11 @@ use radroots_sdk::{
     RadrootsdConfig, SdkConfigError, SdkEnvironment, SdkPublishError,
     SdkRadrootsdBridgeDeliveryPolicy, SdkRadrootsdBridgeError, SdkRadrootsdBridgeJobStatus,
     SdkRadrootsdListingPublishOptions, SdkRadrootsdOrderRequestPublishOptions,
-    SdkRadrootsdPublicTradePublishOptions, SdkRadrootsdPublicTradePublishValidationError,
-    SdkRadrootsdPublicTradeRoute, SdkRadrootsdPublishReceipt, SdkRadrootsdSessionError,
-    SdkRadrootsdSignerSessionHandle, SdkRadrootsdSignerSessionRole, SdkRadrootsdSignerSessionView,
-    SdkRadrootsdTradeChain, SdkTransportMode, SdkTransportReceipt, SignerConfig,
+    SdkRadrootsdPublicTradeMessage, SdkRadrootsdPublicTradePublishOptions,
+    SdkRadrootsdPublicTradePublishValidationError, SdkRadrootsdPublicTradeRoute,
+    SdkRadrootsdPublishReceipt, SdkRadrootsdSessionError, SdkRadrootsdSignerSessionHandle,
+    SdkRadrootsdSignerSessionRole, SdkRadrootsdSignerSessionView, SdkRadrootsdTradeChain,
+    SdkTransportMode, SdkTransportReceipt, SignerConfig,
 };
 use serde_json::{Value, json};
 use std::collections::VecDeque;
@@ -391,8 +392,8 @@ fn sample_trade_order() -> RadrootsTradeOrder {
     }
 }
 
-fn sample_public_trade_request() -> SdkRadrootsdPublicTradePublishRequest {
-    SdkRadrootsdPublicTradePublishRequest::order_response(
+fn sample_public_trade_message() -> SdkRadrootsdPublicTradeMessage {
+    SdkRadrootsdPublicTradeMessage::order_response(
         &sample_public_trade_route(),
         &sample_trade_chain(),
         RadrootsTradeOrderResponse {
@@ -1433,7 +1434,7 @@ async fn radrootsd_trade_public_message_publish_accepts_typed_request() -> TestR
 
     let handle = connected_bunker_session_handle("session-response-1").await?;
     let client = radrootsd_test_client(server.endpoint())?;
-    let request = sample_public_trade_request();
+    let request = sample_public_trade_message();
     let options = SdkRadrootsdPublicTradePublishOptions::from_signer_session(&handle)
         .with_idempotency_key("idem-response-1");
 
@@ -1467,10 +1468,8 @@ async fn radrootsd_trade_public_message_publish_accepts_typed_request() -> TestR
     Ok(())
 }
 
-#[tokio::test]
-async fn radrootsd_trade_public_message_publish_rejects_order_request_payload() -> TestResult<()> {
-    let client = radrootsd_test_client("https://rpc.radroots.org/jsonrpc")?;
-    let handle = connected_bunker_session_handle("session-order-request").await?;
+#[test]
+fn public_trade_request_validation_rejects_order_request_payload() {
     let request = SdkRadrootsdPublicTradePublishRequest::new(
         sample_trade_order().listing_addr.clone(),
         "order-1",
@@ -1478,21 +1477,16 @@ async fn radrootsd_trade_public_message_publish_rejects_order_request_payload() 
         RadrootsTradeMessagePayload::OrderRequest(sample_trade_order()),
     );
 
-    let error = client
-        .trade()
-        .publish_public_message_via_radrootsd(&request, &handle)
-        .await
+    let error = request
+        .validate_for_publish()
         .expect_err("order request payload should use the dedicated trade order request path");
 
-    assert!(matches!(error, SdkPublishError::Encode(_)));
     assert!(
         error
             .to_string()
             .contains("trade.publish_order_request_via_radrootsd"),
         "unexpected error: {error}"
     );
-
-    Ok(())
 }
 
 #[test]
