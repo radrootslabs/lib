@@ -199,6 +199,14 @@ impl RadrootsSdkClient {
         TradeClient { client: self }
     }
 
+    #[cfg(any(
+        feature = "radrootsd-client",
+        all(
+            feature = "identity-models",
+            feature = "relay-client",
+            feature = "signing"
+        )
+    ))]
     fn require_signer_mode(
         &self,
         required: SignerConfig,
@@ -388,6 +396,25 @@ impl<'a> ListingClient<'a> {
             .map_err(|err| SdkPublishError::Encode(err.to_string()))?;
         self.client
             .publish_parts_via_relay_with_identity(identity, parts, "listing.publish_with_identity")
+            .await
+    }
+
+    #[cfg(all(
+        feature = "identity-models",
+        feature = "relay-client",
+        feature = "signing"
+    ))]
+    pub async fn publish_draft_with_identity(
+        &self,
+        identity: &RadrootsIdentity,
+        draft: WireEventParts,
+    ) -> Result<SdkPublishReceipt, SdkPublishError> {
+        self.client
+            .publish_parts_via_relay_with_identity(
+                identity,
+                draft,
+                "listing.publish_draft_with_identity",
+            )
             .await
     }
 

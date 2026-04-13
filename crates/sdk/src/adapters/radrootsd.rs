@@ -1,6 +1,8 @@
 use core::time::Duration;
 
+use crate::RadrootsNostrEvent;
 use crate::config::RadrootsdAuth;
+use crate::listing;
 use crate::listing::RadrootsListing;
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
@@ -24,6 +26,23 @@ pub struct SdkRadrootsdListingPublishRequest {
     pub signer_authority: Option<SdkRadrootsdSignerAuthority>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub idempotency_key: Option<String>,
+}
+
+impl SdkRadrootsdListingPublishRequest {
+    pub fn from_event(
+        event: &RadrootsNostrEvent,
+        signer_session_id: impl Into<String>,
+        signer_authority: Option<SdkRadrootsdSignerAuthority>,
+        idempotency_key: Option<String>,
+    ) -> Result<Self, listing::RadrootsTradeListingParseError> {
+        Ok(Self {
+            listing: listing::parse_event(event)?,
+            kind: Some(event.kind),
+            signer_session_id: signer_session_id.into(),
+            signer_authority,
+            idempotency_key,
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -108,10 +127,9 @@ pub async fn publish_listing(
 
     request_builder = request_builder.header(CONTENT_TYPE, "application/json");
 
-    let response = request_builder
-        .send()
-        .await
-        .map_err(|err| RadrootsdError::Http(format!("send radrootsd listing publish request: {err}")))?;
+    let response = request_builder.send().await.map_err(|err| {
+        RadrootsdError::Http(format!("send radrootsd listing publish request: {err}"))
+    })?;
     let status = response.status();
     let body = response
         .text()

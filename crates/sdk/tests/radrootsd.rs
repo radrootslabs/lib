@@ -10,9 +10,9 @@ use radroots_sdk::listing::{
     RadrootsListingProduct, RadrootsListingStatus,
 };
 use radroots_sdk::{
-    RadrootsSdkClient, RadrootsSdkConfig, RadrootsdAuth, RadrootsdConfig, SdkEnvironment,
-    SdkPublishError, SdkRadrootsdListingPublishRequest, SdkTransportMode, SdkTransportReceipt,
-    SignerConfig,
+    RadrootsNostrEvent, RadrootsSdkClient, RadrootsSdkConfig, RadrootsdAuth, RadrootsdConfig,
+    SdkEnvironment, SdkPublishError, SdkRadrootsdListingPublishRequest, SdkTransportMode,
+    SdkTransportReceipt, SignerConfig, WireEventParts,
 };
 use serde_json::{Value, json};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -238,8 +238,20 @@ fn sample_listing() -> RadrootsListing {
     }
 }
 
+fn sdk_event(author: &str, created_at: u32, parts: WireEventParts) -> RadrootsNostrEvent {
+    RadrootsNostrEvent {
+        id: "event-1".to_owned(),
+        author: author.to_owned(),
+        created_at,
+        kind: parts.kind,
+        tags: parts.tags,
+        content: parts.content,
+        sig: "f".repeat(128),
+    }
+}
+
 #[tokio::test]
-async fn radrootsd_listing_publish_returns_normalized_receipt() -> TestResult<()> {
+async fn radrootsd_listing_publish_accepts_sdk_built_draft() -> TestResult<()> {
     let (server, request_rx) = JsonRpcServer::spawn(
         Some("Bearer sdk-secret"),
         json!({
@@ -274,13 +286,14 @@ async fn radrootsd_listing_publish_returns_normalized_receipt() -> TestResult<()
         auth: RadrootsdAuth::BearerToken("sdk-secret".to_owned()),
     };
     let client = RadrootsSdkClient::from_config(config)?;
-    let request = SdkRadrootsdListingPublishRequest {
-        listing: sample_listing(),
-        kind: None,
-        signer_session_id: "session-123".to_owned(),
-        signer_authority: None,
-        idempotency_key: Some("idem-1".to_owned()),
-    };
+    let draft = client.listing().build_draft(&sample_listing())?;
+    let event = sdk_event("seller", 1_720_000_000, draft);
+    let request = SdkRadrootsdListingPublishRequest::from_event(
+        &event,
+        "session-123",
+        None,
+        Some("idem-1".to_owned()),
+    )?;
 
     let receipt = client.listing().publish_via_radrootsd(&request).await?;
     let request_json = request_rx.await?;
@@ -288,6 +301,7 @@ async fn radrootsd_listing_publish_returns_normalized_receipt() -> TestResult<()
     assert_eq!(request_json["method"], "bridge.listing.publish");
     assert_eq!(request_json["params"]["signer_session_id"], "session-123");
     assert_eq!(request_json["params"]["idempotency_key"], "idem-1");
+    assert_eq!(request_json["params"]["kind"], 30402);
     assert_eq!(
         request_json["params"]["listing"]["d_tag"],
         "AAAAAAAAAAAAAAAAAAAAAg"

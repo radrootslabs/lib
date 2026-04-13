@@ -161,7 +161,7 @@ fn sample_listing() -> RadrootsListing {
 }
 
 #[tokio::test]
-async fn relay_direct_listing_publish_returns_normalized_receipt() -> TestResult<()> {
+async fn relay_direct_listing_publish_accepts_sdk_built_draft() -> TestResult<()> {
     let relay = AckRelay::spawn().await?;
     let identity = RadrootsIdentity::generate();
     let mut config = RadrootsSdkConfig::for_environment(SdkEnvironment::Custom);
@@ -175,10 +175,11 @@ async fn relay_direct_listing_publish_returns_normalized_receipt() -> TestResult
         auth: RadrootsdAuth::None,
     };
     let client = RadrootsSdkClient::from_config(config)?;
+    let draft = client.listing().build_draft(&sample_listing())?;
 
     let receipt = client
         .listing()
-        .publish_with_identity(&identity, &sample_listing())
+        .publish_draft_with_identity(&identity, draft)
         .await?;
 
     assert_eq!(receipt.transport, SdkTransportMode::RelayDirect);
