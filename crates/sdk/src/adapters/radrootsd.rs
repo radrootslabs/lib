@@ -1,3 +1,4 @@
+use core::fmt;
 use core::time::Duration;
 
 use crate::RadrootsNostrEvent;
@@ -9,7 +10,7 @@ use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SdkRadrootsdSignerAuthority {
     pub provider_runtime_id: String,
     pub account_identity_id: String,
@@ -17,7 +18,23 @@ pub struct SdkRadrootsdSignerAuthority {
     pub provider_signer_session_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+impl fmt::Debug for SdkRadrootsdSignerAuthority {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut debug = f.debug_struct("SdkRadrootsdSignerAuthority");
+        debug.field("provider_runtime_id", &self.provider_runtime_id);
+        debug.field("account_identity_id", &self.account_identity_id);
+        debug.field(
+            "provider_signer_session_id",
+            &self
+                .provider_signer_session_id
+                .as_ref()
+                .map(|_| "<redacted>"),
+        );
+        debug.finish()
+    }
+}
+
+#[derive(Clone, Serialize)]
 pub struct SdkRadrootsdListingPublishRequest {
     pub listing: RadrootsListing,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -27,6 +44,18 @@ pub struct SdkRadrootsdListingPublishRequest {
     pub signer_authority: Option<SdkRadrootsdSignerAuthority>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub idempotency_key: Option<String>,
+}
+
+impl fmt::Debug for SdkRadrootsdListingPublishRequest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut debug = f.debug_struct("SdkRadrootsdListingPublishRequest");
+        debug.field("listing", &self.listing);
+        debug.field("kind", &self.kind);
+        debug.field("signer_session_id", &"<redacted>");
+        debug.field("signer_authority", &self.signer_authority);
+        debug.field("idempotency_key", &self.idempotency_key);
+        debug.finish()
+    }
 }
 
 impl SdkRadrootsdListingPublishRequest {
@@ -57,7 +86,7 @@ pub struct SdkRadrootsdBridgePublishResponse {
     pub job: SdkRadrootsdBridgeJob,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Deserialize)]
 pub struct SdkRadrootsdBridgeJob {
     pub job_id: String,
     pub command: String,
@@ -74,6 +103,28 @@ pub struct SdkRadrootsdBridgeJob {
     pub event_addr: Option<String>,
     pub relay_count: usize,
     pub acknowledged_relay_count: usize,
+}
+
+impl fmt::Debug for SdkRadrootsdBridgeJob {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut debug = f.debug_struct("SdkRadrootsdBridgeJob");
+        debug.field("job_id", &self.job_id);
+        debug.field("command", &self.command);
+        debug.field("status", &self.status);
+        debug.field("terminal", &self.terminal);
+        debug.field("recovered_after_restart", &self.recovered_after_restart);
+        debug.field("signer_mode", &"<redacted>");
+        debug.field(
+            "signer_session_id",
+            &self.signer_session_id.as_ref().map(|_| "<redacted>"),
+        );
+        debug.field("event_kind", &self.event_kind);
+        debug.field("event_id", &self.event_id);
+        debug.field("event_addr", &self.event_addr);
+        debug.field("relay_count", &self.relay_count);
+        debug.field("acknowledged_relay_count", &self.acknowledged_relay_count);
+        debug.finish()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

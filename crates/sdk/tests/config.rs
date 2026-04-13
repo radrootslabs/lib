@@ -151,3 +151,14 @@ fn retry_policy_is_explicit_and_non_ambient() {
 
     assert_eq!(config.network.retry_policy, RetryPolicy::None);
 }
+
+#[test]
+fn sdk_config_debug_redacts_bearer_tokens() {
+    let mut config = RadrootsSdkConfig::production();
+    config.radrootsd.auth = RadrootsdAuth::BearerToken("sdk-secret-token".to_owned());
+
+    let debug = format!("{config:?}");
+
+    assert!(!debug.contains("sdk-secret-token"));
+    assert!(debug.contains("BearerToken(\"<redacted>\")"));
+}

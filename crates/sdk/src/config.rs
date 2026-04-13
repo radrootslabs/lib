@@ -149,11 +149,20 @@ impl Default for RadrootsdConfig {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Clone, PartialEq, Eq, Default)]
 pub enum RadrootsdAuth {
     #[default]
     None,
     BearerToken(String),
+}
+
+impl fmt::Debug for RadrootsdAuth {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::None => f.write_str("None"),
+            Self::BearerToken(_) => f.write_str("BearerToken(\"<redacted>\")"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

@@ -12,8 +12,9 @@ use radroots_sdk::listing::{
 };
 use radroots_sdk::{
     RadrootsNostrEvent, RadrootsSdkClient, RadrootsSdkConfig, RadrootsdAuth, RadrootsdConfig,
-    SdkEnvironment, SdkPublishError, SdkRadrootsdListingPublishRequest, SdkTransportMode,
-    SdkTransportReceipt, SignerConfig,
+    SdkEnvironment, SdkPublishError, SdkRadrootsdBridgeJob, SdkRadrootsdBridgePublishResponse,
+    SdkRadrootsdListingPublishRequest, SdkRadrootsdPublishReceipt, SdkRadrootsdSignerAuthority,
+    SdkTransportMode, SdkTransportReceipt, SignerConfig,
 };
 use serde_json::{Value, json};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -256,6 +257,65 @@ fn sdk_event(
     }
 }
 
+#[test]
+fn radrootsd_debug_redacts_signer_session_values() {
+    let signer_authority = SdkRadrootsdSignerAuthority {
+        provider_runtime_id: "runtime-1".to_owned(),
+        account_identity_id: "identity-1".to_owned(),
+        provider_signer_session_id: Some("provider-session-123".to_owned()),
+    };
+    let request = SdkRadrootsdListingPublishRequest {
+        listing: sample_listing(),
+        kind: Some(30402),
+        signer_session_id: "session-123".to_owned(),
+        signer_authority: Some(signer_authority),
+        idempotency_key: Some("idem-1".to_owned()),
+    };
+    let job = SdkRadrootsdBridgeJob {
+        job_id: "job-1".to_owned(),
+        command: "bridge.listing.publish".to_owned(),
+        status: "published".to_owned(),
+        terminal: true,
+        recovered_after_restart: false,
+        signer_mode: "nip46_session:session-123".to_owned(),
+        signer_session_id: Some("session-123".to_owned()),
+        event_kind: 30402,
+        event_id: Some("event-1".to_owned()),
+        event_addr: Some("30402:seller:listing-1".to_owned()),
+        relay_count: 1,
+        acknowledged_relay_count: 1,
+    };
+    let response = SdkRadrootsdBridgePublishResponse {
+        deduplicated: false,
+        job,
+    };
+    let receipt = SdkRadrootsdPublishReceipt {
+        accepted: true,
+        deduplicated: false,
+        job_id: Some("job-1".to_owned()),
+        status: Some("published".to_owned()),
+        signer_mode: Some("nip46_session:session-123".to_owned()),
+        signer_session_id: Some("session-123".to_owned()),
+        event_addr: Some("30402:seller:listing-1".to_owned()),
+        relay_count: Some(1),
+        acknowledged_relay_count: Some(1),
+    };
+
+    let request_debug = format!("{request:?}");
+    let response_debug = format!("{response:?}");
+    let receipt_debug = format!("{receipt:?}");
+
+    assert!(!request_debug.contains("session-123"));
+    assert!(!request_debug.contains("provider-session-123"));
+    assert!(request_debug.contains("<redacted>"));
+
+    assert!(!response_debug.contains("session-123"));
+    assert!(response_debug.contains("<redacted>"));
+
+    assert!(!receipt_debug.contains("session-123"));
+    assert!(receipt_debug.contains("<redacted>"));
+}
+
 #[tokio::test]
 async fn radrootsd_listing_publish_accepts_sdk_built_draft() -> TestResult<()> {
     let (server, request_rx) = JsonRpcServer::spawn(
@@ -441,7 +501,9 @@ fn radrootsd_listing_request_from_event_rejects_listing_draft_kind() -> TestResu
 
     assert!(matches!(
         SdkRadrootsdListingPublishRequest::from_event(&event, "session-123", None, None),
-        Err(RadrootsTradeListingParseError::InvalidKind(KIND_LISTING_DRAFT))
+        Err(RadrootsTradeListingParseError::InvalidKind(
+            KIND_LISTING_DRAFT
+        ))
     ));
 
     Ok(())

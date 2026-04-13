@@ -1,5 +1,6 @@
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
+use core::fmt;
 #[cfg(feature = "std")]
 use std::{string::String, vec::Vec};
 
@@ -60,7 +61,7 @@ pub struct SdkRelayFailure {
     pub error: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Clone, PartialEq, Eq, Default)]
 pub struct SdkRadrootsdPublishReceipt {
     pub accepted: bool,
     pub deduplicated: bool,
@@ -71,6 +72,28 @@ pub struct SdkRadrootsdPublishReceipt {
     pub event_addr: Option<String>,
     pub relay_count: Option<usize>,
     pub acknowledged_relay_count: Option<usize>,
+}
+
+impl fmt::Debug for SdkRadrootsdPublishReceipt {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut debug = f.debug_struct("SdkRadrootsdPublishReceipt");
+        debug.field("accepted", &self.accepted);
+        debug.field("deduplicated", &self.deduplicated);
+        debug.field("job_id", &self.job_id);
+        debug.field("status", &self.status);
+        debug.field(
+            "signer_mode",
+            &self.signer_mode.as_ref().map(|_| "<redacted>"),
+        );
+        debug.field(
+            "signer_session_id",
+            &self.signer_session_id.as_ref().map(|_| "<redacted>"),
+        );
+        debug.field("event_addr", &self.event_addr);
+        debug.field("relay_count", &self.relay_count);
+        debug.field("acknowledged_relay_count", &self.acknowledged_relay_count);
+        debug.finish()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
