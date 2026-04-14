@@ -2,7 +2,7 @@
 use alloc::{string::String, vec::Vec};
 use core::fmt;
 #[cfg(feature = "std")]
-use std::{string::String, vec::Vec};
+use std::{env, string::String, vec::Vec};
 
 pub const RADROOTS_SDK_PRODUCTION_RELAY_URL: &str = "wss://radroots.org";
 pub const RADROOTS_SDK_STAGING_RELAY_URL: &str = "wss://staging.radroots.org";
@@ -14,6 +14,19 @@ pub const RADROOTS_SDK_STAGING_RADROOTSD_ENDPOINT: &str =
 pub const RADROOTS_SDK_LOCAL_RADROOTSD_ENDPOINT: &str = "http://127.0.0.1:7070";
 
 pub const RADROOTS_SDK_DEFAULT_TIMEOUT_MS: u64 = 10_000;
+
+#[cfg(feature = "std")]
+const LOCAL_RELAY_SCHEME_ENV: &str = "NOSTR_RS_RELAY_PUBLIC_SCHEME";
+#[cfg(feature = "std")]
+const LOCAL_RELAY_HOST_ENV: &str = "NOSTR_RS_RELAY_PUBLIC_HOST";
+#[cfg(feature = "std")]
+const LOCAL_RELAY_PORT_ENV: &str = "NOSTR_RS_RELAY_PUBLIC_PORT";
+#[cfg(feature = "std")]
+const LOCAL_RADROOTSD_ENDPOINT_ENV: &str = "RADROOTSD_RPC_URL";
+#[cfg(feature = "std")]
+const LOCAL_RADROOTSD_HOST_ENV: &str = "RADROOTSD_RPC_HOST";
+#[cfg(feature = "std")]
+const LOCAL_RADROOTSD_PORT_ENV: &str = "RADROOTSD_RPC_PORT";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RadrootsSdkConfig {
@@ -113,6 +126,12 @@ impl RelayConfig {
         environment: SdkEnvironment,
     ) -> Result<Vec<String>, SdkConfigError> {
         if self.urls.is_empty() {
+            if environment == SdkEnvironment::Local {
+                #[cfg(feature = "std")]
+                if let Some(local_url) = resolve_local_relay_url_from_env() {
+                    return Ok(vec![normalize_relay_url(local_url.as_str())?]);
+                }
+            }
             return environment
                 .default_relay_urls()
                 .ok_or(SdkConfigError::MissingCustomRelayUrls);
@@ -132,10 +151,19 @@ impl RadrootsdConfig {
     pub fn resolved_endpoint(&self, environment: SdkEnvironment) -> Result<String, SdkConfigError> {
         match self.endpoint.as_deref() {
             Some(endpoint) => normalize_radrootsd_endpoint(endpoint),
-            None => environment
-                .default_radrootsd_endpoint()
-                .map(str::to_owned)
-                .ok_or(SdkConfigError::MissingCustomRadrootsdEndpoint),
+            None => {
+                if environment == SdkEnvironment::Local {
+                    #[cfg(feature = "std")]
+                    if let Some(endpoint) = resolve_local_radrootsd_endpoint_from_env() {
+                        return normalize_radrootsd_endpoint(endpoint.as_str());
+                    }
+                }
+
+                environment
+                    .default_radrootsd_endpoint()
+                    .map(str::to_owned)
+                    .ok_or(SdkConfigError::MissingCustomRadrootsdEndpoint)
+            }
         }
     }
 }
@@ -264,4 +292,33 @@ fn normalize_radrootsd_endpoint(value: &str) -> Result<String, SdkConfigError> {
         return Err(SdkConfigError::InvalidRadrootsdEndpoint(trimmed.to_owned()));
     }
     Ok(trimmed.to_owned())
+}
+
+#[cfg(feature = "std")]
+fn resolve_local_relay_url_from_env() -> Option<String> {
+    let scheme = read_trimmed_env(LOCAL_RELAY_SCHEME_ENV)?;
+    let host = read_trimmed_env(LOCAL_RELAY_HOST_ENV)?;
+    let port = read_trimmed_env(LOCAL_RELAY_PORT_ENV)?;
+    Some(format!("{scheme}://{host}:{port}"))
+}
+
+#[cfg(feature = "std")]
+fn resolve_local_radrootsd_endpoint_from_env() -> Option<String> {
+    if let Some(endpoint) = read_trimmed_env(LOCAL_RADROOTSD_ENDPOINT_ENV) {
+        return Some(endpoint);
+    }
+
+    let host = read_trimmed_env(LOCAL_RADROOTSD_HOST_ENV)?;
+    let port = read_trimmed_env(LOCAL_RADROOTSD_PORT_ENV)?;
+    Some(format!("http://{host}:{port}"))
+}
+
+#[cfg(feature = "std")]
+fn read_trimmed_env(key: &str) -> Option<String> {
+    let value = env::var(key).ok()?;
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    Some(trimmed.to_owned())
 }
