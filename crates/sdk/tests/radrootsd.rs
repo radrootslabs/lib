@@ -4,6 +4,7 @@ use radroots_core::{
     RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
     RadrootsCoreQuantityPrice, RadrootsCoreUnit,
 };
+use radroots_events::farm::RadrootsFarmRef;
 use radroots_events::kinds::{KIND_LISTING, KIND_LISTING_DRAFT};
 use radroots_sdk::adapters::radrootsd::{
     SdkRadrootsdBridgeJob, SdkRadrootsdBridgePublishResponse, SdkRadrootsdListingPublishRequest,
@@ -12,8 +13,8 @@ use radroots_sdk::adapters::radrootsd::{
 };
 use radroots_sdk::listing::{
     RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
-    RadrootsListingDeliveryMethod, RadrootsListingFarmRef, RadrootsListingLocation,
-    RadrootsListingProduct, RadrootsListingStatus, RadrootsTradeListingParseError,
+    RadrootsListingDeliveryMethod, RadrootsListingLocation, RadrootsListingProduct,
+    RadrootsListingStatus, RadrootsTradeListingParseError,
 };
 use radroots_sdk::trade::{
     RadrootsTradeDiscountDecision, RadrootsTradeMessagePayload, RadrootsTradeMessageType,
@@ -319,7 +320,7 @@ async fn write_http_response(
 fn sample_listing() -> RadrootsListing {
     RadrootsListing {
         d_tag: "AAAAAAAAAAAAAAAAAAAAAg".into(),
-        farm: RadrootsListingFarmRef {
+        farm: RadrootsFarmRef {
             pubkey: "seller".into(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".into(),
         },

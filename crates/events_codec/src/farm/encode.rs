@@ -41,8 +41,12 @@ pub fn farm_build_tags(farm: &RadrootsFarm) -> Result<Vec<Vec<String>>, EventEnc
             push_tag(&mut tags, TAG_T, item);
         }
     }
-    if let Some(location) = farm.location.as_ref() {
-        let geohash = location.gcs.geohash.trim();
+    if let Some(geohash) = farm
+        .location
+        .as_ref()
+        .and_then(|location| location.gcs.as_ref())
+        .map(|gcs| gcs.geohash.trim())
+    {
         if geohash.is_empty() {
             return Err(EventEncodeError::EmptyRequiredField("location.gcs.geohash"));
         }

@@ -7,12 +7,12 @@ use radroots_core::{
 };
 use radroots_events::tags::TAG_D;
 use radroots_events::{
+    farm::RadrootsFarmRef,
     kinds::{KIND_LISTING, KIND_LISTING_DRAFT, KIND_POST},
     listing::{
         RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
-        RadrootsListingDeliveryMethod, RadrootsListingFarmRef, RadrootsListingImage,
-        RadrootsListingImageSize, RadrootsListingLocation, RadrootsListingProduct,
-        RadrootsListingStatus,
+        RadrootsListingDeliveryMethod, RadrootsListingImage, RadrootsListingImageSize,
+        RadrootsListingLocation, RadrootsListingProduct, RadrootsListingStatus,
     },
 };
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
@@ -35,7 +35,7 @@ fn sample_listing(d_tag: &str) -> RadrootsListing {
 
     RadrootsListing {
         d_tag: d_tag.to_string(),
-        farm: RadrootsListingFarmRef {
+        farm: RadrootsFarmRef {
             pubkey: "farm_pubkey".to_string(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
         },
@@ -80,7 +80,7 @@ fn sample_listing_full(d_tag: &str) -> RadrootsListing {
 
     RadrootsListing {
         d_tag: d_tag.to_string(),
-        farm: RadrootsListingFarmRef {
+        farm: RadrootsFarmRef {
             pubkey: "farm_pubkey".to_string(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
         },

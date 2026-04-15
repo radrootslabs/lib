@@ -12,12 +12,12 @@ use radroots_core::{
 };
 use radroots_events::{
     RadrootsNostrEvent,
+    farm::RadrootsFarmRef,
     kinds::{KIND_FARM, KIND_PLOT, KIND_RESOURCE_AREA, is_listing_kind},
     listing::{
         RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
-        RadrootsListingDeliveryMethod, RadrootsListingFarmRef, RadrootsListingImage,
-        RadrootsListingImageSize, RadrootsListingLocation, RadrootsListingProduct,
-        RadrootsListingStatus,
+        RadrootsListingDeliveryMethod, RadrootsListingImage, RadrootsListingImageSize,
+        RadrootsListingLocation, RadrootsListingProduct, RadrootsListingStatus,
     },
     plot::RadrootsPlotRef,
     resource_area::RadrootsResourceAreaRef,
@@ -93,7 +93,7 @@ fn parse_d_tag(tags: &[Vec<String>]) -> Result<String, EventParseError> {
     Ok(value)
 }
 
-fn parse_farm_ref(tags: &[Vec<String>]) -> Result<RadrootsListingFarmRef, EventParseError> {
+fn parse_farm_ref(tags: &[Vec<String>]) -> Result<RadrootsFarmRef, EventParseError> {
     for tag in tags
         .iter()
         .filter(|tag| tag.first().map(|value| value.as_str()) == Some(TAG_A))
@@ -122,7 +122,7 @@ fn parse_farm_ref(tags: &[Vec<String>]) -> Result<RadrootsListingFarmRef, EventP
             return Err(EventParseError::InvalidTag(TAG_A));
         }
         validate_d_tag_tag(&d_tag, TAG_A)?;
-        return Ok(RadrootsListingFarmRef { pubkey, d_tag });
+        return Ok(RadrootsFarmRef { pubkey, d_tag });
     }
     Err(EventParseError::MissingTag(TAG_A))
 }

@@ -63,10 +63,10 @@ mod tests {
         RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
         RadrootsCoreQuantityPrice, RadrootsCoreUnit,
     };
+    use radroots_events::farm::RadrootsFarmRef;
     use radroots_events::listing::{
         RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
-        RadrootsListingDeliveryMethod, RadrootsListingFarmRef, RadrootsListingLocation,
-        RadrootsListingProduct,
+        RadrootsListingDeliveryMethod, RadrootsListingLocation, RadrootsListingProduct,
     };
 
     use super::{
@@ -76,7 +76,7 @@ mod tests {
     fn base_listing() -> RadrootsListing {
         RadrootsListing {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAg".into(),
-            farm: RadrootsListingFarmRef {
+            farm: RadrootsFarmRef {
                 pubkey: String::new(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAA".into(),
             },

@@ -16,8 +16,7 @@ use radroots_events::{
     },
     listing::{
         RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
-        RadrootsListingDeliveryMethod, RadrootsListingFarmRef, RadrootsListingLocation,
-        RadrootsListingProduct,
+        RadrootsListingDeliveryMethod, RadrootsListingLocation, RadrootsListingProduct,
     },
     plot::{RadrootsPlot, RadrootsPlotLocation, RadrootsPlotRef},
     resource_area::{RadrootsResourceArea, RadrootsResourceAreaLocation, RadrootsResourceAreaRef},
@@ -123,7 +122,7 @@ fn sample_farm() -> RadrootsFarm {
             city: None,
             region: None,
             country: None,
-            gcs: sample_gcs("9q8yy"),
+            gcs: Some(sample_gcs("9q8yy")),
         }),
         tags: Some(vec!["orchard".to_string()]),
     }
@@ -159,7 +158,7 @@ fn sample_listing() -> RadrootsListing {
 
     RadrootsListing {
         d_tag: VALID_DOC_D_TAG.to_string(),
-        farm: RadrootsListingFarmRef {
+        farm: RadrootsFarmRef {
             pubkey: VALID_PUBKEY.to_string(),
             d_tag: VALID_FARM_D_TAG.to_string(),
         },
@@ -463,12 +462,27 @@ fn farm_encode_and_list_set_paths() {
     assert!(matches!(err, EventEncodeError::EmptyRequiredField("name")));
 
     let mut farm = sample_farm();
-    farm.location.as_mut().expect("location").gcs.geohash = " ".to_string();
+    farm.location
+        .as_mut()
+        .expect("location")
+        .gcs
+        .as_mut()
+        .expect("gcs")
+        .geohash = " ".to_string();
     let err = farm_build_tags(&farm).expect_err("empty geohash");
     assert!(matches!(
         err,
         EventEncodeError::EmptyRequiredField("location.gcs.geohash")
     ));
+
+    let mut farm = sample_farm();
+    farm.location.as_mut().expect("location").gcs = None;
+    let tags = farm_build_tags(&farm).expect("farm location without geo");
+    assert!(
+        !tags
+            .iter()
+            .any(|tag| tag.first().map(|v| v.as_str()) == Some("g"))
+    );
 
     let tags = farm_ref_tags(&RadrootsFarmRef {
         pubkey: VALID_PUBKEY.to_string(),

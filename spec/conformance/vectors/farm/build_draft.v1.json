@@ -18,6 +18,26 @@
           "tags_shape": "d_tag_required"
         }
       }
+    },
+    {
+      "id": "farm_build_draft_location_without_geo_002",
+      "kind": "farm.build_draft",
+      "input": {
+        "farm": {
+          "d_tag": "AAAAAAAAAAAAAAAAAAAAAQ",
+          "name": "example farm with local location",
+          "location": {
+            "primary": "San Francisco, CA"
+          }
+        }
+      },
+      "expected": {
+        "wire_parts": {
+          "kind": "farm",
+          "content_shape": "farm_json",
+          "tags_shape": "d_tag_required"
+        }
+      }
     }
   ]
 }

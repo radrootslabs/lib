@@ -482,8 +482,20 @@ fn load_farm_location(
     exec: &dyn SqlExecutor,
     farm: &Farm,
 ) -> Result<Option<RadrootsFarmLocation>, RadrootsReplicaEventsError> {
-    let location = load_gcs_location_for_farm(exec, &farm.id)?;
-    Ok(location.map(|gcs| RadrootsFarmLocation {
+    let gcs = load_gcs_location_for_farm(exec, &farm.id)?;
+    let has_strings = [
+        farm.location_primary.as_deref(),
+        farm.location_city.as_deref(),
+        farm.location_region.as_deref(),
+        farm.location_country.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    .any(|value| !value.trim().is_empty());
+    if !has_strings && gcs.is_none() {
+        return Ok(None);
+    }
+    Ok(Some(RadrootsFarmLocation {
         primary: farm.location_primary.clone(),
         city: farm.location_city.clone(),
         region: farm.location_region.clone(),
@@ -1870,6 +1882,39 @@ mod tests {
         assert!(load_member_claims(&claims_fail, "p").is_err());
         assert!(load_member_claims_for_member(&claims_fail, "p").is_err());
         assert!(collect_profile_pubkeys(&claims_fail, &farm).is_err());
+    }
+
+    #[test]
+    fn load_farm_location_preserves_string_only_locations() {
+        let exec = SqliteExecutor::open_memory().expect("db");
+        migrations::run_all_up(&exec).expect("migrations");
+        let farm_row = farm::create(
+            &exec,
+            &IFarmFields {
+                d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
+                pubkey: "f".repeat(64),
+                name: "string-only farm".to_string(),
+                about: None,
+                website: None,
+                picture: None,
+                banner: None,
+                location_primary: Some("San Francisco, CA".to_string()),
+                location_city: Some("San Francisco".to_string()),
+                location_region: Some("CA".to_string()),
+                location_country: Some("US".to_string()),
+            },
+        )
+        .expect("farm")
+        .result;
+
+        let location = load_farm_location(&exec, &farm_row)
+            .expect("location query")
+            .expect("string-only location");
+        assert_eq!(location.primary.as_deref(), Some("San Francisco, CA"));
+        assert_eq!(location.city.as_deref(), Some("San Francisco"));
+        assert_eq!(location.region.as_deref(), Some("CA"));
+        assert_eq!(location.country.as_deref(), Some("US"));
+        assert!(location.gcs.is_none());
     }
 
     #[test]

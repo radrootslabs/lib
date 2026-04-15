@@ -179,18 +179,18 @@ mod tests {
     };
     use radroots_events::{
         RadrootsNostrEvent,
+        farm::RadrootsFarmRef,
         kinds::{KIND_LISTING, KIND_LISTING_DRAFT},
         listing::{
             RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
-            RadrootsListingDeliveryMethod, RadrootsListingFarmRef, RadrootsListingLocation,
-            RadrootsListingProduct,
+            RadrootsListingDeliveryMethod, RadrootsListingLocation, RadrootsListingProduct,
         },
     };
 
     fn base_listing() -> RadrootsListing {
         RadrootsListing {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAg".into(),
-            farm: RadrootsListingFarmRef {
+            farm: RadrootsFarmRef {
                 pubkey: "seller".into(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAA".into(),
             },

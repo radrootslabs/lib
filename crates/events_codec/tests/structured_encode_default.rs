@@ -12,9 +12,7 @@ use radroots_events::farm::{
     RadrootsGeoJsonPolygon,
 };
 use radroots_events::list_set::RadrootsListSet;
-use radroots_events::listing::{
-    RadrootsListing, RadrootsListingBin, RadrootsListingFarmRef, RadrootsListingProduct,
-};
+use radroots_events::listing::{RadrootsListing, RadrootsListingBin, RadrootsListingProduct};
 use radroots_events::plot::{RadrootsPlot, RadrootsPlotLocation, RadrootsPlotRef};
 use radroots_events::resource_area::{
     RadrootsResourceArea, RadrootsResourceAreaLocation, RadrootsResourceAreaRef,
@@ -90,7 +88,7 @@ fn sample_listing(d_tag: &str) -> RadrootsListing {
     );
     RadrootsListing {
         d_tag: d_tag.to_string(),
-        farm: RadrootsListingFarmRef {
+        farm: RadrootsFarmRef {
             pubkey: TEST_PUBKEY_HEX.to_string(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
         },
@@ -141,7 +139,7 @@ fn structured_build_tags_cover_optional_and_error_paths() {
             city: None,
             region: None,
             country: None,
-            gcs: sample_gcs(),
+            gcs: Some(sample_gcs()),
         }),
         tags: Some(vec!["organic".to_string(), " ".to_string()]),
     };
@@ -155,12 +153,28 @@ fn structured_build_tags_cover_optional_and_error_paths() {
     assert!(farm_tags.iter().any(|tag| tag[0] == "g"));
 
     let mut invalid_farm = farm.clone();
-    invalid_farm.location.as_mut().unwrap().gcs.geohash = " ".to_string();
+    invalid_farm
+        .location
+        .as_mut()
+        .unwrap()
+        .gcs
+        .as_mut()
+        .unwrap()
+        .geohash = " ".to_string();
     let err = farm_build_tags(&invalid_farm).unwrap_err();
     assert!(matches!(
         err,
         EventEncodeError::EmptyRequiredField("location.gcs.geohash")
     ));
+
+    let mut string_only_farm = farm.clone();
+    string_only_farm.location.as_mut().unwrap().gcs = None;
+    let string_only_tags = farm_build_tags(&string_only_farm).unwrap();
+    assert!(
+        !string_only_tags
+            .iter()
+            .any(|tag| tag.first().map(|v| v.as_str()) == Some("g"))
+    );
 
     let farm_ref_tags = farm_ref_tags(&RadrootsFarmRef {
         pubkey: TEST_PUBKEY_HEX.to_string(),

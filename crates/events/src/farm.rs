@@ -28,7 +28,7 @@ pub struct RadrootsFarm {
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct RadrootsFarmRef {
     pub pubkey: String,
     pub d_tag: String,
@@ -107,5 +107,6 @@ pub struct RadrootsFarmLocation {
     pub region: Option<String>,
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub country: Option<String>,
-    pub gcs: RadrootsGcsLocation,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "RadrootsGcsLocation | null"))]
+    pub gcs: Option<RadrootsGcsLocation>,
 }

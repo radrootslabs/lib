@@ -189,11 +189,10 @@ mod tests {
         RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
         RadrootsCoreQuantityPrice, RadrootsCoreUnit,
     };
+    use radroots_events::farm::RadrootsFarmRef;
     use radroots_events::job::JobInputType;
     use radroots_events::job_request::{RadrootsJobInput, RadrootsJobParam};
-    use radroots_events::listing::{
-        RadrootsListingBin, RadrootsListingFarmRef, RadrootsListingProduct,
-    };
+    use radroots_events::listing::{RadrootsListingBin, RadrootsListingProduct};
 
     fn sample_listing() -> RadrootsListing {
         let quantity =
@@ -205,7 +204,7 @@ mod tests {
 
         RadrootsListing {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAg".to_string(),
-            farm: RadrootsListingFarmRef {
+            farm: RadrootsFarmRef {
                 pubkey: "farm_pubkey".to_string(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
             },

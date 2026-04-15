@@ -10,11 +10,12 @@ use std::collections::BTreeMap;
 use radroots_core::{RadrootsCoreDecimal, RadrootsCoreDiscount, RadrootsCoreDiscountValue};
 use radroots_events::{
     RadrootsNostrEvent, RadrootsNostrEventPtr,
+    farm::RadrootsFarmRef,
     kinds::{KIND_LISTING, is_listing_kind},
     listing::{
         RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
-        RadrootsListingDeliveryMethod, RadrootsListingFarmRef, RadrootsListingImage,
-        RadrootsListingLocation, RadrootsListingProduct,
+        RadrootsListingDeliveryMethod, RadrootsListingImage, RadrootsListingLocation,
+        RadrootsListingProduct,
     },
     plot::RadrootsPlotRef,
     resource_area::RadrootsResourceAreaRef,
@@ -56,8 +57,8 @@ pub struct RadrootsTradeListingProjection {
     pub listing_addr: String,
     pub seller_pubkey: String,
     pub listing_id: String,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsListingFarmRef"))]
-    pub farm: RadrootsListingFarmRef,
+    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsFarmRef"))]
+    pub farm: RadrootsFarmRef,
     #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsListingProduct"))]
     pub product: RadrootsListingProduct,
     pub primary_bin_id: String,
@@ -1769,10 +1770,11 @@ mod tests {
         RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCorePercent,
         RadrootsCoreQuantity, RadrootsCoreQuantityPrice, RadrootsCoreUnit,
     };
+    use radroots_events::farm::RadrootsFarmRef;
     use radroots_events::listing::{
         RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
-        RadrootsListingDeliveryMethod, RadrootsListingFarmRef, RadrootsListingLocation,
-        RadrootsListingProduct, RadrootsListingStatus,
+        RadrootsListingDeliveryMethod, RadrootsListingLocation, RadrootsListingProduct,
+        RadrootsListingStatus,
     };
     use radroots_events::{RadrootsNostrEvent, RadrootsNostrEventPtr, kinds::KIND_LISTING};
 
@@ -1890,7 +1892,7 @@ mod tests {
     fn base_listing() -> RadrootsListing {
         RadrootsListing {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAg".into(),
-            farm: RadrootsListingFarmRef {
+            farm: RadrootsFarmRef {
                 pubkey: "farm-pubkey".into(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAA".into(),
             },
@@ -1995,7 +1997,7 @@ mod tests {
     fn alternate_listing() -> RadrootsListing {
         RadrootsListing {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAw".into(),
-            farm: RadrootsListingFarmRef {
+            farm: RadrootsFarmRef {
                 pubkey: "farm-pubkey-2".into(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAABA".into(),
             },

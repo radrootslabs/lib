@@ -13,11 +13,12 @@ use core::cmp;
 #[cfg(any(feature = "serde_json", test))]
 use radroots_core::RadrootsCoreDiscount;
 use radroots_core::RadrootsCoreMoney;
+use radroots_events::farm::RadrootsFarmRef;
 use radroots_events::kinds::{KIND_FARM, KIND_PLOT, KIND_RESOURCE_AREA};
 use radroots_events::listing::{
     RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
-    RadrootsListingDeliveryMethod, RadrootsListingFarmRef, RadrootsListingImage,
-    RadrootsListingLocation, RadrootsListingStatus,
+    RadrootsListingDeliveryMethod, RadrootsListingImage, RadrootsListingLocation,
+    RadrootsListingStatus,
 };
 use radroots_events::plot::RadrootsPlotRef;
 use radroots_events::resource_area::RadrootsResourceAreaRef;
@@ -266,7 +267,7 @@ pub fn listing_tags_with_options(
 
 fn push_farm_tags(
     tags: &mut Vec<Vec<String>>,
-    farm: &RadrootsListingFarmRef,
+    farm: &RadrootsFarmRef,
 ) -> Result<(), EventEncodeError> {
     if farm.pubkey.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("farm.pubkey"));
@@ -679,7 +680,7 @@ mod tests {
     fn base_listing() -> RadrootsListing {
         RadrootsListing {
             d_tag: TEST_D_TAG.to_string(),
-            farm: RadrootsListingFarmRef {
+            farm: RadrootsFarmRef {
                 pubkey: TEST_PUBKEY_HEX.to_string(),
                 d_tag: TEST_FARM_D_TAG.to_string(),
             },
@@ -1007,7 +1008,7 @@ mod tests {
         let mut tags = Vec::new();
         push_farm_tags(
             &mut tags,
-            &RadrootsListingFarmRef {
+            &RadrootsFarmRef {
                 pubkey: TEST_PUBKEY_HEX.to_string(),
                 d_tag: TEST_FARM_D_TAG.to_string(),
             },
@@ -1018,7 +1019,7 @@ mod tests {
 
         let err = push_farm_tags(
             &mut Vec::new(),
-            &RadrootsListingFarmRef {
+            &RadrootsFarmRef {
                 pubkey: "".to_string(),
                 d_tag: TEST_FARM_D_TAG.to_string(),
             },
@@ -1031,7 +1032,7 @@ mod tests {
 
         let err = push_farm_tags(
             &mut Vec::new(),
-            &RadrootsListingFarmRef {
+            &RadrootsFarmRef {
                 pubkey: TEST_PUBKEY_HEX.to_string(),
                 d_tag: "".to_string(),
             },
@@ -1044,7 +1045,7 @@ mod tests {
 
         let err = push_farm_tags(
             &mut Vec::new(),
-            &RadrootsListingFarmRef {
+            &RadrootsFarmRef {
                 pubkey: TEST_PUBKEY_HEX.to_string(),
                 d_tag: "farm:invalid".to_string(),
             },

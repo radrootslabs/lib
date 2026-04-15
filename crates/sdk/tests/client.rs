@@ -2,12 +2,12 @@ use radroots_core::{
     RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
     RadrootsCoreQuantityPrice, RadrootsCoreUnit,
 };
-use radroots_events::farm::RadrootsFarm;
+use radroots_events::farm::{RadrootsFarm, RadrootsFarmRef};
 use radroots_events::kinds::{KIND_LISTING, KIND_TRADE_LISTING_VALIDATE_REQ};
 use radroots_events::listing::{
     RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
-    RadrootsListingDeliveryMethod, RadrootsListingFarmRef, RadrootsListingLocation,
-    RadrootsListingProduct, RadrootsListingStatus,
+    RadrootsListingDeliveryMethod, RadrootsListingLocation, RadrootsListingProduct,
+    RadrootsListingStatus,
 };
 use radroots_events::trade::{RadrootsTradeListingValidateRequest, RadrootsTradeMessagePayload};
 use radroots_sdk::{
@@ -32,7 +32,7 @@ fn sample_farm() -> RadrootsFarm {
 fn sample_listing() -> RadrootsListing {
     RadrootsListing {
         d_tag: "AAAAAAAAAAAAAAAAAAAAAg".into(),
-        farm: RadrootsListingFarmRef {
+        farm: RadrootsFarmRef {
             pubkey: "seller".into(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".into(),
         },

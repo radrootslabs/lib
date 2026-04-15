@@ -18,9 +18,7 @@ mod tests {
         RadrootsFarm, RadrootsFarmLocation, RadrootsFarmRef, RadrootsGcsLocation,
         RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon,
     };
-    use radroots_events::listing::{
-        RadrootsListing, RadrootsListingBin, RadrootsListingFarmRef, RadrootsListingProduct,
-    };
+    use radroots_events::listing::{RadrootsListing, RadrootsListingBin, RadrootsListingProduct};
     use radroots_events::plot::RadrootsPlot;
 
     #[test]
@@ -37,7 +35,7 @@ mod tests {
                 city: None,
                 region: None,
                 country: None,
-                gcs: RadrootsGcsLocation {
+                gcs: Some(RadrootsGcsLocation {
                     lat: 37.0,
                     lng: -122.0,
                     geohash: "9q8yy".to_string(),
@@ -68,7 +66,7 @@ mod tests {
                     gc_admin1_name: None,
                     gc_country_id: None,
                     gc_country_name: None,
-                },
+                }),
             }),
             tags: Some(vec!["orchard".to_string()]),
         };
@@ -165,7 +163,7 @@ mod tests {
                 city: None,
                 region: None,
                 country: None,
-                gcs: RadrootsGcsLocation {
+                gcs: Some(RadrootsGcsLocation {
                     lat: 37.0,
                     lng: -122.0,
                     geohash: "9q8yy".to_string(),
@@ -196,7 +194,7 @@ mod tests {
                     gc_admin1_name: None,
                     gc_country_id: None,
                     gc_country_name: None,
-                },
+                }),
             }),
             tags: None,
         };
@@ -211,12 +209,26 @@ mod tests {
         assert!(matches!(err, EventEncodeError::EmptyRequiredField("name")));
 
         farm.name = "Test Farm".to_string();
-        farm.location.as_mut().expect("location").gcs.geohash = " ".to_string();
+        farm.location
+            .as_mut()
+            .expect("location")
+            .gcs
+            .as_mut()
+            .expect("gcs")
+            .geohash = " ".to_string();
         let err = farm_build_tags(&farm).expect_err("expected empty geohash");
         assert!(matches!(
             err,
             EventEncodeError::EmptyRequiredField("location.gcs.geohash")
         ));
+
+        farm.location.as_mut().expect("location").gcs = None;
+        let tags = farm_build_tags(&farm).expect("string-only farm location should be allowed");
+        assert!(
+            !tags
+                .iter()
+                .any(|tag| tag.get(0).map(|v| v.as_str()) == Some("g"))
+        );
 
         let err = farm_ref_tags(&RadrootsFarmRef {
             pubkey: " ".to_string(),
@@ -283,7 +295,7 @@ mod tests {
     fn farm_listings_list_set_uses_listing_addresses() {
         let listings = vec![RadrootsListing {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAg".to_string(),
-            farm: RadrootsListingFarmRef {
+            farm: RadrootsFarmRef {
                 pubkey: "farm_pubkey".to_string(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
             },

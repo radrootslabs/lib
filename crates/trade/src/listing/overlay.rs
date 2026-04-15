@@ -527,10 +527,11 @@ mod tests {
         RadrootsCoreQuantity, RadrootsCoreQuantityPrice, RadrootsCoreUnit,
     };
     use radroots_events::RadrootsNostrEventPtr;
+    use radroots_events::farm::RadrootsFarmRef;
     use radroots_events::listing::{
         RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
-        RadrootsListingDeliveryMethod, RadrootsListingFarmRef, RadrootsListingLocation,
-        RadrootsListingProduct, RadrootsListingStatus,
+        RadrootsListingDeliveryMethod, RadrootsListingLocation, RadrootsListingProduct,
+        RadrootsListingStatus,
     };
 
     #[derive(Clone, Debug)]
@@ -647,7 +648,7 @@ mod tests {
     fn base_listing() -> RadrootsListing {
         RadrootsListing {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAg".into(),
-            farm: RadrootsListingFarmRef {
+            farm: RadrootsFarmRef {
                 pubkey: "farm-pubkey".into(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAA".into(),
             },
@@ -712,7 +713,7 @@ mod tests {
     fn alternate_listing() -> RadrootsListing {
         RadrootsListing {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAw".into(),
-            farm: RadrootsListingFarmRef {
+            farm: RadrootsFarmRef {
                 pubkey: "farm-pubkey-2".into(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAABA".into(),
             },

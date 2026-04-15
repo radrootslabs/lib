@@ -5,6 +5,7 @@ use radroots_core::{
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
 
+use crate::farm::RadrootsFarmRef;
 use crate::plot::RadrootsPlotRef;
 use crate::resource_area::RadrootsResourceAreaRef;
 
@@ -67,7 +68,7 @@ pub enum RadrootsListingDeliveryMethod {
 pub struct RadrootsListing {
     pub d_tag: String,
     #[cfg_attr(feature = "serde", serde(default))]
-    pub farm: RadrootsListingFarmRef,
+    pub farm: RadrootsFarmRef,
     pub product: RadrootsListingProduct,
     pub primary_bin_id: String,
     pub bins: Vec<RadrootsListingBin>,
@@ -105,24 +106,6 @@ pub struct RadrootsListing {
         ts(optional, type = "RadrootsListingImage[] | null")
     )]
     pub images: Option<Vec<RadrootsListingImage>>,
-}
-
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Debug)]
-pub struct RadrootsListingFarmRef {
-    pub pubkey: String,
-    pub d_tag: String,
-}
-
-impl Default for RadrootsListingFarmRef {
-    fn default() -> Self {
-        Self {
-            pubkey: String::new(),
-            d_tag: String::new(),
-        }
-    }
 }
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
@@ -228,7 +211,8 @@ pub struct RadrootsListingImageSize {
 
 #[cfg(all(test, feature = "ts-rs", feature = "std"))]
 mod constants_tests {
-    use super::{RADROOTS_LISTING_PRODUCT_TAG_KEYS, RadrootsListingFarmRef};
+    use super::RADROOTS_LISTING_PRODUCT_TAG_KEYS;
+    use crate::farm::RadrootsFarmRef;
     use std::{
         fs,
         path::{Path, PathBuf},
@@ -286,7 +270,7 @@ mod constants_tests {
 
     #[test]
     fn defaults_listing_farm_ref_to_empty_values() {
-        let farm_ref = RadrootsListingFarmRef::default();
+        let farm_ref = RadrootsFarmRef::default();
         assert!(farm_ref.pubkey.is_empty());
         assert!(farm_ref.d_tag.is_empty());
     }

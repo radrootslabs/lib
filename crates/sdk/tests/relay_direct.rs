@@ -10,11 +10,12 @@ use radroots_core::{
     RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
     RadrootsCoreQuantityPrice, RadrootsCoreUnit,
 };
+use radroots_sdk::farm::RadrootsFarmRef;
 use radroots_sdk::identity::RadrootsIdentity;
 use radroots_sdk::listing::{
     RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
-    RadrootsListingDeliveryMethod, RadrootsListingFarmRef, RadrootsListingLocation,
-    RadrootsListingProduct, RadrootsListingStatus,
+    RadrootsListingDeliveryMethod, RadrootsListingLocation, RadrootsListingProduct,
+    RadrootsListingStatus,
 };
 use radroots_sdk::{
     RadrootsSdkClient, RadrootsSdkConfig, RelayConfig, SdkEnvironment, SdkPublishError,
@@ -101,7 +102,7 @@ impl Drop for AckRelay {
 fn sample_listing() -> RadrootsListing {
     RadrootsListing {
         d_tag: "AAAAAAAAAAAAAAAAAAAAAg".into(),
-        farm: RadrootsListingFarmRef {
+        farm: RadrootsFarmRef {
             pubkey: "seller".into(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".into(),
         },

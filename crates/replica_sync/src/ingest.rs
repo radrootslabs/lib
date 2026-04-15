@@ -711,13 +711,15 @@ fn upsert_farm_location(
 ) -> Result<(), RadrootsReplicaEventsError> {
     clear_farm_locations(exec, farm_id)?;
     if let Some(location) = location {
-        let gcs_id = create_gcs_location(exec, location.gcs, factory)?;
-        let fields = IFarmGcsLocationFields {
-            farm_id: farm_id.to_string(),
-            gcs_location_id: gcs_id,
-            role: ROLE_PRIMARY.to_string(),
-        };
-        let _ = farm_gcs_location::create(exec, &fields)?;
+        if let Some(gcs) = location.gcs {
+            let gcs_id = create_gcs_location(exec, gcs, factory)?;
+            let fields = IFarmGcsLocationFields {
+                farm_id: farm_id.to_string(),
+                gcs_location_id: gcs_id,
+                role: ROLE_PRIMARY.to_string(),
+            };
+            let _ = farm_gcs_location::create(exec, &fields)?;
+        }
     }
     Ok(())
 }
@@ -1697,7 +1699,7 @@ mod tests {
                 city: Some("city".to_string()),
                 region: Some("region".to_string()),
                 country: Some("country".to_string()),
-                gcs: sample_gcs(10.0, 20.0, "s0"),
+                gcs: Some(sample_gcs(10.0, 20.0, "s0")),
             }),
             Some(vec![
                 "coffee".to_string(),
@@ -1912,7 +1914,7 @@ mod tests {
             city: Some("c".to_string()),
             region: Some("r".to_string()),
             country: Some("k".to_string()),
-            gcs: sample_gcs(12.0, 22.0, "s2"),
+            gcs: Some(sample_gcs(12.0, 22.0, "s2")),
         };
         assert_eq!(
             unpack_farm_location_strings(Some(&location)).0,
@@ -2053,11 +2055,32 @@ mod tests {
                     city: None,
                     region: None,
                     country: None,
-                    gcs: sample_gcs(1.0, 2.0, "s4"),
+                    gcs: Some(sample_gcs(1.0, 2.0, "s4")),
                 }),
                 &FixedFactory,
             )
             .is_ok()
+        );
+        assert!(
+            upsert_farm_location(
+                &exec,
+                &farm_id,
+                Some(RadrootsFarmLocation {
+                    primary: Some("manual".to_string()),
+                    city: Some("San Francisco".to_string()),
+                    region: Some("CA".to_string()),
+                    country: Some("US".to_string()),
+                    gcs: None,
+                }),
+                &FixedFactory,
+            )
+            .is_ok()
+        );
+        assert!(
+            farm_gcs_location::find_many(&exec, &IFarmGcsLocationFindMany { filter: None })
+                .expect("farm locations after string-only upsert")
+                .results
+                .is_empty()
         );
 
         let not_found_plot_locations = DeleteErrorExecutor {
@@ -2173,7 +2196,7 @@ mod tests {
                     city: None,
                     region: None,
                     country: None,
-                    gcs: sample_gcs(2.0, 3.0, "s6"),
+                    gcs: Some(sample_gcs(2.0, 3.0, "s6")),
                 }),
                 &FixedFactory,
             )
@@ -2274,7 +2297,7 @@ mod tests {
                 city: Some("city".to_string()),
                 region: Some("region".to_string()),
                 country: Some("country".to_string()),
-                gcs: sample_gcs(10.0, 20.0, "s0"),
+                gcs: Some(sample_gcs(10.0, 20.0, "s0")),
             }),
             Some(vec!["coffee".to_string(), "coffee".to_string()]),
         );
@@ -2404,7 +2427,7 @@ mod tests {
                 city: None,
                 region: None,
                 country: None,
-                gcs: sample_gcs(10.0, 20.0, "s0"),
+                gcs: Some(sample_gcs(10.0, 20.0, "s0")),
             }),
             Some(vec!["coffee".to_string()]),
         );
@@ -2529,7 +2552,7 @@ mod tests {
                 city: None,
                 region: None,
                 country: None,
-                gcs: sample_gcs(12.0, 22.0, "s2"),
+                gcs: Some(sample_gcs(12.0, 22.0, "s2")),
             }),
             Some(vec!["coffee".to_string()]),
         );
@@ -2584,7 +2607,7 @@ mod tests {
                     city: None,
                     region: None,
                     country: None,
-                    gcs: sample_gcs(15.0, 25.0, "s5"),
+                    gcs: Some(sample_gcs(15.0, 25.0, "s5")),
                 }),
                 &FixedFactory,
             )
@@ -2650,7 +2673,7 @@ mod tests {
                     city: None,
                     region: None,
                     country: None,
-                    gcs: sample_gcs(15.0, 25.0, "s5"),
+                    gcs: Some(sample_gcs(15.0, 25.0, "s5")),
                 }),
                 &FixedFactory,
             )
@@ -2777,7 +2800,7 @@ mod tests {
                 city: Some("city".to_string()),
                 region: Some("region".to_string()),
                 country: Some("country".to_string()),
-                gcs: sample_gcs(10.0, 20.0, "s0"),
+                gcs: Some(sample_gcs(10.0, 20.0, "s0")),
             }),
             Some(vec!["seed".to_string()]),
         );
@@ -2870,7 +2893,7 @@ mod tests {
                 city: None,
                 region: None,
                 country: None,
-                gcs: sample_gcs(11.0, 21.0, "s1"),
+                gcs: Some(sample_gcs(11.0, 21.0, "s1")),
             }),
             None,
         );
@@ -2892,7 +2915,7 @@ mod tests {
                 city: None,
                 region: None,
                 country: None,
-                gcs: sample_gcs(12.0, 22.0, "s2"),
+                gcs: Some(sample_gcs(12.0, 22.0, "s2")),
             }),
             None,
         );
@@ -2927,7 +2950,7 @@ mod tests {
                 city: None,
                 region: None,
                 country: None,
-                gcs: bad_point,
+                gcs: Some(bad_point),
             }),
             None,
         );
@@ -2946,7 +2969,7 @@ mod tests {
                 city: None,
                 region: None,
                 country: None,
-                gcs: bad_polygon,
+                gcs: Some(bad_polygon),
             }),
             None,
         );
@@ -3367,7 +3390,7 @@ mod tests {
                     city: None,
                     region: None,
                     country: None,
-                    gcs: sample_gcs(31.0, 41.0, "s8"),
+                    gcs: Some(sample_gcs(31.0, 41.0, "s8")),
                 }),
                 &FixedFactory,
             )
@@ -3388,7 +3411,7 @@ mod tests {
                     city: None,
                     region: None,
                     country: None,
-                    gcs: sample_gcs(32.0, 42.0, "s9"),
+                    gcs: Some(sample_gcs(32.0, 42.0, "s9")),
                 }),
                 &FixedFactory,
             )

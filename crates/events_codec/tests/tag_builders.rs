@@ -29,9 +29,9 @@ use radroots_events::kinds::{
 use radroots_events::list::{RadrootsList, RadrootsListEntry};
 use radroots_events::list_set::RadrootsListSet;
 use radroots_events::listing::{
-    RadrootsListing, RadrootsListingAvailability, RadrootsListingBin, RadrootsListingFarmRef,
-    RadrootsListingImage, RadrootsListingImageSize, RadrootsListingLocation,
-    RadrootsListingProduct, RadrootsListingStatus,
+    RadrootsListing, RadrootsListingAvailability, RadrootsListingBin, RadrootsListingImage,
+    RadrootsListingImageSize, RadrootsListingLocation, RadrootsListingProduct,
+    RadrootsListingStatus,
 };
 use radroots_events::message::{RadrootsMessage, RadrootsMessageRecipient};
 use radroots_events::message_file::RadrootsMessageFile;
@@ -115,7 +115,7 @@ fn sample_listing() -> RadrootsListing {
 
     RadrootsListing {
         d_tag: "AAAAAAAAAAAAAAAAAAAAAg".to_string(),
-        farm: RadrootsListingFarmRef {
+        farm: RadrootsFarmRef {
             pubkey: TEST_NPUB.to_string(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
         },

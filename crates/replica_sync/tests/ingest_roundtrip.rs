@@ -823,7 +823,7 @@ fn ingest_reports_query_fail_paths_for_profile_farm_plot_and_list_sets() {
             city: None,
             region: None,
             country: None,
-            gcs: sample_gcs(37.7, -122.4, "9q8yy"),
+            gcs: Some(sample_gcs(37.7, -122.4, "9q8yy")),
         }),
         Some(vec!["coffee".to_string()]),
     );
@@ -1167,7 +1167,7 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
         city: Some("city".to_string()),
         region: Some("region".to_string()),
         country: Some("country".to_string()),
-        gcs: sample_gcs(37.7, -122.4, "9q8yy"),
+        gcs: Some(sample_gcs(37.7, -122.4, "9q8yy")),
     };
     let farm_create = farm_event(
         200,

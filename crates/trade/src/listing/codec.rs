@@ -7,12 +7,12 @@ use radroots_core::{
     RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreDiscount, RadrootsCoreMoney,
     RadrootsCoreQuantity, RadrootsCoreQuantityPrice, RadrootsCoreUnit,
 };
+use radroots_events::farm::RadrootsFarmRef;
 use radroots_events::kinds::{KIND_FARM, KIND_PLOT, KIND_RESOURCE_AREA};
 use radroots_events::listing::{
     RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
-    RadrootsListingDeliveryMethod, RadrootsListingFarmRef, RadrootsListingImage,
-    RadrootsListingImageSize, RadrootsListingLocation, RadrootsListingProduct,
-    RadrootsListingStatus,
+    RadrootsListingDeliveryMethod, RadrootsListingImage, RadrootsListingImageSize,
+    RadrootsListingLocation, RadrootsListingProduct, RadrootsListingStatus,
 };
 use radroots_events::plot::RadrootsPlotRef;
 use radroots_events::resource_area::RadrootsResourceAreaRef;
@@ -161,7 +161,7 @@ fn map_listing_tags_error(err: EventEncodeError) -> TradeListingParseError {
 fn listing_from_tags(
     tags: &[Vec<String>],
     d_tag: String,
-    farm_ref: RadrootsListingFarmRef,
+    farm_ref: RadrootsFarmRef,
     farm_pubkey: String,
     resource_area: Option<RadrootsResourceAreaRef>,
     plot: Option<RadrootsPlotRef>,
@@ -485,7 +485,7 @@ fn listing_from_tags(
     })
 }
 
-fn parse_farm_ref(tags: &[Vec<String>]) -> Result<RadrootsListingFarmRef, TradeListingParseError> {
+fn parse_farm_ref(tags: &[Vec<String>]) -> Result<RadrootsFarmRef, TradeListingParseError> {
     for tag in tags
         .iter()
         .filter(|t| t.get(0).map(|s| s.as_str()) == Some(TAG_A))
@@ -516,7 +516,7 @@ fn parse_farm_ref(tags: &[Vec<String>]) -> Result<RadrootsListingFarmRef, TradeL
         if !is_d_tag_base64url(&d_tag) {
             return Err(TradeListingParseError::InvalidTag(TAG_A.to_string()));
         }
-        return Ok(RadrootsListingFarmRef { pubkey, d_tag });
+        return Ok(RadrootsFarmRef { pubkey, d_tag });
     }
     Err(TradeListingParseError::MissingTag(TAG_A.to_string()))
 }
@@ -631,10 +631,11 @@ mod tests {
         RadrootsCoreDiscountThreshold, RadrootsCoreDiscountValue, RadrootsCoreMoney,
         RadrootsCorePercent, RadrootsCoreQuantity, RadrootsCoreQuantityPrice, RadrootsCoreUnit,
     };
-    use radroots_events::listing::{RadrootsListing, RadrootsListingFarmRef};
+    use radroots_events::farm::RadrootsFarmRef;
+    use radroots_events::listing::RadrootsListing;
 
-    fn farm_ref() -> RadrootsListingFarmRef {
-        RadrootsListingFarmRef {
+    fn farm_ref() -> RadrootsFarmRef {
+        RadrootsFarmRef {
             pubkey: "seller".to_string(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
         }
