@@ -2,8 +2,10 @@ use core::fmt;
 use core::time::Duration;
 
 use crate::config::RadrootsdAuth;
+use crate::farm::RadrootsFarm;
 use crate::listing;
 use crate::listing::RadrootsListing;
+use crate::profile::{RadrootsProfile, RadrootsProfileType};
 use crate::trade;
 use crate::{RadrootsNostrEvent, RadrootsNostrEventPtr};
 use radroots_events::kinds::KIND_LISTING;
@@ -107,6 +109,54 @@ impl fmt::Debug for SdkRadrootsdSignerSessionConnectRequest {
             &self.client_secret_key.as_ref().map(|_| "<redacted>"),
         );
         debug.field("signer_authority", &self.signer_authority);
+        debug.finish()
+    }
+}
+
+#[derive(Clone, Serialize)]
+pub struct SdkRadrootsdProfilePublishRequest {
+    pub profile: RadrootsProfile,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile_type: Option<RadrootsProfileType>,
+    pub signer_session_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signer_authority: Option<SdkRadrootsdSignerAuthority>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub idempotency_key: Option<String>,
+}
+
+impl fmt::Debug for SdkRadrootsdProfilePublishRequest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut debug = f.debug_struct("SdkRadrootsdProfilePublishRequest");
+        debug.field("profile", &self.profile);
+        debug.field("profile_type", &self.profile_type);
+        debug.field("signer_session_id", &"<redacted>");
+        debug.field("signer_authority", &self.signer_authority);
+        debug.field("idempotency_key", &self.idempotency_key);
+        debug.finish()
+    }
+}
+
+#[derive(Clone, Serialize)]
+pub struct SdkRadrootsdFarmPublishRequest {
+    pub farm: RadrootsFarm,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<u32>,
+    pub signer_session_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signer_authority: Option<SdkRadrootsdSignerAuthority>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub idempotency_key: Option<String>,
+}
+
+impl fmt::Debug for SdkRadrootsdFarmPublishRequest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut debug = f.debug_struct("SdkRadrootsdFarmPublishRequest");
+        debug.field("farm", &self.farm);
+        debug.field("kind", &self.kind);
+        debug.field("signer_session_id", &"<redacted>");
+        debug.field("signer_authority", &self.signer_authority);
+        debug.field("idempotency_key", &self.idempotency_key);
         debug.finish()
     }
 }
@@ -1001,6 +1051,40 @@ pub async fn publish_listing(
         auth,
         "radroots-sdk-listing-publish",
         "bridge.listing.publish",
+        request,
+        timeout,
+    )
+    .await
+}
+
+pub(crate) async fn publish_profile(
+    endpoint: &str,
+    auth: &RadrootsdAuth,
+    request: &SdkRadrootsdProfilePublishRequest,
+    timeout: Duration,
+) -> Result<SdkRadrootsdBridgePublishResponse, RadrootsdError> {
+    jsonrpc_call(
+        endpoint,
+        auth,
+        "radroots-sdk-profile-publish",
+        "bridge.profile.publish",
+        request,
+        timeout,
+    )
+    .await
+}
+
+pub(crate) async fn publish_farm(
+    endpoint: &str,
+    auth: &RadrootsdAuth,
+    request: &SdkRadrootsdFarmPublishRequest,
+    timeout: Duration,
+) -> Result<SdkRadrootsdBridgePublishResponse, RadrootsdError> {
+    jsonrpc_call(
+        endpoint,
+        auth,
+        "radroots-sdk-farm-publish",
+        "bridge.farm.publish",
         request,
         timeout,
     )

@@ -42,7 +42,8 @@ pub use crate::client::{
 pub use crate::client::{
     RadrootsdBridgeClient, RadrootsdClient, RadrootsdSignerSessionClient, SdkRadrootsdBridgeError,
     SdkRadrootsdBridgeJobRef, SdkRadrootsdBridgeJobView, SdkRadrootsdBridgeStatus,
-    SdkRadrootsdListingPublishOptions, SdkRadrootsdOrderRequestPublishOptions,
+    SdkRadrootsdFarmPublishOptions, SdkRadrootsdListingPublishOptions,
+    SdkRadrootsdOrderRequestPublishOptions, SdkRadrootsdProfilePublishOptions,
     SdkRadrootsdPublicTradeMessage, SdkRadrootsdPublicTradePublishOptions,
     SdkRadrootsdSessionError, SdkRadrootsdSignerSessionAuthorizeResult,
     SdkRadrootsdSignerSessionCloseResult, SdkRadrootsdSignerSessionHandle,

@@ -4,8 +4,8 @@ use radroots_core::{
     RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
     RadrootsCoreQuantityPrice, RadrootsCoreUnit,
 };
-use radroots_events::farm::RadrootsFarmRef;
-use radroots_events::kinds::{KIND_LISTING, KIND_LISTING_DRAFT};
+use radroots_events::farm::{RadrootsFarm, RadrootsFarmLocation, RadrootsFarmRef};
+use radroots_events::kinds::{KIND_FARM, KIND_LISTING, KIND_LISTING_DRAFT, KIND_PROFILE};
 use radroots_sdk::adapters::radrootsd::{
     SdkRadrootsdBridgeJob, SdkRadrootsdBridgePublishResponse, SdkRadrootsdListingPublishRequest,
     SdkRadrootsdPublicTradePublishRequest, SdkRadrootsdSignerAuthority,
@@ -22,10 +22,11 @@ use radroots_sdk::trade::{
     RadrootsTradeOrderRevision, RadrootsTradeOrderRevisionResponse,
 };
 use radroots_sdk::{
-    RadrootsNostrEvent, RadrootsNostrEventPtr, RadrootsSdkClient, RadrootsSdkConfig, RadrootsdAuth,
-    RadrootsdConfig, SdkConfigError, SdkEnvironment, SdkPublishError,
-    SdkRadrootsdBridgeDeliveryPolicy, SdkRadrootsdBridgeError, SdkRadrootsdBridgeJobStatus,
-    SdkRadrootsdListingPublishOptions, SdkRadrootsdOrderRequestPublishOptions,
+    RadrootsNostrEvent, RadrootsNostrEventPtr, RadrootsProfile, RadrootsProfileType,
+    RadrootsSdkClient, RadrootsSdkConfig, RadrootsdAuth, RadrootsdConfig, SdkConfigError,
+    SdkEnvironment, SdkPublishError, SdkRadrootsdBridgeDeliveryPolicy, SdkRadrootsdBridgeError,
+    SdkRadrootsdBridgeJobStatus, SdkRadrootsdFarmPublishOptions, SdkRadrootsdListingPublishOptions,
+    SdkRadrootsdOrderRequestPublishOptions, SdkRadrootsdProfilePublishOptions,
     SdkRadrootsdPublicTradeMessage, SdkRadrootsdPublicTradePublishOptions,
     SdkRadrootsdPublicTradePublishValidationError, SdkRadrootsdPublicTradeRoute,
     SdkRadrootsdPublishReceipt, SdkRadrootsdSessionError, SdkRadrootsdSignerSessionHandle,
@@ -376,6 +377,40 @@ fn sample_listing() -> RadrootsListing {
             geohash: None,
         }),
         images: None,
+    }
+}
+
+fn sample_profile() -> RadrootsProfile {
+    RadrootsProfile {
+        name: "North Farm".into(),
+        display_name: Some("North Farm".into()),
+        nip05: None,
+        about: Some("Coffee farm".into()),
+        website: Some("https://example.invalid/north-farm".into()),
+        picture: None,
+        banner: None,
+        lud06: None,
+        lud16: None,
+        bot: None,
+    }
+}
+
+fn sample_farm() -> RadrootsFarm {
+    RadrootsFarm {
+        d_tag: "AAAAAAAAAAAAAAAAAAAAAA".into(),
+        name: "North Farm".into(),
+        about: Some("Coffee farm".into()),
+        website: Some("https://example.invalid/north-farm".into()),
+        picture: None,
+        banner: None,
+        location: Some(RadrootsFarmLocation {
+            primary: Some("North Farm".into()),
+            city: Some("San Francisco".into()),
+            region: Some("CA".into()),
+            country: Some("US".into()),
+            gcs: None,
+        }),
+        tags: Some(vec!["coffee".into()]),
     }
 }
 
@@ -1192,6 +1227,136 @@ async fn radrootsd_listing_publish_accepts_typed_listing_value() -> TestResult<(
     assert_eq!(receipt.transport, SdkTransportMode::Radrootsd);
     assert_eq!(receipt.event_kind, Some(30402));
     assert_eq!(receipt.event_id, Some("event-2".to_owned()));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn radrootsd_profile_publish_accepts_typed_profile_value() -> TestResult<()> {
+    let (server, request_rx) = JsonRpcServer::spawn(
+        Some("Bearer sdk-secret"),
+        json!({
+            "jsonrpc": "2.0",
+            "id": "radroots-sdk-profile-publish",
+            "result": {
+                "deduplicated": false,
+                "job": {
+                    "job_id": "job-profile-1",
+                    "command": "bridge.profile.publish",
+                    "status": "published",
+                    "terminal": true,
+                    "recovered_after_restart": false,
+                    "signer_mode": "nip46_session:session-profile-1",
+                    "signer_session_id": "session-profile-1",
+                    "event_kind": 0,
+                    "event_id": "event-profile-1",
+                    "relay_count": 1,
+                    "acknowledged_relay_count": 1
+                }
+            }
+        }),
+    )
+    .await?;
+
+    let handle = connected_bunker_session_handle("session-profile-1").await?;
+    let client = radrootsd_test_client(server.endpoint())?;
+    let options = SdkRadrootsdProfilePublishOptions::from_signer_session(&handle)
+        .with_idempotency_key("profile-idem-1")
+        .with_signer_authority(SdkRadrootsdSignerAuthority {
+            provider_runtime_id: "runtime-profile".to_owned(),
+            account_identity_id: "identity-profile".to_owned(),
+            provider_signer_session_id: Some("provider-session-profile".to_owned()),
+        });
+
+    let receipt = client
+        .profile()
+        .publish_profile_via_radrootsd_with_options(
+            &sample_profile(),
+            Some(RadrootsProfileType::Farm),
+            &options,
+        )
+        .await?;
+    let request_json = request_rx.await?;
+
+    assert_eq!(request_json["method"], "bridge.profile.publish");
+    assert_eq!(
+        request_json["params"]["signer_session_id"],
+        "session-profile-1"
+    );
+    assert_eq!(request_json["params"]["profile_type"], "farm");
+    assert_eq!(request_json["params"]["profile"]["name"], "North Farm");
+    assert_eq!(request_json["params"]["idempotency_key"], "profile-idem-1");
+    assert_eq!(
+        request_json["params"]["signer_authority"]["provider_runtime_id"],
+        "runtime-profile"
+    );
+    assert_eq!(receipt.event_kind, Some(KIND_PROFILE));
+    assert_eq!(receipt.event_id, Some("event-profile-1".to_owned()));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn radrootsd_farm_publish_accepts_typed_farm_value() -> TestResult<()> {
+    let (server, request_rx) = JsonRpcServer::spawn(
+        Some("Bearer sdk-secret"),
+        json!({
+            "jsonrpc": "2.0",
+            "id": "radroots-sdk-farm-publish",
+            "result": {
+                "deduplicated": false,
+                "job": {
+                    "job_id": "job-farm-1",
+                    "command": "bridge.farm.publish",
+                    "status": "published",
+                    "terminal": true,
+                    "recovered_after_restart": false,
+                    "signer_mode": "nip46_session:session-farm-1",
+                    "signer_session_id": "session-farm-1",
+                    "event_kind": 30340,
+                    "event_id": "event-farm-1",
+                    "event_addr": "30340:seller:AAAAAAAAAAAAAAAAAAAAAA",
+                    "relay_count": 1,
+                    "acknowledged_relay_count": 1
+                }
+            }
+        }),
+    )
+    .await?;
+
+    let handle = connected_bunker_session_handle("session-farm-1").await?;
+    let client = radrootsd_test_client(server.endpoint())?;
+    let options = SdkRadrootsdFarmPublishOptions::from_signer_session(&handle)
+        .with_idempotency_key("farm-idem-1");
+
+    let receipt = client
+        .farm()
+        .publish_farm_via_radrootsd_with_options(&sample_farm(), &options)
+        .await?;
+    let request_json = request_rx.await?;
+
+    assert_eq!(request_json["method"], "bridge.farm.publish");
+    assert_eq!(
+        request_json["params"]["signer_session_id"],
+        "session-farm-1"
+    );
+    assert_eq!(request_json["params"]["kind"], KIND_FARM);
+    assert_eq!(
+        request_json["params"]["farm"]["d_tag"],
+        "AAAAAAAAAAAAAAAAAAAAAA"
+    );
+    assert_eq!(request_json["params"]["idempotency_key"], "farm-idem-1");
+    assert_eq!(receipt.event_kind, Some(KIND_FARM));
+    assert_eq!(receipt.event_id, Some("event-farm-1".to_owned()));
+    match receipt.transport_receipt {
+        SdkTransportReceipt::Radrootsd(receipt) => {
+            assert_eq!(
+                receipt.event_addr,
+                Some("30340:seller:AAAAAAAAAAAAAAAAAAAAAA".to_owned())
+            );
+        }
+        SdkTransportReceipt::RelayDirect(_) => panic!("unexpected relay receipt"),
+    }
 
     Ok(())
 }
