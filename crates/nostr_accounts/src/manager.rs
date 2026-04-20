@@ -1,6 +1,6 @@
 use crate::error::RadrootsNostrAccountsError;
 use crate::model::{
-    RadrootsNostrAccountRecord, RadrootsNostrAccountStoreState, RadrootsNostrSelectedAccountStatus,
+    RadrootsNostrAccountRecord, RadrootsNostrAccountStatus, RadrootsNostrAccountStoreState,
 };
 #[cfg(feature = "memory-vault")]
 use crate::store::RadrootsNostrMemoryAccountStore;
@@ -47,21 +47,33 @@ impl RadrootsNostrAccountsManager {
         vault: Arc<dyn RadrootsSecretVault>,
     ) -> Result<Self, RadrootsNostrAccountsError> {
         let mut state = store.load()?;
-        if state.version != crate::model::RADROOTS_NOSTR_ACCOUNTS_STORE_VERSION {
-            return Err(RadrootsNostrAccountsError::InvalidState(format!(
-                "unsupported accounts schema version {}",
-                state.version
-            )));
-        }
+        let mut state_dirty = match state.version {
+            1 => {
+                state.version = crate::model::RADROOTS_NOSTR_ACCOUNTS_STORE_VERSION;
+                true
+            }
+            crate::model::RADROOTS_NOSTR_ACCOUNTS_STORE_VERSION => false,
+            _ => {
+                return Err(RadrootsNostrAccountsError::InvalidState(format!(
+                    "unsupported accounts schema version {}",
+                    state.version
+                )));
+            }
+        };
 
-        if let Some(selected) = state.selected_account_id.clone() {
+        if let Some(default_account_id) = state.default_account_id.clone() {
             let exists = state
                 .accounts
                 .iter()
-                .any(|record| record.account_id == selected);
+                .any(|record| record.account_id == default_account_id);
             if !exists {
-                state.selected_account_id = None;
+                state.default_account_id = None;
+                state_dirty = true;
             }
+        }
+
+        if state_dirty {
+            store.save(&state)?;
         }
 
         Ok(Self {
@@ -125,60 +137,60 @@ impl RadrootsNostrAccountsManager {
         Ok(guard.accounts.clone())
     }
 
-    pub fn selected_account_id(
+    pub fn default_account_id(
         &self,
     ) -> Result<Option<RadrootsIdentityId>, RadrootsNostrAccountsError> {
         let guard = self.state.read().map_err(|_| {
             RadrootsNostrAccountsError::Store("accounts state lock poisoned".into())
         })?;
-        Ok(guard.selected_account_id.clone())
+        Ok(guard.default_account_id.clone())
     }
 
-    pub fn selected_account(
+    pub fn default_account(
         &self,
     ) -> Result<Option<RadrootsNostrAccountRecord>, RadrootsNostrAccountsError> {
         let guard = self.state.read().map_err(|_| {
             RadrootsNostrAccountsError::Store("accounts state lock poisoned".into())
         })?;
-        let Some(selected) = guard.selected_account_id.as_ref() else {
+        let Some(default_account_id) = guard.default_account_id.as_ref() else {
             return Ok(None);
         };
         Ok(guard
             .accounts
             .iter()
-            .find(|record| &record.account_id == selected)
+            .find(|record| &record.account_id == default_account_id)
             .cloned())
     }
 
-    pub fn selected_public_identity(
+    pub fn default_public_identity(
         &self,
     ) -> Result<Option<RadrootsIdentityPublic>, RadrootsNostrAccountsError> {
         Ok(self
-            .selected_account()?
+            .default_account()?
             .map(|record| record.public_identity.clone()))
     }
 
-    pub fn selected_account_status(
+    pub fn default_account_status(
         &self,
-    ) -> Result<RadrootsNostrSelectedAccountStatus, RadrootsNostrAccountsError> {
-        let Some(record) = self.selected_account()? else {
-            return Ok(RadrootsNostrSelectedAccountStatus::NotConfigured);
+    ) -> Result<RadrootsNostrAccountStatus, RadrootsNostrAccountsError> {
+        let Some(record) = self.default_account()? else {
+            return Ok(RadrootsNostrAccountStatus::NotConfigured);
         };
 
         Ok(match self.local_signer_availability(&record)? {
             RadrootsNostrLocalSignerAvailability::PublicOnly => {
-                RadrootsNostrSelectedAccountStatus::PublicOnly { account: record }
+                RadrootsNostrAccountStatus::PublicOnly { account: record }
             }
             RadrootsNostrLocalSignerAvailability::SecretBacked => {
-                RadrootsNostrSelectedAccountStatus::Ready { account: record }
+                RadrootsNostrAccountStatus::Ready { account: record }
             }
         })
     }
 
-    pub fn selected_signing_identity(
+    pub fn default_signing_identity(
         &self,
     ) -> Result<Option<RadrootsIdentity>, RadrootsNostrAccountsError> {
-        let Some(record) = self.selected_account()? else {
+        let Some(record) = self.default_account()? else {
             return Ok(None);
         };
         self.resolve_signing_identity(record)
@@ -203,10 +215,10 @@ impl RadrootsNostrAccountsManager {
         self.resolve_signing_identity(record)
     }
 
-    pub fn selected_signer_capability(
+    pub fn default_signer_capability(
         &self,
     ) -> Result<Option<RadrootsNostrSignerCapability>, RadrootsNostrAccountsError> {
-        let Some(record) = self.selected_account()? else {
+        let Some(record) = self.default_account()? else {
             return Ok(None);
         };
         Ok(Some(self.local_signer_capability(record)?))
@@ -247,7 +259,7 @@ impl RadrootsNostrAccountsManager {
         &self,
         identity: &RadrootsIdentity,
         label: Option<String>,
-        make_selected: bool,
+        make_default: bool,
     ) -> Result<RadrootsIdentityId, RadrootsNostrAccountsError> {
         let account_id = identity.id();
         let secret_key_hex = Zeroizing::new(identity.secret_key_hex());
@@ -257,14 +269,14 @@ impl RadrootsNostrAccountsManager {
         )?;
 
         let public_identity = identity.to_public();
-        self.upsert_public_identity(public_identity, label, make_selected)
+        self.upsert_public_identity(public_identity, label, make_default)
     }
 
     pub fn upsert_public_identity(
         &self,
         public_identity: RadrootsIdentityPublic,
         label: Option<String>,
-        make_selected: bool,
+        make_default: bool,
     ) -> Result<RadrootsIdentityId, RadrootsNostrAccountsError> {
         let updated_at_unix = now_unix_secs();
         let account_id = public_identity.id.clone();
@@ -292,8 +304,8 @@ impl RadrootsNostrAccountsManager {
                 ));
             }
 
-            if state.selected_account_id.is_none() || make_selected {
-                state.selected_account_id = Some(account_id.clone());
+            if state.default_account_id.is_none() || make_default {
+                state.default_account_id = Some(account_id.clone());
             }
             Ok(())
         })?;
@@ -303,13 +315,13 @@ impl RadrootsNostrAccountsManager {
     pub fn generate_identity(
         &self,
         label: Option<String>,
-        make_selected: bool,
+        make_default: bool,
     ) -> Result<RadrootsIdentityId, RadrootsNostrAccountsError> {
         let identity = RadrootsIdentity::generate();
-        self.upsert_identity(&identity, label, make_selected)
+        self.upsert_identity(&identity, label, make_default)
     }
 
-    pub fn select_account(
+    pub fn set_default_account(
         &self,
         account_id: &RadrootsIdentityId,
     ) -> Result<(), RadrootsNostrAccountsError> {
@@ -324,9 +336,60 @@ impl RadrootsNostrAccountsManager {
                     account_id.to_string(),
                 ));
             }
-            state.selected_account_id = Some(account_id);
+            state.default_account_id = Some(account_id);
             Ok(())
         })
+    }
+
+    pub fn clear_default_account(&self) -> Result<(), RadrootsNostrAccountsError> {
+        self.update_state(|state| {
+            state.default_account_id = None;
+            Ok(())
+        })
+    }
+
+    pub fn resolve_account_selector(
+        &self,
+        selector: &str,
+    ) -> Result<RadrootsNostrAccountRecord, RadrootsNostrAccountsError> {
+        let normalized = selector.trim();
+        if normalized.is_empty() {
+            return Err(RadrootsNostrAccountsError::InvalidAccountSelector(
+                "account selector cannot be empty".to_owned(),
+            ));
+        }
+
+        let guard = self.state.read().map_err(|_| {
+            RadrootsNostrAccountsError::Store("accounts state lock poisoned".into())
+        })?;
+        if let Some(record) = guard
+            .accounts
+            .iter()
+            .find(|record| {
+                record.account_id.as_str() == normalized
+                    || record.public_identity.public_key_npub == normalized
+            })
+            .cloned()
+        {
+            return Ok(record);
+        }
+
+        let mut label_matches = guard
+            .accounts
+            .iter()
+            .filter(|record| record.label.as_deref() == Some(normalized))
+            .cloned();
+        let Some(record) = label_matches.next() else {
+            return Err(RadrootsNostrAccountsError::AccountNotFound(
+                normalized.to_owned(),
+            ));
+        };
+        if label_matches.next().is_some() {
+            return Err(RadrootsNostrAccountsError::AmbiguousAccountSelector(
+                normalized.to_owned(),
+            ));
+        }
+        Ok(record)
     }
 
     pub fn remove_account(
@@ -345,11 +408,8 @@ impl RadrootsNostrAccountsManager {
                 ));
             }
 
-            if state.selected_account_id.as_ref() == Some(&account_id) {
-                state.selected_account_id = state
-                    .accounts
-                    .first()
-                    .map(|record| record.account_id.clone());
+            if state.default_account_id.as_ref() == Some(&account_id) {
+                state.default_account_id = None;
             }
             Ok(())
         })?;
@@ -371,10 +431,10 @@ impl RadrootsNostrAccountsManager {
         &self,
         path: impl AsRef<Path>,
         label: Option<String>,
-        make_selected: bool,
+        make_default: bool,
     ) -> Result<RadrootsIdentityId, RadrootsNostrAccountsError> {
         let identity = RadrootsIdentity::load_from_path_auto(path)?;
-        self.upsert_identity(&identity, label, make_selected)
+        self.upsert_identity(&identity, label, make_default)
     }
 
     fn resolve_signing_identity(
@@ -497,6 +557,8 @@ mod tests {
         RadrootsHostVaultCapabilities, RadrootsSecretBackend, RadrootsSecretBackendAvailability,
         RadrootsSecretBackendSelection,
     };
+    use serde_json::json;
+    use std::fs;
     use std::sync::Arc;
     use std::sync::RwLock;
     use std::thread;
@@ -673,26 +735,24 @@ mod tests {
         .join();
     }
 
-    fn status_kind(status: &RadrootsNostrSelectedAccountStatus) -> &'static str {
+    fn status_kind(status: &RadrootsNostrAccountStatus) -> &'static str {
         match status {
-            RadrootsNostrSelectedAccountStatus::NotConfigured => "not-configured",
-            RadrootsNostrSelectedAccountStatus::PublicOnly { .. } => "public-only",
-            RadrootsNostrSelectedAccountStatus::Ready { .. } => "ready",
+            RadrootsNostrAccountStatus::NotConfigured => "not-configured",
+            RadrootsNostrAccountStatus::PublicOnly { .. } => "public-only",
+            RadrootsNostrAccountStatus::Ready { .. } => "ready",
         }
     }
 
-    fn status_account(
-        status: &RadrootsNostrSelectedAccountStatus,
-    ) -> Option<&RadrootsNostrAccountRecord> {
+    fn status_account(status: &RadrootsNostrAccountStatus) -> Option<&RadrootsNostrAccountRecord> {
         match status {
-            RadrootsNostrSelectedAccountStatus::NotConfigured => None,
-            RadrootsNostrSelectedAccountStatus::PublicOnly { account }
-            | RadrootsNostrSelectedAccountStatus::Ready { account } => Some(account),
+            RadrootsNostrAccountStatus::NotConfigured => None,
+            RadrootsNostrAccountStatus::PublicOnly { account }
+            | RadrootsNostrAccountStatus::Ready { account } => Some(account),
         }
     }
 
     #[test]
-    fn manager_persists_selection_and_restores_signing_identity() {
+    fn manager_persists_default_account_and_restores_signing_identity() {
         let temp = tempfile::tempdir().expect("tempdir");
         let store = Arc::new(RadrootsNostrFileAccountStore::new(
             temp.path().join("accounts.json"),
@@ -704,28 +764,28 @@ mod tests {
             .generate_identity(Some("primary".into()), true)
             .expect("create identity");
 
-        let selected = manager
-            .selected_account_id()
-            .expect("selected")
-            .expect("selected id");
-        assert_eq!(selected, created_id);
+        let default_account_id = manager
+            .default_account_id()
+            .expect("default")
+            .expect("default id");
+        assert_eq!(default_account_id, created_id);
 
         let manager2 = RadrootsNostrAccountsManager::new(store, vault).expect("manager2");
-        let selected2 = manager2
-            .selected_account_id()
-            .expect("selected2")
-            .expect("selected2 id");
-        assert_eq!(selected2, created_id);
+        let default_account_id_2 = manager2
+            .default_account_id()
+            .expect("default2")
+            .expect("default2 id");
+        assert_eq!(default_account_id_2, created_id);
         assert!(
             manager2
-                .selected_signing_identity()
+                .default_signing_identity()
                 .expect("signing")
                 .is_some()
         );
     }
 
     #[test]
-    fn new_file_backed_with_vault_persists_selection() {
+    fn new_file_backed_with_vault_persists_default_account() {
         let temp = tempfile::tempdir().expect("tempdir");
         let path = temp.path().join("accounts.json");
         let manager = RadrootsNostrAccountsManager::new_file_backed_with_vault(
@@ -745,10 +805,63 @@ mod tests {
         .expect("reloaded");
 
         assert_eq!(
-            reloaded.selected_account_id().expect("selected"),
+            reloaded.default_account_id().expect("default"),
             Some(account_id)
         );
         assert_eq!(reloaded.list_accounts().expect("accounts").len(), 1);
+    }
+
+    #[test]
+    fn new_migrates_legacy_store_file_to_default_account_semantics() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let path = temp.path().join("accounts.json");
+        let identity = RadrootsIdentity::generate();
+        let public_identity = identity.to_public();
+        let account_id = public_identity.id.clone();
+        let legacy_record =
+            RadrootsNostrAccountRecord::new(public_identity, Some("legacy".into()), 1);
+        fs::write(
+            &path,
+            serde_json::to_vec_pretty(&json!({
+                "version": 1,
+                "selected_account_id": account_id,
+                "accounts": [legacy_record],
+            }))
+            .expect("serialize legacy store"),
+        )
+        .expect("write legacy store");
+
+        let vault = Arc::new(RadrootsNostrSecretVaultMemory::new());
+        vault
+            .store_secret(
+                account_secret_slot(&account_id).as_str(),
+                identity.secret_key_hex().as_str(),
+            )
+            .expect("store secret");
+
+        let manager = RadrootsNostrAccountsManager::new(
+            Arc::new(RadrootsNostrFileAccountStore::new(&path)),
+            vault,
+        )
+        .expect("manager");
+
+        assert_eq!(
+            manager.default_account_id().expect("default"),
+            Some(account_id.clone())
+        );
+
+        let migrated_store: serde_json::Value =
+            serde_json::from_slice(&fs::read(&path).expect("read migrated store"))
+                .expect("parse migrated store");
+        assert_eq!(
+            migrated_store["version"],
+            serde_json::Value::from(crate::model::RADROOTS_NOSTR_ACCOUNTS_STORE_VERSION),
+        );
+        assert_eq!(
+            migrated_store["default_account_id"],
+            serde_json::Value::from(account_id.to_string()),
+        );
+        assert!(migrated_store.get("selected_account_id").is_none());
     }
 
     #[test]
@@ -817,39 +930,39 @@ mod tests {
 
         assert!(
             manager
-                .selected_signing_identity()
+                .default_signing_identity()
                 .expect("signing")
                 .is_none()
         );
         let status = manager
-            .selected_account_status()
-            .expect("selected account status");
+            .default_account_status()
+            .expect("default account status");
         assert_eq!(status_kind(&status), "public-only");
         let account = status_account(&status).expect("account");
         assert_eq!(account.label.as_deref(), Some("watch"));
     }
 
     #[test]
-    fn selected_account_status_reports_ready_for_signing_identity() {
+    fn default_account_status_reports_ready_for_signing_identity() {
         let manager = RadrootsNostrAccountsManager::new_in_memory();
-        let selected_id = manager
+        let default_account_id = manager
             .generate_identity(Some("primary".into()), true)
             .expect("generate");
 
         let status = manager
-            .selected_account_status()
-            .expect("selected account status");
+            .default_account_status()
+            .expect("default account status");
         assert_eq!(status_kind(&status), "ready");
         let account = status_account(&status).expect("account");
-        assert_eq!(account.account_id, selected_id);
+        assert_eq!(account.account_id, default_account_id);
         assert_eq!(account.label.as_deref(), Some("primary"));
 
         let signer = manager
-            .selected_signer_capability()
-            .expect("selected signer capability")
+            .default_signer_capability()
+            .expect("default signer capability")
             .expect("signer capability");
         let local = signer.local_account().expect("local signer");
-        assert_eq!(local.account_id, selected_id);
+        assert_eq!(local.account_id, default_account_id);
         assert!(local.is_secret_backed());
     }
 
@@ -872,9 +985,9 @@ mod tests {
             .expect("migrate");
         assert_eq!(
             manager
-                .selected_account_id()
-                .expect("selected")
-                .expect("selected id"),
+                .default_account_id()
+                .expect("default")
+                .expect("default id"),
             id
         );
     }
@@ -887,8 +1000,8 @@ mod tests {
             .expect("generate");
 
         let existing = manager
-            .selected_public_identity()
-            .expect("selected public")
+            .default_public_identity()
+            .expect("default public")
             .expect("public identity");
         manager
             .upsert_public_identity(existing, None, false)
@@ -917,47 +1030,47 @@ mod tests {
     }
 
     #[test]
-    fn new_clears_orphaned_selected_account() {
+    fn new_clears_orphaned_default_account() {
         let store = Arc::new(RadrootsNostrMemoryAccountStore::new());
         let vault = Arc::new(RadrootsNostrSecretVaultMemory::new());
         let mut state = RadrootsNostrAccountStoreState::default();
-        state.selected_account_id = Some(RadrootsIdentity::generate().id());
+        state.default_account_id = Some(RadrootsIdentity::generate().id());
         store.save(&state).expect("save");
 
         let manager = RadrootsNostrAccountsManager::new(store, vault).expect("manager");
-        assert!(manager.selected_account_id().expect("selected").is_none());
+        assert!(manager.default_account_id().expect("default").is_none());
     }
 
     #[test]
-    fn selected_methods_return_none_when_state_is_empty() {
+    fn default_methods_return_none_when_state_is_empty() {
         let manager = RadrootsNostrAccountsManager::new_in_memory();
         assert!(
             manager
-                .selected_account()
-                .expect("selected account")
+                .default_account()
+                .expect("default account")
                 .is_none()
         );
         assert!(
             manager
-                .selected_public_identity()
-                .expect("selected public")
+                .default_public_identity()
+                .expect("default public")
                 .is_none()
         );
         assert!(
             manager
-                .selected_signing_identity()
-                .expect("selected signing")
+                .default_signing_identity()
+                .expect("default signing")
                 .is_none()
         );
         assert!(
             manager
-                .selected_signer_capability()
-                .expect("selected signer capability")
+                .default_signer_capability()
+                .expect("default signer capability")
                 .is_none()
         );
         let status = manager
-            .selected_account_status()
-            .expect("selected account status");
+            .default_account_status()
+            .expect("default account status");
         assert_eq!(status_kind(&status), "not-configured");
         assert!(status_account(&status).is_none());
 
@@ -977,7 +1090,7 @@ mod tests {
     }
 
     #[test]
-    fn selected_account_status_propagates_secret_integrity_errors() {
+    fn default_account_status_propagates_secret_integrity_errors() {
         let manager = RadrootsNostrAccountsManager::new_in_memory();
         let account_id = manager
             .generate_identity(Some("primary".into()), true)
@@ -988,8 +1101,8 @@ mod tests {
             .expect("remove secret");
 
         let status = manager
-            .selected_account_status()
-            .expect("selected account status");
+            .default_account_status()
+            .expect("default account status");
         assert_eq!(status_kind(&status), "public-only");
         let account = status_account(&status).expect("account");
         assert_eq!(account.account_id, account_id);
@@ -1004,19 +1117,19 @@ mod tests {
             .expect("store wrong secret");
 
         let err = manager
-            .selected_account_status()
+            .default_account_status()
             .expect_err("public key mismatch");
         assert_eq!(err.to_string(), "public key does not match secret key");
     }
 
     #[test]
-    fn selected_account_status_propagates_store_vault_and_secret_parse_errors() {
+    fn default_account_status_propagates_store_vault_and_secret_parse_errors() {
         let poisoned_manager = RadrootsNostrAccountsManager::new_in_memory();
         poison_manager_state(&poisoned_manager);
-        let selected_err = poisoned_manager
-            .selected_account_status()
-            .expect_err("selected status poisoned");
-        assert!(selected_err.to_string().starts_with("store error:"));
+        let default_err = poisoned_manager
+            .default_account_status()
+            .expect_err("default status poisoned");
+        assert!(default_err.to_string().starts_with("store error:"));
 
         let mut load_error_state = RadrootsNostrAccountStoreState::default();
         let load_error_public = RadrootsIdentity::generate().to_public();
@@ -1027,7 +1140,7 @@ mod tests {
                 Some("watch".into()),
                 1,
             ));
-        load_error_state.selected_account_id = Some(load_error_public.id.clone());
+        load_error_state.default_account_id = Some(load_error_public.id.clone());
         let load_error_store = Arc::new(RadrootsNostrMemoryAccountStore::new());
         load_error_store
             .save(&load_error_state)
@@ -1036,7 +1149,7 @@ mod tests {
             RadrootsNostrAccountsManager::new(load_error_store, Arc::new(VaultLoadError))
                 .expect("manager");
         let vault_load_error = vault_load_error_manager
-            .selected_account_status()
+            .default_account_status()
             .expect_err("vault load error");
         assert!(vault_load_error.to_string().starts_with("vault error:"));
 
@@ -1049,7 +1162,7 @@ mod tests {
                 Some("invalid".into()),
                 1,
             ));
-        invalid_secret_state.selected_account_id = Some(invalid_secret_public.id.clone());
+        invalid_secret_state.default_account_id = Some(invalid_secret_public.id.clone());
         let invalid_secret_store = Arc::new(RadrootsNostrMemoryAccountStore::new());
         invalid_secret_store
             .save(&invalid_secret_state)
@@ -1058,7 +1171,7 @@ mod tests {
             RadrootsNostrAccountsManager::new(invalid_secret_store, Arc::new(VaultInvalidSecret))
                 .expect("manager");
         let invalid_secret = invalid_secret_manager
-            .selected_account_status()
+            .default_account_status()
             .expect_err("invalid secret");
         assert!(invalid_secret.to_string().starts_with("identity error:"));
     }
@@ -1074,7 +1187,7 @@ mod tests {
                 Some("invalid".into()),
                 1,
             ));
-        invalid_secret_state.selected_account_id = Some(invalid_secret_public.id.clone());
+        invalid_secret_state.default_account_id = Some(invalid_secret_public.id.clone());
         let invalid_secret_store = Arc::new(RadrootsNostrMemoryAccountStore::new());
         invalid_secret_store
             .save(&invalid_secret_state)
@@ -1083,11 +1196,11 @@ mod tests {
             RadrootsNostrAccountsManager::new(invalid_secret_store, Arc::new(VaultInvalidSecret))
                 .expect("manager");
 
-        let selected_signer_error = invalid_secret_manager
-            .selected_signer_capability()
-            .expect_err("selected signer invalid secret");
+        let default_signer_error = invalid_secret_manager
+            .default_signer_capability()
+            .expect_err("default signer invalid secret");
         assert!(
-            selected_signer_error
+            default_signer_error
                 .to_string()
                 .starts_with("identity error:")
         );
@@ -1108,9 +1221,11 @@ mod tests {
             .generate_identity(Some("second".into()), false)
             .expect("second");
 
-        manager.select_account(&second_id).expect("select second");
+        manager
+            .set_default_account(&second_id)
+            .expect("set default second");
         assert_eq!(
-            manager.selected_account_id().expect("selected"),
+            manager.default_account_id().expect("default"),
             Some(second_id.clone())
         );
         assert!(
@@ -1127,21 +1242,28 @@ mod tests {
         );
 
         manager.remove_account(&second_id).expect("remove second");
-        assert_eq!(
-            manager.selected_account_id().expect("selected"),
-            Some(first_id)
-        );
+        assert_eq!(manager.default_account_id().expect("default"), None);
         assert!(
             manager
                 .export_secret_hex(&second_id)
                 .expect("export after remove")
                 .is_none()
         );
+        assert!(
+            manager
+                .get_signing_identity(&first_id)
+                .expect("first signing")
+                .is_some()
+        );
 
-        let select_missing = manager
-            .select_account(&second_id)
-            .expect_err("missing select");
-        assert!(select_missing.to_string().contains("account not found"));
+        let set_default_missing = manager
+            .set_default_account(&second_id)
+            .expect_err("missing default");
+        assert!(
+            set_default_missing
+                .to_string()
+                .contains("account not found")
+        );
         let remove_missing = manager
             .remove_account(&second_id)
             .expect_err("missing remove");
@@ -1149,15 +1271,15 @@ mod tests {
     }
 
     #[test]
-    fn upsert_public_identity_updates_label_and_respects_selection_flag() {
+    fn upsert_public_identity_updates_label_and_respects_default_flag() {
         let manager = RadrootsNostrAccountsManager::new_in_memory();
-        manager
+        let original_default = manager
             .generate_identity(Some("primary".into()), true)
             .expect("generate");
 
         let existing = manager
-            .selected_public_identity()
-            .expect("selected public")
+            .default_public_identity()
+            .expect("default public")
             .expect("public");
         manager
             .upsert_public_identity(existing.clone(), Some("renamed".into()), false)
@@ -1173,12 +1295,19 @@ mod tests {
 
         let watch_only = RadrootsIdentity::generate().to_public();
         let watch_id = watch_only.id.clone();
-        let make_selected = manager.selected_account_id().expect("selected").is_some();
         manager
-            .upsert_public_identity(watch_only, Some("watch".into()), make_selected)
+            .upsert_public_identity(watch_only.clone(), Some("watch".into()), false)
             .expect("upsert watch");
         assert_eq!(
-            manager.selected_account_id().expect("selected"),
+            manager.default_account_id().expect("default"),
+            Some(original_default.clone())
+        );
+
+        manager
+            .upsert_public_identity(watch_only, Some("watch".into()), true)
+            .expect("replace default");
+        assert_eq!(
+            manager.default_account_id().expect("default"),
             Some(watch_id)
         );
     }
@@ -1197,20 +1326,91 @@ mod tests {
     }
 
     #[test]
-    fn remove_non_selected_account_keeps_current_selection() {
+    fn remove_non_default_account_keeps_current_default() {
         let manager = RadrootsNostrAccountsManager::new_in_memory();
-        let selected_id = manager
+        let default_account_id = manager
             .generate_identity(Some("selected".into()), true)
-            .expect("selected");
+            .expect("default");
         let removable_id = manager
             .generate_identity(Some("removable".into()), false)
             .expect("removable");
 
         manager.remove_account(&removable_id).expect("remove");
         assert_eq!(
-            manager.selected_account_id().expect("selected"),
-            Some(selected_id)
+            manager.default_account_id().expect("default"),
+            Some(default_account_id)
         );
+    }
+
+    #[test]
+    fn clear_default_account_clears_default_without_removing_accounts() {
+        let manager = RadrootsNostrAccountsManager::new_in_memory();
+        manager
+            .generate_identity(Some("primary".into()), true)
+            .expect("primary");
+        manager
+            .generate_identity(Some("secondary".into()), false)
+            .expect("secondary");
+
+        manager.clear_default_account().expect("clear default");
+
+        assert!(manager.default_account_id().expect("default").is_none());
+        assert_eq!(manager.list_accounts().expect("accounts").len(), 2);
+    }
+
+    #[test]
+    fn resolve_account_selector_matches_exact_id_npub_and_unique_label() {
+        let manager = RadrootsNostrAccountsManager::new_in_memory();
+        let account_id = manager
+            .generate_identity(Some("primary".into()), true)
+            .expect("primary");
+        let default_account = manager
+            .default_account()
+            .expect("default account")
+            .expect("default record");
+        let npub = default_account.public_identity.public_key_npub.clone();
+
+        let resolved_by_id = manager
+            .resolve_account_selector(account_id.as_str())
+            .expect("resolve by id");
+        assert_eq!(resolved_by_id.account_id, account_id);
+
+        let resolved_by_npub = manager
+            .resolve_account_selector(&npub)
+            .expect("resolve by npub");
+        assert_eq!(resolved_by_npub.account_id, account_id);
+
+        let resolved_by_label = manager
+            .resolve_account_selector("primary")
+            .expect("resolve by label");
+        assert_eq!(resolved_by_label.account_id, account_id);
+    }
+
+    #[test]
+    fn resolve_account_selector_rejects_empty_and_ambiguous_labels() {
+        let manager = RadrootsNostrAccountsManager::new_in_memory();
+        manager
+            .generate_identity(Some("shared".into()), true)
+            .expect("first");
+        manager
+            .generate_identity(Some("shared".into()), false)
+            .expect("second");
+
+        let empty = manager
+            .resolve_account_selector("   ")
+            .expect_err("empty selector");
+        assert!(matches!(
+            empty,
+            RadrootsNostrAccountsError::InvalidAccountSelector(_)
+        ));
+
+        let ambiguous = manager
+            .resolve_account_selector("shared")
+            .expect_err("ambiguous selector");
+        assert!(matches!(
+            ambiguous,
+            RadrootsNostrAccountsError::AmbiguousAccountSelector(_)
+        ));
     }
 
     #[test]
@@ -1260,7 +1460,7 @@ mod tests {
             .expect("vault store");
 
         let mismatch = manager
-            .selected_signing_identity()
+            .default_signing_identity()
             .expect_err("public key mismatch");
         assert!(
             mismatch
@@ -1358,7 +1558,7 @@ mod tests {
                 Some("watch".into()),
                 1,
             ));
-        load_error_state.selected_account_id = Some(load_error_public.id.clone());
+        load_error_state.default_account_id = Some(load_error_public.id.clone());
         let load_error_store = Arc::new(RadrootsNostrMemoryAccountStore::new());
         load_error_store
             .save(&load_error_state)
@@ -1367,7 +1567,7 @@ mod tests {
             RadrootsNostrAccountsManager::new(load_error_store, Arc::new(VaultLoadError))
                 .expect("manager");
         let vault_load_error = vault_load_error_manager
-            .selected_signing_identity()
+            .default_signing_identity()
             .expect_err("vault load error");
         assert!(vault_load_error.to_string().starts_with("vault error:"));
 
@@ -1380,7 +1580,7 @@ mod tests {
                 Some("invalid".into()),
                 1,
             ));
-        invalid_secret_state.selected_account_id = Some(invalid_secret_public.id.clone());
+        invalid_secret_state.default_account_id = Some(invalid_secret_public.id.clone());
         let invalid_secret_store = Arc::new(RadrootsNostrMemoryAccountStore::new());
         invalid_secret_store
             .save(&invalid_secret_state)
@@ -1389,7 +1589,7 @@ mod tests {
             RadrootsNostrAccountsManager::new(invalid_secret_store, Arc::new(VaultInvalidSecret))
                 .expect("manager");
         let invalid_secret = invalid_secret_manager
-            .selected_signing_identity()
+            .default_signing_identity()
             .expect_err("invalid secret");
         assert!(invalid_secret.to_string().starts_with("identity error:"));
     }
@@ -1412,24 +1612,24 @@ mod tests {
 
         let list_err = manager.list_accounts().expect_err("list poisoned");
         assert!(list_err.to_string().starts_with("store error:"));
-        let selected_id_err = manager
-            .selected_account_id()
-            .expect_err("selected id poisoned");
-        assert!(selected_id_err.to_string().starts_with("store error:"));
-        let selected_err = manager.selected_account().expect_err("selected poisoned");
-        assert!(selected_err.to_string().starts_with("store error:"));
-        let selected_public_err = manager
-            .selected_public_identity()
-            .expect_err("selected public poisoned");
-        assert!(selected_public_err.to_string().starts_with("store error:"));
-        let selected_signing_err = manager
-            .selected_signing_identity()
-            .expect_err("selected signing poisoned");
-        assert!(selected_signing_err.to_string().starts_with("store error:"));
-        let selected_signer_err = manager
-            .selected_signer_capability()
-            .expect_err("selected signer poisoned");
-        assert!(selected_signer_err.to_string().starts_with("store error:"));
+        let default_id_err = manager
+            .default_account_id()
+            .expect_err("default id poisoned");
+        assert!(default_id_err.to_string().starts_with("store error:"));
+        let default_err = manager.default_account().expect_err("default poisoned");
+        assert!(default_err.to_string().starts_with("store error:"));
+        let default_public_err = manager
+            .default_public_identity()
+            .expect_err("default public poisoned");
+        assert!(default_public_err.to_string().starts_with("store error:"));
+        let default_signing_err = manager
+            .default_signing_identity()
+            .expect_err("default signing poisoned");
+        assert!(default_signing_err.to_string().starts_with("store error:"));
+        let default_signer_err = manager
+            .default_signer_capability()
+            .expect_err("default signer poisoned");
+        assert!(default_signer_err.to_string().starts_with("store error:"));
 
         let account_id = RadrootsIdentity::generate().id();
         let signing_err = manager
@@ -1440,10 +1640,10 @@ mod tests {
             .get_signer_capability(&account_id)
             .expect_err("signer poisoned");
         assert!(signer_err.to_string().starts_with("store error:"));
-        let select_err = manager
-            .select_account(&account_id)
-            .expect_err("select poisoned");
-        assert!(select_err.to_string().starts_with("store error:"));
+        let set_default_err = manager
+            .set_default_account(&account_id)
+            .expect_err("default poisoned");
+        assert!(set_default_err.to_string().starts_with("store error:"));
         let remove_err = manager
             .remove_account(&account_id)
             .expect_err("remove poisoned");

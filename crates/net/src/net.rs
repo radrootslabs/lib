@@ -141,7 +141,7 @@ impl Net {
     pub fn selected_nostr_signer(&self) -> Option<RadrootsNostrSignerCapability> {
         self.signer
             .clone()
-            .or_else(|| self.accounts.selected_signer_capability().ok().flatten())
+            .or_else(|| self.accounts.default_signer_capability().ok().flatten())
     }
 
     #[cfg(feature = "nostr-client")]

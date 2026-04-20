@@ -20,6 +20,12 @@ pub enum RadrootsNostrAccountsError {
     #[error("invalid account state: {0}")]
     InvalidState(String),
 
+    #[error("invalid account selector: {0}")]
+    InvalidAccountSelector(String),
+
+    #[error("account selector is ambiguous: {0}")]
+    AmbiguousAccountSelector(String),
+
     #[error("public key does not match secret key")]
     PublicKeyMismatch,
 }

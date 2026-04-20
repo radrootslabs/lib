@@ -1,7 +1,7 @@
 use radroots_identity::{RadrootsIdentityId, RadrootsIdentityPublic};
 use serde::{Deserialize, Serialize};
 
-pub const RADROOTS_NOSTR_ACCOUNTS_STORE_VERSION: u32 = 1;
+pub const RADROOTS_NOSTR_ACCOUNTS_STORE_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RadrootsNostrAccountRecord {
@@ -16,12 +16,13 @@ pub struct RadrootsNostrAccountRecord {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RadrootsNostrAccountStoreState {
     pub version: u32,
-    pub selected_account_id: Option<RadrootsIdentityId>,
+    #[serde(alias = "selected_account_id")]
+    pub default_account_id: Option<RadrootsIdentityId>,
     pub accounts: Vec<RadrootsNostrAccountRecord>,
 }
 
 #[derive(Debug, Clone)]
-pub enum RadrootsNostrSelectedAccountStatus {
+pub enum RadrootsNostrAccountStatus {
     NotConfigured,
     PublicOnly { account: RadrootsNostrAccountRecord },
     Ready { account: RadrootsNostrAccountRecord },
@@ -31,7 +32,7 @@ impl Default for RadrootsNostrAccountStoreState {
     fn default() -> Self {
         Self {
             version: RADROOTS_NOSTR_ACCOUNTS_STORE_VERSION,
-            selected_account_id: None,
+            default_account_id: None,
             accounts: Vec::new(),
         }
     }

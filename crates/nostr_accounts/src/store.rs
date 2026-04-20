@@ -183,7 +183,7 @@ mod tests {
 
         let loaded = store.load().expect("load");
         assert_eq!(loaded.version, state.version);
-        assert_eq!(loaded.selected_account_id, state.selected_account_id);
+        assert_eq!(loaded.default_account_id, state.default_account_id);
     }
 
     #[test]

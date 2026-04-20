@@ -2,11 +2,11 @@ use crate::error::RadrootsNostrAccountsError;
 use crate::manager::RadrootsNostrAccountsManager;
 use radroots_nostr_ndb::prelude::RadrootsNostrNdb;
 
-pub fn radroots_nostr_accounts_register_selected_secret_with_ndb(
+pub fn radroots_nostr_accounts_register_default_secret_with_ndb(
     manager: &RadrootsNostrAccountsManager,
     ndb: &RadrootsNostrNdb,
 ) -> Result<bool, RadrootsNostrAccountsError> {
-    let Some(signer) = manager.selected_signer_capability()? else {
+    let Some(signer) = manager.default_signer_capability()? else {
         return Ok(false);
     };
     let Some(identity) = manager.resolve_signing_identity_for_signer(&signer)? else {
@@ -24,7 +24,7 @@ mod tests {
     use std::sync::Arc;
 
     #[test]
-    fn register_selected_secret_returns_true_for_signing_account() {
+    fn register_default_secret_returns_true_for_signing_account() {
         let temp = tempfile::tempdir().expect("tempdir");
         let store = Arc::new(RadrootsNostrFileAccountStore::new(
             temp.path().join("accounts.json"),
@@ -37,13 +37,13 @@ mod tests {
 
         let ndb = RadrootsNostrNdb::open(RadrootsNostrNdbConfig::new(temp.path().join("ndb")))
             .expect("ndb");
-        let added = radroots_nostr_accounts_register_selected_secret_with_ndb(&manager, &ndb)
+        let added = radroots_nostr_accounts_register_default_secret_with_ndb(&manager, &ndb)
             .expect("register");
         assert!(added);
     }
 
     #[test]
-    fn register_selected_secret_returns_false_for_watch_only_account() {
+    fn register_default_secret_returns_false_for_watch_only_account() {
         let temp = tempfile::tempdir().expect("tempdir");
         let store = Arc::new(RadrootsNostrFileAccountStore::new(
             temp.path().join("accounts.json"),
@@ -60,7 +60,7 @@ mod tests {
 
         let ndb = RadrootsNostrNdb::open(RadrootsNostrNdbConfig::new(temp.path().join("ndb")))
             .expect("ndb");
-        let added = radroots_nostr_accounts_register_selected_secret_with_ndb(&manager, &ndb)
+        let added = radroots_nostr_accounts_register_default_secret_with_ndb(&manager, &ndb)
             .expect("register");
         assert!(!added);
     }

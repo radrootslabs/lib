@@ -20,10 +20,10 @@ pub mod prelude {
     #[cfg(feature = "std")]
     pub use crate::model::{
         RADROOTS_NOSTR_ACCOUNTS_STORE_VERSION, RadrootsNostrAccountRecord,
-        RadrootsNostrAccountStoreState, RadrootsNostrSelectedAccountStatus,
+        RadrootsNostrAccountStatus, RadrootsNostrAccountStoreState,
     };
     #[cfg(feature = "ndb-bridge")]
-    pub use crate::ndb_bridge::radroots_nostr_accounts_register_selected_secret_with_ndb;
+    pub use crate::ndb_bridge::radroots_nostr_accounts_register_default_secret_with_ndb;
     #[cfg(feature = "std")]
     pub use crate::store::{
         RadrootsNostrAccountStore, RadrootsNostrFileAccountStore, RadrootsNostrMemoryAccountStore,
