@@ -27,7 +27,9 @@ pub fn parse_listing_event(
 #[cfg(test)]
 mod tests {
     use super::parse_listing_event;
-    use radroots_events::{RadrootsNostrEvent, kinds::KIND_PROFILE, trade::RadrootsTradeListingParseError};
+    use radroots_events::{
+        RadrootsNostrEvent, kinds::KIND_PROFILE, trade::RadrootsTradeListingParseError,
+    };
 
     #[test]
     fn parse_listing_event_rejects_non_listing_kind() {
