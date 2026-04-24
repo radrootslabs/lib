@@ -147,11 +147,11 @@ Required Rust crates are gated at `100/100/100/100` (exec lines, functions, bran
 ## Release Policy
 
 Release crate classification and publish order are defined in the owning monorepo at
-`contracts/release/mounted_rust_crates/publish-policy.toml`.
+`foundation/contracts/release_runtime/mounted_rust_crates/publish-policy.toml`.
 Operator workflow is root-owned and documented in:
 
-- `contracts/release/mounted_rust_crates/runbook.md`
-- `contracts/release/mounted_rust_crates/checklist.md`
+- `docs/operations/runbooks/mounted-rust-crate-release.md`
+- `docs/operations/runbooks/mounted-rust-crate-release-checklist.md`
 
 Primary commands:
 
