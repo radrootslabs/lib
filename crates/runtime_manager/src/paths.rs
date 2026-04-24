@@ -171,7 +171,7 @@ mod tests {
     const CONTRACT: &str = r#"
 schema = "radroots-runtime-management"
 schema_version = 1
-owner_doc = "docs/migration/radroots-modular-runtime-management-bootstrap-rcl.md"
+owner_doc = "docs/execution/rcl/radroots-modular-runtime-management-bootstrap-rcl.md"
 runtime_registry = "registry.toml"
 distribution_contract = "distribution.toml"
 capabilities_contract = "capabilities.toml"

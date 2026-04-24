@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use crate::coverage::{CoveragePolicyFile, CoverageThresholds, read_coverage_policy};
+use crate::coverage::{read_coverage_policy, CoveragePolicyFile, CoverageThresholds};
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -14,9 +14,8 @@ const CONFORMANCE_ROOT_RELATIVE: &str = "spec/conformance";
 const CONFORMANCE_SCHEMA_RELATIVE: &str = "spec/conformance/schema/vector.schema.json";
 const RELEASE_POLICY_ENV: &str = "RADROOTS_MOUNTED_RUST_CRATE_PUBLISH_POLICY";
 const EVENT_BOUNDARY_MATRIX_ENV: &str = "RADROOTS_EVENT_BOUNDARY_MATRIX";
-const EVENT_BOUNDARY_MATRIX_RELATIVES: [&str; 2] = [
-    "dev/docs/radroots/radrootsd/spec-coverage.md",
-    "docs/radroots/radrootsd/spec-coverage.md",
+const EVENT_BOUNDARY_MATRIX_RELATIVES: [&str; 1] = [
+    "docs/platform/canonical/open_source/radroots_v1_spec/02_public_contract_and_runtime/08_event_boundary_matrix.md",
 ];
 
 #[derive(Debug, Deserialize)]

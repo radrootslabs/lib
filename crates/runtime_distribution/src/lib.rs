@@ -10,8 +10,8 @@ pub use model::{
     RadrootsRuntimeDistributionContract, RuntimeDistributionEntry, TargetSet, TargetSpec,
 };
 pub use resolve::{
-    RUNTIME_DISTRIBUTION_SCHEMA, RadrootsRuntimeDistributionResolver, ResolvedRuntimeArtifact,
-    RuntimeArtifactRequest,
+    RadrootsRuntimeDistributionResolver, ResolvedRuntimeArtifact, RuntimeArtifactRequest,
+    RUNTIME_DISTRIBUTION_SCHEMA,
 };
 
 #[cfg(test)]
@@ -19,14 +19,14 @@ mod tests {
     use toml::Value;
 
     use super::{
-        RUNTIME_DISTRIBUTION_SCHEMA, RadrootsRuntimeDistributionError,
-        RadrootsRuntimeDistributionResolver, RuntimeArtifactRequest,
+        RadrootsRuntimeDistributionError, RadrootsRuntimeDistributionResolver,
+        RuntimeArtifactRequest, RUNTIME_DISTRIBUTION_SCHEMA,
     };
 
     const CONTRACT: &str = r#"
 schema = "radroots-runtime-distribution"
 schema_version = 1
-owner_doc = "docs/migration/radroots-modular-runtime-management-bootstrap-rcl.md"
+owner_doc = "docs/execution/rcl/radroots-modular-runtime-management-bootstrap-rcl.md"
 runtime_registry = "registry.toml"
 
 [family]
@@ -158,8 +158,8 @@ human_installable = true
 id = "community-app-desktop"
 distribution_state = "defined"
 release_unit = "community-app-desktop"
-package_name = "radroots-app-desktop"
-binary_name = "radroots-app-desktop"
+package_name = "radroots_studio_app"
+binary_name = "radroots_studio_app"
 artifact_adapter = "desktop_bundle"
 target_set = "desktop_default"
 default_channel = "stable"
@@ -169,7 +169,7 @@ human_installable = true
 id = "community-app-ios"
 distribution_state = "external_platform_managed"
 release_unit = "community-app-ios"
-package_name = "radroots-app-ios"
+package_name = "radroots_studio_app_ios"
 artifact_adapter = "mobile_store_package"
 default_channel = "stable"
 human_installable = false
@@ -301,7 +301,7 @@ human_installable = false
             .expect("resolve desktop artifact");
 
         assert_eq!(artifact.target_id, "aarch64-apple-darwin");
-        assert_eq!(artifact.package_name, "radroots-app-desktop");
+        assert_eq!(artifact.package_name, "radroots_studio_app");
     }
 
     #[test]
