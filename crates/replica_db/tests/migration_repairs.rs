@@ -12,6 +12,7 @@ fn create_legacy_schema_without_secondary_indexes(exec: &SqliteExecutor) {
         "CREATE TABLE __migrations (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, applied_at TEXT NOT NULL DEFAULT (datetime('now')))",
         "CREATE TABLE farm (id CHAR(36) PRIMARY KEY NOT NULL UNIQUE CHECK(length(id) = 36), created_at DATETIME NOT NULL CHECK(length(created_at) = 24), updated_at DATETIME NOT NULL CHECK(length(updated_at) = 24), d_tag TEXT NOT NULL, pubkey TEXT NOT NULL, name TEXT NOT NULL, about TEXT, website TEXT, picture TEXT, banner TEXT, location_primary TEXT, location_city TEXT, location_region TEXT, location_country TEXT)",
         "CREATE TABLE gcs_location (id CHAR(36) PRIMARY KEY NOT NULL UNIQUE CHECK(length(id) = 36), created_at DATETIME NOT NULL CHECK(length(created_at) = 24), updated_at DATETIME NOT NULL CHECK(length(updated_at) = 24), d_tag TEXT NOT NULL, lat REAL NOT NULL, lng REAL NOT NULL, geohash TEXT NOT NULL, point TEXT NOT NULL, polygon TEXT NOT NULL, accuracy REAL, altitude REAL, tag_0 TEXT, label TEXT, area REAL, elevation INTEGER, soil TEXT, climate TEXT, gc_id TEXT, gc_name TEXT, gc_admin1_id TEXT, gc_admin1_name TEXT, gc_country_id TEXT, gc_country_name TEXT)",
+        "CREATE TABLE trade_product (id CHAR(36) PRIMARY KEY NOT NULL UNIQUE CHECK(length(id) = 36), created_at DATETIME NOT NULL CHECK(length(created_at) = 24), updated_at DATETIME NOT NULL CHECK(length(updated_at) = 24), key TEXT NOT NULL, category TEXT NOT NULL, title TEXT NOT NULL, summary TEXT NOT NULL, process TEXT NOT NULL, lot TEXT NOT NULL, profile TEXT NOT NULL, year INTEGER NOT NULL, qty_amt INTEGER NOT NULL, qty_unit CHAR(4) NOT NULL, qty_label TEXT, qty_avail INTEGER, price_amt REAL NOT NULL, price_currency CHAR(3) NOT NULL, price_qty_amt INTEGER NOT NULL, price_qty_unit CHAR(4) NOT NULL, notes TEXT)",
         "CREATE TABLE plot (id CHAR(36) PRIMARY KEY NOT NULL UNIQUE CHECK(length(id) = 36), created_at DATETIME NOT NULL CHECK(length(created_at) = 24), updated_at DATETIME NOT NULL CHECK(length(updated_at) = 24), d_tag TEXT NOT NULL, farm_id CHAR(36) NOT NULL, name TEXT NOT NULL, about TEXT, location_primary TEXT, location_city TEXT, location_region TEXT, location_country TEXT, FOREIGN KEY (farm_id) REFERENCES farm(id) ON DELETE CASCADE)",
         "CREATE TABLE nostr_event_state (id CHAR(36) PRIMARY KEY NOT NULL UNIQUE CHECK(length(id) = 36), created_at DATETIME NOT NULL CHECK(length(created_at) = 24), updated_at DATETIME NOT NULL CHECK(length(updated_at) = 24), key TEXT NOT NULL UNIQUE, kind INTEGER NOT NULL, pubkey CHAR(64) NOT NULL CHECK(length(pubkey) = 64), d_tag TEXT NOT NULL, last_event_id CHAR(64) NOT NULL CHECK(length(last_event_id) = 64), last_created_at INTEGER NOT NULL, content_hash TEXT NOT NULL)",
     ];
@@ -83,4 +84,11 @@ fn run_all_up_repairs_missing_indexes_in_legacy_sqlite_dbs() {
             "plot_farm_d_tag_idx".to_string(),
         ]
     );
+
+    let trade_product_columns = query_rows(&exec, "PRAGMA table_info(trade_product)");
+    assert!(trade_product_columns.iter().any(|row| {
+        row.get("name")
+            .and_then(Value::as_str)
+            .is_some_and(|name| name == "listing_addr")
+    }));
 }

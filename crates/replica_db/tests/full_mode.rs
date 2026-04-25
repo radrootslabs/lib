@@ -118,6 +118,7 @@ fn full_mode_shaped_query_helpers_cover_cli_reads() {
         .gcs_location_create(&gcs_location)
         .expect("gcs create")
         .result;
+    let listing_addr = format!("30402:{}:listing-a", hex64('d'));
 
     let trade_product: ITradeProductCreate = parse_json(json!({
         "key": "product-a",
@@ -136,6 +137,7 @@ fn full_mode_shaped_query_helpers_cover_cli_reads() {
         "price_currency": "USD",
         "price_qty_amt": 1,
         "price_qty_unit": "kg",
+        "listing_addr": listing_addr.clone(),
         "notes": "fresh coffee"
     }));
     let trade_product_created = db
@@ -167,6 +169,7 @@ fn full_mode_shaped_query_helpers_cover_cli_reads() {
         .expect("trade product search");
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].key, "product-a");
+    assert_eq!(rows[0].listing_addr.as_deref(), Some(listing_addr.as_str()));
     assert_eq!(rows[0].location_primary.as_deref(), Some("stockholm"));
 
     let lookup_rows = db
@@ -174,6 +177,10 @@ fn full_mode_shaped_query_helpers_cover_cli_reads() {
         .expect("trade product lookup");
     assert_eq!(lookup_rows.len(), 1);
     assert_eq!(lookup_rows[0].id, trade_product_created.id);
+    assert_eq!(
+        lookup_rows[0].listing_addr.as_deref(),
+        Some(listing_addr.as_str())
+    );
 
     assert_eq!(
         db.trade_product_search(&[]).expect("empty search"),
@@ -1120,13 +1127,12 @@ fn full_mode_crud_and_relation_paths() {
 
     let trade_product_find_many: ITradeProductFindMany =
         parse_json(json!({ "filter": { "id": trade_product_created.id } }));
-    assert_eq!(
-        db.trade_product_find_many(&trade_product_find_many)
-            .expect("trade product find many")
-            .results
-            .len(),
-        1
-    );
+    let trade_product_results = db
+        .trade_product_find_many(&trade_product_find_many)
+        .expect("trade product find many")
+        .results;
+    assert_eq!(trade_product_results.len(), 1);
+    assert_eq!(trade_product_results[0].listing_addr, None);
     let trade_product_find_one: ITradeProductFindOne =
         parse_json(json!({ "on": { "id": trade_product_created.id } }));
     assert!(
