@@ -286,7 +286,7 @@ impl SdkRadrootsdSignerSessionRef {
         }
     }
 
-    pub(crate) fn session_id(&self) -> &str {
+    pub fn session_id(&self) -> &str {
         self.session_id.as_str()
     }
 }
