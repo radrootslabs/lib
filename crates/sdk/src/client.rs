@@ -498,6 +498,12 @@ pub struct SdkRadrootsdSignerSessionAuthorizeResult {
 
 #[cfg(feature = "radrootsd-client")]
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SdkRadrootsdSignerSessionPublicKeyResult {
+    pub pubkey: String,
+}
+
+#[cfg(feature = "radrootsd-client")]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SdkRadrootsdSignerSessionRequireAuthResult {
     pub required: bool,
 }
@@ -541,6 +547,17 @@ impl From<radrootsd::SdkRadrootsdSignerSessionAuthorizeResponse>
         Self {
             authorized: value.authorized,
             replayed: value.replayed,
+        }
+    }
+}
+
+#[cfg(feature = "radrootsd-client")]
+impl From<radrootsd::SdkRadrootsdSignerSessionPublicKeyResponse>
+    for SdkRadrootsdSignerSessionPublicKeyResult
+{
+    fn from(value: radrootsd::SdkRadrootsdSignerSessionPublicKeyResponse) -> Self {
+        Self {
+            pubkey: value.pubkey,
         }
     }
 }
@@ -1332,6 +1349,29 @@ impl RadrootsSdkClient {
     }
 
     #[cfg(feature = "radrootsd-client")]
+    async fn get_radrootsd_signer_session_public_key(
+        &self,
+        session: &SdkRadrootsdSignerSessionRef,
+    ) -> Result<SdkRadrootsdSignerSessionPublicKeyResult, SdkRadrootsdSessionError> {
+        if self.transport() != SdkTransportMode::Radrootsd {
+            return Err(SdkRadrootsdSessionError::UnsupportedTransport {
+                transport: self.transport(),
+                operation: "radrootsd.signer_sessions.get_public_key",
+            });
+        }
+
+        let response = radrootsd::get_signer_session_public_key(
+            self.require_radrootsd_endpoint("radrootsd.signer_sessions.get_public_key")?,
+            &self.config.radrootsd.auth,
+            session.session_id(),
+            Duration::from_millis(self.config.network.timeout_ms),
+        )
+        .await
+        .map_err(|err| SdkRadrootsdSessionError::Radrootsd(err.to_string()))?;
+        Ok(response.into())
+    }
+
+    #[cfg(feature = "radrootsd-client")]
     async fn require_radrootsd_signer_session_auth(
         &self,
         session: &SdkRadrootsdSignerSessionRef,
@@ -1750,6 +1790,15 @@ impl<'a> RadrootsdSignerSessionClient<'a> {
     ) -> Result<SdkRadrootsdSignerSessionAuthorizeResult, SdkRadrootsdSessionError> {
         self.client
             .authorize_radrootsd_signer_session(session)
+            .await
+    }
+
+    pub async fn get_public_key(
+        &self,
+        session: &SdkRadrootsdSignerSessionRef,
+    ) -> Result<SdkRadrootsdSignerSessionPublicKeyResult, SdkRadrootsdSessionError> {
+        self.client
+            .get_radrootsd_signer_session_public_key(session)
             .await
     }
 

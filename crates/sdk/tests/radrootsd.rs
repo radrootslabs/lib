@@ -971,6 +971,61 @@ async fn radrootsd_signer_session_authorize_returns_typed_result() -> TestResult
 }
 
 #[tokio::test]
+async fn radrootsd_signer_session_get_public_key_returns_typed_result() -> TestResult<()> {
+    let (connect_server, _) = JsonRpcServer::spawn(
+        Some("Bearer sdk-secret"),
+        json!({
+            "jsonrpc": "2.0",
+            "id": "radroots-sdk-nip46-connect",
+            "result": {
+                "session_id": "session-123",
+                "mode": "Bunker",
+                "remote_signer_pubkey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "client_pubkey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "relays": ["wss://radroots.org"]
+            }
+        }),
+    )
+    .await?;
+    let connect_client = radrootsd_test_client(connect_server.endpoint())?;
+    let handle: SdkRadrootsdSignerSessionHandle = connect_client
+        .radrootsd()
+        .signer_sessions()
+        .connect_bunker(
+            "bunker://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa?relay=wss%3A%2F%2Fradroots.org&secret=shared-secret",
+        )
+        .await?;
+
+    let (server, request_rx) = JsonRpcServer::spawn(
+        Some("Bearer sdk-secret"),
+        json!({
+            "jsonrpc": "2.0",
+            "id": "radroots-sdk-nip46-get-public-key",
+            "result": {
+                "pubkey": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+            }
+        }),
+    )
+    .await?;
+    let client = radrootsd_test_client(server.endpoint())?;
+    let result = client
+        .radrootsd()
+        .signer_sessions()
+        .get_public_key(handle.session())
+        .await?;
+    let request_json = request_rx.await?;
+
+    assert_eq!(request_json["method"], "nip46.get_public_key");
+    assert_eq!(request_json["params"]["session_id"], "session-123");
+    assert_eq!(
+        result.pubkey,
+        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn radrootsd_signer_session_require_auth_returns_typed_result() -> TestResult<()> {
     let (connect_server, _) = JsonRpcServer::spawn(
         Some("Bearer sdk-secret"),

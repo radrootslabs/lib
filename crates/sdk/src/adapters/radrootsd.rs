@@ -813,6 +813,11 @@ pub(crate) struct SdkRadrootsdSignerSessionAuthorizeResponse {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub(crate) struct SdkRadrootsdSignerSessionPublicKeyResponse {
+    pub pubkey: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub(crate) struct SdkRadrootsdSignerSessionRequireAuthResponse {
     pub required: bool,
 }
@@ -1355,6 +1360,23 @@ pub(crate) async fn authorize_signer_session(
         auth,
         "radroots-sdk-nip46-session-authorize",
         "nip46.session.authorize",
+        &SdkRadrootsdSignerSessionParams { session_id },
+        timeout,
+    )
+    .await
+}
+
+pub(crate) async fn get_signer_session_public_key(
+    endpoint: &str,
+    auth: &RadrootsdAuth,
+    session_id: &str,
+    timeout: Duration,
+) -> Result<SdkRadrootsdSignerSessionPublicKeyResponse, RadrootsdError> {
+    jsonrpc_call(
+        endpoint,
+        auth,
+        "radroots-sdk-nip46-get-public-key",
+        "nip46.get_public_key",
         &SdkRadrootsdSignerSessionParams { session_id },
         timeout,
     )

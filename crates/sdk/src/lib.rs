@@ -47,8 +47,8 @@ pub use crate::client::{
     SdkRadrootsdPublicTradeMessage, SdkRadrootsdPublicTradePublishOptions,
     SdkRadrootsdSessionError, SdkRadrootsdSignerSessionAuthorizeResult,
     SdkRadrootsdSignerSessionCloseResult, SdkRadrootsdSignerSessionHandle,
-    SdkRadrootsdSignerSessionRef, SdkRadrootsdSignerSessionRequireAuthResult,
-    SdkRadrootsdSignerSessionView,
+    SdkRadrootsdSignerSessionPublicKeyResult, SdkRadrootsdSignerSessionRef,
+    SdkRadrootsdSignerSessionRequireAuthResult, SdkRadrootsdSignerSessionView,
 };
 pub use crate::config::{
     NetworkConfig, RADROOTS_SDK_LOCAL_RADROOTSD_ENDPOINT, RADROOTS_SDK_LOCAL_RELAY_URL,
