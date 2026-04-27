@@ -190,6 +190,84 @@ pub struct RadrootsTradeOrder {
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsTradeOrderRequested {
+    pub order_id: String,
+    pub listing_addr: String,
+    pub buyer_pubkey: String,
+    pub seller_pubkey: String,
+    pub items: Vec<RadrootsTradeOrderItem>,
+}
+
+impl RadrootsTradeOrderRequested {
+    pub fn validate(&self) -> Result<(), RadrootsActiveTradePayloadError> {
+        validate_required_field(&self.order_id, "order_id")?;
+        validate_required_field(&self.listing_addr, "listing_addr")?;
+        validate_required_field(&self.buyer_pubkey, "buyer_pubkey")?;
+        validate_required_field(&self.seller_pubkey, "seller_pubkey")?;
+        validate_order_items(&self.items)
+    }
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsTradeInventoryCommitment {
+    pub bin_id: String,
+    pub bin_count: u32,
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case", tag = "decision"))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RadrootsTradeOrderDecision {
+    Accepted {
+        inventory_commitments: Vec<RadrootsTradeInventoryCommitment>,
+    },
+    Declined {
+        reason: String,
+    },
+}
+
+impl RadrootsTradeOrderDecision {
+    pub fn validate(&self) -> Result<(), RadrootsActiveTradePayloadError> {
+        match self {
+            Self::Accepted {
+                inventory_commitments,
+            } => validate_inventory_commitments(inventory_commitments),
+            Self::Declined { reason } => validate_required_field(reason, "reason"),
+        }
+    }
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsTradeOrderDecisionEvent {
+    pub order_id: String,
+    pub listing_addr: String,
+    pub buyer_pubkey: String,
+    pub seller_pubkey: String,
+    pub decision: RadrootsTradeOrderDecision,
+}
+
+impl RadrootsTradeOrderDecisionEvent {
+    pub fn validate(&self) -> Result<(), RadrootsActiveTradePayloadError> {
+        validate_required_field(&self.order_id, "order_id")?;
+        validate_required_field(&self.listing_addr, "listing_addr")?;
+        validate_required_field(&self.buyer_pubkey, "buyer_pubkey")?;
+        validate_required_field(&self.seller_pubkey, "seller_pubkey")?;
+        self.decision.validate()
+    }
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeQuestion {
     pub question_id: String,
 }
@@ -345,6 +423,54 @@ pub enum RadrootsTradeTransportLane {
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RadrootsActiveTradeMessageType {
+    #[cfg_attr(feature = "serde", serde(rename = "TradeOrderRequested"))]
+    TradeOrderRequested,
+    #[cfg_attr(feature = "serde", serde(rename = "TradeOrderDecision"))]
+    TradeOrderDecision,
+}
+
+impl RadrootsActiveTradeMessageType {
+    #[inline]
+    pub const fn from_kind(kind: u32) -> Option<Self> {
+        match kind {
+            KIND_TRADE_ORDER_REQUEST => Some(Self::TradeOrderRequested),
+            KIND_TRADE_ORDER_DECISION => Some(Self::TradeOrderDecision),
+            _ => None,
+        }
+    }
+
+    #[inline]
+    pub const fn kind(self) -> u32 {
+        match self {
+            Self::TradeOrderRequested => KIND_TRADE_ORDER_REQUEST,
+            Self::TradeOrderDecision => KIND_TRADE_ORDER_DECISION,
+        }
+    }
+
+    #[inline]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::TradeOrderRequested => "TradeOrderRequested",
+            Self::TradeOrderDecision => "TradeOrderDecision",
+        }
+    }
+
+    #[inline]
+    pub const fn requires_listing_snapshot(self) -> bool {
+        matches!(self, Self::TradeOrderRequested)
+    }
+
+    #[inline]
+    pub const fn requires_trade_chain(self) -> bool {
+        matches!(self, Self::TradeOrderDecision)
+    }
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsTradeMessageType {
@@ -492,6 +618,80 @@ impl RadrootsTradeMessageType {
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsActiveTradeEnvelope<T> {
+    pub version: u16,
+    pub domain: RadrootsTradeDomain,
+    #[cfg_attr(feature = "serde", serde(rename = "type"))]
+    pub message_type: RadrootsActiveTradeMessageType,
+    pub order_id: String,
+    pub listing_addr: String,
+    pub payload: T,
+}
+
+impl<T> RadrootsActiveTradeEnvelope<T> {
+    #[inline]
+    pub fn new(
+        message_type: RadrootsActiveTradeMessageType,
+        listing_addr: impl Into<String>,
+        order_id: impl Into<String>,
+        payload: T,
+    ) -> Self {
+        Self {
+            version: RADROOTS_TRADE_ENVELOPE_VERSION,
+            domain: RadrootsTradeDomain::TradeListing,
+            message_type,
+            order_id: order_id.into(),
+            listing_addr: listing_addr.into(),
+            payload,
+        }
+    }
+
+    pub fn validate(&self) -> Result<(), RadrootsActiveTradeEnvelopeError> {
+        if self.version != RADROOTS_TRADE_ENVELOPE_VERSION {
+            return Err(RadrootsActiveTradeEnvelopeError::InvalidVersion {
+                expected: RADROOTS_TRADE_ENVELOPE_VERSION,
+                got: self.version,
+            });
+        }
+        if self.order_id.trim().is_empty() {
+            return Err(RadrootsActiveTradeEnvelopeError::MissingOrderId);
+        }
+        if self.listing_addr.trim().is_empty() {
+            return Err(RadrootsActiveTradeEnvelopeError::MissingListingAddr);
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RadrootsActiveTradeEnvelopeError {
+    InvalidVersion { expected: u16, got: u16 },
+    MissingOrderId,
+    MissingListingAddr,
+}
+
+impl core::fmt::Display for RadrootsActiveTradeEnvelopeError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::InvalidVersion { expected, got } => {
+                write!(
+                    f,
+                    "invalid active trade envelope version: expected {expected}, got {got}"
+                )
+            }
+            Self::MissingOrderId => write!(f, "missing order_id for active trade message"),
+            Self::MissingListingAddr => write!(f, "missing listing_addr"),
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for RadrootsActiveTradeEnvelopeError {}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeEnvelope<T> {
     pub version: u16,
     pub domain: RadrootsTradeDomain,
@@ -539,6 +739,81 @@ impl<T> RadrootsTradeEnvelope<T> {
         }
         Ok(())
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RadrootsActiveTradePayloadError {
+    EmptyField(&'static str),
+    MissingItems,
+    InvalidItemBinCount { index: usize },
+    MissingInventoryCommitments,
+    InvalidInventoryCommitmentCount { index: usize },
+}
+
+impl core::fmt::Display for RadrootsActiveTradePayloadError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::EmptyField(field) => write!(f, "{field} cannot be empty"),
+            Self::MissingItems => write!(f, "items must contain at least one item"),
+            Self::InvalidItemBinCount { index } => {
+                write!(f, "items[{index}].bin_count must be greater than zero")
+            }
+            Self::MissingInventoryCommitments => {
+                write!(
+                    f,
+                    "accepted decisions must contain at least one inventory commitment"
+                )
+            }
+            Self::InvalidInventoryCommitmentCount { index } => write!(
+                f,
+                "inventory_commitments[{index}].bin_count must be greater than zero"
+            ),
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for RadrootsActiveTradePayloadError {}
+
+fn validate_required_field(
+    value: &str,
+    field: &'static str,
+) -> Result<(), RadrootsActiveTradePayloadError> {
+    if value.trim().is_empty() {
+        Err(RadrootsActiveTradePayloadError::EmptyField(field))
+    } else {
+        Ok(())
+    }
+}
+
+fn validate_order_items(
+    items: &[RadrootsTradeOrderItem],
+) -> Result<(), RadrootsActiveTradePayloadError> {
+    if items.is_empty() {
+        return Err(RadrootsActiveTradePayloadError::MissingItems);
+    }
+    for (index, item) in items.iter().enumerate() {
+        validate_required_field(&item.bin_id, "bin_id")?;
+        if item.bin_count == 0 {
+            return Err(RadrootsActiveTradePayloadError::InvalidItemBinCount { index });
+        }
+    }
+    Ok(())
+}
+
+fn validate_inventory_commitments(
+    commitments: &[RadrootsTradeInventoryCommitment],
+) -> Result<(), RadrootsActiveTradePayloadError> {
+    if commitments.is_empty() {
+        return Err(RadrootsActiveTradePayloadError::MissingInventoryCommitments);
+    }
+    for (index, commitment) in commitments.iter().enumerate() {
+        validate_required_field(&commitment.bin_id, "bin_id")?;
+        if commitment.bin_count == 0 {
+            return Err(RadrootsActiveTradePayloadError::InvalidInventoryCommitmentCount { index });
+        }
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -656,6 +931,38 @@ mod tests {
         }
     }
 
+    fn sample_active_order_request() -> RadrootsTradeOrderRequested {
+        RadrootsTradeOrderRequested {
+            order_id: "order-1".into(),
+            listing_addr: sample_listing_addr(),
+            buyer_pubkey: "buyer".into(),
+            seller_pubkey: "seller".into(),
+            items: vec![RadrootsTradeOrderItem {
+                bin_id: "bin-1".into(),
+                bin_count: 2,
+            }],
+        }
+    }
+
+    fn sample_inventory_commitment() -> RadrootsTradeInventoryCommitment {
+        RadrootsTradeInventoryCommitment {
+            bin_id: "bin-1".into(),
+            bin_count: 2,
+        }
+    }
+
+    fn sample_active_order_decision() -> RadrootsTradeOrderDecisionEvent {
+        RadrootsTradeOrderDecisionEvent {
+            order_id: "order-1".into(),
+            listing_addr: sample_listing_addr(),
+            buyer_pubkey: "buyer".into(),
+            seller_pubkey: "seller".into(),
+            decision: RadrootsTradeOrderDecision::Accepted {
+                inventory_commitments: vec![sample_inventory_commitment()],
+            },
+        }
+    }
+
     fn sample_order_revision() -> RadrootsTradeOrderRevision {
         RadrootsTradeOrderRevision {
             revision_id: "rev-1".into(),
@@ -719,6 +1026,144 @@ mod tests {
         assert!(RadrootsTradeMessageType::OrderRequest.is_public());
         assert!(RadrootsTradeMessageType::OrderRequest.is_request());
         assert!(RadrootsTradeMessageType::OrderResponse.is_result());
+    }
+
+    #[test]
+    fn active_message_type_uses_canonical_names_and_kinds() {
+        assert_eq!(
+            RadrootsActiveTradeMessageType::from_kind(KIND_TRADE_ORDER_REQUEST),
+            Some(RadrootsActiveTradeMessageType::TradeOrderRequested)
+        );
+        assert_eq!(
+            RadrootsActiveTradeMessageType::from_kind(KIND_TRADE_ORDER_DECISION),
+            Some(RadrootsActiveTradeMessageType::TradeOrderDecision)
+        );
+        assert_eq!(RadrootsActiveTradeMessageType::from_kind(3431), None);
+        assert_eq!(
+            RadrootsActiveTradeMessageType::TradeOrderRequested.kind(),
+            KIND_TRADE_ORDER_REQUEST
+        );
+        assert_eq!(
+            RadrootsActiveTradeMessageType::TradeOrderDecision.kind(),
+            KIND_TRADE_ORDER_DECISION
+        );
+        assert_eq!(
+            RadrootsActiveTradeMessageType::TradeOrderRequested.name(),
+            "TradeOrderRequested"
+        );
+        assert_eq!(
+            RadrootsActiveTradeMessageType::TradeOrderDecision.name(),
+            "TradeOrderDecision"
+        );
+        assert!(RadrootsActiveTradeMessageType::TradeOrderRequested.requires_listing_snapshot());
+        assert!(RadrootsActiveTradeMessageType::TradeOrderDecision.requires_trade_chain());
+
+        let request_name =
+            serde_json::to_value(RadrootsActiveTradeMessageType::TradeOrderRequested).unwrap();
+        let decision_name =
+            serde_json::to_value(RadrootsActiveTradeMessageType::TradeOrderDecision).unwrap();
+        assert_eq!(request_name, serde_json::json!("TradeOrderRequested"));
+        assert_eq!(decision_name, serde_json::json!("TradeOrderDecision"));
+    }
+
+    #[test]
+    fn active_order_request_validation_rejects_invalid_fields() {
+        assert_eq!(sample_active_order_request().validate(), Ok(()));
+
+        let mut missing_order_id = sample_active_order_request();
+        missing_order_id.order_id = " ".into();
+        assert_eq!(
+            missing_order_id.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::EmptyField("order_id")
+        );
+
+        let mut missing_items = sample_active_order_request();
+        missing_items.items.clear();
+        assert_eq!(
+            missing_items.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::MissingItems
+        );
+
+        let mut invalid_count = sample_active_order_request();
+        invalid_count.items[0].bin_count = 0;
+        assert_eq!(
+            invalid_count.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::InvalidItemBinCount { index: 0 }
+        );
+
+        let mut missing_bin_id = sample_active_order_request();
+        missing_bin_id.items[0].bin_id = " ".into();
+        assert_eq!(
+            missing_bin_id.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::EmptyField("bin_id")
+        );
+    }
+
+    #[test]
+    fn active_order_decision_validation_enforces_commitment_invariants() {
+        assert_eq!(sample_active_order_decision().validate(), Ok(()));
+
+        let declined = RadrootsTradeOrderDecisionEvent {
+            decision: RadrootsTradeOrderDecision::Declined {
+                reason: "out_of_stock".into(),
+            },
+            ..sample_active_order_decision()
+        };
+        assert_eq!(declined.validate(), Ok(()));
+
+        let accepted_without_commitments = RadrootsTradeOrderDecisionEvent {
+            decision: RadrootsTradeOrderDecision::Accepted {
+                inventory_commitments: Vec::new(),
+            },
+            ..sample_active_order_decision()
+        };
+        assert_eq!(
+            accepted_without_commitments.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::MissingInventoryCommitments
+        );
+
+        let accepted_with_zero_count = RadrootsTradeOrderDecisionEvent {
+            decision: RadrootsTradeOrderDecision::Accepted {
+                inventory_commitments: vec![RadrootsTradeInventoryCommitment {
+                    bin_id: "bin-1".into(),
+                    bin_count: 0,
+                }],
+            },
+            ..sample_active_order_decision()
+        };
+        assert_eq!(
+            accepted_with_zero_count.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::InvalidInventoryCommitmentCount { index: 0 }
+        );
+
+        let declined_without_reason = RadrootsTradeOrderDecisionEvent {
+            decision: RadrootsTradeOrderDecision::Declined { reason: " ".into() },
+            ..sample_active_order_decision()
+        };
+        assert_eq!(
+            declined_without_reason.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::EmptyField("reason")
+        );
+    }
+
+    #[test]
+    fn active_envelope_serializes_canonical_type_name() {
+        let envelope = RadrootsActiveTradeEnvelope::new(
+            RadrootsActiveTradeMessageType::TradeOrderRequested,
+            sample_listing_addr(),
+            "order-1",
+            sample_active_order_request(),
+        );
+        assert_eq!(envelope.validate(), Ok(()));
+
+        let json = serde_json::to_value(&envelope).unwrap();
+        assert_eq!(json["type"], serde_json::json!("TradeOrderRequested"));
+        assert_eq!(json["order_id"], serde_json::json!("order-1"));
+        assert_eq!(
+            json["listing_addr"],
+            serde_json::json!("30402:pubkey:AAAAAAAAAAAAAAAAAAAAAg")
+        );
+        assert_eq!(json["payload"]["items"][0]["bin_id"], "bin-1");
     }
 
     #[test]
