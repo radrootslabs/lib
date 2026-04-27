@@ -20,7 +20,11 @@ order = 1
 "listing.build_draft" = "listing.buildDraft"
 "listing.parse_event" = "listing.parseEvent"
 "trade.build_envelope_draft" = "trade.buildEnvelopeDraft"
+"trade.build_order_request_draft" = "trade.buildOrderRequestDraft"
+"trade.build_order_decision_draft" = "trade.buildOrderDecisionDraft"
 "trade.parse_envelope" = "trade.parseEnvelope"
+"trade.parse_order_request" = "trade.parseOrderRequest"
+"trade.parse_order_decision" = "trade.parseOrderDecision"
 "trade.parse_listing_address" = "trade.parseListingAddress"
 "trade.validate_listing_event" = "trade.validateListingEvent"
 
@@ -35,6 +39,13 @@ order = 1
 "RadrootsFarm" = "RadrootsFarm"
 "RadrootsListing" = "RadrootsListing"
 "RadrootsTradeEnvelope" = "TradeEnvelope"
+"RadrootsActiveTradeEnvelope" = "ActiveTradeEnvelope"
+"RadrootsActiveTradeMessageType" = "ActiveTradeMessageType"
+"RadrootsTradeOrderItem" = "TradeOrderItem"
+"RadrootsTradeOrderRequested" = "TradeOrderRequested"
+"RadrootsTradeInventoryCommitment" = "TradeInventoryCommitment"
+"RadrootsTradeOrderDecision" = "TradeOrderDecision"
+"RadrootsTradeOrderDecisionEvent" = "TradeOrderDecisionEvent"
 
 [artifacts]
 models_dir = "src/generated"

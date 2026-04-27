@@ -1,0 +1,22 @@
+{
+  "suite": "trade",
+  "contract_version": "0.1.0",
+  "vectors": [
+    {
+      "id": "trade_parse_order_request_minimal_001",
+      "kind": "trade.parse_order_request",
+      "input": {
+        "event": {
+          "kind": 3422,
+          "author": "buyer_pubkey",
+          "content_type": "TradeOrderRequested",
+          "tags_shape": "active_trade_order_request_tags"
+        }
+      },
+      "expected": {
+        "envelope_shape": "active_trade_order_request",
+        "payload_type": "RadrootsTradeOrderRequested"
+      }
+    }
+  ]
+}

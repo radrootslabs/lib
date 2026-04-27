@@ -1,0 +1,36 @@
+{
+  "suite": "trade",
+  "contract_version": "0.1.0",
+  "vectors": [
+    {
+      "id": "trade_build_order_decision_draft_accept_minimal_001",
+      "kind": "trade.build_order_decision_draft",
+      "input": {
+        "root_event_id": "order-request-event",
+        "prev_event_id": "order-request-event",
+        "payload": {
+          "order_id": "order-1",
+          "listing_addr": "30402:seller_pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+          "buyer_pubkey": "buyer_pubkey",
+          "seller_pubkey": "seller_pubkey",
+          "decision": {
+            "decision": "accepted",
+            "inventory_commitments": [
+              {
+                "bin_id": "bin-1",
+                "bin_count": 2
+              }
+            ]
+          }
+        }
+      },
+      "expected": {
+        "wire_parts": {
+          "kind": 3423,
+          "content_type": "TradeOrderDecision",
+          "tags_shape": "active_trade_order_decision_tags"
+        }
+      }
+    }
+  ]
+}

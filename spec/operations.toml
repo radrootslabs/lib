@@ -18,6 +18,13 @@ public = [
   "RadrootsFarm",
   "RadrootsListing",
   "RadrootsTradeEnvelope",
+  "RadrootsActiveTradeEnvelope",
+  "RadrootsActiveTradeMessageType",
+  "RadrootsTradeOrderItem",
+  "RadrootsTradeOrderRequested",
+  "RadrootsTradeInventoryCommitment",
+  "RadrootsTradeOrderDecision",
+  "RadrootsTradeOrderDecisionEvent",
 ]
 
 [errors]
@@ -164,6 +171,51 @@ rust_types = ["radroots_events::trade::RadrootsTradeEnvelope"]
 [operations.trade_build_envelope_draft.conformance]
 vector = "spec/conformance/vectors/trade/build_envelope_draft.v1.json"
 
+[operations.trade_build_order_request_draft]
+domain = "trade"
+id = "trade.build_order_request_draft"
+stability = "beta"
+inputs = ["RadrootsTradeOrderRequested", "RadrootsNostrEventPtr"]
+outputs = ["WireEventParts"]
+error_class = "encode_error"
+deterministic = true
+signing = "native"
+transport = "native"
+
+[operations.trade_build_order_request_draft.implementation]
+rust_modules = ["crates/events_codec/src/trade/encode.rs"]
+rust_types = [
+  "radroots_events::RadrootsNostrEventPtr",
+  "radroots_events::trade::RadrootsTradeOrderRequested",
+]
+
+[operations.trade_build_order_request_draft.conformance]
+vector = "spec/conformance/vectors/trade/build_order_request_draft.v1.json"
+
+[operations.trade_build_order_decision_draft]
+domain = "trade"
+id = "trade.build_order_decision_draft"
+stability = "beta"
+inputs = [
+  "root_event_id",
+  "prev_event_id",
+  "RadrootsTradeOrderDecisionEvent",
+]
+outputs = ["WireEventParts"]
+error_class = "encode_error"
+deterministic = true
+signing = "native"
+transport = "native"
+
+[operations.trade_build_order_decision_draft.implementation]
+rust_modules = ["crates/events_codec/src/trade/encode.rs"]
+rust_types = [
+  "radroots_events::trade::RadrootsTradeOrderDecisionEvent",
+]
+
+[operations.trade_build_order_decision_draft.conformance]
+vector = "spec/conformance/vectors/trade/build_order_decision_draft.v1.json"
+
 [operations.trade_parse_envelope]
 domain = "trade"
 id = "trade.parse_envelope"
@@ -184,6 +236,50 @@ rust_types = [
 
 [operations.trade_parse_envelope.conformance]
 vector = "spec/conformance/vectors/trade/parse_envelope.v1.json"
+
+[operations.trade_parse_order_request]
+domain = "trade"
+id = "trade.parse_order_request"
+stability = "beta"
+inputs = ["RadrootsNostrEvent"]
+outputs = ["RadrootsActiveTradeEnvelope", "RadrootsTradeOrderRequested"]
+error_class = "parse_error"
+deterministic = true
+signing = "native"
+transport = "native"
+
+[operations.trade_parse_order_request.implementation]
+rust_modules = ["crates/events_codec/src/trade/decode.rs"]
+rust_types = [
+  "radroots_events::RadrootsNostrEvent",
+  "radroots_events::trade::RadrootsActiveTradeEnvelope",
+  "radroots_events::trade::RadrootsTradeOrderRequested",
+]
+
+[operations.trade_parse_order_request.conformance]
+vector = "spec/conformance/vectors/trade/parse_order_request.v1.json"
+
+[operations.trade_parse_order_decision]
+domain = "trade"
+id = "trade.parse_order_decision"
+stability = "beta"
+inputs = ["RadrootsNostrEvent"]
+outputs = ["RadrootsActiveTradeEnvelope", "RadrootsTradeOrderDecisionEvent"]
+error_class = "parse_error"
+deterministic = true
+signing = "native"
+transport = "native"
+
+[operations.trade_parse_order_decision.implementation]
+rust_modules = ["crates/events_codec/src/trade/decode.rs"]
+rust_types = [
+  "radroots_events::RadrootsNostrEvent",
+  "radroots_events::trade::RadrootsActiveTradeEnvelope",
+  "radroots_events::trade::RadrootsTradeOrderDecisionEvent",
+]
+
+[operations.trade_parse_order_decision.conformance]
+vector = "spec/conformance/vectors/trade/parse_order_decision.v1.json"
 
 [operations.trade_parse_listing_address]
 domain = "trade"

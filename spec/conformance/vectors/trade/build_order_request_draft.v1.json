@@ -1,0 +1,35 @@
+{
+  "suite": "trade",
+  "contract_version": "0.1.0",
+  "vectors": [
+    {
+      "id": "trade_build_order_request_draft_minimal_001",
+      "kind": "trade.build_order_request_draft",
+      "input": {
+        "listing_event": {
+          "id": "listing-snapshot",
+          "relays": "wss://relay.example.com"
+        },
+        "payload": {
+          "order_id": "order-1",
+          "listing_addr": "30402:seller_pubkey:AAAAAAAAAAAAAAAAAAAAAg",
+          "buyer_pubkey": "buyer_pubkey",
+          "seller_pubkey": "seller_pubkey",
+          "items": [
+            {
+              "bin_id": "bin-1",
+              "bin_count": 2
+            }
+          ]
+        }
+      },
+      "expected": {
+        "wire_parts": {
+          "kind": 3422,
+          "content_type": "TradeOrderRequested",
+          "tags_shape": "active_trade_order_request_tags"
+        }
+      }
+    }
+  ]
+}

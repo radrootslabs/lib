@@ -1,0 +1,22 @@
+{
+  "suite": "trade",
+  "contract_version": "0.1.0",
+  "vectors": [
+    {
+      "id": "trade_parse_order_decision_minimal_001",
+      "kind": "trade.parse_order_decision",
+      "input": {
+        "event": {
+          "kind": 3423,
+          "author": "seller_pubkey",
+          "content_type": "TradeOrderDecision",
+          "tags_shape": "active_trade_order_decision_tags"
+        }
+      },
+      "expected": {
+        "envelope_shape": "active_trade_order_decision",
+        "payload_type": "RadrootsTradeOrderDecisionEvent"
+      }
+    }
+  ]
+}
