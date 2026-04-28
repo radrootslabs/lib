@@ -309,7 +309,9 @@ where
     I: IntoIterator<Item = RadrootsActiveOrderRequestRecord>,
 {
     let mut unique = Vec::new();
-    for request in requests {
+    let mut records = requests.into_iter().collect::<Vec<_>>();
+    records.sort_by(|left, right| left.event_id.cmp(&right.event_id));
+    for request in records {
         if unique
             .iter()
             .all(|existing: &RadrootsActiveOrderRequestRecord| {
@@ -327,7 +329,9 @@ where
     I: IntoIterator<Item = RadrootsActiveOrderDecisionRecord>,
 {
     let mut unique = Vec::new();
-    for decision in decisions {
+    let mut records = decisions.into_iter().collect::<Vec<_>>();
+    records.sort_by(|left, right| left.event_id.cmp(&right.event_id));
+    for decision in records {
         if unique
             .iter()
             .all(|existing: &RadrootsActiveOrderDecisionRecord| {
@@ -695,12 +699,16 @@ mod tests {
         }
     }
 
-    fn request_record() -> RadrootsActiveOrderRequestRecord {
+    fn request_record_with_event_id(event_id: &str) -> RadrootsActiveOrderRequestRecord {
         RadrootsActiveOrderRequestRecord {
-            event_id: "request-1".to_string(),
+            event_id: event_id.to_string(),
             author_pubkey: BUYER.to_string(),
             payload: clean_request_payload(),
         }
+    }
+
+    fn request_record() -> RadrootsActiveOrderRequestRecord {
+        request_record_with_event_id("request-1")
     }
 
     fn decision_payload(decision: RadrootsTradeOrderDecision) -> RadrootsTradeOrderDecisionEvent {
@@ -960,6 +968,65 @@ mod tests {
             ],
         );
 
+        assert_eq!(projection.status, RadrootsActiveOrderStatus::Invalid);
+        assert_eq!(
+            projection.issues,
+            vec![RadrootsActiveOrderReducerIssue::ConflictingDecisions {
+                event_ids: vec!["decision-1".to_string(), "decision-2".to_string()]
+            }]
+        );
+    }
+
+    #[test]
+    fn reduce_active_order_events_reports_multiple_requests_deterministically() {
+        let projection = reduce_active_order_events(
+            "order-1",
+            [
+                request_record_with_event_id("request-2"),
+                request_record_with_event_id("request-1"),
+            ],
+            [],
+        );
+        let reversed = reduce_active_order_events(
+            "order-1",
+            [
+                request_record_with_event_id("request-1"),
+                request_record_with_event_id("request-2"),
+            ],
+            [],
+        );
+
+        assert_eq!(projection, reversed);
+        assert_eq!(projection.status, RadrootsActiveOrderStatus::Invalid);
+        assert_eq!(projection.request_event_id.as_deref(), Some("request-1"));
+        assert_eq!(
+            projection.issues,
+            vec![RadrootsActiveOrderReducerIssue::MultipleRequests {
+                event_ids: vec!["request-1".to_string(), "request-2".to_string()]
+            }]
+        );
+    }
+
+    #[test]
+    fn reduce_active_order_events_reports_conflicting_decisions_deterministically() {
+        let projection = reduce_active_order_events(
+            "order-1",
+            [request_record()],
+            [
+                accepted_decision_record("decision-2"),
+                declined_decision_record("decision-1"),
+            ],
+        );
+        let reversed = reduce_active_order_events(
+            "order-1",
+            [request_record()],
+            [
+                declined_decision_record("decision-1"),
+                accepted_decision_record("decision-2"),
+            ],
+        );
+
+        assert_eq!(projection, reversed);
         assert_eq!(projection.status, RadrootsActiveOrderStatus::Invalid);
         assert_eq!(
             projection.issues,
