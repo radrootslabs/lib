@@ -1,7 +1,10 @@
 #![forbid(unsafe_code)]
 
 #[cfg(not(feature = "std"))]
-use alloc::string::{String, ToString};
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
+};
 
 use radroots_events::kinds::KIND_LISTING;
 use radroots_events::trade::{
@@ -31,6 +34,150 @@ pub enum RadrootsTradeOrderCanonicalizationError {
     MissingInventoryCommitments,
     #[error("inventory_commitments[{index}].bin_count must be greater than zero")]
     InvalidInventoryCommitmentCount { index: usize },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsActiveOrderRequestRecord {
+    pub event_id: String,
+    pub author_pubkey: String,
+    pub payload: RadrootsTradeOrderRequested,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsActiveOrderDecisionRecord {
+    pub event_id: String,
+    pub author_pubkey: String,
+    pub root_event_id: String,
+    pub prev_event_id: String,
+    pub payload: RadrootsTradeOrderDecisionEvent,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RadrootsActiveOrderStatus {
+    Missing,
+    Requested,
+    Accepted,
+    Declined,
+    Invalid,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RadrootsActiveOrderReducerIssue {
+    MissingRequest,
+    MultipleRequests { event_ids: Vec<String> },
+    RequestPayloadInvalid { event_id: String },
+    RequestOrderIdMismatch { event_id: String },
+    RequestAuthorMismatch { event_id: String },
+    RequestListingAddressInvalid { event_id: String },
+    RequestSellerListingMismatch { event_id: String },
+    DecisionPayloadInvalid { event_id: String },
+    DecisionOrderIdMismatch { event_id: String },
+    DecisionAuthorMismatch { event_id: String },
+    DecisionBuyerMismatch { event_id: String },
+    DecisionSellerMismatch { event_id: String },
+    DecisionListingAddressInvalid { event_id: String },
+    DecisionListingMismatch { event_id: String },
+    DecisionRootMismatch { event_id: String },
+    DecisionPreviousMismatch { event_id: String },
+    DecisionMissingInventoryCommitments { event_id: String },
+    DecisionMissingReason { event_id: String },
+    ConflictingDecisions { event_ids: Vec<String> },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsActiveOrderProjection {
+    pub order_id: String,
+    pub status: RadrootsActiveOrderStatus,
+    pub request_event_id: Option<String>,
+    pub decision_event_id: Option<String>,
+    pub listing_addr: Option<String>,
+    pub buyer_pubkey: Option<String>,
+    pub seller_pubkey: Option<String>,
+    pub last_event_id: Option<String>,
+    pub issues: Vec<RadrootsActiveOrderReducerIssue>,
+}
+
+pub fn reduce_active_order_events<I, J>(
+    order_id: &str,
+    requests: I,
+    decisions: J,
+) -> RadrootsActiveOrderProjection
+where
+    I: IntoIterator<Item = RadrootsActiveOrderRequestRecord>,
+    J: IntoIterator<Item = RadrootsActiveOrderDecisionRecord>,
+{
+    let requests = unique_request_records(requests);
+    let decisions = unique_decision_records(decisions);
+    if requests.is_empty() && decisions.is_empty() {
+        return RadrootsActiveOrderProjection {
+            order_id: order_id.to_string(),
+            status: RadrootsActiveOrderStatus::Missing,
+            request_event_id: None,
+            decision_event_id: None,
+            listing_addr: None,
+            buyer_pubkey: None,
+            seller_pubkey: None,
+            last_event_id: None,
+            issues: Vec::new(),
+        };
+    }
+
+    let mut issues = Vec::new();
+    let mut valid_requests = Vec::new();
+    for request in requests {
+        if validate_active_request_record(order_id, &request, &mut issues) {
+            valid_requests.push(request);
+        }
+    }
+
+    if valid_requests.len() > 1 {
+        let mut event_ids = valid_requests
+            .iter()
+            .map(|request| request.event_id.clone())
+            .collect::<Vec<_>>();
+        event_ids.sort();
+        issues.push(RadrootsActiveOrderReducerIssue::MultipleRequests { event_ids });
+    }
+
+    let Some(request) = valid_requests.first() else {
+        if decisions.is_empty() {
+            return invalid_projection(order_id, None, issues);
+        }
+        issues.push(RadrootsActiveOrderReducerIssue::MissingRequest);
+        return invalid_projection(order_id, None, issues);
+    };
+
+    if valid_requests.len() > 1 {
+        return invalid_projection(order_id, Some(request), issues);
+    }
+
+    let mut valid_decisions = Vec::new();
+    for decision in decisions {
+        if validate_active_decision_record(request, &decision, &mut issues) {
+            valid_decisions.push(decision);
+        }
+    }
+
+    if !issues.is_empty() {
+        return invalid_projection(order_id, Some(request), issues);
+    }
+
+    match valid_decisions.len() {
+        0 => requested_projection(order_id, request),
+        1 => decided_projection(order_id, request, &valid_decisions[0]),
+        _ => {
+            let mut event_ids = valid_decisions
+                .iter()
+                .map(|decision| decision.event_id.clone())
+                .collect::<Vec<_>>();
+            event_ids.sort();
+            invalid_projection(
+                order_id,
+                Some(request),
+                vec![RadrootsActiveOrderReducerIssue::ConflictingDecisions { event_ids }],
+            )
+        }
+    }
 }
 
 pub fn canonicalize_order_request_for_signer(
@@ -157,6 +304,253 @@ pub fn canonicalize_active_order_decision_for_signer(
     Ok(decision_event)
 }
 
+fn unique_request_records<I>(requests: I) -> Vec<RadrootsActiveOrderRequestRecord>
+where
+    I: IntoIterator<Item = RadrootsActiveOrderRequestRecord>,
+{
+    let mut unique = Vec::new();
+    for request in requests {
+        if unique
+            .iter()
+            .all(|existing: &RadrootsActiveOrderRequestRecord| {
+                existing.event_id != request.event_id
+            })
+        {
+            unique.push(request);
+        }
+    }
+    unique
+}
+
+fn unique_decision_records<I>(decisions: I) -> Vec<RadrootsActiveOrderDecisionRecord>
+where
+    I: IntoIterator<Item = RadrootsActiveOrderDecisionRecord>,
+{
+    let mut unique = Vec::new();
+    for decision in decisions {
+        if unique
+            .iter()
+            .all(|existing: &RadrootsActiveOrderDecisionRecord| {
+                existing.event_id != decision.event_id
+            })
+        {
+            unique.push(decision);
+        }
+    }
+    unique
+}
+
+fn validate_active_request_record(
+    order_id: &str,
+    request: &RadrootsActiveOrderRequestRecord,
+    issues: &mut Vec<RadrootsActiveOrderReducerIssue>,
+) -> bool {
+    let mut valid = true;
+    if request.payload.validate().is_err() {
+        issues.push(RadrootsActiveOrderReducerIssue::RequestPayloadInvalid {
+            event_id: request.event_id.clone(),
+        });
+        valid = false;
+    }
+    if request.payload.order_id != order_id {
+        issues.push(RadrootsActiveOrderReducerIssue::RequestOrderIdMismatch {
+            event_id: request.event_id.clone(),
+        });
+        valid = false;
+    }
+    if request.author_pubkey != request.payload.buyer_pubkey {
+        issues.push(RadrootsActiveOrderReducerIssue::RequestAuthorMismatch {
+            event_id: request.event_id.clone(),
+        });
+        valid = false;
+    }
+    match parse_public_listing_addr(&request.payload.listing_addr) {
+        Ok(listing_addr) => {
+            if listing_addr.seller_pubkey != request.payload.seller_pubkey {
+                issues.push(
+                    RadrootsActiveOrderReducerIssue::RequestSellerListingMismatch {
+                        event_id: request.event_id.clone(),
+                    },
+                );
+                valid = false;
+            }
+        }
+        Err(_) => {
+            issues.push(
+                RadrootsActiveOrderReducerIssue::RequestListingAddressInvalid {
+                    event_id: request.event_id.clone(),
+                },
+            );
+            valid = false;
+        }
+    }
+    valid
+}
+
+fn validate_active_decision_record(
+    request: &RadrootsActiveOrderRequestRecord,
+    decision: &RadrootsActiveOrderDecisionRecord,
+    issues: &mut Vec<RadrootsActiveOrderReducerIssue>,
+) -> bool {
+    let mut valid = true;
+    if decision_payload_issue(&decision.payload.decision, &decision.event_id, issues) {
+        valid = false;
+    }
+    if decision.payload.validate().is_err() {
+        issues.push(RadrootsActiveOrderReducerIssue::DecisionPayloadInvalid {
+            event_id: decision.event_id.clone(),
+        });
+        valid = false;
+    }
+    if decision.payload.order_id != request.payload.order_id {
+        issues.push(RadrootsActiveOrderReducerIssue::DecisionOrderIdMismatch {
+            event_id: decision.event_id.clone(),
+        });
+        valid = false;
+    }
+    if decision.author_pubkey != decision.payload.seller_pubkey {
+        issues.push(RadrootsActiveOrderReducerIssue::DecisionAuthorMismatch {
+            event_id: decision.event_id.clone(),
+        });
+        valid = false;
+    }
+    if decision.payload.buyer_pubkey != request.payload.buyer_pubkey {
+        issues.push(RadrootsActiveOrderReducerIssue::DecisionBuyerMismatch {
+            event_id: decision.event_id.clone(),
+        });
+        valid = false;
+    }
+    if decision.payload.seller_pubkey != request.payload.seller_pubkey {
+        issues.push(RadrootsActiveOrderReducerIssue::DecisionSellerMismatch {
+            event_id: decision.event_id.clone(),
+        });
+        valid = false;
+    }
+    match parse_public_listing_addr(&decision.payload.listing_addr) {
+        Ok(listing_addr) => {
+            if decision.payload.listing_addr != request.payload.listing_addr
+                || listing_addr.seller_pubkey != decision.payload.seller_pubkey
+            {
+                issues.push(RadrootsActiveOrderReducerIssue::DecisionListingMismatch {
+                    event_id: decision.event_id.clone(),
+                });
+                valid = false;
+            }
+        }
+        Err(_) => {
+            issues.push(
+                RadrootsActiveOrderReducerIssue::DecisionListingAddressInvalid {
+                    event_id: decision.event_id.clone(),
+                },
+            );
+            valid = false;
+        }
+    }
+    if decision.root_event_id != request.event_id {
+        issues.push(RadrootsActiveOrderReducerIssue::DecisionRootMismatch {
+            event_id: decision.event_id.clone(),
+        });
+        valid = false;
+    }
+    if decision.prev_event_id != request.event_id {
+        issues.push(RadrootsActiveOrderReducerIssue::DecisionPreviousMismatch {
+            event_id: decision.event_id.clone(),
+        });
+        valid = false;
+    }
+    valid
+}
+
+fn decision_payload_issue(
+    decision: &RadrootsTradeOrderDecision,
+    event_id: &str,
+    issues: &mut Vec<RadrootsActiveOrderReducerIssue>,
+) -> bool {
+    match decision {
+        RadrootsTradeOrderDecision::Accepted {
+            inventory_commitments,
+        } => {
+            if inventory_commitments.is_empty() {
+                issues.push(
+                    RadrootsActiveOrderReducerIssue::DecisionMissingInventoryCommitments {
+                        event_id: event_id.to_string(),
+                    },
+                );
+                true
+            } else {
+                false
+            }
+        }
+        RadrootsTradeOrderDecision::Declined { reason } => {
+            if reason.trim().is_empty() {
+                issues.push(RadrootsActiveOrderReducerIssue::DecisionMissingReason {
+                    event_id: event_id.to_string(),
+                });
+                true
+            } else {
+                false
+            }
+        }
+    }
+}
+
+fn requested_projection(
+    order_id: &str,
+    request: &RadrootsActiveOrderRequestRecord,
+) -> RadrootsActiveOrderProjection {
+    RadrootsActiveOrderProjection {
+        order_id: order_id.to_string(),
+        status: RadrootsActiveOrderStatus::Requested,
+        request_event_id: Some(request.event_id.clone()),
+        decision_event_id: None,
+        listing_addr: Some(request.payload.listing_addr.clone()),
+        buyer_pubkey: Some(request.payload.buyer_pubkey.clone()),
+        seller_pubkey: Some(request.payload.seller_pubkey.clone()),
+        last_event_id: Some(request.event_id.clone()),
+        issues: Vec::new(),
+    }
+}
+
+fn decided_projection(
+    order_id: &str,
+    request: &RadrootsActiveOrderRequestRecord,
+    decision: &RadrootsActiveOrderDecisionRecord,
+) -> RadrootsActiveOrderProjection {
+    let status = match &decision.payload.decision {
+        RadrootsTradeOrderDecision::Accepted { .. } => RadrootsActiveOrderStatus::Accepted,
+        RadrootsTradeOrderDecision::Declined { .. } => RadrootsActiveOrderStatus::Declined,
+    };
+    RadrootsActiveOrderProjection {
+        order_id: order_id.to_string(),
+        status,
+        request_event_id: Some(request.event_id.clone()),
+        decision_event_id: Some(decision.event_id.clone()),
+        listing_addr: Some(request.payload.listing_addr.clone()),
+        buyer_pubkey: Some(request.payload.buyer_pubkey.clone()),
+        seller_pubkey: Some(request.payload.seller_pubkey.clone()),
+        last_event_id: Some(decision.event_id.clone()),
+        issues: Vec::new(),
+    }
+}
+
+fn invalid_projection(
+    order_id: &str,
+    request: Option<&RadrootsActiveOrderRequestRecord>,
+    issues: Vec<RadrootsActiveOrderReducerIssue>,
+) -> RadrootsActiveOrderProjection {
+    RadrootsActiveOrderProjection {
+        order_id: order_id.to_string(),
+        status: RadrootsActiveOrderStatus::Invalid,
+        request_event_id: request.map(|request| request.event_id.clone()),
+        decision_event_id: None,
+        listing_addr: request.map(|request| request.payload.listing_addr.clone()),
+        buyer_pubkey: request.map(|request| request.payload.buyer_pubkey.clone()),
+        seller_pubkey: request.map(|request| request.payload.seller_pubkey.clone()),
+        last_event_id: request.map(|request| request.event_id.clone()),
+        issues,
+    }
+}
+
 fn parse_public_listing_addr(
     listing_addr_raw: &str,
 ) -> Result<TradeListingAddress, RadrootsTradeOrderCanonicalizationError> {
@@ -236,8 +630,11 @@ mod tests {
     };
 
     use super::{
+        RadrootsActiveOrderDecisionRecord, RadrootsActiveOrderReducerIssue,
+        RadrootsActiveOrderRequestRecord, RadrootsActiveOrderStatus,
         RadrootsTradeOrderCanonicalizationError, canonicalize_active_order_decision_for_signer,
         canonicalize_active_order_request_for_signer, canonicalize_order_request_for_signer,
+        reduce_active_order_events,
     };
 
     const SELLER: &str = "1111111111111111111111111111111111111111111111111111111111111111";
@@ -282,6 +679,64 @@ mod tests {
                     bin_count: 2,
                 }],
             },
+        }
+    }
+
+    fn clean_request_payload() -> RadrootsTradeOrderRequested {
+        RadrootsTradeOrderRequested {
+            order_id: "order-1".to_string(),
+            listing_addr: format!("{KIND_LISTING}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg"),
+            buyer_pubkey: BUYER.to_string(),
+            seller_pubkey: SELLER.to_string(),
+            items: vec![RadrootsTradeOrderItem {
+                bin_id: "bin-1".to_string(),
+                bin_count: 2,
+            }],
+        }
+    }
+
+    fn request_record() -> RadrootsActiveOrderRequestRecord {
+        RadrootsActiveOrderRequestRecord {
+            event_id: "request-1".to_string(),
+            author_pubkey: BUYER.to_string(),
+            payload: clean_request_payload(),
+        }
+    }
+
+    fn decision_payload(decision: RadrootsTradeOrderDecision) -> RadrootsTradeOrderDecisionEvent {
+        RadrootsTradeOrderDecisionEvent {
+            order_id: "order-1".to_string(),
+            listing_addr: format!("{KIND_LISTING}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg"),
+            buyer_pubkey: BUYER.to_string(),
+            seller_pubkey: SELLER.to_string(),
+            decision,
+        }
+    }
+
+    fn accepted_decision_record(event_id: &str) -> RadrootsActiveOrderDecisionRecord {
+        RadrootsActiveOrderDecisionRecord {
+            event_id: event_id.to_string(),
+            author_pubkey: SELLER.to_string(),
+            root_event_id: "request-1".to_string(),
+            prev_event_id: "request-1".to_string(),
+            payload: decision_payload(RadrootsTradeOrderDecision::Accepted {
+                inventory_commitments: vec![RadrootsTradeInventoryCommitment {
+                    bin_id: "bin-1".to_string(),
+                    bin_count: 2,
+                }],
+            }),
+        }
+    }
+
+    fn declined_decision_record(event_id: &str) -> RadrootsActiveOrderDecisionRecord {
+        RadrootsActiveOrderDecisionRecord {
+            event_id: event_id.to_string(),
+            author_pubkey: SELLER.to_string(),
+            root_event_id: "request-1".to_string(),
+            prev_event_id: "request-1".to_string(),
+            payload: decision_payload(RadrootsTradeOrderDecision::Declined {
+                reason: "out_of_stock".to_string(),
+            }),
         }
     }
 
@@ -382,5 +837,135 @@ mod tests {
             panic!("expected declined decision")
         };
         assert_eq!(reason, "out_of_stock");
+    }
+
+    #[test]
+    fn reduce_active_order_events_reports_missing_without_events() {
+        let projection = reduce_active_order_events("order-1", [], []);
+
+        assert_eq!(projection.status, RadrootsActiveOrderStatus::Missing);
+        assert!(projection.issues.is_empty());
+    }
+
+    #[test]
+    fn reduce_active_order_events_reports_requested_state() {
+        let projection = reduce_active_order_events("order-1", [request_record()], []);
+
+        assert_eq!(projection.status, RadrootsActiveOrderStatus::Requested);
+        assert_eq!(projection.request_event_id.as_deref(), Some("request-1"));
+        assert_eq!(projection.last_event_id.as_deref(), Some("request-1"));
+    }
+
+    #[test]
+    fn reduce_active_order_events_reports_accepted_state() {
+        let projection = reduce_active_order_events(
+            "order-1",
+            [request_record()],
+            [accepted_decision_record("decision-1")],
+        );
+
+        assert_eq!(projection.status, RadrootsActiveOrderStatus::Accepted);
+        assert_eq!(projection.decision_event_id.as_deref(), Some("decision-1"));
+        assert_eq!(projection.last_event_id.as_deref(), Some("decision-1"));
+    }
+
+    #[test]
+    fn reduce_active_order_events_reports_declined_state() {
+        let projection = reduce_active_order_events(
+            "order-1",
+            [request_record()],
+            [declined_decision_record("decision-1")],
+        );
+
+        assert_eq!(projection.status, RadrootsActiveOrderStatus::Declined);
+        assert_eq!(projection.decision_event_id.as_deref(), Some("decision-1"));
+    }
+
+    #[test]
+    fn reduce_active_order_events_rejects_invalid_decision_actor() {
+        let mut decision = accepted_decision_record("decision-1");
+        decision.author_pubkey = BUYER.to_string();
+
+        let projection = reduce_active_order_events("order-1", [request_record()], [decision]);
+
+        assert_eq!(projection.status, RadrootsActiveOrderStatus::Invalid);
+        assert!(projection.issues.iter().any(|issue| matches!(
+            issue,
+            RadrootsActiveOrderReducerIssue::DecisionAuthorMismatch { event_id }
+                if event_id == "decision-1"
+        )));
+    }
+
+    #[test]
+    fn reduce_active_order_events_rejects_invalid_decision_chain() {
+        let mut decision = accepted_decision_record("decision-1");
+        decision.prev_event_id = "request-2".to_string();
+
+        let projection = reduce_active_order_events("order-1", [request_record()], [decision]);
+
+        assert_eq!(projection.status, RadrootsActiveOrderStatus::Invalid);
+        assert!(projection.issues.iter().any(|issue| matches!(
+            issue,
+            RadrootsActiveOrderReducerIssue::DecisionPreviousMismatch { event_id }
+                if event_id == "decision-1"
+        )));
+    }
+
+    #[test]
+    fn reduce_active_order_events_rejects_missing_commitment() {
+        let decision = RadrootsActiveOrderDecisionRecord {
+            payload: decision_payload(RadrootsTradeOrderDecision::Accepted {
+                inventory_commitments: Vec::new(),
+            }),
+            ..accepted_decision_record("decision-1")
+        };
+
+        let projection = reduce_active_order_events("order-1", [request_record()], [decision]);
+
+        assert_eq!(projection.status, RadrootsActiveOrderStatus::Invalid);
+        assert!(projection.issues.iter().any(|issue| matches!(
+            issue,
+            RadrootsActiveOrderReducerIssue::DecisionMissingInventoryCommitments { event_id }
+                if event_id == "decision-1"
+        )));
+    }
+
+    #[test]
+    fn reduce_active_order_events_rejects_missing_decline_reason() {
+        let decision = RadrootsActiveOrderDecisionRecord {
+            payload: decision_payload(RadrootsTradeOrderDecision::Declined {
+                reason: " ".to_string(),
+            }),
+            ..declined_decision_record("decision-1")
+        };
+
+        let projection = reduce_active_order_events("order-1", [request_record()], [decision]);
+
+        assert_eq!(projection.status, RadrootsActiveOrderStatus::Invalid);
+        assert!(projection.issues.iter().any(|issue| matches!(
+            issue,
+            RadrootsActiveOrderReducerIssue::DecisionMissingReason { event_id }
+                if event_id == "decision-1"
+        )));
+    }
+
+    #[test]
+    fn reduce_active_order_events_rejects_conflicting_decisions() {
+        let projection = reduce_active_order_events(
+            "order-1",
+            [request_record()],
+            [
+                accepted_decision_record("decision-2"),
+                declined_decision_record("decision-1"),
+            ],
+        );
+
+        assert_eq!(projection.status, RadrootsActiveOrderStatus::Invalid);
+        assert_eq!(
+            projection.issues,
+            vec![RadrootsActiveOrderReducerIssue::ConflictingDecisions {
+                event_ids: vec!["decision-1".to_string(), "decision-2".to_string()]
+            }]
+        );
     }
 }
