@@ -80,6 +80,7 @@ pub enum RadrootsActiveOrderReducerIssue {
     DecisionRootMismatch { event_id: String },
     DecisionPreviousMismatch { event_id: String },
     DecisionMissingInventoryCommitments { event_id: String },
+    DecisionInventoryCommitmentMismatch { event_id: String },
     DecisionMissingReason { event_id: String },
     ConflictingDecisions { event_ids: Vec<String> },
 }
@@ -462,6 +463,19 @@ fn validate_active_decision_record(
         });
         valid = false;
     }
+    if let RadrootsTradeOrderDecision::Accepted {
+        inventory_commitments,
+    } = &decision.payload.decision
+        && decision.payload.validate().is_ok()
+        && !inventory_commitments_match_request(&request.payload.items, inventory_commitments)
+    {
+        issues.push(
+            RadrootsActiveOrderReducerIssue::DecisionInventoryCommitmentMismatch {
+                event_id: decision.event_id.clone(),
+            },
+        );
+        valid = false;
+    }
     valid
 }
 
@@ -611,6 +625,62 @@ fn canonicalize_inventory_commitments(
         }
     }
     Ok(())
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct NormalizedInventoryCount {
+    bin_id: String,
+    bin_count: u64,
+}
+
+fn inventory_commitments_match_request(
+    request_items: &[RadrootsTradeOrderItem],
+    inventory_commitments: &[RadrootsTradeInventoryCommitment],
+) -> bool {
+    normalized_request_item_counts(request_items)
+        == normalized_inventory_commitment_counts(inventory_commitments)
+}
+
+fn normalized_request_item_counts(
+    items: &[RadrootsTradeOrderItem],
+) -> Option<Vec<NormalizedInventoryCount>> {
+    let mut counts = Vec::new();
+    for item in items {
+        push_normalized_inventory_count(&mut counts, &item.bin_id, item.bin_count)?;
+    }
+    counts.sort_by(|left, right| left.bin_id.cmp(&right.bin_id));
+    Some(counts)
+}
+
+fn normalized_inventory_commitment_counts(
+    commitments: &[RadrootsTradeInventoryCommitment],
+) -> Option<Vec<NormalizedInventoryCount>> {
+    let mut counts = Vec::new();
+    for commitment in commitments {
+        push_normalized_inventory_count(&mut counts, &commitment.bin_id, commitment.bin_count)?;
+    }
+    counts.sort_by(|left, right| left.bin_id.cmp(&right.bin_id));
+    Some(counts)
+}
+
+fn push_normalized_inventory_count(
+    counts: &mut Vec<NormalizedInventoryCount>,
+    bin_id: &str,
+    bin_count: u32,
+) -> Option<()> {
+    let bin_id = bin_id.trim();
+    if bin_id.is_empty() || bin_count == 0 {
+        return None;
+    }
+    if let Some(existing) = counts.iter_mut().find(|count| count.bin_id == bin_id) {
+        existing.bin_count += u64::from(bin_count);
+    } else {
+        counts.push(NormalizedInventoryCount {
+            bin_id: bin_id.to_string(),
+            bin_count: u64::from(bin_count),
+        });
+    }
+    Some(())
 }
 
 fn normalized_required_string(
@@ -936,6 +1006,82 @@ mod tests {
             RadrootsActiveOrderReducerIssue::DecisionMissingInventoryCommitments { event_id }
                 if event_id == "decision-1"
         )));
+    }
+
+    #[test]
+    fn reduce_active_order_events_rejects_commitment_count_mismatch() {
+        let decision = RadrootsActiveOrderDecisionRecord {
+            payload: decision_payload(RadrootsTradeOrderDecision::Accepted {
+                inventory_commitments: vec![RadrootsTradeInventoryCommitment {
+                    bin_id: "bin-1".to_string(),
+                    bin_count: 1,
+                }],
+            }),
+            ..accepted_decision_record("decision-1")
+        };
+
+        let projection = reduce_active_order_events("order-1", [request_record()], [decision]);
+
+        assert_eq!(projection.status, RadrootsActiveOrderStatus::Invalid);
+        assert!(projection.issues.iter().any(|issue| matches!(
+            issue,
+            RadrootsActiveOrderReducerIssue::DecisionInventoryCommitmentMismatch { event_id }
+                if event_id == "decision-1"
+        )));
+    }
+
+    #[test]
+    fn reduce_active_order_events_rejects_commitment_bin_mismatch() {
+        let decision = RadrootsActiveOrderDecisionRecord {
+            payload: decision_payload(RadrootsTradeOrderDecision::Accepted {
+                inventory_commitments: vec![RadrootsTradeInventoryCommitment {
+                    bin_id: "bin-2".to_string(),
+                    bin_count: 2,
+                }],
+            }),
+            ..accepted_decision_record("decision-1")
+        };
+
+        let projection = reduce_active_order_events("order-1", [request_record()], [decision]);
+
+        assert_eq!(projection.status, RadrootsActiveOrderStatus::Invalid);
+        assert_eq!(
+            projection.issues,
+            vec![
+                RadrootsActiveOrderReducerIssue::DecisionInventoryCommitmentMismatch {
+                    event_id: "decision-1".to_string()
+                }
+            ]
+        );
+    }
+
+    #[test]
+    fn reduce_active_order_events_matches_normalized_duplicate_bins() {
+        let mut request = request_record();
+        request.payload.items = vec![
+            RadrootsTradeOrderItem {
+                bin_id: " bin-1 ".to_string(),
+                bin_count: 1,
+            },
+            RadrootsTradeOrderItem {
+                bin_id: "bin-1".to_string(),
+                bin_count: 1,
+            },
+        ];
+        let decision = RadrootsActiveOrderDecisionRecord {
+            payload: decision_payload(RadrootsTradeOrderDecision::Accepted {
+                inventory_commitments: vec![RadrootsTradeInventoryCommitment {
+                    bin_id: "bin-1".to_string(),
+                    bin_count: 2,
+                }],
+            }),
+            ..accepted_decision_record("decision-1")
+        };
+
+        let projection = reduce_active_order_events("order-1", [request], [decision]);
+
+        assert_eq!(projection.status, RadrootsActiveOrderStatus::Accepted);
+        assert!(projection.issues.is_empty());
     }
 
     #[test]
