@@ -98,6 +98,57 @@ pub struct RadrootsActiveOrderProjection {
     pub issues: Vec<RadrootsActiveOrderReducerIssue>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsListingInventoryBinAvailability {
+    pub bin_id: String,
+    pub available_count: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsListingInventoryOrderReservation {
+    pub order_id: String,
+    pub decision_event_id: String,
+    pub bin_count: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsListingInventoryBinAccounting {
+    pub bin_id: String,
+    pub available_count: u64,
+    pub accepted_reserved_count: u64,
+    pub remaining_count: u64,
+    pub over_reserved: bool,
+    pub accepted_orders: Vec<RadrootsListingInventoryOrderReservation>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RadrootsListingInventoryAccountingIssue {
+    InvalidActiveOrder {
+        order_id: String,
+        event_ids: Vec<String>,
+    },
+    UnknownInventoryBin {
+        bin_id: String,
+        event_ids: Vec<String>,
+    },
+    OverReserved {
+        bin_id: String,
+        available_count: u64,
+        reserved_count: u64,
+        event_ids: Vec<String>,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsListingInventoryAccountingProjection {
+    pub listing_addr: String,
+    pub listing_event_id: String,
+    pub bins: Vec<RadrootsListingInventoryBinAccounting>,
+    pub declined_order_ids: Vec<String>,
+    pub invalid_event_ids: Vec<String>,
+    pub issues: Vec<RadrootsListingInventoryAccountingIssue>,
+}
+
 pub fn reduce_active_order_events<I, J>(
     order_id: &str,
     requests: I,
@@ -178,6 +229,102 @@ where
                 vec![RadrootsActiveOrderReducerIssue::ConflictingDecisions { event_ids }],
             )
         }
+    }
+}
+
+pub fn reduce_listing_inventory_accounting<I, J, K>(
+    listing_addr: &str,
+    listing_event_id: &str,
+    bins: I,
+    requests: J,
+    decisions: K,
+) -> RadrootsListingInventoryAccountingProjection
+where
+    I: IntoIterator<Item = RadrootsListingInventoryBinAvailability>,
+    J: IntoIterator<Item = RadrootsActiveOrderRequestRecord>,
+    K: IntoIterator<Item = RadrootsActiveOrderDecisionRecord>,
+{
+    let mut bins = normalized_listing_inventory_bins(bins);
+    let requests = unique_request_records(requests)
+        .into_iter()
+        .filter(|request| request.payload.listing_addr.trim() == listing_addr)
+        .collect::<Vec<_>>();
+    let decisions = unique_decision_records(decisions)
+        .into_iter()
+        .filter(|decision| decision.payload.listing_addr.trim() == listing_addr)
+        .collect::<Vec<_>>();
+    let mut order_ids = listing_order_ids(&requests, &decisions);
+    let mut declined_order_ids = Vec::new();
+    let mut invalid_event_ids = Vec::new();
+    let mut issues = Vec::new();
+
+    for order_id in order_ids.drain(..) {
+        let order_requests = requests
+            .iter()
+            .filter(|request| request.payload.order_id == order_id)
+            .cloned()
+            .collect::<Vec<_>>();
+        let order_decisions = decisions
+            .iter()
+            .filter(|decision| decision.payload.order_id == order_id)
+            .cloned()
+            .collect::<Vec<_>>();
+        let projection =
+            reduce_active_order_events(&order_id, order_requests.clone(), order_decisions.clone());
+        match projection.status {
+            RadrootsActiveOrderStatus::Accepted => {
+                if let Some(decision_event_id) = projection.decision_event_id.as_deref()
+                    && let Some(decision) = order_decisions
+                        .iter()
+                        .find(|decision| decision.event_id == decision_event_id)
+                {
+                    add_accepted_inventory_reservations(
+                        &mut bins,
+                        &order_id,
+                        decision,
+                        &mut issues,
+                    );
+                }
+            }
+            RadrootsActiveOrderStatus::Declined => declined_order_ids.push(order_id),
+            RadrootsActiveOrderStatus::Invalid => {
+                let mut event_ids = projection_issue_event_ids(&projection.issues);
+                if event_ids.is_empty() {
+                    event_ids.extend(
+                        order_requests
+                            .iter()
+                            .map(|request| request.event_id.clone()),
+                    );
+                    event_ids.extend(
+                        order_decisions
+                            .iter()
+                            .map(|decision| decision.event_id.clone()),
+                    );
+                    sort_and_dedup_strings(&mut event_ids);
+                }
+                invalid_event_ids.extend(event_ids.iter().cloned());
+                issues.push(
+                    RadrootsListingInventoryAccountingIssue::InvalidActiveOrder {
+                        order_id,
+                        event_ids,
+                    },
+                );
+            }
+            RadrootsActiveOrderStatus::Missing | RadrootsActiveOrderStatus::Requested => {}
+        }
+    }
+
+    sort_and_dedup_strings(&mut declined_order_ids);
+    sort_and_dedup_strings(&mut invalid_event_ids);
+    finish_inventory_accounting_bins(&mut bins, &mut issues);
+    issues.sort_by(inventory_issue_sort_key);
+    RadrootsListingInventoryAccountingProjection {
+        listing_addr: listing_addr.to_string(),
+        listing_event_id: listing_event_id.to_string(),
+        bins,
+        declined_order_ids,
+        invalid_event_ids,
+        issues,
     }
 }
 
@@ -343,6 +490,201 @@ where
         }
     }
     unique
+}
+
+fn normalized_listing_inventory_bins<I>(bins: I) -> Vec<RadrootsListingInventoryBinAccounting>
+where
+    I: IntoIterator<Item = RadrootsListingInventoryBinAvailability>,
+{
+    let mut normalized: Vec<RadrootsListingInventoryBinAccounting> = Vec::new();
+    for bin in bins {
+        let bin_id = bin.bin_id.trim();
+        if bin_id.is_empty() {
+            continue;
+        }
+        if let Some(existing) = normalized
+            .iter_mut()
+            .find(|existing| existing.bin_id == bin_id)
+        {
+            existing.available_count += bin.available_count;
+        } else {
+            normalized.push(RadrootsListingInventoryBinAccounting {
+                bin_id: bin_id.to_string(),
+                available_count: bin.available_count,
+                accepted_reserved_count: 0,
+                remaining_count: bin.available_count,
+                over_reserved: false,
+                accepted_orders: Vec::new(),
+            });
+        }
+    }
+    normalized.sort_by(|left, right| left.bin_id.cmp(&right.bin_id));
+    normalized
+}
+
+fn listing_order_ids(
+    requests: &[RadrootsActiveOrderRequestRecord],
+    decisions: &[RadrootsActiveOrderDecisionRecord],
+) -> Vec<String> {
+    let mut order_ids = Vec::new();
+    order_ids.extend(
+        requests
+            .iter()
+            .map(|request| request.payload.order_id.clone()),
+    );
+    order_ids.extend(
+        decisions
+            .iter()
+            .map(|decision| decision.payload.order_id.clone()),
+    );
+    sort_and_dedup_strings(&mut order_ids);
+    order_ids
+}
+
+fn add_accepted_inventory_reservations(
+    bins: &mut [RadrootsListingInventoryBinAccounting],
+    order_id: &str,
+    decision: &RadrootsActiveOrderDecisionRecord,
+    issues: &mut Vec<RadrootsListingInventoryAccountingIssue>,
+) {
+    let RadrootsTradeOrderDecision::Accepted {
+        inventory_commitments,
+    } = &decision.payload.decision
+    else {
+        return;
+    };
+    let Some(commitments) = normalized_inventory_commitment_counts(inventory_commitments) else {
+        issues.push(
+            RadrootsListingInventoryAccountingIssue::InvalidActiveOrder {
+                order_id: order_id.to_string(),
+                event_ids: vec![decision.event_id.clone()],
+            },
+        );
+        return;
+    };
+    for commitment in commitments {
+        if let Some(bin) = bins.iter_mut().find(|bin| bin.bin_id == commitment.bin_id) {
+            bin.accepted_reserved_count += commitment.bin_count;
+            bin.accepted_orders
+                .push(RadrootsListingInventoryOrderReservation {
+                    order_id: order_id.to_string(),
+                    decision_event_id: decision.event_id.clone(),
+                    bin_count: commitment.bin_count,
+                });
+        } else {
+            issues.push(
+                RadrootsListingInventoryAccountingIssue::UnknownInventoryBin {
+                    bin_id: commitment.bin_id,
+                    event_ids: vec![decision.event_id.clone()],
+                },
+            );
+        }
+    }
+}
+
+fn finish_inventory_accounting_bins(
+    bins: &mut [RadrootsListingInventoryBinAccounting],
+    issues: &mut Vec<RadrootsListingInventoryAccountingIssue>,
+) {
+    for bin in bins.iter_mut() {
+        bin.accepted_orders.sort_by(|left, right| {
+            left.order_id
+                .cmp(&right.order_id)
+                .then_with(|| left.decision_event_id.cmp(&right.decision_event_id))
+        });
+        bin.remaining_count = bin
+            .available_count
+            .saturating_sub(bin.accepted_reserved_count);
+        bin.over_reserved = bin.accepted_reserved_count > bin.available_count;
+        if bin.over_reserved {
+            let mut event_ids = bin
+                .accepted_orders
+                .iter()
+                .map(|reservation| reservation.decision_event_id.clone())
+                .collect::<Vec<_>>();
+            sort_and_dedup_strings(&mut event_ids);
+            issues.push(RadrootsListingInventoryAccountingIssue::OverReserved {
+                bin_id: bin.bin_id.clone(),
+                available_count: bin.available_count,
+                reserved_count: bin.accepted_reserved_count,
+                event_ids,
+            });
+        }
+    }
+    bins.sort_by(|left, right| left.bin_id.cmp(&right.bin_id));
+}
+
+fn projection_issue_event_ids(issues: &[RadrootsActiveOrderReducerIssue]) -> Vec<String> {
+    let mut event_ids = Vec::new();
+    for issue in issues {
+        match issue {
+            RadrootsActiveOrderReducerIssue::MissingRequest => {}
+            RadrootsActiveOrderReducerIssue::MultipleRequests { event_ids: ids }
+            | RadrootsActiveOrderReducerIssue::ConflictingDecisions { event_ids: ids } => {
+                event_ids.extend(ids.iter().cloned());
+            }
+            RadrootsActiveOrderReducerIssue::RequestPayloadInvalid { event_id }
+            | RadrootsActiveOrderReducerIssue::RequestOrderIdMismatch { event_id }
+            | RadrootsActiveOrderReducerIssue::RequestAuthorMismatch { event_id }
+            | RadrootsActiveOrderReducerIssue::RequestListingAddressInvalid { event_id }
+            | RadrootsActiveOrderReducerIssue::RequestSellerListingMismatch { event_id }
+            | RadrootsActiveOrderReducerIssue::DecisionPayloadInvalid { event_id }
+            | RadrootsActiveOrderReducerIssue::DecisionOrderIdMismatch { event_id }
+            | RadrootsActiveOrderReducerIssue::DecisionAuthorMismatch { event_id }
+            | RadrootsActiveOrderReducerIssue::DecisionBuyerMismatch { event_id }
+            | RadrootsActiveOrderReducerIssue::DecisionSellerMismatch { event_id }
+            | RadrootsActiveOrderReducerIssue::DecisionListingAddressInvalid { event_id }
+            | RadrootsActiveOrderReducerIssue::DecisionListingMismatch { event_id }
+            | RadrootsActiveOrderReducerIssue::DecisionRootMismatch { event_id }
+            | RadrootsActiveOrderReducerIssue::DecisionPreviousMismatch { event_id }
+            | RadrootsActiveOrderReducerIssue::DecisionMissingInventoryCommitments { event_id }
+            | RadrootsActiveOrderReducerIssue::DecisionInventoryCommitmentMismatch { event_id }
+            | RadrootsActiveOrderReducerIssue::DecisionMissingReason { event_id } => {
+                event_ids.push(event_id.clone());
+            }
+        }
+    }
+    sort_and_dedup_strings(&mut event_ids);
+    event_ids
+}
+
+fn sort_and_dedup_strings(values: &mut Vec<String>) {
+    values.sort();
+    values.dedup();
+}
+
+fn inventory_issue_sort_key(
+    left: &RadrootsListingInventoryAccountingIssue,
+    right: &RadrootsListingInventoryAccountingIssue,
+) -> core::cmp::Ordering {
+    inventory_issue_rank(left)
+        .cmp(&inventory_issue_rank(right))
+        .then_with(|| inventory_issue_id(left).cmp(inventory_issue_id(right)))
+        .then_with(|| inventory_issue_event_ids(left).cmp(inventory_issue_event_ids(right)))
+}
+
+fn inventory_issue_rank(issue: &RadrootsListingInventoryAccountingIssue) -> u8 {
+    match issue {
+        RadrootsListingInventoryAccountingIssue::InvalidActiveOrder { .. } => 0,
+        RadrootsListingInventoryAccountingIssue::UnknownInventoryBin { .. } => 1,
+        RadrootsListingInventoryAccountingIssue::OverReserved { .. } => 2,
+    }
+}
+
+fn inventory_issue_id(issue: &RadrootsListingInventoryAccountingIssue) -> &str {
+    match issue {
+        RadrootsListingInventoryAccountingIssue::InvalidActiveOrder { order_id, .. } => order_id,
+        RadrootsListingInventoryAccountingIssue::UnknownInventoryBin { bin_id, .. }
+        | RadrootsListingInventoryAccountingIssue::OverReserved { bin_id, .. } => bin_id,
+    }
+}
+
+fn inventory_issue_event_ids(issue: &RadrootsListingInventoryAccountingIssue) -> &[String] {
+    match issue {
+        RadrootsListingInventoryAccountingIssue::InvalidActiveOrder { event_ids, .. }
+        | RadrootsListingInventoryAccountingIssue::UnknownInventoryBin { event_ids, .. }
+        | RadrootsListingInventoryAccountingIssue::OverReserved { event_ids, .. } => event_ids,
+    }
 }
 
 fn validate_active_request_record(
@@ -706,9 +1048,11 @@ mod tests {
     use super::{
         RadrootsActiveOrderDecisionRecord, RadrootsActiveOrderReducerIssue,
         RadrootsActiveOrderRequestRecord, RadrootsActiveOrderStatus,
+        RadrootsListingInventoryAccountingIssue, RadrootsListingInventoryBinAccounting,
+        RadrootsListingInventoryBinAvailability, RadrootsListingInventoryOrderReservation,
         RadrootsTradeOrderCanonicalizationError, canonicalize_active_order_decision_for_signer,
         canonicalize_active_order_request_for_signer, canonicalize_order_request_for_signer,
-        reduce_active_order_events,
+        reduce_active_order_events, reduce_listing_inventory_accounting,
     };
 
     const SELLER: &str = "1111111111111111111111111111111111111111111111111111111111111111";
@@ -756,10 +1100,14 @@ mod tests {
         }
     }
 
+    fn listing_addr() -> String {
+        format!("{KIND_LISTING}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg")
+    }
+
     fn clean_request_payload() -> RadrootsTradeOrderRequested {
         RadrootsTradeOrderRequested {
             order_id: "order-1".to_string(),
-            listing_addr: format!("{KIND_LISTING}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg"),
+            listing_addr: listing_addr(),
             buyer_pubkey: BUYER.to_string(),
             seller_pubkey: SELLER.to_string(),
             items: vec![RadrootsTradeOrderItem {
@@ -781,10 +1129,21 @@ mod tests {
         request_record_with_event_id("request-1")
     }
 
+    fn request_record_for(
+        order_id: &str,
+        event_id: &str,
+        bin_count: u32,
+    ) -> RadrootsActiveOrderRequestRecord {
+        let mut request = request_record_with_event_id(event_id);
+        request.payload.order_id = order_id.to_string();
+        request.payload.items[0].bin_count = bin_count;
+        request
+    }
+
     fn decision_payload(decision: RadrootsTradeOrderDecision) -> RadrootsTradeOrderDecisionEvent {
         RadrootsTradeOrderDecisionEvent {
             order_id: "order-1".to_string(),
-            listing_addr: format!("{KIND_LISTING}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg"),
+            listing_addr: listing_addr(),
             buyer_pubkey: BUYER.to_string(),
             seller_pubkey: SELLER.to_string(),
             decision,
@@ -815,6 +1174,33 @@ mod tests {
             payload: decision_payload(RadrootsTradeOrderDecision::Declined {
                 reason: "out_of_stock".to_string(),
             }),
+        }
+    }
+
+    fn accepted_decision_record_for(
+        order_id: &str,
+        event_id: &str,
+        request_event_id: &str,
+        bin_count: u32,
+    ) -> RadrootsActiveOrderDecisionRecord {
+        let mut decision = accepted_decision_record(event_id);
+        decision.root_event_id = request_event_id.to_string();
+        decision.prev_event_id = request_event_id.to_string();
+        decision.payload.order_id = order_id.to_string();
+        let RadrootsTradeOrderDecision::Accepted {
+            inventory_commitments,
+        } = &mut decision.payload.decision
+        else {
+            panic!("expected accepted decision")
+        };
+        inventory_commitments[0].bin_count = bin_count;
+        decision
+    }
+
+    fn inventory_bin(available_count: u64) -> RadrootsListingInventoryBinAvailability {
+        RadrootsListingInventoryBinAvailability {
+            bin_id: "bin-1".to_string(),
+            available_count,
         }
     }
 
@@ -957,6 +1343,119 @@ mod tests {
 
         assert_eq!(projection.status, RadrootsActiveOrderStatus::Declined);
         assert_eq!(projection.decision_event_id.as_deref(), Some("decision-1"));
+    }
+
+    #[test]
+    fn reduce_listing_inventory_accounting_reserves_accepted_inventory() {
+        let projection = reduce_listing_inventory_accounting(
+            &listing_addr(),
+            "listing-event-1",
+            [inventory_bin(5)],
+            [request_record()],
+            [accepted_decision_record("decision-1")],
+        );
+
+        assert_eq!(projection.listing_event_id, "listing-event-1");
+        assert_eq!(projection.declined_order_ids, Vec::<String>::new());
+        assert_eq!(projection.invalid_event_ids, Vec::<String>::new());
+        assert!(projection.issues.is_empty());
+        assert_eq!(
+            projection.bins,
+            vec![RadrootsListingInventoryBinAccounting {
+                bin_id: "bin-1".to_string(),
+                available_count: 5,
+                accepted_reserved_count: 2,
+                remaining_count: 3,
+                over_reserved: false,
+                accepted_orders: vec![RadrootsListingInventoryOrderReservation {
+                    order_id: "order-1".to_string(),
+                    decision_event_id: "decision-1".to_string(),
+                    bin_count: 2,
+                }],
+            }]
+        );
+    }
+
+    #[test]
+    fn reduce_listing_inventory_accounting_leaves_declined_inventory_available() {
+        let projection = reduce_listing_inventory_accounting(
+            &listing_addr(),
+            "listing-event-1",
+            [inventory_bin(5)],
+            [request_record()],
+            [declined_decision_record("decision-1")],
+        );
+
+        assert_eq!(projection.declined_order_ids, vec!["order-1".to_string()]);
+        assert!(projection.invalid_event_ids.is_empty());
+        assert!(projection.issues.is_empty());
+        assert_eq!(projection.bins[0].accepted_reserved_count, 0);
+        assert_eq!(projection.bins[0].remaining_count, 5);
+        assert!(!projection.bins[0].over_reserved);
+    }
+
+    #[test]
+    fn reduce_listing_inventory_accounting_reports_invalid_mismatched_commitment() {
+        let decision = RadrootsActiveOrderDecisionRecord {
+            payload: decision_payload(RadrootsTradeOrderDecision::Accepted {
+                inventory_commitments: vec![RadrootsTradeInventoryCommitment {
+                    bin_id: "bin-1".to_string(),
+                    bin_count: 1,
+                }],
+            }),
+            ..accepted_decision_record("decision-1")
+        };
+
+        let projection = reduce_listing_inventory_accounting(
+            &listing_addr(),
+            "listing-event-1",
+            [inventory_bin(5)],
+            [request_record()],
+            [decision],
+        );
+
+        assert_eq!(projection.bins[0].accepted_reserved_count, 0);
+        assert_eq!(projection.invalid_event_ids, vec!["decision-1".to_string()]);
+        assert_eq!(
+            projection.issues,
+            vec![
+                RadrootsListingInventoryAccountingIssue::InvalidActiveOrder {
+                    order_id: "order-1".to_string(),
+                    event_ids: vec!["decision-1".to_string()],
+                }
+            ]
+        );
+    }
+
+    #[test]
+    fn reduce_listing_inventory_accounting_reports_over_reserved_bins() {
+        let projection = reduce_listing_inventory_accounting(
+            &listing_addr(),
+            "listing-event-1",
+            [inventory_bin(3)],
+            [
+                request_record_for("order-2", "request-2", 2),
+                request_record_for("order-1", "request-1", 2),
+            ],
+            [
+                accepted_decision_record_for("order-2", "decision-2", "request-2", 2),
+                accepted_decision_record_for("order-1", "decision-1", "request-1", 2),
+            ],
+        );
+
+        assert_eq!(projection.bins[0].available_count, 3);
+        assert_eq!(projection.bins[0].accepted_reserved_count, 4);
+        assert_eq!(projection.bins[0].remaining_count, 0);
+        assert!(projection.bins[0].over_reserved);
+        assert_eq!(
+            projection.issues,
+            vec![RadrootsListingInventoryAccountingIssue::OverReserved {
+                bin_id: "bin-1".to_string(),
+                available_count: 3,
+                reserved_count: 4,
+                event_ids: vec!["decision-1".to_string(), "decision-2".to_string()],
+            }]
+        );
     }
 
     #[test]
