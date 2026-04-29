@@ -276,17 +276,19 @@ where
     }
 }
 
-pub fn reduce_listing_inventory_accounting<I, J, K>(
+pub fn reduce_listing_inventory_accounting<I, J, K, L>(
     listing_addr: &str,
     listing_event_id: &str,
     bins: I,
     requests: J,
     decisions: K,
+    fulfillments: L,
 ) -> RadrootsListingInventoryAccountingProjection
 where
     I: IntoIterator<Item = RadrootsListingInventoryBinAvailability>,
     J: IntoIterator<Item = RadrootsActiveOrderRequestRecord>,
     K: IntoIterator<Item = RadrootsActiveOrderDecisionRecord>,
+    L: IntoIterator<Item = RadrootsActiveOrderFulfillmentRecord>,
 {
     let (mut bins, mut issues) = normalized_listing_inventory_bins(bins);
     let requests = unique_request_records(requests)
@@ -297,7 +299,11 @@ where
         .into_iter()
         .filter(|decision| decision.payload.listing_addr.trim() == listing_addr)
         .collect::<Vec<_>>();
-    let mut order_ids = listing_order_ids(&requests, &decisions);
+    let fulfillments = unique_fulfillment_records(fulfillments)
+        .into_iter()
+        .filter(|fulfillment| fulfillment.payload.listing_addr.trim() == listing_addr)
+        .collect::<Vec<_>>();
+    let mut order_ids = listing_order_ids(&requests, &decisions, &fulfillments);
     let mut declined_order_ids = Vec::new();
     let mut invalid_event_ids = Vec::new();
 
@@ -312,14 +318,24 @@ where
             .filter(|decision| decision.payload.order_id == order_id)
             .cloned()
             .collect::<Vec<_>>();
+        let order_fulfillments = fulfillments
+            .iter()
+            .filter(|fulfillment| fulfillment.payload.order_id == order_id)
+            .cloned()
+            .collect::<Vec<_>>();
         let projection = reduce_active_order_events(
             &order_id,
             order_requests.clone(),
             order_decisions.clone(),
-            [],
+            order_fulfillments.clone(),
         );
         match projection.status {
             RadrootsActiveOrderStatus::Accepted => {
+                if projection.fulfillment_status
+                    == Some(RadrootsActiveTradeFulfillmentState::SellerCancelled)
+                {
+                    continue;
+                }
                 if let Some(decision_event_id) = projection.decision_event_id.as_deref()
                     && let Some(decision) = order_decisions
                         .iter()
@@ -610,6 +626,7 @@ where
 fn listing_order_ids(
     requests: &[RadrootsActiveOrderRequestRecord],
     decisions: &[RadrootsActiveOrderDecisionRecord],
+    fulfillments: &[RadrootsActiveOrderFulfillmentRecord],
 ) -> Vec<String> {
     let mut order_ids = Vec::new();
     order_ids.extend(
@@ -621,6 +638,11 @@ fn listing_order_ids(
         decisions
             .iter()
             .map(|decision| decision.payload.order_id.clone()),
+    );
+    order_ids.extend(
+        fulfillments
+            .iter()
+            .map(|fulfillment| fulfillment.payload.order_id.clone()),
     );
     sort_and_dedup_strings(&mut order_ids);
     order_ids
@@ -1898,6 +1920,7 @@ mod tests {
             [inventory_bin(5)],
             [request_record()],
             [accepted_decision_record("decision-1")],
+            [],
         );
 
         assert_eq!(projection.listing_event_id, "listing-event-1");
@@ -1922,6 +1945,66 @@ mod tests {
     }
 
     #[test]
+    fn reduce_listing_inventory_accounting_releases_latest_seller_cancelled_order() {
+        let projection = reduce_listing_inventory_accounting(
+            &listing_addr(),
+            "listing-event-1",
+            [inventory_bin(5)],
+            [request_record()],
+            [accepted_decision_record("decision-1")],
+            [fulfillment_record(
+                "fulfillment-1",
+                "decision-1",
+                RadrootsActiveTradeFulfillmentState::SellerCancelled,
+            )],
+        );
+
+        assert!(projection.issues.is_empty());
+        assert_eq!(projection.invalid_event_ids, Vec::<String>::new());
+        assert_eq!(projection.bins[0].accepted_reserved_count, 0);
+        assert_eq!(projection.bins[0].remaining_count, 5);
+        assert!(projection.bins[0].accepted_orders.is_empty());
+    }
+
+    #[test]
+    fn reduce_listing_inventory_accounting_rejects_forked_cancel_release() {
+        let projection = reduce_listing_inventory_accounting(
+            &listing_addr(),
+            "listing-event-1",
+            [inventory_bin(5)],
+            [request_record()],
+            [accepted_decision_record("decision-1")],
+            [
+                fulfillment_record(
+                    "fulfillment-2",
+                    "decision-1",
+                    RadrootsActiveTradeFulfillmentState::SellerCancelled,
+                ),
+                fulfillment_record(
+                    "fulfillment-1",
+                    "decision-1",
+                    RadrootsActiveTradeFulfillmentState::Preparing,
+                ),
+            ],
+        );
+
+        assert_eq!(projection.bins[0].accepted_reserved_count, 0);
+        assert_eq!(
+            projection.invalid_event_ids,
+            vec!["fulfillment-1".to_string(), "fulfillment-2".to_string()]
+        );
+        assert_eq!(
+            projection.issues,
+            vec![
+                RadrootsListingInventoryAccountingIssue::InvalidActiveOrder {
+                    order_id: "order-1".to_string(),
+                    event_ids: vec!["fulfillment-1".to_string(), "fulfillment-2".to_string()],
+                }
+            ]
+        );
+    }
+
+    #[test]
     fn reduce_listing_inventory_accounting_leaves_declined_inventory_available() {
         let projection = reduce_listing_inventory_accounting(
             &listing_addr(),
@@ -1929,6 +2012,7 @@ mod tests {
             [inventory_bin(5)],
             [request_record()],
             [declined_decision_record("decision-1")],
+            [],
         );
 
         assert_eq!(projection.declined_order_ids, vec!["order-1".to_string()]);
@@ -1957,6 +2041,7 @@ mod tests {
             [inventory_bin(5)],
             [request_record()],
             [decision],
+            [],
         );
 
         assert_eq!(projection.bins[0].accepted_reserved_count, 0);
@@ -1986,6 +2071,7 @@ mod tests {
                 accepted_decision_record_for("order-2", "decision-2", "request-2", 2),
                 accepted_decision_record_for("order-1", "decision-1", "request-1", 2),
             ],
+            [],
         );
 
         assert_eq!(projection.bins[0].available_count, 3);
@@ -2017,6 +2103,7 @@ mod tests {
             ],
             Vec::<RadrootsActiveOrderRequestRecord>::new(),
             Vec::<RadrootsActiveOrderDecisionRecord>::new(),
+            Vec::<RadrootsActiveOrderFulfillmentRecord>::new(),
         );
 
         assert_eq!(projection.bins[0].available_count, u64::MAX);
@@ -2102,6 +2189,7 @@ mod tests {
             [inventory_bin(5)],
             [request_record()],
             [decision],
+            [],
         );
 
         assert_eq!(projection.bins[0].accepted_reserved_count, 0);
