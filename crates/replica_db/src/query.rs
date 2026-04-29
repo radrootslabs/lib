@@ -20,6 +20,7 @@ pub struct ReplicaTradeProductSummaryRow {
     pub price_qty_amt: u32,
     pub price_qty_unit: String,
     pub listing_addr: Option<String>,
+    pub primary_bin_id: Option<String>,
     pub location_primary: Option<String>,
 }
 
@@ -38,7 +39,7 @@ impl<E: SqlExecutor> ReplicaSql<E> {
         &self,
         lookup: &str,
     ) -> Result<Vec<ReplicaTradeProductSummaryRow>, SqlError> {
-        let sql = "SELECT tp.id, tp.key, tp.category, tp.title, tp.summary, tp.qty_amt, tp.qty_unit, tp.qty_label, tp.qty_avail, tp.price_amt, tp.price_currency, tp.price_qty_amt, tp.price_qty_unit, tp.listing_addr, loc.location_primary \
+        let sql = "SELECT tp.id, tp.key, tp.category, tp.title, tp.summary, tp.qty_amt, tp.qty_unit, tp.qty_label, tp.qty_avail, tp.price_amt, tp.price_currency, tp.price_qty_amt, tp.price_qty_unit, tp.listing_addr, tp.primary_bin_id, loc.location_primary \
              FROM trade_product tp \
              LEFT JOIN (\
                  SELECT tpl.tb_tp AS trade_product_id, MIN(COALESCE(gl.label, gl.gc_name, gl.gc_admin1_name, gl.gc_country_name, gl.d_tag)) AS location_primary \
@@ -78,7 +79,7 @@ impl<E: SqlExecutor> ReplicaSql<E> {
         }
 
         let sql = format!(
-            "SELECT tp.id, tp.key, tp.category, tp.title, tp.summary, tp.qty_amt, tp.qty_unit, tp.qty_label, tp.qty_avail, tp.price_amt, tp.price_currency, tp.price_qty_amt, tp.price_qty_unit, tp.listing_addr, loc.location_primary \
+            "SELECT tp.id, tp.key, tp.category, tp.title, tp.summary, tp.qty_amt, tp.qty_unit, tp.qty_label, tp.qty_avail, tp.price_amt, tp.price_currency, tp.price_qty_amt, tp.price_qty_unit, tp.listing_addr, tp.primary_bin_id, loc.location_primary \
              FROM trade_product tp \
              LEFT JOIN (\
                  SELECT tpl.tb_tp AS trade_product_id, MIN(COALESCE(gl.label, gl.gc_name, gl.gc_admin1_name, gl.gc_country_name, gl.d_tag)) AS location_primary \

@@ -604,6 +604,7 @@ fn trade_product_fields_from_listing(
         price_qty_amt,
         price_qty_unit,
         listing_addr: Some(listing_addr.to_string()),
+        primary_bin_id: Some(listing.primary_bin_id.clone()),
         notes: None,
     })
 }
@@ -671,6 +672,7 @@ fn trade_product_listing_addr_filter(listing_addr: &str) -> ITradeProductFieldsF
         price_qty_amt: None,
         price_qty_unit: None,
         listing_addr: Some(listing_addr.to_string()),
+        primary_bin_id: None,
         notes: None,
     }
 }
@@ -755,6 +757,7 @@ fn trade_product_partial_from_fields(fields: &ITradeProductFields) -> ITradeProd
         price_qty_amt: Some(Value::from(fields.price_qty_amt)),
         price_qty_unit: Some(Value::from(fields.price_qty_unit.clone())),
         listing_addr: to_value_opt(fields.listing_addr.clone()),
+        primary_bin_id: to_value_opt(fields.primary_bin_id.clone()),
         notes: to_value_opt(fields.notes.clone()),
     }
 }
@@ -2311,6 +2314,7 @@ mod tests {
             Some(listing_addr.as_str())
         );
         assert_eq!(search_rows[0].title, "Pasture Eggs");
+        assert_eq!(search_rows[0].primary_bin_id.as_deref(), Some("bin-a"));
         assert_eq!(search_rows[0].qty_amt, 12);
         assert_eq!(search_rows[0].qty_avail, Some(5));
         assert_eq!(search_rows[0].price_amt, 6.0);
@@ -2338,6 +2342,7 @@ mod tests {
         .results;
         assert_eq!(product_rows.len(), 1);
         assert_eq!(product_rows[0].title, "Market Eggs");
+        assert_eq!(product_rows[0].primary_bin_id.as_deref(), Some("bin-a"));
 
         let archived = listing_event(
             502,

@@ -91,4 +91,9 @@ fn run_all_up_repairs_missing_indexes_in_legacy_sqlite_dbs() {
             .and_then(Value::as_str)
             .is_some_and(|name| name == "listing_addr")
     }));
+    assert!(trade_product_columns.iter().any(|row| {
+        row.get("name")
+            .and_then(Value::as_str)
+            .is_some_and(|name| name == "primary_bin_id")
+    }));
 }
