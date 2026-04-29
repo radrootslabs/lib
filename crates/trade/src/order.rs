@@ -47,6 +47,7 @@ pub struct RadrootsActiveOrderRequestRecord {
 pub struct RadrootsActiveOrderDecisionRecord {
     pub event_id: String,
     pub author_pubkey: String,
+    pub counterparty_pubkey: String,
     pub root_event_id: String,
     pub prev_event_id: String,
     pub payload: RadrootsTradeOrderDecisionEvent,
@@ -73,6 +74,7 @@ pub enum RadrootsActiveOrderReducerIssue {
     DecisionPayloadInvalid { event_id: String },
     DecisionOrderIdMismatch { event_id: String },
     DecisionAuthorMismatch { event_id: String },
+    DecisionCounterpartyMismatch { event_id: String },
     DecisionBuyerMismatch { event_id: String },
     DecisionSellerMismatch { event_id: String },
     DecisionListingAddressInvalid { event_id: String },
@@ -631,6 +633,7 @@ fn projection_issue_event_ids(issues: &[RadrootsActiveOrderReducerIssue]) -> Vec
             | RadrootsActiveOrderReducerIssue::DecisionPayloadInvalid { event_id }
             | RadrootsActiveOrderReducerIssue::DecisionOrderIdMismatch { event_id }
             | RadrootsActiveOrderReducerIssue::DecisionAuthorMismatch { event_id }
+            | RadrootsActiveOrderReducerIssue::DecisionCounterpartyMismatch { event_id }
             | RadrootsActiveOrderReducerIssue::DecisionBuyerMismatch { event_id }
             | RadrootsActiveOrderReducerIssue::DecisionSellerMismatch { event_id }
             | RadrootsActiveOrderReducerIssue::DecisionListingAddressInvalid { event_id }
@@ -759,6 +762,14 @@ fn validate_active_decision_record(
         issues.push(RadrootsActiveOrderReducerIssue::DecisionAuthorMismatch {
             event_id: decision.event_id.clone(),
         });
+        valid = false;
+    }
+    if decision.counterparty_pubkey != request.payload.buyer_pubkey {
+        issues.push(
+            RadrootsActiveOrderReducerIssue::DecisionCounterpartyMismatch {
+                event_id: decision.event_id.clone(),
+            },
+        );
         valid = false;
     }
     if decision.payload.buyer_pubkey != request.payload.buyer_pubkey {
@@ -1154,6 +1165,7 @@ mod tests {
         RadrootsActiveOrderDecisionRecord {
             event_id: event_id.to_string(),
             author_pubkey: SELLER.to_string(),
+            counterparty_pubkey: BUYER.to_string(),
             root_event_id: "request-1".to_string(),
             prev_event_id: "request-1".to_string(),
             payload: decision_payload(RadrootsTradeOrderDecision::Accepted {
@@ -1169,6 +1181,7 @@ mod tests {
         RadrootsActiveOrderDecisionRecord {
             event_id: event_id.to_string(),
             author_pubkey: SELLER.to_string(),
+            counterparty_pubkey: BUYER.to_string(),
             root_event_id: "request-1".to_string(),
             prev_event_id: "request-1".to_string(),
             payload: decision_payload(RadrootsTradeOrderDecision::Declined {
@@ -1471,6 +1484,47 @@ mod tests {
             RadrootsActiveOrderReducerIssue::DecisionAuthorMismatch { event_id }
                 if event_id == "decision-1"
         )));
+    }
+
+    #[test]
+    fn reduce_active_order_events_rejects_invalid_decision_counterparty() {
+        let mut decision = accepted_decision_record("decision-1");
+        decision.counterparty_pubkey = SELLER.to_string();
+
+        let projection = reduce_active_order_events("order-1", [request_record()], [decision]);
+
+        assert_eq!(projection.status, RadrootsActiveOrderStatus::Invalid);
+        assert!(projection.issues.iter().any(|issue| matches!(
+            issue,
+            RadrootsActiveOrderReducerIssue::DecisionCounterpartyMismatch { event_id }
+                if event_id == "decision-1"
+        )));
+    }
+
+    #[test]
+    fn reduce_listing_inventory_accounting_ignores_wrong_counterparty_decision() {
+        let mut decision = accepted_decision_record("decision-1");
+        decision.counterparty_pubkey = SELLER.to_string();
+
+        let projection = reduce_listing_inventory_accounting(
+            &listing_addr(),
+            "listing-event-1",
+            [inventory_bin(5)],
+            [request_record()],
+            [decision],
+        );
+
+        assert_eq!(projection.bins[0].accepted_reserved_count, 0);
+        assert_eq!(projection.invalid_event_ids, vec!["decision-1".to_string()]);
+        assert_eq!(
+            projection.issues,
+            vec![
+                RadrootsListingInventoryAccountingIssue::InvalidActiveOrder {
+                    order_id: "order-1".to_string(),
+                    event_ids: vec!["decision-1".to_string()],
+                }
+            ]
+        );
     }
 
     #[test]
