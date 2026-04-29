@@ -129,6 +129,10 @@ pub enum RadrootsListingInventoryAccountingIssue {
         order_id: String,
         event_ids: Vec<String>,
     },
+    ArithmeticOverflow {
+        bin_id: String,
+        event_ids: Vec<String>,
+    },
     UnknownInventoryBin {
         bin_id: String,
         event_ids: Vec<String>,
@@ -246,7 +250,7 @@ where
     J: IntoIterator<Item = RadrootsActiveOrderRequestRecord>,
     K: IntoIterator<Item = RadrootsActiveOrderDecisionRecord>,
 {
-    let mut bins = normalized_listing_inventory_bins(bins);
+    let (mut bins, mut issues) = normalized_listing_inventory_bins(bins);
     let requests = unique_request_records(requests)
         .into_iter()
         .filter(|request| request.payload.listing_addr.trim() == listing_addr)
@@ -258,7 +262,6 @@ where
     let mut order_ids = listing_order_ids(&requests, &decisions);
     let mut declined_order_ids = Vec::new();
     let mut invalid_event_ids = Vec::new();
-    let mut issues = Vec::new();
 
     for order_id in order_ids.drain(..) {
         let order_requests = requests
@@ -494,11 +497,17 @@ where
     unique
 }
 
-fn normalized_listing_inventory_bins<I>(bins: I) -> Vec<RadrootsListingInventoryBinAccounting>
+fn normalized_listing_inventory_bins<I>(
+    bins: I,
+) -> (
+    Vec<RadrootsListingInventoryBinAccounting>,
+    Vec<RadrootsListingInventoryAccountingIssue>,
+)
 where
     I: IntoIterator<Item = RadrootsListingInventoryBinAvailability>,
 {
     let mut normalized: Vec<RadrootsListingInventoryBinAccounting> = Vec::new();
+    let mut issues = Vec::new();
     for bin in bins {
         let bin_id = bin.bin_id.trim();
         if bin_id.is_empty() {
@@ -508,7 +517,19 @@ where
             .iter_mut()
             .find(|existing| existing.bin_id == bin_id)
         {
-            existing.available_count += bin.available_count;
+            if let Some(next_count) = existing.available_count.checked_add(bin.available_count) {
+                existing.available_count = next_count;
+                existing.remaining_count = next_count;
+            } else {
+                existing.available_count = u64::MAX;
+                existing.remaining_count = u64::MAX;
+                issues.push(
+                    RadrootsListingInventoryAccountingIssue::ArithmeticOverflow {
+                        bin_id: existing.bin_id.clone(),
+                        event_ids: Vec::new(),
+                    },
+                );
+            }
         } else {
             normalized.push(RadrootsListingInventoryBinAccounting {
                 bin_id: bin_id.to_string(),
@@ -521,7 +542,7 @@ where
         }
     }
     normalized.sort_by(|left, right| left.bin_id.cmp(&right.bin_id));
-    normalized
+    (normalized, issues)
 }
 
 fn listing_order_ids(
@@ -566,13 +587,7 @@ fn add_accepted_inventory_reservations(
     };
     for commitment in commitments {
         if let Some(bin) = bins.iter_mut().find(|bin| bin.bin_id == commitment.bin_id) {
-            bin.accepted_reserved_count += commitment.bin_count;
-            bin.accepted_orders
-                .push(RadrootsListingInventoryOrderReservation {
-                    order_id: order_id.to_string(),
-                    decision_event_id: decision.event_id.clone(),
-                    bin_count: commitment.bin_count,
-                });
+            add_inventory_reservation(bin, order_id, decision, commitment.bin_count, issues);
         } else {
             issues.push(
                 RadrootsListingInventoryAccountingIssue::UnknownInventoryBin {
@@ -581,6 +596,31 @@ fn add_accepted_inventory_reservations(
                 },
             );
         }
+    }
+}
+
+fn add_inventory_reservation(
+    bin: &mut RadrootsListingInventoryBinAccounting,
+    order_id: &str,
+    decision: &RadrootsActiveOrderDecisionRecord,
+    bin_count: u64,
+    issues: &mut Vec<RadrootsListingInventoryAccountingIssue>,
+) {
+    if let Some(next_count) = bin.accepted_reserved_count.checked_add(bin_count) {
+        bin.accepted_reserved_count = next_count;
+        bin.accepted_orders
+            .push(RadrootsListingInventoryOrderReservation {
+                order_id: order_id.to_string(),
+                decision_event_id: decision.event_id.clone(),
+                bin_count,
+            });
+    } else {
+        issues.push(
+            RadrootsListingInventoryAccountingIssue::ArithmeticOverflow {
+                bin_id: bin.bin_id.clone(),
+                event_ids: vec![decision.event_id.clone()],
+            },
+        );
     }
 }
 
@@ -669,15 +709,17 @@ fn inventory_issue_sort_key(
 fn inventory_issue_rank(issue: &RadrootsListingInventoryAccountingIssue) -> u8 {
     match issue {
         RadrootsListingInventoryAccountingIssue::InvalidActiveOrder { .. } => 0,
-        RadrootsListingInventoryAccountingIssue::UnknownInventoryBin { .. } => 1,
-        RadrootsListingInventoryAccountingIssue::OverReserved { .. } => 2,
+        RadrootsListingInventoryAccountingIssue::ArithmeticOverflow { .. } => 1,
+        RadrootsListingInventoryAccountingIssue::UnknownInventoryBin { .. } => 2,
+        RadrootsListingInventoryAccountingIssue::OverReserved { .. } => 3,
     }
 }
 
 fn inventory_issue_id(issue: &RadrootsListingInventoryAccountingIssue) -> &str {
     match issue {
         RadrootsListingInventoryAccountingIssue::InvalidActiveOrder { order_id, .. } => order_id,
-        RadrootsListingInventoryAccountingIssue::UnknownInventoryBin { bin_id, .. }
+        RadrootsListingInventoryAccountingIssue::ArithmeticOverflow { bin_id, .. }
+        | RadrootsListingInventoryAccountingIssue::UnknownInventoryBin { bin_id, .. }
         | RadrootsListingInventoryAccountingIssue::OverReserved { bin_id, .. } => bin_id,
     }
 }
@@ -685,6 +727,7 @@ fn inventory_issue_id(issue: &RadrootsListingInventoryAccountingIssue) -> &str {
 fn inventory_issue_event_ids(issue: &RadrootsListingInventoryAccountingIssue) -> &[String] {
     match issue {
         RadrootsListingInventoryAccountingIssue::InvalidActiveOrder { event_ids, .. }
+        | RadrootsListingInventoryAccountingIssue::ArithmeticOverflow { event_ids, .. }
         | RadrootsListingInventoryAccountingIssue::UnknownInventoryBin { event_ids, .. }
         | RadrootsListingInventoryAccountingIssue::OverReserved { event_ids, .. } => event_ids,
     }
@@ -1026,7 +1069,7 @@ fn push_normalized_inventory_count(
         return None;
     }
     if let Some(existing) = counts.iter_mut().find(|count| count.bin_id == bin_id) {
-        existing.bin_count += u64::from(bin_count);
+        existing.bin_count = existing.bin_count.checked_add(u64::from(bin_count))?;
     } else {
         counts.push(NormalizedInventoryCount {
             bin_id: bin_id.to_string(),
@@ -1061,7 +1104,8 @@ mod tests {
         RadrootsActiveOrderRequestRecord, RadrootsActiveOrderStatus,
         RadrootsListingInventoryAccountingIssue, RadrootsListingInventoryBinAccounting,
         RadrootsListingInventoryBinAvailability, RadrootsListingInventoryOrderReservation,
-        RadrootsTradeOrderCanonicalizationError, canonicalize_active_order_decision_for_signer,
+        RadrootsTradeOrderCanonicalizationError, add_inventory_reservation,
+        canonicalize_active_order_decision_for_signer,
         canonicalize_active_order_request_for_signer, canonicalize_order_request_for_signer,
         reduce_active_order_events, reduce_listing_inventory_accounting,
     };
@@ -1468,6 +1512,64 @@ mod tests {
                 reserved_count: 4,
                 event_ids: vec!["decision-1".to_string(), "decision-2".to_string()],
             }]
+        );
+    }
+
+    #[test]
+    fn reduce_listing_inventory_accounting_reports_duplicate_availability_overflow() {
+        let projection = reduce_listing_inventory_accounting(
+            &listing_addr(),
+            "listing-event-1",
+            [
+                RadrootsListingInventoryBinAvailability {
+                    bin_id: "bin-1".to_string(),
+                    available_count: u64::MAX,
+                },
+                inventory_bin(1),
+            ],
+            Vec::<RadrootsActiveOrderRequestRecord>::new(),
+            Vec::<RadrootsActiveOrderDecisionRecord>::new(),
+        );
+
+        assert_eq!(projection.bins[0].available_count, u64::MAX);
+        assert_eq!(projection.bins[0].accepted_reserved_count, 0);
+        assert_eq!(projection.bins[0].remaining_count, u64::MAX);
+        assert_eq!(
+            projection.issues,
+            vec![
+                RadrootsListingInventoryAccountingIssue::ArithmeticOverflow {
+                    bin_id: "bin-1".to_string(),
+                    event_ids: Vec::new(),
+                }
+            ]
+        );
+    }
+
+    #[test]
+    fn add_inventory_reservation_reports_reservation_overflow() {
+        let mut bin = RadrootsListingInventoryBinAccounting {
+            bin_id: "bin-1".to_string(),
+            available_count: u64::MAX,
+            accepted_reserved_count: u64::MAX,
+            remaining_count: 0,
+            over_reserved: false,
+            accepted_orders: Vec::new(),
+        };
+        let decision = accepted_decision_record("decision-overflow");
+        let mut issues = Vec::new();
+
+        add_inventory_reservation(&mut bin, "order-overflow", &decision, 1, &mut issues);
+
+        assert_eq!(bin.accepted_reserved_count, u64::MAX);
+        assert!(bin.accepted_orders.is_empty());
+        assert_eq!(
+            issues,
+            vec![
+                RadrootsListingInventoryAccountingIssue::ArithmeticOverflow {
+                    bin_id: "bin-1".to_string(),
+                    event_ids: vec!["decision-overflow".to_string()],
+                }
+            ]
         );
     }
 
