@@ -125,14 +125,18 @@ pub const TRADE_LISTING_KINDS: [u32; 15] = TRADE_KINDS;
 
 pub const ACTIVE_TRADE_LISTING_KINDS: [u32; 2] = [KIND_LISTING, KIND_LISTING_DRAFT];
 
-pub const ACTIVE_TRADE_PUBLIC_KINDS: [u32; 2] =
-    [KIND_TRADE_ORDER_REQUEST, KIND_TRADE_ORDER_DECISION];
+pub const ACTIVE_TRADE_PUBLIC_KINDS: [u32; 3] = [
+    KIND_TRADE_ORDER_REQUEST,
+    KIND_TRADE_ORDER_DECISION,
+    KIND_TRADE_FULFILLMENT_UPDATE,
+];
 
-pub const ACTIVE_TRADE_KINDS: [u32; 4] = [
+pub const ACTIVE_TRADE_KINDS: [u32; 5] = [
     KIND_LISTING,
     KIND_LISTING_DRAFT,
     KIND_TRADE_ORDER_REQUEST,
     KIND_TRADE_ORDER_DECISION,
+    KIND_TRADE_FULFILLMENT_UPDATE,
 ];
 
 pub const KIND_JOB_REQUEST_MIN: u32 = 5000;
@@ -193,7 +197,10 @@ pub const fn is_active_trade_listing_kind(kind: u32) -> bool {
 
 #[inline]
 pub const fn is_active_trade_public_kind(kind: u32) -> bool {
-    matches!(kind, KIND_TRADE_ORDER_REQUEST | KIND_TRADE_ORDER_DECISION)
+    matches!(
+        kind,
+        KIND_TRADE_ORDER_REQUEST | KIND_TRADE_ORDER_DECISION | KIND_TRADE_FULFILLMENT_UPDATE
+    )
 }
 
 #[inline]
@@ -721,14 +728,18 @@ mod kinds_constants_tests {
     }
 
     #[test]
-    fn active_trade_kind_set_contains_only_listing_request_and_decision() {
+    fn active_trade_kind_set_contains_listing_order_decision_and_fulfillment() {
         assert_eq!(
             ACTIVE_TRADE_LISTING_KINDS,
             [KIND_LISTING, KIND_LISTING_DRAFT]
         );
         assert_eq!(
             ACTIVE_TRADE_PUBLIC_KINDS,
-            [KIND_TRADE_ORDER_REQUEST, KIND_TRADE_ORDER_DECISION]
+            [
+                KIND_TRADE_ORDER_REQUEST,
+                KIND_TRADE_ORDER_DECISION,
+                KIND_TRADE_FULFILLMENT_UPDATE,
+            ]
         );
         assert_eq!(
             ACTIVE_TRADE_KINDS,
@@ -737,6 +748,7 @@ mod kinds_constants_tests {
                 KIND_LISTING_DRAFT,
                 KIND_TRADE_ORDER_REQUEST,
                 KIND_TRADE_ORDER_DECISION,
+                KIND_TRADE_FULFILLMENT_UPDATE,
             ]
         );
 
@@ -744,6 +756,7 @@ mod kinds_constants_tests {
         assert!(is_active_trade_kind(KIND_LISTING_DRAFT));
         assert!(is_active_trade_public_kind(KIND_TRADE_ORDER_REQUEST));
         assert!(is_active_trade_public_kind(KIND_TRADE_ORDER_DECISION));
+        assert!(is_active_trade_public_kind(KIND_TRADE_FULFILLMENT_UPDATE));
         assert!(!is_active_trade_public_kind(
             KIND_TRADE_LISTING_VALIDATE_REQ
         ));
@@ -758,7 +771,6 @@ mod kinds_constants_tests {
         assert!(!is_active_trade_public_kind(KIND_TRADE_DISCOUNT_ACCEPT));
         assert!(!is_active_trade_public_kind(3431));
         assert!(!is_active_trade_public_kind(KIND_TRADE_CANCEL));
-        assert!(!is_active_trade_public_kind(KIND_TRADE_FULFILLMENT_UPDATE));
         assert!(!is_active_trade_public_kind(KIND_TRADE_RECEIPT));
     }
 }

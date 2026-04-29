@@ -7,8 +7,8 @@ use radroots_events::{
     trade::{
         RadrootsActiveTradeEnvelope, RadrootsActiveTradeEnvelopeError,
         RadrootsActiveTradeMessageType, RadrootsActiveTradePayloadError, RadrootsTradeEnvelope,
-        RadrootsTradeEnvelopeError, RadrootsTradeMessagePayload, RadrootsTradeMessageType,
-        RadrootsTradeOrderDecisionEvent, RadrootsTradeOrderRequested,
+        RadrootsTradeEnvelopeError, RadrootsTradeFulfillmentUpdated, RadrootsTradeMessagePayload,
+        RadrootsTradeMessageType, RadrootsTradeOrderDecisionEvent, RadrootsTradeOrderRequested,
     },
 };
 
@@ -62,6 +62,9 @@ fn map_active_payload_error(error: RadrootsActiveTradePayloadError) -> EventEnco
         }
         RadrootsActiveTradePayloadError::InvalidInventoryCommitmentCount { .. } => {
             EventEncodeError::InvalidField("inventory_commitments.bin_count")
+        }
+        RadrootsActiveTradePayloadError::InvalidFulfillmentStatus => {
+            EventEncodeError::InvalidField("fulfillment.status")
         }
     }
 }
@@ -185,6 +188,25 @@ pub fn active_trade_order_decision_event_build(
     active_trade_envelope_event_build(
         &payload.buyer_pubkey,
         RadrootsActiveTradeMessageType::TradeOrderDecision,
+        &payload.listing_addr,
+        &payload.order_id,
+        None,
+        Some(root_event_id),
+        Some(prev_event_id),
+        payload,
+    )
+}
+
+#[cfg(feature = "serde_json")]
+pub fn active_trade_fulfillment_update_event_build(
+    root_event_id: &str,
+    prev_event_id: &str,
+    payload: &RadrootsTradeFulfillmentUpdated,
+) -> Result<WireEventParts, EventEncodeError> {
+    payload.validate().map_err(map_active_payload_error)?;
+    active_trade_envelope_event_build(
+        &payload.buyer_pubkey,
+        RadrootsActiveTradeMessageType::TradeFulfillmentUpdated,
         &payload.listing_addr,
         &payload.order_id,
         None,

@@ -9,8 +9,8 @@ use radroots_events::{
     trade::{
         RadrootsActiveTradeEnvelope, RadrootsActiveTradeEnvelopeError,
         RadrootsActiveTradeMessageType, RadrootsActiveTradePayloadError, RadrootsTradeEnvelope,
-        RadrootsTradeEnvelopeError, RadrootsTradeMessageType, RadrootsTradeOrderDecisionEvent,
-        RadrootsTradeOrderRequested,
+        RadrootsTradeEnvelopeError, RadrootsTradeFulfillmentUpdated, RadrootsTradeMessageType,
+        RadrootsTradeOrderDecisionEvent, RadrootsTradeOrderRequested,
     },
 };
 #[cfg(feature = "serde_json")]
@@ -380,6 +380,37 @@ pub fn active_trade_order_decision_from_event(
 }
 
 #[cfg(feature = "serde_json")]
+pub fn active_trade_fulfillment_update_from_event(
+    event: &RadrootsNostrEvent,
+) -> Result<
+    RadrootsActiveTradeEnvelope<RadrootsTradeFulfillmentUpdated>,
+    RadrootsActiveTradeEnvelopeParseError,
+> {
+    let envelope = active_trade_envelope_from_event::<RadrootsTradeFulfillmentUpdated>(event)?;
+    if envelope.message_type != RadrootsActiveTradeMessageType::TradeFulfillmentUpdated {
+        return Err(
+            RadrootsActiveTradeEnvelopeParseError::MessageTypeKindMismatch {
+                event_kind: event.kind,
+                message_type: envelope.message_type,
+            },
+        );
+    }
+    envelope
+        .payload
+        .validate()
+        .map_err(RadrootsActiveTradeEnvelopeParseError::InvalidPayload)?;
+    validate_active_order_binding(
+        event,
+        &envelope,
+        &envelope.payload.order_id,
+        &envelope.payload.listing_addr,
+        &envelope.payload.seller_pubkey,
+        &envelope.payload.buyer_pubkey,
+    )?;
+    Ok(envelope)
+}
+
+#[cfg(feature = "serde_json")]
 pub fn trade_event_context_from_tags(
     message_type: RadrootsTradeMessageType,
     tags: &[Vec<String>],
@@ -547,20 +578,24 @@ mod tests {
     use super::{
         RadrootsActiveTradeEnvelopeParseError, RadrootsTradeEnvelopeParseError,
         RadrootsTradeListingAddress, active_trade_envelope_from_event,
-        active_trade_order_decision_from_event, active_trade_order_request_from_event,
-        trade_envelope_from_event, trade_event_context_from_tags,
+        active_trade_fulfillment_update_from_event, active_trade_order_decision_from_event,
+        active_trade_order_request_from_event, trade_envelope_from_event,
+        trade_event_context_from_tags,
     };
     use crate::trade::encode::{
-        active_trade_order_decision_event_build, active_trade_order_request_event_build,
-        trade_envelope_event_build,
+        active_trade_fulfillment_update_event_build, active_trade_order_decision_event_build,
+        active_trade_order_request_event_build, trade_envelope_event_build,
     };
     use crate::trade::tags::TAG_LISTING_EVENT;
     use radroots_events::{
         RadrootsNostrEvent, RadrootsNostrEventPtr,
-        kinds::{KIND_TRADE_ORDER_DECISION, KIND_TRADE_ORDER_REQUEST},
+        kinds::{
+            KIND_TRADE_FULFILLMENT_UPDATE, KIND_TRADE_ORDER_DECISION, KIND_TRADE_ORDER_REQUEST,
+        },
         tags::{TAG_D, TAG_E_PREV, TAG_E_ROOT},
         trade::{
-            RadrootsActiveTradeEnvelope, RadrootsActiveTradeMessageType, RadrootsTradeEnvelope,
+            RadrootsActiveTradeEnvelope, RadrootsActiveTradeFulfillmentState,
+            RadrootsActiveTradeMessageType, RadrootsTradeEnvelope, RadrootsTradeFulfillmentUpdated,
             RadrootsTradeInventoryCommitment, RadrootsTradeMessagePayload,
             RadrootsTradeMessageType, RadrootsTradeOrder, RadrootsTradeOrderDecision,
             RadrootsTradeOrderDecisionEvent, RadrootsTradeOrderItem, RadrootsTradeOrderRequested,
@@ -606,6 +641,16 @@ mod tests {
                     bin_count: 3,
                 }],
             },
+        }
+    }
+
+    fn active_fulfillment_update() -> RadrootsTradeFulfillmentUpdated {
+        RadrootsTradeFulfillmentUpdated {
+            order_id: "order-1".into(),
+            listing_addr: "30402:seller:AAAAAAAAAAAAAAAAAAAAAg".into(),
+            buyer_pubkey: "buyer".into(),
+            seller_pubkey: "seller".into(),
+            status: RadrootsActiveTradeFulfillmentState::ReadyForPickup,
         }
     }
 
@@ -730,6 +775,40 @@ mod tests {
     }
 
     #[test]
+    fn active_fulfillment_update_builder_emits_canonical_chain_shape() {
+        let payload = active_fulfillment_update();
+        let built =
+            active_trade_fulfillment_update_event_build("root-event", "prev-event", &payload)
+                .unwrap();
+        let envelope: RadrootsActiveTradeEnvelope<RadrootsTradeFulfillmentUpdated> =
+            serde_json::from_str(&built.content).unwrap();
+
+        assert_eq!(built.kind, KIND_TRADE_FULFILLMENT_UPDATE);
+        assert_eq!(
+            envelope.message_type,
+            RadrootsActiveTradeMessageType::TradeFulfillmentUpdated
+        );
+        assert_eq!(envelope.payload.status, payload.status);
+        assert_eq!(built.tags[0], vec!["p".to_string(), "buyer".to_string()]);
+        assert_eq!(
+            built.tags[2],
+            vec![TAG_D.to_string(), "order-1".to_string()]
+        );
+        assert!(
+            built
+                .tags
+                .iter()
+                .any(|tag| tag == &vec![TAG_E_ROOT.to_string(), "root-event".to_string()])
+        );
+        assert!(
+            built
+                .tags
+                .iter()
+                .any(|tag| tag == &vec![TAG_E_PREV.to_string(), "prev-event".to_string()])
+        );
+    }
+
+    #[test]
     fn active_order_request_parse_roundtrips_and_validates_tags() {
         let payload = active_order_request();
         let built = active_trade_order_request_event_build(&listing_event_ptr(), &payload).unwrap();
@@ -771,6 +850,30 @@ mod tests {
         assert_eq!(
             envelope.message_type,
             RadrootsActiveTradeMessageType::TradeOrderDecision
+        );
+    }
+
+    #[test]
+    fn active_fulfillment_update_parse_roundtrips_and_validates_chain_tags() {
+        let payload = active_fulfillment_update();
+        let built =
+            active_trade_fulfillment_update_event_build("root-event", "prev-event", &payload)
+                .unwrap();
+        let event = RadrootsNostrEvent {
+            id: "event-id".into(),
+            author: "seller".into(),
+            created_at: 1,
+            kind: built.kind,
+            tags: built.tags,
+            content: built.content,
+            sig: "sig".into(),
+        };
+        let envelope = active_trade_fulfillment_update_from_event(&event).unwrap();
+
+        assert_eq!(envelope.payload, payload);
+        assert_eq!(
+            envelope.message_type,
+            RadrootsActiveTradeMessageType::TradeFulfillmentUpdated
         );
     }
 

@@ -267,6 +267,53 @@ impl RadrootsTradeOrderDecisionEvent {
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RadrootsActiveTradeFulfillmentState {
+    AcceptedNotFulfilled,
+    Preparing,
+    ReadyForPickup,
+    OutForDelivery,
+    Delivered,
+    SellerCancelled,
+}
+
+impl RadrootsActiveTradeFulfillmentState {
+    #[inline]
+    pub const fn is_publishable_update(self) -> bool {
+        !matches!(self, Self::AcceptedNotFulfilled)
+    }
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsTradeFulfillmentUpdated {
+    pub order_id: String,
+    pub listing_addr: String,
+    pub buyer_pubkey: String,
+    pub seller_pubkey: String,
+    pub status: RadrootsActiveTradeFulfillmentState,
+}
+
+impl RadrootsTradeFulfillmentUpdated {
+    pub fn validate(&self) -> Result<(), RadrootsActiveTradePayloadError> {
+        validate_required_field(&self.order_id, "order_id")?;
+        validate_required_field(&self.listing_addr, "listing_addr")?;
+        validate_required_field(&self.buyer_pubkey, "buyer_pubkey")?;
+        validate_required_field(&self.seller_pubkey, "seller_pubkey")?;
+        if self.status.is_publishable_update() {
+            Ok(())
+        } else {
+            Err(RadrootsActiveTradePayloadError::InvalidFulfillmentStatus)
+        }
+    }
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeQuestion {
     pub question_id: String,
@@ -429,6 +476,8 @@ pub enum RadrootsActiveTradeMessageType {
     TradeOrderRequested,
     #[cfg_attr(feature = "serde", serde(rename = "TradeOrderDecision"))]
     TradeOrderDecision,
+    #[cfg_attr(feature = "serde", serde(rename = "TradeFulfillmentUpdated"))]
+    TradeFulfillmentUpdated,
 }
 
 impl RadrootsActiveTradeMessageType {
@@ -437,6 +486,7 @@ impl RadrootsActiveTradeMessageType {
         match kind {
             KIND_TRADE_ORDER_REQUEST => Some(Self::TradeOrderRequested),
             KIND_TRADE_ORDER_DECISION => Some(Self::TradeOrderDecision),
+            KIND_TRADE_FULFILLMENT_UPDATE => Some(Self::TradeFulfillmentUpdated),
             _ => None,
         }
     }
@@ -446,6 +496,7 @@ impl RadrootsActiveTradeMessageType {
         match self {
             Self::TradeOrderRequested => KIND_TRADE_ORDER_REQUEST,
             Self::TradeOrderDecision => KIND_TRADE_ORDER_DECISION,
+            Self::TradeFulfillmentUpdated => KIND_TRADE_FULFILLMENT_UPDATE,
         }
     }
 
@@ -454,6 +505,7 @@ impl RadrootsActiveTradeMessageType {
         match self {
             Self::TradeOrderRequested => "TradeOrderRequested",
             Self::TradeOrderDecision => "TradeOrderDecision",
+            Self::TradeFulfillmentUpdated => "TradeFulfillmentUpdated",
         }
     }
 
@@ -464,7 +516,10 @@ impl RadrootsActiveTradeMessageType {
 
     #[inline]
     pub const fn requires_trade_chain(self) -> bool {
-        matches!(self, Self::TradeOrderDecision)
+        matches!(
+            self,
+            Self::TradeOrderDecision | Self::TradeFulfillmentUpdated
+        )
     }
 }
 
@@ -748,6 +803,7 @@ pub enum RadrootsActiveTradePayloadError {
     InvalidItemBinCount { index: usize },
     MissingInventoryCommitments,
     InvalidInventoryCommitmentCount { index: usize },
+    InvalidFulfillmentStatus,
 }
 
 impl core::fmt::Display for RadrootsActiveTradePayloadError {
@@ -768,6 +824,9 @@ impl core::fmt::Display for RadrootsActiveTradePayloadError {
                 f,
                 "inventory_commitments[{index}].bin_count must be greater than zero"
             ),
+            Self::InvalidFulfillmentStatus => {
+                write!(f, "fulfillment status is not publishable")
+            }
         }
     }
 }
@@ -963,6 +1022,16 @@ mod tests {
         }
     }
 
+    fn sample_active_fulfillment_update() -> RadrootsTradeFulfillmentUpdated {
+        RadrootsTradeFulfillmentUpdated {
+            order_id: "order-1".into(),
+            listing_addr: sample_listing_addr(),
+            buyer_pubkey: "buyer".into(),
+            seller_pubkey: "seller".into(),
+            status: RadrootsActiveTradeFulfillmentState::ReadyForPickup,
+        }
+    }
+
     fn sample_order_revision() -> RadrootsTradeOrderRevision {
         RadrootsTradeOrderRevision {
             revision_id: "rev-1".into(),
@@ -1038,6 +1107,10 @@ mod tests {
             RadrootsActiveTradeMessageType::from_kind(KIND_TRADE_ORDER_DECISION),
             Some(RadrootsActiveTradeMessageType::TradeOrderDecision)
         );
+        assert_eq!(
+            RadrootsActiveTradeMessageType::from_kind(KIND_TRADE_FULFILLMENT_UPDATE),
+            Some(RadrootsActiveTradeMessageType::TradeFulfillmentUpdated)
+        );
         assert_eq!(RadrootsActiveTradeMessageType::from_kind(3431), None);
         assert_eq!(
             RadrootsActiveTradeMessageType::TradeOrderRequested.kind(),
@@ -1048,6 +1121,10 @@ mod tests {
             KIND_TRADE_ORDER_DECISION
         );
         assert_eq!(
+            RadrootsActiveTradeMessageType::TradeFulfillmentUpdated.kind(),
+            KIND_TRADE_FULFILLMENT_UPDATE
+        );
+        assert_eq!(
             RadrootsActiveTradeMessageType::TradeOrderRequested.name(),
             "TradeOrderRequested"
         );
@@ -1055,15 +1132,26 @@ mod tests {
             RadrootsActiveTradeMessageType::TradeOrderDecision.name(),
             "TradeOrderDecision"
         );
+        assert_eq!(
+            RadrootsActiveTradeMessageType::TradeFulfillmentUpdated.name(),
+            "TradeFulfillmentUpdated"
+        );
         assert!(RadrootsActiveTradeMessageType::TradeOrderRequested.requires_listing_snapshot());
         assert!(RadrootsActiveTradeMessageType::TradeOrderDecision.requires_trade_chain());
+        assert!(RadrootsActiveTradeMessageType::TradeFulfillmentUpdated.requires_trade_chain());
 
         let request_name =
             serde_json::to_value(RadrootsActiveTradeMessageType::TradeOrderRequested).unwrap();
         let decision_name =
             serde_json::to_value(RadrootsActiveTradeMessageType::TradeOrderDecision).unwrap();
+        let fulfillment_name =
+            serde_json::to_value(RadrootsActiveTradeMessageType::TradeFulfillmentUpdated).unwrap();
         assert_eq!(request_name, serde_json::json!("TradeOrderRequested"));
         assert_eq!(decision_name, serde_json::json!("TradeOrderDecision"));
+        assert_eq!(
+            fulfillment_name,
+            serde_json::json!("TradeFulfillmentUpdated")
+        );
     }
 
     #[test]
@@ -1143,6 +1231,29 @@ mod tests {
         assert_eq!(
             declined_without_reason.validate().unwrap_err(),
             RadrootsActiveTradePayloadError::EmptyField("reason")
+        );
+    }
+
+    #[test]
+    fn active_fulfillment_update_validation_rejects_derived_state() {
+        assert_eq!(sample_active_fulfillment_update().validate(), Ok(()));
+
+        let derived = RadrootsTradeFulfillmentUpdated {
+            status: RadrootsActiveTradeFulfillmentState::AcceptedNotFulfilled,
+            ..sample_active_fulfillment_update()
+        };
+        assert_eq!(
+            derived.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::InvalidFulfillmentStatus
+        );
+
+        let missing_seller = RadrootsTradeFulfillmentUpdated {
+            seller_pubkey: " ".into(),
+            ..sample_active_fulfillment_update()
+        };
+        assert_eq!(
+            missing_seller.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::EmptyField("seller_pubkey")
         );
     }
 
