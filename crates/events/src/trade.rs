@@ -443,6 +443,39 @@ impl RadrootsTradeOrderRequested {
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsTradeOrderRevisionProposed {
+    pub revision_id: String,
+    pub order_id: String,
+    pub listing_addr: String,
+    pub buyer_pubkey: String,
+    pub seller_pubkey: String,
+    pub root_event_id: String,
+    pub prev_event_id: String,
+    pub items: Vec<RadrootsTradeOrderItem>,
+    pub economics: RadrootsTradeOrderEconomics,
+    pub reason: String,
+}
+
+impl RadrootsTradeOrderRevisionProposed {
+    pub fn validate(&self) -> Result<(), RadrootsActiveTradePayloadError> {
+        validate_required_field(&self.revision_id, "revision_id")?;
+        validate_required_field(&self.order_id, "order_id")?;
+        validate_required_field(&self.listing_addr, "listing_addr")?;
+        validate_required_field(&self.buyer_pubkey, "buyer_pubkey")?;
+        validate_required_field(&self.seller_pubkey, "seller_pubkey")?;
+        validate_required_field(&self.root_event_id, "root_event_id")?;
+        validate_required_field(&self.prev_event_id, "prev_event_id")?;
+        validate_required_field(&self.reason, "reason")?;
+        validate_order_items(&self.items)?;
+        self.economics.validate()?;
+        validate_order_economics_binding(&self.items, &self.economics)
+    }
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeInventoryCommitment {
     pub bin_id: String,
     pub bin_count: u32,

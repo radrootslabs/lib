@@ -11,7 +11,7 @@ use radroots_events::{
         RadrootsActiveTradeMessageType, RadrootsActiveTradePayloadError, RadrootsTradeBuyerReceipt,
         RadrootsTradeEnvelope, RadrootsTradeEnvelopeError, RadrootsTradeFulfillmentUpdated,
         RadrootsTradeMessageType, RadrootsTradeOrderCancelled, RadrootsTradeOrderDecisionEvent,
-        RadrootsTradeOrderRequested,
+        RadrootsTradeOrderRequested, RadrootsTradeOrderRevisionProposed,
     },
 };
 #[cfg(feature = "serde_json")]
@@ -381,6 +381,44 @@ pub fn active_trade_order_decision_from_event(
 }
 
 #[cfg(feature = "serde_json")]
+pub fn active_trade_order_revision_proposal_from_event(
+    event: &RadrootsNostrEvent,
+) -> Result<
+    RadrootsActiveTradeEnvelope<RadrootsTradeOrderRevisionProposed>,
+    RadrootsActiveTradeEnvelopeParseError,
+> {
+    let envelope = active_trade_envelope_from_event::<RadrootsTradeOrderRevisionProposed>(event)?;
+    if envelope.message_type != RadrootsActiveTradeMessageType::TradeOrderRevisionProposed {
+        return Err(
+            RadrootsActiveTradeEnvelopeParseError::MessageTypeKindMismatch {
+                event_kind: event.kind,
+                message_type: envelope.message_type,
+            },
+        );
+    }
+    envelope
+        .payload
+        .validate()
+        .map_err(RadrootsActiveTradeEnvelopeParseError::InvalidPayload)?;
+    validate_active_order_binding(
+        event,
+        &envelope,
+        &envelope.payload.order_id,
+        &envelope.payload.listing_addr,
+        &envelope.payload.seller_pubkey,
+        &envelope.payload.buyer_pubkey,
+    )?;
+    let context = active_trade_event_context_from_tags(envelope.message_type, &event.tags)?;
+    if context.root_event_id.as_deref() != Some(envelope.payload.root_event_id.as_str()) {
+        return Err(RadrootsActiveTradeEnvelopeParseError::PayloadBindingMismatch("root_event_id"));
+    }
+    if context.prev_event_id.as_deref() != Some(envelope.payload.prev_event_id.as_str()) {
+        return Err(RadrootsActiveTradeEnvelopeParseError::PayloadBindingMismatch("prev_event_id"));
+    }
+    Ok(envelope)
+}
+
+#[cfg(feature = "serde_json")]
 pub fn active_trade_fulfillment_update_from_event(
     event: &RadrootsNostrEvent,
 ) -> Result<
@@ -643,13 +681,14 @@ mod tests {
         RadrootsTradeListingAddress, active_trade_buyer_receipt_from_event,
         active_trade_envelope_from_event, active_trade_fulfillment_update_from_event,
         active_trade_order_cancel_from_event, active_trade_order_decision_from_event,
-        active_trade_order_request_from_event, trade_envelope_from_event,
-        trade_event_context_from_tags,
+        active_trade_order_request_from_event, active_trade_order_revision_proposal_from_event,
+        trade_envelope_from_event, trade_event_context_from_tags,
     };
     use crate::trade::encode::{
         active_trade_buyer_receipt_event_build, active_trade_fulfillment_update_event_build,
         active_trade_order_cancel_event_build, active_trade_order_decision_event_build,
-        active_trade_order_request_event_build, trade_envelope_event_build,
+        active_trade_order_request_event_build, active_trade_order_revision_proposal_event_build,
+        trade_envelope_event_build,
     };
     use crate::trade::tags::TAG_LISTING_EVENT;
     use radroots_core::{
@@ -672,7 +711,7 @@ mod tests {
             RadrootsTradeOrderDecision, RadrootsTradeOrderDecisionEvent,
             RadrootsTradeOrderEconomicItem, RadrootsTradeOrderEconomicLine,
             RadrootsTradeOrderEconomics, RadrootsTradeOrderItem, RadrootsTradeOrderRequested,
-            RadrootsTradePricingBasis,
+            RadrootsTradeOrderRevisionProposed, RadrootsTradePricingBasis,
         },
     };
 
@@ -748,6 +787,32 @@ mod tests {
                     bin_count: 3,
                 }],
             },
+        }
+    }
+
+    fn active_order_revision_proposal() -> RadrootsTradeOrderRevisionProposed {
+        let mut economics = request_economics();
+        economics.quote_id = "revision-quote-1".into();
+        economics.quote_version = 2;
+        economics.items[0].bin_count = 4;
+        economics.items[0].line_subtotal = usd("20");
+        economics.subtotal = usd("20");
+        economics.total = usd("20");
+        economics.canonicalize();
+        RadrootsTradeOrderRevisionProposed {
+            revision_id: "rev-1".into(),
+            order_id: "order-1".into(),
+            listing_addr: "30402:seller:AAAAAAAAAAAAAAAAAAAAAg".into(),
+            buyer_pubkey: "buyer".into(),
+            seller_pubkey: "seller".into(),
+            root_event_id: "root-event".into(),
+            prev_event_id: "decision-event".into(),
+            items: vec![RadrootsTradeOrderItem {
+                bin_id: "lb".into(),
+                bin_count: 4,
+            }],
+            economics,
+            reason: "update count".into(),
         }
     }
 
@@ -902,6 +967,44 @@ mod tests {
                 .tags
                 .iter()
                 .any(|tag| tag == &vec![TAG_E_PREV.to_string(), "prev-event".to_string()])
+        );
+    }
+
+    #[test]
+    fn active_order_revision_proposal_builder_emits_canonical_chain_shape() {
+        let payload = active_order_revision_proposal();
+        let built = active_trade_order_revision_proposal_event_build(
+            payload.root_event_id.as_str(),
+            payload.prev_event_id.as_str(),
+            &payload,
+        )
+        .unwrap();
+        let envelope: RadrootsActiveTradeEnvelope<RadrootsTradeOrderRevisionProposed> =
+            serde_json::from_str(&built.content).unwrap();
+
+        assert_eq!(built.kind, KIND_TRADE_ORDER_REVISION);
+        assert_eq!(
+            envelope.message_type,
+            RadrootsActiveTradeMessageType::TradeOrderRevisionProposed
+        );
+        assert_eq!(built.tags[0], vec!["p".to_string(), "buyer".to_string()]);
+        assert_eq!(
+            built.tags[2],
+            vec![TAG_D.to_string(), "order-1".to_string()]
+        );
+        assert_eq!(envelope.payload.revision_id, "rev-1");
+        assert_eq!(envelope.payload.economics.quote_version, 2);
+        assert!(
+            built
+                .tags
+                .iter()
+                .any(|tag| tag == &vec![TAG_E_ROOT.to_string(), "root-event".to_string()])
+        );
+        assert!(
+            built
+                .tags
+                .iter()
+                .any(|tag| tag == &vec![TAG_E_PREV.to_string(), "decision-event".to_string()])
         );
     }
 
@@ -1150,6 +1253,32 @@ mod tests {
             envelope.message_type,
             RadrootsActiveTradeMessageType::TradeBuyerReceipt
         );
+    }
+
+    #[test]
+    fn active_order_revision_proposal_parse_validates_actor_counterparty_and_chain_payload() {
+        let payload = active_order_revision_proposal();
+        let built = active_trade_order_revision_proposal_event_build(
+            payload.root_event_id.as_str(),
+            payload.prev_event_id.as_str(),
+            &payload,
+        )
+        .unwrap();
+        let mut event = RadrootsNostrEvent {
+            id: "event-id".into(),
+            author: "seller".into(),
+            created_at: 1,
+            kind: built.kind,
+            tags: built.tags,
+            content: built.content,
+            sig: "sig".into(),
+        };
+        let envelope = active_trade_order_revision_proposal_from_event(&event).unwrap();
+        assert_eq!(envelope.payload, payload);
+
+        event.author = "buyer".into();
+        let err = active_trade_order_revision_proposal_from_event(&event).unwrap_err();
+        assert_eq!(err, RadrootsActiveTradeEnvelopeParseError::AuthorMismatch);
     }
 
     #[test]
