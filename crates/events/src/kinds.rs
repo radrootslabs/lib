@@ -63,7 +63,8 @@ pub const KIND_TRADE_ANSWER: u32 = 3427;
 pub const KIND_TRADE_DISCOUNT_REQUEST: u32 = 3428;
 pub const KIND_TRADE_DISCOUNT_OFFER: u32 = 3429;
 pub const KIND_TRADE_DISCOUNT_ACCEPT: u32 = 3430;
-pub const KIND_TRADE_DISCOUNT_DECLINE: u32 = 3431;
+pub const KIND_TRADE_FORBIDDEN_3431: u32 = 3431;
+pub const KIND_TRADE_DISCOUNT_DECLINE: u32 = KIND_TRADE_FORBIDDEN_3431;
 pub const KIND_TRADE_CANCEL: u32 = 3432;
 pub const KIND_TRADE_FULFILLMENT_UPDATE: u32 = 3433;
 pub const KIND_TRADE_RECEIPT: u32 = 3434;
@@ -77,7 +78,7 @@ pub const KIND_TRADE_LISTING_ANSWER_RES: u32 = KIND_TRADE_ANSWER;
 pub const KIND_TRADE_LISTING_DISCOUNT_REQ: u32 = KIND_TRADE_DISCOUNT_REQUEST;
 pub const KIND_TRADE_LISTING_DISCOUNT_OFFER_RES: u32 = KIND_TRADE_DISCOUNT_OFFER;
 pub const KIND_TRADE_LISTING_DISCOUNT_ACCEPT_REQ: u32 = KIND_TRADE_DISCOUNT_ACCEPT;
-pub const KIND_TRADE_LISTING_DISCOUNT_DECLINE_REQ: u32 = KIND_TRADE_DISCOUNT_DECLINE;
+pub const KIND_TRADE_LISTING_DISCOUNT_DECLINE_REQ: u32 = KIND_TRADE_FORBIDDEN_3431;
 pub const KIND_TRADE_LISTING_CANCEL_REQ: u32 = KIND_TRADE_CANCEL;
 pub const KIND_TRADE_LISTING_FULFILLMENT_UPDATE_REQ: u32 = KIND_TRADE_FULFILLMENT_UPDATE;
 pub const KIND_TRADE_LISTING_RECEIPT_REQ: u32 = KIND_TRADE_RECEIPT;
@@ -87,7 +88,7 @@ pub const TRADE_SERVICE_KINDS: [u32; 2] = [
     KIND_TRADE_LISTING_VALIDATE_RES,
 ];
 
-pub const TRADE_PUBLIC_KINDS: [u32; 13] = [
+pub const TRADE_PUBLIC_KINDS: [u32; 12] = [
     KIND_TRADE_ORDER_REQUEST,
     KIND_TRADE_ORDER_RESPONSE,
     KIND_TRADE_ORDER_REVISION,
@@ -97,13 +98,12 @@ pub const TRADE_PUBLIC_KINDS: [u32; 13] = [
     KIND_TRADE_DISCOUNT_REQUEST,
     KIND_TRADE_DISCOUNT_OFFER,
     KIND_TRADE_DISCOUNT_ACCEPT,
-    KIND_TRADE_DISCOUNT_DECLINE,
     KIND_TRADE_CANCEL,
     KIND_TRADE_FULFILLMENT_UPDATE,
     KIND_TRADE_RECEIPT,
 ];
 
-pub const TRADE_KINDS: [u32; 15] = [
+pub const TRADE_KINDS: [u32; 14] = [
     KIND_TRADE_LISTING_VALIDATE_REQ,
     KIND_TRADE_LISTING_VALIDATE_RES,
     KIND_TRADE_ORDER_REQUEST,
@@ -115,29 +115,32 @@ pub const TRADE_KINDS: [u32; 15] = [
     KIND_TRADE_DISCOUNT_REQUEST,
     KIND_TRADE_DISCOUNT_OFFER,
     KIND_TRADE_DISCOUNT_ACCEPT,
-    KIND_TRADE_DISCOUNT_DECLINE,
     KIND_TRADE_CANCEL,
     KIND_TRADE_FULFILLMENT_UPDATE,
     KIND_TRADE_RECEIPT,
 ];
 
-pub const TRADE_LISTING_KINDS: [u32; 15] = TRADE_KINDS;
+pub const TRADE_LISTING_KINDS: [u32; 14] = TRADE_KINDS;
 
 pub const ACTIVE_TRADE_LISTING_KINDS: [u32; 2] = [KIND_LISTING, KIND_LISTING_DRAFT];
 
-pub const ACTIVE_TRADE_PUBLIC_KINDS: [u32; 5] = [
+pub const ACTIVE_TRADE_PUBLIC_KINDS: [u32; 7] = [
     KIND_TRADE_ORDER_REQUEST,
     KIND_TRADE_ORDER_DECISION,
+    KIND_TRADE_ORDER_REVISION,
+    KIND_TRADE_ORDER_REVISION_RESPONSE,
     KIND_TRADE_CANCEL,
     KIND_TRADE_FULFILLMENT_UPDATE,
     KIND_TRADE_RECEIPT,
 ];
 
-pub const ACTIVE_TRADE_KINDS: [u32; 7] = [
+pub const ACTIVE_TRADE_KINDS: [u32; 9] = [
     KIND_LISTING,
     KIND_LISTING_DRAFT,
     KIND_TRADE_ORDER_REQUEST,
     KIND_TRADE_ORDER_DECISION,
+    KIND_TRADE_ORDER_REVISION,
+    KIND_TRADE_ORDER_REVISION_RESPONSE,
     KIND_TRADE_CANCEL,
     KIND_TRADE_FULFILLMENT_UPDATE,
     KIND_TRADE_RECEIPT,
@@ -182,7 +185,6 @@ pub const fn is_trade_public_kind(kind: u32) -> bool {
             | KIND_TRADE_DISCOUNT_REQUEST
             | KIND_TRADE_DISCOUNT_OFFER
             | KIND_TRADE_DISCOUNT_ACCEPT
-            | KIND_TRADE_DISCOUNT_DECLINE
             | KIND_TRADE_CANCEL
             | KIND_TRADE_FULFILLMENT_UPDATE
             | KIND_TRADE_RECEIPT
@@ -205,6 +207,8 @@ pub const fn is_active_trade_public_kind(kind: u32) -> bool {
         kind,
         KIND_TRADE_ORDER_REQUEST
             | KIND_TRADE_ORDER_DECISION
+            | KIND_TRADE_ORDER_REVISION
+            | KIND_TRADE_ORDER_REVISION_RESPONSE
             | KIND_TRADE_CANCEL
             | KIND_TRADE_FULFILLMENT_UPDATE
             | KIND_TRADE_RECEIPT
@@ -226,7 +230,6 @@ pub const fn is_trade_listing_request_kind(kind: u32) -> bool {
             | KIND_TRADE_QUESTION
             | KIND_TRADE_DISCOUNT_REQUEST
             | KIND_TRADE_DISCOUNT_ACCEPT
-            | KIND_TRADE_DISCOUNT_DECLINE
             | KIND_TRADE_CANCEL
             | KIND_TRADE_FULFILLMENT_UPDATE
             | KIND_TRADE_RECEIPT
@@ -470,7 +473,7 @@ mod kinds_constants_tests {
         ("KIND_TRADE_DISCOUNT_REQUEST", KIND_TRADE_DISCOUNT_REQUEST),
         ("KIND_TRADE_DISCOUNT_OFFER", KIND_TRADE_DISCOUNT_OFFER),
         ("KIND_TRADE_DISCOUNT_ACCEPT", KIND_TRADE_DISCOUNT_ACCEPT),
-        ("KIND_TRADE_DISCOUNT_DECLINE", KIND_TRADE_DISCOUNT_DECLINE),
+        ("KIND_TRADE_FORBIDDEN_3431", KIND_TRADE_FORBIDDEN_3431),
         ("KIND_TRADE_CANCEL", KIND_TRADE_CANCEL),
         (
             "KIND_TRADE_FULFILLMENT_UPDATE",
@@ -506,10 +509,6 @@ mod kinds_constants_tests {
         (
             "KIND_TRADE_LISTING_DISCOUNT_ACCEPT_REQ",
             KIND_TRADE_LISTING_DISCOUNT_ACCEPT_REQ,
-        ),
-        (
-            "KIND_TRADE_LISTING_DISCOUNT_DECLINE_REQ",
-            KIND_TRADE_LISTING_DISCOUNT_DECLINE_REQ,
         ),
         (
             "KIND_TRADE_LISTING_CANCEL_REQ",
@@ -647,9 +646,6 @@ mod kinds_constants_tests {
         assert!(is_trade_listing_request_kind(
             KIND_TRADE_LISTING_DISCOUNT_ACCEPT_REQ
         ));
-        assert!(is_trade_listing_request_kind(
-            KIND_TRADE_LISTING_DISCOUNT_DECLINE_REQ
-        ));
         assert!(is_trade_listing_request_kind(KIND_TRADE_LISTING_CANCEL_REQ));
         assert!(is_trade_listing_request_kind(
             KIND_TRADE_LISTING_FULFILLMENT_UPDATE_REQ
@@ -669,6 +665,9 @@ mod kinds_constants_tests {
         assert!(!is_trade_listing_result_kind(KIND_TRADE_LISTING_CANCEL_REQ));
         assert!(is_trade_listing_kind(KIND_TRADE_LISTING_RECEIPT_REQ));
         assert!(!is_trade_listing_kind(KIND_LISTING));
+        assert!(!is_trade_public_kind(KIND_TRADE_FORBIDDEN_3431));
+        assert!(!is_trade_kind(KIND_TRADE_FORBIDDEN_3431));
+        assert!(!is_trade_listing_request_kind(KIND_TRADE_FORBIDDEN_3431));
         assert_eq!(
             trade_service_result_kind_for_request(KIND_TRADE_LISTING_VALIDATE_REQ),
             Some(KIND_TRADE_LISTING_VALIDATE_RES)
@@ -736,8 +735,8 @@ mod kinds_constants_tests {
     }
 
     #[test]
-    fn active_trade_kind_set_contains_listing_order_decision_fulfillment_cancellation_and_receipt()
-    {
+    fn active_trade_kind_set_contains_listing_order_revision_decision_fulfillment_cancellation_and_receipt()
+     {
         assert_eq!(
             ACTIVE_TRADE_LISTING_KINDS,
             [KIND_LISTING, KIND_LISTING_DRAFT]
@@ -747,6 +746,8 @@ mod kinds_constants_tests {
             [
                 KIND_TRADE_ORDER_REQUEST,
                 KIND_TRADE_ORDER_DECISION,
+                KIND_TRADE_ORDER_REVISION,
+                KIND_TRADE_ORDER_REVISION_RESPONSE,
                 KIND_TRADE_CANCEL,
                 KIND_TRADE_FULFILLMENT_UPDATE,
                 KIND_TRADE_RECEIPT,
@@ -759,6 +760,8 @@ mod kinds_constants_tests {
                 KIND_LISTING_DRAFT,
                 KIND_TRADE_ORDER_REQUEST,
                 KIND_TRADE_ORDER_DECISION,
+                KIND_TRADE_ORDER_REVISION,
+                KIND_TRADE_ORDER_REVISION_RESPONSE,
                 KIND_TRADE_CANCEL,
                 KIND_TRADE_FULFILLMENT_UPDATE,
                 KIND_TRADE_RECEIPT,
@@ -769,21 +772,21 @@ mod kinds_constants_tests {
         assert!(is_active_trade_kind(KIND_LISTING_DRAFT));
         assert!(is_active_trade_public_kind(KIND_TRADE_ORDER_REQUEST));
         assert!(is_active_trade_public_kind(KIND_TRADE_ORDER_DECISION));
+        assert!(is_active_trade_public_kind(KIND_TRADE_ORDER_REVISION));
+        assert!(is_active_trade_public_kind(
+            KIND_TRADE_ORDER_REVISION_RESPONSE
+        ));
         assert!(is_active_trade_public_kind(KIND_TRADE_CANCEL));
         assert!(is_active_trade_public_kind(KIND_TRADE_FULFILLMENT_UPDATE));
         assert!(is_active_trade_public_kind(KIND_TRADE_RECEIPT));
         assert!(!is_active_trade_public_kind(
             KIND_TRADE_LISTING_VALIDATE_REQ
         ));
-        assert!(!is_active_trade_public_kind(KIND_TRADE_ORDER_REVISION));
-        assert!(!is_active_trade_public_kind(
-            KIND_TRADE_ORDER_REVISION_RESPONSE
-        ));
         assert!(!is_active_trade_public_kind(KIND_TRADE_QUESTION));
         assert!(!is_active_trade_public_kind(KIND_TRADE_ANSWER));
         assert!(!is_active_trade_public_kind(KIND_TRADE_DISCOUNT_REQUEST));
         assert!(!is_active_trade_public_kind(KIND_TRADE_DISCOUNT_OFFER));
         assert!(!is_active_trade_public_kind(KIND_TRADE_DISCOUNT_ACCEPT));
-        assert!(!is_active_trade_public_kind(3431));
+        assert!(!is_active_trade_public_kind(KIND_TRADE_FORBIDDEN_3431));
     }
 }

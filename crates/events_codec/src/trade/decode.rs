@@ -656,7 +656,8 @@ mod tests {
         RadrootsNostrEvent, RadrootsNostrEventPtr,
         kinds::{
             KIND_TRADE_CANCEL, KIND_TRADE_FULFILLMENT_UPDATE, KIND_TRADE_ORDER_DECISION,
-            KIND_TRADE_ORDER_REQUEST, KIND_TRADE_RECEIPT,
+            KIND_TRADE_ORDER_REQUEST, KIND_TRADE_ORDER_REVISION,
+            KIND_TRADE_ORDER_REVISION_RESPONSE, KIND_TRADE_RECEIPT,
         },
         tags::{TAG_D, TAG_E_PREV, TAG_E_ROOT},
         trade::{
@@ -1077,6 +1078,46 @@ mod tests {
             envelope.message_type,
             RadrootsActiveTradeMessageType::TradeBuyerReceipt
         );
+    }
+
+    #[test]
+    fn active_revision_kinds_parse_with_chain_tags() {
+        for (kind, message_type) in [
+            (
+                KIND_TRADE_ORDER_REVISION,
+                RadrootsActiveTradeMessageType::TradeOrderRevisionProposed,
+            ),
+            (
+                KIND_TRADE_ORDER_REVISION_RESPONSE,
+                RadrootsActiveTradeMessageType::TradeOrderRevisionDecision,
+            ),
+        ] {
+            let envelope = RadrootsActiveTradeEnvelope::new(
+                message_type,
+                "30402:seller:AAAAAAAAAAAAAAAAAAAAAg",
+                "order-1",
+                &serde_json::json!({}),
+            );
+            let event = RadrootsNostrEvent {
+                id: "event-id".into(),
+                author: "seller".into(),
+                created_at: 1,
+                kind,
+                tags: vec![
+                    vec!["p".into(), "buyer".into()],
+                    vec!["a".into(), "30402:seller:AAAAAAAAAAAAAAAAAAAAAg".into()],
+                    vec![TAG_D.into(), "order-1".into()],
+                    vec![TAG_E_ROOT.into(), "root-event".into()],
+                    vec![TAG_E_PREV.into(), "prev-event".into()],
+                ],
+                content: serde_json::to_string(&envelope).unwrap(),
+                sig: "sig".into(),
+            };
+            let parsed = active_trade_envelope_from_event::<serde_json::Value>(&event).unwrap();
+
+            assert_eq!(parsed.message_type, message_type);
+            assert_eq!(parsed.order_id, "order-1");
+        }
     }
 
     #[test]

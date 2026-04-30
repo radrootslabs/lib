@@ -294,7 +294,6 @@ pub enum SdkRadrootsdPublicTradePublishValidationError {
     InvalidOrderRevisionAcceptPayload,
     InvalidOrderRevisionDeclinePayload,
     InvalidDiscountAcceptPayload,
-    InvalidDiscountDeclinePayload,
     EmptyField(&'static str),
 }
 
@@ -333,9 +332,6 @@ impl fmt::Display for SdkRadrootsdPublicTradePublishValidationError {
             ),
             Self::InvalidDiscountAcceptPayload => f.write_str(
                 "trade public publish discount accept payload must be an accept decision",
-            ),
-            Self::InvalidDiscountDeclinePayload => f.write_str(
-                "trade public publish discount decline payload must be a decline decision",
             ),
             Self::EmptyField(field) => write!(f, "trade public publish field `{field}` must not be empty"),
         }
@@ -542,19 +538,6 @@ impl SdkRadrootsdPublicTradePublishRequest {
         )
     }
 
-    pub fn discount_decline(
-        route: &SdkRadrootsdPublicTradeRoute,
-        chain: &SdkRadrootsdTradeChain,
-        payload: trade::RadrootsTradeDiscountDecision,
-    ) -> Result<Self, SdkRadrootsdPublicTradePublishValidationError> {
-        Self::from_components(
-            route,
-            Some(chain),
-            None,
-            trade::RadrootsTradeMessagePayload::DiscountDecline(payload),
-        )
-    }
-
     pub fn cancel(
         route: &SdkRadrootsdPublicTradeRoute,
         chain: &SdkRadrootsdTradeChain,
@@ -667,11 +650,11 @@ impl SdkRadrootsdPublicTradePublishRequest {
                     SdkRadrootsdPublicTradePublishValidationError::InvalidDiscountAcceptPayload,
                 )
             }
-            trade::RadrootsTradeMessagePayload::DiscountDecline(
-                trade::RadrootsTradeDiscountDecision::Accept { .. },
-            ) => {
+            trade::RadrootsTradeMessagePayload::DiscountDecline(_) => {
                 return Err(
-                    SdkRadrootsdPublicTradePublishValidationError::InvalidDiscountDeclinePayload,
+                    SdkRadrootsdPublicTradePublishValidationError::UnsupportedPayload(
+                        trade::RadrootsTradeMessageType::DiscountDecline,
+                    ),
                 )
             }
             _ => {}
@@ -1239,19 +1222,6 @@ pub(crate) async fn publish_public_trade(
             )
             .await
         }
-        trade::RadrootsTradeMessagePayload::DiscountDecline(payload) => {
-            public_trade_call(
-                endpoint,
-                auth,
-                "bridge.order.discount.decline",
-                request,
-                payload,
-                signer_session_id,
-                idempotency_key,
-                timeout,
-            )
-            .await
-        }
         trade::RadrootsTradeMessagePayload::Cancel(payload) => {
             public_trade_call(
                 endpoint,
@@ -1293,7 +1263,8 @@ pub(crate) async fn publish_public_trade(
         }
         trade::RadrootsTradeMessagePayload::ListingValidateRequest(_)
         | trade::RadrootsTradeMessagePayload::ListingValidateResult(_)
-        | trade::RadrootsTradeMessagePayload::OrderRequest(_) => {
+        | trade::RadrootsTradeMessagePayload::OrderRequest(_)
+        | trade::RadrootsTradeMessagePayload::DiscountDecline(_) => {
             unreachable!("unsupported trade payload should be rejected by the curated client")
         }
     }

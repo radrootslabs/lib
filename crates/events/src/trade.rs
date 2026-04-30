@@ -533,6 +533,10 @@ pub enum RadrootsActiveTradeMessageType {
     TradeOrderRequested,
     #[cfg_attr(feature = "serde", serde(rename = "TradeOrderDecision"))]
     TradeOrderDecision,
+    #[cfg_attr(feature = "serde", serde(rename = "TradeOrderRevisionProposed"))]
+    TradeOrderRevisionProposed,
+    #[cfg_attr(feature = "serde", serde(rename = "TradeOrderRevisionDecision"))]
+    TradeOrderRevisionDecision,
     #[cfg_attr(feature = "serde", serde(rename = "TradeOrderCancelled"))]
     TradeOrderCancelled,
     #[cfg_attr(feature = "serde", serde(rename = "TradeFulfillmentUpdated"))]
@@ -547,6 +551,8 @@ impl RadrootsActiveTradeMessageType {
         match kind {
             KIND_TRADE_ORDER_REQUEST => Some(Self::TradeOrderRequested),
             KIND_TRADE_ORDER_DECISION => Some(Self::TradeOrderDecision),
+            KIND_TRADE_ORDER_REVISION => Some(Self::TradeOrderRevisionProposed),
+            KIND_TRADE_ORDER_REVISION_RESPONSE => Some(Self::TradeOrderRevisionDecision),
             KIND_TRADE_CANCEL => Some(Self::TradeOrderCancelled),
             KIND_TRADE_FULFILLMENT_UPDATE => Some(Self::TradeFulfillmentUpdated),
             KIND_TRADE_RECEIPT => Some(Self::TradeBuyerReceipt),
@@ -559,6 +565,8 @@ impl RadrootsActiveTradeMessageType {
         match self {
             Self::TradeOrderRequested => KIND_TRADE_ORDER_REQUEST,
             Self::TradeOrderDecision => KIND_TRADE_ORDER_DECISION,
+            Self::TradeOrderRevisionProposed => KIND_TRADE_ORDER_REVISION,
+            Self::TradeOrderRevisionDecision => KIND_TRADE_ORDER_REVISION_RESPONSE,
             Self::TradeOrderCancelled => KIND_TRADE_CANCEL,
             Self::TradeFulfillmentUpdated => KIND_TRADE_FULFILLMENT_UPDATE,
             Self::TradeBuyerReceipt => KIND_TRADE_RECEIPT,
@@ -570,6 +578,8 @@ impl RadrootsActiveTradeMessageType {
         match self {
             Self::TradeOrderRequested => "TradeOrderRequested",
             Self::TradeOrderDecision => "TradeOrderDecision",
+            Self::TradeOrderRevisionProposed => "TradeOrderRevisionProposed",
+            Self::TradeOrderRevisionDecision => "TradeOrderRevisionDecision",
             Self::TradeOrderCancelled => "TradeOrderCancelled",
             Self::TradeFulfillmentUpdated => "TradeFulfillmentUpdated",
             Self::TradeBuyerReceipt => "TradeBuyerReceipt",
@@ -586,6 +596,8 @@ impl RadrootsActiveTradeMessageType {
         matches!(
             self,
             Self::TradeOrderDecision
+                | Self::TradeOrderRevisionProposed
+                | Self::TradeOrderRevisionDecision
                 | Self::TradeOrderCancelled
                 | Self::TradeFulfillmentUpdated
                 | Self::TradeBuyerReceipt
@@ -632,7 +644,6 @@ impl RadrootsTradeMessageType {
             KIND_TRADE_DISCOUNT_REQUEST => Some(Self::DiscountRequest),
             KIND_TRADE_DISCOUNT_OFFER => Some(Self::DiscountOffer),
             KIND_TRADE_DISCOUNT_ACCEPT => Some(Self::DiscountAccept),
-            KIND_TRADE_DISCOUNT_DECLINE => Some(Self::DiscountDecline),
             KIND_TRADE_CANCEL => Some(Self::Cancel),
             KIND_TRADE_FULFILLMENT_UPDATE => Some(Self::FulfillmentUpdate),
             KIND_TRADE_RECEIPT => Some(Self::Receipt),
@@ -655,7 +666,7 @@ impl RadrootsTradeMessageType {
             Self::DiscountRequest => KIND_TRADE_DISCOUNT_REQUEST,
             Self::DiscountOffer => KIND_TRADE_DISCOUNT_OFFER,
             Self::DiscountAccept => KIND_TRADE_DISCOUNT_ACCEPT,
-            Self::DiscountDecline => KIND_TRADE_DISCOUNT_DECLINE,
+            Self::DiscountDecline => KIND_TRADE_FORBIDDEN_3431,
             Self::Cancel => KIND_TRADE_CANCEL,
             Self::FulfillmentUpdate => KIND_TRADE_FULFILLMENT_UPDATE,
             Self::Receipt => KIND_TRADE_RECEIPT,
@@ -1208,6 +1219,14 @@ mod tests {
             Some(RadrootsActiveTradeMessageType::TradeOrderDecision)
         );
         assert_eq!(
+            RadrootsActiveTradeMessageType::from_kind(KIND_TRADE_ORDER_REVISION),
+            Some(RadrootsActiveTradeMessageType::TradeOrderRevisionProposed)
+        );
+        assert_eq!(
+            RadrootsActiveTradeMessageType::from_kind(KIND_TRADE_ORDER_REVISION_RESPONSE),
+            Some(RadrootsActiveTradeMessageType::TradeOrderRevisionDecision)
+        );
+        assert_eq!(
             RadrootsActiveTradeMessageType::from_kind(KIND_TRADE_FULFILLMENT_UPDATE),
             Some(RadrootsActiveTradeMessageType::TradeFulfillmentUpdated)
         );
@@ -1227,6 +1246,14 @@ mod tests {
         assert_eq!(
             RadrootsActiveTradeMessageType::TradeOrderDecision.kind(),
             KIND_TRADE_ORDER_DECISION
+        );
+        assert_eq!(
+            RadrootsActiveTradeMessageType::TradeOrderRevisionProposed.kind(),
+            KIND_TRADE_ORDER_REVISION
+        );
+        assert_eq!(
+            RadrootsActiveTradeMessageType::TradeOrderRevisionDecision.kind(),
+            KIND_TRADE_ORDER_REVISION_RESPONSE
         );
         assert_eq!(
             RadrootsActiveTradeMessageType::TradeFulfillmentUpdated.kind(),
@@ -1249,6 +1276,14 @@ mod tests {
             "TradeOrderDecision"
         );
         assert_eq!(
+            RadrootsActiveTradeMessageType::TradeOrderRevisionProposed.name(),
+            "TradeOrderRevisionProposed"
+        );
+        assert_eq!(
+            RadrootsActiveTradeMessageType::TradeOrderRevisionDecision.name(),
+            "TradeOrderRevisionDecision"
+        );
+        assert_eq!(
             RadrootsActiveTradeMessageType::TradeFulfillmentUpdated.name(),
             "TradeFulfillmentUpdated"
         );
@@ -1262,6 +1297,8 @@ mod tests {
         );
         assert!(RadrootsActiveTradeMessageType::TradeOrderRequested.requires_listing_snapshot());
         assert!(RadrootsActiveTradeMessageType::TradeOrderDecision.requires_trade_chain());
+        assert!(RadrootsActiveTradeMessageType::TradeOrderRevisionProposed.requires_trade_chain());
+        assert!(RadrootsActiveTradeMessageType::TradeOrderRevisionDecision.requires_trade_chain());
         assert!(RadrootsActiveTradeMessageType::TradeFulfillmentUpdated.requires_trade_chain());
         assert!(RadrootsActiveTradeMessageType::TradeOrderCancelled.requires_trade_chain());
         assert!(RadrootsActiveTradeMessageType::TradeBuyerReceipt.requires_trade_chain());
@@ -1270,6 +1307,12 @@ mod tests {
             serde_json::to_value(RadrootsActiveTradeMessageType::TradeOrderRequested).unwrap();
         let decision_name =
             serde_json::to_value(RadrootsActiveTradeMessageType::TradeOrderDecision).unwrap();
+        let revision_proposed_name =
+            serde_json::to_value(RadrootsActiveTradeMessageType::TradeOrderRevisionProposed)
+                .unwrap();
+        let revision_decision_name =
+            serde_json::to_value(RadrootsActiveTradeMessageType::TradeOrderRevisionDecision)
+                .unwrap();
         let fulfillment_name =
             serde_json::to_value(RadrootsActiveTradeMessageType::TradeFulfillmentUpdated).unwrap();
         let cancellation_name =
@@ -1278,6 +1321,14 @@ mod tests {
             serde_json::to_value(RadrootsActiveTradeMessageType::TradeBuyerReceipt).unwrap();
         assert_eq!(request_name, serde_json::json!("TradeOrderRequested"));
         assert_eq!(decision_name, serde_json::json!("TradeOrderDecision"));
+        assert_eq!(
+            revision_proposed_name,
+            serde_json::json!("TradeOrderRevisionProposed")
+        );
+        assert_eq!(
+            revision_decision_name,
+            serde_json::json!("TradeOrderRevisionDecision")
+        );
         assert_eq!(
             fulfillment_name,
             serde_json::json!("TradeFulfillmentUpdated")
@@ -1723,7 +1774,7 @@ mod tests {
             ),
             (
                 RadrootsTradeMessageType::DiscountDecline,
-                KIND_TRADE_DISCOUNT_DECLINE,
+                KIND_TRADE_FORBIDDEN_3431,
                 false,
                 true,
                 true,
@@ -1832,8 +1883,8 @@ mod tests {
             Some(RadrootsTradeMessageType::DiscountAccept)
         );
         assert_eq!(
-            RadrootsTradeMessageType::from_kind(KIND_TRADE_DISCOUNT_DECLINE),
-            Some(RadrootsTradeMessageType::DiscountDecline)
+            RadrootsTradeMessageType::from_kind(KIND_TRADE_FORBIDDEN_3431),
+            None
         );
         assert_eq!(
             RadrootsTradeMessageType::from_kind(KIND_TRADE_CANCEL),

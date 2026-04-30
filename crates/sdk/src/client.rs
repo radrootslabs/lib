@@ -1629,18 +1629,6 @@ impl SdkRadrootsdPublicTradeMessage {
         })
     }
 
-    pub fn discount_decline(
-        route: &radrootsd::SdkRadrootsdPublicTradeRoute,
-        chain: &radrootsd::SdkRadrootsdTradeChain,
-        payload: trade::RadrootsTradeDiscountDecision,
-    ) -> Result<Self, radrootsd::SdkRadrootsdPublicTradePublishValidationError> {
-        Ok(Self {
-            request: radrootsd::SdkRadrootsdPublicTradePublishRequest::discount_decline(
-                route, chain, payload,
-            )?,
-        })
-    }
-
     pub fn cancel(
         route: &radrootsd::SdkRadrootsdPublicTradeRoute,
         chain: &radrootsd::SdkRadrootsdTradeChain,
