@@ -11,7 +11,8 @@ use radroots_events::trade::{
     RadrootsActiveTradeFulfillmentState, RadrootsTradeBuyerReceipt,
     RadrootsTradeFulfillmentUpdated, RadrootsTradeInventoryCommitment,
     RadrootsTradeOrder as TradeOrder, RadrootsTradeOrderCancelled, RadrootsTradeOrderDecision,
-    RadrootsTradeOrderDecisionEvent, RadrootsTradeOrderItem, RadrootsTradeOrderRequested,
+    RadrootsTradeOrderDecisionEvent, RadrootsTradeOrderEconomics, RadrootsTradeOrderItem,
+    RadrootsTradeOrderRequested,
 };
 use radroots_events_codec::trade::RadrootsTradeListingAddress as TradeListingAddress;
 use thiserror::Error;
@@ -176,6 +177,7 @@ pub struct RadrootsActiveOrderProjection {
     pub lifecycle_terminal: bool,
     pub settlement_pending: bool,
     pub settlement_reason: Option<String>,
+    pub economics: Option<RadrootsTradeOrderEconomics>,
     pub listing_addr: Option<String>,
     pub buyer_pubkey: Option<String>,
     pub seller_pubkey: Option<String>,
@@ -280,6 +282,7 @@ where
             lifecycle_terminal: false,
             settlement_pending: false,
             settlement_reason: None,
+            economics: None,
             listing_addr: None,
             buyer_pubkey: None,
             seller_pubkey: None,
@@ -1691,6 +1694,7 @@ fn requested_projection(
         lifecycle_terminal: false,
         settlement_pending: false,
         settlement_reason: None,
+        economics: Some(request.payload.economics.clone()),
         listing_addr: Some(request.payload.listing_addr.clone()),
         buyer_pubkey: Some(request.payload.buyer_pubkey.clone()),
         seller_pubkey: Some(request.payload.seller_pubkey.clone()),
@@ -1850,6 +1854,11 @@ fn decided_projection(
         }
         _ => (None, None, Some(decision.event_id.clone())),
     };
+    let economics = if status == RadrootsActiveOrderStatus::Accepted {
+        Some(request.payload.economics.clone())
+    } else {
+        None
+    };
     RadrootsActiveOrderProjection {
         order_id: order_id.to_string(),
         status,
@@ -1865,6 +1874,7 @@ fn decided_projection(
         lifecycle_terminal: false,
         settlement_pending: false,
         settlement_reason: None,
+        economics,
         listing_addr: Some(request.payload.listing_addr.clone()),
         buyer_pubkey: Some(request.payload.buyer_pubkey.clone()),
         seller_pubkey: Some(request.payload.seller_pubkey.clone()),
@@ -1978,6 +1988,7 @@ fn cancelled_projection(
         lifecycle_terminal: true,
         settlement_pending: true,
         settlement_reason: Some(cancellation.payload.reason),
+        economics: Some(request.payload.economics.clone()),
         listing_addr: Some(request.payload.listing_addr.clone()),
         buyer_pubkey: Some(request.payload.buyer_pubkey.clone()),
         seller_pubkey: Some(request.payload.seller_pubkey.clone()),
@@ -2013,6 +2024,7 @@ fn receipt_terminal_projection(
         lifecycle_terminal: true,
         settlement_pending: !receipt.payload.received,
         settlement_reason: receipt.payload.issue,
+        economics: Some(request.payload.economics.clone()),
         listing_addr: Some(request.payload.listing_addr.clone()),
         buyer_pubkey: Some(request.payload.buyer_pubkey.clone()),
         seller_pubkey: Some(request.payload.seller_pubkey.clone()),
@@ -2026,6 +2038,12 @@ fn invalid_projection(
     request: Option<&RadrootsActiveOrderRequestRecord>,
     issues: Vec<RadrootsActiveOrderReducerIssue>,
 ) -> RadrootsActiveOrderProjection {
+    let economics = match request {
+        Some(request) if request.payload.validate().is_ok() => {
+            Some(request.payload.economics.clone())
+        }
+        _ => None,
+    };
     RadrootsActiveOrderProjection {
         order_id: order_id.to_string(),
         status: RadrootsActiveOrderStatus::Invalid,
@@ -2041,6 +2059,7 @@ fn invalid_projection(
         lifecycle_terminal: true,
         settlement_pending: false,
         settlement_reason: None,
+        economics,
         listing_addr: request.map(|request| request.payload.listing_addr.clone()),
         buyer_pubkey: request.map(|request| request.payload.buyer_pubkey.clone()),
         seller_pubkey: request.map(|request| request.payload.seller_pubkey.clone()),
@@ -2615,6 +2634,10 @@ mod tests {
         assert_eq!(projection.status, RadrootsActiveOrderStatus::Requested);
         assert_eq!(projection.request_event_id.as_deref(), Some("request-1"));
         assert_eq!(projection.last_event_id.as_deref(), Some("request-1"));
+        assert_eq!(
+            projection.economics,
+            Some(request_economics("bin-1", 2, "10"))
+        );
     }
 
     #[test]
@@ -2636,6 +2659,27 @@ mod tests {
         );
         assert_eq!(projection.fulfillment_event_id, None);
         assert_eq!(projection.last_event_id.as_deref(), Some("decision-1"));
+        assert_eq!(
+            projection.economics,
+            Some(request_economics("bin-1", 2, "10"))
+        );
+    }
+
+    #[test]
+    fn reduce_active_order_events_rejects_invalid_request_economics() {
+        let mut request = request_record();
+        request.payload.economics.total = usd("12");
+
+        let projection = reduce_active_order_events("order-1", [request], [], [], [], []);
+
+        assert_eq!(projection.status, RadrootsActiveOrderStatus::Invalid);
+        assert_eq!(projection.economics, None);
+        assert_eq!(
+            projection.issues,
+            vec![RadrootsActiveOrderReducerIssue::RequestPayloadInvalid {
+                event_id: "request-1".to_string()
+            }]
+        );
     }
 
     #[test]
