@@ -76,7 +76,7 @@ use radroots_replica_db_schema::trade_product::{
 };
 use radroots_sql_core::SqlExecutor;
 use radroots_sql_core::error::SqlError;
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use crate::error::RadrootsReplicaEventsError;
 use crate::event_state::{event_content_hash, event_state_key};
@@ -605,8 +605,27 @@ fn trade_product_fields_from_listing(
         price_qty_unit,
         listing_addr: Some(listing_addr.to_string()),
         primary_bin_id: Some(listing.primary_bin_id.clone()),
-        notes: None,
+        notes: trade_product_notes_from_listing(listing)?,
     })
+}
+
+fn trade_product_notes_from_listing(
+    listing: &RadrootsListing,
+) -> Result<Option<String>, RadrootsReplicaEventsError> {
+    let Some(discounts) = listing
+        .discounts
+        .as_ref()
+        .filter(|discounts| !discounts.is_empty())
+    else {
+        return Ok(None);
+    };
+    serde_json::to_string(&json!({ "listing_discounts": discounts }))
+        .map(Some)
+        .map_err(|error| {
+            RadrootsReplicaEventsError::InvalidData(format!(
+                "listing discounts could not be serialized: {error}"
+            ))
+        })
 }
 
 fn primary_listing_bin(
@@ -2291,7 +2310,7 @@ mod tests {
         let listing_d_tag = "AAAAAAAAAAAAAAAAAAAAAQ";
         let listing_addr = format!("{}:{}:{}", KIND_LISTING, seller_pubkey, listing_d_tag);
 
-        let active = listing_event(
+        let mut active = listing_event(
             500,
             &seller_pubkey,
             10,
@@ -2299,6 +2318,21 @@ mod tests {
             "active",
             "Pasture Eggs",
         );
+        active.tags.push(vec![
+            "radroots:discount".to_string(),
+            serde_json::json!({
+                "scope": "bin",
+                "threshold": {
+                    "kind": "bin_count",
+                    "amount": { "bin_id": "bin-a", "min": 1 }
+                },
+                "value": {
+                    "kind": "percent",
+                    "amount": { "value": "10" }
+                }
+            })
+            .to_string(),
+        ]);
         assert_eq!(
             radroots_replica_ingest_event(&exec, &active).expect("active ingest"),
             RadrootsReplicaIngestOutcome::Applied
@@ -2319,6 +2353,12 @@ mod tests {
         assert_eq!(search_rows[0].qty_avail, Some(5));
         assert_eq!(search_rows[0].price_amt, 6.0);
         assert_eq!(search_rows[0].price_currency, "USD");
+        assert!(
+            search_rows[0]
+                .notes
+                .as_deref()
+                .is_some_and(|notes| notes.contains("listing_discounts"))
+        );
 
         let updated = listing_event(
             501,
