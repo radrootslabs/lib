@@ -475,6 +475,53 @@ impl RadrootsTradeOrderRevisionProposed {
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case", tag = "decision"))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RadrootsTradeOrderRevisionDecision {
+    Accepted,
+    Declined { reason: String },
+}
+
+impl RadrootsTradeOrderRevisionDecision {
+    pub fn validate(&self) -> Result<(), RadrootsActiveTradePayloadError> {
+        match self {
+            Self::Accepted => Ok(()),
+            Self::Declined { reason } => validate_required_field(reason, "reason"),
+        }
+    }
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsTradeOrderRevisionDecisionEvent {
+    pub revision_id: String,
+    pub order_id: String,
+    pub listing_addr: String,
+    pub buyer_pubkey: String,
+    pub seller_pubkey: String,
+    pub root_event_id: String,
+    pub prev_event_id: String,
+    pub decision: RadrootsTradeOrderRevisionDecision,
+}
+
+impl RadrootsTradeOrderRevisionDecisionEvent {
+    pub fn validate(&self) -> Result<(), RadrootsActiveTradePayloadError> {
+        validate_required_field(&self.revision_id, "revision_id")?;
+        validate_required_field(&self.order_id, "order_id")?;
+        validate_required_field(&self.listing_addr, "listing_addr")?;
+        validate_required_field(&self.buyer_pubkey, "buyer_pubkey")?;
+        validate_required_field(&self.seller_pubkey, "seller_pubkey")?;
+        validate_required_field(&self.root_event_id, "root_event_id")?;
+        validate_required_field(&self.prev_event_id, "prev_event_id")?;
+        self.decision.validate()
+    }
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeInventoryCommitment {
     pub bin_id: String,

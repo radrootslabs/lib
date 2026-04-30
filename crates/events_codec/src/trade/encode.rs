@@ -10,7 +10,7 @@ use radroots_events::{
         RadrootsTradeEnvelope, RadrootsTradeEnvelopeError, RadrootsTradeFulfillmentUpdated,
         RadrootsTradeMessagePayload, RadrootsTradeMessageType, RadrootsTradeOrderCancelled,
         RadrootsTradeOrderDecisionEvent, RadrootsTradeOrderRequested,
-        RadrootsTradeOrderRevisionProposed,
+        RadrootsTradeOrderRevisionDecisionEvent, RadrootsTradeOrderRevisionProposed,
     },
 };
 
@@ -248,6 +248,31 @@ pub fn active_trade_order_revision_proposal_event_build(
     active_trade_envelope_event_build(
         &payload.buyer_pubkey,
         RadrootsActiveTradeMessageType::TradeOrderRevisionProposed,
+        &payload.listing_addr,
+        &payload.order_id,
+        None,
+        Some(root_event_id),
+        Some(prev_event_id),
+        payload,
+    )
+}
+
+#[cfg(feature = "serde_json")]
+pub fn active_trade_order_revision_decision_event_build(
+    root_event_id: &str,
+    prev_event_id: &str,
+    payload: &RadrootsTradeOrderRevisionDecisionEvent,
+) -> Result<WireEventParts, EventEncodeError> {
+    payload.validate().map_err(map_active_payload_error)?;
+    if payload.root_event_id != root_event_id {
+        return Err(EventEncodeError::InvalidField("root_event_id"));
+    }
+    if payload.prev_event_id != prev_event_id {
+        return Err(EventEncodeError::InvalidField("prev_event_id"));
+    }
+    active_trade_envelope_event_build(
+        &payload.seller_pubkey,
+        RadrootsActiveTradeMessageType::TradeOrderRevisionDecision,
         &payload.listing_addr,
         &payload.order_id,
         None,
