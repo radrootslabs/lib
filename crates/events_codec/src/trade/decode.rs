@@ -652,6 +652,9 @@ mod tests {
         active_trade_order_request_event_build, trade_envelope_event_build,
     };
     use crate::trade::tags::TAG_LISTING_EVENT;
+    use radroots_core::{
+        RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreUnit,
+    };
     use radroots_events::{
         RadrootsNostrEvent, RadrootsNostrEventPtr,
         kinds::{
@@ -662,11 +665,14 @@ mod tests {
         tags::{TAG_D, TAG_E_PREV, TAG_E_ROOT},
         trade::{
             RadrootsActiveTradeEnvelope, RadrootsActiveTradeFulfillmentState,
-            RadrootsActiveTradeMessageType, RadrootsTradeBuyerReceipt, RadrootsTradeEnvelope,
-            RadrootsTradeFulfillmentUpdated, RadrootsTradeInventoryCommitment,
-            RadrootsTradeMessagePayload, RadrootsTradeMessageType, RadrootsTradeOrder,
-            RadrootsTradeOrderCancelled, RadrootsTradeOrderDecision,
-            RadrootsTradeOrderDecisionEvent, RadrootsTradeOrderItem, RadrootsTradeOrderRequested,
+            RadrootsActiveTradeMessageType, RadrootsActiveTradePayloadError,
+            RadrootsTradeBuyerReceipt, RadrootsTradeEnvelope, RadrootsTradeFulfillmentUpdated,
+            RadrootsTradeInventoryCommitment, RadrootsTradeMessagePayload,
+            RadrootsTradeMessageType, RadrootsTradeOrder, RadrootsTradeOrderCancelled,
+            RadrootsTradeOrderDecision, RadrootsTradeOrderDecisionEvent,
+            RadrootsTradeOrderEconomicItem, RadrootsTradeOrderEconomicLine,
+            RadrootsTradeOrderEconomics, RadrootsTradeOrderItem, RadrootsTradeOrderRequested,
+            RadrootsTradePricingBasis,
         },
     };
 
@@ -694,6 +700,39 @@ mod tests {
                 bin_id: "lb".into(),
                 bin_count: 3,
             }],
+            economics: request_economics(),
+        }
+    }
+
+    fn decimal(raw: &str) -> RadrootsCoreDecimal {
+        raw.parse().unwrap()
+    }
+
+    fn usd(raw: &str) -> RadrootsCoreMoney {
+        RadrootsCoreMoney::new(decimal(raw), RadrootsCoreCurrency::USD)
+    }
+
+    fn request_economics() -> RadrootsTradeOrderEconomics {
+        RadrootsTradeOrderEconomics {
+            quote_id: "quote-1".into(),
+            quote_version: 1,
+            pricing_basis: RadrootsTradePricingBasis::ListingEvent,
+            currency: RadrootsCoreCurrency::USD,
+            items: vec![RadrootsTradeOrderEconomicItem {
+                bin_id: "lb".into(),
+                bin_count: 3,
+                quantity_amount: decimal("1"),
+                quantity_unit: RadrootsCoreUnit::Each,
+                unit_price_amount: decimal("5"),
+                unit_price_currency: RadrootsCoreCurrency::USD,
+                line_subtotal: usd("15"),
+            }],
+            discounts: Vec::<RadrootsTradeOrderEconomicLine>::new(),
+            adjustments: Vec::<RadrootsTradeOrderEconomicLine>::new(),
+            subtotal: usd("15"),
+            discount_total: usd("0"),
+            adjustment_total: usd("0"),
+            total: usd("15"),
         }
     }
 
@@ -818,6 +857,8 @@ mod tests {
             built.tags[2],
             vec![TAG_D.to_string(), "order-1".to_string()]
         );
+        assert_eq!(envelope.payload.economics.quote_id, "quote-1");
+        assert_eq!(envelope.payload.economics.total, usd("15"));
         assert!(
             built
                 .tags
@@ -984,6 +1025,37 @@ mod tests {
         assert_eq!(
             envelope.message_type,
             RadrootsActiveTradeMessageType::TradeOrderRequested
+        );
+    }
+
+    #[test]
+    fn active_order_request_parse_rejects_mismatched_economics() {
+        let mut payload = active_order_request();
+        let built = active_trade_order_request_event_build(&listing_event_ptr(), &payload).unwrap();
+        payload.economics.items[0].bin_id = "other-bin".into();
+        let envelope = RadrootsActiveTradeEnvelope::new(
+            RadrootsActiveTradeMessageType::TradeOrderRequested,
+            payload.listing_addr.clone(),
+            payload.order_id.clone(),
+            payload,
+        );
+        let event = RadrootsNostrEvent {
+            id: "event-id".into(),
+            author: "buyer".into(),
+            created_at: 1,
+            kind: built.kind,
+            tags: built.tags,
+            content: serde_json::to_string(&envelope).unwrap(),
+            sig: "sig".into(),
+        };
+        let err = active_trade_order_request_from_event(&event).unwrap_err();
+        assert_eq!(
+            err,
+            RadrootsActiveTradeEnvelopeParseError::InvalidPayload(
+                RadrootsActiveTradePayloadError::InvalidOrderEconomicsBinding {
+                    field: "items.bin_id"
+                }
+            )
         );
     }
 

@@ -655,6 +655,7 @@ pub fn canonicalize_active_order_request_for_signer(
     }
 
     canonicalize_items(&mut request.items)?;
+    request.economics.canonicalize();
     request.order_id = order_id;
     request.listing_addr = listing_addr.as_str();
     request.buyer_pubkey = buyer_pubkey;
@@ -2061,17 +2062,34 @@ fn parse_public_listing_addr(
 }
 
 fn canonicalize_items(
-    items: &mut [RadrootsTradeOrderItem],
+    items: &mut Vec<RadrootsTradeOrderItem>,
 ) -> Result<(), RadrootsTradeOrderCanonicalizationError> {
     if items.is_empty() {
         return Err(RadrootsTradeOrderCanonicalizationError::MissingItems);
     }
+    let mut canonical_items: Vec<RadrootsTradeOrderItem> = Vec::new();
     for (index, item) in items.iter_mut().enumerate() {
-        item.bin_id = normalized_required_string(item.bin_id.clone(), "bin_id")?;
+        item.bin_id = normalized_required_string(core::mem::take(&mut item.bin_id), "bin_id")?;
         if item.bin_count == 0 {
             return Err(RadrootsTradeOrderCanonicalizationError::InvalidBinCount { index });
         }
+        if let Some(existing) = canonical_items
+            .iter_mut()
+            .find(|canonical| canonical.bin_id.as_str() == item.bin_id.as_str())
+        {
+            existing.bin_count = existing
+                .bin_count
+                .checked_add(item.bin_count)
+                .ok_or(RadrootsTradeOrderCanonicalizationError::InvalidBinCount { index })?;
+        } else {
+            canonical_items.push(RadrootsTradeOrderItem {
+                bin_id: item.bin_id.clone(),
+                bin_count: item.bin_count,
+            });
+        }
     }
+    canonical_items.sort_by(|left, right| left.bin_id.cmp(&right.bin_id));
+    *items = canonical_items;
     Ok(())
 }
 
@@ -2175,12 +2193,17 @@ fn normalized_required_string(
 
 #[cfg(test)]
 mod tests {
+    use radroots_core::{
+        RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreUnit,
+    };
     use radroots_events::kinds::KIND_LISTING;
     use radroots_events::trade::{
         RadrootsActiveTradeFulfillmentState, RadrootsTradeBuyerReceipt,
         RadrootsTradeFulfillmentUpdated, RadrootsTradeInventoryCommitment,
         RadrootsTradeOrder as TradeOrder, RadrootsTradeOrderCancelled, RadrootsTradeOrderDecision,
-        RadrootsTradeOrderDecisionEvent, RadrootsTradeOrderItem, RadrootsTradeOrderRequested,
+        RadrootsTradeOrderDecisionEvent, RadrootsTradeOrderEconomicItem,
+        RadrootsTradeOrderEconomicLine, RadrootsTradeOrderEconomics, RadrootsTradeOrderItem,
+        RadrootsTradeOrderRequested, RadrootsTradePricingBasis,
     };
 
     use super::{
@@ -2222,6 +2245,43 @@ mod tests {
                 bin_id: " bin-1 ".to_string(),
                 bin_count: 2,
             }],
+            economics: request_economics("bin-1", 2, "10"),
+        }
+    }
+
+    fn decimal(raw: &str) -> RadrootsCoreDecimal {
+        raw.parse().unwrap()
+    }
+
+    fn usd(raw: &str) -> RadrootsCoreMoney {
+        RadrootsCoreMoney::new(decimal(raw), RadrootsCoreCurrency::USD)
+    }
+
+    fn request_economics(
+        bin_id: &str,
+        bin_count: u32,
+        subtotal: &str,
+    ) -> RadrootsTradeOrderEconomics {
+        RadrootsTradeOrderEconomics {
+            quote_id: "quote-1".to_string(),
+            quote_version: 1,
+            pricing_basis: RadrootsTradePricingBasis::ListingEvent,
+            currency: RadrootsCoreCurrency::USD,
+            items: vec![RadrootsTradeOrderEconomicItem {
+                bin_id: bin_id.to_string(),
+                bin_count,
+                quantity_amount: decimal("1"),
+                quantity_unit: RadrootsCoreUnit::Each,
+                unit_price_amount: decimal("5"),
+                unit_price_currency: RadrootsCoreCurrency::USD,
+                line_subtotal: usd(subtotal),
+            }],
+            discounts: Vec::<RadrootsTradeOrderEconomicLine>::new(),
+            adjustments: Vec::<RadrootsTradeOrderEconomicLine>::new(),
+            subtotal: usd(subtotal),
+            discount_total: usd("0"),
+            adjustment_total: usd("0"),
+            total: usd(subtotal),
         }
     }
 
@@ -2254,6 +2314,7 @@ mod tests {
                 bin_id: "bin-1".to_string(),
                 bin_count: 2,
             }],
+            economics: request_economics("bin-1", 2, "10"),
         }
     }
 
@@ -2277,6 +2338,9 @@ mod tests {
         let mut request = request_record_with_event_id(event_id);
         request.payload.order_id = order_id.to_string();
         request.payload.items[0].bin_count = bin_count;
+        let subtotal =
+            (RadrootsCoreDecimal::from(5u32) * RadrootsCoreDecimal::from(bin_count)).to_string();
+        request.payload.economics = request_economics("bin-1", bin_count, &subtotal);
         request
     }
 
@@ -2432,6 +2496,33 @@ mod tests {
         assert_eq!(request.buyer_pubkey, BUYER);
         assert_eq!(request.seller_pubkey, SELLER);
         assert_eq!(request.items[0].bin_id, "bin-1");
+    }
+
+    #[test]
+    fn canonicalize_active_order_request_merges_duplicate_items() {
+        let mut request = active_request("", "");
+        request.economics.total = usd("12");
+        request.items = vec![
+            RadrootsTradeOrderItem {
+                bin_id: " bin-1 ".to_string(),
+                bin_count: 1,
+            },
+            RadrootsTradeOrderItem {
+                bin_id: "bin-1".to_string(),
+                bin_count: 1,
+            },
+        ];
+
+        let request = canonicalize_active_order_request_for_signer(request, BUYER).unwrap();
+
+        assert_eq!(
+            request.items,
+            vec![RadrootsTradeOrderItem {
+                bin_id: "bin-1".to_string(),
+                bin_count: 2,
+            }]
+        );
+        assert_eq!(request.economics.total, usd("10"));
     }
 
     #[test]

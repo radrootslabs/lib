@@ -20,14 +20,53 @@
               "bin_id": "bin-1",
               "bin_count": 2
             }
-          ]
+          ],
+          "economics": {
+            "quote_id": "quote-1",
+            "quote_version": 1,
+            "pricing_basis": "listing_event",
+            "currency": "USD",
+            "items": [
+              {
+                "bin_id": "bin-1",
+                "bin_count": 2,
+                "quantity_amount": "1",
+                "quantity_unit": "each",
+                "unit_price_amount": "5",
+                "unit_price_currency": "USD",
+                "line_subtotal": {
+                  "amount": "10",
+                  "currency": "USD"
+                }
+              }
+            ],
+            "discounts": [],
+            "adjustments": [],
+            "subtotal": {
+              "amount": "10",
+              "currency": "USD"
+            },
+            "discount_total": {
+              "amount": "0",
+              "currency": "USD"
+            },
+            "adjustment_total": {
+              "amount": "0",
+              "currency": "USD"
+            },
+            "total": {
+              "amount": "10",
+              "currency": "USD"
+            }
+          }
         }
       },
       "expected": {
         "wire_parts": {
           "kind": 3422,
           "content_type": "TradeOrderRequested",
-          "tags_shape": "active_trade_order_request_tags"
+          "tags_shape": "active_trade_order_request_tags",
+          "payload_shape": "active_trade_order_request_with_economics"
         }
       }
     }

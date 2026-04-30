@@ -1,7 +1,10 @@
 #![forbid(unsafe_code)]
 
 #[cfg(not(feature = "std"))]
-use alloc::{string::String, vec::Vec};
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
+};
 
 use crate::{RadrootsNostrEventPtr, kinds::*};
 use radroots_core::{
@@ -249,6 +252,12 @@ impl RadrootsTradeOrderEconomics {
         self.discounts.sort_by(|left, right| left.id.cmp(&right.id));
         self.adjustments
             .sort_by(|left, right| left.id.cmp(&right.id));
+        if let Ok(totals) = self.derived_totals() {
+            self.subtotal = totals.subtotal;
+            self.discount_total = totals.discount_total;
+            self.adjustment_total = totals.adjustment_total;
+            self.total = totals.total;
+        }
     }
 
     pub fn canonicalized(&self) -> Self {
@@ -415,6 +424,7 @@ pub struct RadrootsTradeOrderRequested {
     pub buyer_pubkey: String,
     pub seller_pubkey: String,
     pub items: Vec<RadrootsTradeOrderItem>,
+    pub economics: RadrootsTradeOrderEconomics,
 }
 
 impl RadrootsTradeOrderRequested {
@@ -423,7 +433,9 @@ impl RadrootsTradeOrderRequested {
         validate_required_field(&self.listing_addr, "listing_addr")?;
         validate_required_field(&self.buyer_pubkey, "buyer_pubkey")?;
         validate_required_field(&self.seller_pubkey, "seller_pubkey")?;
-        validate_order_items(&self.items)
+        validate_order_items(&self.items)?;
+        self.economics.validate()?;
+        validate_order_economics_binding(&self.items, &self.economics)
     }
 }
 
@@ -1112,6 +1124,7 @@ pub enum RadrootsActiveTradePayloadError {
     InvalidEconomicCurrency { field: &'static str },
     InvalidEconomicOrdering { field: &'static str },
     InvalidEconomicTotal { field: &'static str },
+    InvalidOrderEconomicsBinding { field: &'static str },
     InvalidQuoteVersion,
     MissingInventoryCommitments,
     InvalidInventoryCommitmentCount { index: usize },
@@ -1166,6 +1179,9 @@ impl core::fmt::Display for RadrootsActiveTradePayloadError {
             }
             Self::InvalidEconomicTotal { field } => {
                 write!(f, "economics.{field} total is invalid")
+            }
+            Self::InvalidOrderEconomicsBinding { field } => {
+                write!(f, "order {field} does not match economics")
             }
             Self::InvalidQuoteVersion => {
                 write!(f, "economics.quote_version must be greater than zero")
@@ -1259,6 +1275,67 @@ fn validate_economic_item(
         return Err(RadrootsActiveTradePayloadError::InvalidEconomicItemSubtotal { index });
     }
     Ok(item.line_subtotal.clone())
+}
+
+fn validate_order_economics_binding(
+    items: &[RadrootsTradeOrderItem],
+    economics: &RadrootsTradeOrderEconomics,
+) -> Result<(), RadrootsActiveTradePayloadError> {
+    let order_items = normalized_order_item_counts(items).ok_or(
+        RadrootsActiveTradePayloadError::InvalidOrderEconomicsBinding {
+            field: "items.bin_count",
+        },
+    )?;
+    if order_items.len() != economics.items.len() {
+        return Err(
+            RadrootsActiveTradePayloadError::InvalidOrderEconomicsBinding { field: "items" },
+        );
+    }
+    for (item, economic_item) in order_items.iter().zip(economics.items.iter()) {
+        if item.bin_id != economic_item.bin_id {
+            return Err(
+                RadrootsActiveTradePayloadError::InvalidOrderEconomicsBinding {
+                    field: "items.bin_id",
+                },
+            );
+        }
+        if item.bin_count != u64::from(economic_item.bin_count) {
+            return Err(
+                RadrootsActiveTradePayloadError::InvalidOrderEconomicsBinding {
+                    field: "items.bin_count",
+                },
+            );
+        }
+    }
+    Ok(())
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct NormalizedOrderItemCount {
+    bin_id: String,
+    bin_count: u64,
+}
+
+fn normalized_order_item_counts(
+    items: &[RadrootsTradeOrderItem],
+) -> Option<Vec<NormalizedOrderItemCount>> {
+    let mut counts: Vec<NormalizedOrderItemCount> = Vec::new();
+    for item in items {
+        let bin_id = item.bin_id.trim();
+        if bin_id.is_empty() || item.bin_count == 0 {
+            return None;
+        }
+        if let Some(existing) = counts.iter_mut().find(|count| count.bin_id == bin_id) {
+            existing.bin_count = existing.bin_count.checked_add(u64::from(item.bin_count))?;
+        } else {
+            counts.push(NormalizedOrderItemCount {
+                bin_id: bin_id.to_string(),
+                bin_count: u64::from(item.bin_count),
+            });
+        }
+    }
+    counts.sort_by(|left, right| left.bin_id.cmp(&right.bin_id));
+    Some(counts)
 }
 
 fn validate_economic_line(
@@ -1521,6 +1598,7 @@ mod tests {
                 bin_id: "bin-1".into(),
                 bin_count: 2,
             }],
+            economics: sample_bound_order_economics(),
         }
     }
 
@@ -1588,6 +1666,30 @@ mod tests {
             discount_total: usd("3"),
             adjustment_total: usd("3"),
             total: usd("16"),
+        }
+    }
+
+    fn sample_bound_order_economics() -> RadrootsTradeOrderEconomics {
+        RadrootsTradeOrderEconomics {
+            quote_id: "quote-bound-1".into(),
+            quote_version: 1,
+            pricing_basis: RadrootsTradePricingBasis::ListingEvent,
+            currency: RadrootsCoreCurrency::USD,
+            items: vec![RadrootsTradeOrderEconomicItem {
+                bin_id: "bin-1".into(),
+                bin_count: 2,
+                quantity_amount: decimal("1"),
+                quantity_unit: RadrootsCoreUnit::Each,
+                unit_price_amount: decimal("5"),
+                unit_price_currency: RadrootsCoreCurrency::USD,
+                line_subtotal: usd("10"),
+            }],
+            discounts: Vec::new(),
+            adjustments: Vec::new(),
+            subtotal: usd("10"),
+            discount_total: usd("0"),
+            adjustment_total: usd("0"),
+            total: usd("10"),
         }
     }
 
@@ -1867,6 +1969,27 @@ mod tests {
             missing_bin_id.validate().unwrap_err(),
             RadrootsActiveTradePayloadError::EmptyField("bin_id")
         );
+
+        let mut mismatched_economic_item = sample_active_order_request();
+        mismatched_economic_item.economics.items[0].bin_id = "bin-other".into();
+        assert_eq!(
+            mismatched_economic_item.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::InvalidOrderEconomicsBinding {
+                field: "items.bin_id"
+            }
+        );
+
+        let mut mismatched_economic_count = sample_active_order_request();
+        mismatched_economic_count.economics.items[0].bin_count = 3;
+        mismatched_economic_count.economics.items[0].line_subtotal = usd("15");
+        mismatched_economic_count.economics.subtotal = usd("15");
+        mismatched_economic_count.economics.total = usd("15");
+        assert_eq!(
+            mismatched_economic_count.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::InvalidOrderEconomicsBinding {
+                field: "items.bin_count"
+            }
+        );
     }
 
     #[test]
@@ -1897,6 +2020,8 @@ mod tests {
         let mut economics = sample_active_order_economics();
         economics.items.reverse();
         economics.adjustments.reverse();
+        economics.subtotal = usd("19");
+        economics.total = usd("17");
         assert_eq!(
             economics.validate().unwrap_err(),
             RadrootsActiveTradePayloadError::InvalidEconomicOrdering {
@@ -1907,6 +2032,8 @@ mod tests {
         let canonical = economics.canonicalized();
         assert_eq!(canonical.items[0].bin_id, "bin-a");
         assert_eq!(canonical.adjustments[0].id, "adjustment-a");
+        assert_eq!(canonical.subtotal, usd("18"));
+        assert_eq!(canonical.total, usd("16"));
         assert_eq!(canonical.validate(), Ok(()));
     }
 

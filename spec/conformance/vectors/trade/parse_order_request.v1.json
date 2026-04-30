@@ -10,12 +10,21 @@
           "kind": 3422,
           "author": "buyer_pubkey",
           "content_type": "TradeOrderRequested",
-          "tags_shape": "active_trade_order_request_tags"
+          "tags_shape": "active_trade_order_request_tags",
+          "payload_shape": "active_trade_order_request_with_economics"
         }
       },
       "expected": {
         "envelope_shape": "active_trade_order_request",
-        "payload_type": "RadrootsTradeOrderRequested"
+        "payload_type": "RadrootsTradeOrderRequested",
+        "required_payload_fields": [
+          "order_id",
+          "listing_addr",
+          "buyer_pubkey",
+          "seller_pubkey",
+          "items",
+          "economics"
+        ]
       }
     }
   ]

@@ -78,7 +78,8 @@ fn map_active_payload_error(error: RadrootsActiveTradePayloadError) -> EventEnco
         | RadrootsActiveTradePayloadError::InvalidEconomicLineEffect { field, .. }
         | RadrootsActiveTradePayloadError::InvalidEconomicCurrency { field }
         | RadrootsActiveTradePayloadError::InvalidEconomicOrdering { field }
-        | RadrootsActiveTradePayloadError::InvalidEconomicTotal { field } => {
+        | RadrootsActiveTradePayloadError::InvalidEconomicTotal { field }
+        | RadrootsActiveTradePayloadError::InvalidOrderEconomicsBinding { field } => {
             EventEncodeError::InvalidField(field)
         }
         RadrootsActiveTradePayloadError::InvalidQuoteVersion => {
