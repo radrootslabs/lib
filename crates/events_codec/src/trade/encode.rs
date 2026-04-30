@@ -6,9 +6,10 @@ use radroots_events::{
     RadrootsNostrEventPtr,
     trade::{
         RadrootsActiveTradeEnvelope, RadrootsActiveTradeEnvelopeError,
-        RadrootsActiveTradeMessageType, RadrootsActiveTradePayloadError, RadrootsTradeEnvelope,
-        RadrootsTradeEnvelopeError, RadrootsTradeFulfillmentUpdated, RadrootsTradeMessagePayload,
-        RadrootsTradeMessageType, RadrootsTradeOrderDecisionEvent, RadrootsTradeOrderRequested,
+        RadrootsActiveTradeMessageType, RadrootsActiveTradePayloadError, RadrootsTradeBuyerReceipt,
+        RadrootsTradeEnvelope, RadrootsTradeEnvelopeError, RadrootsTradeFulfillmentUpdated,
+        RadrootsTradeMessagePayload, RadrootsTradeMessageType, RadrootsTradeOrderCancelled,
+        RadrootsTradeOrderDecisionEvent, RadrootsTradeOrderRequested,
     },
 };
 
@@ -65,6 +66,12 @@ fn map_active_payload_error(error: RadrootsActiveTradePayloadError) -> EventEnco
         }
         RadrootsActiveTradePayloadError::InvalidFulfillmentStatus => {
             EventEncodeError::InvalidField("fulfillment.status")
+        }
+        RadrootsActiveTradePayloadError::MissingReceiptIssue => {
+            EventEncodeError::EmptyRequiredField("receipt.issue")
+        }
+        RadrootsActiveTradePayloadError::UnexpectedReceiptIssue => {
+            EventEncodeError::InvalidField("receipt.issue")
         }
     }
 }
@@ -207,6 +214,44 @@ pub fn active_trade_fulfillment_update_event_build(
     active_trade_envelope_event_build(
         &payload.buyer_pubkey,
         RadrootsActiveTradeMessageType::TradeFulfillmentUpdated,
+        &payload.listing_addr,
+        &payload.order_id,
+        None,
+        Some(root_event_id),
+        Some(prev_event_id),
+        payload,
+    )
+}
+
+#[cfg(feature = "serde_json")]
+pub fn active_trade_order_cancel_event_build(
+    root_event_id: &str,
+    prev_event_id: &str,
+    payload: &RadrootsTradeOrderCancelled,
+) -> Result<WireEventParts, EventEncodeError> {
+    payload.validate().map_err(map_active_payload_error)?;
+    active_trade_envelope_event_build(
+        &payload.seller_pubkey,
+        RadrootsActiveTradeMessageType::TradeOrderCancelled,
+        &payload.listing_addr,
+        &payload.order_id,
+        None,
+        Some(root_event_id),
+        Some(prev_event_id),
+        payload,
+    )
+}
+
+#[cfg(feature = "serde_json")]
+pub fn active_trade_buyer_receipt_event_build(
+    root_event_id: &str,
+    prev_event_id: &str,
+    payload: &RadrootsTradeBuyerReceipt,
+) -> Result<WireEventParts, EventEncodeError> {
+    payload.validate().map_err(map_active_payload_error)?;
+    active_trade_envelope_event_build(
+        &payload.seller_pubkey,
+        RadrootsActiveTradeMessageType::TradeBuyerReceipt,
         &payload.listing_addr,
         &payload.order_id,
         None,

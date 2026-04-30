@@ -315,6 +315,63 @@ impl RadrootsTradeFulfillmentUpdated {
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsTradeOrderCancelled {
+    pub order_id: String,
+    pub listing_addr: String,
+    pub buyer_pubkey: String,
+    pub seller_pubkey: String,
+    pub reason: String,
+}
+
+impl RadrootsTradeOrderCancelled {
+    pub fn validate(&self) -> Result<(), RadrootsActiveTradePayloadError> {
+        validate_required_field(&self.order_id, "order_id")?;
+        validate_required_field(&self.listing_addr, "listing_addr")?;
+        validate_required_field(&self.buyer_pubkey, "buyer_pubkey")?;
+        validate_required_field(&self.seller_pubkey, "seller_pubkey")?;
+        validate_required_field(&self.reason, "reason")
+    }
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsTradeBuyerReceipt {
+    pub order_id: String,
+    pub listing_addr: String,
+    pub buyer_pubkey: String,
+    pub seller_pubkey: String,
+    pub received: bool,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
+    pub issue: Option<String>,
+    pub received_at: u64,
+}
+
+impl RadrootsTradeBuyerReceipt {
+    pub fn validate(&self) -> Result<(), RadrootsActiveTradePayloadError> {
+        validate_required_field(&self.order_id, "order_id")?;
+        validate_required_field(&self.listing_addr, "listing_addr")?;
+        validate_required_field(&self.buyer_pubkey, "buyer_pubkey")?;
+        validate_required_field(&self.seller_pubkey, "seller_pubkey")?;
+        if self.received {
+            if self.issue.is_some() {
+                return Err(RadrootsActiveTradePayloadError::UnexpectedReceiptIssue);
+            }
+        } else {
+            match self.issue.as_deref() {
+                Some(issue) => validate_required_field(issue, "issue")?,
+                None => return Err(RadrootsActiveTradePayloadError::MissingReceiptIssue),
+            }
+        }
+        Ok(())
+    }
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeQuestion {
     pub question_id: String,
 }
@@ -476,8 +533,12 @@ pub enum RadrootsActiveTradeMessageType {
     TradeOrderRequested,
     #[cfg_attr(feature = "serde", serde(rename = "TradeOrderDecision"))]
     TradeOrderDecision,
+    #[cfg_attr(feature = "serde", serde(rename = "TradeOrderCancelled"))]
+    TradeOrderCancelled,
     #[cfg_attr(feature = "serde", serde(rename = "TradeFulfillmentUpdated"))]
     TradeFulfillmentUpdated,
+    #[cfg_attr(feature = "serde", serde(rename = "TradeBuyerReceipt"))]
+    TradeBuyerReceipt,
 }
 
 impl RadrootsActiveTradeMessageType {
@@ -486,7 +547,9 @@ impl RadrootsActiveTradeMessageType {
         match kind {
             KIND_TRADE_ORDER_REQUEST => Some(Self::TradeOrderRequested),
             KIND_TRADE_ORDER_DECISION => Some(Self::TradeOrderDecision),
+            KIND_TRADE_CANCEL => Some(Self::TradeOrderCancelled),
             KIND_TRADE_FULFILLMENT_UPDATE => Some(Self::TradeFulfillmentUpdated),
+            KIND_TRADE_RECEIPT => Some(Self::TradeBuyerReceipt),
             _ => None,
         }
     }
@@ -496,7 +559,9 @@ impl RadrootsActiveTradeMessageType {
         match self {
             Self::TradeOrderRequested => KIND_TRADE_ORDER_REQUEST,
             Self::TradeOrderDecision => KIND_TRADE_ORDER_DECISION,
+            Self::TradeOrderCancelled => KIND_TRADE_CANCEL,
             Self::TradeFulfillmentUpdated => KIND_TRADE_FULFILLMENT_UPDATE,
+            Self::TradeBuyerReceipt => KIND_TRADE_RECEIPT,
         }
     }
 
@@ -505,7 +570,9 @@ impl RadrootsActiveTradeMessageType {
         match self {
             Self::TradeOrderRequested => "TradeOrderRequested",
             Self::TradeOrderDecision => "TradeOrderDecision",
+            Self::TradeOrderCancelled => "TradeOrderCancelled",
             Self::TradeFulfillmentUpdated => "TradeFulfillmentUpdated",
+            Self::TradeBuyerReceipt => "TradeBuyerReceipt",
         }
     }
 
@@ -518,7 +585,10 @@ impl RadrootsActiveTradeMessageType {
     pub const fn requires_trade_chain(self) -> bool {
         matches!(
             self,
-            Self::TradeOrderDecision | Self::TradeFulfillmentUpdated
+            Self::TradeOrderDecision
+                | Self::TradeOrderCancelled
+                | Self::TradeFulfillmentUpdated
+                | Self::TradeBuyerReceipt
         )
     }
 }
@@ -804,6 +874,8 @@ pub enum RadrootsActiveTradePayloadError {
     MissingInventoryCommitments,
     InvalidInventoryCommitmentCount { index: usize },
     InvalidFulfillmentStatus,
+    MissingReceiptIssue,
+    UnexpectedReceiptIssue,
 }
 
 impl core::fmt::Display for RadrootsActiveTradePayloadError {
@@ -826,6 +898,12 @@ impl core::fmt::Display for RadrootsActiveTradePayloadError {
             ),
             Self::InvalidFulfillmentStatus => {
                 write!(f, "fulfillment status is not publishable")
+            }
+            Self::MissingReceiptIssue => {
+                write!(f, "receipt issue is required when received is false")
+            }
+            Self::UnexpectedReceiptIssue => {
+                write!(f, "receipt issue must be absent when received is true")
             }
         }
     }
@@ -1032,6 +1110,28 @@ mod tests {
         }
     }
 
+    fn sample_active_order_cancelled() -> RadrootsTradeOrderCancelled {
+        RadrootsTradeOrderCancelled {
+            order_id: "order-1".into(),
+            listing_addr: sample_listing_addr(),
+            buyer_pubkey: "buyer".into(),
+            seller_pubkey: "seller".into(),
+            reason: "changed plans".into(),
+        }
+    }
+
+    fn sample_active_buyer_receipt(received: bool) -> RadrootsTradeBuyerReceipt {
+        RadrootsTradeBuyerReceipt {
+            order_id: "order-1".into(),
+            listing_addr: sample_listing_addr(),
+            buyer_pubkey: "buyer".into(),
+            seller_pubkey: "seller".into(),
+            received,
+            issue: (!received).then(|| "damaged items".into()),
+            received_at: 1_777_665_600,
+        }
+    }
+
     fn sample_order_revision() -> RadrootsTradeOrderRevision {
         RadrootsTradeOrderRevision {
             revision_id: "rev-1".into(),
@@ -1111,6 +1211,14 @@ mod tests {
             RadrootsActiveTradeMessageType::from_kind(KIND_TRADE_FULFILLMENT_UPDATE),
             Some(RadrootsActiveTradeMessageType::TradeFulfillmentUpdated)
         );
+        assert_eq!(
+            RadrootsActiveTradeMessageType::from_kind(KIND_TRADE_CANCEL),
+            Some(RadrootsActiveTradeMessageType::TradeOrderCancelled)
+        );
+        assert_eq!(
+            RadrootsActiveTradeMessageType::from_kind(KIND_TRADE_RECEIPT),
+            Some(RadrootsActiveTradeMessageType::TradeBuyerReceipt)
+        );
         assert_eq!(RadrootsActiveTradeMessageType::from_kind(3431), None);
         assert_eq!(
             RadrootsActiveTradeMessageType::TradeOrderRequested.kind(),
@@ -1125,6 +1233,14 @@ mod tests {
             KIND_TRADE_FULFILLMENT_UPDATE
         );
         assert_eq!(
+            RadrootsActiveTradeMessageType::TradeOrderCancelled.kind(),
+            KIND_TRADE_CANCEL
+        );
+        assert_eq!(
+            RadrootsActiveTradeMessageType::TradeBuyerReceipt.kind(),
+            KIND_TRADE_RECEIPT
+        );
+        assert_eq!(
             RadrootsActiveTradeMessageType::TradeOrderRequested.name(),
             "TradeOrderRequested"
         );
@@ -1136,9 +1252,19 @@ mod tests {
             RadrootsActiveTradeMessageType::TradeFulfillmentUpdated.name(),
             "TradeFulfillmentUpdated"
         );
+        assert_eq!(
+            RadrootsActiveTradeMessageType::TradeOrderCancelled.name(),
+            "TradeOrderCancelled"
+        );
+        assert_eq!(
+            RadrootsActiveTradeMessageType::TradeBuyerReceipt.name(),
+            "TradeBuyerReceipt"
+        );
         assert!(RadrootsActiveTradeMessageType::TradeOrderRequested.requires_listing_snapshot());
         assert!(RadrootsActiveTradeMessageType::TradeOrderDecision.requires_trade_chain());
         assert!(RadrootsActiveTradeMessageType::TradeFulfillmentUpdated.requires_trade_chain());
+        assert!(RadrootsActiveTradeMessageType::TradeOrderCancelled.requires_trade_chain());
+        assert!(RadrootsActiveTradeMessageType::TradeBuyerReceipt.requires_trade_chain());
 
         let request_name =
             serde_json::to_value(RadrootsActiveTradeMessageType::TradeOrderRequested).unwrap();
@@ -1146,12 +1272,18 @@ mod tests {
             serde_json::to_value(RadrootsActiveTradeMessageType::TradeOrderDecision).unwrap();
         let fulfillment_name =
             serde_json::to_value(RadrootsActiveTradeMessageType::TradeFulfillmentUpdated).unwrap();
+        let cancellation_name =
+            serde_json::to_value(RadrootsActiveTradeMessageType::TradeOrderCancelled).unwrap();
+        let receipt_name =
+            serde_json::to_value(RadrootsActiveTradeMessageType::TradeBuyerReceipt).unwrap();
         assert_eq!(request_name, serde_json::json!("TradeOrderRequested"));
         assert_eq!(decision_name, serde_json::json!("TradeOrderDecision"));
         assert_eq!(
             fulfillment_name,
             serde_json::json!("TradeFulfillmentUpdated")
         );
+        assert_eq!(cancellation_name, serde_json::json!("TradeOrderCancelled"));
+        assert_eq!(receipt_name, serde_json::json!("TradeBuyerReceipt"));
     }
 
     #[test]
@@ -1254,6 +1386,62 @@ mod tests {
         assert_eq!(
             missing_seller.validate().unwrap_err(),
             RadrootsActiveTradePayloadError::EmptyField("seller_pubkey")
+        );
+    }
+
+    #[test]
+    fn active_cancellation_validation_requires_buyer_bindings_and_reason() {
+        assert_eq!(sample_active_order_cancelled().validate(), Ok(()));
+
+        let missing_reason = RadrootsTradeOrderCancelled {
+            reason: " ".into(),
+            ..sample_active_order_cancelled()
+        };
+        assert_eq!(
+            missing_reason.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::EmptyField("reason")
+        );
+
+        let missing_buyer = RadrootsTradeOrderCancelled {
+            buyer_pubkey: " ".into(),
+            ..sample_active_order_cancelled()
+        };
+        assert_eq!(
+            missing_buyer.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::EmptyField("buyer_pubkey")
+        );
+    }
+
+    #[test]
+    fn active_buyer_receipt_validation_requires_consistent_received_and_issue() {
+        assert_eq!(sample_active_buyer_receipt(true).validate(), Ok(()));
+        assert_eq!(sample_active_buyer_receipt(false).validate(), Ok(()));
+
+        let received_with_issue = RadrootsTradeBuyerReceipt {
+            issue: Some("damaged".into()),
+            ..sample_active_buyer_receipt(true)
+        };
+        assert_eq!(
+            received_with_issue.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::UnexpectedReceiptIssue
+        );
+
+        let not_received_without_issue = RadrootsTradeBuyerReceipt {
+            issue: None,
+            ..sample_active_buyer_receipt(false)
+        };
+        assert_eq!(
+            not_received_without_issue.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::MissingReceiptIssue
+        );
+
+        let not_received_blank_issue = RadrootsTradeBuyerReceipt {
+            issue: Some(" ".into()),
+            ..sample_active_buyer_receipt(false)
+        };
+        assert_eq!(
+            not_received_blank_issue.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::EmptyField("issue")
         );
     }
 

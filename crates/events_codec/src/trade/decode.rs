@@ -8,9 +8,10 @@ use radroots_events::{
     tags::{TAG_D, TAG_E_PREV, TAG_E_ROOT},
     trade::{
         RadrootsActiveTradeEnvelope, RadrootsActiveTradeEnvelopeError,
-        RadrootsActiveTradeMessageType, RadrootsActiveTradePayloadError, RadrootsTradeEnvelope,
-        RadrootsTradeEnvelopeError, RadrootsTradeFulfillmentUpdated, RadrootsTradeMessageType,
-        RadrootsTradeOrderDecisionEvent, RadrootsTradeOrderRequested,
+        RadrootsActiveTradeMessageType, RadrootsActiveTradePayloadError, RadrootsTradeBuyerReceipt,
+        RadrootsTradeEnvelope, RadrootsTradeEnvelopeError, RadrootsTradeFulfillmentUpdated,
+        RadrootsTradeMessageType, RadrootsTradeOrderCancelled, RadrootsTradeOrderDecisionEvent,
+        RadrootsTradeOrderRequested,
     },
 };
 #[cfg(feature = "serde_json")]
@@ -411,6 +412,68 @@ pub fn active_trade_fulfillment_update_from_event(
 }
 
 #[cfg(feature = "serde_json")]
+pub fn active_trade_order_cancel_from_event(
+    event: &RadrootsNostrEvent,
+) -> Result<
+    RadrootsActiveTradeEnvelope<RadrootsTradeOrderCancelled>,
+    RadrootsActiveTradeEnvelopeParseError,
+> {
+    let envelope = active_trade_envelope_from_event::<RadrootsTradeOrderCancelled>(event)?;
+    if envelope.message_type != RadrootsActiveTradeMessageType::TradeOrderCancelled {
+        return Err(
+            RadrootsActiveTradeEnvelopeParseError::MessageTypeKindMismatch {
+                event_kind: event.kind,
+                message_type: envelope.message_type,
+            },
+        );
+    }
+    envelope
+        .payload
+        .validate()
+        .map_err(RadrootsActiveTradeEnvelopeParseError::InvalidPayload)?;
+    validate_active_order_binding(
+        event,
+        &envelope,
+        &envelope.payload.order_id,
+        &envelope.payload.listing_addr,
+        &envelope.payload.buyer_pubkey,
+        &envelope.payload.seller_pubkey,
+    )?;
+    Ok(envelope)
+}
+
+#[cfg(feature = "serde_json")]
+pub fn active_trade_buyer_receipt_from_event(
+    event: &RadrootsNostrEvent,
+) -> Result<
+    RadrootsActiveTradeEnvelope<RadrootsTradeBuyerReceipt>,
+    RadrootsActiveTradeEnvelopeParseError,
+> {
+    let envelope = active_trade_envelope_from_event::<RadrootsTradeBuyerReceipt>(event)?;
+    if envelope.message_type != RadrootsActiveTradeMessageType::TradeBuyerReceipt {
+        return Err(
+            RadrootsActiveTradeEnvelopeParseError::MessageTypeKindMismatch {
+                event_kind: event.kind,
+                message_type: envelope.message_type,
+            },
+        );
+    }
+    envelope
+        .payload
+        .validate()
+        .map_err(RadrootsActiveTradeEnvelopeParseError::InvalidPayload)?;
+    validate_active_order_binding(
+        event,
+        &envelope,
+        &envelope.payload.order_id,
+        &envelope.payload.listing_addr,
+        &envelope.payload.buyer_pubkey,
+        &envelope.payload.seller_pubkey,
+    )?;
+    Ok(envelope)
+}
+
+#[cfg(feature = "serde_json")]
 pub fn trade_event_context_from_tags(
     message_type: RadrootsTradeMessageType,
     tags: &[Vec<String>],
@@ -577,27 +640,31 @@ fn validate_active_order_binding<T>(
 mod tests {
     use super::{
         RadrootsActiveTradeEnvelopeParseError, RadrootsTradeEnvelopeParseError,
-        RadrootsTradeListingAddress, active_trade_envelope_from_event,
-        active_trade_fulfillment_update_from_event, active_trade_order_decision_from_event,
+        RadrootsTradeListingAddress, active_trade_buyer_receipt_from_event,
+        active_trade_envelope_from_event, active_trade_fulfillment_update_from_event,
+        active_trade_order_cancel_from_event, active_trade_order_decision_from_event,
         active_trade_order_request_from_event, trade_envelope_from_event,
         trade_event_context_from_tags,
     };
     use crate::trade::encode::{
-        active_trade_fulfillment_update_event_build, active_trade_order_decision_event_build,
+        active_trade_buyer_receipt_event_build, active_trade_fulfillment_update_event_build,
+        active_trade_order_cancel_event_build, active_trade_order_decision_event_build,
         active_trade_order_request_event_build, trade_envelope_event_build,
     };
     use crate::trade::tags::TAG_LISTING_EVENT;
     use radroots_events::{
         RadrootsNostrEvent, RadrootsNostrEventPtr,
         kinds::{
-            KIND_TRADE_FULFILLMENT_UPDATE, KIND_TRADE_ORDER_DECISION, KIND_TRADE_ORDER_REQUEST,
+            KIND_TRADE_CANCEL, KIND_TRADE_FULFILLMENT_UPDATE, KIND_TRADE_ORDER_DECISION,
+            KIND_TRADE_ORDER_REQUEST, KIND_TRADE_RECEIPT,
         },
         tags::{TAG_D, TAG_E_PREV, TAG_E_ROOT},
         trade::{
             RadrootsActiveTradeEnvelope, RadrootsActiveTradeFulfillmentState,
-            RadrootsActiveTradeMessageType, RadrootsTradeEnvelope, RadrootsTradeFulfillmentUpdated,
-            RadrootsTradeInventoryCommitment, RadrootsTradeMessagePayload,
-            RadrootsTradeMessageType, RadrootsTradeOrder, RadrootsTradeOrderDecision,
+            RadrootsActiveTradeMessageType, RadrootsTradeBuyerReceipt, RadrootsTradeEnvelope,
+            RadrootsTradeFulfillmentUpdated, RadrootsTradeInventoryCommitment,
+            RadrootsTradeMessagePayload, RadrootsTradeMessageType, RadrootsTradeOrder,
+            RadrootsTradeOrderCancelled, RadrootsTradeOrderDecision,
             RadrootsTradeOrderDecisionEvent, RadrootsTradeOrderItem, RadrootsTradeOrderRequested,
         },
     };
@@ -651,6 +718,28 @@ mod tests {
             buyer_pubkey: "buyer".into(),
             seller_pubkey: "seller".into(),
             status: RadrootsActiveTradeFulfillmentState::ReadyForPickup,
+        }
+    }
+
+    fn active_order_cancelled() -> RadrootsTradeOrderCancelled {
+        RadrootsTradeOrderCancelled {
+            order_id: "order-1".into(),
+            listing_addr: "30402:seller:AAAAAAAAAAAAAAAAAAAAAg".into(),
+            buyer_pubkey: "buyer".into(),
+            seller_pubkey: "seller".into(),
+            reason: "changed plans".into(),
+        }
+    }
+
+    fn active_buyer_receipt(received: bool) -> RadrootsTradeBuyerReceipt {
+        RadrootsTradeBuyerReceipt {
+            order_id: "order-1".into(),
+            listing_addr: "30402:seller:AAAAAAAAAAAAAAAAAAAAAg".into(),
+            buyer_pubkey: "buyer".into(),
+            seller_pubkey: "seller".into(),
+            received,
+            issue: (!received).then(|| "damaged items".into()),
+            received_at: 1_777_665_600,
         }
     }
 
@@ -809,6 +898,73 @@ mod tests {
     }
 
     #[test]
+    fn active_order_cancel_builder_emits_canonical_buyer_chain_shape() {
+        let payload = active_order_cancelled();
+        let built =
+            active_trade_order_cancel_event_build("root-event", "prev-event", &payload).unwrap();
+        let envelope: RadrootsActiveTradeEnvelope<RadrootsTradeOrderCancelled> =
+            serde_json::from_str(&built.content).unwrap();
+
+        assert_eq!(built.kind, KIND_TRADE_CANCEL);
+        assert_eq!(
+            envelope.message_type,
+            RadrootsActiveTradeMessageType::TradeOrderCancelled
+        );
+        assert_eq!(envelope.payload.reason, payload.reason);
+        assert_eq!(built.tags[0], vec!["p".to_string(), "seller".to_string()]);
+        assert_eq!(
+            built.tags[2],
+            vec![TAG_D.to_string(), "order-1".to_string()]
+        );
+        assert!(
+            built
+                .tags
+                .iter()
+                .any(|tag| tag == &vec![TAG_E_ROOT.to_string(), "root-event".to_string()])
+        );
+        assert!(
+            built
+                .tags
+                .iter()
+                .any(|tag| tag == &vec![TAG_E_PREV.to_string(), "prev-event".to_string()])
+        );
+    }
+
+    #[test]
+    fn active_buyer_receipt_builder_emits_canonical_buyer_chain_shape() {
+        let payload = active_buyer_receipt(false);
+        let built =
+            active_trade_buyer_receipt_event_build("root-event", "prev-event", &payload).unwrap();
+        let envelope: RadrootsActiveTradeEnvelope<RadrootsTradeBuyerReceipt> =
+            serde_json::from_str(&built.content).unwrap();
+
+        assert_eq!(built.kind, KIND_TRADE_RECEIPT);
+        assert_eq!(
+            envelope.message_type,
+            RadrootsActiveTradeMessageType::TradeBuyerReceipt
+        );
+        assert_eq!(envelope.payload.received, false);
+        assert_eq!(envelope.payload.issue.as_deref(), Some("damaged items"));
+        assert_eq!(built.tags[0], vec!["p".to_string(), "seller".to_string()]);
+        assert_eq!(
+            built.tags[2],
+            vec![TAG_D.to_string(), "order-1".to_string()]
+        );
+        assert!(
+            built
+                .tags
+                .iter()
+                .any(|tag| tag == &vec![TAG_E_ROOT.to_string(), "root-event".to_string()])
+        );
+        assert!(
+            built
+                .tags
+                .iter()
+                .any(|tag| tag == &vec![TAG_E_PREV.to_string(), "prev-event".to_string()])
+        );
+    }
+
+    #[test]
     fn active_order_request_parse_roundtrips_and_validates_tags() {
         let payload = active_order_request();
         let built = active_trade_order_request_event_build(&listing_event_ptr(), &payload).unwrap();
@@ -878,6 +1034,52 @@ mod tests {
     }
 
     #[test]
+    fn active_order_cancel_parse_roundtrips_and_validates_buyer_actor() {
+        let payload = active_order_cancelled();
+        let built =
+            active_trade_order_cancel_event_build("root-event", "prev-event", &payload).unwrap();
+        let event = RadrootsNostrEvent {
+            id: "event-id".into(),
+            author: "buyer".into(),
+            created_at: 1,
+            kind: built.kind,
+            tags: built.tags,
+            content: built.content,
+            sig: "sig".into(),
+        };
+        let envelope = active_trade_order_cancel_from_event(&event).unwrap();
+
+        assert_eq!(envelope.payload, payload);
+        assert_eq!(
+            envelope.message_type,
+            RadrootsActiveTradeMessageType::TradeOrderCancelled
+        );
+    }
+
+    #[test]
+    fn active_buyer_receipt_parse_roundtrips_and_validates_buyer_actor() {
+        let payload = active_buyer_receipt(true);
+        let built =
+            active_trade_buyer_receipt_event_build("root-event", "prev-event", &payload).unwrap();
+        let event = RadrootsNostrEvent {
+            id: "event-id".into(),
+            author: "buyer".into(),
+            created_at: 1,
+            kind: built.kind,
+            tags: built.tags,
+            content: built.content,
+            sig: "sig".into(),
+        };
+        let envelope = active_trade_buyer_receipt_from_event(&event).unwrap();
+
+        assert_eq!(envelope.payload, payload);
+        assert_eq!(
+            envelope.message_type,
+            RadrootsActiveTradeMessageType::TradeBuyerReceipt
+        );
+    }
+
+    #[test]
     fn active_parse_rejects_forbidden_kind() {
         let event = RadrootsNostrEvent {
             id: "event-id".into(),
@@ -939,6 +1141,44 @@ mod tests {
         event.author = "buyer".into();
         event.tags[0] = vec!["p".into(), "other-seller".into()];
         let err = active_trade_order_request_from_event(&event).unwrap_err();
+        assert_eq!(
+            err,
+            RadrootsActiveTradeEnvelopeParseError::CounterpartyTagMismatch
+        );
+    }
+
+    #[test]
+    fn active_buyer_lifecycle_parse_rejects_wrong_actor_or_counterparty() {
+        let cancellation = active_order_cancelled();
+        let cancellation_parts =
+            active_trade_order_cancel_event_build("root-event", "prev-event", &cancellation)
+                .unwrap();
+        let cancellation_event = RadrootsNostrEvent {
+            id: "event-id".into(),
+            author: "seller".into(),
+            created_at: 1,
+            kind: cancellation_parts.kind,
+            tags: cancellation_parts.tags,
+            content: cancellation_parts.content,
+            sig: "sig".into(),
+        };
+        let err = active_trade_order_cancel_from_event(&cancellation_event).unwrap_err();
+        assert_eq!(err, RadrootsActiveTradeEnvelopeParseError::AuthorMismatch);
+
+        let receipt = active_buyer_receipt(true);
+        let receipt_parts =
+            active_trade_buyer_receipt_event_build("root-event", "prev-event", &receipt).unwrap();
+        let mut receipt_event = RadrootsNostrEvent {
+            id: "event-id".into(),
+            author: "buyer".into(),
+            created_at: 1,
+            kind: receipt_parts.kind,
+            tags: receipt_parts.tags,
+            content: receipt_parts.content,
+            sig: "sig".into(),
+        };
+        receipt_event.tags[0] = vec!["p".into(), "other-seller".into()];
+        let err = active_trade_buyer_receipt_from_event(&receipt_event).unwrap_err();
         assert_eq!(
             err,
             RadrootsActiveTradeEnvelopeParseError::CounterpartyTagMismatch
