@@ -4,7 +4,10 @@
 use alloc::{string::String, vec::Vec};
 
 use crate::{RadrootsNostrEventPtr, kinds::*};
-use radroots_core::RadrootsCoreDiscountValue;
+use radroots_core::{
+    RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreDiscountValue, RadrootsCoreMoney,
+    RadrootsCoreUnit,
+};
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
 
@@ -126,6 +129,222 @@ impl std::error::Error for RadrootsTradeListingValidationError {}
 pub struct RadrootsTradeOrderItem {
     pub bin_id: String,
     pub bin_count: u32,
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RadrootsTradePricingBasis {
+    ListingEvent,
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RadrootsTradeEconomicLineKind {
+    ListingDiscount,
+    BasketAdjustment,
+    RevisionAdjustment,
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RadrootsTradeEconomicActor {
+    Buyer,
+    Seller,
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RadrootsTradeEconomicEffect {
+    Increase,
+    Decrease,
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsTradeOrderEconomicItem {
+    pub bin_id: String,
+    pub bin_count: u32,
+    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreDecimal"))]
+    pub quantity_amount: RadrootsCoreDecimal,
+    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreUnit"))]
+    pub quantity_unit: RadrootsCoreUnit,
+    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreDecimal"))]
+    pub unit_price_amount: RadrootsCoreDecimal,
+    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreCurrency"))]
+    pub unit_price_currency: RadrootsCoreCurrency,
+    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreMoney"))]
+    pub line_subtotal: RadrootsCoreMoney,
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsTradeOrderEconomicLine {
+    pub id: String,
+    pub kind: RadrootsTradeEconomicLineKind,
+    pub actor: RadrootsTradeEconomicActor,
+    pub effect: RadrootsTradeEconomicEffect,
+    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreMoney"))]
+    pub amount: RadrootsCoreMoney,
+    pub reason: String,
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsTradeOrderEconomicTotals {
+    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreMoney"))]
+    pub subtotal: RadrootsCoreMoney,
+    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreMoney"))]
+    pub discount_total: RadrootsCoreMoney,
+    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreMoney"))]
+    pub adjustment_total: RadrootsCoreMoney,
+    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreMoney"))]
+    pub total: RadrootsCoreMoney,
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsTradeOrderEconomics {
+    pub quote_id: String,
+    pub quote_version: u32,
+    pub pricing_basis: RadrootsTradePricingBasis,
+    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreCurrency"))]
+    pub currency: RadrootsCoreCurrency,
+    pub items: Vec<RadrootsTradeOrderEconomicItem>,
+    pub discounts: Vec<RadrootsTradeOrderEconomicLine>,
+    pub adjustments: Vec<RadrootsTradeOrderEconomicLine>,
+    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreMoney"))]
+    pub subtotal: RadrootsCoreMoney,
+    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreMoney"))]
+    pub discount_total: RadrootsCoreMoney,
+    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreMoney"))]
+    pub adjustment_total: RadrootsCoreMoney,
+    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreMoney"))]
+    pub total: RadrootsCoreMoney,
+}
+
+impl RadrootsTradeOrderEconomics {
+    pub fn canonicalize(&mut self) {
+        self.items
+            .sort_by(|left, right| left.bin_id.cmp(&right.bin_id));
+        self.discounts.sort_by(|left, right| left.id.cmp(&right.id));
+        self.adjustments
+            .sort_by(|left, right| left.id.cmp(&right.id));
+    }
+
+    pub fn canonicalized(&self) -> Self {
+        let mut economics = self.clone();
+        economics.canonicalize();
+        economics
+    }
+
+    pub fn derived_totals(
+        &self,
+    ) -> Result<RadrootsTradeOrderEconomicTotals, RadrootsActiveTradePayloadError> {
+        if self.items.is_empty() {
+            return Err(RadrootsActiveTradePayloadError::MissingEconomicItems);
+        }
+
+        let mut subtotal = RadrootsCoreMoney::zero(self.currency);
+        for (index, item) in self.items.iter().enumerate() {
+            let line_subtotal = validate_economic_item(item, self.currency, index)?;
+            subtotal = checked_money_add(&subtotal, &line_subtotal, "subtotal")?;
+        }
+
+        let mut discount_total = RadrootsCoreMoney::zero(self.currency);
+        for (index, line) in self.discounts.iter().enumerate() {
+            validate_economic_line(line, self.currency, "discounts", index)?;
+            if line.kind != RadrootsTradeEconomicLineKind::ListingDiscount {
+                return Err(RadrootsActiveTradePayloadError::InvalidEconomicLineKind {
+                    field: "discounts",
+                    index,
+                });
+            }
+            if line.effect != RadrootsTradeEconomicEffect::Decrease {
+                return Err(RadrootsActiveTradePayloadError::InvalidEconomicLineEffect {
+                    field: "discounts",
+                    index,
+                });
+            }
+            discount_total = checked_money_add(&discount_total, &line.amount, "discount_total")?;
+        }
+
+        let mut adjustment_total = RadrootsCoreMoney::zero(self.currency);
+        let mut total = checked_money_sub_non_negative(&subtotal, &discount_total, "total")?;
+        for (index, line) in self.adjustments.iter().enumerate() {
+            validate_economic_line(line, self.currency, "adjustments", index)?;
+            if line.kind == RadrootsTradeEconomicLineKind::ListingDiscount {
+                return Err(RadrootsActiveTradePayloadError::InvalidEconomicLineKind {
+                    field: "adjustments",
+                    index,
+                });
+            }
+            adjustment_total =
+                checked_money_add(&adjustment_total, &line.amount, "adjustment_total")?;
+            total = match line.effect {
+                RadrootsTradeEconomicEffect::Increase => {
+                    checked_money_add(&total, &line.amount, "total")?
+                }
+                RadrootsTradeEconomicEffect::Decrease => {
+                    checked_money_sub_non_negative(&total, &line.amount, "total")?
+                }
+            };
+        }
+
+        Ok(RadrootsTradeOrderEconomicTotals {
+            subtotal,
+            discount_total,
+            adjustment_total,
+            total,
+        })
+    }
+
+    pub fn validate(&self) -> Result<(), RadrootsActiveTradePayloadError> {
+        validate_required_field(&self.quote_id, "quote_id")?;
+        if self.quote_version == 0 {
+            return Err(RadrootsActiveTradePayloadError::InvalidQuoteVersion);
+        }
+
+        let totals = self.derived_totals()?;
+        validate_economic_item_order(&self.items)?;
+        validate_economic_line_order(&self.discounts, "discounts")?;
+        validate_economic_line_order(&self.adjustments, "adjustments")?;
+        validate_total_money(&self.subtotal, self.currency, "subtotal")?;
+        validate_total_money(&self.discount_total, self.currency, "discount_total")?;
+        validate_total_money(&self.adjustment_total, self.currency, "adjustment_total")?;
+        validate_total_money(&self.total, self.currency, "total")?;
+        validate_total_matches(&self.subtotal, &totals.subtotal, "subtotal")?;
+        validate_total_matches(
+            &self.discount_total,
+            &totals.discount_total,
+            "discount_total",
+        )?;
+        validate_total_matches(
+            &self.adjustment_total,
+            &totals.adjustment_total,
+            "adjustment_total",
+        )?;
+        validate_total_matches(&self.total, &totals.total, "total")
+    }
 }
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
@@ -882,6 +1101,18 @@ pub enum RadrootsActiveTradePayloadError {
     EmptyField(&'static str),
     MissingItems,
     InvalidItemBinCount { index: usize },
+    MissingEconomicItems,
+    InvalidEconomicItemBinCount { index: usize },
+    InvalidEconomicItemQuantity { index: usize },
+    InvalidEconomicItemPrice { index: usize },
+    InvalidEconomicItemSubtotal { index: usize },
+    InvalidEconomicLineAmount { field: &'static str, index: usize },
+    InvalidEconomicLineKind { field: &'static str, index: usize },
+    InvalidEconomicLineEffect { field: &'static str, index: usize },
+    InvalidEconomicCurrency { field: &'static str },
+    InvalidEconomicOrdering { field: &'static str },
+    InvalidEconomicTotal { field: &'static str },
+    InvalidQuoteVersion,
     MissingInventoryCommitments,
     InvalidInventoryCommitmentCount { index: usize },
     InvalidFulfillmentStatus,
@@ -896,6 +1127,48 @@ impl core::fmt::Display for RadrootsActiveTradePayloadError {
             Self::MissingItems => write!(f, "items must contain at least one item"),
             Self::InvalidItemBinCount { index } => {
                 write!(f, "items[{index}].bin_count must be greater than zero")
+            }
+            Self::MissingEconomicItems => {
+                write!(f, "economics.items must contain at least one item")
+            }
+            Self::InvalidEconomicItemBinCount { index } => write!(
+                f,
+                "economics.items[{index}].bin_count must be greater than zero"
+            ),
+            Self::InvalidEconomicItemQuantity { index } => write!(
+                f,
+                "economics.items[{index}].quantity_amount must be greater than zero"
+            ),
+            Self::InvalidEconomicItemPrice { index } => write!(
+                f,
+                "economics.items[{index}].unit_price_amount must not be negative"
+            ),
+            Self::InvalidEconomicItemSubtotal { index } => {
+                write!(f, "economics.items[{index}].line_subtotal is invalid")
+            }
+            Self::InvalidEconomicLineAmount { field, index } => {
+                write!(
+                    f,
+                    "economics.{field}[{index}].amount must be greater than zero"
+                )
+            }
+            Self::InvalidEconomicLineKind { field, index } => {
+                write!(f, "economics.{field}[{index}].kind is invalid")
+            }
+            Self::InvalidEconomicLineEffect { field, index } => {
+                write!(f, "economics.{field}[{index}].effect is invalid")
+            }
+            Self::InvalidEconomicCurrency { field } => {
+                write!(f, "economics.{field} currency is invalid")
+            }
+            Self::InvalidEconomicOrdering { field } => {
+                write!(f, "economics.{field} is not in canonical order")
+            }
+            Self::InvalidEconomicTotal { field } => {
+                write!(f, "economics.{field} total is invalid")
+            }
+            Self::InvalidQuoteVersion => {
+                write!(f, "economics.quote_version must be greater than zero")
             }
             Self::MissingInventoryCommitments => {
                 write!(
@@ -947,6 +1220,165 @@ fn validate_order_items(
         }
     }
     Ok(())
+}
+
+fn validate_economic_item(
+    item: &RadrootsTradeOrderEconomicItem,
+    expected_currency: RadrootsCoreCurrency,
+    index: usize,
+) -> Result<RadrootsCoreMoney, RadrootsActiveTradePayloadError> {
+    validate_required_field(&item.bin_id, "economics.items.bin_id")?;
+    if item.bin_count == 0 {
+        return Err(RadrootsActiveTradePayloadError::InvalidEconomicItemBinCount { index });
+    }
+    if item.quantity_amount.is_zero() || item.quantity_amount.is_sign_negative() {
+        return Err(RadrootsActiveTradePayloadError::InvalidEconomicItemQuantity { index });
+    }
+    if item.unit_price_amount.is_sign_negative() {
+        return Err(RadrootsActiveTradePayloadError::InvalidEconomicItemPrice { index });
+    }
+    if item.unit_price_currency != expected_currency {
+        return Err(RadrootsActiveTradePayloadError::InvalidEconomicCurrency {
+            field: "items.unit_price_currency",
+        });
+    }
+    validate_total_money(
+        &item.line_subtotal,
+        expected_currency,
+        "items.line_subtotal",
+    )?;
+
+    let quantity_total = checked_decimal_mul(
+        item.quantity_amount,
+        RadrootsCoreDecimal::from(item.bin_count),
+    )
+    .ok_or(RadrootsActiveTradePayloadError::InvalidEconomicItemSubtotal { index })?;
+    let expected_subtotal = checked_decimal_mul(item.unit_price_amount, quantity_total)
+        .ok_or(RadrootsActiveTradePayloadError::InvalidEconomicItemSubtotal { index })?;
+    if item.line_subtotal.amount != expected_subtotal {
+        return Err(RadrootsActiveTradePayloadError::InvalidEconomicItemSubtotal { index });
+    }
+    Ok(item.line_subtotal.clone())
+}
+
+fn validate_economic_line(
+    line: &RadrootsTradeOrderEconomicLine,
+    expected_currency: RadrootsCoreCurrency,
+    field: &'static str,
+    index: usize,
+) -> Result<(), RadrootsActiveTradePayloadError> {
+    validate_required_field(&line.id, "economics.line.id")?;
+    validate_required_field(&line.reason, "economics.line.reason")?;
+    if line.amount.currency != expected_currency {
+        return Err(RadrootsActiveTradePayloadError::InvalidEconomicCurrency { field });
+    }
+    if line.amount.amount.is_zero() || line.amount.amount.is_sign_negative() {
+        return Err(RadrootsActiveTradePayloadError::InvalidEconomicLineAmount { field, index });
+    }
+    Ok(())
+}
+
+fn validate_economic_item_order(
+    items: &[RadrootsTradeOrderEconomicItem],
+) -> Result<(), RadrootsActiveTradePayloadError> {
+    for pair in items.windows(2) {
+        if pair[0].bin_id >= pair[1].bin_id {
+            return Err(RadrootsActiveTradePayloadError::InvalidEconomicOrdering {
+                field: "items.bin_id",
+            });
+        }
+    }
+    Ok(())
+}
+
+fn validate_economic_line_order(
+    lines: &[RadrootsTradeOrderEconomicLine],
+    field: &'static str,
+) -> Result<(), RadrootsActiveTradePayloadError> {
+    for pair in lines.windows(2) {
+        if pair[0].id >= pair[1].id {
+            return Err(RadrootsActiveTradePayloadError::InvalidEconomicOrdering { field });
+        }
+    }
+    Ok(())
+}
+
+fn validate_total_money(
+    money: &RadrootsCoreMoney,
+    expected_currency: RadrootsCoreCurrency,
+    field: &'static str,
+) -> Result<(), RadrootsActiveTradePayloadError> {
+    if money.currency != expected_currency {
+        return Err(RadrootsActiveTradePayloadError::InvalidEconomicCurrency { field });
+    }
+    if money.amount.is_sign_negative() {
+        return Err(RadrootsActiveTradePayloadError::InvalidEconomicTotal { field });
+    }
+    Ok(())
+}
+
+fn validate_total_matches(
+    actual: &RadrootsCoreMoney,
+    expected: &RadrootsCoreMoney,
+    field: &'static str,
+) -> Result<(), RadrootsActiveTradePayloadError> {
+    if actual.currency != expected.currency {
+        return Err(RadrootsActiveTradePayloadError::InvalidEconomicCurrency { field });
+    }
+    if actual.amount != expected.amount {
+        return Err(RadrootsActiveTradePayloadError::InvalidEconomicTotal { field });
+    }
+    Ok(())
+}
+
+fn checked_decimal_add(
+    left: RadrootsCoreDecimal,
+    right: RadrootsCoreDecimal,
+) -> Option<RadrootsCoreDecimal> {
+    left.0.checked_add(right.0).map(RadrootsCoreDecimal)
+}
+
+fn checked_decimal_sub(
+    left: RadrootsCoreDecimal,
+    right: RadrootsCoreDecimal,
+) -> Option<RadrootsCoreDecimal> {
+    left.0.checked_sub(right.0).map(RadrootsCoreDecimal)
+}
+
+fn checked_decimal_mul(
+    left: RadrootsCoreDecimal,
+    right: RadrootsCoreDecimal,
+) -> Option<RadrootsCoreDecimal> {
+    left.0.checked_mul(right.0).map(RadrootsCoreDecimal)
+}
+
+fn checked_money_add(
+    left: &RadrootsCoreMoney,
+    right: &RadrootsCoreMoney,
+    field: &'static str,
+) -> Result<RadrootsCoreMoney, RadrootsActiveTradePayloadError> {
+    if left.currency != right.currency {
+        return Err(RadrootsActiveTradePayloadError::InvalidEconomicCurrency { field });
+    }
+    let amount = checked_decimal_add(left.amount, right.amount)
+        .ok_or(RadrootsActiveTradePayloadError::InvalidEconomicTotal { field })?;
+    Ok(RadrootsCoreMoney::new(amount, left.currency))
+}
+
+fn checked_money_sub_non_negative(
+    left: &RadrootsCoreMoney,
+    right: &RadrootsCoreMoney,
+    field: &'static str,
+) -> Result<RadrootsCoreMoney, RadrootsActiveTradePayloadError> {
+    if left.currency != right.currency {
+        return Err(RadrootsActiveTradePayloadError::InvalidEconomicCurrency { field });
+    }
+    let amount = checked_decimal_sub(left.amount, right.amount)
+        .ok_or(RadrootsActiveTradePayloadError::InvalidEconomicTotal { field })?;
+    if amount.is_sign_negative() {
+        return Err(RadrootsActiveTradePayloadError::InvalidEconomicTotal { field });
+    }
+    Ok(RadrootsCoreMoney::new(amount, left.currency))
 }
 
 fn validate_inventory_commitments(
@@ -1045,7 +1477,7 @@ mod tests {
     use super::*;
     use radroots_core::{
         RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreDiscountValue, RadrootsCoreMoney,
-        RadrootsCorePercent,
+        RadrootsCorePercent, RadrootsCoreUnit,
     };
 
     fn sample_listing_addr() -> String {
@@ -1089,6 +1521,73 @@ mod tests {
                 bin_id: "bin-1".into(),
                 bin_count: 2,
             }],
+        }
+    }
+
+    fn decimal(raw: &str) -> RadrootsCoreDecimal {
+        raw.parse().unwrap()
+    }
+
+    fn usd(raw: &str) -> RadrootsCoreMoney {
+        RadrootsCoreMoney::new(decimal(raw), RadrootsCoreCurrency::USD)
+    }
+
+    fn sample_active_order_economics() -> RadrootsTradeOrderEconomics {
+        RadrootsTradeOrderEconomics {
+            quote_id: "quote-1".into(),
+            quote_version: 1,
+            pricing_basis: RadrootsTradePricingBasis::ListingEvent,
+            currency: RadrootsCoreCurrency::USD,
+            items: vec![
+                RadrootsTradeOrderEconomicItem {
+                    bin_id: "bin-a".into(),
+                    bin_count: 2,
+                    quantity_amount: decimal("1.5"),
+                    quantity_unit: RadrootsCoreUnit::Each,
+                    unit_price_amount: decimal("4"),
+                    unit_price_currency: RadrootsCoreCurrency::USD,
+                    line_subtotal: usd("12"),
+                },
+                RadrootsTradeOrderEconomicItem {
+                    bin_id: "bin-b".into(),
+                    bin_count: 1,
+                    quantity_amount: decimal("2"),
+                    quantity_unit: RadrootsCoreUnit::Each,
+                    unit_price_amount: decimal("3"),
+                    unit_price_currency: RadrootsCoreCurrency::USD,
+                    line_subtotal: usd("6"),
+                },
+            ],
+            discounts: vec![RadrootsTradeOrderEconomicLine {
+                id: "discount-a".into(),
+                kind: RadrootsTradeEconomicLineKind::ListingDiscount,
+                actor: RadrootsTradeEconomicActor::Seller,
+                effect: RadrootsTradeEconomicEffect::Decrease,
+                amount: usd("3"),
+                reason: "farmstand pickup".into(),
+            }],
+            adjustments: vec![
+                RadrootsTradeOrderEconomicLine {
+                    id: "adjustment-a".into(),
+                    kind: RadrootsTradeEconomicLineKind::BasketAdjustment,
+                    actor: RadrootsTradeEconomicActor::Buyer,
+                    effect: RadrootsTradeEconomicEffect::Increase,
+                    amount: usd("2"),
+                    reason: "special handling".into(),
+                },
+                RadrootsTradeOrderEconomicLine {
+                    id: "adjustment-b".into(),
+                    kind: RadrootsTradeEconomicLineKind::BasketAdjustment,
+                    actor: RadrootsTradeEconomicActor::Buyer,
+                    effect: RadrootsTradeEconomicEffect::Decrease,
+                    amount: usd("1"),
+                    reason: "local pickup credit".into(),
+                },
+            ],
+            subtotal: usd("18"),
+            discount_total: usd("3"),
+            adjustment_total: usd("3"),
+            total: usd("16"),
         }
     }
 
@@ -1367,6 +1866,143 @@ mod tests {
         assert_eq!(
             missing_bin_id.validate().unwrap_err(),
             RadrootsActiveTradePayloadError::EmptyField("bin_id")
+        );
+    }
+
+    #[test]
+    fn active_order_economics_validation_accepts_canonical_totals() {
+        let economics = sample_active_order_economics();
+        assert_eq!(economics.validate(), Ok(()));
+
+        let totals = economics.derived_totals().unwrap();
+        assert_eq!(totals.subtotal, usd("18"));
+        assert_eq!(totals.discount_total, usd("3"));
+        assert_eq!(totals.adjustment_total, usd("3"));
+        assert_eq!(totals.total, usd("16"));
+
+        let json = serde_json::to_value(&economics).unwrap();
+        assert_eq!(json["pricing_basis"], serde_json::json!("listing_event"));
+        assert_eq!(
+            json["discounts"][0]["kind"],
+            serde_json::json!("listing_discount")
+        );
+        assert_eq!(
+            json["adjustments"][0]["effect"],
+            serde_json::json!("increase")
+        );
+    }
+
+    #[test]
+    fn active_order_economics_canonicalized_sorts_items_and_lines() {
+        let mut economics = sample_active_order_economics();
+        economics.items.reverse();
+        economics.adjustments.reverse();
+        assert_eq!(
+            economics.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::InvalidEconomicOrdering {
+                field: "items.bin_id"
+            }
+        );
+
+        let canonical = economics.canonicalized();
+        assert_eq!(canonical.items[0].bin_id, "bin-a");
+        assert_eq!(canonical.adjustments[0].id, "adjustment-a");
+        assert_eq!(canonical.validate(), Ok(()));
+    }
+
+    #[test]
+    fn active_order_economics_validation_rejects_mixed_currency() {
+        let mut economics = sample_active_order_economics();
+        economics.items[0].unit_price_currency = RadrootsCoreCurrency::EUR;
+        assert_eq!(
+            economics.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::InvalidEconomicCurrency {
+                field: "items.unit_price_currency"
+            }
+        );
+
+        let mut economics = sample_active_order_economics();
+        economics.adjustments[0].amount =
+            RadrootsCoreMoney::new(decimal("2"), RadrootsCoreCurrency::EUR);
+        assert_eq!(
+            economics.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::InvalidEconomicCurrency {
+                field: "adjustments"
+            }
+        );
+    }
+
+    #[test]
+    fn active_order_economics_validation_rejects_bad_subtotal() {
+        let mut economics = sample_active_order_economics();
+        economics.items[0].bin_count = 0;
+        assert_eq!(
+            economics.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::InvalidEconomicItemBinCount { index: 0 }
+        );
+
+        let mut economics = sample_active_order_economics();
+        economics.items[0].line_subtotal = usd("11.99");
+        assert_eq!(
+            economics.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::InvalidEconomicItemSubtotal { index: 0 }
+        );
+    }
+
+    #[test]
+    fn active_order_economics_validation_rejects_bad_line_semantics() {
+        let mut economics = sample_active_order_economics();
+        economics.discounts[0].effect = RadrootsTradeEconomicEffect::Increase;
+        assert_eq!(
+            economics.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::InvalidEconomicLineEffect {
+                field: "discounts",
+                index: 0
+            }
+        );
+
+        let mut economics = sample_active_order_economics();
+        economics.adjustments[0].kind = RadrootsTradeEconomicLineKind::ListingDiscount;
+        assert_eq!(
+            economics.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::InvalidEconomicLineKind {
+                field: "adjustments",
+                index: 0
+            }
+        );
+
+        let mut economics = sample_active_order_economics();
+        economics.adjustments[0].amount = usd("0");
+        assert_eq!(
+            economics.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::InvalidEconomicLineAmount {
+                field: "adjustments",
+                index: 0
+            }
+        );
+    }
+
+    #[test]
+    fn active_order_economics_validation_rejects_duplicate_line_ids() {
+        let mut economics = sample_active_order_economics();
+        economics.adjustments[1].id = "adjustment-a".into();
+        assert_eq!(
+            economics.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::InvalidEconomicOrdering {
+                field: "adjustments"
+            }
+        );
+    }
+
+    #[test]
+    fn active_order_economics_validation_rejects_negative_derived_total() {
+        let mut economics = sample_active_order_economics();
+        economics.adjustments[1].amount = usd("20");
+        economics.adjustment_total = usd("22");
+        economics.total = usd("0");
+        assert_eq!(
+            economics.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::InvalidEconomicTotal { field: "total" }
         );
     }
 

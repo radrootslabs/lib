@@ -58,6 +58,32 @@ fn map_active_payload_error(error: RadrootsActiveTradePayloadError) -> EventEnco
         RadrootsActiveTradePayloadError::InvalidItemBinCount { .. } => {
             EventEncodeError::InvalidField("items.bin_count")
         }
+        RadrootsActiveTradePayloadError::MissingEconomicItems => {
+            EventEncodeError::EmptyRequiredField("economics.items")
+        }
+        RadrootsActiveTradePayloadError::InvalidEconomicItemBinCount { .. } => {
+            EventEncodeError::InvalidField("economics.items.bin_count")
+        }
+        RadrootsActiveTradePayloadError::InvalidEconomicItemQuantity { .. } => {
+            EventEncodeError::InvalidField("economics.items.quantity_amount")
+        }
+        RadrootsActiveTradePayloadError::InvalidEconomicItemPrice { .. } => {
+            EventEncodeError::InvalidField("economics.items.unit_price_amount")
+        }
+        RadrootsActiveTradePayloadError::InvalidEconomicItemSubtotal { .. } => {
+            EventEncodeError::InvalidField("economics.items.line_subtotal")
+        }
+        RadrootsActiveTradePayloadError::InvalidEconomicLineAmount { field, .. }
+        | RadrootsActiveTradePayloadError::InvalidEconomicLineKind { field, .. }
+        | RadrootsActiveTradePayloadError::InvalidEconomicLineEffect { field, .. }
+        | RadrootsActiveTradePayloadError::InvalidEconomicCurrency { field }
+        | RadrootsActiveTradePayloadError::InvalidEconomicOrdering { field }
+        | RadrootsActiveTradePayloadError::InvalidEconomicTotal { field } => {
+            EventEncodeError::InvalidField(field)
+        }
+        RadrootsActiveTradePayloadError::InvalidQuoteVersion => {
+            EventEncodeError::InvalidField("economics.quote_version")
+        }
         RadrootsActiveTradePayloadError::MissingInventoryCommitments => {
             EventEncodeError::EmptyRequiredField("inventory_commitments")
         }

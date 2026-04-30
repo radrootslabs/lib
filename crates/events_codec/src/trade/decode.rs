@@ -1092,11 +1092,12 @@ mod tests {
                 RadrootsActiveTradeMessageType::TradeOrderRevisionDecision,
             ),
         ] {
+            let payload = serde_json::json!({});
             let envelope = RadrootsActiveTradeEnvelope::new(
                 message_type,
                 "30402:seller:AAAAAAAAAAAAAAAAAAAAAg",
                 "order-1",
-                &serde_json::json!({}),
+                &payload,
             );
             let event = RadrootsNostrEvent {
                 id: "event-id".into(),
