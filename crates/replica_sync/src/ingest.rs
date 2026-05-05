@@ -543,7 +543,7 @@ fn trade_product_fields_from_listing(
     listing_addr: &str,
 ) -> Result<ITradeProductFields, RadrootsReplicaEventsError> {
     let bin = primary_listing_bin(listing)?;
-    let qty_amt = decimal_to_i64(&bin.quantity.amount, "listing primary bin quantity")?;
+    let qty_amt = decimal_to_f64(&bin.quantity.amount, "listing primary bin quantity")?;
     let qty_amt_exact = bin.quantity.amount.to_string();
     let qty_avail = listing
         .inventory_available
@@ -560,9 +560,9 @@ fn trade_product_fields_from_listing(
     let price_amt_exact = price_source.amount.to_string();
     let price_currency = price_source.currency.as_str().to_string();
     let price_qty_amt = if bin.display_price.is_some() {
-        1
+        1.0
     } else {
-        decimal_to_u32(
+        decimal_to_f64(
             &bin.price_per_canonical_unit.quantity.amount,
             "listing price quantity",
         )?
@@ -653,13 +653,13 @@ fn decimal_to_i64(
         .map_err(|_| RadrootsReplicaEventsError::InvalidData(format!("{field} exceeds i64 range")))
 }
 
-fn decimal_to_u32(
+fn decimal_to_f64(
     value: &RadrootsCoreDecimal,
     field: &str,
-) -> Result<u32, RadrootsReplicaEventsError> {
-    let value = decimal_to_u64(value, field)?;
-    u32::try_from(value)
-        .map_err(|_| RadrootsReplicaEventsError::InvalidData(format!("{field} exceeds u32 range")))
+) -> Result<f64, RadrootsReplicaEventsError> {
+    value.to_f64_lossy().ok_or_else(|| {
+        RadrootsReplicaEventsError::InvalidData(format!("{field} exceeds f64 range"))
+    })
 }
 
 fn decimal_to_u64(
@@ -2357,12 +2357,13 @@ mod tests {
         );
         assert_eq!(search_rows[0].title, "Pasture Eggs");
         assert_eq!(search_rows[0].primary_bin_id.as_deref(), Some("bin-a"));
-        assert_eq!(search_rows[0].qty_amt, 12);
+        assert_eq!(search_rows[0].qty_amt, 12.0);
         assert_eq!(search_rows[0].qty_amt_exact.as_deref(), Some("12"));
         assert_eq!(search_rows[0].qty_avail, Some(5));
         assert_eq!(search_rows[0].price_amt, 6.0);
         assert_eq!(search_rows[0].price_amt_exact.as_deref(), Some("6"));
         assert_eq!(search_rows[0].price_currency, "USD");
+        assert_eq!(search_rows[0].price_qty_amt, 1.0);
         assert_eq!(search_rows[0].price_qty_amt_exact.as_deref(), Some("1"));
         assert!(
             search_rows[0]
@@ -2456,6 +2457,63 @@ mod tests {
         .expect("stale product rows")
         .results;
         assert!(product_rows.is_empty());
+    }
+
+    #[test]
+    fn ingest_listing_preserves_fractional_exact_economics() {
+        let exec = SqliteExecutor::open_memory().expect("db");
+        migrations::run_all_up(&exec).expect("migrations");
+
+        let seller_pubkey = "s".repeat(64);
+        let listing_d_tag = "AAAAAAAAAAAAAAAAAAAAAg";
+        let listing_addr = format!("{}:{}:{}", KIND_LISTING, seller_pubkey, listing_d_tag);
+
+        let mut active = listing_event(
+            600,
+            &seller_pubkey,
+            10,
+            listing_d_tag,
+            "active",
+            "Half Gram Greens",
+        );
+        for tag in &mut active.tags {
+            if tag.first().is_some_and(|name| name == "radroots:bin") {
+                tag[2] = "0.5".to_string();
+                tag[3] = "g".to_string();
+                tag[4] = "0.5".to_string();
+                tag[5] = "g".to_string();
+                tag[6] = "half gram".to_string();
+            }
+            if tag.first().is_some_and(|name| name == "radroots:price") {
+                tag[2] = "3.25".to_string();
+                tag[3] = "USD".to_string();
+                tag[4] = "1".to_string();
+                tag[5] = "g".to_string();
+                tag[6] = "3.25".to_string();
+                tag[7] = "g".to_string();
+            }
+        }
+
+        assert_eq!(
+            radroots_replica_ingest_event(&exec, &active).expect("fractional active ingest"),
+            RadrootsReplicaIngestOutcome::Applied
+        );
+
+        let replica = ReplicaSql::new(&exec);
+        let search_rows = replica
+            .trade_product_search(&["greens".to_string()])
+            .expect("search");
+        assert_eq!(search_rows.len(), 1);
+        assert_eq!(
+            search_rows[0].listing_addr.as_deref(),
+            Some(listing_addr.as_str())
+        );
+        assert_eq!(search_rows[0].qty_amt, 0.5);
+        assert_eq!(search_rows[0].qty_amt_exact.as_deref(), Some("0.5"));
+        assert_eq!(search_rows[0].price_amt, 3.25);
+        assert_eq!(search_rows[0].price_amt_exact.as_deref(), Some("3.25"));
+        assert_eq!(search_rows[0].price_qty_amt, 1.0);
+        assert_eq!(search_rows[0].price_qty_amt_exact.as_deref(), Some("1"));
     }
 
     #[test]
