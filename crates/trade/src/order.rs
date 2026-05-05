@@ -6,6 +6,7 @@ use alloc::{
     vec::Vec,
 };
 
+use radroots_core::{RadrootsCoreCurrency, RadrootsCoreDecimal};
 use radroots_events::kinds::KIND_LISTING;
 use radroots_events::trade::{
     RadrootsActiveTradeFulfillmentState, RadrootsTradeBuyerReceipt,
@@ -14,8 +15,12 @@ use radroots_events::trade::{
     RadrootsTradeOrderDecisionEvent, RadrootsTradeOrderEconomics, RadrootsTradeOrderItem,
     RadrootsTradeOrderRequested, RadrootsTradeOrderRevisionDecision,
     RadrootsTradeOrderRevisionDecisionEvent, RadrootsTradeOrderRevisionProposed,
+    RadrootsTradePaymentMethod, RadrootsTradePaymentRecorded, RadrootsTradeSettlementDecision,
+    RadrootsTradeSettlementDecisionEvent,
 };
 use radroots_events_codec::trade::RadrootsTradeListingAddress as TradeListingAddress;
+#[cfg(feature = "serde_json")]
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -108,6 +113,26 @@ pub struct RadrootsActiveOrderReceiptRecord {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsActiveOrderPaymentRecord {
+    pub event_id: String,
+    pub author_pubkey: String,
+    pub counterparty_pubkey: String,
+    pub root_event_id: String,
+    pub prev_event_id: String,
+    pub payload: RadrootsTradePaymentRecorded,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsActiveOrderSettlementRecord {
+    pub event_id: String,
+    pub author_pubkey: String,
+    pub counterparty_pubkey: String,
+    pub root_event_id: String,
+    pub prev_event_id: String,
+    pub payload: RadrootsTradeSettlementDecisionEvent,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsActiveOrderStatus {
     Missing,
     Requested,
@@ -116,6 +141,24 @@ pub enum RadrootsActiveOrderStatus {
     Cancelled,
     Completed,
     Disputed,
+    Invalid,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RadrootsActiveOrderPaymentState {
+    NotRecorded,
+    Recorded,
+    Settled,
+    Rejected,
+    Invalid,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RadrootsActiveOrderSettlementState {
+    NotRequired,
+    Pending,
+    Accepted,
+    Rejected,
     Invalid,
 }
 
@@ -202,7 +245,92 @@ pub enum RadrootsActiveOrderReducerIssue {
     ReceiptListingMismatch { event_id: String },
     ReceiptRootMismatch { event_id: String },
     ReceiptPreviousMismatch { event_id: String },
+    PaymentWithoutAcceptedAgreement { event_id: String },
+    PaymentPayloadInvalid { event_id: String },
+    PaymentOrderIdMismatch { event_id: String },
+    PaymentAuthorMismatch { event_id: String },
+    PaymentCounterpartyMismatch { event_id: String },
+    PaymentBuyerMismatch { event_id: String },
+    PaymentSellerMismatch { event_id: String },
+    PaymentListingAddressInvalid { event_id: String },
+    PaymentListingMismatch { event_id: String },
+    PaymentRootMismatch { event_id: String },
+    PaymentPreviousMismatch { event_id: String },
+    PaymentAgreementMismatch { event_id: String },
+    PaymentQuoteMismatch { event_id: String },
+    PaymentQuoteVersionMismatch { event_id: String },
+    PaymentEconomicsDigestMismatch { event_id: String },
+    PaymentAmountMismatch { event_id: String },
+    PaymentCurrencyMismatch { event_id: String },
+    PaymentAfterCancellation { event_id: String },
+    RevisionAfterPayment { event_id: String },
+    DuplicatePayments { event_ids: Vec<String> },
+    SettlementWithoutValidPayment { event_id: String },
+    SettlementPayloadInvalid { event_id: String },
+    SettlementOrderIdMismatch { event_id: String },
+    SettlementAuthorMismatch { event_id: String },
+    SettlementCounterpartyMismatch { event_id: String },
+    SettlementBuyerMismatch { event_id: String },
+    SettlementSellerMismatch { event_id: String },
+    SettlementListingAddressInvalid { event_id: String },
+    SettlementListingMismatch { event_id: String },
+    SettlementRootMismatch { event_id: String },
+    SettlementPreviousMismatch { event_id: String },
+    SettlementPaymentEventMismatch { event_id: String },
+    SettlementAgreementMismatch { event_id: String },
+    SettlementQuoteMismatch { event_id: String },
+    SettlementQuoteVersionMismatch { event_id: String },
+    SettlementEconomicsDigestMismatch { event_id: String },
+    SettlementAmountMismatch { event_id: String },
+    SettlementCurrencyMismatch { event_id: String },
+    DuplicateSettlements { event_ids: Vec<String> },
     ForkedLifecycle { event_ids: Vec<String> },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsActiveOrderPaymentProjection {
+    pub state: RadrootsActiveOrderPaymentState,
+    pub settlement_state: RadrootsActiveOrderSettlementState,
+    pub payment_event_id: Option<String>,
+    pub settlement_event_id: Option<String>,
+    pub agreement_event_id: Option<String>,
+    pub quote_id: Option<String>,
+    pub quote_version: Option<u32>,
+    pub economics_digest: Option<String>,
+    pub amount: Option<RadrootsCoreDecimal>,
+    pub currency: Option<RadrootsCoreCurrency>,
+    pub method: Option<RadrootsTradePaymentMethod>,
+    pub reference: Option<String>,
+    pub paid_at: Option<u64>,
+    pub reason: Option<String>,
+}
+
+impl RadrootsActiveOrderPaymentProjection {
+    pub fn not_recorded() -> Self {
+        Self {
+            state: RadrootsActiveOrderPaymentState::NotRecorded,
+            settlement_state: RadrootsActiveOrderSettlementState::NotRequired,
+            payment_event_id: None,
+            settlement_event_id: None,
+            agreement_event_id: None,
+            quote_id: None,
+            quote_version: None,
+            economics_digest: None,
+            amount: None,
+            currency: None,
+            method: None,
+            reference: None,
+            paid_at: None,
+            reason: None,
+        }
+    }
+
+    pub fn invalid() -> Self {
+        let mut projection = Self::not_recorded();
+        projection.state = RadrootsActiveOrderPaymentState::Invalid;
+        projection.settlement_state = RadrootsActiveOrderSettlementState::Invalid;
+        projection
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -219,8 +347,7 @@ pub struct RadrootsActiveOrderProjection {
     pub receipt_issue: Option<String>,
     pub receipt_received_at: Option<u64>,
     pub lifecycle_terminal: bool,
-    pub settlement_pending: bool,
-    pub settlement_reason: Option<String>,
+    pub payment: RadrootsActiveOrderPaymentProjection,
     pub economics: Option<RadrootsTradeOrderEconomics>,
     pub agreement_event_id: Option<String>,
     pub listing_addr: Option<String>,
@@ -228,6 +355,13 @@ pub struct RadrootsActiveOrderProjection {
     pub seller_pubkey: Option<String>,
     pub last_event_id: Option<String>,
     pub issues: Vec<RadrootsActiveOrderReducerIssue>,
+}
+
+#[cfg(feature = "serde_json")]
+#[derive(Debug, Error)]
+pub enum RadrootsTradeOrderEconomicsDigestError {
+    #[error("failed to serialize order economics for digest: {0}")]
+    Serialize(#[from] serde_json::Error),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -286,7 +420,7 @@ pub struct RadrootsListingInventoryAccountingProjection {
     pub issues: Vec<RadrootsListingInventoryAccountingIssue>,
 }
 
-pub fn reduce_active_order_events<I, J, K, L, M, N, O>(
+pub fn reduce_active_order_events<I, J, K, L, M, N, O, P, Q>(
     order_id: &str,
     requests: I,
     decisions: J,
@@ -295,6 +429,8 @@ pub fn reduce_active_order_events<I, J, K, L, M, N, O>(
     fulfillments: M,
     cancellations: N,
     receipts: O,
+    payments: P,
+    settlements: Q,
 ) -> RadrootsActiveOrderProjection
 where
     I: IntoIterator<Item = RadrootsActiveOrderRequestRecord>,
@@ -304,6 +440,8 @@ where
     M: IntoIterator<Item = RadrootsActiveOrderFulfillmentRecord>,
     N: IntoIterator<Item = RadrootsActiveOrderCancellationRecord>,
     O: IntoIterator<Item = RadrootsActiveOrderReceiptRecord>,
+    P: IntoIterator<Item = RadrootsActiveOrderPaymentRecord>,
+    Q: IntoIterator<Item = RadrootsActiveOrderSettlementRecord>,
 {
     let requests = unique_request_records(requests);
     let decisions = unique_decision_records(decisions);
@@ -312,6 +450,8 @@ where
     let fulfillments = unique_fulfillment_records(fulfillments);
     let cancellations = unique_cancellation_records(cancellations);
     let receipts = unique_receipt_records(receipts);
+    let payments = unique_payment_records(payments);
+    let settlements = unique_settlement_records(settlements);
     if requests.is_empty()
         && decisions.is_empty()
         && revision_proposals.is_empty()
@@ -319,6 +459,8 @@ where
         && fulfillments.is_empty()
         && cancellations.is_empty()
         && receipts.is_empty()
+        && payments.is_empty()
+        && settlements.is_empty()
     {
         return RadrootsActiveOrderProjection {
             order_id: order_id.to_string(),
@@ -333,8 +475,7 @@ where
             receipt_issue: None,
             receipt_received_at: None,
             lifecycle_terminal: false,
-            settlement_pending: false,
-            settlement_reason: None,
+            payment: RadrootsActiveOrderPaymentProjection::not_recorded(),
             economics: None,
             agreement_event_id: None,
             listing_addr: None,
@@ -369,6 +510,8 @@ where
             && fulfillments.is_empty()
             && cancellations.is_empty()
             && receipts.is_empty()
+            && payments.is_empty()
+            && settlements.is_empty()
         {
             return invalid_projection(order_id, None, issues);
         }
@@ -456,8 +599,15 @@ where
             if !valid_receipts.is_empty() {
                 record_receipt_without_eligible_fulfillment(&valid_receipts, &mut issues);
             }
+            record_payment_without_accepted_agreement(&payments, &mut issues);
+            record_settlement_without_valid_payment(&settlements, &mut issues);
             if !issues.is_empty() {
-                invalid_projection(order_id, Some(request), issues)
+                invalid_projection_with_payment(
+                    order_id,
+                    Some(request),
+                    issues,
+                    RadrootsActiveOrderPaymentProjection::invalid(),
+                )
             } else if valid_cancellations.is_empty() {
                 requested_projection(order_id, request)
             } else {
@@ -473,6 +623,8 @@ where
             fulfillments,
             valid_cancellations,
             valid_receipts,
+            payments,
+            settlements,
         ),
         _ => {
             let mut event_ids = valid_decisions
@@ -598,6 +750,8 @@ where
             order_fulfillments.clone(),
             order_cancellations.clone(),
             order_receipts.clone(),
+            Vec::<RadrootsActiveOrderPaymentRecord>::new(),
+            Vec::<RadrootsActiveOrderSettlementRecord>::new(),
         );
         match projection.status {
             RadrootsActiveOrderStatus::Accepted
@@ -815,6 +969,17 @@ pub fn canonicalize_active_order_decision_for_signer(
     Ok(decision_event)
 }
 
+#[cfg(feature = "serde_json")]
+pub fn radroots_trade_order_economics_digest(
+    economics: &RadrootsTradeOrderEconomics,
+) -> Result<String, RadrootsTradeOrderEconomicsDigestError> {
+    let encoded = serde_json::to_vec(economics)?;
+    let digest = Sha256::digest(encoded);
+    let mut value = String::from("sha256:");
+    value.push_str(&hex::encode(digest));
+    Ok(value)
+}
+
 fn unique_request_records<I>(requests: I) -> Vec<RadrootsActiveOrderRequestRecord>
 where
     I: IntoIterator<Item = RadrootsActiveOrderRequestRecord>,
@@ -954,6 +1119,46 @@ where
             })
         {
             unique.push(receipt);
+        }
+    }
+    unique
+}
+
+fn unique_payment_records<I>(payments: I) -> Vec<RadrootsActiveOrderPaymentRecord>
+where
+    I: IntoIterator<Item = RadrootsActiveOrderPaymentRecord>,
+{
+    let mut unique = Vec::new();
+    let mut records = payments.into_iter().collect::<Vec<_>>();
+    records.sort_by(|left, right| left.event_id.cmp(&right.event_id));
+    for payment in records {
+        if unique
+            .iter()
+            .all(|existing: &RadrootsActiveOrderPaymentRecord| {
+                existing.event_id != payment.event_id
+            })
+        {
+            unique.push(payment);
+        }
+    }
+    unique
+}
+
+fn unique_settlement_records<I>(settlements: I) -> Vec<RadrootsActiveOrderSettlementRecord>
+where
+    I: IntoIterator<Item = RadrootsActiveOrderSettlementRecord>,
+{
+    let mut unique = Vec::new();
+    let mut records = settlements.into_iter().collect::<Vec<_>>();
+    records.sort_by(|left, right| left.event_id.cmp(&right.event_id));
+    for settlement in records {
+        if unique
+            .iter()
+            .all(|existing: &RadrootsActiveOrderSettlementRecord| {
+                existing.event_id != settlement.event_id
+            })
+        {
+            unique.push(settlement);
         }
     }
     unique
@@ -1158,6 +1363,8 @@ fn projection_issue_event_ids(issues: &[RadrootsActiveOrderReducerIssue]) -> Vec
             RadrootsActiveOrderReducerIssue::MissingRequest => {}
             RadrootsActiveOrderReducerIssue::MultipleRequests { event_ids: ids }
             | RadrootsActiveOrderReducerIssue::ConflictingDecisions { event_ids: ids }
+            | RadrootsActiveOrderReducerIssue::DuplicatePayments { event_ids: ids }
+            | RadrootsActiveOrderReducerIssue::DuplicateSettlements { event_ids: ids }
             | RadrootsActiveOrderReducerIssue::ForkedLifecycle { event_ids: ids } => {
                 event_ids.extend(ids.iter().cloned());
             }
@@ -1239,7 +1446,44 @@ fn projection_issue_event_ids(issues: &[RadrootsActiveOrderReducerIssue]) -> Vec
             | RadrootsActiveOrderReducerIssue::ReceiptListingAddressInvalid { event_id }
             | RadrootsActiveOrderReducerIssue::ReceiptListingMismatch { event_id }
             | RadrootsActiveOrderReducerIssue::ReceiptRootMismatch { event_id }
-            | RadrootsActiveOrderReducerIssue::ReceiptPreviousMismatch { event_id } => {
+            | RadrootsActiveOrderReducerIssue::ReceiptPreviousMismatch { event_id }
+            | RadrootsActiveOrderReducerIssue::PaymentWithoutAcceptedAgreement { event_id }
+            | RadrootsActiveOrderReducerIssue::PaymentPayloadInvalid { event_id }
+            | RadrootsActiveOrderReducerIssue::PaymentOrderIdMismatch { event_id }
+            | RadrootsActiveOrderReducerIssue::PaymentAuthorMismatch { event_id }
+            | RadrootsActiveOrderReducerIssue::PaymentCounterpartyMismatch { event_id }
+            | RadrootsActiveOrderReducerIssue::PaymentBuyerMismatch { event_id }
+            | RadrootsActiveOrderReducerIssue::PaymentSellerMismatch { event_id }
+            | RadrootsActiveOrderReducerIssue::PaymentListingAddressInvalid { event_id }
+            | RadrootsActiveOrderReducerIssue::PaymentListingMismatch { event_id }
+            | RadrootsActiveOrderReducerIssue::PaymentRootMismatch { event_id }
+            | RadrootsActiveOrderReducerIssue::PaymentPreviousMismatch { event_id }
+            | RadrootsActiveOrderReducerIssue::PaymentAgreementMismatch { event_id }
+            | RadrootsActiveOrderReducerIssue::PaymentQuoteMismatch { event_id }
+            | RadrootsActiveOrderReducerIssue::PaymentQuoteVersionMismatch { event_id }
+            | RadrootsActiveOrderReducerIssue::PaymentEconomicsDigestMismatch { event_id }
+            | RadrootsActiveOrderReducerIssue::PaymentAmountMismatch { event_id }
+            | RadrootsActiveOrderReducerIssue::PaymentCurrencyMismatch { event_id }
+            | RadrootsActiveOrderReducerIssue::PaymentAfterCancellation { event_id }
+            | RadrootsActiveOrderReducerIssue::RevisionAfterPayment { event_id }
+            | RadrootsActiveOrderReducerIssue::SettlementWithoutValidPayment { event_id }
+            | RadrootsActiveOrderReducerIssue::SettlementPayloadInvalid { event_id }
+            | RadrootsActiveOrderReducerIssue::SettlementOrderIdMismatch { event_id }
+            | RadrootsActiveOrderReducerIssue::SettlementAuthorMismatch { event_id }
+            | RadrootsActiveOrderReducerIssue::SettlementCounterpartyMismatch { event_id }
+            | RadrootsActiveOrderReducerIssue::SettlementBuyerMismatch { event_id }
+            | RadrootsActiveOrderReducerIssue::SettlementSellerMismatch { event_id }
+            | RadrootsActiveOrderReducerIssue::SettlementListingAddressInvalid { event_id }
+            | RadrootsActiveOrderReducerIssue::SettlementListingMismatch { event_id }
+            | RadrootsActiveOrderReducerIssue::SettlementRootMismatch { event_id }
+            | RadrootsActiveOrderReducerIssue::SettlementPreviousMismatch { event_id }
+            | RadrootsActiveOrderReducerIssue::SettlementPaymentEventMismatch { event_id }
+            | RadrootsActiveOrderReducerIssue::SettlementAgreementMismatch { event_id }
+            | RadrootsActiveOrderReducerIssue::SettlementQuoteMismatch { event_id }
+            | RadrootsActiveOrderReducerIssue::SettlementQuoteVersionMismatch { event_id }
+            | RadrootsActiveOrderReducerIssue::SettlementEconomicsDigestMismatch { event_id }
+            | RadrootsActiveOrderReducerIssue::SettlementAmountMismatch { event_id }
+            | RadrootsActiveOrderReducerIssue::SettlementCurrencyMismatch { event_id } => {
                 event_ids.push(event_id.clone());
             }
             RadrootsActiveOrderReducerIssue::ForkedFulfillments { event_ids: ids } => {
@@ -1902,6 +2146,485 @@ fn validate_active_receipt_record(
     valid
 }
 
+fn reduce_active_payment_settlement_records(
+    request: &RadrootsActiveOrderRequestRecord,
+    agreement_event_id: &str,
+    economics: &RadrootsTradeOrderEconomics,
+    payments: Vec<RadrootsActiveOrderPaymentRecord>,
+    settlements: Vec<RadrootsActiveOrderSettlementRecord>,
+    issues: &mut Vec<RadrootsActiveOrderReducerIssue>,
+) -> RadrootsActiveOrderPaymentProjection {
+    let mut valid_payments = Vec::new();
+    for payment in payments {
+        if validate_active_payment_record(request, &payment, issues) {
+            valid_payments.push(payment);
+        }
+    }
+    let mut valid_settlements = Vec::new();
+    for settlement in settlements {
+        if validate_active_settlement_record(request, &settlement, issues) {
+            valid_settlements.push(settlement);
+        }
+    }
+    if !issues.is_empty() {
+        return RadrootsActiveOrderPaymentProjection::invalid();
+    }
+    if valid_payments.is_empty() {
+        record_settlement_without_valid_payment(&valid_settlements, issues);
+        return if issues.is_empty() {
+            RadrootsActiveOrderPaymentProjection::not_recorded()
+        } else {
+            RadrootsActiveOrderPaymentProjection::invalid()
+        };
+    }
+
+    let mut previous_payment_parent = agreement_event_id.to_string();
+    let mut used_payment_event_ids = Vec::new();
+    let mut used_settlement_event_ids = Vec::new();
+    let mut rejected_projection = None;
+
+    loop {
+        let payment_candidates = valid_payments
+            .iter()
+            .filter(|payment| {
+                payment.prev_event_id == previous_payment_parent
+                    && payment.payload.previous_event_id == previous_payment_parent
+                    && !used_payment_event_ids.contains(&payment.event_id)
+            })
+            .collect::<Vec<_>>();
+        if payment_candidates.is_empty() {
+            for payment in valid_payments
+                .iter()
+                .filter(|payment| !used_payment_event_ids.contains(&payment.event_id))
+            {
+                issues.push(RadrootsActiveOrderReducerIssue::PaymentPreviousMismatch {
+                    event_id: payment.event_id.clone(),
+                });
+            }
+            for settlement in valid_settlements
+                .iter()
+                .filter(|settlement| !used_settlement_event_ids.contains(&settlement.event_id))
+            {
+                issues.push(
+                    RadrootsActiveOrderReducerIssue::SettlementWithoutValidPayment {
+                        event_id: settlement.event_id.clone(),
+                    },
+                );
+            }
+            return if issues.is_empty() {
+                rejected_projection
+                    .unwrap_or_else(RadrootsActiveOrderPaymentProjection::not_recorded)
+            } else {
+                RadrootsActiveOrderPaymentProjection::invalid()
+            };
+        }
+        if payment_candidates.len() > 1 {
+            let mut event_ids = payment_candidates
+                .iter()
+                .map(|payment| payment.event_id.clone())
+                .collect::<Vec<_>>();
+            event_ids.sort();
+            issues.push(RadrootsActiveOrderReducerIssue::DuplicatePayments { event_ids });
+            return RadrootsActiveOrderPaymentProjection::invalid();
+        }
+        let payment = payment_candidates[0];
+        validate_active_payment_agreement_record(payment, agreement_event_id, economics, issues);
+        if !issues.is_empty() {
+            return RadrootsActiveOrderPaymentProjection::invalid();
+        }
+        used_payment_event_ids.push(payment.event_id.clone());
+
+        let settlement_candidates = valid_settlements
+            .iter()
+            .filter(|settlement| {
+                settlement.prev_event_id == payment.event_id
+                    && settlement.payload.previous_event_id == payment.event_id
+                    && settlement.payload.payment_event_id == payment.event_id
+                    && !used_settlement_event_ids.contains(&settlement.event_id)
+            })
+            .collect::<Vec<_>>();
+        if settlement_candidates.is_empty() {
+            for settlement in valid_settlements
+                .iter()
+                .filter(|settlement| !used_settlement_event_ids.contains(&settlement.event_id))
+            {
+                issues.push(
+                    RadrootsActiveOrderReducerIssue::SettlementWithoutValidPayment {
+                        event_id: settlement.event_id.clone(),
+                    },
+                );
+            }
+            return if issues.is_empty() {
+                payment_projection_from_record(
+                    payment,
+                    RadrootsActiveOrderPaymentState::Recorded,
+                    RadrootsActiveOrderSettlementState::Pending,
+                    None,
+                )
+            } else {
+                RadrootsActiveOrderPaymentProjection::invalid()
+            };
+        }
+        if settlement_candidates.len() > 1 {
+            let mut event_ids = settlement_candidates
+                .iter()
+                .map(|settlement| settlement.event_id.clone())
+                .collect::<Vec<_>>();
+            event_ids.sort();
+            issues.push(RadrootsActiveOrderReducerIssue::DuplicateSettlements { event_ids });
+            return RadrootsActiveOrderPaymentProjection::invalid();
+        }
+        let settlement = settlement_candidates[0];
+        validate_active_settlement_payment_record(settlement, payment, issues);
+        if !issues.is_empty() {
+            return RadrootsActiveOrderPaymentProjection::invalid();
+        }
+        used_settlement_event_ids.push(settlement.event_id.clone());
+        match settlement.payload.decision {
+            RadrootsTradeSettlementDecision::Accepted => {
+                for payment in valid_payments
+                    .iter()
+                    .filter(|payment| !used_payment_event_ids.contains(&payment.event_id))
+                {
+                    issues.push(RadrootsActiveOrderReducerIssue::PaymentPreviousMismatch {
+                        event_id: payment.event_id.clone(),
+                    });
+                }
+                for settlement in valid_settlements
+                    .iter()
+                    .filter(|settlement| !used_settlement_event_ids.contains(&settlement.event_id))
+                {
+                    issues.push(
+                        RadrootsActiveOrderReducerIssue::SettlementWithoutValidPayment {
+                            event_id: settlement.event_id.clone(),
+                        },
+                    );
+                }
+                return if issues.is_empty() {
+                    payment_projection_from_record(
+                        payment,
+                        RadrootsActiveOrderPaymentState::Settled,
+                        RadrootsActiveOrderSettlementState::Accepted,
+                        Some(settlement),
+                    )
+                } else {
+                    RadrootsActiveOrderPaymentProjection::invalid()
+                };
+            }
+            RadrootsTradeSettlementDecision::Rejected => {
+                rejected_projection = Some(payment_projection_from_record(
+                    payment,
+                    RadrootsActiveOrderPaymentState::Rejected,
+                    RadrootsActiveOrderSettlementState::Rejected,
+                    Some(settlement),
+                ));
+                previous_payment_parent = settlement.event_id.clone();
+            }
+        }
+    }
+}
+
+fn payment_projection_from_record(
+    payment: &RadrootsActiveOrderPaymentRecord,
+    state: RadrootsActiveOrderPaymentState,
+    settlement_state: RadrootsActiveOrderSettlementState,
+    settlement: Option<&RadrootsActiveOrderSettlementRecord>,
+) -> RadrootsActiveOrderPaymentProjection {
+    RadrootsActiveOrderPaymentProjection {
+        state,
+        settlement_state,
+        payment_event_id: Some(payment.event_id.clone()),
+        settlement_event_id: settlement.map(|settlement| settlement.event_id.clone()),
+        agreement_event_id: Some(payment.payload.agreement_event_id.clone()),
+        quote_id: Some(payment.payload.quote_id.clone()),
+        quote_version: Some(payment.payload.quote_version),
+        economics_digest: Some(payment.payload.economics_digest.clone()),
+        amount: Some(payment.payload.amount),
+        currency: Some(payment.payload.currency),
+        method: Some(payment.payload.method),
+        reference: payment.payload.reference.clone(),
+        paid_at: payment.payload.paid_at,
+        reason: settlement.and_then(|settlement| settlement.payload.reason.clone()),
+    }
+}
+
+fn validate_active_payment_record(
+    request: &RadrootsActiveOrderRequestRecord,
+    payment: &RadrootsActiveOrderPaymentRecord,
+    issues: &mut Vec<RadrootsActiveOrderReducerIssue>,
+) -> bool {
+    let mut valid = true;
+    if payment.payload.validate().is_err() {
+        issues.push(RadrootsActiveOrderReducerIssue::PaymentPayloadInvalid {
+            event_id: payment.event_id.clone(),
+        });
+        valid = false;
+    }
+    if payment.payload.order_id != request.payload.order_id {
+        issues.push(RadrootsActiveOrderReducerIssue::PaymentOrderIdMismatch {
+            event_id: payment.event_id.clone(),
+        });
+        valid = false;
+    }
+    if payment.author_pubkey != payment.payload.buyer_pubkey {
+        issues.push(RadrootsActiveOrderReducerIssue::PaymentAuthorMismatch {
+            event_id: payment.event_id.clone(),
+        });
+        valid = false;
+    }
+    if payment.counterparty_pubkey != request.payload.seller_pubkey {
+        issues.push(
+            RadrootsActiveOrderReducerIssue::PaymentCounterpartyMismatch {
+                event_id: payment.event_id.clone(),
+            },
+        );
+        valid = false;
+    }
+    if payment.payload.buyer_pubkey != request.payload.buyer_pubkey {
+        issues.push(RadrootsActiveOrderReducerIssue::PaymentBuyerMismatch {
+            event_id: payment.event_id.clone(),
+        });
+        valid = false;
+    }
+    if payment.payload.seller_pubkey != request.payload.seller_pubkey {
+        issues.push(RadrootsActiveOrderReducerIssue::PaymentSellerMismatch {
+            event_id: payment.event_id.clone(),
+        });
+        valid = false;
+    }
+    match parse_public_listing_addr(&payment.payload.listing_addr) {
+        Ok(listing_addr) => {
+            if payment.payload.listing_addr != request.payload.listing_addr
+                || listing_addr.seller_pubkey != payment.payload.seller_pubkey
+            {
+                issues.push(RadrootsActiveOrderReducerIssue::PaymentListingMismatch {
+                    event_id: payment.event_id.clone(),
+                });
+                valid = false;
+            }
+        }
+        Err(_) => {
+            issues.push(
+                RadrootsActiveOrderReducerIssue::PaymentListingAddressInvalid {
+                    event_id: payment.event_id.clone(),
+                },
+            );
+            valid = false;
+        }
+    }
+    if payment.root_event_id != request.event_id
+        || payment.payload.root_event_id != request.event_id
+    {
+        issues.push(RadrootsActiveOrderReducerIssue::PaymentRootMismatch {
+            event_id: payment.event_id.clone(),
+        });
+        valid = false;
+    }
+    if payment.prev_event_id.trim().is_empty()
+        || payment.prev_event_id == payment.event_id
+        || payment.payload.previous_event_id != payment.prev_event_id
+    {
+        issues.push(RadrootsActiveOrderReducerIssue::PaymentPreviousMismatch {
+            event_id: payment.event_id.clone(),
+        });
+        valid = false;
+    }
+    valid
+}
+
+fn validate_active_payment_agreement_record(
+    payment: &RadrootsActiveOrderPaymentRecord,
+    agreement_event_id: &str,
+    economics: &RadrootsTradeOrderEconomics,
+    issues: &mut Vec<RadrootsActiveOrderReducerIssue>,
+) {
+    if payment.payload.agreement_event_id != agreement_event_id {
+        issues.push(RadrootsActiveOrderReducerIssue::PaymentAgreementMismatch {
+            event_id: payment.event_id.clone(),
+        });
+    }
+    if payment.payload.quote_id != economics.quote_id {
+        issues.push(RadrootsActiveOrderReducerIssue::PaymentQuoteMismatch {
+            event_id: payment.event_id.clone(),
+        });
+    }
+    if payment.payload.quote_version != economics.quote_version {
+        issues.push(
+            RadrootsActiveOrderReducerIssue::PaymentQuoteVersionMismatch {
+                event_id: payment.event_id.clone(),
+            },
+        );
+    }
+    if payment.payload.amount != economics.total.amount {
+        issues.push(RadrootsActiveOrderReducerIssue::PaymentAmountMismatch {
+            event_id: payment.event_id.clone(),
+        });
+    }
+    if payment.payload.currency != economics.total.currency
+        || payment.payload.currency != economics.currency
+    {
+        issues.push(RadrootsActiveOrderReducerIssue::PaymentCurrencyMismatch {
+            event_id: payment.event_id.clone(),
+        });
+    }
+    #[cfg(feature = "serde_json")]
+    match radroots_trade_order_economics_digest(economics) {
+        Ok(expected_digest) if payment.payload.economics_digest != expected_digest => {
+            issues.push(
+                RadrootsActiveOrderReducerIssue::PaymentEconomicsDigestMismatch {
+                    event_id: payment.event_id.clone(),
+                },
+            );
+        }
+        Ok(_) => {}
+        Err(_) => {
+            issues.push(
+                RadrootsActiveOrderReducerIssue::PaymentEconomicsDigestMismatch {
+                    event_id: payment.event_id.clone(),
+                },
+            );
+        }
+    }
+}
+
+fn validate_active_settlement_record(
+    request: &RadrootsActiveOrderRequestRecord,
+    settlement: &RadrootsActiveOrderSettlementRecord,
+    issues: &mut Vec<RadrootsActiveOrderReducerIssue>,
+) -> bool {
+    let mut valid = true;
+    if settlement.payload.validate().is_err() {
+        issues.push(RadrootsActiveOrderReducerIssue::SettlementPayloadInvalid {
+            event_id: settlement.event_id.clone(),
+        });
+        valid = false;
+    }
+    if settlement.payload.order_id != request.payload.order_id {
+        issues.push(RadrootsActiveOrderReducerIssue::SettlementOrderIdMismatch {
+            event_id: settlement.event_id.clone(),
+        });
+        valid = false;
+    }
+    if settlement.author_pubkey != settlement.payload.seller_pubkey {
+        issues.push(RadrootsActiveOrderReducerIssue::SettlementAuthorMismatch {
+            event_id: settlement.event_id.clone(),
+        });
+        valid = false;
+    }
+    if settlement.counterparty_pubkey != request.payload.buyer_pubkey {
+        issues.push(
+            RadrootsActiveOrderReducerIssue::SettlementCounterpartyMismatch {
+                event_id: settlement.event_id.clone(),
+            },
+        );
+        valid = false;
+    }
+    if settlement.payload.buyer_pubkey != request.payload.buyer_pubkey {
+        issues.push(RadrootsActiveOrderReducerIssue::SettlementBuyerMismatch {
+            event_id: settlement.event_id.clone(),
+        });
+        valid = false;
+    }
+    if settlement.payload.seller_pubkey != request.payload.seller_pubkey {
+        issues.push(RadrootsActiveOrderReducerIssue::SettlementSellerMismatch {
+            event_id: settlement.event_id.clone(),
+        });
+        valid = false;
+    }
+    match parse_public_listing_addr(&settlement.payload.listing_addr) {
+        Ok(listing_addr) => {
+            if settlement.payload.listing_addr != request.payload.listing_addr
+                || listing_addr.seller_pubkey != settlement.payload.seller_pubkey
+            {
+                issues.push(RadrootsActiveOrderReducerIssue::SettlementListingMismatch {
+                    event_id: settlement.event_id.clone(),
+                });
+                valid = false;
+            }
+        }
+        Err(_) => {
+            issues.push(
+                RadrootsActiveOrderReducerIssue::SettlementListingAddressInvalid {
+                    event_id: settlement.event_id.clone(),
+                },
+            );
+            valid = false;
+        }
+    }
+    if settlement.root_event_id != request.event_id
+        || settlement.payload.root_event_id != request.event_id
+    {
+        issues.push(RadrootsActiveOrderReducerIssue::SettlementRootMismatch {
+            event_id: settlement.event_id.clone(),
+        });
+        valid = false;
+    }
+    if settlement.prev_event_id.trim().is_empty()
+        || settlement.prev_event_id == settlement.event_id
+        || settlement.payload.previous_event_id != settlement.prev_event_id
+    {
+        issues.push(
+            RadrootsActiveOrderReducerIssue::SettlementPreviousMismatch {
+                event_id: settlement.event_id.clone(),
+            },
+        );
+        valid = false;
+    }
+    valid
+}
+
+fn validate_active_settlement_payment_record(
+    settlement: &RadrootsActiveOrderSettlementRecord,
+    payment: &RadrootsActiveOrderPaymentRecord,
+    issues: &mut Vec<RadrootsActiveOrderReducerIssue>,
+) {
+    if settlement.payload.payment_event_id != payment.event_id {
+        issues.push(
+            RadrootsActiveOrderReducerIssue::SettlementPaymentEventMismatch {
+                event_id: settlement.event_id.clone(),
+            },
+        );
+    }
+    if settlement.payload.agreement_event_id != payment.payload.agreement_event_id {
+        issues.push(
+            RadrootsActiveOrderReducerIssue::SettlementAgreementMismatch {
+                event_id: settlement.event_id.clone(),
+            },
+        );
+    }
+    if settlement.payload.quote_id != payment.payload.quote_id {
+        issues.push(RadrootsActiveOrderReducerIssue::SettlementQuoteMismatch {
+            event_id: settlement.event_id.clone(),
+        });
+    }
+    if settlement.payload.quote_version != payment.payload.quote_version {
+        issues.push(
+            RadrootsActiveOrderReducerIssue::SettlementQuoteVersionMismatch {
+                event_id: settlement.event_id.clone(),
+            },
+        );
+    }
+    if settlement.payload.economics_digest != payment.payload.economics_digest {
+        issues.push(
+            RadrootsActiveOrderReducerIssue::SettlementEconomicsDigestMismatch {
+                event_id: settlement.event_id.clone(),
+            },
+        );
+    }
+    if settlement.payload.amount != payment.payload.amount {
+        issues.push(RadrootsActiveOrderReducerIssue::SettlementAmountMismatch {
+            event_id: settlement.event_id.clone(),
+        });
+    }
+    if settlement.payload.currency != payment.payload.currency {
+        issues.push(
+            RadrootsActiveOrderReducerIssue::SettlementCurrencyMismatch {
+                event_id: settlement.event_id.clone(),
+            },
+        );
+    }
+}
+
 fn decision_payload_issue(
     decision: &RadrootsTradeOrderDecision,
     event_id: &str,
@@ -1997,6 +2720,43 @@ fn record_receipt_without_eligible_fulfillment(
                 event_id: receipt.event_id.clone(),
             },
         );
+    }
+}
+
+fn record_payment_without_accepted_agreement(
+    payments: &[RadrootsActiveOrderPaymentRecord],
+    issues: &mut Vec<RadrootsActiveOrderReducerIssue>,
+) {
+    for payment in payments {
+        issues.push(
+            RadrootsActiveOrderReducerIssue::PaymentWithoutAcceptedAgreement {
+                event_id: payment.event_id.clone(),
+            },
+        );
+    }
+}
+
+fn record_settlement_without_valid_payment(
+    settlements: &[RadrootsActiveOrderSettlementRecord],
+    issues: &mut Vec<RadrootsActiveOrderReducerIssue>,
+) {
+    for settlement in settlements {
+        issues.push(
+            RadrootsActiveOrderReducerIssue::SettlementWithoutValidPayment {
+                event_id: settlement.event_id.clone(),
+            },
+        );
+    }
+}
+
+fn record_payment_after_cancellation(
+    payments: &[RadrootsActiveOrderPaymentRecord],
+    issues: &mut Vec<RadrootsActiveOrderReducerIssue>,
+) {
+    for payment in payments {
+        issues.push(RadrootsActiveOrderReducerIssue::PaymentAfterCancellation {
+            event_id: payment.event_id.clone(),
+        });
     }
 }
 
@@ -2238,8 +2998,7 @@ fn requested_projection(
         receipt_issue: None,
         receipt_received_at: None,
         lifecycle_terminal: false,
-        settlement_pending: false,
-        settlement_reason: None,
+        payment: RadrootsActiveOrderPaymentProjection::not_recorded(),
         economics: Some(request.payload.economics.clone()),
         agreement_event_id: None,
         listing_addr: Some(request.payload.listing_addr.clone()),
@@ -2296,182 +3055,252 @@ fn decided_projection(
     fulfillments: Vec<RadrootsActiveOrderFulfillmentRecord>,
     cancellations: Vec<RadrootsActiveOrderCancellationRecord>,
     receipts: Vec<RadrootsActiveOrderReceiptRecord>,
+    payments: Vec<RadrootsActiveOrderPaymentRecord>,
+    settlements: Vec<RadrootsActiveOrderSettlementRecord>,
 ) -> RadrootsActiveOrderProjection {
     let status = match &decision.payload.decision {
         RadrootsTradeOrderDecision::Accepted { .. } => RadrootsActiveOrderStatus::Accepted,
         RadrootsTradeOrderDecision::Declined { .. } => RadrootsActiveOrderStatus::Declined,
     };
     let mut issues = Vec::new();
-    let (fulfillment_event_id, fulfillment_status, last_event_id, agreement_event_id, economics) =
-        match status {
-            RadrootsActiveOrderStatus::Accepted => {
-                let Some(revision_state) = active_revision_state(
-                    request,
-                    decision,
-                    &revision_proposals,
-                    &revision_decisions,
-                    &mut issues,
-                ) else {
-                    return invalid_projection(order_id, Some(request), issues);
-                };
-                if let Some(pending_revision_event_id) =
-                    revision_state.pending_revision_event_id.as_ref()
-                    && (!fulfillments.is_empty()
-                        || !cancellations.is_empty()
-                        || !receipts.is_empty())
-                {
-                    let mut event_ids = vec![pending_revision_event_id.clone()];
-                    event_ids.extend(
-                        fulfillments
-                            .iter()
-                            .map(|fulfillment| fulfillment.event_id.clone()),
-                    );
-                    event_ids.extend(
-                        cancellations
-                            .iter()
-                            .map(|cancellation| cancellation.event_id.clone()),
-                    );
-                    event_ids.extend(receipts.iter().map(|receipt| receipt.event_id.clone()));
-                    sort_and_dedup_strings(&mut event_ids);
-                    return invalid_projection(
+    let (
+        fulfillment_event_id,
+        fulfillment_status,
+        last_event_id,
+        agreement_event_id,
+        economics,
+        payment,
+    ) = match status {
+        RadrootsActiveOrderStatus::Accepted => {
+            let Some(revision_state) = active_revision_state(
+                request,
+                decision,
+                &revision_proposals,
+                &revision_decisions,
+                &mut issues,
+            ) else {
+                return invalid_projection(order_id, Some(request), issues);
+            };
+            if let Some(pending_revision_event_id) =
+                revision_state.pending_revision_event_id.as_ref()
+                && (!fulfillments.is_empty()
+                    || !cancellations.is_empty()
+                    || !receipts.is_empty()
+                    || !payments.is_empty()
+                    || !settlements.is_empty())
+            {
+                let mut event_ids = vec![pending_revision_event_id.clone()];
+                event_ids.extend(
+                    fulfillments
+                        .iter()
+                        .map(|fulfillment| fulfillment.event_id.clone()),
+                );
+                event_ids.extend(
+                    cancellations
+                        .iter()
+                        .map(|cancellation| cancellation.event_id.clone()),
+                );
+                event_ids.extend(receipts.iter().map(|receipt| receipt.event_id.clone()));
+                event_ids.extend(payments.iter().map(|payment| payment.event_id.clone()));
+                event_ids.extend(
+                    settlements
+                        .iter()
+                        .map(|settlement| settlement.event_id.clone()),
+                );
+                sort_and_dedup_strings(&mut event_ids);
+                return invalid_projection(
+                    order_id,
+                    Some(request),
+                    vec![RadrootsActiveOrderReducerIssue::ForkedLifecycle { event_ids }],
+                );
+            }
+            let fulfillment_records =
+                validated_fulfillment_records(request, fulfillments, &mut issues);
+            let latest = latest_fulfillment_record(
+                &revision_state.lifecycle_parent_event_id,
+                &fulfillment_records,
+                &mut issues,
+            );
+            if !issues.is_empty() {
+                return invalid_projection(order_id, Some(request), issues);
+            }
+            let decision_cancellations = cancellations
+                .iter()
+                .cloned()
+                .filter(|cancellation| {
+                    cancellation.prev_event_id == revision_state.lifecycle_parent_event_id
+                })
+                .collect::<Vec<_>>();
+            for cancellation in cancellations.iter().filter(|cancellation| {
+                cancellation.prev_event_id != revision_state.lifecycle_parent_event_id
+            }) {
+                issues.push(
+                    RadrootsActiveOrderReducerIssue::CancellationPreviousMismatch {
+                        event_id: cancellation.event_id.clone(),
+                    },
+                );
+            }
+            if !issues.is_empty() {
+                return invalid_projection(order_id, Some(request), issues);
+            }
+            if !decision_cancellations.is_empty() {
+                record_payment_after_cancellation(&payments, &mut issues);
+                record_settlement_without_valid_payment(&settlements, &mut issues);
+                if !issues.is_empty() {
+                    return invalid_projection_with_payment(
                         order_id,
                         Some(request),
-                        vec![RadrootsActiveOrderReducerIssue::ForkedLifecycle { event_ids }],
+                        issues,
+                        RadrootsActiveOrderPaymentProjection::invalid(),
                     );
                 }
-                let fulfillment_records =
-                    validated_fulfillment_records(request, fulfillments, &mut issues);
-                let latest = latest_fulfillment_record(
-                    &revision_state.lifecycle_parent_event_id,
-                    &fulfillment_records,
-                    &mut issues,
-                );
-                if !issues.is_empty() {
-                    return invalid_projection(order_id, Some(request), issues);
-                }
-                let decision_cancellations = cancellations
+            }
+            if let Some(first_fulfillment) = fulfillment_records.iter().find(|fulfillment| {
+                fulfillment.prev_event_id == revision_state.lifecycle_parent_event_id
+            }) && !decision_cancellations.is_empty()
+            {
+                let mut event_ids = decision_cancellations
                     .iter()
-                    .cloned()
-                    .filter(|cancellation| {
-                        cancellation.prev_event_id == revision_state.lifecycle_parent_event_id
-                    })
+                    .map(|cancellation| cancellation.event_id.clone())
                     .collect::<Vec<_>>();
-                for cancellation in cancellations.iter().filter(|cancellation| {
-                    cancellation.prev_event_id != revision_state.lifecycle_parent_event_id
-                }) {
+                event_ids.push(first_fulfillment.event_id.clone());
+                sort_and_dedup_strings(&mut event_ids);
+                return invalid_projection(
+                    order_id,
+                    Some(request),
+                    vec![RadrootsActiveOrderReducerIssue::ForkedLifecycle { event_ids }],
+                );
+            }
+            if latest.is_some() {
+                for cancellation in decision_cancellations {
                     issues.push(
-                        RadrootsActiveOrderReducerIssue::CancellationPreviousMismatch {
-                            event_id: cancellation.event_id.clone(),
+                        RadrootsActiveOrderReducerIssue::CancellationAfterFulfillment {
+                            event_id: cancellation.event_id,
                         },
                     );
                 }
                 if !issues.is_empty() {
                     return invalid_projection(order_id, Some(request), issues);
                 }
-                if let Some(first_fulfillment) = fulfillment_records.iter().find(|fulfillment| {
-                    fulfillment.prev_event_id == revision_state.lifecycle_parent_event_id
-                }) && !decision_cancellations.is_empty()
-                {
-                    let mut event_ids = decision_cancellations
-                        .iter()
-                        .map(|cancellation| cancellation.event_id.clone())
-                        .collect::<Vec<_>>();
-                    event_ids.push(first_fulfillment.event_id.clone());
-                    sort_and_dedup_strings(&mut event_ids);
-                    return invalid_projection(
-                        order_id,
-                        Some(request),
-                        vec![RadrootsActiveOrderReducerIssue::ForkedLifecycle { event_ids }],
-                    );
-                }
-                if latest.is_some() {
-                    for cancellation in decision_cancellations {
-                        issues.push(
-                            RadrootsActiveOrderReducerIssue::CancellationAfterFulfillment {
-                                event_id: cancellation.event_id,
-                            },
+            } else {
+                match single_lifecycle_child(&decision_cancellations, |record| &record.event_id) {
+                    Ok(Some(cancellation)) => {
+                        return cancelled_projection(
+                            order_id,
+                            request,
+                            Some(decision.event_id.clone()),
+                            Some(revision_state.agreement_event_id.clone()),
+                            revision_state.economics.clone(),
+                            cancellation,
                         );
                     }
-                    if !issues.is_empty() {
-                        return invalid_projection(order_id, Some(request), issues);
-                    }
-                } else {
-                    match single_lifecycle_child(&decision_cancellations, |record| &record.event_id)
-                    {
-                        Ok(Some(cancellation)) => {
-                            return cancelled_projection(
-                                order_id,
-                                request,
-                                Some(decision.event_id.clone()),
-                                Some(revision_state.agreement_event_id.clone()),
-                                revision_state.economics.clone(),
-                                cancellation,
-                            );
-                        }
-                        Ok(None) => {}
-                        Err(issue) => {
-                            return invalid_projection(order_id, Some(request), vec![issue]);
-                        }
+                    Ok(None) => {}
+                    Err(issue) => {
+                        return invalid_projection(order_id, Some(request), vec![issue]);
                     }
                 }
-                let receipt_result = receipt_projection(
+            }
+            let payment = reduce_active_payment_settlement_records(
+                request,
+                &revision_state.agreement_event_id,
+                &revision_state.economics,
+                payments,
+                settlements,
+                &mut issues,
+            );
+            if !issues.is_empty() {
+                return invalid_projection_with_payment(
                     order_id,
-                    request,
-                    decision,
-                    &revision_state.agreement_event_id,
-                    &revision_state.economics,
-                    latest.as_ref(),
-                    &fulfillment_records,
-                    receipts,
-                    &mut issues,
+                    Some(request),
+                    issues,
+                    RadrootsActiveOrderPaymentProjection::invalid(),
                 );
-                if let Some(projection) = receipt_result {
-                    return projection;
-                }
-                if !issues.is_empty() {
-                    return invalid_projection(order_id, Some(request), issues);
-                }
-                let (fulfillment_event_id, fulfillment_status, last_event_id) = match latest {
-                    Some(fulfillment) => (
-                        Some(fulfillment.event_id.clone()),
-                        Some(fulfillment.payload.status),
-                        Some(fulfillment.event_id),
-                    ),
-                    None => (
-                        None,
-                        Some(RadrootsActiveTradeFulfillmentState::AcceptedNotFulfilled),
-                        Some(revision_state.lifecycle_parent_event_id.clone()),
-                    ),
-                };
+            }
+            let receipt_result = receipt_projection(
+                order_id,
+                request,
+                decision,
+                &revision_state.agreement_event_id,
+                &revision_state.economics,
+                latest.as_ref(),
+                &fulfillment_records,
+                receipts,
+                &mut issues,
+            );
+            if let Some(mut projection) = receipt_result {
+                projection.payment = payment;
+                return projection;
+            }
+            if !issues.is_empty() {
+                return invalid_projection(order_id, Some(request), issues);
+            }
+            let (fulfillment_event_id, fulfillment_status, last_event_id) = match latest {
+                Some(fulfillment) => (
+                    Some(fulfillment.event_id.clone()),
+                    Some(fulfillment.payload.status),
+                    Some(fulfillment.event_id),
+                ),
+                None => (
+                    None,
+                    Some(RadrootsActiveTradeFulfillmentState::AcceptedNotFulfilled),
+                    Some(revision_state.lifecycle_parent_event_id.clone()),
+                ),
+            };
+            let mut projection_payment = payment;
+            if projection_payment.state == RadrootsActiveOrderPaymentState::NotRecorded {
+                projection_payment.settlement_state =
+                    RadrootsActiveOrderSettlementState::NotRequired;
+            }
+            (
+                fulfillment_event_id,
+                fulfillment_status,
+                last_event_id,
+                Some(revision_state.agreement_event_id),
+                Some(revision_state.economics),
+                projection_payment,
+            )
+        }
+        RadrootsActiveOrderStatus::Declined => {
+            record_revision_proposal_without_accepted_decision(&revision_proposals, &mut issues);
+            record_revision_decision_without_proposal(&revision_decisions, &mut issues);
+            record_payment_without_accepted_agreement(&payments, &mut issues);
+            record_settlement_without_valid_payment(&settlements, &mut issues);
+            if fulfillments.is_empty()
+                && cancellations.is_empty()
+                && receipts.is_empty()
+                && payments.is_empty()
+                && settlements.is_empty()
+                && issues.is_empty()
+            {
                 (
-                    fulfillment_event_id,
-                    fulfillment_status,
-                    last_event_id,
-                    Some(revision_state.agreement_event_id),
-                    Some(revision_state.economics),
+                    None,
+                    None,
+                    Some(decision.event_id.clone()),
+                    None,
+                    None,
+                    RadrootsActiveOrderPaymentProjection::not_recorded(),
                 )
-            }
-            RadrootsActiveOrderStatus::Declined => {
-                record_revision_proposal_without_accepted_decision(
-                    &revision_proposals,
-                    &mut issues,
+            } else {
+                record_fulfillment_without_accepted_decision(&fulfillments, &mut issues);
+                record_cancellation_without_cancellable_order(&cancellations, &mut issues);
+                record_receipt_without_eligible_fulfillment(&receipts, &mut issues);
+                return invalid_projection_with_payment(
+                    order_id,
+                    Some(request),
+                    issues,
+                    RadrootsActiveOrderPaymentProjection::invalid(),
                 );
-                record_revision_decision_without_proposal(&revision_decisions, &mut issues);
-                if fulfillments.is_empty()
-                    && cancellations.is_empty()
-                    && receipts.is_empty()
-                    && issues.is_empty()
-                {
-                    (None, None, Some(decision.event_id.clone()), None, None)
-                } else {
-                    record_fulfillment_without_accepted_decision(&fulfillments, &mut issues);
-                    record_cancellation_without_cancellable_order(&cancellations, &mut issues);
-                    record_receipt_without_eligible_fulfillment(&receipts, &mut issues);
-                    return invalid_projection(order_id, Some(request), issues);
-                }
             }
-            _ => (None, None, Some(decision.event_id.clone()), None, None),
-        };
+        }
+        _ => (
+            None,
+            None,
+            Some(decision.event_id.clone()),
+            None,
+            None,
+            RadrootsActiveOrderPaymentProjection::not_recorded(),
+        ),
+    };
     RadrootsActiveOrderProjection {
         order_id: order_id.to_string(),
         status,
@@ -2485,8 +3314,7 @@ fn decided_projection(
         receipt_issue: None,
         receipt_received_at: None,
         lifecycle_terminal: false,
-        settlement_pending: false,
-        settlement_reason: None,
+        payment,
         economics,
         agreement_event_id,
         listing_addr: Some(request.payload.listing_addr.clone()),
@@ -2606,8 +3434,7 @@ fn cancelled_projection(
         receipt_issue: None,
         receipt_received_at: None,
         lifecycle_terminal: true,
-        settlement_pending: true,
-        settlement_reason: Some(cancellation.payload.reason),
+        payment: RadrootsActiveOrderPaymentProjection::not_recorded(),
         economics: Some(economics),
         agreement_event_id,
         listing_addr: Some(request.payload.listing_addr.clone()),
@@ -2645,8 +3472,7 @@ fn receipt_terminal_projection(
         receipt_issue: receipt.payload.issue.clone(),
         receipt_received_at: Some(receipt.payload.received_at),
         lifecycle_terminal: true,
-        settlement_pending: !receipt.payload.received,
-        settlement_reason: receipt.payload.issue,
+        payment: RadrootsActiveOrderPaymentProjection::not_recorded(),
         economics: Some(economics.clone()),
         agreement_event_id: Some(agreement_event_id.to_string()),
         listing_addr: Some(request.payload.listing_addr.clone()),
@@ -2661,6 +3487,20 @@ fn invalid_projection(
     order_id: &str,
     request: Option<&RadrootsActiveOrderRequestRecord>,
     issues: Vec<RadrootsActiveOrderReducerIssue>,
+) -> RadrootsActiveOrderProjection {
+    invalid_projection_with_payment(
+        order_id,
+        request,
+        issues,
+        RadrootsActiveOrderPaymentProjection::not_recorded(),
+    )
+}
+
+fn invalid_projection_with_payment(
+    order_id: &str,
+    request: Option<&RadrootsActiveOrderRequestRecord>,
+    issues: Vec<RadrootsActiveOrderReducerIssue>,
+    payment: RadrootsActiveOrderPaymentProjection,
 ) -> RadrootsActiveOrderProjection {
     let economics = match request {
         Some(request) if request.payload.validate().is_ok() => {
@@ -2681,8 +3521,7 @@ fn invalid_projection(
         receipt_issue: None,
         receipt_received_at: None,
         lifecycle_terminal: true,
-        settlement_pending: false,
-        settlement_reason: None,
+        payment,
         economics,
         agreement_event_id: None,
         listing_addr: request.map(|request| request.payload.listing_addr.clone()),
@@ -2849,20 +3688,25 @@ mod tests {
         RadrootsTradeOrderEconomicLine, RadrootsTradeOrderEconomics, RadrootsTradeOrderItem,
         RadrootsTradeOrderRequested, RadrootsTradeOrderRevisionDecision,
         RadrootsTradeOrderRevisionDecisionEvent, RadrootsTradeOrderRevisionProposed,
-        RadrootsTradePricingBasis,
+        RadrootsTradePaymentMethod, RadrootsTradePaymentRecorded, RadrootsTradePricingBasis,
+        RadrootsTradeSettlementDecision, RadrootsTradeSettlementDecisionEvent,
     };
 
     use super::{
         RadrootsActiveOrderCancellationRecord, RadrootsActiveOrderDecisionRecord,
-        RadrootsActiveOrderFulfillmentRecord, RadrootsActiveOrderProjection,
-        RadrootsActiveOrderReceiptRecord, RadrootsActiveOrderReducerIssue,
-        RadrootsActiveOrderRequestRecord, RadrootsActiveOrderRevisionDecisionRecord,
-        RadrootsActiveOrderRevisionProposalRecord, RadrootsActiveOrderStatus,
-        RadrootsListingInventoryAccountingIssue, RadrootsListingInventoryAccountingProjection,
-        RadrootsListingInventoryBinAccounting, RadrootsListingInventoryBinAvailability,
-        RadrootsListingInventoryOrderReservation, RadrootsTradeOrderCanonicalizationError,
-        add_inventory_reservation, canonicalize_active_order_decision_for_signer,
+        RadrootsActiveOrderFulfillmentRecord, RadrootsActiveOrderPaymentProjection,
+        RadrootsActiveOrderPaymentRecord, RadrootsActiveOrderPaymentState,
+        RadrootsActiveOrderProjection, RadrootsActiveOrderReceiptRecord,
+        RadrootsActiveOrderReducerIssue, RadrootsActiveOrderRequestRecord,
+        RadrootsActiveOrderRevisionDecisionRecord, RadrootsActiveOrderRevisionProposalRecord,
+        RadrootsActiveOrderSettlementRecord, RadrootsActiveOrderSettlementState,
+        RadrootsActiveOrderStatus, RadrootsListingInventoryAccountingIssue,
+        RadrootsListingInventoryAccountingProjection, RadrootsListingInventoryBinAccounting,
+        RadrootsListingInventoryBinAvailability, RadrootsListingInventoryOrderReservation,
+        RadrootsTradeOrderCanonicalizationError, add_inventory_reservation,
+        canonicalize_active_order_decision_for_signer,
         canonicalize_active_order_request_for_signer, canonicalize_order_request_for_signer,
+        radroots_trade_order_economics_digest,
         reduce_active_order_events as reduce_active_order_events_with_revisions,
         reduce_listing_inventory_accounting as reduce_listing_inventory_accounting_with_revisions,
     };
@@ -3096,6 +3940,67 @@ mod tests {
         }
     }
 
+    fn payment_record(event_id: &str, prev_event_id: &str) -> RadrootsActiveOrderPaymentRecord {
+        let economics = request_economics("bin-1", 2, "10");
+        RadrootsActiveOrderPaymentRecord {
+            event_id: event_id.to_string(),
+            author_pubkey: BUYER.to_string(),
+            counterparty_pubkey: SELLER.to_string(),
+            root_event_id: "request-1".to_string(),
+            prev_event_id: prev_event_id.to_string(),
+            payload: RadrootsTradePaymentRecorded {
+                order_id: "order-1".to_string(),
+                listing_addr: listing_addr(),
+                buyer_pubkey: BUYER.to_string(),
+                seller_pubkey: SELLER.to_string(),
+                root_event_id: "request-1".to_string(),
+                previous_event_id: prev_event_id.to_string(),
+                agreement_event_id: "decision-1".to_string(),
+                quote_id: economics.quote_id.clone(),
+                quote_version: economics.quote_version,
+                economics_digest: radroots_trade_order_economics_digest(&economics).unwrap(),
+                amount: economics.total.amount,
+                currency: economics.total.currency,
+                method: RadrootsTradePaymentMethod::ManualTransfer,
+                reference: Some("manual reference".to_string()),
+                paid_at: Some(1_777_666_000),
+            },
+        }
+    }
+
+    fn settlement_record(
+        event_id: &str,
+        payment_event_id: &str,
+        decision: RadrootsTradeSettlementDecision,
+    ) -> RadrootsActiveOrderSettlementRecord {
+        let payment = payment_record(payment_event_id, "decision-1");
+        RadrootsActiveOrderSettlementRecord {
+            event_id: event_id.to_string(),
+            author_pubkey: SELLER.to_string(),
+            counterparty_pubkey: BUYER.to_string(),
+            root_event_id: "request-1".to_string(),
+            prev_event_id: payment_event_id.to_string(),
+            payload: RadrootsTradeSettlementDecisionEvent {
+                order_id: payment.payload.order_id,
+                listing_addr: payment.payload.listing_addr,
+                seller_pubkey: payment.payload.seller_pubkey,
+                buyer_pubkey: payment.payload.buyer_pubkey,
+                root_event_id: payment.payload.root_event_id,
+                previous_event_id: payment_event_id.to_string(),
+                agreement_event_id: payment.payload.agreement_event_id,
+                payment_event_id: payment_event_id.to_string(),
+                quote_id: payment.payload.quote_id,
+                quote_version: payment.payload.quote_version,
+                economics_digest: payment.payload.economics_digest,
+                amount: payment.payload.amount,
+                currency: payment.payload.currency,
+                decision,
+                reason: (decision == RadrootsTradeSettlementDecision::Rejected)
+                    .then(|| "reference mismatch".to_string()),
+            },
+        }
+    }
+
     fn accepted_decision_record_for(
         order_id: &str,
         event_id: &str,
@@ -3204,6 +4109,8 @@ mod tests {
             fulfillments,
             cancellations,
             receipts,
+            Vec::<RadrootsActiveOrderPaymentRecord>::new(),
+            Vec::<RadrootsActiveOrderSettlementRecord>::new(),
         )
     }
 
@@ -3412,6 +4319,141 @@ mod tests {
     }
 
     #[test]
+    fn reduce_active_order_events_reports_recorded_payment_state() {
+        let projection = reduce_active_order_events_with_revisions(
+            "order-1",
+            [request_record()],
+            [accepted_decision_record("decision-1")],
+            Vec::<RadrootsActiveOrderRevisionProposalRecord>::new(),
+            Vec::<RadrootsActiveOrderRevisionDecisionRecord>::new(),
+            Vec::<RadrootsActiveOrderFulfillmentRecord>::new(),
+            Vec::<RadrootsActiveOrderCancellationRecord>::new(),
+            Vec::<RadrootsActiveOrderReceiptRecord>::new(),
+            [payment_record("payment-1", "decision-1")],
+            Vec::<RadrootsActiveOrderSettlementRecord>::new(),
+        );
+
+        assert_eq!(projection.status, RadrootsActiveOrderStatus::Accepted);
+        assert_eq!(
+            projection.payment.state,
+            RadrootsActiveOrderPaymentState::Recorded
+        );
+        assert_eq!(
+            projection.payment.settlement_state,
+            RadrootsActiveOrderSettlementState::Pending
+        );
+        assert_eq!(
+            projection.payment.payment_event_id.as_deref(),
+            Some("payment-1")
+        );
+        assert_eq!(
+            projection.payment.agreement_event_id.as_deref(),
+            Some("decision-1")
+        );
+        assert_eq!(projection.payment.amount, Some(decimal("10")));
+        assert_eq!(projection.payment.currency, Some(RadrootsCoreCurrency::USD));
+        assert!(projection.issues.is_empty());
+    }
+
+    #[test]
+    fn reduce_active_order_events_reports_accepted_settlement_state() {
+        let projection = reduce_active_order_events_with_revisions(
+            "order-1",
+            [request_record()],
+            [accepted_decision_record("decision-1")],
+            Vec::<RadrootsActiveOrderRevisionProposalRecord>::new(),
+            Vec::<RadrootsActiveOrderRevisionDecisionRecord>::new(),
+            Vec::<RadrootsActiveOrderFulfillmentRecord>::new(),
+            Vec::<RadrootsActiveOrderCancellationRecord>::new(),
+            Vec::<RadrootsActiveOrderReceiptRecord>::new(),
+            [payment_record("payment-1", "decision-1")],
+            [settlement_record(
+                "settlement-1",
+                "payment-1",
+                RadrootsTradeSettlementDecision::Accepted,
+            )],
+        );
+
+        assert_eq!(projection.status, RadrootsActiveOrderStatus::Accepted);
+        assert_eq!(
+            projection.payment.state,
+            RadrootsActiveOrderPaymentState::Settled
+        );
+        assert_eq!(
+            projection.payment.settlement_state,
+            RadrootsActiveOrderSettlementState::Accepted
+        );
+        assert_eq!(
+            projection.payment.settlement_event_id.as_deref(),
+            Some("settlement-1")
+        );
+        assert_eq!(projection.payment.reason, None);
+        assert!(projection.issues.is_empty());
+    }
+
+    #[test]
+    fn reduce_active_order_events_rejects_stale_payment_amount() {
+        let mut payment = payment_record("payment-1", "decision-1");
+        payment.payload.amount = decimal("9");
+
+        let projection = reduce_active_order_events_with_revisions(
+            "order-1",
+            [request_record()],
+            [accepted_decision_record("decision-1")],
+            Vec::<RadrootsActiveOrderRevisionProposalRecord>::new(),
+            Vec::<RadrootsActiveOrderRevisionDecisionRecord>::new(),
+            Vec::<RadrootsActiveOrderFulfillmentRecord>::new(),
+            Vec::<RadrootsActiveOrderCancellationRecord>::new(),
+            Vec::<RadrootsActiveOrderReceiptRecord>::new(),
+            [payment],
+            Vec::<RadrootsActiveOrderSettlementRecord>::new(),
+        );
+
+        assert_eq!(projection.status, RadrootsActiveOrderStatus::Invalid);
+        assert_eq!(
+            projection.payment.state,
+            RadrootsActiveOrderPaymentState::Invalid
+        );
+        assert!(projection.issues.iter().any(|issue| matches!(
+            issue,
+            RadrootsActiveOrderReducerIssue::PaymentAmountMismatch { event_id }
+                if event_id == "payment-1"
+        )));
+    }
+
+    #[test]
+    fn reduce_active_order_events_keeps_payment_separate_from_receipt() {
+        let projection = reduce_active_order_events_with_revisions(
+            "order-1",
+            [request_record()],
+            [accepted_decision_record("decision-1")],
+            Vec::<RadrootsActiveOrderRevisionProposalRecord>::new(),
+            Vec::<RadrootsActiveOrderRevisionDecisionRecord>::new(),
+            [fulfillment_record(
+                "fulfillment-1",
+                "decision-1",
+                RadrootsActiveTradeFulfillmentState::Delivered,
+            )],
+            Vec::<RadrootsActiveOrderCancellationRecord>::new(),
+            [receipt_record("receipt-1", "fulfillment-1", true)],
+            [payment_record("payment-1", "decision-1")],
+            Vec::<RadrootsActiveOrderSettlementRecord>::new(),
+        );
+
+        assert_eq!(projection.status, RadrootsActiveOrderStatus::Completed);
+        assert_eq!(projection.receipt_received, Some(true));
+        assert_eq!(
+            projection.payment.state,
+            RadrootsActiveOrderPaymentState::Recorded
+        );
+        assert_eq!(
+            projection.payment.settlement_state,
+            RadrootsActiveOrderSettlementState::Pending
+        );
+        assert!(projection.issues.is_empty());
+    }
+
+    #[test]
     fn reduce_active_order_events_applies_accepted_revision_agreement() {
         let projection = reduce_active_order_events_with_revisions(
             "order-1",
@@ -3432,6 +4474,8 @@ mod tests {
             Vec::<RadrootsActiveOrderFulfillmentRecord>::new(),
             Vec::<RadrootsActiveOrderCancellationRecord>::new(),
             Vec::<RadrootsActiveOrderReceiptRecord>::new(),
+            Vec::<RadrootsActiveOrderPaymentRecord>::new(),
+            Vec::<RadrootsActiveOrderSettlementRecord>::new(),
         );
 
         assert_eq!(projection.status, RadrootsActiveOrderStatus::Accepted);
@@ -3473,6 +4517,8 @@ mod tests {
             Vec::<RadrootsActiveOrderFulfillmentRecord>::new(),
             Vec::<RadrootsActiveOrderCancellationRecord>::new(),
             Vec::<RadrootsActiveOrderReceiptRecord>::new(),
+            Vec::<RadrootsActiveOrderPaymentRecord>::new(),
+            Vec::<RadrootsActiveOrderSettlementRecord>::new(),
         );
 
         assert_eq!(projection.status, RadrootsActiveOrderStatus::Accepted);
@@ -3512,6 +4558,8 @@ mod tests {
             Vec::<RadrootsActiveOrderFulfillmentRecord>::new(),
             Vec::<RadrootsActiveOrderCancellationRecord>::new(),
             Vec::<RadrootsActiveOrderReceiptRecord>::new(),
+            Vec::<RadrootsActiveOrderPaymentRecord>::new(),
+            Vec::<RadrootsActiveOrderSettlementRecord>::new(),
         );
 
         assert_eq!(projection.status, RadrootsActiveOrderStatus::Invalid);
@@ -3543,6 +4591,8 @@ mod tests {
             Vec::<RadrootsActiveOrderFulfillmentRecord>::new(),
             Vec::<RadrootsActiveOrderCancellationRecord>::new(),
             Vec::<RadrootsActiveOrderReceiptRecord>::new(),
+            Vec::<RadrootsActiveOrderPaymentRecord>::new(),
+            Vec::<RadrootsActiveOrderSettlementRecord>::new(),
         );
 
         assert_eq!(projection.status, RadrootsActiveOrderStatus::Invalid);
@@ -3646,10 +4696,9 @@ mod tests {
         );
         assert_eq!(projection.last_event_id.as_deref(), Some("cancel-1"));
         assert!(projection.lifecycle_terminal);
-        assert!(projection.settlement_pending);
         assert_eq!(
-            projection.settlement_reason.as_deref(),
-            Some("changed plans")
+            projection.payment,
+            RadrootsActiveOrderPaymentProjection::not_recorded()
         );
         assert!(projection.issues.is_empty());
     }
@@ -3744,7 +4793,10 @@ mod tests {
         assert_eq!(projection.receipt_issue, None);
         assert_eq!(projection.receipt_received_at, Some(1_777_665_600));
         assert!(projection.lifecycle_terminal);
-        assert!(!projection.settlement_pending);
+        assert_eq!(
+            projection.payment,
+            RadrootsActiveOrderPaymentProjection::not_recorded()
+        );
     }
 
     #[test]
@@ -3798,10 +4850,9 @@ mod tests {
         assert_eq!(projection.receipt_received, Some(false));
         assert_eq!(projection.receipt_issue.as_deref(), Some("damaged items"));
         assert!(projection.lifecycle_terminal);
-        assert!(projection.settlement_pending);
         assert_eq!(
-            projection.settlement_reason.as_deref(),
-            Some("damaged items")
+            projection.payment,
+            RadrootsActiveOrderPaymentProjection::not_recorded()
         );
     }
 

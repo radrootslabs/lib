@@ -21,13 +21,20 @@ serde = [
   "radroots_events/serde",
   "radroots_events_codec/serde",
 ]
-serde_json = ["serde", "dep:serde_json", "radroots_events_codec/serde_json"]
+serde_json = [
+  "serde",
+  "dep:hex",
+  "dep:serde_json",
+  "dep:sha2",
+  "radroots_events_codec/serde_json",
+]
 ts-rs = ["dep:ts-rs", "radroots_events/ts-rs", "radroots_events/std"]
 
 [dependencies]
 radroots_core = { workspace = true, default-features = false }
 radroots_events = { workspace = true, default-features = false }
 radroots_events_codec = { workspace = true, default-features = false }
+hex = { workspace = true, optional = true }
 serde = { workspace = true, default-features = false, features = [
   "alloc",
   "derive",
@@ -35,5 +42,6 @@ serde = { workspace = true, default-features = false, features = [
 serde_json = { workspace = true, default-features = false, features = [
   "alloc",
 ], optional = true }
+sha2 = { workspace = true, default-features = false, optional = true }
 thiserror = { workspace = true }
 ts-rs = { workspace = true, optional = true }
