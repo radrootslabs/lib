@@ -11,6 +11,7 @@ use radroots_events::{
         RadrootsTradeMessagePayload, RadrootsTradeMessageType, RadrootsTradeOrderCancelled,
         RadrootsTradeOrderDecisionEvent, RadrootsTradeOrderRequested,
         RadrootsTradeOrderRevisionDecisionEvent, RadrootsTradeOrderRevisionProposed,
+        RadrootsTradePaymentRecorded, RadrootsTradeSettlementDecisionEvent,
     },
 };
 
@@ -100,6 +101,15 @@ fn map_active_payload_error(error: RadrootsActiveTradePayloadError) -> EventEnco
         }
         RadrootsActiveTradePayloadError::UnexpectedReceiptIssue => {
             EventEncodeError::InvalidField("receipt.issue")
+        }
+        RadrootsActiveTradePayloadError::InvalidPaymentAmount => {
+            EventEncodeError::InvalidField("payment.amount")
+        }
+        RadrootsActiveTradePayloadError::MissingSettlementReason => {
+            EventEncodeError::EmptyRequiredField("settlement.reason")
+        }
+        RadrootsActiveTradePayloadError::UnexpectedSettlementReason => {
+            EventEncodeError::InvalidField("settlement.reason")
         }
     }
 }
@@ -330,6 +340,56 @@ pub fn active_trade_buyer_receipt_event_build(
     active_trade_envelope_event_build(
         &payload.seller_pubkey,
         RadrootsActiveTradeMessageType::TradeBuyerReceipt,
+        &payload.listing_addr,
+        &payload.order_id,
+        None,
+        Some(root_event_id),
+        Some(prev_event_id),
+        payload,
+    )
+}
+
+#[cfg(feature = "serde_json")]
+pub fn active_trade_payment_recorded_event_build(
+    root_event_id: &str,
+    prev_event_id: &str,
+    payload: &RadrootsTradePaymentRecorded,
+) -> Result<WireEventParts, EventEncodeError> {
+    payload.validate().map_err(map_active_payload_error)?;
+    if payload.root_event_id != root_event_id {
+        return Err(EventEncodeError::InvalidField("root_event_id"));
+    }
+    if payload.previous_event_id != prev_event_id {
+        return Err(EventEncodeError::InvalidField("previous_event_id"));
+    }
+    active_trade_envelope_event_build(
+        &payload.seller_pubkey,
+        RadrootsActiveTradeMessageType::TradePaymentRecorded,
+        &payload.listing_addr,
+        &payload.order_id,
+        None,
+        Some(root_event_id),
+        Some(prev_event_id),
+        payload,
+    )
+}
+
+#[cfg(feature = "serde_json")]
+pub fn active_trade_settlement_decision_event_build(
+    root_event_id: &str,
+    prev_event_id: &str,
+    payload: &RadrootsTradeSettlementDecisionEvent,
+) -> Result<WireEventParts, EventEncodeError> {
+    payload.validate().map_err(map_active_payload_error)?;
+    if payload.root_event_id != root_event_id {
+        return Err(EventEncodeError::InvalidField("root_event_id"));
+    }
+    if payload.previous_event_id != prev_event_id {
+        return Err(EventEncodeError::InvalidField("previous_event_id"));
+    }
+    active_trade_envelope_event_build(
+        &payload.buyer_pubkey,
+        RadrootsActiveTradeMessageType::TradeSettlementDecision,
         &payload.listing_addr,
         &payload.order_id,
         None,

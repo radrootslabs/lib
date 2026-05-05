@@ -682,6 +682,135 @@ impl RadrootsTradeBuyerReceipt {
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RadrootsTradePaymentMethod {
+    Cash,
+    ManualTransfer,
+    Other,
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsTradePaymentRecorded {
+    pub order_id: String,
+    pub listing_addr: String,
+    pub buyer_pubkey: String,
+    pub seller_pubkey: String,
+    pub root_event_id: String,
+    pub previous_event_id: String,
+    pub agreement_event_id: String,
+    pub quote_id: String,
+    pub quote_version: u32,
+    pub economics_digest: String,
+    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreDecimal"))]
+    pub amount: RadrootsCoreDecimal,
+    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreCurrency"))]
+    pub currency: RadrootsCoreCurrency,
+    pub method: RadrootsTradePaymentMethod,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
+    pub reference: Option<String>,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "number | null"))]
+    pub paid_at: Option<u64>,
+}
+
+impl RadrootsTradePaymentRecorded {
+    pub fn validate(&self) -> Result<(), RadrootsActiveTradePayloadError> {
+        validate_required_field(&self.order_id, "order_id")?;
+        validate_required_field(&self.listing_addr, "listing_addr")?;
+        validate_required_field(&self.buyer_pubkey, "buyer_pubkey")?;
+        validate_required_field(&self.seller_pubkey, "seller_pubkey")?;
+        validate_required_field(&self.root_event_id, "root_event_id")?;
+        validate_required_field(&self.previous_event_id, "previous_event_id")?;
+        validate_required_field(&self.agreement_event_id, "agreement_event_id")?;
+        validate_required_field(&self.quote_id, "quote_id")?;
+        validate_required_field(&self.economics_digest, "economics_digest")?;
+        if self.quote_version == 0 {
+            return Err(RadrootsActiveTradePayloadError::InvalidQuoteVersion);
+        }
+        if self.amount.is_zero() || self.amount.is_sign_negative() {
+            return Err(RadrootsActiveTradePayloadError::InvalidPaymentAmount);
+        }
+        if let Some(reference) = self.reference.as_deref() {
+            validate_required_field(reference, "reference")?;
+        }
+        Ok(())
+    }
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RadrootsTradeSettlementDecision {
+    Accepted,
+    Rejected,
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsTradeSettlementDecisionEvent {
+    pub order_id: String,
+    pub listing_addr: String,
+    pub seller_pubkey: String,
+    pub buyer_pubkey: String,
+    pub root_event_id: String,
+    pub previous_event_id: String,
+    pub agreement_event_id: String,
+    pub payment_event_id: String,
+    pub quote_id: String,
+    pub quote_version: u32,
+    pub economics_digest: String,
+    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreDecimal"))]
+    pub amount: RadrootsCoreDecimal,
+    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreCurrency"))]
+    pub currency: RadrootsCoreCurrency,
+    pub decision: RadrootsTradeSettlementDecision,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
+    pub reason: Option<String>,
+}
+
+impl RadrootsTradeSettlementDecisionEvent {
+    pub fn validate(&self) -> Result<(), RadrootsActiveTradePayloadError> {
+        validate_required_field(&self.order_id, "order_id")?;
+        validate_required_field(&self.listing_addr, "listing_addr")?;
+        validate_required_field(&self.seller_pubkey, "seller_pubkey")?;
+        validate_required_field(&self.buyer_pubkey, "buyer_pubkey")?;
+        validate_required_field(&self.root_event_id, "root_event_id")?;
+        validate_required_field(&self.previous_event_id, "previous_event_id")?;
+        validate_required_field(&self.agreement_event_id, "agreement_event_id")?;
+        validate_required_field(&self.payment_event_id, "payment_event_id")?;
+        validate_required_field(&self.quote_id, "quote_id")?;
+        validate_required_field(&self.economics_digest, "economics_digest")?;
+        if self.quote_version == 0 {
+            return Err(RadrootsActiveTradePayloadError::InvalidQuoteVersion);
+        }
+        if self.amount.is_zero() || self.amount.is_sign_negative() {
+            return Err(RadrootsActiveTradePayloadError::InvalidPaymentAmount);
+        }
+        match self.decision {
+            RadrootsTradeSettlementDecision::Accepted => {
+                if self.reason.is_some() {
+                    return Err(RadrootsActiveTradePayloadError::UnexpectedSettlementReason);
+                }
+            }
+            RadrootsTradeSettlementDecision::Rejected => match self.reason.as_deref() {
+                Some(reason) => validate_required_field(reason, "reason")?,
+                None => return Err(RadrootsActiveTradePayloadError::MissingSettlementReason),
+            },
+        }
+        Ok(())
+    }
+}
+
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeQuestion {
     pub question_id: String,
@@ -854,6 +983,10 @@ pub enum RadrootsActiveTradeMessageType {
     TradeFulfillmentUpdated,
     #[cfg_attr(feature = "serde", serde(rename = "TradeBuyerReceipt"))]
     TradeBuyerReceipt,
+    #[cfg_attr(feature = "serde", serde(rename = "TradePaymentRecorded"))]
+    TradePaymentRecorded,
+    #[cfg_attr(feature = "serde", serde(rename = "TradeSettlementDecision"))]
+    TradeSettlementDecision,
 }
 
 impl RadrootsActiveTradeMessageType {
@@ -867,6 +1000,8 @@ impl RadrootsActiveTradeMessageType {
             KIND_TRADE_CANCEL => Some(Self::TradeOrderCancelled),
             KIND_TRADE_FULFILLMENT_UPDATE => Some(Self::TradeFulfillmentUpdated),
             KIND_TRADE_RECEIPT => Some(Self::TradeBuyerReceipt),
+            KIND_TRADE_PAYMENT_RECORDED => Some(Self::TradePaymentRecorded),
+            KIND_TRADE_SETTLEMENT_DECISION => Some(Self::TradeSettlementDecision),
             _ => None,
         }
     }
@@ -881,6 +1016,8 @@ impl RadrootsActiveTradeMessageType {
             Self::TradeOrderCancelled => KIND_TRADE_CANCEL,
             Self::TradeFulfillmentUpdated => KIND_TRADE_FULFILLMENT_UPDATE,
             Self::TradeBuyerReceipt => KIND_TRADE_RECEIPT,
+            Self::TradePaymentRecorded => KIND_TRADE_PAYMENT_RECORDED,
+            Self::TradeSettlementDecision => KIND_TRADE_SETTLEMENT_DECISION,
         }
     }
 
@@ -894,6 +1031,8 @@ impl RadrootsActiveTradeMessageType {
             Self::TradeOrderCancelled => "TradeOrderCancelled",
             Self::TradeFulfillmentUpdated => "TradeFulfillmentUpdated",
             Self::TradeBuyerReceipt => "TradeBuyerReceipt",
+            Self::TradePaymentRecorded => "TradePaymentRecorded",
+            Self::TradeSettlementDecision => "TradeSettlementDecision",
         }
     }
 
@@ -912,6 +1051,8 @@ impl RadrootsActiveTradeMessageType {
                 | Self::TradeOrderCancelled
                 | Self::TradeFulfillmentUpdated
                 | Self::TradeBuyerReceipt
+                | Self::TradePaymentRecorded
+                | Self::TradeSettlementDecision
         )
     }
 }
@@ -1211,6 +1352,9 @@ pub enum RadrootsActiveTradePayloadError {
     InvalidFulfillmentStatus,
     MissingReceiptIssue,
     UnexpectedReceiptIssue,
+    InvalidPaymentAmount,
+    MissingSettlementReason,
+    UnexpectedSettlementReason,
 }
 
 impl core::fmt::Display for RadrootsActiveTradePayloadError {
@@ -1284,6 +1428,18 @@ impl core::fmt::Display for RadrootsActiveTradePayloadError {
             }
             Self::UnexpectedReceiptIssue => {
                 write!(f, "receipt issue must be absent when received is true")
+            }
+            Self::InvalidPaymentAmount => {
+                write!(f, "payment amount must be greater than zero")
+            }
+            Self::MissingSettlementReason => {
+                write!(f, "settlement reason is required when decision is rejected")
+            }
+            Self::UnexpectedSettlementReason => {
+                write!(
+                    f,
+                    "settlement reason must be absent when decision is accepted"
+                )
             }
         }
     }
@@ -1919,6 +2075,14 @@ mod tests {
             RadrootsActiveTradeMessageType::from_kind(KIND_TRADE_RECEIPT),
             Some(RadrootsActiveTradeMessageType::TradeBuyerReceipt)
         );
+        assert_eq!(
+            RadrootsActiveTradeMessageType::from_kind(KIND_TRADE_PAYMENT_RECORDED),
+            Some(RadrootsActiveTradeMessageType::TradePaymentRecorded)
+        );
+        assert_eq!(
+            RadrootsActiveTradeMessageType::from_kind(KIND_TRADE_SETTLEMENT_DECISION),
+            Some(RadrootsActiveTradeMessageType::TradeSettlementDecision)
+        );
         assert_eq!(RadrootsActiveTradeMessageType::from_kind(3431), None);
         assert_eq!(
             RadrootsActiveTradeMessageType::TradeOrderRequested.kind(),
@@ -1949,6 +2113,14 @@ mod tests {
             KIND_TRADE_RECEIPT
         );
         assert_eq!(
+            RadrootsActiveTradeMessageType::TradePaymentRecorded.kind(),
+            KIND_TRADE_PAYMENT_RECORDED
+        );
+        assert_eq!(
+            RadrootsActiveTradeMessageType::TradeSettlementDecision.kind(),
+            KIND_TRADE_SETTLEMENT_DECISION
+        );
+        assert_eq!(
             RadrootsActiveTradeMessageType::TradeOrderRequested.name(),
             "TradeOrderRequested"
         );
@@ -1976,6 +2148,14 @@ mod tests {
             RadrootsActiveTradeMessageType::TradeBuyerReceipt.name(),
             "TradeBuyerReceipt"
         );
+        assert_eq!(
+            RadrootsActiveTradeMessageType::TradePaymentRecorded.name(),
+            "TradePaymentRecorded"
+        );
+        assert_eq!(
+            RadrootsActiveTradeMessageType::TradeSettlementDecision.name(),
+            "TradeSettlementDecision"
+        );
         assert!(RadrootsActiveTradeMessageType::TradeOrderRequested.requires_listing_snapshot());
         assert!(RadrootsActiveTradeMessageType::TradeOrderDecision.requires_trade_chain());
         assert!(RadrootsActiveTradeMessageType::TradeOrderRevisionProposed.requires_trade_chain());
@@ -1983,6 +2163,8 @@ mod tests {
         assert!(RadrootsActiveTradeMessageType::TradeFulfillmentUpdated.requires_trade_chain());
         assert!(RadrootsActiveTradeMessageType::TradeOrderCancelled.requires_trade_chain());
         assert!(RadrootsActiveTradeMessageType::TradeBuyerReceipt.requires_trade_chain());
+        assert!(RadrootsActiveTradeMessageType::TradePaymentRecorded.requires_trade_chain());
+        assert!(RadrootsActiveTradeMessageType::TradeSettlementDecision.requires_trade_chain());
 
         let request_name =
             serde_json::to_value(RadrootsActiveTradeMessageType::TradeOrderRequested).unwrap();
@@ -2000,6 +2182,10 @@ mod tests {
             serde_json::to_value(RadrootsActiveTradeMessageType::TradeOrderCancelled).unwrap();
         let receipt_name =
             serde_json::to_value(RadrootsActiveTradeMessageType::TradeBuyerReceipt).unwrap();
+        let payment_name =
+            serde_json::to_value(RadrootsActiveTradeMessageType::TradePaymentRecorded).unwrap();
+        let settlement_name =
+            serde_json::to_value(RadrootsActiveTradeMessageType::TradeSettlementDecision).unwrap();
         assert_eq!(request_name, serde_json::json!("TradeOrderRequested"));
         assert_eq!(decision_name, serde_json::json!("TradeOrderDecision"));
         assert_eq!(
@@ -2016,6 +2202,11 @@ mod tests {
         );
         assert_eq!(cancellation_name, serde_json::json!("TradeOrderCancelled"));
         assert_eq!(receipt_name, serde_json::json!("TradeBuyerReceipt"));
+        assert_eq!(payment_name, serde_json::json!("TradePaymentRecorded"));
+        assert_eq!(
+            settlement_name,
+            serde_json::json!("TradeSettlementDecision")
+        );
     }
 
     #[test]

@@ -12,7 +12,8 @@ use radroots_events::{
         RadrootsTradeEnvelope, RadrootsTradeEnvelopeError, RadrootsTradeFulfillmentUpdated,
         RadrootsTradeMessageType, RadrootsTradeOrderCancelled, RadrootsTradeOrderDecisionEvent,
         RadrootsTradeOrderRequested, RadrootsTradeOrderRevisionDecisionEvent,
-        RadrootsTradeOrderRevisionProposed,
+        RadrootsTradeOrderRevisionProposed, RadrootsTradePaymentRecorded,
+        RadrootsTradeSettlementDecisionEvent,
     },
 };
 #[cfg(feature = "serde_json")]
@@ -552,6 +553,86 @@ pub fn active_trade_buyer_receipt_from_event(
 }
 
 #[cfg(feature = "serde_json")]
+pub fn active_trade_payment_recorded_from_event(
+    event: &RadrootsNostrEvent,
+) -> Result<
+    RadrootsActiveTradeEnvelope<RadrootsTradePaymentRecorded>,
+    RadrootsActiveTradeEnvelopeParseError,
+> {
+    let envelope = active_trade_envelope_from_event::<RadrootsTradePaymentRecorded>(event)?;
+    if envelope.message_type != RadrootsActiveTradeMessageType::TradePaymentRecorded {
+        return Err(
+            RadrootsActiveTradeEnvelopeParseError::MessageTypeKindMismatch {
+                event_kind: event.kind,
+                message_type: envelope.message_type,
+            },
+        );
+    }
+    envelope
+        .payload
+        .validate()
+        .map_err(RadrootsActiveTradeEnvelopeParseError::InvalidPayload)?;
+    validate_active_order_binding(
+        event,
+        &envelope,
+        &envelope.payload.order_id,
+        &envelope.payload.listing_addr,
+        &envelope.payload.buyer_pubkey,
+        &envelope.payload.seller_pubkey,
+    )?;
+    let context = active_trade_event_context_from_tags(envelope.message_type, &event.tags)?;
+    if context.root_event_id.as_deref() != Some(envelope.payload.root_event_id.as_str()) {
+        return Err(RadrootsActiveTradeEnvelopeParseError::PayloadBindingMismatch("root_event_id"));
+    }
+    if context.prev_event_id.as_deref() != Some(envelope.payload.previous_event_id.as_str()) {
+        return Err(
+            RadrootsActiveTradeEnvelopeParseError::PayloadBindingMismatch("previous_event_id"),
+        );
+    }
+    Ok(envelope)
+}
+
+#[cfg(feature = "serde_json")]
+pub fn active_trade_settlement_decision_from_event(
+    event: &RadrootsNostrEvent,
+) -> Result<
+    RadrootsActiveTradeEnvelope<RadrootsTradeSettlementDecisionEvent>,
+    RadrootsActiveTradeEnvelopeParseError,
+> {
+    let envelope = active_trade_envelope_from_event::<RadrootsTradeSettlementDecisionEvent>(event)?;
+    if envelope.message_type != RadrootsActiveTradeMessageType::TradeSettlementDecision {
+        return Err(
+            RadrootsActiveTradeEnvelopeParseError::MessageTypeKindMismatch {
+                event_kind: event.kind,
+                message_type: envelope.message_type,
+            },
+        );
+    }
+    envelope
+        .payload
+        .validate()
+        .map_err(RadrootsActiveTradeEnvelopeParseError::InvalidPayload)?;
+    validate_active_order_binding(
+        event,
+        &envelope,
+        &envelope.payload.order_id,
+        &envelope.payload.listing_addr,
+        &envelope.payload.seller_pubkey,
+        &envelope.payload.buyer_pubkey,
+    )?;
+    let context = active_trade_event_context_from_tags(envelope.message_type, &event.tags)?;
+    if context.root_event_id.as_deref() != Some(envelope.payload.root_event_id.as_str()) {
+        return Err(RadrootsActiveTradeEnvelopeParseError::PayloadBindingMismatch("root_event_id"));
+    }
+    if context.prev_event_id.as_deref() != Some(envelope.payload.previous_event_id.as_str()) {
+        return Err(
+            RadrootsActiveTradeEnvelopeParseError::PayloadBindingMismatch("previous_event_id"),
+        );
+    }
+    Ok(envelope)
+}
+
+#[cfg(feature = "serde_json")]
 pub fn trade_event_context_from_tags(
     message_type: RadrootsTradeMessageType,
     tags: &[Vec<String>],
@@ -722,14 +803,17 @@ mod tests {
         active_trade_envelope_from_event, active_trade_fulfillment_update_from_event,
         active_trade_order_cancel_from_event, active_trade_order_decision_from_event,
         active_trade_order_request_from_event, active_trade_order_revision_decision_from_event,
-        active_trade_order_revision_proposal_from_event, trade_envelope_from_event,
+        active_trade_order_revision_proposal_from_event, active_trade_payment_recorded_from_event,
+        active_trade_settlement_decision_from_event, trade_envelope_from_event,
         trade_event_context_from_tags,
     };
     use crate::trade::encode::{
         active_trade_buyer_receipt_event_build, active_trade_fulfillment_update_event_build,
         active_trade_order_cancel_event_build, active_trade_order_decision_event_build,
         active_trade_order_request_event_build, active_trade_order_revision_decision_event_build,
-        active_trade_order_revision_proposal_event_build, trade_envelope_event_build,
+        active_trade_order_revision_proposal_event_build,
+        active_trade_payment_recorded_event_build, active_trade_settlement_decision_event_build,
+        trade_envelope_event_build,
     };
     use crate::trade::tags::TAG_LISTING_EVENT;
     use radroots_core::{
@@ -740,7 +824,8 @@ mod tests {
         kinds::{
             KIND_TRADE_CANCEL, KIND_TRADE_FULFILLMENT_UPDATE, KIND_TRADE_ORDER_DECISION,
             KIND_TRADE_ORDER_REQUEST, KIND_TRADE_ORDER_REVISION,
-            KIND_TRADE_ORDER_REVISION_RESPONSE, KIND_TRADE_RECEIPT,
+            KIND_TRADE_ORDER_REVISION_RESPONSE, KIND_TRADE_PAYMENT_RECORDED, KIND_TRADE_RECEIPT,
+            KIND_TRADE_SETTLEMENT_DECISION,
         },
         tags::{TAG_D, TAG_E_PREV, TAG_E_ROOT},
         trade::{
@@ -753,7 +838,9 @@ mod tests {
             RadrootsTradeOrderEconomicItem, RadrootsTradeOrderEconomicLine,
             RadrootsTradeOrderEconomics, RadrootsTradeOrderItem, RadrootsTradeOrderRequested,
             RadrootsTradeOrderRevisionDecision, RadrootsTradeOrderRevisionDecisionEvent,
-            RadrootsTradeOrderRevisionProposed, RadrootsTradePricingBasis,
+            RadrootsTradeOrderRevisionProposed, RadrootsTradePaymentMethod,
+            RadrootsTradePaymentRecorded, RadrootsTradePricingBasis,
+            RadrootsTradeSettlementDecision, RadrootsTradeSettlementDecisionEvent,
         },
     };
 
@@ -902,6 +989,49 @@ mod tests {
             received,
             issue: (!received).then(|| "damaged items".into()),
             received_at: 1_777_665_600,
+        }
+    }
+
+    fn active_payment_recorded() -> RadrootsTradePaymentRecorded {
+        RadrootsTradePaymentRecorded {
+            order_id: "order-1".into(),
+            listing_addr: "30402:seller:AAAAAAAAAAAAAAAAAAAAAg".into(),
+            buyer_pubkey: "buyer".into(),
+            seller_pubkey: "seller".into(),
+            root_event_id: "root-event".into(),
+            previous_event_id: "agreement-event".into(),
+            agreement_event_id: "agreement-event".into(),
+            quote_id: "quote-1".into(),
+            quote_version: 1,
+            economics_digest: "digest-1".into(),
+            amount: decimal("15"),
+            currency: RadrootsCoreCurrency::USD,
+            method: RadrootsTradePaymentMethod::Cash,
+            reference: Some("cash drawer".into()),
+            paid_at: Some(1_777_665_600),
+        }
+    }
+
+    fn active_settlement_decision(
+        decision: RadrootsTradeSettlementDecision,
+    ) -> RadrootsTradeSettlementDecisionEvent {
+        RadrootsTradeSettlementDecisionEvent {
+            order_id: "order-1".into(),
+            listing_addr: "30402:seller:AAAAAAAAAAAAAAAAAAAAAg".into(),
+            seller_pubkey: "seller".into(),
+            buyer_pubkey: "buyer".into(),
+            root_event_id: "root-event".into(),
+            previous_event_id: "payment-event".into(),
+            agreement_event_id: "agreement-event".into(),
+            payment_event_id: "payment-event".into(),
+            quote_id: "quote-1".into(),
+            quote_version: 1,
+            economics_digest: "digest-1".into(),
+            amount: decimal("15"),
+            currency: RadrootsCoreCurrency::USD,
+            decision,
+            reason: (decision == RadrootsTradeSettlementDecision::Rejected)
+                .then(|| "reference mismatch".into()),
         }
     }
 
@@ -1204,6 +1334,85 @@ mod tests {
     }
 
     #[test]
+    fn active_payment_recorded_builder_emits_canonical_buyer_chain_shape() {
+        let payload = active_payment_recorded();
+        let built = active_trade_payment_recorded_event_build(
+            payload.root_event_id.as_str(),
+            payload.previous_event_id.as_str(),
+            &payload,
+        )
+        .unwrap();
+        let envelope: RadrootsActiveTradeEnvelope<RadrootsTradePaymentRecorded> =
+            serde_json::from_str(&built.content).unwrap();
+
+        assert_eq!(built.kind, KIND_TRADE_PAYMENT_RECORDED);
+        assert_eq!(
+            envelope.message_type,
+            RadrootsActiveTradeMessageType::TradePaymentRecorded
+        );
+        assert_eq!(envelope.payload.amount, decimal("15"));
+        assert_eq!(envelope.payload.method, RadrootsTradePaymentMethod::Cash);
+        assert_eq!(built.tags[0], vec!["p".to_string(), "seller".to_string()]);
+        assert_eq!(
+            built.tags[2],
+            vec![TAG_D.to_string(), "order-1".to_string()]
+        );
+        assert!(
+            built
+                .tags
+                .iter()
+                .any(|tag| tag == &vec![TAG_E_ROOT.to_string(), "root-event".to_string()])
+        );
+        assert!(
+            built
+                .tags
+                .iter()
+                .any(|tag| tag == &vec![TAG_E_PREV.to_string(), "agreement-event".to_string()])
+        );
+    }
+
+    #[test]
+    fn active_settlement_decision_builder_emits_canonical_seller_chain_shape() {
+        let payload = active_settlement_decision(RadrootsTradeSettlementDecision::Accepted);
+        let built = active_trade_settlement_decision_event_build(
+            payload.root_event_id.as_str(),
+            payload.previous_event_id.as_str(),
+            &payload,
+        )
+        .unwrap();
+        let envelope: RadrootsActiveTradeEnvelope<RadrootsTradeSettlementDecisionEvent> =
+            serde_json::from_str(&built.content).unwrap();
+
+        assert_eq!(built.kind, KIND_TRADE_SETTLEMENT_DECISION);
+        assert_eq!(
+            envelope.message_type,
+            RadrootsActiveTradeMessageType::TradeSettlementDecision
+        );
+        assert_eq!(
+            envelope.payload.decision,
+            RadrootsTradeSettlementDecision::Accepted
+        );
+        assert_eq!(envelope.payload.reason, None);
+        assert_eq!(built.tags[0], vec!["p".to_string(), "buyer".to_string()]);
+        assert_eq!(
+            built.tags[2],
+            vec![TAG_D.to_string(), "order-1".to_string()]
+        );
+        assert!(
+            built
+                .tags
+                .iter()
+                .any(|tag| tag == &vec![TAG_E_ROOT.to_string(), "root-event".to_string()])
+        );
+        assert!(
+            built
+                .tags
+                .iter()
+                .any(|tag| tag == &vec![TAG_E_PREV.to_string(), "payment-event".to_string()])
+        );
+    }
+
+    #[test]
     fn active_order_request_parse_roundtrips_and_validates_tags() {
         let payload = active_order_request();
         let built = active_trade_order_request_event_build(&listing_event_ptr(), &payload).unwrap();
@@ -1346,6 +1555,60 @@ mod tests {
         assert_eq!(
             envelope.message_type,
             RadrootsActiveTradeMessageType::TradeBuyerReceipt
+        );
+    }
+
+    #[test]
+    fn active_payment_recorded_parse_roundtrips_and_validates_buyer_actor() {
+        let payload = active_payment_recorded();
+        let built = active_trade_payment_recorded_event_build(
+            payload.root_event_id.as_str(),
+            payload.previous_event_id.as_str(),
+            &payload,
+        )
+        .unwrap();
+        let event = RadrootsNostrEvent {
+            id: "payment-event".into(),
+            author: "buyer".into(),
+            created_at: 1,
+            kind: built.kind,
+            tags: built.tags,
+            content: built.content,
+            sig: "sig".into(),
+        };
+        let envelope = active_trade_payment_recorded_from_event(&event).unwrap();
+
+        assert_eq!(envelope.payload, payload);
+        assert_eq!(
+            envelope.message_type,
+            RadrootsActiveTradeMessageType::TradePaymentRecorded
+        );
+    }
+
+    #[test]
+    fn active_settlement_decision_parse_roundtrips_and_validates_seller_actor() {
+        let payload = active_settlement_decision(RadrootsTradeSettlementDecision::Rejected);
+        let built = active_trade_settlement_decision_event_build(
+            payload.root_event_id.as_str(),
+            payload.previous_event_id.as_str(),
+            &payload,
+        )
+        .unwrap();
+        let event = RadrootsNostrEvent {
+            id: "settlement-event".into(),
+            author: "seller".into(),
+            created_at: 1,
+            kind: built.kind,
+            tags: built.tags,
+            content: built.content,
+            sig: "sig".into(),
+        };
+        let envelope = active_trade_settlement_decision_from_event(&event).unwrap();
+
+        assert_eq!(envelope.payload, payload);
+        assert_eq!(
+            envelope.message_type,
+            RadrootsActiveTradeMessageType::TradeSettlementDecision
         );
     }
 

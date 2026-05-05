@@ -68,6 +68,8 @@ pub const KIND_TRADE_DISCOUNT_DECLINE: u32 = KIND_TRADE_FORBIDDEN_3431;
 pub const KIND_TRADE_CANCEL: u32 = 3432;
 pub const KIND_TRADE_FULFILLMENT_UPDATE: u32 = 3433;
 pub const KIND_TRADE_RECEIPT: u32 = 3434;
+pub const KIND_TRADE_PAYMENT_RECORDED: u32 = 3435;
+pub const KIND_TRADE_SETTLEMENT_DECISION: u32 = 3436;
 
 pub const KIND_TRADE_LISTING_ORDER_REQ: u32 = KIND_TRADE_ORDER_REQUEST;
 pub const KIND_TRADE_LISTING_ORDER_RES: u32 = KIND_TRADE_ORDER_RESPONSE;
@@ -88,7 +90,7 @@ pub const TRADE_SERVICE_KINDS: [u32; 2] = [
     KIND_TRADE_LISTING_VALIDATE_RES,
 ];
 
-pub const TRADE_PUBLIC_KINDS: [u32; 12] = [
+pub const TRADE_PUBLIC_KINDS: [u32; 14] = [
     KIND_TRADE_ORDER_REQUEST,
     KIND_TRADE_ORDER_RESPONSE,
     KIND_TRADE_ORDER_REVISION,
@@ -101,9 +103,11 @@ pub const TRADE_PUBLIC_KINDS: [u32; 12] = [
     KIND_TRADE_CANCEL,
     KIND_TRADE_FULFILLMENT_UPDATE,
     KIND_TRADE_RECEIPT,
+    KIND_TRADE_PAYMENT_RECORDED,
+    KIND_TRADE_SETTLEMENT_DECISION,
 ];
 
-pub const TRADE_KINDS: [u32; 14] = [
+pub const TRADE_KINDS: [u32; 16] = [
     KIND_TRADE_LISTING_VALIDATE_REQ,
     KIND_TRADE_LISTING_VALIDATE_RES,
     KIND_TRADE_ORDER_REQUEST,
@@ -118,13 +122,15 @@ pub const TRADE_KINDS: [u32; 14] = [
     KIND_TRADE_CANCEL,
     KIND_TRADE_FULFILLMENT_UPDATE,
     KIND_TRADE_RECEIPT,
+    KIND_TRADE_PAYMENT_RECORDED,
+    KIND_TRADE_SETTLEMENT_DECISION,
 ];
 
-pub const TRADE_LISTING_KINDS: [u32; 14] = TRADE_KINDS;
+pub const TRADE_LISTING_KINDS: [u32; 16] = TRADE_KINDS;
 
 pub const ACTIVE_TRADE_LISTING_KINDS: [u32; 2] = [KIND_LISTING, KIND_LISTING_DRAFT];
 
-pub const ACTIVE_TRADE_PUBLIC_KINDS: [u32; 7] = [
+pub const ACTIVE_TRADE_PUBLIC_KINDS: [u32; 9] = [
     KIND_TRADE_ORDER_REQUEST,
     KIND_TRADE_ORDER_DECISION,
     KIND_TRADE_ORDER_REVISION,
@@ -132,9 +138,11 @@ pub const ACTIVE_TRADE_PUBLIC_KINDS: [u32; 7] = [
     KIND_TRADE_CANCEL,
     KIND_TRADE_FULFILLMENT_UPDATE,
     KIND_TRADE_RECEIPT,
+    KIND_TRADE_PAYMENT_RECORDED,
+    KIND_TRADE_SETTLEMENT_DECISION,
 ];
 
-pub const ACTIVE_TRADE_KINDS: [u32; 9] = [
+pub const ACTIVE_TRADE_KINDS: [u32; 11] = [
     KIND_LISTING,
     KIND_LISTING_DRAFT,
     KIND_TRADE_ORDER_REQUEST,
@@ -144,6 +152,8 @@ pub const ACTIVE_TRADE_KINDS: [u32; 9] = [
     KIND_TRADE_CANCEL,
     KIND_TRADE_FULFILLMENT_UPDATE,
     KIND_TRADE_RECEIPT,
+    KIND_TRADE_PAYMENT_RECORDED,
+    KIND_TRADE_SETTLEMENT_DECISION,
 ];
 
 pub const KIND_JOB_REQUEST_MIN: u32 = 5000;
@@ -188,6 +198,8 @@ pub const fn is_trade_public_kind(kind: u32) -> bool {
             | KIND_TRADE_CANCEL
             | KIND_TRADE_FULFILLMENT_UPDATE
             | KIND_TRADE_RECEIPT
+            | KIND_TRADE_PAYMENT_RECORDED
+            | KIND_TRADE_SETTLEMENT_DECISION
     )
 }
 
@@ -212,6 +224,8 @@ pub const fn is_active_trade_public_kind(kind: u32) -> bool {
             | KIND_TRADE_CANCEL
             | KIND_TRADE_FULFILLMENT_UPDATE
             | KIND_TRADE_RECEIPT
+            | KIND_TRADE_PAYMENT_RECORDED
+            | KIND_TRADE_SETTLEMENT_DECISION
     )
 }
 
@@ -751,6 +765,8 @@ mod kinds_constants_tests {
                 KIND_TRADE_CANCEL,
                 KIND_TRADE_FULFILLMENT_UPDATE,
                 KIND_TRADE_RECEIPT,
+                KIND_TRADE_PAYMENT_RECORDED,
+                KIND_TRADE_SETTLEMENT_DECISION,
             ]
         );
         assert_eq!(
@@ -765,6 +781,8 @@ mod kinds_constants_tests {
                 KIND_TRADE_CANCEL,
                 KIND_TRADE_FULFILLMENT_UPDATE,
                 KIND_TRADE_RECEIPT,
+                KIND_TRADE_PAYMENT_RECORDED,
+                KIND_TRADE_SETTLEMENT_DECISION,
             ]
         );
 
@@ -779,6 +797,8 @@ mod kinds_constants_tests {
         assert!(is_active_trade_public_kind(KIND_TRADE_CANCEL));
         assert!(is_active_trade_public_kind(KIND_TRADE_FULFILLMENT_UPDATE));
         assert!(is_active_trade_public_kind(KIND_TRADE_RECEIPT));
+        assert!(is_active_trade_public_kind(KIND_TRADE_PAYMENT_RECORDED));
+        assert!(is_active_trade_public_kind(KIND_TRADE_SETTLEMENT_DECISION));
         assert!(!is_active_trade_public_kind(
             KIND_TRADE_LISTING_VALIDATE_REQ
         ));
