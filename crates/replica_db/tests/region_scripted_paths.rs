@@ -722,10 +722,13 @@ assert_trade_product_paths!(
         "profile": "floral",
         "year": 2024,
         "qty_amt": 100,
+        "qty_amt_exact": "100",
         "qty_unit": "kg",
         "price_amt": 7.5,
+        "price_amt_exact": "7.5",
         "price_currency": "USD",
         "price_qty_amt": 1,
+        "price_qty_amt_exact": "1",
         "price_qty_unit": "kg"
     }),
     trade_product_create,

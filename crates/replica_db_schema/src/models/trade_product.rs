@@ -19,12 +19,15 @@ pub struct TradeProduct {
     pub profile: String,
     pub year: i64,
     pub qty_amt: i64,
+    pub qty_amt_exact: Option<String>,
     pub qty_unit: String,
     pub qty_label: Option<String>,
     pub qty_avail: Option<i64>,
     pub price_amt: f64,
+    pub price_amt_exact: Option<String>,
     pub price_currency: String,
     pub price_qty_amt: u32,
+    pub price_qty_amt_exact: Option<String>,
     pub price_qty_unit: String,
     pub listing_addr: Option<String>,
     pub primary_bin_id: Option<String>,
@@ -43,14 +46,17 @@ pub struct ITradeProductFields {
     pub profile: String,
     pub year: i64,
     pub qty_amt: i64,
+    pub qty_amt_exact: String,
     pub qty_unit: String,
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub qty_label: Option<String>,
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "number | null"))]
     pub qty_avail: Option<i64>,
     pub price_amt: f64,
+    pub price_amt_exact: String,
     pub price_currency: String,
     pub price_qty_amt: u32,
+    pub price_qty_amt_exact: String,
     pub price_qty_unit: String,
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub listing_addr: Option<String>,
@@ -82,6 +88,8 @@ pub struct ITradeProductFieldsPartial {
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "number | null"))]
     pub qty_amt: Option<serde_json::Value>,
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
+    pub qty_amt_exact: Option<serde_json::Value>,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub qty_unit: Option<serde_json::Value>,
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub qty_label: Option<serde_json::Value>,
@@ -90,9 +98,13 @@ pub struct ITradeProductFieldsPartial {
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "number | null"))]
     pub price_amt: Option<serde_json::Value>,
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
+    pub price_amt_exact: Option<serde_json::Value>,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub price_currency: Option<serde_json::Value>,
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "number | null"))]
     pub price_qty_amt: Option<serde_json::Value>,
+    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
+    pub price_qty_amt_exact: Option<serde_json::Value>,
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub price_qty_unit: Option<serde_json::Value>,
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
@@ -131,6 +143,8 @@ pub struct ITradeProductFieldsFilter {
     #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub qty_amt: Option<i64>,
     #[cfg_attr(feature = "ts-rs", ts(optional))]
+    pub qty_amt_exact: Option<String>,
+    #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub qty_unit: Option<String>,
     #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub qty_label: Option<String>,
@@ -139,9 +153,13 @@ pub struct ITradeProductFieldsFilter {
     #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub price_amt: Option<f64>,
     #[cfg_attr(feature = "ts-rs", ts(optional))]
+    pub price_amt_exact: Option<String>,
+    #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub price_currency: Option<String>,
     #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub price_qty_amt: Option<u32>,
+    #[cfg_attr(feature = "ts-rs", ts(optional))]
+    pub price_qty_amt_exact: Option<String>,
     #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub price_qty_unit: Option<String>,
     #[cfg_attr(feature = "ts-rs", ts(optional))]

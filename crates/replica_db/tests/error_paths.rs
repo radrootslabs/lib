@@ -914,10 +914,13 @@ fn trade_product_error_paths_cover_regions() {
         "profile": "floral",
         "year": 2024,
         "qty_amt": 100,
+        "qty_amt_exact": "100",
         "qty_unit": "kg",
         "price_amt": 7.5,
+        "price_amt_exact": "7.5",
         "price_currency": "USD",
         "price_qty_amt": 1,
+        "price_qty_amt_exact": "1",
         "price_qty_unit": "kg"
     }));
     assert_invalid_query(db.trade_product_create(&create_opts));

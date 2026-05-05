@@ -544,27 +544,21 @@ fn trade_product_fields_from_listing(
 ) -> Result<ITradeProductFields, RadrootsReplicaEventsError> {
     let bin = primary_listing_bin(listing)?;
     let qty_amt = decimal_to_i64(&bin.quantity.amount, "listing primary bin quantity")?;
+    let qty_amt_exact = bin.quantity.amount.to_string();
     let qty_avail = listing
         .inventory_available
         .as_ref()
         .map(|amount| decimal_to_i64(amount, "listing inventory"))
         .transpose()?;
-    let price_amt = bin
+    let price_source = bin
         .display_price
         .as_ref()
-        .unwrap_or(&bin.price_per_canonical_unit.amount)
-        .amount
-        .to_f64_lossy()
-        .ok_or_else(|| {
-            RadrootsReplicaEventsError::InvalidData("listing price amount out of range".to_string())
-        })?;
-    let price_currency = bin
-        .display_price
-        .as_ref()
-        .unwrap_or(&bin.price_per_canonical_unit.amount)
-        .currency
-        .as_str()
-        .to_string();
+        .unwrap_or(&bin.price_per_canonical_unit.amount);
+    let price_amt = price_source.amount.to_f64_lossy().ok_or_else(|| {
+        RadrootsReplicaEventsError::InvalidData("listing price amount out of range".to_string())
+    })?;
+    let price_amt_exact = price_source.amount.to_string();
+    let price_currency = price_source.currency.as_str().to_string();
     let price_qty_amt = if bin.display_price.is_some() {
         1
     } else {
@@ -572,6 +566,11 @@ fn trade_product_fields_from_listing(
             &bin.price_per_canonical_unit.quantity.amount,
             "listing price quantity",
         )?
+    };
+    let price_qty_amt_exact = if bin.display_price.is_some() {
+        "1".to_string()
+    } else {
+        bin.price_per_canonical_unit.quantity.amount.to_string()
     };
     let price_qty_unit = bin
         .display_price_unit
@@ -593,6 +592,7 @@ fn trade_product_fields_from_listing(
             .and_then(|value| value.parse::<i64>().ok())
             .unwrap_or_default(),
         qty_amt,
+        qty_amt_exact,
         qty_unit: bin.quantity.unit.to_string(),
         qty_label: bin
             .display_label
@@ -600,8 +600,10 @@ fn trade_product_fields_from_listing(
             .or_else(|| bin.quantity.label.clone()),
         qty_avail,
         price_amt,
+        price_amt_exact,
         price_currency,
         price_qty_amt,
+        price_qty_amt_exact,
         price_qty_unit,
         listing_addr: Some(listing_addr.to_string()),
         primary_bin_id: Some(listing.primary_bin_id.clone()),
@@ -683,12 +685,15 @@ fn trade_product_listing_addr_filter(listing_addr: &str) -> ITradeProductFieldsF
         profile: None,
         year: None,
         qty_amt: None,
+        qty_amt_exact: None,
         qty_unit: None,
         qty_label: None,
         qty_avail: None,
         price_amt: None,
+        price_amt_exact: None,
         price_currency: None,
         price_qty_amt: None,
+        price_qty_amt_exact: None,
         price_qty_unit: None,
         listing_addr: Some(listing_addr.to_string()),
         primary_bin_id: None,
@@ -768,12 +773,15 @@ fn trade_product_partial_from_fields(fields: &ITradeProductFields) -> ITradeProd
         profile: Some(Value::from(fields.profile.clone())),
         year: Some(Value::from(fields.year)),
         qty_amt: Some(Value::from(fields.qty_amt)),
+        qty_amt_exact: Some(Value::from(fields.qty_amt_exact.clone())),
         qty_unit: Some(Value::from(fields.qty_unit.clone())),
         qty_label: to_value_opt(fields.qty_label.clone()),
         qty_avail: fields.qty_avail.map(Value::from).or(Some(Value::Null)),
         price_amt: Some(Value::from(fields.price_amt)),
+        price_amt_exact: Some(Value::from(fields.price_amt_exact.clone())),
         price_currency: Some(Value::from(fields.price_currency.clone())),
         price_qty_amt: Some(Value::from(fields.price_qty_amt)),
+        price_qty_amt_exact: Some(Value::from(fields.price_qty_amt_exact.clone())),
         price_qty_unit: Some(Value::from(fields.price_qty_unit.clone())),
         listing_addr: to_value_opt(fields.listing_addr.clone()),
         primary_bin_id: to_value_opt(fields.primary_bin_id.clone()),
@@ -2350,9 +2358,12 @@ mod tests {
         assert_eq!(search_rows[0].title, "Pasture Eggs");
         assert_eq!(search_rows[0].primary_bin_id.as_deref(), Some("bin-a"));
         assert_eq!(search_rows[0].qty_amt, 12);
+        assert_eq!(search_rows[0].qty_amt_exact.as_deref(), Some("12"));
         assert_eq!(search_rows[0].qty_avail, Some(5));
         assert_eq!(search_rows[0].price_amt, 6.0);
+        assert_eq!(search_rows[0].price_amt_exact.as_deref(), Some("6"));
         assert_eq!(search_rows[0].price_currency, "USD");
+        assert_eq!(search_rows[0].price_qty_amt_exact.as_deref(), Some("1"));
         assert!(
             search_rows[0]
                 .notes
