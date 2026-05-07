@@ -1976,6 +1976,42 @@ impl<'a> FarmClient<'a> {
         farm::build_draft(farm_value)
     }
 
+    #[cfg(all(
+        feature = "identity-models",
+        feature = "relay-client",
+        feature = "signing"
+    ))]
+    pub async fn publish_with_identity(
+        &self,
+        identity: &RadrootsIdentity,
+        farm_value: &farm::RadrootsFarm,
+    ) -> Result<SdkPublishReceipt, SdkPublishError> {
+        let parts = farm::build_draft(farm_value)
+            .map_err(|err| SdkPublishError::Encode(err.to_string()))?;
+        self.client
+            .publish_parts_via_relay_with_identity(identity, parts, "farm.publish_with_identity")
+            .await
+    }
+
+    #[cfg(all(
+        feature = "identity-models",
+        feature = "relay-client",
+        feature = "signing"
+    ))]
+    pub async fn publish_draft_with_identity(
+        &self,
+        identity: &RadrootsIdentity,
+        draft: WireEventParts,
+    ) -> Result<SdkPublishReceipt, SdkPublishError> {
+        self.client
+            .publish_parts_via_relay_with_identity(
+                identity,
+                draft,
+                "farm.publish_draft_with_identity",
+            )
+            .await
+    }
+
     #[cfg(feature = "radrootsd-client")]
     pub async fn publish_farm_via_radrootsd(
         &self,
