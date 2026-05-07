@@ -272,6 +272,49 @@ impl RadrootsNostrAccountsManager {
         self.upsert_public_identity(public_identity, label, make_default)
     }
 
+    /// Attaches matching secret material to an existing account without import semantics.
+    pub fn attach_identity_secret(
+        &self,
+        account_id: &RadrootsIdentityId,
+        identity: &RadrootsIdentity,
+        make_default: bool,
+    ) -> Result<RadrootsNostrAccountRecord, RadrootsNostrAccountsError> {
+        let account_id = account_id.clone();
+        let public_key_hex = identity.public_key_hex();
+        let updated_at_unix = now_unix_secs();
+        let mut guard = self.state.write().map_err(|_| {
+            RadrootsNostrAccountsError::Store("accounts state lock poisoned".into())
+        })?;
+        let mut next = guard.clone();
+        let Some(record) = next
+            .accounts
+            .iter_mut()
+            .find(|record| record.account_id == account_id)
+        else {
+            return Err(RadrootsNostrAccountsError::AccountNotFound(
+                account_id.to_string(),
+            ));
+        };
+        if record.public_identity.public_key_hex.as_str() != public_key_hex.as_str() {
+            return Err(RadrootsNostrAccountsError::PublicKeyMismatch);
+        }
+
+        let secret_key_hex = Zeroizing::new(identity.secret_key_hex());
+        self.vault.store_secret(
+            account_secret_slot(&account_id).as_str(),
+            secret_key_hex.as_str(),
+        )?;
+
+        record.touch_updated(updated_at_unix);
+        let updated_record = record.clone();
+        if make_default {
+            next.default_account_id = Some(account_id);
+        }
+        self.store.save(&next)?;
+        *guard = next;
+        Ok(updated_record)
+    }
+
     pub fn upsert_public_identity(
         &self,
         public_identity: RadrootsIdentityPublic,
@@ -940,6 +983,130 @@ mod tests {
         assert_eq!(status_kind(&status), "public-only");
         let account = status_account(&status).expect("account");
         assert_eq!(account.label.as_deref(), Some("watch"));
+    }
+
+    #[test]
+    fn attach_identity_secret_upgrades_existing_watch_only_account() {
+        let manager = RadrootsNostrAccountsManager::new_in_memory();
+        let identity = RadrootsIdentity::generate();
+        let account_id = manager
+            .upsert_public_identity(identity.to_public(), Some("watch".into()), false)
+            .expect("watch");
+        manager.clear_default_account().expect("clear default");
+
+        let attached = manager
+            .attach_identity_secret(&account_id, &identity, false)
+            .expect("attach secret");
+
+        assert_eq!(attached.account_id, account_id);
+        assert_eq!(attached.label.as_deref(), Some("watch"));
+        assert_eq!(
+            attached.public_identity.public_key_hex,
+            identity.public_key_hex()
+        );
+        assert_eq!(manager.list_accounts().expect("list").len(), 1);
+        let signing_identity = manager
+            .get_signing_identity(&account_id)
+            .expect("signing")
+            .expect("secret backed");
+        assert_eq!(signing_identity.public_key_hex(), identity.public_key_hex());
+        assert_eq!(manager.default_account_id().expect("default"), None);
+    }
+
+    #[test]
+    fn attach_identity_secret_preserves_existing_default_when_not_requested() {
+        let manager = RadrootsNostrAccountsManager::new_in_memory();
+        let default_account_id = manager
+            .generate_identity(Some("primary".into()), true)
+            .expect("primary");
+        let identity = RadrootsIdentity::generate();
+        let account_id = manager
+            .upsert_public_identity(identity.to_public(), Some("watch".into()), false)
+            .expect("watch");
+
+        manager
+            .attach_identity_secret(&account_id, &identity, false)
+            .expect("attach secret");
+
+        assert_eq!(
+            manager.default_account_id().expect("default"),
+            Some(default_account_id)
+        );
+    }
+
+    #[test]
+    fn attach_identity_secret_can_explicitly_make_default() {
+        let manager = RadrootsNostrAccountsManager::new_in_memory();
+        manager
+            .generate_identity(Some("primary".into()), true)
+            .expect("primary");
+        let identity = RadrootsIdentity::generate();
+        let account_id = manager
+            .upsert_public_identity(identity.to_public(), Some("watch".into()), false)
+            .expect("watch");
+
+        manager
+            .attach_identity_secret(&account_id, &identity, true)
+            .expect("attach secret");
+
+        assert_eq!(
+            manager.default_account_id().expect("default"),
+            Some(account_id)
+        );
+    }
+
+    #[test]
+    fn attach_identity_secret_rejects_missing_account_without_storing_secret() {
+        let manager = RadrootsNostrAccountsManager::new_in_memory();
+        let identity = RadrootsIdentity::generate();
+        let missing_id = identity.id();
+
+        let err = manager
+            .attach_identity_secret(&missing_id, &identity, false)
+            .expect_err("missing account");
+
+        assert!(matches!(
+            &err,
+            RadrootsNostrAccountsError::AccountNotFound(value)
+                if value.as_str() == missing_id.as_str()
+        ));
+        assert!(
+            manager
+                .export_secret_hex(&missing_id)
+                .expect("export")
+                .is_none()
+        );
+        assert!(manager.list_accounts().expect("list").is_empty());
+    }
+
+    #[test]
+    fn attach_identity_secret_rejects_public_key_mismatch_without_storing_secret() {
+        let manager = RadrootsNostrAccountsManager::new_in_memory();
+        let public_identity = RadrootsIdentity::generate();
+        let account_id = manager
+            .upsert_public_identity(public_identity.to_public(), Some("watch".into()), false)
+            .expect("watch");
+        manager.clear_default_account().expect("clear default");
+        let mismatched_identity = RadrootsIdentity::generate();
+
+        let err = manager
+            .attach_identity_secret(&account_id, &mismatched_identity, false)
+            .expect_err("public key mismatch");
+
+        assert!(matches!(err, RadrootsNostrAccountsError::PublicKeyMismatch));
+        assert!(
+            manager
+                .export_secret_hex(&account_id)
+                .expect("export")
+                .is_none()
+        );
+        assert!(
+            manager
+                .get_signing_identity(&account_id)
+                .expect("signing")
+                .is_none()
+        );
+        assert_eq!(manager.default_account_id().expect("default"), None);
     }
 
     #[test]
@@ -1636,6 +1803,11 @@ mod tests {
             .get_signing_identity(&account_id)
             .expect_err("signing poisoned");
         assert!(signing_err.to_string().starts_with("store error:"));
+        let attach_identity = RadrootsIdentity::generate();
+        let attach_err = manager
+            .attach_identity_secret(&account_id, &attach_identity, false)
+            .expect_err("attach poisoned");
+        assert!(attach_err.to_string().starts_with("store error:"));
         let signer_err = manager
             .get_signer_capability(&account_id)
             .expect_err("signer poisoned");
