@@ -185,6 +185,18 @@ async fn relay_direct_listing_publish_accepts_sdk_built_draft() -> TestResult<()
     match receipt.transport_receipt {
         SdkTransportReceipt::RelayDirect(relay_receipt) => {
             assert_eq!(
+                receipt.event_id.as_deref(),
+                Some(relay_receipt.event_id.as_str())
+            );
+            assert_eq!(receipt.event_kind, Some(relay_receipt.event_kind));
+            assert_eq!(relay_receipt.event.kind, 30402);
+            assert_eq!(relay_receipt.event_id, relay_receipt.event.id);
+            assert_eq!(relay_receipt.signature, relay_receipt.event.sig);
+            assert_eq!(relay_receipt.created_at, relay_receipt.event.created_at);
+            assert_eq!(relay_receipt.event.author, identity.public_key_hex());
+            assert_eq!(relay_receipt.target_relays, vec![relay.url().to_owned()]);
+            assert_eq!(relay_receipt.connected_relays, vec![relay.url().to_owned()]);
+            assert_eq!(
                 relay_receipt.acknowledged_relays,
                 vec![relay.url().to_owned()]
             );

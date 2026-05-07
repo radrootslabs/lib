@@ -30,7 +30,7 @@ identity-models = [
 ]
 identity-storage = ["identity-models", "std", "radroots_identity/std"]
 signing = ["dep:radroots_nostr", "nostr"]
-relay-client = ["signing", "std", "radroots_nostr/client"]
+relay-client = ["signing", "std", "serde_json", "radroots_nostr/client"]
 radrootsd-client = ["std", "serde_json", "dep:reqwest"]
 signer-adapters = [
   "identity-models",

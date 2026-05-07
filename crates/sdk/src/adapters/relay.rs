@@ -1,7 +1,6 @@
 use core::time::Duration;
 
-use crate::WireEventParts;
-use crate::adapters::signing::{SignedNostrEvent, event_builder_from_parts};
+use crate::adapters::signing::SignedNostrEvent;
 use crate::identity::RadrootsIdentity;
 use radroots_nostr::prelude::{
     RadrootsNostrClient, RadrootsNostrClientOptions, RadrootsNostrError, RadrootsNostrEventId,
@@ -51,13 +50,16 @@ pub async fn connected_client_from_identity(
     Ok(client)
 }
 
-pub async fn publish_parts(
-    client: &RelayClient,
-    parts: WireEventParts,
-) -> Result<RelayOutput<RelayEventId>, RelayError> {
-    client
-        .send_event_builder(event_builder_from_parts(parts)?)
+pub async fn connected_relay_urls(client: &RelayClient) -> Vec<String> {
+    let mut relay_urls = client
+        .relays()
         .await
+        .into_values()
+        .filter(|relay| relay.is_connected())
+        .map(|relay| relay.url().to_string())
+        .collect::<Vec<_>>();
+    relay_urls.sort();
+    relay_urls
 }
 
 pub async fn publish_signed_event(

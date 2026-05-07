@@ -11,7 +11,7 @@ use crate::adapters::radrootsd;
     feature = "relay-client",
     feature = "signing"
 ))]
-use crate::adapters::relay;
+use crate::adapters::{relay, signing};
 use crate::config::SignerConfig;
 use crate::config::{RadrootsSdkConfig, SdkConfigError, SdkTransportMode};
 #[cfg(all(
@@ -51,8 +51,15 @@ pub enum SdkTransportReceipt {
     Radrootsd(SdkRadrootsdPublishReceipt),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SdkRelayPublishReceipt {
+    pub event: RadrootsNostrEvent,
+    pub event_id: String,
+    pub event_kind: u32,
+    pub created_at: u32,
+    pub signature: String,
+    pub target_relays: Vec<String>,
+    pub connected_relays: Vec<String>,
     pub acknowledged_relays: Vec<String>,
     pub failed_relays: Vec<SdkRelayFailure>,
 }
@@ -1043,7 +1050,6 @@ impl RadrootsSdkClient {
         }
         self.require_signer_mode(SignerConfig::LocalIdentity, operation)?;
 
-        let event_kind = u32::from(parts.kind);
         let relay_urls = match &self.resolved_transport_target {
             SdkResolvedTransportTarget::RelayDirect { relay_urls } => relay_urls.clone(),
             SdkResolvedTransportTarget::Radrootsd { .. } => {
@@ -1060,10 +1066,13 @@ impl RadrootsSdkClient {
         )
         .await
         .map_err(|err| SdkPublishError::Relay(err.to_string()))?;
-        let output = relay::publish_parts(&client, parts)
+        let connected_relays = relay::connected_relay_urls(&client).await;
+        let signed_event = signing::sign_parts_with_identity(identity, parts)
+            .map_err(|err| SdkPublishError::Relay(err.to_string()))?;
+        let output = relay::publish_signed_event(&client, &signed_event)
             .await
             .map_err(|err| SdkPublishError::Relay(err.to_string()))?;
-        sdk_publish_receipt_from_relay_output(event_kind, output)
+        sdk_publish_receipt_from_relay_output(signed_event, relay_urls, connected_relays, output)
     }
 
     #[cfg(feature = "radrootsd-client")]
@@ -2239,15 +2248,24 @@ impl<'a> TradeClient<'a> {
     feature = "signing"
 ))]
 fn sdk_publish_receipt_from_relay_output(
-    event_kind: u32,
+    signed_event: signing::SignedNostrEvent,
+    target_relays: Vec<String>,
+    connected_relays: Vec<String>,
     output: relay::RelayOutput<relay::RelayEventId>,
 ) -> Result<SdkPublishReceipt, SdkPublishError> {
+    let event = sdk_event_from_signed_event(&signed_event);
+    let event_id = event.id.clone();
+    let event_kind = event.kind;
+    let created_at = event.created_at;
+    let signature = event.sig.clone();
+    let target_relays = sorted_unique_strings(target_relays);
+    let connected_relays = sorted_unique_strings(connected_relays);
     let mut acknowledged_relays = output
         .success
         .into_iter()
         .map(|relay| relay.to_string())
         .collect::<Vec<_>>();
-    acknowledged_relays.sort();
+    acknowledged_relays = sorted_unique_strings(acknowledged_relays);
 
     let mut failed_relays = output
         .failed
@@ -2269,12 +2287,51 @@ fn sdk_publish_receipt_from_relay_output(
     Ok(SdkPublishReceipt {
         transport: SdkTransportMode::RelayDirect,
         event_kind: Some(event_kind),
-        event_id: Some(output.val.to_string()),
+        event_id: Some(event_id.clone()),
         transport_receipt: SdkTransportReceipt::RelayDirect(SdkRelayPublishReceipt {
+            event,
+            event_id,
+            event_kind,
+            created_at,
+            signature,
+            target_relays,
+            connected_relays,
             acknowledged_relays,
             failed_relays,
         }),
     })
+}
+
+#[cfg(all(
+    feature = "identity-models",
+    feature = "relay-client",
+    feature = "signing"
+))]
+fn sdk_event_from_signed_event(event: &signing::SignedNostrEvent) -> RadrootsNostrEvent {
+    RadrootsNostrEvent {
+        id: event.id.to_string(),
+        author: event.pubkey.to_string(),
+        created_at: u32::try_from(event.created_at.as_secs()).unwrap_or(u32::MAX),
+        kind: event.kind.as_u16() as u32,
+        tags: event
+            .tags
+            .iter()
+            .map(|tag| tag.as_slice().to_vec())
+            .collect(),
+        content: event.content.clone(),
+        sig: event.sig.to_string(),
+    }
+}
+
+#[cfg(all(
+    feature = "identity-models",
+    feature = "relay-client",
+    feature = "signing"
+))]
+fn sorted_unique_strings(mut values: Vec<String>) -> Vec<String> {
+    values.sort();
+    values.dedup();
+    values
 }
 
 #[cfg(feature = "radrootsd-client")]
@@ -2310,17 +2367,30 @@ mod tests {
     use super::{
         SdkPublishError, SdkRelayFailure, SdkTransportMode, sdk_publish_receipt_from_relay_output,
     };
+    use crate::WireEventParts;
     use crate::adapters::relay::RelayOutput;
+    use crate::adapters::signing::sign_parts_with_identity;
+    use crate::identity::RadrootsIdentity;
     use radroots_nostr::prelude::RadrootsNostrEventId;
     use std::collections::{HashMap, HashSet};
 
     #[test]
     fn relay_output_maps_to_normalized_publish_receipt() {
+        let identity = RadrootsIdentity::generate();
+        let signed_event = sign_parts_with_identity(
+            &identity,
+            WireEventParts {
+                kind: 30402,
+                content: "listing".to_owned(),
+                tags: vec![vec!["d".to_owned(), "AAAAAAAAAAAAAAAAAAAAAg".to_owned()]],
+            },
+        )
+        .expect("signed event");
+        let event_id = signed_event.id.to_string();
+        let event_created_at = u32::try_from(signed_event.created_at.as_secs()).unwrap();
+        let event_signature = signed_event.sig.to_string();
         let output = RelayOutput {
-            val: RadrootsNostrEventId::parse(
-                "5f3cf27d85c9571a2dca28269f6547f625364a7e06e5e853ee1bc74d2c4aa3d4",
-            )
-            .expect("event id"),
+            val: RadrootsNostrEventId::parse(event_id.as_str()).expect("event id"),
             success: HashSet::from([
                 nostr::RelayUrl::parse("ws://127.0.0.1:8080").expect("relay a"),
                 nostr::RelayUrl::parse("ws://127.0.0.1:8081").expect("relay b"),
@@ -2331,23 +2401,57 @@ mod tests {
             )]),
         };
 
-        let receipt = sdk_publish_receipt_from_relay_output(30402, output).expect("receipt");
+        let receipt = sdk_publish_receipt_from_relay_output(
+            signed_event,
+            vec![
+                "ws://127.0.0.1:8081".to_owned(),
+                "ws://127.0.0.1:8080".to_owned(),
+            ],
+            vec!["ws://127.0.0.1:8080".to_owned()],
+            output,
+        )
+        .expect("receipt");
 
         assert_eq!(receipt.transport, SdkTransportMode::RelayDirect);
         assert_eq!(receipt.event_kind, Some(30402));
+        assert_eq!(receipt.event_id, Some(event_id.clone()));
+        let relay_receipt = match receipt.transport_receipt {
+            super::SdkTransportReceipt::RelayDirect(relay_receipt) => relay_receipt,
+            super::SdkTransportReceipt::Radrootsd(_) => panic!("unexpected radrootsd receipt"),
+        };
+        assert_eq!(relay_receipt.event.id, event_id);
+        assert_eq!(relay_receipt.event_id, relay_receipt.event.id);
+        assert_eq!(relay_receipt.event_kind, 30402);
+        assert_eq!(relay_receipt.created_at, event_created_at);
+        assert_eq!(relay_receipt.signature, event_signature);
         assert_eq!(
-            receipt.event_id,
-            Some("5f3cf27d85c9571a2dca28269f6547f625364a7e06e5e853ee1bc74d2c4aa3d4".to_owned())
+            relay_receipt.target_relays,
+            vec![
+                "ws://127.0.0.1:8080".to_owned(),
+                "ws://127.0.0.1:8081".to_owned(),
+            ]
+        );
+        assert_eq!(
+            relay_receipt.connected_relays,
+            vec!["ws://127.0.0.1:8080".to_owned()]
         );
     }
 
     #[test]
     fn relay_output_without_acknowledgement_is_rejected() {
+        let identity = RadrootsIdentity::generate();
+        let signed_event = sign_parts_with_identity(
+            &identity,
+            WireEventParts {
+                kind: 30402,
+                content: "listing".to_owned(),
+                tags: vec![],
+            },
+        )
+        .expect("signed event");
         let output = RelayOutput {
-            val: RadrootsNostrEventId::parse(
-                "5f3cf27d85c9571a2dca28269f6547f625364a7e06e5e853ee1bc74d2c4aa3d4",
-            )
-            .expect("event id"),
+            val: RadrootsNostrEventId::parse(signed_event.id.to_string().as_str())
+                .expect("event id"),
             success: HashSet::new(),
             failed: HashMap::from([(
                 nostr::RelayUrl::parse("ws://127.0.0.1:8082").expect("relay c"),
@@ -2355,7 +2459,8 @@ mod tests {
             )]),
         };
 
-        let error = sdk_publish_receipt_from_relay_output(30402, output).expect_err("error");
+        let error = sdk_publish_receipt_from_relay_output(signed_event, vec![], vec![], output)
+            .expect_err("error");
 
         assert_eq!(
             error,
