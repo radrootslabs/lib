@@ -17,6 +17,7 @@ use radroots_sdk::listing::{
     RadrootsListingDeliveryMethod, RadrootsListingLocation, RadrootsListingProduct,
     RadrootsListingStatus,
 };
+use radroots_sdk::profile::{RadrootsProfile, RadrootsProfileType};
 use radroots_sdk::{
     RadrootsSdkClient, RadrootsSdkConfig, RelayConfig, SdkEnvironment, SdkPublishError,
     SdkTransportMode, SdkTransportReceipt, SignerConfig,
@@ -159,6 +160,134 @@ fn sample_listing() -> RadrootsListing {
         }),
         images: None,
     }
+}
+
+fn sample_profile() -> RadrootsProfile {
+    RadrootsProfile {
+        name: "north-farm".into(),
+        display_name: Some("North Farm".into()),
+        nip05: None,
+        about: Some("Farm profile".into()),
+        website: None,
+        picture: None,
+        banner: None,
+        lud06: None,
+        lud16: None,
+        bot: None,
+    }
+}
+
+#[tokio::test]
+async fn relay_direct_profile_publish_accepts_sdk_built_draft() -> TestResult<()> {
+    let relay = AckRelay::spawn().await?;
+    let identity = RadrootsIdentity::generate();
+    let mut config = RadrootsSdkConfig::for_environment(SdkEnvironment::Custom);
+    config.transport = SdkTransportMode::RelayDirect;
+    config.signer = SignerConfig::LocalIdentity;
+    config.relay = RelayConfig {
+        urls: vec![relay.url().to_owned()],
+    };
+    let client = RadrootsSdkClient::from_config(config)?;
+    let draft = client
+        .profile()
+        .build_draft(&sample_profile(), Some(RadrootsProfileType::Farm))?;
+
+    let receipt = client
+        .profile()
+        .publish_draft_with_identity(&identity, draft)
+        .await?;
+
+    assert_eq!(receipt.transport, SdkTransportMode::RelayDirect);
+    assert_eq!(receipt.event_kind, Some(0));
+    assert!(receipt.event_id.is_some());
+    match receipt.transport_receipt {
+        SdkTransportReceipt::RelayDirect(relay_receipt) => {
+            assert_eq!(
+                receipt.event_id.as_deref(),
+                Some(relay_receipt.event_id.as_str())
+            );
+            assert_eq!(relay_receipt.event.kind, 0);
+            assert_eq!(relay_receipt.event.author, identity.public_key_hex());
+            assert_eq!(
+                relay_receipt.event.tags,
+                vec![vec!["t".to_owned(), "radroots:type:farm".to_owned()]]
+            );
+            assert_eq!(relay_receipt.target_relays, vec![relay.url().to_owned()]);
+            assert_eq!(relay_receipt.connected_relays, vec![relay.url().to_owned()]);
+            assert_eq!(
+                relay_receipt.acknowledged_relays,
+                vec![relay.url().to_owned()]
+            );
+            assert!(relay_receipt.failed_relays.is_empty());
+        }
+        SdkTransportReceipt::Radrootsd(_) => panic!("unexpected radrootsd receipt"),
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn relay_direct_profile_publish_rejects_radrootsd_transport_mode() -> TestResult<()> {
+    let identity = RadrootsIdentity::generate();
+    let mut config = RadrootsSdkConfig::production();
+    config.transport = SdkTransportMode::Radrootsd;
+    config.signer = SignerConfig::LocalIdentity;
+    let client = RadrootsSdkClient::from_config(config)?;
+
+    let error = client
+        .profile()
+        .publish_with_identity(
+            &identity,
+            &sample_profile(),
+            Some(RadrootsProfileType::Farm),
+        )
+        .await
+        .expect_err("unsupported transport");
+
+    assert!(matches!(
+        error,
+        SdkPublishError::UnsupportedTransport {
+            transport: SdkTransportMode::Radrootsd,
+            operation: "profile.publish_with_identity",
+        }
+    ));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn relay_direct_profile_publish_rejects_draft_only_signer_mode() -> TestResult<()> {
+    let relay = AckRelay::spawn().await?;
+    let identity = RadrootsIdentity::generate();
+    let mut config = RadrootsSdkConfig::for_environment(SdkEnvironment::Custom);
+    config.transport = SdkTransportMode::RelayDirect;
+    config.signer = SignerConfig::DraftOnly;
+    config.relay = RelayConfig {
+        urls: vec![relay.url().to_owned()],
+    };
+    let client = RadrootsSdkClient::from_config(config)?;
+
+    let error = client
+        .profile()
+        .publish_with_identity(
+            &identity,
+            &sample_profile(),
+            Some(RadrootsProfileType::Farm),
+        )
+        .await
+        .expect_err("unsupported signer mode");
+
+    assert!(matches!(
+        error,
+        SdkPublishError::UnsupportedSignerMode {
+            transport: SdkTransportMode::RelayDirect,
+            signer: SignerConfig::DraftOnly,
+            required: SignerConfig::LocalIdentity,
+            operation: "profile.publish_with_identity",
+        }
+    ));
+
+    Ok(())
 }
 
 #[tokio::test]

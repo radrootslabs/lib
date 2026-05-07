@@ -1880,6 +1880,43 @@ impl<'a> ProfileClient<'a> {
         profile::build_draft(profile_value, profile_type)
     }
 
+    #[cfg(all(
+        feature = "identity-models",
+        feature = "relay-client",
+        feature = "signing"
+    ))]
+    pub async fn publish_with_identity(
+        &self,
+        identity: &RadrootsIdentity,
+        profile_value: &RadrootsProfile,
+        profile_type: Option<RadrootsProfileType>,
+    ) -> Result<SdkPublishReceipt, SdkPublishError> {
+        let parts = profile::build_draft(profile_value, profile_type)
+            .map_err(|err| SdkPublishError::Encode(err.to_string()))?;
+        self.client
+            .publish_parts_via_relay_with_identity(identity, parts, "profile.publish_with_identity")
+            .await
+    }
+
+    #[cfg(all(
+        feature = "identity-models",
+        feature = "relay-client",
+        feature = "signing"
+    ))]
+    pub async fn publish_draft_with_identity(
+        &self,
+        identity: &RadrootsIdentity,
+        draft: WireEventParts,
+    ) -> Result<SdkPublishReceipt, SdkPublishError> {
+        self.client
+            .publish_parts_via_relay_with_identity(
+                identity,
+                draft,
+                "profile.publish_draft_with_identity",
+            )
+            .await
+    }
+
     #[cfg(feature = "radrootsd-client")]
     pub async fn publish_profile_via_radrootsd(
         &self,
