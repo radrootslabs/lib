@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use crate::coverage::{read_coverage_policy, CoveragePolicyFile, CoverageThresholds};
+use crate::coverage::{CoveragePolicyFile, CoverageThresholds, read_coverage_policy};
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};

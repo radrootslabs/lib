@@ -129,6 +129,12 @@ pub enum SdkPublishError {
         operation: &'static str,
     },
     Relay(String),
+    RelaySetup {
+        transport: SdkTransportMode,
+        operation: &'static str,
+        target_relays: Vec<String>,
+        error: String,
+    },
     RelayNotAcknowledged {
         transport: SdkTransportMode,
         failed_relays: Vec<SdkRelayFailure>,
@@ -166,6 +172,25 @@ impl core::fmt::Display for SdkPublishError {
                 "{operation} requires signer mode `{required}` for {transport:?} transport, got `{signer}`"
             ),
             Self::Relay(message) => write!(f, "{message}"),
+            Self::RelaySetup {
+                transport,
+                operation,
+                target_relays,
+                error,
+            } => {
+                if target_relays.is_empty() {
+                    write!(
+                        f,
+                        "{operation} failed to prepare {transport:?} relay publish: {error}"
+                    )
+                } else {
+                    let relays = target_relays.join(", ");
+                    write!(
+                        f,
+                        "{operation} failed to prepare {transport:?} relay publish for {relays}: {error}"
+                    )
+                }
+            }
             Self::RelayNotAcknowledged {
                 transport,
                 failed_relays,
@@ -1065,13 +1090,31 @@ impl RadrootsSdkClient {
             Duration::from_millis(self.config.network.timeout_ms),
         )
         .await
-        .map_err(|err| SdkPublishError::Relay(err.to_string()))?;
+        .map_err(|err| SdkPublishError::RelaySetup {
+            transport: SdkTransportMode::RelayDirect,
+            operation,
+            target_relays: relay_urls.clone(),
+            error: err.to_string(),
+        })?;
         let connected_relays = relay::connected_relay_urls(&client).await;
+        if connected_relays.is_empty() {
+            return Err(SdkPublishError::RelaySetup {
+                transport: SdkTransportMode::RelayDirect,
+                operation,
+                target_relays: relay_urls,
+                error: "no relay connection was established".to_owned(),
+            });
+        }
         let signed_event = signing::sign_parts_with_identity(identity, parts)
             .map_err(|err| SdkPublishError::Relay(err.to_string()))?;
         let output = relay::publish_signed_event(&client, &signed_event)
             .await
-            .map_err(|err| SdkPublishError::Relay(err.to_string()))?;
+            .map_err(|err| SdkPublishError::RelaySetup {
+                transport: SdkTransportMode::RelayDirect,
+                operation,
+                target_relays: relay_urls.clone(),
+                error: err.to_string(),
+            })?;
         sdk_publish_receipt_from_relay_output(signed_event, relay_urls, connected_relays, output)
     }
 
@@ -2254,6 +2297,67 @@ impl<'a> TradeClient<'a> {
         event: &RadrootsNostrEvent,
     ) -> Result<TradeListingValidateResult, trade::RadrootsTradeListingValidationError> {
         trade::validate_listing_event(event)
+    }
+
+    #[cfg(feature = "serde_json")]
+    pub fn build_order_request_draft(
+        &self,
+        listing_event: &RadrootsNostrEventPtr,
+        payload: &trade::RadrootsTradeOrderRequested,
+    ) -> Result<trade::RadrootsTradeOrderRequestDraft, trade::EventEncodeError> {
+        trade::build_order_request_draft(listing_event, payload)
+    }
+
+    #[cfg(feature = "serde_json")]
+    pub fn parse_order_request(
+        &self,
+        event: &RadrootsNostrEvent,
+    ) -> Result<
+        trade::RadrootsActiveTradeEnvelope<trade::RadrootsTradeOrderRequested>,
+        trade::RadrootsActiveTradeEnvelopeParseError,
+    > {
+        trade::parse_order_request(event)
+    }
+
+    #[cfg(all(
+        feature = "identity-models",
+        feature = "relay-client",
+        feature = "signing"
+    ))]
+    pub async fn publish_order_request_with_identity(
+        &self,
+        identity: &RadrootsIdentity,
+        listing_event: &RadrootsNostrEventPtr,
+        payload: &trade::RadrootsTradeOrderRequested,
+    ) -> Result<SdkPublishReceipt, SdkPublishError> {
+        let draft = trade::build_order_request_draft(listing_event, payload)
+            .map_err(|err| SdkPublishError::Encode(err.to_string()))?;
+        self.client
+            .publish_parts_via_relay_with_identity(
+                identity,
+                draft.into_wire_parts(),
+                "trade.publish_order_request_with_identity",
+            )
+            .await
+    }
+
+    #[cfg(all(
+        feature = "identity-models",
+        feature = "relay-client",
+        feature = "signing"
+    ))]
+    pub async fn publish_order_request_draft_with_identity(
+        &self,
+        identity: &RadrootsIdentity,
+        draft: trade::RadrootsTradeOrderRequestDraft,
+    ) -> Result<SdkPublishReceipt, SdkPublishError> {
+        self.client
+            .publish_parts_via_relay_with_identity(
+                identity,
+                draft.into_wire_parts(),
+                "trade.publish_order_request_draft_with_identity",
+            )
+            .await
     }
 
     #[cfg(feature = "radrootsd-client")]

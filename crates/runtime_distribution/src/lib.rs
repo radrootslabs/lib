@@ -10,8 +10,8 @@ pub use model::{
     RadrootsRuntimeDistributionContract, RuntimeDistributionEntry, TargetSet, TargetSpec,
 };
 pub use resolve::{
-    RadrootsRuntimeDistributionResolver, ResolvedRuntimeArtifact, RuntimeArtifactRequest,
-    RUNTIME_DISTRIBUTION_SCHEMA,
+    RUNTIME_DISTRIBUTION_SCHEMA, RadrootsRuntimeDistributionResolver, ResolvedRuntimeArtifact,
+    RuntimeArtifactRequest,
 };
 
 #[cfg(test)]
@@ -19,8 +19,8 @@ mod tests {
     use toml::Value;
 
     use super::{
-        RadrootsRuntimeDistributionError, RadrootsRuntimeDistributionResolver,
-        RuntimeArtifactRequest, RUNTIME_DISTRIBUTION_SCHEMA,
+        RUNTIME_DISTRIBUTION_SCHEMA, RadrootsRuntimeDistributionError,
+        RadrootsRuntimeDistributionResolver, RuntimeArtifactRequest,
     };
 
     const CONTRACT: &str = r#"

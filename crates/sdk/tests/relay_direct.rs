@@ -18,9 +18,13 @@ use radroots_sdk::listing::{
     RadrootsListingStatus,
 };
 use radroots_sdk::profile::{RadrootsProfile, RadrootsProfileType};
+use radroots_sdk::trade::{
+    RadrootsTradeOrderEconomicItem, RadrootsTradeOrderEconomics, RadrootsTradeOrderItem,
+    RadrootsTradeOrderRequested, RadrootsTradePricingBasis,
+};
 use radroots_sdk::{
-    RadrootsSdkClient, RadrootsSdkConfig, RelayConfig, SdkEnvironment, SdkPublishError,
-    SdkTransportMode, SdkTransportReceipt, SignerConfig,
+    RadrootsNostrEventPtr, RadrootsSdkClient, RadrootsSdkConfig, RelayConfig, SdkEnvironment,
+    SdkPublishError, SdkTransportMode, SdkTransportReceipt, SignerConfig,
 };
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
@@ -196,6 +200,58 @@ fn sample_farm() -> RadrootsFarm {
     }
 }
 
+fn decimal(raw: &str) -> RadrootsCoreDecimal {
+    raw.parse().expect("decimal")
+}
+
+fn usd(raw: &str) -> RadrootsCoreMoney {
+    RadrootsCoreMoney::new(decimal(raw), RadrootsCoreCurrency::USD)
+}
+
+fn listing_event_ptr() -> RadrootsNostrEventPtr {
+    RadrootsNostrEventPtr {
+        id: "listing-event-1".into(),
+        relays: Some("wss://listing.relay.example".into()),
+    }
+}
+
+fn sample_order_request(
+    buyer_pubkey: String,
+    seller_pubkey: String,
+) -> RadrootsTradeOrderRequested {
+    RadrootsTradeOrderRequested {
+        order_id: "order-1".into(),
+        listing_addr: format!("30402:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg"),
+        buyer_pubkey,
+        seller_pubkey,
+        items: vec![RadrootsTradeOrderItem {
+            bin_id: "bin-1".into(),
+            bin_count: 2,
+        }],
+        economics: RadrootsTradeOrderEconomics {
+            quote_id: "quote-1".into(),
+            quote_version: 1,
+            pricing_basis: RadrootsTradePricingBasis::ListingEvent,
+            currency: RadrootsCoreCurrency::USD,
+            items: vec![RadrootsTradeOrderEconomicItem {
+                bin_id: "bin-1".into(),
+                bin_count: 2,
+                quantity_amount: decimal("1"),
+                quantity_unit: RadrootsCoreUnit::Each,
+                unit_price_amount: decimal("5"),
+                unit_price_currency: RadrootsCoreCurrency::USD,
+                line_subtotal: usd("10"),
+            }],
+            discounts: Vec::new(),
+            adjustments: Vec::new(),
+            subtotal: usd("10"),
+            discount_total: usd("0"),
+            adjustment_total: usd("0"),
+            total: usd("10"),
+        },
+    }
+}
+
 #[tokio::test]
 async fn relay_direct_farm_publish_accepts_sdk_built_draft() -> TestResult<()> {
     let relay = AckRelay::spawn().await?;
@@ -242,6 +298,251 @@ async fn relay_direct_farm_publish_accepts_sdk_built_draft() -> TestResult<()> {
         }
         SdkTransportReceipt::Radrootsd(_) => panic!("unexpected radrootsd receipt"),
     }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn relay_direct_order_request_publish_accepts_sdk_built_draft() -> TestResult<()> {
+    let relay = AckRelay::spawn().await?;
+    let buyer_identity = RadrootsIdentity::generate();
+    let seller_identity = RadrootsIdentity::generate();
+    let listing_event = listing_event_ptr();
+    let payload = sample_order_request(
+        buyer_identity.public_key_hex(),
+        seller_identity.public_key_hex(),
+    );
+    let mut config = RadrootsSdkConfig::for_environment(SdkEnvironment::Custom);
+    config.transport = SdkTransportMode::RelayDirect;
+    config.signer = SignerConfig::LocalIdentity;
+    config.relay = RelayConfig {
+        urls: vec![relay.url().to_owned()],
+    };
+    let client = RadrootsSdkClient::from_config(config)?;
+    let draft = client
+        .trade()
+        .build_order_request_draft(&listing_event, &payload)?;
+    assert_eq!(draft.as_wire_parts().kind, 3422);
+
+    let receipt = client
+        .trade()
+        .publish_order_request_draft_with_identity(&buyer_identity, draft)
+        .await?;
+
+    assert_eq!(receipt.transport, SdkTransportMode::RelayDirect);
+    assert_eq!(receipt.event_kind, Some(3422));
+    assert!(receipt.event_id.is_some());
+    match receipt.transport_receipt {
+        SdkTransportReceipt::RelayDirect(relay_receipt) => {
+            assert_eq!(
+                receipt.event_id.as_deref(),
+                Some(relay_receipt.event_id.as_str())
+            );
+            assert_eq!(receipt.event_kind, Some(relay_receipt.event_kind));
+            assert_eq!(relay_receipt.event.kind, 3422);
+            assert_eq!(relay_receipt.event_id, relay_receipt.event.id);
+            assert_eq!(relay_receipt.signature, relay_receipt.event.sig);
+            assert_eq!(relay_receipt.created_at, relay_receipt.event.created_at);
+            assert_eq!(relay_receipt.event.author, buyer_identity.public_key_hex());
+            assert!(
+                relay_receipt
+                    .event
+                    .tags
+                    .contains(&vec!["p".to_owned(), seller_identity.public_key_hex()])
+            );
+            assert!(
+                relay_receipt
+                    .event
+                    .tags
+                    .contains(&vec!["a".to_owned(), payload.listing_addr.clone()])
+            );
+            assert!(
+                relay_receipt
+                    .event
+                    .tags
+                    .contains(&vec!["d".to_owned(), payload.order_id.clone()])
+            );
+            assert!(relay_receipt.event.tags.contains(&vec![
+                "listing_event".to_owned(),
+                listing_event.id.clone(),
+                listing_event.relays.clone().expect("listing relay")
+            ]));
+            assert_eq!(relay_receipt.target_relays, vec![relay.url().to_owned()]);
+            assert_eq!(relay_receipt.connected_relays, vec![relay.url().to_owned()]);
+            assert_eq!(
+                relay_receipt.acknowledged_relays,
+                vec![relay.url().to_owned()]
+            );
+            assert!(relay_receipt.failed_relays.is_empty());
+            let envelope = client
+                .trade()
+                .parse_order_request(&relay_receipt.event)
+                .expect("active order request");
+            assert_eq!(envelope.order_id, payload.order_id);
+            assert_eq!(envelope.listing_addr, payload.listing_addr);
+            assert_eq!(envelope.payload.economics.quote_id, "quote-1");
+            assert_eq!(envelope.payload.economics.total, usd("10"));
+        }
+        SdkTransportReceipt::Radrootsd(_) => panic!("unexpected radrootsd receipt"),
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn relay_direct_order_request_publish_builds_and_publishes_payload() -> TestResult<()> {
+    let relay = AckRelay::spawn().await?;
+    let buyer_identity = RadrootsIdentity::generate();
+    let seller_identity = RadrootsIdentity::generate();
+    let payload = sample_order_request(
+        buyer_identity.public_key_hex(),
+        seller_identity.public_key_hex(),
+    );
+    let mut config = RadrootsSdkConfig::for_environment(SdkEnvironment::Custom);
+    config.transport = SdkTransportMode::RelayDirect;
+    config.signer = SignerConfig::LocalIdentity;
+    config.relay = RelayConfig {
+        urls: vec![relay.url().to_owned()],
+    };
+    let client = RadrootsSdkClient::from_config(config)?;
+
+    let receipt = client
+        .trade()
+        .publish_order_request_with_identity(&buyer_identity, &listing_event_ptr(), &payload)
+        .await?;
+
+    assert_eq!(receipt.transport, SdkTransportMode::RelayDirect);
+    assert_eq!(receipt.event_kind, Some(3422));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn relay_direct_order_request_publish_rejects_radrootsd_transport_mode() -> TestResult<()> {
+    let buyer_identity = RadrootsIdentity::generate();
+    let seller_identity = RadrootsIdentity::generate();
+    let payload = sample_order_request(
+        buyer_identity.public_key_hex(),
+        seller_identity.public_key_hex(),
+    );
+    let mut config = RadrootsSdkConfig::production();
+    config.transport = SdkTransportMode::Radrootsd;
+    config.signer = SignerConfig::LocalIdentity;
+    let client = RadrootsSdkClient::from_config(config)?;
+
+    let error = client
+        .trade()
+        .publish_order_request_with_identity(&buyer_identity, &listing_event_ptr(), &payload)
+        .await
+        .expect_err("unsupported transport");
+
+    assert!(matches!(
+        error,
+        SdkPublishError::UnsupportedTransport {
+            transport: SdkTransportMode::Radrootsd,
+            operation: "trade.publish_order_request_with_identity",
+        }
+    ));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn relay_direct_order_request_publish_rejects_draft_only_signer_mode() -> TestResult<()> {
+    let relay = AckRelay::spawn().await?;
+    let buyer_identity = RadrootsIdentity::generate();
+    let seller_identity = RadrootsIdentity::generate();
+    let payload = sample_order_request(
+        buyer_identity.public_key_hex(),
+        seller_identity.public_key_hex(),
+    );
+    let mut config = RadrootsSdkConfig::for_environment(SdkEnvironment::Custom);
+    config.transport = SdkTransportMode::RelayDirect;
+    config.signer = SignerConfig::DraftOnly;
+    config.relay = RelayConfig {
+        urls: vec![relay.url().to_owned()],
+    };
+    let client = RadrootsSdkClient::from_config(config)?;
+
+    let error = client
+        .trade()
+        .publish_order_request_with_identity(&buyer_identity, &listing_event_ptr(), &payload)
+        .await
+        .expect_err("unsupported signer mode");
+
+    assert!(matches!(
+        error,
+        SdkPublishError::UnsupportedSignerMode {
+            transport: SdkTransportMode::RelayDirect,
+            signer: SignerConfig::DraftOnly,
+            required: SignerConfig::LocalIdentity,
+            operation: "trade.publish_order_request_with_identity",
+        }
+    ));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn relay_direct_order_request_publish_rejects_invalid_economics() -> TestResult<()> {
+    let buyer_identity = RadrootsIdentity::generate();
+    let seller_identity = RadrootsIdentity::generate();
+    let mut payload = sample_order_request(
+        buyer_identity.public_key_hex(),
+        seller_identity.public_key_hex(),
+    );
+    payload.economics.items[0].bin_count = 1;
+    let mut config = RadrootsSdkConfig::for_environment(SdkEnvironment::Custom);
+    config.transport = SdkTransportMode::RelayDirect;
+    config.signer = SignerConfig::LocalIdentity;
+    config.relay = RelayConfig {
+        urls: vec!["ws://127.0.0.1:9".to_owned()],
+    };
+    let client = RadrootsSdkClient::from_config(config)?;
+
+    let error = client
+        .trade()
+        .publish_order_request_with_identity(&buyer_identity, &listing_event_ptr(), &payload)
+        .await
+        .expect_err("invalid economics");
+
+    assert!(matches!(error, SdkPublishError::Encode(_)));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn relay_direct_order_request_publish_reports_setup_error_detail() -> TestResult<()> {
+    let buyer_identity = RadrootsIdentity::generate();
+    let seller_identity = RadrootsIdentity::generate();
+    let payload = sample_order_request(
+        buyer_identity.public_key_hex(),
+        seller_identity.public_key_hex(),
+    );
+    let mut config = RadrootsSdkConfig::for_environment(SdkEnvironment::Custom);
+    config.transport = SdkTransportMode::RelayDirect;
+    config.signer = SignerConfig::LocalIdentity;
+    config.network.timeout_ms = 10;
+    config.relay = RelayConfig {
+        urls: vec!["ws://127.0.0.1:9".to_owned()],
+    };
+    let client = RadrootsSdkClient::from_config(config)?;
+
+    let error = client
+        .trade()
+        .publish_order_request_with_identity(&buyer_identity, &listing_event_ptr(), &payload)
+        .await
+        .expect_err("relay setup error");
+
+    assert!(matches!(
+        error,
+        SdkPublishError::RelaySetup {
+            transport: SdkTransportMode::RelayDirect,
+            operation: "trade.publish_order_request_with_identity",
+            target_relays,
+            error: _,
+        } if target_relays == vec!["ws://127.0.0.1:9".to_owned()]
+    ));
 
     Ok(())
 }

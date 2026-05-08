@@ -2,13 +2,28 @@ pub use radroots_events::trade::*;
 pub use radroots_events_codec::error::EventEncodeError;
 #[cfg(feature = "serde_json")]
 pub use radroots_events_codec::trade::{
-    RadrootsTradeEnvelopeParseError, RadrootsTradeEventContext, RadrootsTradeListingAddress,
-    RadrootsTradeListingAddressError,
+    RadrootsActiveTradeEnvelopeParseError, RadrootsTradeEnvelopeParseError,
+    RadrootsTradeEventContext, RadrootsTradeListingAddress, RadrootsTradeListingAddressError,
 };
 pub use radroots_trade::listing::validation::RadrootsTradeListing as TradeListingValidateResult;
 
 use crate::RadrootsTradeEnvelope as SdkTradeEnvelope;
 use crate::{RadrootsNostrEvent, RadrootsNostrEventPtr, WireEventParts};
+
+#[derive(Debug, Clone)]
+pub struct RadrootsTradeOrderRequestDraft {
+    parts: WireEventParts,
+}
+
+impl RadrootsTradeOrderRequestDraft {
+    pub fn as_wire_parts(&self) -> &WireEventParts {
+        &self.parts
+    }
+
+    pub fn into_wire_parts(self) -> WireEventParts {
+        self.parts
+    }
+}
 
 #[cfg(feature = "serde_json")]
 pub fn build_envelope_draft(
@@ -34,10 +49,33 @@ pub fn build_envelope_draft(
 }
 
 #[cfg(feature = "serde_json")]
+pub fn build_order_request_draft(
+    listing_event: &RadrootsNostrEventPtr,
+    payload: &RadrootsTradeOrderRequested,
+) -> Result<RadrootsTradeOrderRequestDraft, EventEncodeError> {
+    Ok(RadrootsTradeOrderRequestDraft {
+        parts: radroots_events_codec::trade::active_trade_order_request_event_build(
+            listing_event,
+            payload,
+        )?,
+    })
+}
+
+#[cfg(feature = "serde_json")]
 pub fn parse_envelope(
     event: &RadrootsNostrEvent,
 ) -> Result<SdkTradeEnvelope, RadrootsTradeEnvelopeParseError> {
     radroots_events_codec::trade::trade_envelope_from_event::<RadrootsTradeMessagePayload>(event)
+}
+
+#[cfg(feature = "serde_json")]
+pub fn parse_order_request(
+    event: &RadrootsNostrEvent,
+) -> Result<
+    RadrootsActiveTradeEnvelope<RadrootsTradeOrderRequested>,
+    RadrootsActiveTradeEnvelopeParseError,
+> {
+    radroots_events_codec::trade::active_trade_order_request_from_event(event)
 }
 
 #[cfg(feature = "serde_json")]
