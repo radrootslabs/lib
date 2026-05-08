@@ -833,30 +833,15 @@ mod tests {
             RadrootsActiveTradeMessageType, RadrootsActiveTradePayloadError,
             RadrootsTradeBuyerReceipt, RadrootsTradeEnvelope, RadrootsTradeFulfillmentUpdated,
             RadrootsTradeInventoryCommitment, RadrootsTradeMessagePayload,
-            RadrootsTradeMessageType, RadrootsTradeOrder, RadrootsTradeOrderCancelled,
-            RadrootsTradeOrderDecision, RadrootsTradeOrderDecisionEvent,
-            RadrootsTradeOrderEconomicItem, RadrootsTradeOrderEconomicLine,
-            RadrootsTradeOrderEconomics, RadrootsTradeOrderItem, RadrootsTradeOrderRequested,
-            RadrootsTradeOrderRevisionDecision, RadrootsTradeOrderRevisionDecisionEvent,
-            RadrootsTradeOrderRevisionProposed, RadrootsTradePaymentMethod,
-            RadrootsTradePaymentRecorded, RadrootsTradePricingBasis,
+            RadrootsTradeMessageType, RadrootsTradeOrderCancelled, RadrootsTradeOrderDecision,
+            RadrootsTradeOrderDecisionEvent, RadrootsTradeOrderEconomicItem,
+            RadrootsTradeOrderEconomicLine, RadrootsTradeOrderEconomics, RadrootsTradeOrderItem,
+            RadrootsTradeOrderRequested, RadrootsTradeOrderRevisionDecision,
+            RadrootsTradeOrderRevisionDecisionEvent, RadrootsTradeOrderRevisionProposed,
+            RadrootsTradePaymentMethod, RadrootsTradePaymentRecorded, RadrootsTradePricingBasis,
             RadrootsTradeSettlementDecision, RadrootsTradeSettlementDecisionEvent,
         },
     };
-
-    fn base_order() -> RadrootsTradeOrder {
-        RadrootsTradeOrder {
-            order_id: "order-1".into(),
-            listing_addr: "30402:seller:AAAAAAAAAAAAAAAAAAAAAg".into(),
-            buyer_pubkey: "buyer".into(),
-            seller_pubkey: "seller".into(),
-            items: vec![RadrootsTradeOrderItem {
-                bin_id: "lb".into(),
-                bin_count: 3,
-            }],
-            discounts: None,
-        }
-    }
 
     fn active_order_request() -> RadrootsTradeOrderRequested {
         RadrootsTradeOrderRequested {
@@ -870,6 +855,15 @@ mod tests {
             }],
             economics: request_economics(),
         }
+    }
+
+    fn generic_order_response() -> RadrootsTradeMessagePayload {
+        RadrootsTradeMessagePayload::OrderResponse(
+            radroots_events::trade::RadrootsTradeOrderResponse {
+                accepted: true,
+                reason: None,
+            },
+        )
     }
 
     fn decimal(raw: &str) -> RadrootsCoreDecimal {
@@ -1050,19 +1044,16 @@ mod tests {
     }
 
     #[test]
-    fn parse_order_request_roundtrip() {
-        let payload = RadrootsTradeMessagePayload::OrderRequest(base_order());
+    fn parse_generic_order_response_roundtrip() {
+        let payload = generic_order_response();
         let built = trade_envelope_event_build(
-            "seller",
-            RadrootsTradeMessageType::OrderRequest,
+            "buyer",
+            RadrootsTradeMessageType::OrderResponse,
             "30402:seller:AAAAAAAAAAAAAAAAAAAAAg",
             Some("order-1".into()),
-            Some(&RadrootsNostrEventPtr {
-                id: "listing-snapshot".into(),
-                relays: None,
-            }),
             None,
-            None,
+            Some("root"),
+            Some("prev"),
             &payload,
         )
         .expect("build trade envelope");
@@ -1079,7 +1070,7 @@ mod tests {
             trade_envelope_from_event(&event).expect("parse trade envelope");
         assert_eq!(
             envelope.message_type,
-            RadrootsTradeMessageType::OrderRequest
+            RadrootsTradeMessageType::OrderResponse
         );
         assert_eq!(envelope.order_id.as_deref(), Some("order-1"));
     }
@@ -1816,18 +1807,15 @@ mod tests {
 
     #[test]
     fn parse_rejects_listing_addr_mismatch() {
-        let payload = RadrootsTradeMessagePayload::OrderRequest(base_order());
+        let payload = generic_order_response();
         let built = trade_envelope_event_build(
-            "seller",
-            RadrootsTradeMessageType::OrderRequest,
+            "buyer",
+            RadrootsTradeMessageType::OrderResponse,
             "30402:seller:AAAAAAAAAAAAAAAAAAAAAg",
             Some("order-1".into()),
-            Some(&RadrootsNostrEventPtr {
-                id: "listing-snapshot".into(),
-                relays: None,
-            }),
             None,
-            None,
+            Some("root"),
+            Some("prev"),
             &payload,
         )
         .expect("build trade envelope");
@@ -1849,18 +1837,23 @@ mod tests {
 
     #[test]
     fn parse_rejects_missing_public_snapshot_tag() {
-        let payload = RadrootsTradeMessagePayload::OrderRequest(base_order());
+        let payload = RadrootsTradeMessagePayload::OrderRevision(
+            radroots_events::trade::RadrootsTradeOrderRevision {
+                revision_id: "rev-1".into(),
+                changes: Vec::new(),
+            },
+        );
         let built = trade_envelope_event_build(
             "seller",
-            RadrootsTradeMessageType::OrderRequest,
+            RadrootsTradeMessageType::OrderRevision,
             "30402:seller:AAAAAAAAAAAAAAAAAAAAAg",
             Some("order-1".into()),
             Some(&RadrootsNostrEventPtr {
                 id: "listing-snapshot".into(),
                 relays: None,
             }),
-            None,
-            None,
+            Some("root"),
+            Some("prev"),
             &payload,
         )
         .expect("build trade envelope");

@@ -2363,11 +2363,13 @@ impl<'a> TradeClient<'a> {
     #[cfg(feature = "radrootsd-client")]
     pub async fn publish_order_request_via_radrootsd(
         &self,
-        order: &trade::RadrootsTradeOrder,
+        order: &trade::RadrootsTradeOrderRequested,
+        listing_event: &RadrootsNostrEventPtr,
         session: &SdkRadrootsdSignerSessionHandle,
     ) -> Result<SdkPublishReceipt, SdkPublishError> {
         self.publish_order_request_via_radrootsd_with_options(
             order,
+            listing_event,
             &SdkRadrootsdOrderRequestPublishOptions::from_signer_session(session),
         )
         .await
@@ -2376,11 +2378,13 @@ impl<'a> TradeClient<'a> {
     #[cfg(feature = "radrootsd-client")]
     pub async fn publish_order_request_via_radrootsd_with_options(
         &self,
-        order: &trade::RadrootsTradeOrder,
+        order: &trade::RadrootsTradeOrderRequested,
+        listing_event: &RadrootsNostrEventPtr,
         options: &SdkRadrootsdOrderRequestPublishOptions,
     ) -> Result<SdkPublishReceipt, SdkPublishError> {
         let request = radrootsd::SdkRadrootsdOrderRequestPublishRequest {
             order: order.clone(),
+            listing_event: listing_event.clone(),
             signer_session_id: options.session().session_id().to_owned(),
             signer_authority: options.signer_authority().cloned(),
             idempotency_key: options.idempotency_key().map(str::to_owned),

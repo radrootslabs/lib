@@ -18,8 +18,9 @@ use radroots_sdk::listing::{
 };
 use radroots_sdk::trade::{
     RadrootsTradeDiscountDecision, RadrootsTradeMessagePayload, RadrootsTradeMessageType,
-    RadrootsTradeOrder, RadrootsTradeOrderItem, RadrootsTradeOrderResponse,
-    RadrootsTradeOrderRevision, RadrootsTradeOrderRevisionResponse,
+    RadrootsTradeOrderEconomicItem, RadrootsTradeOrderEconomicLine, RadrootsTradeOrderEconomics,
+    RadrootsTradeOrderItem, RadrootsTradeOrderRequested, RadrootsTradeOrderResponse,
+    RadrootsTradeOrderRevision, RadrootsTradeOrderRevisionResponse, RadrootsTradePricingBasis,
 };
 use radroots_sdk::{
     RadrootsNostrEvent, RadrootsNostrEventPtr, RadrootsProfile, RadrootsProfileType,
@@ -414,8 +415,44 @@ fn sample_farm() -> RadrootsFarm {
     }
 }
 
-fn sample_trade_order() -> RadrootsTradeOrder {
-    RadrootsTradeOrder {
+fn sample_trade_order_economics() -> RadrootsTradeOrderEconomics {
+    RadrootsTradeOrderEconomics {
+        quote_id: "quote-1".to_owned(),
+        quote_version: 1,
+        pricing_basis: RadrootsTradePricingBasis::ListingEvent,
+        currency: RadrootsCoreCurrency::USD,
+        items: vec![RadrootsTradeOrderEconomicItem {
+            bin_id: "bin-1".to_owned(),
+            bin_count: 2,
+            quantity_amount: RadrootsCoreDecimal::from(1u32),
+            quantity_unit: RadrootsCoreUnit::MassG,
+            unit_price_amount: RadrootsCoreDecimal::from(20u32),
+            unit_price_currency: RadrootsCoreCurrency::USD,
+            line_subtotal: RadrootsCoreMoney::new(
+                RadrootsCoreDecimal::from(40u32),
+                RadrootsCoreCurrency::USD,
+            ),
+        }],
+        discounts: Vec::<RadrootsTradeOrderEconomicLine>::new(),
+        adjustments: Vec::<RadrootsTradeOrderEconomicLine>::new(),
+        subtotal: RadrootsCoreMoney::new(
+            RadrootsCoreDecimal::from(40u32),
+            RadrootsCoreCurrency::USD,
+        ),
+        discount_total: RadrootsCoreMoney::new(
+            RadrootsCoreDecimal::from(0u32),
+            RadrootsCoreCurrency::USD,
+        ),
+        adjustment_total: RadrootsCoreMoney::new(
+            RadrootsCoreDecimal::from(0u32),
+            RadrootsCoreCurrency::USD,
+        ),
+        total: RadrootsCoreMoney::new(RadrootsCoreDecimal::from(40u32), RadrootsCoreCurrency::USD),
+    }
+}
+
+fn sample_trade_order() -> RadrootsTradeOrderRequested {
+    RadrootsTradeOrderRequested {
         order_id: "order-1".to_owned(),
         listing_addr: format!("{KIND_LISTING}:seller:AAAAAAAAAAAAAAAAAAAAAg"),
         buyer_pubkey: "buyer".to_owned(),
@@ -424,7 +461,7 @@ fn sample_trade_order() -> RadrootsTradeOrder {
             bin_id: "bin-1".to_owned(),
             bin_count: 2,
         }],
-        discounts: Some(Vec::new()),
+        economics: sample_trade_order_economics(),
     }
 }
 
@@ -1597,7 +1634,11 @@ async fn radrootsd_trade_order_request_publish_accepts_session_handle() -> TestR
 
     let receipt = client
         .trade()
-        .publish_order_request_via_radrootsd_with_options(&sample_trade_order(), &options)
+        .publish_order_request_via_radrootsd_with_options(
+            &sample_trade_order(),
+            &listing_event_ptr_with_relays(Some("wss://radroots.org")),
+            &options,
+        )
         .await?;
     let request_json = request_rx.await?;
 
@@ -1608,6 +1649,14 @@ async fn radrootsd_trade_order_request_publish_accepts_session_handle() -> TestR
     );
     assert_eq!(request_json["params"]["idempotency_key"], "idem-order-1");
     assert_eq!(request_json["params"]["order"]["order_id"], "order-1");
+    assert_eq!(
+        request_json["params"]["listing_event"]["id"],
+        "listing-event-1"
+    );
+    assert_eq!(
+        request_json["params"]["listing_event"]["relays"],
+        "wss://radroots.org"
+    );
     assert_eq!(
         request_json["params"]["signer_authority"]["provider_runtime_id"],
         "runtime-1"
@@ -1695,7 +1744,7 @@ fn public_trade_request_validation_rejects_order_request_payload() {
         sample_trade_order().listing_addr.clone(),
         "order-1",
         "buyer",
-        RadrootsTradeMessagePayload::OrderRequest(sample_trade_order()),
+        RadrootsTradeMessagePayload::TradeOrderRequested(sample_trade_order()),
     );
 
     let error = request
@@ -1905,7 +1954,11 @@ async fn radrootsd_sdk_workflow_chains_session_listing_trade_and_bridge_job() ->
 
     let trade_receipt = client
         .trade()
-        .publish_order_request_via_radrootsd(&sample_trade_order(), &handle)
+        .publish_order_request_via_radrootsd(
+            &sample_trade_order(),
+            &listing_event_ptr_with_relays(Some("wss://radroots.org")),
+            &handle,
+        )
         .await?;
     let trade_request = request_rx.recv().await.expect("trade publish request");
     assert_eq!(trade_request["method"], "bridge.order.request");
@@ -1914,6 +1967,10 @@ async fn radrootsd_sdk_workflow_chains_session_listing_trade_and_bridge_job() ->
         "session-workflow-1"
     );
     assert_eq!(trade_request["params"]["order"]["order_id"], "order-1");
+    assert_eq!(
+        trade_request["params"]["listing_event"]["id"],
+        "listing-event-1"
+    );
 
     let trade_job = match &trade_receipt.transport_receipt {
         SdkTransportReceipt::Radrootsd(receipt) => receipt.job(),

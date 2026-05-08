@@ -401,23 +401,6 @@ pub enum RadrootsTradeOrderStatus {
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsTradeOrder {
-    pub order_id: String,
-    pub listing_addr: String,
-    pub buyer_pubkey: String,
-    pub seller_pubkey: String,
-    pub items: Vec<RadrootsTradeOrderItem>,
-    #[cfg_attr(
-        feature = "ts-rs",
-        ts(optional, type = "RadrootsCoreDiscountValue[] | null")
-    )]
-    pub discounts: Option<Vec<RadrootsCoreDiscountValue>>,
-}
-
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeOrderRequested {
     pub order_id: String,
     pub listing_addr: String,
@@ -1087,7 +1070,7 @@ impl RadrootsTradeMessageType {
         match kind {
             KIND_TRADE_LISTING_VALIDATE_REQ => Some(Self::ListingValidateRequest),
             KIND_TRADE_LISTING_VALIDATE_RES => Some(Self::ListingValidateResult),
-            KIND_TRADE_ORDER_REQUEST => Some(Self::OrderRequest),
+            KIND_TRADE_ORDER_REQUEST => None,
             KIND_TRADE_ORDER_RESPONSE => Some(Self::OrderResponse),
             KIND_TRADE_ORDER_REVISION => Some(Self::OrderRevision),
             KIND_TRADE_ORDER_REVISION_RESPONSE => None,
@@ -1745,7 +1728,7 @@ impl std::error::Error for RadrootsTradeEnvelopeError {}
 pub enum RadrootsTradeMessagePayload {
     ListingValidateRequest(RadrootsTradeListingValidateRequest),
     ListingValidateResult(RadrootsTradeListingValidateResult),
-    OrderRequest(RadrootsTradeOrder),
+    TradeOrderRequested(RadrootsTradeOrderRequested),
     OrderResponse(RadrootsTradeOrderResponse),
     OrderRevision(RadrootsTradeOrderRevision),
     OrderRevisionAccept(RadrootsTradeOrderRevisionResponse),
@@ -1767,7 +1750,7 @@ impl RadrootsTradeMessagePayload {
         match self {
             Self::ListingValidateRequest(_) => RadrootsTradeMessageType::ListingValidateRequest,
             Self::ListingValidateResult(_) => RadrootsTradeMessageType::ListingValidateResult,
-            Self::OrderRequest(_) => RadrootsTradeMessageType::OrderRequest,
+            Self::TradeOrderRequested(_) => RadrootsTradeMessageType::OrderRequest,
             Self::OrderResponse(_) => RadrootsTradeMessageType::OrderResponse,
             Self::OrderRevision(_) => RadrootsTradeMessageType::OrderRevision,
             Self::OrderRevisionAccept(_) => RadrootsTradeMessageType::OrderRevisionAccept,
@@ -1808,20 +1791,6 @@ mod tests {
         RadrootsCoreDiscountValue::Percent(RadrootsCorePercent::new(RadrootsCoreDecimal::from(
             10u32,
         )))
-    }
-
-    fn sample_order() -> RadrootsTradeOrder {
-        RadrootsTradeOrder {
-            order_id: "order-1".into(),
-            listing_addr: sample_listing_addr(),
-            buyer_pubkey: "buyer".into(),
-            seller_pubkey: "seller".into(),
-            items: vec![RadrootsTradeOrderItem {
-                bin_id: "bin-1".into(),
-                bin_count: 2,
-            }],
-            discounts: Some(vec![sample_discount_value()]),
-        }
     }
 
     fn sample_active_order_request() -> RadrootsTradeOrderRequested {
@@ -2033,7 +2002,7 @@ mod tests {
     fn message_type_classifies_request_and_result_kinds() {
         assert_eq!(
             RadrootsTradeMessageType::from_kind(KIND_TRADE_LISTING_ORDER_REQ),
-            Some(RadrootsTradeMessageType::OrderRequest)
+            None
         );
         assert_eq!(
             RadrootsTradeMessageType::from_kind(KIND_TRADE_LISTING_ORDER_RES),
@@ -2882,7 +2851,7 @@ mod tests {
         );
         assert_eq!(
             RadrootsTradeMessageType::from_kind(KIND_TRADE_ORDER_REQUEST),
-            Some(RadrootsTradeMessageType::OrderRequest)
+            None
         );
         assert_eq!(
             RadrootsTradeMessageType::from_kind(KIND_TRADE_ORDER_RESPONSE),
@@ -2938,10 +2907,10 @@ mod tests {
     #[test]
     fn envelope_requires_order_id_for_order_scoped_messages() {
         let envelope = RadrootsTradeEnvelope::new(
-            RadrootsTradeMessageType::OrderRequest,
+            RadrootsTradeMessageType::OrderResponse,
             sample_listing_addr(),
             None,
-            RadrootsTradeMessagePayload::OrderRequest(sample_order()),
+            RadrootsTradeMessagePayload::OrderResponse(sample_order_response(true)),
         );
         assert_eq!(
             envelope.validate().unwrap_err(),
@@ -2960,20 +2929,20 @@ mod tests {
         assert_eq!(service_envelope.validate(), Ok(()));
 
         let public_envelope = RadrootsTradeEnvelope::new(
-            RadrootsTradeMessageType::OrderRequest,
+            RadrootsTradeMessageType::OrderResponse,
             sample_listing_addr(),
             Some("order-1".into()),
-            RadrootsTradeMessagePayload::OrderRequest(sample_order()),
+            RadrootsTradeMessagePayload::OrderResponse(sample_order_response(true)),
         );
         assert_eq!(public_envelope.validate(), Ok(()));
 
         let invalid_version = RadrootsTradeEnvelope {
             version: RADROOTS_TRADE_ENVELOPE_VERSION + 1,
             domain: RadrootsTradeDomain::TradeListing,
-            message_type: RadrootsTradeMessageType::OrderRequest,
+            message_type: RadrootsTradeMessageType::OrderResponse,
             order_id: Some("order-1".into()),
             listing_addr: sample_listing_addr(),
-            payload: RadrootsTradeMessagePayload::OrderRequest(sample_order()),
+            payload: RadrootsTradeMessagePayload::OrderResponse(sample_order_response(true)),
         };
         assert_eq!(
             invalid_version.validate().unwrap_err(),
@@ -3038,7 +3007,7 @@ mod tests {
                 RadrootsTradeMessageType::ListingValidateResult,
             ),
             (
-                RadrootsTradeMessagePayload::OrderRequest(sample_order()),
+                RadrootsTradeMessagePayload::TradeOrderRequested(sample_active_order_request()),
                 RadrootsTradeMessageType::OrderRequest,
             ),
             (

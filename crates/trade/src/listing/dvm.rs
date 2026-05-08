@@ -636,7 +636,7 @@ pub struct TradeListingCancel {
 pub enum TradeListingMessagePayload {
     ListingValidateRequest(TradeListingValidateRequest),
     ListingValidateResult(TradeListingValidateResult),
-    OrderRequest(TradeOrder),
+    TradeOrderRequested(TradeOrder),
     OrderResponse(TradeOrderResponse),
     OrderRevision(TradeOrderRevision),
     OrderRevisionAccept(TradeOrderRevisionResponse),
@@ -661,7 +661,9 @@ impl TradeListingMessagePayload {
             TradeListingMessagePayload::ListingValidateResult(_) => {
                 TradeListingMessageType::ListingValidateResult
             }
-            TradeListingMessagePayload::OrderRequest(_) => TradeListingMessageType::OrderRequest,
+            TradeListingMessagePayload::TradeOrderRequested(_) => {
+                TradeListingMessageType::OrderRequest
+            }
             TradeListingMessagePayload::OrderResponse(_) => TradeListingMessageType::OrderResponse,
             TradeListingMessagePayload::OrderRevision(_) => TradeListingMessageType::OrderRevision,
             TradeListingMessagePayload::OrderRevisionAccept(_) => {
@@ -706,7 +708,12 @@ mod tests {
     use radroots_events_codec::error::EventEncodeError;
 
     #[cfg(feature = "serde_json")]
-    use crate::listing::order::{TradeOrder, TradeOrderItem};
+    use crate::listing::order::{
+        TradeOrder, TradeOrderEconomicItem, TradeOrderEconomicLine, TradeOrderEconomics,
+        TradeOrderItem, TradePricingBasis,
+    };
+    #[cfg(feature = "serde_json")]
+    use radroots_core::{RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreUnit};
 
     #[test]
     fn envelope_requires_listing_addr() {
@@ -935,17 +942,65 @@ mod tests {
     }
 
     #[cfg(feature = "serde_json")]
+    fn order_economics(items: &[TradeOrderItem]) -> TradeOrderEconomics {
+        let economic_items = items
+            .iter()
+            .map(|item| {
+                let line_subtotal =
+                    RadrootsCoreDecimal::from(item.bin_count) * RadrootsCoreDecimal::from(5u32);
+                TradeOrderEconomicItem {
+                    bin_id: item.bin_id.clone(),
+                    bin_count: item.bin_count,
+                    quantity_amount: RadrootsCoreDecimal::from(1u32),
+                    quantity_unit: RadrootsCoreUnit::Each,
+                    unit_price_amount: RadrootsCoreDecimal::from(5u32),
+                    unit_price_currency: RadrootsCoreCurrency::USD,
+                    line_subtotal: RadrootsCoreMoney::new(line_subtotal, RadrootsCoreCurrency::USD),
+                }
+            })
+            .collect::<Vec<_>>();
+        let subtotal = items
+            .iter()
+            .fold(RadrootsCoreDecimal::from(0u32), |total, item| {
+                total
+                    + (RadrootsCoreDecimal::from(item.bin_count)
+                        * RadrootsCoreDecimal::from(5u32))
+            });
+
+        TradeOrderEconomics {
+            quote_id: "quote-1".into(),
+            quote_version: 1,
+            pricing_basis: TradePricingBasis::ListingEvent,
+            currency: RadrootsCoreCurrency::USD,
+            items: economic_items,
+            discounts: Vec::<TradeOrderEconomicLine>::new(),
+            adjustments: Vec::<TradeOrderEconomicLine>::new(),
+            subtotal: RadrootsCoreMoney::new(subtotal, RadrootsCoreCurrency::USD),
+            discount_total: RadrootsCoreMoney::new(
+                RadrootsCoreDecimal::from(0u32),
+                RadrootsCoreCurrency::USD,
+            ),
+            adjustment_total: RadrootsCoreMoney::new(
+                RadrootsCoreDecimal::from(0u32),
+                RadrootsCoreCurrency::USD,
+            ),
+            total: RadrootsCoreMoney::new(subtotal, RadrootsCoreCurrency::USD),
+        }
+    }
+
+    #[cfg(feature = "serde_json")]
     fn base_order() -> TradeOrder {
+        let items = vec![TradeOrderItem {
+            bin_id: "bin-1".into(),
+            bin_count: 2,
+        }];
         TradeOrder {
             order_id: "order-1".into(),
             listing_addr: format!("{KIND_LISTING}:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg"),
             buyer_pubkey: "buyer-pubkey".into(),
             seller_pubkey: "seller-pubkey".into(),
-            items: vec![TradeOrderItem {
-                bin_id: "bin-1".into(),
-                bin_count: 2,
-            }],
-            discounts: None,
+            economics: order_economics(&items),
+            items,
         }
     }
 
@@ -996,7 +1051,7 @@ mod tests {
     #[test]
     fn envelope_event_build_includes_order_and_snapshot_tags() {
         let listing_addr = format!("{KIND_LISTING}:pubkey:AAAAAAAAAAAAAAAAAAAAAg");
-        let payload = TradeListingMessagePayload::OrderRequest(base_order());
+        let payload = TradeListingMessagePayload::TradeOrderRequested(base_order());
         let built = super::trade_listing_envelope_event_build(
             "pubkey",
             TradeListingMessageType::OrderRequest,
@@ -1054,7 +1109,7 @@ mod tests {
     #[test]
     fn envelope_event_build_requires_snapshot_for_order_request() {
         let listing_addr = format!("{KIND_LISTING}:pubkey:AAAAAAAAAAAAAAAAAAAAAg");
-        let payload = TradeListingMessagePayload::OrderRequest(base_order());
+        let payload = TradeListingMessagePayload::TradeOrderRequested(base_order());
         let err = super::trade_listing_envelope_event_build(
             "pubkey",
             TradeListingMessageType::OrderRequest,
@@ -1097,7 +1152,7 @@ mod tests {
     #[cfg(feature = "serde_json")]
     #[test]
     fn envelope_from_event_parses_canonical_order_request() {
-        let payload = TradeListingMessagePayload::OrderRequest(base_order());
+        let payload = TradeListingMessagePayload::TradeOrderRequested(base_order());
         let event = base_event(
             "buyer-pubkey",
             "seller-pubkey",
@@ -1117,7 +1172,7 @@ mod tests {
     #[cfg(feature = "serde_json")]
     #[test]
     fn envelope_from_event_rejects_kind_mismatch() {
-        let payload = TradeListingMessagePayload::OrderRequest(base_order());
+        let payload = TradeListingMessagePayload::TradeOrderRequested(base_order());
         let mut event = base_event(
             "buyer-pubkey",
             "seller-pubkey",
@@ -1142,7 +1197,7 @@ mod tests {
     #[cfg(feature = "serde_json")]
     #[test]
     fn envelope_from_event_rejects_listing_addr_tag_mismatch() {
-        let payload = TradeListingMessagePayload::OrderRequest(base_order());
+        let payload = TradeListingMessagePayload::TradeOrderRequested(base_order());
         let mut event = base_event(
             "buyer-pubkey",
             "seller-pubkey",
@@ -1161,7 +1216,7 @@ mod tests {
     #[cfg(feature = "serde_json")]
     #[test]
     fn envelope_from_event_rejects_order_id_tag_mismatch() {
-        let payload = TradeListingMessagePayload::OrderRequest(base_order());
+        let payload = TradeListingMessagePayload::TradeOrderRequested(base_order());
         let mut event = base_event(
             "buyer-pubkey",
             "seller-pubkey",

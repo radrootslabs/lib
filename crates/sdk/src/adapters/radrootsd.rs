@@ -187,7 +187,8 @@ impl fmt::Debug for SdkRadrootsdListingPublishRequest {
 
 #[derive(Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct SdkRadrootsdOrderRequestPublishRequest {
-    pub order: trade::RadrootsTradeOrder,
+    pub order: trade::RadrootsTradeOrderRequested,
+    pub listing_event: RadrootsNostrEventPtr,
     pub signer_session_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signer_authority: Option<SdkRadrootsdSignerAuthority>,
@@ -199,6 +200,7 @@ impl fmt::Debug for SdkRadrootsdOrderRequestPublishRequest {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut debug = f.debug_struct("SdkRadrootsdOrderRequestPublishRequest");
         debug.field("order", &self.order);
+        debug.field("listing_event", &self.listing_event);
         debug.field("signer_session_id", &"<redacted>");
         debug.field("signer_authority", &self.signer_authority);
         debug.field("idempotency_key", &self.idempotency_key);
@@ -375,7 +377,7 @@ impl SdkRadrootsdPublicTradePublishRequest {
         match &self.payload {
             trade::RadrootsTradeMessagePayload::ListingValidateRequest(_) => None,
             trade::RadrootsTradeMessagePayload::ListingValidateResult(_) => None,
-            trade::RadrootsTradeMessagePayload::OrderRequest(_) => None,
+            trade::RadrootsTradeMessagePayload::TradeOrderRequested(_) => None,
             trade::RadrootsTradeMessagePayload::OrderResponse(_) => {
                 Some(trade::RadrootsTradeMessageType::OrderResponse)
             }
@@ -1263,7 +1265,7 @@ pub(crate) async fn publish_public_trade(
         }
         trade::RadrootsTradeMessagePayload::ListingValidateRequest(_)
         | trade::RadrootsTradeMessagePayload::ListingValidateResult(_)
-        | trade::RadrootsTradeMessagePayload::OrderRequest(_)
+        | trade::RadrootsTradeMessagePayload::TradeOrderRequested(_)
         | trade::RadrootsTradeMessagePayload::DiscountDecline(_) => {
             unreachable!("unsupported trade payload should be rejected by the curated client")
         }

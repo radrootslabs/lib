@@ -11,7 +11,7 @@ use radroots_core::{RadrootsCoreDecimal, RadrootsCoreDiscount, RadrootsCoreDisco
 use radroots_events::{
     RadrootsNostrEvent, RadrootsNostrEventPtr,
     farm::RadrootsFarmRef,
-    kinds::{KIND_LISTING, is_listing_kind},
+    kinds::{KIND_LISTING, KIND_TRADE_ORDER_REQUEST, is_listing_kind},
     listing::{
         RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
         RadrootsListingDeliveryMethod, RadrootsListingImage, RadrootsListingLocation,
@@ -31,12 +31,16 @@ use crate::listing::{
     },
     model::RadrootsTradeListingTotal,
     order::{
-        TradeFulfillmentStatus, TradeOrder, TradeOrderChange, TradeOrderItem, TradeOrderStatus,
+        TradeFulfillmentStatus, TradeOrder, TradeOrderChange, TradeOrderEconomicLine,
+        TradeOrderItem, TradeOrderStatus,
     },
     price_ext::BinPricingExt,
 };
 #[cfg(feature = "serde_json")]
-use radroots_events_codec::trade::trade_event_context_from_tags;
+use radroots_events_codec::trade::{
+    RadrootsActiveTradeEnvelopeParseError, active_trade_order_request_from_event,
+    trade_event_context_from_tags,
+};
 
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
@@ -116,9 +120,9 @@ pub struct RadrootsTradeOrderWorkflowProjection {
     pub items: Vec<TradeOrderItem>,
     #[cfg_attr(
         feature = "ts-rs",
-        ts(optional, type = "RadrootsCoreDiscountValue[] | null")
+        ts(optional, type = "RadrootsTradeOrderEconomicLine[] | null")
     )]
-    pub requested_discounts: Option<Vec<RadrootsCoreDiscountValue>>,
+    pub requested_discounts: Option<Vec<TradeOrderEconomicLine>>,
     pub status: TradeOrderStatus,
     #[cfg_attr(feature = "ts-rs", ts(optional, type = "RadrootsNostrEventPtr | null"))]
     pub listing_snapshot: Option<RadrootsNostrEventPtr>,
@@ -678,7 +682,8 @@ impl RadrootsTradeOrderWorkflowProjection {
             buyer_pubkey: order.buyer_pubkey.clone(),
             seller_pubkey: order.seller_pubkey.clone(),
             items: order.items.clone(),
-            requested_discounts: order.discounts.clone(),
+            requested_discounts: (!order.economics.discounts.is_empty())
+                .then(|| order.economics.discounts.clone()),
             status: TradeOrderStatus::Requested,
             listing_snapshot: Some(listing_snapshot),
             root_event_id: message.event_id.clone(),
@@ -710,6 +715,24 @@ impl RadrootsTradeOrderWorkflowProjection {
 impl RadrootsTradeOrderWorkflowMessage {
     #[cfg(feature = "serde_json")]
     pub fn from_event(event: &RadrootsNostrEvent) -> Result<Self, TradeListingEnvelopeParseError> {
+        if event.kind == KIND_TRADE_ORDER_REQUEST {
+            let envelope = active_trade_order_request_from_event(event)
+                .map_err(map_active_order_request_parse_error)?;
+            let context =
+                trade_event_context_from_tags(TradeListingMessageType::OrderRequest, &event.tags)?;
+            return Ok(Self {
+                event_id: event.id.clone(),
+                actor_pubkey: event.author.clone(),
+                counterparty_pubkey: context.counterparty_pubkey,
+                listing_addr: envelope.listing_addr,
+                order_id: Some(envelope.order_id),
+                listing_event: context.listing_event,
+                root_event_id: context.root_event_id,
+                prev_event_id: context.prev_event_id,
+                payload: TradeListingMessagePayload::TradeOrderRequested(envelope.payload),
+            });
+        }
+
         let envelope = trade_listing_envelope_from_event::<TradeListingMessagePayload>(event)?;
         trade_event_context_from_tags(envelope.message_type, &event.tags).map(|context| Self {
             event_id: event.id.clone(),
@@ -732,7 +755,9 @@ impl RadrootsTradeOrderWorkflowMessage {
             TradeListingMessagePayload::ListingValidateResult(_) => {
                 TradeListingMessageType::ListingValidateResult
             }
-            TradeListingMessagePayload::OrderRequest(_) => TradeListingMessageType::OrderRequest,
+            TradeListingMessagePayload::TradeOrderRequested(_) => {
+                TradeListingMessageType::OrderRequest
+            }
             TradeListingMessagePayload::OrderResponse(_) => TradeListingMessageType::OrderResponse,
             TradeListingMessagePayload::OrderRevision(_) => TradeListingMessageType::OrderRevision,
             TradeListingMessagePayload::OrderRevisionAccept(_) => {
@@ -758,6 +783,41 @@ impl RadrootsTradeOrderWorkflowMessage {
                 TradeListingMessageType::FulfillmentUpdate
             }
             TradeListingMessagePayload::Receipt(_) => TradeListingMessageType::Receipt,
+        }
+    }
+}
+
+#[cfg(feature = "serde_json")]
+fn map_active_order_request_parse_error(
+    error: RadrootsActiveTradeEnvelopeParseError,
+) -> TradeListingEnvelopeParseError {
+    match error {
+        RadrootsActiveTradeEnvelopeParseError::InvalidKind(kind) => {
+            TradeListingEnvelopeParseError::InvalidKind(kind)
+        }
+        RadrootsActiveTradeEnvelopeParseError::MissingTag(tag) => {
+            TradeListingEnvelopeParseError::MissingTag(tag)
+        }
+        RadrootsActiveTradeEnvelopeParseError::InvalidTag(tag) => {
+            TradeListingEnvelopeParseError::InvalidTag(tag)
+        }
+        RadrootsActiveTradeEnvelopeParseError::ListingAddrTagMismatch => {
+            TradeListingEnvelopeParseError::ListingAddrTagMismatch
+        }
+        RadrootsActiveTradeEnvelopeParseError::OrderIdTagMismatch => {
+            TradeListingEnvelopeParseError::OrderIdTagMismatch
+        }
+        RadrootsActiveTradeEnvelopeParseError::InvalidListingAddr(error) => {
+            TradeListingEnvelopeParseError::InvalidListingAddr(error)
+        }
+        RadrootsActiveTradeEnvelopeParseError::InvalidJson
+        | RadrootsActiveTradeEnvelopeParseError::InvalidEnvelope(_)
+        | RadrootsActiveTradeEnvelopeParseError::InvalidPayload(_)
+        | RadrootsActiveTradeEnvelopeParseError::MessageTypeKindMismatch { .. }
+        | RadrootsActiveTradeEnvelopeParseError::PayloadBindingMismatch(_)
+        | RadrootsActiveTradeEnvelopeParseError::AuthorMismatch
+        | RadrootsActiveTradeEnvelopeParseError::CounterpartyTagMismatch => {
+            TradeListingEnvelopeParseError::InvalidJson
         }
     }
 }
@@ -956,7 +1016,7 @@ impl RadrootsTradeReadIndex {
             | TradeListingMessagePayload::ListingValidateResult(_) => Err(
                 RadrootsTradeProjectionError::NonOrderWorkflowMessage(message.message_type()),
             ),
-            TradeListingMessagePayload::OrderRequest(order) => {
+            TradeListingMessagePayload::TradeOrderRequested(order) => {
                 self.apply_order_request(message, order)
             }
             TradeListingMessagePayload::OrderResponse(response) => {
@@ -1762,8 +1822,10 @@ mod tests {
         },
         order::{
             TradeAnswer, TradeDiscountDecision, TradeDiscountOffer, TradeDiscountRequest,
-            TradeFulfillmentStatus, TradeFulfillmentUpdate, TradeOrder, TradeOrderChange,
-            TradeOrderItem, TradeOrderRevision, TradeOrderStatus, TradeQuestion, TradeReceipt,
+            TradeEconomicActor, TradeEconomicEffect, TradeEconomicLineKind, TradeFulfillmentStatus,
+            TradeFulfillmentUpdate, TradeOrder, TradeOrderChange, TradeOrderEconomicItem,
+            TradeOrderEconomicLine, TradeOrderEconomics, TradeOrderItem, TradeOrderRevision,
+            TradeOrderStatus, TradePricingBasis, TradeQuestion, TradeReceipt,
         },
     };
     use radroots_core::{
@@ -1777,6 +1839,7 @@ mod tests {
         RadrootsListingStatus,
     };
     use radroots_events::{RadrootsNostrEvent, RadrootsNostrEventPtr, kinds::KIND_LISTING};
+    use radroots_events_codec::trade::active_trade_order_request_event_build;
 
     #[derive(Clone, Debug)]
     struct TestWorkflowChain {
@@ -1833,7 +1896,7 @@ mod tests {
                 None,
                 None,
             ),
-            (TradeListingMessagePayload::OrderRequest(order), Some(order_id)) => {
+            (TradeListingMessagePayload::TradeOrderRequested(order), Some(order_id)) => {
                 let event_id = format!("{order_id}:request");
                 TEST_WORKFLOW_CHAINS.with(|chains| {
                     chains.borrow_mut().insert(
@@ -1978,19 +2041,75 @@ mod tests {
         }
     }
 
+    fn order_economics(items: &[TradeOrderItem], include_discount: bool) -> TradeOrderEconomics {
+        let mut subtotal = RadrootsCoreDecimal::from(0u32);
+        let economic_items = items
+            .iter()
+            .map(|item| {
+                let line_subtotal =
+                    RadrootsCoreDecimal::from(item.bin_count) * RadrootsCoreDecimal::from(5u32);
+                subtotal = subtotal + line_subtotal;
+                TradeOrderEconomicItem {
+                    bin_id: item.bin_id.clone(),
+                    bin_count: item.bin_count,
+                    quantity_amount: RadrootsCoreDecimal::from(1u32),
+                    quantity_unit: RadrootsCoreUnit::Each,
+                    unit_price_amount: RadrootsCoreDecimal::from(5u32),
+                    unit_price_currency: RadrootsCoreCurrency::USD,
+                    line_subtotal: RadrootsCoreMoney::new(line_subtotal, RadrootsCoreCurrency::USD),
+                }
+            })
+            .collect::<Vec<_>>();
+        let discounts = include_discount
+            .then(|| {
+                vec![TradeOrderEconomicLine {
+                    id: "discount-1".into(),
+                    kind: TradeEconomicLineKind::ListingDiscount,
+                    actor: TradeEconomicActor::Seller,
+                    effect: TradeEconomicEffect::Decrease,
+                    amount: RadrootsCoreMoney::new(
+                        RadrootsCoreDecimal::from(1u32),
+                        RadrootsCoreCurrency::USD,
+                    ),
+                    reason: "listing discount".into(),
+                }]
+            })
+            .unwrap_or_default();
+        let discount_total = if include_discount {
+            RadrootsCoreDecimal::from(1u32)
+        } else {
+            RadrootsCoreDecimal::from(0u32)
+        };
+        TradeOrderEconomics {
+            quote_id: "quote-1".into(),
+            quote_version: 1,
+            pricing_basis: TradePricingBasis::ListingEvent,
+            currency: RadrootsCoreCurrency::USD,
+            items: economic_items,
+            discounts,
+            adjustments: Vec::new(),
+            subtotal: RadrootsCoreMoney::new(subtotal, RadrootsCoreCurrency::USD),
+            discount_total: RadrootsCoreMoney::new(discount_total, RadrootsCoreCurrency::USD),
+            adjustment_total: RadrootsCoreMoney::new(
+                RadrootsCoreDecimal::from(0u32),
+                RadrootsCoreCurrency::USD,
+            ),
+            total: RadrootsCoreMoney::new(subtotal - discount_total, RadrootsCoreCurrency::USD),
+        }
+    }
+
     fn base_order() -> TradeOrder {
+        let items = vec![TradeOrderItem {
+            bin_id: "bin-1".into(),
+            bin_count: 2,
+        }];
         TradeOrder {
             order_id: "order-1".into(),
             listing_addr: "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg".into(),
             buyer_pubkey: "buyer-pubkey".into(),
             seller_pubkey: "seller-pubkey".into(),
-            items: vec![TradeOrderItem {
-                bin_id: "bin-1".into(),
-                bin_count: 2,
-            }],
-            discounts: Some(vec![radroots_core::RadrootsCoreDiscountValue::Percent(
-                RadrootsCorePercent::new(RadrootsCoreDecimal::from(10u32)),
-            )]),
+            economics: order_economics(&items, true),
+            items,
         }
     }
 
@@ -2061,22 +2180,23 @@ mod tests {
     }
 
     fn alternate_order() -> TradeOrder {
+        let items = vec![
+            TradeOrderItem {
+                bin_id: "bin-1".into(),
+                bin_count: 3,
+            },
+            TradeOrderItem {
+                bin_id: "bin-2".into(),
+                bin_count: 1,
+            },
+        ];
         TradeOrder {
             order_id: "order-2".into(),
             listing_addr: "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAw".into(),
             buyer_pubkey: "buyer-pubkey-2".into(),
             seller_pubkey: "seller-pubkey".into(),
-            items: vec![
-                TradeOrderItem {
-                    bin_id: "bin-1".into(),
-                    bin_count: 3,
-                },
-                TradeOrderItem {
-                    bin_id: "bin-2".into(),
-                    bin_count: 1,
-                },
-            ],
-            discounts: None,
+            economics: order_economics(&items, false),
+            items,
         }
     }
 
@@ -2123,17 +2243,30 @@ mod tests {
     ) -> RadrootsNostrEvent {
         let (_, _, listing_event, root_event_id, prev_event_id) =
             workflow_refs(actor_pubkey, listing_addr, order_id, payload);
-        let built = trade_listing_envelope_event_build(
-            recipient_pubkey,
-            message_type,
-            listing_addr.to_string(),
-            order_id.map(str::to_string),
-            listing_event.as_ref(),
-            root_event_id.as_deref(),
-            prev_event_id.as_deref(),
-            payload,
-        )
-        .expect("trade workflow event");
+        let built = if message_type == crate::listing::dvm::TradeListingMessageType::OrderRequest {
+            let TradeListingMessagePayload::TradeOrderRequested(order) = payload else {
+                panic!("order-request workflow event requires active order payload")
+            };
+            active_trade_order_request_event_build(
+                listing_event
+                    .as_ref()
+                    .expect("order-request workflow event requires listing snapshot"),
+                order,
+            )
+            .expect("trade workflow event")
+        } else {
+            trade_listing_envelope_event_build(
+                recipient_pubkey,
+                message_type,
+                listing_addr.to_string(),
+                order_id.map(str::to_string),
+                listing_event.as_ref(),
+                root_event_id.as_deref(),
+                prev_event_id.as_deref(),
+                payload,
+            )
+            .expect("trade workflow event")
+        };
         RadrootsNostrEvent {
             id: "workflow-event-id".into(),
             author: actor_pubkey.into(),
@@ -2200,7 +2333,7 @@ mod tests {
                 "buyer-pubkey",
                 "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
                 Some("order-1"),
-                TradeListingMessagePayload::OrderRequest(base_order()),
+                TradeListingMessagePayload::TradeOrderRequested(base_order()),
             ))
             .expect("order request");
         assert_eq!(index.listings().len(), 1);
@@ -2481,7 +2614,7 @@ mod tests {
             crate::listing::dvm::TradeListingMessageType::OrderRequest,
             "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
             Some("order-1"),
-            &TradeListingMessagePayload::OrderRequest(base_order()),
+            &TradeListingMessagePayload::TradeOrderRequested(base_order()),
         );
 
         let order = index
@@ -2506,7 +2639,7 @@ mod tests {
                 "buyer-pubkey",
                 "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
                 Some("order-1"),
-                TradeListingMessagePayload::OrderRequest(base_order()),
+                TradeListingMessagePayload::TradeOrderRequested(base_order()),
             ))
             .expect("order request");
         let listing_after_request = index
@@ -2576,7 +2709,7 @@ mod tests {
                 "buyer-pubkey",
                 "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
                 Some("order-1"),
-                TradeListingMessagePayload::OrderRequest(base_order()),
+                TradeListingMessagePayload::TradeOrderRequested(base_order()),
             ))
             .expect("order request");
         index
@@ -2625,7 +2758,7 @@ mod tests {
                 "buyer-pubkey",
                 "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
                 Some("order-1"),
-                TradeListingMessagePayload::OrderRequest(base_order()),
+                TradeListingMessagePayload::TradeOrderRequested(base_order()),
             ))
             .expect("order request");
         index
@@ -2679,7 +2812,7 @@ mod tests {
                 "buyer-pubkey",
                 "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
                 Some("order-1"),
-                TradeListingMessagePayload::OrderRequest(base_order()),
+                TradeListingMessagePayload::TradeOrderRequested(base_order()),
             ))
             .expect("order request");
 
@@ -2745,7 +2878,7 @@ mod tests {
                 "buyer-pubkey",
                 "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
                 Some("order-1"),
-                TradeListingMessagePayload::OrderRequest(base_order()),
+                TradeListingMessagePayload::TradeOrderRequested(base_order()),
             ))
             .expect("order request");
 
@@ -2815,7 +2948,7 @@ mod tests {
                 "buyer-pubkey",
                 "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
                 Some("order-1"),
-                TradeListingMessagePayload::OrderRequest(base_order()),
+                TradeListingMessagePayload::TradeOrderRequested(base_order()),
             ))
             .expect("order request");
 
@@ -2880,7 +3013,7 @@ mod tests {
                 "buyer-pubkey",
                 "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
                 Some("order-1"),
-                TradeListingMessagePayload::OrderRequest(base_order()),
+                TradeListingMessagePayload::TradeOrderRequested(base_order()),
             ))
             .expect("order request");
         assert_eq!(
@@ -2889,6 +3022,10 @@ mod tests {
             "canonical helper should still create a requested order"
         );
 
+        let missing_snapshot_items = vec![TradeOrderItem {
+            bin_id: "bin-1".into(),
+            bin_count: 1,
+        }];
         let err = index
             .apply_workflow_message(&RadrootsTradeOrderWorkflowMessage {
                 event_id: "missing-snapshot".into(),
@@ -2899,16 +3036,13 @@ mod tests {
                 listing_event: None,
                 root_event_id: None,
                 prev_event_id: None,
-                payload: TradeListingMessagePayload::OrderRequest(TradeOrder {
+                payload: TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                     order_id: "order-2".into(),
                     listing_addr: "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg".into(),
                     buyer_pubkey: "buyer-pubkey".into(),
                     seller_pubkey: "seller-pubkey".into(),
-                    items: vec![TradeOrderItem {
-                        bin_id: "bin-1".into(),
-                        bin_count: 1,
-                    }],
-                    discounts: None,
+                    economics: order_economics(&missing_snapshot_items, false),
+                    items: missing_snapshot_items,
                 }),
             })
             .expect_err("order request without snapshot should fail");
@@ -2924,7 +3058,7 @@ mod tests {
             crate::listing::dvm::TradeListingMessageType::OrderRequest,
             "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
             Some("order-1"),
-            &TradeListingMessagePayload::OrderRequest(base_order()),
+            &TradeListingMessagePayload::TradeOrderRequested(base_order()),
         );
         event.tags[1][1] = "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAw".into();
 
@@ -2954,7 +3088,7 @@ mod tests {
                 "buyer-pubkey",
                 "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
                 Some("order-1"),
-                TradeListingMessagePayload::OrderRequest(base_order()),
+                TradeListingMessagePayload::TradeOrderRequested(base_order()),
             ))
             .expect("open order");
         index
@@ -2962,7 +3096,7 @@ mod tests {
                 "buyer-pubkey-2",
                 "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAw",
                 Some("order-2"),
-                TradeListingMessagePayload::OrderRequest(alternate_order()),
+                TradeListingMessagePayload::TradeOrderRequested(alternate_order()),
             ))
             .expect("second order request");
         index
@@ -3149,7 +3283,7 @@ mod tests {
             "buyer-pubkey",
             "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
             Some("order-1"),
-            TradeListingMessagePayload::OrderRequest(base_order()),
+            TradeListingMessagePayload::TradeOrderRequested(base_order()),
         );
         let order_a = RadrootsTradeOrderWorkflowProjection::from_order_request(
             &request_message,
@@ -3250,7 +3384,7 @@ mod tests {
                     "buyer-pubkey",
                     "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
                     Some("message-type-order-request"),
-                    TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                         order_id: "message-type-order-request".into(),
                         ..base_order()
                     }),
@@ -3470,7 +3604,7 @@ mod tests {
                 "buyer-pubkey",
                 "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
                 Some("order-1"),
-                TradeListingMessagePayload::OrderRequest(base_order()),
+                TradeListingMessagePayload::TradeOrderRequested(base_order()),
             ))
             .expect("first order");
         index
@@ -3478,7 +3612,7 @@ mod tests {
                 "buyer-pubkey-2",
                 "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAw",
                 Some("order-2"),
-                TradeListingMessagePayload::OrderRequest(alternate_order()),
+                TradeListingMessagePayload::TradeOrderRequested(alternate_order()),
             ))
             .expect("second order");
         index
@@ -3587,7 +3721,7 @@ mod tests {
                 "buyer-pubkey",
                 "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
                 Some("order-1"),
-                TradeListingMessagePayload::OrderRequest(base_order()),
+                TradeListingMessagePayload::TradeOrderRequested(base_order()),
             ))
             .expect("order request");
 
@@ -3668,7 +3802,7 @@ mod tests {
                 "buyer-pubkey",
                 "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
                 Some("order-1"),
-                TradeListingMessagePayload::OrderRequest(base_order()),
+                TradeListingMessagePayload::TradeOrderRequested(base_order()),
             ))
             .expect("decline order request");
         let declined = decline_index
@@ -3697,7 +3831,7 @@ mod tests {
                 "buyer-pubkey",
                 "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
                 Some("order-2"),
-                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                     order_id: "order-2".into(),
                     ..base_order()
                 }),
@@ -3724,7 +3858,7 @@ mod tests {
                 "buyer-pubkey",
                 "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
                 Some("order-2"),
-                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                     order_id: "order-2".into(),
                     ..base_order()
                 }),
@@ -3751,7 +3885,7 @@ mod tests {
                 "buyer-pubkey",
                 "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
                 Some("order-2"),
-                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                     order_id: "order-2".into(),
                     ..base_order()
                 }),
@@ -3777,7 +3911,7 @@ mod tests {
                 "buyer-pubkey",
                 "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
                 Some("order-2"),
-                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                     order_id: "order-2".into(),
                     ..base_order()
                 }),
@@ -3807,7 +3941,7 @@ mod tests {
                     "buyer-pubkey",
                     "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
                     Some("wrong-order-id"),
-                    TradeListingMessagePayload::OrderRequest(mismatched_order.clone()),
+                    TradeListingMessagePayload::TradeOrderRequested(mismatched_order.clone()),
                 ))
                 .expect_err("order id mismatch"),
             RadrootsTradeProjectionError::OrderIdMismatch
@@ -3819,7 +3953,7 @@ mod tests {
                     "buyer-pubkey",
                     "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
                     Some("order-3"),
-                    TradeListingMessagePayload::OrderRequest(mismatched_order),
+                    TradeListingMessagePayload::TradeOrderRequested(mismatched_order),
                 ))
                 .expect_err("listing addr mismatch"),
             RadrootsTradeProjectionError::ListingAddrMismatch
@@ -3836,7 +3970,7 @@ mod tests {
                     "buyer-pubkey-2",
                     "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
                     Some("order-1"),
-                    TradeListingMessagePayload::OrderRequest(duplicate_order),
+                    TradeListingMessagePayload::TradeOrderRequested(duplicate_order),
                 ))
                 .expect_err("duplicate order identity mismatch"),
             RadrootsTradeProjectionError::ListingAddrMismatch
@@ -3858,7 +3992,9 @@ mod tests {
             )),
             root_event_id: None,
             prev_event_id: None,
-            payload: TradeListingMessagePayload::OrderRequest(duplicate_listing_mismatch_order),
+            payload: TradeListingMessagePayload::TradeOrderRequested(
+                duplicate_listing_mismatch_order,
+            ),
         };
         assert_eq!(
             index
@@ -3872,7 +4008,7 @@ mod tests {
                 "buyer-pubkey",
                 "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
                 Some("order-1"),
-                TradeListingMessagePayload::OrderRequest(base_order()),
+                TradeListingMessagePayload::TradeOrderRequested(base_order()),
             ))
             .expect("duplicate same order");
         assert_eq!(duplicate_same.order_id, "order-1");
@@ -3888,7 +4024,7 @@ mod tests {
             )),
             root_event_id: None,
             prev_event_id: None,
-            payload: TradeListingMessagePayload::OrderRequest(TradeOrder {
+            payload: TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                 order_id: "order-1".into(),
                 seller_pubkey: "other-seller".into(),
                 ..base_order()
@@ -3907,7 +4043,7 @@ mod tests {
                 "buyer-pubkey",
                 "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
                 Some("order-4"),
-                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                     order_id: "order-4".into(),
                     ..base_order()
                 }),
@@ -3933,7 +4069,7 @@ mod tests {
                 "buyer-pubkey",
                 "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
                 Some("order-4"),
-                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                     order_id: "order-4".into(),
                     ..base_order()
                 }),
@@ -3968,7 +4104,7 @@ mod tests {
                     "intruder",
                     listing_addr,
                     Some("order-request-actor"),
-                    TradeListingMessagePayload::OrderRequest(TradeOrder {
+                    TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                         order_id: "order-request-actor".into(),
                         ..base_order()
                     }),
@@ -3981,7 +4117,7 @@ mod tests {
             "buyer-pubkey",
             listing_addr,
             Some("order-request-counterparty"),
-            TradeListingMessagePayload::OrderRequest(TradeOrder {
+            TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                 order_id: "order-request-counterparty".into(),
                 ..base_order()
             }),
@@ -4005,7 +4141,7 @@ mod tests {
                 "buyer-pubkey",
                 listing_addr,
                 Some("order-helper"),
-                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                     order_id: "order-helper".into(),
                     ..base_order()
                 }),
@@ -4563,7 +4699,7 @@ mod tests {
                 "buyer-pubkey",
                 listing_addr,
                 Some("order-response-actor"),
-                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                     order_id: "order-response-actor".into(),
                     ..base_order()
                 }),
@@ -4590,7 +4726,7 @@ mod tests {
                 "buyer-pubkey",
                 listing_addr,
                 Some("order-revision-actor"),
-                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                     order_id: "order-revision-actor".into(),
                     ..base_order()
                 }),
@@ -4655,7 +4791,7 @@ mod tests {
                 "buyer-pubkey",
                 listing_addr,
                 Some("order-revision-accept-actor"),
-                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                     order_id: "order-revision-accept-actor".into(),
                     ..base_order()
                 }),
@@ -4682,7 +4818,7 @@ mod tests {
                 "buyer-pubkey",
                 listing_addr,
                 Some("order-revision-decline-actor"),
-                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                     order_id: "order-revision-decline-actor".into(),
                     ..base_order()
                 }),
@@ -4709,7 +4845,7 @@ mod tests {
                 "buyer-pubkey",
                 listing_addr,
                 Some("order-answer-actor"),
-                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                     order_id: "order-answer-actor".into(),
                     ..base_order()
                 }),
@@ -4745,7 +4881,7 @@ mod tests {
                 "buyer-pubkey",
                 listing_addr,
                 Some("order-discount-request-actor"),
-                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                     order_id: "order-discount-request-actor".into(),
                     ..base_order()
                 }),
@@ -4800,7 +4936,7 @@ mod tests {
                 "buyer-pubkey",
                 listing_addr,
                 Some("order-discount-offer-actor"),
-                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                     order_id: "order-discount-offer-actor".into(),
                     ..base_order()
                 }),
@@ -4855,7 +4991,7 @@ mod tests {
                 "buyer-pubkey",
                 listing_addr,
                 Some("order-discount-accept-actor"),
-                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                     order_id: "order-discount-accept-actor".into(),
                     ..base_order()
                 }),
@@ -4883,7 +5019,7 @@ mod tests {
                 "buyer-pubkey",
                 listing_addr,
                 Some("order-discount-decline-actor"),
-                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                     order_id: "order-discount-decline-actor".into(),
                     ..base_order()
                 }),
@@ -4909,7 +5045,7 @@ mod tests {
                 "buyer-pubkey",
                 listing_addr,
                 Some("order-fulfillment-actor"),
-                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                     order_id: "order-fulfillment-actor".into(),
                     ..base_order()
                 }),
@@ -4935,7 +5071,7 @@ mod tests {
                 "buyer-pubkey",
                 listing_addr,
                 Some("order-receipt-actor"),
-                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                     order_id: "order-receipt-actor".into(),
                     ..base_order()
                 }),
@@ -4967,7 +5103,7 @@ mod tests {
                 "buyer-pubkey",
                 listing_addr,
                 Some("order-response-transition"),
-                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                     order_id: "order-response-transition".into(),
                     ..base_order()
                 }),
@@ -5002,7 +5138,7 @@ mod tests {
                 "buyer-pubkey",
                 listing_addr,
                 Some("order-revision-transition"),
-                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                     order_id: "order-revision-transition".into(),
                     ..base_order()
                 }),
@@ -5040,7 +5176,7 @@ mod tests {
                 "buyer-pubkey",
                 listing_addr,
                 Some("order-revision-accept-transition"),
-                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                     order_id: "order-revision-accept-transition".into(),
                     ..base_order()
                 }),
@@ -5075,7 +5211,7 @@ mod tests {
                 "buyer-pubkey",
                 listing_addr,
                 Some("order-revision-decline-transition"),
-                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                     order_id: "order-revision-decline-transition".into(),
                     ..base_order()
                 }),
@@ -5110,7 +5246,7 @@ mod tests {
                 "buyer-pubkey",
                 listing_addr,
                 Some("order-question-transition"),
-                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                     order_id: "order-question-transition".into(),
                     ..base_order()
                 }),
@@ -5144,7 +5280,7 @@ mod tests {
                 "buyer-pubkey",
                 listing_addr,
                 Some("order-answer-transition"),
-                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                     order_id: "order-answer-transition".into(),
                     ..base_order()
                 }),
@@ -5178,7 +5314,7 @@ mod tests {
                 "buyer-pubkey",
                 listing_addr,
                 Some("order-discount-offer-transition"),
-                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                     order_id: "order-discount-offer-transition".into(),
                     ..base_order()
                 }),
@@ -5215,7 +5351,7 @@ mod tests {
                 "buyer-pubkey",
                 listing_addr,
                 Some("order-discount-accept-transition"),
-                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                     order_id: "order-discount-accept-transition".into(),
                     ..base_order()
                 }),
@@ -5251,7 +5387,7 @@ mod tests {
                 "buyer-pubkey",
                 listing_addr,
                 Some("order-discount-decline-transition"),
-                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                     order_id: "order-discount-decline-transition".into(),
                     ..base_order()
                 }),
@@ -5285,7 +5421,7 @@ mod tests {
                 "buyer-pubkey",
                 listing_addr,
                 Some("order-cancel-transition"),
-                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                     order_id: "order-cancel-transition".into(),
                     ..base_order()
                 }),
@@ -5319,7 +5455,7 @@ mod tests {
                 "buyer-pubkey",
                 listing_addr,
                 Some("order-fulfillment-transition"),
-                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                     order_id: "order-fulfillment-transition".into(),
                     ..base_order()
                 }),
@@ -5348,7 +5484,7 @@ mod tests {
                 "buyer-pubkey",
                 listing_addr,
                 Some("order-receipt-transition"),
-                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                     order_id: "order-receipt-transition".into(),
                     ..base_order()
                 }),
@@ -5387,7 +5523,7 @@ mod tests {
                 "buyer-pubkey",
                 listing_addr,
                 Some("order-revision-invalid-change"),
-                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                     order_id: "order-revision-invalid-change".into(),
                     ..base_order()
                 }),
@@ -5424,7 +5560,7 @@ mod tests {
                 "buyer-pubkey",
                 "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
                 Some("order-question"),
-                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                     order_id: "order-question".into(),
                     ..base_order()
                 }),
@@ -5462,7 +5598,7 @@ mod tests {
                 "buyer-pubkey",
                 "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
                 Some("order-revision-accept"),
-                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                     order_id: "order-revision-accept".into(),
                     ..base_order()
                 }),
@@ -5510,7 +5646,7 @@ mod tests {
                 "buyer-pubkey",
                 "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
                 Some("order-revision-decline"),
-                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                     order_id: "order-revision-decline".into(),
                     ..base_order()
                 }),
@@ -5553,7 +5689,7 @@ mod tests {
                 "buyer-pubkey",
                 "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
                 Some("order-discount"),
-                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                     order_id: "order-discount".into(),
                     ..base_order()
                 }),
@@ -5609,7 +5745,7 @@ mod tests {
                 "buyer-pubkey",
                 "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
                 Some("order-discount-decline"),
-                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                     order_id: "order-discount-decline".into(),
                     ..base_order()
                 }),
@@ -5650,7 +5786,7 @@ mod tests {
                 "buyer-pubkey",
                 "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
                 Some("order-seller-cancel"),
-                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                     order_id: "order-seller-cancel".into(),
                     ..base_order()
                 }),
@@ -5677,7 +5813,7 @@ mod tests {
                 "buyer-pubkey",
                 "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
                 Some("order-preparing"),
-                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                     order_id: "order-preparing".into(),
                     ..base_order()
                 }),
@@ -5715,7 +5851,7 @@ mod tests {
                 "buyer-pubkey",
                 "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
                 Some("order-receipt"),
-                TradeListingMessagePayload::OrderRequest(TradeOrder {
+                TradeListingMessagePayload::TradeOrderRequested(TradeOrder {
                     order_id: "order-receipt".into(),
                     ..base_order()
                 }),

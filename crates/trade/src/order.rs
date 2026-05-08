@@ -10,10 +10,9 @@ use radroots_core::{RadrootsCoreCurrency, RadrootsCoreDecimal};
 use radroots_events::kinds::KIND_LISTING;
 use radroots_events::trade::{
     RadrootsActiveTradeFulfillmentState, RadrootsTradeBuyerReceipt,
-    RadrootsTradeFulfillmentUpdated, RadrootsTradeInventoryCommitment,
-    RadrootsTradeOrder as TradeOrder, RadrootsTradeOrderCancelled, RadrootsTradeOrderDecision,
-    RadrootsTradeOrderDecisionEvent, RadrootsTradeOrderEconomics, RadrootsTradeOrderItem,
-    RadrootsTradeOrderRequested, RadrootsTradeOrderRevisionDecision,
+    RadrootsTradeFulfillmentUpdated, RadrootsTradeInventoryCommitment, RadrootsTradeOrderCancelled,
+    RadrootsTradeOrderDecision, RadrootsTradeOrderDecisionEvent, RadrootsTradeOrderEconomics,
+    RadrootsTradeOrderItem, RadrootsTradeOrderRequested, RadrootsTradeOrderRevisionDecision,
     RadrootsTradeOrderRevisionDecisionEvent, RadrootsTradeOrderRevisionProposed,
     RadrootsTradePaymentMethod, RadrootsTradePaymentRecorded, RadrootsTradeSettlementDecision,
     RadrootsTradeSettlementDecisionEvent,
@@ -842,58 +841,6 @@ where
         invalid_event_ids,
         issues,
     }
-}
-
-pub fn canonicalize_order_request_for_signer(
-    mut order: TradeOrder,
-    signer_pubkey: &str,
-) -> Result<TradeOrder, RadrootsTradeOrderCanonicalizationError> {
-    let order_id = normalized_required_string(core::mem::take(&mut order.order_id), "order_id")?;
-    let listing_addr_raw =
-        normalized_required_string(core::mem::take(&mut order.listing_addr), "listing_addr")?;
-    let listing_addr = TradeListingAddress::parse(&listing_addr_raw).map_err(|error| {
-        RadrootsTradeOrderCanonicalizationError::InvalidListingAddress(error.to_string())
-    })?;
-    if u32::from(listing_addr.kind) != KIND_LISTING {
-        return Err(RadrootsTradeOrderCanonicalizationError::InvalidListingKind);
-    }
-
-    let buyer_pubkey = if order.buyer_pubkey.trim().is_empty() {
-        signer_pubkey.to_string()
-    } else {
-        normalized_required_string(core::mem::take(&mut order.buyer_pubkey), "buyer_pubkey")?
-    };
-    if buyer_pubkey != signer_pubkey {
-        return Err(RadrootsTradeOrderCanonicalizationError::InvalidBuyerSigner);
-    }
-
-    let seller_pubkey = if order.seller_pubkey.trim().is_empty() {
-        listing_addr.seller_pubkey.clone()
-    } else {
-        normalized_required_string(core::mem::take(&mut order.seller_pubkey), "seller_pubkey")?
-    };
-    if seller_pubkey != listing_addr.seller_pubkey {
-        return Err(RadrootsTradeOrderCanonicalizationError::InvalidSellerListing);
-    }
-
-    if order.items.is_empty() {
-        return Err(RadrootsTradeOrderCanonicalizationError::MissingItems);
-    }
-    for (index, item) in order.items.iter_mut().enumerate() {
-        item.bin_id = normalized_required_string(item.bin_id.clone(), "bin_id")?;
-        if item.bin_count == 0 {
-            return Err(RadrootsTradeOrderCanonicalizationError::InvalidBinCount { index });
-        }
-    }
-
-    order.order_id = order_id;
-    order.listing_addr = listing_addr.as_str();
-    order.buyer_pubkey = buyer_pubkey;
-    order.seller_pubkey = seller_pubkey;
-    if order.discounts.as_ref().is_some_and(Vec::is_empty) {
-        order.discounts = None;
-    }
-    Ok(order)
 }
 
 pub fn canonicalize_active_order_request_for_signer(
@@ -3683,13 +3630,13 @@ mod tests {
     use radroots_events::trade::{
         RadrootsActiveTradeFulfillmentState, RadrootsTradeBuyerReceipt,
         RadrootsTradeFulfillmentUpdated, RadrootsTradeInventoryCommitment,
-        RadrootsTradeOrder as TradeOrder, RadrootsTradeOrderCancelled, RadrootsTradeOrderDecision,
-        RadrootsTradeOrderDecisionEvent, RadrootsTradeOrderEconomicItem,
-        RadrootsTradeOrderEconomicLine, RadrootsTradeOrderEconomics, RadrootsTradeOrderItem,
-        RadrootsTradeOrderRequested, RadrootsTradeOrderRevisionDecision,
-        RadrootsTradeOrderRevisionDecisionEvent, RadrootsTradeOrderRevisionProposed,
-        RadrootsTradePaymentMethod, RadrootsTradePaymentRecorded, RadrootsTradePricingBasis,
-        RadrootsTradeSettlementDecision, RadrootsTradeSettlementDecisionEvent,
+        RadrootsTradeOrderCancelled, RadrootsTradeOrderDecision, RadrootsTradeOrderDecisionEvent,
+        RadrootsTradeOrderEconomicItem, RadrootsTradeOrderEconomicLine,
+        RadrootsTradeOrderEconomics, RadrootsTradeOrderItem, RadrootsTradeOrderRequested,
+        RadrootsTradeOrderRevisionDecision, RadrootsTradeOrderRevisionDecisionEvent,
+        RadrootsTradeOrderRevisionProposed, RadrootsTradePaymentMethod,
+        RadrootsTradePaymentRecorded, RadrootsTradePricingBasis, RadrootsTradeSettlementDecision,
+        RadrootsTradeSettlementDecisionEvent,
     };
 
     use super::{
@@ -3705,28 +3652,13 @@ mod tests {
         RadrootsListingInventoryBinAvailability, RadrootsListingInventoryOrderReservation,
         RadrootsTradeOrderCanonicalizationError, add_inventory_reservation,
         canonicalize_active_order_decision_for_signer,
-        canonicalize_active_order_request_for_signer, canonicalize_order_request_for_signer,
-        radroots_trade_order_economics_digest,
+        canonicalize_active_order_request_for_signer, radroots_trade_order_economics_digest,
         reduce_active_order_events as reduce_active_order_events_with_revisions,
         reduce_listing_inventory_accounting as reduce_listing_inventory_accounting_with_revisions,
     };
 
     const SELLER: &str = "1111111111111111111111111111111111111111111111111111111111111111";
     const BUYER: &str = "2222222222222222222222222222222222222222222222222222222222222222";
-
-    fn base_order(buyer_pubkey: &str, seller_pubkey: &str) -> TradeOrder {
-        TradeOrder {
-            order_id: "order-1".to_string(),
-            listing_addr: format!("{KIND_LISTING}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg"),
-            buyer_pubkey: buyer_pubkey.to_string(),
-            seller_pubkey: seller_pubkey.to_string(),
-            items: vec![RadrootsTradeOrderItem {
-                bin_id: "bin-1".to_string(),
-                bin_count: 1,
-            }],
-            discounts: None,
-        }
-    }
 
     fn active_request(buyer_pubkey: &str, seller_pubkey: &str) -> RadrootsTradeOrderRequested {
         RadrootsTradeOrderRequested {
@@ -4144,15 +4076,6 @@ mod tests {
             cancellations,
             receipts,
         )
-    }
-
-    #[test]
-    fn canonicalize_order_request_sets_missing_pubkeys() {
-        let order = canonicalize_order_request_for_signer(base_order("", ""), SELLER)
-            .expect("canonical order");
-
-        assert_eq!(order.buyer_pubkey, SELLER);
-        assert_eq!(order.seller_pubkey, SELLER);
     }
 
     #[test]

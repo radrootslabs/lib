@@ -125,6 +125,9 @@ pub fn trade_envelope_event_build(
     prev_event_id: Option<&str>,
     payload: &RadrootsTradeMessagePayload,
 ) -> Result<WireEventParts, EventEncodeError> {
+    if message_type == RadrootsTradeMessageType::OrderRequest {
+        return Err(EventEncodeError::InvalidField("message_type"));
+    }
     if payload.message_type() != message_type {
         return Err(EventEncodeError::InvalidField("payload"));
     }

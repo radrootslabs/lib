@@ -513,8 +513,9 @@ mod tests {
     };
     use crate::listing::{
         order::{
-            TradeFulfillmentStatus, TradeFulfillmentUpdate, TradeOrder, TradeOrderItem,
-            TradeOrderStatus, TradeReceipt,
+            TradeEconomicActor, TradeEconomicEffect, TradeEconomicLineKind, TradeFulfillmentStatus,
+            TradeFulfillmentUpdate, TradeOrder, TradeOrderEconomicItem, TradeOrderEconomicLine,
+            TradeOrderEconomics, TradeOrderItem, TradeOrderStatus, TradePricingBasis, TradeReceipt,
         },
         projection::{
             RadrootsTradeListingSort, RadrootsTradeListingSortField, RadrootsTradeOrderQuery,
@@ -523,8 +524,8 @@ mod tests {
         },
     };
     use radroots_core::{
-        RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCorePercent,
-        RadrootsCoreQuantity, RadrootsCoreQuantityPrice, RadrootsCoreUnit,
+        RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
+        RadrootsCoreQuantityPrice, RadrootsCoreUnit,
     };
     use radroots_events::RadrootsNostrEventPtr;
     use radroots_events::farm::RadrootsFarmRef;
@@ -589,7 +590,7 @@ mod tests {
                 None,
                 None,
             ),
-            (TradeListingMessagePayload::OrderRequest(order), Some(order_id)) => {
+            (TradeListingMessagePayload::TradeOrderRequested(order), Some(order_id)) => {
                 let event_id = format!("{order_id}:request");
                 TEST_WORKFLOW_CHAINS.with(|chains| {
                     chains.borrow_mut().insert(
@@ -775,33 +776,90 @@ mod tests {
         }
     }
 
+    fn order_economics(items: &[TradeOrderItem], include_discount: bool) -> TradeOrderEconomics {
+        let mut subtotal = RadrootsCoreDecimal::from(0u32);
+        let economic_items = items
+            .iter()
+            .map(|item| {
+                let line_subtotal =
+                    RadrootsCoreDecimal::from(item.bin_count) * RadrootsCoreDecimal::from(5u32);
+                subtotal = subtotal + line_subtotal;
+                TradeOrderEconomicItem {
+                    bin_id: item.bin_id.clone(),
+                    bin_count: item.bin_count,
+                    quantity_amount: RadrootsCoreDecimal::from(1u32),
+                    quantity_unit: RadrootsCoreUnit::Each,
+                    unit_price_amount: RadrootsCoreDecimal::from(5u32),
+                    unit_price_currency: RadrootsCoreCurrency::USD,
+                    line_subtotal: RadrootsCoreMoney::new(line_subtotal, RadrootsCoreCurrency::USD),
+                }
+            })
+            .collect::<Vec<_>>();
+        let discounts = include_discount
+            .then(|| {
+                vec![TradeOrderEconomicLine {
+                    id: "discount-1".into(),
+                    kind: TradeEconomicLineKind::ListingDiscount,
+                    actor: TradeEconomicActor::Seller,
+                    effect: TradeEconomicEffect::Decrease,
+                    amount: RadrootsCoreMoney::new(
+                        RadrootsCoreDecimal::from(1u32),
+                        RadrootsCoreCurrency::USD,
+                    ),
+                    reason: "listing discount".into(),
+                }]
+            })
+            .unwrap_or_default();
+        let discount_total = if include_discount {
+            RadrootsCoreDecimal::from(1u32)
+        } else {
+            RadrootsCoreDecimal::from(0u32)
+        };
+        TradeOrderEconomics {
+            quote_id: "quote-1".into(),
+            quote_version: 1,
+            pricing_basis: TradePricingBasis::ListingEvent,
+            currency: RadrootsCoreCurrency::USD,
+            items: economic_items,
+            discounts,
+            adjustments: Vec::new(),
+            subtotal: RadrootsCoreMoney::new(subtotal, RadrootsCoreCurrency::USD),
+            discount_total: RadrootsCoreMoney::new(discount_total, RadrootsCoreCurrency::USD),
+            adjustment_total: RadrootsCoreMoney::new(
+                RadrootsCoreDecimal::from(0u32),
+                RadrootsCoreCurrency::USD,
+            ),
+            total: RadrootsCoreMoney::new(subtotal - discount_total, RadrootsCoreCurrency::USD),
+        }
+    }
+
     fn base_order() -> TradeOrder {
+        let items = vec![TradeOrderItem {
+            bin_id: "bin-1".into(),
+            bin_count: 2,
+        }];
         TradeOrder {
             order_id: "order-1".into(),
             listing_addr: "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg".into(),
             buyer_pubkey: "buyer-pubkey".into(),
             seller_pubkey: "seller-pubkey".into(),
-            items: vec![TradeOrderItem {
-                bin_id: "bin-1".into(),
-                bin_count: 2,
-            }],
-            discounts: Some(vec![radroots_core::RadrootsCoreDiscountValue::Percent(
-                RadrootsCorePercent::new(RadrootsCoreDecimal::from(10u32)),
-            )]),
+            economics: order_economics(&items, true),
+            items,
         }
     }
 
     fn alternate_order() -> TradeOrder {
+        let items = vec![TradeOrderItem {
+            bin_id: "bin-1".into(),
+            bin_count: 3,
+        }];
         TradeOrder {
             order_id: "order-2".into(),
             listing_addr: "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAw".into(),
             buyer_pubkey: "buyer-pubkey-2".into(),
             seller_pubkey: "seller-pubkey".into(),
-            items: vec![TradeOrderItem {
-                bin_id: "bin-1".into(),
-                bin_count: 3,
-            }],
-            discounts: None,
+            economics: order_economics(&items, false),
+            items,
         }
     }
 
@@ -1043,7 +1101,7 @@ mod tests {
                 "buyer-pubkey",
                 "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAg",
                 Some("order-1"),
-                TradeListingMessagePayload::OrderRequest(base_order()),
+                TradeListingMessagePayload::TradeOrderRequested(base_order()),
             ))
             .expect("first order");
         index
@@ -1051,7 +1109,7 @@ mod tests {
                 "buyer-pubkey-2",
                 "30402:seller-pubkey:AAAAAAAAAAAAAAAAAAAAAw",
                 Some("order-2"),
-                TradeListingMessagePayload::OrderRequest(alternate_order()),
+                TradeListingMessagePayload::TradeOrderRequested(alternate_order()),
             ))
             .expect("second order");
         index
