@@ -24,7 +24,11 @@ pub use ingest::{
     RadrootsReplicaIdFactory, RadrootsReplicaIngestOutcome, radroots_replica_ingest_event_state,
     radroots_replica_ingest_event_with_factory,
 };
-pub use sync_state::{RadrootsReplicaSyncStatus, radroots_replica_sync_status};
+pub use sync_state::{
+    RadrootsReplicaPendingPublishBatch, RadrootsReplicaPendingPublishEvent,
+    RadrootsReplicaSyncStatus, radroots_replica_pending_publish_batch,
+    radroots_replica_sync_status,
+};
 pub use types::{
     RADROOTS_REPLICA_TRANSFER_VERSION, RadrootsReplicaEventDraft, RadrootsReplicaFarmSelector,
     RadrootsReplicaSyncBundle, RadrootsReplicaSyncOptions, RadrootsReplicaSyncRequest,
