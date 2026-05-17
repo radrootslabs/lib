@@ -10,6 +10,11 @@ description = "SP1 guest model for Radroots trade verification"
 repository.workspace = true
 homepage.workspace = true
 
+[[bin]]
+name = "radroots_sp1_trade_order_acceptance_guest"
+path = "src/bin/order_acceptance_guest.rs"
+required-features = ["sp1_guest"]
+
 [features]
 default = []
 sp1_guest = ["dep:sp1-zkvm"]

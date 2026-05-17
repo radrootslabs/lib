@@ -220,6 +220,12 @@ pub fn canonical_public_values_bytes(
     serde_json::to_vec(public_values).map_err(|_| RadrootsSp1TradeGuestError::PublicValuesEncoding)
 }
 
+pub fn reduce_order_acceptance_canonical_public_values(
+    witness: &RadrootsSp1TradeOrderAcceptanceWitness,
+) -> Result<Vec<u8>, RadrootsSp1TradeGuestError> {
+    Ok(reduce_order_acceptance_public_values(witness)?.canonical_public_values)
+}
+
 pub fn public_values_hash_hex(
     public_values: &RadrootsSp1TradeProofPublicValues,
 ) -> Result<String, RadrootsSp1TradeGuestError> {
@@ -491,7 +497,7 @@ mod tests {
         RadrootsSp1TradeGuestError, RadrootsSp1TradeInventoryBinWitness,
         RadrootsSp1TradeOrderAcceptanceWitness, RadrootsSp1TradeProofResult,
         RadrootsSp1TradeProofTransitionKind, canonical_public_values_bytes,
-        reduce_order_acceptance_public_values,
+        reduce_order_acceptance_canonical_public_values, reduce_order_acceptance_public_values,
     };
     use radroots_core::{
         RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreUnit,
@@ -631,6 +637,14 @@ mod tests {
             serde_json::from_slice(&execution.canonical_public_values).expect("decode");
         let encoded = canonical_public_values_bytes(&decoded).expect("reencode");
         assert_eq!(execution.canonical_public_values, encoded);
+    }
+
+    #[test]
+    fn guest_public_values_output_is_canonical_bytes() {
+        let execution = reduce_order_acceptance_public_values(&witness()).expect("execution");
+        let bytes =
+            reduce_order_acceptance_canonical_public_values(&witness()).expect("guest bytes");
+        assert_eq!(bytes, execution.canonical_public_values);
     }
 
     #[test]
