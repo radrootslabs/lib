@@ -68,6 +68,7 @@ pub const KIND_TRADE_DISCOUNT_DECLINE: u32 = KIND_TRADE_FORBIDDEN_3431;
 pub const KIND_TRADE_CANCEL: u32 = 3432;
 pub const KIND_TRADE_FULFILLMENT_UPDATE: u32 = 3433;
 pub const KIND_TRADE_RECEIPT: u32 = 3434;
+pub const KIND_TRADE_VALIDATION_RECEIPT: u32 = 3440;
 pub const KIND_TRADE_PAYMENT_RECORDED: u32 = 3435;
 pub const KIND_TRADE_SETTLEMENT_DECISION: u32 = 3436;
 
@@ -156,6 +157,8 @@ pub const ACTIVE_TRADE_KINDS: [u32; 11] = [
     KIND_TRADE_SETTLEMENT_DECISION,
 ];
 
+pub const TRADE_VALIDATION_RECEIPT_KINDS: [u32; 1] = [KIND_TRADE_VALIDATION_RECEIPT];
+
 pub const KIND_JOB_REQUEST_MIN: u32 = 5000;
 pub const KIND_JOB_REQUEST_MAX: u32 = 5999;
 pub const KIND_JOB_RESULT_MIN: u32 = 6000;
@@ -232,6 +235,11 @@ pub const fn is_active_trade_public_kind(kind: u32) -> bool {
 #[inline]
 pub const fn is_active_trade_kind(kind: u32) -> bool {
     is_active_trade_listing_kind(kind) || is_active_trade_public_kind(kind)
+}
+
+#[inline]
+pub const fn is_trade_validation_receipt_kind(kind: u32) -> bool {
+    kind == KIND_TRADE_VALIDATION_RECEIPT
 }
 
 #[inline]
@@ -494,6 +502,10 @@ mod kinds_constants_tests {
             KIND_TRADE_FULFILLMENT_UPDATE,
         ),
         ("KIND_TRADE_RECEIPT", KIND_TRADE_RECEIPT),
+        (
+            "KIND_TRADE_VALIDATION_RECEIPT",
+            KIND_TRADE_VALIDATION_RECEIPT,
+        ),
         ("KIND_TRADE_LISTING_ORDER_REQ", KIND_TRADE_LISTING_ORDER_REQ),
         ("KIND_TRADE_LISTING_ORDER_RES", KIND_TRADE_LISTING_ORDER_RES),
         (
@@ -808,5 +820,23 @@ mod kinds_constants_tests {
         assert!(!is_active_trade_public_kind(KIND_TRADE_DISCOUNT_OFFER));
         assert!(!is_active_trade_public_kind(KIND_TRADE_DISCOUNT_ACCEPT));
         assert!(!is_active_trade_public_kind(KIND_TRADE_FORBIDDEN_3431));
+    }
+
+    #[test]
+    fn validation_receipt_kind_is_registered_outside_buyer_receipt_lifecycle() {
+        assert_eq!(KIND_TRADE_RECEIPT, 3434);
+        assert_eq!(KIND_TRADE_VALIDATION_RECEIPT, 3440);
+        assert_ne!(KIND_TRADE_VALIDATION_RECEIPT, KIND_TRADE_RECEIPT);
+        assert_eq!(
+            TRADE_VALIDATION_RECEIPT_KINDS,
+            [KIND_TRADE_VALIDATION_RECEIPT]
+        );
+        assert!(is_trade_validation_receipt_kind(
+            KIND_TRADE_VALIDATION_RECEIPT
+        ));
+        assert!(!is_trade_validation_receipt_kind(KIND_TRADE_RECEIPT));
+        assert!(!is_trade_public_kind(KIND_TRADE_VALIDATION_RECEIPT));
+        assert!(!is_active_trade_public_kind(KIND_TRADE_VALIDATION_RECEIPT));
+        assert!(!is_active_trade_kind(KIND_TRADE_VALIDATION_RECEIPT));
     }
 }
