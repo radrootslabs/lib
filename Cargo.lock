@@ -4391,6 +4391,7 @@ name = "radroots_sp1_host_trade"
 version = "0.1.0-alpha.2"
 dependencies = [
  "base64 0.22.1",
+ "bincode",
  "radroots_events",
  "radroots_sp1_guest_trade",
  "radroots_trade",

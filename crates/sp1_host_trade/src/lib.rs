@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+#[cfg(feature = "expensive_proofs")]
 use base64::Engine;
 use radroots_sp1_guest_trade::{
     RadrootsSp1TradeGuestError, RadrootsSp1TradeOrderAcceptanceWitness,
@@ -88,6 +89,24 @@ pub enum RadrootsSp1TradeHostError {
     Sp1PublicValuesDecode(String),
     #[error("SP1 public values do not match deterministic reducer output")]
     Sp1PublicValuesMismatch,
+    #[error("SP1 proof generation requires the expensive proof lane")]
+    Sp1ProofGenerationRequired,
+    #[error("SP1 proof mode is required")]
+    Sp1ProofModeRequired,
+    #[error("SP1 setup failed: {0}")]
+    Sp1SetupFailed(String),
+    #[error("SP1 proof generation failed: {0}")]
+    Sp1ProofFailed(String),
+    #[error("SP1 proof verification failed: {0}")]
+    Sp1ProofVerificationFailed(String),
+    #[error("SP1 proof material failed to decode: {0}")]
+    Sp1ProofMaterialDecode(String),
+    #[error("SP1 proof material is synthetic")]
+    Sp1SyntheticProofMaterial,
+    #[error("SP1 proof mode does not match the proof artifact")]
+    Sp1ProofModeMismatch,
+    #[error("SP1 verifying key hash mismatch")]
+    Sp1VerifyingKeyHashMismatch,
     #[error("proof artifact encoding failed")]
     ProofEncoding,
 }
@@ -154,31 +173,7 @@ pub async fn execute_order_acceptance_sp1_public_values_with_elf(
         return Err(RadrootsSp1TradeHostError::Sp1ExitCode(report.exit_code));
     }
 
-    let committed_public_values = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let mut public_values = public_values;
-        public_values.read::<Vec<u8>>()
-    }))
-    .map_err(|_| {
-        RadrootsSp1TradeHostError::Sp1PublicValuesDecode(
-            "SP1 public values stream did not contain canonical bytes".to_string(),
-        )
-    })?;
-    let decoded: radroots_sp1_guest_trade::RadrootsSp1TradeProofPublicValues =
-        serde_json::from_slice(&committed_public_values).map_err(|error| {
-            RadrootsSp1TradeHostError::Sp1PublicValuesDecode(format!(
-                "{error}; public values bytes={}; prefix={}",
-                committed_public_values.len(),
-                public_values_prefix(&committed_public_values)
-            ))
-        })?;
-    let canonical_public_values = radroots_sp1_guest_trade::canonical_public_values_bytes(&decoded)
-        .map_err(|error| RadrootsSp1TradeHostError::Sp1PublicValuesDecode(error.to_string()))?;
-    let public_values_hash = radroots_sp1_guest_trade::public_values_hash_hex(&decoded)?;
-    let execution = RadrootsSp1TradePublicValuesExecution {
-        public_values: decoded,
-        public_values_hash,
-        canonical_public_values,
-    };
+    let (committed_public_values, execution) = execution_from_sp1_public_values(public_values)?;
     if execution != expected {
         return Err(RadrootsSp1TradeHostError::Sp1PublicValuesMismatch);
     }
@@ -193,6 +188,91 @@ pub async fn execute_order_acceptance_sp1_public_values_with_elf(
             total_syscall_count: report.total_syscall_count(),
         },
     })
+}
+
+#[cfg(feature = "expensive_proofs")]
+pub async fn generate_order_acceptance_sp1_proof(
+    witness: &RadrootsSp1TradeOrderAcceptanceWitness,
+    mode: RadrootsSp1TradeProofMode,
+) -> Result<RadrootsSp1TradeProofBundle, RadrootsSp1TradeHostError> {
+    use sp1_sdk::{
+        HashableKey, ProveRequest, Prover, ProverClient, ProvingKey, SP1Stdin, StatusCode,
+    };
+
+    let sp1_mode = sp1_proof_mode(mode)?;
+    let expected = execute_order_acceptance_public_values(witness)?;
+    let client = ProverClient::builder().cpu().build().await;
+    let pk = client
+        .setup(order_acceptance_guest_elf())
+        .await
+        .map_err(|error| RadrootsSp1TradeHostError::Sp1SetupFailed(error.to_string()))?;
+    let mut stdin = SP1Stdin::new();
+    stdin.write(witness);
+    let proof = client
+        .prove(&pk, stdin)
+        .mode(sp1_mode)
+        .expected_exit_code(StatusCode::SUCCESS)
+        .await
+        .map_err(|error| RadrootsSp1TradeHostError::Sp1ProofFailed(error.to_string()))?;
+    if !sp1_proof_material_is_real(&proof.proof) {
+        return Err(RadrootsSp1TradeHostError::Sp1SyntheticProofMaterial);
+    }
+    client
+        .verify(&proof, pk.verifying_key(), Some(StatusCode::SUCCESS))
+        .map_err(|error| {
+            RadrootsSp1TradeHostError::Sp1ProofVerificationFailed(error.to_string())
+        })?;
+    let (_, execution) = execution_from_sp1_public_values(proof.public_values.clone())?;
+    if execution != expected {
+        return Err(RadrootsSp1TradeHostError::Sp1PublicValuesMismatch);
+    }
+    let proof_bytes =
+        bincode::serialize(&proof).map_err(|_| RadrootsSp1TradeHostError::ProofEncoding)?;
+    let proof = proof_artifact_for_real_sp1_execution(
+        &execution,
+        mode,
+        pk.verifying_key().bytes32(),
+        &proof_bytes,
+    )?;
+    verify_order_acceptance_proof_artifact(&execution, &proof)?;
+    Ok(RadrootsSp1TradeProofBundle { execution, proof })
+}
+
+#[cfg(feature = "expensive_proofs")]
+pub async fn verify_order_acceptance_sp1_proof_artifact(
+    execution: &RadrootsSp1TradePublicValuesExecution,
+    artifact: &RadrootsSp1TradeProofArtifact,
+) -> Result<(), RadrootsSp1TradeHostError> {
+    use sp1_sdk::{HashableKey, Prover, ProverClient, ProvingKey, StatusCode};
+
+    verify_order_acceptance_proof_artifact(execution, artifact)?;
+    let mode = artifact_proof_mode(artifact)?;
+    let proof = decode_sp1_proof_artifact(artifact)?;
+    if !sp1_proof_material_is_real(&proof.proof) {
+        return Err(RadrootsSp1TradeHostError::Sp1SyntheticProofMaterial);
+    }
+    if !sp1_proof_matches_mode(&proof.proof, mode) {
+        return Err(RadrootsSp1TradeHostError::Sp1ProofModeMismatch);
+    }
+    let client = ProverClient::builder().cpu().build().await;
+    let pk = client
+        .setup(order_acceptance_guest_elf())
+        .await
+        .map_err(|error| RadrootsSp1TradeHostError::Sp1SetupFailed(error.to_string()))?;
+    let verifying_key_hash = pk.verifying_key().bytes32();
+    if artifact.verifying_key_hash.as_deref() != Some(verifying_key_hash.as_str()) {
+        return Err(RadrootsSp1TradeHostError::Sp1VerifyingKeyHashMismatch);
+    }
+    client
+        .verify(&proof, pk.verifying_key(), Some(StatusCode::SUCCESS))
+        .map_err(|error| {
+            RadrootsSp1TradeHostError::Sp1ProofVerificationFailed(error.to_string())
+        })?;
+    let (_, proof_execution) = execution_from_sp1_public_values(proof.public_values)?;
+    if &proof_execution != execution {
+        return Err(RadrootsSp1TradeHostError::Sp1PublicValuesMismatch);
+    }
+    Ok(())
 }
 
 pub fn generate_order_acceptance_proof(
@@ -293,16 +373,31 @@ fn proof_artifact_for_execution(
         return Ok(artifact);
     }
 
-    let verifying_key_hash = execution
-        .public_values
-        .sp1_verifying_key_hash
-        .clone()
-        .ok_or(RadrootsSp1TradeHostError::MissingVerifyingKeyHash)?;
-    artifact.program_hash = Some(execution.public_values.reducer_program_hash.clone());
-    artifact.verifying_key_hash = Some(verifying_key_hash);
+    Err(RadrootsSp1TradeHostError::Sp1ProofGenerationRequired)
+}
+
+#[cfg(feature = "expensive_proofs")]
+fn proof_artifact_for_real_sp1_execution(
+    execution: &RadrootsSp1TradePublicValuesExecution,
+    mode: RadrootsSp1TradeProofMode,
+    verifying_key_hash: String,
+    proof_bytes: &[u8],
+) -> Result<RadrootsSp1TradeProofArtifact, RadrootsSp1TradeHostError> {
+    let system = mode.proof_system();
+    if system == RadrootsValidationReceiptProofSystem::None {
+        return Err(RadrootsSp1TradeHostError::Sp1ProofModeRequired);
+    }
+    let mut artifact = RadrootsSp1TradeProofArtifact {
+        inline_proof_base64: Some(base64::engine::general_purpose::STANDARD.encode(proof_bytes)),
+        mode: mode.mode_label().map(str::to_string),
+        program_hash: Some(execution.public_values.reducer_program_hash.clone()),
+        proof_digest: String::new(),
+        proof_reference: None,
+        public_values_hash: execution.public_values_hash.clone(),
+        system,
+        verifying_key_hash: Some(verifying_key_hash),
+    };
     artifact.proof_digest = proof_digest_for_execution(execution, &artifact)?;
-    artifact.inline_proof_base64 =
-        Some(base64::engine::general_purpose::STANDARD.encode(artifact.proof_digest.as_bytes()));
     Ok(artifact)
 }
 
@@ -312,6 +407,7 @@ fn proof_digest_for_execution(
 ) -> Result<String, RadrootsSp1TradeHostError> {
     let material = ProofDigestMaterial {
         canonical_public_values: &execution.canonical_public_values,
+        inline_proof_base64: artifact.inline_proof_base64.as_deref(),
         mode: artifact.mode.as_deref(),
         program_hash: artifact.program_hash.as_deref(),
         proof_reference: artifact.proof_reference.as_deref(),
@@ -343,9 +439,119 @@ fn public_values_prefix(bytes: &[u8]) -> String {
     hex_lower(&bytes[..bytes.len().min(PREFIX_LEN)])
 }
 
+#[cfg(feature = "expensive_proofs")]
+fn execution_from_sp1_public_values(
+    public_values: sp1_sdk::SP1PublicValues,
+) -> Result<(Vec<u8>, RadrootsSp1TradePublicValuesExecution), RadrootsSp1TradeHostError> {
+    let committed_public_values = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let mut public_values = public_values;
+        public_values.read::<Vec<u8>>()
+    }))
+    .map_err(|_| {
+        RadrootsSp1TradeHostError::Sp1PublicValuesDecode(
+            "SP1 public values stream did not contain canonical bytes".to_string(),
+        )
+    })?;
+    let decoded: radroots_sp1_guest_trade::RadrootsSp1TradeProofPublicValues =
+        serde_json::from_slice(&committed_public_values).map_err(|error| {
+            RadrootsSp1TradeHostError::Sp1PublicValuesDecode(format!(
+                "{error}; public values bytes={}; prefix={}",
+                committed_public_values.len(),
+                public_values_prefix(&committed_public_values)
+            ))
+        })?;
+    let canonical_public_values = radroots_sp1_guest_trade::canonical_public_values_bytes(&decoded)
+        .map_err(|error| RadrootsSp1TradeHostError::Sp1PublicValuesDecode(error.to_string()))?;
+    let public_values_hash = radroots_sp1_guest_trade::public_values_hash_hex(&decoded)?;
+    Ok((
+        committed_public_values,
+        RadrootsSp1TradePublicValuesExecution {
+            public_values: decoded,
+            public_values_hash,
+            canonical_public_values,
+        },
+    ))
+}
+
+#[cfg(feature = "expensive_proofs")]
+fn sp1_proof_mode(
+    mode: RadrootsSp1TradeProofMode,
+) -> Result<sp1_sdk::SP1ProofMode, RadrootsSp1TradeHostError> {
+    match mode {
+        RadrootsSp1TradeProofMode::None => Err(RadrootsSp1TradeHostError::Sp1ProofModeRequired),
+        RadrootsSp1TradeProofMode::Core => Ok(sp1_sdk::SP1ProofMode::Core),
+        RadrootsSp1TradeProofMode::Compressed => Ok(sp1_sdk::SP1ProofMode::Compressed),
+        RadrootsSp1TradeProofMode::Groth16 => Ok(sp1_sdk::SP1ProofMode::Groth16),
+        RadrootsSp1TradeProofMode::Plonk => Ok(sp1_sdk::SP1ProofMode::Plonk),
+    }
+}
+
+#[cfg(feature = "expensive_proofs")]
+fn artifact_proof_mode(
+    artifact: &RadrootsSp1TradeProofArtifact,
+) -> Result<RadrootsSp1TradeProofMode, RadrootsSp1TradeHostError> {
+    match artifact.system {
+        RadrootsValidationReceiptProofSystem::None => {
+            Err(RadrootsSp1TradeHostError::Sp1ProofModeRequired)
+        }
+        RadrootsValidationReceiptProofSystem::Sp1Core => Ok(RadrootsSp1TradeProofMode::Core),
+        RadrootsValidationReceiptProofSystem::Sp1Compressed => {
+            Ok(RadrootsSp1TradeProofMode::Compressed)
+        }
+        RadrootsValidationReceiptProofSystem::Sp1Groth16 => Ok(RadrootsSp1TradeProofMode::Groth16),
+        RadrootsValidationReceiptProofSystem::Sp1Plonk => Ok(RadrootsSp1TradeProofMode::Plonk),
+    }
+}
+
+#[cfg(feature = "expensive_proofs")]
+fn decode_sp1_proof_artifact(
+    artifact: &RadrootsSp1TradeProofArtifact,
+) -> Result<sp1_sdk::SP1ProofWithPublicValues, RadrootsSp1TradeHostError> {
+    let inline = artifact
+        .inline_proof_base64
+        .as_deref()
+        .ok_or(RadrootsSp1TradeHostError::MissingProofMaterial)?;
+    let proof_bytes = base64::engine::general_purpose::STANDARD
+        .decode(inline)
+        .map_err(|error| RadrootsSp1TradeHostError::Sp1ProofMaterialDecode(error.to_string()))?;
+    bincode::deserialize::<sp1_sdk::SP1ProofWithPublicValues>(&proof_bytes)
+        .map_err(|error| RadrootsSp1TradeHostError::Sp1ProofMaterialDecode(error.to_string()))
+}
+
+#[cfg(feature = "expensive_proofs")]
+fn sp1_proof_material_is_real(proof: &sp1_sdk::SP1Proof) -> bool {
+    match proof {
+        sp1_sdk::SP1Proof::Core(chunks) => !chunks.is_empty(),
+        sp1_sdk::SP1Proof::Compressed(_) => true,
+        sp1_sdk::SP1Proof::Groth16(proof) => !proof.encoded_proof.is_empty(),
+        sp1_sdk::SP1Proof::Plonk(proof) => !proof.encoded_proof.is_empty(),
+    }
+}
+
+#[cfg(feature = "expensive_proofs")]
+fn sp1_proof_matches_mode(proof: &sp1_sdk::SP1Proof, mode: RadrootsSp1TradeProofMode) -> bool {
+    matches!(
+        (proof, mode),
+        (sp1_sdk::SP1Proof::Core(_), RadrootsSp1TradeProofMode::Core)
+            | (
+                sp1_sdk::SP1Proof::Compressed(_),
+                RadrootsSp1TradeProofMode::Compressed
+            )
+            | (
+                sp1_sdk::SP1Proof::Groth16(_),
+                RadrootsSp1TradeProofMode::Groth16
+            )
+            | (
+                sp1_sdk::SP1Proof::Plonk(_),
+                RadrootsSp1TradeProofMode::Plonk
+            )
+    )
+}
+
 #[derive(Serialize)]
 struct ProofDigestMaterial<'a> {
     canonical_public_values: &'a [u8],
+    inline_proof_base64: Option<&'a str>,
     mode: Option<&'a str>,
     program_hash: Option<&'a str>,
     proof_reference: Option<&'a str>,
@@ -360,6 +566,8 @@ mod tests {
         RadrootsSp1TradeHostError, RadrootsSp1TradeProofMode, generate_order_acceptance_proof,
         validation_receipt_for_order_acceptance_proof, verify_order_acceptance_proof_artifact,
     };
+    #[cfg(feature = "expensive_proofs")]
+    use base64::Engine;
     use radroots_events::{RadrootsNostrEvent, kinds::KIND_TRADE_VALIDATION_RECEIPT};
     use radroots_sp1_guest_trade::{
         RADROOTS_SP1_TRADE_PROTOCOL_VERSION, RADROOTS_SP1_TRADE_REDUCER_PROGRAM_HASH,
@@ -436,12 +644,11 @@ mod tests {
 
     #[test]
     fn execute_public_values_and_bind_validation_receipt() {
-        let bundle =
-            generate_order_acceptance_proof(&witness(), RadrootsSp1TradeProofMode::Compressed)
-                .expect("proof bundle");
+        let bundle = generate_order_acceptance_proof(&witness(), RadrootsSp1TradeProofMode::None)
+            .expect("proof bundle");
         assert_eq!(
             bundle.proof.system,
-            RadrootsValidationReceiptProofSystem::Sp1Compressed
+            RadrootsValidationReceiptProofSystem::None
         );
         verify_order_acceptance_proof_artifact(&bundle.execution, &bundle.proof)
             .expect("proof verifies");
@@ -477,7 +684,7 @@ mod tests {
             RadrootsValidationReceiptExpectedBinding {
                 event_set_root: Some(&receipt.event_set_root),
                 order_id: Some("order-1"),
-                proof_system: Some(RadrootsValidationReceiptProofSystem::Sp1Compressed),
+                proof_system: Some(RadrootsValidationReceiptProofSystem::None),
                 public_values_hash: Some(&receipt.public_values_hash),
                 reducer_output_root: Some(&receipt.new_state_root),
             },
@@ -488,13 +695,21 @@ mod tests {
     #[test]
     fn proof_verifier_rejects_tampered_public_values_hash() {
         let mut bundle =
-            generate_order_acceptance_proof(&witness(), RadrootsSp1TradeProofMode::Core)
+            generate_order_acceptance_proof(&witness(), RadrootsSp1TradeProofMode::None)
                 .expect("proof bundle");
         bundle.proof.public_values_hash =
             "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string();
         let err = verify_order_acceptance_proof_artifact(&bundle.execution, &bundle.proof)
             .expect_err("tamper");
         assert_eq!(err, RadrootsSp1TradeHostError::PublicValuesHashMismatch);
+    }
+
+    #[test]
+    fn sp1_modes_require_the_expensive_proof_lane() {
+        let err =
+            generate_order_acceptance_proof(&witness(), RadrootsSp1TradeProofMode::Compressed)
+                .expect_err("synthetic sp1 proof");
+        assert_eq!(err, RadrootsSp1TradeHostError::Sp1ProofGenerationRequired);
     }
 
     #[test]
@@ -546,13 +761,62 @@ mod tests {
     }
 
     #[cfg(feature = "expensive_proofs")]
-    #[test]
-    fn expensive_proof_generation_and_verification_is_runnable() {
+    #[tokio::test]
+    async fn expensive_proof_generation_and_verification_is_runnable() {
         let bundle =
-            generate_order_acceptance_proof(&witness(), RadrootsSp1TradeProofMode::Compressed)
+            super::generate_order_acceptance_sp1_proof(&witness(), RadrootsSp1TradeProofMode::Core)
+                .await
                 .expect("proof bundle");
-        verify_order_acceptance_proof_artifact(&bundle.execution, &bundle.proof)
+        super::verify_order_acceptance_sp1_proof_artifact(&bundle.execution, &bundle.proof)
+            .await
             .expect("proof verifies");
+        assert_eq!(
+            bundle.proof.system,
+            RadrootsValidationReceiptProofSystem::Sp1Core
+        );
         assert!(bundle.proof.inline_proof_base64.is_some());
+    }
+
+    #[cfg(feature = "expensive_proofs")]
+    #[tokio::test]
+    async fn real_sp1_verifier_rejects_missing_and_synthetic_material() {
+        let execution = super::execute_order_acceptance_public_values(&witness())
+            .expect("deterministic execution");
+        let mut missing = super::RadrootsSp1TradeProofArtifact {
+            inline_proof_base64: None,
+            mode: Some("core".to_string()),
+            program_hash: Some(execution.public_values.reducer_program_hash.clone()),
+            proof_digest: "0x00".to_string(),
+            proof_reference: None,
+            public_values_hash: execution.public_values_hash.clone(),
+            system: RadrootsValidationReceiptProofSystem::Sp1Core,
+            verifying_key_hash: Some(
+                "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string(),
+            ),
+        };
+        let err = super::verify_order_acceptance_sp1_proof_artifact(&execution, &missing)
+            .await
+            .expect_err("missing proof material");
+        assert_eq!(err, RadrootsSp1TradeHostError::ProofDigestMismatch);
+
+        missing.proof_digest =
+            super::proof_digest_for_execution(&execution, &missing).expect("missing proof digest");
+        let err = super::verify_order_acceptance_sp1_proof_artifact(&execution, &missing)
+            .await
+            .expect_err("missing proof material");
+        assert_eq!(err, RadrootsSp1TradeHostError::MissingProofMaterial);
+
+        let mut synthetic = missing;
+        synthetic.inline_proof_base64 =
+            Some(base64::engine::general_purpose::STANDARD.encode(b"synthetic proof material"));
+        synthetic.proof_digest = super::proof_digest_for_execution(&execution, &synthetic)
+            .expect("synthetic proof digest");
+        let err = super::verify_order_acceptance_sp1_proof_artifact(&execution, &synthetic)
+            .await
+            .expect_err("synthetic proof material");
+        assert!(matches!(
+            err,
+            RadrootsSp1TradeHostError::Sp1ProofMaterialDecode(_)
+        ));
     }
 }

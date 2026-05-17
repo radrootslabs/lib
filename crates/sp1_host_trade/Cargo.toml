@@ -13,10 +13,11 @@ homepage.workspace = true
 
 [features]
 default = []
-expensive_proofs = ["dep:sp1-build", "dep:sp1-sdk"]
+expensive_proofs = ["dep:bincode", "dep:sp1-build", "dep:sp1-sdk"]
 
 [dependencies]
 base64 = { workspace = true }
+bincode = { workspace = true, optional = true }
 radroots_sp1_guest_trade = { workspace = true }
 radroots_trade = { workspace = true, default-features = false, features = [
   "serde_json",
