@@ -53,6 +53,8 @@ pub const KIND_APPLICATION_HANDLER: u32 = 31990;
 
 pub const KIND_TRADE_LISTING_VALIDATE_REQ: u32 = 5321;
 pub const KIND_TRADE_LISTING_VALIDATE_RES: u32 = 6321;
+pub const KIND_WORKER_TRADE_TRANSITION_PROOF_REQ: u32 = 5322;
+pub const KIND_WORKER_TRADE_TRANSITION_PROOF_RES: u32 = 6322;
 pub const KIND_TRADE_ORDER_REQUEST: u32 = 3422;
 pub const KIND_TRADE_ORDER_RESPONSE: u32 = 3423;
 pub const KIND_TRADE_ORDER_DECISION: u32 = KIND_TRADE_ORDER_RESPONSE;
@@ -86,9 +88,11 @@ pub const KIND_TRADE_LISTING_CANCEL_REQ: u32 = KIND_TRADE_CANCEL;
 pub const KIND_TRADE_LISTING_FULFILLMENT_UPDATE_REQ: u32 = KIND_TRADE_FULFILLMENT_UPDATE;
 pub const KIND_TRADE_LISTING_RECEIPT_REQ: u32 = KIND_TRADE_RECEIPT;
 
-pub const TRADE_SERVICE_KINDS: [u32; 2] = [
+pub const TRADE_SERVICE_KINDS: [u32; 4] = [
     KIND_TRADE_LISTING_VALIDATE_REQ,
     KIND_TRADE_LISTING_VALIDATE_RES,
+    KIND_WORKER_TRADE_TRANSITION_PROOF_REQ,
+    KIND_WORKER_TRADE_TRANSITION_PROOF_RES,
 ];
 
 pub const TRADE_PUBLIC_KINDS: [u32; 14] = [
@@ -108,9 +112,11 @@ pub const TRADE_PUBLIC_KINDS: [u32; 14] = [
     KIND_TRADE_SETTLEMENT_DECISION,
 ];
 
-pub const TRADE_KINDS: [u32; 16] = [
+pub const TRADE_KINDS: [u32; 18] = [
     KIND_TRADE_LISTING_VALIDATE_REQ,
     KIND_TRADE_LISTING_VALIDATE_RES,
+    KIND_WORKER_TRADE_TRANSITION_PROOF_REQ,
+    KIND_WORKER_TRADE_TRANSITION_PROOF_RES,
     KIND_TRADE_ORDER_REQUEST,
     KIND_TRADE_ORDER_RESPONSE,
     KIND_TRADE_ORDER_REVISION,
@@ -127,7 +133,7 @@ pub const TRADE_KINDS: [u32; 16] = [
     KIND_TRADE_SETTLEMENT_DECISION,
 ];
 
-pub const TRADE_LISTING_KINDS: [u32; 16] = TRADE_KINDS;
+pub const TRADE_LISTING_KINDS: [u32; 18] = TRADE_KINDS;
 
 pub const ACTIVE_TRADE_LISTING_KINDS: [u32; 2] = [KIND_LISTING, KIND_LISTING_DRAFT];
 
@@ -172,12 +178,18 @@ pub const fn is_listing_kind(kind: u32) -> bool {
 
 #[inline]
 pub const fn is_trade_service_request_kind(kind: u32) -> bool {
-    kind == KIND_TRADE_LISTING_VALIDATE_REQ
+    matches!(
+        kind,
+        KIND_TRADE_LISTING_VALIDATE_REQ | KIND_WORKER_TRADE_TRANSITION_PROOF_REQ
+    )
 }
 
 #[inline]
 pub const fn is_trade_service_result_kind(kind: u32) -> bool {
-    kind == KIND_TRADE_LISTING_VALIDATE_RES
+    matches!(
+        kind,
+        KIND_TRADE_LISTING_VALIDATE_RES | KIND_WORKER_TRADE_TRANSITION_PROOF_RES
+    )
 }
 
 #[inline]
@@ -279,6 +291,7 @@ pub const fn is_trade_listing_kind(kind: u32) -> bool {
 pub const fn trade_service_result_kind_for_request(kind: u32) -> Option<u32> {
     match kind {
         KIND_TRADE_LISTING_VALIDATE_REQ => Some(KIND_TRADE_LISTING_VALIDATE_RES),
+        KIND_WORKER_TRADE_TRANSITION_PROOF_REQ => Some(KIND_WORKER_TRADE_TRANSITION_PROOF_RES),
         _ => None,
     }
 }
@@ -287,6 +300,7 @@ pub const fn trade_service_result_kind_for_request(kind: u32) -> Option<u32> {
 pub const fn trade_service_request_kind_for_result(kind: u32) -> Option<u32> {
     match kind {
         KIND_TRADE_LISTING_VALIDATE_RES => Some(KIND_TRADE_LISTING_VALIDATE_REQ),
+        KIND_WORKER_TRADE_TRANSITION_PROOF_RES => Some(KIND_WORKER_TRADE_TRANSITION_PROOF_REQ),
         _ => None,
     }
 }
@@ -482,6 +496,14 @@ mod kinds_constants_tests {
             "KIND_TRADE_LISTING_VALIDATE_RES",
             KIND_TRADE_LISTING_VALIDATE_RES,
         ),
+        (
+            "KIND_WORKER_TRADE_TRANSITION_PROOF_REQ",
+            KIND_WORKER_TRADE_TRANSITION_PROOF_REQ,
+        ),
+        (
+            "KIND_WORKER_TRADE_TRANSITION_PROOF_RES",
+            KIND_WORKER_TRADE_TRANSITION_PROOF_RES,
+        ),
         ("KIND_TRADE_ORDER_REQUEST", KIND_TRADE_ORDER_REQUEST),
         ("KIND_TRADE_ORDER_RESPONSE", KIND_TRADE_ORDER_RESPONSE),
         ("KIND_TRADE_ORDER_DECISION", KIND_TRADE_ORDER_DECISION),
@@ -640,17 +662,29 @@ mod kinds_constants_tests {
         assert!(is_trade_service_request_kind(
             KIND_TRADE_LISTING_VALIDATE_REQ
         ));
+        assert!(is_trade_service_request_kind(
+            KIND_WORKER_TRADE_TRANSITION_PROOF_REQ
+        ));
         assert!(!is_trade_service_request_kind(
             KIND_TRADE_LISTING_VALIDATE_RES
         ));
         assert!(is_trade_service_result_kind(
             KIND_TRADE_LISTING_VALIDATE_RES
         ));
+        assert!(is_trade_service_result_kind(
+            KIND_WORKER_TRADE_TRANSITION_PROOF_RES
+        ));
         assert!(!is_trade_service_result_kind(
             KIND_TRADE_LISTING_VALIDATE_REQ
         ));
         assert!(is_trade_service_kind(KIND_TRADE_LISTING_VALIDATE_REQ));
         assert!(is_trade_service_kind(KIND_TRADE_LISTING_VALIDATE_RES));
+        assert!(is_trade_service_kind(
+            KIND_WORKER_TRADE_TRANSITION_PROOF_REQ
+        ));
+        assert!(is_trade_service_kind(
+            KIND_WORKER_TRADE_TRANSITION_PROOF_RES
+        ));
         assert!(!is_trade_service_kind(KIND_TRADE_ORDER_REQUEST));
         assert!(is_trade_public_kind(KIND_TRADE_ORDER_REQUEST));
         assert!(is_trade_public_kind(KIND_TRADE_ORDER_RESPONSE));
@@ -699,12 +733,20 @@ mod kinds_constants_tests {
             Some(KIND_TRADE_LISTING_VALIDATE_RES)
         );
         assert_eq!(
+            trade_service_result_kind_for_request(KIND_WORKER_TRADE_TRANSITION_PROOF_REQ),
+            Some(KIND_WORKER_TRADE_TRANSITION_PROOF_RES)
+        );
+        assert_eq!(
             trade_service_result_kind_for_request(KIND_TRADE_ORDER_REQUEST),
             None
         );
         assert_eq!(
             trade_service_request_kind_for_result(KIND_TRADE_LISTING_VALIDATE_RES),
             Some(KIND_TRADE_LISTING_VALIDATE_REQ)
+        );
+        assert_eq!(
+            trade_service_request_kind_for_result(KIND_WORKER_TRADE_TRANSITION_PROOF_RES),
+            Some(KIND_WORKER_TRADE_TRANSITION_PROOF_REQ)
         );
         assert_eq!(
             trade_service_request_kind_for_result(KIND_TRADE_ORDER_RESPONSE),
