@@ -80,6 +80,14 @@ pub enum RadrootsSp1TradeHostError {
     MissingProofMaterial,
     #[error("receipt binding field {0} is missing")]
     MissingReceiptBinding(&'static str),
+    #[error("SP1 execution failed: {0}")]
+    Sp1ExecuteFailed(String),
+    #[error("SP1 execution returned exit code {0}")]
+    Sp1ExitCode(u64),
+    #[error("SP1 public values failed to decode: {0}")]
+    Sp1PublicValuesDecode(String),
+    #[error("SP1 public values do not match deterministic reducer output")]
+    Sp1PublicValuesMismatch,
     #[error("proof artifact encoding failed")]
     ProofEncoding,
 }
@@ -94,6 +102,97 @@ pub fn execute_order_acceptance_public_values(
     witness: &RadrootsSp1TradeOrderAcceptanceWitness,
 ) -> Result<RadrootsSp1TradePublicValuesExecution, RadrootsSp1TradeHostError> {
     Ok(reduce_order_acceptance_public_values(witness)?)
+}
+
+#[cfg(feature = "expensive_proofs")]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsSp1TradeExecuteReport {
+    pub exit_code: u64,
+    pub gas: Option<u64>,
+    pub total_instruction_count: u64,
+    pub total_syscall_count: u64,
+}
+
+#[cfg(feature = "expensive_proofs")]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsSp1TradeExecuteBundle {
+    pub committed_public_values: Vec<u8>,
+    pub execution: RadrootsSp1TradePublicValuesExecution,
+    pub report: RadrootsSp1TradeExecuteReport,
+}
+
+#[cfg(feature = "expensive_proofs")]
+pub fn order_acceptance_guest_elf() -> sp1_sdk::Elf {
+    sp1_sdk::include_elf!("radroots_sp1_trade_order_acceptance_guest")
+}
+
+#[cfg(feature = "expensive_proofs")]
+pub async fn execute_order_acceptance_sp1_public_values(
+    witness: &RadrootsSp1TradeOrderAcceptanceWitness,
+) -> Result<RadrootsSp1TradeExecuteBundle, RadrootsSp1TradeHostError> {
+    execute_order_acceptance_sp1_public_values_with_elf(order_acceptance_guest_elf(), witness).await
+}
+
+#[cfg(feature = "expensive_proofs")]
+pub async fn execute_order_acceptance_sp1_public_values_with_elf(
+    elf: sp1_sdk::Elf,
+    witness: &RadrootsSp1TradeOrderAcceptanceWitness,
+) -> Result<RadrootsSp1TradeExecuteBundle, RadrootsSp1TradeHostError> {
+    use sp1_sdk::{Prover, ProverClient, SP1Stdin, StatusCode};
+
+    let expected = execute_order_acceptance_public_values(witness)?;
+    let mut stdin = SP1Stdin::new();
+    stdin.write(witness);
+    let client = ProverClient::builder().light().build().await;
+    let (public_values, report) = client
+        .execute(elf, stdin)
+        .calculate_gas(true)
+        .expected_exit_code(StatusCode::SUCCESS)
+        .await
+        .map_err(|error| RadrootsSp1TradeHostError::Sp1ExecuteFailed(error.to_string()))?;
+    if report.exit_code != 0 {
+        return Err(RadrootsSp1TradeHostError::Sp1ExitCode(report.exit_code));
+    }
+
+    let committed_public_values = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let mut public_values = public_values;
+        public_values.read::<Vec<u8>>()
+    }))
+    .map_err(|_| {
+        RadrootsSp1TradeHostError::Sp1PublicValuesDecode(
+            "SP1 public values stream did not contain canonical bytes".to_string(),
+        )
+    })?;
+    let decoded: radroots_sp1_guest_trade::RadrootsSp1TradeProofPublicValues =
+        serde_json::from_slice(&committed_public_values).map_err(|error| {
+            RadrootsSp1TradeHostError::Sp1PublicValuesDecode(format!(
+                "{error}; public values bytes={}; prefix={}",
+                committed_public_values.len(),
+                public_values_prefix(&committed_public_values)
+            ))
+        })?;
+    let canonical_public_values = radroots_sp1_guest_trade::canonical_public_values_bytes(&decoded)
+        .map_err(|error| RadrootsSp1TradeHostError::Sp1PublicValuesDecode(error.to_string()))?;
+    let public_values_hash = radroots_sp1_guest_trade::public_values_hash_hex(&decoded)?;
+    let execution = RadrootsSp1TradePublicValuesExecution {
+        public_values: decoded,
+        public_values_hash,
+        canonical_public_values,
+    };
+    if execution != expected {
+        return Err(RadrootsSp1TradeHostError::Sp1PublicValuesMismatch);
+    }
+
+    Ok(RadrootsSp1TradeExecuteBundle {
+        committed_public_values,
+        execution,
+        report: RadrootsSp1TradeExecuteReport {
+            exit_code: report.exit_code,
+            gas: report.gas(),
+            total_instruction_count: report.total_instruction_count(),
+            total_syscall_count: report.total_syscall_count(),
+        },
+    })
 }
 
 pub fn generate_order_acceptance_proof(
@@ -238,6 +337,12 @@ fn hex_lower(bytes: &[u8]) -> String {
     out
 }
 
+#[cfg(feature = "expensive_proofs")]
+fn public_values_prefix(bytes: &[u8]) -> String {
+    const PREFIX_LEN: usize = 32;
+    hex_lower(&bytes[..bytes.len().min(PREFIX_LEN)])
+}
+
 #[derive(Serialize)]
 struct ProofDigestMaterial<'a> {
     canonical_public_values: &'a [u8],
@@ -255,22 +360,13 @@ mod tests {
         RadrootsSp1TradeHostError, RadrootsSp1TradeProofMode, generate_order_acceptance_proof,
         validation_receipt_for_order_acceptance_proof, verify_order_acceptance_proof_artifact,
     };
-    use radroots_core::{
-        RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreUnit,
-    };
-    use radroots_events::{
-        RadrootsNostrEvent,
-        kinds::KIND_TRADE_VALIDATION_RECEIPT,
-        trade::{
-            RadrootsTradeInventoryCommitment, RadrootsTradeOrderDecision,
-            RadrootsTradeOrderDecisionEvent, RadrootsTradeOrderEconomicItem,
-            RadrootsTradeOrderEconomicLine, RadrootsTradeOrderEconomics, RadrootsTradeOrderItem,
-            RadrootsTradeOrderRequested, RadrootsTradePricingBasis,
-        },
-    };
+    use radroots_events::{RadrootsNostrEvent, kinds::KIND_TRADE_VALIDATION_RECEIPT};
     use radroots_sp1_guest_trade::{
         RADROOTS_SP1_TRADE_PROTOCOL_VERSION, RADROOTS_SP1_TRADE_REDUCER_PROGRAM_HASH,
-        RadrootsSp1TradeInventoryBinWitness, RadrootsSp1TradeOrderAcceptanceWitness,
+        RadrootsSp1TradeInventoryBinWitness, RadrootsSp1TradeInventoryCommitmentWitness,
+        RadrootsSp1TradeOrderAcceptanceWitness, RadrootsSp1TradeOrderDecisionEventWitness,
+        RadrootsSp1TradeOrderDecisionWitness, RadrootsSp1TradeOrderItemWitness,
+        RadrootsSp1TradeOrderRequestWitness,
     };
     use radroots_trade::validation_receipt::{
         RadrootsValidationReceiptExpectedBinding, RadrootsValidationReceiptProofSystem,
@@ -302,8 +398,8 @@ mod tests {
         }
     }
 
-    fn request(bin_count: u32) -> RadrootsTradeOrderRequested {
-        RadrootsTradeOrderRequested {
+    fn request(bin_count: u32) -> RadrootsSp1TradeOrderRequestWitness {
+        RadrootsSp1TradeOrderRequestWitness {
             order_id: "order-1".to_string(),
             listing_addr:
                 "30402:1111111111111111111111111111111111111111111111111111111111111111:listing-1"
@@ -312,16 +408,15 @@ mod tests {
                 .to_string(),
             seller_pubkey: "1111111111111111111111111111111111111111111111111111111111111111"
                 .to_string(),
-            items: vec![RadrootsTradeOrderItem {
+            items: vec![RadrootsSp1TradeOrderItemWitness {
                 bin_id: "bin-1".to_string(),
                 bin_count,
             }],
-            economics: economics(bin_count),
         }
     }
 
-    fn decision(bin_count: u32) -> RadrootsTradeOrderDecisionEvent {
-        RadrootsTradeOrderDecisionEvent {
+    fn decision(bin_count: u32) -> RadrootsSp1TradeOrderDecisionEventWitness {
+        RadrootsSp1TradeOrderDecisionEventWitness {
             order_id: "order-1".to_string(),
             listing_addr:
                 "30402:1111111111111111111111111111111111111111111111111111111111111111:listing-1"
@@ -330,47 +425,13 @@ mod tests {
                 .to_string(),
             seller_pubkey: "1111111111111111111111111111111111111111111111111111111111111111"
                 .to_string(),
-            decision: RadrootsTradeOrderDecision::Accepted {
-                inventory_commitments: vec![RadrootsTradeInventoryCommitment {
+            decision: RadrootsSp1TradeOrderDecisionWitness::Accepted {
+                inventory_commitments: vec![RadrootsSp1TradeInventoryCommitmentWitness {
                     bin_id: "bin-1".to_string(),
                     bin_count,
                 }],
             },
         }
-    }
-
-    fn economics(bin_count: u32) -> RadrootsTradeOrderEconomics {
-        let subtotal =
-            (RadrootsCoreDecimal::from(5u32) * RadrootsCoreDecimal::from(bin_count)).to_string();
-        RadrootsTradeOrderEconomics {
-            quote_id: "quote-1".to_string(),
-            quote_version: 1,
-            pricing_basis: RadrootsTradePricingBasis::ListingEvent,
-            currency: RadrootsCoreCurrency::USD,
-            items: vec![RadrootsTradeOrderEconomicItem {
-                bin_id: "bin-1".to_string(),
-                bin_count,
-                quantity_amount: decimal("1"),
-                quantity_unit: RadrootsCoreUnit::Each,
-                unit_price_amount: decimal("5"),
-                unit_price_currency: RadrootsCoreCurrency::USD,
-                line_subtotal: usd(&subtotal),
-            }],
-            discounts: Vec::<RadrootsTradeOrderEconomicLine>::new(),
-            adjustments: Vec::<RadrootsTradeOrderEconomicLine>::new(),
-            subtotal: usd(&subtotal),
-            discount_total: usd("0"),
-            adjustment_total: usd("0"),
-            total: usd(&subtotal),
-        }
-    }
-
-    fn decimal(raw: &str) -> RadrootsCoreDecimal {
-        raw.parse().expect("decimal")
-    }
-
-    fn usd(raw: &str) -> RadrootsCoreMoney {
-        RadrootsCoreMoney::new(decimal(raw), RadrootsCoreCurrency::USD)
     }
 
     #[test]
@@ -465,6 +526,23 @@ mod tests {
             assert!(!manifest.contains("sp1-sdk"));
             assert!(!manifest.contains("sp1_sdk"));
         }
+    }
+
+    #[cfg(feature = "expensive_proofs")]
+    #[tokio::test]
+    async fn sp1_execute_public_values_match_deterministic_reducer() {
+        let execution = super::execute_order_acceptance_sp1_public_values(&witness())
+            .await
+            .expect("sp1 execute");
+        let expected = super::execute_order_acceptance_public_values(&witness())
+            .expect("deterministic execution");
+        assert_eq!(execution.execution, expected);
+        assert_eq!(
+            execution.committed_public_values,
+            expected.canonical_public_values
+        );
+        assert_eq!(execution.report.exit_code, 0);
+        assert!(execution.report.total_instruction_count > 0);
     }
 
     #[cfg(feature = "expensive_proofs")]

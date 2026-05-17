@@ -3,6 +3,7 @@ name = "radroots_sp1_host_trade"
 publish = false
 version = "0.1.0-alpha.2"
 edition.workspace = true
+build = "build.rs"
 authors = ["Tyson Lupul <tyson@radroots.org>"]
 rust-version.workspace = true
 license.workspace = true
@@ -12,7 +13,7 @@ homepage.workspace = true
 
 [features]
 default = []
-expensive_proofs = ["dep:sp1-sdk"]
+expensive_proofs = ["dep:sp1-build", "dep:sp1-sdk"]
 
 [dependencies]
 base64 = { workspace = true }
@@ -27,6 +28,9 @@ sha2 = { workspace = true }
 sp1-sdk = { workspace = true, optional = true }
 thiserror = { workspace = true }
 
+[build-dependencies]
+sp1-build = { workspace = true, optional = true }
+
 [dev-dependencies]
-radroots_core = { workspace = true }
 radroots_events = { workspace = true, features = ["serde"] }
+tokio = { workspace = true, features = ["rt-multi-thread"] }

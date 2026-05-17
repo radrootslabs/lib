@@ -1,9 +1,5 @@
 #![forbid(unsafe_code)]
 
-use radroots_events::trade::{
-    RadrootsTradeOrderDecision, RadrootsTradeOrderDecisionEvent, RadrootsTradeOrderRequested,
-};
-use radroots_trade::validation_receipt::validation_receipt_public_values_hash_hex;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -69,12 +65,56 @@ pub struct RadrootsSp1TradeInventoryBinWitness {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct RadrootsSp1TradeOrderItemWitness {
+    pub bin_id: String,
+    pub bin_count: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RadrootsSp1TradeOrderRequestWitness {
+    pub order_id: String,
+    pub listing_addr: String,
+    pub buyer_pubkey: String,
+    pub seller_pubkey: String,
+    pub items: Vec<RadrootsSp1TradeOrderItemWitness>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RadrootsSp1TradeInventoryCommitmentWitness {
+    pub bin_id: String,
+    pub bin_count: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RadrootsSp1TradeOrderDecisionWitness {
+    Accepted {
+        inventory_commitments: Vec<RadrootsSp1TradeInventoryCommitmentWitness>,
+    },
+    Declined {
+        reason: String,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RadrootsSp1TradeOrderDecisionEventWitness {
+    pub order_id: String,
+    pub listing_addr: String,
+    pub buyer_pubkey: String,
+    pub seller_pubkey: String,
+    pub decision: RadrootsSp1TradeOrderDecisionWitness,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RadrootsSp1TradeOrderAcceptanceWitness {
     pub listing_event_id: String,
     pub request_event_id: String,
     pub decision_event_id: String,
-    pub request: RadrootsTradeOrderRequested,
-    pub decision: RadrootsTradeOrderDecisionEvent,
+    pub request: RadrootsSp1TradeOrderRequestWitness,
+    pub decision: RadrootsSp1TradeOrderDecisionEventWitness,
     pub inventory_bins: Vec<RadrootsSp1TradeInventoryBinWitness>,
     pub inventory_sequence: u128,
     pub previous_state_root: Option<String>,
@@ -124,14 +164,8 @@ pub fn reduce_order_acceptance_public_values(
     witness: &RadrootsSp1TradeOrderAcceptanceWitness,
 ) -> Result<RadrootsSp1TradePublicValuesExecution, RadrootsSp1TradeGuestError> {
     validate_witness_header(witness)?;
-    witness
-        .request
-        .validate()
-        .map_err(|_| RadrootsSp1TradeGuestError::InvalidOrderRequest)?;
-    witness
-        .decision
-        .validate()
-        .map_err(|_| RadrootsSp1TradeGuestError::InvalidOrderDecision)?;
+    validate_order_request_shape(&witness.request)?;
+    validate_order_decision_shape(&witness.decision)?;
     validate_order_binding(witness)?;
 
     let request_counts = aggregate_requested_counts(&witness.request)?;
@@ -233,6 +267,13 @@ pub fn public_values_hash_hex(
     Ok(validation_receipt_public_values_hash_hex(&bytes))
 }
 
+pub fn validation_receipt_public_values_hash_hex(public_values: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(b"radroots:sp1-public-values:v1");
+    hasher.update(public_values);
+    format!("0x{}", hex_lower(hasher.finalize().as_slice()))
+}
+
 pub fn empty_state_root() -> String {
     hash_bytes("radroots:state-empty:v1", &[])
 }
@@ -255,12 +296,60 @@ fn validate_witness_header(
     Ok(())
 }
 
+fn validate_order_request_shape(
+    request: &RadrootsSp1TradeOrderRequestWitness,
+) -> Result<(), RadrootsSp1TradeGuestError> {
+    validate_required_str(&request.order_id, "request.order_id")?;
+    validate_required_str(&request.listing_addr, "request.listing_addr")?;
+    validate_required_str(&request.buyer_pubkey, "request.buyer_pubkey")?;
+    validate_required_str(&request.seller_pubkey, "request.seller_pubkey")?;
+    if request.items.is_empty() {
+        return Err(RadrootsSp1TradeGuestError::InvalidOrderRequest);
+    }
+    for item in &request.items {
+        validate_required_str(&item.bin_id, "request.items.bin_id")?;
+        if item.bin_count == 0 {
+            return Err(RadrootsSp1TradeGuestError::InvalidOrderRequest);
+        }
+    }
+    Ok(())
+}
+
+fn validate_order_decision_shape(
+    decision: &RadrootsSp1TradeOrderDecisionEventWitness,
+) -> Result<(), RadrootsSp1TradeGuestError> {
+    validate_required_str(&decision.order_id, "decision.order_id")?;
+    validate_required_str(&decision.listing_addr, "decision.listing_addr")?;
+    validate_required_str(&decision.buyer_pubkey, "decision.buyer_pubkey")?;
+    validate_required_str(&decision.seller_pubkey, "decision.seller_pubkey")?;
+    match &decision.decision {
+        RadrootsSp1TradeOrderDecisionWitness::Accepted {
+            inventory_commitments,
+        } => {
+            if inventory_commitments.is_empty() {
+                return Err(RadrootsSp1TradeGuestError::InvalidOrderDecision);
+            }
+            for commitment in inventory_commitments {
+                validate_required_str(&commitment.bin_id, "decision.inventory_commitments.bin_id")?;
+                if commitment.bin_count == 0 {
+                    return Err(RadrootsSp1TradeGuestError::InvalidOrderDecision);
+                }
+            }
+            Ok(())
+        }
+        RadrootsSp1TradeOrderDecisionWitness::Declined { reason } => {
+            validate_required_str(reason, "decision.reason")?;
+            Ok(())
+        }
+    }
+}
+
 fn validate_order_binding(
     witness: &RadrootsSp1TradeOrderAcceptanceWitness,
 ) -> Result<(), RadrootsSp1TradeGuestError> {
     if !matches!(
         witness.decision.decision,
-        RadrootsTradeOrderDecision::Accepted { .. }
+        RadrootsSp1TradeOrderDecisionWitness::Accepted { .. }
     ) {
         return Err(RadrootsSp1TradeGuestError::DecisionNotAccepted);
     }
@@ -286,7 +375,7 @@ fn validate_order_binding(
 }
 
 fn aggregate_requested_counts(
-    request: &RadrootsTradeOrderRequested,
+    request: &RadrootsSp1TradeOrderRequestWitness,
 ) -> Result<BTreeMap<String, u64>, RadrootsSp1TradeGuestError> {
     let mut counts = BTreeMap::new();
     for item in &request.items {
@@ -299,9 +388,9 @@ fn aggregate_requested_counts(
 }
 
 fn aggregate_accepted_counts(
-    decision: &RadrootsTradeOrderDecisionEvent,
+    decision: &RadrootsSp1TradeOrderDecisionEventWitness,
 ) -> Result<BTreeMap<String, u64>, RadrootsSp1TradeGuestError> {
-    let RadrootsTradeOrderDecision::Accepted {
+    let RadrootsSp1TradeOrderDecisionWitness::Accepted {
         inventory_commitments,
     } = &decision.decision
     else {
@@ -495,18 +584,12 @@ mod tests {
     use super::{
         RADROOTS_SP1_TRADE_PROTOCOL_VERSION, RADROOTS_SP1_TRADE_REDUCER_PROGRAM_HASH,
         RadrootsSp1TradeGuestError, RadrootsSp1TradeInventoryBinWitness,
-        RadrootsSp1TradeOrderAcceptanceWitness, RadrootsSp1TradeProofResult,
-        RadrootsSp1TradeProofTransitionKind, canonical_public_values_bytes,
-        reduce_order_acceptance_canonical_public_values, reduce_order_acceptance_public_values,
-    };
-    use radroots_core::{
-        RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreUnit,
-    };
-    use radroots_events::trade::{
-        RadrootsTradeInventoryCommitment, RadrootsTradeOrderDecision,
-        RadrootsTradeOrderDecisionEvent, RadrootsTradeOrderEconomicItem,
-        RadrootsTradeOrderEconomicLine, RadrootsTradeOrderEconomics, RadrootsTradeOrderItem,
-        RadrootsTradeOrderRequested, RadrootsTradePricingBasis,
+        RadrootsSp1TradeInventoryCommitmentWitness, RadrootsSp1TradeOrderAcceptanceWitness,
+        RadrootsSp1TradeOrderDecisionEventWitness, RadrootsSp1TradeOrderDecisionWitness,
+        RadrootsSp1TradeOrderItemWitness, RadrootsSp1TradeOrderRequestWitness,
+        RadrootsSp1TradeProofResult, RadrootsSp1TradeProofTransitionKind,
+        canonical_public_values_bytes, reduce_order_acceptance_canonical_public_values,
+        reduce_order_acceptance_public_values,
     };
 
     fn witness() -> RadrootsSp1TradeOrderAcceptanceWitness {
@@ -534,8 +617,8 @@ mod tests {
         }
     }
 
-    fn request(bin_count: u32) -> RadrootsTradeOrderRequested {
-        RadrootsTradeOrderRequested {
+    fn request(bin_count: u32) -> RadrootsSp1TradeOrderRequestWitness {
+        RadrootsSp1TradeOrderRequestWitness {
             order_id: "order-1".to_string(),
             listing_addr:
                 "30402:1111111111111111111111111111111111111111111111111111111111111111:listing-1"
@@ -544,16 +627,15 @@ mod tests {
                 .to_string(),
             seller_pubkey: "1111111111111111111111111111111111111111111111111111111111111111"
                 .to_string(),
-            items: vec![RadrootsTradeOrderItem {
+            items: vec![RadrootsSp1TradeOrderItemWitness {
                 bin_id: "bin-1".to_string(),
                 bin_count,
             }],
-            economics: economics(bin_count),
         }
     }
 
-    fn decision(bin_count: u32) -> RadrootsTradeOrderDecisionEvent {
-        RadrootsTradeOrderDecisionEvent {
+    fn decision(bin_count: u32) -> RadrootsSp1TradeOrderDecisionEventWitness {
+        RadrootsSp1TradeOrderDecisionEventWitness {
             order_id: "order-1".to_string(),
             listing_addr:
                 "30402:1111111111111111111111111111111111111111111111111111111111111111:listing-1"
@@ -562,47 +644,13 @@ mod tests {
                 .to_string(),
             seller_pubkey: "1111111111111111111111111111111111111111111111111111111111111111"
                 .to_string(),
-            decision: RadrootsTradeOrderDecision::Accepted {
-                inventory_commitments: vec![RadrootsTradeInventoryCommitment {
+            decision: RadrootsSp1TradeOrderDecisionWitness::Accepted {
+                inventory_commitments: vec![RadrootsSp1TradeInventoryCommitmentWitness {
                     bin_id: "bin-1".to_string(),
                     bin_count,
                 }],
             },
         }
-    }
-
-    fn economics(bin_count: u32) -> RadrootsTradeOrderEconomics {
-        let subtotal =
-            (RadrootsCoreDecimal::from(5u32) * RadrootsCoreDecimal::from(bin_count)).to_string();
-        RadrootsTradeOrderEconomics {
-            quote_id: "quote-1".to_string(),
-            quote_version: 1,
-            pricing_basis: RadrootsTradePricingBasis::ListingEvent,
-            currency: RadrootsCoreCurrency::USD,
-            items: vec![RadrootsTradeOrderEconomicItem {
-                bin_id: "bin-1".to_string(),
-                bin_count,
-                quantity_amount: decimal("1"),
-                quantity_unit: RadrootsCoreUnit::Each,
-                unit_price_amount: decimal("5"),
-                unit_price_currency: RadrootsCoreCurrency::USD,
-                line_subtotal: usd(&subtotal),
-            }],
-            discounts: Vec::<RadrootsTradeOrderEconomicLine>::new(),
-            adjustments: Vec::<RadrootsTradeOrderEconomicLine>::new(),
-            subtotal: usd(&subtotal),
-            discount_total: usd("0"),
-            adjustment_total: usd("0"),
-            total: usd(&subtotal),
-        }
-    }
-
-    fn decimal(raw: &str) -> RadrootsCoreDecimal {
-        raw.parse().expect("decimal")
-    }
-
-    fn usd(raw: &str) -> RadrootsCoreMoney {
-        RadrootsCoreMoney::new(decimal(raw), RadrootsCoreCurrency::USD)
     }
 
     #[test]

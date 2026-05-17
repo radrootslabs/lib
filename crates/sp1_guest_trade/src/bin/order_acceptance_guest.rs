@@ -10,5 +10,5 @@ fn main() {
     let witness = sp1_zkvm::io::read::<RadrootsSp1TradeOrderAcceptanceWitness>();
     let public_values = reduce_order_acceptance_canonical_public_values(&witness)
         .expect("valid radroots order acceptance witness");
-    sp1_zkvm::io::commit_slice(&public_values);
+    sp1_zkvm::io::commit(&public_values);
 }

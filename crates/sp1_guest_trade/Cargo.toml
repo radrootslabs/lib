@@ -20,19 +20,8 @@ default = []
 sp1_guest = ["dep:sp1-zkvm"]
 
 [dependencies]
-radroots_events = { workspace = true, default-features = false, features = [
-  "serde",
-  "std",
-] }
-radroots_trade = { workspace = true, default-features = false, features = [
-  "serde_json",
-  "std",
-] }
 serde = { workspace = true, default-features = false, features = ["alloc", "derive"] }
 serde_json = { workspace = true, default-features = false, features = ["alloc"] }
 sha2 = { workspace = true, default-features = false }
 sp1-zkvm = { workspace = true, optional = true }
 thiserror = { workspace = true }
-
-[dev-dependencies]
-radroots_core = { workspace = true }
