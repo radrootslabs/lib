@@ -58,6 +58,8 @@ deferred_publication = [
   "radroots_replica_sync_wasm",
   "radroots_simplex_chat_proto",
   "radroots_simplex_smp_proto",
+  "radroots_sp1_guest_trade",
+  "radroots_sp1_host_trade",
 ]
 
 [surface.internal_replica_crates]

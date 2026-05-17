@@ -38,6 +38,8 @@ members = [
   "crates/runtime_distribution",
   "crates/runtime_manager",
   "crates/sdk",
+  "crates/sp1_guest_trade",
+  "crates/sp1_host_trade",
   "crates/trade",
   "crates/types",
   "crates/protected_store",
@@ -95,6 +97,8 @@ radroots_trade = { path = "crates/trade", version = "0.1.0-alpha.2", default-fea
 radroots_types = { path = "crates/types", version = "0.1.0-alpha.2", default-features = false }
 radroots_protected_store = { path = "crates/protected_store", version = "0.1.0-alpha.2", default-features = false }
 radroots_secret_vault = { path = "crates/secret_vault", version = "0.1.0-alpha.2", default-features = false }
+radroots_sp1_guest_trade = { path = "crates/sp1_guest_trade", version = "0.1.0-alpha.2", default-features = false }
+radroots_sp1_host_trade = { path = "crates/sp1_host_trade", version = "0.1.0-alpha.2", default-features = false }
 
 anyhow = { version = "1" }
 base64 = { version = "0.22" }

@@ -2766,6 +2766,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "radroots_sp1_guest_trade"
+version = "0.1.0-alpha.2"
+dependencies = [
+ "radroots_core",
+ "radroots_events",
+ "radroots_trade",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "radroots_sp1_host_trade"
+version = "0.1.0-alpha.2"
+dependencies = [
+ "base64 0.22.1",
+ "radroots_core",
+ "radroots_events",
+ "radroots_sp1_guest_trade",
+ "radroots_trade",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "radroots_sql_core"
 version = "0.1.0-alpha.2"
 dependencies = [

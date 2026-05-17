@@ -1,0 +1,28 @@
+[package]
+name = "radroots_sp1_guest_trade"
+publish = false
+version = "0.1.0-alpha.2"
+edition.workspace = true
+authors = ["Tyson Lupul <tyson@radroots.org>"]
+rust-version.workspace = true
+license.workspace = true
+description = "SP1 guest model for Radroots trade verification"
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+radroots_events = { workspace = true, default-features = false, features = [
+  "serde",
+  "std",
+] }
+radroots_trade = { workspace = true, default-features = false, features = [
+  "serde_json",
+  "std",
+] }
+serde = { workspace = true, default-features = false, features = ["alloc", "derive"] }
+serde_json = { workspace = true, default-features = false, features = ["alloc"] }
+sha2 = { workspace = true, default-features = false }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+radroots_core = { workspace = true }
