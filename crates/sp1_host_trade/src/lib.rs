@@ -1024,9 +1024,7 @@ mod tests {
             proof_reference: None,
             public_values_hash: execution.public_values_hash.clone(),
             system: RadrootsValidationReceiptProofSystem::Sp1Core,
-            verifying_key_hash: Some(
-                "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string(),
-            ),
+            verifying_key_hash: execution.public_values.sp1_verifying_key_hash.clone(),
         };
         let err = super::verify_order_acceptance_sp1_proof_artifact(&execution, &missing)
             .await
