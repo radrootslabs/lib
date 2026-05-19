@@ -653,7 +653,11 @@ mod tests {
     use base64::Engine;
     use radroots_events::{RadrootsNostrEvent, kinds::KIND_TRADE_VALIDATION_RECEIPT};
     use radroots_sp1_guest_trade::{
+        RADROOTS_SP1_TRADE_KIND_LISTING, RADROOTS_SP1_TRADE_KIND_ORDER_DECISION,
+        RADROOTS_SP1_TRADE_KIND_ORDER_REQUEST, RADROOTS_SP1_TRADE_ORDER_ACCEPTANCE_PROOF_TARGET,
         RADROOTS_SP1_TRADE_PROTOCOL_VERSION, RADROOTS_SP1_TRADE_REDUCER_PROGRAM_HASH,
+        RADROOTS_SP1_TRADE_WITNESS_VERSION, RadrootsSp1TradeCanonicalEventEvidence,
+        RadrootsSp1TradeEventEvidenceRole, RadrootsSp1TradeEventWorkflowPosition,
         RadrootsSp1TradeInventoryBinWitness, RadrootsSp1TradeInventoryCommitmentWitness,
         RadrootsSp1TradeOrderAcceptanceWitness, RadrootsSp1TradeOrderDecisionEventWitness,
         RadrootsSp1TradeOrderDecisionWitness, RadrootsSp1TradeOrderItemWitness,
@@ -666,12 +670,15 @@ mod tests {
 
     fn witness() -> RadrootsSp1TradeOrderAcceptanceWitness {
         RadrootsSp1TradeOrderAcceptanceWitness {
+            witness_version: RADROOTS_SP1_TRADE_WITNESS_VERSION,
+            proof_target: RADROOTS_SP1_TRADE_ORDER_ACCEPTANCE_PROOF_TARGET.to_string(),
             listing_event_id: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                 .to_string(),
             request_event_id: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
                 .to_string(),
             decision_event_id: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
                 .to_string(),
+            event_evidence: event_evidence(),
             request: request(2),
             decision: decision(2),
             inventory_bins: vec![RadrootsSp1TradeInventoryBinWitness {
@@ -690,6 +697,68 @@ mod tests {
                 "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string(),
             ),
         }
+    }
+
+    fn event_evidence() -> Vec<RadrootsSp1TradeCanonicalEventEvidence> {
+        vec![
+            RadrootsSp1TradeCanonicalEventEvidence {
+                event_id: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                    .to_string(),
+                signer_pubkey: "1111111111111111111111111111111111111111111111111111111111111111"
+                    .to_string(),
+                kind: RADROOTS_SP1_TRADE_KIND_LISTING,
+                canonical_event_hash:
+                    "0x1010101010101010101010101010101010101010101010101010101010101010".to_string(),
+                signature_hash:
+                    "0x1111111111111111111111111111111111111111111111111111111111111111".to_string(),
+                preverified_signature: true,
+                role: RadrootsSp1TradeEventEvidenceRole::Seller,
+                workflow_position: RadrootsSp1TradeEventWorkflowPosition::Listing,
+                content_hash: "0x1212121212121212121212121212121212121212121212121212121212121212"
+                    .to_string(),
+                tags_hash: "0x1313131313131313131313131313131313131313131313131313131313131313"
+                    .to_string(),
+                ordering_key: "001:listing".to_string(),
+            },
+            RadrootsSp1TradeCanonicalEventEvidence {
+                event_id: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                    .to_string(),
+                signer_pubkey: "2222222222222222222222222222222222222222222222222222222222222222"
+                    .to_string(),
+                kind: RADROOTS_SP1_TRADE_KIND_ORDER_REQUEST,
+                canonical_event_hash:
+                    "0x2020202020202020202020202020202020202020202020202020202020202020".to_string(),
+                signature_hash:
+                    "0x2121212121212121212121212121212121212121212121212121212121212121".to_string(),
+                preverified_signature: true,
+                role: RadrootsSp1TradeEventEvidenceRole::Buyer,
+                workflow_position: RadrootsSp1TradeEventWorkflowPosition::OrderRequest,
+                content_hash: "0x2222222222222222222222222222222222222222222222222222222222222222"
+                    .to_string(),
+                tags_hash: "0x2323232323232323232323232323232323232323232323232323232323232323"
+                    .to_string(),
+                ordering_key: "002:order_request".to_string(),
+            },
+            RadrootsSp1TradeCanonicalEventEvidence {
+                event_id: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                    .to_string(),
+                signer_pubkey: "1111111111111111111111111111111111111111111111111111111111111111"
+                    .to_string(),
+                kind: RADROOTS_SP1_TRADE_KIND_ORDER_DECISION,
+                canonical_event_hash:
+                    "0x3030303030303030303030303030303030303030303030303030303030303030".to_string(),
+                signature_hash:
+                    "0x3131313131313131313131313131313131313131313131313131313131313131".to_string(),
+                preverified_signature: true,
+                role: RadrootsSp1TradeEventEvidenceRole::Seller,
+                workflow_position: RadrootsSp1TradeEventWorkflowPosition::OrderDecision,
+                content_hash: "0x3232323232323232323232323232323232323232323232323232323232323232"
+                    .to_string(),
+                tags_hash: "0x3333333333333333333333333333333333333333333333333333333333333333"
+                    .to_string(),
+                ordering_key: "003:order_decision".to_string(),
+            },
+        ]
     }
 
     fn request(bin_count: u32) -> RadrootsSp1TradeOrderRequestWitness {
