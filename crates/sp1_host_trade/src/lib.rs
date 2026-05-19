@@ -166,17 +166,22 @@ pub async fn execute_order_acceptance_sp1_public_values_with_elf(
     elf: sp1_sdk::Elf,
     witness: &RadrootsSp1TradeOrderAcceptanceWitness,
 ) -> Result<RadrootsSp1TradeExecuteBundle, RadrootsSp1TradeHostError> {
-    use sp1_sdk::{Prover, ProverClient, SP1Stdin, StatusCode};
+    use sp1_sdk::{HashableKey, Prover, ProverClient, ProvingKey, SP1Stdin, StatusCode};
 
+    let client = ProverClient::builder().light().build().await;
+    let pk = client
+        .setup(elf.clone())
+        .await
+        .map_err(|error| RadrootsSp1TradeHostError::Sp1SetupFailed(error.to_string()))?;
+    let verifying_key_hash = pk.verifying_key().bytes32();
     let witness = witness_with_sp1_identity(
         witness,
         Some(sp1_program_hash_for_elf(&elf)),
-        witness.sp1_verifying_key_hash.clone(),
+        Some(verifying_key_hash),
     )?;
     let expected = execute_order_acceptance_public_values(&witness)?;
     let mut stdin = SP1Stdin::new();
     stdin.write(&witness);
-    let client = ProverClient::builder().light().build().await;
     let (public_values, report) = client
         .execute(elf, stdin)
         .calculate_gas(true)
@@ -699,6 +704,14 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "expensive_proofs")]
+    fn witness_without_sp1_identity() -> RadrootsSp1TradeOrderAcceptanceWitness {
+        let mut input = witness();
+        input.sp1_program_hash = None;
+        input.sp1_verifying_key_hash = None;
+        input
+    }
+
     fn event_evidence() -> Vec<RadrootsSp1TradeCanonicalEventEvidence> {
         vec![
             RadrootsSp1TradeCanonicalEventEvidence {
@@ -953,10 +966,19 @@ mod tests {
     #[cfg(feature = "expensive_proofs")]
     #[tokio::test]
     async fn sp1_execute_public_values_match_deterministic_reducer() {
-        let execution = super::execute_order_acceptance_sp1_public_values(&witness())
+        let input = witness_without_sp1_identity();
+        let execution = super::execute_order_acceptance_sp1_public_values(&input)
             .await
             .expect("sp1 execute");
-        let expected = super::execute_order_acceptance_public_values(&witness())
+        let mut expected_input = input;
+        expected_input.sp1_program_hash =
+            execution.execution.public_values.sp1_program_hash.clone();
+        expected_input.sp1_verifying_key_hash = execution
+            .execution
+            .public_values
+            .sp1_verifying_key_hash
+            .clone();
+        let expected = super::execute_order_acceptance_public_values(&expected_input)
             .expect("deterministic execution");
         assert_eq!(execution.execution, expected);
         assert_eq!(
@@ -970,10 +992,12 @@ mod tests {
     #[cfg(feature = "expensive_proofs")]
     #[tokio::test]
     async fn expensive_proof_generation_and_verification_is_runnable() {
-        let bundle =
-            super::generate_order_acceptance_sp1_proof(&witness(), RadrootsSp1TradeProofMode::Core)
-                .await
-                .expect("proof bundle");
+        let bundle = super::generate_order_acceptance_sp1_proof(
+            &witness_without_sp1_identity(),
+            RadrootsSp1TradeProofMode::Core,
+        )
+        .await
+        .expect("proof bundle");
         super::verify_order_acceptance_sp1_proof_artifact(&bundle.execution, &bundle.proof)
             .await
             .expect("proof verifies");
@@ -987,8 +1011,11 @@ mod tests {
     #[cfg(feature = "expensive_proofs")]
     #[tokio::test]
     async fn real_sp1_verifier_rejects_missing_and_synthetic_material() {
-        let execution = super::execute_order_acceptance_public_values(&witness())
-            .expect("deterministic execution");
+        let execution =
+            super::execute_order_acceptance_sp1_public_values(&witness_without_sp1_identity())
+                .await
+                .expect("sp1 execute")
+                .execution;
         let mut missing = super::RadrootsSp1TradeProofArtifact {
             inline_proof_base64: None,
             mode: Some("core".to_string()),
