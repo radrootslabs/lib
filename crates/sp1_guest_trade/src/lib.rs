@@ -9,6 +9,7 @@ pub const RADROOTS_SP1_TRADE_PUBLIC_VALUES_SCHEMA_VERSION: u32 = 1;
 pub const RADROOTS_SP1_TRADE_PROTOCOL_VERSION: &str = "radroots.trade.v1";
 pub const RADROOTS_SP1_TRADE_REDUCER_PROGRAM_HASH: &str =
     "0x3d8f7f463904d71f2d0d14b1551450756697e51c7b658e10c6d5c20a7bc61f08";
+pub const RADROOTS_SP1_TRADE_ORDER_ACCEPTANCE_PROOF_TARGET: &str = "trade.order_acceptance.v1";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -36,6 +37,7 @@ pub struct RadrootsSp1TradeProofPublicValues {
     pub statement_type: RadrootsSp1TradeProofStatementType,
     pub radroots_protocol_version: String,
     pub reducer_program_hash: String,
+    pub sp1_program_hash: Option<String>,
     pub sp1_verifying_key_hash: Option<String>,
     pub event_set_root: String,
     pub listing_addr_hash: Option<String>,
@@ -120,6 +122,7 @@ pub struct RadrootsSp1TradeOrderAcceptanceWitness {
     pub previous_state_root: Option<String>,
     pub reducer_program_hash: String,
     pub radroots_protocol_version: String,
+    pub sp1_program_hash: Option<String>,
     pub sp1_verifying_key_hash: Option<String>,
 }
 
@@ -214,6 +217,7 @@ pub fn reduce_order_acceptance_public_values(
         statement_type: RadrootsSp1TradeProofStatementType::TradeTransition,
         radroots_protocol_version: witness.radroots_protocol_version.clone(),
         reducer_program_hash: witness.reducer_program_hash.clone(),
+        sp1_program_hash: witness.sp1_program_hash.clone(),
         sp1_verifying_key_hash: witness.sp1_verifying_key_hash.clone(),
         event_set_root,
         listing_addr_hash: Some(hash_bytes(
@@ -292,6 +296,9 @@ fn validate_witness_header(
     )?;
     if let Some(hash) = &witness.sp1_verifying_key_hash {
         validate_hash32(hash, "sp1_verifying_key_hash")?;
+    }
+    if let Some(hash) = &witness.sp1_program_hash {
+        validate_hash32(hash, "sp1_program_hash")?;
     }
     Ok(())
 }
@@ -455,6 +462,9 @@ fn validate_public_values(
         "radroots_protocol_version",
     )?;
     validate_hash32(&public_values.reducer_program_hash, "reducer_program_hash")?;
+    if let Some(hash) = &public_values.sp1_program_hash {
+        validate_hash32(hash, "sp1_program_hash")?;
+    }
     if let Some(hash) = &public_values.sp1_verifying_key_hash {
         validate_hash32(hash, "sp1_verifying_key_hash")?;
     }
@@ -611,6 +621,9 @@ mod tests {
             previous_state_root: None,
             reducer_program_hash: RADROOTS_SP1_TRADE_REDUCER_PROGRAM_HASH.to_string(),
             radroots_protocol_version: RADROOTS_SP1_TRADE_PROTOCOL_VERSION.to_string(),
+            sp1_program_hash: Some(
+                "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+            ),
             sp1_verifying_key_hash: Some(
                 "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string(),
             ),

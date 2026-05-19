@@ -107,6 +107,10 @@ pub enum RadrootsSp1TradeHostError {
     Sp1ProofModeMismatch,
     #[error("SP1 verifying key hash mismatch")]
     Sp1VerifyingKeyHashMismatch,
+    #[error("SP1 program hash mismatch")]
+    Sp1ProgramHashMismatch,
+    #[error("SP1 program hash is missing")]
+    MissingSp1ProgramHash,
     #[error("proof artifact encoding failed")]
     ProofEncoding,
 }
@@ -146,6 +150,11 @@ pub fn order_acceptance_guest_elf() -> sp1_sdk::Elf {
 }
 
 #[cfg(feature = "expensive_proofs")]
+pub fn sp1_program_hash_for_order_acceptance_guest() -> String {
+    sp1_program_hash_for_elf(&order_acceptance_guest_elf())
+}
+
+#[cfg(feature = "expensive_proofs")]
 pub async fn execute_order_acceptance_sp1_public_values(
     witness: &RadrootsSp1TradeOrderAcceptanceWitness,
 ) -> Result<RadrootsSp1TradeExecuteBundle, RadrootsSp1TradeHostError> {
@@ -159,9 +168,14 @@ pub async fn execute_order_acceptance_sp1_public_values_with_elf(
 ) -> Result<RadrootsSp1TradeExecuteBundle, RadrootsSp1TradeHostError> {
     use sp1_sdk::{Prover, ProverClient, SP1Stdin, StatusCode};
 
-    let expected = execute_order_acceptance_public_values(witness)?;
+    let witness = witness_with_sp1_identity(
+        witness,
+        Some(sp1_program_hash_for_elf(&elf)),
+        witness.sp1_verifying_key_hash.clone(),
+    )?;
+    let expected = execute_order_acceptance_public_values(&witness)?;
     let mut stdin = SP1Stdin::new();
-    stdin.write(witness);
+    stdin.write(&witness);
     let client = ProverClient::builder().light().build().await;
     let (public_values, report) = client
         .execute(elf, stdin)
@@ -200,14 +214,19 @@ pub async fn generate_order_acceptance_sp1_proof(
     };
 
     let sp1_mode = sp1_proof_mode(mode)?;
-    let expected = execute_order_acceptance_public_values(witness)?;
     let client = ProverClient::builder().cpu().build().await;
+    let elf = order_acceptance_guest_elf();
+    let sp1_program_hash = sp1_program_hash_for_elf(&elf);
     let pk = client
-        .setup(order_acceptance_guest_elf())
+        .setup(elf)
         .await
         .map_err(|error| RadrootsSp1TradeHostError::Sp1SetupFailed(error.to_string()))?;
+    let verifying_key_hash = pk.verifying_key().bytes32();
+    let witness =
+        witness_with_sp1_identity(witness, Some(sp1_program_hash), Some(verifying_key_hash))?;
+    let expected = execute_order_acceptance_public_values(&witness)?;
     let mut stdin = SP1Stdin::new();
-    stdin.write(witness);
+    stdin.write(&witness);
     let proof = client
         .prove(&pk, stdin)
         .mode(sp1_mode)
@@ -228,12 +247,7 @@ pub async fn generate_order_acceptance_sp1_proof(
     }
     let proof_bytes =
         bincode::serialize(&proof).map_err(|_| RadrootsSp1TradeHostError::ProofEncoding)?;
-    let proof = proof_artifact_for_real_sp1_execution(
-        &execution,
-        mode,
-        pk.verifying_key().bytes32(),
-        &proof_bytes,
-    )?;
+    let proof = proof_artifact_for_real_sp1_execution(&execution, mode, &proof_bytes)?;
     verify_order_acceptance_proof_artifact(&execution, &proof)?;
     Ok(RadrootsSp1TradeProofBundle { execution, proof })
 }
@@ -262,6 +276,10 @@ pub async fn verify_order_acceptance_sp1_proof_artifact(
     let verifying_key_hash = pk.verifying_key().bytes32();
     if artifact.verifying_key_hash.as_deref() != Some(verifying_key_hash.as_str()) {
         return Err(RadrootsSp1TradeHostError::Sp1VerifyingKeyHashMismatch);
+    }
+    let sp1_program_hash = sp1_program_hash_for_order_acceptance_guest();
+    if artifact.program_hash.as_deref() != Some(sp1_program_hash.as_str()) {
+        return Err(RadrootsSp1TradeHostError::Sp1ProgramHashMismatch);
     }
     client
         .verify(&proof, pk.verifying_key(), Some(StatusCode::SUCCESS))
@@ -310,6 +328,16 @@ pub fn verify_order_acceptance_proof_artifact(
         _ => {
             if artifact.inline_proof_base64.is_none() && artifact.proof_reference.is_none() {
                 return Err(RadrootsSp1TradeHostError::MissingProofMaterial);
+            }
+            if artifact.program_hash.as_deref()
+                != execution.public_values.sp1_program_hash.as_deref()
+            {
+                return Err(RadrootsSp1TradeHostError::Sp1ProgramHashMismatch);
+            }
+            if artifact.verifying_key_hash.as_deref()
+                != execution.public_values.sp1_verifying_key_hash.as_deref()
+            {
+                return Err(RadrootsSp1TradeHostError::Sp1VerifyingKeyHashMismatch);
             }
         }
     }
@@ -380,7 +408,6 @@ fn proof_artifact_for_execution(
 fn proof_artifact_for_real_sp1_execution(
     execution: &RadrootsSp1TradePublicValuesExecution,
     mode: RadrootsSp1TradeProofMode,
-    verifying_key_hash: String,
     proof_bytes: &[u8],
 ) -> Result<RadrootsSp1TradeProofArtifact, RadrootsSp1TradeHostError> {
     let system = mode.proof_system();
@@ -390,12 +417,18 @@ fn proof_artifact_for_real_sp1_execution(
     let mut artifact = RadrootsSp1TradeProofArtifact {
         inline_proof_base64: Some(base64::engine::general_purpose::STANDARD.encode(proof_bytes)),
         mode: mode.mode_label().map(str::to_string),
-        program_hash: Some(execution.public_values.reducer_program_hash.clone()),
+        program_hash: Some(
+            execution
+                .public_values
+                .sp1_program_hash
+                .clone()
+                .ok_or(RadrootsSp1TradeHostError::MissingSp1ProgramHash)?,
+        ),
         proof_digest: String::new(),
         proof_reference: None,
         public_values_hash: execution.public_values_hash.clone(),
         system,
-        verifying_key_hash: Some(verifying_key_hash),
+        verifying_key_hash: execution.public_values.sp1_verifying_key_hash.clone(),
     };
     artifact.proof_digest = proof_digest_for_execution(execution, &artifact)?;
     Ok(artifact)
@@ -431,6 +464,56 @@ fn hex_lower(bytes: &[u8]) -> String {
         out.push(HEX[(byte & 0x0f) as usize] as char);
     }
     out
+}
+
+#[cfg(feature = "expensive_proofs")]
+fn sp1_program_hash_for_elf(elf: &sp1_sdk::Elf) -> String {
+    let bytes: &[u8] = match elf {
+        sp1_sdk::Elf::Static(bytes) => bytes,
+        sp1_sdk::Elf::Dynamic(bytes) => bytes,
+    };
+    hash_bytes("radroots:sp1-guest-elf:v1", bytes)
+}
+
+#[cfg(feature = "expensive_proofs")]
+fn hash_bytes(domain: &'static str, bytes: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(domain.as_bytes());
+    hasher.update(bytes);
+    format!("0x{}", hex_lower(hasher.finalize().as_slice()))
+}
+
+#[cfg(feature = "expensive_proofs")]
+fn witness_with_sp1_identity(
+    witness: &RadrootsSp1TradeOrderAcceptanceWitness,
+    sp1_program_hash: Option<String>,
+    sp1_verifying_key_hash: Option<String>,
+) -> Result<RadrootsSp1TradeOrderAcceptanceWitness, RadrootsSp1TradeHostError> {
+    if let (Some(existing), Some(actual)) = (
+        witness.sp1_program_hash.as_deref(),
+        sp1_program_hash.as_deref(),
+    ) {
+        if existing != actual {
+            return Err(RadrootsSp1TradeHostError::Sp1ProgramHashMismatch);
+        }
+    }
+    if let (Some(existing), Some(actual)) = (
+        witness.sp1_verifying_key_hash.as_deref(),
+        sp1_verifying_key_hash.as_deref(),
+    ) {
+        if existing != actual {
+            return Err(RadrootsSp1TradeHostError::Sp1VerifyingKeyHashMismatch);
+        }
+    }
+
+    let mut bound = witness.clone();
+    if let Some(hash) = sp1_program_hash {
+        bound.sp1_program_hash = Some(hash);
+    }
+    if let Some(hash) = sp1_verifying_key_hash {
+        bound.sp1_verifying_key_hash = Some(hash);
+    }
+    Ok(bound)
 }
 
 #[cfg(feature = "expensive_proofs")]
@@ -600,6 +683,9 @@ mod tests {
             previous_state_root: None,
             reducer_program_hash: RADROOTS_SP1_TRADE_REDUCER_PROGRAM_HASH.to_string(),
             radroots_protocol_version: RADROOTS_SP1_TRADE_PROTOCOL_VERSION.to_string(),
+            sp1_program_hash: Some(
+                "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+            ),
             sp1_verifying_key_hash: Some(
                 "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string(),
             ),
@@ -713,6 +799,58 @@ mod tests {
     }
 
     #[test]
+    fn sp1_artifact_program_hash_must_match_public_values_identity() {
+        let mut input = witness();
+        input.sp1_program_hash =
+            Some("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string());
+        let execution =
+            super::execute_order_acceptance_public_values(&input).expect("deterministic execution");
+        let mut artifact = super::RadrootsSp1TradeProofArtifact {
+            inline_proof_base64: Some("cHJvb2Y=".to_string()),
+            mode: Some("core".to_string()),
+            program_hash: Some(
+                "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd".to_string(),
+            ),
+            proof_digest: String::new(),
+            proof_reference: None,
+            public_values_hash: execution.public_values_hash.clone(),
+            system: RadrootsValidationReceiptProofSystem::Sp1Core,
+            verifying_key_hash: execution.public_values.sp1_verifying_key_hash.clone(),
+        };
+        artifact.proof_digest =
+            super::proof_digest_for_execution(&execution, &artifact).expect("proof digest");
+        let err = verify_order_acceptance_proof_artifact(&execution, &artifact)
+            .expect_err("program hash mismatch");
+        assert_eq!(err, RadrootsSp1TradeHostError::Sp1ProgramHashMismatch);
+    }
+
+    #[test]
+    fn sp1_artifact_program_hash_is_distinct_from_reducer_hash() {
+        let mut input = witness();
+        input.sp1_program_hash =
+            Some("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string());
+        let execution =
+            super::execute_order_acceptance_public_values(&input).expect("deterministic execution");
+        let mut artifact = super::RadrootsSp1TradeProofArtifact {
+            inline_proof_base64: Some("cHJvb2Y=".to_string()),
+            mode: Some("core".to_string()),
+            program_hash: execution.public_values.sp1_program_hash.clone(),
+            proof_digest: String::new(),
+            proof_reference: None,
+            public_values_hash: execution.public_values_hash.clone(),
+            system: RadrootsValidationReceiptProofSystem::Sp1Core,
+            verifying_key_hash: execution.public_values.sp1_verifying_key_hash.clone(),
+        };
+        artifact.proof_digest =
+            super::proof_digest_for_execution(&execution, &artifact).expect("proof digest");
+        verify_order_acceptance_proof_artifact(&execution, &artifact).expect("artifact verifies");
+        assert_ne!(
+            artifact.program_hash.as_deref(),
+            Some(execution.public_values.reducer_program_hash.as_str())
+        );
+    }
+
+    #[test]
     fn none_proof_mode_builds_deterministic_reducer_receipt() {
         let mut input = witness();
         input.sp1_verifying_key_hash = None;
@@ -785,7 +923,7 @@ mod tests {
         let mut missing = super::RadrootsSp1TradeProofArtifact {
             inline_proof_base64: None,
             mode: Some("core".to_string()),
-            program_hash: Some(execution.public_values.reducer_program_hash.clone()),
+            program_hash: execution.public_values.sp1_program_hash.clone(),
             proof_digest: "0x00".to_string(),
             proof_reference: None,
             public_values_hash: execution.public_values_hash.clone(),
