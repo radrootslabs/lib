@@ -20,6 +20,7 @@ use thiserror::Error;
 pub const VALIDATION_RECEIPT_DOMAIN: &str = "radroots.receipt";
 pub const VALIDATION_RECEIPT_VERSION: u32 = 1;
 pub const VALIDATION_RECEIPT_PUBLIC_VALUES_HASH_DOMAIN: &[u8] = b"radroots:sp1-public-values:v1";
+pub const VALIDATION_RECEIPT_PROOF_REFERENCE_SCHEME: &str = "radroots-proof://";
 pub const TAG_VALIDATION_RECEIPT_EVENT_SET_ROOT: &str = "event_set_root";
 pub const TAG_VALIDATION_RECEIPT_PROOF_SYSTEM: &str = "proof_system";
 pub const TAG_VALIDATION_RECEIPT_PUBLIC_VALUES_HASH: &str = "public_values_hash";
@@ -159,9 +160,11 @@ pub struct RadrootsValidationReceiptTags {
 pub struct RadrootsValidationReceiptExpectedBinding<'a> {
     pub event_set_root: Option<&'a str>,
     pub order_id: Option<&'a str>,
+    pub program_hash: Option<&'a str>,
     pub proof_system: Option<RadrootsValidationReceiptProofSystem>,
     pub public_values_hash: Option<&'a str>,
     pub reducer_output_root: Option<&'a str>,
+    pub verifying_key_hash: Option<&'a str>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -252,12 +255,8 @@ impl RadrootsValidationReceiptProof {
                     ));
                 }
                 match (&self.inline_proof_base64, &self.proof_reference) {
-                    (Some(inline), None) => {
-                        validate_required_str(inline, "proof.inline_proof_base64")?
-                    }
-                    (None, Some(reference)) => {
-                        validate_required_str(reference, "proof.proof_reference")?
-                    }
+                    (Some(inline), None) => validate_inline_proof_base64(inline)?,
+                    (None, Some(reference)) => validate_proof_reference(reference)?,
                     _ => {
                         return Err(RadrootsValidationReceiptError::InvalidProofMetadata(
                             "proof.material",
@@ -454,7 +453,7 @@ pub fn verify_validation_receipt_event(
         return Err(RadrootsValidationReceiptError::TagMismatch("receipt_type"));
     }
 
-    validate_expected_binding(&tags, expected)?;
+    validate_expected_binding(&tags, &receipt, expected)?;
 
     Ok(RadrootsVerifiedValidationReceipt { receipt, tags })
 }
@@ -470,6 +469,7 @@ pub fn reject_validation_receipt_as_buyer_receipt(
 
 fn validate_expected_binding(
     tags: &RadrootsValidationReceiptTags,
+    receipt: &RadrootsTradeValidationReceipt,
     expected: RadrootsValidationReceiptExpectedBinding<'_>,
 ) -> Result<(), RadrootsValidationReceiptError> {
     if let Some(order_id) = expected.order_id {
@@ -504,6 +504,20 @@ fn validate_expected_binding(
         if tags.proof_system != proof_system {
             return Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
                 "proof_system",
+            ));
+        }
+    }
+    if let Some(program_hash) = expected.program_hash {
+        if receipt.proof.program_hash.as_deref() != Some(program_hash) {
+            return Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
+                "program_hash",
+            ));
+        }
+    }
+    if let Some(verifying_key_hash) = expected.verifying_key_hash {
+        if receipt.proof.verifying_key_hash.as_deref() != Some(verifying_key_hash) {
+            return Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
+                "verifying_key_hash",
             ));
         }
     }
@@ -569,6 +583,51 @@ fn validate_required_str(
         return Err(RadrootsValidationReceiptError::EmptyField(field));
     }
     Ok(())
+}
+
+fn validate_inline_proof_base64(value: &str) -> Result<(), RadrootsValidationReceiptError> {
+    validate_required_str(value, "proof.inline_proof_base64")?;
+    if value.len() % 4 != 0 {
+        return Err(RadrootsValidationReceiptError::InvalidProofMetadata(
+            "proof.inline_proof_base64",
+        ));
+    }
+
+    let bytes = value.as_bytes();
+    let mut padding_started = false;
+    let mut padding_count = 0usize;
+    for (index, byte) in bytes.iter().copied().enumerate() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'+' | b'/' if !padding_started => {}
+            b'=' => {
+                padding_started = true;
+                padding_count += 1;
+                if padding_count > 2 || index < bytes.len().saturating_sub(2) {
+                    return Err(RadrootsValidationReceiptError::InvalidProofMetadata(
+                        "proof.inline_proof_base64",
+                    ));
+                }
+            }
+            _ => {
+                return Err(RadrootsValidationReceiptError::InvalidProofMetadata(
+                    "proof.inline_proof_base64",
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_proof_reference(value: &str) -> Result<(), RadrootsValidationReceiptError> {
+    validate_required_str(value, "proof.proof_reference")?;
+    let body = value
+        .strip_prefix(VALIDATION_RECEIPT_PROOF_REFERENCE_SCHEME)
+        .ok_or(RadrootsValidationReceiptError::InvalidProofMetadata(
+            "proof.proof_reference",
+        ))?;
+    validate_required_str(body, "proof.proof_reference")
+        .map_err(|_| RadrootsValidationReceiptError::InvalidProofMetadata("proof.proof_reference"))
 }
 
 fn validate_result_error_bitmap(
@@ -674,6 +733,19 @@ mod tests {
             },
             version: 1,
         }
+    }
+
+    fn sample_sp1_reference_receipt() -> RadrootsTradeValidationReceipt {
+        let mut receipt = sample_validation_receipt();
+        receipt.proof = RadrootsValidationReceiptProof {
+            inline_proof_base64: None,
+            mode: Some("core".to_string()),
+            program_hash: Some(hash32('a')),
+            proof_reference: Some("radroots-proof://proof-1".to_string()),
+            system: RadrootsValidationReceiptProofSystem::Sp1Core,
+            verifying_key_hash: Some(hash32('b')),
+        };
+        receipt
     }
 
     fn sample_validation_receipt_event() -> RadrootsNostrEvent {
@@ -846,6 +918,126 @@ mod tests {
         assert_eq!(
             verified.receipt.proof.system,
             RadrootsValidationReceiptProofSystem::Sp1Compressed
+        );
+    }
+
+    #[test]
+    fn validation_receipt_enforces_none_and_sp1_material_rules() {
+        let mut none_with_material = sample_validation_receipt();
+        none_with_material.proof.inline_proof_base64 = Some("cHJvb2Y=".to_string());
+        assert_eq!(
+            none_with_material.validate(),
+            Err(RadrootsValidationReceiptError::InvalidProofMetadata(
+                "proof.system"
+            ))
+        );
+
+        let mut both_material_sources = sample_sp1_reference_receipt();
+        both_material_sources.proof.inline_proof_base64 = Some("cHJvb2Y=".to_string());
+        assert_eq!(
+            both_material_sources.validate(),
+            Err(RadrootsValidationReceiptError::InvalidProofMetadata(
+                "proof.material"
+            ))
+        );
+
+        let mut missing_material = sample_sp1_reference_receipt();
+        missing_material.proof.proof_reference = None;
+        assert_eq!(
+            missing_material.validate(),
+            Err(RadrootsValidationReceiptError::InvalidProofMetadata(
+                "proof.material"
+            ))
+        );
+    }
+
+    #[test]
+    fn validation_receipt_rejects_invalid_sp1_material_shape() {
+        let mut invalid_inline = sample_sp1_reference_receipt();
+        invalid_inline.proof.proof_reference = None;
+        invalid_inline.proof.inline_proof_base64 = Some("not canonical base64".to_string());
+        assert_eq!(
+            invalid_inline.validate(),
+            Err(RadrootsValidationReceiptError::InvalidProofMetadata(
+                "proof.inline_proof_base64"
+            ))
+        );
+
+        invalid_inline.proof.inline_proof_base64 = Some("cHJvb2Y=".to_string());
+        invalid_inline.validate().expect("valid inline proof shape");
+
+        let mut invalid_reference = sample_sp1_reference_receipt();
+        invalid_reference.proof.proof_reference = Some("https://example.test/proof".to_string());
+        assert_eq!(
+            invalid_reference.validate(),
+            Err(RadrootsValidationReceiptError::InvalidProofMetadata(
+                "proof.proof_reference"
+            ))
+        );
+
+        invalid_reference.proof.proof_reference = Some("radroots-proof://".to_string());
+        assert_eq!(
+            invalid_reference.validate(),
+            Err(RadrootsValidationReceiptError::InvalidProofMetadata(
+                "proof.proof_reference"
+            ))
+        );
+    }
+
+    #[test]
+    fn validation_receipt_expected_binding_enforces_sp1_identity() {
+        let receipt = sample_sp1_reference_receipt();
+        let parts = validation_receipt_event_build("order-1", &receipt).expect("sp1 event parts");
+        let mut event = sample_validation_receipt_event();
+        event.content = parts.content;
+        event.tags = parts.tags;
+
+        verify_validation_receipt_event(
+            &event,
+            RadrootsValidationReceiptExpectedBinding {
+                program_hash: Some(&hash32('a')),
+                verifying_key_hash: Some(&hash32('b')),
+                ..RadrootsValidationReceiptExpectedBinding::default()
+            },
+        )
+        .expect("sp1 identity binding matches");
+
+        assert_eq!(
+            verify_validation_receipt_event(
+                &event,
+                RadrootsValidationReceiptExpectedBinding {
+                    program_hash: Some(&hash32('c')),
+                    ..RadrootsValidationReceiptExpectedBinding::default()
+                },
+            ),
+            Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
+                "program_hash"
+            ))
+        );
+        assert_eq!(
+            verify_validation_receipt_event(
+                &event,
+                RadrootsValidationReceiptExpectedBinding {
+                    verifying_key_hash: Some(&hash32('d')),
+                    ..RadrootsValidationReceiptExpectedBinding::default()
+                },
+            ),
+            Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
+                "verifying_key_hash"
+            ))
+        );
+
+        assert_eq!(
+            verify_validation_receipt_event(
+                &sample_validation_receipt_event(),
+                RadrootsValidationReceiptExpectedBinding {
+                    program_hash: Some(&hash32('a')),
+                    ..RadrootsValidationReceiptExpectedBinding::default()
+                },
+            ),
+            Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
+                "program_hash"
+            ))
         );
     }
 

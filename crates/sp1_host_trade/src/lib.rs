@@ -855,6 +855,7 @@ mod tests {
                 proof_system: Some(RadrootsValidationReceiptProofSystem::None),
                 public_values_hash: Some(&receipt.public_values_hash),
                 reducer_output_root: Some(&receipt.new_state_root),
+                ..RadrootsValidationReceiptExpectedBinding::default()
             },
         )
         .expect("receipt verifies");
