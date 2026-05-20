@@ -6,6 +6,11 @@ use radroots_sp1_guest_trade::{
     RadrootsSp1TradeGuestError, RadrootsSp1TradeOrderAcceptanceWitness,
     RadrootsSp1TradePublicValuesExecution, reduce_order_acceptance_public_values,
 };
+#[cfg(feature = "expensive_proofs")]
+use radroots_sp1_guest_trade::{
+    RadrootsSp1TradeProofPublicValues, RadrootsSp1TradeProofResult,
+    RadrootsSp1TradeProofStatementType,
+};
 use radroots_trade::validation_receipt::{
     RadrootsTradeValidationReceipt, RadrootsValidationReceiptProof,
     RadrootsValidationReceiptProofSystem, RadrootsValidationReceiptResult,
@@ -67,6 +72,16 @@ pub struct RadrootsSp1TradeProofBundle {
     pub proof: RadrootsSp1TradeProofArtifact,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsSp1TradeValidationReceiptVerification {
+    pub canonical_public_values_len: usize,
+    pub proof_mode: RadrootsSp1TradeProofMode,
+    pub proof_system: RadrootsValidationReceiptProofSystem,
+    pub public_values_hash: String,
+    pub sp1_program_hash: String,
+    pub sp1_verifying_key_hash: String,
+}
+
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum RadrootsSp1TradeHostError {
     #[error("guest execution failed")]
@@ -103,6 +118,8 @@ pub enum RadrootsSp1TradeHostError {
     Sp1ProofMaterialDecode(String),
     #[error("SP1 proof material is synthetic")]
     Sp1SyntheticProofMaterial,
+    #[error("SP1 proof reference is unresolved")]
+    Sp1ProofReferenceUnresolved,
     #[error("SP1 proof mode does not match the proof artifact")]
     Sp1ProofModeMismatch,
     #[error("SP1 verifying key hash mismatch")]
@@ -111,6 +128,8 @@ pub enum RadrootsSp1TradeHostError {
     Sp1ProgramHashMismatch,
     #[error("SP1 program hash is missing")]
     MissingSp1ProgramHash,
+    #[error("validation receipt field {0} does not match SP1 public values")]
+    ValidationReceiptBindingMismatch(&'static str),
     #[error("proof artifact encoding failed")]
     ProofEncoding,
 }
@@ -298,6 +317,79 @@ pub async fn verify_order_acceptance_sp1_proof_artifact(
     Ok(())
 }
 
+#[cfg(feature = "expensive_proofs")]
+pub async fn verify_order_acceptance_validation_receipt_inline_sp1_proof(
+    receipt: &RadrootsTradeValidationReceipt,
+) -> Result<RadrootsSp1TradeValidationReceiptVerification, RadrootsSp1TradeHostError> {
+    use sp1_sdk::{HashableKey, Prover, ProverClient, ProvingKey, StatusCode};
+
+    if receipt.proof.system == RadrootsValidationReceiptProofSystem::None {
+        return Err(RadrootsSp1TradeHostError::Sp1ProofModeRequired);
+    }
+    if receipt.proof.proof_reference.is_some() {
+        return Err(RadrootsSp1TradeHostError::Sp1ProofReferenceUnresolved);
+    }
+
+    let artifact = RadrootsSp1TradeProofArtifact {
+        inline_proof_base64: Some(
+            receipt
+                .proof
+                .inline_proof_base64
+                .clone()
+                .ok_or(RadrootsSp1TradeHostError::MissingProofMaterial)?,
+        ),
+        mode: receipt.proof.mode.clone(),
+        program_hash: receipt.proof.program_hash.clone(),
+        proof_digest: String::new(),
+        proof_reference: None,
+        public_values_hash: receipt.public_values_hash.clone(),
+        system: receipt.proof.system,
+        verifying_key_hash: receipt.proof.verifying_key_hash.clone(),
+    };
+    let mode = artifact_proof_mode(&artifact)?;
+    let proof = decode_sp1_proof_artifact(&artifact)?;
+    if !sp1_proof_material_is_real(&proof.proof) {
+        return Err(RadrootsSp1TradeHostError::Sp1SyntheticProofMaterial);
+    }
+    if !sp1_proof_matches_mode(&proof.proof, mode) {
+        return Err(RadrootsSp1TradeHostError::Sp1ProofModeMismatch);
+    }
+
+    let client = ProverClient::builder().cpu().build().await;
+    let pk = client
+        .setup(order_acceptance_guest_elf())
+        .await
+        .map_err(|error| RadrootsSp1TradeHostError::Sp1SetupFailed(error.to_string()))?;
+    let verifying_key_hash = pk.verifying_key().bytes32();
+    if artifact.verifying_key_hash.as_deref() != Some(verifying_key_hash.as_str()) {
+        return Err(RadrootsSp1TradeHostError::Sp1VerifyingKeyHashMismatch);
+    }
+    let sp1_program_hash = sp1_program_hash_for_order_acceptance_guest();
+    if artifact.program_hash.as_deref() != Some(sp1_program_hash.as_str()) {
+        return Err(RadrootsSp1TradeHostError::Sp1ProgramHashMismatch);
+    }
+
+    client
+        .verify(&proof, pk.verifying_key(), Some(StatusCode::SUCCESS))
+        .map_err(|error| {
+            RadrootsSp1TradeHostError::Sp1ProofVerificationFailed(error.to_string())
+        })?;
+    let (_, execution) = execution_from_sp1_public_values(proof.public_values)?;
+    verify_validation_receipt_matches_public_values(receipt, &execution.public_values)?;
+    if execution.public_values_hash != receipt.public_values_hash {
+        return Err(RadrootsSp1TradeHostError::PublicValuesHashMismatch);
+    }
+
+    Ok(RadrootsSp1TradeValidationReceiptVerification {
+        canonical_public_values_len: execution.canonical_public_values.len(),
+        proof_mode: mode,
+        proof_system: receipt.proof.system,
+        public_values_hash: execution.public_values_hash,
+        sp1_program_hash,
+        sp1_verifying_key_hash: verifying_key_hash,
+    })
+}
+
 pub fn generate_order_acceptance_proof(
     witness: &RadrootsSp1TradeOrderAcceptanceWitness,
     mode: RadrootsSp1TradeProofMode,
@@ -306,6 +398,84 @@ pub fn generate_order_acceptance_proof(
     let proof = proof_artifact_for_execution(&execution, mode)?;
     verify_order_acceptance_proof_artifact(&execution, &proof)?;
     Ok(RadrootsSp1TradeProofBundle { execution, proof })
+}
+
+#[cfg(feature = "expensive_proofs")]
+fn verify_validation_receipt_matches_public_values(
+    receipt: &RadrootsTradeValidationReceipt,
+    public_values: &RadrootsSp1TradeProofPublicValues,
+) -> Result<(), RadrootsSp1TradeHostError> {
+    if public_values.statement_type != RadrootsSp1TradeProofStatementType::TradeTransition {
+        return Err(RadrootsSp1TradeHostError::ValidationReceiptBindingMismatch(
+            "statement_type",
+        ));
+    }
+    if receipt.receipt_type != RadrootsValidationReceiptType::TradeTransition
+        || receipt.statement.statement_type != RadrootsValidationReceiptType::TradeTransition
+    {
+        return Err(RadrootsSp1TradeHostError::ValidationReceiptBindingMismatch(
+            "receipt_type",
+        ));
+    }
+    if public_values.event_set_root != receipt.event_set_root {
+        return Err(RadrootsSp1TradeHostError::ValidationReceiptBindingMismatch(
+            "event_set_root",
+        ));
+    }
+    if public_values.previous_state_root != receipt.previous_state_root {
+        return Err(RadrootsSp1TradeHostError::ValidationReceiptBindingMismatch(
+            "previous_state_root",
+        ));
+    }
+    if public_values.new_state_root != receipt.new_state_root {
+        return Err(RadrootsSp1TradeHostError::ValidationReceiptBindingMismatch(
+            "new_state_root",
+        ));
+    }
+    if public_values.changed_records_root != receipt.changed_records_root {
+        return Err(RadrootsSp1TradeHostError::ValidationReceiptBindingMismatch(
+            "changed_records_root",
+        ));
+    }
+    if public_values.error_bitmap != receipt.error_bitmap {
+        return Err(RadrootsSp1TradeHostError::ValidationReceiptBindingMismatch(
+            "error_bitmap",
+        ));
+    }
+    if public_values.root_event_id.as_deref() != Some(receipt.statement.root_event_id.as_str()) {
+        return Err(RadrootsSp1TradeHostError::ValidationReceiptBindingMismatch(
+            "root_event_id",
+        ));
+    }
+    if public_values.target_event_id.as_deref() != Some(receipt.statement.target_event_id.as_str())
+    {
+        return Err(RadrootsSp1TradeHostError::ValidationReceiptBindingMismatch(
+            "target_event_id",
+        ));
+    }
+    if !receipt_result_matches_public_values(receipt.result, public_values.result) {
+        return Err(RadrootsSp1TradeHostError::ValidationReceiptBindingMismatch(
+            "result",
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(feature = "expensive_proofs")]
+fn receipt_result_matches_public_values(
+    receipt_result: RadrootsValidationReceiptResult,
+    public_values_result: RadrootsSp1TradeProofResult,
+) -> bool {
+    matches!(
+        (receipt_result, public_values_result),
+        (
+            RadrootsValidationReceiptResult::Valid,
+            RadrootsSp1TradeProofResult::Valid
+        ) | (
+            RadrootsValidationReceiptResult::Invalid,
+            RadrootsSp1TradeProofResult::Invalid
+        )
+    )
 }
 
 pub fn verify_order_acceptance_proof_artifact(
@@ -1002,11 +1172,30 @@ mod tests {
         super::verify_order_acceptance_sp1_proof_artifact(&bundle.execution, &bundle.proof)
             .await
             .expect("proof verifies");
+        let receipt =
+            validation_receipt_for_order_acceptance_proof(&bundle).expect("validation receipt");
+        let verification =
+            super::verify_order_acceptance_validation_receipt_inline_sp1_proof(&receipt)
+                .await
+                .expect("receipt proof verifies");
         assert_eq!(
             bundle.proof.system,
             RadrootsValidationReceiptProofSystem::Sp1Core
         );
         assert!(bundle.proof.inline_proof_base64.is_some());
+        assert_eq!(verification.proof_mode, RadrootsSp1TradeProofMode::Core);
+        assert_eq!(verification.public_values_hash, receipt.public_values_hash);
+        assert_eq!(
+            verification.sp1_program_hash,
+            receipt.proof.program_hash.expect("receipt program hash")
+        );
+        assert_eq!(
+            verification.sp1_verifying_key_hash,
+            receipt
+                .proof
+                .verifying_key_hash
+                .expect("receipt verifying key hash")
+        );
     }
 
     #[cfg(feature = "expensive_proofs")]
