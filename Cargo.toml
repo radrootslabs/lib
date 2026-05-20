@@ -101,7 +101,7 @@ radroots_sp1_guest_trade = { path = "crates/sp1_guest_trade", version = "0.1.0-a
 radroots_sp1_host_trade = { path = "crates/sp1_host_trade", version = "0.1.0-alpha.2", default-features = false }
 
 anyhow = { version = "1" }
-base64 = { version = "0.22" }
+base64 = { version = "0.22", default-features = false, features = ["alloc"] }
 bincode = { version = "1.3.3" }
 chacha20poly1305 = { version = "0.10.1", default-features = false, features = [
   "alloc",

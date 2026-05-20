@@ -7,6 +7,7 @@ use alloc::{
     vec::Vec,
 };
 
+use base64::Engine as _;
 use radroots_events::{
     RadrootsNostrEvent,
     kinds::{KIND_TRADE_RECEIPT, KIND_TRADE_VALIDATION_RECEIPT},
@@ -21,6 +22,7 @@ pub const VALIDATION_RECEIPT_DOMAIN: &str = "radroots.receipt";
 pub const VALIDATION_RECEIPT_VERSION: u32 = 1;
 pub const VALIDATION_RECEIPT_PUBLIC_VALUES_HASH_DOMAIN: &[u8] = b"radroots:sp1-public-values:v1";
 pub const VALIDATION_RECEIPT_PROOF_REFERENCE_SCHEME: &str = "radroots-proof://";
+pub const VALIDATION_RECEIPT_PROOF_REFERENCE_SHA256_PREFIX: &str = "radroots-proof://sha256/";
 pub const TAG_VALIDATION_RECEIPT_EVENT_SET_ROOT: &str = "event_set_root";
 pub const TAG_VALIDATION_RECEIPT_PROOF_SYSTEM: &str = "proof_system";
 pub const TAG_VALIDATION_RECEIPT_PUBLIC_VALUES_HASH: &str = "public_values_hash";
@@ -587,33 +589,15 @@ fn validate_required_str(
 
 fn validate_inline_proof_base64(value: &str) -> Result<(), RadrootsValidationReceiptError> {
     validate_required_str(value, "proof.inline_proof_base64")?;
-    if value.len() % 4 != 0 {
+    let decoded = base64::engine::general_purpose::STANDARD
+        .decode(value)
+        .map_err(|_| {
+            RadrootsValidationReceiptError::InvalidProofMetadata("proof.inline_proof_base64")
+        })?;
+    if decoded.is_empty() || base64::engine::general_purpose::STANDARD.encode(&decoded) != value {
         return Err(RadrootsValidationReceiptError::InvalidProofMetadata(
             "proof.inline_proof_base64",
         ));
-    }
-
-    let bytes = value.as_bytes();
-    let mut padding_started = false;
-    let mut padding_count = 0usize;
-    for (index, byte) in bytes.iter().copied().enumerate() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'+' | b'/' if !padding_started => {}
-            b'=' => {
-                padding_started = true;
-                padding_count += 1;
-                if padding_count > 2 || index < bytes.len().saturating_sub(2) {
-                    return Err(RadrootsValidationReceiptError::InvalidProofMetadata(
-                        "proof.inline_proof_base64",
-                    ));
-                }
-            }
-            _ => {
-                return Err(RadrootsValidationReceiptError::InvalidProofMetadata(
-                    "proof.inline_proof_base64",
-                ));
-            }
-        }
     }
 
     Ok(())
@@ -621,13 +605,17 @@ fn validate_inline_proof_base64(value: &str) -> Result<(), RadrootsValidationRec
 
 fn validate_proof_reference(value: &str) -> Result<(), RadrootsValidationReceiptError> {
     validate_required_str(value, "proof.proof_reference")?;
-    let body = value
-        .strip_prefix(VALIDATION_RECEIPT_PROOF_REFERENCE_SCHEME)
+    let digest = value
+        .strip_prefix(VALIDATION_RECEIPT_PROOF_REFERENCE_SHA256_PREFIX)
         .ok_or(RadrootsValidationReceiptError::InvalidProofMetadata(
             "proof.proof_reference",
         ))?;
-    validate_required_str(body, "proof.proof_reference")
-        .map_err(|_| RadrootsValidationReceiptError::InvalidProofMetadata("proof.proof_reference"))
+    if digest.len() != 64 || !is_lower_hex(digest) {
+        return Err(RadrootsValidationReceiptError::InvalidProofMetadata(
+            "proof.proof_reference",
+        ));
+    }
+    Ok(())
 }
 
 fn validate_result_error_bitmap(
@@ -741,7 +729,7 @@ mod tests {
             inline_proof_base64: None,
             mode: Some("core".to_string()),
             program_hash: Some(hash32('a')),
-            proof_reference: Some("radroots-proof://proof-1".to_string()),
+            proof_reference: Some(format!("radroots-proof://sha256/{}", "1".repeat(64))),
             system: RadrootsValidationReceiptProofSystem::Sp1Core,
             verifying_key_hash: Some(hash32('b')),
         };
@@ -902,7 +890,7 @@ mod tests {
             ))
         );
 
-        receipt.proof.proof_reference = Some("radroots-proof://proof-1".to_string());
+        receipt.proof.proof_reference = Some(format!("radroots-proof://sha256/{}", "1".repeat(64)));
         let parts = validation_receipt_event_build("order-1", &receipt).expect("sp1 event parts");
         let mut event = sample_validation_receipt_event();
         event.content = parts.content;
@@ -966,6 +954,27 @@ mod tests {
         invalid_inline.proof.inline_proof_base64 = Some("cHJvb2Y=".to_string());
         invalid_inline.validate().expect("valid inline proof shape");
 
+        invalid_inline.proof.inline_proof_base64 = Some("AA==".to_string());
+        invalid_inline
+            .validate()
+            .expect("canonical zero byte inline proof shape");
+
+        invalid_inline.proof.inline_proof_base64 = Some("AB==".to_string());
+        assert_eq!(
+            invalid_inline.validate(),
+            Err(RadrootsValidationReceiptError::InvalidProofMetadata(
+                "proof.inline_proof_base64"
+            ))
+        );
+
+        invalid_inline.proof.inline_proof_base64 = Some(String::new());
+        assert_eq!(
+            invalid_inline.validate(),
+            Err(RadrootsValidationReceiptError::EmptyField(
+                "proof.inline_proof_base64"
+            ))
+        );
+
         let mut invalid_reference = sample_sp1_reference_receipt();
         invalid_reference.proof.proof_reference = Some("https://example.test/proof".to_string());
         assert_eq!(
@@ -982,6 +991,39 @@ mod tests {
                 "proof.proof_reference"
             ))
         );
+
+        invalid_reference.proof.proof_reference =
+            Some(format!("radroots-proof://sha256/{}", "A".repeat(64)));
+        assert_eq!(
+            invalid_reference.validate(),
+            Err(RadrootsValidationReceiptError::InvalidProofMetadata(
+                "proof.proof_reference"
+            ))
+        );
+
+        invalid_reference.proof.proof_reference =
+            Some(format!("radroots-proof://sha256/{}", "1".repeat(63)));
+        assert_eq!(
+            invalid_reference.validate(),
+            Err(RadrootsValidationReceiptError::InvalidProofMetadata(
+                "proof.proof_reference"
+            ))
+        );
+
+        invalid_reference.proof.proof_reference =
+            Some(format!("radroots-proof://sha256/{}/proof", "1".repeat(64)));
+        assert_eq!(
+            invalid_reference.validate(),
+            Err(RadrootsValidationReceiptError::InvalidProofMetadata(
+                "proof.proof_reference"
+            ))
+        );
+
+        invalid_reference.proof.proof_reference =
+            Some(format!("radroots-proof://sha256/{}", "1".repeat(64)));
+        invalid_reference
+            .validate()
+            .expect("valid sha256 proof reference");
     }
 
     #[test]
