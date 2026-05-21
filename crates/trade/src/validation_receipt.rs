@@ -112,6 +112,7 @@ impl RadrootsValidationReceiptProofSystem {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RadrootsValidationReceiptStatement {
+    pub listing_event_id: String,
     pub root_event_id: String,
     pub target_event_id: String,
     #[serde(rename = "type")]
@@ -149,6 +150,7 @@ pub struct RadrootsTradeValidationReceipt {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsValidationReceiptTags {
     pub event_set_root: String,
+    pub listing_event_id: String,
     pub order_id: String,
     pub proof_system: RadrootsValidationReceiptProofSystem,
     pub public_values_hash: String,
@@ -161,6 +163,7 @@ pub struct RadrootsValidationReceiptTags {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct RadrootsValidationReceiptExpectedBinding<'a> {
     pub event_set_root: Option<&'a str>,
+    pub listing_event_id: Option<&'a str>,
     pub order_id: Option<&'a str>,
     pub program_hash: Option<&'a str>,
     pub proof_system: Option<RadrootsValidationReceiptProofSystem>,
@@ -222,6 +225,10 @@ impl RadrootsTradeValidationReceipt {
         validate_hash32(&self.new_state_root, "new_state_root")?;
         validate_hash32(&self.previous_state_root, "previous_state_root")?;
         validate_hash32(&self.public_values_hash, "public_values_hash")?;
+        validate_event_id(
+            &self.statement.listing_event_id,
+            "statement.listing_event_id",
+        )?;
         validate_event_id(&self.statement.root_event_id, "statement.root_event_id")?;
         validate_event_id(&self.statement.target_event_id, "statement.target_event_id")?;
         validate_result_error_bitmap(self.result, &self.error_bitmap)?;
@@ -313,6 +320,13 @@ pub fn validation_receipt_tags(
         vec![TAG_D.to_string(), order_id.to_string()],
         vec![
             "e".to_string(),
+            receipt.statement.listing_event_id.clone(),
+            String::new(),
+            String::new(),
+            "listing".to_string(),
+        ],
+        vec![
+            "e".to_string(),
             receipt.statement.root_event_id.clone(),
             String::new(),
             String::new(),
@@ -352,6 +366,7 @@ pub fn validation_receipt_tags_from_tags(
     tags: &[Vec<String>],
 ) -> Result<RadrootsValidationReceiptTags, RadrootsValidationReceiptError> {
     let order_id = required_tag_value(tags, TAG_D)?;
+    let listing_event_id = required_event_marker(tags, "listing")?;
     let root_event_id = required_event_marker(tags, "root")?;
     let target_event_id = required_event_marker(tags, "target")?;
     let event_set_root = required_tag_value(tags, TAG_VALIDATION_RECEIPT_EVENT_SET_ROOT)?;
@@ -372,6 +387,7 @@ pub fn validation_receipt_tags_from_tags(
         TAG_VALIDATION_RECEIPT_RECEIPT_TYPE,
     ))?;
 
+    validate_event_id(&listing_event_id, "tags.e.listing")?;
     validate_event_id(&root_event_id, "tags.e.root")?;
     validate_event_id(&target_event_id, "tags.e.target")?;
     validate_hash32(&event_set_root, TAG_VALIDATION_RECEIPT_EVENT_SET_ROOT)?;
@@ -386,6 +402,7 @@ pub fn validation_receipt_tags_from_tags(
 
     Ok(RadrootsValidationReceiptTags {
         event_set_root,
+        listing_event_id,
         order_id,
         proof_system,
         public_values_hash,
@@ -430,6 +447,11 @@ pub fn verify_validation_receipt_event(
     let receipt = validation_receipt_content_from_str(&event.content)?;
     let tags = validation_receipt_tags_from_tags(&event.tags)?;
 
+    if tags.listing_event_id != receipt.statement.listing_event_id {
+        return Err(RadrootsValidationReceiptError::TagMismatch(
+            "listing_event_id",
+        ));
+    }
     if tags.root_event_id != receipt.statement.root_event_id {
         return Err(RadrootsValidationReceiptError::TagMismatch("root_event_id"));
     }
@@ -483,6 +505,13 @@ fn validate_expected_binding(
         if tags.order_id != order_id {
             return Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
                 "order_id",
+            ));
+        }
+    }
+    if let Some(listing_event_id) = expected.listing_event_id {
+        if tags.listing_event_id != listing_event_id {
+            return Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
+                "listing_event_id",
             ));
         }
     }
@@ -720,6 +749,7 @@ mod tests {
             receipt_type: RadrootsValidationReceiptType::TradeTransition,
             result: RadrootsValidationReceiptResult::Valid,
             statement: RadrootsValidationReceiptStatement {
+                listing_event_id: event_id('0'),
                 root_event_id: event_id('1'),
                 target_event_id: event_id('2'),
                 statement_type: RadrootsValidationReceiptType::TradeTransition,
@@ -762,12 +792,13 @@ mod tests {
         assert_eq!(
             content,
             format!(
-                "{{\"changed_records_root\":\"{}\",\"domain\":\"radroots.receipt\",\"error_bitmap\":\"0x00000000000000000000000000000000\",\"event_set_root\":\"{}\",\"new_state_root\":\"{}\",\"previous_state_root\":\"{}\",\"proof\":{{\"inline_proof_base64\":null,\"mode\":null,\"program_hash\":null,\"proof_reference\":null,\"system\":\"none\",\"verifying_key_hash\":null}},\"public_values_hash\":\"{}\",\"receipt_type\":\"trade_transition\",\"result\":\"valid\",\"statement\":{{\"root_event_id\":\"{}\",\"target_event_id\":\"{}\",\"type\":\"trade_transition\"}},\"version\":1}}",
+                "{{\"changed_records_root\":\"{}\",\"domain\":\"radroots.receipt\",\"error_bitmap\":\"0x00000000000000000000000000000000\",\"event_set_root\":\"{}\",\"new_state_root\":\"{}\",\"previous_state_root\":\"{}\",\"proof\":{{\"inline_proof_base64\":null,\"mode\":null,\"program_hash\":null,\"proof_reference\":null,\"system\":\"none\",\"verifying_key_hash\":null}},\"public_values_hash\":\"{}\",\"receipt_type\":\"trade_transition\",\"result\":\"valid\",\"statement\":{{\"listing_event_id\":\"{}\",\"root_event_id\":\"{}\",\"target_event_id\":\"{}\",\"type\":\"trade_transition\"}},\"version\":1}}",
                 hash32('6'),
                 hash32('c'),
                 hash32('4'),
                 hash32('3'),
                 receipt.public_values_hash,
+                event_id('0'),
                 event_id('1'),
                 event_id('2'),
             )
@@ -781,6 +812,7 @@ mod tests {
         assert_eq!(event.kind, KIND_TRADE_VALIDATION_RECEIPT);
         let verified = validation_receipt_from_event(&event).expect("verified receipt");
         assert_eq!(verified.tags.order_id, "order-1");
+        assert_eq!(verified.tags.listing_event_id, event_id('0'));
         assert_eq!(verified.tags.event_set_root, hash32('c'));
         assert_eq!(verified.tags.reducer_output_root, hash32('4'));
         assert_eq!(

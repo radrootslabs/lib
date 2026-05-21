@@ -85,6 +85,7 @@ pub struct RadrootsSp1TradeProofEnvelope {
     pub sp1_verifying_key_hash: String,
     pub receipt_type: String,
     pub receipt_result: String,
+    pub listing_event_id: String,
     pub root_event_id: String,
     pub target_event_id: String,
     pub event_set_root: String,
@@ -499,6 +500,13 @@ fn verify_validation_receipt_matches_public_values(
             "error_bitmap",
         ));
     }
+    if public_values.listing_event_id.as_deref()
+        != Some(receipt.statement.listing_event_id.as_str())
+    {
+        return Err(RadrootsSp1TradeHostError::ValidationReceiptBindingMismatch(
+            "listing_event_id",
+        ));
+    }
     if public_values.root_event_id.as_deref() != Some(receipt.statement.root_event_id.as_str()) {
         return Err(RadrootsSp1TradeHostError::ValidationReceiptBindingMismatch(
             "root_event_id",
@@ -613,6 +621,9 @@ pub fn validation_receipt_for_order_acceptance_proof(
     bundle: &RadrootsSp1TradeProofBundle,
 ) -> Result<RadrootsTradeValidationReceipt, RadrootsSp1TradeHostError> {
     let public_values = &bundle.execution.public_values;
+    let listing_event_id = public_values.listing_event_id.clone().ok_or(
+        RadrootsSp1TradeHostError::MissingReceiptBinding("listing_event_id"),
+    )?;
     let root_event_id = public_values.root_event_id.clone().ok_or(
         RadrootsSp1TradeHostError::MissingReceiptBinding("root_event_id"),
     )?;
@@ -638,6 +649,7 @@ pub fn validation_receipt_for_order_acceptance_proof(
         receipt_type: RadrootsValidationReceiptType::TradeTransition,
         result: validation_receipt_result_from_public_values(public_values.result),
         statement: RadrootsValidationReceiptStatement {
+            listing_event_id,
             root_event_id,
             target_event_id,
             statement_type: RadrootsValidationReceiptType::TradeTransition,
@@ -786,6 +798,9 @@ fn proof_envelope_for_real_sp1_execution(
             validation_receipt_result_from_public_values(execution.public_values.result),
         )
         .to_owned(),
+        listing_event_id: execution.public_values.listing_event_id.clone().ok_or(
+            RadrootsSp1TradeHostError::MissingReceiptBinding("listing_event_id"),
+        )?,
         root_event_id: execution.public_values.root_event_id.clone().ok_or(
             RadrootsSp1TradeHostError::MissingReceiptBinding("root_event_id"),
         )?,
@@ -839,6 +854,7 @@ fn proof_digest_for_envelope(
         sp1_verifying_key_hash: envelope.sp1_verifying_key_hash.as_str(),
         receipt_type: envelope.receipt_type.as_str(),
         receipt_result: envelope.receipt_result.as_str(),
+        listing_event_id: envelope.listing_event_id.as_str(),
         root_event_id: envelope.root_event_id.as_str(),
         target_event_id: envelope.target_event_id.as_str(),
         event_set_root: envelope.event_set_root.as_str(),
@@ -902,6 +918,17 @@ fn verify_proof_envelope(
     {
         return Err(RadrootsSp1TradeHostError::ValidationReceiptBindingMismatch(
             "result",
+        ));
+    }
+    if envelope.listing_event_id.as_str()
+        != execution
+            .public_values
+            .listing_event_id
+            .as_deref()
+            .unwrap_or("")
+    {
+        return Err(RadrootsSp1TradeHostError::ValidationReceiptBindingMismatch(
+            "listing_event_id",
         ));
     }
     if envelope.root_event_id.as_str()
@@ -1133,6 +1160,7 @@ struct ProofEnvelopeDigestMaterial<'a> {
     sp1_verifying_key_hash: &'a str,
     receipt_type: &'a str,
     receipt_result: &'a str,
+    listing_event_id: &'a str,
     root_event_id: &'a str,
     target_event_id: &'a str,
     event_set_root: &'a str,
