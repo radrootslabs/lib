@@ -259,9 +259,14 @@ impl RadrootsValidationReceiptProof {
                 match (&self.inline_proof_base64, &self.proof_reference) {
                     (Some(inline), None) => validate_inline_proof_base64(inline)?,
                     (None, Some(reference)) => validate_proof_reference(reference)?,
-                    _ => {
+                    (None, None) => {
                         return Err(RadrootsValidationReceiptError::InvalidProofMetadata(
-                            "proof.material",
+                            "proof.material_missing",
+                        ));
+                    }
+                    (Some(_), Some(_)) => {
+                        return Err(RadrootsValidationReceiptError::InvalidProofMetadata(
+                            "proof.material_conflict",
                         ));
                     }
                 }
@@ -886,7 +891,7 @@ mod tests {
         assert_eq!(
             receipt.validate(),
             Err(RadrootsValidationReceiptError::InvalidProofMetadata(
-                "proof.material"
+                "proof.material_missing"
             ))
         );
 
@@ -925,7 +930,7 @@ mod tests {
         assert_eq!(
             both_material_sources.validate(),
             Err(RadrootsValidationReceiptError::InvalidProofMetadata(
-                "proof.material"
+                "proof.material_conflict"
             ))
         );
 
@@ -934,7 +939,7 @@ mod tests {
         assert_eq!(
             missing_material.validate(),
             Err(RadrootsValidationReceiptError::InvalidProofMetadata(
-                "proof.material"
+                "proof.material_missing"
             ))
         );
     }

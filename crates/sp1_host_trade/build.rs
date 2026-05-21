@@ -1,6 +1,6 @@
 fn main() {
-    println!("cargo:rerun-if-env-changed=CARGO_FEATURE_EXPENSIVE_PROOFS");
-    #[cfg(feature = "expensive_proofs")]
+    println!("cargo:rerun-if-env-changed=CARGO_FEATURE_SP1_VERIFY");
+    #[cfg(feature = "sp1_verify")]
     {
         let args = sp1_build::BuildArgs {
             binaries: vec!["radroots_sp1_trade_order_acceptance_guest".to_string()],

@@ -13,7 +13,8 @@ homepage.workspace = true
 
 [features]
 default = []
-expensive_proofs = ["dep:bincode", "dep:sp1-build", "dep:sp1-sdk"]
+sp1_verify = ["dep:bincode", "dep:sp1-build", "dep:sp1-sdk"]
+sp1_proving = ["sp1_verify"]
 
 [dependencies]
 base64 = { workspace = true }
