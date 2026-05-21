@@ -169,6 +169,36 @@ impl core::fmt::Display for RadrootsSp1TradeProverBackend {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+pub enum RadrootsSp1TradeProofEngine {
+    Cpu,
+    Cuda,
+}
+
+impl RadrootsSp1TradeProofEngine {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Cpu => "cpu",
+            Self::Cuda => "cuda",
+        }
+    }
+
+    pub fn from_label(value: &str) -> Option<Self> {
+        match value {
+            "cpu" => Some(Self::Cpu),
+            "cuda" => Some(Self::Cuda),
+            _ => None,
+        }
+    }
+}
+
+impl core::fmt::Display for RadrootsSp1TradeProofEngine {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum RadrootsSp1TradeRemoteProverStatus {
     Accepted,
     Running,
@@ -228,6 +258,7 @@ pub struct RadrootsSp1TradeRemoteProverRequest {
     pub witness: RadrootsSp1TradeOrderAcceptanceWitness,
     pub expected_sp1_program_hash: String,
     pub expected_sp1_verifying_key_hash: String,
+    pub expected_public_values_hash: String,
     pub expected_reducer_program_hash: String,
     pub expected_protocol_version: String,
     pub expected_witness_version: u32,
@@ -330,6 +361,8 @@ pub enum RadrootsSp1TradeHostError {
     Sp1PublicValuesMismatch,
     #[error("SP1 proof generation requires the sp1_proving feature")]
     Sp1ProofGenerationRequired,
+    #[error("SP1 CUDA proof generation is unavailable: {0}")]
+    Sp1CudaProofEngineUnavailable(String),
     #[error("SP1 proof mode is required")]
     Sp1ProofModeRequired,
     #[error("SP1 setup failed: {0}")]
@@ -461,12 +494,72 @@ pub async fn generate_order_acceptance_sp1_proof(
     witness: &RadrootsSp1TradeOrderAcceptanceWitness,
     mode: RadrootsSp1TradeProofMode,
 ) -> Result<RadrootsSp1TradeProofBundle, RadrootsSp1TradeHostError> {
-    use sp1_sdk::{
-        HashableKey, ProveRequest, Prover, ProverClient, ProvingKey, SP1Stdin, StatusCode,
-    };
+    generate_order_acceptance_sp1_proof_with_engine(witness, mode, RadrootsSp1TradeProofEngine::Cpu)
+        .await
+}
+
+#[cfg(feature = "sp1_proving")]
+pub async fn generate_order_acceptance_sp1_proof_with_engine(
+    witness: &RadrootsSp1TradeOrderAcceptanceWitness,
+    mode: RadrootsSp1TradeProofMode,
+    engine: RadrootsSp1TradeProofEngine,
+) -> Result<RadrootsSp1TradeProofBundle, RadrootsSp1TradeHostError> {
+    match engine {
+        RadrootsSp1TradeProofEngine::Cpu => {
+            let client = sp1_sdk::ProverClient::builder().cpu().build().await;
+            generate_order_acceptance_sp1_proof_with_client(&client, witness, mode).await
+        }
+        RadrootsSp1TradeProofEngine::Cuda => {
+            generate_order_acceptance_sp1_cuda_proof(witness, mode).await
+        }
+    }
+}
+
+#[cfg(all(feature = "sp1_proving", feature = "sp1_cuda"))]
+async fn generate_order_acceptance_sp1_cuda_proof(
+    witness: &RadrootsSp1TradeOrderAcceptanceWitness,
+    mode: RadrootsSp1TradeProofMode,
+) -> Result<RadrootsSp1TradeProofBundle, RadrootsSp1TradeHostError> {
+    use futures::FutureExt;
+    let client = std::panic::AssertUnwindSafe(sp1_sdk::ProverClient::builder().cuda().build())
+        .catch_unwind()
+        .await
+        .map_err(cuda_panic_to_host_error)?;
+    generate_order_acceptance_sp1_proof_with_client(&client, witness, mode).await
+}
+
+#[cfg(all(feature = "sp1_proving", feature = "sp1_cuda"))]
+fn cuda_panic_to_host_error(payload: Box<dyn std::any::Any + Send>) -> RadrootsSp1TradeHostError {
+    let message = payload
+        .downcast_ref::<&str>()
+        .map(|value| (*value).to_owned())
+        .or_else(|| payload.downcast_ref::<String>().cloned())
+        .unwrap_or_else(|| "CUDA prover initialization failed".to_owned());
+    RadrootsSp1TradeHostError::Sp1CudaProofEngineUnavailable(message)
+}
+
+#[cfg(all(feature = "sp1_proving", not(feature = "sp1_cuda")))]
+async fn generate_order_acceptance_sp1_cuda_proof(
+    _witness: &RadrootsSp1TradeOrderAcceptanceWitness,
+    _mode: RadrootsSp1TradeProofMode,
+) -> Result<RadrootsSp1TradeProofBundle, RadrootsSp1TradeHostError> {
+    Err(RadrootsSp1TradeHostError::Sp1CudaProofEngineUnavailable(
+        "build without sp1_cuda feature".to_owned(),
+    ))
+}
+
+#[cfg(feature = "sp1_proving")]
+async fn generate_order_acceptance_sp1_proof_with_client<P>(
+    client: &P,
+    witness: &RadrootsSp1TradeOrderAcceptanceWitness,
+    mode: RadrootsSp1TradeProofMode,
+) -> Result<RadrootsSp1TradeProofBundle, RadrootsSp1TradeHostError>
+where
+    P: sp1_sdk::Prover,
+{
+    use sp1_sdk::{HashableKey, ProveRequest, ProvingKey, SP1Stdin, StatusCode};
 
     let sp1_mode = sp1_proof_mode(mode)?;
-    let client = ProverClient::builder().cpu().build().await;
     let elf = order_acceptance_guest_elf();
     let sp1_program_hash = sp1_program_hash_for_elf(&elf);
     let pk = client
@@ -1945,6 +2038,8 @@ mod tests {
                 "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
             expected_sp1_verifying_key_hash:
                 "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string(),
+            expected_public_values_hash:
+                "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc".to_string(),
             expected_reducer_program_hash: RADROOTS_SP1_TRADE_REDUCER_PROGRAM_HASH.to_string(),
             expected_protocol_version: RADROOTS_SP1_TRADE_PROTOCOL_VERSION.to_string(),
             expected_witness_version: RADROOTS_SP1_TRADE_WITNESS_VERSION,
