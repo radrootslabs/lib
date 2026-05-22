@@ -1706,6 +1706,8 @@ mod tests {
         RadrootsValidationReceiptResult, validation_receipt_event_build,
         verify_validation_receipt_event,
     };
+    #[cfg(feature = "sp1_verify")]
+    use serde::Deserialize;
 
     fn witness() -> RadrootsSp1TradeOrderAcceptanceWitness {
         RadrootsSp1TradeOrderAcceptanceWitness {
@@ -2104,6 +2106,119 @@ mod tests {
             super::RadrootsSp1TradeProverBackend::from_label("remote_http_prove"),
             Some(super::RadrootsSp1TradeProverBackend::RemoteHttpProve)
         );
+    }
+
+    #[cfg(feature = "sp1_verify")]
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct RemoteReturnedProofFixture {
+        schema_version: u32,
+        fixture_id: String,
+        proof_target: String,
+        proof_mode: RadrootsSp1TradeProofMode,
+        proof_system: RadrootsValidationReceiptProofSystem,
+        sp1_version_line: String,
+        remote_prover_request: super::RadrootsSp1TradeRemoteProverRequest,
+        remote_prover_response: super::RadrootsSp1TradeRemoteProverResponse,
+    }
+
+    #[cfg(feature = "sp1_verify")]
+    fn remote_returned_proof_fixture() -> RemoteReturnedProofFixture {
+        serde_json::from_str(include_str!(
+            "../tests/fixtures/remote_returned_proof_order_acceptance_core_v1.json"
+        ))
+        .expect("remote returned proof fixture")
+    }
+
+    #[cfg(feature = "sp1_verify")]
+    #[tokio::test]
+    async fn remote_returned_proof_artifact_verifies() {
+        let fixture = remote_returned_proof_fixture();
+        assert_eq!(fixture.schema_version, 1);
+        assert_eq!(
+            fixture.fixture_id,
+            "remote_returned_proof_order_acceptance_core_v1"
+        );
+        assert_eq!(
+            fixture.proof_target,
+            RADROOTS_SP1_TRADE_ORDER_ACCEPTANCE_PROOF_TARGET
+        );
+        assert_eq!(fixture.proof_mode, RadrootsSp1TradeProofMode::Core);
+        assert_eq!(
+            fixture.proof_system,
+            RadrootsValidationReceiptProofSystem::Sp1Core
+        );
+        assert_eq!(
+            fixture.sp1_version_line,
+            super::RADROOTS_SP1_TRADE_SP1_VERSION_LINE
+        );
+
+        let request = fixture.remote_prover_request;
+        let response = fixture.remote_prover_response;
+        let execution = super::execute_order_acceptance_public_values(&request.witness)
+            .expect("deterministic execution");
+        assert_eq!(
+            execution.public_values_hash,
+            request.expected_public_values_hash
+        );
+        assert_eq!(
+            execution.public_values.sp1_program_hash.as_deref(),
+            Some(request.expected_sp1_program_hash.as_str())
+        );
+        assert_eq!(
+            execution.public_values.sp1_verifying_key_hash.as_deref(),
+            Some(request.expected_sp1_verifying_key_hash.as_str())
+        );
+        assert_eq!(
+            response.status,
+            super::RadrootsSp1TradeRemoteProverStatus::Completed
+        );
+        assert_eq!(response.request_id, request.request_id);
+        assert_eq!(
+            response.public_values_hash.as_deref(),
+            Some(request.expected_public_values_hash.as_str())
+        );
+        assert_eq!(
+            response.sp1_program_hash.as_deref(),
+            Some(request.expected_sp1_program_hash.as_str())
+        );
+        assert_eq!(
+            response.sp1_verifying_key_hash.as_deref(),
+            Some(request.expected_sp1_verifying_key_hash.as_str())
+        );
+
+        let artifact = response.proof_artifact.expect("proof artifact");
+        verify_order_acceptance_proof_artifact_structure(&execution, &artifact)
+            .expect("artifact structure");
+        super::verify_order_acceptance_resolved_sp1_proof_artifact(
+            &execution,
+            &super::RadrootsSp1TradeResolvedProofArtifact::inline(artifact.clone()),
+        )
+        .await
+        .expect("remote proof verifies");
+
+        let mut digest_mismatch = artifact.clone();
+        digest_mismatch.proof_digest =
+            "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string();
+        let err = verify_order_acceptance_proof_artifact_structure(&execution, &digest_mismatch)
+            .expect_err("digest mismatch");
+        assert_eq!(err, RadrootsSp1TradeHostError::ProofDigestMismatch);
+
+        let mut identity_mismatch = execution.clone();
+        identity_mismatch.public_values.sp1_program_hash =
+            Some("0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd".to_string());
+        let err = verify_order_acceptance_proof_artifact_structure(&identity_mismatch, &artifact)
+            .expect_err("identity mismatch");
+        assert_eq!(err, RadrootsSp1TradeHostError::Sp1ProgramHashMismatch);
+
+        let mut public_values_mismatch = request.witness;
+        public_values_mismatch.inventory_sequence += 1;
+        let mismatch_execution =
+            super::execute_order_acceptance_public_values(&public_values_mismatch)
+                .expect("mismatch execution");
+        let err = verify_order_acceptance_proof_artifact_structure(&mismatch_execution, &artifact)
+            .expect_err("public values mismatch");
+        assert_eq!(err, RadrootsSp1TradeHostError::PublicValuesHashMismatch);
     }
 
     #[cfg(feature = "sp1_verify")]
