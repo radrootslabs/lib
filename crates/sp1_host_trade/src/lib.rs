@@ -80,6 +80,7 @@ pub const RADROOTS_SP1_TRADE_PROOF_ARTIFACT_SCHEMA_VERSION: u32 = 1;
 pub const RADROOTS_SP1_TRADE_REMOTE_PROVER_SCHEMA_VERSION: u32 = 1;
 pub const RADROOTS_SP1_TRADE_SP1_VERSION_LINE: &str = "sp1-sdk-6.2.1";
 pub const RADROOTS_SP1_TRADE_PROOF_CODEC: &str = "sp1-proof-with-public-values-bincode";
+pub const RADROOTS_SP1_TRADE_VERIFYING_KEY_CODEC: &str = "sp1-verifying-key-bincode";
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -95,6 +96,8 @@ pub struct RadrootsSp1TradeProofEnvelope {
     pub canonical_public_values_hash: String,
     pub sp1_program_hash: String,
     pub sp1_verifying_key_hash: String,
+    pub sp1_verifying_key_codec: String,
+    pub sp1_verifying_key_base64: String,
     pub receipt_type: String,
     pub receipt_result: String,
     pub listing_event_id: String,
@@ -592,7 +595,14 @@ where
     }
     let proof_bytes =
         bincode::serialize(&proof).map_err(|_| RadrootsSp1TradeHostError::ProofEncoding)?;
-    let proof = proof_artifact_for_real_sp1_execution(&execution, mode, &proof_bytes)?;
+    let verifying_key_bytes = bincode::serialize(pk.verifying_key())
+        .map_err(|_| RadrootsSp1TradeHostError::ProofEncoding)?;
+    let proof = proof_artifact_for_real_sp1_execution(
+        &execution,
+        mode,
+        &proof_bytes,
+        &verifying_key_bytes,
+    )?;
     verify_order_acceptance_proof_artifact_structure(&execution, &proof)?;
     Ok(RadrootsSp1TradeProofBundle { execution, proof })
 }
@@ -602,7 +612,7 @@ pub async fn verify_order_acceptance_resolved_sp1_proof_artifact(
     execution: &RadrootsSp1TradePublicValuesExecution,
     resolved: &RadrootsSp1TradeResolvedProofArtifact,
 ) -> Result<(), RadrootsSp1TradeHostError> {
-    use sp1_sdk::{HashableKey, Prover, ProverClient, ProvingKey, StatusCode};
+    use sp1_sdk::{HashableKey, Prover, ProverClient, StatusCode};
 
     let artifact = &resolved.artifact;
     verify_order_acceptance_proof_artifact_structure(execution, artifact)?;
@@ -618,27 +628,24 @@ pub async fn verify_order_acceptance_resolved_sp1_proof_artifact(
         return Err(RadrootsSp1TradeHostError::Sp1ProofModeMismatch);
     }
     let client = ProverClient::builder().cpu().build().await;
-    let pk = client
-        .setup(order_acceptance_guest_elf())
-        .await
-        .map_err(|error| RadrootsSp1TradeHostError::Sp1SetupFailed(error.to_string()))?;
-    let verifying_key_hash = pk.verifying_key().bytes32();
+    let verifying_key = decode_sp1_verifying_key_envelope(&envelope)?;
+    let verifying_key_hash = verifying_key.bytes32();
     if artifact.verifying_key_hash.as_deref() != Some(verifying_key_hash.as_str()) {
         return Err(RadrootsSp1TradeHostError::Sp1VerifyingKeyHashMismatch);
     }
-    let sp1_program_hash = sp1_program_hash_for_order_acceptance_guest();
-    if artifact.program_hash.as_deref() != Some(sp1_program_hash.as_str()) {
-        return Err(RadrootsSp1TradeHostError::Sp1ProgramHashMismatch);
-    }
+    let sp1_program_hash = artifact
+        .program_hash
+        .as_deref()
+        .ok_or(RadrootsSp1TradeHostError::MissingSp1ProgramHash)?;
     client
-        .verify(&proof, pk.verifying_key(), Some(StatusCode::SUCCESS))
+        .verify(&proof, &verifying_key, Some(StatusCode::SUCCESS))
         .map_err(|error| {
             RadrootsSp1TradeHostError::Sp1ProofVerificationFailed(error.to_string())
         })?;
     let (_, proof_execution) = execution_from_sp1_public_values(proof.public_values)?;
     require_public_values_sp1_identity(
         &proof_execution.public_values,
-        sp1_program_hash.as_str(),
+        sp1_program_hash,
         verifying_key_hash.as_str(),
     )?;
     if &proof_execution != execution {
@@ -651,7 +658,7 @@ pub async fn verify_order_acceptance_resolved_sp1_proof_artifact(
 pub async fn verify_order_acceptance_validation_receipt_inline_sp1_proof(
     receipt: &RadrootsTradeValidationReceipt,
 ) -> Result<RadrootsSp1TradeValidationReceiptVerification, RadrootsSp1TradeHostError> {
-    use sp1_sdk::{HashableKey, Prover, ProverClient, ProvingKey, StatusCode};
+    use sp1_sdk::{HashableKey, Prover, ProverClient, StatusCode};
 
     if receipt.proof.system == RadrootsValidationReceiptProofSystem::None {
         return Err(RadrootsSp1TradeHostError::Sp1ProofModeRequired);
@@ -685,32 +692,29 @@ pub async fn verify_order_acceptance_validation_receipt_inline_sp1_proof(
         return Err(RadrootsSp1TradeHostError::Sp1ProofModeMismatch);
     }
 
-    let client = ProverClient::builder().cpu().build().await;
-    let pk = client
-        .setup(order_acceptance_guest_elf())
-        .await
-        .map_err(|error| RadrootsSp1TradeHostError::Sp1SetupFailed(error.to_string()))?;
-    let verifying_key_hash = pk.verifying_key().bytes32();
+    let envelope = decode_proof_envelope(&artifact)?;
+    let verifying_key = decode_sp1_verifying_key_envelope(&envelope)?;
+    let verifying_key_hash = verifying_key.bytes32();
     if artifact.verifying_key_hash.as_deref() != Some(verifying_key_hash.as_str()) {
         return Err(RadrootsSp1TradeHostError::Sp1VerifyingKeyHashMismatch);
     }
-    let sp1_program_hash = sp1_program_hash_for_order_acceptance_guest();
-    if artifact.program_hash.as_deref() != Some(sp1_program_hash.as_str()) {
-        return Err(RadrootsSp1TradeHostError::Sp1ProgramHashMismatch);
-    }
+    let sp1_program_hash = artifact
+        .program_hash
+        .as_deref()
+        .ok_or(RadrootsSp1TradeHostError::MissingSp1ProgramHash)?;
 
+    let client = ProverClient::builder().cpu().build().await;
     client
-        .verify(&proof, pk.verifying_key(), Some(StatusCode::SUCCESS))
+        .verify(&proof, &verifying_key, Some(StatusCode::SUCCESS))
         .map_err(|error| {
             RadrootsSp1TradeHostError::Sp1ProofVerificationFailed(error.to_string())
         })?;
     let (_, execution) = execution_from_sp1_public_values(proof.public_values)?;
     require_public_values_sp1_identity(
         &execution.public_values,
-        sp1_program_hash.as_str(),
+        sp1_program_hash,
         verifying_key_hash.as_str(),
     )?;
-    let envelope = decode_proof_envelope(&artifact)?;
     verify_proof_envelope(&execution, &artifact, &envelope)?;
     verify_validation_receipt_matches_public_values(receipt, &execution.public_values)?;
     if execution.public_values_hash != receipt.public_values_hash {
@@ -722,7 +726,7 @@ pub async fn verify_order_acceptance_validation_receipt_inline_sp1_proof(
         proof_mode: mode,
         proof_system: receipt.proof.system,
         public_values_hash: execution.public_values_hash,
-        sp1_program_hash,
+        sp1_program_hash: sp1_program_hash.to_owned(),
         sp1_verifying_key_hash: verifying_key_hash,
     })
 }
@@ -732,7 +736,7 @@ pub async fn verify_order_acceptance_validation_receipt_resolved_sp1_proof(
     receipt: &RadrootsTradeValidationReceipt,
     resolved: &RadrootsSp1TradeResolvedProofArtifact,
 ) -> Result<RadrootsSp1TradeValidationReceiptVerification, RadrootsSp1TradeHostError> {
-    use sp1_sdk::{HashableKey, Prover, ProverClient, ProvingKey, StatusCode};
+    use sp1_sdk::{HashableKey, Prover, ProverClient, StatusCode};
 
     if receipt.proof.system == RadrootsValidationReceiptProofSystem::None {
         return Err(RadrootsSp1TradeHostError::Sp1ProofModeRequired);
@@ -749,29 +753,27 @@ pub async fn verify_order_acceptance_validation_receipt_resolved_sp1_proof(
         return Err(RadrootsSp1TradeHostError::Sp1ProofModeMismatch);
     }
 
-    let client = ProverClient::builder().cpu().build().await;
-    let pk = client
-        .setup(order_acceptance_guest_elf())
-        .await
-        .map_err(|error| RadrootsSp1TradeHostError::Sp1SetupFailed(error.to_string()))?;
-    let verifying_key_hash = pk.verifying_key().bytes32();
+    let verifying_key = decode_sp1_verifying_key_envelope(&envelope)?;
+    let verifying_key_hash = verifying_key.bytes32();
     if resolved.artifact.verifying_key_hash.as_deref() != Some(verifying_key_hash.as_str()) {
         return Err(RadrootsSp1TradeHostError::Sp1VerifyingKeyHashMismatch);
     }
-    let sp1_program_hash = sp1_program_hash_for_order_acceptance_guest();
-    if resolved.artifact.program_hash.as_deref() != Some(sp1_program_hash.as_str()) {
-        return Err(RadrootsSp1TradeHostError::Sp1ProgramHashMismatch);
-    }
+    let sp1_program_hash = resolved
+        .artifact
+        .program_hash
+        .as_deref()
+        .ok_or(RadrootsSp1TradeHostError::MissingSp1ProgramHash)?;
 
+    let client = ProverClient::builder().cpu().build().await;
     client
-        .verify(&proof, pk.verifying_key(), Some(StatusCode::SUCCESS))
+        .verify(&proof, &verifying_key, Some(StatusCode::SUCCESS))
         .map_err(|error| {
             RadrootsSp1TradeHostError::Sp1ProofVerificationFailed(error.to_string())
         })?;
     let (_, execution) = execution_from_sp1_public_values(proof.public_values)?;
     require_public_values_sp1_identity(
         &execution.public_values,
-        sp1_program_hash.as_str(),
+        sp1_program_hash,
         verifying_key_hash.as_str(),
     )?;
     verify_order_acceptance_proof_artifact_structure(&execution, &resolved.artifact)?;
@@ -786,7 +788,7 @@ pub async fn verify_order_acceptance_validation_receipt_resolved_sp1_proof(
         proof_mode: mode,
         proof_system: receipt.proof.system,
         public_values_hash: execution.public_values_hash,
-        sp1_program_hash,
+        sp1_program_hash: sp1_program_hash.to_owned(),
         sp1_verifying_key_hash: verifying_key_hash,
     })
 }
@@ -1109,6 +1111,7 @@ fn proof_artifact_for_real_sp1_execution(
     execution: &RadrootsSp1TradePublicValuesExecution,
     mode: RadrootsSp1TradeProofMode,
     proof_bytes: &[u8],
+    verifying_key_bytes: &[u8],
 ) -> Result<RadrootsSp1TradeProofArtifact, RadrootsSp1TradeHostError> {
     let system = mode.proof_system();
     if system == RadrootsValidationReceiptProofSystem::None {
@@ -1131,6 +1134,7 @@ fn proof_artifact_for_real_sp1_execution(
         program_hash.as_str(),
         verifying_key_hash.as_str(),
         proof_bytes,
+        verifying_key_bytes,
     )?;
     envelope.proof_digest = proof_digest_for_envelope(&envelope)?;
     let envelope_json =
@@ -1179,6 +1183,7 @@ fn proof_envelope_for_real_sp1_execution(
     program_hash: &str,
     verifying_key_hash: &str,
     proof_bytes: &[u8],
+    verifying_key_bytes: &[u8],
 ) -> Result<RadrootsSp1TradeProofEnvelope, RadrootsSp1TradeHostError> {
     Ok(RadrootsSp1TradeProofEnvelope {
         schema_version: RADROOTS_SP1_TRADE_PROOF_ARTIFACT_SCHEMA_VERSION,
@@ -1198,6 +1203,9 @@ fn proof_envelope_for_real_sp1_execution(
         ),
         sp1_program_hash: program_hash.to_owned(),
         sp1_verifying_key_hash: verifying_key_hash.to_owned(),
+        sp1_verifying_key_codec: RADROOTS_SP1_TRADE_VERIFYING_KEY_CODEC.to_owned(),
+        sp1_verifying_key_base64: base64::engine::general_purpose::STANDARD
+            .encode(verifying_key_bytes),
         receipt_type: RadrootsValidationReceiptType::TradeTransition
             .as_str()
             .to_owned(),
@@ -1317,6 +1325,8 @@ fn proof_digest_for_envelope(
         canonical_public_values_hash: envelope.canonical_public_values_hash.as_str(),
         sp1_program_hash: envelope.sp1_program_hash.as_str(),
         sp1_verifying_key_hash: envelope.sp1_verifying_key_hash.as_str(),
+        sp1_verifying_key_codec: envelope.sp1_verifying_key_codec.as_str(),
+        sp1_verifying_key_base64: envelope.sp1_verifying_key_base64.as_str(),
         receipt_type: envelope.receipt_type.as_str(),
         receipt_result: envelope.receipt_result.as_str(),
         listing_event_id: envelope.listing_event_id.as_str(),
@@ -1350,6 +1360,8 @@ fn verify_proof_envelope(
         || envelope.sp1_program_hash.as_str() != artifact.program_hash.as_deref().unwrap_or("")
         || envelope.sp1_verifying_key_hash.as_str()
             != artifact.verifying_key_hash.as_deref().unwrap_or("")
+        || envelope.sp1_verifying_key_codec != RADROOTS_SP1_TRADE_VERIFYING_KEY_CODEC
+        || envelope.sp1_verifying_key_base64.is_empty()
     {
         return Err(RadrootsSp1TradeHostError::Sp1ProofMaterialDecode(
             "proof envelope metadata mismatch".to_owned(),
@@ -1584,6 +1596,22 @@ fn decode_sp1_proof_envelope(
 }
 
 #[cfg(feature = "sp1_verify")]
+fn decode_sp1_verifying_key_envelope(
+    envelope: &RadrootsSp1TradeProofEnvelope,
+) -> Result<sp1_sdk::SP1VerifyingKey, RadrootsSp1TradeHostError> {
+    if envelope.sp1_verifying_key_codec != RADROOTS_SP1_TRADE_VERIFYING_KEY_CODEC {
+        return Err(RadrootsSp1TradeHostError::Sp1ProofMaterialDecode(
+            "proof envelope verifying key codec mismatch".to_owned(),
+        ));
+    }
+    let verifying_key_bytes = base64::engine::general_purpose::STANDARD
+        .decode(envelope.sp1_verifying_key_base64.as_str())
+        .map_err(|error| RadrootsSp1TradeHostError::Sp1ProofMaterialDecode(error.to_string()))?;
+    bincode::deserialize::<sp1_sdk::SP1VerifyingKey>(&verifying_key_bytes)
+        .map_err(|error| RadrootsSp1TradeHostError::Sp1ProofMaterialDecode(error.to_string()))
+}
+
+#[cfg(feature = "sp1_verify")]
 fn sp1_proof_material_is_real(proof: &sp1_sdk::SP1Proof) -> bool {
     match proof {
         sp1_sdk::SP1Proof::Core(chunks) => !chunks.is_empty(),
@@ -1636,6 +1664,8 @@ struct ProofEnvelopeDigestMaterial<'a> {
     canonical_public_values_hash: &'a str,
     sp1_program_hash: &'a str,
     sp1_verifying_key_hash: &'a str,
+    sp1_verifying_key_codec: &'a str,
+    sp1_verifying_key_base64: &'a str,
     receipt_type: &'a str,
     receipt_result: &'a str,
     listing_event_id: &'a str,
