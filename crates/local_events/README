@@ -1,0 +1,8 @@
+# radroots_local_events
+
+Shared local event and work-store primitives for same-host Rad Roots runtimes.
+
+This crate owns the SQLite schema and typed API for the `shared/local_events`
+namespace. It is an interop store for local work records, signed event records,
+publish outbox status, relay delivery metadata, and projection cursors. It is
+not an application primary database.

@@ -3987,6 +3987,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "radroots_local_events"
+version = "0.1.0-alpha.2"
+dependencies = [
+ "radroots_sql_core",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "radroots_log"
 version = "0.1.0-alpha.2"
 dependencies = [
