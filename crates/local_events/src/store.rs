@@ -145,6 +145,39 @@ impl<E: SqlExecutor> LocalEventsStore<E> {
         )
     }
 
+    pub fn list_records_changed_latest(
+        &self,
+        limit: u32,
+    ) -> Result<Vec<LocalEventRecord>, LocalEventsError> {
+        let params = json!([i64::from(limit)]).to_string();
+        self.query_records(
+            "select * from local_event_record order by change_seq desc, seq desc, record_id asc limit ?",
+            &params,
+        )
+    }
+
+    pub fn list_records_changed_before(
+        &self,
+        before_change_seq: i64,
+        before_seq: i64,
+        limit: u32,
+    ) -> Result<Vec<LocalEventRecord>, LocalEventsError> {
+        let params = json!([
+            before_change_seq,
+            before_change_seq,
+            before_seq,
+            i64::from(limit)
+        ])
+        .to_string();
+        self.query_records(
+            "select * from local_event_record
+             where change_seq < ? or (change_seq = ? and seq < ?)
+             order by change_seq desc, seq desc, record_id asc
+             limit ?",
+            &params,
+        )
+    }
+
     pub fn update_outbox(
         &self,
         update: &LocalEventRecordUpdate,
