@@ -213,6 +213,7 @@ impl LocalEventRecordInput {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LocalEventRecord {
     pub seq: i64,
+    pub change_seq: i64,
     pub record_id: String,
     pub family: LocalRecordFamily,
     pub status: LocalRecordStatus,
@@ -251,7 +252,7 @@ pub struct LocalEventRecordUpdate {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LocalEventsCursor {
     pub consumer_id: String,
-    pub last_seq: i64,
+    pub last_change_seq: i64,
     pub updated_at_ms: i64,
 }
 

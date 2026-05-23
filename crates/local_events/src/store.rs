@@ -38,58 +38,72 @@ impl<E: SqlExecutor> LocalEventsStore<E> {
         input: &LocalEventRecordInput,
     ) -> Result<LocalEventRecord, LocalEventsError> {
         input.validate()?;
-        let params = json!([
-            input.record_id,
-            input.family.as_str(),
-            input.status.as_str(),
-            input.source_runtime.as_str(),
-            input.created_at_ms,
-            input.inserted_at_ms,
-            input.inserted_at_ms,
-            input.owner_account_id,
-            input.owner_pubkey,
-            input.farm_id,
-            input.listing_addr,
-            encode_json(input.local_work_json.as_ref())?,
-            input.event_id,
-            input.event_kind,
-            input.event_pubkey,
-            input.event_created_at,
-            encode_json(input.event_tags_json.as_ref())?,
-            input.event_content,
-            input.event_sig,
-            encode_json(input.raw_event_json.as_ref())?,
-            input.outbox_status.as_str(),
-            input.relay_set_fingerprint,
-            encode_json(input.relay_delivery_json.as_ref())?
-        ])
-        .to_string();
-        let sql = "insert or ignore into local_event_record(
-            record_id,
-            family,
-            status,
-            source_runtime,
-            created_at_ms,
-            inserted_at_ms,
-            updated_at_ms,
-            owner_account_id,
-            owner_pubkey,
-            farm_id,
-            listing_addr,
-            local_work_json,
-            event_id,
-            event_kind,
-            event_pubkey,
-            event_created_at,
-            event_tags_json,
-            event_content,
-            event_sig,
-            raw_event_json,
-            outbox_status,
-            relay_set_fingerprint,
-            relay_delivery_json
-        ) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
-        self.executor.exec(sql, &params)?;
+        self.executor.begin()?;
+        let result = (|| -> Result<(), LocalEventsError> {
+            let change_seq = self.next_change_seq()?;
+            let params = json!([
+                change_seq,
+                input.record_id,
+                input.family.as_str(),
+                input.status.as_str(),
+                input.source_runtime.as_str(),
+                input.created_at_ms,
+                input.inserted_at_ms,
+                input.inserted_at_ms,
+                input.owner_account_id,
+                input.owner_pubkey,
+                input.farm_id,
+                input.listing_addr,
+                encode_json(input.local_work_json.as_ref())?,
+                input.event_id,
+                input.event_kind,
+                input.event_pubkey,
+                input.event_created_at,
+                encode_json(input.event_tags_json.as_ref())?,
+                input.event_content,
+                input.event_sig,
+                encode_json(input.raw_event_json.as_ref())?,
+                input.outbox_status.as_str(),
+                input.relay_set_fingerprint,
+                encode_json(input.relay_delivery_json.as_ref())?
+            ])
+            .to_string();
+            let sql = "insert or ignore into local_event_record(
+                change_seq,
+                record_id,
+                family,
+                status,
+                source_runtime,
+                created_at_ms,
+                inserted_at_ms,
+                updated_at_ms,
+                owner_account_id,
+                owner_pubkey,
+                farm_id,
+                listing_addr,
+                local_work_json,
+                event_id,
+                event_kind,
+                event_pubkey,
+                event_created_at,
+                event_tags_json,
+                event_content,
+                event_sig,
+                raw_event_json,
+                outbox_status,
+                relay_set_fingerprint,
+                relay_delivery_json
+            ) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+            let _ = self.executor.exec(sql, &params)?;
+            Ok(())
+        })();
+        match result {
+            Ok(()) => self.executor.commit()?,
+            Err(err) => {
+                let _ = self.executor.rollback();
+                return Err(err);
+            }
+        }
         self.get_record(&input.record_id)?
             .ok_or_else(|| LocalEventsError::InvalidRecord("record append failed".to_owned()))
     }
@@ -107,7 +121,7 @@ impl<E: SqlExecutor> LocalEventsStore<E> {
         Ok(rows.into_iter().next())
     }
 
-    pub fn list_records_after(
+    pub fn list_records_after_seq(
         &self,
         after_seq: i64,
         limit: u32,
@@ -119,31 +133,60 @@ impl<E: SqlExecutor> LocalEventsStore<E> {
         )
     }
 
+    pub fn list_records_changed_after(
+        &self,
+        after_change_seq: i64,
+        limit: u32,
+    ) -> Result<Vec<LocalEventRecord>, LocalEventsError> {
+        let params = json!([after_change_seq, i64::from(limit)]).to_string();
+        self.query_records(
+            "select * from local_event_record where change_seq > ? order by change_seq asc, seq asc limit ?",
+            &params,
+        )
+    }
+
     pub fn update_outbox(
         &self,
         update: &LocalEventRecordUpdate,
     ) -> Result<LocalEventRecord, LocalEventsError> {
         validate_non_empty("record_id", &update.record_id)?;
-        let params = json!([
-            update.status.as_str(),
-            update.outbox_status.as_str(),
-            update.relay_set_fingerprint,
-            encode_json(update.relay_delivery_json.as_ref())?,
-            update.updated_at_ms,
-            update.record_id
-        ])
-        .to_string();
-        let outcome = self.executor.exec(
-            "update local_event_record
-             set status = ?,
-                 outbox_status = ?,
-                 relay_set_fingerprint = ?,
-                 relay_delivery_json = ?,
-                 updated_at_ms = ?
-             where record_id = ?",
-            &params,
-        )?;
-        if outcome.changes == 0 {
+        self.executor.begin()?;
+        let result = (|| -> Result<i64, LocalEventsError> {
+            let change_seq = self.next_change_seq()?;
+            let params = json!([
+                change_seq,
+                update.status.as_str(),
+                update.outbox_status.as_str(),
+                update.relay_set_fingerprint,
+                encode_json(update.relay_delivery_json.as_ref())?,
+                update.updated_at_ms,
+                update.record_id
+            ])
+            .to_string();
+            let outcome = self.executor.exec(
+                "update local_event_record
+                 set change_seq = ?,
+                     status = ?,
+                     outbox_status = ?,
+                     relay_set_fingerprint = ?,
+                     relay_delivery_json = ?,
+                     updated_at_ms = ?
+                 where record_id = ?",
+                &params,
+            )?;
+            Ok(outcome.changes)
+        })();
+        let changes = match result {
+            Ok(changes) => {
+                self.executor.commit()?;
+                changes
+            }
+            Err(err) => {
+                let _ = self.executor.rollback();
+                return Err(err);
+            }
+        };
+        if changes == 0 {
             return Err(LocalEventsError::Sql(SqlError::NotFound(
                 update.record_id.clone(),
             )));
@@ -159,7 +202,7 @@ impl<E: SqlExecutor> LocalEventsStore<E> {
         validate_non_empty("consumer_id", consumer_id)?;
         let params = json!([consumer_id]).to_string();
         let raw = self.executor.query_raw(
-            "select consumer_id, last_seq, updated_at_ms from local_event_projection_cursor where consumer_id = ? limit 1",
+            "select consumer_id, last_change_seq, updated_at_ms from local_event_projection_cursor where consumer_id = ? limit 1",
             &params,
         )?;
         let rows: Vec<CursorRow> = serde_json::from_str(&raw)?;
@@ -169,16 +212,16 @@ impl<E: SqlExecutor> LocalEventsStore<E> {
     pub fn advance_cursor(
         &self,
         consumer_id: &str,
-        last_seq: i64,
+        last_change_seq: i64,
         updated_at_ms: i64,
     ) -> Result<LocalEventsCursor, LocalEventsError> {
         validate_non_empty("consumer_id", consumer_id)?;
-        let params = json!([consumer_id, last_seq, updated_at_ms]).to_string();
+        let params = json!([consumer_id, last_change_seq, updated_at_ms]).to_string();
         self.executor.exec(
-            "insert into local_event_projection_cursor(consumer_id, last_seq, updated_at_ms)
+            "insert into local_event_projection_cursor(consumer_id, last_change_seq, updated_at_ms)
              values(?,?,?)
              on conflict(consumer_id) do update set
-                 last_seq = max(local_event_projection_cursor.last_seq, excluded.last_seq),
+                 last_change_seq = max(local_event_projection_cursor.last_change_seq, excluded.last_change_seq),
                  updated_at_ms = excluded.updated_at_ms",
             &params,
         )?;
@@ -195,11 +238,26 @@ impl<E: SqlExecutor> LocalEventsStore<E> {
         let rows: Vec<RecordRow> = serde_json::from_str(&raw)?;
         rows.into_iter().map(TryInto::try_into).collect()
     }
+
+    fn next_change_seq(&self) -> Result<i64, LocalEventsError> {
+        let raw = self.executor.query_raw(
+            "select coalesce(max(change_seq), 0) + 1 as change_seq from local_event_record",
+            "[]",
+        )?;
+        let rows: Vec<ChangeSeqRow> = serde_json::from_str(&raw)?;
+        rows.into_iter()
+            .next()
+            .map(|row| row.change_seq)
+            .ok_or_else(|| {
+                LocalEventsError::InvalidRecord("change sequence unavailable".to_owned())
+            })
+    }
 }
 
 #[derive(Debug, Deserialize)]
 struct RecordRow {
     seq: i64,
+    change_seq: i64,
     record_id: String,
     family: String,
     status: String,
@@ -231,6 +289,7 @@ impl TryFrom<RecordRow> for LocalEventRecord {
     fn try_from(row: RecordRow) -> Result<Self, Self::Error> {
         Ok(Self {
             seq: row.seq,
+            change_seq: row.change_seq,
             record_id: row.record_id,
             family: LocalRecordFamily::parse(&row.family)?,
             status: LocalRecordStatus::parse(&row.status)?,
@@ -261,7 +320,7 @@ impl TryFrom<RecordRow> for LocalEventRecord {
 #[derive(Debug, Deserialize)]
 struct CursorRow {
     consumer_id: String,
-    last_seq: i64,
+    last_change_seq: i64,
     updated_at_ms: i64,
 }
 
@@ -269,10 +328,15 @@ impl From<CursorRow> for LocalEventsCursor {
     fn from(row: CursorRow) -> Self {
         Self {
             consumer_id: row.consumer_id,
-            last_seq: row.last_seq,
+            last_change_seq: row.last_change_seq,
             updated_at_ms: row.updated_at_ms,
         }
     }
+}
+
+#[derive(Debug, Deserialize)]
+struct ChangeSeqRow {
+    change_seq: i64,
 }
 
 fn encode_json(value: Option<&Value>) -> Result<Option<String>, LocalEventsError> {
