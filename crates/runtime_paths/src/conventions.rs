@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::{
     RadrootsPathOverrides, RadrootsPathProfile, RadrootsPathResolver, RadrootsRuntimeNamespace,
@@ -8,6 +8,10 @@ use crate::{
 pub const DEFAULT_CONFIG_FILE_NAME: &str = "config.toml";
 pub const DEFAULT_SERVICE_IDENTITY_FILE_NAME: &str = "identity.secret.json";
 pub const DEFAULT_SHARED_IDENTITY_FILE_NAME: &str = "default.json";
+pub const DEFAULT_SHARED_LOCAL_EVENTS_NAMESPACE_KIND: &str = "shared";
+pub const DEFAULT_SHARED_LOCAL_EVENTS_NAMESPACE_VALUE: &str = "local_events";
+pub const DEFAULT_SHARED_LOCAL_EVENTS_NAMESPACE: &str = "shared/local_events";
+pub const DEFAULT_SHARED_LOCAL_EVENTS_DB_FILE_NAME: &str = "local_events.sqlite";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RadrootsBootstrapPaths {
@@ -51,6 +55,41 @@ pub fn default_shared_runtime_logs_dir(
     Ok(namespaced.logs)
 }
 
+#[must_use]
+pub fn default_shared_local_events_root_from_data_root(data_root: impl AsRef<Path>) -> PathBuf {
+    data_root
+        .as_ref()
+        .join(DEFAULT_SHARED_LOCAL_EVENTS_NAMESPACE_KIND)
+        .join(DEFAULT_SHARED_LOCAL_EVENTS_NAMESPACE_VALUE)
+}
+
+#[must_use]
+pub fn default_shared_local_events_database_path_from_data_root(
+    data_root: impl AsRef<Path>,
+) -> PathBuf {
+    default_shared_local_events_root_from_data_root(data_root)
+        .join(DEFAULT_SHARED_LOCAL_EVENTS_DB_FILE_NAME)
+}
+
+pub fn default_shared_local_events_root_from_shared_accounts_data_root(
+    shared_accounts_data_root: impl AsRef<Path>,
+) -> Result<PathBuf, RadrootsRuntimePathsError> {
+    let shared_accounts_data_root = shared_accounts_data_root.as_ref();
+    let shared_data_root = shared_accounts_data_root.parent().ok_or_else(|| {
+        RadrootsRuntimePathsError::SharedAccountsDataRootMissingParent {
+            path: shared_accounts_data_root.to_path_buf(),
+        }
+    })?;
+    Ok(shared_data_root.join(DEFAULT_SHARED_LOCAL_EVENTS_NAMESPACE_VALUE))
+}
+
+pub fn default_shared_local_events_database_path_from_shared_accounts_data_root(
+    shared_accounts_data_root: impl AsRef<Path>,
+) -> Result<PathBuf, RadrootsRuntimePathsError> {
+    default_shared_local_events_root_from_shared_accounts_data_root(shared_accounts_data_root)
+        .map(|root| root.join(DEFAULT_SHARED_LOCAL_EVENTS_DB_FILE_NAME))
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
@@ -59,7 +98,12 @@ mod tests {
 
     use super::{
         DEFAULT_SERVICE_IDENTITY_FILE_NAME, DEFAULT_SHARED_IDENTITY_FILE_NAME,
+        DEFAULT_SHARED_LOCAL_EVENTS_DB_FILE_NAME, DEFAULT_SHARED_LOCAL_EVENTS_NAMESPACE,
         default_namespaced_bootstrap_paths, default_shared_identity_path,
+        default_shared_local_events_database_path_from_data_root,
+        default_shared_local_events_database_path_from_shared_accounts_data_root,
+        default_shared_local_events_root_from_data_root,
+        default_shared_local_events_root_from_shared_accounts_data_root,
         default_shared_runtime_logs_dir,
     };
 
@@ -131,6 +175,45 @@ mod tests {
         assert_eq!(
             logs_dir,
             PathBuf::from("/Users/treesap/.radroots/logs/shared/runtime")
+        );
+    }
+
+    #[test]
+    fn shared_local_events_paths_use_canonical_shared_namespace() {
+        let data_root = PathBuf::from("/repo/infra/local/runtime/radroots/data");
+
+        assert_eq!(
+            default_shared_local_events_root_from_data_root(&data_root),
+            data_root.join(DEFAULT_SHARED_LOCAL_EVENTS_NAMESPACE)
+        );
+        assert_eq!(
+            default_shared_local_events_database_path_from_data_root(&data_root),
+            data_root
+                .join(DEFAULT_SHARED_LOCAL_EVENTS_NAMESPACE)
+                .join(DEFAULT_SHARED_LOCAL_EVENTS_DB_FILE_NAME)
+        );
+    }
+
+    #[test]
+    fn shared_local_events_paths_derive_from_shared_accounts_data_root() {
+        let shared_accounts_data_root =
+            PathBuf::from("/repo/infra/local/runtime/radroots/data/shared/accounts");
+
+        assert_eq!(
+            default_shared_local_events_root_from_shared_accounts_data_root(
+                &shared_accounts_data_root
+            )
+            .expect("shared local-events root"),
+            PathBuf::from("/repo/infra/local/runtime/radroots/data/shared/local_events")
+        );
+        assert_eq!(
+            default_shared_local_events_database_path_from_shared_accounts_data_root(
+                &shared_accounts_data_root
+            )
+            .expect("shared local-events database path"),
+            PathBuf::from(
+                "/repo/infra/local/runtime/radroots/data/shared/local_events/local_events.sqlite"
+            )
         );
     }
 
