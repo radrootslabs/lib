@@ -12,5 +12,5 @@ homepage.workspace = true
 readme = "README"
 
 [dependencies]
-serde = { workspace = true, features = ["derive"] }
+serde = { workspace = true, features = ["derive", "std"] }
 thiserror = { workspace = true }
