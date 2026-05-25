@@ -4,6 +4,7 @@ mod error;
 mod migrations;
 mod models;
 mod order_work;
+mod relay_set;
 mod store;
 
 pub use error::LocalEventsError;
@@ -21,4 +22,5 @@ pub use order_work::{
     validate_supported_buyer_order_request_local_work_payload,
     validate_unsupported_buyer_order_request_local_work_payload,
 };
+pub use relay_set::{CANONICAL_RELAY_SET_FINGERPRINT_VERSION, canonical_relay_set_fingerprint};
 pub use store::LocalEventsStore;
