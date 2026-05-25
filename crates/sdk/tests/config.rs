@@ -209,6 +209,50 @@ fn invalid_coordinate_schemes_fail_loudly() {
 }
 
 #[test]
+fn invalid_relay_authorities_fail_loudly() {
+    let invalid_relays = [
+        "wss://",
+        "wss:///relay",
+        "ws://:8080",
+        "wss://relay example",
+        "wss://user@relay.example",
+        "wss://relay.example:abc",
+        "wss://2001:db8::1",
+    ];
+
+    for relay_url in invalid_relays {
+        let mut config = RadrootsSdkConfig::production();
+        config.relay.urls = vec![relay_url.to_owned()];
+
+        assert_eq!(
+            config
+                .resolved_relay_urls()
+                .expect_err("relay authority error"),
+            SdkConfigError::InvalidRelayUrl(relay_url.to_owned())
+        );
+    }
+}
+
+#[test]
+fn valid_relay_authorities_still_resolve() {
+    let mut config = RadrootsSdkConfig::production();
+    config.relay.urls = vec![
+        " wss://relay.example/nostr ".to_owned(),
+        "ws://127.0.0.1:8080".to_owned(),
+        "wss://[2001:db8::1]:443/relay".to_owned(),
+    ];
+
+    assert_eq!(
+        config.resolved_relay_urls().expect("valid relays"),
+        vec![
+            "wss://relay.example/nostr".to_owned(),
+            "ws://127.0.0.1:8080".to_owned(),
+            "wss://[2001:db8::1]:443/relay".to_owned()
+        ]
+    );
+}
+
+#[test]
 fn sdk_config_debug_redacts_bearer_tokens() {
     let mut config = RadrootsSdkConfig::production();
     config.radrootsd.auth = RadrootsdAuth::BearerToken("sdk-secret-token".to_owned());

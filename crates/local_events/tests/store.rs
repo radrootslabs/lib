@@ -1,6 +1,6 @@
 use radroots_local_events::{
     LocalEventRecordInput, LocalEventRecordUpdate, LocalEventsStore, LocalRecordFamily,
-    LocalRecordStatus, MIGRATIONS, PublishOutboxStatus, SourceRuntime,
+    LocalRecordStatus, MIGRATIONS, PublishOutboxStatus, RelayDeliveryEvidence, SourceRuntime,
 };
 use radroots_sql_core::migrations::migrations_run_all_up;
 use radroots_sql_core::{SqlExecutor, SqliteExecutor};
@@ -63,7 +63,12 @@ fn signed_event(record_id: &str) -> LocalEventRecordInput {
         raw_event_json: Some(json!({"id":"event-a","kind":3421})),
         outbox_status: PublishOutboxStatus::Pending,
         relay_set_fingerprint: Some("relay-set-a".to_owned()),
-        relay_delivery_json: Some(json!({"pending":["ws://127.0.0.1:8080"]})),
+        relay_delivery_json: Some(
+            RelayDeliveryEvidence::pending(["ws://127.0.0.1:8080"])
+                .expect("pending delivery")
+                .to_json_value()
+                .expect("pending delivery json"),
+        ),
     }
 }
 
@@ -124,7 +129,17 @@ fn outbox_status_updates_signed_event_records() {
             status: LocalRecordStatus::Published,
             outbox_status: PublishOutboxStatus::Acknowledged,
             relay_set_fingerprint: Some("relay-set-a".to_owned()),
-            relay_delivery_json: Some(json!({"acked":["ws://127.0.0.1:8080"]})),
+            relay_delivery_json: Some(
+                RelayDeliveryEvidence::acknowledged(
+                    ["ws://127.0.0.1:8080"],
+                    ["ws://127.0.0.1:8080"],
+                    ["ws://127.0.0.1:8080"],
+                    Vec::new(),
+                )
+                .expect("acknowledged delivery")
+                .to_json_value()
+                .expect("acknowledged delivery json"),
+            ),
             updated_at_ms: 3000,
         })
         .expect("update outbox");
@@ -133,7 +148,13 @@ fn outbox_status_updates_signed_event_records() {
     assert_eq!(updated.outbox_status, PublishOutboxStatus::Acknowledged);
     assert_eq!(
         updated.relay_delivery_json,
-        Some(json!({"acked":["ws://127.0.0.1:8080"]}))
+        Some(json!({
+            "state": "acknowledged",
+            "target_relays": ["ws://127.0.0.1:8080"],
+            "connected_relays": ["ws://127.0.0.1:8080"],
+            "acknowledged_relays": ["ws://127.0.0.1:8080"],
+            "failed_relays": []
+        }))
     );
 }
 
@@ -157,7 +178,17 @@ fn changed_after_uses_change_seq_for_appends_and_outbox_updates() {
             status: LocalRecordStatus::Published,
             outbox_status: PublishOutboxStatus::Acknowledged,
             relay_set_fingerprint: Some("relay-set-a".to_owned()),
-            relay_delivery_json: Some(json!({"acked":["ws://127.0.0.1:8080"]})),
+            relay_delivery_json: Some(
+                RelayDeliveryEvidence::acknowledged(
+                    ["ws://127.0.0.1:8080"],
+                    ["ws://127.0.0.1:8080"],
+                    ["ws://127.0.0.1:8080"],
+                    Vec::new(),
+                )
+                .expect("acknowledged delivery")
+                .to_json_value()
+                .expect("acknowledged delivery json"),
+            ),
             updated_at_ms: 3000,
         })
         .expect("update outbox");

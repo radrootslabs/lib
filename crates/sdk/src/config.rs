@@ -277,10 +277,74 @@ fn normalize_relay_url(value: &str) -> Result<String, SdkConfigError> {
     if trimmed.is_empty() {
         return Err(SdkConfigError::EmptyRelayUrl);
     }
-    if !(trimmed.starts_with("ws://") || trimmed.starts_with("wss://")) {
+
+    let rest = if let Some(rest) = trimmed.strip_prefix("ws://") {
+        rest
+    } else if let Some(rest) = trimmed.strip_prefix("wss://") {
+        rest
+    } else {
+        return Err(SdkConfigError::InvalidRelayUrl(trimmed.to_owned()));
+    };
+
+    if relay_authority_is_invalid(rest) {
         return Err(SdkConfigError::InvalidRelayUrl(trimmed.to_owned()));
     }
+
     Ok(trimmed.to_owned())
+}
+
+fn relay_authority_is_invalid(rest: &str) -> bool {
+    let authority_end = rest
+        .char_indices()
+        .find(|(_, ch)| matches!(ch, '/' | '?' | '#'))
+        .map(|(index, _)| index)
+        .unwrap_or(rest.len());
+    let authority = &rest[..authority_end];
+
+    if authority.is_empty() || authority.chars().any(char::is_whitespace) {
+        return true;
+    }
+    if authority.contains('@') {
+        return true;
+    }
+
+    if let Some(after_open) = authority.strip_prefix('[') {
+        let Some(close_index) = after_open.find(']') else {
+            return true;
+        };
+        let host = &after_open[..close_index];
+        let after_host = &after_open[close_index + 1..];
+        if host.is_empty() {
+            return true;
+        }
+        return relay_port_suffix_is_invalid(after_host);
+    }
+
+    let colon_count = authority.bytes().filter(|byte| *byte == b':').count();
+    match colon_count {
+        0 => false,
+        1 => {
+            let Some((host, port)) = authority.split_once(':') else {
+                return true;
+            };
+            host.is_empty() || relay_port_is_invalid(port)
+        }
+        _ => true,
+    }
+}
+
+fn relay_port_suffix_is_invalid(after_host: &str) -> bool {
+    if after_host.is_empty() {
+        return false;
+    }
+    let Some(port) = after_host.strip_prefix(':') else {
+        return true;
+    };
+    relay_port_is_invalid(port)
+}
+
+fn relay_port_is_invalid(port: &str) -> bool {
+    port.is_empty() || !port.bytes().all(|byte| byte.is_ascii_digit())
 }
 
 fn normalize_radrootsd_endpoint(value: &str) -> Result<String, SdkConfigError> {
