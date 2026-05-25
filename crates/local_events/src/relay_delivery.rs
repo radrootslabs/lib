@@ -14,6 +14,7 @@ pub enum RelayDeliveryState {
     Pending,
     Acknowledged,
     Failed,
+    Observed,
 }
 
 impl RelayDeliveryState {
@@ -22,6 +23,7 @@ impl RelayDeliveryState {
             Self::Pending => "pending",
             Self::Acknowledged => "acknowledged",
             Self::Failed => "failed",
+            Self::Observed => "observed",
         }
     }
 }
@@ -49,6 +51,8 @@ pub struct RelayDeliveryEvidence {
     pub target_relays: Vec<String>,
     pub connected_relays: Vec<String>,
     pub acknowledged_relays: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub observed_relays: Vec<String>,
     pub failed_relays: Vec<RelayDeliveryFailure>,
 }
 
@@ -61,6 +65,7 @@ impl RelayDeliveryEvidence {
         Self::build(
             RelayDeliveryState::Pending,
             target_relays,
+            Vec::<String>::new(),
             Vec::<String>::new(),
             Vec::<String>::new(),
             Vec::new(),
@@ -86,6 +91,31 @@ impl RelayDeliveryEvidence {
             target_relays,
             connected_relays,
             acknowledged_relays,
+            Vec::<String>::new(),
+            failed_relays,
+        )
+    }
+
+    pub fn observed<I, S, J, T, K, U>(
+        target_relays: I,
+        connected_relays: J,
+        observed_relays: K,
+        failed_relays: Vec<RelayDeliveryFailure>,
+    ) -> Result<Self, LocalEventsError>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+        J: IntoIterator<Item = T>,
+        T: AsRef<str>,
+        K: IntoIterator<Item = U>,
+        U: AsRef<str>,
+    {
+        Self::build(
+            RelayDeliveryState::Observed,
+            target_relays,
+            connected_relays,
+            Vec::<String>::new(),
+            observed_relays,
             failed_relays,
         )
     }
@@ -106,6 +136,7 @@ impl RelayDeliveryEvidence {
             target_relays,
             connected_relays,
             Vec::<String>::new(),
+            Vec::<String>::new(),
             failed_relays,
         )
     }
@@ -114,6 +145,7 @@ impl RelayDeliveryEvidence {
         validate_relay_set("target_relays", &self.target_relays, true)?;
         validate_relay_set("connected_relays", &self.connected_relays, false)?;
         validate_relay_set("acknowledged_relays", &self.acknowledged_relays, false)?;
+        validate_relay_set("observed_relays", &self.observed_relays, false)?;
         for failure in &self.failed_relays {
             let normalized =
                 normalize_relay_url_for_evidence("failed_relays.relay_url", &failure.relay_url)?;
@@ -129,9 +161,12 @@ impl RelayDeliveryEvidence {
         }
         match self.state {
             RelayDeliveryState::Pending => {
-                if !self.acknowledged_relays.is_empty() || !self.failed_relays.is_empty() {
+                if !self.acknowledged_relays.is_empty()
+                    || !self.observed_relays.is_empty()
+                    || !self.failed_relays.is_empty()
+                {
                     return Err(invalid_evidence(
-                        "pending delivery evidence must not include acknowledged or failed relays",
+                        "pending delivery evidence must not include acknowledged, observed, or failed relays",
                     ));
                 }
             }
@@ -141,11 +176,31 @@ impl RelayDeliveryEvidence {
                         "acknowledged delivery evidence requires acknowledged_relays",
                     ));
                 }
+                if !self.observed_relays.is_empty() {
+                    return Err(invalid_evidence(
+                        "acknowledged delivery evidence must not include observed_relays",
+                    ));
+                }
             }
             RelayDeliveryState::Failed => {
-                if !self.acknowledged_relays.is_empty() || self.failed_relays.is_empty() {
+                if !self.acknowledged_relays.is_empty()
+                    || !self.observed_relays.is_empty()
+                    || self.failed_relays.is_empty()
+                {
                     return Err(invalid_evidence(
-                        "failed delivery evidence requires failed_relays and no acknowledged_relays",
+                        "failed delivery evidence requires failed_relays and no acknowledged or observed relays",
+                    ));
+                }
+            }
+            RelayDeliveryState::Observed => {
+                if !self.acknowledged_relays.is_empty() {
+                    return Err(invalid_evidence(
+                        "observed delivery evidence must not include acknowledged_relays",
+                    ));
+                }
+                if self.observed_relays.is_empty() && self.connected_relays.is_empty() {
+                    return Err(invalid_evidence(
+                        "observed delivery evidence requires connected_relays or observed_relays",
                     ));
                 }
             }
@@ -168,11 +223,12 @@ impl RelayDeliveryEvidence {
         Ok(evidence)
     }
 
-    fn build<I, S, J, T, K, U>(
+    fn build<I, S, J, T, K, U, L, V>(
         state: RelayDeliveryState,
         target_relays: I,
         connected_relays: J,
         acknowledged_relays: K,
+        observed_relays: L,
         failed_relays: Vec<RelayDeliveryFailure>,
     ) -> Result<Self, LocalEventsError>
     where
@@ -182,12 +238,15 @@ impl RelayDeliveryEvidence {
         T: AsRef<str>,
         K: IntoIterator<Item = U>,
         U: AsRef<str>,
+        L: IntoIterator<Item = V>,
+        V: AsRef<str>,
     {
         let evidence = Self {
             state,
             target_relays: normalize_required_relay_set("target_relays", target_relays)?,
             connected_relays: normalize_relay_set("connected_relays", connected_relays)?,
             acknowledged_relays: normalize_relay_set("acknowledged_relays", acknowledged_relays)?,
+            observed_relays: normalize_relay_set("observed_relays", observed_relays)?,
             failed_relays,
         };
         evidence.validate()?;

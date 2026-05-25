@@ -58,6 +58,55 @@ fn acknowledged_delivery_evidence_uses_canonical_failure_fields() {
 }
 
 #[test]
+fn observed_delivery_evidence_tracks_observed_relays_without_acknowledgement() {
+    let evidence = RelayDeliveryEvidence::observed(
+        ["wss://relay-a.example", "wss://relay-b.example"],
+        [" wss://relay-a.example ", "wss://relay-b.example"],
+        ["wss://relay-b.example"],
+        Vec::new(),
+    )
+    .expect("observed evidence");
+
+    assert_eq!(evidence.state, RelayDeliveryState::Observed);
+    assert!(evidence.acknowledged_relays.is_empty());
+    assert_eq!(
+        evidence.to_json_value().expect("json"),
+        json!({
+            "state": "observed",
+            "target_relays": ["wss://relay-a.example", "wss://relay-b.example"],
+            "connected_relays": ["wss://relay-a.example", "wss://relay-b.example"],
+            "acknowledged_relays": [],
+            "observed_relays": ["wss://relay-b.example"],
+            "failed_relays": []
+        })
+    );
+}
+
+#[test]
+fn observed_delivery_evidence_allows_unknown_exact_relay_when_connected() {
+    let evidence = RelayDeliveryEvidence::observed(
+        ["wss://relay-a.example", "wss://relay-b.example"],
+        ["wss://relay-a.example", "wss://relay-b.example"],
+        Vec::<String>::new(),
+        Vec::new(),
+    )
+    .expect("observed evidence");
+
+    assert_eq!(evidence.state, RelayDeliveryState::Observed);
+    assert!(evidence.observed_relays.is_empty());
+    assert_eq!(
+        evidence.to_json_value().expect("json"),
+        json!({
+            "state": "observed",
+            "target_relays": ["wss://relay-a.example", "wss://relay-b.example"],
+            "connected_relays": ["wss://relay-a.example", "wss://relay-b.example"],
+            "acknowledged_relays": [],
+            "failed_relays": []
+        })
+    );
+}
+
+#[test]
 fn failed_delivery_evidence_requires_failures_without_acknowledgements() {
     let evidence = RelayDeliveryEvidence::failed(
         ["wss://relay-a.example"],
@@ -69,6 +118,21 @@ fn failed_delivery_evidence_requires_failures_without_acknowledgements() {
     assert_eq!(evidence.state, RelayDeliveryState::Failed);
     assert!(evidence.acknowledged_relays.is_empty());
     assert_eq!(evidence.failed_relays.len(), 1);
+}
+
+#[test]
+fn acknowledged_delivery_evidence_rejects_observed_relays() {
+    let err = RelayDeliveryEvidence::from_json_value(&json!({
+        "state": "acknowledged",
+        "target_relays": ["wss://relay-a.example"],
+        "connected_relays": ["wss://relay-a.example"],
+        "acknowledged_relays": ["wss://relay-a.example"],
+        "observed_relays": ["wss://relay-a.example"],
+        "failed_relays": []
+    }))
+    .expect_err("invalid evidence");
+
+    assert!(err.to_string().contains("observed_relays"));
 }
 
 #[test]
