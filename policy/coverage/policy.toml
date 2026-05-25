@@ -117,6 +117,7 @@ crates = [
   "radroots_nostr_connect",
   "radroots_nostr_signer",
   "radroots_sql_core",
+  "radroots_local_events",
   "radroots_replica_db_schema",
   "radroots_replica_db",
   "radroots_replica_sync",
