@@ -25,7 +25,7 @@ create table local_event_record_previous (
   record_id text not null unique,
   family text not null check (family in ('local_work', 'signed_event')),
   status text not null check (status in ('local_draft', 'local_saved', 'pending_publish', 'published', 'failed', 'conflict')),
-  source_runtime text not null check (source_runtime in ('cli', 'app', 'service', 'worker', 'test')),
+  source_runtime text not null check (source_runtime in ('cli', 'app', 'network', 'service', 'worker', 'test')),
   created_at_ms integer not null,
   inserted_at_ms integer not null,
   updated_at_ms integer not null,

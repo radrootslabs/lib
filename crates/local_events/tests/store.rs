@@ -103,6 +103,27 @@ fn append_is_idempotent_by_record_id() {
 }
 
 #[test]
+fn source_runtime_network_round_trips() {
+    let store = store();
+    let mut input = signed_event("event-network-a");
+    input.source_runtime = SourceRuntime::Network;
+
+    let inserted = store.append_record(&input).expect("append network event");
+    let rows = store
+        .list_records_after_seq(0, 10)
+        .expect("list network event");
+
+    assert_eq!(SourceRuntime::Network.as_str(), "network");
+    assert_eq!(
+        SourceRuntime::parse("network").expect("parse network runtime"),
+        SourceRuntime::Network
+    );
+    assert_eq!(inserted.source_runtime, SourceRuntime::Network);
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].source_runtime, SourceRuntime::Network);
+}
+
+#[test]
 fn projection_cursor_advances_without_rewinding() {
     let store = store();
 

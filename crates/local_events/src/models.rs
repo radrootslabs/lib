@@ -106,6 +106,7 @@ impl PublishOutboxStatus {
 pub enum SourceRuntime {
     Cli,
     App,
+    Network,
     Service,
     Worker,
     Test,
@@ -116,6 +117,7 @@ impl SourceRuntime {
         match self {
             Self::Cli => "cli",
             Self::App => "app",
+            Self::Network => "network",
             Self::Service => "service",
             Self::Worker => "worker",
             Self::Test => "test",
@@ -126,6 +128,7 @@ impl SourceRuntime {
         match value {
             "cli" => Ok(Self::Cli),
             "app" => Ok(Self::App),
+            "network" => Ok(Self::Network),
             "service" => Ok(Self::Service),
             "worker" => Ok(Self::Worker),
             "test" => Ok(Self::Test),
