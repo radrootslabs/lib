@@ -15,6 +15,11 @@ pub static MIGRATIONS: &[Migration] = &[
         up_sql: include_str!("../migrations/0001_change_tracking.up.sql"),
         down_sql: include_str!("../migrations/0001_change_tracking.down.sql"),
     },
+    Migration {
+        name: "0002_network_source_runtime",
+        up_sql: include_str!("../migrations/0002_network_source_runtime.up.sql"),
+        down_sql: include_str!("../migrations/0002_network_source_runtime.down.sql"),
+    },
 ];
 
 pub fn run_all_up<E>(executor: &E) -> Result<(), SqlError>
