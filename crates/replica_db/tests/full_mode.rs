@@ -142,6 +142,7 @@ fn full_mode_shaped_query_helpers_cover_cli_reads() {
         "price_qty_unit": "kg",
         "listing_addr": listing_addr.clone(),
         "primary_bin_id": "bin-a",
+        "verified_primary_bin_id": "bin-a",
         "notes": "fresh coffee"
     }));
     let trade_product_created = db
@@ -175,6 +176,7 @@ fn full_mode_shaped_query_helpers_cover_cli_reads() {
     assert_eq!(rows[0].key, "product-a");
     assert_eq!(rows[0].listing_addr.as_deref(), Some(listing_addr.as_str()));
     assert_eq!(rows[0].primary_bin_id.as_deref(), Some("bin-a"));
+    assert_eq!(rows[0].verified_primary_bin_id.as_deref(), Some("bin-a"));
     assert_eq!(rows[0].location_primary.as_deref(), Some("stockholm"));
 
     let lookup_rows = db
@@ -187,6 +189,10 @@ fn full_mode_shaped_query_helpers_cover_cli_reads() {
         Some(listing_addr.as_str())
     );
     assert_eq!(lookup_rows[0].primary_bin_id.as_deref(), Some("bin-a"));
+    assert_eq!(
+        lookup_rows[0].verified_primary_bin_id.as_deref(),
+        Some("bin-a")
+    );
 
     assert_eq!(
         db.trade_product_search(&[]).expect("empty search"),
