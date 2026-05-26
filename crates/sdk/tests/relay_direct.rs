@@ -19,6 +19,7 @@ use radroots_sdk::listing::{
 };
 use radroots_sdk::profile::{RadrootsProfile, RadrootsProfileType};
 use radroots_sdk::trade::{
+    RadrootsTradeInventoryCommitment, RadrootsTradeOrderDecision, RadrootsTradeOrderDecisionEvent,
     RadrootsTradeOrderEconomicItem, RadrootsTradeOrderEconomics, RadrootsTradeOrderItem,
     RadrootsTradeOrderRequested, RadrootsTradePricingBasis,
 };
@@ -252,6 +253,24 @@ fn sample_order_request(
     }
 }
 
+fn sample_order_decision(
+    buyer_pubkey: String,
+    seller_pubkey: String,
+) -> RadrootsTradeOrderDecisionEvent {
+    RadrootsTradeOrderDecisionEvent {
+        order_id: "order-1".into(),
+        listing_addr: format!("30402:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg"),
+        buyer_pubkey,
+        seller_pubkey,
+        decision: RadrootsTradeOrderDecision::Accepted {
+            inventory_commitments: vec![RadrootsTradeInventoryCommitment {
+                bin_id: "bin-1".into(),
+                bin_count: 2,
+            }],
+        },
+    }
+}
+
 #[tokio::test]
 async fn relay_direct_farm_publish_accepts_sdk_built_draft() -> TestResult<()> {
     let relay = AckRelay::spawn().await?;
@@ -385,6 +404,130 @@ async fn relay_direct_order_request_publish_accepts_sdk_built_draft() -> TestRes
         }
         SdkTransportReceipt::Radrootsd(_) => panic!("unexpected radrootsd receipt"),
     }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn relay_direct_order_decision_publish_accepts_sdk_built_draft() -> TestResult<()> {
+    let relay = AckRelay::spawn().await?;
+    let buyer_identity = RadrootsIdentity::generate();
+    let seller_identity = RadrootsIdentity::generate();
+    let root_event_id = "order-request-event-1";
+    let payload = sample_order_decision(
+        buyer_identity.public_key_hex(),
+        seller_identity.public_key_hex(),
+    );
+    let mut config = RadrootsSdkConfig::for_environment(SdkEnvironment::Custom);
+    config.transport = SdkTransportMode::RelayDirect;
+    config.signer = SignerConfig::LocalIdentity;
+    config.relay = RelayConfig {
+        urls: vec![relay.url().to_owned()],
+    };
+    let client = RadrootsSdkClient::from_config(config)?;
+    let draft =
+        client
+            .trade()
+            .build_order_decision_draft(root_event_id, root_event_id, &payload)?;
+    assert_eq!(draft.as_wire_parts().kind, 3423);
+
+    let receipt = client
+        .trade()
+        .publish_order_decision_draft_with_identity(&seller_identity, draft)
+        .await?;
+
+    assert_eq!(receipt.transport, SdkTransportMode::RelayDirect);
+    assert_eq!(receipt.event_kind, Some(3423));
+    assert!(receipt.event_id.is_some());
+    match receipt.transport_receipt {
+        SdkTransportReceipt::RelayDirect(relay_receipt) => {
+            assert_eq!(
+                receipt.event_id.as_deref(),
+                Some(relay_receipt.event_id.as_str())
+            );
+            assert_eq!(receipt.event_kind, Some(relay_receipt.event_kind));
+            assert_eq!(relay_receipt.event.kind, 3423);
+            assert_eq!(relay_receipt.event.author, seller_identity.public_key_hex());
+            assert!(
+                relay_receipt
+                    .event
+                    .tags
+                    .contains(&vec!["p".to_owned(), buyer_identity.public_key_hex()])
+            );
+            assert!(
+                relay_receipt
+                    .event
+                    .tags
+                    .contains(&vec!["a".to_owned(), payload.listing_addr.clone()])
+            );
+            assert!(
+                relay_receipt
+                    .event
+                    .tags
+                    .contains(&vec!["d".to_owned(), payload.order_id.clone()])
+            );
+            assert!(
+                relay_receipt
+                    .event
+                    .tags
+                    .contains(&vec!["e_root".to_owned(), root_event_id.to_owned(),])
+            );
+            assert!(
+                relay_receipt
+                    .event
+                    .tags
+                    .contains(&vec!["e_prev".to_owned(), root_event_id.to_owned(),])
+            );
+            assert_eq!(relay_receipt.target_relays, vec![relay.url().to_owned()]);
+            assert_eq!(relay_receipt.connected_relays, vec![relay.url().to_owned()]);
+            assert_eq!(
+                relay_receipt.acknowledged_relays,
+                vec![relay.url().to_owned()]
+            );
+            assert!(relay_receipt.failed_relays.is_empty());
+            let envelope = client
+                .trade()
+                .parse_order_decision(&relay_receipt.event)
+                .expect("active order decision");
+            assert_eq!(envelope.order_id, payload.order_id);
+            assert_eq!(envelope.listing_addr, payload.listing_addr);
+            assert_eq!(envelope.payload.decision, payload.decision);
+        }
+        SdkTransportReceipt::Radrootsd(_) => panic!("unexpected radrootsd receipt"),
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn relay_direct_order_decision_publish_builds_and_publishes_payload() -> TestResult<()> {
+    let relay = AckRelay::spawn().await?;
+    let buyer_identity = RadrootsIdentity::generate();
+    let seller_identity = RadrootsIdentity::generate();
+    let payload = sample_order_decision(
+        buyer_identity.public_key_hex(),
+        seller_identity.public_key_hex(),
+    );
+    let mut config = RadrootsSdkConfig::for_environment(SdkEnvironment::Custom);
+    config.transport = SdkTransportMode::RelayDirect;
+    config.signer = SignerConfig::LocalIdentity;
+    config.relay = RelayConfig {
+        urls: vec![relay.url().to_owned()],
+    };
+    let client = RadrootsSdkClient::from_config(config)?;
+
+    let receipt = client
+        .trade()
+        .publish_order_decision_with_identity(
+            &seller_identity,
+            "order-request-event-1",
+            "order-request-event-1",
+            &payload,
+        )
+        .await?;
+
+    assert_eq!(receipt.transport, SdkTransportMode::RelayDirect);
+    assert_eq!(receipt.event_kind, Some(3423));
 
     Ok(())
 }

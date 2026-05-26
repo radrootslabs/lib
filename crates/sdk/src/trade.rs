@@ -15,7 +15,22 @@ pub struct RadrootsTradeOrderRequestDraft {
     parts: WireEventParts,
 }
 
+#[derive(Debug, Clone)]
+pub struct RadrootsTradeOrderDecisionDraft {
+    parts: WireEventParts,
+}
+
 impl RadrootsTradeOrderRequestDraft {
+    pub fn as_wire_parts(&self) -> &WireEventParts {
+        &self.parts
+    }
+
+    pub fn into_wire_parts(self) -> WireEventParts {
+        self.parts
+    }
+}
+
+impl RadrootsTradeOrderDecisionDraft {
     pub fn as_wire_parts(&self) -> &WireEventParts {
         &self.parts
     }
@@ -62,6 +77,21 @@ pub fn build_order_request_draft(
 }
 
 #[cfg(feature = "serde_json")]
+pub fn build_order_decision_draft(
+    root_event_id: &str,
+    prev_event_id: &str,
+    payload: &RadrootsTradeOrderDecisionEvent,
+) -> Result<RadrootsTradeOrderDecisionDraft, EventEncodeError> {
+    Ok(RadrootsTradeOrderDecisionDraft {
+        parts: radroots_events_codec::trade::active_trade_order_decision_event_build(
+            root_event_id,
+            prev_event_id,
+            payload,
+        )?,
+    })
+}
+
+#[cfg(feature = "serde_json")]
 pub fn parse_envelope(
     event: &RadrootsNostrEvent,
 ) -> Result<SdkTradeEnvelope, RadrootsTradeEnvelopeParseError> {
@@ -76,6 +106,16 @@ pub fn parse_order_request(
     RadrootsActiveTradeEnvelopeParseError,
 > {
     radroots_events_codec::trade::active_trade_order_request_from_event(event)
+}
+
+#[cfg(feature = "serde_json")]
+pub fn parse_order_decision(
+    event: &RadrootsNostrEvent,
+) -> Result<
+    RadrootsActiveTradeEnvelope<RadrootsTradeOrderDecisionEvent>,
+    RadrootsActiveTradeEnvelopeParseError,
+> {
+    radroots_events_codec::trade::active_trade_order_decision_from_event(event)
 }
 
 #[cfg(feature = "serde_json")]
