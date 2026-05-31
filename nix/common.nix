@@ -49,14 +49,12 @@ let
   coverageEnv = sharedEnv // {
     RADROOTS_COVERAGE_CARGO = "${toolchains.coverage}/bin/cargo";
   };
-  cargoLlvmCov =
-    (pkgs.callPackage "${pkgs.path}/pkgs/by-name/ca/cargo-llvm-cov/package.nix" { }).overrideAttrs
-      (old: {
-        doCheck = false;
-        meta = old.meta // {
-          broken = false;
-        };
-      });
+  cargoLlvmCov = pkgs.cargo-llvm-cov.overrideAttrs (old: {
+    doCheck = false;
+    meta = old.meta // {
+      broken = false;
+    };
+  });
   exportEnv =
     env:
     lib.concatStringsSep "\n" (
