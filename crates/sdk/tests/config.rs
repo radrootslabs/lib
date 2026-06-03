@@ -4,7 +4,10 @@ use radroots_sdk::{
     RADROOTS_SDK_STAGING_RADROOTSD_ENDPOINT, RADROOTS_SDK_STAGING_RELAY_URL, RadrootsSdkConfig,
     RadrootsdAuth, SdkConfigError, SdkEnvironment, SdkTransportMode, SignerConfig,
 };
-use std::sync::{Mutex, OnceLock};
+use std::{
+    ffi::OsString,
+    sync::{Mutex, OnceLock},
+};
 
 const LOCAL_SDK_ENV_KEYS: &[&str] = &[
     "NOSTR_RS_RELAY_PUBLIC_SCHEME",
@@ -21,14 +24,14 @@ fn sdk_env_lock() -> &'static Mutex<()> {
 }
 
 struct LocalSdkEnvRestore {
-    saved: Vec<(&'static str, Option<String>)>,
+    saved: Vec<(&'static str, Option<OsString>)>,
 }
 
 impl LocalSdkEnvRestore {
     fn apply(pairs: &[(&str, &str)]) -> Self {
         let saved = LOCAL_SDK_ENV_KEYS
             .iter()
-            .map(|key| (*key, std::env::var(key).ok()))
+            .map(|key| (*key, std::env::var_os(key)))
             .collect::<Vec<_>>();
 
         for key in LOCAL_SDK_ENV_KEYS {
@@ -65,6 +68,33 @@ impl Drop for LocalSdkEnvRestore {
     }
 }
 
+struct EnvKeyRestore {
+    key: &'static str,
+    saved: Option<OsString>,
+}
+
+impl EnvKeyRestore {
+    fn capture(key: &'static str) -> Self {
+        Self {
+            key,
+            saved: std::env::var_os(key),
+        }
+    }
+}
+
+impl Drop for EnvKeyRestore {
+    fn drop(&mut self) {
+        match &self.saved {
+            Some(value) => unsafe {
+                std::env::set_var(self.key, value);
+            },
+            None => unsafe {
+                std::env::remove_var(self.key);
+            },
+        }
+    }
+}
+
 fn with_local_sdk_env<F>(pairs: &[(&str, &str)], test: F)
 where
     F: FnOnce(),
@@ -73,6 +103,49 @@ where
     let _env_restore = LocalSdkEnvRestore::apply(pairs);
 
     test();
+}
+
+#[test]
+fn local_sdk_env_restore_preserves_original_os_string_values() {
+    let _guard = sdk_env_lock().lock().expect("sdk env lock");
+    let key = "NOSTR_RS_RELAY_PUBLIC_HOST";
+    let _restore_key = EnvKeyRestore::capture(key);
+    let original = OsString::from("relay.before.example");
+
+    unsafe {
+        std::env::set_var(key, &original);
+    }
+
+    {
+        let _env_restore = LocalSdkEnvRestore::apply(&[("RADROOTSD_RPC_PORT", "18080")]);
+
+        assert_eq!(std::env::var_os(key), None);
+    }
+
+    assert_eq!(std::env::var_os(key), Some(original));
+}
+
+#[cfg(unix)]
+#[test]
+fn local_sdk_env_restore_preserves_non_unicode_original_values() {
+    use std::os::unix::ffi::OsStringExt;
+
+    let _guard = sdk_env_lock().lock().expect("sdk env lock");
+    let key = "NOSTR_RS_RELAY_PUBLIC_HOST";
+    let _restore_key = EnvKeyRestore::capture(key);
+    let original = OsString::from_vec(vec![b'r', b'e', b'l', b'a', b'y', 0x80]);
+
+    unsafe {
+        std::env::set_var(key, &original);
+    }
+
+    {
+        let _env_restore = LocalSdkEnvRestore::apply(&[("RADROOTSD_RPC_PORT", "18080")]);
+
+        assert_eq!(std::env::var_os(key), None);
+    }
+
+    assert_eq!(std::env::var_os(key), Some(original));
 }
 
 #[test]
