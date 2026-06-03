@@ -21,6 +21,16 @@ pub struct RadrootsTradeOrderDecisionDraft {
 }
 
 #[derive(Debug, Clone)]
+pub struct RadrootsTradeOrderRevisionProposalDraft {
+    parts: WireEventParts,
+}
+
+#[derive(Debug, Clone)]
+pub struct RadrootsTradeOrderRevisionDecisionDraft {
+    parts: WireEventParts,
+}
+
+#[derive(Debug, Clone)]
 pub struct RadrootsTradeFulfillmentUpdateDraft {
     parts: WireEventParts,
 }
@@ -46,6 +56,26 @@ impl RadrootsTradeOrderRequestDraft {
 }
 
 impl RadrootsTradeOrderDecisionDraft {
+    pub fn as_wire_parts(&self) -> &WireEventParts {
+        &self.parts
+    }
+
+    pub fn into_wire_parts(self) -> WireEventParts {
+        self.parts
+    }
+}
+
+impl RadrootsTradeOrderRevisionProposalDraft {
+    pub fn as_wire_parts(&self) -> &WireEventParts {
+        &self.parts
+    }
+
+    pub fn into_wire_parts(self) -> WireEventParts {
+        self.parts
+    }
+}
+
+impl RadrootsTradeOrderRevisionDecisionDraft {
     pub fn as_wire_parts(&self) -> &WireEventParts {
         &self.parts
     }
@@ -137,6 +167,36 @@ pub fn build_order_decision_draft(
 }
 
 #[cfg(feature = "serde_json")]
+pub fn build_order_revision_proposal_draft(
+    root_event_id: &str,
+    prev_event_id: &str,
+    payload: &RadrootsTradeOrderRevisionProposed,
+) -> Result<RadrootsTradeOrderRevisionProposalDraft, EventEncodeError> {
+    Ok(RadrootsTradeOrderRevisionProposalDraft {
+        parts: radroots_events_codec::trade::active_trade_order_revision_proposal_event_build(
+            root_event_id,
+            prev_event_id,
+            payload,
+        )?,
+    })
+}
+
+#[cfg(feature = "serde_json")]
+pub fn build_order_revision_decision_draft(
+    root_event_id: &str,
+    prev_event_id: &str,
+    payload: &RadrootsTradeOrderRevisionDecisionEvent,
+) -> Result<RadrootsTradeOrderRevisionDecisionDraft, EventEncodeError> {
+    Ok(RadrootsTradeOrderRevisionDecisionDraft {
+        parts: radroots_events_codec::trade::active_trade_order_revision_decision_event_build(
+            root_event_id,
+            prev_event_id,
+            payload,
+        )?,
+    })
+}
+
+#[cfg(feature = "serde_json")]
 pub fn build_fulfillment_update_draft(
     root_event_id: &str,
     prev_event_id: &str,
@@ -206,6 +266,26 @@ pub fn parse_order_decision(
     RadrootsActiveTradeEnvelopeParseError,
 > {
     radroots_events_codec::trade::active_trade_order_decision_from_event(event)
+}
+
+#[cfg(feature = "serde_json")]
+pub fn parse_order_revision_proposal(
+    event: &RadrootsNostrEvent,
+) -> Result<
+    RadrootsActiveTradeEnvelope<RadrootsTradeOrderRevisionProposed>,
+    RadrootsActiveTradeEnvelopeParseError,
+> {
+    radroots_events_codec::trade::active_trade_order_revision_proposal_from_event(event)
+}
+
+#[cfg(feature = "serde_json")]
+pub fn parse_order_revision_decision(
+    event: &RadrootsNostrEvent,
+) -> Result<
+    RadrootsActiveTradeEnvelope<RadrootsTradeOrderRevisionDecisionEvent>,
+    RadrootsActiveTradeEnvelopeParseError,
+> {
+    radroots_events_codec::trade::active_trade_order_revision_decision_from_event(event)
 }
 
 #[cfg(feature = "serde_json")]

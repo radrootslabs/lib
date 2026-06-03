@@ -23,7 +23,8 @@ use radroots_sdk::trade::{
     RadrootsTradeFulfillmentUpdated, RadrootsTradeInventoryCommitment, RadrootsTradeOrderCancelled,
     RadrootsTradeOrderDecision, RadrootsTradeOrderDecisionEvent, RadrootsTradeOrderEconomicItem,
     RadrootsTradeOrderEconomics, RadrootsTradeOrderItem, RadrootsTradeOrderRequested,
-    RadrootsTradePricingBasis,
+    RadrootsTradeOrderRevisionDecision, RadrootsTradeOrderRevisionDecisionEvent,
+    RadrootsTradeOrderRevisionProposed, RadrootsTradePricingBasis,
 };
 use radroots_sdk::{
     RadrootsNostrEventPtr, RadrootsSdkClient, RadrootsSdkConfig, RelayConfig, SdkEnvironment,
@@ -270,6 +271,65 @@ fn sample_order_decision(
                 bin_count: 2,
             }],
         },
+    }
+}
+
+fn sample_order_revision_proposal(
+    buyer_pubkey: String,
+    seller_pubkey: String,
+    root_event_id: String,
+    prev_event_id: String,
+) -> RadrootsTradeOrderRevisionProposed {
+    RadrootsTradeOrderRevisionProposed {
+        revision_id: "revision-1".into(),
+        order_id: "order-1".into(),
+        listing_addr: format!("30402:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg"),
+        buyer_pubkey,
+        seller_pubkey,
+        root_event_id,
+        prev_event_id,
+        items: vec![RadrootsTradeOrderItem {
+            bin_id: "bin-1".into(),
+            bin_count: 3,
+        }],
+        economics: RadrootsTradeOrderEconomics {
+            quote_id: "revision-quote-1".into(),
+            quote_version: 2,
+            pricing_basis: RadrootsTradePricingBasis::ListingEvent,
+            currency: RadrootsCoreCurrency::USD,
+            items: vec![RadrootsTradeOrderEconomicItem {
+                bin_id: "bin-1".into(),
+                bin_count: 3,
+                quantity_amount: decimal("1"),
+                quantity_unit: RadrootsCoreUnit::Each,
+                unit_price_amount: decimal("5"),
+                unit_price_currency: RadrootsCoreCurrency::USD,
+                line_subtotal: usd("15"),
+            }],
+            discounts: Vec::new(),
+            adjustments: Vec::new(),
+            subtotal: usd("15"),
+            discount_total: usd("0"),
+            adjustment_total: usd("0"),
+            total: usd("15"),
+        },
+        reason: "update count".into(),
+    }
+}
+
+fn sample_order_revision_decision(
+    proposal: &RadrootsTradeOrderRevisionProposed,
+    decision: RadrootsTradeOrderRevisionDecision,
+) -> RadrootsTradeOrderRevisionDecisionEvent {
+    RadrootsTradeOrderRevisionDecisionEvent {
+        revision_id: proposal.revision_id.clone(),
+        order_id: proposal.order_id.clone(),
+        listing_addr: proposal.listing_addr.clone(),
+        buyer_pubkey: proposal.buyer_pubkey.clone(),
+        seller_pubkey: proposal.seller_pubkey.clone(),
+        root_event_id: proposal.root_event_id.clone(),
+        prev_event_id: "order-revision-proposal-event-1".into(),
+        decision,
     }
 }
 
@@ -532,6 +592,126 @@ async fn relay_direct_order_decision_publish_accepts_sdk_built_draft() -> TestRe
             assert_eq!(envelope.order_id, payload.order_id);
             assert_eq!(envelope.listing_addr, payload.listing_addr);
             assert_eq!(envelope.payload.decision, payload.decision);
+        }
+        SdkTransportReceipt::Radrootsd(_) => panic!("unexpected radrootsd receipt"),
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn relay_direct_trade_revision_publish_accepts_sdk_built_payloads() -> TestResult<()> {
+    let relay = AckRelay::spawn().await?;
+    let buyer_identity = RadrootsIdentity::generate();
+    let seller_identity = RadrootsIdentity::generate();
+    let buyer_pubkey = buyer_identity.public_key_hex();
+    let seller_pubkey = seller_identity.public_key_hex();
+    let root_event_id = "order-request-event-1";
+    let decision_event_id = "order-decision-event-1";
+    let proposal = sample_order_revision_proposal(
+        buyer_pubkey.clone(),
+        seller_pubkey.clone(),
+        root_event_id.to_owned(),
+        decision_event_id.to_owned(),
+    );
+    let decision =
+        sample_order_revision_decision(&proposal, RadrootsTradeOrderRevisionDecision::Accepted);
+    let mut config = RadrootsSdkConfig::for_environment(SdkEnvironment::Custom);
+    config.transport = SdkTransportMode::RelayDirect;
+    config.signer = SignerConfig::LocalIdentity;
+    config.relay = RelayConfig {
+        urls: vec![relay.url().to_owned()],
+    };
+    let client = RadrootsSdkClient::from_config(config)?;
+
+    let proposal_receipt = client
+        .trade()
+        .publish_order_revision_proposal_with_identity(
+            &seller_identity,
+            root_event_id,
+            decision_event_id,
+            &proposal,
+        )
+        .await?;
+    let decision_receipt = client
+        .trade()
+        .publish_order_revision_decision_with_identity(
+            &buyer_identity,
+            root_event_id,
+            decision.prev_event_id.as_str(),
+            &decision,
+        )
+        .await?;
+
+    assert_eq!(proposal_receipt.event_kind, Some(3424));
+    assert_eq!(decision_receipt.event_kind, Some(3425));
+
+    match proposal_receipt.transport_receipt {
+        SdkTransportReceipt::RelayDirect(relay_receipt) => {
+            assert_eq!(relay_receipt.event.kind, 3424);
+            assert_eq!(relay_receipt.event.author, seller_pubkey);
+            assert!(
+                relay_receipt
+                    .event
+                    .tags
+                    .contains(&vec!["p".to_owned(), buyer_pubkey.clone()])
+            );
+            assert!(
+                relay_receipt
+                    .event
+                    .tags
+                    .contains(&vec!["e_root".to_owned(), root_event_id.to_owned()])
+            );
+            assert!(
+                relay_receipt
+                    .event
+                    .tags
+                    .contains(&vec!["e_prev".to_owned(), decision_event_id.to_owned()])
+            );
+            let envelope = client
+                .trade()
+                .parse_order_revision_proposal(&relay_receipt.event)
+                .expect("active order revision proposal");
+            assert_eq!(envelope.order_id, proposal.order_id);
+            assert_eq!(envelope.listing_addr, proposal.listing_addr);
+            assert_eq!(envelope.payload.revision_id, "revision-1");
+            assert_eq!(envelope.payload.economics.total, usd("15"));
+            assert_eq!(envelope.payload.reason, "update count");
+        }
+        SdkTransportReceipt::Radrootsd(_) => panic!("unexpected radrootsd receipt"),
+    }
+
+    match decision_receipt.transport_receipt {
+        SdkTransportReceipt::RelayDirect(relay_receipt) => {
+            assert_eq!(relay_receipt.event.kind, 3425);
+            assert_eq!(relay_receipt.event.author, buyer_pubkey);
+            assert!(
+                relay_receipt
+                    .event
+                    .tags
+                    .contains(&vec!["p".to_owned(), seller_pubkey])
+            );
+            assert!(
+                relay_receipt
+                    .event
+                    .tags
+                    .contains(&vec!["e_root".to_owned(), root_event_id.to_owned()])
+            );
+            assert!(relay_receipt.event.tags.contains(&vec![
+                "e_prev".to_owned(),
+                "order-revision-proposal-event-1".to_owned()
+            ]));
+            let envelope = client
+                .trade()
+                .parse_order_revision_decision(&relay_receipt.event)
+                .expect("active order revision decision");
+            assert_eq!(envelope.order_id, decision.order_id);
+            assert_eq!(envelope.listing_addr, decision.listing_addr);
+            assert_eq!(envelope.payload.revision_id, decision.revision_id);
+            assert_eq!(
+                envelope.payload.decision,
+                RadrootsTradeOrderRevisionDecision::Accepted
+            );
         }
         SdkTransportReceipt::Radrootsd(_) => panic!("unexpected radrootsd receipt"),
     }

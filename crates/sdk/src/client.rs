@@ -2319,6 +2319,26 @@ impl<'a> TradeClient<'a> {
     }
 
     #[cfg(feature = "serde_json")]
+    pub fn build_order_revision_proposal_draft(
+        &self,
+        root_event_id: &str,
+        prev_event_id: &str,
+        payload: &trade::RadrootsTradeOrderRevisionProposed,
+    ) -> Result<trade::RadrootsTradeOrderRevisionProposalDraft, trade::EventEncodeError> {
+        trade::build_order_revision_proposal_draft(root_event_id, prev_event_id, payload)
+    }
+
+    #[cfg(feature = "serde_json")]
+    pub fn build_order_revision_decision_draft(
+        &self,
+        root_event_id: &str,
+        prev_event_id: &str,
+        payload: &trade::RadrootsTradeOrderRevisionDecisionEvent,
+    ) -> Result<trade::RadrootsTradeOrderRevisionDecisionDraft, trade::EventEncodeError> {
+        trade::build_order_revision_decision_draft(root_event_id, prev_event_id, payload)
+    }
+
+    #[cfg(feature = "serde_json")]
     pub fn build_fulfillment_update_draft(
         &self,
         root_event_id: &str,
@@ -2368,6 +2388,28 @@ impl<'a> TradeClient<'a> {
         trade::RadrootsActiveTradeEnvelopeParseError,
     > {
         trade::parse_order_decision(event)
+    }
+
+    #[cfg(feature = "serde_json")]
+    pub fn parse_order_revision_proposal(
+        &self,
+        event: &RadrootsNostrEvent,
+    ) -> Result<
+        trade::RadrootsActiveTradeEnvelope<trade::RadrootsTradeOrderRevisionProposed>,
+        trade::RadrootsActiveTradeEnvelopeParseError,
+    > {
+        trade::parse_order_revision_proposal(event)
+    }
+
+    #[cfg(feature = "serde_json")]
+    pub fn parse_order_revision_decision(
+        &self,
+        event: &RadrootsNostrEvent,
+    ) -> Result<
+        trade::RadrootsActiveTradeEnvelope<trade::RadrootsTradeOrderRevisionDecisionEvent>,
+        trade::RadrootsActiveTradeEnvelopeParseError,
+    > {
+        trade::parse_order_revision_decision(event)
     }
 
     #[cfg(feature = "serde_json")]
@@ -2430,6 +2472,54 @@ impl<'a> TradeClient<'a> {
         feature = "relay-client",
         feature = "signing"
     ))]
+    pub async fn publish_order_revision_proposal_with_identity(
+        &self,
+        identity: &RadrootsIdentity,
+        root_event_id: &str,
+        prev_event_id: &str,
+        payload: &trade::RadrootsTradeOrderRevisionProposed,
+    ) -> Result<SdkPublishReceipt, SdkPublishError> {
+        let draft =
+            trade::build_order_revision_proposal_draft(root_event_id, prev_event_id, payload)
+                .map_err(|err| SdkPublishError::Encode(err.to_string()))?;
+        self.client
+            .publish_parts_via_relay_with_identity(
+                identity,
+                draft.into_wire_parts(),
+                "trade.publish_order_revision_proposal_with_identity",
+            )
+            .await
+    }
+
+    #[cfg(all(
+        feature = "identity-models",
+        feature = "relay-client",
+        feature = "signing"
+    ))]
+    pub async fn publish_order_revision_decision_with_identity(
+        &self,
+        identity: &RadrootsIdentity,
+        root_event_id: &str,
+        prev_event_id: &str,
+        payload: &trade::RadrootsTradeOrderRevisionDecisionEvent,
+    ) -> Result<SdkPublishReceipt, SdkPublishError> {
+        let draft =
+            trade::build_order_revision_decision_draft(root_event_id, prev_event_id, payload)
+                .map_err(|err| SdkPublishError::Encode(err.to_string()))?;
+        self.client
+            .publish_parts_via_relay_with_identity(
+                identity,
+                draft.into_wire_parts(),
+                "trade.publish_order_revision_decision_with_identity",
+            )
+            .await
+    }
+
+    #[cfg(all(
+        feature = "identity-models",
+        feature = "relay-client",
+        feature = "signing"
+    ))]
     pub async fn publish_order_decision_with_identity(
         &self,
         identity: &RadrootsIdentity,
@@ -2467,6 +2557,44 @@ impl<'a> TradeClient<'a> {
                 identity,
                 draft.into_wire_parts(),
                 "trade.publish_fulfillment_update_with_identity",
+            )
+            .await
+    }
+
+    #[cfg(all(
+        feature = "identity-models",
+        feature = "relay-client",
+        feature = "signing"
+    ))]
+    pub async fn publish_order_revision_proposal_draft_with_identity(
+        &self,
+        identity: &RadrootsIdentity,
+        draft: trade::RadrootsTradeOrderRevisionProposalDraft,
+    ) -> Result<SdkPublishReceipt, SdkPublishError> {
+        self.client
+            .publish_parts_via_relay_with_identity(
+                identity,
+                draft.into_wire_parts(),
+                "trade.publish_order_revision_proposal_draft_with_identity",
+            )
+            .await
+    }
+
+    #[cfg(all(
+        feature = "identity-models",
+        feature = "relay-client",
+        feature = "signing"
+    ))]
+    pub async fn publish_order_revision_decision_draft_with_identity(
+        &self,
+        identity: &RadrootsIdentity,
+        draft: trade::RadrootsTradeOrderRevisionDecisionDraft,
+    ) -> Result<SdkPublishReceipt, SdkPublishError> {
+        self.client
+            .publish_parts_via_relay_with_identity(
+                identity,
+                draft.into_wire_parts(),
+                "trade.publish_order_revision_decision_draft_with_identity",
             )
             .await
     }
