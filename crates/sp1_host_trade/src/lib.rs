@@ -372,6 +372,8 @@ pub enum RadrootsSp1TradeHostError {
     Sp1SetupFailed(String),
     #[error("SP1 proof generation failed: {0}")]
     Sp1ProofFailed(String),
+    #[error("SP1 proof verifier is unavailable in this build")]
+    Sp1ProofVerifierUnavailable,
     #[error("SP1 proof verification failed: {0}")]
     Sp1ProofVerificationFailed(String),
     #[error("SP1 proof material failed to decode: {0}")]
@@ -654,6 +656,14 @@ pub async fn verify_order_acceptance_resolved_sp1_proof_artifact(
     Ok(())
 }
 
+#[cfg(not(feature = "sp1_verify"))]
+pub async fn verify_order_acceptance_resolved_sp1_proof_artifact(
+    _execution: &RadrootsSp1TradePublicValuesExecution,
+    _resolved: &RadrootsSp1TradeResolvedProofArtifact,
+) -> Result<(), RadrootsSp1TradeHostError> {
+    Err(RadrootsSp1TradeHostError::Sp1ProofVerifierUnavailable)
+}
+
 #[cfg(feature = "sp1_verify")]
 pub async fn verify_order_acceptance_validation_receipt_inline_sp1_proof(
     receipt: &RadrootsTradeValidationReceipt,
@@ -731,6 +741,13 @@ pub async fn verify_order_acceptance_validation_receipt_inline_sp1_proof(
     })
 }
 
+#[cfg(not(feature = "sp1_verify"))]
+pub async fn verify_order_acceptance_validation_receipt_inline_sp1_proof(
+    _receipt: &RadrootsTradeValidationReceipt,
+) -> Result<RadrootsSp1TradeValidationReceiptVerification, RadrootsSp1TradeHostError> {
+    Err(RadrootsSp1TradeHostError::Sp1ProofVerifierUnavailable)
+}
+
 #[cfg(feature = "sp1_verify")]
 pub async fn verify_order_acceptance_validation_receipt_resolved_sp1_proof(
     receipt: &RadrootsTradeValidationReceipt,
@@ -791,6 +808,14 @@ pub async fn verify_order_acceptance_validation_receipt_resolved_sp1_proof(
         sp1_program_hash: sp1_program_hash.to_owned(),
         sp1_verifying_key_hash: verifying_key_hash,
     })
+}
+
+#[cfg(not(feature = "sp1_verify"))]
+pub async fn verify_order_acceptance_validation_receipt_resolved_sp1_proof(
+    _receipt: &RadrootsTradeValidationReceipt,
+    _resolved: &RadrootsSp1TradeResolvedProofArtifact,
+) -> Result<RadrootsSp1TradeValidationReceiptVerification, RadrootsSp1TradeHostError> {
+    Err(RadrootsSp1TradeHostError::Sp1ProofVerifierUnavailable)
 }
 
 pub fn generate_order_acceptance_proof(
@@ -1699,12 +1724,10 @@ mod tests {
         RadrootsSp1TradeOrderDecisionWitness, RadrootsSp1TradeOrderItemWitness,
         RadrootsSp1TradeOrderRequestWitness, RadrootsSp1TradeProofResult,
     };
-    #[cfg(feature = "sp1_verify")]
-    use radroots_trade::validation_receipt::RadrootsValidationReceiptProof;
     use radroots_trade::validation_receipt::{
-        RadrootsValidationReceiptExpectedBinding, RadrootsValidationReceiptProofSystem,
-        RadrootsValidationReceiptResult, validation_receipt_event_build,
-        verify_validation_receipt_event,
+        RadrootsValidationReceiptExpectedBinding, RadrootsValidationReceiptProof,
+        RadrootsValidationReceiptProofSystem, RadrootsValidationReceiptResult,
+        validation_receipt_event_build, verify_validation_receipt_event,
     };
     #[cfg(feature = "sp1_verify")]
     use serde::Deserialize;
@@ -2055,6 +2078,74 @@ mod tests {
         .expect("referenced artifact");
         verify_order_acceptance_proof_artifact_structure(&execution, &artifact)
             .expect("referenced artifact is structurally valid");
+    }
+
+    #[cfg(not(feature = "sp1_verify"))]
+    #[test]
+    fn sp1_verification_apis_report_unavailable_without_sp1_verify_feature() {
+        let runtime = tokio::runtime::Runtime::new().expect("runtime");
+        runtime.block_on(async {
+            let bundle =
+                generate_order_acceptance_proof(&witness(), RadrootsSp1TradeProofMode::None)
+                    .expect("proof bundle");
+            let mut inline_receipt =
+                validation_receipt_for_order_acceptance_proof(&bundle).expect("validation receipt");
+            inline_receipt.proof = RadrootsValidationReceiptProof {
+                inline_proof_base64: Some("cHJvb2Y=".to_string()),
+                mode: Some("core".to_string()),
+                program_hash: Some(
+                    "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                        .to_string(),
+                ),
+                proof_reference: None,
+                system: RadrootsValidationReceiptProofSystem::Sp1Core,
+                verifying_key_hash: Some(
+                    "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                        .to_string(),
+                ),
+            };
+            let err =
+                super::verify_order_acceptance_validation_receipt_inline_sp1_proof(&inline_receipt)
+                    .await
+                    .expect_err("verifier unavailable");
+            assert_eq!(err, RadrootsSp1TradeHostError::Sp1ProofVerifierUnavailable);
+
+            let execution =
+                super::execute_order_acceptance_public_values(&witness()).expect("execution");
+            let artifact = super::referenced_order_acceptance_proof_artifact_for_execution(
+                &execution,
+                RadrootsSp1TradeProofMode::Core,
+                format!("radroots-proof://sha256/{}", "1".repeat(64)),
+            )
+            .expect("referenced artifact");
+            let resolved = super::RadrootsSp1TradeResolvedProofArtifact {
+                artifact: artifact.clone(),
+                resolved_proof_envelope_base64: None,
+            };
+            let err =
+                super::verify_order_acceptance_resolved_sp1_proof_artifact(&execution, &resolved)
+                    .await
+                    .expect_err("verifier unavailable");
+            assert_eq!(err, RadrootsSp1TradeHostError::Sp1ProofVerifierUnavailable);
+
+            let mut referenced_receipt =
+                validation_receipt_for_order_acceptance_proof(&bundle).expect("validation receipt");
+            referenced_receipt.proof = RadrootsValidationReceiptProof {
+                inline_proof_base64: artifact.inline_proof_base64.clone(),
+                mode: artifact.mode.clone(),
+                program_hash: artifact.program_hash.clone(),
+                proof_reference: artifact.proof_reference.clone(),
+                system: artifact.system,
+                verifying_key_hash: artifact.verifying_key_hash.clone(),
+            };
+            let err = super::verify_order_acceptance_validation_receipt_resolved_sp1_proof(
+                &referenced_receipt,
+                &resolved,
+            )
+            .await
+            .expect_err("verifier unavailable");
+            assert_eq!(err, RadrootsSp1TradeHostError::Sp1ProofVerifierUnavailable);
+        });
     }
 
     #[test]
