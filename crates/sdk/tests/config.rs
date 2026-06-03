@@ -6,9 +6,63 @@ use radroots_sdk::{
 };
 use std::sync::{Mutex, OnceLock};
 
+const LOCAL_SDK_ENV_KEYS: &[&str] = &[
+    "NOSTR_RS_RELAY_PUBLIC_SCHEME",
+    "NOSTR_RS_RELAY_PUBLIC_HOST",
+    "NOSTR_RS_RELAY_PUBLIC_PORT",
+    "RADROOTSD_RPC_URL",
+    "RADROOTSD_RPC_HOST",
+    "RADROOTSD_RPC_PORT",
+];
+
 fn sdk_env_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| Mutex::new(()))
+}
+
+struct LocalSdkEnvRestore {
+    saved: Vec<(&'static str, Option<String>)>,
+}
+
+impl LocalSdkEnvRestore {
+    fn apply(pairs: &[(&str, &str)]) -> Self {
+        let saved = LOCAL_SDK_ENV_KEYS
+            .iter()
+            .map(|key| (*key, std::env::var(key).ok()))
+            .collect::<Vec<_>>();
+
+        for key in LOCAL_SDK_ENV_KEYS {
+            unsafe {
+                std::env::remove_var(key);
+            }
+        }
+        for (key, value) in pairs {
+            assert!(
+                LOCAL_SDK_ENV_KEYS.contains(key),
+                "unexpected local sdk env key `{key}`"
+            );
+            unsafe {
+                std::env::set_var(key, value);
+            }
+        }
+
+        Self { saved }
+    }
+}
+
+impl Drop for LocalSdkEnvRestore {
+    fn drop(&mut self) {
+        for (key, original) in self.saved.drain(..) {
+            match original {
+                Some(value) => unsafe {
+                    std::env::set_var(key, value);
+                },
+                None => unsafe {
+                    std::env::remove_var(key);
+                },
+            }
+        }
+    }
 }
 
 fn with_local_sdk_env<F>(pairs: &[(&str, &str)], test: F)
@@ -16,30 +70,9 @@ where
     F: FnOnce(),
 {
     let _guard = sdk_env_lock().lock().expect("sdk env lock");
-    let saved = pairs
-        .iter()
-        .map(|(key, _)| (key.to_string(), std::env::var(key).ok()))
-        .collect::<Vec<_>>();
-
-    for (key, value) in pairs {
-        // The global lock keeps env mutation single-threaded for this test file.
-        unsafe {
-            std::env::set_var(key, value);
-        }
-    }
+    let _env_restore = LocalSdkEnvRestore::apply(pairs);
 
     test();
-
-    for (key, original) in saved {
-        match original {
-            Some(value) => unsafe {
-                std::env::set_var(&key, value);
-            },
-            None => unsafe {
-                std::env::remove_var(&key);
-            },
-        }
-    }
 }
 
 #[test]
@@ -87,18 +120,20 @@ fn staging_environment_resolves_staging_defaults() {
 
 #[test]
 fn local_environment_resolves_localhost_defaults() {
-    let config = RadrootsSdkConfig::local();
+    with_local_sdk_env(&[], || {
+        let config = RadrootsSdkConfig::local();
 
-    assert_eq!(
-        config.resolved_relay_urls().expect("relay defaults"),
-        vec![RADROOTS_SDK_LOCAL_RELAY_URL.to_owned()]
-    );
-    assert_eq!(
-        config
-            .resolved_radrootsd_endpoint()
-            .expect("radrootsd endpoint"),
-        RADROOTS_SDK_LOCAL_RADROOTSD_ENDPOINT
-    );
+        assert_eq!(
+            config.resolved_relay_urls().expect("relay defaults"),
+            vec![RADROOTS_SDK_LOCAL_RELAY_URL.to_owned()]
+        );
+        assert_eq!(
+            config
+                .resolved_radrootsd_endpoint()
+                .expect("radrootsd endpoint"),
+            RADROOTS_SDK_LOCAL_RADROOTSD_ENDPOINT
+        );
+    });
 }
 
 #[test]
