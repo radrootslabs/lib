@@ -19,9 +19,11 @@ use radroots_sdk::listing::{
 };
 use radroots_sdk::profile::{RadrootsProfile, RadrootsProfileType};
 use radroots_sdk::trade::{
-    RadrootsTradeInventoryCommitment, RadrootsTradeOrderDecision, RadrootsTradeOrderDecisionEvent,
-    RadrootsTradeOrderEconomicItem, RadrootsTradeOrderEconomics, RadrootsTradeOrderItem,
-    RadrootsTradeOrderRequested, RadrootsTradePricingBasis,
+    RadrootsActiveTradeFulfillmentState, RadrootsTradeBuyerReceipt,
+    RadrootsTradeFulfillmentUpdated, RadrootsTradeInventoryCommitment, RadrootsTradeOrderCancelled,
+    RadrootsTradeOrderDecision, RadrootsTradeOrderDecisionEvent, RadrootsTradeOrderEconomicItem,
+    RadrootsTradeOrderEconomics, RadrootsTradeOrderItem, RadrootsTradeOrderRequested,
+    RadrootsTradePricingBasis,
 };
 use radroots_sdk::{
     RadrootsNostrEventPtr, RadrootsSdkClient, RadrootsSdkConfig, RelayConfig, SdkEnvironment,
@@ -271,6 +273,44 @@ fn sample_order_decision(
     }
 }
 
+fn sample_fulfillment_update(
+    buyer_pubkey: String,
+    seller_pubkey: String,
+) -> RadrootsTradeFulfillmentUpdated {
+    RadrootsTradeFulfillmentUpdated {
+        order_id: "order-1".into(),
+        listing_addr: format!("30402:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg"),
+        buyer_pubkey,
+        seller_pubkey,
+        status: RadrootsActiveTradeFulfillmentState::ReadyForPickup,
+    }
+}
+
+fn sample_order_cancellation(
+    buyer_pubkey: String,
+    seller_pubkey: String,
+) -> RadrootsTradeOrderCancelled {
+    RadrootsTradeOrderCancelled {
+        order_id: "order-1".into(),
+        listing_addr: format!("30402:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg"),
+        buyer_pubkey,
+        seller_pubkey,
+        reason: "schedule changed".into(),
+    }
+}
+
+fn sample_buyer_receipt(buyer_pubkey: String, seller_pubkey: String) -> RadrootsTradeBuyerReceipt {
+    RadrootsTradeBuyerReceipt {
+        order_id: "order-1".into(),
+        listing_addr: format!("30402:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg"),
+        buyer_pubkey,
+        seller_pubkey,
+        received: true,
+        issue: None,
+        received_at: 1_785_000_000,
+    }
+}
+
 #[tokio::test]
 async fn relay_direct_farm_publish_accepts_sdk_built_draft() -> TestResult<()> {
     let relay = AckRelay::spawn().await?;
@@ -492,6 +532,161 @@ async fn relay_direct_order_decision_publish_accepts_sdk_built_draft() -> TestRe
             assert_eq!(envelope.order_id, payload.order_id);
             assert_eq!(envelope.listing_addr, payload.listing_addr);
             assert_eq!(envelope.payload.decision, payload.decision);
+        }
+        SdkTransportReceipt::Radrootsd(_) => panic!("unexpected radrootsd receipt"),
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn relay_direct_trade_lifecycle_publish_accepts_sdk_built_payloads() -> TestResult<()> {
+    let relay = AckRelay::spawn().await?;
+    let buyer_identity = RadrootsIdentity::generate();
+    let seller_identity = RadrootsIdentity::generate();
+    let buyer_pubkey = buyer_identity.public_key_hex();
+    let seller_pubkey = seller_identity.public_key_hex();
+    let root_event_id = "order-request-event-1";
+    let decision_event_id = "order-decision-event-1";
+    let fulfillment_event_id = "fulfillment-event-1";
+    let fulfillment = sample_fulfillment_update(buyer_pubkey.clone(), seller_pubkey.clone());
+    let cancellation = sample_order_cancellation(buyer_pubkey.clone(), seller_pubkey.clone());
+    let receipt = sample_buyer_receipt(buyer_pubkey.clone(), seller_pubkey.clone());
+    let mut config = RadrootsSdkConfig::for_environment(SdkEnvironment::Custom);
+    config.transport = SdkTransportMode::RelayDirect;
+    config.signer = SignerConfig::LocalIdentity;
+    config.relay = RelayConfig {
+        urls: vec![relay.url().to_owned()],
+    };
+    let client = RadrootsSdkClient::from_config(config)?;
+
+    let fulfillment_receipt = client
+        .trade()
+        .publish_fulfillment_update_with_identity(
+            &seller_identity,
+            root_event_id,
+            decision_event_id,
+            &fulfillment,
+        )
+        .await?;
+    let cancellation_receipt = client
+        .trade()
+        .publish_order_cancellation_with_identity(
+            &buyer_identity,
+            root_event_id,
+            root_event_id,
+            &cancellation,
+        )
+        .await?;
+    let buyer_receipt = client
+        .trade()
+        .publish_buyer_receipt_with_identity(
+            &buyer_identity,
+            root_event_id,
+            fulfillment_event_id,
+            &receipt,
+        )
+        .await?;
+
+    assert_eq!(fulfillment_receipt.event_kind, Some(3433));
+    assert_eq!(cancellation_receipt.event_kind, Some(3432));
+    assert_eq!(buyer_receipt.event_kind, Some(3434));
+
+    match fulfillment_receipt.transport_receipt {
+        SdkTransportReceipt::RelayDirect(relay_receipt) => {
+            assert_eq!(relay_receipt.event.kind, 3433);
+            assert_eq!(relay_receipt.event.author, seller_pubkey);
+            assert!(
+                relay_receipt
+                    .event
+                    .tags
+                    .contains(&vec!["p".to_owned(), buyer_pubkey.clone()])
+            );
+            assert!(
+                relay_receipt
+                    .event
+                    .tags
+                    .contains(&vec!["e_root".to_owned(), root_event_id.to_owned()])
+            );
+            assert!(
+                relay_receipt
+                    .event
+                    .tags
+                    .contains(&vec!["e_prev".to_owned(), decision_event_id.to_owned()])
+            );
+            let envelope = client
+                .trade()
+                .parse_fulfillment_update(&relay_receipt.event)
+                .expect("active fulfillment update");
+            assert_eq!(envelope.order_id, fulfillment.order_id);
+            assert_eq!(envelope.listing_addr, fulfillment.listing_addr);
+            assert_eq!(envelope.payload.status, fulfillment.status);
+        }
+        SdkTransportReceipt::Radrootsd(_) => panic!("unexpected radrootsd receipt"),
+    }
+
+    match cancellation_receipt.transport_receipt {
+        SdkTransportReceipt::RelayDirect(relay_receipt) => {
+            assert_eq!(relay_receipt.event.kind, 3432);
+            assert_eq!(relay_receipt.event.author, buyer_pubkey);
+            assert!(
+                relay_receipt
+                    .event
+                    .tags
+                    .contains(&vec!["p".to_owned(), seller_pubkey.clone()])
+            );
+            assert!(
+                relay_receipt
+                    .event
+                    .tags
+                    .contains(&vec!["e_root".to_owned(), root_event_id.to_owned()])
+            );
+            assert!(
+                relay_receipt
+                    .event
+                    .tags
+                    .contains(&vec!["e_prev".to_owned(), root_event_id.to_owned()])
+            );
+            let envelope = client
+                .trade()
+                .parse_order_cancellation(&relay_receipt.event)
+                .expect("active order cancellation");
+            assert_eq!(envelope.order_id, cancellation.order_id);
+            assert_eq!(envelope.listing_addr, cancellation.listing_addr);
+            assert_eq!(envelope.payload.reason, cancellation.reason);
+        }
+        SdkTransportReceipt::Radrootsd(_) => panic!("unexpected radrootsd receipt"),
+    }
+
+    match buyer_receipt.transport_receipt {
+        SdkTransportReceipt::RelayDirect(relay_receipt) => {
+            assert_eq!(relay_receipt.event.kind, 3434);
+            assert_eq!(relay_receipt.event.author, buyer_pubkey);
+            assert!(
+                relay_receipt
+                    .event
+                    .tags
+                    .contains(&vec!["p".to_owned(), seller_pubkey])
+            );
+            assert!(
+                relay_receipt
+                    .event
+                    .tags
+                    .contains(&vec!["e_root".to_owned(), root_event_id.to_owned()])
+            );
+            assert!(
+                relay_receipt
+                    .event
+                    .tags
+                    .contains(&vec!["e_prev".to_owned(), fulfillment_event_id.to_owned()])
+            );
+            let envelope = client
+                .trade()
+                .parse_buyer_receipt(&relay_receipt.event)
+                .expect("active buyer receipt");
+            assert_eq!(envelope.order_id, receipt.order_id);
+            assert_eq!(envelope.listing_addr, receipt.listing_addr);
+            assert_eq!(envelope.payload.received, receipt.received);
         }
         SdkTransportReceipt::Radrootsd(_) => panic!("unexpected radrootsd receipt"),
     }

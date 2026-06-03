@@ -20,6 +20,21 @@ pub struct RadrootsTradeOrderDecisionDraft {
     parts: WireEventParts,
 }
 
+#[derive(Debug, Clone)]
+pub struct RadrootsTradeFulfillmentUpdateDraft {
+    parts: WireEventParts,
+}
+
+#[derive(Debug, Clone)]
+pub struct RadrootsTradeOrderCancellationDraft {
+    parts: WireEventParts,
+}
+
+#[derive(Debug, Clone)]
+pub struct RadrootsTradeBuyerReceiptDraft {
+    parts: WireEventParts,
+}
+
 impl RadrootsTradeOrderRequestDraft {
     pub fn as_wire_parts(&self) -> &WireEventParts {
         &self.parts
@@ -31,6 +46,36 @@ impl RadrootsTradeOrderRequestDraft {
 }
 
 impl RadrootsTradeOrderDecisionDraft {
+    pub fn as_wire_parts(&self) -> &WireEventParts {
+        &self.parts
+    }
+
+    pub fn into_wire_parts(self) -> WireEventParts {
+        self.parts
+    }
+}
+
+impl RadrootsTradeFulfillmentUpdateDraft {
+    pub fn as_wire_parts(&self) -> &WireEventParts {
+        &self.parts
+    }
+
+    pub fn into_wire_parts(self) -> WireEventParts {
+        self.parts
+    }
+}
+
+impl RadrootsTradeOrderCancellationDraft {
+    pub fn as_wire_parts(&self) -> &WireEventParts {
+        &self.parts
+    }
+
+    pub fn into_wire_parts(self) -> WireEventParts {
+        self.parts
+    }
+}
+
+impl RadrootsTradeBuyerReceiptDraft {
     pub fn as_wire_parts(&self) -> &WireEventParts {
         &self.parts
     }
@@ -92,6 +137,51 @@ pub fn build_order_decision_draft(
 }
 
 #[cfg(feature = "serde_json")]
+pub fn build_fulfillment_update_draft(
+    root_event_id: &str,
+    prev_event_id: &str,
+    payload: &RadrootsTradeFulfillmentUpdated,
+) -> Result<RadrootsTradeFulfillmentUpdateDraft, EventEncodeError> {
+    Ok(RadrootsTradeFulfillmentUpdateDraft {
+        parts: radroots_events_codec::trade::active_trade_fulfillment_update_event_build(
+            root_event_id,
+            prev_event_id,
+            payload,
+        )?,
+    })
+}
+
+#[cfg(feature = "serde_json")]
+pub fn build_order_cancellation_draft(
+    root_event_id: &str,
+    prev_event_id: &str,
+    payload: &RadrootsTradeOrderCancelled,
+) -> Result<RadrootsTradeOrderCancellationDraft, EventEncodeError> {
+    Ok(RadrootsTradeOrderCancellationDraft {
+        parts: radroots_events_codec::trade::active_trade_order_cancel_event_build(
+            root_event_id,
+            prev_event_id,
+            payload,
+        )?,
+    })
+}
+
+#[cfg(feature = "serde_json")]
+pub fn build_buyer_receipt_draft(
+    root_event_id: &str,
+    prev_event_id: &str,
+    payload: &RadrootsTradeBuyerReceipt,
+) -> Result<RadrootsTradeBuyerReceiptDraft, EventEncodeError> {
+    Ok(RadrootsTradeBuyerReceiptDraft {
+        parts: radroots_events_codec::trade::active_trade_buyer_receipt_event_build(
+            root_event_id,
+            prev_event_id,
+            payload,
+        )?,
+    })
+}
+
+#[cfg(feature = "serde_json")]
 pub fn parse_envelope(
     event: &RadrootsNostrEvent,
 ) -> Result<SdkTradeEnvelope, RadrootsTradeEnvelopeParseError> {
@@ -116,6 +206,36 @@ pub fn parse_order_decision(
     RadrootsActiveTradeEnvelopeParseError,
 > {
     radroots_events_codec::trade::active_trade_order_decision_from_event(event)
+}
+
+#[cfg(feature = "serde_json")]
+pub fn parse_fulfillment_update(
+    event: &RadrootsNostrEvent,
+) -> Result<
+    RadrootsActiveTradeEnvelope<RadrootsTradeFulfillmentUpdated>,
+    RadrootsActiveTradeEnvelopeParseError,
+> {
+    radroots_events_codec::trade::active_trade_fulfillment_update_from_event(event)
+}
+
+#[cfg(feature = "serde_json")]
+pub fn parse_order_cancellation(
+    event: &RadrootsNostrEvent,
+) -> Result<
+    RadrootsActiveTradeEnvelope<RadrootsTradeOrderCancelled>,
+    RadrootsActiveTradeEnvelopeParseError,
+> {
+    radroots_events_codec::trade::active_trade_order_cancel_from_event(event)
+}
+
+#[cfg(feature = "serde_json")]
+pub fn parse_buyer_receipt(
+    event: &RadrootsNostrEvent,
+) -> Result<
+    RadrootsActiveTradeEnvelope<RadrootsTradeBuyerReceipt>,
+    RadrootsActiveTradeEnvelopeParseError,
+> {
+    radroots_events_codec::trade::active_trade_buyer_receipt_from_event(event)
 }
 
 #[cfg(feature = "serde_json")]
