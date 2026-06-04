@@ -28,9 +28,13 @@ ts-rs = ["dep:ts-rs"]
 
 [dependencies]
 radroots_runtime = { workspace = true, optional = true }
-radroots_protected_store = { workspace = true, optional = true, features = ["std"] }
+radroots_protected_store = { workspace = true, optional = true, features = [
+  "std",
+] }
 radroots_runtime_paths = { workspace = true, optional = true }
-radroots_secret_vault = { workspace = true, optional = true, features = ["std"] }
+radroots_secret_vault = { workspace = true, optional = true, features = [
+  "std",
+] }
 radroots_events = { workspace = true, optional = true, default-features = false, features = [
   "serde",
 ] }

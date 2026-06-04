@@ -19,14 +19,15 @@ fn default_jitter_ms() -> u64 {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
 pub struct BackoffConfig {
-    #[serde(default = "default_base_ms", alias = "reconnect_base_ms")]
+    #[serde(default = "default_base_ms")]
     pub base_ms: u64,
-    #[serde(default = "default_max_ms", alias = "reconnect_max_ms")]
+    #[serde(default = "default_max_ms")]
     pub max_ms: u64,
-    #[serde(default = "default_factor", alias = "reconnect_factor")]
+    #[serde(default = "default_factor")]
     pub factor: u32,
-    #[serde(default = "default_jitter_ms", alias = "reconnect_jitter_ms")]
+    #[serde(default = "default_jitter_ms")]
     pub jitter_ms: u64,
 }
 
@@ -121,8 +122,8 @@ mod tests {
     }
 
     #[test]
-    fn alias_fields_deserialize() {
-        let cfg: BackoffConfig = toml::from_str(
+    fn reconnect_alias_fields_are_rejected() {
+        let err = toml::from_str::<BackoffConfig>(
             r#"
 reconnect_base_ms = 10
 reconnect_max_ms = 100
@@ -130,12 +131,9 @@ reconnect_factor = 3
 reconnect_jitter_ms = 5
 "#,
         )
-        .expect("backoff aliases should deserialize");
+        .expect_err("backoff aliases should fail");
 
-        assert_eq!(cfg.base_ms, 10);
-        assert_eq!(cfg.max_ms, 100);
-        assert_eq!(cfg.factor, 3);
-        assert_eq!(cfg.jitter_ms, 5);
+        assert!(err.to_string().contains("reconnect_base_ms"));
     }
 
     #[test]

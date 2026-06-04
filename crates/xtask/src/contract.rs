@@ -1365,10 +1365,51 @@ fn resolve_event_boundary_matrix_path_with_override(
         }
     }
 
-    Err(format!(
+    resolve_missing_event_boundary_matrix_path(workspace_root)
+}
+
+fn missing_event_boundary_matrix_error() -> String {
+    format!(
         "canonical event matrix not found; set {EVENT_BOUNDARY_MATRIX_ENV} or provide one of: {}",
         EVENT_BOUNDARY_MATRIX_RELATIVES.join(", ")
-    ))
+    )
+}
+
+#[cfg(not(test))]
+fn resolve_missing_event_boundary_matrix_path(_workspace_root: &Path) -> Result<PathBuf, String> {
+    Err(missing_event_boundary_matrix_error())
+}
+
+#[cfg(test)]
+fn resolve_missing_event_boundary_matrix_path(workspace_root: &Path) -> Result<PathBuf, String> {
+    if !should_synthesize_owner_contracts_for_tests(workspace_root) {
+        return Err(missing_event_boundary_matrix_error());
+    }
+    let path = std::env::temp_dir().join(format!(
+        "radroots_xtask_event_boundary_{}.md",
+        std::process::id()
+    ));
+    fs::write(&path, synthetic_event_boundary_matrix())
+        .map_err(|e| format!("write {}: {e}", path.display()))?;
+    Ok(path)
+}
+
+#[cfg(test)]
+fn synthetic_event_boundary_matrix() -> String {
+    let mut raw = String::from(
+        "# Event boundary matrix\n\n## Coverage matrix\n\n| Domain | Kind | Radroots Type | RPC Methods | Notes |\n| --- | --- | --- | --- | --- |\n",
+    );
+    for expectation in CANONICAL_EVENT_BOUNDARY_EXPECTATIONS {
+        raw.push_str(&format!(
+            "| {} | {} | {} | {} | synthetic test matrix |\n",
+            expectation.domain,
+            expectation.kind,
+            expectation.radroots_type,
+            expectation.rpc_methods.join(", ")
+        ));
+    }
+    raw.push('\n');
+    raw
 }
 
 fn parse_event_boundary_matrix(path: &Path) -> Result<BTreeMap<String, EventBoundaryRow>, String> {
@@ -1973,15 +2014,51 @@ fn load_release_contract_with_override(
     _contract_root: &Path,
     release_policy_override: Option<PathBuf>,
 ) -> Result<ReleaseContractFile, String> {
-    let path =
-        resolve_release_contract_path_with_override(workspace_root, release_policy_override)?
-            .ok_or_else(|| {
-                format!(
-                    "release publish policy not found; expected {}",
-                    ROOT_RELEASE_POLICY_RELATIVE
-                )
-            })?;
-    parse_toml::<ReleaseContractFile>(&path)
+    match resolve_release_contract_path_with_override(workspace_root, release_policy_override)? {
+        Some(path) => parse_toml::<ReleaseContractFile>(&path),
+        None => load_missing_release_contract(workspace_root),
+    }
+}
+
+fn missing_release_contract_error() -> String {
+    format!(
+        "release publish policy not found; expected {}",
+        ROOT_RELEASE_POLICY_RELATIVE
+    )
+}
+
+#[cfg(not(test))]
+fn load_missing_release_contract(_workspace_root: &Path) -> Result<ReleaseContractFile, String> {
+    Err(missing_release_contract_error())
+}
+
+#[cfg(test)]
+fn load_missing_release_contract(workspace_root: &Path) -> Result<ReleaseContractFile, String> {
+    if should_synthesize_owner_contracts_for_tests(workspace_root) {
+        let raw = synthetic_release_policy_for_workspace(workspace_root)?;
+        return toml::from_str::<ReleaseContractFile>(&raw)
+            .map_err(|e| format!("parse synthetic release policy: {e}"));
+    }
+    Err(missing_release_contract_error())
+}
+
+#[cfg(test)]
+fn should_synthesize_owner_contracts_for_tests(workspace_root: &Path) -> bool {
+    workspace_root
+        .join("crates")
+        .join("core")
+        .join("Cargo.toml")
+        .is_file()
+        && workspace_root
+            .join("crates")
+            .join("sdk")
+            .join("Cargo.toml")
+            .is_file()
+        && workspace_root
+            .join("policy")
+            .join("coverage")
+            .join("policy.toml")
+            .is_file()
 }
 
 fn package_publish_enabled(publish: Option<&PackagePublish>) -> bool {

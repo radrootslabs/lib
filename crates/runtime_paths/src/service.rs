@@ -16,6 +16,28 @@ pub struct RadrootsRuntimePathSelection {
     pub repo_local_root_source: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RadrootsRuntimePathConfigEntry {
+    pub key: String,
+    pub value: String,
+    pub source_label: String,
+}
+
+impl RadrootsRuntimePathConfigEntry {
+    #[must_use]
+    pub fn new(
+        key: impl Into<String>,
+        value: impl Into<String>,
+        source_label: impl Into<String>,
+    ) -> Self {
+        Self {
+            key: key.into(),
+            value: value.into(),
+            source_label: source_label.into(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct RadrootsRuntimeSelectionContract {
     pub active_profile: String,
@@ -145,6 +167,30 @@ impl RadrootsRuntimePathSelection {
         Ok(Self::caller(parse_profile_value(profile)?, repo_local_root))
     }
 
+    pub fn from_config_entries(
+        profile_entry: Option<RadrootsRuntimePathConfigEntry>,
+        repo_local_root_entry: Option<RadrootsRuntimePathConfigEntry>,
+        default_profile: RadrootsPathProfile,
+    ) -> Result<Self, RadrootsRuntimePathSelectionError> {
+        let (profile, profile_source) = match profile_entry {
+            Some(entry) => (
+                parse_profile(entry.key.as_str(), entry.value.as_str())?,
+                entry.source_label,
+            ),
+            None => (default_profile, "default".to_owned()),
+        };
+        let (repo_local_root, repo_local_root_source) = match repo_local_root_entry {
+            Some(entry) => (Some(PathBuf::from(entry.value)), Some(entry.source_label)),
+            None => (None, None),
+        };
+        Ok(Self {
+            profile,
+            profile_source,
+            repo_local_root,
+            repo_local_root_source,
+        })
+    }
+
     pub fn from_env(
         profile_env: &'static str,
         repo_local_root_env: &'static str,
@@ -257,7 +303,7 @@ impl RadrootsRuntimePathSelection {
 }
 
 fn parse_profile(
-    env_var: &'static str,
+    env_var: &str,
     value: &str,
 ) -> Result<RadrootsPathProfile, RadrootsRuntimePathSelectionError> {
     match parse_profile_value(value) {
@@ -295,8 +341,9 @@ mod tests {
     };
 
     use super::{
-        RadrootsRuntimePathPolicyContract, RadrootsRuntimePathSelection,
-        RadrootsRuntimePathSelectionError, runtime_migration_contract,
+        RadrootsRuntimePathConfigEntry, RadrootsRuntimePathPolicyContract,
+        RadrootsRuntimePathSelection, RadrootsRuntimePathSelectionError,
+        runtime_migration_contract,
     };
     use crate::{RadrootsLegacyPathDetection, RadrootsMigrationReport};
 
@@ -381,6 +428,53 @@ mod tests {
 
         assert_eq!(selection.profile, RadrootsPathProfile::MobileNative);
         assert_eq!(selection.profile_source, "caller");
+    }
+
+    #[test]
+    fn config_entry_selection_preserves_sources() {
+        let selection = RadrootsRuntimePathSelection::from_config_entries(
+            Some(RadrootsRuntimePathConfigEntry::new(
+                "RADROOTS_CLI_PATHS_PROFILE",
+                "repo_local",
+                "env_file:RADROOTS_CLI_PATHS_PROFILE",
+            )),
+            Some(RadrootsRuntimePathConfigEntry::new(
+                "RADROOTS_CLI_PATHS_REPO_LOCAL_ROOT",
+                ".local/radroots",
+                "env_file:RADROOTS_CLI_PATHS_REPO_LOCAL_ROOT",
+            )),
+            RadrootsPathProfile::InteractiveUser,
+        )
+        .expect("config entries should select paths");
+
+        assert_eq!(selection.profile, RadrootsPathProfile::RepoLocal);
+        assert_eq!(
+            selection.profile_source,
+            "env_file:RADROOTS_CLI_PATHS_PROFILE"
+        );
+        assert_eq!(
+            selection.repo_local_root,
+            Some(PathBuf::from(".local/radroots"))
+        );
+        assert_eq!(
+            selection.repo_local_root_source.as_deref(),
+            Some("env_file:RADROOTS_CLI_PATHS_REPO_LOCAL_ROOT")
+        );
+    }
+
+    #[test]
+    fn config_entry_selection_uses_default_profile_without_sources() {
+        let selection = RadrootsRuntimePathSelection::from_config_entries(
+            None,
+            None,
+            RadrootsPathProfile::InteractiveUser,
+        )
+        .expect("default selection");
+
+        assert_eq!(selection.profile, RadrootsPathProfile::InteractiveUser);
+        assert_eq!(selection.profile_source, "default");
+        assert_eq!(selection.repo_local_root, None);
+        assert_eq!(selection.repo_local_root_source, None);
     }
 
     #[test]

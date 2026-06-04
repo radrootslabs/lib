@@ -17,7 +17,12 @@ pub use cli::{parse_and_load_path_with_env_overrides_and_init, parse_and_load_pa
 pub use backoff::{Backoff, BackoffConfig};
 
 pub use config::{
-    load_required_file, load_required_file_with_env, load_required_file_with_env_and_overrides,
+    ConfigKeySpec, ConfigSourceKind, RuntimeConfigValueError, RuntimeEnvFileError,
+    StrictEnvFileValues, load_required_file, load_required_file_with_env,
+    load_required_file_with_env_and_overrides, load_strict_env_file,
+    load_strict_env_file_with_specs, parse_bool_value, parse_optional_path_value,
+    parse_optional_string_value, parse_strict_env_file, parse_strict_env_file_with_specs,
+    parse_string_list_value, parse_u64_value, parse_usize_value,
 };
 
 #[cfg(feature = "cli")]

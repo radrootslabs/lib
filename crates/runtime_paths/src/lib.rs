@@ -31,9 +31,10 @@ pub use platform::{RadrootsHostEnvironment, RadrootsPathProfile, RadrootsPlatfor
 pub use roots::{RadrootsPathOverrides, RadrootsPathResolver, RadrootsPaths};
 pub use service::{
     RadrootsRuntimeLegacyPathContract, RadrootsRuntimeMigrationContract,
-    RadrootsRuntimePathPolicyContract, RadrootsRuntimePathSelection,
-    RadrootsRuntimePathSelectionError, RadrootsRuntimeSelectionContract,
-    RadrootsRuntimeSelectionOverrideContract, runtime_migration_contract,
+    RadrootsRuntimePathConfigEntry, RadrootsRuntimePathPolicyContract,
+    RadrootsRuntimePathSelection, RadrootsRuntimePathSelectionError,
+    RadrootsRuntimeSelectionContract, RadrootsRuntimeSelectionOverrideContract,
+    runtime_migration_contract,
 };
 
 #[cfg(test)]

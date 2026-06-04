@@ -50,15 +50,27 @@ radroots_identity = { workspace = true, optional = true, default-features = fals
 radroots_nostr = { workspace = true, optional = true, default-features = false }
 radroots_nostr_connect = { workspace = true, optional = true }
 radroots_nostr_signer = { workspace = true, optional = true, default-features = false }
-reqwest = { workspace = true, optional = true, default-features = false, features = ["json", "rustls-tls"] }
-serde = { workspace = true, optional = true, default-features = false, features = ["derive", "alloc"] }
-serde_json = { workspace = true, optional = true, default-features = false, features = ["alloc"] }
+reqwest = { workspace = true, optional = true, default-features = false, features = [
+  "json",
+  "rustls-tls",
+] }
+serde = { workspace = true, optional = true, default-features = false, features = [
+  "derive",
+  "alloc",
+] }
+serde_json = { workspace = true, optional = true, default-features = false, features = [
+  "alloc",
+] }
 
 [dev-dependencies]
 futures = { workspace = true }
 nostr = { workspace = true }
-radroots_core = { workspace = true, default-features = false, features = ["std"] }
-radroots_replica_db = { workspace = true, default-features = false, features = ["native"] }
+radroots_core = { workspace = true, default-features = false, features = [
+  "std",
+] }
+radroots_replica_db = { workspace = true, default-features = false, features = [
+  "native",
+] }
 radroots_replica_db_schema = { workspace = true }
 radroots_replica_sync = { workspace = true, features = ["std"] }
 radroots_sql_core = { workspace = true, features = ["native"] }

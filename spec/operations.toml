@@ -204,11 +204,7 @@ vector = "spec/conformance/vectors/trade/build_order_request_draft.v1.json"
 domain = "trade"
 id = "trade.build_order_decision_draft"
 stability = "beta"
-inputs = [
-  "root_event_id",
-  "prev_event_id",
-  "RadrootsTradeOrderDecisionEvent",
-]
+inputs = ["root_event_id", "prev_event_id", "RadrootsTradeOrderDecisionEvent"]
 outputs = ["WireEventParts"]
 error_class = "encode_error"
 deterministic = true
@@ -217,9 +213,7 @@ transport = "native"
 
 [operations.trade_build_order_decision_draft.implementation]
 rust_modules = ["crates/events_codec/src/trade/encode.rs"]
-rust_types = [
-  "radroots_events::trade::RadrootsTradeOrderDecisionEvent",
-]
+rust_types = ["radroots_events::trade::RadrootsTradeOrderDecisionEvent"]
 
 [operations.trade_build_order_decision_draft.conformance]
 vector = "spec/conformance/vectors/trade/build_order_decision_draft.v1.json"
