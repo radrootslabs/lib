@@ -17,6 +17,7 @@ pub mod farm_workspace;
 pub mod follow;
 pub mod geochat;
 pub mod gift_wrap;
+pub mod group;
 pub mod http_auth;
 pub mod job;
 pub mod job_feedback;
