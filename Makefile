@@ -26,12 +26,12 @@ help:
 
 build-replica-db-wasm:
 	wasm-pack build crates/replica_db_wasm --release --target web \
-		--out-dir ../replica-db-wasm/pkg/dist --scope radroots
+		--out-dir pkg/dist --scope radroots
 
 build-events-codec-wasm:
 	wasm-pack build crates/events_codec_wasm --release --target web \
-		--out-dir ../events-codec-wasm/pkg/dist --scope radroots
+		--out-dir pkg/dist --scope radroots
 
 build-replica-sync-wasm:
 	wasm-pack build crates/replica_sync_wasm --release --target web \
-		--out-dir ../replica-sync-wasm/pkg/dist --scope radroots
+		--out-dir pkg/dist --scope radroots

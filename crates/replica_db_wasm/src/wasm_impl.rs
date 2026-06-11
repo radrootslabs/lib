@@ -1,3 +1,4 @@
+use crate::utils::value_to_js;
 use radroots_replica_db::migrations;
 use radroots_replica_db::{ReplicaDbExportManifestRs, export_manifest};
 use radroots_replica_sync::radroots_replica_sync_status;
@@ -83,9 +84,6 @@ use radroots_replica_db_schema::nostr_profile_relay::INostrProfileRelayRelation;
 use radroots_replica_db_schema::trade_product_location::ITradeProductLocationRelation;
 
 use radroots_replica_db_schema::trade_product_media::ITradeProductMediaRelation;
-
-pub mod utils;
-pub use utils::*;
 
 #[wasm_bindgen(js_name = replica_db_run_migrations)]
 pub fn replica_db_run_migrations() -> Result<(), JsValue> {
