@@ -10,4 +10,5 @@ homepage.workspace = true
 publish = false
 
 [dependencies]
+radroots_sdk_binding_model = { path = "../binding_model" }
 radroots_trade = { workspace = true }
