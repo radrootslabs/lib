@@ -5,9 +5,21 @@ pub const KIND_REACTION: u32 = 7;
 pub const KIND_SEAL: u32 = 13;
 pub const KIND_MESSAGE: u32 = 14;
 pub const KIND_MESSAGE_FILE: u32 = 15;
+pub const KIND_APP_CUSTOM_DATA: u32 = 78;
+pub const KIND_FARM_CRDT_CHANGE: u32 = KIND_APP_CUSTOM_DATA;
 pub const KIND_GIFT_WRAP: u32 = 1059;
+pub const KIND_FILE_METADATA: u32 = 1063;
+pub const KIND_FARM_FILE_METADATA: u32 = KIND_FILE_METADATA;
 pub const KIND_COMMENT: u32 = 1111;
+pub const KIND_GROUP_PUT_USER: u32 = 9000;
+pub const KIND_GROUP_REMOVE_USER: u32 = 9001;
+pub const KIND_GROUP_EDIT_METADATA: u32 = 9002;
+pub const KIND_GROUP_CREATE_INVITE: u32 = 9009;
+pub const KIND_GROUP_JOIN_REQUEST: u32 = 9021;
+pub const KIND_GROUP_LEAVE_REQUEST: u32 = 9022;
 pub const KIND_GEOCHAT: u32 = 20000;
+pub const KIND_RELAY_AUTH: u32 = 22242;
+pub const KIND_HTTP_AUTH: u32 = 27235;
 pub const KIND_LIST_MUTE: u32 = 10000;
 pub const KIND_LIST_PINNED_NOTES: u32 = 10001;
 pub const KIND_LIST_READ_WRITE_RELAYS: u32 = 10002;
@@ -47,9 +59,14 @@ pub const KIND_RESOURCE_AREA: u32 = 30370;
 pub const KIND_RESOURCE_HARVEST_CAP: u32 = 30371;
 pub const KIND_ACCOUNT_CLAIM: u32 = 30380;
 pub const KIND_APP_DATA: u32 = 30078;
+pub const KIND_FARM_WORKSPACE_MANIFEST: u32 = KIND_APP_DATA;
 pub const KIND_LISTING: u32 = 30402;
 pub const KIND_LISTING_DRAFT: u32 = 30403;
 pub const KIND_APPLICATION_HANDLER: u32 = 31990;
+pub const KIND_GROUP_METADATA: u32 = 39000;
+pub const KIND_GROUP_ADMINS: u32 = 39001;
+pub const KIND_GROUP_MEMBERS: u32 = 39002;
+pub const KIND_GROUP_ROLES: u32 = 39003;
 
 pub const KIND_TRADE_LISTING_VALIDATE_REQ: u32 = 5321;
 pub const KIND_TRADE_LISTING_VALIDATE_RES: u32 = 6321;
@@ -438,6 +455,31 @@ mod tests {
             Some(KIND_JOB_REQUEST_MIN)
         );
         assert_eq!(request_kind_for_result_kind(KIND_JOB_REQUEST_MIN), None);
+    }
+
+    #[test]
+    fn exposes_field_event_kind_aliases() {
+        assert_eq!(KIND_APP_CUSTOM_DATA, 78);
+        assert_eq!(KIND_FARM_CRDT_CHANGE, KIND_APP_CUSTOM_DATA);
+        assert_eq!(KIND_FILE_METADATA, 1063);
+        assert_eq!(KIND_FARM_FILE_METADATA, KIND_FILE_METADATA);
+        assert_eq!(KIND_FARM_WORKSPACE_MANIFEST, KIND_APP_DATA);
+        assert_eq!(KIND_RELAY_AUTH, 22242);
+        assert_eq!(KIND_HTTP_AUTH, 27235);
+    }
+
+    #[test]
+    fn exposes_nip29_group_kind_constants() {
+        assert_eq!(KIND_GROUP_PUT_USER, 9000);
+        assert_eq!(KIND_GROUP_REMOVE_USER, 9001);
+        assert_eq!(KIND_GROUP_EDIT_METADATA, 9002);
+        assert_eq!(KIND_GROUP_CREATE_INVITE, 9009);
+        assert_eq!(KIND_GROUP_JOIN_REQUEST, 9021);
+        assert_eq!(KIND_GROUP_LEAVE_REQUEST, 9022);
+        assert_eq!(KIND_GROUP_METADATA, 39000);
+        assert_eq!(KIND_GROUP_ADMINS, 39001);
+        assert_eq!(KIND_GROUP_MEMBERS, 39002);
+        assert_eq!(KIND_GROUP_ROLES, 39003);
     }
 
     #[test]
