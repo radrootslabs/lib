@@ -11,8 +11,6 @@ use radroots_events_codec::d_tag::is_d_tag_base64url;
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
 #[cfg(feature = "serde_json")]
 use serde::de::DeserializeOwned;
-#[cfg(feature = "ts-rs")]
-use ts_rs::TS;
 
 use crate::listing::kinds::{
     KIND_TRADE_LISTING_ANSWER_RES, KIND_TRADE_LISTING_CANCEL_REQ,
@@ -40,8 +38,6 @@ use crate::listing::validation::TradeListingValidationError;
 pub const TRADE_LISTING_DOMAIN: &str = "trade:listing";
 pub const TRADE_LISTING_ENVELOPE_VERSION: u16 = 1;
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -50,8 +46,6 @@ pub enum TradeListingDomain {
     TradeListing,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -178,8 +172,6 @@ impl TradeListingMessageType {
     }
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TradeListingEnvelope<T> {
@@ -187,7 +179,6 @@ pub struct TradeListingEnvelope<T> {
     pub domain: TradeListingDomain,
     #[cfg_attr(feature = "serde", serde(rename = "type"))]
     pub message_type: TradeListingMessageType,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub order_id: Option<String>,
     pub listing_addr: String,
     pub payload: T,
@@ -577,56 +568,39 @@ fn map_event_parse_error(error: EventParseError) -> TradeListingEnvelopeParseErr
     }
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TradeListingValidateRequest {
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "RadrootsNostrEventPtr | null"))]
     pub listing_event: Option<RadrootsNostrEventPtr>,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TradeListingValidateResult {
     pub valid: bool,
-    #[cfg_attr(feature = "ts-rs", ts(type = "TradeListingValidationError[]"))]
     pub errors: Vec<TradeListingValidationError>,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TradeOrderResponse {
     pub accepted: bool,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub reason: Option<String>,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TradeOrderRevisionResponse {
     pub accepted: bool,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub reason: Option<String>,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TradeListingCancel {
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub reason: Option<String>,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(
     feature = "serde",

@@ -10,8 +10,7 @@ helpers for the `radroots` core libraries.
  * listing publish helpers for canonical address normalization, author checks,
    and event-shaping workflows;
  * order and public-trade helpers for shared request validation and projection;
- * optional `serde`, `serde_json`, and `ts-rs` support for shared model
-   serialization and export;
+ * optional `serde` and `serde_json` support for shared model serialization;
  * portable shared-model support for both `std` and `no_std` builds.
 
 ## Copyright

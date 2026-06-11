@@ -4,7 +4,6 @@ use alloc::{string::String, vec::Vec};
 
 use crate::types::RadrootsEventsIndexedShardId;
 
-#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsEventsIndexedShardCheckpoint {
@@ -18,7 +17,6 @@ pub struct RadrootsEventsIndexedShardCheckpoint {
     pub cursor: Option<String>,
 }
 
-#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsEventsIndexedIndexCheckpoint {

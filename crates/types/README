@@ -7,8 +7,7 @@ wrappers for the `radroots` core libraries.
 
  * `IError`, `IResult`, `IResultList`, and `IResultPass` wrapper types;
  * small constructor helpers and status-label logic for pass and fail outcomes;
- * optional `serde` and `ts-rs` support for API boundary serialization and
-   export;
+ * optional `serde` support for API boundary serialization;
  * a compact support crate with no domain-specific business logic.
 
 ## Copyright

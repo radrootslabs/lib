@@ -181,7 +181,6 @@ let
     cargo check --workspace
   '';
   contractCommand = ''
-    ./scripts/ci/guard_committed_ts_artifacts.sh
     ./scripts/ci/guard_no_legacy_identifiers.sh
     cargo check -q ${sdkContractCargoArgs}
     cargo test -q ${sdkContractCargoArgs}

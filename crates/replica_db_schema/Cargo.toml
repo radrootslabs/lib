@@ -10,17 +10,14 @@ description = "Replica schema model for Radroots"
 repository.workspace = true
 homepage.workspace = true
 readme = "README"
-build = "build.rs"
 
 [lib]
 crate-type = ["rlib"]
 
 [features]
 default = []
-ts-rs = ["dep:ts-rs"]
 
 [dependencies]
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-ts-rs = { workspace = true, optional = true }
 radroots_types = { workspace = true }

@@ -4,11 +4,7 @@
 use alloc::{string::String, vec::Vec};
 
 use radroots_core::RadrootsCoreDiscountValue;
-#[cfg(feature = "ts-rs")]
-use ts_rs::TS;
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TradeOrderItem {
@@ -16,8 +12,6 @@ pub struct TradeOrderItem {
     pub bin_count: u32,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(
     feature = "serde",
@@ -30,8 +24,6 @@ pub enum TradeOrderChange {
     ItemRemove { item_index: u32 },
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TradeOrderRevision {
@@ -39,8 +31,6 @@ pub struct TradeOrderRevision {
     pub changes: Vec<TradeOrderChange>,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TradeOrder {
@@ -49,15 +39,9 @@ pub struct TradeOrder {
     pub buyer_pubkey: String,
     pub seller_pubkey: String,
     pub items: Vec<TradeOrderItem>,
-    #[cfg_attr(
-        feature = "ts-rs",
-        ts(optional, type = "RadrootsCoreDiscountValue[] | null")
-    )]
     pub discounts: Option<Vec<RadrootsCoreDiscountValue>>,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -74,44 +58,32 @@ pub enum TradeOrderStatus {
     Completed,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TradeQuestion {
     pub question_id: String,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TradeAnswer {
     pub question_id: String,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TradeDiscountRequest {
     pub discount_id: String,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreDiscountValue"))]
     pub value: RadrootsCoreDiscountValue,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TradeDiscountOffer {
     pub discount_id: String,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreDiscountValue"))]
     pub value: RadrootsCoreDiscountValue,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(
     feature = "serde",
@@ -120,17 +92,13 @@ pub struct TradeDiscountOffer {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TradeDiscountDecision {
     Accept {
-        #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreDiscountValue"))]
         value: RadrootsCoreDiscountValue,
     },
     Decline {
-        #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
         reason: Option<String>,
     },
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(
     feature = "serde",
@@ -145,16 +113,12 @@ pub enum TradeFulfillmentStatus {
     Cancelled,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TradeFulfillmentUpdate {
     pub status: TradeFulfillmentStatus,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TradeReceipt {

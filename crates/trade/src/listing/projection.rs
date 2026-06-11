@@ -20,8 +20,6 @@ use radroots_events::{
     plot::RadrootsPlotRef,
     resource_area::RadrootsResourceAreaRef,
 };
-#[cfg(feature = "ts-rs")]
-use ts_rs::TS;
 
 use crate::listing::{
     codec::{TradeListingParseError, listing_from_event_parts},
@@ -42,73 +40,36 @@ use radroots_events_codec::trade::{
     trade_event_context_from_tags,
 };
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsTradeListingBinProjection {
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsListingBin"))]
     pub bin: RadrootsListingBin,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsTradeListingTotal"))]
     pub one_bin_total: RadrootsTradeListingTotal,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsTradeListingProjection {
     pub listing_addr: String,
     pub seller_pubkey: String,
     pub listing_id: String,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsFarmRef"))]
     pub farm: RadrootsFarmRef,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsListingProduct"))]
     pub product: RadrootsListingProduct,
     pub primary_bin_id: String,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsTradeListingBinProjection[]"))]
     pub bins: Vec<RadrootsTradeListingBinProjection>,
-    #[cfg_attr(
-        feature = "ts-rs",
-        ts(optional, type = "RadrootsResourceAreaRef | null")
-    )]
     pub resource_area: Option<RadrootsResourceAreaRef>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "RadrootsPlotRef | null"))]
     pub plot: Option<RadrootsPlotRef>,
-    #[cfg_attr(
-        feature = "ts-rs",
-        ts(optional, type = "RadrootsCoreDiscount[] | null")
-    )]
     pub discounts: Option<Vec<RadrootsCoreDiscount>>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "RadrootsCoreDecimal | null"))]
     pub inventory_available: Option<RadrootsCoreDecimal>,
-    #[cfg_attr(
-        feature = "ts-rs",
-        ts(optional, type = "RadrootsListingAvailability | null")
-    )]
     pub availability: Option<RadrootsListingAvailability>,
-    #[cfg_attr(
-        feature = "ts-rs",
-        ts(optional, type = "RadrootsListingDeliveryMethod | null")
-    )]
     pub delivery_method: Option<RadrootsListingDeliveryMethod>,
-    #[cfg_attr(
-        feature = "ts-rs",
-        ts(optional, type = "RadrootsListingLocation | null")
-    )]
     pub location: Option<RadrootsListingLocation>,
-    #[cfg_attr(
-        feature = "ts-rs",
-        ts(optional, type = "RadrootsListingImage[] | null")
-    )]
     pub images: Option<Vec<RadrootsListingImage>>,
     pub order_count: u32,
     pub open_order_count: u32,
     pub terminal_order_count: u32,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeOrderWorkflowProjection {
@@ -116,45 +77,19 @@ pub struct RadrootsTradeOrderWorkflowProjection {
     pub listing_addr: String,
     pub buyer_pubkey: String,
     pub seller_pubkey: String,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsTradeOrderItem[]"))]
     pub items: Vec<TradeOrderItem>,
-    #[cfg_attr(
-        feature = "ts-rs",
-        ts(optional, type = "RadrootsTradeOrderEconomicLine[] | null")
-    )]
     pub requested_discounts: Option<Vec<TradeOrderEconomicLine>>,
     pub status: TradeOrderStatus,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "RadrootsNostrEventPtr | null"))]
     pub listing_snapshot: Option<RadrootsNostrEventPtr>,
     pub root_event_id: String,
     pub last_event_id: String,
-    #[cfg_attr(
-        feature = "ts-rs",
-        ts(optional, type = "RadrootsCoreDiscountValue | null")
-    )]
     pub last_discount_request: Option<RadrootsCoreDiscountValue>,
-    #[cfg_attr(
-        feature = "ts-rs",
-        ts(optional, type = "RadrootsCoreDiscountValue | null")
-    )]
     pub last_discount_offer: Option<RadrootsCoreDiscountValue>,
-    #[cfg_attr(
-        feature = "ts-rs",
-        ts(optional, type = "RadrootsCoreDiscountValue | null")
-    )]
     pub accepted_discount: Option<RadrootsCoreDiscountValue>,
-    #[cfg_attr(
-        feature = "ts-rs",
-        ts(optional, type = "RadrootsTradeFulfillmentStatus | null")
-    )]
     pub last_fulfillment_status: Option<TradeFulfillmentStatus>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "bool | null"))]
     pub receipt_acknowledged: Option<bool>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "number | null"))]
     pub receipt_at: Option<u64>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub last_reason: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub last_discount_decline_reason: Option<String>,
     pub question_count: u32,
     pub answer_count: u32,
@@ -170,8 +105,6 @@ pub struct RadrootsTradeOrderWorkflowProjection {
     pub last_actor_pubkey: String,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeOrderWorkflowMessage {
@@ -179,20 +112,13 @@ pub struct RadrootsTradeOrderWorkflowMessage {
     pub actor_pubkey: String,
     pub counterparty_pubkey: String,
     pub listing_addr: String,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub order_id: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "RadrootsNostrEventPtr | null"))]
     pub listing_event: Option<RadrootsNostrEventPtr>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub root_event_id: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub prev_event_id: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsTradeMessagePayload"))]
     pub payload: TradeListingMessagePayload,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -201,8 +127,6 @@ pub enum RadrootsTradeSortDirection {
     Desc,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -214,30 +138,17 @@ pub enum RadrootsTradeListingMarketStatus {
     Other { value: String },
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RadrootsTradeListingQuery {
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub seller_pubkey: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub farm_pubkey: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub farm_id: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub product_key: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub product_category: Option<String>,
-    #[cfg_attr(
-        feature = "ts-rs",
-        ts(optional, type = "RadrootsTradeListingMarketStatus | null")
-    )]
     pub listing_status: Option<RadrootsTradeListingMarketStatus>,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -251,8 +162,6 @@ pub enum RadrootsTradeListingSortField {
     TotalOrderCount,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeListingSort {
@@ -269,26 +178,15 @@ impl Default for RadrootsTradeListingSort {
     }
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RadrootsTradeOrderQuery {
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub listing_addr: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub buyer_pubkey: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub seller_pubkey: Option<String>,
-    #[cfg_attr(
-        feature = "ts-rs",
-        ts(optional, type = "RadrootsTradeOrderStatus | null")
-    )]
     pub status: Option<TradeOrderStatus>,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -302,8 +200,6 @@ pub enum RadrootsTradeOrderSortField {
     TotalBinCount,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeOrderSort {
@@ -320,8 +216,6 @@ impl Default for RadrootsTradeOrderSort {
     }
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeFacetCount {
@@ -329,42 +223,26 @@ pub struct RadrootsTradeFacetCount {
     pub count: u32,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeListingFacets {
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsTradeFacetCount[]"))]
     pub seller_pubkeys: Vec<RadrootsTradeFacetCount>,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsTradeFacetCount[]"))]
     pub farm_pubkeys: Vec<RadrootsTradeFacetCount>,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsTradeFacetCount[]"))]
     pub farm_ids: Vec<RadrootsTradeFacetCount>,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsTradeFacetCount[]"))]
     pub product_keys: Vec<RadrootsTradeFacetCount>,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsTradeFacetCount[]"))]
     pub product_categories: Vec<RadrootsTradeFacetCount>,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsTradeFacetCount[]"))]
     pub listing_statuses: Vec<RadrootsTradeFacetCount>,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeOrderFacets {
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsTradeFacetCount[]"))]
     pub buyer_pubkeys: Vec<RadrootsTradeFacetCount>,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsTradeFacetCount[]"))]
     pub seller_pubkeys: Vec<RadrootsTradeFacetCount>,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsTradeFacetCount[]"))]
     pub listing_addrs: Vec<RadrootsTradeFacetCount>,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsTradeFacetCount[]"))]
     pub statuses: Vec<RadrootsTradeFacetCount>,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeMarketplaceListingSummary {
@@ -375,25 +253,18 @@ pub struct RadrootsTradeMarketplaceListingSummary {
     pub product_key: String,
     pub product_title: String,
     pub product_category: String,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub product_summary: Option<String>,
     pub listing_status: RadrootsTradeListingMarketStatus,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub location_primary: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "RadrootsCoreDecimal | null"))]
     pub inventory_available: Option<RadrootsCoreDecimal>,
     pub primary_bin_id: String,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub primary_bin_label: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsTradeListingTotal"))]
     pub primary_bin_total: RadrootsTradeListingTotal,
     pub order_count: u32,
     pub open_order_count: u32,
     pub terminal_order_count: u32,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeMarketplaceOrderSummary {
@@ -406,7 +277,6 @@ pub struct RadrootsTradeMarketplaceOrderSummary {
     pub item_count: u32,
     pub total_bin_count: u32,
     pub has_requested_discounts: bool,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub last_reason: Option<String>,
 }
 

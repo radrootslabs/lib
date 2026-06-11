@@ -40,7 +40,6 @@ in
     ];
     initGit = true;
     command = ''
-      ./scripts/ci/guard_committed_ts_artifacts.sh
       ./scripts/ci/guard_no_legacy_identifiers.sh
     '';
   };

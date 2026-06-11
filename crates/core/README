@@ -9,8 +9,7 @@ unit semantics for the `radroots` core libraries.
    percent, discounts, and decimals;
  * unit kinds, dimensions, parsing, and deterministic conversion helpers;
  * portable core semantics for both `std` and `no_std` builds;
- * optional integration with `serde`, `typeshare`, and `ts-rs` for
-   serialization and cross-language type export.
+ * optional integration with `serde` for serialization.
 
 ## Copyright
 

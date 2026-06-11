@@ -1,22 +1,11 @@
 use crate::{RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity, RadrootsCoreUnit};
-#[cfg(feature = "ts-rs")]
-use ts_rs::TS;
 
-#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsCoreQuantityPrice {
-    #[cfg_attr(
-        all(feature = "serde", not(feature = "ts-rs")),
-        serde(alias = "money", alias = "price")
-    )]
+    #[cfg_attr(feature = "serde", serde(alias = "money", alias = "price"))]
     pub amount: RadrootsCoreMoney,
-    #[cfg_attr(
-        all(feature = "serde", not(feature = "ts-rs")),
-        serde(alias = "per", alias = "quantity")
-    )]
+    #[cfg_attr(feature = "serde", serde(alias = "per", alias = "quantity"))]
     pub quantity: RadrootsCoreQuantity,
 }
 

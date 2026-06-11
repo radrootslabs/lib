@@ -162,8 +162,6 @@ tracing = { version = "0.1", default-features = false }
 tracing-appender = { version = "0.2" }
 tracing-log = { version = "0.2" }
 tracing-subscriber = { version = "0.3" }
-ts-rs = { version = "11.1" }
-typeshare = { version = "1" }
 url = { version = "2" }
 uuid = { version = "1.22.0", features = ["v4", "v7"] }
 x509-parser = { version = "0.17", default-features = false }

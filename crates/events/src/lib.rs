@@ -3,9 +3,6 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
-#[cfg(feature = "ts-rs")]
-use ts_rs::TS;
-
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
 
@@ -39,8 +36,6 @@ pub mod seal;
 pub mod tags;
 pub mod trade;
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsNostrEvent {
@@ -53,26 +48,19 @@ pub struct RadrootsNostrEvent {
     pub sig: String,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsNostrEventRef {
     pub id: String,
     pub author: String,
     pub kind: u32,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub d_tag: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string[] | null"))]
     pub relays: Option<Vec<String>>,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsNostrEventPtr {
     pub id: String,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub relays: Option<String>,
 }

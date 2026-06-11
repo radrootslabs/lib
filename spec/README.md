@@ -132,7 +132,6 @@ Repository guards also enforce:
 
 - deterministic export requirements
 - strict no-legacy identifier policy for replica surfaces
-- no committed generated TypeScript artifacts under `target/ts-rs/`
 
 ## Coverage Policy
 

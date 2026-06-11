@@ -8,8 +8,7 @@ manifest and checkpoint models for the `radroots` core libraries.
  * manifest and checkpoint value types for indexed event shards;
  * shard identifiers, id ranges, and shard metadata validation helpers;
  * portable model semantics for both `std` and `no_std` builds;
- * optional integration with `serde` and `typeshare` for serialization and
-   shared type export.
+ * optional integration with `serde` for serialization.
 
 ## Copyright
 

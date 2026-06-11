@@ -11,11 +11,7 @@ use crate::listing::projection::{
     RadrootsTradeOrderQuery, RadrootsTradeOrderSort, RadrootsTradeOrderWorkflowProjection,
     RadrootsTradeReadIndex,
 };
-#[cfg(feature = "ts-rs")]
-use ts_rs::TS;
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -26,8 +22,6 @@ pub enum RadrootsTradeReviewPriority {
     Critical,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -38,17 +32,13 @@ pub enum RadrootsTradeReviewStatus {
     Resolved,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeReviewQueueEntry {
     pub queue: String,
     pub priority: RadrootsTradeReviewPriority,
     pub status: RadrootsTradeReviewStatus,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub assigned_operator: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub reason: Option<String>,
 }
 
@@ -58,8 +48,6 @@ impl RadrootsTradeReviewQueueEntry {
     }
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -69,8 +57,6 @@ pub enum RadrootsTradeModerationSeverity {
     Block,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -80,17 +66,13 @@ pub enum RadrootsTradeModerationStatus {
     Resolved,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeModerationFlag {
     pub code: String,
     pub severity: RadrootsTradeModerationSeverity,
     pub status: RadrootsTradeModerationStatus,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub source: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub reason: Option<String>,
 }
 
@@ -100,8 +82,6 @@ impl RadrootsTradeModerationFlag {
     }
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -111,8 +91,6 @@ pub enum RadrootsTradeFulfillmentExceptionSeverity {
     Blocking,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -122,17 +100,13 @@ pub enum RadrootsTradeFulfillmentExceptionStatus {
     Resolved,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeFulfillmentException {
     pub code: String,
     pub severity: RadrootsTradeFulfillmentExceptionSeverity,
     pub status: RadrootsTradeFulfillmentExceptionStatus,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub source: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub notes: Option<String>,
 }
 
@@ -145,18 +119,11 @@ impl RadrootsTradeFulfillmentException {
     }
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeListingBackofficeOverlay {
     pub listing_addr: String,
-    #[cfg_attr(
-        feature = "ts-rs",
-        ts(optional, type = "RadrootsTradeReviewQueueEntry | null")
-    )]
     pub review_queue: Option<RadrootsTradeReviewQueueEntry>,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsTradeModerationFlag[]"))]
     pub moderation_flags: Vec<RadrootsTradeModerationFlag>,
 }
 
@@ -182,20 +149,12 @@ impl RadrootsTradeListingBackofficeOverlay {
     }
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeOrderBackofficeOverlay {
     pub order_id: String,
-    #[cfg_attr(
-        feature = "ts-rs",
-        ts(optional, type = "RadrootsTradeReviewQueueEntry | null")
-    )]
     pub review_queue: Option<RadrootsTradeReviewQueueEntry>,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsTradeModerationFlag[]"))]
     pub moderation_flags: Vec<RadrootsTradeModerationFlag>,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsTradeFulfillmentException[]"))]
     pub fulfillment_exceptions: Vec<RadrootsTradeFulfillmentException>,
 }
 
@@ -237,68 +196,38 @@ impl RadrootsTradeOrderBackofficeOverlay {
     }
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RadrootsTradeListingBackofficeQuery {
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsTradeListingQuery"))]
     pub listing: RadrootsTradeListingQuery,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "boolean | null"))]
     pub requires_review: Option<bool>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "boolean | null"))]
     pub has_open_moderation_flags: Option<bool>,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RadrootsTradeOrderBackofficeQuery {
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsTradeOrderQuery"))]
     pub order: RadrootsTradeOrderQuery,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "boolean | null"))]
     pub requires_review: Option<bool>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "boolean | null"))]
     pub has_open_moderation_flags: Option<bool>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "boolean | null"))]
     pub has_open_fulfillment_exceptions: Option<bool>,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsTradeListingBackofficeView {
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsTradeListingProjection"))]
     pub listing: RadrootsTradeListingProjection,
-    #[cfg_attr(
-        feature = "ts-rs",
-        ts(optional, type = "RadrootsTradeMarketplaceListingSummary | null")
-    )]
     pub marketplace: Option<RadrootsTradeMarketplaceListingSummary>,
-    #[cfg_attr(
-        feature = "ts-rs",
-        ts(optional, type = "RadrootsTradeListingBackofficeOverlay | null")
-    )]
     pub overlay: Option<RadrootsTradeListingBackofficeOverlay>,
     pub requires_review: bool,
     pub open_moderation_flag_count: u32,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsTradeOrderBackofficeView {
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsTradeOrderWorkflowProjection"))]
     pub order: RadrootsTradeOrderWorkflowProjection,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsTradeMarketplaceOrderSummary"))]
     pub marketplace: RadrootsTradeMarketplaceOrderSummary,
-    #[cfg_attr(
-        feature = "ts-rs",
-        ts(optional, type = "RadrootsTradeOrderBackofficeOverlay | null")
-    )]
     pub overlay: Option<RadrootsTradeOrderBackofficeOverlay>,
     pub requires_review: bool,
     pub open_moderation_flag_count: u32,

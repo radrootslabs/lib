@@ -7,8 +7,7 @@ schema models for the `radroots` core libraries.
 
  * schema model types reexported from the `models` module;
  * table- and record-oriented value types shared by replica database code;
- * optional serialization and shared type export support through `serde`,
-   `typeshare`, and `ts-rs`;
+ * optional serialization support through `serde`;
  * no runtime backend logic beyond the shared schema model layer.
 
 ## Copyright

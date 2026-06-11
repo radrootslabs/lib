@@ -2,8 +2,6 @@ use radroots_core::{
     RadrootsCoreDecimal, RadrootsCoreDiscount, RadrootsCoreMoney, RadrootsCoreQuantity,
     RadrootsCoreQuantityPrice, RadrootsCoreUnit,
 };
-#[cfg(feature = "ts-rs")]
-use ts_rs::TS;
 
 use crate::farm::RadrootsFarmRef;
 use crate::plot::RadrootsPlotRef;
@@ -12,8 +10,6 @@ use crate::resource_area::RadrootsResourceAreaRef;
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(
     feature = "serde",
@@ -22,9 +18,7 @@ use alloc::{string::String, vec::Vec};
 #[derive(Clone, Debug)]
 pub enum RadrootsListingAvailability {
     Window {
-        #[cfg_attr(feature = "ts-rs", ts(optional, type = "number | null"))]
         start: Option<u64>,
-        #[cfg_attr(feature = "ts-rs", ts(optional, type = "number | null"))]
         end: Option<u64>,
     },
     Status {
@@ -32,8 +26,6 @@ pub enum RadrootsListingAvailability {
     },
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(
     feature = "serde",
@@ -46,8 +38,6 @@ pub enum RadrootsListingStatus {
     Other { value: String },
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(
     feature = "serde",
@@ -61,8 +51,6 @@ pub enum RadrootsListingDeliveryMethod {
     Other { method: String },
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsListing {
@@ -72,61 +60,27 @@ pub struct RadrootsListing {
     pub product: RadrootsListingProduct,
     pub primary_bin_id: String,
     pub bins: Vec<RadrootsListingBin>,
-    #[cfg_attr(
-        feature = "ts-rs",
-        ts(optional, type = "RadrootsResourceAreaRef | null")
-    )]
     pub resource_area: Option<RadrootsResourceAreaRef>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "RadrootsPlotRef | null"))]
     pub plot: Option<RadrootsPlotRef>,
-    #[cfg_attr(
-        feature = "ts-rs",
-        ts(optional, type = "RadrootsCoreDiscount[] | null")
-    )]
     pub discounts: Option<Vec<RadrootsCoreDiscount>>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "RadrootsCoreDecimal | null"))]
     pub inventory_available: Option<RadrootsCoreDecimal>,
-    #[cfg_attr(
-        feature = "ts-rs",
-        ts(optional, type = "RadrootsListingAvailability | null")
-    )]
     pub availability: Option<RadrootsListingAvailability>,
-    #[cfg_attr(
-        feature = "ts-rs",
-        ts(optional, type = "RadrootsListingDeliveryMethod | null")
-    )]
     pub delivery_method: Option<RadrootsListingDeliveryMethod>,
-    #[cfg_attr(
-        feature = "ts-rs",
-        ts(optional, type = "RadrootsListingLocation | null")
-    )]
     pub location: Option<RadrootsListingLocation>,
-    #[cfg_attr(
-        feature = "ts-rs",
-        ts(optional, type = "RadrootsListingImage[] | null")
-    )]
     pub images: Option<Vec<RadrootsListingImage>>,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsListingProduct {
     pub key: String,
     pub title: String,
     pub category: String,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub summary: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub process: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub lot: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub location: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub profile: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub year: Option<String>,
 }
 
@@ -134,74 +88,40 @@ pub const RADROOTS_LISTING_PRODUCT_TAG_KEYS: [&str; 9] = [
     "key", "title", "category", "summary", "process", "lot", "location", "profile", "year",
 ];
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(
-    feature = "ts-rs",
-    ts(
-        export,
-        export_to = "types.ts",
-        type = "readonly [\"key\", \"title\", \"category\", \"summary\", \"process\", \"lot\", \"location\", \"profile\", \"year\"]"
-    )
-)]
 pub struct RadrootsListingProductTagKeys;
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsListingBin {
     pub bin_id: String,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreQuantity"))]
     pub quantity: RadrootsCoreQuantity,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreQuantityPrice"))]
     pub price_per_canonical_unit: RadrootsCoreQuantityPrice,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "RadrootsCoreDecimal | null"))]
     pub display_amount: Option<RadrootsCoreDecimal>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "RadrootsCoreUnit | null"))]
     pub display_unit: Option<RadrootsCoreUnit>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub display_label: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "RadrootsCoreMoney | null"))]
     pub display_price: Option<RadrootsCoreMoney>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "RadrootsCoreUnit | null"))]
     pub display_price_unit: Option<RadrootsCoreUnit>,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsListingLocation {
     pub primary: String,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub city: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub region: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub country: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "number | null"))]
     pub lat: Option<f64>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "number | null"))]
     pub lng: Option<f64>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub geohash: Option<String>,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsListingImage {
     pub url: String,
-    #[cfg_attr(
-        feature = "ts-rs",
-        ts(optional, type = "RadrootsListingImageSize | null")
-    )]
     pub size: Option<RadrootsListingImageSize>,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsListingImageSize {
@@ -209,95 +129,14 @@ pub struct RadrootsListingImageSize {
     pub h: u32,
 }
 
-#[cfg(all(test, feature = "ts-rs", feature = "std"))]
-mod constants_tests {
-    use super::RADROOTS_LISTING_PRODUCT_TAG_KEYS;
+#[cfg(all(test, feature = "std"))]
+mod tests {
     use crate::farm::RadrootsFarmRef;
-    use std::{
-        fs,
-        path::{Path, PathBuf},
-    };
-
-    fn workspace_root(manifest_dir: &Path) -> PathBuf {
-        let parent = manifest_dir.parent().unwrap_or(manifest_dir);
-        if parent.file_name().and_then(|name| name.to_str()) == Some("crates") {
-            parent.parent().unwrap_or(parent).to_path_buf()
-        } else {
-            parent.to_path_buf()
-        }
-    }
-
-    fn ts_export_dir_from(export_dir: Option<&str>) -> PathBuf {
-        if let Some(export_dir) = export_dir {
-            return PathBuf::from(export_dir);
-        }
-        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        workspace_root(&manifest_dir)
-            .join("target")
-            .join("ts-rs")
-            .join("events")
-    }
-
-    fn ts_export_dir() -> PathBuf {
-        ts_export_dir_from(option_env!("TS_RS_EXPORT_DIR"))
-    }
-
-    fn listing_product_tag_keys_literal() -> String {
-        let mut out = String::from("[");
-        for (idx, key) in RADROOTS_LISTING_PRODUCT_TAG_KEYS.iter().enumerate() {
-            if idx > 0 {
-                out.push_str(", ");
-            }
-            out.push('"');
-            out.push_str(key);
-            out.push('"');
-        }
-        out.push(']');
-        out
-    }
-
-    #[test]
-    fn export_listing_product_tag_keys_const() {
-        let path = ts_export_dir().join("constants.ts");
-        let parent = path.parent().expect("listing export path has parent");
-        fs::create_dir_all(parent).expect("create ts export dir");
-        let keys = listing_product_tag_keys_literal();
-        let content = format!(
-            "import type {{ RadrootsListingProductTagKeys }} from \"./types.js\";\n\nexport const RADROOTS_LISTING_PRODUCT_TAG_KEYS: RadrootsListingProductTagKeys = {keys};\n"
-        );
-        fs::write(&path, content).expect("write constants");
-    }
 
     #[test]
     fn defaults_listing_farm_ref_to_empty_values() {
         let farm_ref = RadrootsFarmRef::default();
         assert!(farm_ref.pubkey.is_empty());
         assert!(farm_ref.d_tag.is_empty());
-    }
-
-    #[test]
-    fn resolves_workspace_root_for_crates_and_non_crates_paths() {
-        let inside_crates = PathBuf::from("/tmp/radroots/crates/events");
-        let non_crates = PathBuf::from("/tmp/radroots/events");
-        assert_eq!(
-            workspace_root(&inside_crates),
-            PathBuf::from("/tmp/radroots")
-        );
-        assert_eq!(workspace_root(&non_crates), PathBuf::from("/tmp/radroots"));
-    }
-
-    #[test]
-    fn resolves_export_dir_for_override_and_fallback() {
-        let override_dir = PathBuf::from("/tmp/radroots_events-ts-export");
-        assert_eq!(
-            ts_export_dir_from(Some("/tmp/radroots_events-ts-export")),
-            override_dir
-        );
-
-        let expected = workspace_root(Path::new(env!("CARGO_MANIFEST_DIR")))
-            .join("target")
-            .join("ts-rs")
-            .join("events");
-        assert_eq!(ts_export_dir_from(None), expected);
     }
 }

@@ -1,11 +1,7 @@
 use radroots_types::types::{IResult, IResultList};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-#[cfg(feature = "ts-rs")]
-use ts_rs::TS;
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Serialize, Deserialize)]
 pub struct GcsLocation {
     pub id: String,
@@ -33,8 +29,6 @@ pub struct GcsLocation {
     pub gc_country_name: Option<String>,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Deserialize, Serialize)]
 pub struct IGcsLocationFields {
     pub d_tag: String,
@@ -43,136 +37,73 @@ pub struct IGcsLocationFields {
     pub geohash: String,
     pub point: String,
     pub polygon: String,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "number | null"))]
     pub accuracy: Option<f64>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "number | null"))]
     pub altitude: Option<f64>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub tag_0: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub label: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "number | null"))]
     pub area: Option<f64>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "number | null"))]
     pub elevation: Option<u32>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub soil: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub climate: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub gc_id: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub gc_name: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub gc_admin1_id: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub gc_admin1_name: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub gc_country_id: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub gc_country_name: Option<String>,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Deserialize, Serialize)]
 pub struct IGcsLocationFieldsPartial {
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub d_tag: Option<serde_json::Value>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "number | null"))]
     pub lat: Option<serde_json::Value>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "number | null"))]
     pub lng: Option<serde_json::Value>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub geohash: Option<serde_json::Value>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub point: Option<serde_json::Value>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub polygon: Option<serde_json::Value>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "number | null"))]
     pub accuracy: Option<serde_json::Value>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "number | null"))]
     pub altitude: Option<serde_json::Value>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub tag_0: Option<serde_json::Value>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub label: Option<serde_json::Value>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "number | null"))]
     pub area: Option<serde_json::Value>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "number | null"))]
     pub elevation: Option<serde_json::Value>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub soil: Option<serde_json::Value>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub climate: Option<serde_json::Value>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub gc_id: Option<serde_json::Value>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub gc_name: Option<serde_json::Value>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub gc_admin1_id: Option<serde_json::Value>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub gc_admin1_name: Option<serde_json::Value>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub gc_country_id: Option<serde_json::Value>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub gc_country_name: Option<serde_json::Value>,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Deserialize, Serialize)]
 pub struct IGcsLocationFieldsFilter {
-    #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub id: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub created_at: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub updated_at: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub d_tag: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub lat: Option<f64>,
-    #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub lng: Option<f64>,
-    #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub geohash: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub point: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub polygon: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub accuracy: Option<f64>,
-    #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub altitude: Option<f64>,
-    #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub tag_0: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub label: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub area: Option<f64>,
-    #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub elevation: Option<u32>,
-    #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub soil: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub climate: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub gc_id: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub gc_name: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub gc_admin1_id: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub gc_admin1_name: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub gc_country_id: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional))]
     pub gc_country_name: Option<String>,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum GcsLocationQueryBindValues {
@@ -205,29 +136,21 @@ impl GcsLocationQueryBindValues {
     }
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Deserialize, Serialize)]
 pub struct GcsLocationTradeProductArgs {
     pub id: String,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Deserialize, Serialize)]
 pub struct GcsLocationFarmArgs {
     pub id: String,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Deserialize, Serialize)]
 pub struct GcsLocationPlotArgs {
     pub id: String,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Clone, Deserialize, Serialize)]
 pub enum GcsLocationFindManyRel {
     #[serde(rename = "on_trade_product")]
@@ -244,49 +167,20 @@ pub enum GcsLocationFindManyRel {
     OffPlot(GcsLocationPlotArgs),
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(
-    feature = "ts-rs",
-    ts(
-        export,
-        export_to = "types.ts",
-        rename = "IGcsLocationCreate",
-        type = "IGcsLocationFields"
-    )
-)]
 pub struct IGcsLocationCreateTs;
 pub type IGcsLocationCreate = IGcsLocationFields;
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(
-    feature = "ts-rs",
-    ts(
-        export,
-        export_to = "types.ts",
-        rename = "IGcsLocationCreateResolve",
-        type = "IResult<GcsLocation>"
-    )
-)]
 pub struct IGcsLocationCreateResolveTs;
 pub type IGcsLocationCreateResolve = IResult<GcsLocation>;
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Deserialize, Serialize)]
 pub struct IGcsLocationFindOneArgs {
     pub on: GcsLocationQueryBindValues,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[derive(Deserialize, Serialize)]
 pub struct IGcsLocationFindOneRelArgs {
     pub rel: GcsLocationFindManyRel,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(
-    feature = "ts-rs",
-    ts(export, export_to = "types.ts", rename = "IGcsLocationFindOne")
-)]
 #[derive(Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum IGcsLocationFindOne {
@@ -294,23 +188,8 @@ pub enum IGcsLocationFindOne {
     Rel(IGcsLocationFindOneRelArgs),
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(
-    feature = "ts-rs",
-    ts(
-        export,
-        export_to = "types.ts",
-        rename = "IGcsLocationFindOneResolve",
-        type = "IResult<GcsLocation>"
-    )
-)]
 pub struct IGcsLocationFindOneResolveTs;
 pub type IGcsLocationFindOneResolve = IResult<Option<GcsLocation>>;
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(
-    feature = "ts-rs",
-    ts(export, export_to = "types.ts", rename = "IGcsLocationFindMany")
-)]
 #[derive(Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum IGcsLocationFindMany {
@@ -321,62 +200,17 @@ pub enum IGcsLocationFindMany {
         rel: GcsLocationFindManyRel,
     },
 }
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(
-    feature = "ts-rs",
-    ts(
-        export,
-        export_to = "types.ts",
-        rename = "IGcsLocationFindManyResolve",
-        type = "IResultList<GcsLocation>"
-    )
-)]
 pub struct IGcsLocationFindManyResolveTs;
 pub type IGcsLocationFindManyResolve = IResultList<GcsLocation>;
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(
-    feature = "ts-rs",
-    ts(
-        export,
-        export_to = "types.ts",
-        rename = "IGcsLocationDelete",
-        type = "IGcsLocationFindOne"
-    )
-)]
 pub struct IGcsLocationDeleteTs;
 pub type IGcsLocationDelete = IGcsLocationFindOne;
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(
-    feature = "ts-rs",
-    ts(
-        export,
-        export_to = "types.ts",
-        rename = "IGcsLocationDeleteResolve",
-        type = "IResult<string>"
-    )
-)]
 pub struct IGcsLocationDeleteResolveTs;
 pub type IGcsLocationDeleteResolve = IResult<String>;
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(
-    feature = "ts-rs",
-    ts(export, export_to = "types.ts", rename = "IGcsLocationUpdate")
-)]
 #[derive(Deserialize, Serialize)]
 pub struct IGcsLocationUpdateArgs {
     pub on: GcsLocationQueryBindValues,
     pub fields: IGcsLocationFieldsPartial,
 }
 pub type IGcsLocationUpdate = IGcsLocationUpdateArgs;
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(
-    feature = "ts-rs",
-    ts(
-        export,
-        export_to = "types.ts",
-        rename = "IGcsLocationUpdateResolve",
-        type = "IResult<GcsLocation>"
-    )
-)]
 pub struct IGcsLocationUpdateResolveTs;
 pub type IGcsLocationUpdateResolve = IResult<GcsLocation>;

@@ -10,10 +10,9 @@ description = "Trade domain model for Radroots"
 repository.workspace = true
 homepage.workspace = true
 readme = "README"
-build = "build.rs"
 
 [features]
-default = ["std", "serde", "serde_json", "ts-rs"]
+default = ["std", "serde", "serde_json"]
 std = ["radroots_core/std", "radroots_events/std", "radroots_events_codec/std"]
 serde = [
   "dep:serde",
@@ -29,7 +28,6 @@ serde_json = [
   "dep:sha2",
   "radroots_events_codec/serde_json",
 ]
-ts-rs = ["dep:ts-rs", "radroots_events/ts-rs", "radroots_events/std"]
 
 [dependencies]
 radroots_core = { workspace = true, default-features = false }
@@ -46,4 +44,3 @@ serde_json = { workspace = true, default-features = false, features = [
 ], optional = true }
 sha2 = { workspace = true, default-features = false, optional = true }
 thiserror = { workspace = true }
-ts-rs = { workspace = true, optional = true }

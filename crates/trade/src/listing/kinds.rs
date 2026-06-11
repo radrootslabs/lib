@@ -1,7 +1,5 @@
 #![forbid(unsafe_code)]
 
-#[cfg(feature = "ts-rs")]
-use ts_rs::TS;
 
 pub const KIND_TRADE_LISTING_VALIDATE_REQ: u16 = 5321;
 pub const KIND_TRADE_LISTING_VALIDATE_RES: u16 = 6321;
@@ -43,16 +41,6 @@ pub const TRADE_LISTING_KINDS: [u16; 15] = [
     KIND_TRADE_LISTING_RECEIPT_REQ,
 ];
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(
-    feature = "ts-rs",
-    ts(
-        export,
-        export_to = "types.ts",
-        rename_all = "SCREAMING_SNAKE_CASE",
-        repr(enum)
-    )
-)]
 #[repr(u16)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TradeListingKind {

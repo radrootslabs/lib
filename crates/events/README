@@ -11,8 +11,7 @@ models, kinds, and tag conventions for the `radroots` core libraries.
  * shared event references, pointers, and kind and tag definitions used across
    event-processing code;
  * portable event model semantics for both `std` and `no_std` builds;
- * optional integration with `serde`, `typeshare`, and `ts-rs` for
-   serialization and cross-language type export.
+ * optional integration with `serde` for serialization.
 
 ## Copyright
 

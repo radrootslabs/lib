@@ -1,6 +1,3 @@
-#[cfg(feature = "ts-rs")]
-use ts_rs::TS;
-
 #[cfg(not(feature = "std"))]
 use alloc::string::String;
 
@@ -11,8 +8,6 @@ pub const RADROOTS_PROFILE_TYPE_TAG_COOP: &str = "radroots:type:coop";
 pub const RADROOTS_PROFILE_TYPE_TAG_ANY: &str = "radroots:type:any";
 pub const RADROOTS_PROFILE_TYPE_TAG_RADROOTSD: &str = "radroots:type:radrootsd";
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Debug, PartialEq, Eq, Copy)]
@@ -45,29 +40,18 @@ pub fn radroots_profile_type_from_tag_value(value: &str) -> Option<RadrootsProfi
     }
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsProfile {
     pub name: String,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub display_name: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub nip05: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub about: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub website: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub picture: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub banner: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub lud06: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub lud16: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub bot: Option<String>,
 }
 

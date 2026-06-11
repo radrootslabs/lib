@@ -3,7 +3,6 @@
 use alloc::{string::String, vec::Vec};
 use core::fmt;
 
-#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsEventsIndexedShardMetadata {
@@ -16,7 +15,6 @@ pub struct RadrootsEventsIndexedShardMetadata {
     pub sha256: String,
 }
 
-#[cfg_attr(feature = "typeshare", typeshare::typeshare)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsEventsIndexedManifest {

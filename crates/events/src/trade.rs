@@ -11,14 +11,10 @@ use radroots_core::{
     RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreDiscountValue, RadrootsCoreMoney,
     RadrootsCoreUnit,
 };
-#[cfg(feature = "ts-rs")]
-use ts_rs::TS;
 
 pub const RADROOTS_TRADE_LISTING_DOMAIN: &str = "trade:listing";
 pub const RADROOTS_TRADE_ENVELOPE_VERSION: u16 = 1;
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsTradeListingParseError {
@@ -50,8 +46,6 @@ impl core::fmt::Display for RadrootsTradeListingParseError {
 #[cfg(feature = "std")]
 impl std::error::Error for RadrootsTradeListingParseError {}
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(
     feature = "serde",
@@ -125,8 +119,6 @@ impl core::fmt::Display for RadrootsTradeListingValidationError {
 #[cfg(feature = "std")]
 impl std::error::Error for RadrootsTradeListingValidationError {}
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeOrderItem {
@@ -134,8 +126,6 @@ pub struct RadrootsTradeOrderItem {
     pub bin_count: u32,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -143,8 +133,6 @@ pub enum RadrootsTradePricingBasis {
     ListingEvent,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -154,8 +142,6 @@ pub enum RadrootsTradeEconomicLineKind {
     RevisionAdjustment,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -164,8 +150,6 @@ pub enum RadrootsTradeEconomicActor {
     Seller,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -174,27 +158,18 @@ pub enum RadrootsTradeEconomicEffect {
     Decrease,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeOrderEconomicItem {
     pub bin_id: String,
     pub bin_count: u32,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreDecimal"))]
     pub quantity_amount: RadrootsCoreDecimal,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreUnit"))]
     pub quantity_unit: RadrootsCoreUnit,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreDecimal"))]
     pub unit_price_amount: RadrootsCoreDecimal,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreCurrency"))]
     pub unit_price_currency: RadrootsCoreCurrency,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreMoney"))]
     pub line_subtotal: RadrootsCoreMoney,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeOrderEconomicLine {
@@ -202,46 +177,32 @@ pub struct RadrootsTradeOrderEconomicLine {
     pub kind: RadrootsTradeEconomicLineKind,
     pub actor: RadrootsTradeEconomicActor,
     pub effect: RadrootsTradeEconomicEffect,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreMoney"))]
     pub amount: RadrootsCoreMoney,
     pub reason: String,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeOrderEconomicTotals {
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreMoney"))]
     pub subtotal: RadrootsCoreMoney,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreMoney"))]
     pub discount_total: RadrootsCoreMoney,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreMoney"))]
     pub adjustment_total: RadrootsCoreMoney,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreMoney"))]
     pub total: RadrootsCoreMoney,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeOrderEconomics {
     pub quote_id: String,
     pub quote_version: u32,
     pub pricing_basis: RadrootsTradePricingBasis,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreCurrency"))]
     pub currency: RadrootsCoreCurrency,
     pub items: Vec<RadrootsTradeOrderEconomicItem>,
     pub discounts: Vec<RadrootsTradeOrderEconomicLine>,
     pub adjustments: Vec<RadrootsTradeOrderEconomicLine>,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreMoney"))]
     pub subtotal: RadrootsCoreMoney,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreMoney"))]
     pub discount_total: RadrootsCoreMoney,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreMoney"))]
     pub adjustment_total: RadrootsCoreMoney,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreMoney"))]
     pub total: RadrootsCoreMoney,
 }
 
@@ -356,8 +317,6 @@ impl RadrootsTradeOrderEconomics {
     }
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(
     feature = "serde",
@@ -370,8 +329,6 @@ pub enum RadrootsTradeOrderChange {
     ItemRemove { item_index: u32 },
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeOrderRevision {
@@ -379,8 +336,6 @@ pub struct RadrootsTradeOrderRevision {
     pub changes: Vec<RadrootsTradeOrderChange>,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -397,8 +352,6 @@ pub enum RadrootsTradeOrderStatus {
     Completed,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeOrderRequested {
@@ -422,8 +375,6 @@ impl RadrootsTradeOrderRequested {
     }
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeOrderRevisionProposed {
@@ -455,8 +406,6 @@ impl RadrootsTradeOrderRevisionProposed {
     }
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case", tag = "decision"))]
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -474,8 +423,6 @@ impl RadrootsTradeOrderRevisionDecision {
     }
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeOrderRevisionDecisionEvent {
@@ -502,8 +449,6 @@ impl RadrootsTradeOrderRevisionDecisionEvent {
     }
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeInventoryCommitment {
@@ -511,8 +456,6 @@ pub struct RadrootsTradeInventoryCommitment {
     pub bin_count: u32,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case", tag = "decision"))]
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -536,8 +479,6 @@ impl RadrootsTradeOrderDecision {
     }
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeOrderDecisionEvent {
@@ -558,8 +499,6 @@ impl RadrootsTradeOrderDecisionEvent {
     }
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -579,8 +518,6 @@ impl RadrootsActiveTradeFulfillmentState {
     }
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeFulfillmentUpdated {
@@ -605,8 +542,6 @@ impl RadrootsTradeFulfillmentUpdated {
     }
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeOrderCancelled {
@@ -627,8 +562,6 @@ impl RadrootsTradeOrderCancelled {
     }
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeBuyerReceipt {
@@ -637,7 +570,6 @@ pub struct RadrootsTradeBuyerReceipt {
     pub buyer_pubkey: String,
     pub seller_pubkey: String,
     pub received: bool,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub issue: Option<String>,
     pub received_at: u64,
 }
@@ -662,8 +594,6 @@ impl RadrootsTradeBuyerReceipt {
     }
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -673,8 +603,6 @@ pub enum RadrootsTradePaymentMethod {
     Other,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradePaymentRecorded {
@@ -688,14 +616,10 @@ pub struct RadrootsTradePaymentRecorded {
     pub quote_id: String,
     pub quote_version: u32,
     pub economics_digest: String,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreDecimal"))]
     pub amount: RadrootsCoreDecimal,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreCurrency"))]
     pub currency: RadrootsCoreCurrency,
     pub method: RadrootsTradePaymentMethod,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub reference: Option<String>,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "number | null"))]
     pub paid_at: Option<u64>,
 }
 
@@ -723,8 +647,6 @@ impl RadrootsTradePaymentRecorded {
     }
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -733,8 +655,6 @@ pub enum RadrootsTradeSettlementDecision {
     Rejected,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeSettlementDecisionEvent {
@@ -749,12 +669,9 @@ pub struct RadrootsTradeSettlementDecisionEvent {
     pub quote_id: String,
     pub quote_version: u32,
     pub economics_digest: String,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreDecimal"))]
     pub amount: RadrootsCoreDecimal,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreCurrency"))]
     pub currency: RadrootsCoreCurrency,
     pub decision: RadrootsTradeSettlementDecision,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub reason: Option<String>,
 }
 
@@ -791,44 +708,32 @@ impl RadrootsTradeSettlementDecisionEvent {
     }
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeQuestion {
     pub question_id: String,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeAnswer {
     pub question_id: String,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeDiscountRequest {
     pub discount_id: String,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreDiscountValue"))]
     pub value: RadrootsCoreDiscountValue,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeDiscountOffer {
     pub discount_id: String,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreDiscountValue"))]
     pub value: RadrootsCoreDiscountValue,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(
     feature = "serde",
@@ -836,18 +741,10 @@ pub struct RadrootsTradeDiscountOffer {
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsTradeDiscountDecision {
-    Accept {
-        #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreDiscountValue"))]
-        value: RadrootsCoreDiscountValue,
-    },
-    Decline {
-        #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
-        reason: Option<String>,
-    },
+    Accept { value: RadrootsCoreDiscountValue },
+    Decline { reason: Option<String> },
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(
     feature = "serde",
@@ -862,16 +759,12 @@ pub enum RadrootsTradeFulfillmentStatus {
     Cancelled,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeFulfillmentUpdate {
     pub status: RadrootsTradeFulfillmentStatus,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeReceipt {
@@ -879,56 +772,39 @@ pub struct RadrootsTradeReceipt {
     pub at: u64,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeListingValidateRequest {
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "RadrootsNostrEventPtr | null"))]
     pub listing_event: Option<RadrootsNostrEventPtr>,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeListingValidateResult {
     pub valid: bool,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsTradeListingValidationError[]"))]
     pub errors: Vec<RadrootsTradeListingValidationError>,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeOrderResponse {
     pub accepted: bool,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub reason: Option<String>,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeOrderRevisionResponse {
     pub accepted: bool,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub reason: Option<String>,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeListingCancel {
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub reason: Option<String>,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -937,8 +813,6 @@ pub enum RadrootsTradeDomain {
     TradeListing,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -947,8 +821,6 @@ pub enum RadrootsTradeTransportLane {
     Public,
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsActiveTradeMessageType {
@@ -1040,8 +912,6 @@ impl RadrootsActiveTradeMessageType {
     }
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1185,8 +1055,6 @@ impl RadrootsTradeMessageType {
     }
 }
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsActiveTradeEnvelope<T> {
@@ -1259,8 +1127,6 @@ impl core::fmt::Display for RadrootsActiveTradeEnvelopeError {
 #[cfg(feature = "std")]
 impl std::error::Error for RadrootsActiveTradeEnvelopeError {}
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeEnvelope<T> {
@@ -1268,7 +1134,6 @@ pub struct RadrootsTradeEnvelope<T> {
     pub domain: RadrootsTradeDomain,
     #[cfg_attr(feature = "serde", serde(rename = "type"))]
     pub message_type: RadrootsTradeMessageType,
-    #[cfg_attr(feature = "ts-rs", ts(optional, type = "string | null"))]
     pub order_id: Option<String>,
     pub listing_addr: String,
     pub payload: T,
@@ -1717,8 +1582,6 @@ impl core::fmt::Display for RadrootsTradeEnvelopeError {
 #[cfg(feature = "std")]
 impl std::error::Error for RadrootsTradeEnvelopeError {}
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(
     feature = "serde",

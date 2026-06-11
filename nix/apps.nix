@@ -72,7 +72,6 @@ in
     description = "Run repository guard scripts";
     runtimeInputs = common.runtimeInputs.stable;
     command = ''
-      ./scripts/ci/guard_committed_ts_artifacts.sh
       ./scripts/ci/guard_no_legacy_identifiers.sh
     '';
   };

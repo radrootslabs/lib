@@ -35,7 +35,6 @@ fs-persistence = ["std", "dep:radroots_runtime_paths"]
 radroots_events = { workspace = true, optional = true, default-features = true, features = [
   "std",
   "serde",
-  "typeshare",
 ] }
 radroots_log = { workspace = true, features = ["std"] }
 radroots_nostr_accounts = { workspace = true, optional = true, default-features = true }

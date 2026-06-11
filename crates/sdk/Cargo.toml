@@ -39,8 +39,6 @@ signer-adapters = [
   "dep:radroots_nostr_connect",
   "dep:radroots_nostr_signer",
 ]
-ts-rs = ["radroots_events/ts-rs", "radroots_trade/ts-rs"]
-typeshare = ["radroots_events/typeshare"]
 
 [dependencies]
 radroots_events = { workspace = true, default-features = false }

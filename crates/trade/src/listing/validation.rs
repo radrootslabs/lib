@@ -15,14 +15,10 @@ use radroots_events::{
     },
     trade::RadrootsTradeListingValidationError as TradeListingValidationError,
 };
-#[cfg(feature = "ts-rs")]
-use ts_rs::TS;
 
 use crate::listing::codec::listing_from_event_parts;
 use crate::listing::dvm::TradeListingAddress;
 
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[cfg_attr(feature = "ts-rs", ts(export, export_to = "types.ts"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsTradeListing {
@@ -33,13 +29,9 @@ pub struct RadrootsTradeListing {
     pub description: String,
     pub product_type: String,
     pub primary_bin_id: String,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreQuantity"))]
     pub bin_quantity: RadrootsCoreQuantity,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreUnit"))]
     pub unit: RadrootsCoreUnit,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreMoney"))]
     pub unit_price: RadrootsCoreMoney,
-    #[cfg_attr(feature = "ts-rs", ts(type = "RadrootsCoreDecimal"))]
     pub inventory_available: RadrootsCoreDecimal,
     pub availability: RadrootsListingAvailability,
     pub location: RadrootsListingLocation,

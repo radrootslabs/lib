@@ -11,8 +11,8 @@ libraries.
  * default identity path constants and JSON file support behind feature flags;
  * encrypted identity-file and public-profile storage helpers for local runtime
    consumers;
- * optional NIP-49, `secrecy`, `zeroize`, and `ts-rs` support for protected key
-   material and shared model export.
+ * optional NIP-49, `secrecy`, and `zeroize` support for protected key
+   material.
 
 ## Copyright
 

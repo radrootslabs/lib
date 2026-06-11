@@ -33,5 +33,4 @@ serde-wasm-bindgen = { workspace = true }
 thiserror = { workspace = true }
 wasm-bindgen = { workspace = true }
 js-sys = { workspace = true }
-ts-rs = { workspace = true }
 uuid = { workspace = true, features = ["v4", "fast-rng", "js"] }
