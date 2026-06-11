@@ -1,7 +1,6 @@
 pub use radroots_trade as upstream;
 
-pub const TYPES_TS: &str =
-    include_str!("../../../testdata/baseline/current-radroots-generated/trade/types.ts");
+pub const TYPES_TS: &str = include_str!("typescript/types.ts");
 
 #[cfg(test)]
 mod tests {

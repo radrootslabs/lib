@@ -1,7 +1,6 @@
 pub use radroots_identity as upstream;
 
-pub const CONSTANTS_TS: &str =
-    include_str!("../../../testdata/baseline/current-radroots-generated/identity/constants.ts");
+pub const CONSTANTS_TS: &str = include_str!("typescript/constants.ts");
 
 #[cfg(test)]
 mod tests {
