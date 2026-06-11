@@ -1,0 +1,13 @@
+[package]
+name = "radroots_trade_bindings"
+description = "Generated bindings for Radroots trade contracts"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish = false
+
+[dependencies]
+radroots_trade = { workspace = true }
