@@ -2,8 +2,9 @@
 use alloc::{string::String, vec::Vec};
 
 use radroots_events::{
-    kinds::is_nip51_standard_list_kind,
+    kinds::{KIND_LIST_READ_WRITE_RELAYS, is_nip51_standard_list_kind},
     list::{RadrootsList, RadrootsListEntry},
+    tags::TAG_R,
 };
 
 use crate::error::EventEncodeError;
@@ -47,12 +48,46 @@ pub fn to_wire_parts_with_kind(
     if !is_nip51_standard_list_kind(kind) {
         return Err(EventEncodeError::InvalidKind(kind));
     }
+    if kind == KIND_LIST_READ_WRITE_RELAYS {
+        validate_relay_entries(&list.entries)?;
+    }
     let tags = list_build_tags(list)?;
     Ok(WireEventParts {
         kind,
         content: list.content.clone(),
         tags,
     })
+}
+
+fn validate_relay_entries(entries: &[RadrootsListEntry]) -> Result<(), EventEncodeError> {
+    if entries.is_empty() {
+        return Err(EventEncodeError::EmptyRequiredField("relay.entries"));
+    }
+    for entry in entries {
+        if entry.tag != TAG_R {
+            return Err(EventEncodeError::InvalidField("relay.tag"));
+        }
+        let Some(url) = entry.values.first() else {
+            return Err(EventEncodeError::EmptyRequiredField("relay.url"));
+        };
+        if !is_ws_relay_url(url) {
+            return Err(EventEncodeError::InvalidField("relay.url"));
+        }
+        if entry.values.len() > 2 {
+            return Err(EventEncodeError::InvalidField("relay.marker"));
+        }
+        if let Some(marker) = entry.values.get(1) {
+            if marker != "read" && marker != "write" {
+                return Err(EventEncodeError::InvalidField("relay.marker"));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn is_ws_relay_url(value: &str) -> bool {
+    (value.starts_with("wss://") && value.len() > "wss://".len())
+        || (value.starts_with("ws://") && value.len() > "ws://".len())
 }
 
 #[cfg(feature = "serde_json")]

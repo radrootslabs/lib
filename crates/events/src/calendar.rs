@@ -110,6 +110,11 @@ pub struct RadrootsCalendarTimeEvent {
 pub struct RadrootsCalendarEventRsvp {
     pub d_tag: String,
     pub event: RadrootsSocialTarget,
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub event_id: Option<String>,
     pub status: RadrootsCalendarEventRsvpStatus,
     #[cfg_attr(
         feature = "serde",
@@ -214,6 +219,7 @@ mod tests {
                 event_kind: Some(31923),
                 relays: None,
             },
+            event_id: Some("b".repeat(64)),
             status: RadrootsCalendarEventRsvpStatus::Tentative,
             free_busy: Some(RadrootsCalendarEventFreeBusy::Busy),
             note: Some("depends on harvest".to_string()),
@@ -221,6 +227,10 @@ mod tests {
         };
 
         assert_eq!(rsvp.status, RadrootsCalendarEventRsvpStatus::Tentative);
+        assert_eq!(
+            rsvp.event_id.as_deref(),
+            Some("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+        );
         assert_eq!(rsvp.free_busy, Some(RadrootsCalendarEventFreeBusy::Busy));
     }
 }

@@ -21,7 +21,7 @@ use radroots_events::{
     },
     plot::RadrootsPlotRef,
     resource_area::RadrootsResourceAreaRef,
-    tags::TAG_D,
+    tags::{TAG_D, TAG_PUBLISHED_AT},
 };
 
 use crate::d_tag::validate_d_tag_tag;
@@ -259,6 +259,7 @@ pub fn listing_from_event_parts(
     let mut delivery_method: Option<RadrootsListingDeliveryMethod> = None;
     let mut images: Vec<RadrootsListingImage> = Vec::new();
     let mut geohash: Option<String> = None;
+    let mut published_at: Option<u64> = None;
 
     let has_structured_location = tags
         .iter()
@@ -273,6 +274,9 @@ pub fn listing_from_event_parts(
             "title" => set_if_empty(&mut product.title, tag.get(1)),
             "category" => set_if_empty(&mut product.category, tag.get(1)),
             "summary" => set_optional(&mut product.summary, tag.get(1)),
+            TAG_PUBLISHED_AT => {
+                published_at = Some(parse_u64_tag_value(tag.get(1), TAG_PUBLISHED_AT)?);
+            }
             "process" => set_optional(&mut product.process, tag.get(1)),
             "lot" => set_optional(&mut product.lot, tag.get(1)),
             "location" => {
@@ -490,7 +494,7 @@ pub fn listing_from_event_parts(
 
     Ok(RadrootsListing {
         d_tag,
-        published_at: None,
+        published_at,
         farm: farm_ref,
         product,
         primary_bin_id,

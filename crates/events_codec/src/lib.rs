@@ -10,6 +10,8 @@ mod field_helpers;
 pub mod job;
 pub mod parsed;
 pub mod profile;
+pub mod report;
+pub mod repost;
 mod social_helpers;
 pub mod tag_builders;
 pub mod wire;

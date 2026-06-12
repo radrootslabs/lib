@@ -1,29 +1,46 @@
 #![cfg(feature = "serde_json")]
 
 use radroots_events::{
-    calendar::{RadrootsCalendarDateEvent, RadrootsCalendarTimeEvent},
-    kinds::{KIND_CALENDAR_DATE_EVENT, KIND_CALENDAR_TIME_EVENT, KIND_POST},
-    social::{RadrootsCalendarDateValue, RadrootsCalendarParticipant, RadrootsSocialLocation},
+    calendar::{
+        RadrootsCalendar, RadrootsCalendarDateEvent, RadrootsCalendarEventRsvp,
+        RadrootsCalendarTimeEvent,
+    },
+    kinds::{
+        KIND_ARTICLE, KIND_CALENDAR, KIND_CALENDAR_DATE_EVENT, KIND_CALENDAR_EVENT_RSVP,
+        KIND_CALENDAR_TIME_EVENT, KIND_POST,
+    },
+    social::{
+        RadrootsCalendarDateValue, RadrootsCalendarEventFreeBusy, RadrootsCalendarEventRsvpStatus,
+        RadrootsCalendarParticipant, RadrootsSocialLocation, RadrootsSocialTarget,
+    },
     tags::{
-        TAG_D, TAG_D_DAY, TAG_END, TAG_END_TZID, TAG_G, TAG_IMAGE, TAG_LOCATION, TAG_P, TAG_START,
-        TAG_START_TZID, TAG_SUMMARY, TAG_TITLE,
+        TAG_A, TAG_D, TAG_D_DAY, TAG_E, TAG_END, TAG_END_TZID, TAG_FREE_BUSY, TAG_G, TAG_IMAGE,
+        TAG_LOCATION, TAG_P, TAG_START, TAG_START_TZID, TAG_STATUS, TAG_SUMMARY, TAG_TITLE,
     },
 };
 use radroots_events_codec::{
     calendar::{
         decode::{
-            calendar_date_event_from_event, calendar_time_event_from_event, date_data_from_event,
-            date_parsed_from_event, time_data_from_event, time_parsed_from_event,
+            calendar_data_from_event, calendar_date_event_from_event, calendar_from_event,
+            calendar_parsed_from_event, calendar_time_event_from_event, date_data_from_event,
+            date_parsed_from_event, rsvp_data_from_event, rsvp_from_event, rsvp_parsed_from_event,
+            time_data_from_event, time_parsed_from_event,
         },
         encode::{
-            calendar_date_event_build_tags, calendar_time_event_build_tags, date_to_wire_parts,
-            date_to_wire_parts_with_kind, time_to_wire_parts, time_to_wire_parts_with_kind,
+            calendar_collection_build_tags, calendar_date_event_build_tags,
+            calendar_time_event_build_tags, calendar_to_wire_parts,
+            calendar_to_wire_parts_with_kind, date_to_wire_parts, date_to_wire_parts_with_kind,
+            rsvp_build_tags, rsvp_to_wire_parts, rsvp_to_wire_parts_with_kind, time_to_wire_parts,
+            time_to_wire_parts_with_kind,
         },
     },
     error::{EventEncodeError, EventParseError},
 };
 
 const VALID_D_TAG: &str = "CCCCCCCCCCCCCCCCCCCCCA";
+const EVENT_ID: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const EVENT_AUTHOR: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+const EVENT_D_TAG: &str = "EEEEEEEEEEEEEEEEEEEEEA";
 
 fn sample_date_event() -> RadrootsCalendarDateEvent {
     RadrootsCalendarDateEvent {
@@ -62,6 +79,42 @@ fn sample_time_event() -> RadrootsCalendarTimeEvent {
         }),
         summary: Some("Prepare CSA bins".to_string()),
         image: None,
+        participants: Some(vec![RadrootsCalendarParticipant {
+            pubkey: "crew_pubkey".to_string(),
+            relay: None,
+            role: Some("participant".to_string()),
+        }]),
+    }
+}
+
+fn sample_calendar_collection() -> RadrootsCalendar {
+    RadrootsCalendar {
+        d_tag: VALID_D_TAG.to_string(),
+        title: "Farm calendar".to_string(),
+        events: vec![RadrootsSocialTarget::Address {
+            address: format!("{KIND_CALENDAR_TIME_EVENT}:{EVENT_AUTHOR}:{EVENT_D_TAG}"),
+            author: Some(EVENT_AUTHOR.to_string()),
+            event_kind: Some(KIND_CALENDAR_TIME_EVENT),
+            relays: Some(vec!["wss://relay.example.test".to_string()]),
+        }],
+        summary: Some("CSA and harvest schedule".to_string()),
+        image: Some("https://media.example.test/calendar.jpg".to_string()),
+    }
+}
+
+fn sample_rsvp() -> RadrootsCalendarEventRsvp {
+    RadrootsCalendarEventRsvp {
+        d_tag: VALID_D_TAG.to_string(),
+        event: RadrootsSocialTarget::Address {
+            address: format!("{KIND_CALENDAR_TIME_EVENT}:{EVENT_AUTHOR}:{EVENT_D_TAG}"),
+            author: Some(EVENT_AUTHOR.to_string()),
+            event_kind: Some(KIND_CALENDAR_TIME_EVENT),
+            relays: Some(vec!["wss://relay.example.test".to_string()]),
+        },
+        event_id: Some(EVENT_ID.to_string()),
+        status: RadrootsCalendarEventRsvpStatus::Accepted,
+        free_busy: Some(RadrootsCalendarEventFreeBusy::Busy),
+        note: Some("I can attend after harvest".to_string()),
         participants: Some(vec![RadrootsCalendarParticipant {
             pubkey: "crew_pubkey".to_string(),
             relay: None,
@@ -141,6 +194,60 @@ fn calendar_time_event_to_wire_parts_roundtrips_tags() {
 }
 
 #[test]
+fn calendar_collection_to_wire_parts_roundtrips_event_addresses() {
+    let calendar = sample_calendar_collection();
+    let parts = calendar_to_wire_parts(&calendar).unwrap();
+
+    assert_eq!(parts.kind, KIND_CALENDAR);
+    assert!(parts.content.is_empty());
+    assert!(has_tag(&parts.tags, TAG_D, VALID_D_TAG));
+    assert!(has_tag(&parts.tags, TAG_TITLE, "Farm calendar"));
+    assert!(has_tag(
+        &parts.tags,
+        TAG_A,
+        format!("{KIND_CALENDAR_TIME_EVENT}:{EVENT_AUTHOR}:{EVENT_D_TAG}").as_str()
+    ));
+
+    let decoded = calendar_from_event(parts.kind, &parts.tags, &parts.content).unwrap();
+    assert_eq!(decoded.d_tag, VALID_D_TAG);
+    assert_eq!(decoded.title, "Farm calendar");
+    assert_eq!(decoded.events.len(), 1);
+    assert!(matches!(
+        decoded.events[0],
+        RadrootsSocialTarget::Address {
+            event_kind: Some(KIND_CALENDAR_TIME_EVENT),
+            ..
+        }
+    ));
+}
+
+#[test]
+fn calendar_rsvp_to_wire_parts_roundtrips_status_event_id_and_participants() {
+    let rsvp = sample_rsvp();
+    let parts = rsvp_to_wire_parts(&rsvp).unwrap();
+
+    assert_eq!(parts.kind, KIND_CALENDAR_EVENT_RSVP);
+    assert_eq!(parts.content, "I can attend after harvest");
+    assert!(has_tag(&parts.tags, TAG_D, VALID_D_TAG));
+    assert!(has_tag(
+        &parts.tags,
+        TAG_A,
+        format!("{KIND_CALENDAR_TIME_EVENT}:{EVENT_AUTHOR}:{EVENT_D_TAG}").as_str()
+    ));
+    assert!(has_tag(&parts.tags, TAG_E, EVENT_ID));
+    assert!(has_tag(&parts.tags, TAG_STATUS, "accepted"));
+    assert!(has_tag(&parts.tags, TAG_FREE_BUSY, "busy"));
+    assert!(has_tag(&parts.tags, TAG_P, "crew_pubkey"));
+
+    let decoded = rsvp_from_event(parts.kind, &parts.tags, &parts.content).unwrap();
+    assert_eq!(decoded.event_id.as_deref(), Some(EVENT_ID));
+    assert_eq!(decoded.status, RadrootsCalendarEventRsvpStatus::Accepted);
+    assert_eq!(decoded.free_busy, Some(RadrootsCalendarEventFreeBusy::Busy));
+    assert_eq!(decoded.note.as_deref(), Some("I can attend after harvest"));
+    assert_eq!(decoded.participants.as_ref().map(Vec::len), Some(1));
+}
+
+#[test]
 fn calendar_codecs_reject_wrong_kind_invalid_dates_and_nonempty_content() {
     assert!(matches!(
         date_to_wire_parts_with_kind(&sample_date_event(), KIND_POST),
@@ -189,6 +296,63 @@ fn calendar_codecs_reject_wrong_kind_invalid_dates_and_nonempty_content() {
             expected: "31923",
             got: KIND_POST
         }
+    ));
+}
+
+#[test]
+fn calendar_collection_and_rsvp_reject_missing_or_invalid_required_tags() {
+    assert!(matches!(
+        calendar_to_wire_parts_with_kind(&sample_calendar_collection(), KIND_POST),
+        Err(EventEncodeError::InvalidKind(KIND_POST))
+    ));
+    assert!(matches!(
+        rsvp_to_wire_parts_with_kind(&sample_rsvp(), KIND_POST),
+        Err(EventEncodeError::InvalidKind(KIND_POST))
+    ));
+
+    let mut calendar = sample_calendar_collection();
+    calendar.events.clear();
+    assert!(matches!(
+        calendar_collection_build_tags(&calendar),
+        Err(EventEncodeError::EmptyRequiredField("events"))
+    ));
+
+    let mut rsvp = sample_rsvp();
+    if let RadrootsSocialTarget::Address { event_kind, .. } = &mut rsvp.event {
+        *event_kind = Some(KIND_ARTICLE);
+    }
+    assert!(matches!(
+        rsvp_build_tags(&rsvp),
+        Err(EventEncodeError::InvalidField("event"))
+    ));
+
+    let mut tags = calendar_collection_build_tags(&sample_calendar_collection()).unwrap();
+    tags.retain(|tag| tag.first().map(|value| value.as_str()) != Some(TAG_A));
+    assert!(matches!(
+        calendar_from_event(KIND_CALENDAR, &tags, ""),
+        Err(EventParseError::MissingTag(TAG_A))
+    ));
+
+    let mut tags = rsvp_build_tags(&sample_rsvp()).unwrap();
+    let status = tags
+        .iter_mut()
+        .find(|tag| tag.first().map(|value| value.as_str()) == Some(TAG_STATUS))
+        .expect("status tag");
+    status[1] = "maybe".to_string();
+    assert!(matches!(
+        rsvp_from_event(KIND_CALENDAR_EVENT_RSVP, &tags, ""),
+        Err(EventParseError::InvalidTag(TAG_STATUS))
+    ));
+
+    let mut tags = rsvp_build_tags(&sample_rsvp()).unwrap();
+    let free_busy = tags
+        .iter_mut()
+        .find(|tag| tag.first().map(|value| value.as_str()) == Some(TAG_FREE_BUSY))
+        .expect("fb tag");
+    free_busy[1] = "unknown".to_string();
+    assert!(matches!(
+        rsvp_from_event(KIND_CALENDAR_EVENT_RSVP, &tags, ""),
+        Err(EventParseError::InvalidTag(TAG_FREE_BUSY))
     ));
 }
 
@@ -245,4 +409,56 @@ fn calendar_wrappers_preserve_event_metadata() {
     )
     .unwrap();
     assert_eq!(time_parsed.event.created_at, 8);
+
+    let calendar = sample_calendar_collection();
+    let calendar_parts = calendar_to_wire_parts(&calendar).unwrap();
+    let calendar_data = calendar_data_from_event(
+        "calendar_id".to_string(),
+        "author".to_string(),
+        9,
+        calendar_parts.kind,
+        calendar_parts.content.clone(),
+        calendar_parts.tags.clone(),
+    )
+    .unwrap();
+    assert_eq!(calendar_data.kind, KIND_CALENDAR);
+    assert_eq!(calendar_data.data.title, "Farm calendar");
+
+    let calendar_parsed = calendar_parsed_from_event(
+        "calendar_id".to_string(),
+        "author".to_string(),
+        9,
+        calendar_parts.kind,
+        calendar_parts.content,
+        calendar_parts.tags,
+        "sig".to_string(),
+    )
+    .unwrap();
+    assert_eq!(calendar_parsed.event.sig, "sig");
+
+    let rsvp = sample_rsvp();
+    let rsvp_parts = rsvp_to_wire_parts(&rsvp).unwrap();
+    let rsvp_data = rsvp_data_from_event(
+        "rsvp_id".to_string(),
+        "author".to_string(),
+        10,
+        rsvp_parts.kind,
+        rsvp_parts.content.clone(),
+        rsvp_parts.tags.clone(),
+    )
+    .unwrap();
+    assert_eq!(rsvp_data.kind, KIND_CALENDAR_EVENT_RSVP);
+    assert_eq!(rsvp_data.data.event_id.as_deref(), Some(EVENT_ID));
+
+    let rsvp_parsed = rsvp_parsed_from_event(
+        "rsvp_id".to_string(),
+        "author".to_string(),
+        10,
+        rsvp_parts.kind,
+        rsvp_parts.content,
+        rsvp_parts.tags,
+        "sig".to_string(),
+    )
+    .unwrap();
+    assert_eq!(rsvp_parsed.event.created_at, 10);
 }

@@ -5,7 +5,7 @@ use radroots_core::{
     RadrootsCoreDiscountThreshold, RadrootsCoreDiscountValue, RadrootsCoreMoney,
     RadrootsCoreQuantity, RadrootsCoreQuantityPrice, RadrootsCoreUnit,
 };
-use radroots_events::tags::TAG_D;
+use radroots_events::tags::{TAG_D, TAG_PUBLISHED_AT};
 use radroots_events::{
     farm::RadrootsFarmRef,
     kinds::{KIND_LISTING, KIND_LISTING_DRAFT, KIND_POST},
@@ -222,13 +222,38 @@ fn listing_from_event_rejects_wrong_kind() {
 
 #[test]
 fn draft_listing_roundtrip_from_event() {
-    let listing = sample_listing("AAAAAAAAAAAAAAAAAAAAAQ");
+    let mut listing = sample_listing("AAAAAAAAAAAAAAAAAAAAAQ");
+    listing.published_at = Some(1_781_895_600);
     let parts = to_wire_parts_with_kind(&listing, KIND_LISTING_DRAFT).unwrap();
 
     let decoded = listing_from_event(parts.kind, &parts.tags, &parts.content).unwrap();
     assert_eq!(parts.kind, KIND_LISTING_DRAFT);
     assert_eq!(parts.content, "# Widget");
     assert_eq!(decoded.d_tag, listing.d_tag);
+    assert_eq!(decoded.published_at, Some(1_781_895_600));
+}
+
+#[test]
+fn listing_roundtrips_published_at_for_active_and_rejects_bad_value() {
+    let mut listing = sample_listing("AAAAAAAAAAAAAAAAAAAAAg");
+    listing.published_at = Some(1_781_895_600);
+    let parts = to_wire_parts_with_kind(&listing, KIND_LISTING).unwrap();
+    assert!(parts.tags.iter().any(|tag| {
+        tag.first().map(|value| value.as_str()) == Some(TAG_PUBLISHED_AT)
+            && tag.get(1).map(|value| value.as_str()) == Some("1781895600")
+    }));
+
+    let decoded = listing_from_event(parts.kind, &parts.tags, &parts.content).unwrap();
+    assert_eq!(decoded.published_at, Some(1_781_895_600));
+
+    let mut tags = parts.tags;
+    let published_at = tags
+        .iter_mut()
+        .find(|tag| tag.first().map(|value| value.as_str()) == Some(TAG_PUBLISHED_AT))
+        .expect("published_at tag");
+    published_at[1] = "bad".to_string();
+    let err = listing_from_event(KIND_LISTING, &tags, "# Widget").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag(TAG_PUBLISHED_AT)));
 }
 
 #[test]

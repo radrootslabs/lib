@@ -22,7 +22,7 @@ use radroots_events::listing::{
 };
 use radroots_events::plot::RadrootsPlotRef;
 use radroots_events::resource_area::RadrootsResourceAreaRef;
-use radroots_events::tags::TAG_D;
+use radroots_events::tags::{TAG_D, TAG_PUBLISHED_AT};
 
 use crate::d_tag::validate_d_tag;
 use crate::error::EventEncodeError;
@@ -132,6 +132,9 @@ pub fn listing_tags_with_options(
     push_tag_value(&mut tags, "category", &product.category);
     if let Some(summary) = product.summary.as_deref() {
         push_tag_value(&mut tags, "summary", summary);
+    }
+    if let Some(published_at) = listing.published_at {
+        tags.push(vec![TAG_PUBLISHED_AT.to_string(), published_at.to_string()]);
     }
     if let Some(process) = product.process.as_deref() {
         push_tag_value(&mut tags, "process", process);

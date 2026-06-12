@@ -3,8 +3,9 @@ use alloc::{string::String, vec::Vec};
 
 use radroots_events::{
     RadrootsNostrEvent,
-    kinds::is_nip51_standard_list_kind,
+    kinds::{KIND_LIST_READ_WRITE_RELAYS, is_nip51_standard_list_kind},
     list::{RadrootsList, RadrootsListEntry},
+    tags::TAG_R,
 };
 
 use crate::error::EventParseError;
@@ -46,8 +47,42 @@ pub fn list_from_tags(
             got: kind,
         });
     }
+    if kind == KIND_LIST_READ_WRITE_RELAYS {
+        validate_relay_tags(tags)?;
+    }
     let entries = list_entries_from_tags(tags)?;
     Ok(RadrootsList { content, entries })
+}
+
+fn validate_relay_tags(tags: &[Vec<String>]) -> Result<(), EventParseError> {
+    if tags.is_empty() {
+        return Err(EventParseError::MissingTag(TAG_R));
+    }
+    for tag in tags {
+        if tag.first().map(|value| value.as_str()) != Some(TAG_R) {
+            return Err(EventParseError::InvalidTag(TAG_R));
+        }
+        let Some(url) = tag.get(1) else {
+            return Err(EventParseError::InvalidTag(TAG_R));
+        };
+        if !is_ws_relay_url(url) {
+            return Err(EventParseError::InvalidTag(TAG_R));
+        }
+        if tag.len() > 3 {
+            return Err(EventParseError::InvalidTag(TAG_R));
+        }
+        if let Some(marker) = tag.get(2) {
+            if marker != "read" && marker != "write" {
+                return Err(EventParseError::InvalidTag(TAG_R));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn is_ws_relay_url(value: &str) -> bool {
+    (value.starts_with("wss://") && value.len() > "wss://".len())
+        || (value.starts_with("ws://") && value.len() > "ws://".len())
 }
 
 pub fn data_from_event(
