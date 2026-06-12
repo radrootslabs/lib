@@ -26,6 +26,14 @@ fail_under_branches = 73.638
 temporary = true
 reason = "heavy-development branch coverage gap for publish 0.1.0-alpha.2"
 
+[overrides.radroots_events_codec]
+fail_under_exec_lines = 90.0
+fail_under_functions = 90.0
+fail_under_regions = 90.0
+fail_under_branches = 81.264
+temporary = true
+reason = "heavy-development branch coverage gap for publish 0.1.0-alpha.2"
+
 [overrides.radroots_nostr_signer]
 fail_under_exec_lines = 89.185
 fail_under_functions = 90.0

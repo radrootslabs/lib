@@ -8,6 +8,11 @@ no_default_features = true
 features = []
 test_threads = 1
 
+[profiles.crates."radroots_events_codec"]
+no_default_features = false
+features = ["serde_json"]
+test_threads = 1
+
 [profiles.crates."radroots_nostr_runtime"]
 no_default_features = true
 features = ["std"]

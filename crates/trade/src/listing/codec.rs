@@ -16,7 +16,7 @@ use radroots_events::listing::{
 };
 use radroots_events::plot::RadrootsPlotRef;
 use radroots_events::resource_area::RadrootsResourceAreaRef;
-use radroots_events::tags::TAG_D;
+use radroots_events::tags::{TAG_D, TAG_PUBLISHED_AT};
 pub(crate) use radroots_events::trade::RadrootsTradeListingParseError as TradeListingParseError;
 use radroots_events_codec::d_tag::is_d_tag_base64url;
 use radroots_events_codec::error::EventEncodeError;
@@ -54,6 +54,13 @@ fn parse_currency(s: &str) -> Result<RadrootsCoreCurrency, TradeListingParseErro
 fn parse_unit(s: &str) -> Result<RadrootsCoreUnit, TradeListingParseError> {
     s.parse::<RadrootsCoreUnit>()
         .map_err(|_| TradeListingParseError::InvalidUnit)
+}
+
+fn parse_u64_tag_value(value: Option<&String>, field: &str) -> Result<u64, TradeListingParseError> {
+    value
+        .ok_or_else(|| TradeListingParseError::InvalidTag(field.to_string()))?
+        .parse::<u64>()
+        .map_err(|_| TradeListingParseError::InvalidNumber(field.to_string()))
 }
 
 fn parse_d_tag(tags: &[Vec<String>]) -> Result<String, TradeListingParseError> {
@@ -193,6 +200,7 @@ fn listing_from_tags(
     let mut delivery_method: Option<RadrootsListingDeliveryMethod> = None;
     let mut images: Vec<RadrootsListingImage> = Vec::new();
     let mut geohash: Option<String> = None;
+    let mut published_at: Option<u64> = None;
 
     let has_structured_location = tags
         .iter()
@@ -208,6 +216,9 @@ fn listing_from_tags(
             "title" => set_if_empty(&mut product.title, tag.get(1)),
             "category" => set_if_empty(&mut product.category, tag.get(1)),
             "summary" => set_optional(&mut product.summary, tag.get(1)),
+            TAG_PUBLISHED_AT => {
+                published_at = Some(parse_u64_tag_value(tag.get(1), TAG_PUBLISHED_AT)?);
+            }
             "process" => set_optional(&mut product.process, tag.get(1)),
             "lot" => set_optional(&mut product.lot, tag.get(1)),
             "location" => {
@@ -462,6 +473,7 @@ fn listing_from_tags(
 
     Ok(RadrootsListing {
         d_tag,
+        published_at,
         farm: farm_ref,
         product,
         primary_bin_id,
@@ -735,6 +747,42 @@ mod tests {
             listing.bins[0].display_unit.expect("display unit").code(),
             "kg"
         );
+    }
+
+    #[test]
+    fn listing_from_tags_roundtrips_published_at_tag() {
+        let mut tags = base_trade_tags();
+        tags.push(vec![TAG_PUBLISHED_AT.into(), "1781895600".into()]);
+
+        let listing = listing_from_tags(
+            &tags,
+            listing_d_tag(),
+            farm_ref(),
+            "seller".to_string(),
+            None,
+            None,
+        )
+        .expect("listing");
+
+        assert_eq!(listing.published_at, Some(1_781_895_600));
+
+        let published_at = tags
+            .iter_mut()
+            .find(|tag| tag.first().map(|value| value.as_str()) == Some(TAG_PUBLISHED_AT))
+            .expect("published_at tag");
+        published_at[1] = "bad".to_string();
+
+        let err = listing_from_tags(
+            &tags,
+            listing_d_tag(),
+            farm_ref(),
+            "seller".to_string(),
+            None,
+            None,
+        )
+        .unwrap_err();
+
+        assert_eq!(parse_error_tag(err), TAG_PUBLISHED_AT.to_string());
     }
 
     #[test]
