@@ -6,6 +6,7 @@ extern crate alloc;
 pub mod d_tag;
 pub mod error;
 pub mod event_ref;
+mod field_helpers;
 pub mod job;
 pub mod parsed;
 pub mod profile;
