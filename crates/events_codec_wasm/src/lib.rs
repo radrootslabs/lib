@@ -1,5 +1,10 @@
 #![forbid(unsafe_code)]
 
+use radroots_events::article::RadrootsArticle;
+use radroots_events::calendar::{
+    RadrootsCalendar, RadrootsCalendarDateEvent, RadrootsCalendarEventRsvp,
+    RadrootsCalendarTimeEvent,
+};
 use radroots_events::comment::RadrootsComment;
 use radroots_events::coop::RadrootsCoop;
 use radroots_events::document::RadrootsDocument;
@@ -7,6 +12,7 @@ use radroots_events::farm::RadrootsFarm;
 use radroots_events::farm_crdt::RadrootsFarmCrdtChange;
 use radroots_events::farm_file::RadrootsFarmFileMetadata;
 use radroots_events::farm_workspace::RadrootsFarmWorkspaceManifest;
+use radroots_events::file_metadata::RadrootsFileMetadata;
 use radroots_events::follow::RadrootsFollow;
 use radroots_events::gift_wrap::RadrootsGiftWrap;
 use radroots_events::group::{
@@ -25,9 +31,17 @@ use radroots_events::listing::RadrootsListing;
 use radroots_events::message::RadrootsMessage;
 use radroots_events::message_file::RadrootsMessageFile;
 use radroots_events::plot::RadrootsPlot;
+use radroots_events::post::RadrootsPost;
 use radroots_events::reaction::RadrootsReaction;
 use radroots_events::relay_auth::RadrootsRelayAuth;
+use radroots_events::report::RadrootsReport;
+use radroots_events::repost::{RadrootsGenericRepost, RadrootsRepost};
 use radroots_events::seal::RadrootsSeal;
+use radroots_events_codec::article::encode::article_build_tags;
+use radroots_events_codec::calendar::encode::{
+    calendar_collection_build_tags, calendar_date_event_build_tags, calendar_time_event_build_tags,
+    rsvp_build_tags,
+};
 use radroots_events_codec::comment::encode::comment_build_tags;
 use radroots_events_codec::coop::encode::coop_build_tags;
 use radroots_events_codec::document::encode::document_build_tags;
@@ -35,6 +49,7 @@ use radroots_events_codec::farm::encode::farm_build_tags;
 use radroots_events_codec::farm_crdt::encode::farm_crdt_change_build_tags_with_author;
 use radroots_events_codec::farm_file::encode::farm_file_metadata_build_tags;
 use radroots_events_codec::farm_workspace::encode::farm_workspace_build_tags;
+use radroots_events_codec::file_metadata::encode::file_metadata_build_tags;
 use radroots_events_codec::follow::encode::follow_build_tags;
 use radroots_events_codec::gift_wrap::encode::gift_wrap_build_tags;
 use radroots_events_codec::group::encode::{
@@ -56,8 +71,11 @@ use radroots_events_codec::listing::tags::{
 use radroots_events_codec::message::encode::message_build_tags;
 use radroots_events_codec::message_file::encode::message_file_build_tags;
 use radroots_events_codec::plot::encode::plot_build_tags;
+use radroots_events_codec::post::encode::post_build_tags;
 use radroots_events_codec::reaction::encode::reaction_build_tags;
 use radroots_events_codec::relay_auth::encode::relay_auth_build_tags;
+use radroots_events_codec::report::encode::report_build_tags;
+use radroots_events_codec::repost::encode::{generic_repost_build_tags, repost_build_tags};
 use radroots_events_codec::seal::encode::seal_build_tags;
 use serde::de::DeserializeOwned;
 #[cfg(target_arch = "wasm32")]
@@ -131,9 +149,65 @@ pub fn listing_tags_full(listing_json: &str) -> Result<String, RadrootsJsValue> 
     build_tags_json::<RadrootsListing, _, _>(listing_json, listing_tags_full_impl)
 }
 
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = post_tags))]
+pub fn post_tags(post_json: &str) -> Result<String, RadrootsJsValue> {
+    build_tags_json::<RadrootsPost, _, _>(post_json, post_build_tags)
+}
+
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = comment_tags))]
 pub fn comment_tags(comment_json: &str) -> Result<String, RadrootsJsValue> {
     build_tags_json::<RadrootsComment, _, _>(comment_json, comment_build_tags)
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = article_tags))]
+pub fn article_tags(article_json: &str) -> Result<String, RadrootsJsValue> {
+    build_tags_json::<RadrootsArticle, _, _>(article_json, article_build_tags)
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = file_metadata_tags))]
+pub fn file_metadata_tags(metadata_json: &str) -> Result<String, RadrootsJsValue> {
+    build_tags_json::<RadrootsFileMetadata, _, _>(metadata_json, file_metadata_build_tags)
+}
+
+#[cfg_attr(
+    target_arch = "wasm32",
+    wasm_bindgen(js_name = calendar_date_event_tags)
+)]
+pub fn calendar_date_event_tags(event_json: &str) -> Result<String, RadrootsJsValue> {
+    build_tags_json::<RadrootsCalendarDateEvent, _, _>(event_json, calendar_date_event_build_tags)
+}
+
+#[cfg_attr(
+    target_arch = "wasm32",
+    wasm_bindgen(js_name = calendar_time_event_tags)
+)]
+pub fn calendar_time_event_tags(event_json: &str) -> Result<String, RadrootsJsValue> {
+    build_tags_json::<RadrootsCalendarTimeEvent, _, _>(event_json, calendar_time_event_build_tags)
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = calendar_tags))]
+pub fn calendar_tags(calendar_json: &str) -> Result<String, RadrootsJsValue> {
+    build_tags_json::<RadrootsCalendar, _, _>(calendar_json, calendar_collection_build_tags)
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = calendar_rsvp_tags))]
+pub fn calendar_rsvp_tags(rsvp_json: &str) -> Result<String, RadrootsJsValue> {
+    build_tags_json::<RadrootsCalendarEventRsvp, _, _>(rsvp_json, rsvp_build_tags)
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = repost_tags))]
+pub fn repost_tags(repost_json: &str) -> Result<String, RadrootsJsValue> {
+    build_tags_json::<RadrootsRepost, _, _>(repost_json, repost_build_tags)
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = generic_repost_tags))]
+pub fn generic_repost_tags(repost_json: &str) -> Result<String, RadrootsJsValue> {
+    build_tags_json::<RadrootsGenericRepost, _, _>(repost_json, generic_repost_build_tags)
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = report_tags))]
+pub fn report_tags(report_json: &str) -> Result<String, RadrootsJsValue> {
+    build_tags_json::<RadrootsReport, _, _>(report_json, report_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = follow_tags))]
@@ -339,6 +413,12 @@ mod tests {
     use radroots_events::job_request::{RadrootsJobInput, RadrootsJobParam};
     use radroots_events::listing::{RadrootsListingBin, RadrootsListingProduct};
     use radroots_events::relay_auth::RadrootsRelayAuth;
+    use radroots_events::social::{
+        RadrootsCalendarDateValue, RadrootsCalendarEventFreeBusy, RadrootsCalendarEventRsvpStatus,
+        RadrootsCalendarParticipant, RadrootsReportFileTarget, RadrootsReportType,
+        RadrootsSocialFarmAnchor, RadrootsSocialLocation, RadrootsSocialMediaDimensions,
+        RadrootsSocialMediaMetadata, RadrootsSocialTarget,
+    };
 
     fn sample_listing() -> RadrootsListing {
         let quantity =
@@ -385,6 +465,226 @@ mod tests {
             delivery_method: None,
             location: None,
             images: None,
+        }
+    }
+
+    fn synthetic_pubkey(seed: char) -> String {
+        seed.to_string().repeat(64)
+    }
+
+    fn synthetic_event_id(seed: char) -> String {
+        seed.to_string().repeat(64)
+    }
+
+    fn social_farm_anchor() -> RadrootsSocialFarmAnchor {
+        RadrootsSocialFarmAnchor {
+            farm: RadrootsFarmRef {
+                pubkey: synthetic_pubkey('a'),
+                d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
+            },
+            relays: Some(vec!["wss://relay.example.test".to_string()]),
+        }
+    }
+
+    fn event_target(kind: u32, seed: char) -> RadrootsSocialTarget {
+        RadrootsSocialTarget::Event {
+            id: synthetic_event_id(seed),
+            author: Some(synthetic_pubkey('b')),
+            event_kind: Some(kind),
+            relays: Some(vec!["wss://relay.example.test".to_string()]),
+        }
+    }
+
+    fn address_target(kind: u32, d_tag: &str) -> RadrootsSocialTarget {
+        let author = synthetic_pubkey('c');
+        RadrootsSocialTarget::Address {
+            address: format!("{kind}:{author}:{d_tag}"),
+            author: Some(author),
+            event_kind: Some(kind),
+            relays: Some(vec!["wss://relay2.example.test".to_string()]),
+        }
+    }
+
+    fn social_location() -> RadrootsSocialLocation {
+        RadrootsSocialLocation {
+            name: Some("field edge".to_string()),
+            geohash: Some("c23nb62w20st".to_string()),
+        }
+    }
+
+    fn sample_post() -> RadrootsPost {
+        RadrootsPost {
+            content: "field update".to_string(),
+            farm: Some(social_farm_anchor()),
+            address_refs: Some(vec![address_target(30023, "AAAAAAAAAAAAAAAAAAAAAQ")]),
+            location: Some(social_location()),
+            topics: Some(vec!["soil".to_string(), "market".to_string()]),
+            quote_refs: Some(vec![event_target(30023, 'd')]),
+            media: Some(vec![RadrootsSocialMediaMetadata {
+                url: Some("https://media.example.test/field.jpg".to_string()),
+                mime_type: Some("image/jpeg".to_string()),
+                sha256: Some(
+                    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string(),
+                ),
+                original_sha256: None,
+                size: Some(4096),
+                dimensions: Some(RadrootsSocialMediaDimensions {
+                    width: 1200,
+                    height: 800,
+                }),
+                blurhash: None,
+                thumbnails: None,
+                image: None,
+                summary: Some("field photo".to_string()),
+                alt: Some("rows after harvest".to_string()),
+                fallback: None,
+                magnet: Some("magnet:?xt=urn:btih:abc".to_string()),
+                content_hashes: Some(vec!["sha256:field".to_string()]),
+                services: Some(vec!["https://media.example.test".to_string()]),
+                imeta: None,
+            }]),
+        }
+    }
+
+    fn sample_article() -> RadrootsArticle {
+        RadrootsArticle {
+            d_tag: "AAAAAAAAAAAAAAAAAAAAAg".to_string(),
+            title: "soil notes".to_string(),
+            content: "# soil notes".to_string(),
+            summary: Some("cover crop observations".to_string()),
+            image: Some("https://media.example.test/article.jpg".to_string()),
+            published_at: Some(1_780_000_000),
+            farm: Some(social_farm_anchor()),
+            location: Some(social_location()),
+            topics: Some(vec!["soil".to_string(), "cover-crops".to_string()]),
+        }
+    }
+
+    fn sample_public_file_metadata() -> RadrootsFileMetadata {
+        RadrootsFileMetadata {
+            url: "https://media.example.test/public.jpg".to_string(),
+            mime_type: "image/jpeg".to_string(),
+            sha256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string(),
+            original_sha256: Some(
+                "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789".to_string(),
+            ),
+            size: Some(4096),
+            dimensions: Some(RadrootsSocialMediaDimensions {
+                width: 1200,
+                height: 800,
+            }),
+            blurhash: None,
+            thumbnails: None,
+            summary: Some("public field photo".to_string()),
+            alt: Some("rows after harvest".to_string()),
+            fallback: Some("https://media.example.test/fallback.jpg".to_string()),
+            magnet: Some("magnet:?xt=urn:btih:abc".to_string()),
+            content_hashes: Some(vec!["sha256:field".to_string()]),
+            services: Some(vec!["https://media.example.test".to_string()]),
+            content: Some("caption".to_string()),
+        }
+    }
+
+    fn sample_calendar_date_event() -> RadrootsCalendarDateEvent {
+        RadrootsCalendarDateEvent {
+            d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
+            title: "market day".to_string(),
+            start: "2026-06-20".to_string(),
+            end: Some("2026-06-21".to_string()),
+            days: Some(vec![RadrootsCalendarDateValue {
+                value: "2026-06-20".to_string(),
+            }]),
+            location: Some(social_location()),
+            summary: Some("weekly pickup".to_string()),
+            image: None,
+            participants: Some(vec![RadrootsCalendarParticipant {
+                pubkey: synthetic_pubkey('e'),
+                relay: Some("wss://relay.example.test".to_string()),
+                role: Some("host".to_string()),
+            }]),
+        }
+    }
+
+    fn sample_calendar_time_event() -> RadrootsCalendarTimeEvent {
+        RadrootsCalendarTimeEvent {
+            d_tag: "AAAAAAAAAAAAAAAAAAAA-A".to_string(),
+            title: "wash pack shift".to_string(),
+            start: 1_781_895_600,
+            end: Some(1_781_899_200),
+            start_tzid: Some("America/Vancouver".to_string()),
+            end_tzid: Some("America/Vancouver".to_string()),
+            location: Some(social_location()),
+            summary: Some("field crew".to_string()),
+            image: None,
+            participants: None,
+        }
+    }
+
+    fn sample_calendar() -> RadrootsCalendar {
+        RadrootsCalendar {
+            d_tag: "AAAAAAAAAAAAAAAAAAAA_A".to_string(),
+            title: "farm calendar".to_string(),
+            events: vec![address_target(31923, "AAAAAAAAAAAAAAAAAAAA-A")],
+            summary: Some("field schedule".to_string()),
+            image: None,
+        }
+    }
+
+    fn sample_calendar_rsvp() -> RadrootsCalendarEventRsvp {
+        RadrootsCalendarEventRsvp {
+            d_tag: "AAAAAAAAAAAAAAAAAAAAAQ".to_string(),
+            event: address_target(31923, "AAAAAAAAAAAAAAAAAAAA-A"),
+            event_id: Some(synthetic_event_id('f')),
+            status: RadrootsCalendarEventRsvpStatus::Tentative,
+            free_busy: Some(RadrootsCalendarEventFreeBusy::Busy),
+            note: Some("depends on harvest".to_string()),
+            participants: None,
+        }
+    }
+
+    fn sample_comment() -> RadrootsComment {
+        RadrootsComment {
+            root: event_target(30023, 'a'),
+            parent: address_target(30023, "AAAAAAAAAAAAAAAAAAAAAg"),
+            content: "great notes".to_string(),
+        }
+    }
+
+    fn sample_reaction() -> RadrootsReaction {
+        RadrootsReaction {
+            target: address_target(30023, "AAAAAAAAAAAAAAAAAAAAAg"),
+            content: String::new(),
+        }
+    }
+
+    fn sample_repost() -> RadrootsRepost {
+        RadrootsRepost {
+            target: event_target(1, 'b'),
+            content: Some("field update".to_string()),
+        }
+    }
+
+    fn sample_generic_repost() -> RadrootsGenericRepost {
+        RadrootsGenericRepost {
+            target: address_target(30023, "AAAAAAAAAAAAAAAAAAAAAg"),
+            target_kind: 30023,
+            content: Some("article share".to_string()),
+        }
+    }
+
+    fn sample_report() -> RadrootsReport {
+        RadrootsReport {
+            reported_pubkey: synthetic_pubkey('b'),
+            report_type: RadrootsReportType::Spam,
+            event: Some(event_target(1, 'c')),
+            file: Some(RadrootsReportFileTarget {
+                sha256: Some(
+                    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string(),
+                ),
+                url: Some("https://media.example.test/bad.jpg".to_string()),
+                magnet: None,
+            }),
+            content: Some("spam report".to_string()),
         }
     }
 
@@ -528,10 +828,20 @@ mod tests {
 
     #[test]
     fn bindings_reject_invalid_json() {
-        let bindings: [fn(&str) -> Result<String, RadrootsJsValue>; 36] = [
+        let bindings: [fn(&str) -> Result<String, RadrootsJsValue>; 46] = [
             listing_tags,
             listing_tags_full,
+            post_tags,
             comment_tags,
+            article_tags,
+            file_metadata_tags,
+            calendar_date_event_tags,
+            calendar_time_event_tags,
+            calendar_tags,
+            calendar_rsvp_tags,
+            repost_tags,
+            generic_repost_tags,
+            report_tags,
             follow_tags,
             document_tags,
             coop_tags,
@@ -586,6 +896,73 @@ mod tests {
         let request_tags: Vec<Vec<String>> =
             serde_json::from_str(&request_tags_json).expect("request tags json");
         assert!(!request_tags.is_empty());
+    }
+
+    #[test]
+    fn social_bindings_encode_to_json_when_input_is_valid() {
+        assert_tags_json(post_tags(
+            &serde_json::to_string(&sample_post()).expect("post json"),
+        ));
+        assert_tags_json(comment_tags(
+            &serde_json::to_string(&sample_comment()).expect("comment json"),
+        ));
+        assert_tags_json(article_tags(
+            &serde_json::to_string(&sample_article()).expect("article json"),
+        ));
+        assert_tags_json(file_metadata_tags(
+            &serde_json::to_string(&sample_public_file_metadata()).expect("file json"),
+        ));
+        assert_tags_json(calendar_date_event_tags(
+            &serde_json::to_string(&sample_calendar_date_event()).expect("date json"),
+        ));
+        assert_tags_json(calendar_time_event_tags(
+            &serde_json::to_string(&sample_calendar_time_event()).expect("time json"),
+        ));
+        assert_tags_json(calendar_tags(
+            &serde_json::to_string(&sample_calendar()).expect("calendar json"),
+        ));
+        assert_tags_json(calendar_rsvp_tags(
+            &serde_json::to_string(&sample_calendar_rsvp()).expect("rsvp json"),
+        ));
+        assert_tags_json(reaction_tags(
+            &serde_json::to_string(&sample_reaction()).expect("reaction json"),
+        ));
+        assert_tags_json(repost_tags(
+            &serde_json::to_string(&sample_repost()).expect("repost json"),
+        ));
+        assert_tags_json(generic_repost_tags(
+            &serde_json::to_string(&sample_generic_repost()).expect("generic repost json"),
+        ));
+        assert_tags_json(report_tags(
+            &serde_json::to_string(&sample_report()).expect("report json"),
+        ));
+    }
+
+    #[test]
+    fn social_bindings_surface_builder_errors() {
+        let mut article = sample_article();
+        article.d_tag.clear();
+        assert!(article_tags(&serde_json::to_string(&article).expect("article json")).is_err());
+
+        let mut comment = sample_comment();
+        comment.root = event_target(1, 'a');
+        assert!(comment_tags(&serde_json::to_string(&comment).expect("comment json")).is_err());
+
+        let mut reaction = sample_reaction();
+        reaction.target = RadrootsSocialTarget::External {
+            id: "https://example.test/object".to_string(),
+            external_kind: "web".to_string(),
+            hint: None,
+        };
+        assert!(reaction_tags(&serde_json::to_string(&reaction).expect("reaction json")).is_err());
+
+        let mut rsvp = sample_calendar_rsvp();
+        rsvp.event = event_target(31923, 'f');
+        assert!(calendar_rsvp_tags(&serde_json::to_string(&rsvp).expect("rsvp json")).is_err());
+
+        let mut report = sample_report();
+        report.reported_pubkey.clear();
+        assert!(report_tags(&serde_json::to_string(&report).expect("report json")).is_err());
     }
 
     #[test]
