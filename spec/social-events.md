@@ -116,6 +116,14 @@ helpers, and conformance vectors exist. Production-v1 repost, report, calendar c
 behavior remains substrate-visible by default unless a consumer proves that it should be promoted
 into the curated operation surface.
 
+`radroots_events_codec_wasm` exposes the canonical JSON-to-tags helper names `post_tags`,
+`comment_tags`, `reaction_tags`, `article_tags`, `file_metadata_tags`,
+`calendar_date_event_tags`, `calendar_time_event_tags`, `calendar_tags`,
+`calendar_event_rsvp_tags`, `repost_tags`, `generic_repost_tags`, and `report_tags` for the public
+social substrate. The same wasm crate exposes `farm_workspace_manifest_tags`,
+`farm_crdt_change_tags`, `farm_file_metadata_tags`, `relay_auth_tags`, and `http_auth_tags` for the
+field event substrate.
+
 ## Conformance Boundary
 
 Every new social codec and every upgraded existing social codec must have deterministic valid and

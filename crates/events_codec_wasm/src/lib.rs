@@ -190,8 +190,11 @@ pub fn calendar_tags(calendar_json: &str) -> Result<String, RadrootsJsValue> {
     build_tags_json::<RadrootsCalendar, _, _>(calendar_json, calendar_collection_build_tags)
 }
 
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = calendar_rsvp_tags))]
-pub fn calendar_rsvp_tags(rsvp_json: &str) -> Result<String, RadrootsJsValue> {
+#[cfg_attr(
+    target_arch = "wasm32",
+    wasm_bindgen(js_name = calendar_event_rsvp_tags)
+)]
+pub fn calendar_event_rsvp_tags(rsvp_json: &str) -> Result<String, RadrootsJsValue> {
     build_tags_json::<RadrootsCalendarEventRsvp, _, _>(rsvp_json, rsvp_build_tags)
 }
 
@@ -285,24 +288,27 @@ pub fn gift_wrap_tags(gift_wrap_json: &str) -> Result<String, RadrootsJsValue> {
     build_tags_json::<RadrootsGiftWrap, _, _>(gift_wrap_json, gift_wrap_build_tags)
 }
 
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = farm_workspace_tags))]
-pub fn farm_workspace_tags(workspace_json: &str) -> Result<String, RadrootsJsValue> {
+#[cfg_attr(
+    target_arch = "wasm32",
+    wasm_bindgen(js_name = farm_workspace_manifest_tags)
+)]
+pub fn farm_workspace_manifest_tags(workspace_json: &str) -> Result<String, RadrootsJsValue> {
     build_tags_json::<RadrootsFarmWorkspaceManifest, _, _>(
         workspace_json,
         farm_workspace_build_tags,
     )
 }
 
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = farm_crdt_tags))]
-pub fn farm_crdt_tags(input_json: &str) -> Result<String, RadrootsJsValue> {
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = farm_crdt_change_tags))]
+pub fn farm_crdt_change_tags(input_json: &str) -> Result<String, RadrootsJsValue> {
     let input = parse_json::<FarmCrdtTagsInput>(input_json)?;
     let tags = farm_crdt_change_build_tags_with_author(&input.change, Some(&input.author_pubkey))
         .map_err(err_js)?;
     tags_to_json(tags)
 }
 
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = farm_file_tags))]
-pub fn farm_file_tags(file_json: &str) -> Result<String, RadrootsJsValue> {
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = farm_file_metadata_tags))]
+pub fn farm_file_metadata_tags(file_json: &str) -> Result<String, RadrootsJsValue> {
     build_tags_json::<RadrootsFarmFileMetadata, _, _>(file_json, farm_file_metadata_build_tags)
 }
 
@@ -411,6 +417,7 @@ mod tests {
     use radroots_events::http_auth::RadrootsHttpAuth;
     use radroots_events::job::JobInputType;
     use radroots_events::job_request::{RadrootsJobInput, RadrootsJobParam};
+    use radroots_events::kinds::KIND_FARM_FILE_METADATA;
     use radroots_events::listing::{RadrootsListingBin, RadrootsListingProduct};
     use radroots_events::relay_auth::RadrootsRelayAuth;
     use radroots_events::social::{
@@ -735,7 +742,7 @@ mod tests {
                 url: "https://media.example.invalid/farm/field-group".to_string(),
                 service: "RadrootsPrivateMedia".to_string(),
             }],
-            supported_kinds: vec![78, 30078],
+            supported_kinds: vec![78, 30078, KIND_FARM_FILE_METADATA],
             protocol_version: RADROOTS_FARM_WORKSPACE_PROTOCOL_VERSION.to_string(),
             created_at_ms: 1_780_000_000_000,
             updated_at_ms: None,
@@ -803,7 +810,7 @@ mod tests {
             is_restricted: true,
             is_closed: false,
             is_hidden: false,
-            supported_kinds: Some(vec![78, 30078]),
+            supported_kinds: Some(vec![78, 30078, KIND_FARM_FILE_METADATA]),
         }
     }
 
@@ -832,6 +839,13 @@ mod tests {
         serde_json::from_str(&json).expect("tags")
     }
 
+    fn has_tag(tags: &[Vec<String>], key: &str, value: &str) -> bool {
+        tags.iter().any(|tag| {
+            tag.first().map(|entry| entry.as_str()) == Some(key)
+                && tag.get(1).map(|entry| entry.as_str()) == Some(value)
+        })
+    }
+
     #[test]
     fn bindings_reject_invalid_json() {
         let bindings: [fn(&str) -> Result<String, RadrootsJsValue>; 46] = [
@@ -844,7 +858,7 @@ mod tests {
             calendar_date_event_tags,
             calendar_time_event_tags,
             calendar_tags,
-            calendar_rsvp_tags,
+            calendar_event_rsvp_tags,
             repost_tags,
             generic_repost_tags,
             report_tags,
@@ -863,9 +877,9 @@ mod tests {
             message_file_tags,
             seal_tags,
             gift_wrap_tags,
-            farm_workspace_tags,
-            farm_crdt_tags,
-            farm_file_tags,
+            farm_workspace_manifest_tags,
+            farm_crdt_change_tags,
+            farm_file_metadata_tags,
             relay_auth_tags,
             http_auth_tags,
             group_put_user_tags,
@@ -921,13 +935,14 @@ mod tests {
         assert_tags_json(calendar_date_event_tags(
             &serde_json::to_string(&sample_calendar_date_event()).expect("date json"),
         ));
-        assert_tags_json(calendar_time_event_tags(
+        let time_tags = tags_json(calendar_time_event_tags(
             &serde_json::to_string(&sample_calendar_time_event()).expect("time json"),
         ));
+        assert!(has_tag(&time_tags, "D", "2026-06-20"));
         assert_tags_json(calendar_tags(
             &serde_json::to_string(&sample_calendar()).expect("calendar json"),
         ));
-        assert_tags_json(calendar_rsvp_tags(
+        assert_tags_json(calendar_event_rsvp_tags(
             &serde_json::to_string(&sample_calendar_rsvp()).expect("rsvp json"),
         ));
         assert_tags_json(reaction_tags(
@@ -964,7 +979,9 @@ mod tests {
 
         let mut rsvp = sample_calendar_rsvp();
         rsvp.event = event_target(31923, 'f');
-        assert!(calendar_rsvp_tags(&serde_json::to_string(&rsvp).expect("rsvp json")).is_err());
+        assert!(
+            calendar_event_rsvp_tags(&serde_json::to_string(&rsvp).expect("rsvp json")).is_err()
+        );
 
         let mut report = sample_report();
         report.reported_pubkey.clear();
@@ -975,17 +992,17 @@ mod tests {
     fn field_bindings_encode_to_json_when_input_is_valid() {
         let workspace_json =
             serde_json::to_string(&sample_workspace_manifest()).expect("workspace json");
-        assert_tags_json(farm_workspace_tags(&workspace_json));
+        assert_tags_json(farm_workspace_manifest_tags(&workspace_json));
 
         let crdt_json = serde_json::json!({
             "change": sample_crdt_change(),
             "author_pubkey": "author_pubkey"
         })
         .to_string();
-        assert_tags_json(farm_crdt_tags(&crdt_json));
+        assert_tags_json(farm_crdt_change_tags(&crdt_json));
 
         let file_json = serde_json::to_string(&sample_file_metadata()).expect("file json");
-        assert_tags_json(farm_file_tags(&file_json));
+        assert_tags_json(farm_file_metadata_tags(&file_json));
 
         let relay_auth_json = serde_json::to_string(&RadrootsRelayAuth {
             relay: "wss://relay.example.invalid/farm/field-group".to_string(),
@@ -1091,7 +1108,8 @@ mod tests {
         assert!(metadata_tags.contains(&vec![
             "supported_kinds".to_string(),
             "78".to_string(),
-            "30078".to_string()
+            "30078".to_string(),
+            KIND_FARM_FILE_METADATA.to_string()
         ]));
         assert_tags_json(group_admins_tags(
             &serde_json::to_string(&RadrootsGroupAdmins {
