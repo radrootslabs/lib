@@ -1,6 +1,6 @@
 use radroots_events::{
     farm::RadrootsFarmRef,
-    kinds::{KIND_COMMENT, KIND_POST},
+    kinds::{KIND_ARTICLE, KIND_COMMENT, KIND_POST},
     post::RadrootsPost,
     social::{
         RadrootsSocialFarmAnchor, RadrootsSocialLocation, RadrootsSocialMediaMetadata,
@@ -12,7 +12,9 @@ use radroots_events_codec::error::{EventEncodeError, EventParseError};
 use radroots_events_codec::post::decode::{
     data_from_event, parsed_from_event, post_from_content, post_from_event,
 };
-use radroots_events_codec::post::encode::{post_build_tags, to_wire_parts};
+use radroots_events_codec::post::encode::{
+    post_build_tags, to_wire_parts, to_wire_parts_with_kind,
+};
 
 const QUOTE_ID: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 const FARM_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAA";
@@ -53,6 +55,24 @@ fn post_to_wire_parts_sets_kind_and_content() {
     assert_eq!(parts.kind, KIND_POST);
     assert_eq!(parts.content, "hello");
     assert!(parts.tags.is_empty());
+}
+
+#[test]
+fn post_to_wire_parts_with_kind_rejects_non_post_kind() {
+    let post = RadrootsPost {
+        content: "hello".to_string(),
+        farm: None,
+        address_refs: None,
+        location: None,
+        topics: None,
+        quote_refs: None,
+        media: None,
+    };
+
+    assert!(matches!(
+        to_wire_parts_with_kind(&post, KIND_ARTICLE),
+        Err(EventEncodeError::InvalidKind(KIND_ARTICLE))
+    ));
 }
 
 #[test]

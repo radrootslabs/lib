@@ -12,7 +12,7 @@ use radroots_events::{
         KIND_FARM_WORKSPACE_MANIFEST, RADROOTS_FARM_WORKSPACE_SCHEMA, RADROOTS_FARM_WORKSPACE_TAG,
         RadrootsFarmWorkspaceManifest,
     },
-    kinds::{KIND_FARM, KIND_FARM_CRDT_CHANGE},
+    kinds::{KIND_FARM, KIND_FARM_CRDT_CHANGE, KIND_FARM_FILE_METADATA},
     tags::{TAG_A, TAG_D, TAG_H, TAG_P, TAG_T},
 };
 
@@ -144,6 +144,11 @@ fn validate_manifest_content(
         .supported_kinds
         .contains(&KIND_FARM_WORKSPACE_MANIFEST)
         || !manifest.supported_kinds.contains(&KIND_FARM_CRDT_CHANGE)
+    {
+        return Err(EventParseError::InvalidJson("supported_kinds"));
+    }
+    if !manifest.media_servers.is_empty()
+        && !manifest.supported_kinds.contains(&KIND_FARM_FILE_METADATA)
     {
         return Err(EventParseError::InvalidJson("supported_kinds"));
     }

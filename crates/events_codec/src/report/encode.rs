@@ -53,6 +53,7 @@ pub fn to_wire_parts_with_kind(
 
 fn validate_report(report: &RadrootsReport) -> Result<(), EventEncodeError> {
     validate_non_empty_field(&report.reported_pubkey, "reported_pubkey")?;
+    validate_lowercase_hex_64(&report.reported_pubkey, "reported_pubkey")?;
     if let Some(file) = report.file.as_ref() {
         validate_file_target(file)?;
     }

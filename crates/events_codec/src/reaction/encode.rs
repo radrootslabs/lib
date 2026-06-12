@@ -33,6 +33,9 @@ pub fn to_wire_parts_with_kind(
     reaction: &RadrootsReaction,
     kind: u32,
 ) -> Result<WireEventParts, EventEncodeError> {
+    if kind != DEFAULT_KIND {
+        return Err(EventEncodeError::InvalidKind(kind));
+    }
     let tags = reaction_build_tags(reaction)?;
     Ok(WireEventParts {
         kind,

@@ -61,6 +61,9 @@ pub fn to_wire_parts_with_kind(
     post: &RadrootsPost,
     kind: u32,
 ) -> Result<WireEventParts, EventEncodeError> {
+    if kind != DEFAULT_KIND {
+        return Err(EventEncodeError::InvalidKind(kind));
+    }
     if post.content.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("content"));
     }

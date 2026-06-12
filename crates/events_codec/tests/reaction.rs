@@ -1,5 +1,5 @@
 use radroots_events::{
-    kinds::{KIND_ARTICLE, KIND_POST, KIND_REACTION},
+    kinds::{KIND_ARTICLE, KIND_COMMENT, KIND_POST, KIND_REACTION},
     reaction::RadrootsReaction,
     social::RadrootsSocialTarget,
     tags::TAG_E_ROOT,
@@ -113,14 +113,15 @@ fn reaction_to_wire_parts_accepts_empty_plus_minus_emoji_and_custom_content() {
 }
 
 #[test]
-fn reaction_to_wire_parts_with_kind_keeps_requested_kind() {
+fn reaction_to_wire_parts_with_kind_rejects_non_reaction_kind() {
     let reaction = RadrootsReaction {
         target: event_target(),
         content: "+".to_string(),
     };
-    let parts = to_wire_parts_with_kind(&reaction, KIND_POST).unwrap();
-    assert_eq!(parts.kind, KIND_POST);
-    assert_eq!(parts.content, "+");
+    assert!(matches!(
+        to_wire_parts_with_kind(&reaction, KIND_COMMENT),
+        Err(EventEncodeError::InvalidKind(KIND_COMMENT))
+    ));
 }
 
 #[test]

@@ -1,6 +1,9 @@
 #![cfg(feature = "serde_json")]
 
 use radroots_events::{
+    farm_crdt::RadrootsFarmCrdtDocumentKind,
+    farm_file::{RadrootsFarmFileDimensions, RadrootsFarmFileMetadata},
+    farm_workspace::RadrootsFarmWorkspaceRef,
     file_metadata::RadrootsFileMetadata,
     kinds::{KIND_POST, KIND_PUBLIC_FILE_METADATA},
     social::{RadrootsSocialMediaDimensions, RadrootsSocialMediaThumbnail},
@@ -11,6 +14,9 @@ use radroots_events::{
 };
 use radroots_events_codec::{
     error::{EventEncodeError, EventParseError},
+    farm_file::{
+        decode::farm_file_metadata_from_event, encode::to_wire_parts as farm_file_to_wire_parts,
+    },
     file_metadata::{
         decode::{data_from_event, file_metadata_from_event, parsed_from_event},
         encode::{file_metadata_build_tags, to_wire_parts, to_wire_parts_with_kind},
@@ -46,6 +52,31 @@ fn sample_metadata() -> RadrootsFileMetadata {
         content_hashes: Some(vec![format!("sha256:{VALID_HASH}")]),
         services: Some(vec!["https://media.example.test".to_string()]),
         content: Some("Harvest block photo".to_string()),
+    }
+}
+
+fn sample_farm_file_metadata() -> RadrootsFarmFileMetadata {
+    RadrootsFarmFileMetadata {
+        d_tag: "BBBBBBBBBBBBBBBBBBBBBA".to_string(),
+        workspace: RadrootsFarmWorkspaceRef {
+            pubkey: "workspace_pubkey".to_string(),
+            d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
+        },
+        farm_group_id: "field-group".to_string(),
+        owner_document_id: "CCCCCCCCCCCCCCCCCCCCCA".to_string(),
+        owner_document_kind: RadrootsFarmCrdtDocumentKind::FarmTask,
+        caption: Some("Private crop photo".to_string()),
+        url: "https://media.example.test/private.jpg".to_string(),
+        mime_type: "image/jpeg".to_string(),
+        sha256: VALID_HASH.to_string(),
+        original_sha256: None,
+        size_bytes: Some(2048),
+        dimensions: Some(RadrootsFarmFileDimensions { w: 800, h: 600 }),
+        blurhash: None,
+        thumb: None,
+        image: None,
+        alt: Some("Private rows".to_string()),
+        fallbacks: Vec::new(),
     }
 }
 
@@ -123,6 +154,27 @@ fn file_metadata_to_wire_parts_roundtrips_nip94_tags() {
 }
 
 #[test]
+fn file_metadata_public_and_private_kind1063_contracts_do_not_cross_decode() {
+    let public = to_wire_parts(&sample_metadata()).unwrap();
+    let decoded_public =
+        file_metadata_from_event(public.kind, &public.tags, &public.content).unwrap();
+    assert_eq!(decoded_public.url, "https://media.example.test/field.jpg");
+    assert!(matches!(
+        farm_file_metadata_from_event(public.kind, &public.tags, &public.content),
+        Err(EventParseError::MissingTag("d"))
+    ));
+
+    let private = farm_file_to_wire_parts(&sample_farm_file_metadata()).unwrap();
+    let decoded_private =
+        farm_file_metadata_from_event(private.kind, &private.tags, &private.content).unwrap();
+    assert_eq!(decoded_private.owner_document_id, "CCCCCCCCCCCCCCCCCCCCCA");
+    assert!(matches!(
+        file_metadata_from_event(private.kind, &private.tags, &private.content),
+        Err(EventParseError::InvalidTag("radroots:owner_document"))
+    ));
+}
+
+#[test]
 fn file_metadata_codec_requires_kind_required_tags_and_hash_shape() {
     let mut metadata = sample_metadata();
     metadata.url = "ipfs://field.jpg".to_string();
@@ -148,6 +200,20 @@ fn file_metadata_codec_requires_kind_required_tags_and_hash_shape() {
     assert!(matches!(
         file_metadata_from_event(KIND_PUBLIC_FILE_METADATA, &tags, ""),
         Err(EventParseError::MissingTag(TAG_URL))
+    ));
+
+    let mut tags = file_metadata_build_tags(&sample_metadata()).unwrap();
+    tags.retain(|tag| tag.first().map(|value| value.as_str()) != Some(TAG_MIME));
+    assert!(matches!(
+        file_metadata_from_event(KIND_PUBLIC_FILE_METADATA, &tags, ""),
+        Err(EventParseError::MissingTag(TAG_MIME))
+    ));
+
+    let mut tags = file_metadata_build_tags(&sample_metadata()).unwrap();
+    tags.retain(|tag| tag.first().map(|value| value.as_str()) != Some(TAG_SHA256));
+    assert!(matches!(
+        file_metadata_from_event(KIND_PUBLIC_FILE_METADATA, &tags, ""),
+        Err(EventParseError::MissingTag(TAG_SHA256))
     ));
 
     let mut tags = file_metadata_build_tags(&sample_metadata()).unwrap();

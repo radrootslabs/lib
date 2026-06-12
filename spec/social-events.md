@@ -63,7 +63,8 @@ valid.
 
 `RadrootsComment` uses strict NIP-22 semantics. The target and scope model must support event-id,
 address, and external roots or parents through `E`/`e`, `A`/`a`, and `I`/`i` tags with matching
-`K`/`k` kind metadata, including ordinary kind `1` short text note targets. Canonical decode must
+`K`/`k` kind metadata. Canonical encode and decode must reject ordinary kind `1` short text note
+targets; kind `1` replies belong to NIP-10 text-note reply semantics instead. Canonical decode must
 reject legacy `e_root` and `e_prev` fallback tags.
 
 `RadrootsReaction` uses strict NIP-25 semantics. Empty content, `+`, `-`, emoji, and custom reaction

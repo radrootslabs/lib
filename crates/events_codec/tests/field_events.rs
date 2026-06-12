@@ -18,7 +18,7 @@ use radroots_events::{
         RadrootsGroupPutUser, RadrootsGroupUserRef,
     },
     http_auth::RadrootsHttpAuth,
-    kinds::KIND_POST,
+    kinds::{KIND_FARM_FILE_METADATA, KIND_POST},
     relay_auth::RadrootsRelayAuth,
 };
 use radroots_events_codec::{
@@ -309,7 +309,7 @@ fn sample_workspace() -> RadrootsFarmWorkspaceManifest {
             url: "https://media.example.invalid/farm/field-group".to_string(),
             service: "RadrootsPrivateMedia".to_string(),
         }],
-        supported_kinds: vec![78, 30078],
+        supported_kinds: vec![78, 30078, KIND_FARM_FILE_METADATA],
         protocol_version: RADROOTS_FARM_WORKSPACE_PROTOCOL_VERSION.to_string(),
         created_at_ms: 1_780_000_000_000,
         updated_at_ms: None,
@@ -377,7 +377,7 @@ fn sample_group_metadata() -> RadrootsGroupEditableMetadata {
         is_restricted: true,
         is_closed: false,
         is_hidden: false,
-        supported_kinds: Some(vec![78, 30078]),
+        supported_kinds: Some(vec![78, 30078, KIND_FARM_FILE_METADATA]),
     }
 }
 

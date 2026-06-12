@@ -14,7 +14,7 @@ mod tests {
             RadrootsFarmWorkspaceManifest, RadrootsFarmWorkspaceMediaServer,
             RadrootsFarmWorkspaceRelay, RadrootsFarmWorkspaceRelayMode,
         },
-        kinds::KIND_POST,
+        kinds::{KIND_FARM_FILE_METADATA, KIND_POST},
     };
 
     use crate::error::{EventEncodeError, EventParseError};
@@ -48,7 +48,14 @@ mod tests {
         assert_eq!(decoded.d_tag, D_TAG);
         assert_eq!(decoded.schema, RADROOTS_FARM_WORKSPACE_SCHEMA);
         assert_eq!(decoded.farm_group_id, GROUP_ID);
-        assert_eq!(decoded.supported_kinds, vec![KIND_FARM_CRDT_CHANGE, 30078]);
+        assert_eq!(
+            decoded.supported_kinds,
+            vec![
+                KIND_FARM_CRDT_CHANGE,
+                KIND_FARM_WORKSPACE_MANIFEST,
+                KIND_FARM_FILE_METADATA
+            ]
+        );
     }
 
     #[test]
@@ -120,6 +127,37 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn farm_workspace_manifest_requires_farm_file_support_for_media_servers() {
+        let mut no_file_support = sample_manifest();
+        no_file_support.supported_kinds = vec![KIND_FARM_CRDT_CHANGE, KIND_FARM_WORKSPACE_MANIFEST];
+        let encode_err = to_wire_parts(&no_file_support).unwrap_err();
+        assert!(matches!(
+            encode_err,
+            EventEncodeError::InvalidField("supported_kinds")
+        ));
+
+        let mut no_media = no_file_support.clone();
+        no_media.media_servers.clear();
+        let parts = to_wire_parts(&no_media).expect("non-media manifest remains valid");
+        let decoded = farm_workspace_from_event(parts.kind, &parts.tags, &parts.content)
+            .expect("non-media manifest decodes");
+        assert!(decoded.media_servers.is_empty());
+
+        let mut content_missing_file_support = sample_manifest();
+        content_missing_file_support.supported_kinds =
+            vec![KIND_FARM_CRDT_CHANGE, KIND_FARM_WORKSPACE_MANIFEST];
+        let content =
+            serde_json::to_string(&content_missing_file_support).expect("workspace content");
+        let tags = farm_workspace_build_tags(&sample_manifest()).expect("workspace tags");
+        let parse_err =
+            farm_workspace_from_event(KIND_FARM_WORKSPACE_MANIFEST, &tags, &content).unwrap_err();
+        assert!(matches!(
+            parse_err,
+            EventParseError::InvalidJson("supported_kinds")
+        ));
+    }
+
     fn sample_manifest() -> RadrootsFarmWorkspaceManifest {
         RadrootsFarmWorkspaceManifest {
             d_tag: D_TAG.to_string(),
@@ -139,7 +177,11 @@ mod tests {
                 url: "https://media.example.invalid/farm/field-group".to_string(),
                 service: "RadrootsPrivateMedia".to_string(),
             }],
-            supported_kinds: vec![KIND_FARM_CRDT_CHANGE, KIND_FARM_WORKSPACE_MANIFEST],
+            supported_kinds: vec![
+                KIND_FARM_CRDT_CHANGE,
+                KIND_FARM_WORKSPACE_MANIFEST,
+                KIND_FARM_FILE_METADATA,
+            ],
             protocol_version: RADROOTS_FARM_WORKSPACE_PROTOCOL_VERSION.to_string(),
             created_at_ms: 1_780_000_000_000,
             updated_at_ms: None,

@@ -27,6 +27,7 @@ pub fn report_from_event(
     }
     let p_tag = find_tag(tags, TAG_P).ok_or(EventParseError::MissingTag(TAG_P))?;
     let reported_pubkey = required_tag_value(tags, TAG_P)?;
+    validate_lowercase_hex_64_tag(&reported_pubkey, TAG_P)?;
     let report_type = parse_report_type(
         p_tag
             .get(2)

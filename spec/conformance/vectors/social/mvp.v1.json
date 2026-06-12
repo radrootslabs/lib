@@ -144,8 +144,8 @@
       }
     },
     {
-      "id": "social_comment_kind_one_target_valid_006",
-      "kind": "social.comment.build_tags.valid",
+      "id": "social_comment_kind_one_target_invalid_006",
+      "kind": "social.comment.build_tags.invalid",
       "input": {
         "comment": {
           "root": {
@@ -166,15 +166,9 @@
         }
       },
       "expected": {
-        "result": "ok",
-        "required_tags": [
-          "E",
-          "P",
-          "K",
-          "e",
-          "p",
-          "k"
-        ]
+        "result": "error",
+        "error_class": "encode_error",
+        "field": "root"
       }
     },
     {

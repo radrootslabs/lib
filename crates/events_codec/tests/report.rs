@@ -4,7 +4,7 @@ use radroots_events::{
     kinds::{KIND_POST, KIND_REPORT},
     report::RadrootsReport,
     social::{RadrootsReportFileTarget, RadrootsReportType, RadrootsSocialTarget},
-    tags::{TAG_E, TAG_MAGNET, TAG_P, TAG_SERVER, TAG_SHA256},
+    tags::{TAG_A, TAG_E, TAG_MAGNET, TAG_P, TAG_SERVER, TAG_SHA256},
 };
 use radroots_events_codec::{
     error::{EventEncodeError, EventParseError},
@@ -116,6 +116,13 @@ fn report_codec_rejects_missing_pubkey_unknown_type_bad_hash_and_wrong_kind() {
         Err(EventEncodeError::EmptyRequiredField("reported_pubkey"))
     ));
 
+    let mut report = profile_report();
+    report.reported_pubkey = "not-a-pubkey".to_string();
+    assert!(matches!(
+        report_build_tags(&report),
+        Err(EventEncodeError::InvalidField("reported_pubkey"))
+    ));
+
     assert!(matches!(
         to_wire_parts_with_kind(&profile_report(), KIND_POST),
         Err(EventEncodeError::InvalidKind(KIND_POST))
@@ -130,6 +137,14 @@ fn report_codec_rejects_missing_pubkey_unknown_type_bad_hash_and_wrong_kind() {
 
     let err = report_from_event(KIND_REPORT, &[], "").unwrap_err();
     assert!(matches!(err, EventParseError::MissingTag(TAG_P)));
+
+    let tags = vec![vec![
+        TAG_P.to_string(),
+        "not-a-pubkey".to_string(),
+        "spam".to_string(),
+    ]];
+    let err = report_from_event(KIND_REPORT, &tags, "").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag(TAG_P)));
 
     let tags = vec![vec![
         TAG_P.to_string(),
@@ -162,6 +177,42 @@ fn report_codec_rejects_missing_pubkey_unknown_type_bad_hash_and_wrong_kind() {
             got: KIND_POST
         }
     ));
+}
+
+#[test]
+fn report_codec_rejects_bad_event_targets_and_report_type_mismatches() {
+    let mut report = event_report();
+    report.event = Some(RadrootsSocialTarget::External {
+        id: "https://example.test/report".to_string(),
+        external_kind: "web".to_string(),
+        hint: None,
+    });
+    assert!(matches!(
+        report_build_tags(&report),
+        Err(EventEncodeError::InvalidField("event"))
+    ));
+
+    let tags = vec![
+        vec![TAG_P.to_string(), REPORTED.to_string(), "spam".to_string()],
+        vec![
+            TAG_E.to_string(),
+            EVENT_ID.to_string(),
+            "illegal".to_string(),
+        ],
+    ];
+    let err = report_from_event(KIND_REPORT, &tags, "").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidTag(TAG_E)));
+
+    let tags = vec![
+        vec![TAG_P.to_string(), REPORTED.to_string(), "spam".to_string()],
+        vec![
+            TAG_A.to_string(),
+            "bad-address".to_string(),
+            "spam".to_string(),
+        ],
+    ];
+    let err = report_from_event(KIND_REPORT, &tags, "").unwrap_err();
+    assert!(matches!(err, EventParseError::InvalidNumber(TAG_A, _)));
 }
 
 #[test]

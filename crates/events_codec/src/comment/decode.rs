@@ -7,7 +7,7 @@ use alloc::{
 use radroots_events::{
     RadrootsNostrEvent,
     comment::RadrootsComment,
-    kinds::KIND_COMMENT,
+    kinds::{KIND_COMMENT, KIND_POST},
     social::RadrootsSocialTarget,
     tags::{TAG_E_PREV, TAG_E_ROOT},
 };
@@ -109,6 +109,7 @@ fn parse_comment_target(
             .ok_or(EventParseError::InvalidTag(keys.event))?;
         validate_lowercase_hex_64_tag(&id, keys.event)?;
         let kind = required_numeric_kind(tags, keys.kind)?;
+        validate_comment_target_kind(kind, keys.kind)?;
         let author = required_author(tags, keys.author)?;
         let relays = if tag.len() > 2 {
             Some(tag[2..].to_vec())
@@ -130,6 +131,7 @@ fn parse_comment_target(
             .ok_or(EventParseError::InvalidTag(keys.address))?;
         let address = parse_address_tag(&value, keys.address)?;
         let kind = required_numeric_kind(tags, keys.kind)?;
+        validate_comment_target_kind(kind, keys.kind)?;
         if kind != address.kind {
             return Err(EventParseError::InvalidTag(keys.kind));
         }
@@ -161,12 +163,23 @@ fn parse_comment_target(
         return Err(EventParseError::InvalidTag(keys.external));
     }
     let external_kind = required_kind_value(tags, keys.kind)?;
+    if external_kind == "1" {
+        return Err(EventParseError::InvalidTag(keys.kind));
+    }
     let hint = tag.get(2).filter(|value| !value.trim().is_empty()).cloned();
     Ok(RadrootsSocialTarget::External {
         id,
         external_kind,
         hint,
     })
+}
+
+fn validate_comment_target_kind(kind: u32, key: &'static str) -> Result<(), EventParseError> {
+    if kind == KIND_POST {
+        Err(EventParseError::InvalidTag(key))
+    } else {
+        Ok(())
+    }
 }
 
 fn find_tag<'a>(tags: &'a [Vec<String>], key: &'static str) -> Option<&'a Vec<String>> {

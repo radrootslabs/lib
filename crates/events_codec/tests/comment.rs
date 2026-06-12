@@ -148,22 +148,59 @@ fn comment_roundtrips_event_and_address_targets() {
     assert_address_target(&parsed.parent, PARENT_AUTHOR, KIND_ARTICLE, D_TAG);
     assert_eq!(parsed.content, "hello");
 
-    let custom_parts = to_wire_parts_with_kind(&comment, KIND_POST).unwrap();
-    assert_eq!(custom_parts.kind, KIND_POST);
+    assert!(matches!(
+        to_wire_parts_with_kind(&comment, KIND_POST),
+        Err(EventEncodeError::InvalidKind(KIND_POST))
+    ));
 }
 
 #[test]
-fn comment_roundtrips_short_text_note_targets() {
-    let comment = RadrootsComment {
+fn comment_rejects_short_text_note_targets() {
+    let root_kind_one = RadrootsComment {
         root: event_target(ROOT_ID, AUTHOR, KIND_POST),
+        parent: event_target(PARENT_ID, PARENT_AUTHOR, KIND_ARTICLE),
+        content: "note reply".to_string(),
+    };
+    assert!(matches!(
+        comment_build_tags(&root_kind_one),
+        Err(EventEncodeError::InvalidField("root"))
+    ));
+
+    let parent_kind_one = RadrootsComment {
+        root: event_target(ROOT_ID, AUTHOR, KIND_ARTICLE),
         parent: event_target(PARENT_ID, PARENT_AUTHOR, KIND_POST),
         content: "note reply".to_string(),
     };
-    let parts = to_wire_parts(&comment).unwrap();
-    let parsed = comment_from_tags(parts.kind, &parts.tags, &parts.content).unwrap();
+    assert!(matches!(
+        comment_build_tags(&parent_kind_one),
+        Err(EventEncodeError::InvalidField("parent"))
+    ));
 
-    assert_event_target(&parsed.root, ROOT_ID, AUTHOR, KIND_POST);
-    assert_event_target(&parsed.parent, PARENT_ID, PARENT_AUTHOR, KIND_POST);
+    let root_kind_one_tags = vec![
+        vec!["E".to_string(), ROOT_ID.to_string()],
+        vec!["P".to_string(), AUTHOR.to_string()],
+        vec!["K".to_string(), KIND_POST.to_string()],
+        vec!["e".to_string(), PARENT_ID.to_string()],
+        vec!["p".to_string(), PARENT_AUTHOR.to_string()],
+        vec!["k".to_string(), KIND_ARTICLE.to_string()],
+    ];
+    assert!(matches!(
+        comment_from_tags(KIND_COMMENT, &root_kind_one_tags, "note reply"),
+        Err(EventParseError::InvalidTag("K"))
+    ));
+
+    let parent_kind_one_tags = vec![
+        vec!["E".to_string(), ROOT_ID.to_string()],
+        vec!["P".to_string(), AUTHOR.to_string()],
+        vec!["K".to_string(), KIND_ARTICLE.to_string()],
+        vec!["e".to_string(), PARENT_ID.to_string()],
+        vec!["p".to_string(), PARENT_AUTHOR.to_string()],
+        vec!["k".to_string(), KIND_POST.to_string()],
+    ];
+    assert!(matches!(
+        comment_from_tags(KIND_COMMENT, &parent_kind_one_tags, "note reply"),
+        Err(EventParseError::InvalidTag("k"))
+    ));
 }
 
 #[test]
