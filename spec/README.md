@@ -46,6 +46,22 @@ envelope. They are outside the `rr-rs` event-contract boundary unless a future
 contract slice explicitly promotes them into a curated SDK operation surface with
 matching conformance vectors and language export mappings.
 
+## Public Social Event Substrate
+
+Public social events are represented as event and codec substrate in
+`radroots_events`, `radroots_events_codec`, and `radroots_events_codec_wasm`.
+
+The active social-event contract is defined in `spec/social-events.md`. It covers
+ordinary posts, comments, reactions, articles, public generic file metadata,
+calendar events, reposts, reports, listing drafts through `RadrootsListing`, and
+NIP-65 relay lists through `RadrootsList`.
+
+The social surface is substrate-first. MVP social builders and parsers may be
+promoted into curated SDK operation metadata only after their Rust models,
+codecs, wasm helpers where needed, and deterministic conformance vectors exist.
+Production-v1 repost, report, calendar collection, and RSVP behavior remains
+available through event and codec APIs by default.
+
 ## Rust Crate Tiers
 
 The public Rust story is tiered explicitly.

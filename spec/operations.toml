@@ -6,6 +6,10 @@ source = "rust"
 [public]
 domains = ["profile", "farm", "listing", "trade"]
 
+# Public social events are substrate-first during the active social refactor.
+# Curated social operations are intentionally added only after their models,
+# codecs, wasm helpers, and conformance vectors exist.
+
 [shared_types]
 public = [
   "WireEventParts",
