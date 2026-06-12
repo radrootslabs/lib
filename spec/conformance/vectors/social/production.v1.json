@@ -1,0 +1,243 @@
+{
+  "suite": "social_production",
+  "contract_version": "0.1.0",
+  "vectors": [
+    {
+      "id": "social_repost_note_valid_001",
+      "kind": "social.repost.build_tags.valid",
+      "input": {
+        "repost": {
+          "target": {
+            "kind": "event",
+            "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "author": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "event_kind": 1,
+            "relays": [
+              "wss://relay.example.test"
+            ]
+          },
+          "content": "field update"
+        }
+      },
+      "expected": {
+        "result": "ok",
+        "required_tags": [
+          "e",
+          "p"
+        ]
+      }
+    },
+    {
+      "id": "social_repost_non_note_invalid_002",
+      "kind": "social.repost.build_tags.invalid",
+      "input": {
+        "repost": {
+          "target": {
+            "kind": "event",
+            "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "author": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "event_kind": 30023,
+            "relays": []
+          }
+        }
+      },
+      "expected": {
+        "result": "error",
+        "error_class": "encode_error",
+        "field": "target_kind"
+      }
+    },
+    {
+      "id": "social_generic_repost_address_valid_003",
+      "kind": "social.generic_repost.build_tags.valid",
+      "input": {
+        "repost": {
+          "target": {
+            "kind": "address",
+            "address": "30023:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:AAAAAAAAAAAAAAAAAAAAAg",
+            "author": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "event_kind": 30023,
+            "relays": [
+              "wss://relay.example.test"
+            ]
+          },
+          "target_kind": 30023,
+          "content": "article share"
+        }
+      },
+      "expected": {
+        "result": "ok",
+        "required_tags": [
+          "a",
+          "k"
+        ]
+      }
+    },
+    {
+      "id": "social_generic_repost_kind_one_invalid_004",
+      "kind": "social.generic_repost.build_tags.invalid",
+      "input": {
+        "repost": {
+          "target": {
+            "kind": "event",
+            "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "author": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "event_kind": 1,
+            "relays": []
+          },
+          "target_kind": 1
+        }
+      },
+      "expected": {
+        "result": "error",
+        "error_class": "encode_error",
+        "field": "target_kind"
+      }
+    },
+    {
+      "id": "social_calendar_collection_valid_005",
+      "kind": "social.calendar.build_tags.valid",
+      "input": {
+        "calendar": {
+          "d_tag": "AAAAAAAAAAAAAAAAAAAA_A",
+          "title": "farm calendar",
+          "events": [
+            {
+              "kind": "address",
+              "address": "31923:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:AAAAAAAAAAAAAAAAAAAA-A",
+              "author": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "event_kind": 31923,
+              "relays": [
+                "wss://relay.example.test"
+              ]
+            }
+          ]
+        }
+      },
+      "expected": {
+        "result": "ok",
+        "required_tags": [
+          "d",
+          "title",
+          "a"
+        ]
+      }
+    },
+    {
+      "id": "social_calendar_collection_empty_invalid_006",
+      "kind": "social.calendar.build_tags.invalid",
+      "input": {
+        "calendar": {
+          "d_tag": "AAAAAAAAAAAAAAAAAAAA_A",
+          "title": "farm calendar",
+          "events": []
+        }
+      },
+      "expected": {
+        "result": "error",
+        "error_class": "encode_error",
+        "field": "events"
+      }
+    },
+    {
+      "id": "social_calendar_rsvp_valid_007",
+      "kind": "social.calendar_rsvp.build_tags.valid",
+      "input": {
+        "rsvp": {
+          "d_tag": "AAAAAAAAAAAAAAAAAAAAAQ",
+          "event": {
+            "kind": "address",
+            "address": "31923:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:AAAAAAAAAAAAAAAAAAAA-A",
+            "author": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "event_kind": 31923,
+            "relays": [
+              "wss://relay.example.test"
+            ]
+          },
+          "event_id": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "status": "tentative",
+          "free_busy": "busy"
+        }
+      },
+      "expected": {
+        "result": "ok",
+        "required_tags": [
+          "d",
+          "a",
+          "e",
+          "status",
+          "fb"
+        ]
+      }
+    },
+    {
+      "id": "social_calendar_rsvp_event_target_invalid_008",
+      "kind": "social.calendar_rsvp.build_tags.invalid",
+      "input": {
+        "rsvp": {
+          "d_tag": "AAAAAAAAAAAAAAAAAAAAAQ",
+          "event": {
+            "kind": "event",
+            "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "author": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "event_kind": 31923,
+            "relays": []
+          },
+          "status": "accepted"
+        }
+      },
+      "expected": {
+        "result": "error",
+        "error_class": "encode_error",
+        "field": "event"
+      }
+    },
+    {
+      "id": "social_report_event_and_file_valid_009",
+      "kind": "social.report.build_tags.valid",
+      "input": {
+        "report": {
+          "reported_pubkey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "report_type": "spam",
+          "event": {
+            "kind": "event",
+            "id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "author": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "event_kind": 1,
+            "relays": [
+              "wss://relay.example.test"
+            ]
+          },
+          "file": {
+            "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "url": "https://media.example.test/bad.jpg"
+          }
+        }
+      },
+      "expected": {
+        "result": "ok",
+        "required_tags": [
+          "p",
+          "e",
+          "x",
+          "server"
+        ]
+      }
+    },
+    {
+      "id": "social_report_missing_pubkey_invalid_010",
+      "kind": "social.report.build_tags.invalid",
+      "input": {
+        "report": {
+          "reported_pubkey": "",
+          "report_type": "spam"
+        }
+      },
+      "expected": {
+        "result": "error",
+        "error_class": "encode_error",
+        "field": "reported_pubkey"
+      }
+    }
+  ]
+}

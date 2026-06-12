@@ -325,6 +325,28 @@ const REACTION_WITNESSES: [EventBoundarySourceWitness; 2] = [
     },
 ];
 
+const REPOST_WITNESSES: [EventBoundarySourceWitness; 2] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/repost.rs",
+        required_fragments: &["pub struct RadrootsRepost"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/kinds.rs",
+        required_fragments: &["pub const KIND_REPOST: u32 = 6;"],
+    },
+];
+
+const GENERIC_REPOST_WITNESSES: [EventBoundarySourceWitness; 2] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/repost.rs",
+        required_fragments: &["pub struct RadrootsGenericRepost"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/kinds.rs",
+        required_fragments: &["pub const KIND_GENERIC_REPOST: u32 = 16;"],
+    },
+];
+
 const SEAL_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
         relative_path: "crates/events/src/seal.rs",
@@ -399,6 +421,28 @@ const GIFT_WRAP_WITNESSES: [EventBoundarySourceWitness; 4] = [
     },
 ];
 
+const PUBLIC_FILE_METADATA_WITNESSES: [EventBoundarySourceWitness; 2] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/file_metadata.rs",
+        required_fragments: &["pub struct RadrootsFileMetadata"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/kinds.rs",
+        required_fragments: &["pub const KIND_PUBLIC_FILE_METADATA: u32 = KIND_FILE_METADATA;"],
+    },
+];
+
+const REPORT_WITNESSES: [EventBoundarySourceWitness; 2] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/report.rs",
+        required_fragments: &["pub struct RadrootsReport"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/kinds.rs",
+        required_fragments: &["pub const KIND_REPORT: u32 = 1984;"],
+    },
+];
+
 const LIST_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
         relative_path: "crates/events/src/list.rs",
@@ -413,6 +457,17 @@ const LIST_WITNESSES: [EventBoundarySourceWitness; 2] = [
     },
 ];
 
+const RELAY_LIST_WITNESSES: [EventBoundarySourceWitness; 2] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/list.rs",
+        required_fragments: &["pub struct RadrootsList"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/kinds.rs",
+        required_fragments: &["pub const KIND_LIST_READ_WRITE_RELAYS: u32 = 10002;"],
+    },
+];
+
 const LIST_SET_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
         relative_path: "crates/events/src/list_set.rs",
@@ -424,6 +479,17 @@ const LIST_SET_WITNESSES: [EventBoundarySourceWitness; 2] = [
             "pub const KIND_LIST_SET_FOLLOW: u32 = 30000;",
             "pub const KIND_LIST_SET_MEDIA_STARTER_PACK: u32 = 39092;",
         ],
+    },
+];
+
+const ARTICLE_WITNESSES: [EventBoundarySourceWitness; 2] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/article.rs",
+        required_fragments: &["pub struct RadrootsArticle"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/kinds.rs",
+        required_fragments: &["pub const KIND_ARTICLE: u32 = 30023;"],
     },
 ];
 
@@ -446,6 +512,50 @@ const APP_HANDLER_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
         relative_path: "crates/nostr/src/events/application_handler.rs",
         required_fragments: &["pub fn radroots_nostr_build_application_handler_event("],
+    },
+];
+
+const CALENDAR_DATE_WITNESSES: [EventBoundarySourceWitness; 2] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/calendar.rs",
+        required_fragments: &["pub struct RadrootsCalendarDateEvent"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/kinds.rs",
+        required_fragments: &["pub const KIND_CALENDAR_DATE_EVENT: u32 = 31922;"],
+    },
+];
+
+const CALENDAR_TIME_WITNESSES: [EventBoundarySourceWitness; 2] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/calendar.rs",
+        required_fragments: &["pub struct RadrootsCalendarTimeEvent"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/kinds.rs",
+        required_fragments: &["pub const KIND_CALENDAR_TIME_EVENT: u32 = 31923;"],
+    },
+];
+
+const CALENDAR_WITNESSES: [EventBoundarySourceWitness; 2] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/calendar.rs",
+        required_fragments: &["pub struct RadrootsCalendar"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/kinds.rs",
+        required_fragments: &["pub const KIND_CALENDAR: u32 = KIND_LIST_SET_CALENDAR;"],
+    },
+];
+
+const CALENDAR_RSVP_WITNESSES: [EventBoundarySourceWitness; 2] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/calendar.rs",
+        required_fragments: &["pub struct RadrootsCalendarEventRsvp"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/kinds.rs",
+        required_fragments: &["pub const KIND_CALENDAR_EVENT_RSVP: u32 = 31925;"],
     },
 ];
 
@@ -867,7 +977,7 @@ const RELAY_DOC_WITNESSES: [EventBoundarySourceWitness; 2] = [
     },
 ];
 
-const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 35] = [
+const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 45] = [
     EventBoundaryExpectation {
         domain: "profile",
         kind: "0",
@@ -920,6 +1030,28 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 35] = [
         witnesses: &REACTION_WITNESSES,
     },
     EventBoundaryExpectation {
+        domain: "repost",
+        kind: "6",
+        radroots_type: "RadrootsRepost",
+        rpc_methods: &[
+            "events.repost.publish",
+            "events.repost.list",
+            "events.repost.get",
+        ],
+        witnesses: &REPOST_WITNESSES,
+    },
+    EventBoundaryExpectation {
+        domain: "generic_repost",
+        kind: "16",
+        radroots_type: "RadrootsGenericRepost",
+        rpc_methods: &[
+            "events.generic_repost.publish",
+            "events.generic_repost.list",
+            "events.generic_repost.get",
+        ],
+        witnesses: &GENERIC_REPOST_WITNESSES,
+    },
+    EventBoundaryExpectation {
         domain: "seal",
         kind: "13",
         radroots_type: "RadrootsSeal",
@@ -960,11 +1092,44 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 35] = [
         witnesses: &GIFT_WRAP_WITNESSES,
     },
     EventBoundaryExpectation {
+        domain: "public_file_metadata",
+        kind: "1063",
+        radroots_type: "RadrootsFileMetadata",
+        rpc_methods: &[
+            "events.public_file_metadata.publish",
+            "events.public_file_metadata.list",
+            "events.public_file_metadata.get",
+        ],
+        witnesses: &PUBLIC_FILE_METADATA_WITNESSES,
+    },
+    EventBoundaryExpectation {
+        domain: "report",
+        kind: "1984",
+        radroots_type: "RadrootsReport",
+        rpc_methods: &[
+            "events.report.publish",
+            "events.report.list",
+            "events.report.get",
+        ],
+        witnesses: &REPORT_WITNESSES,
+    },
+    EventBoundaryExpectation {
         domain: "list",
         kind: "10000..10102",
         radroots_type: "RadrootsList",
         rpc_methods: &["events.list.publish", "events.list.list", "events.list.get"],
         witnesses: &LIST_WITNESSES,
+    },
+    EventBoundaryExpectation {
+        domain: "relay_list",
+        kind: "10002",
+        radroots_type: "RadrootsList",
+        rpc_methods: &[
+            "events.relay_list.publish",
+            "events.relay_list.list",
+            "events.relay_list.get",
+        ],
+        witnesses: &RELAY_LIST_WITNESSES,
     },
     EventBoundaryExpectation {
         domain: "list_set",
@@ -976,6 +1141,17 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 35] = [
             "events.list_set.get",
         ],
         witnesses: &LIST_SET_WITNESSES,
+    },
+    EventBoundaryExpectation {
+        domain: "article",
+        kind: "30023",
+        radroots_type: "RadrootsArticle",
+        rpc_methods: &[
+            "events.article.publish",
+            "events.article.list",
+            "events.article.get",
+        ],
+        witnesses: &ARTICLE_WITNESSES,
     },
     EventBoundaryExpectation {
         domain: "app_data",
@@ -998,6 +1174,50 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 35] = [
             "events.app_handler.get",
         ],
         witnesses: &APP_HANDLER_WITNESSES,
+    },
+    EventBoundaryExpectation {
+        domain: "calendar_date",
+        kind: "31922",
+        radroots_type: "RadrootsCalendarDateEvent",
+        rpc_methods: &[
+            "events.calendar_date.publish",
+            "events.calendar_date.list",
+            "events.calendar_date.get",
+        ],
+        witnesses: &CALENDAR_DATE_WITNESSES,
+    },
+    EventBoundaryExpectation {
+        domain: "calendar_time",
+        kind: "31923",
+        radroots_type: "RadrootsCalendarTimeEvent",
+        rpc_methods: &[
+            "events.calendar_time.publish",
+            "events.calendar_time.list",
+            "events.calendar_time.get",
+        ],
+        witnesses: &CALENDAR_TIME_WITNESSES,
+    },
+    EventBoundaryExpectation {
+        domain: "calendar",
+        kind: "31924",
+        radroots_type: "RadrootsCalendar",
+        rpc_methods: &[
+            "events.calendar.publish",
+            "events.calendar.list",
+            "events.calendar.get",
+        ],
+        witnesses: &CALENDAR_WITNESSES,
+    },
+    EventBoundaryExpectation {
+        domain: "calendar_rsvp",
+        kind: "31925",
+        radroots_type: "RadrootsCalendarEventRsvp",
+        rpc_methods: &[
+            "events.calendar_rsvp.publish",
+            "events.calendar_rsvp.list",
+            "events.calendar_rsvp.get",
+        ],
+        witnesses: &CALENDAR_RSVP_WITNESSES,
     },
     EventBoundaryExpectation {
         domain: "farm",
@@ -1885,6 +2105,109 @@ fn base_contract_version(version: &str) -> &str {
     version.split_once('-').map_or(version, |(base, _)| base)
 }
 
+fn collect_conformance_vector_paths(dir: &Path, paths: &mut Vec<PathBuf>) -> Result<(), String> {
+    let read_dir = match fs::read_dir(dir) {
+        Ok(read_dir) => read_dir,
+        Err(e) => return Err(format!("read dir {}: {e}", dir.display())),
+    };
+    let mut entries = read_dir.filter_map(Result::ok).collect::<Vec<_>>();
+    entries.sort_by_key(|entry| entry.file_name());
+    for entry in entries {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_conformance_vector_paths(&path, paths)?;
+        } else if path.extension().and_then(|ext| ext.to_str()) == Some("json") {
+            paths.push(path);
+        }
+    }
+    Ok(())
+}
+
+fn validate_conformance_vector_file(
+    path: &Path,
+    contract_version: &str,
+) -> Result<ConformanceVectorFile, String> {
+    let vector = parse_json::<ConformanceVectorFile>(path)?;
+    if vector.suite.trim().is_empty() {
+        return Err(format!(
+            "conformance vector {} suite must not be empty",
+            path.display()
+        ));
+    }
+    if vector.vectors.is_empty() {
+        return Err(format!(
+            "conformance vector {} must contain at least one vector",
+            path.display()
+        ));
+    }
+    if vector.contract_version != base_contract_version(contract_version) {
+        return Err(format!(
+            "conformance vector {} version {} must match contract version {}",
+            path.display(),
+            vector.contract_version,
+            base_contract_version(contract_version)
+        ));
+    }
+    let mut ids = BTreeSet::new();
+    for entry in &vector.vectors {
+        if entry.id.trim().is_empty() || entry.kind.trim().is_empty() {
+            return Err(format!(
+                "conformance vector {} entries must define non-empty id and kind",
+                path.display()
+            ));
+        }
+        if !ids.insert(entry.id.clone()) {
+            return Err(format!(
+                "conformance vector {} has duplicate vector id {}",
+                path.display(),
+                entry.id
+            ));
+        }
+    }
+    Ok(vector)
+}
+
+fn validate_all_conformance_vectors(
+    workspace_root: &Path,
+    contract_version: &str,
+) -> Result<(), String> {
+    let vectors_dir = conformance_root(workspace_root).join("vectors");
+    if !vectors_dir.is_dir() {
+        return validate_missing_conformance_vectors(workspace_root, &vectors_dir);
+    }
+    let mut paths = Vec::new();
+    collect_conformance_vector_paths(&vectors_dir, &mut paths)?;
+    if paths.is_empty() {
+        return Err(format!(
+            "conformance vectors directory {} must contain JSON vectors",
+            vectors_dir.display()
+        ));
+    }
+    for path in paths {
+        validate_conformance_vector_file(&path, contract_version)?;
+    }
+    Ok(())
+}
+
+#[cfg(not(test))]
+fn validate_missing_conformance_vectors(
+    _workspace_root: &Path,
+    vectors_dir: &Path,
+) -> Result<(), String> {
+    Err(format!(
+        "conformance vectors directory {} must exist",
+        vectors_dir.display()
+    ))
+}
+
+#[cfg(test)]
+fn validate_missing_conformance_vectors(
+    _workspace_root: &Path,
+    _vectors_dir: &Path,
+) -> Result<(), String> {
+    Ok(())
+}
+
 #[derive(Debug)]
 struct WorkspacePackageRecord {
     name: String,
@@ -2405,35 +2728,7 @@ fn validate_operations_contract(
                 conformance_root.display()
             ));
         }
-        let vector = parse_json::<ConformanceVectorFile>(&vector_path)?;
-        if vector.suite.trim().is_empty() {
-            return Err(format!(
-                "operation {} conformance vector suite must not be empty",
-                operation.id
-            ));
-        }
-        if vector.vectors.is_empty() {
-            return Err(format!(
-                "operation {} conformance vector must contain at least one vector",
-                operation.id
-            ));
-        }
-        if vector.contract_version != base_contract_version(&operations_manifest.contract.version) {
-            return Err(format!(
-                "operation {} conformance vector version {} must match contract version {}",
-                operation.id,
-                vector.contract_version,
-                base_contract_version(&operations_manifest.contract.version)
-            ));
-        }
-        for entry in vector.vectors {
-            if entry.id.trim().is_empty() || entry.kind.trim().is_empty() {
-                return Err(format!(
-                    "operation {} conformance vector entries must define non-empty id and kind",
-                    operation.id
-                ));
-            }
-        }
+        validate_conformance_vector_file(&vector_path, &operations_manifest.contract.version)?;
     }
 
     if bundle.sdk_exports.is_empty() {
@@ -3358,6 +3653,7 @@ fn validate_contract_bundle_with_release_policy_override(
     if let Some(operations_manifest) = bundle.operations_manifest.as_ref() {
         validate_operations_contract(bundle, operations_manifest, workspace_root)?;
     }
+    validate_all_conformance_vectors(workspace_root, &bundle.manifest.contract.version)?;
     validate_core_unit_dimension_variant_order(workspace_root)?;
     validate_coverage_policy_parity(workspace_root, &bundle.root)?;
     if resolve_release_contract_path_with_override(workspace_root, release_policy_override.clone())
@@ -3728,6 +4024,7 @@ pub fn validate_contract_bundle(bundle: &ContractBundle) -> Result<(), String> {
     if let Some(operations_manifest) = bundle.operations_manifest.as_ref() {
         validate_operations_contract(bundle, operations_manifest, workspace_root)?;
     }
+    validate_all_conformance_vectors(workspace_root, &bundle.manifest.contract.version)?;
     validate_core_unit_dimension_variant_order(workspace_root)?;
     validate_coverage_policy_parity(workspace_root, &bundle.root)?;
     if resolve_release_contract_path(workspace_root)

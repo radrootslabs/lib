@@ -1,0 +1,229 @@
+{
+  "suite": "social_upgraded_boundaries",
+  "contract_version": "0.1.0",
+  "vectors": [
+    {
+      "id": "social_listing_published_at_valid_001",
+      "kind": "social.listing.parse_event.valid",
+      "input": {
+        "event": {
+          "kind": 30402,
+          "content_shape": "listing_markdown",
+          "tags": [
+            [
+              "published_at",
+              "1780000000"
+            ]
+          ]
+        }
+      },
+      "expected": {
+        "result": "ok",
+        "field": "published_at"
+      }
+    },
+    {
+      "id": "social_listing_published_at_invalid_002",
+      "kind": "social.listing.parse_event.invalid",
+      "input": {
+        "event": {
+          "kind": 30402,
+          "content_shape": "listing_markdown",
+          "tags": [
+            [
+              "published_at",
+              "not-a-number"
+            ]
+          ]
+        }
+      },
+      "expected": {
+        "result": "error",
+        "error_class": "parse_error",
+        "field": "published_at"
+      }
+    },
+    {
+      "id": "social_listing_draft_uses_listing_model_valid_003",
+      "kind": "social.listing_draft.parse_event.valid",
+      "input": {
+        "event": {
+          "kind": 30403,
+          "content_shape": "listing_markdown",
+          "tags_shape": "listing_tags_full"
+        }
+      },
+      "expected": {
+        "result": "ok",
+        "model": "RadrootsListing"
+      }
+    },
+    {
+      "id": "social_relay_list_read_write_valid_004",
+      "kind": "social.relay_list.parse_event.valid",
+      "input": {
+        "event": {
+          "kind": 10002,
+          "content": "",
+          "tags": [
+            [
+              "r",
+              "wss://relay.example.test",
+              "read"
+            ],
+            [
+              "r",
+              "wss://relay2.example.test",
+              "write"
+            ]
+          ]
+        }
+      },
+      "expected": {
+        "result": "ok",
+        "model": "RadrootsList"
+      }
+    },
+    {
+      "id": "social_relay_list_bad_marker_invalid_005",
+      "kind": "social.relay_list.parse_event.invalid",
+      "input": {
+        "event": {
+          "kind": 10002,
+          "content": "",
+          "tags": [
+            [
+              "r",
+              "wss://relay.example.test",
+              "admin"
+            ]
+          ]
+        }
+      },
+      "expected": {
+        "result": "error",
+        "error_class": "parse_error",
+        "field": "relay.marker"
+      }
+    },
+    {
+      "id": "social_list_set_calendar_address_valid_006",
+      "kind": "social.list_set.parse_event.valid",
+      "input": {
+        "event": {
+          "kind": 31924,
+          "content": "",
+          "tags": [
+            [
+              "d",
+              "AAAAAAAAAAAAAAAAAAAA_A"
+            ],
+            [
+              "title",
+              "farm calendar"
+            ],
+            [
+              "a",
+              "31923:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:AAAAAAAAAAAAAAAAAAAA-A"
+            ]
+          ]
+        }
+      },
+      "expected": {
+        "result": "ok",
+        "typed_model": "RadrootsCalendar",
+        "generic_model": "RadrootsListSet"
+      }
+    },
+    {
+      "id": "social_farm_rejects_private_ops_json_invalid_007",
+      "kind": "social.farm.parse_event.invalid",
+      "input": {
+        "event": {
+          "kind": 30340,
+          "content": {
+            "workspace": {
+              "pubkey": "workspace_pubkey",
+              "d_tag": "AAAAAAAAAAAAAAAAAAAAAA"
+            },
+            "farm_group_id": "field-group",
+            "document_id": "AAAAAAAAAAAAAAAAAAAAAg",
+            "document_kind": "FarmTask",
+            "encoded_change": "abc-DEF_012"
+          },
+          "tags": [
+            [
+              "d",
+              "AAAAAAAAAAAAAAAAAAAAAA"
+            ]
+          ]
+        }
+      },
+      "expected": {
+        "result": "error",
+        "error_class": "parse_error",
+        "private_fields_rejected": true
+      }
+    },
+    {
+      "id": "social_file_metadata_rejects_farm_file_marker_invalid_008",
+      "kind": "social.file_metadata.parse_event.invalid",
+      "input": {
+        "event": {
+          "kind": 1063,
+          "content": "private caption",
+          "tags": [
+            [
+              "url",
+              "https://media.example.test/private.jpg"
+            ],
+            [
+              "m",
+              "image/jpeg"
+            ],
+            [
+              "x",
+              "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+            ],
+            [
+              "radroots:owner_document",
+              "FarmTask",
+              "AAAAAAAAAAAAAAAAAAAAAg"
+            ]
+          ]
+        }
+      },
+      "expected": {
+        "result": "error",
+        "error_class": "parse_error",
+        "rejected_tag": "radroots:owner_document"
+      }
+    },
+    {
+      "id": "social_nip29_group_metadata_not_public_social_009",
+      "kind": "social.group.classification.valid",
+      "input": {
+        "event": {
+          "kind": 39000,
+          "content": "{\"name\":\"Field Group\"}",
+          "tags": [
+            [
+              "d",
+              "field-group"
+            ],
+            [
+              "supported_kinds",
+              "78",
+              "30078"
+            ]
+          ]
+        }
+      },
+      "expected": {
+        "result": "ok",
+        "public_social_kind": false,
+        "group_infrastructure": true
+      }
+    }
+  ]
+}

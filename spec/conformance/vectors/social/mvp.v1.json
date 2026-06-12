@@ -1,0 +1,416 @@
+{
+  "suite": "social_mvp",
+  "contract_version": "0.1.0",
+  "vectors": [
+    {
+      "id": "social_post_tags_with_metadata_valid_001",
+      "kind": "social.post.build_tags.valid",
+      "input": {
+        "post": {
+          "content": "field update",
+          "farm": {
+            "farm": {
+              "pubkey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "d_tag": "AAAAAAAAAAAAAAAAAAAAAA"
+            },
+            "relays": [
+              "wss://relay.example.test"
+            ]
+          },
+          "topics": [
+            "soil"
+          ],
+          "media": [
+            {
+              "url": "https://media.example.test/field.jpg",
+              "mime_type": "image/jpeg",
+              "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "result": "ok",
+        "required_tags": [
+          "a",
+          "t",
+          "imeta"
+        ]
+      }
+    },
+    {
+      "id": "social_post_tags_empty_content_valid_002",
+      "kind": "social.post.build_tags.valid",
+      "input": {
+        "post": {
+          "content": ""
+        }
+      },
+      "expected": {
+        "result": "ok",
+        "required_tags": []
+      }
+    },
+    {
+      "id": "social_post_tags_malformed_imeta_invalid_003",
+      "kind": "social.post.build_tags.invalid",
+      "input": {
+        "post": {
+          "content": "field update",
+          "media": [
+            {
+              "imeta": [
+                [
+                  "url https://media.example.test/field.jpg",
+                  ""
+                ]
+              ]
+            }
+          ]
+        }
+      },
+      "expected": {
+        "result": "error",
+        "error_class": "encode_error",
+        "field": "imeta"
+      }
+    },
+    {
+      "id": "social_comment_event_root_address_parent_valid_004",
+      "kind": "social.comment.build_tags.valid",
+      "input": {
+        "comment": {
+          "root": {
+            "kind": "event",
+            "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "author": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "event_kind": 30023,
+            "relays": [
+              "wss://relay.example.test"
+            ]
+          },
+          "parent": {
+            "kind": "address",
+            "address": "30023:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:AAAAAAAAAAAAAAAAAAAAAg",
+            "author": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "event_kind": 30023,
+            "relays": [
+              "wss://relay2.example.test"
+            ]
+          },
+          "content": "great notes"
+        }
+      },
+      "expected": {
+        "result": "ok",
+        "required_tags": [
+          "E",
+          "P",
+          "K",
+          "a",
+          "p",
+          "k"
+        ]
+      }
+    },
+    {
+      "id": "social_comment_external_root_parent_valid_005",
+      "kind": "social.comment.build_tags.valid",
+      "input": {
+        "comment": {
+          "root": {
+            "kind": "external",
+            "id": "https://example.test/root",
+            "external_kind": "web",
+            "hint": "https://example.test/root"
+          },
+          "parent": {
+            "kind": "external",
+            "id": "https://example.test/parent",
+            "external_kind": "web",
+            "hint": "https://example.test/parent"
+          },
+          "content": "linked context"
+        }
+      },
+      "expected": {
+        "result": "ok",
+        "required_tags": [
+          "I",
+          "K",
+          "i",
+          "k"
+        ]
+      }
+    },
+    {
+      "id": "social_comment_kind_one_target_invalid_006",
+      "kind": "social.comment.build_tags.invalid",
+      "input": {
+        "comment": {
+          "root": {
+            "kind": "event",
+            "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "author": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "event_kind": 1,
+            "relays": []
+          },
+          "parent": {
+            "kind": "event",
+            "id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "author": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "event_kind": 1,
+            "relays": []
+          },
+          "content": "reply"
+        }
+      },
+      "expected": {
+        "result": "error",
+        "error_class": "encode_error",
+        "field": "root"
+      }
+    },
+    {
+      "id": "social_comment_legacy_decode_invalid_007",
+      "kind": "social.comment.parse_event.invalid",
+      "input": {
+        "event": {
+          "kind": 1111,
+          "content": "legacy",
+          "tags": [
+            [
+              "e_root",
+              "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            ],
+            [
+              "e_prev",
+              "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            ]
+          ]
+        }
+      },
+      "expected": {
+        "result": "error",
+        "error_class": "parse_error",
+        "rejected_tags": [
+          "e_root",
+          "e_prev"
+        ]
+      }
+    },
+    {
+      "id": "social_reaction_empty_content_valid_008",
+      "kind": "social.reaction.build_tags.valid",
+      "input": {
+        "reaction": {
+          "target": {
+            "kind": "address",
+            "address": "30023:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:AAAAAAAAAAAAAAAAAAAAAg",
+            "author": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "event_kind": 30023,
+            "relays": [
+              "wss://relay.example.test"
+            ]
+          },
+          "content": ""
+        }
+      },
+      "expected": {
+        "result": "ok",
+        "required_tags": [
+          "a",
+          "p",
+          "k"
+        ]
+      }
+    },
+    {
+      "id": "social_reaction_missing_target_invalid_009",
+      "kind": "social.reaction.parse_event.invalid",
+      "input": {
+        "event": {
+          "kind": 7,
+          "content": "+",
+          "tags": []
+        }
+      },
+      "expected": {
+        "result": "error",
+        "error_class": "parse_error",
+        "missing_target": true
+      }
+    },
+    {
+      "id": "social_article_tags_valid_010",
+      "kind": "social.article.build_tags.valid",
+      "input": {
+        "article": {
+          "d_tag": "AAAAAAAAAAAAAAAAAAAAAg",
+          "title": "soil notes",
+          "content": "# soil notes",
+          "summary": "cover crop observations",
+          "published_at": 1780000000,
+          "topics": [
+            "soil",
+            "cover-crops"
+          ]
+        }
+      },
+      "expected": {
+        "result": "ok",
+        "required_tags": [
+          "d",
+          "title",
+          "summary",
+          "published_at",
+          "t"
+        ]
+      }
+    },
+    {
+      "id": "social_article_missing_title_invalid_011",
+      "kind": "social.article.build_tags.invalid",
+      "input": {
+        "article": {
+          "d_tag": "AAAAAAAAAAAAAAAAAAAAAg",
+          "title": "",
+          "content": "# soil notes"
+        }
+      },
+      "expected": {
+        "result": "error",
+        "error_class": "encode_error",
+        "field": "title"
+      }
+    },
+    {
+      "id": "social_file_metadata_public_valid_012",
+      "kind": "social.file_metadata.build_tags.valid",
+      "input": {
+        "metadata": {
+          "url": "https://media.example.test/public.jpg",
+          "mime_type": "image/jpeg",
+          "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "magnet": "magnet:?xt=urn:btih:abc",
+          "content_hashes": [
+            "sha256:field"
+          ],
+          "services": [
+            "https://media.example.test"
+          ]
+        }
+      },
+      "expected": {
+        "result": "ok",
+        "required_tags": [
+          "url",
+          "m",
+          "x",
+          "magnet",
+          "i",
+          "service"
+        ]
+      }
+    },
+    {
+      "id": "social_file_metadata_bad_hash_invalid_013",
+      "kind": "social.file_metadata.build_tags.invalid",
+      "input": {
+        "metadata": {
+          "url": "https://media.example.test/public.jpg",
+          "mime_type": "image/jpeg",
+          "sha256": "not-a-sha"
+        }
+      },
+      "expected": {
+        "result": "error",
+        "error_class": "encode_error",
+        "field": "sha256"
+      }
+    },
+    {
+      "id": "social_calendar_date_tags_valid_014",
+      "kind": "social.calendar_date_event.build_tags.valid",
+      "input": {
+        "event": {
+          "d_tag": "AAAAAAAAAAAAAAAAAAAAAw",
+          "title": "market day",
+          "start": "2026-06-20",
+          "end": "2026-06-21",
+          "days": [
+            {
+              "value": "2026-06-20"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "result": "ok",
+        "required_tags": [
+          "d",
+          "title",
+          "start",
+          "end",
+          "d"
+        ]
+      }
+    },
+    {
+      "id": "social_calendar_date_bad_date_invalid_015",
+      "kind": "social.calendar_date_event.build_tags.invalid",
+      "input": {
+        "event": {
+          "d_tag": "AAAAAAAAAAAAAAAAAAAAAw",
+          "title": "market day",
+          "start": "June 20"
+        }
+      },
+      "expected": {
+        "result": "error",
+        "error_class": "encode_error",
+        "field": "start"
+      }
+    },
+    {
+      "id": "social_calendar_time_tags_valid_016",
+      "kind": "social.calendar_time_event.build_tags.valid",
+      "input": {
+        "event": {
+          "d_tag": "AAAAAAAAAAAAAAAAAAAA-A",
+          "title": "wash pack shift",
+          "start": 1781895600,
+          "end": 1781899200,
+          "start_tzid": "America/Vancouver"
+        }
+      },
+      "expected": {
+        "result": "ok",
+        "required_tags": [
+          "d",
+          "title",
+          "start",
+          "end",
+          "start_tzid"
+        ]
+      }
+    },
+    {
+      "id": "social_calendar_time_end_before_start_invalid_017",
+      "kind": "social.calendar_time_event.build_tags.invalid",
+      "input": {
+        "event": {
+          "d_tag": "AAAAAAAAAAAAAAAAAAAA-A",
+          "title": "wash pack shift",
+          "start": 1781899200,
+          "end": 1781895600
+        }
+      },
+      "expected": {
+        "result": "error",
+        "error_class": "encode_error",
+        "field": "end"
+      }
+    }
+  ]
+}

@@ -16,24 +16,23 @@ The target implementation is standards-first and Radroots-named. Event models li
 to tags helpers live in `radroots_events_codec_wasm`, and deterministic fixtures live under
 `spec/conformance`.
 
-## Source Inventory
+## Implementation Inventory
 
-The current repository already contains partial public social support for kind `1`
-`RadrootsPost`, kind `1111` `RadrootsComment`, kind `7` `RadrootsReaction`, generic
-`RadrootsList` entries, and listing draft kind `30403` through `RadrootsListing`.
+The repository implements public social support for kind `1` `RadrootsPost`, kind `1111`
+`RadrootsComment`, kind `7` `RadrootsReaction`, generic `RadrootsList` entries, listing draft kind
+`30403` through `RadrootsListing`, articles, generic public file metadata, calendar date events,
+calendar time events, reposts, generic reposts, calendar collections, RSVP events, and reports.
 
-The current gaps before the social refactor are:
+The closeout contract requires:
 
-- missing model and codec coverage for articles, public generic file metadata, calendar date events,
-  calendar time events, reposts, generic reposts, calendar collections, RSVP events, and reports
-- incomplete kind and tag constants for the approved NIP surface
-- `RadrootsPost` does not yet preserve optional social metadata
-- `RadrootsComment` still accepts legacy `e_root` and `e_prev` fallback tags in canonical decode
-- `RadrootsReaction` currently rejects empty content even though empty content is a valid NIP-25 like
-- `RadrootsListing` needs explicit optional `published_at` metadata for NIP-99 parity
-- NIP-65 relay-list behavior needs explicit validation evidence through `RadrootsList`
-- conformance vectors and canonical-event witnesses do not yet cover every new or upgraded social
-  event family
+- complete model and codec coverage for the approved public social event families
+- kind and tag constants for the approved NIP surface
+- `RadrootsPost` preservation for optional social metadata
+- strict NIP-22 `RadrootsComment` behavior without legacy `e_root` or `e_prev` fallback tags
+- strict NIP-25 `RadrootsReaction` behavior where empty content is a valid like
+- explicit optional `published_at` support for NIP-99 listing parity
+- NIP-65 relay-list validation evidence through `RadrootsList`
+- conformance vectors and canonical-event witnesses for every new or upgraded social event family
 
 ## Approved Event Families
 
@@ -93,11 +92,11 @@ promotes them.
 
 ## SDK Boundary
 
-The public social surface is event and codec substrate first. Curated SDK operation metadata may
-promote MVP social builders and parsers only after the corresponding Rust models, codecs, wasm
-helpers where needed, and conformance vectors exist. Production-v1 repost, report, calendar
-collection, and RSVP behavior remains substrate-visible by default unless a consumer proves that it
-should be promoted into the curated operation surface.
+The public social surface is event and codec substrate first. Curated SDK operation metadata
+promotes the MVP social tag-builder surface after the corresponding Rust models, codecs, wasm
+helpers, and conformance vectors exist. Production-v1 repost, report, calendar collection, and RSVP
+behavior remains substrate-visible by default unless a consumer proves that it should be promoted
+into the curated operation surface.
 
 ## Conformance Boundary
 

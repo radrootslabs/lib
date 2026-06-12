@@ -4,11 +4,7 @@ version = "0.1.0-alpha.2"
 source = "rust"
 
 [public]
-domains = ["profile", "farm", "listing", "trade"]
-
-# Public social events are substrate-first during the active social refactor.
-# Curated social operations are intentionally added only after their models,
-# codecs, wasm helpers, and conformance vectors exist.
+domains = ["profile", "farm", "listing", "trade", "social"]
 
 [shared_types]
 public = [
@@ -21,6 +17,13 @@ public = [
   "RadrootsProfile",
   "RadrootsFarm",
   "RadrootsListing",
+  "RadrootsPost",
+  "RadrootsComment",
+  "RadrootsReaction",
+  "RadrootsArticle",
+  "RadrootsFileMetadata",
+  "RadrootsCalendarDateEvent",
+  "RadrootsCalendarTimeEvent",
   "RadrootsTradeEnvelope",
   "RadrootsActiveTradeEnvelope",
   "RadrootsActiveTradeMessageType",
@@ -54,7 +57,7 @@ wasm_crates = ["radroots_events_codec_wasm"]
 
 [sdk]
 rust_package = "radroots_sdk"
-primary_domains = ["profile", "farm", "listing", "trade"]
+primary_domains = ["profile", "farm", "listing", "trade", "social"]
 public_surface = "operation_first"
 
 [operations.profile_build_draft]
@@ -155,6 +158,132 @@ rust_types = [
 
 [operations.listing_parse_event.conformance]
 vector = "spec/conformance/vectors/listing/parse_event.v1.json"
+
+[operations.social_post_build_tags]
+domain = "social"
+id = "social.post.build_tags"
+stability = "beta"
+inputs = ["RadrootsPost"]
+outputs = ["NostrTags"]
+error_class = "encode_error"
+deterministic = true
+signing = "native"
+transport = "native"
+
+[operations.social_post_build_tags.implementation]
+rust_modules = ["crates/events_codec/src/post/encode.rs"]
+rust_types = ["radroots_events::post::RadrootsPost"]
+
+[operations.social_post_build_tags.conformance]
+vector = "spec/conformance/vectors/social/mvp.v1.json"
+
+[operations.social_comment_build_tags]
+domain = "social"
+id = "social.comment.build_tags"
+stability = "beta"
+inputs = ["RadrootsComment"]
+outputs = ["NostrTags"]
+error_class = "encode_error"
+deterministic = true
+signing = "native"
+transport = "native"
+
+[operations.social_comment_build_tags.implementation]
+rust_modules = ["crates/events_codec/src/comment/encode.rs"]
+rust_types = ["radroots_events::comment::RadrootsComment"]
+
+[operations.social_comment_build_tags.conformance]
+vector = "spec/conformance/vectors/social/mvp.v1.json"
+
+[operations.social_reaction_build_tags]
+domain = "social"
+id = "social.reaction.build_tags"
+stability = "beta"
+inputs = ["RadrootsReaction"]
+outputs = ["NostrTags"]
+error_class = "encode_error"
+deterministic = true
+signing = "native"
+transport = "native"
+
+[operations.social_reaction_build_tags.implementation]
+rust_modules = ["crates/events_codec/src/reaction/encode.rs"]
+rust_types = ["radroots_events::reaction::RadrootsReaction"]
+
+[operations.social_reaction_build_tags.conformance]
+vector = "spec/conformance/vectors/social/mvp.v1.json"
+
+[operations.social_article_build_tags]
+domain = "social"
+id = "social.article.build_tags"
+stability = "beta"
+inputs = ["RadrootsArticle"]
+outputs = ["NostrTags"]
+error_class = "encode_error"
+deterministic = true
+signing = "native"
+transport = "native"
+
+[operations.social_article_build_tags.implementation]
+rust_modules = ["crates/events_codec/src/article/encode.rs"]
+rust_types = ["radroots_events::article::RadrootsArticle"]
+
+[operations.social_article_build_tags.conformance]
+vector = "spec/conformance/vectors/social/mvp.v1.json"
+
+[operations.social_file_metadata_build_tags]
+domain = "social"
+id = "social.file_metadata.build_tags"
+stability = "beta"
+inputs = ["RadrootsFileMetadata"]
+outputs = ["NostrTags"]
+error_class = "encode_error"
+deterministic = true
+signing = "native"
+transport = "native"
+
+[operations.social_file_metadata_build_tags.implementation]
+rust_modules = ["crates/events_codec/src/file_metadata/encode.rs"]
+rust_types = ["radroots_events::file_metadata::RadrootsFileMetadata"]
+
+[operations.social_file_metadata_build_tags.conformance]
+vector = "spec/conformance/vectors/social/mvp.v1.json"
+
+[operations.social_calendar_date_event_build_tags]
+domain = "social"
+id = "social.calendar_date_event.build_tags"
+stability = "beta"
+inputs = ["RadrootsCalendarDateEvent"]
+outputs = ["NostrTags"]
+error_class = "encode_error"
+deterministic = true
+signing = "native"
+transport = "native"
+
+[operations.social_calendar_date_event_build_tags.implementation]
+rust_modules = ["crates/events_codec/src/calendar/encode.rs"]
+rust_types = ["radroots_events::calendar::RadrootsCalendarDateEvent"]
+
+[operations.social_calendar_date_event_build_tags.conformance]
+vector = "spec/conformance/vectors/social/mvp.v1.json"
+
+[operations.social_calendar_time_event_build_tags]
+domain = "social"
+id = "social.calendar_time_event.build_tags"
+stability = "beta"
+inputs = ["RadrootsCalendarTimeEvent"]
+outputs = ["NostrTags"]
+error_class = "encode_error"
+deterministic = true
+signing = "native"
+transport = "native"
+
+[operations.social_calendar_time_event_build_tags.implementation]
+rust_modules = ["crates/events_codec/src/calendar/encode.rs"]
+rust_types = ["radroots_events::calendar::RadrootsCalendarTimeEvent"]
+
+[operations.social_calendar_time_event_build_tags.conformance]
+vector = "spec/conformance/vectors/social/mvp.v1.json"
 
 [operations.trade_build_envelope_draft]
 domain = "trade"

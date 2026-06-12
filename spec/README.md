@@ -56,11 +56,13 @@ ordinary posts, comments, reactions, articles, public generic file metadata,
 calendar events, reposts, reports, listing drafts through `RadrootsListing`, and
 NIP-65 relay lists through `RadrootsList`.
 
-The social surface is substrate-first. MVP social builders and parsers may be
-promoted into curated SDK operation metadata only after their Rust models,
-codecs, wasm helpers where needed, and deterministic conformance vectors exist.
-Production-v1 repost, report, calendar collection, and RSVP behavior remains
-available through event and codec APIs by default.
+The social surface is substrate-first. MVP social tag builders for posts,
+comments, reactions, articles, generic public file metadata, calendar date
+events, and calendar time events are promoted into curated SDK operation
+metadata after their Rust models, codecs, wasm helpers, and deterministic
+conformance vectors exist. Production-v1 repost, report, calendar collection,
+and RSVP behavior remains available through event and codec APIs by default and
+is covered by conformance vectors.
 
 ## Rust Crate Tiers
 
