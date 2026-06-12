@@ -28,13 +28,14 @@ use crate::wire::WireEventParts;
 
 const TAG_ABOUT: &str = "about";
 const TAG_CLOSED: &str = "closed";
-const TAG_CLAIM: &str = "claim";
-const TAG_EXPIRATION: &str = "expiration";
+const TAG_CODE: &str = "code";
 const TAG_HIDDEN: &str = "hidden";
 const TAG_NAME: &str = "name";
 const TAG_PICTURE: &str = "picture";
 const TAG_PRIVATE: &str = "private";
+const TAG_RESTRICTED: &str = "restricted";
 const TAG_ROLE: &str = "role";
+const TAG_SUPPORTED_KINDS: &str = "supported_kinds";
 
 pub fn group_put_user_build_tags(
     event: &RadrootsGroupPutUser,
@@ -88,22 +89,18 @@ pub fn group_create_invite_build_tags(
     event: &RadrootsGroupCreateInvite,
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
     let mut tags = h_tags(&event.group_id)?;
-    push_optional_tag(&mut tags, TAG_P, event.invitee_pubkey.as_deref());
-    for role in &event.roles {
-        validate_non_empty_field(role, "roles")?;
-        push_tag(&mut tags, TAG_ROLE, role.as_str());
-    }
-    if let Some(expires_at) = event.expires_at {
-        push_tag(&mut tags, TAG_EXPIRATION, expires_at.to_string());
-    }
-    push_optional_tag(&mut tags, TAG_CLAIM, event.claim.as_deref());
+    validate_non_empty_field(&event.code, "code")?;
+    push_tag(&mut tags, TAG_CODE, event.code.as_str());
     Ok(tags)
 }
 
 pub fn group_join_request_build_tags(
     event: &RadrootsGroupJoinRequest,
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
-    h_tags(&event.group_id)
+    let mut tags = h_tags(&event.group_id)?;
+    push_optional_tag(&mut tags, TAG_CODE, event.code.as_deref());
+    validate_optional(event.code.as_deref(), "code")?;
+    Ok(tags)
 }
 
 pub fn group_leave_request_build_tags(
@@ -155,57 +152,70 @@ pub fn group_roles_build_tags(
 pub fn group_put_user_to_wire_parts(
     event: &RadrootsGroupPutUser,
 ) -> Result<WireEventParts, EventEncodeError> {
-    empty_wire(KIND_GROUP_PUT_USER, group_put_user_build_tags(event)?)
+    message_wire(
+        KIND_GROUP_PUT_USER,
+        group_put_user_build_tags(event)?,
+        event.message.as_deref(),
+    )
 }
 
 pub fn group_remove_user_to_wire_parts(
     event: &RadrootsGroupRemoveUser,
 ) -> Result<WireEventParts, EventEncodeError> {
-    empty_wire(KIND_GROUP_REMOVE_USER, group_remove_user_build_tags(event)?)
+    message_wire(
+        KIND_GROUP_REMOVE_USER,
+        group_remove_user_build_tags(event)?,
+        event.message.as_deref(),
+    )
 }
 
 pub fn group_create_group_to_wire_parts(
     event: &RadrootsGroupCreateGroup,
 ) -> Result<WireEventParts, EventEncodeError> {
-    empty_wire(
+    message_wire(
         KIND_GROUP_CREATE_GROUP,
         group_create_group_build_tags(event)?,
+        event.message.as_deref(),
     )
 }
 
 pub fn group_edit_metadata_to_wire_parts(
     event: &RadrootsGroupEditMetadata,
 ) -> Result<WireEventParts, EventEncodeError> {
-    empty_wire(
+    message_wire(
         KIND_GROUP_EDIT_METADATA,
         group_edit_metadata_build_tags(event)?,
+        event.message.as_deref(),
     )
 }
 
 pub fn group_delete_group_to_wire_parts(
     event: &RadrootsGroupDeleteGroup,
 ) -> Result<WireEventParts, EventEncodeError> {
-    empty_wire(
+    message_wire(
         KIND_GROUP_DELETE_GROUP,
         group_delete_group_build_tags(event)?,
+        event.message.as_deref(),
     )
 }
 
 pub fn group_delete_event_to_wire_parts(
     event: &RadrootsGroupDeleteEvent,
 ) -> Result<WireEventParts, EventEncodeError> {
-    empty_wire(
+    message_wire(
         KIND_GROUP_DELETE_EVENT,
         group_delete_event_build_tags(event)?,
+        event.message.as_deref(),
     )
 }
 
 pub fn group_create_invite_to_wire_parts(
     event: &RadrootsGroupCreateInvite,
 ) -> Result<WireEventParts, EventEncodeError> {
-    empty_wire(
+    message_wire(
         KIND_GROUP_CREATE_INVITE,
         group_create_invite_build_tags(event)?,
+        event.message.as_deref(),
     )
 }
 
@@ -238,19 +248,31 @@ pub fn group_metadata_to_wire_parts(
 pub fn group_admins_to_wire_parts(
     event: &RadrootsGroupAdmins,
 ) -> Result<WireEventParts, EventEncodeError> {
-    empty_wire(KIND_GROUP_ADMINS, group_admins_build_tags(event)?)
+    message_wire(
+        KIND_GROUP_ADMINS,
+        group_admins_build_tags(event)?,
+        event.description.as_deref(),
+    )
 }
 
 pub fn group_members_to_wire_parts(
     event: &RadrootsGroupMembers,
 ) -> Result<WireEventParts, EventEncodeError> {
-    empty_wire(KIND_GROUP_MEMBERS, group_members_build_tags(event)?)
+    message_wire(
+        KIND_GROUP_MEMBERS,
+        group_members_build_tags(event)?,
+        event.description.as_deref(),
+    )
 }
 
 pub fn group_roles_to_wire_parts(
     event: &RadrootsGroupRoles,
 ) -> Result<WireEventParts, EventEncodeError> {
-    empty_wire(KIND_GROUP_ROLES, group_roles_build_tags(event)?)
+    message_wire(
+        KIND_GROUP_ROLES,
+        group_roles_build_tags(event)?,
+        event.description.as_deref(),
+    )
 }
 
 fn h_tags(group_id: &str) -> Result<Vec<Vec<String>>, EventEncodeError> {
@@ -275,18 +297,32 @@ fn push_metadata_tags(
     push_optional_tag(tags, TAG_ABOUT, metadata.about.as_deref());
     push_optional_tag(tags, TAG_PICTURE, metadata.picture.as_deref());
     if metadata.is_private {
-        push_tag(tags, TAG_PRIVATE, "true");
+        push_marker_tag(tags, TAG_PRIVATE);
+    }
+    if metadata.is_restricted {
+        push_marker_tag(tags, TAG_RESTRICTED);
     }
     if metadata.is_closed {
-        push_tag(tags, TAG_CLOSED, "true");
+        push_marker_tag(tags, TAG_CLOSED);
     }
     if metadata.is_hidden {
-        push_tag(tags, TAG_HIDDEN, "true");
+        push_marker_tag(tags, TAG_HIDDEN);
+    }
+    if let Some(supported_kinds) = metadata.supported_kinds.as_deref() {
+        push_tag_values(
+            tags,
+            TAG_SUPPORTED_KINDS,
+            supported_kinds.iter().map(ToString::to_string),
+        );
     }
     validate_optional(metadata.name.as_deref(), "name")?;
     validate_optional(metadata.about.as_deref(), "about")?;
     validate_optional(metadata.picture.as_deref(), "picture")?;
     Ok(())
+}
+
+fn push_marker_tag(tags: &mut Vec<Vec<String>>, key: &str) {
+    tags.push(vec![key.to_string()]);
 }
 
 fn push_user_refs(

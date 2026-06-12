@@ -29,13 +29,19 @@ The Field codec surface validates the public Nostr event substrate exposed by
  * NIP-42 relay auth and NIP-98 HTTP auth events require empty content and the
    auth tags required by their protocols;
  * NIP-29 group codecs preserve the protocol distinction between `h`-routed
-   group operations and `d`-routed addressable group state.
+   group operations and `d`-routed addressable group state for the supported
+   `9000`, `9001`, `9002`, `9005`, `9007`, `9008`, `9009`, `9021`, `9022`,
+   `39000`, `39001`, `39002`, and `39003` subset.
 
 These codecs validate event shape, routing tags, hashes, and payload encoding.
 They do not validate private Field task, work-session, harvest, approval, or
 authorization semantics; those remain application and CRDT document concerns.
-The companion `radroots_events_codec_wasm` crate exposes deterministic JSON tag
-builders for the same Field and NIP-29 families.
+The group codecs use bare metadata marker tags such as `private`, `restricted`,
+`hidden`, and `closed`, `supported_kinds` declarations, and `code` tags for
+invite and join flows. They preserve optional reason content on user management
+and moderation events. LiveKit room metadata and live participant state are
+deferred. The companion `radroots_events_codec_wasm` crate exposes
+deterministic JSON tag builders for the same Field and NIP-29 families.
 
 ## Copyright
 

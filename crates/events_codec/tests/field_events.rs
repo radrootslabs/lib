@@ -13,8 +13,9 @@ use radroots_events::{
         RadrootsFarmWorkspaceRelay, RadrootsFarmWorkspaceRelayMode,
     },
     group::{
-        RadrootsGroupAdmins, RadrootsGroupCreateInvite, RadrootsGroupEditableMetadata,
-        RadrootsGroupMetadata, RadrootsGroupPutUser, RadrootsGroupUserRef,
+        KIND_GROUP_CREATE_INVITE, KIND_GROUP_METADATA, RadrootsGroupAdmins,
+        RadrootsGroupCreateInvite, RadrootsGroupEditableMetadata, RadrootsGroupMetadata,
+        RadrootsGroupPutUser, RadrootsGroupUserRef,
     },
     http_auth::RadrootsHttpAuth,
     kinds::KIND_POST,
@@ -132,6 +133,7 @@ fn field_codec_matrix_roundtrips_all_new_event_families() {
 
     let admins = RadrootsGroupAdmins {
         d_tag: GROUP_ID.to_string(),
+        description: Some("field group admins".to_string()),
         admins: vec![RadrootsGroupUserRef {
             pubkey: "admin_pubkey".to_string(),
             roles: vec!["admin".to_string()],
@@ -146,6 +148,7 @@ fn field_codec_matrix_roundtrips_all_new_event_families() {
 
     let put = RadrootsGroupPutUser {
         group_id: GROUP_ID.to_string(),
+        message: Some("add field member".to_string()),
         pubkey: "member_pubkey".to_string(),
         roles: vec!["member".to_string()],
     };
@@ -158,10 +161,8 @@ fn field_codec_matrix_roundtrips_all_new_event_families() {
 
     let invite = RadrootsGroupCreateInvite {
         group_id: GROUP_ID.to_string(),
-        invitee_pubkey: Some("member_pubkey".to_string()),
-        roles: vec!["member".to_string()],
-        expires_at: Some(1_780_000_000),
-        claim: Some("claim-token".to_string()),
+        message: Some("join the field group".to_string()),
+        code: "invite-code".to_string(),
     };
     let invite_parts = group_create_invite_to_wire_parts(&invite).expect("invite parts");
     assert_eq!(
@@ -204,6 +205,7 @@ fn field_codec_matrix_rejects_missing_required_tags_and_mismatches() {
 
     let put_parts = group_put_user_to_wire_parts(&RadrootsGroupPutUser {
         group_id: GROUP_ID.to_string(),
+        message: None,
         pubkey: "member_pubkey".to_string(),
         roles: vec!["member".to_string()],
     })
@@ -211,6 +213,26 @@ fn field_codec_matrix_rejects_missing_required_tags_and_mismatches() {
     assert!(matches!(
         group_put_user_from_event(put_parts.kind, &without_tag(&put_parts.tags, "h"), ""),
         Err(EventParseError::MissingTag("h"))
+    ));
+
+    let valued_marker_tags = vec![
+        vec!["d".to_string(), GROUP_ID.to_string()],
+        vec!["private".to_string(), "true".to_string()],
+    ];
+    assert!(matches!(
+        group_metadata_from_event(KIND_GROUP_METADATA, &valued_marker_tags, ""),
+        Err(EventParseError::InvalidTag("private"))
+    ));
+
+    let first_pass_invite_tags = vec![
+        vec!["h".to_string(), GROUP_ID.to_string()],
+        vec!["p".to_string(), "member_pubkey".to_string()],
+        vec!["role".to_string(), "member".to_string()],
+        vec!["claim".to_string(), "claim-token".to_string()],
+    ];
+    assert!(matches!(
+        group_create_invite_from_event(KIND_GROUP_CREATE_INVITE, &first_pass_invite_tags, ""),
+        Err(EventParseError::MissingTag("code"))
     ));
 }
 
@@ -352,8 +374,10 @@ fn sample_group_metadata() -> RadrootsGroupEditableMetadata {
         about: Some("Field app group".to_string()),
         picture: Some("https://media.example.invalid/group.png".to_string()),
         is_private: false,
+        is_restricted: true,
         is_closed: false,
         is_hidden: false,
+        supported_kinds: Some(vec![78, 30078]),
     }
 }
 

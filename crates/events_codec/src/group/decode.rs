@@ -21,19 +21,19 @@ use radroots_events::{
 
 use crate::error::EventParseError;
 use crate::field_helpers::{
-    optional_tag_value, require_empty_content, required_tag_value, tag_values,
-    validate_non_empty_tag_value,
+    optional_tag_value, require_empty_content, required_tag_value, validate_non_empty_tag_value,
 };
 
 const TAG_ABOUT: &str = "about";
 const TAG_CLOSED: &str = "closed";
-const TAG_CLAIM: &str = "claim";
-const TAG_EXPIRATION: &str = "expiration";
+const TAG_CODE: &str = "code";
 const TAG_HIDDEN: &str = "hidden";
 const TAG_NAME: &str = "name";
 const TAG_PICTURE: &str = "picture";
 const TAG_PRIVATE: &str = "private";
+const TAG_RESTRICTED: &str = "restricted";
 const TAG_ROLE: &str = "role";
+const TAG_SUPPORTED_KINDS: &str = "supported_kinds";
 
 pub fn group_put_user_from_event(
     kind: u32,
@@ -41,10 +41,10 @@ pub fn group_put_user_from_event(
     content: &str,
 ) -> Result<RadrootsGroupPutUser, EventParseError> {
     require_kind(kind, KIND_GROUP_PUT_USER, "9000")?;
-    require_empty_content(content, "content")?;
     let (pubkey, roles) = required_user_tag(tags)?;
     Ok(RadrootsGroupPutUser {
         group_id: required_tag_value(tags, TAG_H)?,
+        message: optional_content(content),
         pubkey,
         roles,
     })
@@ -56,10 +56,10 @@ pub fn group_remove_user_from_event(
     content: &str,
 ) -> Result<RadrootsGroupRemoveUser, EventParseError> {
     require_kind(kind, KIND_GROUP_REMOVE_USER, "9001")?;
-    require_empty_content(content, "content")?;
     let (pubkey, _) = required_user_tag(tags)?;
     Ok(RadrootsGroupRemoveUser {
         group_id: required_tag_value(tags, TAG_H)?,
+        message: optional_content(content),
         pubkey,
     })
 }
@@ -70,9 +70,9 @@ pub fn group_create_group_from_event(
     content: &str,
 ) -> Result<RadrootsGroupCreateGroup, EventParseError> {
     require_kind(kind, KIND_GROUP_CREATE_GROUP, "9007")?;
-    require_empty_content(content, "content")?;
     Ok(RadrootsGroupCreateGroup {
         group_id: required_tag_value(tags, TAG_H)?,
+        message: optional_content(content),
         metadata: metadata_from_tags(tags)?,
     })
 }
@@ -83,9 +83,9 @@ pub fn group_edit_metadata_from_event(
     content: &str,
 ) -> Result<RadrootsGroupEditMetadata, EventParseError> {
     require_kind(kind, KIND_GROUP_EDIT_METADATA, "9002")?;
-    require_empty_content(content, "content")?;
     Ok(RadrootsGroupEditMetadata {
         group_id: required_tag_value(tags, TAG_H)?,
+        message: optional_content(content),
         metadata: metadata_from_tags(tags)?,
     })
 }
@@ -96,9 +96,9 @@ pub fn group_delete_group_from_event(
     content: &str,
 ) -> Result<RadrootsGroupDeleteGroup, EventParseError> {
     require_kind(kind, KIND_GROUP_DELETE_GROUP, "9008")?;
-    require_empty_content(content, "content")?;
     Ok(RadrootsGroupDeleteGroup {
         group_id: required_tag_value(tags, TAG_H)?,
+        message: optional_content(content),
     })
 }
 
@@ -108,9 +108,9 @@ pub fn group_delete_event_from_event(
     content: &str,
 ) -> Result<RadrootsGroupDeleteEvent, EventParseError> {
     require_kind(kind, KIND_GROUP_DELETE_EVENT, "9005")?;
-    require_empty_content(content, "content")?;
     Ok(RadrootsGroupDeleteEvent {
         group_id: required_tag_value(tags, TAG_H)?,
+        message: optional_content(content),
         event_id: required_tag_value(tags, TAG_E)?,
     })
 }
@@ -121,13 +121,10 @@ pub fn group_create_invite_from_event(
     content: &str,
 ) -> Result<RadrootsGroupCreateInvite, EventParseError> {
     require_kind(kind, KIND_GROUP_CREATE_INVITE, "9009")?;
-    require_empty_content(content, "content")?;
     Ok(RadrootsGroupCreateInvite {
         group_id: required_tag_value(tags, TAG_H)?,
-        invitee_pubkey: optional_tag_value(tags, TAG_P)?,
-        roles: tag_values(tags, TAG_ROLE)?,
-        expires_at: parse_u64_optional(tags, TAG_EXPIRATION)?,
-        claim: optional_tag_value(tags, TAG_CLAIM)?,
+        message: optional_content(content),
+        code: required_tag_value(tags, TAG_CODE)?,
     })
 }
 
@@ -140,6 +137,7 @@ pub fn group_join_request_from_event(
     Ok(RadrootsGroupJoinRequest {
         group_id: required_tag_value(tags, TAG_H)?,
         message: optional_content(content),
+        code: optional_tag_value(tags, TAG_CODE)?,
     })
 }
 
@@ -174,9 +172,9 @@ pub fn group_admins_from_event(
     content: &str,
 ) -> Result<RadrootsGroupAdmins, EventParseError> {
     require_kind(kind, KIND_GROUP_ADMINS, "39001")?;
-    require_empty_content(content, "content")?;
     Ok(RadrootsGroupAdmins {
         d_tag: required_tag_value(tags, TAG_D)?,
+        description: optional_content(content),
         admins: user_refs_from_tags(tags)?,
     })
 }
@@ -187,9 +185,9 @@ pub fn group_members_from_event(
     content: &str,
 ) -> Result<RadrootsGroupMembers, EventParseError> {
     require_kind(kind, KIND_GROUP_MEMBERS, "39002")?;
-    require_empty_content(content, "content")?;
     Ok(RadrootsGroupMembers {
         d_tag: required_tag_value(tags, TAG_D)?,
+        description: optional_content(content),
         members: user_refs_from_tags(tags)?,
     })
 }
@@ -200,9 +198,9 @@ pub fn group_roles_from_event(
     content: &str,
 ) -> Result<RadrootsGroupRoles, EventParseError> {
     require_kind(kind, KIND_GROUP_ROLES, "39003")?;
-    require_empty_content(content, "content")?;
     Ok(RadrootsGroupRoles {
         d_tag: required_tag_value(tags, TAG_D)?,
+        description: optional_content(content),
         roles: roles_from_tags(tags)?,
     })
 }
@@ -229,21 +227,48 @@ fn metadata_from_tags(
         name: optional_tag_value(tags, TAG_NAME)?,
         about: optional_tag_value(tags, TAG_ABOUT)?,
         picture: optional_tag_value(tags, TAG_PICTURE)?,
-        is_private: bool_tag(tags, TAG_PRIVATE)?,
-        is_closed: bool_tag(tags, TAG_CLOSED)?,
-        is_hidden: bool_tag(tags, TAG_HIDDEN)?,
+        is_private: marker_tag(tags, TAG_PRIVATE)?,
+        is_restricted: marker_tag(tags, TAG_RESTRICTED)?,
+        is_closed: marker_tag(tags, TAG_CLOSED)?,
+        is_hidden: marker_tag(tags, TAG_HIDDEN)?,
+        supported_kinds: supported_kinds_from_tags(tags)?,
     })
 }
 
-fn bool_tag(tags: &[Vec<String>], key: &'static str) -> Result<bool, EventParseError> {
-    let Some(value) = optional_tag_value(tags, key)? else {
-        return Ok(false);
-    };
-    match value.as_str() {
-        "true" => Ok(true),
-        "false" => Ok(false),
-        _ => Err(EventParseError::InvalidTag(key)),
+fn marker_tag(tags: &[Vec<String>], key: &'static str) -> Result<bool, EventParseError> {
+    let mut found = false;
+    for tag in tags
+        .iter()
+        .filter(|tag| tag.first().map(|value| value.as_str()) == Some(key))
+    {
+        if found || tag.len() != 1 {
+            return Err(EventParseError::InvalidTag(key));
+        }
+        found = true;
     }
+    Ok(found)
+}
+
+fn supported_kinds_from_tags(tags: &[Vec<String>]) -> Result<Option<Vec<u32>>, EventParseError> {
+    let mut matches = tags
+        .iter()
+        .filter(|tag| tag.first().map(|value| value.as_str()) == Some(TAG_SUPPORTED_KINDS));
+    let Some(tag) = matches.next() else {
+        return Ok(None);
+    };
+    if matches.next().is_some() {
+        return Err(EventParseError::InvalidTag(TAG_SUPPORTED_KINDS));
+    }
+    let mut supported_kinds = Vec::new();
+    for value in tag.iter().skip(1) {
+        validate_non_empty_tag_value(value, TAG_SUPPORTED_KINDS)?;
+        supported_kinds.push(
+            value
+                .parse::<u32>()
+                .map_err(|err| EventParseError::InvalidNumber(TAG_SUPPORTED_KINDS, err))?,
+        );
+    }
+    Ok(Some(supported_kinds))
 }
 
 fn required_user_tag(tags: &[Vec<String>]) -> Result<(String, Vec<String>), EventParseError> {
@@ -303,19 +328,6 @@ fn roles_from_tags(tags: &[Vec<String>]) -> Result<Vec<RadrootsGroupRole>, Event
             })
         })
         .collect()
-}
-
-fn parse_u64_optional(
-    tags: &[Vec<String>],
-    key: &'static str,
-) -> Result<Option<u64>, EventParseError> {
-    let Some(value) = optional_tag_value(tags, key)? else {
-        return Ok(None);
-    };
-    value
-        .parse::<u64>()
-        .map(Some)
-        .map_err(|err| EventParseError::InvalidNumber(key, err))
 }
 
 fn optional_content(content: &str) -> Option<String> {

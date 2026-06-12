@@ -26,7 +26,14 @@ farming operations:
  * farm file metadata events for media attached to farm documents;
  * NIP-42 relay auth and NIP-98 HTTP auth payload models;
  * NIP-29 group metadata, member lists, roles, invites, joins, leaves, and user
-   operations.
+   operations for the supported `9000`, `9001`, `9002`, `9005`, `9007`, `9008`,
+   `9009`, `9021`, `9022`, `39000`, `39001`, `39002`, and `39003` subset.
+
+The NIP-29 group surface uses bare metadata marker tags such as `private`,
+`restricted`, `hidden`, and `closed`, `supported_kinds` declarations, and
+`code` tags for invite and join flows. User management and moderation events
+preserve optional reason content. LiveKit room metadata and live participant
+state are not part of this crate's current group event subset.
 
 Task records, work sessions, harvest records, approvals, and similar Field
 business objects are CRDT document semantics carried by

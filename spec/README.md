@@ -32,8 +32,13 @@ through `radroots_events`, `radroots_events_codec`, and
 `radroots_events_codec_wasm`.
 
 The substrate includes workspace manifests, CRDT change envelopes, farm file
-metadata, NIP-42 relay auth, NIP-98 HTTP auth, and NIP-29 group events. These are
-event and codec APIs, not curated SDK operations by default.
+metadata, NIP-42 relay auth, NIP-98 HTTP auth, and the supported NIP-29 group
+event subset covering `9000`, `9001`, `9002`, `9005`, `9007`, `9008`, `9009`,
+`9021`, `9022`, `39000`, `39001`, `39002`, and `39003`. These are event and
+codec APIs, not curated SDK operations by default. The active NIP-29 subset uses
+bare metadata markers, `supported_kinds`, and `code` tags for invite and join
+flows, and preserves optional user management and moderation reason content;
+LiveKit room metadata and live participant state are deferred.
 
 Task records, work sessions, harvest records, approvals, and similar Field
 business objects are CRDT document semantics carried inside the CRDT change

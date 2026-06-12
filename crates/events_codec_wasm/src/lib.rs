@@ -493,8 +493,10 @@ mod tests {
             about: Some("Field app group".to_string()),
             picture: Some("https://media.example.invalid/group.png".to_string()),
             is_private: false,
+            is_restricted: true,
             is_closed: false,
             is_hidden: false,
+            supported_kinds: Some(vec![78, 30078]),
         }
     }
 
@@ -514,9 +516,13 @@ mod tests {
     }
 
     fn assert_tags_json(value: Result<String, RadrootsJsValue>) {
-        let json = value.expect("tags json");
-        let tags: Vec<Vec<String>> = serde_json::from_str(&json).expect("tags");
+        let tags = tags_json(value);
         assert!(!tags.is_empty());
+    }
+
+    fn tags_json(value: Result<String, RadrootsJsValue>) -> Vec<Vec<String>> {
+        let json = value.expect("tags json");
+        serde_json::from_str(&json).expect("tags")
     }
 
     #[test]
@@ -621,6 +627,7 @@ mod tests {
         assert_tags_json(group_put_user_tags(
             &serde_json::to_string(&RadrootsGroupPutUser {
                 group_id: "field-group".to_string(),
+                message: Some("add member".to_string()),
                 pubkey: "member_pubkey".to_string(),
                 roles: vec!["member".to_string()],
             })
@@ -629,6 +636,7 @@ mod tests {
         assert_tags_json(group_remove_user_tags(
             &serde_json::to_string(&RadrootsGroupRemoveUser {
                 group_id: "field-group".to_string(),
+                message: Some("remove member".to_string()),
                 pubkey: "member_pubkey".to_string(),
             })
             .expect("remove user json"),
@@ -636,6 +644,7 @@ mod tests {
         assert_tags_json(group_create_group_tags(
             &serde_json::to_string(&RadrootsGroupCreateGroup {
                 group_id: "field-group".to_string(),
+                message: Some("create group".to_string()),
                 metadata: metadata.clone(),
             })
             .expect("create group json"),
@@ -643,6 +652,7 @@ mod tests {
         assert_tags_json(group_edit_metadata_tags(
             &serde_json::to_string(&RadrootsGroupEditMetadata {
                 group_id: "field-group".to_string(),
+                message: Some("edit metadata".to_string()),
                 metadata: metadata.clone(),
             })
             .expect("edit metadata json"),
@@ -650,30 +660,32 @@ mod tests {
         assert_tags_json(group_delete_group_tags(
             &serde_json::to_string(&RadrootsGroupDeleteGroup {
                 group_id: "field-group".to_string(),
+                message: Some("delete group".to_string()),
             })
             .expect("delete group json"),
         ));
         assert_tags_json(group_delete_event_tags(
             &serde_json::to_string(&RadrootsGroupDeleteEvent {
                 group_id: "field-group".to_string(),
+                message: Some("delete event".to_string()),
                 event_id: "event_id".to_string(),
             })
             .expect("delete event json"),
         ));
-        assert_tags_json(group_create_invite_tags(
+        let invite_tags = tags_json(group_create_invite_tags(
             &serde_json::to_string(&RadrootsGroupCreateInvite {
                 group_id: "field-group".to_string(),
-                invitee_pubkey: Some("member_pubkey".to_string()),
-                roles: vec!["member".to_string()],
-                expires_at: Some(1_780_000_000),
-                claim: Some("claim-token".to_string()),
+                message: Some("join the field group".to_string()),
+                code: "invite-code".to_string(),
             })
             .expect("invite json"),
         ));
+        assert!(invite_tags.contains(&vec!["code".to_string(), "invite-code".to_string()]));
         assert_tags_json(group_join_request_tags(
             &serde_json::to_string(&RadrootsGroupJoinRequest {
                 group_id: "field-group".to_string(),
                 message: Some("requesting access".to_string()),
+                code: Some("invite-code".to_string()),
             })
             .expect("join json"),
         ));
@@ -684,16 +696,23 @@ mod tests {
             })
             .expect("leave json"),
         ));
-        assert_tags_json(group_metadata_tags(
+        let metadata_tags = tags_json(group_metadata_tags(
             &serde_json::to_string(&RadrootsGroupMetadata {
                 d_tag: "field-group".to_string(),
                 metadata,
             })
             .expect("metadata json"),
         ));
+        assert!(metadata_tags.contains(&vec!["restricted".to_string()]));
+        assert!(metadata_tags.contains(&vec![
+            "supported_kinds".to_string(),
+            "78".to_string(),
+            "30078".to_string()
+        ]));
         assert_tags_json(group_admins_tags(
             &serde_json::to_string(&RadrootsGroupAdmins {
                 d_tag: "field-group".to_string(),
+                description: Some("group admins".to_string()),
                 admins: vec![sample_group_user("admin")],
             })
             .expect("admins json"),
@@ -701,6 +720,7 @@ mod tests {
         assert_tags_json(group_members_tags(
             &serde_json::to_string(&RadrootsGroupMembers {
                 d_tag: "field-group".to_string(),
+                description: Some("group members".to_string()),
                 members: vec![sample_group_user("member")],
             })
             .expect("members json"),
@@ -708,6 +728,7 @@ mod tests {
         assert_tags_json(group_roles_tags(
             &serde_json::to_string(&RadrootsGroupRoles {
                 d_tag: "field-group".to_string(),
+                description: Some("group roles".to_string()),
                 roles: vec![sample_group_role()],
             })
             .expect("roles json"),

@@ -29,11 +29,13 @@ mod tests {
     fn group_user_operations_use_h_group_id_routing() {
         let put = RadrootsGroupPutUser {
             group_id: "field-group".to_string(),
+            message: Some("add member".to_string()),
             pubkey: "member_pubkey".to_string(),
             roles: vec!["member".to_string()],
         };
         let remove = RadrootsGroupRemoveUser {
             group_id: "field-group".to_string(),
+            message: Some("remove member".to_string()),
             pubkey: "member_pubkey".to_string(),
         };
 
@@ -42,6 +44,8 @@ mod tests {
 
         assert_eq!(put_parts.kind, KIND_GROUP_PUT_USER);
         assert_eq!(remove_parts.kind, KIND_GROUP_REMOVE_USER);
+        assert_eq!(put_parts.content, "add member");
+        assert_eq!(remove_parts.content, "remove member");
         assert!(put_parts.tags.contains(&tag("h", "field-group")));
         assert!(
             !put_parts
@@ -73,14 +77,17 @@ mod tests {
         };
         let admins = RadrootsGroupAdmins {
             d_tag: "field-group".to_string(),
+            description: Some("group admins".to_string()),
             admins: vec![sample_user("admin_pubkey", "admin")],
         };
         let members = RadrootsGroupMembers {
             d_tag: "field-group".to_string(),
+            description: Some("group members".to_string()),
             members: vec![sample_user("member_pubkey", "member")],
         };
         let roles = RadrootsGroupRoles {
             d_tag: "field-group".to_string(),
+            description: Some("group roles".to_string()),
             roles: vec![sample_role()],
         };
 
@@ -91,12 +98,22 @@ mod tests {
 
         assert_eq!(metadata_parts.kind, KIND_GROUP_METADATA);
         assert!(metadata_parts.tags.contains(&tag("d", "field-group")));
+        assert!(metadata_parts.tags.contains(&marker("restricted")));
+        assert!(metadata_parts.tags.contains(&marker("closed")));
+        assert!(metadata_parts.tags.contains(&vec![
+            "supported_kinds".to_string(),
+            "78".to_string(),
+            "30078".to_string()
+        ]));
         assert!(
             !metadata_parts
                 .tags
                 .iter()
                 .any(|tag| tag.first().map(|v| v.as_str()) == Some("h"))
         );
+        assert_eq!(admins_parts.content, "group admins");
+        assert_eq!(members_parts.content, "group members");
+        assert_eq!(roles_parts.content, "group roles");
         assert_eq!(
             group_metadata_from_event(
                 metadata_parts.kind,
@@ -134,14 +151,13 @@ mod tests {
     fn group_invites_and_join_requests_roundtrip_without_field_authorization() {
         let invite = RadrootsGroupCreateInvite {
             group_id: "field-group".to_string(),
-            invitee_pubkey: Some("member_pubkey".to_string()),
-            roles: vec!["member".to_string()],
-            expires_at: Some(1_780_000_000),
-            claim: Some("claim-token".to_string()),
+            message: Some("join the field group".to_string()),
+            code: "invite-code".to_string(),
         };
         let join = RadrootsGroupJoinRequest {
             group_id: "field-group".to_string(),
             message: Some("requesting access".to_string()),
+            code: Some("invite-code".to_string()),
         };
 
         let invite_parts = group_create_invite_to_wire_parts(&invite).expect("invite");
@@ -150,6 +166,9 @@ mod tests {
         assert_eq!(invite_parts.kind, KIND_GROUP_CREATE_INVITE);
         assert_eq!(join_parts.kind, KIND_GROUP_JOIN_REQUEST);
         assert!(invite_parts.tags.contains(&tag("h", "field-group")));
+        assert!(invite_parts.tags.contains(&tag("code", "invite-code")));
+        assert!(join_parts.tags.contains(&tag("code", "invite-code")));
+        assert_eq!(invite_parts.content, "join the field group");
         assert_eq!(join_parts.content, "requesting access");
         assert_eq!(
             group_create_invite_from_event(
@@ -188,6 +207,7 @@ mod tests {
 
         let put = RadrootsGroupPutUser {
             group_id: "field-group".to_string(),
+            message: None,
             pubkey: "member_pubkey".to_string(),
             roles: vec!["member".to_string()],
         };
@@ -202,14 +222,42 @@ mod tests {
         assert!(matches!(put_err, EventParseError::MissingTag("h")));
     }
 
+    #[test]
+    fn group_codecs_reject_nonstandard_first_pass_group_shapes() {
+        let valued_marker_tags = vec![
+            tag("d", "field-group"),
+            tag("private", "true"),
+            tag("supported_kinds", "78"),
+        ];
+        let metadata_err =
+            group_metadata_from_event(KIND_GROUP_METADATA, &valued_marker_tags, "").unwrap_err();
+        assert!(matches!(
+            metadata_err,
+            EventParseError::InvalidTag("private")
+        ));
+
+        let first_pass_invite_tags = vec![
+            tag("h", "field-group"),
+            tag("p", "member_pubkey"),
+            tag("role", "member"),
+            tag("claim", "claim-token"),
+        ];
+        let invite_err =
+            group_create_invite_from_event(KIND_GROUP_CREATE_INVITE, &first_pass_invite_tags, "")
+                .unwrap_err();
+        assert!(matches!(invite_err, EventParseError::MissingTag("code")));
+    }
+
     fn sample_metadata() -> RadrootsGroupEditableMetadata {
         RadrootsGroupEditableMetadata {
             name: Some("Small Regen Farm".to_string()),
             about: Some("Field app group".to_string()),
             picture: Some("https://media.example.invalid/group.png".to_string()),
             is_private: false,
-            is_closed: false,
+            is_restricted: true,
+            is_closed: true,
             is_hidden: false,
+            supported_kinds: Some(vec![78, 30078]),
         }
     }
 
@@ -230,5 +278,9 @@ mod tests {
 
     fn tag(key: &str, value: &str) -> Vec<String> {
         vec![key.to_string(), value.to_string()]
+    }
+
+    fn marker(key: &str) -> Vec<String> {
+        vec![key.to_string()]
     }
 }

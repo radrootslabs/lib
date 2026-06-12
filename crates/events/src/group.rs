@@ -37,6 +37,7 @@ pub const KIND_GROUP_ROLES: u32 = KIND_GROUP_ROLES_EVENT;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsGroupPutUser {
     pub group_id: String,
+    pub message: Option<String>,
     pub pubkey: String,
     pub roles: Vec<String>,
 }
@@ -45,6 +46,7 @@ pub struct RadrootsGroupPutUser {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsGroupRemoveUser {
     pub group_id: String,
+    pub message: Option<String>,
     pub pubkey: String,
 }
 
@@ -52,6 +54,7 @@ pub struct RadrootsGroupRemoveUser {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsGroupCreateGroup {
     pub group_id: String,
+    pub message: Option<String>,
     pub metadata: RadrootsGroupEditableMetadata,
 }
 
@@ -59,6 +62,7 @@ pub struct RadrootsGroupCreateGroup {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsGroupEditMetadata {
     pub group_id: String,
+    pub message: Option<String>,
     pub metadata: RadrootsGroupEditableMetadata,
 }
 
@@ -66,12 +70,14 @@ pub struct RadrootsGroupEditMetadata {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsGroupDeleteGroup {
     pub group_id: String,
+    pub message: Option<String>,
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsGroupDeleteEvent {
     pub group_id: String,
+    pub message: Option<String>,
     pub event_id: String,
 }
 
@@ -79,10 +85,8 @@ pub struct RadrootsGroupDeleteEvent {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsGroupCreateInvite {
     pub group_id: String,
-    pub invitee_pubkey: Option<String>,
-    pub roles: Vec<String>,
-    pub expires_at: Option<u64>,
-    pub claim: Option<String>,
+    pub message: Option<String>,
+    pub code: String,
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -90,6 +94,7 @@ pub struct RadrootsGroupCreateInvite {
 pub struct RadrootsGroupJoinRequest {
     pub group_id: String,
     pub message: Option<String>,
+    pub code: Option<String>,
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -110,6 +115,7 @@ pub struct RadrootsGroupMetadata {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsGroupAdmins {
     pub d_tag: String,
+    pub description: Option<String>,
     pub admins: Vec<RadrootsGroupUserRef>,
 }
 
@@ -117,6 +123,7 @@ pub struct RadrootsGroupAdmins {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsGroupMembers {
     pub d_tag: String,
+    pub description: Option<String>,
     pub members: Vec<RadrootsGroupUserRef>,
 }
 
@@ -124,6 +131,7 @@ pub struct RadrootsGroupMembers {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsGroupRoles {
     pub d_tag: String,
+    pub description: Option<String>,
     pub roles: Vec<RadrootsGroupRole>,
 }
 
@@ -134,8 +142,10 @@ pub struct RadrootsGroupEditableMetadata {
     pub about: Option<String>,
     pub picture: Option<String>,
     pub is_private: bool,
+    pub is_restricted: bool,
     pub is_closed: bool,
     pub is_hidden: bool,
+    pub supported_kinds: Option<Vec<u32>>,
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -161,16 +171,19 @@ mod tests {
     fn group_user_and_moderation_models_use_h_group_id_semantics() {
         let put = RadrootsGroupPutUser {
             group_id: "field-group".to_string(),
+            message: Some("add member".to_string()),
             pubkey: "member_pubkey".to_string(),
             roles: vec!["member".to_string()],
         };
         let delete = RadrootsGroupDeleteEvent {
             group_id: "field-group".to_string(),
+            message: Some("remove duplicate event".to_string()),
             event_id: "event_id".to_string(),
         };
         let join = RadrootsGroupJoinRequest {
             group_id: "field-group".to_string(),
             message: Some("requesting access".to_string()),
+            code: Some("invite-code".to_string()),
         };
 
         assert_eq!(put.group_id, "field-group");
@@ -189,10 +202,12 @@ mod tests {
         };
         let members = RadrootsGroupMembers {
             d_tag: "field-group".to_string(),
+            description: Some("group members".to_string()),
             members: vec![sample_user_ref()],
         };
         let roles = RadrootsGroupRoles {
             d_tag: "field-group".to_string(),
+            description: Some("group roles".to_string()),
             roles: vec![RadrootsGroupRole {
                 name: "member".to_string(),
                 description: Some("can read and write group events".to_string()),
@@ -212,6 +227,7 @@ mod tests {
     fn group_models_are_infrastructure_not_field_business_authorization() {
         let admins = RadrootsGroupAdmins {
             d_tag: "field-group".to_string(),
+            description: Some("group admins".to_string()),
             admins: vec![sample_user_ref()],
         };
 
@@ -223,14 +239,13 @@ mod tests {
     fn group_models_serialize_stable_shapes() {
         let create = RadrootsGroupCreateGroup {
             group_id: "field-group".to_string(),
+            message: None,
             metadata: sample_metadata(),
         };
         let invite = RadrootsGroupCreateInvite {
             group_id: "field-group".to_string(),
-            invitee_pubkey: Some("member_pubkey".to_string()),
-            roles: vec!["member".to_string()],
-            expires_at: Some(1_780_000_000),
-            claim: Some("claim-token".to_string()),
+            message: Some("join the field group".to_string()),
+            code: "invite-code".to_string(),
         };
 
         let create_value = serde_json::to_value(create).unwrap();
@@ -238,8 +253,8 @@ mod tests {
 
         assert_eq!(create_value["group_id"], "field-group");
         assert_eq!(create_value["metadata"]["name"], "Small Regen Farm");
-        assert_eq!(invite_value["roles"][0], "member");
-        assert_eq!(invite_value["claim"], "claim-token");
+        assert_eq!(invite_value["code"], "invite-code");
+        assert_eq!(invite_value["message"], "join the field group");
         assert_eq!(KIND_GROUP_CREATE_GROUP, 9007);
         assert_eq!(KIND_GROUP_CREATE_INVITE, 9009);
     }
@@ -250,8 +265,10 @@ mod tests {
             about: Some("Field app group".to_string()),
             picture: Some("https://media.example.invalid/group.png".to_string()),
             is_private: false,
+            is_restricted: true,
             is_closed: false,
             is_hidden: false,
+            supported_kinds: Some(vec![78, 30078]),
         }
     }
 
