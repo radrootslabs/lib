@@ -1,5 +1,5 @@
 use radroots_events::{
-    kinds::{KIND_LIST_MUTE, KIND_LIST_READ_WRITE_RELAYS, KIND_POST},
+    kinds::{KIND_LIST_MUTE, KIND_LIST_READ_WRITE_RELAYS, KIND_LIST_SET_FOLLOW, KIND_POST},
     list::{RadrootsList, RadrootsListEntry},
     tags::TAG_R,
 };
@@ -92,10 +92,21 @@ fn list_encode_and_decode_reject_invalid_inputs() {
     assert!(matches!(
         err,
         EventParseError::InvalidKind {
-            expected: "nip51 standard list kind",
+            expected: "nip51 standard or list-set kind",
             got: KIND_POST
         }
     ));
+}
+
+#[test]
+fn list_set_kind_roundtrips_generic_entries() {
+    let list = sample_list();
+    let parts = to_wire_parts_with_kind(&list, KIND_LIST_SET_FOLLOW).unwrap();
+
+    assert_eq!(parts.kind, KIND_LIST_SET_FOLLOW);
+    let decoded = list_from_tags(parts.kind, parts.content, &parts.tags).unwrap();
+    assert_eq!(decoded.entries.len(), list.entries.len());
+    assert_eq!(decoded.entries[0].tag, "p");
 }
 
 #[test]
@@ -168,7 +179,7 @@ fn list_index_from_event_propagates_parse_errors() {
     assert!(matches!(
         err,
         EventParseError::InvalidKind {
-            expected: "nip51 standard list kind",
+            expected: "nip51 standard or list-set kind",
             got: KIND_POST
         }
     ));

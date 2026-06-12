@@ -6,9 +6,7 @@ use alloc::{
 };
 
 use radroots_events::{
-    comment::RadrootsComment,
-    kinds::{KIND_COMMENT, KIND_POST},
-    social::RadrootsSocialTarget,
+    comment::RadrootsComment, kinds::KIND_COMMENT, social::RadrootsSocialTarget,
 };
 
 use crate::error::EventEncodeError;
@@ -96,7 +94,6 @@ fn push_comment_target(
                 .ok_or(EventEncodeError::EmptyRequiredField(keys.field))?;
             validate_non_empty_field(author, keys.field)?;
             let kind = event_kind.ok_or(EventEncodeError::EmptyRequiredField(keys.field))?;
-            validate_comment_target_kind(kind, keys.field)?;
             let mut event_tag = Vec::with_capacity(2 + relays.as_ref().map_or(0, Vec::len));
             event_tag.push(keys.event.to_string());
             event_tag.push(id.clone());
@@ -115,7 +112,6 @@ fn push_comment_target(
         } => {
             let parsed = parse_address_tag(address, keys.field)
                 .map_err(|_| EventEncodeError::InvalidField(keys.field))?;
-            validate_comment_target_kind(parsed.kind, keys.field)?;
             if let Some(kind) = event_kind {
                 if *kind != parsed.kind {
                     return Err(EventEncodeError::InvalidField(keys.field));
@@ -157,12 +153,4 @@ fn push_comment_target(
         }
     }
     Ok(())
-}
-
-fn validate_comment_target_kind(kind: u32, field: &'static str) -> Result<(), EventEncodeError> {
-    if kind == KIND_POST {
-        Err(EventEncodeError::InvalidField(field))
-    } else {
-        Ok(())
-    }
 }

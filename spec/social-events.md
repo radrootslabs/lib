@@ -63,7 +63,8 @@ valid.
 
 `RadrootsComment` uses strict NIP-22 semantics. The target and scope model must support event-id,
 address, and external roots or parents through `E`/`e`, `A`/`a`, and `I`/`i` tags with matching
-`K`/`k` kind metadata. Canonical decode must reject legacy `e_root` and `e_prev` fallback tags.
+`K`/`k` kind metadata, including ordinary kind `1` short text note targets. Canonical decode must
+reject legacy `e_root` and `e_prev` fallback tags.
 
 `RadrootsReaction` uses strict NIP-25 semantics. Empty content, `+`, `-`, emoji, and custom reaction
 content are valid when the target tags are valid. Missing targets remain invalid.
@@ -77,8 +78,9 @@ including URL, MIME type, SHA-256 hash, original hash, size, dimensions, blurhas
 summary, alt text, fallback, `magnet`, `i`, and `service`.
 
 `RadrootsListingDraft` and `RadrootsRelayList` are not separate model types in the target contract.
-Listing draft kind `30403` is represented through `RadrootsListing`, and NIP-65 relay metadata kind
-`10002` is represented through `RadrootsList`.
+Listing draft kind `30403` is represented through `RadrootsListing`, and NIP-51 standard and
+list-set entries, including NIP-65 relay metadata kind `10002`, are represented through
+`RadrootsList`.
 
 ## Exclusions
 

@@ -96,13 +96,18 @@ fn comment_build_tags_requires_strict_nip22_target_fields() {
     ));
 
     let comment = RadrootsComment {
-        root: event_target(ROOT_ID, AUTHOR, KIND_POST),
+        root: RadrootsSocialTarget::Event {
+            id: ROOT_ID.to_string(),
+            author: None,
+            event_kind: Some(KIND_ARTICLE),
+            relays: None,
+        },
         parent: event_target(PARENT_ID, PARENT_AUTHOR, KIND_ARTICLE),
         content: "hello".to_string(),
     };
     assert!(matches!(
         comment_build_tags(&comment),
-        Err(EventEncodeError::InvalidField("root"))
+        Err(EventEncodeError::EmptyRequiredField("root"))
     ));
 }
 
@@ -148,6 +153,20 @@ fn comment_roundtrips_event_and_address_targets() {
 }
 
 #[test]
+fn comment_roundtrips_short_text_note_targets() {
+    let comment = RadrootsComment {
+        root: event_target(ROOT_ID, AUTHOR, KIND_POST),
+        parent: event_target(PARENT_ID, PARENT_AUTHOR, KIND_POST),
+        content: "note reply".to_string(),
+    };
+    let parts = to_wire_parts(&comment).unwrap();
+    let parsed = comment_from_tags(parts.kind, &parts.tags, &parts.content).unwrap();
+
+    assert_event_target(&parsed.root, ROOT_ID, AUTHOR, KIND_POST);
+    assert_event_target(&parsed.parent, PARENT_ID, PARENT_AUTHOR, KIND_POST);
+}
+
+#[test]
 fn comment_roundtrips_external_targets() {
     let comment = RadrootsComment {
         root: external_target("https://example.test/root", "web"),
@@ -178,7 +197,7 @@ fn comment_roundtrips_external_targets() {
 }
 
 #[test]
-fn comment_from_tags_rejects_legacy_missing_and_kind1_shapes() {
+fn comment_from_tags_rejects_legacy_and_missing_shapes() {
     let legacy_tags = vec![vec![
         TAG_E_ROOT.to_string(),
         ROOT_ID.to_string(),
@@ -214,19 +233,6 @@ fn comment_from_tags_rejects_legacy_missing_and_kind1_shapes() {
     assert!(matches!(
         comment_from_tags(KIND_COMMENT, &missing_parent_tags, "hello"),
         Err(EventParseError::MissingTag("e"))
-    ));
-
-    let kind1_tags = vec![
-        vec!["E".to_string(), ROOT_ID.to_string()],
-        vec!["P".to_string(), AUTHOR.to_string()],
-        vec!["K".to_string(), KIND_POST.to_string()],
-        vec!["e".to_string(), PARENT_ID.to_string()],
-        vec!["p".to_string(), PARENT_AUTHOR.to_string()],
-        vec!["k".to_string(), KIND_ARTICLE.to_string()],
-    ];
-    assert!(matches!(
-        comment_from_tags(KIND_COMMENT, &kind1_tags, "hello"),
-        Err(EventParseError::InvalidTag("K"))
     ));
 }
 

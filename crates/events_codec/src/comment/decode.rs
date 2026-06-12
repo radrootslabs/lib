@@ -7,7 +7,7 @@ use alloc::{
 use radroots_events::{
     RadrootsNostrEvent,
     comment::RadrootsComment,
-    kinds::{KIND_COMMENT, KIND_POST},
+    kinds::KIND_COMMENT,
     social::RadrootsSocialTarget,
     tags::{TAG_E_PREV, TAG_E_ROOT},
 };
@@ -109,7 +109,6 @@ fn parse_comment_target(
             .ok_or(EventParseError::InvalidTag(keys.event))?;
         validate_lowercase_hex_64_tag(&id, keys.event)?;
         let kind = required_numeric_kind(tags, keys.kind)?;
-        validate_comment_target_kind(kind, keys.kind)?;
         let author = required_author(tags, keys.author)?;
         let relays = if tag.len() > 2 {
             Some(tag[2..].to_vec())
@@ -134,7 +133,6 @@ fn parse_comment_target(
         if kind != address.kind {
             return Err(EventParseError::InvalidTag(keys.kind));
         }
-        validate_comment_target_kind(kind, keys.kind)?;
         let author = required_author(tags, keys.author)?;
         if author != address.pubkey {
             return Err(EventParseError::InvalidTag(keys.author));
@@ -202,14 +200,6 @@ fn required_numeric_kind(tags: &[Vec<String>], key: &'static str) -> Result<u32,
     required_kind_value(tags, key)?
         .parse::<u32>()
         .map_err(|err| EventParseError::InvalidNumber(key, err))
-}
-
-fn validate_comment_target_kind(kind: u32, key: &'static str) -> Result<(), EventParseError> {
-    if kind == KIND_POST {
-        Err(EventParseError::InvalidTag(key))
-    } else {
-        Ok(())
-    }
 }
 
 pub fn data_from_event(

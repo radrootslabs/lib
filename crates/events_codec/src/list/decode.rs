@@ -3,7 +3,7 @@ use alloc::{string::String, vec::Vec};
 
 use radroots_events::{
     RadrootsNostrEvent,
-    kinds::{KIND_LIST_READ_WRITE_RELAYS, is_nip51_standard_list_kind},
+    kinds::{KIND_LIST_READ_WRITE_RELAYS, is_nip51_list_set_kind, is_nip51_standard_list_kind},
     list::{RadrootsList, RadrootsListEntry},
     tags::TAG_R,
 };
@@ -41,9 +41,9 @@ pub fn list_from_tags(
     content: String,
     tags: &[Vec<String>],
 ) -> Result<RadrootsList, EventParseError> {
-    if !is_nip51_standard_list_kind(kind) {
+    if !is_supported_list_kind(kind) {
         return Err(EventParseError::InvalidKind {
-            expected: "nip51 standard list kind",
+            expected: "nip51 standard or list-set kind",
             got: kind,
         });
     }
@@ -52,6 +52,10 @@ pub fn list_from_tags(
     }
     let entries = list_entries_from_tags(tags)?;
     Ok(RadrootsList { content, entries })
+}
+
+fn is_supported_list_kind(kind: u32) -> bool {
+    is_nip51_standard_list_kind(kind) || is_nip51_list_set_kind(kind)
 }
 
 fn validate_relay_tags(tags: &[Vec<String>]) -> Result<(), EventParseError> {
