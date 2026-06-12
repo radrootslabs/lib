@@ -115,6 +115,7 @@ fn sample_listing() -> RadrootsListing {
 
     RadrootsListing {
         d_tag: "AAAAAAAAAAAAAAAAAAAAAg".to_string(),
+        published_at: None,
         farm: RadrootsFarmRef {
             pubkey: TEST_NPUB.to_string(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
@@ -437,6 +438,12 @@ fn event_tag_builder_impls_build_tags_for_all_supported_types() {
 
     let post = RadrootsPost {
         content: "hello".to_string(),
+        farm: None,
+        address_refs: None,
+        location: None,
+        topics: None,
+        quote_refs: None,
+        media: None,
     };
     assert!(post.build_tags().unwrap().is_empty());
 }

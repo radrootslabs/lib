@@ -322,6 +322,7 @@ async fn write_http_response(
 fn sample_listing() -> RadrootsListing {
     RadrootsListing {
         d_tag: "AAAAAAAAAAAAAAAAAAAAAg".into(),
+        published_at: None,
         farm: RadrootsFarmRef {
             pubkey: "seller".into(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".into(),

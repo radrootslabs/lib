@@ -55,6 +55,11 @@ pub enum RadrootsListingDeliveryMethod {
 #[derive(Clone, Debug)]
 pub struct RadrootsListing {
     pub d_tag: String,
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub published_at: Option<u64>,
     #[cfg_attr(feature = "serde", serde(default))]
     pub farm: RadrootsFarmRef,
     pub product: RadrootsListingProduct,
@@ -138,5 +143,40 @@ mod tests {
         let farm_ref = RadrootsFarmRef::default();
         assert!(farm_ref.pubkey.is_empty());
         assert!(farm_ref.d_tag.is_empty());
+    }
+
+    #[test]
+    fn listing_model_covers_published_draft_metadata() {
+        use crate::kinds::{KIND_LISTING_DRAFT, is_listing_kind};
+
+        let listing = super::RadrootsListing {
+            d_tag: "listing-draft".to_string(),
+            published_at: Some(1_700_000_000),
+            farm: RadrootsFarmRef::default(),
+            product: super::RadrootsListingProduct {
+                key: "lettuce".to_string(),
+                title: "lettuce".to_string(),
+                category: "produce".to_string(),
+                summary: None,
+                process: None,
+                lot: None,
+                location: None,
+                profile: None,
+                year: None,
+            },
+            primary_bin_id: "bin-1".to_string(),
+            bins: vec![],
+            resource_area: None,
+            plot: None,
+            discounts: None,
+            inventory_available: None,
+            availability: None,
+            delivery_method: None,
+            location: None,
+            images: None,
+        };
+
+        assert_eq!(listing.published_at, Some(1_700_000_000));
+        assert!(is_listing_kind(KIND_LISTING_DRAFT));
     }
 }

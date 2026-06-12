@@ -158,6 +158,7 @@ fn sample_listing() -> RadrootsListing {
 
     RadrootsListing {
         d_tag: VALID_DOC_D_TAG.to_string(),
+        published_at: None,
         farm: RadrootsFarmRef {
             pubkey: VALID_PUBKEY.to_string(),
             d_tag: VALID_FARM_D_TAG.to_string(),

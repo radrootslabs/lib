@@ -88,6 +88,7 @@ fn sample_listing(d_tag: &str) -> RadrootsListing {
     );
     RadrootsListing {
         d_tag: d_tag.to_string(),
+        published_at: None,
         farm: RadrootsFarmRef {
             pubkey: TEST_PUBKEY_HEX.to_string(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),

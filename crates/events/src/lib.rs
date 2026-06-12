@@ -39,6 +39,8 @@ pub mod profile;
 pub mod reaction;
 pub mod relay_auth;
 pub mod relay_document;
+pub mod report;
+pub mod repost;
 pub mod resource_area;
 pub mod resource_cap;
 pub mod seal;

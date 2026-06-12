@@ -76,6 +76,7 @@ mod tests {
     fn base_listing() -> RadrootsListing {
         RadrootsListing {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAg".into(),
+            published_at: None,
             farm: RadrootsFarmRef {
                 pubkey: String::new(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAA".into(),

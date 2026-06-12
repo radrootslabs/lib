@@ -680,6 +680,7 @@ mod tests {
     fn base_listing() -> RadrootsListing {
         RadrootsListing {
             d_tag: TEST_D_TAG.to_string(),
+            published_at: None,
             farm: RadrootsFarmRef {
                 pubkey: TEST_PUBKEY_HEX.to_string(),
                 d_tag: TEST_FARM_D_TAG.to_string(),

@@ -111,6 +111,7 @@ impl Drop for AckRelay {
 fn sample_listing() -> RadrootsListing {
     RadrootsListing {
         d_tag: "AAAAAAAAAAAAAAAAAAAAAg".into(),
+        published_at: None,
         farm: RadrootsFarmRef {
             pubkey: "seller".into(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".into(),

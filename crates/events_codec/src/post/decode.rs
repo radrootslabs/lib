@@ -23,6 +23,12 @@ pub fn post_from_content(kind: u32, content: &str) -> Result<RadrootsPost, Event
     }
     Ok(RadrootsPost {
         content: content.to_string(),
+        farm: None,
+        address_refs: None,
+        location: None,
+        topics: None,
+        quote_refs: None,
+        media: None,
     })
 }
 

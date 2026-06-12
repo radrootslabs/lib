@@ -24,6 +24,12 @@ pub fn to_post_event_metadata(e: &RadrootsNostrEvent) -> RadrootsParsedData<Radr
         e.kind.as_u16() as u32,
         RadrootsPost {
             content: e.content.clone(),
+            farm: None,
+            address_refs: None,
+            location: None,
+            topics: None,
+            quote_refs: None,
+            media: None,
         },
     )
 }

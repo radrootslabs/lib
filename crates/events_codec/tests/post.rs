@@ -10,6 +10,12 @@ use radroots_events_codec::post::encode::to_wire_parts;
 fn post_to_wire_parts_requires_content() {
     let post = RadrootsPost {
         content: "   ".to_string(),
+        farm: None,
+        address_refs: None,
+        location: None,
+        topics: None,
+        quote_refs: None,
+        media: None,
     };
 
     let err = to_wire_parts(&post).unwrap_err();
@@ -23,6 +29,12 @@ fn post_to_wire_parts_requires_content() {
 fn post_to_wire_parts_sets_kind_and_content() {
     let post = RadrootsPost {
         content: "hello".to_string(),
+        farm: None,
+        address_refs: None,
+        location: None,
+        topics: None,
+        quote_refs: None,
+        media: None,
     };
 
     let parts = to_wire_parts(&post).unwrap();

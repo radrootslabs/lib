@@ -350,6 +350,7 @@ mod tests {
 
         RadrootsListing {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAg".to_string(),
+            published_at: None,
             farm: RadrootsFarmRef {
                 pubkey: "farm_pubkey".to_string(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),

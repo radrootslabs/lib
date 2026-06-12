@@ -490,6 +490,7 @@ pub fn listing_from_event_parts(
 
     Ok(RadrootsListing {
         d_tag,
+        published_at: None,
         farm: farm_ref,
         product,
         primary_bin_id,

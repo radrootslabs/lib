@@ -295,6 +295,7 @@ mod tests {
     fn farm_listings_list_set_uses_listing_addresses() {
         let listings = vec![RadrootsListing {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAg".to_string(),
+            published_at: None,
             farm: RadrootsFarmRef {
                 pubkey: "farm_pubkey".to_string(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),

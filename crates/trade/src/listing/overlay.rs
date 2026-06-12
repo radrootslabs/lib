@@ -578,6 +578,7 @@ mod tests {
     fn base_listing() -> RadrootsListing {
         RadrootsListing {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAg".into(),
+            published_at: None,
             farm: RadrootsFarmRef {
                 pubkey: "farm-pubkey".into(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAA".into(),
@@ -643,6 +644,7 @@ mod tests {
     fn alternate_listing() -> RadrootsListing {
         RadrootsListing {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAw".into(),
+            published_at: None,
             farm: RadrootsFarmRef {
                 pubkey: "farm-pubkey-2".into(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAABA".into(),

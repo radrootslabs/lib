@@ -2,8 +2,27 @@
 use alloc::{string::String, vec::Vec};
 
 use crate::social::{
-    RadrootsCalendarDateValue, RadrootsCalendarParticipant, RadrootsSocialLocation,
+    RadrootsCalendarDateValue, RadrootsCalendarEventFreeBusy, RadrootsCalendarEventRsvpStatus,
+    RadrootsCalendarParticipant, RadrootsSocialLocation, RadrootsSocialTarget,
 };
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug)]
+pub struct RadrootsCalendar {
+    pub d_tag: String,
+    pub title: String,
+    pub events: Vec<RadrootsSocialTarget>,
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub summary: Option<String>,
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub image: Option<String>,
+}
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
@@ -86,6 +105,29 @@ pub struct RadrootsCalendarTimeEvent {
     pub participants: Option<Vec<RadrootsCalendarParticipant>>,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug)]
+pub struct RadrootsCalendarEventRsvp {
+    pub d_tag: String,
+    pub event: RadrootsSocialTarget,
+    pub status: RadrootsCalendarEventRsvpStatus,
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub free_busy: Option<RadrootsCalendarEventFreeBusy>,
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub note: Option<String>,
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub participants: Option<Vec<RadrootsCalendarParticipant>>,
+}
+
 #[cfg(all(test, feature = "std", feature = "serde"))]
 mod tests {
     use super::*;
@@ -137,5 +179,48 @@ mod tests {
         assert_eq!(event.end, Some(1_781_899_200));
         assert_eq!(event.start_tzid.as_deref(), Some("America/Vancouver"));
         assert_eq!(event.participants.expect("participants").len(), 1);
+    }
+
+    #[test]
+    fn calendar_collection_represents_event_address_refs() {
+        let calendar = RadrootsCalendar {
+            d_tag: "farm-calendar".to_string(),
+            title: "farm calendar".to_string(),
+            events: vec![RadrootsSocialTarget::Address {
+                address: "31923:pubkey:wash-pack".to_string(),
+                author: None,
+                event_kind: Some(31923),
+                relays: None,
+            }],
+            summary: None,
+            image: None,
+        };
+
+        assert_eq!(calendar.d_tag, "farm-calendar");
+        assert_eq!(calendar.events.len(), 1);
+        assert!(matches!(
+            calendar.events[0],
+            RadrootsSocialTarget::Address { .. }
+        ));
+    }
+
+    #[test]
+    fn rsvp_represents_status_and_free_busy_state() {
+        let rsvp = RadrootsCalendarEventRsvp {
+            d_tag: "rsvp-1".to_string(),
+            event: RadrootsSocialTarget::Address {
+                address: "31923:pubkey:wash-pack".to_string(),
+                author: Some("a".repeat(64)),
+                event_kind: Some(31923),
+                relays: None,
+            },
+            status: RadrootsCalendarEventRsvpStatus::Tentative,
+            free_busy: Some(RadrootsCalendarEventFreeBusy::Busy),
+            note: Some("depends on harvest".to_string()),
+            participants: None,
+        };
+
+        assert_eq!(rsvp.status, RadrootsCalendarEventRsvpStatus::Tentative);
+        assert_eq!(rsvp.free_busy, Some(RadrootsCalendarEventFreeBusy::Busy));
     }
 }
