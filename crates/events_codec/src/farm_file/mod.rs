@@ -117,6 +117,32 @@ mod tests {
         assert_eq!(decoded.caption, None);
     }
 
+    #[test]
+    fn farm_file_metadata_preserves_expanded_owner_document_kinds() {
+        for kind in [
+            RadrootsFarmCrdtDocumentKind::FarmMembership,
+            RadrootsFarmCrdtDocumentKind::FarmRolePolicy,
+            RadrootsFarmCrdtDocumentKind::FarmActivity,
+            RadrootsFarmCrdtDocumentKind::FarmLocation,
+            RadrootsFarmCrdtDocumentKind::FarmCrop,
+            RadrootsFarmCrdtDocumentKind::FarmCropVariety,
+            RadrootsFarmCrdtDocumentKind::FarmCropCycle,
+            RadrootsFarmCrdtDocumentKind::FarmAttachment,
+            RadrootsFarmCrdtDocumentKind::FarmPayPeriod,
+            RadrootsFarmCrdtDocumentKind::Other {
+                value: "FarmSoilTest".to_string(),
+            },
+        ] {
+            let mut metadata = sample_metadata();
+            metadata.owner_document_kind = kind;
+            let parts = to_wire_parts(&metadata).expect("file metadata wire parts");
+            let decoded = farm_file_metadata_from_event(parts.kind, &parts.tags, &parts.content)
+                .expect("file metadata decode");
+
+            assert_eq!(decoded.owner_document_kind, metadata.owner_document_kind);
+        }
+    }
+
     fn sample_metadata() -> RadrootsFarmFileMetadata {
         RadrootsFarmFileMetadata {
             d_tag: FILE_D_TAG.to_string(),

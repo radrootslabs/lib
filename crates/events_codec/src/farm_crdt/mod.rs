@@ -59,6 +59,93 @@ mod tests {
     }
 
     #[test]
+    fn farm_crdt_change_roundtrips_representative_mvp_semantics() {
+        let cases = vec![
+            (
+                RadrootsFarmCrdtDocumentKind::FarmTask,
+                RadrootsFarmSemanticKind::FarmTaskCreate,
+            ),
+            (
+                RadrootsFarmCrdtDocumentKind::FarmTask,
+                RadrootsFarmSemanticKind::FarmTaskStatusSet,
+            ),
+            (
+                RadrootsFarmCrdtDocumentKind::FarmWorkSession,
+                RadrootsFarmSemanticKind::FarmWorkSessionStart,
+            ),
+            (
+                RadrootsFarmCrdtDocumentKind::FarmWorkSession,
+                RadrootsFarmSemanticKind::FarmWorkSessionStop,
+            ),
+            (
+                RadrootsFarmCrdtDocumentKind::FarmWorkSession,
+                RadrootsFarmSemanticKind::FarmWorkSessionSubmit,
+            ),
+            (
+                RadrootsFarmCrdtDocumentKind::FarmWorkSession,
+                RadrootsFarmSemanticKind::FarmWorkSessionApprove,
+            ),
+            (
+                RadrootsFarmCrdtDocumentKind::FarmWorkSession,
+                RadrootsFarmSemanticKind::FarmWorkSessionReject,
+            ),
+            (
+                RadrootsFarmCrdtDocumentKind::FarmWorkSession,
+                RadrootsFarmSemanticKind::FarmWorkSessionCorrect,
+            ),
+            (
+                RadrootsFarmCrdtDocumentKind::FarmHarvestRecord,
+                RadrootsFarmSemanticKind::FarmHarvestLineAdd,
+            ),
+            (
+                RadrootsFarmCrdtDocumentKind::FarmHarvestRecord,
+                RadrootsFarmSemanticKind::FarmHarvestLineCorrect,
+            ),
+            (
+                RadrootsFarmCrdtDocumentKind::FarmHarvestRecord,
+                RadrootsFarmSemanticKind::FarmHarvestLineVoid,
+            ),
+            (
+                RadrootsFarmCrdtDocumentKind::FarmMembership,
+                RadrootsFarmSemanticKind::FarmMemberInviteCreate,
+            ),
+            (
+                RadrootsFarmCrdtDocumentKind::FarmMembership,
+                RadrootsFarmSemanticKind::FarmMemberApprove,
+            ),
+            (
+                RadrootsFarmCrdtDocumentKind::FarmMembership,
+                RadrootsFarmSemanticKind::FarmMemberRoleSet,
+            ),
+            (
+                RadrootsFarmCrdtDocumentKind::FarmPayPeriod,
+                RadrootsFarmSemanticKind::FarmPayPeriodClose,
+            ),
+            (
+                RadrootsFarmCrdtDocumentKind::FarmPayPeriod,
+                RadrootsFarmSemanticKind::FarmReportExportMark,
+            ),
+        ];
+
+        for (index, (document_kind, semantic_kind)) in cases.into_iter().enumerate() {
+            let document_id = document_id(index);
+            let change = sample_change_with(document_id.as_str(), document_kind, semantic_kind);
+            let parts = to_wire_parts_with_author(&change, AUTHOR).expect("crdt wire parts");
+            let decoded = farm_crdt_change_from_event_with_author(
+                parts.kind,
+                &parts.tags,
+                &parts.content,
+                AUTHOR,
+            )
+            .expect("crdt decode");
+
+            assert_eq!(decoded.document_id, document_id);
+            assert_eq!(decoded.document_kind, change.document_kind);
+            assert_eq!(decoded.semantic_kind, change.semantic_kind);
+        }
+    }
+
+    #[test]
     fn farm_crdt_change_rejects_missing_t_and_d_mismatch() {
         let parts = to_wire_parts(&sample_change()).expect("crdt wire parts");
         let without_t = parts
@@ -164,6 +251,18 @@ mod tests {
     }
 
     fn sample_change() -> RadrootsFarmCrdtChange {
+        sample_change_with(
+            DOCUMENT_ID,
+            RadrootsFarmCrdtDocumentKind::FarmTask,
+            RadrootsFarmSemanticKind::FarmTaskCreate,
+        )
+    }
+
+    fn sample_change_with(
+        document_id: &str,
+        document_kind: RadrootsFarmCrdtDocumentKind,
+        semantic_kind: RadrootsFarmSemanticKind,
+    ) -> RadrootsFarmCrdtChange {
         RadrootsFarmCrdtChange {
             schema: RADROOTS_FARM_CRDT_CHANGE_SCHEMA.to_string(),
             workspace: RadrootsFarmWorkspaceRef {
@@ -171,19 +270,23 @@ mod tests {
                 d_tag: WORKSPACE_D_TAG.to_string(),
             },
             farm_group_id: GROUP_ID.to_string(),
-            document_id: DOCUMENT_ID.to_string(),
-            document_kind: RadrootsFarmCrdtDocumentKind::FarmTask,
+            document_id: document_id.to_string(),
+            document_kind,
             crdt_backend: RadrootsCrdtBackend::Automerge,
             crdt_backend_version: Some("0.x".to_string()),
             actor_id: "actor_abc".to_string(),
             change_hash: "crdt_hash_abc".to_string(),
             dependencies: Vec::new(),
             encoded_change: "abc-DEF_012".to_string(),
-            semantic_kind: RadrootsFarmSemanticKind::FarmTaskCreate,
+            semantic_kind,
             business_time_ms: 1_780_000_000_000,
             author_member_id: Some("member_abc".to_string()),
             app_version: Some("0.1.0".to_string()),
         }
+    }
+
+    fn document_id(index: usize) -> String {
+        format!("{index:02}AAAAAAAAAAAAAAAAAAAA")
     }
 
     fn tag(key: &str, value: &str) -> Vec<String> {

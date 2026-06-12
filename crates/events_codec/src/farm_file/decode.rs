@@ -187,14 +187,10 @@ fn parse_owner_document(
 }
 
 fn parse_document_kind_tag(value: &str) -> Result<RadrootsFarmCrdtDocumentKind, EventParseError> {
-    match value {
-        "FarmTask" => Ok(RadrootsFarmCrdtDocumentKind::FarmTask),
-        "FarmWorkSession" => Ok(RadrootsFarmCrdtDocumentKind::FarmWorkSession),
-        "FarmHarvestRecord" => Ok(RadrootsFarmCrdtDocumentKind::FarmHarvestRecord),
-        "FarmInventoryItem" => Ok(RadrootsFarmCrdtDocumentKind::FarmInventoryItem),
-        "FarmMediaAsset" => Ok(RadrootsFarmCrdtDocumentKind::FarmMediaAsset),
-        "FarmObservation" => Ok(RadrootsFarmCrdtDocumentKind::FarmObservation),
-        _ => Err(EventParseError::InvalidTag(TAG_OWNER_DOCUMENT)),
+    if value.trim().is_empty() {
+        Err(EventParseError::InvalidTag(TAG_OWNER_DOCUMENT))
+    } else {
+        Ok(RadrootsFarmCrdtDocumentKind::from(value.to_string()))
     }
 }
 

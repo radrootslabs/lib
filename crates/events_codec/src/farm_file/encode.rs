@@ -53,9 +53,9 @@ pub fn farm_file_metadata_build_tags(
     push_tag_values(
         &mut tags,
         TAG_OWNER_DOCUMENT,
-        [
-            metadata.owner_document_id.as_str(),
-            document_kind_tag(metadata.owner_document_kind),
+        vec![
+            metadata.owner_document_id.clone(),
+            document_kind_tag(&metadata.owner_document_kind),
         ],
     );
     push_optional_tag(
@@ -135,15 +135,8 @@ pub(crate) fn validate_metadata(
     Ok(())
 }
 
-pub(crate) fn document_kind_tag(kind: RadrootsFarmCrdtDocumentKind) -> &'static str {
-    match kind {
-        RadrootsFarmCrdtDocumentKind::FarmTask => "FarmTask",
-        RadrootsFarmCrdtDocumentKind::FarmWorkSession => "FarmWorkSession",
-        RadrootsFarmCrdtDocumentKind::FarmHarvestRecord => "FarmHarvestRecord",
-        RadrootsFarmCrdtDocumentKind::FarmInventoryItem => "FarmInventoryItem",
-        RadrootsFarmCrdtDocumentKind::FarmMediaAsset => "FarmMediaAsset",
-        RadrootsFarmCrdtDocumentKind::FarmObservation => "FarmObservation",
-    }
+pub(crate) fn document_kind_tag(kind: &RadrootsFarmCrdtDocumentKind) -> String {
+    kind.as_str().to_string()
 }
 
 fn validate_dimensions(
