@@ -222,7 +222,40 @@
       "expected": {
         "result": "ok",
         "public_social_kind": false,
+        "home_feed_candidate_kind": false,
+        "market_candidate_kind": false,
+        "private_farm_ops_kind": true,
         "group_infrastructure": true
+      }
+    },
+    {
+      "id": "social_surface_kind_sets_valid_010",
+      "kind": "social.surface_kinds.classification.valid",
+      "input": {
+        "kinds": {
+          "active_listing": 30402,
+          "listing_draft": 30403,
+          "report": 1984,
+          "farm_crdt_change": 78,
+          "relay_auth": 22242,
+          "http_auth": 27235
+        }
+      },
+      "expected": {
+        "result": "ok",
+        "home_feed_active_listing": true,
+        "home_feed_listing_draft": false,
+        "home_feed_report": false,
+        "home_feed_farm_crdt_change": false,
+        "home_feed_relay_auth": false,
+        "home_feed_http_auth": false,
+        "market_active_listing": true,
+        "market_listing_draft": false,
+        "moderation_report": true,
+        "draft_owner_listing_draft": true,
+        "private_farm_ops_farm_crdt_change": true,
+        "private_farm_ops_relay_auth": false,
+        "private_farm_ops_http_auth": false
       }
     }
   ]

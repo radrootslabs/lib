@@ -18,7 +18,7 @@ pub struct RadrootsListEntry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::kinds::{KIND_LIST_READ_WRITE_RELAYS, is_public_social_kind};
+    use crate::kinds::{KIND_LIST_READ_WRITE_RELAYS, is_nip51_standard_list_kind};
 
     #[test]
     fn generic_list_model_covers_nip65_relay_entries() {
@@ -39,6 +39,6 @@ mod tests {
         assert_eq!(list.entries.len(), 2);
         assert_eq!(list.entries[0].tag, "r");
         assert_eq!(list.entries[0].values[1], "read");
-        assert!(is_public_social_kind(KIND_LIST_READ_WRITE_RELAYS));
+        assert!(is_nip51_standard_list_kind(KIND_LIST_READ_WRITE_RELAYS));
     }
 }

@@ -84,6 +84,14 @@ optional uppercase `D` tags for covered all-day dates. Calendar time events requ
 uppercase `D` tag so timestamped events retain a deterministic calendar-date anchor across codecs and
 language exports.
 
+Product routing uses surface-specific kind classifiers rather than a broad public-social set. Home,
+Events, Market, Map, and Profile public-content candidates are explicit. Active listing kind `30402`
+can appear in public product surfaces, but listing draft kind `30403` is limited to draft-owner
+contexts. Report kind `1984` is a moderation/admin candidate, not normal feed content. Relay and HTTP
+auth kinds are transient and excluded from durable social and farm-ops candidate sets. Private farm
+operations candidates include the farm workspace manifest, farm CRDT change envelope, farm file
+metadata, and the supported NIP-29 group event subset.
+
 `RadrootsListingDraft` and `RadrootsRelayList` are not separate model types in the target contract.
 Listing draft kind `30403` is represented through `RadrootsListing`, and NIP-51 standard and
 list-set entries, including NIP-65 relay metadata kind `10002`, are represented through

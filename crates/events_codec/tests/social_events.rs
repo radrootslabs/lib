@@ -7,8 +7,10 @@ use radroots_events::{
     file_metadata::RadrootsFileMetadata,
     group::{RadrootsGroupEditableMetadata, RadrootsGroupMetadata},
     kinds::{
-        KIND_ARTICLE, KIND_FARM, KIND_FARM_CRDT_CHANGE, KIND_GROUP_METADATA, KIND_LISTING,
-        KIND_POST, KIND_PUBLIC_FILE_METADATA, is_public_social_kind,
+        KIND_ARTICLE, KIND_FARM, KIND_FARM_CRDT_CHANGE, KIND_GROUP_METADATA, KIND_HTTP_AUTH,
+        KIND_LISTING, KIND_LISTING_DRAFT, KIND_POST, KIND_PUBLIC_FILE_METADATA, KIND_RELAY_AUTH,
+        KIND_REPORT, is_home_feed_candidate_kind, is_market_candidate_kind,
+        is_private_farm_ops_kind, is_public_social_kind,
     },
     social::RadrootsSocialMediaDimensions,
 };
@@ -97,6 +99,16 @@ fn social_events_reject_private_farm_ops_semantics_in_public_codecs() {
     assert!(is_public_social_kind(KIND_PUBLIC_FILE_METADATA));
     assert!(!is_public_social_kind(KIND_FARM_CRDT_CHANGE));
     assert!(!is_public_social_kind(KIND_LISTING));
+    assert!(is_home_feed_candidate_kind(KIND_LISTING));
+    assert!(is_home_feed_candidate_kind(KIND_FARM));
+    assert!(is_home_feed_candidate_kind(KIND_PUBLIC_FILE_METADATA));
+    assert!(!is_home_feed_candidate_kind(KIND_LISTING_DRAFT));
+    assert!(!is_home_feed_candidate_kind(KIND_REPORT));
+    assert!(!is_home_feed_candidate_kind(KIND_FARM_CRDT_CHANGE));
+    assert!(!is_home_feed_candidate_kind(KIND_RELAY_AUTH));
+    assert!(!is_home_feed_candidate_kind(KIND_HTTP_AUTH));
+    assert!(is_market_candidate_kind(KIND_LISTING));
+    assert!(!is_market_candidate_kind(KIND_LISTING_DRAFT));
 }
 
 #[test]
@@ -117,6 +129,8 @@ fn social_events_keep_nip29_groups_out_of_public_social_classification() {
     let parts = group_metadata_to_wire_parts(&group).unwrap();
     assert_eq!(parts.kind, KIND_GROUP_METADATA);
     assert!(!is_public_social_kind(KIND_GROUP_METADATA));
+    assert!(!is_home_feed_candidate_kind(KIND_GROUP_METADATA));
+    assert!(is_private_farm_ops_kind(KIND_GROUP_METADATA));
     assert_eq!(
         group_metadata_from_event(parts.kind, &parts.tags, &parts.content)
             .unwrap()

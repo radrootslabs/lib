@@ -200,33 +200,108 @@ pub const KIND_JOB_RESULT_MIN: u32 = 6000;
 pub const KIND_JOB_RESULT_MAX: u32 = 6999;
 pub const KIND_JOB_FEEDBACK: u32 = 7000;
 
-pub const PUBLIC_SOCIAL_KINDS: [u32; 14] = [
+pub const HOME_FEED_CANDIDATE_KINDS: [u32; 9] = [
     KIND_POST,
     KIND_REPOST,
-    KIND_REACTION,
     KIND_GENERIC_REPOST,
-    KIND_PUBLIC_FILE_METADATA,
-    KIND_COMMENT,
-    KIND_REPORT,
-    KIND_LIST_READ_WRITE_RELAYS,
     KIND_ARTICLE,
-    KIND_LISTING_DRAFT,
+    KIND_LISTING,
+    KIND_CALENDAR_DATE_EVENT,
+    KIND_CALENDAR_TIME_EVENT,
+    KIND_FARM,
+    KIND_PUBLIC_FILE_METADATA,
+];
+
+pub const EVENTS_CANDIDATE_KINDS: [u32; 4] = [
     KIND_CALENDAR_DATE_EVENT,
     KIND_CALENDAR_TIME_EVENT,
     KIND_CALENDAR,
     KIND_CALENDAR_EVENT_RSVP,
 ];
 
-pub const UNAMBIGUOUS_PUBLIC_SOCIAL_KINDS: [u32; 13] = [
+pub const MARKET_CANDIDATE_KINDS: [u32; 3] = [KIND_LISTING, KIND_FARM, KIND_PUBLIC_FILE_METADATA];
+
+pub const MAP_CANDIDATE_KINDS: [u32; 7] = [
+    KIND_FARM,
+    KIND_LISTING,
+    KIND_CALENDAR_DATE_EVENT,
+    KIND_CALENDAR_TIME_EVENT,
+    KIND_POST,
+    KIND_ARTICLE,
+    KIND_PUBLIC_FILE_METADATA,
+];
+
+pub const PROFILE_PUBLIC_CONTENT_KINDS: [u32; 8] = [
+    KIND_POST,
+    KIND_REPOST,
+    KIND_GENERIC_REPOST,
+    KIND_ARTICLE,
+    KIND_LISTING,
+    KIND_CALENDAR_DATE_EVENT,
+    KIND_CALENDAR_TIME_EVENT,
+    KIND_PUBLIC_FILE_METADATA,
+];
+
+pub const MODERATION_ADMIN_CANDIDATE_KINDS: [u32; 1] = [KIND_REPORT];
+
+pub const DRAFT_OWNER_CANDIDATE_KINDS: [u32; 1] = [KIND_LISTING_DRAFT];
+
+pub const NIP29_GROUP_KINDS: [u32; 13] = [
+    KIND_GROUP_METADATA,
+    KIND_GROUP_ADMINS,
+    KIND_GROUP_MEMBERS,
+    KIND_GROUP_ROLES,
+    KIND_GROUP_PUT_USER,
+    KIND_GROUP_REMOVE_USER,
+    KIND_GROUP_EDIT_METADATA,
+    KIND_GROUP_DELETE_EVENT,
+    KIND_GROUP_CREATE_GROUP,
+    KIND_GROUP_DELETE_GROUP,
+    KIND_GROUP_CREATE_INVITE,
+    KIND_GROUP_JOIN_REQUEST,
+    KIND_GROUP_LEAVE_REQUEST,
+];
+
+pub const PRIVATE_FARM_OPS_KINDS: [u32; 16] = [
+    KIND_FARM_WORKSPACE_MANIFEST,
+    KIND_FARM_CRDT_CHANGE,
+    KIND_FARM_FILE_METADATA,
+    KIND_GROUP_METADATA,
+    KIND_GROUP_ADMINS,
+    KIND_GROUP_MEMBERS,
+    KIND_GROUP_ROLES,
+    KIND_GROUP_PUT_USER,
+    KIND_GROUP_REMOVE_USER,
+    KIND_GROUP_EDIT_METADATA,
+    KIND_GROUP_DELETE_EVENT,
+    KIND_GROUP_CREATE_GROUP,
+    KIND_GROUP_DELETE_GROUP,
+    KIND_GROUP_CREATE_INVITE,
+    KIND_GROUP_JOIN_REQUEST,
+    KIND_GROUP_LEAVE_REQUEST,
+];
+
+pub const PUBLIC_SOCIAL_KINDS: [u32; 11] = [
+    KIND_POST,
+    KIND_REPOST,
+    KIND_REACTION,
+    KIND_GENERIC_REPOST,
+    KIND_PUBLIC_FILE_METADATA,
+    KIND_COMMENT,
+    KIND_ARTICLE,
+    KIND_CALENDAR_DATE_EVENT,
+    KIND_CALENDAR_TIME_EVENT,
+    KIND_CALENDAR,
+    KIND_CALENDAR_EVENT_RSVP,
+];
+
+pub const UNAMBIGUOUS_PUBLIC_SOCIAL_KINDS: [u32; 10] = [
     KIND_POST,
     KIND_REPOST,
     KIND_REACTION,
     KIND_GENERIC_REPOST,
     KIND_COMMENT,
-    KIND_REPORT,
-    KIND_LIST_READ_WRITE_RELAYS,
     KIND_ARTICLE,
-    KIND_LISTING_DRAFT,
     KIND_CALENDAR_DATE_EVENT,
     KIND_CALENDAR_TIME_EVENT,
     KIND_CALENDAR,
@@ -241,12 +316,9 @@ pub const MVP_SOCIAL_KINDS: [u32; 5] = [
     KIND_CALENDAR_TIME_EVENT,
 ];
 
-pub const PRODUCTION_SOCIAL_KINDS: [u32; 7] = [
+pub const PRODUCTION_SOCIAL_KINDS: [u32; 4] = [
     KIND_REPOST,
     KIND_GENERIC_REPOST,
-    KIND_REPORT,
-    KIND_LIST_READ_WRITE_RELAYS,
-    KIND_LISTING_DRAFT,
     KIND_CALENDAR,
     KIND_CALENDAR_EVENT_RSVP,
 ];
@@ -275,10 +347,7 @@ pub const fn is_unambiguous_public_social_kind(kind: u32) -> bool {
             | KIND_REACTION
             | KIND_GENERIC_REPOST
             | KIND_COMMENT
-            | KIND_REPORT
-            | KIND_LIST_READ_WRITE_RELAYS
             | KIND_ARTICLE
-            | KIND_LISTING_DRAFT
             | KIND_CALENDAR_DATE_EVENT
             | KIND_CALENDAR_TIME_EVENT
             | KIND_CALENDAR
@@ -307,14 +376,107 @@ pub const fn is_mvp_social_kind(kind: u32) -> bool {
 pub const fn is_production_social_kind(kind: u32) -> bool {
     matches!(
         kind,
-        KIND_REPOST
+        KIND_REPOST | KIND_GENERIC_REPOST | KIND_CALENDAR | KIND_CALENDAR_EVENT_RSVP
+    )
+}
+
+#[inline]
+pub const fn is_home_feed_candidate_kind(kind: u32) -> bool {
+    matches!(
+        kind,
+        KIND_POST
+            | KIND_REPOST
             | KIND_GENERIC_REPOST
-            | KIND_REPORT
-            | KIND_LIST_READ_WRITE_RELAYS
-            | KIND_LISTING_DRAFT
+            | KIND_ARTICLE
+            | KIND_LISTING
+            | KIND_CALENDAR_DATE_EVENT
+            | KIND_CALENDAR_TIME_EVENT
+            | KIND_FARM
+            | KIND_PUBLIC_FILE_METADATA
+    )
+}
+
+#[inline]
+pub const fn is_events_candidate_kind(kind: u32) -> bool {
+    matches!(
+        kind,
+        KIND_CALENDAR_DATE_EVENT
+            | KIND_CALENDAR_TIME_EVENT
             | KIND_CALENDAR
             | KIND_CALENDAR_EVENT_RSVP
     )
+}
+
+#[inline]
+pub const fn is_market_candidate_kind(kind: u32) -> bool {
+    matches!(kind, KIND_LISTING | KIND_FARM | KIND_PUBLIC_FILE_METADATA)
+}
+
+#[inline]
+pub const fn is_map_candidate_kind(kind: u32) -> bool {
+    matches!(
+        kind,
+        KIND_FARM
+            | KIND_LISTING
+            | KIND_CALENDAR_DATE_EVENT
+            | KIND_CALENDAR_TIME_EVENT
+            | KIND_POST
+            | KIND_ARTICLE
+            | KIND_PUBLIC_FILE_METADATA
+    )
+}
+
+#[inline]
+pub const fn is_profile_public_content_kind(kind: u32) -> bool {
+    matches!(
+        kind,
+        KIND_POST
+            | KIND_REPOST
+            | KIND_GENERIC_REPOST
+            | KIND_ARTICLE
+            | KIND_LISTING
+            | KIND_CALENDAR_DATE_EVENT
+            | KIND_CALENDAR_TIME_EVENT
+            | KIND_PUBLIC_FILE_METADATA
+    )
+}
+
+#[inline]
+pub const fn is_moderation_admin_candidate_kind(kind: u32) -> bool {
+    kind == KIND_REPORT
+}
+
+#[inline]
+pub const fn is_draft_owner_candidate_kind(kind: u32) -> bool {
+    kind == KIND_LISTING_DRAFT
+}
+
+#[inline]
+pub const fn is_nip29_group_kind(kind: u32) -> bool {
+    matches!(
+        kind,
+        KIND_GROUP_METADATA
+            | KIND_GROUP_ADMINS
+            | KIND_GROUP_MEMBERS
+            | KIND_GROUP_ROLES
+            | KIND_GROUP_PUT_USER
+            | KIND_GROUP_REMOVE_USER
+            | KIND_GROUP_EDIT_METADATA
+            | KIND_GROUP_DELETE_EVENT
+            | KIND_GROUP_CREATE_GROUP
+            | KIND_GROUP_DELETE_GROUP
+            | KIND_GROUP_CREATE_INVITE
+            | KIND_GROUP_JOIN_REQUEST
+            | KIND_GROUP_LEAVE_REQUEST
+    )
+}
+
+#[inline]
+pub const fn is_private_farm_ops_kind(kind: u32) -> bool {
+    kind == KIND_FARM_WORKSPACE_MANIFEST
+        || kind == KIND_FARM_CRDT_CHANGE
+        || kind == KIND_FARM_FILE_METADATA
+        || is_nip29_group_kind(kind)
 }
 
 #[inline]
@@ -607,10 +769,10 @@ mod tests {
 
     #[test]
     fn classifies_public_social_kinds() {
-        assert_eq!(PUBLIC_SOCIAL_KINDS.len(), 14);
-        assert_eq!(UNAMBIGUOUS_PUBLIC_SOCIAL_KINDS.len(), 13);
+        assert_eq!(PUBLIC_SOCIAL_KINDS.len(), 11);
+        assert_eq!(UNAMBIGUOUS_PUBLIC_SOCIAL_KINDS.len(), 10);
         assert_eq!(MVP_SOCIAL_KINDS.len(), 5);
-        assert_eq!(PRODUCTION_SOCIAL_KINDS.len(), 7);
+        assert_eq!(PRODUCTION_SOCIAL_KINDS.len(), 4);
 
         assert!(is_public_social_kind(KIND_POST));
         assert!(is_public_social_kind(KIND_PUBLIC_FILE_METADATA));
@@ -621,23 +783,113 @@ mod tests {
         assert!(is_public_social_kind(KIND_CALENDAR_TIME_EVENT));
         assert!(is_public_social_kind(KIND_REPOST));
         assert!(is_public_social_kind(KIND_GENERIC_REPOST));
-        assert!(is_public_social_kind(KIND_REPORT));
         assert!(is_public_social_kind(KIND_CALENDAR));
         assert!(is_public_social_kind(KIND_CALENDAR_EVENT_RSVP));
-        assert!(is_public_social_kind(KIND_LISTING_DRAFT));
-        assert!(is_public_social_kind(KIND_LIST_READ_WRITE_RELAYS));
+        assert!(!is_public_social_kind(KIND_REPORT));
+        assert!(!is_public_social_kind(KIND_LISTING));
+        assert!(!is_public_social_kind(KIND_LISTING_DRAFT));
+        assert!(!is_public_social_kind(KIND_LIST_READ_WRITE_RELAYS));
         assert!(!is_public_social_kind(KIND_FARM_CRDT_CHANGE));
         assert!(!is_public_social_kind(KIND_FARM_WORKSPACE_MANIFEST));
 
         assert!(is_mvp_social_kind(KIND_ARTICLE));
         assert!(!is_mvp_social_kind(KIND_REPORT));
-        assert!(is_production_social_kind(KIND_REPORT));
+        assert!(!is_production_social_kind(KIND_REPORT));
         assert!(!is_production_social_kind(KIND_ARTICLE));
         assert!(is_ambiguous_public_social_kind(KIND_PUBLIC_FILE_METADATA));
         assert!(!is_unambiguous_public_social_kind(
             KIND_PUBLIC_FILE_METADATA
         ));
         assert!(is_unambiguous_public_social_kind(KIND_ARTICLE));
+    }
+
+    #[test]
+    fn classifies_product_surface_candidate_kinds() {
+        assert_eq!(HOME_FEED_CANDIDATE_KINDS.len(), 9);
+        assert_eq!(EVENTS_CANDIDATE_KINDS.len(), 4);
+        assert_eq!(MARKET_CANDIDATE_KINDS.len(), 3);
+        assert_eq!(MAP_CANDIDATE_KINDS.len(), 7);
+        assert_eq!(PROFILE_PUBLIC_CONTENT_KINDS.len(), 8);
+        assert_eq!(MODERATION_ADMIN_CANDIDATE_KINDS.len(), 1);
+        assert_eq!(DRAFT_OWNER_CANDIDATE_KINDS.len(), 1);
+        assert_eq!(NIP29_GROUP_KINDS.len(), 13);
+        assert_eq!(PRIVATE_FARM_OPS_KINDS.len(), 16);
+
+        assert!(is_home_feed_candidate_kind(KIND_POST));
+        assert!(is_home_feed_candidate_kind(KIND_REPOST));
+        assert!(is_home_feed_candidate_kind(KIND_GENERIC_REPOST));
+        assert!(is_home_feed_candidate_kind(KIND_ARTICLE));
+        assert!(is_home_feed_candidate_kind(KIND_LISTING));
+        assert!(is_home_feed_candidate_kind(KIND_CALENDAR_DATE_EVENT));
+        assert!(is_home_feed_candidate_kind(KIND_CALENDAR_TIME_EVENT));
+        assert!(is_home_feed_candidate_kind(KIND_FARM));
+        assert!(is_home_feed_candidate_kind(KIND_PUBLIC_FILE_METADATA));
+        assert!(!is_home_feed_candidate_kind(KIND_LISTING_DRAFT));
+        assert!(!is_home_feed_candidate_kind(KIND_REPORT));
+        assert!(!is_home_feed_candidate_kind(KIND_FARM_CRDT_CHANGE));
+        assert!(!is_home_feed_candidate_kind(KIND_RELAY_AUTH));
+        assert!(!is_home_feed_candidate_kind(KIND_HTTP_AUTH));
+
+        assert!(is_events_candidate_kind(KIND_CALENDAR_DATE_EVENT));
+        assert!(is_events_candidate_kind(KIND_CALENDAR_TIME_EVENT));
+        assert!(is_events_candidate_kind(KIND_CALENDAR));
+        assert!(is_events_candidate_kind(KIND_CALENDAR_EVENT_RSVP));
+        assert!(!is_events_candidate_kind(KIND_POST));
+        assert!(!is_events_candidate_kind(KIND_FARM_CRDT_CHANGE));
+
+        assert!(is_market_candidate_kind(KIND_LISTING));
+        assert!(is_market_candidate_kind(KIND_FARM));
+        assert!(is_market_candidate_kind(KIND_PUBLIC_FILE_METADATA));
+        assert!(!is_market_candidate_kind(KIND_LISTING_DRAFT));
+        assert!(!is_market_candidate_kind(KIND_REPORT));
+
+        assert!(is_map_candidate_kind(KIND_FARM));
+        assert!(is_map_candidate_kind(KIND_LISTING));
+        assert!(is_map_candidate_kind(KIND_CALENDAR_DATE_EVENT));
+        assert!(is_map_candidate_kind(KIND_CALENDAR_TIME_EVENT));
+        assert!(is_map_candidate_kind(KIND_POST));
+        assert!(is_map_candidate_kind(KIND_ARTICLE));
+        assert!(is_map_candidate_kind(KIND_PUBLIC_FILE_METADATA));
+        assert!(!is_map_candidate_kind(KIND_LISTING_DRAFT));
+        assert!(!is_map_candidate_kind(KIND_REPORT));
+
+        assert!(is_profile_public_content_kind(KIND_POST));
+        assert!(is_profile_public_content_kind(KIND_REPOST));
+        assert!(is_profile_public_content_kind(KIND_GENERIC_REPOST));
+        assert!(is_profile_public_content_kind(KIND_ARTICLE));
+        assert!(is_profile_public_content_kind(KIND_LISTING));
+        assert!(is_profile_public_content_kind(KIND_CALENDAR_DATE_EVENT));
+        assert!(is_profile_public_content_kind(KIND_CALENDAR_TIME_EVENT));
+        assert!(is_profile_public_content_kind(KIND_PUBLIC_FILE_METADATA));
+        assert!(!is_profile_public_content_kind(KIND_LISTING_DRAFT));
+        assert!(!is_profile_public_content_kind(KIND_REPORT));
+
+        assert!(is_moderation_admin_candidate_kind(KIND_REPORT));
+        assert!(!is_moderation_admin_candidate_kind(KIND_POST));
+        assert!(is_draft_owner_candidate_kind(KIND_LISTING_DRAFT));
+        assert!(!is_draft_owner_candidate_kind(KIND_LISTING));
+
+        assert!(is_private_farm_ops_kind(KIND_FARM_WORKSPACE_MANIFEST));
+        assert!(is_private_farm_ops_kind(KIND_FARM_CRDT_CHANGE));
+        assert!(is_private_farm_ops_kind(KIND_FARM_FILE_METADATA));
+        assert!(is_nip29_group_kind(KIND_GROUP_METADATA));
+        assert!(is_private_farm_ops_kind(KIND_GROUP_METADATA));
+        assert!(is_private_farm_ops_kind(KIND_GROUP_ADMINS));
+        assert!(is_private_farm_ops_kind(KIND_GROUP_MEMBERS));
+        assert!(is_private_farm_ops_kind(KIND_GROUP_ROLES));
+        assert!(is_private_farm_ops_kind(KIND_GROUP_PUT_USER));
+        assert!(is_private_farm_ops_kind(KIND_GROUP_REMOVE_USER));
+        assert!(is_private_farm_ops_kind(KIND_GROUP_EDIT_METADATA));
+        assert!(is_private_farm_ops_kind(KIND_GROUP_DELETE_EVENT));
+        assert!(is_private_farm_ops_kind(KIND_GROUP_CREATE_GROUP));
+        assert!(is_private_farm_ops_kind(KIND_GROUP_DELETE_GROUP));
+        assert!(is_private_farm_ops_kind(KIND_GROUP_CREATE_INVITE));
+        assert!(is_private_farm_ops_kind(KIND_GROUP_JOIN_REQUEST));
+        assert!(is_private_farm_ops_kind(KIND_GROUP_LEAVE_REQUEST));
+        assert!(!is_private_farm_ops_kind(KIND_RELAY_AUTH));
+        assert!(!is_private_farm_ops_kind(KIND_HTTP_AUTH));
+        assert!(!is_private_farm_ops_kind(KIND_REPORT));
+        assert!(!is_private_farm_ops_kind(KIND_LISTING_DRAFT));
     }
 
     #[test]
