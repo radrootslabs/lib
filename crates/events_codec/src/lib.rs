@@ -18,6 +18,7 @@ pub mod comment;
 pub mod coop;
 pub mod document;
 pub mod farm;
+pub mod farm_workspace;
 pub mod follow;
 pub mod geochat;
 pub mod gift_wrap;
