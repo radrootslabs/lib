@@ -5,13 +5,37 @@ codecs and tag builders for the `radroots` core libraries.
 
 ## Overview
 
- * canonical decoders for event content, tags, job envelopes, profiles, and
-   wire representations;
+ * canonical decoders for event content, tags, job envelopes, profiles, Field
+   event envelopes, NIP-29 group events, and wire representations;
  * tag builder helpers for the same event families exposed by
    `radroots_events`;
  * parsed view and error types for codec-driven validation and routing;
  * optional `serde_json` and `radroots_nostr` integration for JSON and wire
    interop.
+
+## Field Event Codecs
+
+The Field codec surface validates the public Nostr event substrate exposed by
+`radroots_events`:
+
+ * workspace manifests use kind `30078`, JSON content, a schema marker, `d` and
+   `h` routing tags, owner tags, relay references, and Field-supported kind
+   declarations;
+ * CRDT changes use kind `78`, JSON content, `h`, `d`, `a`, optional author `p`,
+   and semantic `t` tags, with base64url change payload validation;
+ * farm files use kind `1063`, NIP-94-compatible metadata tags, a workspace
+   address, a farm group id, an owner document tag, lowercase SHA-256 hashes,
+   and optional caption text as content;
+ * NIP-42 relay auth and NIP-98 HTTP auth events require empty content and the
+   auth tags required by their protocols;
+ * NIP-29 group codecs preserve the protocol distinction between `h`-routed
+   group operations and `d`-routed addressable group state.
+
+These codecs validate event shape, routing tags, hashes, and payload encoding.
+They do not validate private Field task, work-session, harvest, approval, or
+authorization semantics; those remain application and CRDT document concerns.
+The companion `radroots_events_codec_wasm` crate exposes deterministic JSON tag
+builders for the same Field and NIP-29 families.
 
 ## Copyright
 

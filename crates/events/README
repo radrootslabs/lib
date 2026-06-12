@@ -6,12 +6,32 @@ models, kinds, and tag conventions for the `radroots` core libraries.
 ## Overview
 
  * typed content modules for accounts, app data, comments, coops, documents,
-   farms, jobs, lists, messages, posts, profiles, reactions, trades, and
-   related domains;
+   farms, farm workspaces, farm CRDT changes, farm files, groups, auth events,
+   jobs, lists, messages, posts, profiles, reactions, trades, and related
+   domains;
  * shared event references, pointers, and kind and tag definitions used across
    event-processing code;
  * portable event model semantics for both `std` and `no_std` builds;
  * optional integration with `serde` for serialization.
+
+## Field Event Boundary
+
+`radroots_events` includes the public event-layer models needed by Field-style
+farming operations:
+
+ * workspace manifests for discovering the farm group, relay set, media servers,
+   and supported event kinds;
+ * CRDT change envelopes for operation documents such as tasks, work sessions,
+   harvest records, and approvals;
+ * farm file metadata events for media attached to farm documents;
+ * NIP-42 relay auth and NIP-98 HTTP auth payload models;
+ * NIP-29 group metadata, member lists, roles, invites, joins, leaves, and user
+   operations.
+
+Task records, work sessions, harvest records, approvals, and similar Field
+business objects are CRDT document semantics carried by
+`RadrootsFarmCrdtChange`. They are not separate `rr-rs` event families and this
+crate does not enforce private Field workflow authorization.
 
 ## Copyright
 

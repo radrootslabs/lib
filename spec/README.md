@@ -25,6 +25,22 @@ package.
 
 Public SDK exports are intentionally narrower than the full Rust workspace.
 
+## Field Event Substrate
+
+Field-oriented farming operations are represented in the public Rust substrate
+through `radroots_events`, `radroots_events_codec`, and
+`radroots_events_codec_wasm`.
+
+The substrate includes workspace manifests, CRDT change envelopes, farm file
+metadata, NIP-42 relay auth, NIP-98 HTTP auth, and NIP-29 group events. These are
+event and codec APIs, not curated SDK operations by default.
+
+Task records, work sessions, harvest records, approvals, and similar Field
+business objects are CRDT document semantics carried inside the CRDT change
+envelope. They are outside the `rr-rs` event-contract boundary unless a future
+contract slice explicitly promotes them into a curated SDK operation surface with
+matching conformance vectors and language export mappings.
+
 ## Rust Crate Tiers
 
 The public Rust story is tiered explicitly.
