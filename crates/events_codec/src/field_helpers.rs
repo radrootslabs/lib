@@ -127,18 +127,6 @@ pub(crate) fn validate_non_empty_base64url(
     }
 }
 
-#[cfg(feature = "serde_json")]
-pub(crate) fn validate_non_empty_base64url_tag(
-    value: &str,
-    tag: &'static str,
-) -> Result<(), EventParseError> {
-    if is_non_empty_base64url(value) {
-        Ok(())
-    } else {
-        Err(EventParseError::InvalidTag(tag))
-    }
-}
-
 pub(crate) fn validate_non_empty_field(
     value: &str,
     field: &'static str,
