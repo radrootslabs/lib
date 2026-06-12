@@ -16,6 +16,11 @@ pub struct RadrootsCalendar {
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
+    pub description: Option<String>,
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
     pub summary: Option<String>,
     #[cfg_attr(
         feature = "serde",
@@ -30,6 +35,11 @@ pub struct RadrootsCalendarDateEvent {
     pub d_tag: String,
     pub title: String,
     pub start: String,
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub description: Option<String>,
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
@@ -68,6 +78,16 @@ pub struct RadrootsCalendarTimeEvent {
     pub d_tag: String,
     pub title: String,
     pub start: u64,
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Vec::is_empty")
+    )]
+    pub dates: Vec<RadrootsCalendarDateValue>,
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub description: Option<String>,
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
@@ -143,6 +163,7 @@ mod tests {
             d_tag: "market-day".to_string(),
             title: "market day".to_string(),
             start: "2026-06-20".to_string(),
+            description: Some("Farm stand pickup window.".to_string()),
             end: None,
             days: Some(vec![RadrootsCalendarDateValue {
                 value: "2026-06-20".to_string(),
@@ -167,6 +188,10 @@ mod tests {
             d_tag: "wash-pack".to_string(),
             title: "wash pack shift".to_string(),
             start: 1_781_895_600,
+            dates: vec![RadrootsCalendarDateValue {
+                value: "2026-06-20".to_string(),
+            }],
+            description: Some("Pack CSA shares before pickup.".to_string()),
             end: Some(1_781_899_200),
             start_tzid: Some("America/Vancouver".to_string()),
             end_tzid: Some("America/Vancouver".to_string()),
@@ -197,6 +222,7 @@ mod tests {
                 event_kind: Some(31923),
                 relays: None,
             }],
+            description: Some("Shared farm operations schedule.".to_string()),
             summary: None,
             image: None,
         };

@@ -343,6 +343,7 @@
           "d_tag": "AAAAAAAAAAAAAAAAAAAAAw",
           "title": "market day",
           "start": "2026-06-20",
+          "description": "Farm stand pickup window.",
           "end": "2026-06-21",
           "days": [
             {
@@ -358,8 +359,9 @@
           "title",
           "start",
           "end",
-          "d"
-        ]
+          "D"
+        ],
+        "content": "Farm stand pickup window."
       }
     },
     {
@@ -386,6 +388,12 @@
           "d_tag": "AAAAAAAAAAAAAAAAAAAA-A",
           "title": "wash pack shift",
           "start": 1781895600,
+          "dates": [
+            {
+              "value": "2026-06-20"
+            }
+          ],
+          "description": "Prepare CSA bins before pickup.",
           "end": 1781899200,
           "start_tzid": "America/Vancouver"
         }
@@ -396,9 +404,11 @@
           "d",
           "title",
           "start",
+          "D",
           "end",
           "start_tzid"
-        ]
+        ],
+        "content": "Prepare CSA bins before pickup."
       }
     },
     {
@@ -409,6 +419,11 @@
           "d_tag": "AAAAAAAAAAAAAAAAAAAA-A",
           "title": "wash pack shift",
           "start": 1781899200,
+          "dates": [
+            {
+              "value": "2026-06-20"
+            }
+          ],
           "end": 1781895600
         }
       },
@@ -416,6 +431,22 @@
         "result": "error",
         "error_class": "encode_error",
         "field": "end"
+      }
+    },
+    {
+      "id": "social_calendar_time_missing_date_invalid_018",
+      "kind": "social.calendar_time_event.build_tags.invalid",
+      "input": {
+        "event": {
+          "d_tag": "AAAAAAAAAAAAAAAAAAAA-A",
+          "title": "wash pack shift",
+          "start": 1781895600
+        }
+      },
+      "expected": {
+        "result": "error",
+        "error_class": "encode_error",
+        "field": "dates"
       }
     }
   ]

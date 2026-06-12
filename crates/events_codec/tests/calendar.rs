@@ -47,6 +47,7 @@ fn sample_date_event() -> RadrootsCalendarDateEvent {
         d_tag: VALID_D_TAG.to_string(),
         title: "CSA pickup".to_string(),
         start: "2026-06-20".to_string(),
+        description: Some("Bring clean bins to the farm stand.".to_string()),
         end: Some("2026-06-21".to_string()),
         days: Some(vec![RadrootsCalendarDateValue {
             value: "2026-06-20".to_string(),
@@ -70,6 +71,10 @@ fn sample_time_event() -> RadrootsCalendarTimeEvent {
         d_tag: VALID_D_TAG.to_string(),
         title: "Wash pack shift".to_string(),
         start: 1_781_895_600,
+        dates: vec![RadrootsCalendarDateValue {
+            value: "2026-06-20".to_string(),
+        }],
+        description: Some("Prepare CSA bins before pickup.".to_string()),
         end: Some(1_781_899_200),
         start_tzid: Some("America/Vancouver".to_string()),
         end_tzid: Some("America/Vancouver".to_string()),
@@ -97,6 +102,7 @@ fn sample_calendar_collection() -> RadrootsCalendar {
             event_kind: Some(KIND_CALENDAR_TIME_EVENT),
             relays: Some(vec!["wss://relay.example.test".to_string()]),
         }],
+        description: Some("Shared schedule for farm operations.".to_string()),
         summary: Some("CSA and harvest schedule".to_string()),
         image: Some("https://media.example.test/calendar.jpg".to_string()),
     }
@@ -136,7 +142,7 @@ fn calendar_date_event_to_wire_parts_roundtrips_tags() {
     let parts = date_to_wire_parts(&event).unwrap();
 
     assert_eq!(parts.kind, KIND_CALENDAR_DATE_EVENT);
-    assert!(parts.content.is_empty());
+    assert_eq!(parts.content, "Bring clean bins to the farm stand.");
     assert!(has_tag(&parts.tags, TAG_D, VALID_D_TAG));
     assert!(has_tag(&parts.tags, TAG_TITLE, "CSA pickup"));
     assert!(has_tag(&parts.tags, TAG_START, "2026-06-20"));
@@ -155,6 +161,10 @@ fn calendar_date_event_to_wire_parts_roundtrips_tags() {
     let decoded = calendar_date_event_from_event(parts.kind, &parts.tags, &parts.content).unwrap();
     assert_eq!(decoded.d_tag, VALID_D_TAG);
     assert_eq!(decoded.title, "CSA pickup");
+    assert_eq!(
+        decoded.description.as_deref(),
+        Some("Bring clean bins to the farm stand.")
+    );
     assert_eq!(decoded.start, "2026-06-20");
     assert_eq!(decoded.end.as_deref(), Some("2026-06-21"));
     assert_eq!(decoded.days.as_ref().map(Vec::len), Some(1));
@@ -174,10 +184,11 @@ fn calendar_time_event_to_wire_parts_roundtrips_tags() {
     let parts = time_to_wire_parts(&event).unwrap();
 
     assert_eq!(parts.kind, KIND_CALENDAR_TIME_EVENT);
-    assert!(parts.content.is_empty());
+    assert_eq!(parts.content, "Prepare CSA bins before pickup.");
     assert!(has_tag(&parts.tags, TAG_D, VALID_D_TAG));
     assert!(has_tag(&parts.tags, TAG_TITLE, "Wash pack shift"));
     assert!(has_tag(&parts.tags, TAG_START, "1781895600"));
+    assert!(has_tag(&parts.tags, TAG_D_DAY, "2026-06-20"));
     assert!(has_tag(&parts.tags, TAG_END, "1781899200"));
     assert!(has_tag(&parts.tags, TAG_START_TZID, "America/Vancouver"));
     assert!(has_tag(&parts.tags, TAG_END_TZID, "America/Vancouver"));
@@ -187,7 +198,12 @@ fn calendar_time_event_to_wire_parts_roundtrips_tags() {
     let decoded = calendar_time_event_from_event(parts.kind, &parts.tags, &parts.content).unwrap();
     assert_eq!(decoded.d_tag, VALID_D_TAG);
     assert_eq!(decoded.title, "Wash pack shift");
+    assert_eq!(
+        decoded.description.as_deref(),
+        Some("Prepare CSA bins before pickup.")
+    );
     assert_eq!(decoded.start, 1_781_895_600);
+    assert_eq!(decoded.dates.len(), 1);
     assert_eq!(decoded.end, Some(1_781_899_200));
     assert_eq!(decoded.start_tzid.as_deref(), Some("America/Vancouver"));
     assert_eq!(decoded.participants.as_ref().map(Vec::len), Some(1));
@@ -199,7 +215,7 @@ fn calendar_collection_to_wire_parts_roundtrips_event_addresses() {
     let parts = calendar_to_wire_parts(&calendar).unwrap();
 
     assert_eq!(parts.kind, KIND_CALENDAR);
-    assert!(parts.content.is_empty());
+    assert_eq!(parts.content, "Shared schedule for farm operations.");
     assert!(has_tag(&parts.tags, TAG_D, VALID_D_TAG));
     assert!(has_tag(&parts.tags, TAG_TITLE, "Farm calendar"));
     assert!(has_tag(
@@ -211,6 +227,10 @@ fn calendar_collection_to_wire_parts_roundtrips_event_addresses() {
     let decoded = calendar_from_event(parts.kind, &parts.tags, &parts.content).unwrap();
     assert_eq!(decoded.d_tag, VALID_D_TAG);
     assert_eq!(decoded.title, "Farm calendar");
+    assert_eq!(
+        decoded.description.as_deref(),
+        Some("Shared schedule for farm operations.")
+    );
     assert_eq!(decoded.events.len(), 1);
     assert!(matches!(
         decoded.events[0],
@@ -248,7 +268,7 @@ fn calendar_rsvp_to_wire_parts_roundtrips_status_event_id_and_participants() {
 }
 
 #[test]
-fn calendar_codecs_reject_wrong_kind_invalid_dates_and_nonempty_content() {
+fn calendar_codecs_reject_wrong_kind_invalid_dates_and_missing_time_dates() {
     assert!(matches!(
         date_to_wire_parts_with_kind(&sample_date_event(), KIND_POST),
         Err(EventEncodeError::InvalidKind(KIND_POST))
@@ -272,11 +292,16 @@ fn calendar_codecs_reject_wrong_kind_invalid_dates_and_nonempty_content() {
         Err(EventEncodeError::InvalidField("end"))
     ));
 
-    let tags = calendar_date_event_build_tags(&sample_date_event()).unwrap();
+    let mut event = sample_time_event();
+    event.dates.clear();
     assert!(matches!(
-        calendar_date_event_from_event(KIND_CALENDAR_DATE_EVENT, &tags, "body"),
-        Err(EventParseError::InvalidJson("content"))
+        calendar_time_event_build_tags(&event),
+        Err(EventEncodeError::EmptyRequiredField("dates"))
     ));
+
+    let tags = calendar_date_event_build_tags(&sample_date_event()).unwrap();
+    let decoded = calendar_date_event_from_event(KIND_CALENDAR_DATE_EVENT, &tags, "body").unwrap();
+    assert_eq!(decoded.description.as_deref(), Some("body"));
 
     let mut tags = calendar_date_event_build_tags(&sample_date_event()).unwrap();
     let start = tags
@@ -287,6 +312,13 @@ fn calendar_codecs_reject_wrong_kind_invalid_dates_and_nonempty_content() {
     assert!(matches!(
         calendar_date_event_from_event(KIND_CALENDAR_DATE_EVENT, &tags, ""),
         Err(EventParseError::InvalidTag(TAG_START))
+    ));
+
+    let mut tags = calendar_time_event_build_tags(&sample_time_event()).unwrap();
+    tags.retain(|tag| tag.first().map(|value| value.as_str()) != Some(TAG_D_DAY));
+    assert!(matches!(
+        calendar_time_event_from_event(KIND_CALENDAR_TIME_EVENT, &tags, ""),
+        Err(EventParseError::MissingTag(TAG_D_DAY))
     ));
 
     let err = calendar_time_event_from_event(KIND_POST, &tags, "").unwrap_err();

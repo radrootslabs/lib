@@ -28,7 +28,7 @@ use crate::social_helpers::{
     push_location_tags, push_participants, validate_date, validate_date_end_after_start,
     validate_end_after_start,
 };
-use crate::wire::{WireEventParts, empty_content};
+use crate::wire::WireEventParts;
 
 pub fn calendar_date_event_build_tags(
     event: &RadrootsCalendarDateEvent,
@@ -62,6 +62,10 @@ pub fn calendar_time_event_build_tags(
     push_tag(&mut tags, TAG_D, event.d_tag.as_str());
     push_tag(&mut tags, TAG_TITLE, event.title.as_str());
     push_tag(&mut tags, TAG_START, event.start.to_string());
+    for date in &event.dates {
+        validate_date(&date.value, "dates")?;
+        push_tag(&mut tags, TAG_D_DAY, date.value.as_str());
+    }
     if let Some(end) = event.end {
         push_tag(&mut tags, TAG_END, end.to_string());
     }
@@ -153,7 +157,7 @@ pub fn date_to_wire_parts_with_kind(
     }
     Ok(WireEventParts {
         kind,
-        content: empty_content(),
+        content: event.description.clone().unwrap_or_default(),
         tags: calendar_date_event_build_tags(event)?,
     })
 }
@@ -167,7 +171,7 @@ pub fn time_to_wire_parts_with_kind(
     }
     Ok(WireEventParts {
         kind,
-        content: empty_content(),
+        content: event.description.clone().unwrap_or_default(),
         tags: calendar_time_event_build_tags(event)?,
     })
 }
@@ -181,7 +185,7 @@ pub fn calendar_to_wire_parts_with_kind(
     }
     Ok(WireEventParts {
         kind,
-        content: empty_content(),
+        content: calendar.description.clone().unwrap_or_default(),
         tags: calendar_collection_build_tags(calendar)?,
     })
 }
@@ -215,6 +219,12 @@ fn validate_time_event(event: &RadrootsCalendarTimeEvent) -> Result<(), EventEnc
     validate_d_tag(&event.d_tag, "d_tag")?;
     validate_non_empty_field(&event.title, "title")?;
     validate_end_after_start(event.start, event.end, "end")?;
+    if event.dates.is_empty() {
+        return Err(EventEncodeError::EmptyRequiredField("dates"));
+    }
+    for date in &event.dates {
+        validate_date(&date.value, "dates")?;
+    }
     Ok(())
 }
 

@@ -590,6 +590,7 @@ mod tests {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
             title: "market day".to_string(),
             start: "2026-06-20".to_string(),
+            description: Some("Farm stand pickup window.".to_string()),
             end: Some("2026-06-21".to_string()),
             days: Some(vec![RadrootsCalendarDateValue {
                 value: "2026-06-20".to_string(),
@@ -610,6 +611,10 @@ mod tests {
             d_tag: "AAAAAAAAAAAAAAAAAAAA-A".to_string(),
             title: "wash pack shift".to_string(),
             start: 1_781_895_600,
+            dates: vec![RadrootsCalendarDateValue {
+                value: "2026-06-20".to_string(),
+            }],
+            description: Some("Prepare CSA bins before pickup.".to_string()),
             end: Some(1_781_899_200),
             start_tzid: Some("America/Vancouver".to_string()),
             end_tzid: Some("America/Vancouver".to_string()),
@@ -625,6 +630,7 @@ mod tests {
             d_tag: "AAAAAAAAAAAAAAAAAAAA_A".to_string(),
             title: "farm calendar".to_string(),
             events: vec![address_target(31923, "AAAAAAAAAAAAAAAAAAAA-A")],
+            description: Some("Shared schedule for farm operations.".to_string()),
             summary: Some("field schedule".to_string()),
             image: None,
         }

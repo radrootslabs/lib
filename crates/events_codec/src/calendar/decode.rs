@@ -47,9 +47,6 @@ pub fn calendar_date_event_from_event(
             got: kind,
         });
     }
-    if !content.is_empty() {
-        return Err(EventParseError::InvalidJson("content"));
-    }
     let d_tag = required_tag_value(tags, TAG_D)?;
     validate_d_tag_tag(&d_tag, TAG_D)?;
     let title = required_tag_value(tags, TAG_TITLE)?;
@@ -73,6 +70,7 @@ pub fn calendar_date_event_from_event(
         d_tag,
         title,
         start,
+        description: optional_content(content),
         end,
         days: non_empty_vec(days),
         location: location_from_tags(tags),
@@ -93,9 +91,6 @@ pub fn calendar_time_event_from_event(
             got: kind,
         });
     }
-    if !content.is_empty() {
-        return Err(EventParseError::InvalidJson("content"));
-    }
     let d_tag = required_tag_value(tags, TAG_D)?;
     validate_d_tag_tag(&d_tag, TAG_D)?;
     let title = required_tag_value(tags, TAG_TITLE)?;
@@ -103,10 +98,22 @@ pub fn calendar_time_event_from_event(
     let end = parse_optional_u64(tags, TAG_END)?;
     validate_end_after_start(start, end, TAG_END)
         .map_err(|_| EventParseError::InvalidTag(TAG_END))?;
+    let dates = tag_values(tags, TAG_D_DAY)?
+        .into_iter()
+        .map(|value| {
+            validate_date_tag(&value, TAG_D_DAY)?;
+            Ok(RadrootsCalendarDateValue { value })
+        })
+        .collect::<Result<Vec<_>, EventParseError>>()?;
+    if dates.is_empty() {
+        return Err(EventParseError::MissingTag(TAG_D_DAY));
+    }
     Ok(RadrootsCalendarTimeEvent {
         d_tag,
         title,
         start,
+        dates,
+        description: optional_content(content),
         end,
         start_tzid: optional_tag_value(tags, TAG_START_TZID)?,
         end_tzid: optional_tag_value(tags, TAG_END_TZID)?,
@@ -128,9 +135,6 @@ pub fn calendar_from_event(
             got: kind,
         });
     }
-    if !content.is_empty() {
-        return Err(EventParseError::InvalidJson("content"));
-    }
     let d_tag = required_tag_value(tags, TAG_D)?;
     validate_d_tag_tag(&d_tag, TAG_D)?;
     let title = required_tag_value(tags, TAG_TITLE)?;
@@ -142,6 +146,7 @@ pub fn calendar_from_event(
         d_tag,
         title,
         events,
+        description: optional_content(content),
         summary: optional_tag_value(tags, TAG_SUMMARY)?,
         image: optional_tag_value(tags, TAG_IMAGE)?,
     })
@@ -404,6 +409,14 @@ fn non_empty_vec<T>(values: Vec<T>) -> Option<Vec<T>> {
         None
     } else {
         Some(values)
+    }
+}
+
+fn optional_content(content: &str) -> Option<String> {
+    if content.is_empty() {
+        None
+    } else {
+        Some(content.to_string())
     }
 }
 

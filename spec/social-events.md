@@ -77,6 +77,13 @@ though both use kind `1063`. The public generic model must cover the current sim
 including URL, MIME type, SHA-256 hash, original hash, size, dimensions, blurhash, thumbnail, image,
 summary, alt text, fallback, `magnet`, `i`, and `service`.
 
+`RadrootsCalendarDateEvent`, `RadrootsCalendarTimeEvent`, and `RadrootsCalendar` use NIP-52
+description content. Optional `description` data is encoded as event content and empty content
+decodes to no description. Calendar date events use lowercase `d` for the replaceable identifier and
+optional uppercase `D` tags for covered all-day dates. Calendar time events require at least one
+uppercase `D` tag so timestamped events retain a deterministic calendar-date anchor across codecs and
+language exports.
+
 `RadrootsListingDraft` and `RadrootsRelayList` are not separate model types in the target contract.
 Listing draft kind `30403` is represented through `RadrootsListing`, and NIP-51 standard and
 list-set entries, including NIP-65 relay metadata kind `10002`, are represented through

@@ -101,6 +101,7 @@
         "calendar": {
           "d_tag": "AAAAAAAAAAAAAAAAAAAA_A",
           "title": "farm calendar",
+          "description": "Shared schedule for farm operations.",
           "events": [
             {
               "kind": "address",
@@ -120,7 +121,8 @@
           "d",
           "title",
           "a"
-        ]
+        ],
+        "content": "Shared schedule for farm operations."
       }
     },
     {
