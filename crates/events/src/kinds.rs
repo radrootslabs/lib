@@ -1,16 +1,20 @@
 pub const KIND_PROFILE: u32 = 0;
 pub const KIND_POST: u32 = 1;
 pub const KIND_FOLLOW: u32 = 3;
+pub const KIND_REPOST: u32 = 6;
 pub const KIND_REACTION: u32 = 7;
 pub const KIND_SEAL: u32 = 13;
 pub const KIND_MESSAGE: u32 = 14;
 pub const KIND_MESSAGE_FILE: u32 = 15;
+pub const KIND_GENERIC_REPOST: u32 = 16;
 pub const KIND_APP_CUSTOM_DATA: u32 = 78;
 pub const KIND_FARM_CRDT_CHANGE: u32 = KIND_APP_CUSTOM_DATA;
 pub const KIND_GIFT_WRAP: u32 = 1059;
 pub const KIND_FILE_METADATA: u32 = 1063;
 pub const KIND_FARM_FILE_METADATA: u32 = KIND_FILE_METADATA;
+pub const KIND_PUBLIC_FILE_METADATA: u32 = KIND_FILE_METADATA;
 pub const KIND_COMMENT: u32 = 1111;
+pub const KIND_REPORT: u32 = 1984;
 pub const KIND_GROUP_PUT_USER: u32 = 9000;
 pub const KIND_GROUP_REMOVE_USER: u32 = 9001;
 pub const KIND_GROUP_EDIT_METADATA: u32 = 9002;
@@ -51,7 +55,12 @@ pub const KIND_LIST_SET_INTEREST: u32 = 30015;
 pub const KIND_LIST_SET_EMOJI: u32 = 30030;
 pub const KIND_LIST_SET_RELEASE_ARTIFACT: u32 = 30063;
 pub const KIND_LIST_SET_APP_CURATION: u32 = 30267;
+pub const KIND_ARTICLE: u32 = 30023;
+pub const KIND_CALENDAR_DATE_EVENT: u32 = 31922;
+pub const KIND_CALENDAR_TIME_EVENT: u32 = 31923;
 pub const KIND_LIST_SET_CALENDAR: u32 = 31924;
+pub const KIND_CALENDAR: u32 = KIND_LIST_SET_CALENDAR;
+pub const KIND_CALENDAR_EVENT_RSVP: u32 = 31925;
 pub const KIND_LIST_SET_STARTER_PACK: u32 = 39089;
 pub const KIND_LIST_SET_MEDIA_STARTER_PACK: u32 = 39092;
 pub const KIND_FARM: u32 = 30340;
@@ -191,9 +200,121 @@ pub const KIND_JOB_RESULT_MIN: u32 = 6000;
 pub const KIND_JOB_RESULT_MAX: u32 = 6999;
 pub const KIND_JOB_FEEDBACK: u32 = 7000;
 
+pub const PUBLIC_SOCIAL_KINDS: [u32; 14] = [
+    KIND_POST,
+    KIND_REPOST,
+    KIND_REACTION,
+    KIND_GENERIC_REPOST,
+    KIND_PUBLIC_FILE_METADATA,
+    KIND_COMMENT,
+    KIND_REPORT,
+    KIND_LIST_READ_WRITE_RELAYS,
+    KIND_ARTICLE,
+    KIND_LISTING_DRAFT,
+    KIND_CALENDAR_DATE_EVENT,
+    KIND_CALENDAR_TIME_EVENT,
+    KIND_CALENDAR,
+    KIND_CALENDAR_EVENT_RSVP,
+];
+
+pub const UNAMBIGUOUS_PUBLIC_SOCIAL_KINDS: [u32; 13] = [
+    KIND_POST,
+    KIND_REPOST,
+    KIND_REACTION,
+    KIND_GENERIC_REPOST,
+    KIND_COMMENT,
+    KIND_REPORT,
+    KIND_LIST_READ_WRITE_RELAYS,
+    KIND_ARTICLE,
+    KIND_LISTING_DRAFT,
+    KIND_CALENDAR_DATE_EVENT,
+    KIND_CALENDAR_TIME_EVENT,
+    KIND_CALENDAR,
+    KIND_CALENDAR_EVENT_RSVP,
+];
+
+pub const MVP_SOCIAL_KINDS: [u32; 5] = [
+    KIND_POST,
+    KIND_PUBLIC_FILE_METADATA,
+    KIND_ARTICLE,
+    KIND_CALENDAR_DATE_EVENT,
+    KIND_CALENDAR_TIME_EVENT,
+];
+
+pub const PRODUCTION_SOCIAL_KINDS: [u32; 7] = [
+    KIND_REPOST,
+    KIND_GENERIC_REPOST,
+    KIND_REPORT,
+    KIND_LIST_READ_WRITE_RELAYS,
+    KIND_LISTING_DRAFT,
+    KIND_CALENDAR,
+    KIND_CALENDAR_EVENT_RSVP,
+];
+
 #[inline]
 pub const fn is_listing_kind(kind: u32) -> bool {
     matches!(kind, KIND_LISTING | KIND_LISTING_DRAFT)
+}
+
+#[inline]
+pub const fn is_public_file_metadata_kind(kind: u32) -> bool {
+    kind == KIND_PUBLIC_FILE_METADATA
+}
+
+#[inline]
+pub const fn is_ambiguous_public_social_kind(kind: u32) -> bool {
+    kind == KIND_PUBLIC_FILE_METADATA
+}
+
+#[inline]
+pub const fn is_unambiguous_public_social_kind(kind: u32) -> bool {
+    matches!(
+        kind,
+        KIND_POST
+            | KIND_REPOST
+            | KIND_REACTION
+            | KIND_GENERIC_REPOST
+            | KIND_COMMENT
+            | KIND_REPORT
+            | KIND_LIST_READ_WRITE_RELAYS
+            | KIND_ARTICLE
+            | KIND_LISTING_DRAFT
+            | KIND_CALENDAR_DATE_EVENT
+            | KIND_CALENDAR_TIME_EVENT
+            | KIND_CALENDAR
+            | KIND_CALENDAR_EVENT_RSVP
+    )
+}
+
+#[inline]
+pub const fn is_public_social_kind(kind: u32) -> bool {
+    is_unambiguous_public_social_kind(kind) || is_ambiguous_public_social_kind(kind)
+}
+
+#[inline]
+pub const fn is_mvp_social_kind(kind: u32) -> bool {
+    matches!(
+        kind,
+        KIND_POST
+            | KIND_PUBLIC_FILE_METADATA
+            | KIND_ARTICLE
+            | KIND_CALENDAR_DATE_EVENT
+            | KIND_CALENDAR_TIME_EVENT
+    )
+}
+
+#[inline]
+pub const fn is_production_social_kind(kind: u32) -> bool {
+    matches!(
+        kind,
+        KIND_REPOST
+            | KIND_GENERIC_REPOST
+            | KIND_REPORT
+            | KIND_LIST_READ_WRITE_RELAYS
+            | KIND_LISTING_DRAFT
+            | KIND_CALENDAR
+            | KIND_CALENDAR_EVENT_RSVP
+    )
 }
 
 #[inline]
@@ -466,9 +587,57 @@ mod tests {
         assert_eq!(KIND_FARM_CRDT_CHANGE, KIND_APP_CUSTOM_DATA);
         assert_eq!(KIND_FILE_METADATA, 1063);
         assert_eq!(KIND_FARM_FILE_METADATA, KIND_FILE_METADATA);
+        assert_eq!(KIND_PUBLIC_FILE_METADATA, KIND_FILE_METADATA);
         assert_eq!(KIND_FARM_WORKSPACE_MANIFEST, KIND_APP_DATA);
         assert_eq!(KIND_RELAY_AUTH, 22242);
         assert_eq!(KIND_HTTP_AUTH, 27235);
+    }
+
+    #[test]
+    fn exposes_social_event_kind_constants() {
+        assert_eq!(KIND_REPOST, 6);
+        assert_eq!(KIND_GENERIC_REPOST, 16);
+        assert_eq!(KIND_REPORT, 1984);
+        assert_eq!(KIND_ARTICLE, 30023);
+        assert_eq!(KIND_CALENDAR_DATE_EVENT, 31922);
+        assert_eq!(KIND_CALENDAR_TIME_EVENT, 31923);
+        assert_eq!(KIND_CALENDAR, KIND_LIST_SET_CALENDAR);
+        assert_eq!(KIND_CALENDAR_EVENT_RSVP, 31925);
+    }
+
+    #[test]
+    fn classifies_public_social_kinds() {
+        assert_eq!(PUBLIC_SOCIAL_KINDS.len(), 14);
+        assert_eq!(UNAMBIGUOUS_PUBLIC_SOCIAL_KINDS.len(), 13);
+        assert_eq!(MVP_SOCIAL_KINDS.len(), 5);
+        assert_eq!(PRODUCTION_SOCIAL_KINDS.len(), 7);
+
+        assert!(is_public_social_kind(KIND_POST));
+        assert!(is_public_social_kind(KIND_PUBLIC_FILE_METADATA));
+        assert!(is_public_social_kind(KIND_COMMENT));
+        assert!(is_public_social_kind(KIND_REACTION));
+        assert!(is_public_social_kind(KIND_ARTICLE));
+        assert!(is_public_social_kind(KIND_CALENDAR_DATE_EVENT));
+        assert!(is_public_social_kind(KIND_CALENDAR_TIME_EVENT));
+        assert!(is_public_social_kind(KIND_REPOST));
+        assert!(is_public_social_kind(KIND_GENERIC_REPOST));
+        assert!(is_public_social_kind(KIND_REPORT));
+        assert!(is_public_social_kind(KIND_CALENDAR));
+        assert!(is_public_social_kind(KIND_CALENDAR_EVENT_RSVP));
+        assert!(is_public_social_kind(KIND_LISTING_DRAFT));
+        assert!(is_public_social_kind(KIND_LIST_READ_WRITE_RELAYS));
+        assert!(!is_public_social_kind(KIND_FARM_CRDT_CHANGE));
+        assert!(!is_public_social_kind(KIND_FARM_WORKSPACE_MANIFEST));
+
+        assert!(is_mvp_social_kind(KIND_ARTICLE));
+        assert!(!is_mvp_social_kind(KIND_REPORT));
+        assert!(is_production_social_kind(KIND_REPORT));
+        assert!(!is_production_social_kind(KIND_ARTICLE));
+        assert!(is_ambiguous_public_social_kind(KIND_PUBLIC_FILE_METADATA));
+        assert!(!is_unambiguous_public_social_kind(
+            KIND_PUBLIC_FILE_METADATA
+        ));
+        assert!(is_unambiguous_public_social_kind(KIND_ARTICLE));
     }
 
     #[test]

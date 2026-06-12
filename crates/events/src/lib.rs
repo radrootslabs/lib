@@ -39,6 +39,7 @@ pub mod relay_document;
 pub mod resource_area;
 pub mod resource_cap;
 pub mod seal;
+pub mod social;
 pub mod tags;
 pub mod trade;
 
