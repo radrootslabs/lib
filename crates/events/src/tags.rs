@@ -28,7 +28,8 @@ pub const TAG_ORIGINAL_SHA256: &str = "ox";
 pub const TAG_SIZE: &str = "size";
 pub const TAG_DIMENSIONS: &str = "dim";
 pub const TAG_BLURHASH: &str = "blurhash";
-pub const TAG_THUMBNAIL: &str = "thumb";
+pub const TAG_THUMB: &str = "thumb";
+pub const TAG_THUMBNAIL: &str = TAG_THUMB;
 pub const TAG_IMAGE: &str = "image";
 pub const TAG_SUMMARY: &str = "summary";
 pub const TAG_ALT: &str = "alt";
@@ -92,6 +93,7 @@ mod tests {
         assert_eq!(TAG_SIZE, "size");
         assert_eq!(TAG_DIMENSIONS, "dim");
         assert_eq!(TAG_BLURHASH, "blurhash");
+        assert_eq!(TAG_THUMB, "thumb");
         assert_eq!(TAG_THUMBNAIL, "thumb");
         assert_eq!(TAG_IMAGE, "image");
         assert_eq!(TAG_SUMMARY, "summary");
