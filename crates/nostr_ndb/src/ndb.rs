@@ -448,9 +448,9 @@ mod tests {
             RadrootsNostrNdbIngestSource::client()
         );
         assert_eq!(
-            RadrootsNostrNdbIngestSource::relay("wss://relay.radroots.org"),
+            RadrootsNostrNdbIngestSource::relay("wss://radroots.org"),
             RadrootsNostrNdbIngestSource::Relay {
-                relay_url: Some("wss://relay.radroots.org".into())
+                relay_url: Some("wss://radroots.org".into())
             }
         );
         assert_eq!(

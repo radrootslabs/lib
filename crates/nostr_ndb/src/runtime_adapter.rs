@@ -80,7 +80,7 @@ mod tests {
         let ndb = RadrootsNostrNdb::open(config).expect("database should open");
         let store = RadrootsNostrNdbEventStoreAdapter::new(ndb)
             .with_source(RadrootsNostrNdbIngestSource::relay(
-                "wss://relay.radroots.org",
+                "wss://radroots.org",
             ))
             .into_event_store();
 
