@@ -8,6 +8,8 @@ use alloc::{string::String, vec::Vec};
 
 pub mod account;
 pub mod app_data;
+pub mod article;
+pub mod calendar;
 pub mod comment;
 pub mod coop;
 pub mod document;
@@ -15,6 +17,7 @@ pub mod farm;
 pub mod farm_crdt;
 pub mod farm_file;
 pub mod farm_workspace;
+pub mod file_metadata;
 pub mod follow;
 pub mod geochat;
 pub mod gift_wrap;
