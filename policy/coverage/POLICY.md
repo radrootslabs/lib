@@ -11,7 +11,12 @@ The authoritative machine-readable contract is `policy/coverage/policy.toml`.
 - branch coverage: 90.0
 - branch records must be present in lcov data
 
-All four thresholds are release-blocking.
+All four thresholds are release-blocking for required crates. This is the
+heavy-development coverage gate, not a 100% coverage requirement.
+
+Coverage work should prioritize required behavior, protocol contracts,
+conformance vectors, parsing, validation, and state-transition invariants.
+Do not add low-value tests solely to chase crate-wide 100% coverage.
 
 ## toolchain contract
 
@@ -33,6 +38,7 @@ All four thresholds are release-blocking.
 - every workspace crate is required
 - the required blocking crate list is tracked in `policy/coverage/policy.toml`
 - workspace membership changes must update `policy/coverage/policy.toml` in the same change
+- crates are not expected to reach 100% coverage during heavy development
 
 ## local override policy
 

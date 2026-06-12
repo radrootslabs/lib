@@ -6,8 +6,9 @@ fail_under_branches = 90.0
 require_branches = true
 
 # Heavy-development baseline: required crates must generally hold at least 90%
-# coverage across executable lines, functions, regions, and branches. Temporary
-# overrides below 90% are allowed only for explicit release-preflight gaps.
+# coverage across executable lines, functions, regions, and branches. This is
+# not a 100% coverage target. Temporary overrides below 90% are allowed only for
+# explicit release-preflight gaps.
 
 [overrides.radroots_secret_vault]
 fail_under_exec_lines = 90.0

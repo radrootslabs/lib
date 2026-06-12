@@ -162,7 +162,10 @@ Coverage governance is defined under `policy/coverage/`:
 - human policy notes: `policy/coverage/POLICY.md`
 - per-crate profiles: `policy/coverage/profiles.toml`
 
-Required Rust crates are gated at `90/90/90/90` (exec lines, functions, branches, regions), with branch records required. Temporary crate-specific overrides below 90% must remain explicit in the machine-readable policy.
+Required Rust crates are gated at `90/90/90/90` (exec lines, functions,
+branches, regions), with branch records required. This is not a 100% coverage
+target. Temporary crate-specific overrides below 90% must remain explicit in
+the machine-readable policy.
 
 ## Release Policy
 
