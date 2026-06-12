@@ -7,7 +7,6 @@ use radroots_core::{
     RadrootsCoreQuantity, RadrootsCoreQuantityPrice, RadrootsCoreUnit,
 };
 use radroots_events::RadrootsNostrEventPtr;
-use radroots_events::RadrootsNostrEventRef;
 use radroots_events::app_data::RadrootsAppData;
 use radroots_events::comment::RadrootsComment;
 use radroots_events::coop::RadrootsCoop;
@@ -24,7 +23,7 @@ use radroots_events::job_feedback::RadrootsJobFeedback;
 use radroots_events::job_request::{RadrootsJobInput, RadrootsJobParam, RadrootsJobRequest};
 use radroots_events::job_result::RadrootsJobResult;
 use radroots_events::kinds::{
-    KIND_JOB_FEEDBACK, KIND_JOB_REQUEST_MIN, KIND_JOB_RESULT_MIN, KIND_POST,
+    KIND_ARTICLE, KIND_JOB_FEEDBACK, KIND_JOB_REQUEST_MIN, KIND_JOB_RESULT_MIN,
 };
 use radroots_events::list::{RadrootsList, RadrootsListEntry};
 use radroots_events::list_set::RadrootsListSet;
@@ -44,6 +43,7 @@ use radroots_events::resource_area::{
 };
 use radroots_events::resource_cap::{RadrootsResourceHarvestCap, RadrootsResourceHarvestProduct};
 use radroots_events::seal::RadrootsSeal;
+use radroots_events::social::RadrootsSocialTarget;
 use radroots_events_codec::error::EventEncodeError;
 use radroots_events_codec::job::encode::JobEncodeError;
 use radroots_events_codec::listing::encode::listing_build_tags;
@@ -60,12 +60,11 @@ fn cdn_url(path: &str) -> String {
     format!("{CDN_PRIMARY_HTTPS}/{path}")
 }
 
-fn sample_event_ref(id: &str) -> RadrootsNostrEventRef {
-    RadrootsNostrEventRef {
+fn sample_social_target(id: &str) -> RadrootsSocialTarget {
+    RadrootsSocialTarget::Event {
         id: id.to_string(),
-        author: TEST_PUBKEY_HEX.to_string(),
-        kind: KIND_POST,
-        d_tag: None,
+        author: Some(TEST_PUBKEY_HEX.to_string()),
+        event_kind: Some(KIND_ARTICLE),
         relays: None,
     }
 }
@@ -166,14 +165,20 @@ fn event_tag_builder_impls_build_tags_for_all_supported_types() {
     assert!(!app_data.build_tags().unwrap().is_empty());
 
     let comment = RadrootsComment {
-        root: sample_event_ref("root"),
-        parent: sample_event_ref("parent"),
+        root: sample_social_target(
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        ),
+        parent: sample_social_target(
+            "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+        ),
         content: "hello".to_string(),
     };
     assert!(!comment.build_tags().unwrap().is_empty());
 
     let reaction = RadrootsReaction {
-        root: sample_event_ref("root"),
+        target: sample_social_target(
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        ),
         content: "+".to_string(),
     };
     assert!(!reaction.build_tags().unwrap().is_empty());

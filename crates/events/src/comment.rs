@@ -1,4 +1,4 @@
-use crate::RadrootsNostrEventRef;
+use crate::social::RadrootsSocialTarget;
 
 #[cfg(not(feature = "std"))]
 use alloc::string::String;
@@ -6,7 +6,7 @@ use alloc::string::String;
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsComment {
-    pub root: RadrootsNostrEventRef,
-    pub parent: RadrootsNostrEventRef,
+    pub root: RadrootsSocialTarget,
+    pub parent: RadrootsSocialTarget,
     pub content: String,
 }

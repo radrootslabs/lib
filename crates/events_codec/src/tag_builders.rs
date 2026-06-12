@@ -35,6 +35,7 @@ use crate::listing::tags::listing_tags;
 use crate::message::encode::message_build_tags;
 use crate::message_file::encode::message_file_build_tags;
 use crate::plot::encode::plot_build_tags;
+use crate::post::encode::post_build_tags;
 use crate::reaction::encode::reaction_build_tags;
 use crate::resource_area::encode::resource_area_build_tags;
 use crate::resource_cap::encode::resource_harvest_cap_build_tags;
@@ -225,9 +226,9 @@ impl RadrootsEventTagBuilder for RadrootsProfile {
 }
 
 impl RadrootsEventTagBuilder for RadrootsPost {
-    type Error = Infallible;
+    type Error = EventEncodeError;
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
-        Ok(Vec::new())
+        post_build_tags(self)
     }
 }

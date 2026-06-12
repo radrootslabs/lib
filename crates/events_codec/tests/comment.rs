@@ -1,65 +1,116 @@
-mod common;
-
-use radroots_events::tags::{TAG_E_PREV, TAG_E_ROOT};
 use radroots_events::{
     comment::RadrootsComment,
-    kinds::{KIND_COMMENT, KIND_POST},
+    kinds::{KIND_ARTICLE, KIND_COMMENT, KIND_POST},
+    social::RadrootsSocialTarget,
+    tags::{TAG_E_PREV, TAG_E_ROOT},
 };
-
-use radroots_events_codec::comment::decode::comment_from_tags;
-use radroots_events_codec::comment::decode::{data_from_event, parsed_from_event};
+use radroots_events_codec::comment::decode::{
+    comment_from_tags, data_from_event, parsed_from_event,
+};
 use radroots_events_codec::comment::encode::{
     comment_build_tags, to_wire_parts, to_wire_parts_with_kind,
 };
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
-use radroots_events_codec::event_ref::{build_event_ref_tag, push_nip10_ref_tags};
 
-fn assert_event_ref_fields(
-    actual: &radroots_events::RadrootsNostrEventRef,
-    expected: &radroots_events::RadrootsNostrEventRef,
-) {
-    assert_eq!(actual.id, expected.id);
-    assert_eq!(actual.author, expected.author);
-    assert_eq!(actual.kind, expected.kind);
-    assert_eq!(actual.d_tag, expected.d_tag);
-    assert_eq!(actual.relays, expected.relays);
+const ROOT_ID: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+const PARENT_ID: &str = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
+const AUTHOR: &str = "author_pubkey";
+const PARENT_AUTHOR: &str = "parent_pubkey";
+const D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAA";
+
+fn event_target(id: &str, author: &str, kind: u32) -> RadrootsSocialTarget {
+    RadrootsSocialTarget::Event {
+        id: id.to_string(),
+        author: Some(author.to_string()),
+        event_kind: Some(kind),
+        relays: Some(vec!["wss://relay.example.test".to_string()]),
+    }
+}
+
+fn address_target(author: &str, kind: u32, d_tag: &str) -> RadrootsSocialTarget {
+    RadrootsSocialTarget::Address {
+        address: format!("{kind}:{author}:{d_tag}"),
+        author: Some(author.to_string()),
+        event_kind: Some(kind),
+        relays: Some(vec!["wss://relay2.example.test".to_string()]),
+    }
+}
+
+fn external_target(id: &str, kind: &str) -> RadrootsSocialTarget {
+    RadrootsSocialTarget::External {
+        id: id.to_string(),
+        external_kind: kind.to_string(),
+        hint: Some("https://example.test/object".to_string()),
+    }
+}
+
+fn assert_event_target(target: &RadrootsSocialTarget, id: &str, author: &str, kind: u32) {
+    match target {
+        RadrootsSocialTarget::Event {
+            id: actual_id,
+            author: actual_author,
+            event_kind,
+            relays,
+        } => {
+            assert_eq!(actual_id, id);
+            assert_eq!(actual_author.as_deref(), Some(author));
+            assert_eq!(*event_kind, Some(kind));
+            assert_eq!(relays.as_ref().map(Vec::len), Some(1));
+        }
+        _ => panic!("expected event target"),
+    }
+}
+
+fn assert_address_target(target: &RadrootsSocialTarget, author: &str, kind: u32, d_tag: &str) {
+    match target {
+        RadrootsSocialTarget::Address {
+            address,
+            author: actual_author,
+            event_kind,
+            relays,
+        } => {
+            assert_eq!(address, &format!("{kind}:{author}:{d_tag}"));
+            assert_eq!(actual_author.as_deref(), Some(author));
+            assert_eq!(*event_kind, Some(kind));
+            assert_eq!(relays.as_ref().map(Vec::len), Some(1));
+        }
+        _ => panic!("expected address target"),
+    }
 }
 
 #[test]
-fn comment_build_tags_requires_root_id() {
+fn comment_build_tags_requires_strict_nip22_target_fields() {
     let comment = RadrootsComment {
-        root: common::event_ref("", "author", KIND_POST),
-        parent: common::event_ref("parent", "author", KIND_POST),
+        root: RadrootsSocialTarget::Event {
+            id: "not-hex".to_string(),
+            author: Some(AUTHOR.to_string()),
+            event_kind: Some(KIND_ARTICLE),
+            relays: None,
+        },
+        parent: event_target(PARENT_ID, PARENT_AUTHOR, KIND_ARTICLE),
         content: "hello".to_string(),
     };
-
-    let err = comment_build_tags(&comment).unwrap_err();
     assert!(matches!(
-        err,
-        EventEncodeError::EmptyRequiredField("root.id")
+        comment_build_tags(&comment),
+        Err(EventEncodeError::InvalidField("root"))
     ));
-}
 
-#[test]
-fn comment_build_tags_requires_parent_author() {
     let comment = RadrootsComment {
-        root: common::event_ref("root", "author", KIND_POST),
-        parent: common::event_ref("parent", "", KIND_POST),
+        root: event_target(ROOT_ID, AUTHOR, KIND_POST),
+        parent: event_target(PARENT_ID, PARENT_AUTHOR, KIND_ARTICLE),
         content: "hello".to_string(),
     };
-
-    let err = comment_build_tags(&comment).unwrap_err();
     assert!(matches!(
-        err,
-        EventEncodeError::EmptyRequiredField("parent.author")
+        comment_build_tags(&comment),
+        Err(EventEncodeError::InvalidField("root"))
     ));
 }
 
 #[test]
 fn comment_to_wire_parts_requires_content() {
     let comment = RadrootsComment {
-        root: common::event_ref("root", "author", KIND_POST),
-        parent: common::event_ref("parent", "author", KIND_POST),
+        root: event_target(ROOT_ID, AUTHOR, KIND_ARTICLE),
+        parent: event_target(PARENT_ID, PARENT_AUTHOR, KIND_ARTICLE),
         content: "   ".to_string(),
     };
 
@@ -68,266 +119,172 @@ fn comment_to_wire_parts_requires_content() {
         err,
         EventEncodeError::EmptyRequiredField("content")
     ));
+}
 
+#[test]
+fn comment_roundtrips_event_and_address_targets() {
     let comment = RadrootsComment {
-        root: common::event_ref("", "author", KIND_POST),
-        parent: common::event_ref("parent", "author", KIND_POST),
+        root: event_target(ROOT_ID, AUTHOR, KIND_ARTICLE),
+        parent: address_target(PARENT_AUTHOR, KIND_ARTICLE, D_TAG),
         content: "hello".to_string(),
     };
-    let err = to_wire_parts(&comment).unwrap_err();
+    let parts = to_wire_parts(&comment).unwrap();
+
+    assert_eq!(parts.kind, KIND_COMMENT);
+    assert!(parts.tags.iter().any(|tag| tag[0] == "E"));
+    assert!(parts.tags.iter().any(|tag| tag[0] == "P"));
+    assert!(parts.tags.iter().any(|tag| tag[0] == "K"));
+    assert!(parts.tags.iter().any(|tag| tag[0] == "a"));
+    assert!(parts.tags.iter().any(|tag| tag[0] == "p"));
+    assert!(parts.tags.iter().any(|tag| tag[0] == "k"));
+
+    let parsed = comment_from_tags(parts.kind, &parts.tags, &parts.content).unwrap();
+    assert_event_target(&parsed.root, ROOT_ID, AUTHOR, KIND_ARTICLE);
+    assert_address_target(&parsed.parent, PARENT_AUTHOR, KIND_ARTICLE, D_TAG);
+    assert_eq!(parsed.content, "hello");
+
+    let custom_parts = to_wire_parts_with_kind(&comment, KIND_POST).unwrap();
+    assert_eq!(custom_parts.kind, KIND_POST);
+}
+
+#[test]
+fn comment_roundtrips_external_targets() {
+    let comment = RadrootsComment {
+        root: external_target("https://example.test/root", "web"),
+        parent: external_target("https://example.test/parent", "web"),
+        content: "external comment".to_string(),
+    };
+    let parts = to_wire_parts(&comment).unwrap();
+    let parsed = comment_from_tags(parts.kind, &parts.tags, &parts.content).unwrap();
+
+    match parsed.root {
+        RadrootsSocialTarget::External {
+            id,
+            external_kind,
+            hint,
+        } => {
+            assert_eq!(id, "https://example.test/root");
+            assert_eq!(external_kind, "web");
+            assert_eq!(hint.as_deref(), Some("https://example.test/object"));
+        }
+        _ => panic!("expected external root"),
+    }
+    match parsed.parent {
+        RadrootsSocialTarget::External { id, .. } => {
+            assert_eq!(id, "https://example.test/parent");
+        }
+        _ => panic!("expected external parent"),
+    }
+}
+
+#[test]
+fn comment_from_tags_rejects_legacy_missing_and_kind1_shapes() {
+    let legacy_tags = vec![vec![
+        TAG_E_ROOT.to_string(),
+        ROOT_ID.to_string(),
+        AUTHOR.to_string(),
+        KIND_ARTICLE.to_string(),
+    ]];
     assert!(matches!(
-        err,
-        EventEncodeError::EmptyRequiredField("root.id")
+        comment_from_tags(KIND_COMMENT, &legacy_tags, "hello"),
+        Err(EventParseError::InvalidTag(TAG_E_ROOT))
+    ));
+
+    let legacy_parent_tags = vec![
+        vec!["E".to_string(), ROOT_ID.to_string()],
+        vec!["P".to_string(), AUTHOR.to_string()],
+        vec!["K".to_string(), KIND_ARTICLE.to_string()],
+        vec![
+            TAG_E_PREV.to_string(),
+            PARENT_ID.to_string(),
+            PARENT_AUTHOR.to_string(),
+            KIND_ARTICLE.to_string(),
+        ],
+    ];
+    assert!(matches!(
+        comment_from_tags(KIND_COMMENT, &legacy_parent_tags, "hello"),
+        Err(EventParseError::InvalidTag(TAG_E_PREV))
+    ));
+
+    let missing_parent_tags = vec![
+        vec!["E".to_string(), ROOT_ID.to_string()],
+        vec!["P".to_string(), AUTHOR.to_string()],
+        vec!["K".to_string(), KIND_ARTICLE.to_string()],
+    ];
+    assert!(matches!(
+        comment_from_tags(KIND_COMMENT, &missing_parent_tags, "hello"),
+        Err(EventParseError::MissingTag("e"))
+    ));
+
+    let kind1_tags = vec![
+        vec!["E".to_string(), ROOT_ID.to_string()],
+        vec!["P".to_string(), AUTHOR.to_string()],
+        vec!["K".to_string(), KIND_POST.to_string()],
+        vec!["e".to_string(), PARENT_ID.to_string()],
+        vec!["p".to_string(), PARENT_AUTHOR.to_string()],
+        vec!["k".to_string(), KIND_ARTICLE.to_string()],
+    ];
+    assert!(matches!(
+        comment_from_tags(KIND_COMMENT, &kind1_tags, "hello"),
+        Err(EventParseError::InvalidTag("K"))
     ));
 }
 
 #[test]
-fn comment_to_wire_parts_sets_kind_content_and_tags() {
-    let comment = RadrootsComment {
-        root: common::event_ref("root", "author", KIND_POST),
-        parent: common::event_ref("parent", "author", KIND_POST),
+fn comment_from_tags_rejects_empty_content_and_wrong_kind() {
+    let tags = comment_build_tags(&RadrootsComment {
+        root: event_target(ROOT_ID, AUTHOR, KIND_ARTICLE),
+        parent: event_target(PARENT_ID, PARENT_AUTHOR, KIND_ARTICLE),
         content: "hello".to_string(),
-    };
-    let parts = to_wire_parts(&comment).unwrap();
-    assert_eq!(parts.kind, KIND_COMMENT);
-    assert_eq!(parts.content, "hello");
-    assert_eq!(parts.tags.len(), 6);
+    })
+    .unwrap();
 
-    let custom_parts = to_wire_parts_with_kind(&comment, KIND_POST).unwrap();
-    assert_eq!(custom_parts.kind, KIND_POST);
-    assert_eq!(custom_parts.content, "hello");
-    assert_eq!(custom_parts.tags.len(), 6);
-}
-
-#[test]
-fn comment_build_tags_includes_address_tags_when_refs_have_d_tag() {
-    let comment = RadrootsComment {
-        root: common::event_ref_with_d(
-            "root",
-            "author",
-            KIND_POST,
-            "root-d",
-            Some(vec!["wss://relay".to_string()]),
-        ),
-        parent: common::event_ref_with_d(
-            "parent",
-            "author",
-            KIND_POST,
-            "parent-d",
-            Some(vec!["wss://relay-2".to_string()]),
-        ),
-        content: "hello".to_string(),
-    };
-    let tags = comment_build_tags(&comment).unwrap();
-    assert_eq!(tags.len(), 8);
-    assert!(tags.iter().any(|tag| tag[0] == "A"));
-    assert!(tags.iter().any(|tag| tag[0] == "a"));
-}
-
-#[test]
-fn comment_roundtrip_from_tags_with_parent() {
-    let root = common::event_ref_with_d(
-        "root",
-        "author",
-        KIND_POST,
-        "root-d",
-        Some(vec!["wss://relay".to_string()]),
-    );
-    let parent = common::event_ref_with_d(
-        "parent",
-        "author",
-        KIND_POST,
-        "parent-d",
-        Some(vec!["wss://relay-2".to_string()]),
-    );
-
-    let mut tags = Vec::new();
-    push_nip10_ref_tags(&mut tags, &root, "E", "P", "K", "A");
-    push_nip10_ref_tags(&mut tags, &parent, "e", "p", "k", "a");
-
-    let comment = comment_from_tags(KIND_COMMENT, &tags, "hello").unwrap();
-
-    assert_event_ref_fields(&comment.root, &root);
-    assert_event_ref_fields(&comment.parent, &parent);
-    assert_eq!(comment.content, "hello");
-}
-
-#[test]
-fn comment_from_tags_defaults_parent_to_root() {
-    let root = common::event_ref("root", "author", KIND_POST);
-    let mut tags = Vec::new();
-    push_nip10_ref_tags(&mut tags, &root, "E", "P", "K", "A");
-
-    let comment = comment_from_tags(KIND_COMMENT, &tags, "hello").unwrap();
-
-    assert_event_ref_fields(&comment.root, &root);
-    assert_event_ref_fields(&comment.parent, &root);
-}
-
-#[test]
-fn comment_roundtrip_from_legacy_tags() {
-    let root = common::event_ref("root", "author", KIND_POST);
-    let parent = common::event_ref("parent", "author", KIND_POST);
-
-    let tags = vec![
-        build_event_ref_tag(TAG_E_ROOT, &root),
-        build_event_ref_tag(TAG_E_PREV, &parent),
-    ];
-
-    let comment = comment_from_tags(KIND_COMMENT, &tags, "hello").unwrap();
-
-    assert_event_ref_fields(&comment.root, &root);
-    assert_event_ref_fields(&comment.parent, &parent);
-}
-
-#[test]
-fn comment_from_tags_requires_root_tag() {
-    let tags = vec![vec!["p".to_string(), "x".to_string()]];
-
-    let err = comment_from_tags(KIND_COMMENT, &tags, "hello").unwrap_err();
-    assert!(matches!(err, EventParseError::MissingTag("E")));
-}
-
-#[test]
-fn comment_from_tags_propagates_root_and_parent_reference_parse_errors() {
-    let err = comment_from_tags(
-        KIND_COMMENT,
-        &[
-            vec!["E".to_string()],
-            vec!["P".to_string(), "author".to_string()],
-            vec!["K".to_string(), KIND_POST.to_string()],
-        ],
-        "hello",
-    )
-    .unwrap_err();
-    assert!(matches!(err, EventParseError::InvalidTag("E")));
-
-    let err = comment_from_tags(
-        KIND_COMMENT,
-        &[
-            vec!["e".to_string()],
-            vec!["p".to_string(), "author".to_string()],
-            vec!["k".to_string(), KIND_POST.to_string()],
-            build_event_ref_tag(TAG_E_ROOT, &common::event_ref("root", "author", KIND_POST)),
-        ],
-        "hello",
-    )
-    .unwrap_err();
-    assert!(matches!(err, EventParseError::InvalidTag("e")));
-
-    let err = comment_from_tags(
-        KIND_COMMENT,
-        &[vec![TAG_E_ROOT.to_string(), "root".to_string()]],
-        "hello",
-    )
-    .unwrap_err();
-    assert!(matches!(err, EventParseError::InvalidTag("e_root")));
-
-    let err = comment_from_tags(
-        KIND_COMMENT,
-        &[
-            build_event_ref_tag(TAG_E_ROOT, &common::event_ref("root", "author", KIND_POST)),
-            vec![TAG_E_PREV.to_string(), "parent".to_string()],
-        ],
-        "hello",
-    )
-    .unwrap_err();
-    assert!(matches!(err, EventParseError::InvalidTag("e_prev")));
-}
-
-#[test]
-fn comment_from_tags_rejects_empty_content() {
-    let root = common::event_ref("root", "author", KIND_POST);
-    let mut tags = Vec::new();
-    push_nip10_ref_tags(&mut tags, &root, "E", "P", "K", "A");
-
-    let err = comment_from_tags(KIND_COMMENT, &tags, "   ").unwrap_err();
-    assert!(matches!(err, EventParseError::InvalidTag("content")));
-}
-
-#[test]
-fn comment_from_tags_rejects_wrong_kind() {
-    let tags = vec![vec!["e".to_string(), "x".to_string()]];
-    let err = comment_from_tags(KIND_POST, &tags, "hello").unwrap_err();
     assert!(matches!(
-        err,
-        EventParseError::InvalidKind {
+        comment_from_tags(KIND_COMMENT, &tags, "   "),
+        Err(EventParseError::InvalidTag("content"))
+    ));
+    assert!(matches!(
+        comment_from_tags(KIND_POST, &tags, "hello"),
+        Err(EventParseError::InvalidKind {
             expected: "1111",
             got: KIND_POST
-        }
+        })
     ));
 }
 
 #[test]
 fn comment_metadata_and_index_from_event_roundtrip() {
-    let root = common::event_ref_with_d(
-        "root",
-        "author",
-        KIND_POST,
-        "root-d",
-        Some(vec!["wss://relay".to_string()]),
-    );
-    let parent = common::event_ref_with_d(
-        "parent",
-        "author",
-        KIND_POST,
-        "parent-d",
-        Some(vec!["wss://relay-2".to_string()]),
-    );
-
-    let mut tags = Vec::new();
-    push_nip10_ref_tags(&mut tags, &root, "E", "P", "K", "A");
-    push_nip10_ref_tags(&mut tags, &parent, "e", "p", "k", "a");
+    let parts = to_wire_parts(&RadrootsComment {
+        root: event_target(ROOT_ID, AUTHOR, KIND_ARTICLE),
+        parent: address_target(PARENT_AUTHOR, KIND_ARTICLE, D_TAG),
+        content: "hello".to_string(),
+    })
+    .unwrap();
 
     let metadata = data_from_event(
         "id".to_string(),
         "author".to_string(),
         77,
         KIND_COMMENT,
-        "hello".to_string(),
-        tags.clone(),
+        parts.content.clone(),
+        parts.tags.clone(),
     )
     .unwrap();
     assert_eq!(metadata.id, "id");
-    assert_eq!(metadata.author, "author");
     assert_eq!(metadata.published_at, 77);
-    assert_eq!(metadata.data.content, "hello");
-    assert_event_ref_fields(&metadata.data.root, &root);
-    assert_event_ref_fields(&metadata.data.parent, &parent);
+    assert_event_target(&metadata.data.root, ROOT_ID, AUTHOR, KIND_ARTICLE);
 
     let index = parsed_from_event(
         "id".to_string(),
         "author".to_string(),
         77,
         KIND_COMMENT,
-        "hello".to_string(),
-        tags,
+        parts.content,
+        parts.tags,
         "sig".to_string(),
     )
     .unwrap();
     assert_eq!(index.event.created_at, 77);
-    assert_eq!(index.event.kind, KIND_COMMENT);
     assert_eq!(index.event.sig, "sig");
-    assert_eq!(index.data.data.content, "hello");
-}
-
-#[test]
-fn comment_index_from_event_propagates_parse_errors() {
-    let err = parsed_from_event(
-        "id".to_string(),
-        "author".to_string(),
-        77,
-        KIND_POST,
-        "hello".to_string(),
-        Vec::new(),
-        "sig".to_string(),
-    )
-    .unwrap_err();
-    assert!(matches!(
-        err,
-        EventParseError::InvalidKind {
-            expected: "1111",
-            got: KIND_POST
-        }
-    ));
+    assert_address_target(&index.data.data.parent, PARENT_AUTHOR, KIND_ARTICLE, D_TAG);
 }

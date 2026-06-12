@@ -20,6 +20,7 @@ use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 use crate::social_helpers::{first_tag_value, parse_dimensions_tag};
 
 const EXPECTED_KIND: &str = "1063";
+const TAG_RADROOTS_OWNER_DOCUMENT: &str = "radroots:owner_document";
 
 pub fn file_metadata_from_event(
     kind: u32,
@@ -32,6 +33,7 @@ pub fn file_metadata_from_event(
             got: kind,
         });
     }
+    reject_private_farm_file_tags(tags)?;
     let url = required_tag_value(tags, TAG_URL)?;
     let mime_type = required_tag_value(tags, TAG_MIME)?;
     let sha256 = required_tag_value(tags, TAG_SHA256)?;
@@ -69,6 +71,17 @@ pub fn file_metadata_from_event(
             Some(content.to_string())
         },
     })
+}
+
+fn reject_private_farm_file_tags(tags: &[Vec<String>]) -> Result<(), EventParseError> {
+    if tags
+        .iter()
+        .any(|tag| tag.first().map(|value| value.as_str()) == Some(TAG_RADROOTS_OWNER_DOCUMENT))
+    {
+        Err(EventParseError::InvalidTag(TAG_RADROOTS_OWNER_DOCUMENT))
+    } else {
+        Ok(())
+    }
 }
 
 pub fn data_from_event(

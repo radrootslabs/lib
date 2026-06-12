@@ -45,6 +45,7 @@ pub fn farm_from_event(
         return Err(EventParseError::InvalidJson("content"));
     }
     let d_tag = parse_d_tag(tags)?;
+    reject_private_farm_ops_content(content)?;
     let mut farm: RadrootsFarm =
         serde_json::from_str(content).map_err(|_| EventParseError::InvalidJson("content"))?;
 
@@ -55,6 +56,34 @@ pub fn farm_from_event(
     }
 
     Ok(farm)
+}
+
+fn reject_private_farm_ops_content(content: &str) -> Result<(), EventParseError> {
+    let value: serde_json::Value =
+        serde_json::from_str(content).map_err(|_| EventParseError::InvalidJson("content"))?;
+    let Some(object) = value.as_object() else {
+        return Err(EventParseError::InvalidJson("content"));
+    };
+    for key in [
+        "workspace",
+        "farm_group_id",
+        "document_id",
+        "document_kind",
+        "crdt_backend",
+        "encoded_change",
+        "semantic_kind",
+        "owner_document_kind",
+        "owner_document_id",
+        "relays",
+        "media_servers",
+        "supported_kinds",
+        "protocol_version",
+    ] {
+        if object.contains_key(key) {
+            return Err(EventParseError::InvalidJson("content"));
+        }
+    }
+    Ok(())
 }
 
 pub fn data_from_event(
