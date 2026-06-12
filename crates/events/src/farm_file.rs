@@ -65,9 +65,15 @@ mod tests {
             metadata.owner_document_kind,
             RadrootsFarmCrdtDocumentKind::FarmTask
         );
-        assert_eq!(metadata.caption.as_deref(), Some("Tomatoes harvested from Patch Y."));
+        assert_eq!(
+            metadata.caption.as_deref(),
+            Some("Tomatoes harvested from Patch Y.")
+        );
         assert_eq!(metadata.mime_type, "image/jpeg");
-        assert_eq!(metadata.dimensions, Some(RadrootsFarmFileDimensions { w: 1600, h: 1200 }));
+        assert_eq!(
+            metadata.dimensions,
+            Some(RadrootsFarmFileDimensions { w: 1600, h: 1200 })
+        );
         assert_eq!(metadata.fallbacks.len(), 1);
     }
 
@@ -101,11 +107,9 @@ mod tests {
             caption: Some("Tomatoes harvested from Patch Y.".to_string()),
             url: "https://media.example.invalid/blob/sha256".to_string(),
             mime_type: "image/jpeg".to_string(),
-            sha256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-                .to_string(),
+            sha256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string(),
             original_sha256: Some(
-                "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
-                    .to_string(),
+                "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789".to_string(),
             ),
             size_bytes: Some(123_456),
             dimensions: Some(RadrootsFarmFileDimensions { w: 1600, h: 1200 }),

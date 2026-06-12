@@ -79,9 +79,7 @@ mod tests {
         let config = RadrootsNostrNdbConfig::new(&db_dir);
         let ndb = RadrootsNostrNdb::open(config).expect("database should open");
         let store = RadrootsNostrNdbEventStoreAdapter::new(ndb)
-            .with_source(RadrootsNostrNdbIngestSource::relay(
-                "wss://radroots.org",
-            ))
+            .with_source(RadrootsNostrNdbIngestSource::relay("wss://radroots.org"))
             .into_event_store();
 
         let keys = RadrootsNostrKeys::generate();
