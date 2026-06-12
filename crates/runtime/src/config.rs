@@ -358,8 +358,8 @@ fn normalize_env_value(
 #[cfg(test)]
 mod tests {
     use super::{
-        ConfigKeySpec, ConfigSourceKind, RuntimeConfigValueError, RuntimeEnvFileError,
-        load_required_file, load_required_file_with_env, load_required_file_with_env_and_overrides,
+        ConfigKeySpec, ConfigSourceKind, RuntimeConfigValueError, load_required_file,
+        load_required_file_with_env, load_required_file_with_env_and_overrides,
         load_strict_env_file, load_strict_env_file_with_specs, parse_bool_value,
         parse_optional_path_value, parse_optional_string_value, parse_strict_env_file,
         parse_strict_env_file_with_specs, parse_string_list_value, parse_u64_value,
@@ -392,6 +392,9 @@ mod tests {
     #[test]
     fn config_source_kind_formats_labels() {
         assert_eq!(ConfigSourceKind::ProcessEnv.as_str(), "process_env");
+        assert_eq!(ConfigSourceKind::Toml.as_str(), "toml");
+        assert_eq!(ConfigSourceKind::Caller.as_str(), "caller");
+        assert_eq!(ConfigSourceKind::Default.as_str(), "default");
         assert_eq!(
             ConfigSourceKind::EnvFile.key_label("RADROOTS_CLI_OUTPUT_FORMAT"),
             "env_file:RADROOTS_CLI_OUTPUT_FORMAT"
@@ -427,13 +430,10 @@ RADROOTS_CLI_HYF_ENABLED='true'
         let err = parse_strict_env_file("RADROOTS_OUTPUT=json", "runtime.env", &[])
             .expect_err("unknown key should fail");
 
-        match err {
-            RuntimeEnvFileError::UnknownKey { line, key, .. } => {
-                assert_eq!(line, 1);
-                assert_eq!(key, "RADROOTS_OUTPUT");
-            }
-            other => panic!("unexpected error {other:?}"),
-        }
+        assert_eq!(
+            err.to_string(),
+            "invalid env file runtime.env line 1: unknown environment variable `RADROOTS_OUTPUT`"
+        );
     }
 
     #[test]
@@ -448,15 +448,41 @@ RADROOTS_CLI_OUTPUT_FORMAT=ndjson
         )
         .expect_err("duplicate key should fail");
 
-        match err {
-            RuntimeEnvFileError::DuplicateKey {
-                line, first_line, ..
-            } => {
-                assert_eq!(line, 3);
-                assert_eq!(first_line, 2);
-            }
-            other => panic!("unexpected error {other:?}"),
-        }
+        assert_eq!(
+            err.to_string(),
+            "invalid env file runtime.env line 3: duplicate environment variable `RADROOTS_CLI_OUTPUT_FORMAT` first set on line 2"
+        );
+    }
+
+    #[test]
+    fn strict_env_file_rejects_invalid_line_empty_key_and_read_error() {
+        let invalid_line = parse_strict_env_file(
+            "RADROOTS_CLI_OUTPUT_FORMAT",
+            "runtime.env",
+            &["RADROOTS_CLI_OUTPUT_FORMAT"],
+        )
+        .expect_err("missing equals should fail");
+        assert_eq!(
+            invalid_line.to_string(),
+            "invalid env file runtime.env line 1: expected KEY=VALUE"
+        );
+
+        let empty_key =
+            parse_strict_env_file("=json", "runtime.env", &["RADROOTS_CLI_OUTPUT_FORMAT"])
+                .expect_err("empty key should fail");
+        assert_eq!(
+            empty_key.to_string(),
+            "invalid env file runtime.env line 1: empty key"
+        );
+
+        let dir = tempdir().expect("tempdir");
+        let missing_path = dir.path().join("missing.env");
+        let read_error = load_strict_env_file(&missing_path, &["RADROOTS_CLI_OUTPUT_FORMAT"])
+            .expect_err("missing env file should fail");
+        assert!(read_error.to_string().starts_with(&format!(
+            "failed to read env file {}",
+            missing_path.display()
+        )));
     }
 
     #[test]
@@ -468,10 +494,22 @@ RADROOTS_CLI_OUTPUT_FORMAT=ndjson
         )
         .expect_err("unterminated quote should fail");
 
-        assert!(matches!(
-            err,
-            RuntimeEnvFileError::UnterminatedQuotedValue { line: 1, .. }
-        ));
+        assert_eq!(
+            err.to_string(),
+            "invalid env file runtime.env line 1: unterminated quoted environment value"
+        );
+
+        let err = parse_strict_env_file(
+            "RADROOTS_CLI_OUTPUT_FORMAT=\"",
+            "runtime.env",
+            &["RADROOTS_CLI_OUTPUT_FORMAT"],
+        )
+        .expect_err("single quote marker should fail");
+
+        assert_eq!(
+            err.to_string(),
+            "invalid env file runtime.env line 1: unterminated quoted environment value"
+        );
     }
 
     #[test]
@@ -530,6 +568,13 @@ RADROOTS_CLI_OUTPUT_FORMAT=ndjson
             Err(RuntimeConfigValueError::U64 {
                 key: "KEY_MS".to_owned(),
                 value: "soon".to_owned(),
+            })
+        );
+        assert_eq!(
+            parse_usize_value("KEY_COUNT", "many"),
+            Err(RuntimeConfigValueError::Usize {
+                key: "KEY_COUNT".to_owned(),
+                value: "many".to_owned(),
             })
         );
     }

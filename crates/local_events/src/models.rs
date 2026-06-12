@@ -276,3 +276,222 @@ fn validate_required(field: &str, value: Option<&str>) -> Result<(), LocalEvents
         ))),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn enum_strings_and_parse_errors_cover_all_model_variants() {
+        for (variant, value) in [
+            (LocalRecordFamily::LocalWork, "local_work"),
+            (LocalRecordFamily::SignedEvent, "signed_event"),
+        ] {
+            assert_eq!(variant.as_str(), value);
+            assert_eq!(
+                LocalRecordFamily::parse(value).expect("record family"),
+                variant
+            );
+        }
+
+        for (variant, value) in [
+            (LocalRecordStatus::LocalDraft, "local_draft"),
+            (LocalRecordStatus::LocalSaved, "local_saved"),
+            (LocalRecordStatus::PendingPublish, "pending_publish"),
+            (LocalRecordStatus::Published, "published"),
+            (LocalRecordStatus::Failed, "failed"),
+            (LocalRecordStatus::Conflict, "conflict"),
+        ] {
+            assert_eq!(variant.as_str(), value);
+            assert_eq!(
+                LocalRecordStatus::parse(value).expect("record status"),
+                variant
+            );
+        }
+
+        for (variant, value) in [
+            (PublishOutboxStatus::None, "none"),
+            (PublishOutboxStatus::Pending, "pending"),
+            (PublishOutboxStatus::Acknowledged, "acknowledged"),
+            (PublishOutboxStatus::Failed, "failed"),
+        ] {
+            assert_eq!(variant.as_str(), value);
+            assert_eq!(
+                PublishOutboxStatus::parse(value).expect("outbox status"),
+                variant
+            );
+        }
+
+        for (variant, value) in [
+            (SourceRuntime::Cli, "cli"),
+            (SourceRuntime::App, "app"),
+            (SourceRuntime::Network, "network"),
+            (SourceRuntime::Service, "service"),
+            (SourceRuntime::Worker, "worker"),
+            (SourceRuntime::Test, "test"),
+        ] {
+            assert_eq!(variant.as_str(), value);
+            assert_eq!(
+                SourceRuntime::parse(value).expect("source runtime"),
+                variant
+            );
+        }
+
+        assert!(LocalRecordFamily::parse("other").is_err());
+        assert!(LocalRecordStatus::parse("other").is_err());
+        assert!(PublishOutboxStatus::parse("other").is_err());
+        assert!(SourceRuntime::parse("other").is_err());
+    }
+
+    #[test]
+    fn local_record_input_validation_covers_success_and_error_paths() {
+        let mut local_work = local_work_input();
+        local_work.validate().expect("valid local work");
+
+        for (field, update) in [
+            (
+                "owner_account_id",
+                Box::new(|input: &mut LocalEventRecordInput| {
+                    input.owner_account_id = Some(" ".to_owned());
+                }) as Box<dyn Fn(&mut LocalEventRecordInput)>,
+            ),
+            (
+                "owner_pubkey",
+                Box::new(|input: &mut LocalEventRecordInput| {
+                    input.owner_pubkey = Some(" ".to_owned());
+                }),
+            ),
+            (
+                "farm_id",
+                Box::new(|input: &mut LocalEventRecordInput| {
+                    input.farm_id = Some(" ".to_owned());
+                }),
+            ),
+            (
+                "listing_addr",
+                Box::new(|input: &mut LocalEventRecordInput| {
+                    input.listing_addr = Some(" ".to_owned());
+                }),
+            ),
+        ] {
+            let mut input = local_work_input();
+            update(&mut input);
+            assert_error_contains(input.validate(), field);
+        }
+
+        local_work.record_id = " ".to_owned();
+        assert_error_contains(local_work.validate(), "record_id");
+
+        let mut missing_work = local_work_input();
+        missing_work.local_work_json = None;
+        assert_error_contains(missing_work.validate(), "local_work_json");
+
+        let mut queued_work = local_work_input();
+        queued_work.outbox_status = PublishOutboxStatus::Pending;
+        assert_error_contains(queued_work.validate(), "outbox status none");
+
+        let signed_event = signed_event_input();
+        signed_event.validate().expect("valid signed event");
+
+        for (field, update) in [
+            (
+                "event_id",
+                Box::new(|input: &mut LocalEventRecordInput| {
+                    input.event_id = Some(" ".to_owned());
+                }) as Box<dyn Fn(&mut LocalEventRecordInput)>,
+            ),
+            (
+                "event_pubkey",
+                Box::new(|input: &mut LocalEventRecordInput| {
+                    input.event_pubkey = None;
+                }),
+            ),
+            (
+                "event_sig",
+                Box::new(|input: &mut LocalEventRecordInput| {
+                    input.event_sig = None;
+                }),
+            ),
+            (
+                "event_kind",
+                Box::new(|input: &mut LocalEventRecordInput| {
+                    input.event_kind = None;
+                }),
+            ),
+            (
+                "raw_event_json",
+                Box::new(|input: &mut LocalEventRecordInput| {
+                    input.raw_event_json = None;
+                }),
+            ),
+        ] {
+            let mut input = signed_event_input();
+            update(&mut input);
+            assert_error_contains(input.validate(), field);
+        }
+    }
+
+    fn local_work_input() -> LocalEventRecordInput {
+        LocalEventRecordInput {
+            record_id: "local-work-a".to_owned(),
+            family: LocalRecordFamily::LocalWork,
+            status: LocalRecordStatus::LocalSaved,
+            source_runtime: SourceRuntime::App,
+            created_at_ms: 10,
+            inserted_at_ms: 11,
+            owner_account_id: Some("account-a".to_owned()),
+            owner_pubkey: Some("pubkey-a".to_owned()),
+            farm_id: Some("farm-a".to_owned()),
+            listing_addr: Some("listing-a".to_owned()),
+            local_work_json: Some(json!({"kind":"buyer_order_request_v1"})),
+            event_id: None,
+            event_kind: None,
+            event_pubkey: None,
+            event_created_at: None,
+            event_tags_json: None,
+            event_content: None,
+            event_sig: None,
+            raw_event_json: None,
+            outbox_status: PublishOutboxStatus::None,
+            relay_set_fingerprint: None,
+            relay_delivery_json: None,
+        }
+    }
+
+    fn signed_event_input() -> LocalEventRecordInput {
+        LocalEventRecordInput {
+            record_id: "signed-event-a".to_owned(),
+            family: LocalRecordFamily::SignedEvent,
+            status: LocalRecordStatus::PendingPublish,
+            source_runtime: SourceRuntime::Service,
+            created_at_ms: 20,
+            inserted_at_ms: 21,
+            owner_account_id: None,
+            owner_pubkey: None,
+            farm_id: None,
+            listing_addr: None,
+            local_work_json: None,
+            event_id: Some("event-a".to_owned()),
+            event_kind: Some(30402),
+            event_pubkey: Some("pubkey-a".to_owned()),
+            event_created_at: Some(20),
+            event_tags_json: Some(json!([["d", "listing-a"]])),
+            event_content: Some("{}".to_owned()),
+            event_sig: Some("sig-a".to_owned()),
+            raw_event_json: Some(json!({"id":"event-a"})),
+            outbox_status: PublishOutboxStatus::Pending,
+            relay_set_fingerprint: Some("relay-set-a".to_owned()),
+            relay_delivery_json: Some(json!({"state":"pending"})),
+        }
+    }
+
+    fn assert_error_contains(result: Result<(), LocalEventsError>, expected: &str) {
+        let err = result.expect_err("validation error");
+        assert!(
+            err.to_string().contains(expected),
+            "expected error to contain {expected}, got {err}"
+        );
+    }
+}

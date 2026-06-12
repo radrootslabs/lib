@@ -456,3 +456,322 @@ fn invalid_field(field: &str, requirement: &str) -> LocalEventsError {
 fn invalid_field_at(field: String, requirement: &str) -> LocalEventsError {
     LocalEventsError::InvalidRecord(format!("local order field `{field}` {requirement}"))
 }
+
+#[cfg(test)]
+mod tests {
+    use serde_json::{Value, json};
+
+    use super::*;
+
+    #[test]
+    fn support_state_labels_and_record_id_validation_are_stable() {
+        assert_eq!(
+            BuyerOrderRequestSupportState::Supported.as_str(),
+            "supported"
+        );
+        assert_eq!(
+            BuyerOrderRequestSupportState::Unsupported.as_str(),
+            "unsupported"
+        );
+        assert_eq!(
+            buyer_order_request_local_work_record_id(" ord-a ").expect("record id"),
+            "app:local_work:order_request:ord-a"
+        );
+        assert_error_contains(
+            buyer_order_request_local_work_record_id(" "),
+            "order_id must not be empty",
+        );
+    }
+
+    #[test]
+    fn private_validation_helpers_cover_successful_payload() {
+        let payload = supported_payload();
+
+        assert_eq!(
+            validate_support_status(&payload).expect("support status"),
+            BuyerOrderRequestSupportState::Supported
+        );
+        validate_exportability(&payload, BuyerOrderRequestSupportState::Supported)
+            .expect("exportability");
+        validate_order_identity(&payload, BuyerOrderRequestSupportState::Supported)
+            .expect("identity");
+        validate_order_items(&payload).expect("items");
+        validate_order_economics(&payload).expect("economics");
+        assert_eq!(
+            validate_required_string(&payload, &["document", "order", "order_id"])
+                .expect("order id"),
+            "ord_1"
+        );
+        validate_bool_field(&payload, &["currentness", "current"], true).expect("bool");
+        assert_eq!(
+            support_issues(&payload).expect("support issues"),
+            Vec::<String>::new()
+        );
+        assert!(value_at(&payload, &["document", "order"]).is_some());
+    }
+
+    #[test]
+    fn payload_validation_rejects_top_level_contract_drift() {
+        let mut wrong_kind = supported_payload();
+        wrong_kind["record_kind"] = json!("other");
+        assert_invalid(wrong_kind, "record_kind");
+
+        let mut missing_scope = supported_payload();
+        missing_scope["scope"] = Value::Null;
+        assert_invalid(missing_scope, "scope");
+
+        let mut wrong_document_kind = supported_payload();
+        wrong_document_kind["document"]["kind"] = json!("other");
+        assert_invalid(wrong_document_kind, "document.kind");
+
+        let mut wrong_currentness_source = supported_payload();
+        wrong_currentness_source["currentness"]["source"] = json!("other");
+        assert_invalid(wrong_currentness_source, "currentness.source");
+
+        let mut missing_order_updated = supported_payload();
+        missing_order_updated["currentness"]["order_updated_at"] = Value::Null;
+        assert_invalid(missing_order_updated, "order_updated_at");
+
+        let mut bad_created_at = supported_payload();
+        bad_created_at["currentness"]["created_at_ms"] = json!(0);
+        assert_invalid(bad_created_at, "created_at_ms");
+
+        let mut wrong_payment_state = supported_payload();
+        wrong_payment_state["payment_display"]["state"] = json!("recorded");
+        assert_invalid(wrong_payment_state, "payment_display.state");
+    }
+
+    #[test]
+    fn support_and_exportability_rejections_cover_private_branches() {
+        let mut invalid_state = supported_payload();
+        invalid_state["support_status"]["state"] = json!("partial");
+        assert_invalid(invalid_state, "support_status.state");
+
+        let mut issue_not_string = supported_payload();
+        issue_not_string["support_status"] = json!({
+            "state": "unsupported",
+            "issues": [42]
+        });
+        assert_invalid(issue_not_string, "support_status.issues[0]");
+
+        let mut issue_empty = supported_payload();
+        issue_empty["support_status"] = json!({
+            "state": "unsupported",
+            "issues": [" "]
+        });
+        assert_invalid(issue_empty, "support_status.issues");
+
+        let mut supported_but_unresolved = unsupported_payload();
+        supported_but_unresolved["support_status"] = json!({
+            "state": "supported",
+            "issues": []
+        });
+        assert_invalid(supported_but_unresolved, "exportability.state");
+
+        let mut unknown_exportability = supported_payload();
+        unknown_exportability["exportability"]["state"] = json!("queued");
+        assert_invalid(unknown_exportability, "exportability.state");
+
+        let mut missing_reason = unsupported_payload();
+        missing_reason["exportability"]["reason"] = Value::Null;
+        assert_invalid(missing_reason, "exportability.reason");
+
+        let mut wrong_actor_source = unsupported_payload();
+        wrong_actor_source["document"]["buyer_actor"]["source"] =
+            json!(BUYER_ORDER_REQUEST_ACTOR_SOURCE_RESOLVED_ACCOUNT);
+        assert_invalid(wrong_actor_source, "buyer_actor.source");
+
+        let mut mismatched_buyer = supported_payload();
+        mismatched_buyer["document"]["buyer_actor"]["pubkey"] = json!("other");
+        assert_invalid(mismatched_buyer, "buyer_actor.pubkey");
+
+        let supported_error =
+            validate_unsupported_buyer_order_request_local_work_payload(&supported_payload())
+                .expect_err("supported payload is not unsupported");
+        assert!(supported_error.to_string().contains("support_status.state"));
+    }
+
+    #[test]
+    fn item_and_economics_rejections_cover_private_branches() {
+        let mut economics_not_object = supported_payload();
+        economics_not_object["document"]["order"]["economics"] = json!("bad");
+        assert_invalid(economics_not_object, "economics");
+
+        let mut bad_pricing_basis = supported_payload();
+        bad_pricing_basis["document"]["order"]["economics"]["pricing_basis"] = json!("manual");
+        assert_invalid(bad_pricing_basis, "pricing_basis");
+
+        let mut bad_currency = supported_payload();
+        bad_currency["document"]["order"]["economics"]["currency"] = json!("usd");
+        assert_invalid(bad_currency, "currency");
+
+        let mut economics_items_missing = supported_payload();
+        economics_items_missing["document"]["order"]["economics"]["items"] = Value::Null;
+        assert_invalid(economics_items_missing, "items");
+
+        let mut economics_items_short = supported_payload();
+        economics_items_short["document"]["order"]["economics"]["items"] = json!([]);
+        assert_invalid(economics_items_short, "economics.items");
+
+        let mut economics_bin_missing = supported_payload();
+        economics_bin_missing["document"]["order"]["economics"]["items"][0]["bin_id"] = Value::Null;
+        assert_invalid(economics_bin_missing, "economics.items[0].bin_id");
+
+        let mut economics_count_bad = supported_payload();
+        economics_count_bad["document"]["order"]["economics"]["items"][0]["bin_count"] = json!(0);
+        assert_invalid(economics_count_bad, "economics.items[0].bin_count");
+
+        let mut order_count_mismatch = supported_payload();
+        order_count_mismatch["document"]["order"]["economics"]["items"][0]["bin_count"] = json!(3);
+        assert_invalid(order_count_mismatch, "economics.items[0].bin_count");
+
+        let mut quantity_amount_missing = supported_payload();
+        quantity_amount_missing["document"]["order"]["economics"]["items"][0]["quantity_amount"] =
+            Value::Null;
+        assert_invalid(quantity_amount_missing, "quantity_amount");
+
+        let mut quantity_unit_missing = supported_payload();
+        quantity_unit_missing["document"]["order"]["economics"]["items"][0]["quantity_unit"] =
+            Value::Null;
+        assert_invalid(quantity_unit_missing, "quantity_unit");
+
+        let mut unit_price_amount_missing = supported_payload();
+        unit_price_amount_missing["document"]["order"]["economics"]["items"][0]["unit_price_amount"] =
+            Value::Null;
+        assert_invalid(unit_price_amount_missing, "unit_price_amount");
+
+        let mut line_subtotal_missing = supported_payload();
+        line_subtotal_missing["document"]["order"]["economics"]["items"][0]["line_subtotal"] =
+            Value::Null;
+        assert_invalid(line_subtotal_missing, "amount");
+
+        let mut line_subtotal_currency = supported_payload();
+        line_subtotal_currency["document"]["order"]["economics"]["items"][0]["line_subtotal"]["currency"] =
+            json!("CAD");
+        assert_invalid(line_subtotal_currency, "line_subtotal.currency");
+
+        let mut subtotal_currency = supported_payload();
+        subtotal_currency["document"]["order"]["economics"]["subtotal"]["currency"] = json!("CAD");
+        assert_invalid(subtotal_currency, "subtotal.currency");
+
+        let mut order_item_missing = supported_payload();
+        order_item_missing["document"]["order"]["items"] = Value::Null;
+        assert_invalid(order_item_missing, "document.order.items");
+    }
+
+    fn supported_payload() -> Value {
+        json!({
+            "record_kind": BUYER_ORDER_REQUEST_LOCAL_WORK_RECORD_KIND,
+            "scope": "app",
+            "exportability": {
+                "state": "exportable"
+            },
+            "support_status": {
+                "state": "supported",
+                "issues": []
+            },
+            "currentness": {
+                "current": true,
+                "source": "app_sqlite_order",
+                "record_id": "app:local_work:order_request:ord_1",
+                "order_id": "ord_1",
+                "order_updated_at": "2026-05-24T12:00:00Z",
+                "created_at_ms": 1777777777000_i64
+            },
+            "payment_display": {
+                "state": "not_recorded",
+                "allows_payment_action": false
+            },
+            "document": {
+                "kind": BUYER_ORDER_REQUEST_DOCUMENT_KIND,
+                "order": {
+                    "order_id": "ord_1",
+                    "listing_addr": "30402:seller_pubkey:listing_key",
+                    "listing_event_id": "event-listing-1",
+                    "buyer_pubkey": "buyer_pubkey",
+                    "seller_pubkey": "seller_pubkey",
+                    "items": [
+                        {
+                            "bin_id": "dozen-eggs",
+                            "bin_count": 2
+                        }
+                    ],
+                    "economics": {
+                        "pricing_basis": "listing_event",
+                        "currency": "USD",
+                        "items": [
+                            {
+                                "bin_id": "dozen-eggs",
+                                "bin_count": 2,
+                                "quantity_amount": "1",
+                                "quantity_unit": "dozen",
+                                "unit_price_amount": "8.00",
+                                "unit_price_currency": "USD",
+                                "line_subtotal": {
+                                    "amount": "16.00",
+                                    "currency": "USD"
+                                }
+                            }
+                        ],
+                        "subtotal": {
+                            "amount": "16.00",
+                            "currency": "USD"
+                        },
+                        "discount_total": {
+                            "amount": "0",
+                            "currency": "USD"
+                        },
+                        "adjustment_total": {
+                            "amount": "0",
+                            "currency": "USD"
+                        },
+                        "total": {
+                            "amount": "16.00",
+                            "currency": "USD"
+                        }
+                    }
+                },
+                "buyer_actor": {
+                    "account_id": "buyer-account",
+                    "pubkey": "buyer_pubkey",
+                    "source": BUYER_ORDER_REQUEST_ACTOR_SOURCE_RESOLVED_ACCOUNT
+                }
+            }
+        })
+    }
+
+    fn unsupported_payload() -> Value {
+        let mut payload = supported_payload();
+        payload["exportability"] = json!({
+            "state": "identity_unresolved",
+            "reason": "canonical_hex_pubkey_required"
+        });
+        payload["support_status"] = json!({
+            "state": "unsupported",
+            "issues": ["buyer_pubkey_required"]
+        });
+        payload["document"]["order"]["buyer_pubkey"] = json!("");
+        payload["document"]["buyer_actor"]["pubkey"] = json!("");
+        payload["document"]["buyer_actor"]["source"] =
+            json!(BUYER_ORDER_REQUEST_ACTOR_SOURCE_UNRESOLVED_APP);
+        payload
+    }
+
+    fn assert_invalid(payload: Value, expected: &str) {
+        assert_error_contains(
+            validate_buyer_order_request_local_work_payload(&payload),
+            expected,
+        );
+    }
+
+    fn assert_error_contains<T: std::fmt::Debug>(
+        result: Result<T, LocalEventsError>,
+        expected: &str,
+    ) {
+        let error = result.expect_err("expected validation error");
+        assert!(
+            error.to_string().contains(expected),
+            "expected error to contain {expected}, got {error}"
+        );
+    }
+}

@@ -908,6 +908,20 @@ mod tests {
     }
 
     #[test]
+    fn new_reports_save_error_when_dirty_state_requires_rewrite() {
+        let mut state = RadrootsNostrAccountStoreState::default();
+        state.version = 1;
+        let store = Arc::new(SaveErrorStore::new(state));
+        let vault = Arc::new(RadrootsNostrSecretVaultMemory::new());
+
+        let err = RadrootsNostrAccountsManager::new(store, vault)
+            .err()
+            .expect("dirty state save error");
+
+        assert_eq!(err.to_string(), "store error: store save failed");
+    }
+
+    #[test]
     fn resolve_local_backend_applies_shared_fallback_policy() {
         let resolved = RadrootsNostrAccountsManager::resolve_local_backend(
             RadrootsSecretBackendSelection {
@@ -953,6 +967,122 @@ mod tests {
         assert_eq!(
             err.to_string(),
             "vault error: external_command secret backend is not supported for local accounts"
+        );
+    }
+
+    #[test]
+    fn new_local_file_backed_reports_backend_resolution_error() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let err = RadrootsNostrAccountsManager::new_local_file_backed(
+            temp.path().join("accounts.json"),
+            temp.path().join("secrets"),
+            RadrootsSecretBackendSelection {
+                primary: RadrootsSecretBackend::HostVault(
+                    radroots_secret_vault::RadrootsHostVaultPolicy::desktop(),
+                ),
+                fallback: None,
+            },
+            RadrootsSecretBackendAvailability {
+                host_vault: RadrootsHostVaultCapabilities::unavailable(),
+                encrypted_file: false,
+                external_command: false,
+                memory: false,
+            },
+            "org.radroots.test.local-account",
+        )
+        .err()
+        .expect("backend resolution error");
+
+        assert_eq!(
+            err.to_string(),
+            "vault error: secret backend host_vault is unavailable"
+        );
+    }
+
+    #[test]
+    fn new_local_file_backed_reports_store_load_error() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let err = RadrootsNostrAccountsManager::new_local_file_backed(
+            temp.path(),
+            temp.path().join("secrets"),
+            RadrootsSecretBackendSelection {
+                primary: RadrootsSecretBackend::EncryptedFile,
+                fallback: None,
+            },
+            RadrootsSecretBackendAvailability {
+                host_vault: RadrootsHostVaultCapabilities::unavailable(),
+                encrypted_file: true,
+                external_command: false,
+                memory: false,
+            },
+            "org.radroots.test.local-account",
+        )
+        .err()
+        .expect("store load error");
+
+        assert!(err.to_string().starts_with("store error:"));
+    }
+
+    #[test]
+    fn new_local_file_backed_resolves_encrypted_file_backend() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let (manager, resolved) = RadrootsNostrAccountsManager::new_local_file_backed(
+            temp.path().join("accounts.json"),
+            temp.path().join("secrets"),
+            RadrootsSecretBackendSelection {
+                primary: RadrootsSecretBackend::EncryptedFile,
+                fallback: None,
+            },
+            RadrootsSecretBackendAvailability {
+                host_vault: RadrootsHostVaultCapabilities::unavailable(),
+                encrypted_file: true,
+                external_command: false,
+                memory: false,
+            },
+            "org.radroots.test.local-account",
+        )
+        .expect("encrypted file manager");
+
+        assert_eq!(resolved.backend, RadrootsSecretBackend::EncryptedFile);
+        assert!(!resolved.used_fallback);
+        assert!(manager.list_accounts().expect("accounts").is_empty());
+    }
+
+    #[test]
+    #[cfg(not(feature = "os-keyring"))]
+    fn local_file_backed_secret_vault_rejects_host_vault_without_feature() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let err = local_file_backed_secret_vault(
+            RadrootsSecretBackend::HostVault(
+                radroots_secret_vault::RadrootsHostVaultPolicy::desktop(),
+            ),
+            temp.path(),
+            "org.radroots.test.local-account".into(),
+        )
+        .err()
+        .expect("host vault requires feature");
+
+        assert_eq!(
+            err.to_string(),
+            "vault error: host_vault backend requires radroots_nostr_accounts os-keyring support"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "memory-vault")]
+    fn local_file_backed_secret_vault_resolves_memory_backend() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let vault = local_file_backed_secret_vault(
+            RadrootsSecretBackend::Memory,
+            temp.path(),
+            "org.radroots.test.local-account".into(),
+        )
+        .expect("memory vault");
+
+        vault.store_secret("slot", "secret").expect("store");
+        assert_eq!(
+            vault.load_secret("slot").expect("load").as_deref(),
+            Some("secret")
         );
     }
 
@@ -1065,11 +1195,7 @@ mod tests {
             .attach_identity_secret(&missing_id, &identity, false)
             .expect_err("missing account");
 
-        assert!(matches!(
-            &err,
-            RadrootsNostrAccountsError::AccountNotFound(value)
-                if value.as_str() == missing_id.as_str()
-        ));
+        assert_eq!(err.to_string(), format!("account not found: {missing_id}"));
         assert!(
             manager
                 .export_secret_hex(&missing_id)
@@ -1093,7 +1219,7 @@ mod tests {
             .attach_identity_secret(&account_id, &mismatched_identity, false)
             .expect_err("public key mismatch");
 
-        assert!(matches!(err, RadrootsNostrAccountsError::PublicKeyMismatch));
+        assert_eq!(err.to_string(), "public key does not match secret key");
         assert!(
             manager
                 .export_secret_hex(&account_id)
@@ -1107,6 +1233,49 @@ mod tests {
                 .is_none()
         );
         assert_eq!(manager.default_account_id().expect("default"), None);
+    }
+
+    #[test]
+    fn attach_identity_secret_reports_vault_store_error() {
+        let manager = RadrootsNostrAccountsManager::new(
+            Arc::new(RadrootsNostrMemoryAccountStore::new()),
+            Arc::new(VaultStoreError),
+        )
+        .expect("manager");
+        let identity = RadrootsIdentity::generate();
+        let account_id = manager
+            .upsert_public_identity(identity.to_public(), Some("watch".into()), false)
+            .expect("watch");
+
+        let err = manager
+            .attach_identity_secret(&account_id, &identity, false)
+            .expect_err("vault store error");
+
+        assert!(err.to_string().starts_with("vault error:"));
+    }
+
+    #[test]
+    fn attach_identity_secret_reports_store_save_error_after_secret_store() {
+        let identity = RadrootsIdentity::generate();
+        let public_identity = identity.to_public();
+        let account_id = public_identity.id.clone();
+        let mut state = RadrootsNostrAccountStoreState::default();
+        state.accounts.push(RadrootsNostrAccountRecord::new(
+            public_identity,
+            Some("watch".into()),
+            1,
+        ));
+        let manager = RadrootsNostrAccountsManager::new(
+            Arc::new(SaveErrorStore::new(state)),
+            Arc::new(RadrootsNostrSecretVaultMemory::new()),
+        )
+        .expect("manager");
+
+        let err = manager
+            .attach_identity_secret(&account_id, &identity, false)
+            .expect_err("store save error");
+
+        assert_eq!(err.to_string(), "store error: store save failed");
     }
 
     #[test]
@@ -1566,18 +1735,21 @@ mod tests {
         let empty = manager
             .resolve_account_selector("   ")
             .expect_err("empty selector");
-        assert!(matches!(
-            empty,
-            RadrootsNostrAccountsError::InvalidAccountSelector(_)
-        ));
+        assert!(empty.to_string().starts_with("invalid account selector:"));
 
         let ambiguous = manager
             .resolve_account_selector("shared")
             .expect_err("ambiguous selector");
-        assert!(matches!(
-            ambiguous,
-            RadrootsNostrAccountsError::AmbiguousAccountSelector(_)
-        ));
+        assert!(
+            ambiguous
+                .to_string()
+                .starts_with("account selector is ambiguous:")
+        );
+
+        let missing = manager
+            .resolve_account_selector("missing")
+            .expect_err("missing selector");
+        assert_eq!(missing.to_string(), "account not found: missing");
     }
 
     #[test]
@@ -1812,6 +1984,14 @@ mod tests {
             .get_signer_capability(&account_id)
             .expect_err("signer poisoned");
         assert!(signer_err.to_string().starts_with("store error:"));
+        let selector_err = manager
+            .resolve_account_selector("missing")
+            .expect_err("selector poisoned");
+        assert!(selector_err.to_string().starts_with("store error:"));
+        let clear_default_err = manager
+            .clear_default_account()
+            .expect_err("clear default poisoned");
+        assert!(clear_default_err.to_string().starts_with("store error:"));
         let set_default_err = manager
             .set_default_account(&account_id)
             .expect_err("default poisoned");

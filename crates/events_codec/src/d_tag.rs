@@ -1,7 +1,6 @@
 #![forbid(unsafe_code)]
 
 use crate::error::EventEncodeError;
-#[cfg(feature = "serde_json")]
 use crate::error::EventParseError;
 
 pub fn is_d_tag_base64url(value: &str) -> bool {
@@ -30,7 +29,6 @@ pub(crate) fn validate_d_tag(value: &str, field: &'static str) -> Result<(), Eve
     }
 }
 
-#[cfg(feature = "serde_json")]
 pub(crate) fn validate_d_tag_tag(value: &str, tag: &'static str) -> Result<(), EventParseError> {
     if is_d_tag_base64url(value) {
         Ok(())
@@ -57,5 +55,7 @@ mod tests {
     fn validate_d_tag_returns_error_for_invalid_values() {
         let err = validate_d_tag("AAAAAAAAAAAAAAAAAAAAA!", "d_tag").expect_err("invalid d_tag");
         assert!(matches!(err, EventEncodeError::InvalidField("d_tag")));
+        let tag_err = validate_d_tag_tag("AAAAAAAAAAAAAAAAAAAAA!", "d").expect_err("invalid d tag");
+        assert!(matches!(tag_err, EventParseError::InvalidTag("d")));
     }
 }

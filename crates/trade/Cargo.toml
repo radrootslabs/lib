@@ -44,3 +44,6 @@ serde_json = { workspace = true, default-features = false, features = [
 ], optional = true }
 sha2 = { workspace = true, default-features = false, optional = true }
 thiserror = { workspace = true }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage_nightly)'] }

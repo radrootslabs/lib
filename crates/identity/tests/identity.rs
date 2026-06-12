@@ -6,10 +6,18 @@ use radroots_identity::{
     DEFAULT_IDENTITY_PATH, IdentityError, RadrootsIdentity, RadrootsIdentityId,
     RadrootsIdentityProfile, RadrootsIdentityPublic, RadrootsIdentitySecretKeyFormat,
 };
+use radroots_identity::{
+    RADROOTS_ENCRYPTED_IDENTITY_DEFAULT_KEY_SLOT, RADROOTS_ENCRYPTED_IDENTITY_KEY_SUFFIX,
+    RadrootsEncryptedIdentityFile, encrypted_identity_wrapping_key_path, load_encrypted_identity,
+    load_encrypted_identity_with_key_slot, load_identity_profile, rotate_encrypted_identity,
+    rotate_encrypted_identity_with_key_slot, store_encrypted_identity,
+    store_encrypted_identity_with_key_slot, store_identity_profile,
+};
 #[cfg(feature = "nip49")]
 use radroots_identity::{
     RadrootsIdentityEncryptedSecretKeyOptions, RadrootsIdentityEncryptedSecretKeySecurity,
 };
+use radroots_protected_store::{RadrootsProtectedFileKeySource, RadrootsProtectedStoreEnvelope};
 use radroots_runtime_paths::{
     RadrootsHostEnvironment, RadrootsPathOverrides, RadrootsPathProfile, RadrootsPathResolver,
     RadrootsPlatform,
@@ -785,4 +793,216 @@ fn secret_key_zeroizing_bytes_matches_raw_secret() {
     let raw = identity.secret_key_bytes();
     let protected = identity.secret_key_bytes_zeroizing();
     assert_eq!(&*protected, &raw);
+}
+
+#[test]
+fn encrypted_identity_storage_public_api_round_trips_and_reports_errors() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("identity.enc.json");
+    let identity = fixture_identity(FIXTURE_ALICE);
+
+    let default_file = RadrootsEncryptedIdentityFile::new(path.as_path());
+    assert_eq!(default_file.path(), path.as_path());
+    assert_eq!(
+        default_file.key_slot(),
+        RADROOTS_ENCRYPTED_IDENTITY_DEFAULT_KEY_SLOT
+    );
+    assert_eq!(
+        default_file.wrapping_key_path(),
+        encrypted_identity_wrapping_key_path(path.as_path())
+    );
+
+    let custom_file =
+        RadrootsEncryptedIdentityFile::with_key_slot(path.as_path(), "field_identity");
+    assert_eq!(custom_file.key_slot(), "field_identity");
+
+    store_encrypted_identity(path.as_path(), &identity).unwrap();
+    rotate_encrypted_identity(path.as_path()).unwrap();
+    let loaded = load_encrypted_identity(path.as_path()).unwrap();
+    assert_eq!(loaded.public_key(), identity.public_key());
+
+    store_encrypted_identity_with_key_slot(path.as_path(), "field_identity", &identity).unwrap();
+    rotate_encrypted_identity_with_key_slot(path.as_path(), "field_identity").unwrap();
+    let loaded = load_encrypted_identity_with_key_slot(path.as_path(), "field_identity").unwrap();
+    assert_eq!(loaded.secret_key_hex(), identity.secret_key_hex());
+
+    let path_buf_api = temp.path().join("identity-pathbuf.enc.json");
+    let path_buf_ref = &path_buf_api;
+    let path_buf_file = RadrootsEncryptedIdentityFile::new(path_buf_ref);
+    assert_eq!(path_buf_file.path(), path_buf_api.as_path());
+    let path_buf_file =
+        RadrootsEncryptedIdentityFile::with_key_slot(path_buf_ref, "path_buf_identity");
+    assert_eq!(path_buf_file.key_slot(), "path_buf_identity");
+    store_encrypted_identity(path_buf_ref, &identity).unwrap();
+    rotate_encrypted_identity(path_buf_ref).unwrap();
+    let loaded = load_encrypted_identity(path_buf_ref).unwrap();
+    assert_eq!(loaded.public_key(), identity.public_key());
+    store_encrypted_identity_with_key_slot(path_buf_ref, "path_buf_identity", &identity).unwrap();
+    rotate_encrypted_identity_with_key_slot(path_buf_ref, "path_buf_identity").unwrap();
+    let loaded = load_encrypted_identity_with_key_slot(path_buf_ref, "path_buf_identity").unwrap();
+    assert_eq!(loaded.secret_key_hex(), identity.secret_key_hex());
+
+    let missing = temp.path().join("missing.enc.json");
+    let missing_error = load_encrypted_identity(missing.as_path()).unwrap_err();
+    assert!(matches!(missing_error, IdentityError::NotFound(error_path) if error_path == missing));
+
+    let read_error = load_encrypted_identity(temp.path()).unwrap_err();
+    assert!(matches!(read_error, IdentityError::Read(error_path, _) if error_path == temp.path()));
+
+    let invalid = temp.path().join("invalid.enc.json");
+    std::fs::write(&invalid, b"not-json").unwrap();
+    let decode_error = load_encrypted_identity(invalid.as_path()).unwrap_err();
+    assert!(matches!(
+        decode_error,
+        IdentityError::ProtectedStorage { path: error_path, message }
+            if error_path == invalid && message.contains("decode encrypted identity")
+    ));
+
+    let invalid_plaintext = temp.path().join("invalid-plaintext.enc.json");
+    let key_source = RadrootsProtectedFileKeySource::from_sidecar_suffix(
+        invalid_plaintext.as_path(),
+        RADROOTS_ENCRYPTED_IDENTITY_KEY_SUFFIX,
+    );
+    let envelope = RadrootsProtectedStoreEnvelope::seal_with_wrapped_key(
+        &key_source,
+        RADROOTS_ENCRYPTED_IDENTITY_DEFAULT_KEY_SLOT,
+        b"not identity json",
+    )
+    .unwrap();
+    std::fs::write(&invalid_plaintext, envelope.encode_json().unwrap()).unwrap();
+    let invalid_plaintext_error = load_encrypted_identity(invalid_plaintext.as_path()).unwrap_err();
+    assert!(matches!(
+        invalid_plaintext_error,
+        IdentityError::InvalidJson(_)
+    ));
+
+    std::fs::write(
+        encrypted_identity_wrapping_key_path(path.as_path()),
+        b"short",
+    )
+    .unwrap();
+    let open_error = load_encrypted_identity(path.as_path()).unwrap_err();
+    assert!(matches!(
+        open_error,
+        IdentityError::ProtectedStorage { path: error_path, message }
+            if error_path == path && message.contains("open encrypted identity")
+    ));
+}
+
+#[test]
+fn encrypted_identity_storage_public_api_reports_store_errors() {
+    let temp = tempfile::tempdir().unwrap();
+    let identity = fixture_identity(FIXTURE_ALICE);
+
+    let blocked_parent = temp.path().join("blocked-parent");
+    std::fs::write(&blocked_parent, b"not-a-directory").unwrap();
+    let create_path = blocked_parent.join("identity.enc.json");
+    let create_error = store_encrypted_identity(create_path.as_path(), &identity).unwrap_err();
+    assert!(matches!(create_error, IdentityError::CreateDir(path, _) if path == blocked_parent));
+
+    let directory_path = temp.path().join("identity-as-directory.enc.json");
+    std::fs::create_dir(&directory_path).unwrap();
+    let write_error = store_encrypted_identity(directory_path.as_path(), &identity).unwrap_err();
+    assert!(matches!(write_error, IdentityError::Write(path, _) if path == directory_path));
+
+    let sealed_path = temp.path().join("seal-error.enc.json");
+    std::fs::create_dir(encrypted_identity_wrapping_key_path(sealed_path.as_path())).unwrap();
+    let seal_error = store_encrypted_identity(sealed_path.as_path(), &identity).unwrap_err();
+    assert!(matches!(
+        seal_error,
+        IdentityError::ProtectedStorage { path, message }
+            if path == sealed_path && message.contains("seal encrypted identity")
+    ));
+}
+
+#[cfg(unix)]
+#[test]
+fn encrypted_identity_storage_public_api_restores_key_after_rotation_failure() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("identity.enc.json");
+    let identity = fixture_identity(FIXTURE_ALICE);
+
+    store_encrypted_identity(path.as_path(), &identity).unwrap();
+    let key_path = encrypted_identity_wrapping_key_path(path.as_path());
+    let key_before = std::fs::read(&key_path).unwrap();
+
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o400)).unwrap();
+    let error = rotate_encrypted_identity(path.as_path()).unwrap_err();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+
+    assert!(matches!(error, IdentityError::Write(error_path, _) if error_path == path));
+    assert_eq!(std::fs::read(&key_path).unwrap(), key_before);
+    let loaded = load_encrypted_identity(path.as_path()).unwrap();
+    assert_eq!(loaded.public_key(), identity.public_key());
+}
+
+#[test]
+fn identity_profile_storage_public_api_reports_errors_and_private_fallback() {
+    let temp = tempfile::tempdir().unwrap();
+    let identity = fixture_identity(FIXTURE_ALICE);
+
+    let path = temp.path().join("profile.json");
+    store_identity_profile(path.as_path(), &identity).unwrap();
+    let loaded = load_identity_profile(path.as_path()).unwrap();
+    assert_eq!(loaded.id, identity.id());
+
+    let path_buf_profile = temp.path().join("profile-pathbuf.json");
+    store_identity_profile(&path_buf_profile, &identity).unwrap();
+    let loaded = load_identity_profile(&path_buf_profile).unwrap();
+    assert_eq!(loaded.id, identity.id());
+
+    let blocked_parent = temp.path().join("blocked-profile-parent");
+    std::fs::write(&blocked_parent, b"not-a-directory").unwrap();
+    let create_path = blocked_parent.join("profile.json");
+    let create_error = store_identity_profile(create_path.as_path(), &identity).unwrap_err();
+    assert!(matches!(create_error, IdentityError::CreateDir(path, _) if path == blocked_parent));
+
+    let directory_path = temp.path().join("profile-as-directory.json");
+    std::fs::create_dir(&directory_path).unwrap();
+    let write_error = store_identity_profile(directory_path.as_path(), &identity).unwrap_err();
+    assert!(matches!(write_error, IdentityError::Write(path, _) if path == directory_path));
+
+    let missing = temp.path().join("missing-profile.json");
+    let missing_error = load_identity_profile(missing.as_path()).unwrap_err();
+    assert!(matches!(missing_error, IdentityError::NotFound(path) if path == missing));
+
+    let read_error = load_identity_profile(temp.path()).unwrap_err();
+    assert!(matches!(read_error, IdentityError::Read(path, _) if path == temp.path()));
+
+    let private_profile = temp.path().join("private-profile.json");
+    std::fs::write(
+        &private_profile,
+        serde_json::to_vec(&identity.to_file()).unwrap(),
+    )
+    .unwrap();
+    let loaded = load_identity_profile(private_profile.as_path()).unwrap();
+    assert_eq!(loaded.public_key_hex, FIXTURE_ALICE.public_key_hex);
+}
+
+#[test]
+fn storage_public_api_supports_parentless_relative_files() {
+    let temp = tempfile::tempdir().unwrap();
+    let previous = std::env::current_dir().unwrap();
+    std::env::set_current_dir(temp.path()).unwrap();
+
+    let identity = fixture_identity(FIXTURE_ALICE);
+    let encrypted_path = std::path::Path::new("identity.enc.json");
+    store_encrypted_identity(encrypted_path, &identity).unwrap();
+    let loaded = load_encrypted_identity(encrypted_path).unwrap();
+    assert_eq!(loaded.secret_key_hex(), identity.secret_key_hex());
+
+    let profile_path = std::path::Path::new("profile.json");
+    store_identity_profile(profile_path, &identity).unwrap();
+    let loaded = load_identity_profile(profile_path).unwrap();
+    assert_eq!(loaded.id, identity.id());
+
+    let empty_path = std::path::Path::new("");
+    let encrypted_error = store_encrypted_identity(empty_path, &identity).unwrap_err();
+    assert!(matches!(encrypted_error, IdentityError::Write(_, _)));
+    let profile_error = store_identity_profile(empty_path, &identity).unwrap_err();
+    assert!(matches!(profile_error, IdentityError::Write(_, _)));
+
+    std::env::set_current_dir(previous).unwrap();
 }

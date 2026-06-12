@@ -324,9 +324,9 @@ fn relay_authority_is_invalid(rest: &str) -> bool {
     match colon_count {
         0 => false,
         1 => {
-            let Some((host, port)) = authority.split_once(':') else {
-                return true;
-            };
+            let (host, port) = authority
+                .split_once(':')
+                .expect("one colon in relay authority");
             host.is_empty() || relay_port_is_invalid(port)
         }
         _ => true,

@@ -231,6 +231,31 @@ mod tests {
     }
 
     #[test]
+    fn external_command_resolves_when_available() {
+        let selection = RadrootsSecretBackendSelection {
+            primary: RadrootsSecretBackend::ExternalCommand,
+            fallback: None,
+        };
+
+        let resolved = selection
+            .resolve(RadrootsSecretBackendAvailability {
+                host_vault: RadrootsHostVaultCapabilities::unavailable(),
+                encrypted_file: false,
+                external_command: true,
+                memory: false,
+            })
+            .expect("external command resolves");
+
+        assert_eq!(
+            resolved,
+            RadrootsResolvedSecretBackend {
+                backend: RadrootsSecretBackend::ExternalCommand,
+                used_fallback: false,
+            }
+        );
+    }
+
+    #[test]
     fn memory_backend_must_be_selected_explicitly() {
         let selection = RadrootsSecretBackendSelection {
             primary: RadrootsSecretBackend::Memory,

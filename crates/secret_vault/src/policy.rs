@@ -128,3 +128,61 @@ impl RadrootsHostVaultCapabilities {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn device_local_policy_and_secure_device_capabilities_are_explicit() {
+        assert_eq!(
+            RadrootsHostVaultPolicy::device_local(),
+            RadrootsHostVaultPolicy {
+                residency: RadrootsHostVaultResidency::DeviceLocalOnly,
+                user_presence: RadrootsHostVaultUserPresencePolicy::NotRequired,
+                hardware: RadrootsHostVaultHardwarePolicy::Any,
+            }
+        );
+        assert_eq!(
+            RadrootsHostVaultCapabilities::secure_device(),
+            RadrootsHostVaultCapabilities {
+                available: true,
+                supports_device_local_only: true,
+                supports_user_presence: true,
+                supports_hardware_backed: true,
+            }
+        );
+        assert_eq!(
+            RadrootsHostVaultCapabilities::secure_device()
+                .validate(RadrootsHostVaultPolicy::device_local()),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn validate_reports_user_presence_and_hardware_requirements() {
+        let user_presence_policy = RadrootsHostVaultPolicy {
+            residency: RadrootsHostVaultResidency::UserProfile,
+            user_presence: RadrootsHostVaultUserPresencePolicy::Required,
+            hardware: RadrootsHostVaultHardwarePolicy::Any,
+        };
+        assert_eq!(
+            RadrootsHostVaultCapabilities::desktop_keyring().validate(user_presence_policy),
+            Err(RadrootsSecretVaultError::HostVaultPolicyUnsupported {
+                requirement: RadrootsHostVaultRequirement::UserPresence,
+            })
+        );
+
+        let hardware_policy = RadrootsHostVaultPolicy {
+            residency: RadrootsHostVaultResidency::UserProfile,
+            user_presence: RadrootsHostVaultUserPresencePolicy::NotRequired,
+            hardware: RadrootsHostVaultHardwarePolicy::RequireHardwareBacked,
+        };
+        assert_eq!(
+            RadrootsHostVaultCapabilities::desktop_keyring().validate(hardware_policy),
+            Err(RadrootsSecretVaultError::HostVaultPolicyUnsupported {
+                requirement: RadrootsHostVaultRequirement::HardwareBacked,
+            })
+        );
+    }
+}

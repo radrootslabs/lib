@@ -319,3 +319,229 @@ fn invalid_evidence(message: impl Into<String>) -> LocalEventsError {
         message.into()
     ))
 }
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn state_labels_and_failure_constructor_cover_public_surface() {
+        for (state, value) in [
+            (RelayDeliveryState::Pending, "pending"),
+            (RelayDeliveryState::Acknowledged, "acknowledged"),
+            (RelayDeliveryState::Failed, "failed"),
+            (RelayDeliveryState::Observed, "observed"),
+        ] {
+            assert_eq!(state.as_str(), value);
+        }
+
+        let failure = RelayDeliveryFailure::new(" ws://relay.test ", " connection refused ")
+            .expect("failure");
+        assert_eq!(failure.relay_url, "ws://relay.test");
+        assert_eq!(failure.error, "connection refused");
+        assert_error_contains(
+            RelayDeliveryFailure::new("http://relay.test", "err"),
+            "failed_relays.relay_url",
+        );
+        assert_error_contains(RelayDeliveryFailure::new("ws://relay.test", " "), "error");
+    }
+
+    #[test]
+    fn constructors_validate_all_delivery_states_and_json_roundtrips() {
+        let pending = RelayDeliveryEvidence::pending(["ws://relay-a.test", "ws://relay-a.test"])
+            .expect("pending evidence");
+        assert_eq!(pending.state, RelayDeliveryState::Pending);
+        assert_eq!(pending.target_relays, vec!["ws://relay-a.test"]);
+        assert!(pending.relay_set_fingerprint().is_some());
+        assert_eq!(
+            RelayDeliveryEvidence::from_json_value(&pending.to_json_value().expect("pending json"))
+                .expect("pending from json"),
+            pending
+        );
+
+        let failure = RelayDeliveryFailure::new("ws://relay-b.test", "timeout").expect("failure");
+        let acknowledged = RelayDeliveryEvidence::acknowledged(
+            ["ws://relay-a.test"],
+            ["ws://relay-a.test"],
+            ["ws://relay-a.test"],
+            vec![failure.clone()],
+        )
+        .expect("acknowledged");
+        assert_eq!(acknowledged.state, RelayDeliveryState::Acknowledged);
+
+        let observed = RelayDeliveryEvidence::observed(
+            ["ws://relay-a.test"],
+            Vec::<String>::new(),
+            ["ws://relay-b.test"],
+            vec![failure.clone()],
+        )
+        .expect("observed");
+        assert_eq!(observed.state, RelayDeliveryState::Observed);
+
+        let failed = RelayDeliveryEvidence::failed(
+            ["ws://relay-a.test"],
+            ["ws://relay-a.test"],
+            vec![failure],
+        )
+        .expect("failed");
+        assert_eq!(failed.state, RelayDeliveryState::Failed);
+    }
+
+    #[test]
+    fn validate_rejects_invalid_manual_evidence_shapes() {
+        assert_error_contains(
+            RelayDeliveryEvidence::pending(Vec::<String>::new()),
+            "target_relays",
+        );
+
+        assert_error_contains(
+            RelayDeliveryEvidence {
+                state: RelayDeliveryState::Pending,
+                target_relays: vec!["ws://relay.test".to_owned()],
+                connected_relays: Vec::new(),
+                acknowledged_relays: vec!["ws://relay.test".to_owned()],
+                observed_relays: Vec::new(),
+                failed_relays: Vec::new(),
+            }
+            .validate(),
+            "pending delivery evidence",
+        );
+
+        assert_error_contains(
+            RelayDeliveryEvidence {
+                state: RelayDeliveryState::Acknowledged,
+                target_relays: vec!["ws://relay.test".to_owned()],
+                connected_relays: Vec::new(),
+                acknowledged_relays: Vec::new(),
+                observed_relays: Vec::new(),
+                failed_relays: Vec::new(),
+            }
+            .validate(),
+            "requires acknowledged_relays",
+        );
+
+        assert_error_contains(
+            RelayDeliveryEvidence {
+                state: RelayDeliveryState::Acknowledged,
+                target_relays: vec!["ws://relay.test".to_owned()],
+                connected_relays: Vec::new(),
+                acknowledged_relays: vec!["ws://relay.test".to_owned()],
+                observed_relays: vec!["ws://relay.test".to_owned()],
+                failed_relays: Vec::new(),
+            }
+            .validate(),
+            "must not include observed_relays",
+        );
+
+        assert_error_contains(
+            RelayDeliveryEvidence {
+                state: RelayDeliveryState::Failed,
+                target_relays: vec!["ws://relay.test".to_owned()],
+                connected_relays: Vec::new(),
+                acknowledged_relays: Vec::new(),
+                observed_relays: Vec::new(),
+                failed_relays: Vec::new(),
+            }
+            .validate(),
+            "failed delivery evidence",
+        );
+
+        assert_error_contains(
+            RelayDeliveryEvidence {
+                state: RelayDeliveryState::Observed,
+                target_relays: vec!["ws://relay.test".to_owned()],
+                connected_relays: Vec::new(),
+                acknowledged_relays: vec!["ws://relay.test".to_owned()],
+                observed_relays: Vec::new(),
+                failed_relays: Vec::new(),
+            }
+            .validate(),
+            "must not include acknowledged_relays",
+        );
+
+        assert_error_contains(
+            RelayDeliveryEvidence {
+                state: RelayDeliveryState::Observed,
+                target_relays: vec!["ws://relay.test".to_owned()],
+                connected_relays: Vec::new(),
+                acknowledged_relays: Vec::new(),
+                observed_relays: Vec::new(),
+                failed_relays: Vec::new(),
+            }
+            .validate(),
+            "requires connected_relays or observed_relays",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_non_normalized_relays_and_failure_text() {
+        assert_error_contains(
+            RelayDeliveryEvidence {
+                state: RelayDeliveryState::Pending,
+                target_relays: vec!["ws://relay.test".to_owned(), "ws://relay.test".to_owned()],
+                connected_relays: Vec::new(),
+                acknowledged_relays: Vec::new(),
+                observed_relays: Vec::new(),
+                failed_relays: Vec::new(),
+            }
+            .validate(),
+            "normalized and deduplicated",
+        );
+
+        assert_error_contains(
+            RelayDeliveryEvidence {
+                state: RelayDeliveryState::Failed,
+                target_relays: vec!["ws://relay.test".to_owned()],
+                connected_relays: Vec::new(),
+                acknowledged_relays: Vec::new(),
+                observed_relays: Vec::new(),
+                failed_relays: vec![RelayDeliveryFailure {
+                    relay_url: "http://relay.test".to_owned(),
+                    error: "timeout".to_owned(),
+                }],
+            }
+            .validate(),
+            "failed_relays.relay_url",
+        );
+
+        assert_error_contains(
+            RelayDeliveryEvidence {
+                state: RelayDeliveryState::Failed,
+                target_relays: vec!["ws://relay.test".to_owned()],
+                connected_relays: Vec::new(),
+                acknowledged_relays: Vec::new(),
+                observed_relays: Vec::new(),
+                failed_relays: vec![RelayDeliveryFailure {
+                    relay_url: "ws://relay.test".to_owned(),
+                    error: " timeout ".to_owned(),
+                }],
+            }
+            .validate(),
+            "must be trimmed",
+        );
+
+        assert_error_contains(
+            RelayDeliveryEvidence::from_json_value(&json!({
+                "state": "pending",
+                "target_relays": [],
+                "connected_relays": [],
+                "acknowledged_relays": [],
+                "failed_relays": []
+            })),
+            "target_relays",
+        );
+    }
+
+    fn assert_error_contains<T: std::fmt::Debug>(
+        result: Result<T, LocalEventsError>,
+        expected: &str,
+    ) {
+        let err = result.expect_err("expected relay delivery error");
+        assert!(
+            err.to_string().contains(expected),
+            "expected error to contain {expected}, got {err}"
+        );
+    }
+}

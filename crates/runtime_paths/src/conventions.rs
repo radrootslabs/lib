@@ -94,7 +94,10 @@ pub fn default_shared_local_events_database_path_from_shared_accounts_data_root(
 mod tests {
     use std::path::PathBuf;
 
-    use crate::{RadrootsHostEnvironment, RadrootsPlatform, RadrootsRuntimeNamespace};
+    use crate::{
+        RadrootsHostEnvironment, RadrootsPlatform, RadrootsRuntimeNamespace,
+        RadrootsRuntimePathsError,
+    };
 
     use super::{
         DEFAULT_SERVICE_IDENTITY_FILE_NAME, DEFAULT_SHARED_IDENTITY_FILE_NAME,
@@ -207,6 +210,13 @@ mod tests {
             PathBuf::from("/repo/infra/local/runtime/radroots/data/shared/local_events")
         );
         assert_eq!(
+            default_shared_local_events_root_from_shared_accounts_data_root(
+                shared_accounts_data_root.clone()
+            )
+            .expect("shared local-events root from owned path"),
+            PathBuf::from("/repo/infra/local/runtime/radroots/data/shared/local_events")
+        );
+        assert_eq!(
             default_shared_local_events_database_path_from_shared_accounts_data_root(
                 &shared_accounts_data_root
             )
@@ -214,6 +224,16 @@ mod tests {
             PathBuf::from(
                 "/repo/infra/local/runtime/radroots/data/shared/local_events/local_events.sqlite"
             )
+        );
+
+        let err =
+            default_shared_local_events_root_from_shared_accounts_data_root(PathBuf::from("/"))
+                .expect_err("root path has no parent shared data root");
+        assert_eq!(
+            err,
+            RadrootsRuntimePathsError::SharedAccountsDataRootMissingParent {
+                path: PathBuf::from("/")
+            }
         );
     }
 

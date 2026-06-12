@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{ffi::OsString, path::PathBuf};
 
 use serde::Serialize;
 use thiserror::Error;
@@ -196,7 +196,23 @@ impl RadrootsRuntimePathSelection {
         repo_local_root_env: &'static str,
         default_profile: RadrootsPathProfile,
     ) -> Result<Self, RadrootsRuntimePathSelectionError> {
-        let (profile, profile_source) = match std::env::var(profile_env) {
+        Self::from_env_values(
+            profile_env,
+            std::env::var(profile_env),
+            repo_local_root_env,
+            std::env::var_os(repo_local_root_env),
+            default_profile,
+        )
+    }
+
+    fn from_env_values(
+        profile_env: &'static str,
+        profile_value: Result<String, std::env::VarError>,
+        repo_local_root_env: &'static str,
+        repo_local_root_raw: Option<OsString>,
+        default_profile: RadrootsPathProfile,
+    ) -> Result<Self, RadrootsRuntimePathSelectionError> {
+        let (profile, profile_source) = match profile_value {
             Ok(value) => (
                 parse_profile(profile_env, value.as_str())?,
                 format!("process_env:{profile_env}"),
@@ -208,7 +224,6 @@ impl RadrootsRuntimePathSelection {
                 });
             }
         };
-        let repo_local_root_raw = std::env::var_os(repo_local_root_env);
         let repo_local_root = repo_local_root_raw.as_ref().map(PathBuf::from);
         Ok(Self {
             profile,
@@ -306,16 +321,10 @@ fn parse_profile(
     env_var: &str,
     value: &str,
 ) -> Result<RadrootsPathProfile, RadrootsRuntimePathSelectionError> {
-    match parse_profile_value(value) {
-        Ok(profile) => Ok(profile),
-        Err(RadrootsRuntimePathSelectionError::InvalidProfileValue { value }) => {
-            Err(RadrootsRuntimePathSelectionError::InvalidProfileEnv {
-                env_var: env_var.to_owned(),
-                value,
-            })
-        }
-        Err(other) => Err(other),
-    }
+    parse_profile_value(value).map_err(|_| RadrootsRuntimePathSelectionError::InvalidProfileEnv {
+        env_var: env_var.to_owned(),
+        value: value.to_owned(),
+    })
 }
 
 fn parse_profile_value(
@@ -356,6 +365,15 @@ mod tests {
         assert_eq!(selection.repo_local_root, None);
         assert_eq!(selection.repo_local_root_source, None);
         assert_eq!(selection.root_source(), "host_defaults");
+
+        let overrides = selection
+            .caller_overrides()
+            .expect("non-repo-local caller overrides should be empty");
+        assert_eq!(overrides.repo_local_root, None);
+
+        let service_selection =
+            RadrootsRuntimePathSelection::caller(RadrootsPathProfile::ServiceHost, None);
+        assert_eq!(service_selection.root_source(), "service_host_defaults");
     }
 
     #[test]
@@ -368,6 +386,14 @@ mod tests {
         assert_eq!(selection.profile_source, "caller");
         assert_eq!(selection.repo_local_root_source.as_deref(), Some("caller"));
         assert_eq!(selection.root_source(), "repo_local_root");
+
+        let overrides = selection
+            .caller_overrides()
+            .expect("caller overrides should use repo-local root");
+        assert_eq!(
+            overrides.repo_local_root,
+            Some(PathBuf::from("/repo/.local/radroots"))
+        );
     }
 
     #[test]
@@ -428,6 +454,84 @@ mod tests {
 
         assert_eq!(selection.profile, RadrootsPathProfile::MobileNative);
         assert_eq!(selection.profile_source, "caller");
+        assert_eq!(selection.root_source(), "mobile_native_defaults");
+
+        let selection = RadrootsRuntimePathSelection::from_profile_value("interactive_user", None)
+            .expect("interactive profile");
+        assert_eq!(selection.profile, RadrootsPathProfile::InteractiveUser);
+
+        let selection = RadrootsRuntimePathSelection::from_profile_value("service_host", None)
+            .expect("service-host profile");
+        assert_eq!(selection.profile, RadrootsPathProfile::ServiceHost);
+    }
+
+    #[test]
+    fn env_selection_covers_absent_present_and_error_paths() {
+        let selection = RadrootsRuntimePathSelection::from_env(
+            "RADROOTS_RUNTIME_PATHS_TEST_UNSET_PROFILE_DFA3ED5D",
+            "RADROOTS_RUNTIME_PATHS_TEST_UNSET_ROOT_DFA3ED5D",
+            RadrootsPathProfile::ServiceHost,
+        )
+        .expect("absent env selection should use default profile");
+        assert_eq!(selection.profile, RadrootsPathProfile::ServiceHost);
+        assert_eq!(selection.profile_source, "default");
+        assert_eq!(selection.repo_local_root, None);
+        assert_eq!(selection.repo_local_root_source, None);
+
+        let selection = RadrootsRuntimePathSelection::from_env_values(
+            "RADROOTS_TEST_PROFILE",
+            Ok("repo_local".to_owned()),
+            "RADROOTS_TEST_ROOT",
+            Some(std::ffi::OsString::from("/repo/.local/radroots")),
+            RadrootsPathProfile::InteractiveUser,
+        )
+        .expect("present env values should select repo-local profile");
+        assert_eq!(selection.profile, RadrootsPathProfile::RepoLocal);
+        assert_eq!(
+            selection.profile_source,
+            "process_env:RADROOTS_TEST_PROFILE"
+        );
+        assert_eq!(
+            selection.repo_local_root,
+            Some(PathBuf::from("/repo/.local/radroots"))
+        );
+        assert_eq!(
+            selection.repo_local_root_source.as_deref(),
+            Some("process_env:RADROOTS_TEST_ROOT")
+        );
+
+        let err = RadrootsRuntimePathSelection::from_env_values(
+            "RADROOTS_TEST_PROFILE",
+            Err(std::env::VarError::NotUnicode(std::ffi::OsString::from(
+                "not-unicode",
+            ))),
+            "RADROOTS_TEST_ROOT",
+            None,
+            RadrootsPathProfile::InteractiveUser,
+        )
+        .expect_err("non-unicode profile env should fail");
+        assert_eq!(
+            err,
+            RadrootsRuntimePathSelectionError::NonUnicodeEnv {
+                env_var: "RADROOTS_TEST_PROFILE".to_owned()
+            }
+        );
+
+        let err = RadrootsRuntimePathSelection::from_env_values(
+            "RADROOTS_TEST_PROFILE",
+            Ok("unknown".to_owned()),
+            "RADROOTS_TEST_ROOT",
+            None,
+            RadrootsPathProfile::InteractiveUser,
+        )
+        .expect_err("invalid profile env should fail");
+        assert_eq!(
+            err,
+            RadrootsRuntimePathSelectionError::InvalidProfileEnv {
+                env_var: "RADROOTS_TEST_PROFILE".to_owned(),
+                value: "unknown".to_owned()
+            }
+        );
     }
 
     #[test]

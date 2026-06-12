@@ -140,3 +140,78 @@ fn validate_port(original: &str, port: &str) -> Result<(), RelayUrlValidationErr
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn display_formats_all_validation_errors() {
+        assert_eq!(
+            RelayUrlValidationError::Empty.to_string(),
+            "relay url must not be empty"
+        );
+        assert_eq!(
+            RelayUrlValidationError::UnsupportedScheme("http://relay.test".to_owned()).to_string(),
+            "relay url must use ws or wss, got `http://relay.test`"
+        );
+        assert_eq!(
+            RelayUrlValidationError::MissingHost("ws://".to_owned()).to_string(),
+            "relay url must include a host, got `ws://`"
+        );
+        assert_eq!(
+            RelayUrlValidationError::InvalidAuthority("ws://user@relay.test".to_owned())
+                .to_string(),
+            "relay url authority is invalid, got `ws://user@relay.test`"
+        );
+        assert_eq!(
+            RelayUrlValidationError::InvalidPort("ws://relay.test:x".to_owned()).to_string(),
+            "relay url port is invalid, got `ws://relay.test:x`"
+        );
+    }
+
+    #[test]
+    fn normalize_relay_url_covers_authority_edges() {
+        assert_eq!(
+            normalize_relay_url(" wss://relay.test:443/path?x=1#fragment ")
+                .expect("normalized relay"),
+            "wss://relay.test:443/path?x=1#fragment"
+        );
+        assert_eq!(
+            normalize_relay_url("ws://[::1]:8080").expect("ipv6 relay"),
+            "ws://[::1]:8080"
+        );
+        assert!(matches!(
+            normalize_relay_url("ws://[::1]extra"),
+            Err(RelayUrlValidationError::InvalidAuthority(_))
+        ));
+        assert!(matches!(
+            normalize_relay_url("ws://relay.test:"),
+            Err(RelayUrlValidationError::InvalidPort(_))
+        ));
+        assert!(matches!(
+            normalize_relay_url("ws://relay.test:8a"),
+            Err(RelayUrlValidationError::InvalidPort(_))
+        ));
+        assert!(matches!(
+            normalize_relay_url("ws://relay one.test"),
+            Err(RelayUrlValidationError::InvalidAuthority(_))
+        ));
+        assert!(matches!(
+            normalize_relay_url("ws://relay:8080:9090"),
+            Err(RelayUrlValidationError::InvalidAuthority(_))
+        ));
+    }
+
+    #[test]
+    fn normalize_relay_urls_dedupes_while_preserving_order() {
+        let relays = normalize_relay_urls([
+            "ws://relay-a.test",
+            "ws://relay-b.test",
+            "ws://relay-a.test",
+        ])
+        .expect("relay set");
+
+        assert_eq!(relays, vec!["ws://relay-a.test", "ws://relay-b.test"]);
+    }
+}

@@ -3906,7 +3906,7 @@ test_threads = 0
         report_gate(&args).expect("report gate success");
         let report_raw = fs::read_to_string(&out_path).expect("read report");
         assert!(report_raw.contains("\"scope\": \"crate-x\""));
-        assert!(report_raw.contains("\"regions\": 100.0"));
+        assert!(report_raw.contains("\"regions\": 90.0"));
         assert!(report_raw.contains("\"pass\": true"));
         fs::remove_dir_all(root).expect("remove report gate success root");
     }

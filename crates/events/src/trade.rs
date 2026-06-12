@@ -1812,6 +1812,82 @@ mod tests {
         }
     }
 
+    fn sample_active_revision_proposed() -> RadrootsTradeOrderRevisionProposed {
+        RadrootsTradeOrderRevisionProposed {
+            revision_id: "rev-1".into(),
+            order_id: "order-1".into(),
+            listing_addr: sample_listing_addr(),
+            buyer_pubkey: "buyer".into(),
+            seller_pubkey: "seller".into(),
+            root_event_id: "root-event".into(),
+            prev_event_id: "previous-event".into(),
+            items: vec![RadrootsTradeOrderItem {
+                bin_id: "bin-1".into(),
+                bin_count: 2,
+            }],
+            economics: sample_bound_order_economics(),
+            reason: "update quantity".into(),
+        }
+    }
+
+    fn sample_active_revision_decision_event(
+        decision: RadrootsTradeOrderRevisionDecision,
+    ) -> RadrootsTradeOrderRevisionDecisionEvent {
+        RadrootsTradeOrderRevisionDecisionEvent {
+            revision_id: "rev-1".into(),
+            order_id: "order-1".into(),
+            listing_addr: sample_listing_addr(),
+            buyer_pubkey: "buyer".into(),
+            seller_pubkey: "seller".into(),
+            root_event_id: "root-event".into(),
+            prev_event_id: "previous-event".into(),
+            decision,
+        }
+    }
+
+    fn sample_payment_recorded() -> RadrootsTradePaymentRecorded {
+        RadrootsTradePaymentRecorded {
+            order_id: "order-1".into(),
+            listing_addr: sample_listing_addr(),
+            buyer_pubkey: "buyer".into(),
+            seller_pubkey: "seller".into(),
+            root_event_id: "root-event".into(),
+            previous_event_id: "previous-event".into(),
+            agreement_event_id: "agreement-event".into(),
+            quote_id: "quote-1".into(),
+            quote_version: 1,
+            economics_digest: "economics-digest".into(),
+            amount: decimal("16"),
+            currency: RadrootsCoreCurrency::USD,
+            method: RadrootsTradePaymentMethod::ManualTransfer,
+            reference: Some("bank-ref".into()),
+            paid_at: Some(1_777_665_600),
+        }
+    }
+
+    fn sample_settlement_decision(
+        decision: RadrootsTradeSettlementDecision,
+        reason: Option<&str>,
+    ) -> RadrootsTradeSettlementDecisionEvent {
+        RadrootsTradeSettlementDecisionEvent {
+            order_id: "order-1".into(),
+            listing_addr: sample_listing_addr(),
+            seller_pubkey: "seller".into(),
+            buyer_pubkey: "buyer".into(),
+            root_event_id: "root-event".into(),
+            previous_event_id: "previous-event".into(),
+            agreement_event_id: "agreement-event".into(),
+            payment_event_id: "payment-event".into(),
+            quote_id: "quote-1".into(),
+            quote_version: 1,
+            economics_digest: "economics-digest".into(),
+            amount: decimal("16"),
+            currency: RadrootsCoreCurrency::USD,
+            decision,
+            reason: reason.map(Into::into),
+        }
+    }
+
     fn sample_order_revision() -> RadrootsTradeOrderRevision {
         RadrootsTradeOrderRevision {
             revision_id: "rev-1".into(),
@@ -1997,6 +2073,8 @@ mod tests {
         assert!(RadrootsActiveTradeMessageType::TradeBuyerReceipt.requires_trade_chain());
         assert!(RadrootsActiveTradeMessageType::TradePaymentRecorded.requires_trade_chain());
         assert!(RadrootsActiveTradeMessageType::TradeSettlementDecision.requires_trade_chain());
+        assert!(!RadrootsActiveTradeMessageType::TradeOrderRequested.requires_trade_chain());
+        assert!(!RadrootsActiveTradeMessageType::TradePaymentRecorded.requires_listing_snapshot());
 
         let request_name =
             serde_json::to_value(RadrootsActiveTradeMessageType::TradeOrderRequested).unwrap();
@@ -2123,6 +2201,15 @@ mod tests {
         let mut economics = sample_active_order_economics();
         economics.items.reverse();
         economics.adjustments.reverse();
+        economics.discounts.push(RadrootsTradeOrderEconomicLine {
+            id: "discount-b".into(),
+            kind: RadrootsTradeEconomicLineKind::ListingDiscount,
+            actor: RadrootsTradeEconomicActor::Seller,
+            effect: RadrootsTradeEconomicEffect::Decrease,
+            amount: usd("1"),
+            reason: "market credit".into(),
+        });
+        economics.discounts.reverse();
         economics.subtotal = usd("19");
         economics.total = usd("17");
         assert_eq!(
@@ -2134,10 +2221,18 @@ mod tests {
 
         let canonical = economics.canonicalized();
         assert_eq!(canonical.items[0].bin_id, "bin-a");
+        assert_eq!(canonical.discounts[0].id, "discount-a");
         assert_eq!(canonical.adjustments[0].id, "adjustment-a");
         assert_eq!(canonical.subtotal, usd("18"));
-        assert_eq!(canonical.total, usd("16"));
+        assert_eq!(canonical.discount_total, usd("4"));
+        assert_eq!(canonical.total, usd("15"));
         assert_eq!(canonical.validate(), Ok(()));
+
+        let mut uncanonicalizable = sample_active_order_economics();
+        uncanonicalizable.items.clear();
+        uncanonicalizable.subtotal = usd("88");
+        uncanonicalizable.canonicalize();
+        assert_eq!(uncanonicalizable.subtotal, usd("88"));
     }
 
     #[test]
@@ -2177,6 +2272,153 @@ mod tests {
             economics.validate().unwrap_err(),
             RadrootsActiveTradePayloadError::InvalidEconomicItemSubtotal { index: 0 }
         );
+
+        let mut economics = sample_active_order_economics();
+        economics.items[0].line_subtotal =
+            RadrootsCoreMoney::new(decimal("12"), RadrootsCoreCurrency::EUR);
+        assert_eq!(
+            economics.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::InvalidEconomicCurrency {
+                field: "items.line_subtotal"
+            }
+        );
+    }
+
+    #[test]
+    fn active_order_economics_validation_covers_remaining_error_paths() {
+        let mut economics = sample_active_order_economics();
+        economics.items.clear();
+        assert_eq!(
+            economics.derived_totals().unwrap_err(),
+            RadrootsActiveTradePayloadError::MissingEconomicItems
+        );
+
+        let mut economics = sample_active_order_economics();
+        economics.quote_version = 0;
+        assert_eq!(
+            economics.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::InvalidQuoteVersion
+        );
+
+        let mut economics = sample_active_order_economics();
+        economics.items[0].quantity_amount = decimal("0");
+        assert_eq!(
+            economics.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::InvalidEconomicItemQuantity { index: 0 }
+        );
+
+        let mut economics = sample_active_order_economics();
+        economics.items[0].quantity_amount = decimal("-1");
+        assert_eq!(
+            economics.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::InvalidEconomicItemQuantity { index: 0 }
+        );
+
+        let mut economics = sample_active_order_economics();
+        economics.items[0].unit_price_amount = decimal("-1");
+        assert_eq!(
+            economics.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::InvalidEconomicItemPrice { index: 0 }
+        );
+
+        let mut economics = sample_active_order_economics();
+        economics.discounts[0].kind = RadrootsTradeEconomicLineKind::BasketAdjustment;
+        assert_eq!(
+            economics.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::InvalidEconomicLineKind {
+                field: "discounts",
+                index: 0
+            }
+        );
+
+        let mut economics = sample_active_order_economics();
+        economics.subtotal = RadrootsCoreMoney::new(decimal("18"), RadrootsCoreCurrency::EUR);
+        assert_eq!(
+            economics.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::InvalidEconomicCurrency { field: "subtotal" }
+        );
+
+        let mut economics = sample_active_order_economics();
+        economics.subtotal = usd("-1");
+        assert_eq!(
+            economics.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::InvalidEconomicTotal { field: "subtotal" }
+        );
+
+        let mut economics = sample_active_order_economics();
+        economics.discount_total = usd("4");
+        assert_eq!(
+            economics.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::InvalidEconomicTotal {
+                field: "discount_total"
+            }
+        );
+
+        let mut economics = sample_active_order_economics();
+        economics.adjustment_total = usd("4");
+        assert_eq!(
+            economics.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::InvalidEconomicTotal {
+                field: "adjustment_total"
+            }
+        );
+
+        let economics = sample_bound_order_economics();
+        assert_eq!(
+            validate_order_economics_binding(&[], &economics).unwrap_err(),
+            RadrootsActiveTradePayloadError::InvalidOrderEconomicsBinding { field: "items" }
+        );
+
+        let invalid_order_items = [RadrootsTradeOrderItem {
+            bin_id: " ".into(),
+            bin_count: 1,
+        }];
+        assert_eq!(
+            validate_order_economics_binding(&invalid_order_items, &economics).unwrap_err(),
+            RadrootsActiveTradePayloadError::InvalidOrderEconomicsBinding {
+                field: "items.bin_count"
+            }
+        );
+
+        let duplicate_counts = normalized_order_item_counts(&[
+            RadrootsTradeOrderItem {
+                bin_id: "bin-1".into(),
+                bin_count: 1,
+            },
+            RadrootsTradeOrderItem {
+                bin_id: "bin-1".into(),
+                bin_count: 2,
+            },
+        ])
+        .unwrap();
+        assert_eq!(duplicate_counts[0].bin_count, 3);
+
+        assert!(
+            normalized_order_item_counts(&[RadrootsTradeOrderItem {
+                bin_id: " ".into(),
+                bin_count: 1,
+            }])
+            .is_none()
+        );
+        assert!(
+            normalized_order_item_counts(&[RadrootsTradeOrderItem {
+                bin_id: "bin-1".into(),
+                bin_count: 0,
+            }])
+            .is_none()
+        );
+        let sorted_counts = normalized_order_item_counts(&[
+            RadrootsTradeOrderItem {
+                bin_id: "bin-b".into(),
+                bin_count: 1,
+            },
+            RadrootsTradeOrderItem {
+                bin_id: "bin-a".into(),
+                bin_count: 1,
+            },
+        ])
+        .unwrap();
+        assert_eq!(sorted_counts[0].bin_id, "bin-a");
     }
 
     #[test]
@@ -2209,6 +2451,51 @@ mod tests {
                 field: "adjustments",
                 index: 0
             }
+        );
+
+        let mut economics = sample_active_order_economics();
+        economics.adjustments[0].amount = usd("-1");
+        assert_eq!(
+            economics.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::InvalidEconomicLineAmount {
+                field: "adjustments",
+                index: 0
+            }
+        );
+    }
+
+    #[test]
+    fn active_order_economics_helpers_cover_currency_error_paths() {
+        assert_eq!(
+            validate_total_money(&usd("-1"), RadrootsCoreCurrency::USD, "subtotal").unwrap_err(),
+            RadrootsActiveTradePayloadError::InvalidEconomicTotal { field: "subtotal" }
+        );
+        assert_eq!(
+            validate_total_matches(
+                &usd("1"),
+                &RadrootsCoreMoney::new(decimal("1"), RadrootsCoreCurrency::EUR),
+                "total"
+            )
+            .unwrap_err(),
+            RadrootsActiveTradePayloadError::InvalidEconomicCurrency { field: "total" }
+        );
+        assert_eq!(
+            checked_money_add(
+                &usd("1"),
+                &RadrootsCoreMoney::new(decimal("1"), RadrootsCoreCurrency::EUR),
+                "subtotal"
+            )
+            .unwrap_err(),
+            RadrootsActiveTradePayloadError::InvalidEconomicCurrency { field: "subtotal" }
+        );
+        assert_eq!(
+            checked_money_sub_non_negative(
+                &usd("1"),
+                &RadrootsCoreMoney::new(decimal("1"), RadrootsCoreCurrency::EUR),
+                "total"
+            )
+            .unwrap_err(),
+            RadrootsActiveTradePayloadError::InvalidEconomicCurrency { field: "total" }
         );
     }
 
@@ -2280,6 +2567,51 @@ mod tests {
         assert_eq!(
             declined_without_reason.validate().unwrap_err(),
             RadrootsActiveTradePayloadError::EmptyField("reason")
+        );
+    }
+
+    #[test]
+    fn active_revision_validation_covers_proposed_and_decision_paths() {
+        assert_eq!(sample_active_revision_proposed().validate(), Ok(()));
+
+        let missing_prev = RadrootsTradeOrderRevisionProposed {
+            prev_event_id: " ".into(),
+            ..sample_active_revision_proposed()
+        };
+        assert_eq!(
+            missing_prev.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::EmptyField("prev_event_id")
+        );
+
+        assert_eq!(
+            sample_active_revision_decision_event(RadrootsTradeOrderRevisionDecision::Accepted)
+                .validate(),
+            Ok(())
+        );
+        assert_eq!(
+            sample_active_revision_decision_event(RadrootsTradeOrderRevisionDecision::Declined {
+                reason: "out of stock".into(),
+            })
+            .validate(),
+            Ok(())
+        );
+
+        let declined_without_reason =
+            sample_active_revision_decision_event(RadrootsTradeOrderRevisionDecision::Declined {
+                reason: " ".into(),
+            });
+        assert_eq!(
+            declined_without_reason.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::EmptyField("reason")
+        );
+
+        let missing_root = RadrootsTradeOrderRevisionDecisionEvent {
+            root_event_id: " ".into(),
+            ..sample_active_revision_decision_event(RadrootsTradeOrderRevisionDecision::Accepted)
+        };
+        assert_eq!(
+            missing_root.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::EmptyField("root_event_id")
         );
     }
 
@@ -2363,6 +2695,111 @@ mod tests {
     }
 
     #[test]
+    fn active_payment_and_settlement_validation_covers_amount_and_reason_paths() {
+        assert_eq!(sample_payment_recorded().validate(), Ok(()));
+
+        let unreferenced_payment = RadrootsTradePaymentRecorded {
+            reference: None,
+            ..sample_payment_recorded()
+        };
+        assert_eq!(unreferenced_payment.validate(), Ok(()));
+
+        let invalid_quote_version = RadrootsTradePaymentRecorded {
+            quote_version: 0,
+            ..sample_payment_recorded()
+        };
+        assert_eq!(
+            invalid_quote_version.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::InvalidQuoteVersion
+        );
+
+        let invalid_amount = RadrootsTradePaymentRecorded {
+            amount: decimal("0"),
+            ..sample_payment_recorded()
+        };
+        assert_eq!(
+            invalid_amount.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::InvalidPaymentAmount
+        );
+
+        let negative_amount = RadrootsTradePaymentRecorded {
+            amount: decimal("-1"),
+            ..sample_payment_recorded()
+        };
+        assert_eq!(
+            negative_amount.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::InvalidPaymentAmount
+        );
+
+        let blank_reference = RadrootsTradePaymentRecorded {
+            reference: Some(" ".into()),
+            ..sample_payment_recorded()
+        };
+        assert_eq!(
+            blank_reference.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::EmptyField("reference")
+        );
+
+        assert_eq!(
+            sample_settlement_decision(RadrootsTradeSettlementDecision::Accepted, None).validate(),
+            Ok(())
+        );
+        assert_eq!(
+            sample_settlement_decision(RadrootsTradeSettlementDecision::Rejected, Some("damaged"))
+                .validate(),
+            Ok(())
+        );
+
+        let accepted_with_reason =
+            sample_settlement_decision(RadrootsTradeSettlementDecision::Accepted, Some("extra"));
+        assert_eq!(
+            accepted_with_reason.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::UnexpectedSettlementReason
+        );
+
+        let rejected_without_reason =
+            sample_settlement_decision(RadrootsTradeSettlementDecision::Rejected, None);
+        assert_eq!(
+            rejected_without_reason.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::MissingSettlementReason
+        );
+
+        let rejected_blank_reason =
+            sample_settlement_decision(RadrootsTradeSettlementDecision::Rejected, Some(" "));
+        assert_eq!(
+            rejected_blank_reason.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::EmptyField("reason")
+        );
+
+        let invalid_quote_version = RadrootsTradeSettlementDecisionEvent {
+            quote_version: 0,
+            ..sample_settlement_decision(RadrootsTradeSettlementDecision::Accepted, None)
+        };
+        assert_eq!(
+            invalid_quote_version.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::InvalidQuoteVersion
+        );
+
+        let zero_amount = RadrootsTradeSettlementDecisionEvent {
+            amount: decimal("0"),
+            ..sample_settlement_decision(RadrootsTradeSettlementDecision::Accepted, None)
+        };
+        assert_eq!(
+            zero_amount.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::InvalidPaymentAmount
+        );
+
+        let invalid_amount = RadrootsTradeSettlementDecisionEvent {
+            amount: decimal("-1"),
+            ..sample_settlement_decision(RadrootsTradeSettlementDecision::Accepted, None)
+        };
+        assert_eq!(
+            invalid_amount.validate().unwrap_err(),
+            RadrootsActiveTradePayloadError::InvalidPaymentAmount
+        );
+    }
+
+    #[test]
     fn active_envelope_serializes_canonical_type_name() {
         let envelope = RadrootsActiveTradeEnvelope::new(
             RadrootsActiveTradeMessageType::TradeOrderRequested,
@@ -2380,6 +2817,59 @@ mod tests {
             serde_json::json!("30402:pubkey:AAAAAAAAAAAAAAAAAAAAAg")
         );
         assert_eq!(json["payload"]["items"][0]["bin_id"], "bin-1");
+    }
+
+    #[test]
+    fn active_envelope_validation_and_display_cover_error_paths() {
+        let invalid_version = RadrootsActiveTradeEnvelope {
+            version: RADROOTS_TRADE_ENVELOPE_VERSION + 1,
+            domain: RadrootsTradeDomain::TradeListing,
+            message_type: RadrootsActiveTradeMessageType::TradeOrderRequested,
+            order_id: "order-1".into(),
+            listing_addr: sample_listing_addr(),
+            payload: sample_active_order_request(),
+        };
+        let invalid_version_err = invalid_version.validate().unwrap_err();
+        assert_eq!(
+            invalid_version_err,
+            RadrootsActiveTradeEnvelopeError::InvalidVersion {
+                expected: RADROOTS_TRADE_ENVELOPE_VERSION,
+                got: RADROOTS_TRADE_ENVELOPE_VERSION + 1,
+            }
+        );
+        assert_eq!(
+            invalid_version_err.to_string(),
+            "invalid active trade envelope version: expected 1, got 2"
+        );
+
+        let missing_order = RadrootsActiveTradeEnvelope::new(
+            RadrootsActiveTradeMessageType::TradeOrderRequested,
+            sample_listing_addr(),
+            " ",
+            sample_active_order_request(),
+        );
+        let missing_order_err = missing_order.validate().unwrap_err();
+        assert_eq!(
+            missing_order_err,
+            RadrootsActiveTradeEnvelopeError::MissingOrderId
+        );
+        assert_eq!(
+            missing_order_err.to_string(),
+            "missing order_id for active trade message"
+        );
+
+        let missing_listing = RadrootsActiveTradeEnvelope::new(
+            RadrootsActiveTradeMessageType::TradeOrderRequested,
+            " ",
+            "order-1",
+            sample_active_order_request(),
+        );
+        let missing_listing_err = missing_listing.validate().unwrap_err();
+        assert_eq!(
+            missing_listing_err,
+            RadrootsActiveTradeEnvelopeError::MissingListingAddr
+        );
+        assert_eq!(missing_listing_err.to_string(), "missing listing_addr");
     }
 
     #[test]
@@ -2856,6 +3346,121 @@ mod tests {
             RadrootsTradeEnvelopeError::MissingListingAddr.to_string(),
             "missing listing_addr"
         );
+    }
+
+    #[test]
+    fn active_payload_error_display_variants_cover_all_messages() {
+        let cases = [
+            (
+                RadrootsActiveTradePayloadError::EmptyField("field"),
+                "field cannot be empty",
+            ),
+            (
+                RadrootsActiveTradePayloadError::MissingItems,
+                "items must contain at least one item",
+            ),
+            (
+                RadrootsActiveTradePayloadError::InvalidItemBinCount { index: 2 },
+                "items[2].bin_count must be greater than zero",
+            ),
+            (
+                RadrootsActiveTradePayloadError::MissingEconomicItems,
+                "economics.items must contain at least one item",
+            ),
+            (
+                RadrootsActiveTradePayloadError::InvalidEconomicItemBinCount { index: 3 },
+                "economics.items[3].bin_count must be greater than zero",
+            ),
+            (
+                RadrootsActiveTradePayloadError::InvalidEconomicItemQuantity { index: 4 },
+                "economics.items[4].quantity_amount must be greater than zero",
+            ),
+            (
+                RadrootsActiveTradePayloadError::InvalidEconomicItemPrice { index: 5 },
+                "economics.items[5].unit_price_amount must not be negative",
+            ),
+            (
+                RadrootsActiveTradePayloadError::InvalidEconomicItemSubtotal { index: 6 },
+                "economics.items[6].line_subtotal is invalid",
+            ),
+            (
+                RadrootsActiveTradePayloadError::InvalidEconomicLineAmount {
+                    field: "adjustments",
+                    index: 7,
+                },
+                "economics.adjustments[7].amount must be greater than zero",
+            ),
+            (
+                RadrootsActiveTradePayloadError::InvalidEconomicLineKind {
+                    field: "discounts",
+                    index: 8,
+                },
+                "economics.discounts[8].kind is invalid",
+            ),
+            (
+                RadrootsActiveTradePayloadError::InvalidEconomicLineEffect {
+                    field: "discounts",
+                    index: 9,
+                },
+                "economics.discounts[9].effect is invalid",
+            ),
+            (
+                RadrootsActiveTradePayloadError::InvalidEconomicCurrency { field: "total" },
+                "economics.total currency is invalid",
+            ),
+            (
+                RadrootsActiveTradePayloadError::InvalidEconomicOrdering { field: "items" },
+                "economics.items is not in canonical order",
+            ),
+            (
+                RadrootsActiveTradePayloadError::InvalidEconomicTotal { field: "subtotal" },
+                "economics.subtotal total is invalid",
+            ),
+            (
+                RadrootsActiveTradePayloadError::InvalidOrderEconomicsBinding { field: "items" },
+                "order items does not match economics",
+            ),
+            (
+                RadrootsActiveTradePayloadError::InvalidQuoteVersion,
+                "economics.quote_version must be greater than zero",
+            ),
+            (
+                RadrootsActiveTradePayloadError::MissingInventoryCommitments,
+                "accepted decisions must contain at least one inventory commitment",
+            ),
+            (
+                RadrootsActiveTradePayloadError::InvalidInventoryCommitmentCount { index: 1 },
+                "inventory_commitments[1].bin_count must be greater than zero",
+            ),
+            (
+                RadrootsActiveTradePayloadError::InvalidFulfillmentStatus,
+                "fulfillment status is not publishable",
+            ),
+            (
+                RadrootsActiveTradePayloadError::MissingReceiptIssue,
+                "receipt issue is required when received is false",
+            ),
+            (
+                RadrootsActiveTradePayloadError::UnexpectedReceiptIssue,
+                "receipt issue must be absent when received is true",
+            ),
+            (
+                RadrootsActiveTradePayloadError::InvalidPaymentAmount,
+                "payment amount must be greater than zero",
+            ),
+            (
+                RadrootsActiveTradePayloadError::MissingSettlementReason,
+                "settlement reason is required when decision is rejected",
+            ),
+            (
+                RadrootsActiveTradePayloadError::UnexpectedSettlementReason,
+                "settlement reason must be absent when decision is accepted",
+            ),
+        ];
+
+        for (error, expected) in cases {
+            assert_eq!(error.to_string(), expected);
+        }
     }
 
     #[test]

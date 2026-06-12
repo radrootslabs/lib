@@ -35,3 +35,21 @@ where
 {
     migrations_run_all_down(executor, MIGRATIONS)
 }
+
+#[cfg(test)]
+mod tests {
+    use radroots_sql_core::SqliteExecutor;
+
+    use super::*;
+
+    #[test]
+    fn migration_entrypoints_apply_and_reverse_schema() {
+        let executor = SqliteExecutor::open_memory().expect("open memory sqlite");
+
+        run_all_up(&executor).expect("migrate up");
+        executor
+            .query_raw("select name from __migrations order by name", "[]")
+            .expect("query migrations");
+        run_all_down(&executor).expect("migrate down");
+    }
+}

@@ -619,19 +619,16 @@ fn infer_health_state(target: &ManagedRuntimeTarget) -> (&'static str, &'static 
         );
     }
 
-    match record.install_state {
-        ManagedRuntimeInstallState::NotInstalled => (
+    if record.install_state == ManagedRuntimeInstallState::NotInstalled {
+        (
             health_state_label(ManagedRuntimeHealthState::NotInstalled),
             "registry_install_state",
-        ),
-        ManagedRuntimeInstallState::Installed | ManagedRuntimeInstallState::Configured => (
+        )
+    } else {
+        (
             health_state_label(ManagedRuntimeHealthState::Stopped),
             "pid_file_absent",
-        ),
-        ManagedRuntimeInstallState::Failed => (
-            health_state_label(ManagedRuntimeHealthState::Failed),
-            "registry_install_state",
-        ),
+        )
     }
 }
 
@@ -691,18 +688,28 @@ pub fn runtime_group(
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+    };
 
     use radroots_runtime_paths::{
         RadrootsHostEnvironment, RadrootsPathOverrides, RadrootsPathProfile, RadrootsPathResolver,
-        RadrootsPlatform,
+        RadrootsPlatform, RadrootsRuntimePathSelection,
     };
+    use tempfile::tempdir;
 
     use super::{
-        ManagedRuntimeGroup, active_management_mode_for_profile, load_management_context,
-        resolve_runtime_target,
+        ManagedRuntimeContext, ManagedRuntimeGroup, ManagedRuntimeInspectionAvailability,
+        ManagedRuntimeLifecycleAction, active_management_mode_for_profile, health_state_label,
+        inspect_runtime_action, inspect_runtime_config, inspect_runtime_logs,
+        inspect_runtime_status, load_management_context, load_management_context_with_selection,
+        resolve_runtime_target, runtime_group,
     };
-    use crate::{ManagedRuntimeInstallState, ManagedRuntimeInstanceRecord, parse_contract_str};
+    use crate::{
+        ManagedRuntimeHealthState, ManagedRuntimeInstallState, ManagedRuntimeInstanceRecord,
+        parse_contract_str,
+    };
 
     const CONTRACT: &str = r#"
 schema = "radroots-runtime-management"
@@ -737,14 +744,22 @@ contract_state = "active"
 platforms = ["linux"]
 supported_profiles = ["interactive_user", "repo_local"]
 service_manager_integration = false
-uses_absolute_binary_paths = true
-default_instance_cardinality = "single_default_instance"
+	uses_absolute_binary_paths = true
+	default_instance_cardinality = "single_default_instance"
 
-[paths.interactive_user_managed]
-shared_namespace = "shared/runtime-manager"
-instance_registry_root_class = "config"
-instance_registry_rel = "shared/runtime-manager/instances.toml"
-artifact_cache_root_class = "cache"
+	[mode.service_host_managed]
+	contract_state = "defined"
+	platforms = ["linux"]
+	supported_profiles = ["service_host"]
+	service_manager_integration = true
+	uses_absolute_binary_paths = true
+	default_instance_cardinality = "single_default_instance"
+
+	[paths.interactive_user_managed]
+	shared_namespace = "shared/runtime-manager"
+	instance_registry_root_class = "config"
+	instance_registry_rel = "shared/runtime-manager/instances.toml"
+	artifact_cache_root_class = "cache"
 artifact_cache_rel = "shared/runtime-manager/artifacts"
 install_root_class = "data"
 install_root_rel = "shared/runtime-manager/installs"
@@ -761,18 +776,66 @@ secrets_namespace_rel = "shared/runtime-manager"
 required_fields = ["runtime_id"]
 optional_fields = ["notes"]
 
-[bootstrap.radrootsd]
-runtime_id = "radrootsd"
-management_mode = "interactive_user_managed"
-default_instance_id = "local"
+	[bootstrap.radrootsd]
+	runtime_id = "radrootsd"
+	management_mode = "interactive_user_managed"
+	default_instance_id = "local"
 install_strategy = "archive_unpack"
 config_format = "toml"
 requires_bootstrap_secret = true
 requires_config_bootstrap = true
 requires_signer_provider = false
 health_surface = "jsonrpc_status"
-preferred_cli_binding = true
-"#;
+	preferred_cli_binding = true
+	"#;
+
+    fn resolver_for_home(home_dir: PathBuf) -> RadrootsPathResolver {
+        RadrootsPathResolver::new(
+            RadrootsPlatform::Linux,
+            RadrootsHostEnvironment {
+                home_dir: Some(home_dir),
+                ..RadrootsHostEnvironment::default()
+            },
+        )
+    }
+
+    fn repo_local_context(root: &Path) -> ManagedRuntimeContext {
+        let contract = parse_contract_str(CONTRACT).expect("contract");
+        let resolver =
+            RadrootsPathResolver::new(RadrootsPlatform::Linux, RadrootsHostEnvironment::default());
+        load_management_context(
+            contract,
+            &resolver,
+            RadrootsPathProfile::RepoLocal,
+            &RadrootsPathOverrides::repo_local(root),
+        )
+        .expect("context")
+    }
+
+    fn sample_record(
+        runtime_id: &str,
+        instance_id: &str,
+        install_state: ManagedRuntimeInstallState,
+        root: &Path,
+    ) -> ManagedRuntimeInstanceRecord {
+        let instance_root = root.join(runtime_id).join(instance_id);
+        ManagedRuntimeInstanceRecord {
+            runtime_id: runtime_id.to_owned(),
+            instance_id: instance_id.to_owned(),
+            management_mode: "interactive_user_managed".to_owned(),
+            install_state,
+            binary_path: instance_root.join("bin/runtime"),
+            config_path: instance_root.join("config/runtime.toml"),
+            logs_path: instance_root.join("logs"),
+            run_path: instance_root.join("run"),
+            installed_version: "0.1.0-alpha.2".to_owned(),
+            health_endpoint: Some("jsonrpc_status".to_owned()),
+            secret_material_ref: None,
+            last_started_at: None,
+            last_stopped_at: None,
+            notes: Some("managed test record".to_owned()),
+        }
+    }
 
     #[test]
     fn active_management_mode_matches_supported_profile() {
@@ -784,15 +847,53 @@ preferred_cli_binding = true
     }
 
     #[test]
+    fn active_management_mode_rejects_profiles_without_active_mode() {
+        let contract = parse_contract_str(CONTRACT).expect("contract");
+        let err = active_management_mode_for_profile(&contract, RadrootsPathProfile::ServiceHost)
+            .expect_err("service host mode is defined but inactive");
+
+        assert!(err.to_string().contains("service_host"));
+    }
+
+    #[test]
+    fn management_context_reports_selection_and_context_errors() {
+        let dir = tempdir().expect("tempdir");
+        let contract = parse_contract_str(CONTRACT).expect("contract");
+        let resolver =
+            RadrootsPathResolver::new(RadrootsPlatform::Linux, RadrootsHostEnvironment::default());
+        let selection = RadrootsRuntimePathSelection::caller(RadrootsPathProfile::RepoLocal, None);
+        let err = load_management_context_with_selection(contract.clone(), &resolver, &selection)
+            .expect_err("repo local selection without root should fail");
+        assert!(err.to_string().contains("repo_local"));
+
+        let err = load_management_context(
+            contract.clone(),
+            &resolver,
+            RadrootsPathProfile::ServiceHost,
+            &RadrootsPathOverrides::default(),
+        )
+        .expect_err("service host mode is inactive");
+        assert!(err.to_string().contains("service_host"));
+
+        let root = dir.path().join("runtime-root");
+        let overrides = RadrootsPathOverrides::repo_local(&root);
+        fs::create_dir_all(root.join("config/shared/runtime-manager")).expect("registry parent");
+        fs::create_dir(root.join("config/shared/runtime-manager/instances.toml"))
+            .expect("registry directory");
+        let err = load_management_context(
+            contract,
+            &resolver,
+            RadrootsPathProfile::RepoLocal,
+            &overrides,
+        )
+        .expect_err("directory registry path should fail");
+        assert!(err.to_string().contains("read runtime instance registry"));
+    }
+
+    #[test]
     fn resolve_runtime_target_uses_bootstrap_default_instance_id() {
         let contract = parse_contract_str(CONTRACT).expect("contract");
-        let resolver = RadrootsPathResolver::new(
-            RadrootsPlatform::Linux,
-            RadrootsHostEnvironment {
-                home_dir: Some(PathBuf::from("/home/treesap")),
-                ..RadrootsHostEnvironment::default()
-            },
-        );
+        let resolver = resolver_for_home(PathBuf::from("/home/treesap"));
         let mut context = load_management_context(
             contract,
             &resolver,
@@ -828,5 +929,410 @@ preferred_cli_binding = true
             ManagedRuntimeGroup::ActiveManagedTarget
         );
         assert!(target.predicted_paths.is_some());
+    }
+
+    #[test]
+    fn load_context_with_selection_uses_caller_path_selection() {
+        let dir = tempdir().expect("tempdir");
+        let root = dir.path().join("runtime-root");
+        let contract = parse_contract_str(CONTRACT).expect("contract");
+        let resolver =
+            RadrootsPathResolver::new(RadrootsPlatform::Linux, RadrootsHostEnvironment::default());
+        let selection = RadrootsRuntimePathSelection::caller(
+            RadrootsPathProfile::RepoLocal,
+            Some(root.clone()),
+        );
+
+        let context = load_management_context_with_selection(contract, &resolver, &selection)
+            .expect("selection context");
+
+        assert_eq!(
+            context.shared_paths.instance_registry_path,
+            root.join("config/shared/runtime-manager/instances.toml")
+        );
+        assert!(context.registry.instances.is_empty());
+    }
+
+    #[test]
+    fn runtime_groups_and_action_labels_cover_declared_surfaces() {
+        let contract = parse_contract_str(CONTRACT).expect("contract");
+        assert_eq!(
+            runtime_group(&contract, "radrootsd"),
+            ManagedRuntimeGroup::ActiveManagedTarget
+        );
+        assert_eq!(
+            runtime_group(&contract, "myc"),
+            ManagedRuntimeGroup::DefinedManagedTarget
+        );
+        assert_eq!(
+            runtime_group(&contract, "hyf"),
+            ManagedRuntimeGroup::BootstrapOnly
+        );
+        assert_eq!(
+            runtime_group(&contract, "unknown"),
+            ManagedRuntimeGroup::Unknown
+        );
+
+        assert_eq!(
+            ManagedRuntimeGroup::ActiveManagedTarget.as_str(),
+            "active_managed_target"
+        );
+        assert_eq!(
+            ManagedRuntimeGroup::DefinedManagedTarget.posture(),
+            "defined_future_target"
+        );
+        assert_eq!(
+            ManagedRuntimeGroup::BootstrapOnly.posture(),
+            "bootstrap_only_direct_binding"
+        );
+        assert_eq!(ManagedRuntimeGroup::Unknown.as_str(), "unknown");
+
+        let actions = [
+            (ManagedRuntimeLifecycleAction::Install, "install"),
+            (ManagedRuntimeLifecycleAction::Uninstall, "uninstall"),
+            (ManagedRuntimeLifecycleAction::Start, "start"),
+            (ManagedRuntimeLifecycleAction::Stop, "stop"),
+            (ManagedRuntimeLifecycleAction::Restart, "restart"),
+            (ManagedRuntimeLifecycleAction::ConfigSet, "config_set"),
+        ];
+        for (action, expected) in actions {
+            assert_eq!(action.as_str(), expected);
+        }
+    }
+
+    #[test]
+    fn resolve_runtime_target_covers_requested_and_non_active_sources() {
+        let dir = tempdir().expect("tempdir");
+        let mut context = repo_local_context(dir.path());
+        context.registry.instances.push(sample_record(
+            "myc",
+            "default",
+            ManagedRuntimeInstallState::Configured,
+            dir.path(),
+        ));
+
+        let requested = resolve_runtime_target(&context, "radrootsd", Some("manual"));
+        assert_eq!(requested.instance_id, "manual");
+        assert_eq!(requested.instance_source, "command_arg");
+        assert_eq!(
+            requested.runtime_group,
+            ManagedRuntimeGroup::ActiveManagedTarget
+        );
+        assert!(requested.predicted_paths.is_some());
+
+        let defined = resolve_runtime_target(&context, "myc", None);
+        assert_eq!(defined.instance_id, "default");
+        assert_eq!(defined.instance_source, "implicit_default");
+        assert_eq!(
+            defined.runtime_group,
+            ManagedRuntimeGroup::DefinedManagedTarget
+        );
+        assert!(defined.predicted_paths.is_none());
+        assert!(defined.instance_record.is_some());
+
+        let bootstrap = resolve_runtime_target(&context, "hyf", None);
+        assert_eq!(bootstrap.instance_source, "implicit_default");
+        assert_eq!(bootstrap.runtime_group, ManagedRuntimeGroup::BootstrapOnly);
+        assert!(bootstrap.management_mode.is_none());
+
+        let unknown = resolve_runtime_target(&context, "unknown", Some("manual"));
+        assert_eq!(unknown.instance_id, "manual");
+        assert_eq!(unknown.instance_source, "command_arg");
+        assert_eq!(unknown.runtime_group, ManagedRuntimeGroup::Unknown);
+        assert!(unknown.predicted_paths.is_none());
+    }
+
+    #[test]
+    fn status_inspection_covers_install_and_health_states() {
+        let dir = tempdir().expect("tempdir");
+        let context = repo_local_context(dir.path());
+        let active_missing = resolve_runtime_target(&context, "radrootsd", None);
+        let status =
+            inspect_runtime_status(&active_missing, &["install".to_owned(), "start".to_owned()]);
+        assert_eq!(
+            status.availability,
+            ManagedRuntimeInspectionAvailability::Success
+        );
+        assert_eq!(status.view.state, "not_installed");
+        assert_eq!(status.view.health_state, "not_installed");
+        assert_eq!(status.view.health_source, "registry_absent");
+        assert_eq!(status.view.lifecycle_actions, ["install", "start"]);
+
+        let mut context = repo_local_context(dir.path());
+        context.registry.instances.push(sample_record(
+            "radrootsd",
+            "local",
+            ManagedRuntimeInstallState::Configured,
+            dir.path(),
+        ));
+        let active_configured = resolve_runtime_target(&context, "radrootsd", None);
+        let configured_status = inspect_runtime_status(&active_configured, &[]);
+        assert_eq!(configured_status.view.state, "configured");
+        assert_eq!(configured_status.view.health_state, "stopped");
+        assert_eq!(configured_status.view.health_source, "pid_file_absent");
+        assert_eq!(configured_status.view.install_state, "configured");
+
+        let predicted = active_configured
+            .predicted_paths
+            .as_ref()
+            .expect("predicted active paths");
+        fs::create_dir_all(&predicted.run_dir).expect("run dir");
+        fs::write(&predicted.pid_file_path, std::process::id().to_string()).expect("pid");
+        let running_status = inspect_runtime_status(&active_configured, &[]);
+        assert_eq!(running_status.view.health_state, "running");
+        assert_eq!(running_status.view.health_source, "process_probe");
+        fs::remove_file(&predicted.pid_file_path).expect("remove pid");
+
+        let mut context = repo_local_context(dir.path());
+        context.registry.instances.push(sample_record(
+            "radrootsd",
+            "local",
+            ManagedRuntimeInstallState::Failed,
+            dir.path(),
+        ));
+        let active_failed = resolve_runtime_target(&context, "radrootsd", None);
+        let failed_status = inspect_runtime_status(&active_failed, &[]);
+        assert_eq!(failed_status.view.state, "failed");
+        assert_eq!(failed_status.view.health_state, "failed");
+        assert_eq!(failed_status.view.health_source, "registry_install_state");
+
+        let mut context = repo_local_context(dir.path());
+        context.registry.instances.push(sample_record(
+            "radrootsd",
+            "local",
+            ManagedRuntimeInstallState::NotInstalled,
+            dir.path(),
+        ));
+        let active_not_installed = resolve_runtime_target(&context, "radrootsd", None);
+        let not_installed_status = inspect_runtime_status(&active_not_installed, &[]);
+        assert_eq!(not_installed_status.view.health_state, "not_installed");
+        assert_eq!(
+            not_installed_status.view.health_source,
+            "registry_install_state"
+        );
+
+        let mut context = repo_local_context(dir.path());
+        let defined_record = sample_record(
+            "myc",
+            "default",
+            ManagedRuntimeInstallState::Installed,
+            dir.path(),
+        );
+        fs::create_dir_all(&defined_record.run_path).expect("run dir");
+        fs::write(defined_record.run_path.join("runtime.pid"), "42").expect("pid");
+        context.registry.instances.push(defined_record);
+        let defined = resolve_runtime_target(&context, "myc", None);
+        let defined_status = inspect_runtime_status(&defined, &["install".to_owned()]);
+        assert_eq!(defined_status.view.state, "defined_not_active");
+        assert_eq!(defined_status.view.health_state, "running");
+        assert_eq!(defined_status.view.health_source, "pid_file_presence");
+        assert!(defined_status.view.lifecycle_actions.is_empty());
+
+        let no_pid_dir = tempdir().expect("no-pid tempdir");
+        let mut context = repo_local_context(no_pid_dir.path());
+        context.registry.instances.push(sample_record(
+            "myc",
+            "default",
+            ManagedRuntimeInstallState::Installed,
+            no_pid_dir.path(),
+        ));
+        let defined_without_pid = resolve_runtime_target(&context, "myc", None);
+        let defined_without_pid_status = inspect_runtime_status(&defined_without_pid, &[]);
+        assert_eq!(defined_without_pid_status.view.health_state, "stopped");
+        assert_eq!(
+            defined_without_pid_status.view.health_source,
+            "pid_file_absent"
+        );
+
+        let bootstrap = resolve_runtime_target(&context, "hyf", None);
+        let bootstrap_status = inspect_runtime_status(&bootstrap, &[]);
+        assert_eq!(bootstrap_status.view.state, "bootstrap_only");
+        assert_eq!(
+            bootstrap_status.view.management_posture,
+            "bootstrap_only_direct_binding"
+        );
+        assert_eq!(
+            health_state_label(ManagedRuntimeHealthState::Starting),
+            "starting"
+        );
+        assert_eq!(
+            health_state_label(ManagedRuntimeHealthState::Degraded),
+            "degraded"
+        );
+
+        let unknown = resolve_runtime_target(&context, "unknown", None);
+        let unknown_status = inspect_runtime_status(&unknown, &[]);
+        assert_eq!(
+            unknown_status.availability,
+            ManagedRuntimeInspectionAvailability::Unconfigured
+        );
+        assert_eq!(unknown_status.view.state, "unknown_runtime");
+    }
+
+    #[test]
+    fn logs_and_config_inspections_cover_availability_paths() {
+        let dir = tempdir().expect("tempdir");
+        let mut context = repo_local_context(dir.path());
+        context.registry.instances.push(sample_record(
+            "radrootsd",
+            "local",
+            ManagedRuntimeInstallState::Configured,
+            dir.path(),
+        ));
+        let active = resolve_runtime_target(&context, "radrootsd", None);
+        let predicted = active.predicted_paths.as_ref().expect("predicted paths");
+        fs::create_dir_all(&predicted.logs_dir).expect("predicted logs dir");
+        fs::write(&predicted.stdout_log_path, "stdout").expect("stdout");
+        fs::write(&predicted.stderr_log_path, "stderr").expect("stderr");
+        let config_path = active
+            .instance_record
+            .as_ref()
+            .expect("record")
+            .config_path
+            .clone();
+        fs::create_dir_all(config_path.parent().expect("config parent")).expect("config parent");
+        fs::write(&config_path, "listen = true").expect("config");
+
+        let active_logs = inspect_runtime_logs(&active);
+        assert_eq!(
+            active_logs.availability,
+            ManagedRuntimeInspectionAvailability::Success
+        );
+        assert_eq!(active_logs.view.state, "ready");
+        assert!(active_logs.view.stdout_log_present);
+        assert!(active_logs.view.stderr_log_present);
+        assert!(active_logs.view.stdout_log_path.is_some());
+
+        let active_config = inspect_runtime_config(&active);
+        assert_eq!(active_config.view.state, "ready");
+        assert!(active_config.view.config_present);
+        assert_eq!(active_config.view.config_format.as_deref(), Some("toml"));
+        assert_eq!(active_config.view.requires_bootstrap_secret, Some(true));
+        assert_eq!(active_config.view.requires_config_bootstrap, Some(true));
+        assert_eq!(active_config.view.requires_signer_provider, Some(false));
+
+        let empty_dir = tempdir().expect("empty tempdir");
+        let empty_context = repo_local_context(empty_dir.path());
+        let active_missing = resolve_runtime_target(&empty_context, "radrootsd", None);
+        let missing_logs = inspect_runtime_logs(&active_missing);
+        assert_eq!(missing_logs.view.state, "ready");
+        assert!(!missing_logs.view.stdout_log_present);
+        assert!(!missing_logs.view.stderr_log_present);
+        let missing_config = inspect_runtime_config(&active_missing);
+        assert_eq!(missing_config.view.state, "not_installed");
+        assert!(!missing_config.view.config_present);
+
+        let mut context = repo_local_context(dir.path());
+        let defined_record = sample_record(
+            "myc",
+            "default",
+            ManagedRuntimeInstallState::Configured,
+            dir.path(),
+        );
+        fs::create_dir_all(&defined_record.logs_path).expect("defined logs dir");
+        fs::write(defined_record.logs_path.join("stdout.log"), "stdout").expect("defined stdout");
+        fs::create_dir_all(defined_record.config_path.parent().expect("config parent"))
+            .expect("defined config parent");
+        fs::write(&defined_record.config_path, "enabled = true").expect("defined config");
+        context.registry.instances.push(defined_record);
+        let defined = resolve_runtime_target(&context, "myc", None);
+        let defined_logs = inspect_runtime_logs(&defined);
+        assert_eq!(
+            defined_logs.availability,
+            ManagedRuntimeInspectionAvailability::Success
+        );
+        assert_eq!(defined_logs.view.state, "ready");
+        assert!(defined_logs.view.stdout_log_present);
+        assert!(!defined_logs.view.stderr_log_present);
+        assert!(defined_logs.view.stdout_log_path.is_none());
+        let defined_config = inspect_runtime_config(&defined);
+        assert_eq!(
+            defined_config.availability,
+            ManagedRuntimeInspectionAvailability::Success
+        );
+        assert_eq!(defined_config.view.state, "ready");
+        assert!(defined_config.view.config_present);
+
+        let defined_without_record = resolve_runtime_target(&empty_context, "myc", None);
+        assert_eq!(
+            inspect_runtime_logs(&defined_without_record).availability,
+            ManagedRuntimeInspectionAvailability::Unsupported
+        );
+        assert_eq!(
+            inspect_runtime_config(&defined_without_record).availability,
+            ManagedRuntimeInspectionAvailability::Unsupported
+        );
+
+        let bootstrap = resolve_runtime_target(&empty_context, "hyf", None);
+        assert_eq!(
+            inspect_runtime_logs(&bootstrap).availability,
+            ManagedRuntimeInspectionAvailability::Unsupported
+        );
+        assert_eq!(
+            inspect_runtime_config(&bootstrap).availability,
+            ManagedRuntimeInspectionAvailability::Unsupported
+        );
+
+        let unknown = resolve_runtime_target(&empty_context, "unknown", None);
+        assert_eq!(
+            inspect_runtime_logs(&unknown).availability,
+            ManagedRuntimeInspectionAvailability::Unconfigured
+        );
+        assert_eq!(
+            inspect_runtime_config(&unknown).availability,
+            ManagedRuntimeInspectionAvailability::Unconfigured
+        );
+    }
+
+    #[test]
+    fn action_inspection_covers_all_group_postures() {
+        let dir = tempdir().expect("tempdir");
+        let context = repo_local_context(dir.path());
+        let active = resolve_runtime_target(&context, "radrootsd", None);
+        let defined = resolve_runtime_target(&context, "myc", None);
+        let bootstrap = resolve_runtime_target(&context, "hyf", None);
+        let unknown = resolve_runtime_target(&context, "unknown", None);
+
+        let active_install =
+            inspect_runtime_action(&active, ManagedRuntimeLifecycleAction::Install, None);
+        assert_eq!(
+            active_install.availability,
+            ManagedRuntimeInspectionAvailability::Unsupported
+        );
+        assert_eq!(active_install.view.state, "deferred");
+        assert!(active_install.view.detail.contains("runtime install"));
+        assert!(!active_install.view.mutates_bindings);
+        assert!(active_install.view.next_step.is_none());
+
+        let overridden = inspect_runtime_action(
+            &active,
+            ManagedRuntimeLifecycleAction::ConfigSet,
+            Some("custom detail".to_owned()),
+        );
+        assert_eq!(overridden.view.action, "config_set");
+        assert_eq!(overridden.view.detail, "custom detail");
+
+        let defined_start =
+            inspect_runtime_action(&defined, ManagedRuntimeLifecycleAction::Start, None);
+        assert_eq!(defined_start.view.state, "unsupported");
+        assert!(
+            defined_start
+                .view
+                .detail
+                .contains("defined future managed target")
+        );
+
+        let bootstrap_stop =
+            inspect_runtime_action(&bootstrap, ManagedRuntimeLifecycleAction::Stop, None);
+        assert_eq!(bootstrap_stop.view.state, "unsupported");
+        assert!(bootstrap_stop.view.detail.contains("bootstrap_only"));
+
+        let unknown_restart =
+            inspect_runtime_action(&unknown, ManagedRuntimeLifecycleAction::Restart, None);
+        assert_eq!(
+            unknown_restart.availability,
+            ManagedRuntimeInspectionAvailability::Unconfigured
+        );
+        assert_eq!(unknown_restart.view.state, "unknown_runtime");
     }
 }

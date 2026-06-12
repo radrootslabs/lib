@@ -7,7 +7,12 @@ use crate::model::{ManagedRuntimeInstanceRecord, ManagedRuntimeInstanceRegistry}
 pub fn load_registry(
     path: impl AsRef<Path>,
 ) -> Result<ManagedRuntimeInstanceRegistry, RadrootsRuntimeManagerError> {
-    let path = path.as_ref();
+    load_registry_path(path.as_ref())
+}
+
+fn load_registry_path(
+    path: &Path,
+) -> Result<ManagedRuntimeInstanceRegistry, RadrootsRuntimeManagerError> {
     let raw = match fs::read_to_string(path) {
         Ok(raw) => raw,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
@@ -33,10 +38,24 @@ pub fn save_registry(
     path: impl AsRef<Path>,
     registry: &ManagedRuntimeInstanceRegistry,
 ) -> Result<(), RadrootsRuntimeManagerError> {
-    let path = path.as_ref();
+    save_registry_path(path.as_ref(), registry)
+}
+
+fn save_registry_path(
+    path: &Path,
+    registry: &ManagedRuntimeInstanceRegistry,
+) -> Result<(), RadrootsRuntimeManagerError> {
+    save_registry_path_with(path, registry, toml::to_string_pretty)
+}
+
+fn save_registry_path_with(
+    path: &Path,
+    registry: &ManagedRuntimeInstanceRegistry,
+    serializer: fn(&ManagedRuntimeInstanceRegistry) -> Result<String, toml::ser::Error>,
+) -> Result<(), RadrootsRuntimeManagerError> {
     ensure_registry_parent(path)?;
 
-    let raw = toml::to_string_pretty(registry)
+    let raw = serializer(registry)
         .map_err(|err| RadrootsRuntimeManagerError::SerializeRegistry(err.to_string()))?;
     fs::write(path, raw).map_err(|source| RadrootsRuntimeManagerError::WriteRegistry {
         path: path.to_path_buf(),
@@ -103,11 +122,12 @@ mod tests {
     use std::fs;
     use std::path::{Path, PathBuf};
 
+    use serde::ser::Error as _;
     use tempfile::tempdir;
 
     use super::{
         ensure_registry_parent, instance, load_registry, remove_instance, save_registry,
-        upsert_instance,
+        save_registry_path_with, upsert_instance,
     };
     use crate::{
         ManagedRuntimeInstallState, ManagedRuntimeInstanceRecord, ManagedRuntimeInstanceRegistry,
@@ -215,6 +235,28 @@ mod tests {
     }
 
     #[test]
+    fn save_registry_reports_serializer_errors() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("instances.toml");
+
+        let err =
+            save_registry_path_with(&path, &ManagedRuntimeInstanceRegistry::default(), |_| {
+                Err(toml::ser::Error::custom(
+                    "forced registry serializer failure",
+                ))
+            })
+            .expect_err("serializer should fail");
+
+        assert_error_contains(
+            &err,
+            &[
+                "serialize runtime instance registry",
+                "forced registry serializer failure",
+            ],
+        );
+    }
+
+    #[test]
     fn ensure_registry_parent_accepts_parentless_relative_paths() {
         ensure_registry_parent(Path::new("instances.toml")).expect("relative path parentless");
         ensure_registry_parent(Path::new("/")).expect("root path parentless");
@@ -224,16 +266,19 @@ mod tests {
     fn upsert_instance_replaces_existing_and_sorts_new_records() {
         let mut registry = ManagedRuntimeInstanceRegistry::default();
         upsert_instance(&mut registry, sample_record("radrootsd", "b"));
+        upsert_instance(&mut registry, sample_record("radrootsd", "a"));
         upsert_instance(&mut registry, sample_record("myc", "a"));
 
         let mut replacement = sample_record("radrootsd", "b");
         replacement.installed_version = "0.2.0".to_string();
         upsert_instance(&mut registry, replacement);
 
-        assert_eq!(registry.instances.len(), 2);
+        assert_eq!(registry.instances.len(), 3);
         assert_eq!(registry.instances[0].runtime_id, "myc");
-        assert_eq!(registry.instances[1].runtime_id, "radrootsd");
-        assert_eq!(registry.instances[1].installed_version, "0.2.0");
+        assert_eq!(registry.instances[1].instance_id, "a");
+        assert_eq!(registry.instances[2].runtime_id, "radrootsd");
+        assert_eq!(registry.instances[2].instance_id, "b");
+        assert_eq!(registry.instances[2].installed_version, "0.2.0");
     }
 
     #[test]

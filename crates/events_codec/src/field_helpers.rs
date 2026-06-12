@@ -7,10 +7,8 @@ use alloc::{
 };
 
 use crate::d_tag::validate_d_tag;
-#[cfg(feature = "serde_json")]
 use crate::d_tag::validate_d_tag_tag;
 use crate::error::EventEncodeError;
-#[cfg(feature = "serde_json")]
 use crate::error::EventParseError;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -31,7 +29,6 @@ pub(crate) fn address_string(
     Ok(format!("{kind}:{pubkey}:{d_tag}"))
 }
 
-#[cfg(feature = "serde_json")]
 pub(crate) fn parse_address_tag(
     value: &str,
     tag: &'static str,
@@ -62,7 +59,6 @@ pub(crate) fn parse_address_tag(
     })
 }
 
-#[cfg(feature = "serde_json")]
 pub(crate) fn parse_address_tag_with_kind(
     value: &str,
     expected_kind: u32,
@@ -94,7 +90,6 @@ pub(crate) fn validate_lowercase_hex_64(
     }
 }
 
-#[cfg(feature = "serde_json")]
 pub(crate) fn validate_lowercase_hex_64_tag(
     value: &str,
     tag: &'static str,
@@ -138,7 +133,6 @@ pub(crate) fn validate_non_empty_field(
     }
 }
 
-#[cfg(feature = "serde_json")]
 pub(crate) fn validate_non_empty_tag_value(
     value: &str,
     tag: &'static str,
@@ -172,7 +166,6 @@ where
     tags.push(tag);
 }
 
-#[cfg(feature = "serde_json")]
 pub(crate) fn required_tag_value(
     tags: &[Vec<String>],
     key: &'static str,
@@ -191,7 +184,6 @@ pub(crate) fn required_tag_value(
         })
 }
 
-#[cfg(feature = "serde_json")]
 pub(crate) fn optional_tag_value(
     tags: &[Vec<String>],
     key: &'static str,
@@ -210,7 +202,6 @@ pub(crate) fn optional_tag_value(
     Ok(Some(value))
 }
 
-#[cfg(feature = "serde_json")]
 pub(crate) fn tag_values(
     tags: &[Vec<String>],
     key: &'static str,
@@ -229,7 +220,6 @@ pub(crate) fn tag_values(
         .collect()
 }
 
-#[cfg(feature = "serde_json")]
 pub(crate) fn require_empty_content(
     content: &str,
     field: &'static str,
@@ -268,7 +258,6 @@ mod tests {
         ));
     }
 
-    #[cfg(feature = "serde_json")]
     #[test]
     fn address_parser_accepts_valid_radroots_address() {
         let address = parse_address_tag("30078:workspace_pubkey:AAAAAAAAAAAAAAAAAAAAAA", "a")
@@ -279,7 +268,6 @@ mod tests {
         assert_eq!(address.d_tag, VALID_D_TAG);
     }
 
-    #[cfg(feature = "serde_json")]
     #[test]
     fn address_parser_rejects_invalid_radroots_addresses() {
         assert!(matches!(
@@ -320,7 +308,6 @@ mod tests {
         ));
     }
 
-    #[cfg(feature = "serde_json")]
     #[test]
     fn lowercase_hex_tag_validation_maps_to_parse_error() {
         assert!(validate_lowercase_hex_64_tag(VALID_HASH, "x").is_ok());
@@ -342,7 +329,6 @@ mod tests {
         ));
     }
 
-    #[cfg(feature = "serde_json")]
     #[test]
     fn tag_helpers_parse_required_optional_and_repeated_values() {
         let tags = vec![

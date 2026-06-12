@@ -164,12 +164,10 @@ fn listing_parse_rejects_non_listing_kind() {
     let mut event = listing_event(&listing_value);
     event.kind = KIND_PROFILE;
 
-    assert!(matches!(
-        listing::parse_event(&event),
-        Err(listing::RadrootsTradeListingParseError::InvalidKind(
-            KIND_PROFILE
-        ))
-    ));
+    assert_eq!(
+        listing::parse_event(&event).expect_err("listing kind error"),
+        listing::RadrootsTradeListingParseError::InvalidKind(KIND_PROFILE)
+    );
 }
 
 #[test]

@@ -419,6 +419,7 @@ pub struct RadrootsListingInventoryAccountingProjection {
     pub issues: Vec<RadrootsListingInventoryAccountingIssue>,
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 pub fn reduce_active_order_events<I, J, K, L, M, N, O, P, Q>(
     order_id: &str,
     requests: I,
@@ -442,6 +443,32 @@ where
     P: IntoIterator<Item = RadrootsActiveOrderPaymentRecord>,
     Q: IntoIterator<Item = RadrootsActiveOrderSettlementRecord>,
 {
+    reduce_active_order_event_records(
+        order_id,
+        requests.into_iter().collect(),
+        decisions.into_iter().collect(),
+        revision_proposals.into_iter().collect(),
+        revision_decisions.into_iter().collect(),
+        fulfillments.into_iter().collect(),
+        cancellations.into_iter().collect(),
+        receipts.into_iter().collect(),
+        payments.into_iter().collect(),
+        settlements.into_iter().collect(),
+    )
+}
+
+fn reduce_active_order_event_records(
+    order_id: &str,
+    requests: Vec<RadrootsActiveOrderRequestRecord>,
+    decisions: Vec<RadrootsActiveOrderDecisionRecord>,
+    revision_proposals: Vec<RadrootsActiveOrderRevisionProposalRecord>,
+    revision_decisions: Vec<RadrootsActiveOrderRevisionDecisionRecord>,
+    fulfillments: Vec<RadrootsActiveOrderFulfillmentRecord>,
+    cancellations: Vec<RadrootsActiveOrderCancellationRecord>,
+    receipts: Vec<RadrootsActiveOrderReceiptRecord>,
+    payments: Vec<RadrootsActiveOrderPaymentRecord>,
+    settlements: Vec<RadrootsActiveOrderSettlementRecord>,
+) -> RadrootsActiveOrderProjection {
     let requests = unique_request_records(requests);
     let decisions = unique_decision_records(decisions);
     let revision_proposals = unique_revision_proposal_records(revision_proposals);
@@ -640,6 +667,7 @@ where
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 pub fn reduce_listing_inventory_accounting<I, J, K, L, M, N, O, P>(
     listing_addr: &str,
     listing_event_id: &str,
@@ -662,6 +690,32 @@ where
     O: IntoIterator<Item = RadrootsActiveOrderCancellationRecord>,
     P: IntoIterator<Item = RadrootsActiveOrderReceiptRecord>,
 {
+    reduce_listing_inventory_accounting_records(
+        listing_addr,
+        listing_event_id,
+        bins.into_iter().collect(),
+        requests.into_iter().collect(),
+        decisions.into_iter().collect(),
+        revision_proposals.into_iter().collect(),
+        revision_decisions.into_iter().collect(),
+        fulfillments.into_iter().collect(),
+        cancellations.into_iter().collect(),
+        receipts.into_iter().collect(),
+    )
+}
+
+fn reduce_listing_inventory_accounting_records(
+    listing_addr: &str,
+    listing_event_id: &str,
+    bins: Vec<RadrootsListingInventoryBinAvailability>,
+    requests: Vec<RadrootsActiveOrderRequestRecord>,
+    decisions: Vec<RadrootsActiveOrderDecisionRecord>,
+    revision_proposals: Vec<RadrootsActiveOrderRevisionProposalRecord>,
+    revision_decisions: Vec<RadrootsActiveOrderRevisionDecisionRecord>,
+    fulfillments: Vec<RadrootsActiveOrderFulfillmentRecord>,
+    cancellations: Vec<RadrootsActiveOrderCancellationRecord>,
+    receipts: Vec<RadrootsActiveOrderReceiptRecord>,
+) -> RadrootsListingInventoryAccountingProjection {
     let (mut bins, mut issues) = normalized_listing_inventory_bins(bins);
     let requests = unique_request_records(requests)
         .into_iter()
@@ -927,12 +981,11 @@ pub fn radroots_trade_order_economics_digest(
     Ok(value)
 }
 
-fn unique_request_records<I>(requests: I) -> Vec<RadrootsActiveOrderRequestRecord>
-where
-    I: IntoIterator<Item = RadrootsActiveOrderRequestRecord>,
-{
+fn unique_request_records(
+    requests: Vec<RadrootsActiveOrderRequestRecord>,
+) -> Vec<RadrootsActiveOrderRequestRecord> {
     let mut unique = Vec::new();
-    let mut records = requests.into_iter().collect::<Vec<_>>();
+    let mut records = requests;
     records.sort_by(|left, right| left.event_id.cmp(&right.event_id));
     for request in records {
         if unique
@@ -947,12 +1000,11 @@ where
     unique
 }
 
-fn unique_decision_records<I>(decisions: I) -> Vec<RadrootsActiveOrderDecisionRecord>
-where
-    I: IntoIterator<Item = RadrootsActiveOrderDecisionRecord>,
-{
+fn unique_decision_records(
+    decisions: Vec<RadrootsActiveOrderDecisionRecord>,
+) -> Vec<RadrootsActiveOrderDecisionRecord> {
     let mut unique = Vec::new();
-    let mut records = decisions.into_iter().collect::<Vec<_>>();
+    let mut records = decisions;
     records.sort_by(|left, right| left.event_id.cmp(&right.event_id));
     for decision in records {
         if unique
@@ -967,14 +1019,11 @@ where
     unique
 }
 
-fn unique_revision_proposal_records<I>(
-    revision_proposals: I,
-) -> Vec<RadrootsActiveOrderRevisionProposalRecord>
-where
-    I: IntoIterator<Item = RadrootsActiveOrderRevisionProposalRecord>,
-{
+fn unique_revision_proposal_records(
+    revision_proposals: Vec<RadrootsActiveOrderRevisionProposalRecord>,
+) -> Vec<RadrootsActiveOrderRevisionProposalRecord> {
     let mut unique = Vec::new();
-    let mut records = revision_proposals.into_iter().collect::<Vec<_>>();
+    let mut records = revision_proposals;
     records.sort_by(|left, right| left.event_id.cmp(&right.event_id));
     for proposal in records {
         if unique
@@ -989,14 +1038,11 @@ where
     unique
 }
 
-fn unique_revision_decision_records<I>(
-    revision_decisions: I,
-) -> Vec<RadrootsActiveOrderRevisionDecisionRecord>
-where
-    I: IntoIterator<Item = RadrootsActiveOrderRevisionDecisionRecord>,
-{
+fn unique_revision_decision_records(
+    revision_decisions: Vec<RadrootsActiveOrderRevisionDecisionRecord>,
+) -> Vec<RadrootsActiveOrderRevisionDecisionRecord> {
     let mut unique = Vec::new();
-    let mut records = revision_decisions.into_iter().collect::<Vec<_>>();
+    let mut records = revision_decisions;
     records.sort_by(|left, right| left.event_id.cmp(&right.event_id));
     for decision in records {
         if unique
@@ -1011,12 +1057,11 @@ where
     unique
 }
 
-fn unique_fulfillment_records<I>(fulfillments: I) -> Vec<RadrootsActiveOrderFulfillmentRecord>
-where
-    I: IntoIterator<Item = RadrootsActiveOrderFulfillmentRecord>,
-{
+fn unique_fulfillment_records(
+    fulfillments: Vec<RadrootsActiveOrderFulfillmentRecord>,
+) -> Vec<RadrootsActiveOrderFulfillmentRecord> {
     let mut unique = Vec::new();
-    let mut records = fulfillments.into_iter().collect::<Vec<_>>();
+    let mut records = fulfillments;
     records.sort_by(|left, right| left.event_id.cmp(&right.event_id));
     for fulfillment in records {
         if unique
@@ -1031,12 +1076,11 @@ where
     unique
 }
 
-fn unique_cancellation_records<I>(cancellations: I) -> Vec<RadrootsActiveOrderCancellationRecord>
-where
-    I: IntoIterator<Item = RadrootsActiveOrderCancellationRecord>,
-{
+fn unique_cancellation_records(
+    cancellations: Vec<RadrootsActiveOrderCancellationRecord>,
+) -> Vec<RadrootsActiveOrderCancellationRecord> {
     let mut unique = Vec::new();
-    let mut records = cancellations.into_iter().collect::<Vec<_>>();
+    let mut records = cancellations;
     records.sort_by(|left, right| left.event_id.cmp(&right.event_id));
     for cancellation in records {
         if unique
@@ -1051,12 +1095,11 @@ where
     unique
 }
 
-fn unique_receipt_records<I>(receipts: I) -> Vec<RadrootsActiveOrderReceiptRecord>
-where
-    I: IntoIterator<Item = RadrootsActiveOrderReceiptRecord>,
-{
+fn unique_receipt_records(
+    receipts: Vec<RadrootsActiveOrderReceiptRecord>,
+) -> Vec<RadrootsActiveOrderReceiptRecord> {
     let mut unique = Vec::new();
-    let mut records = receipts.into_iter().collect::<Vec<_>>();
+    let mut records = receipts;
     records.sort_by(|left, right| left.event_id.cmp(&right.event_id));
     for receipt in records {
         if unique
@@ -1071,12 +1114,11 @@ where
     unique
 }
 
-fn unique_payment_records<I>(payments: I) -> Vec<RadrootsActiveOrderPaymentRecord>
-where
-    I: IntoIterator<Item = RadrootsActiveOrderPaymentRecord>,
-{
+fn unique_payment_records(
+    payments: Vec<RadrootsActiveOrderPaymentRecord>,
+) -> Vec<RadrootsActiveOrderPaymentRecord> {
     let mut unique = Vec::new();
-    let mut records = payments.into_iter().collect::<Vec<_>>();
+    let mut records = payments;
     records.sort_by(|left, right| left.event_id.cmp(&right.event_id));
     for payment in records {
         if unique
@@ -1091,12 +1133,11 @@ where
     unique
 }
 
-fn unique_settlement_records<I>(settlements: I) -> Vec<RadrootsActiveOrderSettlementRecord>
-where
-    I: IntoIterator<Item = RadrootsActiveOrderSettlementRecord>,
-{
+fn unique_settlement_records(
+    settlements: Vec<RadrootsActiveOrderSettlementRecord>,
+) -> Vec<RadrootsActiveOrderSettlementRecord> {
     let mut unique = Vec::new();
-    let mut records = settlements.into_iter().collect::<Vec<_>>();
+    let mut records = settlements;
     records.sort_by(|left, right| left.event_id.cmp(&right.event_id));
     for settlement in records {
         if unique
@@ -3652,7 +3693,8 @@ mod tests {
         RadrootsListingInventoryBinAvailability, RadrootsListingInventoryOrderReservation,
         RadrootsTradeOrderCanonicalizationError, add_inventory_reservation,
         canonicalize_active_order_decision_for_signer,
-        canonicalize_active_order_request_for_signer, radroots_trade_order_economics_digest,
+        canonicalize_active_order_request_for_signer, projection_issue_event_ids,
+        radroots_trade_order_economics_digest,
         reduce_active_order_events as reduce_active_order_events_with_revisions,
         reduce_listing_inventory_accounting as reduce_listing_inventory_accounting_with_revisions,
     };
@@ -5583,5 +5625,228 @@ mod tests {
                 event_ids: vec!["decision-1".to_string(), "decision-2".to_string()]
             }]
         );
+    }
+
+    #[test]
+    fn projection_issue_event_ids_covers_all_issue_variants() {
+        macro_rules! issue {
+            ($variant:ident, $id:expr) => {
+                RadrootsActiveOrderReducerIssue::$variant {
+                    event_id: $id.to_string(),
+                }
+            };
+        }
+
+        let issues = vec![
+            RadrootsActiveOrderReducerIssue::MissingRequest,
+            RadrootsActiveOrderReducerIssue::MultipleRequests {
+                event_ids: vec!["multi-b".to_string(), "multi-a".to_string()],
+            },
+            issue!(RequestPayloadInvalid, "request-payload"),
+            issue!(RequestOrderIdMismatch, "request-order"),
+            issue!(RequestAuthorMismatch, "request-author"),
+            issue!(RequestListingAddressInvalid, "request-listing-address"),
+            issue!(RequestSellerListingMismatch, "request-seller-listing"),
+            issue!(DecisionPayloadInvalid, "decision-payload"),
+            issue!(DecisionOrderIdMismatch, "decision-order"),
+            issue!(DecisionAuthorMismatch, "decision-author"),
+            issue!(DecisionCounterpartyMismatch, "decision-counterparty"),
+            issue!(DecisionBuyerMismatch, "decision-buyer"),
+            issue!(DecisionSellerMismatch, "decision-seller"),
+            issue!(DecisionListingAddressInvalid, "decision-listing-address"),
+            issue!(DecisionListingMismatch, "decision-listing"),
+            issue!(DecisionRootMismatch, "decision-root"),
+            issue!(DecisionPreviousMismatch, "decision-previous"),
+            issue!(
+                DecisionMissingInventoryCommitments,
+                "decision-missing-commitments"
+            ),
+            issue!(
+                DecisionInventoryCommitmentMismatch,
+                "decision-commitment-mismatch"
+            ),
+            issue!(DecisionMissingReason, "decision-missing-reason"),
+            RadrootsActiveOrderReducerIssue::ConflictingDecisions {
+                event_ids: vec!["conflict-b".to_string(), "conflict-a".to_string()],
+            },
+            issue!(
+                RevisionProposalWithoutAcceptedDecision,
+                "proposal-without-accepted"
+            ),
+            issue!(RevisionProposalPayloadInvalid, "proposal-payload"),
+            issue!(RevisionProposalOrderIdMismatch, "proposal-order"),
+            issue!(RevisionProposalAuthorMismatch, "proposal-author"),
+            issue!(
+                RevisionProposalCounterpartyMismatch,
+                "proposal-counterparty"
+            ),
+            issue!(RevisionProposalBuyerMismatch, "proposal-buyer"),
+            issue!(RevisionProposalSellerMismatch, "proposal-seller"),
+            issue!(
+                RevisionProposalListingAddressInvalid,
+                "proposal-listing-address"
+            ),
+            issue!(RevisionProposalListingMismatch, "proposal-listing"),
+            issue!(RevisionProposalRootMismatch, "proposal-root"),
+            issue!(RevisionProposalPreviousMismatch, "proposal-previous"),
+            issue!(RevisionDecisionWithoutProposal, "revision-without-proposal"),
+            issue!(RevisionDecisionPayloadInvalid, "revision-payload"),
+            issue!(RevisionDecisionOrderIdMismatch, "revision-order"),
+            issue!(RevisionDecisionAuthorMismatch, "revision-author"),
+            issue!(
+                RevisionDecisionCounterpartyMismatch,
+                "revision-counterparty"
+            ),
+            issue!(RevisionDecisionBuyerMismatch, "revision-buyer"),
+            issue!(RevisionDecisionSellerMismatch, "revision-seller"),
+            issue!(
+                RevisionDecisionListingAddressInvalid,
+                "revision-listing-address"
+            ),
+            issue!(RevisionDecisionListingMismatch, "revision-listing"),
+            issue!(RevisionDecisionRootMismatch, "revision-root"),
+            issue!(RevisionDecisionPreviousMismatch, "revision-previous"),
+            issue!(RevisionDecisionRevisionIdMismatch, "revision-id"),
+            issue!(
+                FulfillmentWithoutAcceptedDecision,
+                "fulfillment-without-accepted"
+            ),
+            issue!(FulfillmentPayloadInvalid, "fulfillment-payload"),
+            issue!(FulfillmentOrderIdMismatch, "fulfillment-order"),
+            issue!(FulfillmentAuthorMismatch, "fulfillment-author"),
+            issue!(FulfillmentCounterpartyMismatch, "fulfillment-counterparty"),
+            issue!(FulfillmentBuyerMismatch, "fulfillment-buyer"),
+            issue!(FulfillmentSellerMismatch, "fulfillment-seller"),
+            issue!(
+                FulfillmentListingAddressInvalid,
+                "fulfillment-listing-address"
+            ),
+            issue!(FulfillmentListingMismatch, "fulfillment-listing"),
+            issue!(FulfillmentRootMismatch, "fulfillment-root"),
+            issue!(FulfillmentPreviousMismatch, "fulfillment-previous"),
+            issue!(
+                FulfillmentStatusNotPublishable,
+                "fulfillment-not-publishable"
+            ),
+            issue!(
+                FulfillmentUnsupportedTransition,
+                "fulfillment-unsupported-transition"
+            ),
+            RadrootsActiveOrderReducerIssue::ForkedFulfillments {
+                event_ids: vec![
+                    "fulfillment-fork-b".to_string(),
+                    "fulfillment-fork-a".to_string(),
+                ],
+            },
+            issue!(
+                CancellationWithoutCancellableOrder,
+                "cancellation-without-cancellable"
+            ),
+            issue!(CancellationPayloadInvalid, "cancellation-payload"),
+            issue!(CancellationOrderIdMismatch, "cancellation-order"),
+            issue!(CancellationAuthorMismatch, "cancellation-author"),
+            issue!(
+                CancellationCounterpartyMismatch,
+                "cancellation-counterparty"
+            ),
+            issue!(CancellationBuyerMismatch, "cancellation-buyer"),
+            issue!(CancellationSellerMismatch, "cancellation-seller"),
+            issue!(
+                CancellationListingAddressInvalid,
+                "cancellation-listing-address"
+            ),
+            issue!(CancellationListingMismatch, "cancellation-listing"),
+            issue!(CancellationRootMismatch, "cancellation-root"),
+            issue!(CancellationPreviousMismatch, "cancellation-previous"),
+            issue!(
+                CancellationAfterFulfillment,
+                "cancellation-after-fulfillment"
+            ),
+            issue!(
+                ReceiptWithoutEligibleFulfillment,
+                "receipt-without-eligible"
+            ),
+            issue!(ReceiptPayloadInvalid, "receipt-payload"),
+            issue!(ReceiptOrderIdMismatch, "receipt-order"),
+            issue!(ReceiptAuthorMismatch, "receipt-author"),
+            issue!(ReceiptCounterpartyMismatch, "receipt-counterparty"),
+            issue!(ReceiptBuyerMismatch, "receipt-buyer"),
+            issue!(ReceiptSellerMismatch, "receipt-seller"),
+            issue!(ReceiptListingAddressInvalid, "receipt-listing-address"),
+            issue!(ReceiptListingMismatch, "receipt-listing"),
+            issue!(ReceiptRootMismatch, "receipt-root"),
+            issue!(ReceiptPreviousMismatch, "receipt-previous"),
+            issue!(PaymentWithoutAcceptedAgreement, "payment-without-agreement"),
+            issue!(PaymentPayloadInvalid, "payment-payload"),
+            issue!(PaymentOrderIdMismatch, "payment-order"),
+            issue!(PaymentAuthorMismatch, "payment-author"),
+            issue!(PaymentCounterpartyMismatch, "payment-counterparty"),
+            issue!(PaymentBuyerMismatch, "payment-buyer"),
+            issue!(PaymentSellerMismatch, "payment-seller"),
+            issue!(PaymentListingAddressInvalid, "payment-listing-address"),
+            issue!(PaymentListingMismatch, "payment-listing"),
+            issue!(PaymentRootMismatch, "payment-root"),
+            issue!(PaymentPreviousMismatch, "payment-previous"),
+            issue!(PaymentAgreementMismatch, "payment-agreement"),
+            issue!(PaymentQuoteMismatch, "payment-quote"),
+            issue!(PaymentQuoteVersionMismatch, "payment-quote-version"),
+            issue!(PaymentEconomicsDigestMismatch, "payment-digest"),
+            issue!(PaymentAmountMismatch, "payment-amount"),
+            issue!(PaymentCurrencyMismatch, "payment-currency"),
+            issue!(PaymentAfterCancellation, "payment-after-cancellation"),
+            issue!(RevisionAfterPayment, "revision-after-payment"),
+            RadrootsActiveOrderReducerIssue::DuplicatePayments {
+                event_ids: vec![
+                    "payment-duplicate-b".to_string(),
+                    "payment-duplicate-a".to_string(),
+                ],
+            },
+            issue!(SettlementWithoutValidPayment, "settlement-without-payment"),
+            issue!(SettlementPayloadInvalid, "settlement-payload"),
+            issue!(SettlementOrderIdMismatch, "settlement-order"),
+            issue!(SettlementAuthorMismatch, "settlement-author"),
+            issue!(SettlementCounterpartyMismatch, "settlement-counterparty"),
+            issue!(SettlementBuyerMismatch, "settlement-buyer"),
+            issue!(SettlementSellerMismatch, "settlement-seller"),
+            issue!(
+                SettlementListingAddressInvalid,
+                "settlement-listing-address"
+            ),
+            issue!(SettlementListingMismatch, "settlement-listing"),
+            issue!(SettlementRootMismatch, "settlement-root"),
+            issue!(SettlementPreviousMismatch, "settlement-previous"),
+            issue!(SettlementPaymentEventMismatch, "settlement-payment-event"),
+            issue!(SettlementAgreementMismatch, "settlement-agreement"),
+            issue!(SettlementQuoteMismatch, "settlement-quote"),
+            issue!(SettlementQuoteVersionMismatch, "settlement-quote-version"),
+            issue!(SettlementEconomicsDigestMismatch, "settlement-digest"),
+            issue!(SettlementAmountMismatch, "settlement-amount"),
+            issue!(SettlementCurrencyMismatch, "settlement-currency"),
+            RadrootsActiveOrderReducerIssue::DuplicateSettlements {
+                event_ids: vec![
+                    "settlement-duplicate-b".to_string(),
+                    "settlement-duplicate-a".to_string(),
+                ],
+            },
+            RadrootsActiveOrderReducerIssue::ForkedLifecycle {
+                event_ids: vec!["lifecycle-b".to_string(), "lifecycle-a".to_string()],
+            },
+        ];
+
+        let event_ids = projection_issue_event_ids(&issues);
+
+        assert_eq!(
+            event_ids.first().map(String::as_str),
+            Some("cancellation-after-fulfillment")
+        );
+        assert_eq!(
+            event_ids.last().map(String::as_str),
+            Some("settlement-without-payment")
+        );
+        assert_eq!(event_ids.contains(&"payment-digest".to_string()), true);
+        assert_eq!(event_ids.contains(&"multi-a".to_string()), true);
+        assert_eq!(event_ids.contains(&"multi-b".to_string()), true);
+        assert_eq!(event_ids.contains(&"missing-request".to_string()), false);
+        assert_eq!(event_ids.len(), 126);
     }
 }

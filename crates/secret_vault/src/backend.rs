@@ -27,3 +27,28 @@ impl RadrootsSecretBackend {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn backend_kind_maps_all_backend_variants() {
+        assert_eq!(
+            RadrootsSecretBackend::HostVault(RadrootsHostVaultPolicy::desktop()).kind(),
+            RadrootsSecretBackendKind::HostVault
+        );
+        assert_eq!(
+            RadrootsSecretBackend::EncryptedFile.kind(),
+            RadrootsSecretBackendKind::EncryptedFile
+        );
+        assert_eq!(
+            RadrootsSecretBackend::ExternalCommand.kind(),
+            RadrootsSecretBackendKind::ExternalCommand
+        );
+        assert_eq!(
+            RadrootsSecretBackend::Memory.kind(),
+            RadrootsSecretBackendKind::Memory
+        );
+    }
+}

@@ -165,7 +165,8 @@ mod tests {
 
     use super::{bootstrap_runtime, resolve_shared_paths, root_class_path};
     use crate::{
-        RadrootsRuntimeManagerError, model::RadrootsRuntimeManagementContract, parse_contract_str,
+        ManagementPathContract, RadrootsRuntimeManagerError,
+        model::RadrootsRuntimeManagementContract, parse_contract_str,
     };
 
     const CONTRACT: &str = r#"
@@ -325,22 +326,35 @@ preferred_cli_binding = true
 
     #[test]
     fn resolve_shared_paths_reports_unknown_root_class() {
-        let mut contract = contract();
-        contract
-            .paths
-            .get_mut("interactive_user_managed")
-            .expect("path spec")
-            .instance_registry_root_class = "bogus".to_string();
+        let mutators: &[fn(&mut ManagementPathContract)] = &[
+            |paths| paths.instance_registry_root_class = "bogus".to_string(),
+            |paths| paths.artifact_cache_root_class = "bogus".to_string(),
+            |paths| paths.install_root_class = "bogus".to_string(),
+            |paths| paths.state_root_class = "bogus".to_string(),
+            |paths| paths.logs_root_class = "bogus".to_string(),
+            |paths| paths.run_root_class = "bogus".to_string(),
+            |paths| paths.secrets_root_class = "bogus".to_string(),
+        ];
 
-        let err = resolve_shared_paths(
-            &contract,
-            &linux_resolver(),
-            RadrootsPathProfile::InteractiveUser,
-            &RadrootsPathOverrides::default(),
-            "interactive_user_managed",
-        )
-        .expect_err("unknown root class should fail");
-        assert_error_contains(&err, &["unknown root class `bogus`"]);
+        for mutate in mutators {
+            let mut contract = contract();
+            mutate(
+                contract
+                    .paths
+                    .get_mut("interactive_user_managed")
+                    .expect("path spec"),
+            );
+
+            let err = resolve_shared_paths(
+                &contract,
+                &linux_resolver(),
+                RadrootsPathProfile::InteractiveUser,
+                &RadrootsPathOverrides::default(),
+                "interactive_user_managed",
+            )
+            .expect_err("unknown root class should fail");
+            assert_error_contains(&err, &["unknown root class `bogus`"]);
+        }
     }
 
     #[test]

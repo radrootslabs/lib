@@ -35,7 +35,14 @@ pub fn install_binary(
     paths: &ManagedRuntimeInstancePaths,
     binary_name: &str,
 ) -> Result<PathBuf, RadrootsRuntimeManagerError> {
-    let source_binary_path = source_binary_path.as_ref();
+    install_binary_path(source_binary_path.as_ref(), paths, binary_name)
+}
+
+fn install_binary_path(
+    source_binary_path: &Path,
+    paths: &ManagedRuntimeInstancePaths,
+    binary_name: &str,
+) -> Result<PathBuf, RadrootsRuntimeManagerError> {
     ensure_instance_layout(paths)?;
     let installed_binary_path = paths.install_dir.join(binary_name);
     fs::copy(source_binary_path, &installed_binary_path).map_err(|source| {
@@ -55,7 +62,15 @@ pub fn extract_binary_archive(
     paths: &ManagedRuntimeInstancePaths,
     binary_name: &str,
 ) -> Result<PathBuf, RadrootsRuntimeManagerError> {
-    let archive_path = archive_path.as_ref();
+    extract_binary_archive_path(archive_path.as_ref(), archive_format, paths, binary_name)
+}
+
+fn extract_binary_archive_path(
+    archive_path: &Path,
+    archive_format: &str,
+    paths: &ManagedRuntimeInstancePaths,
+    binary_name: &str,
+) -> Result<PathBuf, RadrootsRuntimeManagerError> {
     remove_path_if_exists(&paths.install_dir)?;
     ensure_instance_layout(paths)?;
 
@@ -109,7 +124,10 @@ pub fn write_managed_file(
     path: impl AsRef<Path>,
     contents: &str,
 ) -> Result<(), RadrootsRuntimeManagerError> {
-    let path = path.as_ref();
+    write_managed_file_path(path.as_ref(), contents)
+}
+
+fn write_managed_file_path(path: &Path, contents: &str) -> Result<(), RadrootsRuntimeManagerError> {
     ensure_parent_dir(path)?;
     fs::write(path, contents).map_err(|source| RadrootsRuntimeManagerError::WriteManagedFile {
         path: path.to_path_buf(),
@@ -121,7 +139,10 @@ pub fn write_secret_file(
     path: impl AsRef<Path>,
     contents: &str,
 ) -> Result<(), RadrootsRuntimeManagerError> {
-    let path = path.as_ref();
+    write_secret_file_path(path.as_ref(), contents)
+}
+
+fn write_secret_file_path(path: &Path, contents: &str) -> Result<(), RadrootsRuntimeManagerError> {
     ensure_parent_dir(path)?;
     fs::write(path, contents).map_err(|source| RadrootsRuntimeManagerError::WriteManagedFile {
         path: path.to_path_buf(),
@@ -132,7 +153,10 @@ pub fn write_secret_file(
 }
 
 pub fn read_secret_file(path: impl AsRef<Path>) -> Result<String, RadrootsRuntimeManagerError> {
-    let path = path.as_ref();
+    read_secret_file_path(path.as_ref())
+}
+
+fn read_secret_file_path(path: &Path) -> Result<String, RadrootsRuntimeManagerError> {
     fs::read_to_string(path).map_err(|source| RadrootsRuntimeManagerError::ReadManagedFile {
         path: path.to_path_buf(),
         source,
@@ -145,7 +169,15 @@ pub fn start_process(
     envs: &[(String, String)],
     paths: &ManagedRuntimeInstancePaths,
 ) -> Result<u32, RadrootsRuntimeManagerError> {
-    let binary_path = binary_path.as_ref();
+    start_process_path(binary_path.as_ref(), args, envs, paths)
+}
+
+fn start_process_path(
+    binary_path: &Path,
+    args: &[String],
+    envs: &[(String, String)],
+    paths: &ManagedRuntimeInstancePaths,
+) -> Result<u32, RadrootsRuntimeManagerError> {
     ensure_instance_layout(paths)?;
     let stdout = open_log_file(&paths.stdout_log_path)?;
     let stderr = open_log_file(&paths.stderr_log_path)?;
@@ -190,13 +222,17 @@ pub fn stop_process(
         return Ok(false);
     }
 
+    let mut is_running = process_running_for_pid;
+    let mut terminate = terminate_process;
+    let mut force_kill = force_kill_process;
+    let mut sleep = thread::sleep;
     stop_process_for_pid(
         paths,
         pid,
-        process_running_for_pid,
-        terminate_process,
-        force_kill_process,
-        thread::sleep,
+        &mut is_running,
+        &mut terminate,
+        &mut force_kill,
+        &mut sleep,
     )
 }
 
@@ -230,20 +266,14 @@ fn serialize_instance_metadata_with(
     })
 }
 
-fn stop_process_for_pid<IsRunning, Terminate, ForceKill, Sleep>(
+fn stop_process_for_pid(
     paths: &ManagedRuntimeInstancePaths,
     pid: u32,
-    mut is_running: IsRunning,
-    terminate: Terminate,
-    force_kill: ForceKill,
-    mut sleep: Sleep,
-) -> Result<bool, RadrootsRuntimeManagerError>
-where
-    IsRunning: FnMut(u32) -> bool,
-    Terminate: FnOnce(u32) -> Result<(), RadrootsRuntimeManagerError>,
-    ForceKill: FnOnce(u32) -> Result<(), RadrootsRuntimeManagerError>,
-    Sleep: FnMut(Duration),
-{
+    is_running: &mut dyn FnMut(u32) -> bool,
+    terminate: &mut dyn FnMut(u32) -> Result<(), RadrootsRuntimeManagerError>,
+    force_kill: &mut dyn FnMut(u32) -> Result<(), RadrootsRuntimeManagerError>,
+    sleep: &mut dyn FnMut(Duration),
+) -> Result<bool, RadrootsRuntimeManagerError> {
     terminate(pid)?;
     for _ in 0..20 {
         if !is_running(pid) {
@@ -712,6 +742,20 @@ mod tests {
         ))
     }
 
+    fn ok_runtime_signal(_pid: u32) -> Result<(), RadrootsRuntimeManagerError> {
+        Ok(())
+    }
+
+    fn noop_runtime_sleep(_duration: Duration) {}
+
+    fn runtime_is_stopped(_pid: u32) -> bool {
+        false
+    }
+
+    fn runtime_is_running(_pid: u32) -> bool {
+        true
+    }
+
     #[test]
     fn layout_and_metadata_helpers_write_expected_files() {
         let dir = tempdir().expect("tempdir");
@@ -797,7 +841,8 @@ mod tests {
         fs::write(&binary, "#!/bin/sh\nexec sleep 30\n").expect("script");
         let paths = sample_paths(dir.path());
         let installed = install_binary(&binary, &paths, "sleepy.sh").expect("install");
-        let pid = start_process(&installed, &Vec::new(), &Vec::new(), &paths).expect("start");
+        let envs = vec![("RADROOTS_RUNTIME_MANAGER_TEST".to_owned(), "1".to_owned())];
+        let pid = start_process(&installed, &Vec::new(), &envs, &paths).expect("start");
         assert!(pid > 0);
         thread::sleep(Duration::from_millis(100));
         assert!(paths.pid_file_path.is_file());
@@ -1087,22 +1132,51 @@ mod tests {
         fs::write(&paths.pid_file_path, "42").expect("write pid");
 
         let mut polls = 0_u32;
+        let mut is_running = |_pid| {
+            polls += 1;
+            polls <= 20
+        };
+        let mut terminate = ok_runtime_signal;
+        let mut force_kill = ok_runtime_signal;
+        let mut sleep = noop_runtime_sleep;
         let stopped = stop_process_for_pid(
             &paths,
             42,
-            |_pid| {
-                polls += 1;
-                polls <= 20
-            },
-            |_pid| Ok(()),
-            |_pid| Ok(()),
-            |_duration| {},
+            &mut is_running,
+            &mut terminate,
+            &mut force_kill,
+            &mut sleep,
         )
         .expect("force-kill path should stop");
 
         assert!(stopped);
         assert!(!paths.pid_file_path.exists());
         assert_eq!(polls, 21);
+    }
+
+    #[test]
+    fn stop_process_for_pid_stops_after_terminate_poll() {
+        let dir = tempdir().expect("tempdir");
+        let paths = sample_paths(dir.path());
+        ensure_instance_layout(&paths).expect("layout");
+        fs::write(&paths.pid_file_path, "42").expect("write pid");
+
+        let mut is_running = runtime_is_stopped;
+        let mut terminate = ok_runtime_signal;
+        let mut force_kill = ok_runtime_signal;
+        let mut sleep = noop_runtime_sleep;
+        let stopped = stop_process_for_pid(
+            &paths,
+            42,
+            &mut is_running,
+            &mut terminate,
+            &mut force_kill,
+            &mut sleep,
+        )
+        .expect("terminate poll should stop");
+
+        assert!(stopped);
+        assert!(!paths.pid_file_path.exists());
     }
 
     #[test]
@@ -1113,15 +1187,19 @@ mod tests {
         fs::write(&paths.pid_file_path, "42").expect("write pid");
 
         let mut sleeps = 0_u32;
+        let mut is_running = runtime_is_running;
+        let mut terminate = ok_runtime_signal;
+        let mut force_kill = ok_runtime_signal;
+        let mut sleep = |_duration| {
+            sleeps += 1;
+        };
         let err = stop_process_for_pid(
             &paths,
             42,
-            |_pid| true,
-            |_pid| Ok(()),
-            |_pid| Ok(()),
-            |_duration| {
-                sleeps += 1;
-            },
+            &mut is_running,
+            &mut terminate,
+            &mut force_kill,
+            &mut sleep,
         )
         .expect_err("force-kill exhaustion should fail");
 

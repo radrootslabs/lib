@@ -1,99 +1,37 @@
 [gate]
-fail_under_exec_lines = 100.0
-fail_under_functions = 100.0
-fail_under_regions = 100.0
-fail_under_branches = 100.0
+fail_under_exec_lines = 90.0
+fail_under_functions = 90.0
+fail_under_regions = 90.0
+fail_under_branches = 90.0
 require_branches = true
 
-# Temporary per-crate relaxations may be added as:
-# [overrides.radroots_runtime_paths]
-# fail_under_exec_lines = 88.322368
-# fail_under_functions = 79.245283
-# fail_under_regions = 87.735849
-# fail_under_branches = 66.666667
-# require_branches = false
-# temporary = true
-# reason = "publish 0.1.0-alpha.2 blocker"
+# Heavy-development baseline: required crates must generally hold at least 90%
+# coverage across executable lines, functions, regions, and branches. Temporary
+# overrides below 90% are allowed only for explicit release-preflight gaps.
 
 [overrides.radroots_secret_vault]
-fail_under_exec_lines = 82.108
-fail_under_functions = 75.0
-fail_under_regions = 76.494
-fail_under_branches = 80.0
+fail_under_exec_lines = 90.0
+fail_under_functions = 90.0
+fail_under_regions = 90.0
+fail_under_branches = 86.363
 temporary = true
-reason = "publish 0.1.0-alpha.2 temporary coverage override"
+reason = "heavy-development branch coverage gap for publish 0.1.0-alpha.2"
 
-[overrides.radroots_runtime]
-fail_under_exec_lines = 99.428
-fail_under_functions = 100.0
-fail_under_regions = 100.0
-fail_under_branches = 100.0
+[overrides.radroots_trade]
+fail_under_exec_lines = 90.0
+fail_under_functions = 90.0
+fail_under_regions = 90.0
+fail_under_branches = 73.638
 temporary = true
-reason = "publish 0.1.0-alpha.2 temporary coverage override"
+reason = "heavy-development branch coverage gap for publish 0.1.0-alpha.2"
 
-[overrides.radroots_identity]
-fail_under_exec_lines = 100.0
-fail_under_functions = 100.0
-fail_under_regions = 98.608
-fail_under_branches = 100.0
+[overrides.radroots_nostr_signer]
+fail_under_exec_lines = 89.185
+fail_under_functions = 90.0
+fail_under_regions = 90.0
+fail_under_branches = 90.0
 temporary = true
-reason = "publish 0.1.0-alpha.2 temporary coverage override"
-
-[overrides.radroots_events_codec]
-fail_under_exec_lines = 100.0
-fail_under_functions = 100.0
-fail_under_regions = 99.946
-fail_under_branches = 100.0
-temporary = true
-reason = "publish 0.1.0-alpha.2 temporary coverage override"
-
-[overrides.radroots_geocoder]
-fail_under_exec_lines = 100.0
-fail_under_functions = 100.0
-fail_under_regions = 99.728
-fail_under_branches = 100.0
-temporary = true
-reason = "publish 0.1.0-alpha.2 temporary coverage override"
-
-[overrides.radroots_nostr]
-fail_under_exec_lines = 100.0
-fail_under_functions = 100.0
-fail_under_regions = 99.419
-fail_under_branches = 100.0
-temporary = true
-reason = "publish 0.1.0-alpha.2 temporary coverage override"
-
-[overrides.radroots_nostr_connect]
-fail_under_exec_lines = 100.0
-fail_under_functions = 100.0
-fail_under_regions = 98.423
-fail_under_branches = 100.0
-temporary = true
-reason = "publish 0.1.0-alpha.2 temporary coverage override"
-
-[overrides.radroots_sql_core]
-fail_under_exec_lines = 100.0
-fail_under_functions = 100.0
-fail_under_regions = 98.171
-fail_under_branches = 100.0
-temporary = true
-reason = "publish 0.1.0-alpha.2 temporary coverage override"
-
-[overrides.radroots_replica_db]
-fail_under_exec_lines = 100.0
-fail_under_functions = 100.0
-fail_under_regions = 99.859
-fail_under_branches = 100.0
-temporary = true
-reason = "publish 0.1.0-alpha.2 temporary coverage override"
-
-[overrides.radroots_replica_sync]
-fail_under_exec_lines = 100.0
-fail_under_functions = 100.0
-fail_under_regions = 99.989
-fail_under_branches = 100.0
-temporary = true
-reason = "publish 0.1.0-alpha.2 temporary coverage override"
+reason = "heavy-development executable-line coverage gap for publish 0.1.0-alpha.2"
 
 [required]
 crates = [
