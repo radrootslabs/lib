@@ -37,6 +37,7 @@ in
       pkgs.coreutils
       pkgs.gitMinimal
       pkgs.gnugrep
+      pkgs.ripgrep
     ];
     initGit = true;
     command = ''

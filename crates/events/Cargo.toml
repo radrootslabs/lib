@@ -23,7 +23,9 @@ serde = { workspace = true, default-features = false, features = [
   "alloc",
   "derive",
 ], optional = true }
-serde_json = { workspace = true, default-features = false, features = ["alloc"] }
+serde_json = { workspace = true, default-features = false, features = [
+  "alloc",
+] }
 sha2 = { workspace = true, default-features = false }
 
 [dev-dependencies]
