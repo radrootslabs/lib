@@ -2,6 +2,7 @@
 
 mod contract;
 mod coverage;
+mod phase1_1;
 
 use std::env;
 use std::path::{Path, PathBuf};
@@ -23,6 +24,7 @@ fn usage() {
     eprintln!(
         "  cargo xtask sdk coverage refresh-summary [--reports-root <dir>] [--out <file>] [--status-out <file>]"
     );
+    eprintln!("  cargo xtask phase1-1 invariants");
 }
 
 fn workspace_root_with_override(override_root: Option<&str>) -> PathBuf {
@@ -73,6 +75,7 @@ fn run_sdk(args: &[String]) -> Result<(), String> {
 fn run(args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
         Some("sdk") => run_sdk(&args[1..]),
+        Some("phase1-1") => phase1_1::run(&args[1..], &workspace_root()),
         _ => Err("unknown command".to_string()),
     }
 }
@@ -276,6 +279,7 @@ mod tests {
             "help".to_string(),
         ])
         .expect("root run sdk coverage");
+        run(&["phase1-1".to_string(), "invariants".to_string()]).expect("phase1-1 invariants");
 
         let _ = fs::remove_dir_all(out_dir);
     }

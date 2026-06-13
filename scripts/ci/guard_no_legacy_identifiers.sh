@@ -11,6 +11,7 @@ scan_forbidden() {
     rg -nI \
       --glob '!AGENTS.md' \
       --glob '!scripts/ci/guard_no_legacy_identifiers.sh' \
+      --glob '!crates/xtask/src/phase1_1.rs' \
       -- "$pattern" "$@" ||
       true
   )"

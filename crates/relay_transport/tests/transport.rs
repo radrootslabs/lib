@@ -12,9 +12,10 @@ use radroots_outbox::{
 };
 use radroots_relay_transport::{
     RadrootsMockRelayFetchAdapter, RadrootsMockRelayPublishAdapter, RadrootsOutboxPublishPolicy,
-    RadrootsRelayFetchItem, RadrootsRelayFetchRequest, RadrootsRelayOutcome,
-    RadrootsRelayOutcomeKind, RadrootsRelayTargetSet, RadrootsRelayUrl, RadrootsRelayUrlPolicy,
-    fetch_and_ingest_relay_events, publish_claimed_outbox_event, publish_signed_event,
+    RadrootsRelayFetchItem, RadrootsRelayFetchOutcomeKind, RadrootsRelayFetchRequest,
+    RadrootsRelayOutcome, RadrootsRelayOutcomeKind, RadrootsRelayTargetSet, RadrootsRelayUrl,
+    RadrootsRelayUrlPolicy, fetch_and_ingest_relay_events, publish_claimed_outbox_event,
+    publish_signed_event,
 };
 
 const FIXTURE_ALICE_SECRET_KEY_HEX: &str =
@@ -220,7 +221,11 @@ async fn fetch_ingests_events_and_records_relay_observations() {
         },
         RadrootsRelayFetchItem::Closed {
             relay_url: RELAY_SECONDARY_WSS.to_owned(),
-            message: "closed: done".to_owned(),
+            message: "auth-required: challenge".to_owned(),
+        },
+        RadrootsRelayFetchItem::Closed {
+            relay_url: RELAY_TERTIARY_WSS.to_owned(),
+            message: "restricted: group write denied".to_owned(),
         },
         RadrootsRelayFetchItem::Notice {
             relay_url: RELAY_TERTIARY_WSS.to_owned(),
@@ -241,8 +246,38 @@ async fn fetch_ingests_events_and_records_relay_observations() {
     assert_eq!(receipt.unsupported_count, 1);
     assert_eq!(receipt.malformed_count, 1);
     assert_eq!(receipt.eose_count, 1);
-    assert_eq!(receipt.closed_count, 1);
+    assert_eq!(receipt.closed_count, 2);
     assert_eq!(receipt.notice_count, 1);
+    assert_eq!(receipt.relay_outcomes.len(), 4);
+    assert_eq!(receipt.relay_outcomes[0].relay_url, RELAY_PRIMARY_WSS);
+    assert_eq!(
+        receipt.relay_outcomes[0].kind,
+        RadrootsRelayFetchOutcomeKind::Eose
+    );
+    assert!(receipt.relay_outcomes[0].relay_outcome.is_none());
+    assert_eq!(receipt.relay_outcomes[1].relay_url, RELAY_SECONDARY_WSS);
+    assert_eq!(
+        receipt.relay_outcomes[1]
+            .relay_outcome
+            .as_ref()
+            .expect("auth outcome")
+            .kind,
+        RadrootsRelayOutcomeKind::AuthRequired
+    );
+    assert_eq!(receipt.relay_outcomes[2].relay_url, RELAY_TERTIARY_WSS);
+    assert_eq!(
+        receipt.relay_outcomes[2]
+            .relay_outcome
+            .as_ref()
+            .expect("restricted outcome")
+            .kind,
+        RadrootsRelayOutcomeKind::Restricted
+    );
+    assert_eq!(
+        receipt.relay_outcomes[3].kind,
+        RadrootsRelayFetchOutcomeKind::Notice
+    );
+    assert!(receipt.relay_outcomes[3].relay_outcome.is_none());
     assert_eq!(
         receipt.events[0].verification_status.as_deref(),
         Some(RadrootsEventVerificationStatus::Verified.as_str())
@@ -532,4 +567,43 @@ async fn outbox_publish_marks_published_when_policy_quorum_is_met_with_failure_d
         .await
         .expect("observations");
     assert_eq!(observations.len(), 2);
+}
+
+#[tokio::test]
+async fn smoke_relay_fetch_processes_one_thousand_event_receipts() {
+    let store = RadrootsEventStore::open_memory().await.expect("store");
+    let mut items = Vec::new();
+    for index in 0..1_000 {
+        let signed = signed_post(format!("fetch-smoke-{index}").as_str());
+        let relay_url = match index % 3 {
+            0 => RELAY_PRIMARY_WSS,
+            1 => RELAY_SECONDARY_WSS,
+            _ => RELAY_TERTIARY_WSS,
+        };
+        items.push(RadrootsRelayFetchItem::Event {
+            relay_url: relay_url.to_owned(),
+            raw_json: signed.raw_json,
+            observed_at_ms: 10_000 + index,
+        });
+    }
+    let adapter = RadrootsMockRelayFetchAdapter::new(items);
+    let receipt = fetch_and_ingest_relay_events(
+        &adapter,
+        &store,
+        RadrootsRelayFetchRequest::fetch(10_000, 1_000),
+    )
+    .await
+    .expect("fetch");
+
+    assert_eq!(receipt.inserted_count, 1_000);
+    assert_eq!(receipt.duplicate_count, 0);
+    assert_eq!(receipt.malformed_count, 0);
+    assert_eq!(receipt.unsupported_count, 0);
+    assert_eq!(receipt.events.len(), 1_000);
+    assert!(receipt.events.iter().all(|event| event.projection_eligible));
+    let replay = store
+        .events_since_cursor("fetch-smoke", 1_000)
+        .await
+        .expect("replay");
+    assert_eq!(replay.len(), 1_000);
 }

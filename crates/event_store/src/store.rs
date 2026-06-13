@@ -1129,4 +1129,51 @@ mod tests {
         assert_eq!(replay.len(), 1);
         assert_eq!(replay[0].event_id, second.id);
     }
+
+    #[tokio::test]
+    async fn smoke_event_store_ingests_and_replays_ten_thousand_events() {
+        let store = RadrootsEventStore::open_memory().await.expect("open");
+        for index in 0..10_000u32 {
+            let event = signed_event(
+                KIND_POST,
+                10_000 + index,
+                vec![vec!["t".to_owned(), "smoke".to_owned()]],
+                format!("smoke-{index}").as_str(),
+            );
+            let receipt = store
+                .ingest_event(RadrootsEventIngest::new(event, 10_000 + i64::from(index)))
+                .await
+                .expect("ingest");
+            assert!(receipt.inserted);
+            assert_eq!(
+                receipt.verification_status,
+                RadrootsEventVerificationStatus::Verified
+            );
+        }
+
+        let replay = store
+            .events_since_cursor("smoke", 10_000)
+            .await
+            .expect("replay");
+        assert_eq!(replay.len(), 10_000);
+        assert_eq!(replay[0].seq, 1);
+        assert_eq!(replay[9_999].seq, 10_000);
+
+        store
+            .update_projection_cursor(&RadrootsProjectionCursor {
+                projection_id: "smoke".to_owned(),
+                projection_version: 1,
+                last_event_seq: replay[4_999].seq,
+                updated_at_ms: 25_000,
+            })
+            .await
+            .expect("cursor");
+        let replay = store
+            .events_since_cursor("smoke", 10_000)
+            .await
+            .expect("replay after cursor");
+        assert_eq!(replay.len(), 5_000);
+        assert_eq!(replay[0].seq, 5_001);
+        assert_eq!(replay[4_999].seq, 10_000);
+    }
 }

@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use crate::RadrootsRelayTransportError;
+use crate::{RadrootsRelayOutcome, RadrootsRelayTransportError};
 use futures::future::BoxFuture;
 use nostr::JsonUtil;
 use radroots_event_store::{
@@ -63,6 +63,21 @@ pub enum RadrootsRelayFetchItem {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RadrootsRelayFetchOutcomeKind {
+    Eose,
+    Closed,
+    Notice,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RadrootsRelayFetchRelayOutcome {
+    pub relay_url: String,
+    pub kind: RadrootsRelayFetchOutcomeKind,
+    pub relay_outcome: Option<RadrootsRelayOutcome>,
+    pub message: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RadrootsRelayFetchEventReceipt {
     pub relay_url: String,
     pub event_id: Option<String>,
@@ -85,6 +100,7 @@ pub struct RadrootsRelayFetchReceipt {
     pub closed_count: usize,
     pub notice_count: usize,
     pub events: Vec<RadrootsRelayFetchEventReceipt>,
+    pub relay_outcomes: Vec<RadrootsRelayFetchRelayOutcome>,
 }
 
 pub trait RadrootsRelayFetchAdapter: Send + Sync {
@@ -114,6 +130,7 @@ where
         closed_count: 0,
         notice_count: 0,
         events: Vec::new(),
+        relay_outcomes: Vec::new(),
     };
     let mut processed_events = 0usize;
     for item in items {
@@ -199,14 +216,32 @@ where
                     }
                 }
             }
-            RadrootsRelayFetchItem::Eose { .. } => {
+            RadrootsRelayFetchItem::Eose { relay_url } => {
                 receipt.eose_count += 1;
+                receipt.relay_outcomes.push(RadrootsRelayFetchRelayOutcome {
+                    relay_url,
+                    kind: RadrootsRelayFetchOutcomeKind::Eose,
+                    relay_outcome: None,
+                    message: None,
+                });
             }
-            RadrootsRelayFetchItem::Closed { .. } => {
+            RadrootsRelayFetchItem::Closed { relay_url, message } => {
                 receipt.closed_count += 1;
+                receipt.relay_outcomes.push(RadrootsRelayFetchRelayOutcome {
+                    relay_url,
+                    kind: RadrootsRelayFetchOutcomeKind::Closed,
+                    relay_outcome: Some(RadrootsRelayOutcome::classify(message.as_str())),
+                    message: Some(message),
+                });
             }
-            RadrootsRelayFetchItem::Notice { .. } => {
+            RadrootsRelayFetchItem::Notice { relay_url, message } => {
                 receipt.notice_count += 1;
+                receipt.relay_outcomes.push(RadrootsRelayFetchRelayOutcome {
+                    relay_url,
+                    kind: RadrootsRelayFetchOutcomeKind::Notice,
+                    relay_outcome: None,
+                    message: Some(message),
+                });
             }
         }
     }

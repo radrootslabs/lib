@@ -13,8 +13,9 @@ pub use error::RadrootsRelayTransportError;
 #[cfg(feature = "storage")]
 pub use fetch::{
     RadrootsMockRelayFetchAdapter, RadrootsRelayFetchAdapter, RadrootsRelayFetchEventReceipt,
-    RadrootsRelayFetchItem, RadrootsRelayFetchMode, RadrootsRelayFetchReceipt,
-    RadrootsRelayFetchRequest, fetch_and_ingest_relay_events,
+    RadrootsRelayFetchItem, RadrootsRelayFetchMode, RadrootsRelayFetchOutcomeKind,
+    RadrootsRelayFetchReceipt, RadrootsRelayFetchRelayOutcome, RadrootsRelayFetchRequest,
+    fetch_and_ingest_relay_events,
 };
 #[cfg(feature = "storage")]
 pub use outbox::{

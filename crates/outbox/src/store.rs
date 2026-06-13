@@ -1631,4 +1631,63 @@ mod tests {
                 .is_none()
         );
     }
+
+    #[tokio::test]
+    async fn smoke_outbox_claim_cancel_cycles_complete_one_thousand_events() {
+        let outbox = RadrootsOutbox::open_memory().await.expect("open");
+        let mut receipts = Vec::new();
+        for index in 0..1_000 {
+            let draft = post_draft(
+                FIXTURE_ALICE_PUBLIC_KEY_HEX,
+                format!("claim-cycle-{index}").as_str(),
+            );
+            let receipt = outbox
+                .enqueue_operation(operation_input(draft, 1_000 + index))
+                .await
+                .expect("enqueue");
+            receipts.push(receipt);
+        }
+
+        for index in 0..1_000 {
+            let claim_token = format!("claim-{index}");
+            let claimed = outbox
+                .claim_next_ready_event(
+                    "smoke-worker",
+                    claim_token.as_str(),
+                    10_000 + index,
+                    2_000 + index,
+                )
+                .await
+                .expect("claim")
+                .expect("claimed");
+            outbox
+                .cancel_claimed_event(claimed.outbox_event_id, claim_token.as_str(), 3_000 + index)
+                .await
+                .expect("cancel");
+        }
+
+        for receipt in receipts {
+            let event = outbox
+                .get_event(receipt.outbox_event_id)
+                .await
+                .expect("event")
+                .expect("event");
+            assert_eq!(event.state, RadrootsOutboxEventState::Cancelled);
+            assert!(event.claim_token.is_none());
+            let operation = outbox
+                .get_operation(receipt.operation_id)
+                .await
+                .expect("operation")
+                .expect("operation");
+            assert_eq!(operation.status, RadrootsOutboxOperationStatus::Cancelled);
+        }
+
+        assert!(
+            outbox
+                .claim_next_ready_event("smoke-worker", "claim-final", 20_000, 20_000)
+                .await
+                .expect("claim")
+                .is_none()
+        );
+    }
 }
