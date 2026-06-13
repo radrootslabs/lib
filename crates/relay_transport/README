@@ -1,0 +1,3 @@
+# radroots_relay_transport
+
+Deterministic Nostr relay transport substrate for exact signed-event publish, fetch ingest, and outbox relay status coordination.

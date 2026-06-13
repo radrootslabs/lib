@@ -98,6 +98,7 @@ The public Rust story is tiered explicitly.
   - `radroots_types`
   - `radroots_event_store`
   - `radroots_outbox`
+  - `radroots_relay_transport`
   - `radroots_events_codec_wasm`
   - `radroots_net`
   - `radroots_nostr_runtime`

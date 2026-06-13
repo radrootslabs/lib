@@ -1,0 +1,48 @@
+[package]
+name = "radroots_relay_transport"
+publish = false
+version = "0.1.0-alpha.2"
+edition.workspace = true
+authors = ["Tyson Lupul <tyson@radroots.org>"]
+rust-version.workspace = true
+license.workspace = true
+description = "Relay transport layer for Radroots"
+repository.workspace = true
+homepage.workspace = true
+readme = "README"
+
+[features]
+default = ["std", "runtime-tokio"]
+std = []
+runtime-tokio = [
+  "radroots_event_store/runtime-tokio",
+  "radroots_outbox/runtime-tokio",
+]
+
+[dependencies]
+radroots_events = { workspace = true, default-features = false, features = [
+  "std",
+  "serde",
+] }
+radroots_event_store = { workspace = true, default-features = false, features = [
+  "sqlite",
+  "runtime-tokio",
+] }
+radroots_nostr = { workspace = true, default-features = false, features = [
+  "std",
+  "client",
+  "events",
+] }
+radroots_outbox = { workspace = true, default-features = false, features = [
+  "sqlite",
+  "runtime-tokio",
+] }
+futures = { workspace = true }
+nostr = { workspace = true }
+serde = { workspace = true, features = ["derive", "std"] }
+serde_json = { workspace = true, features = ["std"] }
+thiserror = { workspace = true }
+url = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }

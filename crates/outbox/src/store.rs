@@ -80,6 +80,7 @@ impl RadrootsOutbox {
             &input.draft,
             &target_relays,
         )?;
+        let accepted_quorum = target_relays.len() as i64;
         let mut tx = self.pool.begin().await?;
 
         if let Some(idempotency_key) = input.idempotency_key.as_deref() {
@@ -126,13 +127,14 @@ impl RadrootsOutbox {
         let operation_id = operation.last_insert_rowid();
         let draft_json = serde_json::to_string(&input.draft)?;
         let event = sqlx::query(
-            "INSERT INTO outbox_event(operation_id, event_id, expected_pubkey, draft_json, state, attempt_count, next_attempt_after_ms, event_store_ingested, event_store_inserted, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, 0, ?, 0, 0, ?, ?)",
+            "INSERT INTO outbox_event(operation_id, event_id, expected_pubkey, draft_json, state, accepted_quorum, attempt_count, next_attempt_after_ms, event_store_ingested, event_store_inserted, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, 0, ?, 0, 0, ?, ?)",
         )
         .bind(operation_id)
         .bind(input.draft.expected_event_id.as_str())
         .bind(input.draft.expected_pubkey.as_str())
         .bind(draft_json.as_str())
         .bind(RadrootsOutboxEventState::DraftQueued.as_str())
+        .bind(accepted_quorum)
         .bind(input.created_at_ms)
         .bind(input.created_at_ms)
         .bind(input.created_at_ms)
@@ -179,7 +181,7 @@ impl RadrootsOutbox {
         outbox_event_id: i64,
     ) -> Result<Option<RadrootsOutboxEventRecord>, RadrootsOutboxError> {
         let row = sqlx::query(
-            "SELECT outbox_event_id, operation_id, event_id, expected_pubkey, draft_json, signed_event_json, raw_event_json, state, attempt_count, claim_token, claim_owner, claim_expires_at_ms, next_attempt_after_ms, last_error, event_store_ingested, event_store_inserted, event_store_ingested_at_ms, created_at_ms, updated_at_ms FROM outbox_event WHERE outbox_event_id = ?",
+            "SELECT outbox_event_id, operation_id, event_id, expected_pubkey, draft_json, signed_event_json, raw_event_json, state, accepted_quorum, attempt_count, claim_token, claim_owner, claim_expires_at_ms, next_attempt_after_ms, last_error, event_store_ingested, event_store_inserted, event_store_ingested_at_ms, created_at_ms, updated_at_ms FROM outbox_event WHERE outbox_event_id = ?",
         )
         .bind(outbox_event_id)
         .fetch_optional(&self.pool)
@@ -456,6 +458,65 @@ impl RadrootsOutbox {
         Ok(())
     }
 
+    pub async fn set_publish_quorum(
+        &self,
+        outbox_event_id: i64,
+        claim_token: &str,
+        accepted_quorum: i64,
+        now_ms: i64,
+    ) -> Result<(), RadrootsOutboxError> {
+        self.ensure_claim_token(outbox_event_id, claim_token)
+            .await?;
+        sqlx::query(
+            "UPDATE outbox_event SET accepted_quorum = ?, updated_at_ms = ? WHERE outbox_event_id = ? AND claim_token = ?",
+        )
+        .bind(accepted_quorum)
+        .bind(now_ms)
+        .bind(outbox_event_id)
+        .bind(claim_token)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn mark_relay_failed_retryable(
+        &self,
+        outbox_event_id: i64,
+        claim_token: &str,
+        relay_url: &str,
+        error: &str,
+        attempted_at_ms: i64,
+    ) -> Result<(), RadrootsOutboxError> {
+        self.mark_relay_failed(
+            outbox_event_id,
+            claim_token,
+            relay_url,
+            RadrootsOutboxRelayStatus::FailedRetryable,
+            error,
+            attempted_at_ms,
+        )
+        .await
+    }
+
+    pub async fn mark_relay_failed_terminal(
+        &self,
+        outbox_event_id: i64,
+        claim_token: &str,
+        relay_url: &str,
+        error: &str,
+        attempted_at_ms: i64,
+    ) -> Result<(), RadrootsOutboxError> {
+        self.mark_relay_failed(
+            outbox_event_id,
+            claim_token,
+            relay_url,
+            RadrootsOutboxRelayStatus::FailedTerminal,
+            error,
+            attempted_at_ms,
+        )
+        .await
+    }
+
     async fn claimed_event(
         &self,
         outbox_event_id: i64,
@@ -484,6 +545,30 @@ impl RadrootsOutbox {
         if stored.as_deref() != Some(claim_token) {
             return Err(RadrootsOutboxError::ClaimTokenMismatch { outbox_event_id });
         }
+        Ok(())
+    }
+
+    async fn mark_relay_failed(
+        &self,
+        outbox_event_id: i64,
+        claim_token: &str,
+        relay_url: &str,
+        status: RadrootsOutboxRelayStatus,
+        error: &str,
+        attempted_at_ms: i64,
+    ) -> Result<(), RadrootsOutboxError> {
+        self.ensure_claim_token(outbox_event_id, claim_token)
+            .await?;
+        sqlx::query(
+            "UPDATE outbox_event_relay_status SET status = ?, attempt_count = attempt_count + 1, last_attempt_at_ms = ?, acknowledged_at_ms = NULL, last_error = ? WHERE outbox_event_id = ? AND relay_url = ?",
+        )
+        .bind(status.as_str())
+        .bind(attempted_at_ms)
+        .bind(error)
+        .bind(outbox_event_id)
+        .bind(relay_url)
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 }
@@ -563,7 +648,7 @@ async fn event_by_id_tx(
     outbox_event_id: i64,
 ) -> Result<RadrootsOutboxEventRecord, RadrootsOutboxError> {
     let row = sqlx::query(
-        "SELECT outbox_event_id, operation_id, event_id, expected_pubkey, draft_json, signed_event_json, raw_event_json, state, attempt_count, claim_token, claim_owner, claim_expires_at_ms, next_attempt_after_ms, last_error, event_store_ingested, event_store_inserted, event_store_ingested_at_ms, created_at_ms, updated_at_ms FROM outbox_event WHERE outbox_event_id = ?",
+        "SELECT outbox_event_id, operation_id, event_id, expected_pubkey, draft_json, signed_event_json, raw_event_json, state, accepted_quorum, attempt_count, claim_token, claim_owner, claim_expires_at_ms, next_attempt_after_ms, last_error, event_store_ingested, event_store_inserted, event_store_ingested_at_ms, created_at_ms, updated_at_ms FROM outbox_event WHERE outbox_event_id = ?",
     )
     .bind(outbox_event_id)
     .fetch_one(&mut **tx)
@@ -635,6 +720,7 @@ fn event_from_row(
         signed_event,
         raw_event_json: row.try_get("raw_event_json")?,
         state,
+        accepted_quorum: row.try_get("accepted_quorum")?,
         attempt_count: row.try_get("attempt_count")?,
         claim_token: row.try_get("claim_token")?,
         claim_owner: row.try_get("claim_owner")?,

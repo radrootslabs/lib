@@ -25,6 +25,7 @@ CREATE TABLE outbox_event (
   signed_event_json TEXT,
   raw_event_json TEXT,
   state TEXT NOT NULL,
+  accepted_quorum INTEGER NOT NULL,
   attempt_count INTEGER NOT NULL,
   claim_token TEXT,
   claim_owner TEXT,

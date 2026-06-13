@@ -4254,6 +4254,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "radroots_relay_transport"
+version = "0.1.0-alpha.2"
+dependencies = [
+ "futures",
+ "nostr",
+ "radroots_event_store",
+ "radroots_events",
+ "radroots_nostr",
+ "radroots_outbox",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "radroots_replica_db"
 version = "0.1.0-alpha.2"
 dependencies = [

@@ -170,6 +170,7 @@ pub struct RadrootsOutboxEventRecord {
     pub signed_event: Option<RadrootsSignedNostrEvent>,
     pub raw_event_json: Option<String>,
     pub state: RadrootsOutboxEventState,
+    pub accepted_quorum: i64,
     pub attempt_count: i64,
     pub claim_token: Option<String>,
     pub claim_owner: Option<String>,
