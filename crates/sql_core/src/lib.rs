@@ -1,6 +1,5 @@
-#![cfg_attr(any(feature = "embedded", target_os = "espidf"), no_std)]
+#![cfg_attr(not(feature = "std"), no_std)]
 
-#[cfg(any(feature = "embedded", target_os = "espidf"))]
 extern crate alloc;
 
 pub mod error;
@@ -18,11 +17,11 @@ mod executor_wasm;
 #[cfg(all(feature = "bridge", target_arch = "wasm32"))]
 pub use executor_wasm::WasmSqlExecutor;
 
-#[cfg(feature = "native")]
+#[cfg(all(feature = "native", feature = "std"))]
 mod executor_sqlite;
-#[cfg(feature = "native")]
+#[cfg(all(feature = "native", feature = "std"))]
 pub use executor_sqlite::SqliteExecutor;
-#[cfg(feature = "native")]
+#[cfg(all(feature = "native", feature = "std"))]
 pub mod sqlite_util;
 
 #[cfg(feature = "embedded")]
@@ -30,10 +29,12 @@ mod executor_embedded;
 #[cfg(feature = "embedded")]
 pub use executor_embedded::EmbeddedSqlExecutor;
 
-#[cfg(not(any(feature = "embedded", target_os = "espidf")))]
+#[cfg(feature = "std")]
 pub mod utils;
 
 pub use error::SqlError;
+
+use alloc::string::String;
 
 #[derive(Clone, Copy, Debug)]
 pub struct ExecOutcome {

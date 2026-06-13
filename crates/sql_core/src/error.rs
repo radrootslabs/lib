@@ -1,27 +1,14 @@
-#![cfg_attr(any(feature = "embedded", target_os = "espidf"), no_std)]
-
-#[cfg(any(feature = "embedded", target_os = "espidf"))]
-extern crate alloc;
-
+use alloc::string::{String, ToString};
+use core::fmt::{Display, Formatter};
 use serde::Serialize;
-use thiserror::Error;
 
-#[cfg(any(feature = "embedded", target_os = "espidf"))]
-use alloc::string::String;
-
-#[derive(Error, Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub enum SqlError {
-    #[error("invalid argument: {0}")]
     InvalidArgument(String),
-    #[error("{0} not found")]
     NotFound(String),
-    #[error("serialization error: {0}")]
     SerializationError(String),
-    #[error("invalid query: {0}")]
     InvalidQuery(String),
-    #[error("internal error")]
     Internal,
-    #[error("unsupported on this platform")]
     UnsupportedPlatform,
 }
 
@@ -42,13 +29,29 @@ impl SqlError {
     }
 }
 
+impl Display for SqlError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        match self {
+            SqlError::InvalidArgument(value) => write!(f, "invalid argument: {value}"),
+            SqlError::NotFound(value) => write!(f, "{value} not found"),
+            SqlError::SerializationError(value) => write!(f, "serialization error: {value}"),
+            SqlError::InvalidQuery(value) => write!(f, "invalid query: {value}"),
+            SqlError::Internal => f.write_str("internal error"),
+            SqlError::UnsupportedPlatform => f.write_str("unsupported on this platform"),
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for SqlError {}
+
 impl From<serde_json::Error> for SqlError {
     fn from(e: serde_json::Error) -> Self {
         SqlError::SerializationError(e.to_string())
     }
 }
 
-#[cfg(feature = "native")]
+#[cfg(all(feature = "native", feature = "std"))]
 impl From<rusqlite::Error> for SqlError {
     fn from(e: rusqlite::Error) -> Self {
         SqlError::InvalidQuery(e.to_string())

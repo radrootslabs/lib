@@ -1,3 +1,6 @@
+use alloc::string::ToString;
+use alloc::vec::Vec;
+
 use crate::SqlExecutor;
 use crate::error::SqlError;
 use serde_json::{Value, json};

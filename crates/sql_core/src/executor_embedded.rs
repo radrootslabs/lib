@@ -1,8 +1,3 @@
-#![cfg(any(feature = "embedded", target_os = "espidf"))]
-#![no_std]
-
-extern crate alloc;
-
 use alloc::string::String;
 
 use crate::{ExecOutcome, SqlExecutor, error::SqlError};
