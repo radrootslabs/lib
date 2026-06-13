@@ -56,7 +56,14 @@ wasm_crates = ["radroots_events_codec_wasm"]
 
 [sdk]
 rust_package = "radroots_sdk"
-primary_domains = ["profile", "farm", "listing", "order", "trade_validation", "social"]
+primary_domains = [
+  "profile",
+  "farm",
+  "listing",
+  "order",
+  "trade_validation",
+  "social",
+]
 public_surface = "operation_first"
 
 [operations.profile_build_draft]
