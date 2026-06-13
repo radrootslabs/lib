@@ -205,6 +205,7 @@ pub enum RadrootsEventHeadStoreDecision {
     Applied,
     NotHeadSelected,
     NotPersisted,
+    NotProjectionEligible,
     SkippedDuplicate,
     SkippedOlder,
     SkippedSameTimestampHigherEventId,
