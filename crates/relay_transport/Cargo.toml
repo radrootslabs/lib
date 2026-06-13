@@ -12,9 +12,21 @@ homepage.workspace = true
 readme = "README"
 
 [features]
-default = ["std", "runtime-tokio"]
+default = ["std", "client", "storage", "runtime-tokio"]
 std = []
+client = [
+  "dep:radroots_nostr",
+  "radroots_nostr/std",
+  "radroots_nostr/client",
+  "radroots_nostr/events",
+]
+storage = [
+  "dep:radroots_event_store",
+  "dep:radroots_outbox",
+  "client",
+]
 runtime-tokio = [
+  "storage",
   "radroots_event_store/runtime-tokio",
   "radroots_outbox/runtime-tokio",
 ]
@@ -24,16 +36,16 @@ radroots_events = { workspace = true, default-features = false, features = [
   "std",
   "serde",
 ] }
-radroots_event_store = { workspace = true, default-features = false, features = [
+radroots_event_store = { workspace = true, optional = true, default-features = false, features = [
   "sqlite",
   "runtime-tokio",
 ] }
-radroots_nostr = { workspace = true, default-features = false, features = [
+radroots_nostr = { workspace = true, optional = true, default-features = false, features = [
   "std",
   "client",
   "events",
 ] }
-radroots_outbox = { workspace = true, default-features = false, features = [
+radroots_outbox = { workspace = true, optional = true, default-features = false, features = [
   "sqlite",
   "runtime-tokio",
 ] }

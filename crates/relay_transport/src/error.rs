@@ -31,12 +31,15 @@ pub enum RadrootsRelayTransportError {
     #[error("Nostr event JSON error: {0}")]
     NostrEventJson(String),
 
+    #[cfg(feature = "storage")]
     #[error("Event store error: {0}")]
     EventStore(#[from] radroots_event_store::RadrootsEventStoreError),
 
+    #[cfg(feature = "storage")]
     #[error("Outbox error: {0}")]
     Outbox(#[from] radroots_outbox::RadrootsOutboxError),
 
+    #[cfg(feature = "storage")]
     #[error("Outbox claim {0} does not contain a signed event")]
     MissingSignedOutboxEvent(i64),
 

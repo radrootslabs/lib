@@ -5,12 +5,15 @@ use crate::{
     RadrootsRelayTransportError, RadrootsRelayUrlPolicy,
 };
 use futures::future::BoxFuture;
-use nostr::JsonUtil;
 use radroots_events::draft::RadrootsSignedNostrEvent;
-use radroots_nostr::prelude::{RadrootsNostrClient, RadrootsNostrEvent};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
+
+#[cfg(feature = "client")]
+use nostr::JsonUtil;
+#[cfg(feature = "client")]
+use radroots_nostr::prelude::{RadrootsNostrClient, RadrootsNostrEvent};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsRelayPublishRequest {
@@ -180,17 +183,20 @@ impl RadrootsRelayPublishAdapter for RadrootsMockRelayPublishAdapter {
     }
 }
 
+#[cfg(feature = "client")]
 #[derive(Clone)]
 pub struct RadrootsNostrClientPublishAdapter {
     client: RadrootsNostrClient,
 }
 
+#[cfg(feature = "client")]
 impl RadrootsNostrClientPublishAdapter {
     pub fn new(client: RadrootsNostrClient) -> Self {
         Self { client }
     }
 }
 
+#[cfg(feature = "client")]
 impl RadrootsRelayPublishAdapter for RadrootsNostrClientPublishAdapter {
     fn publish<'a>(
         &'a self,
