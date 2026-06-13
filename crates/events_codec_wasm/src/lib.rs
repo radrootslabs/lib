@@ -436,7 +436,7 @@ mod tests {
         );
 
         RadrootsListing {
-            d_tag: "AAAAAAAAAAAAAAAAAAAAAg".to_string(),
+            d_tag: "AAAAAAAAAAAAAAAAAAAAAg".parse().expect("listing d tag"),
             published_at: None,
             farm: RadrootsFarmRef {
                 pubkey: "farm_pubkey".to_string(),
@@ -453,9 +453,9 @@ mod tests {
                 profile: None,
                 year: None,
             },
-            primary_bin_id: "bin-1".to_string(),
+            primary_bin_id: "bin-1".parse().expect("primary bin id"),
             bins: vec![RadrootsListingBin {
-                bin_id: "bin-1".to_string(),
+                bin_id: "bin-1".parse().expect("bin id"),
                 quantity,
                 price_per_canonical_unit: price,
                 display_amount: None,
@@ -1139,9 +1139,9 @@ mod tests {
 
     #[test]
     fn listing_bindings_surface_builder_errors() {
-        let mut listing = sample_listing();
-        listing.d_tag.clear();
-        let listing_json = serde_json::to_string(&listing).expect("listing json");
+        let mut listing_json = serde_json::to_value(sample_listing()).expect("listing value");
+        listing_json["bins"] = serde_json::Value::Array(Vec::new());
+        let listing_json = serde_json::to_string(&listing_json).expect("listing json");
 
         assert!(listing_tags(&listing_json).is_err());
         assert!(listing_tags_full(&listing_json).is_err());
