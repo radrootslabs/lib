@@ -22,6 +22,34 @@ scan_forbidden() {
   fi
 }
 
+scan_raw_commercial_identifier_fields() {
+  local files
+  files="$(rg --files crates/events/src crates/events_codec/src crates/trade/src -g '*.rs')"
+
+  local matches
+  matches="$(
+    awk '
+      /^pub struct / {
+        struct_name = $3
+        sub(/\{.*/, "", struct_name)
+        sub(/<.*/, "", struct_name)
+      }
+      /^}/ { struct_name = "" }
+      /^[[:space:]]*pub (order_id|listing_addr|revision_id|quote_id|primary_bin_id|bin_id|economics_digest): String,/ {
+        if (struct_name != "RadrootsOrderEnvelope" && struct_name != "BinDraft" && struct_name !~ /Projection|Accounting|Availability|Reservation|Issue|NormalizedInventoryCount|TradeListing|ValidationReceiptTags/) {
+          print FILENAME ":" FNR ":" $0
+        }
+      }
+    ' $files || true
+  )"
+
+  if [[ -n $matches ]]; then
+    echo "raw commercial protocol identifier String fields are forbidden in active payload structs"
+    echo "$matches"
+    exit 1
+  fi
+}
+
 scan_forbidden "legacy identifier 'tangle'" "tangle" .
 
 scan_forbidden \
@@ -33,5 +61,7 @@ scan_forbidden \
   "legacy broad trade listing kind constant" \
   "KIND_TRADE_LISTING_(ORDER|QUESTION|ANSWER|DISCOUNT|CANCEL|FULFILLMENT|RECEIPT)" \
   crates spec scripts
+
+scan_raw_commercial_identifier_fields
 
 echo "no legacy identifiers found in oss source files"

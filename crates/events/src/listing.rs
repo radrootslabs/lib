@@ -4,6 +4,7 @@ use radroots_core::{
 };
 
 use crate::farm::RadrootsFarmRef;
+use crate::ids::{RadrootsDTag, RadrootsInventoryBinId};
 use crate::plot::RadrootsPlotRef;
 use crate::resource_area::RadrootsResourceAreaRef;
 
@@ -54,7 +55,7 @@ pub enum RadrootsListingDeliveryMethod {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsListing {
-    pub d_tag: String,
+    pub d_tag: RadrootsDTag,
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
@@ -63,7 +64,7 @@ pub struct RadrootsListing {
     #[cfg_attr(feature = "serde", serde(default))]
     pub farm: RadrootsFarmRef,
     pub product: RadrootsListingProduct,
-    pub primary_bin_id: String,
+    pub primary_bin_id: RadrootsInventoryBinId,
     pub bins: Vec<RadrootsListingBin>,
     pub resource_area: Option<RadrootsResourceAreaRef>,
     pub plot: Option<RadrootsPlotRef>,
@@ -98,7 +99,7 @@ pub struct RadrootsListingProductTagKeys;
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsListingBin {
-    pub bin_id: String,
+    pub bin_id: RadrootsInventoryBinId,
     pub quantity: RadrootsCoreQuantity,
     pub price_per_canonical_unit: RadrootsCoreQuantityPrice,
     pub display_amount: Option<RadrootsCoreDecimal>,
@@ -150,7 +151,7 @@ mod tests {
         use crate::kinds::{KIND_LISTING_DRAFT, is_listing_kind};
 
         let listing = super::RadrootsListing {
-            d_tag: "listing-draft".to_string(),
+            d_tag: "listing-draft".parse().unwrap(),
             published_at: Some(1_700_000_000),
             farm: RadrootsFarmRef::default(),
             product: super::RadrootsListingProduct {
@@ -164,7 +165,7 @@ mod tests {
                 profile: None,
                 year: None,
             },
-            primary_bin_id: "bin-1".to_string(),
+            primary_bin_id: "bin-1".parse().unwrap(),
             bins: vec![],
             resource_area: None,
             plot: None,

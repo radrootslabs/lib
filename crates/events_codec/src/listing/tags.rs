@@ -154,7 +154,7 @@ pub fn listing_tags_with_options(
 
     tags.push(vec![
         TAG_RADROOTS_PRIMARY_BIN.to_string(),
-        listing.primary_bin_id.clone(),
+        listing.primary_bin_id.to_string(),
     ]);
 
     let mut bins: Vec<&RadrootsListingBin> = listing.bins.iter().collect();
@@ -336,7 +336,7 @@ fn tag_listing_bin(bin: &RadrootsListingBin) -> Result<Vec<String>, EventEncodeE
     }
     let mut tag = Vec::with_capacity(7);
     tag.push(TAG_RADROOTS_BIN.to_string());
-    tag.push(bin.bin_id.clone());
+    tag.push(bin.bin_id.to_string());
     tag.push(bin.quantity.amount.to_string());
     tag.push(unit.code().to_string());
     if let Some(amount) = bin.display_amount.as_ref() {
@@ -371,7 +371,7 @@ fn tag_listing_price(bin: &RadrootsListingBin) -> Result<Vec<String>, EventEncod
     }
     let mut tag = Vec::with_capacity(8);
     tag.push(TAG_RADROOTS_PRICE.to_string());
-    tag.push(bin.bin_id.clone());
+    tag.push(bin.bin_id.to_string());
     tag.push(price.amount.amount.to_string());
     tag.push(price.amount.currency.as_str().to_string());
     tag.push(price.quantity.amount.to_string());
@@ -629,6 +629,7 @@ mod tests {
         RadrootsCoreDiscountThreshold, RadrootsCoreDiscountValue, RadrootsCoreQuantity,
         RadrootsCoreQuantityPrice, RadrootsCoreUnit,
     };
+    use radroots_events::ids::{RadrootsDTag, RadrootsInventoryBinId};
     use radroots_events::listing::{
         RadrootsListingImageSize, RadrootsListingProduct, RadrootsListingStatus,
     };
@@ -644,6 +645,14 @@ mod tests {
 
     fn decimal(value: &str) -> RadrootsCoreDecimal {
         RadrootsCoreDecimal::from_str(value).expect("valid decimal")
+    }
+
+    fn d_tag(raw: &str) -> RadrootsDTag {
+        raw.parse().unwrap()
+    }
+
+    fn bin_id(raw: &str) -> RadrootsInventoryBinId {
+        raw.parse().unwrap()
     }
 
     fn base_product() -> RadrootsListingProduct {
@@ -662,7 +671,7 @@ mod tests {
 
     fn base_bin() -> RadrootsListingBin {
         RadrootsListingBin {
-            bin_id: "bin-1".to_string(),
+            bin_id: bin_id("bin-1"),
             quantity: RadrootsCoreQuantity::new(decimal("1000"), RadrootsCoreUnit::MassG)
                 .with_label("bag"),
             price_per_canonical_unit: RadrootsCoreQuantityPrice::new(
@@ -682,14 +691,14 @@ mod tests {
 
     fn base_listing() -> RadrootsListing {
         RadrootsListing {
-            d_tag: TEST_D_TAG.to_string(),
+            d_tag: d_tag(TEST_D_TAG),
             published_at: None,
             farm: RadrootsFarmRef {
                 pubkey: TEST_PUBKEY_HEX.to_string(),
                 d_tag: TEST_FARM_D_TAG.to_string(),
             },
             product: base_product(),
-            primary_bin_id: "bin-1".to_string(),
+            primary_bin_id: bin_id("bin-1"),
             bins: vec![base_bin()],
             resource_area: Some(RadrootsResourceAreaRef {
                 pubkey: TEST_PUBKEY_HEX.to_string(),
@@ -1083,19 +1092,6 @@ mod tests {
         let generic_tag = tag_listing_price_generic(&total);
         assert_eq!(generic_tag[0], "price");
 
-        let mut bad_bin = base_bin();
-        bad_bin.bin_id = "".to_string();
-        let err = tag_listing_bin(&bad_bin).expect_err("empty bin_id");
-        assert!(matches!(
-            err,
-            EventEncodeError::EmptyRequiredField("bin_id")
-        ));
-        let err = tag_listing_price(&bad_bin).expect_err("empty bin_id");
-        assert!(matches!(
-            err,
-            EventEncodeError::EmptyRequiredField("bin_id")
-        ));
-
         let mut non_canonical = base_bin();
         non_canonical.quantity = RadrootsCoreQuantity::new(decimal("1"), RadrootsCoreUnit::MassKg);
         let err = tag_listing_bin(&non_canonical).expect_err("non canonical quantity");
@@ -1187,16 +1183,6 @@ mod tests {
 
     #[test]
     fn listing_tags_propagate_bin_and_resource_area_validation_errors() {
-        let mut listing = base_listing();
-        listing.discounts = None;
-        listing.bins[0].bin_id = "".to_string();
-        let err = listing_tags_with_options(&listing, ListingTagOptions::default())
-            .expect_err("empty bin id should fail listing tags");
-        assert!(matches!(
-            err,
-            EventEncodeError::EmptyRequiredField("bin_id")
-        ));
-
         let mut listing = base_listing();
         listing.discounts = None;
         listing.bins[0].price_per_canonical_unit = RadrootsCoreQuantityPrice::new(
@@ -1429,22 +1415,9 @@ mod tests {
     fn listing_tags_required_field_errors() {
         let mut listing = base_listing();
 
-        listing.d_tag = "".to_string();
-        let err = listing_tags(&listing).expect_err("missing d");
-        assert!(matches!(err, EventEncodeError::EmptyRequiredField("d")));
-
-        listing = base_listing();
-        listing.d_tag = "listing:invalid".to_string();
+        listing.d_tag = d_tag("listing:invalid");
         let err = listing_tags(&listing).expect_err("invalid d");
         assert!(matches!(err, EventEncodeError::InvalidField("d")));
-
-        listing = base_listing();
-        listing.primary_bin_id = "".to_string();
-        let err = listing_tags(&listing).expect_err("missing primary bin");
-        assert!(matches!(
-            err,
-            EventEncodeError::EmptyRequiredField("primary_bin_id")
-        ));
 
         listing = base_listing();
         listing.bins.clear();
@@ -1596,13 +1569,13 @@ mod tests {
         listing.discounts = None;
 
         let mut primary = base_bin();
-        primary.bin_id = "bin-1".to_string();
+        primary.bin_id = bin_id("bin-1");
         primary.display_label = None;
         primary.quantity = primary.quantity.clone().with_label("fallback-label");
 
         let mut secondary = base_bin();
-        secondary.bin_id = "bin-2".to_string();
-        listing.primary_bin_id = "bin-1".to_string();
+        secondary.bin_id = bin_id("bin-2");
+        listing.primary_bin_id = bin_id("bin-1");
         listing.bins = vec![secondary, primary];
 
         let tags = listing_tags(&listing).expect("listing tags");
@@ -1616,12 +1589,12 @@ mod tests {
         let mut listing_without_primary_match = base_listing();
         listing_without_primary_match.discounts = None;
         let mut first = base_bin();
-        first.bin_id = "bin-2".to_string();
+        first.bin_id = bin_id("bin-2");
         first.display_label = None;
         first.quantity = RadrootsCoreQuantity::new(decimal("1000"), RadrootsCoreUnit::MassG);
         let mut second = base_bin();
-        second.bin_id = "bin-1".to_string();
-        listing_without_primary_match.primary_bin_id = "bin-missing".to_string();
+        second.bin_id = bin_id("bin-1");
+        listing_without_primary_match.primary_bin_id = bin_id("bin-missing");
         listing_without_primary_match.bins = vec![first, second];
 
         let tags = listing_tags(&listing_without_primary_match).expect("listing tags");

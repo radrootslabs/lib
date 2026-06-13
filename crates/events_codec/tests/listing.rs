@@ -8,6 +8,7 @@ use radroots_core::{
 use radroots_events::tags::{TAG_D, TAG_PUBLISHED_AT};
 use radroots_events::{
     farm::RadrootsFarmRef,
+    ids::{RadrootsDTag, RadrootsInventoryBinId},
     kinds::{KIND_LISTING, KIND_LISTING_DRAFT, KIND_POST},
     listing::{
         RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
@@ -25,6 +26,14 @@ use radroots_events_codec::listing::tags::{
 };
 use std::str::FromStr;
 
+fn listing_d_tag(raw: &str) -> RadrootsDTag {
+    raw.parse().unwrap()
+}
+
+fn bin_id(raw: &str) -> RadrootsInventoryBinId {
+    raw.parse().unwrap()
+}
+
 fn sample_listing(d_tag: &str) -> RadrootsListing {
     let quantity =
         RadrootsCoreQuantity::new(RadrootsCoreDecimal::from(1u32), RadrootsCoreUnit::Each);
@@ -34,7 +43,7 @@ fn sample_listing(d_tag: &str) -> RadrootsListing {
     );
 
     RadrootsListing {
-        d_tag: d_tag.to_string(),
+        d_tag: listing_d_tag(d_tag),
         published_at: None,
         farm: RadrootsFarmRef {
             pubkey: "farm_pubkey".to_string(),
@@ -51,9 +60,9 @@ fn sample_listing(d_tag: &str) -> RadrootsListing {
             profile: None,
             year: None,
         },
-        primary_bin_id: "bin-1".to_string(),
+        primary_bin_id: bin_id("bin-1"),
         bins: vec![RadrootsListingBin {
-            bin_id: "bin-1".to_string(),
+            bin_id: bin_id("bin-1"),
             quantity,
             price_per_canonical_unit: price,
             display_amount: None,
@@ -80,7 +89,7 @@ fn sample_listing_full(d_tag: &str) -> RadrootsListing {
     let display_price = RadrootsCoreDecimal::from_str("10").unwrap();
 
     RadrootsListing {
-        d_tag: d_tag.to_string(),
+        d_tag: listing_d_tag(d_tag),
         published_at: None,
         farm: RadrootsFarmRef {
             pubkey: "farm_pubkey".to_string(),
@@ -97,9 +106,9 @@ fn sample_listing_full(d_tag: &str) -> RadrootsListing {
             profile: Some("standard".to_string()),
             year: Some("2024".to_string()),
         },
-        primary_bin_id: "bin-1".to_string(),
+        primary_bin_id: bin_id("bin-1"),
         bins: vec![RadrootsListingBin {
-            bin_id: "bin-1".to_string(),
+            bin_id: bin_id("bin-1"),
             quantity: RadrootsCoreQuantity::new(qty_amount, RadrootsCoreUnit::MassG),
             price_per_canonical_unit: RadrootsCoreQuantityPrice::new(
                 RadrootsCoreMoney::new(price_amount, RadrootsCoreCurrency::USD),
@@ -148,9 +157,7 @@ fn sample_listing_full(d_tag: &str) -> RadrootsListing {
 
 #[test]
 fn listing_build_tags_requires_d_tag() {
-    let listing = sample_listing("");
-    let err = listing_build_tags(&listing).unwrap_err();
-    assert!(matches!(err, EventEncodeError::EmptyRequiredField("d")));
+    assert!(RadrootsDTag::parse("").is_err());
 }
 
 #[test]
@@ -376,7 +383,7 @@ fn listing_build_tags_includes_listing_fields() {
 fn listing_tags_full_uses_single_generic_price_for_primary_bin() {
     let mut listing = sample_listing_full("AAAAAAAAAAAAAAAAAAAAAw");
     listing.bins.push(RadrootsListingBin {
-        bin_id: "bin-2".to_string(),
+        bin_id: bin_id("bin-2"),
         quantity: RadrootsCoreQuantity::new(
             RadrootsCoreDecimal::from_str("500").unwrap(),
             RadrootsCoreUnit::MassG,

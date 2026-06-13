@@ -7,10 +7,12 @@ use radroots_core::{
     RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreUnit,
 };
 
+use crate::ids::{RadrootsInventoryBinId, RadrootsOrderQuoteId};
+
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOrderItem {
-    pub bin_id: String,
+    pub bin_id: RadrootsInventoryBinId,
     pub bin_count: u32,
 }
 
@@ -49,7 +51,7 @@ pub enum RadrootsOrderEconomicEffect {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOrderEconomicItem {
-    pub bin_id: String,
+    pub bin_id: RadrootsInventoryBinId,
     pub bin_count: u32,
     pub quantity_amount: RadrootsCoreDecimal,
     pub quantity_unit: RadrootsCoreUnit,
@@ -81,7 +83,7 @@ pub struct RadrootsOrderEconomicTotals {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOrderEconomics {
-    pub quote_id: String,
+    pub quote_id: RadrootsOrderQuoteId,
     pub quote_version: u32,
     pub pricing_basis: RadrootsOrderPricingBasis,
     pub currency: RadrootsCoreCurrency,

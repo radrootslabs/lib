@@ -172,6 +172,7 @@ mod tests {
     use radroots_events::{
         RadrootsNostrEvent,
         farm::RadrootsFarmRef,
+        ids::{RadrootsDTag, RadrootsInventoryBinId},
         kinds::{KIND_LISTING, KIND_LISTING_DRAFT},
         listing::{
             RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
@@ -179,9 +180,17 @@ mod tests {
         },
     };
 
+    fn d_tag(raw: &str) -> RadrootsDTag {
+        RadrootsDTag::parse(raw).expect("d tag")
+    }
+
+    fn bin_id(raw: &str) -> RadrootsInventoryBinId {
+        RadrootsInventoryBinId::parse(raw).expect("bin id")
+    }
+
     fn base_listing() -> RadrootsListing {
         RadrootsListing {
-            d_tag: "AAAAAAAAAAAAAAAAAAAAAg".into(),
+            d_tag: d_tag("AAAAAAAAAAAAAAAAAAAAAg"),
             published_at: None,
             farm: RadrootsFarmRef {
                 pubkey: "seller".into(),
@@ -198,9 +207,9 @@ mod tests {
                 profile: None,
                 year: None,
             },
-            primary_bin_id: "bin-1".into(),
+            primary_bin_id: bin_id("bin-1"),
             bins: vec![RadrootsListingBin {
-                bin_id: "bin-1".into(),
+                bin_id: bin_id("bin-1"),
                 quantity: RadrootsCoreQuantity::new(
                     RadrootsCoreDecimal::from(1000u32),
                     RadrootsCoreUnit::MassG,
@@ -249,7 +258,7 @@ mod tests {
             created_at: 0,
             kind: KIND_LISTING,
             tags: vec![
-                vec!["d".into(), listing.d_tag.clone()],
+                vec!["d".into(), listing.d_tag.to_string()],
                 vec!["p".into(), listing.farm.pubkey.clone()],
                 vec![
                     "a".into(),
@@ -397,15 +406,13 @@ mod tests {
 
     #[test]
     fn validate_listing_rejects_missing_primary_bin_id() {
-        let mut listing = base_listing();
-        listing.primary_bin_id = " ".into();
-        assert_validation_err(listing, TradeListingValidationError::MissingPrimaryBin);
+        assert!(RadrootsInventoryBinId::parse(" ").is_err());
     }
 
     #[test]
     fn validate_listing_rejects_primary_bin_not_found() {
         let mut listing = base_listing();
-        listing.primary_bin_id = "missing".into();
+        listing.primary_bin_id = bin_id("missing");
         assert_validation_err(listing, TradeListingValidationError::MissingPrimaryBin);
     }
 

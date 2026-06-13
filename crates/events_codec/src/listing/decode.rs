@@ -13,6 +13,7 @@ use radroots_core::{
 use radroots_events::{
     RadrootsNostrEvent,
     farm::RadrootsFarmRef,
+    ids::{RadrootsDTag, RadrootsInventoryBinId},
     kinds::{KIND_FARM, KIND_PLOT, KIND_RESOURCE_AREA, is_listing_kind},
     listing::{
         RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
@@ -492,6 +493,10 @@ pub fn listing_from_event_parts(
         return Err(EventParseError::InvalidTag(TAG_RADROOTS_PRIMARY_BIN));
     }
 
+    let d_tag = RadrootsDTag::parse(&d_tag).map_err(|_| EventParseError::InvalidTag(TAG_D))?;
+    let primary_bin_id = RadrootsInventoryBinId::parse(&primary_bin_id)
+        .map_err(|_| EventParseError::InvalidTag(TAG_RADROOTS_PRIMARY_BIN))?;
+
     Ok(RadrootsListing {
         d_tag,
         published_at,
@@ -689,7 +694,8 @@ fn build_bins(mut drafts: Vec<BinDraft>) -> Result<Vec<RadrootsListingBin>, Even
             return Err(EventParseError::InvalidTag(TAG_RADROOTS_PRICE));
         }
         bins.push(RadrootsListingBin {
-            bin_id: draft.bin_id,
+            bin_id: RadrootsInventoryBinId::parse(&draft.bin_id)
+                .map_err(|_| EventParseError::InvalidTag(TAG_RADROOTS_BIN))?,
             quantity,
             price_per_canonical_unit: price,
             display_amount: draft.display_amount,

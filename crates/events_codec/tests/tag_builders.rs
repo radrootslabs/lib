@@ -18,6 +18,7 @@ use radroots_events::farm::{
 use radroots_events::follow::{RadrootsFollow, RadrootsFollowProfile};
 use radroots_events::geochat::RadrootsGeoChat;
 use radroots_events::gift_wrap::{RadrootsGiftWrap, RadrootsGiftWrapRecipient};
+use radroots_events::ids::{RadrootsDTag, RadrootsInventoryBinId};
 use radroots_events::job::{JobFeedbackStatus, JobInputType, JobPaymentRequest};
 use radroots_events::job_feedback::RadrootsJobFeedback;
 use radroots_events::job_request::{RadrootsJobInput, RadrootsJobParam, RadrootsJobRequest};
@@ -58,6 +59,14 @@ const TEST_NPUB: &str = FIXTURE_ALICE_NPUB;
 
 fn cdn_url(path: &str) -> String {
     format!("{CDN_PRIMARY_HTTPS}/{path}")
+}
+
+fn d_tag(raw: &str) -> RadrootsDTag {
+    raw.parse().unwrap()
+}
+
+fn bin_id(raw: &str) -> RadrootsInventoryBinId {
+    raw.parse().unwrap()
 }
 
 fn sample_social_target(id: &str) -> RadrootsSocialTarget {
@@ -113,7 +122,7 @@ fn sample_listing() -> RadrootsListing {
     );
 
     RadrootsListing {
-        d_tag: "AAAAAAAAAAAAAAAAAAAAAg".to_string(),
+        d_tag: d_tag("AAAAAAAAAAAAAAAAAAAAAg"),
         published_at: None,
         farm: RadrootsFarmRef {
             pubkey: TEST_NPUB.to_string(),
@@ -130,9 +139,9 @@ fn sample_listing() -> RadrootsListing {
             profile: None,
             year: None,
         },
-        primary_bin_id: "bin-1".to_string(),
+        primary_bin_id: bin_id("bin-1"),
         bins: vec![RadrootsListingBin {
-            bin_id: "bin-1".to_string(),
+            bin_id: bin_id("bin-1"),
             quantity,
             price_per_canonical_unit: price,
             display_amount: None,
@@ -665,22 +674,9 @@ fn listing_and_message_builders_cover_optional_shapes() {
 #[test]
 fn listing_builder_rejects_required_field_errors() {
     let mut listing = sample_listing();
-    listing.d_tag = " ".to_string();
-    let err = listing_build_tags(&listing).expect_err("empty listing d_tag");
-    assert!(matches!(err, EventEncodeError::EmptyRequiredField("d")));
-
-    let mut listing = sample_listing();
-    listing.d_tag = "invalid".to_string();
+    listing.d_tag = d_tag("listing:invalid");
     let err = listing_build_tags(&listing).expect_err("invalid listing d_tag");
     assert!(matches!(err, EventEncodeError::InvalidField("d")));
-
-    let mut listing = sample_listing();
-    listing.primary_bin_id = " ".to_string();
-    let err = listing_build_tags(&listing).expect_err("empty primary bin id");
-    assert!(matches!(
-        err,
-        EventEncodeError::EmptyRequiredField("primary_bin_id")
-    ));
 
     let mut listing = sample_listing();
     listing.bins.clear();

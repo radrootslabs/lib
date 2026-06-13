@@ -6,6 +6,10 @@ use alloc::{
     vec::Vec,
 };
 
+use crate::ids::{
+    RadrootsEconomicsDigest, RadrootsInventoryBinId, RadrootsListingAddress, RadrootsOrderId,
+    RadrootsOrderQuoteId, RadrootsOrderRevisionId,
+};
 use crate::kinds::*;
 pub use crate::order_economics::*;
 #[cfg(test)]
@@ -158,8 +162,8 @@ impl RadrootsOrderEconomics {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOrderRequest {
-    pub order_id: String,
-    pub listing_addr: String,
+    pub order_id: RadrootsOrderId,
+    pub listing_addr: RadrootsListingAddress,
     pub buyer_pubkey: String,
     pub seller_pubkey: String,
     pub items: Vec<RadrootsOrderItem>,
@@ -181,9 +185,9 @@ impl RadrootsOrderRequest {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOrderRevisionProposal {
-    pub revision_id: String,
-    pub order_id: String,
-    pub listing_addr: String,
+    pub revision_id: RadrootsOrderRevisionId,
+    pub order_id: RadrootsOrderId,
+    pub listing_addr: RadrootsListingAddress,
     pub buyer_pubkey: String,
     pub seller_pubkey: String,
     pub root_event_id: String,
@@ -229,9 +233,9 @@ impl RadrootsOrderRevisionOutcome {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOrderRevisionDecision {
-    pub revision_id: String,
-    pub order_id: String,
-    pub listing_addr: String,
+    pub revision_id: RadrootsOrderRevisionId,
+    pub order_id: RadrootsOrderId,
+    pub listing_addr: RadrootsListingAddress,
     pub buyer_pubkey: String,
     pub seller_pubkey: String,
     pub root_event_id: String,
@@ -255,7 +259,7 @@ impl RadrootsOrderRevisionDecision {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOrderInventoryCommitment {
-    pub bin_id: String,
+    pub bin_id: RadrootsInventoryBinId,
     pub bin_count: u32,
 }
 
@@ -285,8 +289,8 @@ impl RadrootsOrderDecisionOutcome {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOrderDecision {
-    pub order_id: String,
-    pub listing_addr: String,
+    pub order_id: RadrootsOrderId,
+    pub listing_addr: RadrootsListingAddress,
     pub buyer_pubkey: String,
     pub seller_pubkey: String,
     pub decision: RadrootsOrderDecisionOutcome,
@@ -324,8 +328,8 @@ impl RadrootsOrderFulfillmentState {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOrderFulfillmentUpdate {
-    pub order_id: String,
-    pub listing_addr: String,
+    pub order_id: RadrootsOrderId,
+    pub listing_addr: RadrootsListingAddress,
     pub buyer_pubkey: String,
     pub seller_pubkey: String,
     pub status: RadrootsOrderFulfillmentState,
@@ -348,8 +352,8 @@ impl RadrootsOrderFulfillmentUpdate {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOrderCancellation {
-    pub order_id: String,
-    pub listing_addr: String,
+    pub order_id: RadrootsOrderId,
+    pub listing_addr: RadrootsListingAddress,
     pub buyer_pubkey: String,
     pub seller_pubkey: String,
     pub reason: String,
@@ -368,8 +372,8 @@ impl RadrootsOrderCancellation {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOrderReceipt {
-    pub order_id: String,
-    pub listing_addr: String,
+    pub order_id: RadrootsOrderId,
+    pub listing_addr: RadrootsListingAddress,
     pub buyer_pubkey: String,
     pub seller_pubkey: String,
     pub received: bool,
@@ -409,16 +413,16 @@ pub enum RadrootsOrderPaymentMethod {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOrderPaymentRecord {
-    pub order_id: String,
-    pub listing_addr: String,
+    pub order_id: RadrootsOrderId,
+    pub listing_addr: RadrootsListingAddress,
     pub buyer_pubkey: String,
     pub seller_pubkey: String,
     pub root_event_id: String,
     pub previous_event_id: String,
     pub agreement_event_id: String,
-    pub quote_id: String,
+    pub quote_id: RadrootsOrderQuoteId,
     pub quote_version: u32,
-    pub economics_digest: String,
+    pub economics_digest: RadrootsEconomicsDigest,
     pub amount: RadrootsCoreDecimal,
     pub currency: RadrootsCoreCurrency,
     pub method: RadrootsOrderPaymentMethod,
@@ -461,17 +465,17 @@ pub enum RadrootsOrderSettlementOutcome {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOrderSettlementDecision {
-    pub order_id: String,
-    pub listing_addr: String,
+    pub order_id: RadrootsOrderId,
+    pub listing_addr: RadrootsListingAddress,
     pub seller_pubkey: String,
     pub buyer_pubkey: String,
     pub root_event_id: String,
     pub previous_event_id: String,
     pub agreement_event_id: String,
     pub payment_event_id: String,
-    pub quote_id: String,
+    pub quote_id: RadrootsOrderQuoteId,
     pub quote_version: u32,
-    pub economics_digest: String,
+    pub economics_digest: RadrootsEconomicsDigest,
     pub amount: RadrootsCoreDecimal,
     pub currency: RadrootsCoreCurrency,
     pub decision: RadrootsOrderSettlementOutcome,
@@ -1061,18 +1065,44 @@ mod tests {
         RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreUnit,
     };
 
-    fn sample_listing_addr() -> String {
-        "30402:pubkey:AAAAAAAAAAAAAAAAAAAAAg".into()
+    fn sample_pubkey() -> String {
+        "0".repeat(64)
+    }
+
+    fn sample_listing_addr() -> RadrootsListingAddress {
+        format!("30402:{}:AAAAAAAAAAAAAAAAAAAAAg", sample_pubkey())
+            .parse()
+            .unwrap()
+    }
+
+    fn order_id(raw: &str) -> RadrootsOrderId {
+        raw.parse().unwrap()
+    }
+
+    fn revision_id(raw: &str) -> RadrootsOrderRevisionId {
+        raw.parse().unwrap()
+    }
+
+    fn quote_id(raw: &str) -> RadrootsOrderQuoteId {
+        raw.parse().unwrap()
+    }
+
+    fn bin_id(raw: &str) -> RadrootsInventoryBinId {
+        raw.parse().unwrap()
+    }
+
+    fn digest(raw: &str) -> RadrootsEconomicsDigest {
+        raw.parse().unwrap()
     }
 
     fn sample_order_request() -> RadrootsOrderRequest {
         RadrootsOrderRequest {
-            order_id: "order-1".into(),
+            order_id: order_id("order-1"),
             listing_addr: sample_listing_addr(),
             buyer_pubkey: "buyer".into(),
             seller_pubkey: "seller".into(),
             items: vec![RadrootsOrderItem {
-                bin_id: "bin-1".into(),
+                bin_id: bin_id("bin-1"),
                 bin_count: 2,
             }],
             economics: sample_bound_order_economics(),
@@ -1089,13 +1119,13 @@ mod tests {
 
     fn sample_order_economics() -> RadrootsOrderEconomics {
         RadrootsOrderEconomics {
-            quote_id: "quote-1".into(),
+            quote_id: quote_id("quote-1"),
             quote_version: 1,
             pricing_basis: RadrootsOrderPricingBasis::ListingEvent,
             currency: RadrootsCoreCurrency::USD,
             items: vec![
                 RadrootsOrderEconomicItem {
-                    bin_id: "bin-a".into(),
+                    bin_id: bin_id("bin-a"),
                     bin_count: 2,
                     quantity_amount: decimal("1.5"),
                     quantity_unit: RadrootsCoreUnit::Each,
@@ -1104,7 +1134,7 @@ mod tests {
                     line_subtotal: usd("12"),
                 },
                 RadrootsOrderEconomicItem {
-                    bin_id: "bin-b".into(),
+                    bin_id: bin_id("bin-b"),
                     bin_count: 1,
                     quantity_amount: decimal("2"),
                     quantity_unit: RadrootsCoreUnit::Each,
@@ -1148,12 +1178,12 @@ mod tests {
 
     fn sample_bound_order_economics() -> RadrootsOrderEconomics {
         RadrootsOrderEconomics {
-            quote_id: "quote-bound-1".into(),
+            quote_id: quote_id("quote-bound-1"),
             quote_version: 1,
             pricing_basis: RadrootsOrderPricingBasis::ListingEvent,
             currency: RadrootsCoreCurrency::USD,
             items: vec![RadrootsOrderEconomicItem {
-                bin_id: "bin-1".into(),
+                bin_id: bin_id("bin-1"),
                 bin_count: 2,
                 quantity_amount: decimal("1"),
                 quantity_unit: RadrootsCoreUnit::Each,
@@ -1172,14 +1202,14 @@ mod tests {
 
     fn sample_inventory_commitment() -> RadrootsOrderInventoryCommitment {
         RadrootsOrderInventoryCommitment {
-            bin_id: "bin-1".into(),
+            bin_id: bin_id("bin-1"),
             bin_count: 2,
         }
     }
 
     fn sample_order_decision() -> RadrootsOrderDecision {
         RadrootsOrderDecision {
-            order_id: "order-1".into(),
+            order_id: order_id("order-1"),
             listing_addr: sample_listing_addr(),
             buyer_pubkey: "buyer".into(),
             seller_pubkey: "seller".into(),
@@ -1191,7 +1221,7 @@ mod tests {
 
     fn sample_order_fulfillment_update() -> RadrootsOrderFulfillmentUpdate {
         RadrootsOrderFulfillmentUpdate {
-            order_id: "order-1".into(),
+            order_id: order_id("order-1"),
             listing_addr: sample_listing_addr(),
             buyer_pubkey: "buyer".into(),
             seller_pubkey: "seller".into(),
@@ -1201,7 +1231,7 @@ mod tests {
 
     fn sample_order_cancellation() -> RadrootsOrderCancellation {
         RadrootsOrderCancellation {
-            order_id: "order-1".into(),
+            order_id: order_id("order-1"),
             listing_addr: sample_listing_addr(),
             buyer_pubkey: "buyer".into(),
             seller_pubkey: "seller".into(),
@@ -1211,7 +1241,7 @@ mod tests {
 
     fn sample_order_buyer_receipt(received: bool) -> RadrootsOrderReceipt {
         RadrootsOrderReceipt {
-            order_id: "order-1".into(),
+            order_id: order_id("order-1"),
             listing_addr: sample_listing_addr(),
             buyer_pubkey: "buyer".into(),
             seller_pubkey: "seller".into(),
@@ -1223,15 +1253,15 @@ mod tests {
 
     fn sample_order_revision_proposal() -> RadrootsOrderRevisionProposal {
         RadrootsOrderRevisionProposal {
-            revision_id: "rev-1".into(),
-            order_id: "order-1".into(),
+            revision_id: revision_id("rev-1"),
+            order_id: order_id("order-1"),
             listing_addr: sample_listing_addr(),
             buyer_pubkey: "buyer".into(),
             seller_pubkey: "seller".into(),
             root_event_id: "root-event".into(),
             prev_event_id: "previous-event".into(),
             items: vec![RadrootsOrderItem {
-                bin_id: "bin-1".into(),
+                bin_id: bin_id("bin-1"),
                 bin_count: 2,
             }],
             economics: sample_bound_order_economics(),
@@ -1243,8 +1273,8 @@ mod tests {
         decision: RadrootsOrderRevisionOutcome,
     ) -> RadrootsOrderRevisionDecision {
         RadrootsOrderRevisionDecision {
-            revision_id: "rev-1".into(),
-            order_id: "order-1".into(),
+            revision_id: revision_id("rev-1"),
+            order_id: order_id("order-1"),
             listing_addr: sample_listing_addr(),
             buyer_pubkey: "buyer".into(),
             seller_pubkey: "seller".into(),
@@ -1256,16 +1286,16 @@ mod tests {
 
     fn sample_payment_recorded() -> RadrootsOrderPaymentRecord {
         RadrootsOrderPaymentRecord {
-            order_id: "order-1".into(),
+            order_id: order_id("order-1"),
             listing_addr: sample_listing_addr(),
             buyer_pubkey: "buyer".into(),
             seller_pubkey: "seller".into(),
             root_event_id: "root-event".into(),
             previous_event_id: "previous-event".into(),
             agreement_event_id: "agreement-event".into(),
-            quote_id: "quote-1".into(),
+            quote_id: quote_id("quote-1"),
             quote_version: 1,
-            economics_digest: "economics-digest".into(),
+            economics_digest: digest("economics-digest"),
             amount: decimal("16"),
             currency: RadrootsCoreCurrency::USD,
             method: RadrootsOrderPaymentMethod::ManualTransfer,
@@ -1279,7 +1309,7 @@ mod tests {
         reason: Option<&str>,
     ) -> RadrootsOrderSettlementDecision {
         RadrootsOrderSettlementDecision {
-            order_id: "order-1".into(),
+            order_id: order_id("order-1"),
             listing_addr: sample_listing_addr(),
             seller_pubkey: "seller".into(),
             buyer_pubkey: "buyer".into(),
@@ -1287,9 +1317,9 @@ mod tests {
             previous_event_id: "previous-event".into(),
             agreement_event_id: "agreement-event".into(),
             payment_event_id: "payment-event".into(),
-            quote_id: "quote-1".into(),
+            quote_id: quote_id("quote-1"),
             quote_version: 1,
-            economics_digest: "economics-digest".into(),
+            economics_digest: digest("economics-digest"),
             amount: decimal("16"),
             currency: RadrootsCoreCurrency::USD,
             decision,
@@ -1461,11 +1491,11 @@ mod tests {
     fn order_request_validation_rejects_invalid_fields() {
         assert_eq!(sample_order_request().validate(), Ok(()));
 
-        let mut missing_order_id = sample_order_request();
-        missing_order_id.order_id = " ".into();
+        let mut missing_buyer_pubkey = sample_order_request();
+        missing_buyer_pubkey.buyer_pubkey = " ".into();
         assert_eq!(
-            missing_order_id.validate().unwrap_err(),
-            RadrootsOrderPayloadError::EmptyField("order_id")
+            missing_buyer_pubkey.validate().unwrap_err(),
+            RadrootsOrderPayloadError::EmptyField("buyer_pubkey")
         );
 
         let mut missing_items = sample_order_request();
@@ -1482,15 +1512,8 @@ mod tests {
             RadrootsOrderPayloadError::InvalidItemBinCount { index: 0 }
         );
 
-        let mut missing_bin_id = sample_order_request();
-        missing_bin_id.items[0].bin_id = " ".into();
-        assert_eq!(
-            missing_bin_id.validate().unwrap_err(),
-            RadrootsOrderPayloadError::EmptyField("bin_id")
-        );
-
         let mut mismatched_economic_item = sample_order_request();
-        mismatched_economic_item.economics.items[0].bin_id = "bin-other".into();
+        mismatched_economic_item.economics.items[0].bin_id = bin_id("bin-other");
         assert_eq!(
             mismatched_economic_item.validate().unwrap_err(),
             RadrootsOrderPayloadError::InvalidOrderEconomicsBinding {
@@ -1708,8 +1731,8 @@ mod tests {
         );
 
         let invalid_order_items = [RadrootsOrderItem {
-            bin_id: " ".into(),
-            bin_count: 1,
+            bin_id: bin_id("bin-1"),
+            bin_count: 0,
         }];
         assert_eq!(
             validate_order_economics_binding(&invalid_order_items, &economics).unwrap_err(),
@@ -1720,11 +1743,11 @@ mod tests {
 
         let duplicate_counts = normalized_order_item_counts(&[
             RadrootsOrderItem {
-                bin_id: "bin-1".into(),
+                bin_id: bin_id("bin-1"),
                 bin_count: 1,
             },
             RadrootsOrderItem {
-                bin_id: "bin-1".into(),
+                bin_id: bin_id("bin-1"),
                 bin_count: 2,
             },
         ])
@@ -1733,25 +1756,18 @@ mod tests {
 
         assert!(
             normalized_order_item_counts(&[RadrootsOrderItem {
-                bin_id: " ".into(),
-                bin_count: 1,
-            }])
-            .is_none()
-        );
-        assert!(
-            normalized_order_item_counts(&[RadrootsOrderItem {
-                bin_id: "bin-1".into(),
+                bin_id: bin_id("bin-1"),
                 bin_count: 0,
             }])
             .is_none()
         );
         let sorted_counts = normalized_order_item_counts(&[
             RadrootsOrderItem {
-                bin_id: "bin-b".into(),
+                bin_id: bin_id("bin-b"),
                 bin_count: 1,
             },
             RadrootsOrderItem {
-                bin_id: "bin-a".into(),
+                bin_id: bin_id("bin-a"),
                 bin_count: 1,
             },
         ])
@@ -1887,7 +1903,7 @@ mod tests {
         let accepted_with_zero_count = RadrootsOrderDecision {
             decision: RadrootsOrderDecisionOutcome::Accepted {
                 inventory_commitments: vec![RadrootsOrderInventoryCommitment {
-                    bin_id: "bin-1".into(),
+                    bin_id: bin_id("bin-1"),
                     bin_count: 0,
                 }],
             },
@@ -1912,15 +1928,6 @@ mod tests {
     fn order_revision_validation_covers_proposed_and_decision_paths() {
         assert_eq!(sample_order_revision_proposal().validate(), Ok(()));
 
-        let missing_prev = RadrootsOrderRevisionProposal {
-            prev_event_id: " ".into(),
-            ..sample_order_revision_proposal()
-        };
-        assert_eq!(
-            missing_prev.validate().unwrap_err(),
-            RadrootsOrderPayloadError::EmptyField("prev_event_id")
-        );
-
         assert_eq!(
             sample_order_revision_decision(RadrootsOrderRevisionOutcome::Accepted).validate(),
             Ok(())
@@ -1940,15 +1947,6 @@ mod tests {
         assert_eq!(
             declined_without_reason.validate().unwrap_err(),
             RadrootsOrderPayloadError::EmptyField("reason")
-        );
-
-        let missing_root = RadrootsOrderRevisionDecision {
-            root_event_id: " ".into(),
-            ..sample_order_revision_decision(RadrootsOrderRevisionOutcome::Accepted)
-        };
-        assert_eq!(
-            missing_root.validate().unwrap_err(),
-            RadrootsOrderPayloadError::EmptyField("root_event_id")
         );
     }
 
@@ -2151,7 +2149,7 @@ mod tests {
         assert_eq!(json["order_id"], serde_json::json!("order-1"));
         assert_eq!(
             json["listing_addr"],
-            serde_json::json!("30402:pubkey:AAAAAAAAAAAAAAAAAAAAAg")
+            serde_json::json!(sample_listing_addr().as_str())
         );
         assert_eq!(json["payload"]["items"][0]["bin_id"], "bin-1");
     }
@@ -2163,7 +2161,7 @@ mod tests {
             domain: RadrootsCommercialDomain::Listing,
             message_type: RadrootsOrderEventType::OrderRequested,
             order_id: "order-1".into(),
-            listing_addr: sample_listing_addr(),
+            listing_addr: sample_listing_addr().into_string(),
             payload: sample_order_request(),
         };
         let invalid_version_err = invalid_version.validate().unwrap_err();

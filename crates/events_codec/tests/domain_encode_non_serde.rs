@@ -14,6 +14,7 @@ use radroots_events::{
         RadrootsFarm, RadrootsFarmLocation, RadrootsFarmRef, RadrootsGcsLocation,
         RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon,
     },
+    ids::{RadrootsDTag, RadrootsInventoryBinId},
     listing::{
         RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
         RadrootsListingDeliveryMethod, RadrootsListingLocation, RadrootsListingProduct,
@@ -53,6 +54,14 @@ const VALID_DOC_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAg";
 
 fn decimal(value: &str) -> RadrootsCoreDecimal {
     RadrootsCoreDecimal::from_str(value).expect("valid decimal")
+}
+
+fn listing_d_tag(raw: &str) -> RadrootsDTag {
+    raw.parse().unwrap()
+}
+
+fn bin_id(raw: &str) -> RadrootsInventoryBinId {
+    raw.parse().unwrap()
 }
 
 fn sample_gcs(geohash: &str) -> RadrootsGcsLocation {
@@ -157,7 +166,7 @@ fn sample_listing() -> RadrootsListing {
     );
 
     RadrootsListing {
-        d_tag: VALID_DOC_D_TAG.to_string(),
+        d_tag: listing_d_tag(VALID_DOC_D_TAG),
         published_at: None,
         farm: RadrootsFarmRef {
             pubkey: VALID_PUBKEY.to_string(),
@@ -174,9 +183,9 @@ fn sample_listing() -> RadrootsListing {
             profile: None,
             year: None,
         },
-        primary_bin_id: "bin-1".to_string(),
+        primary_bin_id: bin_id("bin-1"),
         bins: vec![RadrootsListingBin {
-            bin_id: "bin-1".to_string(),
+            bin_id: bin_id("bin-1"),
             quantity,
             price_per_canonical_unit,
             display_amount: None,
@@ -842,15 +851,6 @@ fn listing_encode_paths() {
     }));
 
     let mut invalid = sample_listing();
-    invalid.bins[0].bin_id = " ".to_string();
-    let err = listing_tags_with_options(&invalid, ListingTagOptions::default())
-        .expect_err("empty bin_id");
-    assert!(matches!(
-        err,
-        EventEncodeError::EmptyRequiredField("bin_id")
-    ));
-
-    let mut invalid = sample_listing();
     invalid.bins[0].display_price = None;
     invalid.bins[0].display_price_unit = Some(RadrootsCoreUnit::Each);
     let err = listing_tags_with_options(&invalid, ListingTagOptions::default())
@@ -953,21 +953,6 @@ fn listing_encode_paths() {
     assert!(matches!(
         err,
         EventEncodeError::EmptyRequiredField("farm.d_tag")
-    ));
-
-    let mut invalid = sample_listing();
-    invalid.d_tag = " ".to_string();
-    let err =
-        listing_tags_with_options(&invalid, ListingTagOptions::default()).expect_err("empty d");
-    assert!(matches!(err, EventEncodeError::EmptyRequiredField("d")));
-
-    let mut invalid = sample_listing();
-    invalid.primary_bin_id = " ".to_string();
-    let err = listing_tags_with_options(&invalid, ListingTagOptions::default())
-        .expect_err("empty primary_bin_id");
-    assert!(matches!(
-        err,
-        EventEncodeError::EmptyRequiredField("primary_bin_id")
     ));
 
     let mut invalid = sample_listing();

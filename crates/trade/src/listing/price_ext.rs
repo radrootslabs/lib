@@ -94,11 +94,16 @@ mod tests {
         RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
         RadrootsCoreQuantityPrice, RadrootsCoreQuantityPriceError, RadrootsCoreUnit,
     };
+    use radroots_events::ids::RadrootsInventoryBinId;
     use radroots_events::listing::RadrootsListingBin;
+
+    fn bin_id(raw: &str) -> RadrootsInventoryBinId {
+        RadrootsInventoryBinId::parse(raw).expect("bin id")
+    }
 
     fn valid_bin() -> RadrootsListingBin {
         RadrootsListingBin {
-            bin_id: "bin-1".into(),
+            bin_id: bin_id("bin-1"),
             quantity: RadrootsCoreQuantity::new(
                 RadrootsCoreDecimal::from(2u32),
                 RadrootsCoreUnit::MassG,
@@ -118,7 +123,7 @@ mod tests {
     #[test]
     fn try_subtotal_for_rejects_unit_mismatch() {
         let bin = RadrootsListingBin {
-            bin_id: "bin-1".into(),
+            bin_id: bin_id("bin-1"),
             quantity: RadrootsCoreQuantity::new(
                 RadrootsCoreDecimal::from(1u32),
                 RadrootsCoreUnit::MassG,
@@ -182,7 +187,7 @@ mod tests {
     #[test]
     fn try_total_for_count_propagates_subtotal_errors() {
         let bin = RadrootsListingBin {
-            bin_id: "bin-1".into(),
+            bin_id: bin_id("bin-1"),
             quantity: RadrootsCoreQuantity::new(
                 RadrootsCoreDecimal::from(1u32),
                 RadrootsCoreUnit::MassG,

@@ -607,6 +607,10 @@ mod tests {
     };
     use radroots_events::{
         RadrootsNostrEvent, RadrootsNostrEventPtr,
+        ids::{
+            RadrootsEconomicsDigest, RadrootsInventoryBinId, RadrootsListingAddress,
+            RadrootsOrderId, RadrootsOrderQuoteId, RadrootsOrderRevisionId,
+        },
         kinds::{
             KIND_ORDER_CANCELLATION, KIND_ORDER_DECISION, KIND_ORDER_FULFILLMENT_UPDATE,
             KIND_ORDER_PAYMENT_RECORD, KIND_ORDER_RECEIPT, KIND_ORDER_REQUEST,
@@ -627,14 +631,48 @@ mod tests {
         tags::{TAG_D, TAG_E_PREV, TAG_E_ROOT},
     };
 
+    fn seller_pubkey() -> String {
+        "a".repeat(64)
+    }
+
+    fn listing_addr() -> RadrootsListingAddress {
+        format!("30402:{}:AAAAAAAAAAAAAAAAAAAAAg", seller_pubkey())
+            .parse()
+            .unwrap()
+    }
+
+    fn listing_addr_wire() -> String {
+        listing_addr().into_string()
+    }
+
+    fn order_id(raw: &str) -> RadrootsOrderId {
+        raw.parse().unwrap()
+    }
+
+    fn revision_id(raw: &str) -> RadrootsOrderRevisionId {
+        raw.parse().unwrap()
+    }
+
+    fn quote_id(raw: &str) -> RadrootsOrderQuoteId {
+        raw.parse().unwrap()
+    }
+
+    fn bin_id(raw: &str) -> RadrootsInventoryBinId {
+        raw.parse().unwrap()
+    }
+
+    fn digest(raw: &str) -> RadrootsEconomicsDigest {
+        raw.parse().unwrap()
+    }
+
     fn order_request() -> RadrootsOrderRequest {
         RadrootsOrderRequest {
-            order_id: "order-1".into(),
-            listing_addr: "30402:seller:AAAAAAAAAAAAAAAAAAAAAg".into(),
+            order_id: order_id("order-1"),
+            listing_addr: listing_addr(),
             buyer_pubkey: "buyer".into(),
             seller_pubkey: "seller".into(),
             items: vec![RadrootsOrderItem {
-                bin_id: "lb".into(),
+                bin_id: bin_id("lb"),
                 bin_count: 3,
             }],
             economics: request_economics(),
@@ -651,12 +689,12 @@ mod tests {
 
     fn request_economics() -> RadrootsOrderEconomics {
         RadrootsOrderEconomics {
-            quote_id: "quote-1".into(),
+            quote_id: quote_id("quote-1"),
             quote_version: 1,
             pricing_basis: RadrootsOrderPricingBasis::ListingEvent,
             currency: RadrootsCoreCurrency::USD,
             items: vec![RadrootsOrderEconomicItem {
-                bin_id: "lb".into(),
+                bin_id: bin_id("lb"),
                 bin_count: 3,
                 quantity_amount: decimal("1"),
                 quantity_unit: RadrootsCoreUnit::Each,
@@ -675,13 +713,13 @@ mod tests {
 
     fn order_decision() -> RadrootsOrderDecision {
         RadrootsOrderDecision {
-            order_id: "order-1".into(),
-            listing_addr: "30402:seller:AAAAAAAAAAAAAAAAAAAAAg".into(),
+            order_id: order_id("order-1"),
+            listing_addr: listing_addr(),
             buyer_pubkey: "buyer".into(),
             seller_pubkey: "seller".into(),
             decision: RadrootsOrderDecisionOutcome::Accepted {
                 inventory_commitments: vec![RadrootsOrderInventoryCommitment {
-                    bin_id: "lb".into(),
+                    bin_id: bin_id("lb"),
                     bin_count: 3,
                 }],
             },
@@ -690,7 +728,7 @@ mod tests {
 
     fn order_revision_proposal() -> RadrootsOrderRevisionProposal {
         let mut economics = request_economics();
-        economics.quote_id = "revision-quote-1".into();
+        economics.quote_id = quote_id("revision-quote-1");
         economics.quote_version = 2;
         economics.items[0].bin_count = 4;
         economics.items[0].line_subtotal = usd("20");
@@ -698,15 +736,15 @@ mod tests {
         economics.total = usd("20");
         economics.canonicalize();
         RadrootsOrderRevisionProposal {
-            revision_id: "rev-1".into(),
-            order_id: "order-1".into(),
-            listing_addr: "30402:seller:AAAAAAAAAAAAAAAAAAAAAg".into(),
+            revision_id: revision_id("rev-1"),
+            order_id: order_id("order-1"),
+            listing_addr: listing_addr(),
             buyer_pubkey: "buyer".into(),
             seller_pubkey: "seller".into(),
             root_event_id: "root-event".into(),
             prev_event_id: "decision-event".into(),
             items: vec![RadrootsOrderItem {
-                bin_id: "lb".into(),
+                bin_id: bin_id("lb"),
                 bin_count: 4,
             }],
             economics,
@@ -718,9 +756,9 @@ mod tests {
         decision: RadrootsOrderRevisionOutcome,
     ) -> RadrootsOrderRevisionDecision {
         RadrootsOrderRevisionDecision {
-            revision_id: "rev-1".into(),
-            order_id: "order-1".into(),
-            listing_addr: "30402:seller:AAAAAAAAAAAAAAAAAAAAAg".into(),
+            revision_id: revision_id("rev-1"),
+            order_id: order_id("order-1"),
+            listing_addr: listing_addr(),
             buyer_pubkey: "buyer".into(),
             seller_pubkey: "seller".into(),
             root_event_id: "root-event".into(),
@@ -731,8 +769,8 @@ mod tests {
 
     fn order_fulfillment_update() -> RadrootsOrderFulfillmentUpdate {
         RadrootsOrderFulfillmentUpdate {
-            order_id: "order-1".into(),
-            listing_addr: "30402:seller:AAAAAAAAAAAAAAAAAAAAAg".into(),
+            order_id: order_id("order-1"),
+            listing_addr: listing_addr(),
             buyer_pubkey: "buyer".into(),
             seller_pubkey: "seller".into(),
             status: RadrootsOrderFulfillmentState::ReadyForPickup,
@@ -741,8 +779,8 @@ mod tests {
 
     fn order_cancelled() -> RadrootsOrderCancellation {
         RadrootsOrderCancellation {
-            order_id: "order-1".into(),
-            listing_addr: "30402:seller:AAAAAAAAAAAAAAAAAAAAAg".into(),
+            order_id: order_id("order-1"),
+            listing_addr: listing_addr(),
             buyer_pubkey: "buyer".into(),
             seller_pubkey: "seller".into(),
             reason: "changed plans".into(),
@@ -751,8 +789,8 @@ mod tests {
 
     fn order_buyer_receipt(received: bool) -> RadrootsOrderReceipt {
         RadrootsOrderReceipt {
-            order_id: "order-1".into(),
-            listing_addr: "30402:seller:AAAAAAAAAAAAAAAAAAAAAg".into(),
+            order_id: order_id("order-1"),
+            listing_addr: listing_addr(),
             buyer_pubkey: "buyer".into(),
             seller_pubkey: "seller".into(),
             received,
@@ -763,16 +801,16 @@ mod tests {
 
     fn order_payment_recorded() -> RadrootsOrderPaymentRecord {
         RadrootsOrderPaymentRecord {
-            order_id: "order-1".into(),
-            listing_addr: "30402:seller:AAAAAAAAAAAAAAAAAAAAAg".into(),
+            order_id: order_id("order-1"),
+            listing_addr: listing_addr(),
             buyer_pubkey: "buyer".into(),
             seller_pubkey: "seller".into(),
             root_event_id: "root-event".into(),
             previous_event_id: "agreement-event".into(),
             agreement_event_id: "agreement-event".into(),
-            quote_id: "quote-1".into(),
+            quote_id: quote_id("quote-1"),
             quote_version: 1,
-            economics_digest: "digest-1".into(),
+            economics_digest: digest("digest-1"),
             amount: decimal("15"),
             currency: RadrootsCoreCurrency::USD,
             method: RadrootsOrderPaymentMethod::Cash,
@@ -785,17 +823,17 @@ mod tests {
         decision: RadrootsOrderSettlementOutcome,
     ) -> RadrootsOrderSettlementDecision {
         RadrootsOrderSettlementDecision {
-            order_id: "order-1".into(),
-            listing_addr: "30402:seller:AAAAAAAAAAAAAAAAAAAAAg".into(),
+            order_id: order_id("order-1"),
+            listing_addr: listing_addr(),
             seller_pubkey: "seller".into(),
             buyer_pubkey: "buyer".into(),
             root_event_id: "root-event".into(),
             previous_event_id: "payment-event".into(),
             agreement_event_id: "agreement-event".into(),
             payment_event_id: "payment-event".into(),
-            quote_id: "quote-1".into(),
+            quote_id: quote_id("quote-1"),
             quote_version: 1,
-            economics_digest: "digest-1".into(),
+            economics_digest: digest("digest-1"),
             amount: decimal("15"),
             currency: RadrootsCoreCurrency::USD,
             decision,
@@ -832,13 +870,7 @@ mod tests {
         );
         assert_eq!(envelope.order_id, "order-1");
         assert_eq!(built.tags[0], vec!["p".to_string(), "seller".to_string()]);
-        assert_eq!(
-            built.tags[1],
-            vec![
-                "a".to_string(),
-                "30402:seller:AAAAAAAAAAAAAAAAAAAAAg".to_string()
-            ]
-        );
+        assert_eq!(built.tags[1], vec!["a".to_string(), listing_addr_wire()]);
         assert_eq!(
             built.tags[2],
             vec![TAG_D.to_string(), "order-1".to_string()]
@@ -1162,7 +1194,7 @@ mod tests {
     fn order_request_parse_rejects_mismatched_economics() {
         let mut payload = order_request();
         let built = order_request_event_build(&listing_event_ptr(), &payload).unwrap();
-        payload.economics.items[0].bin_id = "other-bin".into();
+        payload.economics.items[0].bin_id = bin_id("other-bin");
         let envelope = RadrootsOrderEnvelope::new(
             RadrootsOrderEventType::OrderRequested,
             payload.listing_addr.clone(),
@@ -1393,12 +1425,8 @@ mod tests {
             ),
         ] {
             let payload = serde_json::json!({});
-            let envelope = RadrootsOrderEnvelope::new(
-                message_type,
-                "30402:seller:AAAAAAAAAAAAAAAAAAAAAg",
-                "order-1",
-                &payload,
-            );
+            let envelope =
+                RadrootsOrderEnvelope::new(message_type, listing_addr_wire(), "order-1", &payload);
             let event = RadrootsNostrEvent {
                 id: "event-id".into(),
                 author: "seller".into(),
@@ -1406,7 +1434,7 @@ mod tests {
                 kind,
                 tags: vec![
                     vec!["p".into(), "buyer".into()],
-                    vec!["a".into(), "30402:seller:AAAAAAAAAAAAAAAAAAAAAg".into()],
+                    vec!["a".into(), listing_addr_wire()],
                     vec![TAG_D.into(), "order-1".into()],
                     vec![TAG_E_ROOT.into(), "root-event".into()],
                     vec![TAG_E_PREV.into(), "prev-event".into()],

@@ -6,7 +6,7 @@ use alloc::{string::String, string::ToString, vec::Vec};
 #[cfg(feature = "std")]
 use std::{string::String, vec::Vec};
 
-use core::{borrow::Borrow, fmt, str::FromStr};
+use core::{borrow::Borrow, fmt, ops::Deref, str::FromStr};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsIdParseError {
@@ -67,10 +67,54 @@ macro_rules! validated_string_id {
             }
         }
 
+        impl Deref for $name {
+            type Target = str;
+
+            #[inline]
+            fn deref(&self) -> &Self::Target {
+                self.as_str()
+            }
+        }
+
         impl Borrow<str> for $name {
             #[inline]
             fn borrow(&self) -> &str {
                 self.as_str()
+            }
+        }
+
+        impl From<$name> for String {
+            #[inline]
+            fn from(value: $name) -> Self {
+                value.into_string()
+            }
+        }
+
+        impl PartialEq<&str> for $name {
+            #[inline]
+            fn eq(&self, other: &&str) -> bool {
+                self.as_str() == *other
+            }
+        }
+
+        impl PartialEq<$name> for &str {
+            #[inline]
+            fn eq(&self, other: &$name) -> bool {
+                *self == other.as_str()
+            }
+        }
+
+        impl PartialEq<String> for $name {
+            #[inline]
+            fn eq(&self, other: &String) -> bool {
+                self.as_str() == other.as_str()
+            }
+        }
+
+        impl PartialEq<$name> for String {
+            #[inline]
+            fn eq(&self, other: &$name) -> bool {
+                self.as_str() == other.as_str()
             }
         }
 

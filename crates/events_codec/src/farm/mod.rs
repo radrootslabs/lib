@@ -18,8 +18,17 @@ mod tests {
         RadrootsFarm, RadrootsFarmLocation, RadrootsFarmRef, RadrootsGcsLocation,
         RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon,
     };
+    use radroots_events::ids::{RadrootsDTag, RadrootsInventoryBinId};
     use radroots_events::listing::{RadrootsListing, RadrootsListingBin, RadrootsListingProduct};
     use radroots_events::plot::RadrootsPlot;
+
+    fn d_tag(raw: &str) -> RadrootsDTag {
+        raw.parse().unwrap()
+    }
+
+    fn bin_id(raw: &str) -> RadrootsInventoryBinId {
+        raw.parse().unwrap()
+    }
 
     #[test]
     fn farm_tags_include_required_fields() {
@@ -294,7 +303,7 @@ mod tests {
     #[test]
     fn farm_listings_list_set_uses_listing_addresses() {
         let listings = vec![RadrootsListing {
-            d_tag: "AAAAAAAAAAAAAAAAAAAAAg".to_string(),
+            d_tag: d_tag("AAAAAAAAAAAAAAAAAAAAAg"),
             published_at: None,
             farm: RadrootsFarmRef {
                 pubkey: "farm_pubkey".to_string(),
@@ -311,9 +320,9 @@ mod tests {
                 profile: None,
                 year: None,
             },
-            primary_bin_id: "bin-1".to_string(),
+            primary_bin_id: bin_id("bin-1"),
             bins: vec![RadrootsListingBin {
-                bin_id: "bin-1".to_string(),
+                bin_id: bin_id("bin-1"),
                 quantity: RadrootsCoreQuantity::new(
                     RadrootsCoreDecimal::from(1u32),
                     RadrootsCoreUnit::Each,

@@ -64,6 +64,7 @@ mod tests {
         RadrootsCoreQuantityPrice, RadrootsCoreUnit,
     };
     use radroots_events::farm::RadrootsFarmRef;
+    use radroots_events::ids::{RadrootsDTag, RadrootsInventoryBinId};
     use radroots_events::listing::{
         RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
         RadrootsListingDeliveryMethod, RadrootsListingLocation, RadrootsListingProduct,
@@ -73,9 +74,17 @@ mod tests {
         canonicalize_listing_for_seller, resolve_listing_kind, validate_listing_for_seller,
     };
 
+    fn d_tag(raw: &str) -> RadrootsDTag {
+        RadrootsDTag::parse(raw).expect("d tag")
+    }
+
+    fn bin_id(raw: &str) -> RadrootsInventoryBinId {
+        RadrootsInventoryBinId::parse(raw).expect("bin id")
+    }
+
     fn base_listing() -> RadrootsListing {
         RadrootsListing {
-            d_tag: "AAAAAAAAAAAAAAAAAAAAAg".into(),
+            d_tag: d_tag("AAAAAAAAAAAAAAAAAAAAAg"),
             published_at: None,
             farm: RadrootsFarmRef {
                 pubkey: String::new(),
@@ -92,9 +101,9 @@ mod tests {
                 profile: None,
                 year: None,
             },
-            primary_bin_id: "bin-1".into(),
+            primary_bin_id: bin_id("bin-1"),
             bins: vec![RadrootsListingBin {
-                bin_id: "bin-1".into(),
+                bin_id: bin_id("bin-1"),
                 quantity: RadrootsCoreQuantity::new(
                     RadrootsCoreDecimal::from(1000u32),
                     RadrootsCoreUnit::MassG,

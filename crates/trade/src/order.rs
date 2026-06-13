@@ -7,6 +7,7 @@ use alloc::{
 };
 
 use radroots_core::{RadrootsCoreCurrency, RadrootsCoreDecimal};
+use radroots_events::ids::RadrootsListingAddress;
 use radroots_events::kinds::KIND_LISTING;
 use radroots_events::order::{
     RadrootsOrderCancellation, RadrootsOrderDecision, RadrootsOrderDecisionOutcome,
@@ -898,9 +899,8 @@ pub fn canonicalize_order_request_for_signer(
     mut request: RadrootsOrderRequest,
     signer_pubkey: &str,
 ) -> Result<RadrootsOrderRequest, RadrootsOrderCanonicalizationError> {
-    let order_id = normalized_required_string(core::mem::take(&mut request.order_id), "order_id")?;
-    let listing_addr_raw =
-        normalized_required_string(core::mem::take(&mut request.listing_addr), "listing_addr")?;
+    let order_id = request.order_id.clone();
+    let listing_addr_raw = request.listing_addr.to_string();
     let listing_addr = parse_public_listing_addr(&listing_addr_raw)?;
 
     let buyer_pubkey = if request.buyer_pubkey.trim().is_empty() {
@@ -924,7 +924,10 @@ pub fn canonicalize_order_request_for_signer(
     canonicalize_items(&mut request.items)?;
     request.economics.canonicalize();
     request.order_id = order_id;
-    request.listing_addr = listing_addr.as_str();
+    request.listing_addr =
+        RadrootsListingAddress::parse(listing_addr.as_str()).map_err(|error| {
+            RadrootsOrderCanonicalizationError::InvalidListingAddress(error.to_string())
+        })?;
     request.buyer_pubkey = buyer_pubkey;
     request.seller_pubkey = seller_pubkey;
     Ok(request)
@@ -934,12 +937,8 @@ pub fn canonicalize_order_decision_for_signer(
     mut decision_event: RadrootsOrderDecision,
     signer_pubkey: &str,
 ) -> Result<RadrootsOrderDecision, RadrootsOrderCanonicalizationError> {
-    let order_id =
-        normalized_required_string(core::mem::take(&mut decision_event.order_id), "order_id")?;
-    let listing_addr_raw = normalized_required_string(
-        core::mem::take(&mut decision_event.listing_addr),
-        "listing_addr",
-    )?;
+    let order_id = decision_event.order_id.clone();
+    let listing_addr_raw = decision_event.listing_addr.to_string();
     let listing_addr = parse_public_listing_addr(&listing_addr_raw)?;
 
     let seller_pubkey = if decision_event.seller_pubkey.trim().is_empty() {
@@ -961,7 +960,10 @@ pub fn canonicalize_order_decision_for_signer(
     canonicalize_decision(&mut decision_event.decision)?;
 
     decision_event.order_id = order_id;
-    decision_event.listing_addr = listing_addr.as_str();
+    decision_event.listing_addr =
+        RadrootsListingAddress::parse(listing_addr.as_str()).map_err(|error| {
+            RadrootsOrderCanonicalizationError::InvalidListingAddress(error.to_string())
+        })?;
     decision_event.buyer_pubkey = buyer_pubkey;
     decision_event.seller_pubkey = seller_pubkey;
     Ok(decision_event)
@@ -1202,37 +1204,37 @@ fn listing_order_ids(
     order_ids.extend(
         requests
             .iter()
-            .map(|request| request.payload.order_id.clone()),
+            .map(|request| request.payload.order_id.to_string()),
     );
     order_ids.extend(
         decisions
             .iter()
-            .map(|decision| decision.payload.order_id.clone()),
+            .map(|decision| decision.payload.order_id.to_string()),
     );
     order_ids.extend(
         revision_proposals
             .iter()
-            .map(|proposal| proposal.payload.order_id.clone()),
+            .map(|proposal| proposal.payload.order_id.to_string()),
     );
     order_ids.extend(
         revision_decisions
             .iter()
-            .map(|decision| decision.payload.order_id.clone()),
+            .map(|decision| decision.payload.order_id.to_string()),
     );
     order_ids.extend(
         fulfillments
             .iter()
-            .map(|fulfillment| fulfillment.payload.order_id.clone()),
+            .map(|fulfillment| fulfillment.payload.order_id.to_string()),
     );
     order_ids.extend(
         cancellations
             .iter()
-            .map(|cancellation| cancellation.payload.order_id.clone()),
+            .map(|cancellation| cancellation.payload.order_id.to_string()),
     );
     order_ids.extend(
         receipts
             .iter()
-            .map(|receipt| receipt.payload.order_id.clone()),
+            .map(|receipt| receipt.payload.order_id.to_string()),
     );
     sort_and_dedup_strings(&mut order_ids);
     order_ids
@@ -1257,7 +1259,7 @@ fn add_accepted_inventory_reservations_from_economics(
         } else {
             issues.push(
                 RadrootsListingInventoryAccountingIssue::UnknownInventoryBin {
-                    bin_id: item.bin_id.clone(),
+                    bin_id: item.bin_id.to_string(),
                     event_ids: vec![agreement_event_id.to_string()],
                 },
             );
@@ -2222,9 +2224,9 @@ fn payment_projection_from_record(
         payment_event_id: Some(payment.event_id.clone()),
         settlement_event_id: settlement.map(|settlement| settlement.event_id.clone()),
         agreement_event_id: Some(payment.payload.agreement_event_id.clone()),
-        quote_id: Some(payment.payload.quote_id.clone()),
+        quote_id: Some(payment.payload.quote_id.to_string()),
         quote_version: Some(payment.payload.quote_version),
-        economics_digest: Some(payment.payload.economics_digest.clone()),
+        economics_digest: Some(payment.payload.economics_digest.to_string()),
         amount: Some(payment.payload.amount),
         currency: Some(payment.payload.currency),
         method: Some(payment.payload.method),
@@ -2833,7 +2835,7 @@ fn requested_projection(
         payment: RadrootsOrderPaymentProjection::not_recorded(),
         economics: Some(request.payload.economics.clone()),
         agreement_event_id: None,
-        listing_addr: Some(request.payload.listing_addr.clone()),
+        listing_addr: Some(request.payload.listing_addr.to_string()),
         buyer_pubkey: Some(request.payload.buyer_pubkey.clone()),
         seller_pubkey: Some(request.payload.seller_pubkey.clone()),
         last_event_id: Some(request.event_id.clone()),
@@ -3142,7 +3144,7 @@ fn decided_projection(
         payment,
         economics,
         agreement_event_id,
-        listing_addr: Some(request.payload.listing_addr.clone()),
+        listing_addr: Some(request.payload.listing_addr.to_string()),
         buyer_pubkey: Some(request.payload.buyer_pubkey.clone()),
         seller_pubkey: Some(request.payload.seller_pubkey.clone()),
         last_event_id,
@@ -3261,7 +3263,7 @@ fn cancelled_projection(
         payment: RadrootsOrderPaymentProjection::not_recorded(),
         economics: Some(economics),
         agreement_event_id,
-        listing_addr: Some(request.payload.listing_addr.clone()),
+        listing_addr: Some(request.payload.listing_addr.to_string()),
         buyer_pubkey: Some(request.payload.buyer_pubkey.clone()),
         seller_pubkey: Some(request.payload.seller_pubkey.clone()),
         last_event_id: Some(cancellation.event_id),
@@ -3299,7 +3301,7 @@ fn receipt_terminal_projection(
         payment: RadrootsOrderPaymentProjection::not_recorded(),
         economics: Some(economics.clone()),
         agreement_event_id: Some(agreement_event_id.to_string()),
-        listing_addr: Some(request.payload.listing_addr.clone()),
+        listing_addr: Some(request.payload.listing_addr.to_string()),
         buyer_pubkey: Some(request.payload.buyer_pubkey.clone()),
         seller_pubkey: Some(request.payload.seller_pubkey.clone()),
         last_event_id: Some(receipt.event_id),
@@ -3348,7 +3350,7 @@ fn invalid_projection_with_payment(
         payment,
         economics,
         agreement_event_id: None,
-        listing_addr: request.map(|request| request.payload.listing_addr.clone()),
+        listing_addr: request.map(|request| request.payload.listing_addr.to_string()),
         buyer_pubkey: request.map(|request| request.payload.buyer_pubkey.clone()),
         seller_pubkey: request.map(|request| request.payload.seller_pubkey.clone()),
         last_event_id: request.map(|request| request.event_id.clone()),
@@ -3376,7 +3378,6 @@ fn canonicalize_items(
     }
     let mut canonical_items: Vec<RadrootsOrderItem> = Vec::new();
     for (index, item) in items.iter_mut().enumerate() {
-        item.bin_id = normalized_required_string(core::mem::take(&mut item.bin_id), "bin_id")?;
         if item.bin_count == 0 {
             return Err(RadrootsOrderCanonicalizationError::InvalidBinCount { index });
         }
@@ -3421,7 +3422,6 @@ fn canonicalize_inventory_commitments(
         return Err(RadrootsOrderCanonicalizationError::MissingInventoryCommitments);
     }
     for (index, commitment) in commitments.iter_mut().enumerate() {
-        commitment.bin_id = normalized_required_string(commitment.bin_id.clone(), "bin_id")?;
         if commitment.bin_count == 0 {
             return Err(
                 RadrootsOrderCanonicalizationError::InvalidInventoryCommitmentCount { index },
@@ -3503,6 +3503,10 @@ mod tests {
     use radroots_core::{
         RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreUnit,
     };
+    use radroots_events::ids::{
+        RadrootsEconomicsDigest, RadrootsInventoryBinId, RadrootsListingAddress, RadrootsOrderId,
+        RadrootsOrderQuoteId, RadrootsOrderRevisionId,
+    };
     use radroots_events::kinds::KIND_LISTING;
     use radroots_events::order::{
         RadrootsOrderCancellation, RadrootsOrderDecision, RadrootsOrderDecisionOutcome,
@@ -3535,14 +3539,38 @@ mod tests {
     const SELLER: &str = "1111111111111111111111111111111111111111111111111111111111111111";
     const BUYER: &str = "2222222222222222222222222222222222222222222222222222222222222222";
 
+    fn order_id(raw: &str) -> RadrootsOrderId {
+        RadrootsOrderId::parse(raw).expect("order id")
+    }
+
+    fn order_revision_id(raw: &str) -> RadrootsOrderRevisionId {
+        RadrootsOrderRevisionId::parse(raw).expect("revision id")
+    }
+
+    fn order_quote_id(raw: &str) -> RadrootsOrderQuoteId {
+        RadrootsOrderQuoteId::parse(raw).expect("quote id")
+    }
+
+    fn bin_id(raw: &str) -> RadrootsInventoryBinId {
+        RadrootsInventoryBinId::parse(raw).expect("bin id")
+    }
+
+    fn listing_address() -> RadrootsListingAddress {
+        RadrootsListingAddress::parse(listing_addr()).expect("listing address")
+    }
+
+    fn economics_digest(raw: impl AsRef<str>) -> RadrootsEconomicsDigest {
+        RadrootsEconomicsDigest::parse(raw.as_ref()).expect("economics digest")
+    }
+
     fn sample_order_request(buyer_pubkey: &str, seller_pubkey: &str) -> RadrootsOrderRequest {
         RadrootsOrderRequest {
-            order_id: " order-1 ".to_string(),
-            listing_addr: format!(" {KIND_LISTING}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg "),
+            order_id: order_id("order-1"),
+            listing_addr: listing_address(),
             buyer_pubkey: buyer_pubkey.to_string(),
             seller_pubkey: seller_pubkey.to_string(),
             items: vec![RadrootsOrderItem {
-                bin_id: " bin-1 ".to_string(),
+                bin_id: bin_id("bin-1"),
                 bin_count: 2,
             }],
             economics: request_economics("bin-1", 2, "10"),
@@ -3557,14 +3585,18 @@ mod tests {
         RadrootsCoreMoney::new(decimal(raw), RadrootsCoreCurrency::USD)
     }
 
-    fn request_economics(bin_id: &str, bin_count: u32, subtotal: &str) -> RadrootsOrderEconomics {
+    fn request_economics(
+        raw_bin_id: &str,
+        bin_count: u32,
+        subtotal: &str,
+    ) -> RadrootsOrderEconomics {
         RadrootsOrderEconomics {
-            quote_id: "quote-1".to_string(),
+            quote_id: order_quote_id("quote-1"),
             quote_version: 1,
             pricing_basis: RadrootsOrderPricingBasis::ListingEvent,
             currency: RadrootsCoreCurrency::USD,
             items: vec![RadrootsOrderEconomicItem {
-                bin_id: bin_id.to_string(),
+                bin_id: bin_id(raw_bin_id),
                 bin_count,
                 quantity_amount: decimal("1"),
                 quantity_unit: RadrootsCoreUnit::Each,
@@ -3583,13 +3615,13 @@ mod tests {
 
     fn sample_order_decision(seller_pubkey: &str) -> RadrootsOrderDecision {
         RadrootsOrderDecision {
-            order_id: " order-1 ".to_string(),
-            listing_addr: format!(" {KIND_LISTING}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg "),
+            order_id: order_id("order-1"),
+            listing_addr: listing_address(),
             buyer_pubkey: format!(" {BUYER} "),
             seller_pubkey: seller_pubkey.to_string(),
             decision: RadrootsOrderDecisionOutcome::Accepted {
                 inventory_commitments: vec![RadrootsOrderInventoryCommitment {
-                    bin_id: " bin-1 ".to_string(),
+                    bin_id: bin_id("bin-1"),
                     bin_count: 2,
                 }],
             },
@@ -3602,12 +3634,12 @@ mod tests {
 
     fn clean_request_payload() -> RadrootsOrderRequest {
         RadrootsOrderRequest {
-            order_id: "order-1".to_string(),
-            listing_addr: listing_addr(),
+            order_id: order_id("order-1"),
+            listing_addr: listing_address(),
             buyer_pubkey: BUYER.to_string(),
             seller_pubkey: SELLER.to_string(),
             items: vec![RadrootsOrderItem {
-                bin_id: "bin-1".to_string(),
+                bin_id: bin_id("bin-1"),
                 bin_count: 2,
             }],
             economics: request_economics("bin-1", 2, "10"),
@@ -3627,12 +3659,12 @@ mod tests {
     }
 
     fn request_record_for(
-        order_id: &str,
+        raw_order_id: &str,
         event_id: &str,
         bin_count: u32,
     ) -> RadrootsOrderRequestRecord {
         let mut request = request_record_with_event_id(event_id);
-        request.payload.order_id = order_id.to_string();
+        request.payload.order_id = order_id(raw_order_id);
         request.payload.items[0].bin_count = bin_count;
         let subtotal =
             (RadrootsCoreDecimal::from(5u32) * RadrootsCoreDecimal::from(bin_count)).to_string();
@@ -3642,8 +3674,8 @@ mod tests {
 
     fn decision_payload(decision: RadrootsOrderDecisionOutcome) -> RadrootsOrderDecision {
         RadrootsOrderDecision {
-            order_id: "order-1".to_string(),
-            listing_addr: listing_addr(),
+            order_id: order_id("order-1"),
+            listing_addr: listing_address(),
             buyer_pubkey: BUYER.to_string(),
             seller_pubkey: SELLER.to_string(),
             decision,
@@ -3659,7 +3691,7 @@ mod tests {
             prev_event_id: "request-1".to_string(),
             payload: decision_payload(RadrootsOrderDecisionOutcome::Accepted {
                 inventory_commitments: vec![RadrootsOrderInventoryCommitment {
-                    bin_id: "bin-1".to_string(),
+                    bin_id: bin_id("bin-1"),
                     bin_count: 2,
                 }],
             }),
@@ -3691,8 +3723,8 @@ mod tests {
             root_event_id: "request-1".to_string(),
             prev_event_id: prev_event_id.to_string(),
             payload: RadrootsOrderFulfillmentUpdate {
-                order_id: "order-1".to_string(),
-                listing_addr: listing_addr(),
+                order_id: order_id("order-1"),
+                listing_addr: listing_address(),
                 buyer_pubkey: BUYER.to_string(),
                 seller_pubkey: SELLER.to_string(),
                 status,
@@ -3708,8 +3740,8 @@ mod tests {
             root_event_id: "request-1".to_string(),
             prev_event_id: prev_event_id.to_string(),
             payload: RadrootsOrderCancellation {
-                order_id: "order-1".to_string(),
-                listing_addr: listing_addr(),
+                order_id: order_id("order-1"),
+                listing_addr: listing_address(),
                 buyer_pubkey: BUYER.to_string(),
                 seller_pubkey: SELLER.to_string(),
                 reason: "changed plans".to_string(),
@@ -3729,8 +3761,8 @@ mod tests {
             root_event_id: "request-1".to_string(),
             prev_event_id: prev_event_id.to_string(),
             payload: RadrootsOrderReceipt {
-                order_id: "order-1".to_string(),
-                listing_addr: listing_addr(),
+                order_id: order_id("order-1"),
+                listing_addr: listing_address(),
                 buyer_pubkey: BUYER.to_string(),
                 seller_pubkey: SELLER.to_string(),
                 received,
@@ -3749,8 +3781,8 @@ mod tests {
             root_event_id: "request-1".to_string(),
             prev_event_id: prev_event_id.to_string(),
             payload: RadrootsOrderPaymentPayload {
-                order_id: "order-1".to_string(),
-                listing_addr: listing_addr(),
+                order_id: order_id("order-1"),
+                listing_addr: listing_address(),
                 buyer_pubkey: BUYER.to_string(),
                 seller_pubkey: SELLER.to_string(),
                 root_event_id: "request-1".to_string(),
@@ -3758,7 +3790,9 @@ mod tests {
                 agreement_event_id: "decision-1".to_string(),
                 quote_id: economics.quote_id.clone(),
                 quote_version: economics.quote_version,
-                economics_digest: radroots_order_economics_digest(&economics).unwrap(),
+                economics_digest: economics_digest(
+                    radroots_order_economics_digest(&economics).unwrap(),
+                ),
                 amount: economics.total.amount,
                 currency: economics.total.currency,
                 method: RadrootsOrderPaymentMethod::ManualTransfer,
@@ -3802,7 +3836,7 @@ mod tests {
     }
 
     fn accepted_decision_record_for(
-        order_id: &str,
+        raw_order_id: &str,
         event_id: &str,
         request_event_id: &str,
         bin_count: u32,
@@ -3810,7 +3844,7 @@ mod tests {
         let mut decision = accepted_decision_record(event_id);
         decision.root_event_id = request_event_id.to_string();
         decision.prev_event_id = request_event_id.to_string();
-        decision.payload.order_id = order_id.to_string();
+        decision.payload.order_id = order_id(raw_order_id);
         let RadrootsOrderDecisionOutcome::Accepted {
             inventory_commitments,
         } = &mut decision.payload.decision
@@ -3843,15 +3877,15 @@ mod tests {
             root_event_id: "request-1".to_string(),
             prev_event_id: prev_event_id.to_string(),
             payload: RadrootsOrderRevisionProposal {
-                revision_id: revision_id.to_string(),
-                order_id: "order-1".to_string(),
-                listing_addr: listing_addr(),
+                revision_id: order_revision_id(revision_id),
+                order_id: order_id("order-1"),
+                listing_addr: listing_address(),
                 buyer_pubkey: BUYER.to_string(),
                 seller_pubkey: SELLER.to_string(),
                 root_event_id: "request-1".to_string(),
                 prev_event_id: prev_event_id.to_string(),
                 items: vec![RadrootsOrderItem {
-                    bin_id: "bin-1".to_string(),
+                    bin_id: bin_id("bin-1"),
                     bin_count,
                 }],
                 economics: request_economics("bin-1", bin_count, &subtotal),
@@ -3873,9 +3907,9 @@ mod tests {
             root_event_id: "request-1".to_string(),
             prev_event_id: prev_event_id.to_string(),
             payload: RadrootsOrderRevisionDecision {
-                revision_id: revision_id.to_string(),
-                order_id: "order-1".to_string(),
-                listing_addr: listing_addr(),
+                revision_id: order_revision_id(revision_id),
+                order_id: order_id("order-1"),
+                listing_addr: listing_address(),
                 buyer_pubkey: BUYER.to_string(),
                 seller_pubkey: SELLER.to_string(),
                 root_event_id: "request-1".to_string(),
@@ -3967,11 +4001,11 @@ mod tests {
         request.economics.total = usd("12");
         request.items = vec![
             RadrootsOrderItem {
-                bin_id: " bin-1 ".to_string(),
+                bin_id: bin_id("bin-1"),
                 bin_count: 1,
             },
             RadrootsOrderItem {
-                bin_id: "bin-1".to_string(),
+                bin_id: bin_id("bin-1"),
                 bin_count: 1,
             },
         ];
@@ -3981,7 +4015,7 @@ mod tests {
         assert_eq!(
             request.items,
             vec![RadrootsOrderItem {
-                bin_id: "bin-1".to_string(),
+                bin_id: bin_id("bin-1"),
                 bin_count: 2,
             }]
         );
@@ -5022,7 +5056,7 @@ mod tests {
         let decision = RadrootsOrderDecisionRecord {
             payload: decision_payload(RadrootsOrderDecisionOutcome::Accepted {
                 inventory_commitments: vec![RadrootsOrderInventoryCommitment {
-                    bin_id: "bin-1".to_string(),
+                    bin_id: bin_id("bin-1"),
                     bin_count: 1,
                 }],
             }),
@@ -5242,7 +5276,7 @@ mod tests {
         let decision = RadrootsOrderDecisionRecord {
             payload: decision_payload(RadrootsOrderDecisionOutcome::Accepted {
                 inventory_commitments: vec![RadrootsOrderInventoryCommitment {
-                    bin_id: "bin-1".to_string(),
+                    bin_id: bin_id("bin-1"),
                     bin_count: 1,
                 }],
             }),
@@ -5264,7 +5298,7 @@ mod tests {
         let decision = RadrootsOrderDecisionRecord {
             payload: decision_payload(RadrootsOrderDecisionOutcome::Accepted {
                 inventory_commitments: vec![RadrootsOrderInventoryCommitment {
-                    bin_id: "bin-2".to_string(),
+                    bin_id: bin_id("bin-2"),
                     bin_count: 2,
                 }],
             }),
@@ -5287,18 +5321,18 @@ mod tests {
         let mut request = request_record();
         request.payload.items = vec![
             RadrootsOrderItem {
-                bin_id: " bin-1 ".to_string(),
+                bin_id: bin_id("bin-1"),
                 bin_count: 1,
             },
             RadrootsOrderItem {
-                bin_id: "bin-1".to_string(),
+                bin_id: bin_id("bin-1"),
                 bin_count: 1,
             },
         ];
         let decision = RadrootsOrderDecisionRecord {
             payload: decision_payload(RadrootsOrderDecisionOutcome::Accepted {
                 inventory_commitments: vec![RadrootsOrderInventoryCommitment {
-                    bin_id: "bin-1".to_string(),
+                    bin_id: bin_id("bin-1"),
                     bin_count: 2,
                 }],
             }),

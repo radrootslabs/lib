@@ -8,6 +8,7 @@ use radroots_core::{
     RadrootsCoreQuantity, RadrootsCoreQuantityPrice, RadrootsCoreUnit,
 };
 use radroots_events::farm::RadrootsFarmRef;
+use radroots_events::ids::{RadrootsDTag, RadrootsInventoryBinId};
 use radroots_events::kinds::{KIND_FARM, KIND_PLOT, KIND_RESOURCE_AREA};
 use radroots_events::listing::{
     RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
@@ -95,7 +96,8 @@ pub fn listing_from_event_parts(
         {
             if let Ok(mut listing) = serde_json::from_str::<RadrootsListing>(content) {
                 if listing.d_tag.trim().is_empty() {
-                    listing.d_tag = d_tag;
+                    listing.d_tag = RadrootsDTag::parse(&d_tag)
+                        .map_err(|_| ListingParseError::InvalidTag(TAG_D.to_string()))?;
                 } else if listing.d_tag != d_tag {
                     return Err(ListingParseError::InvalidTag(TAG_D.to_string()));
                 }
@@ -173,6 +175,8 @@ fn listing_from_tags(
     if !is_d_tag_base64url(&d_tag) {
         return Err(ListingParseError::InvalidTag(TAG_D.to_string()));
     }
+    let d_tag = RadrootsDTag::parse(&d_tag)
+        .map_err(|_| ListingParseError::InvalidTag(TAG_D.to_string()))?;
     let mut product = RadrootsListingProduct {
         key: String::new(),
         title: String::new(),
@@ -448,6 +452,8 @@ fn listing_from_tags(
     let primary_bin_id = primary_bin_id
         .and_then(|v| clean_value(&v))
         .ok_or_else(|| ListingParseError::MissingTag(TAG_RADROOTS_PRIMARY_BIN.to_string()))?;
+    let primary_bin_id = RadrootsInventoryBinId::parse(&primary_bin_id)
+        .map_err(|_| ListingParseError::InvalidTag(TAG_RADROOTS_PRIMARY_BIN.to_string()))?;
     let bins = build_bins(bin_drafts)?;
     if !bins.iter().any(|bin| bin.bin_id == primary_bin_id) {
         return Err(ListingParseError::InvalidTag(
@@ -632,6 +638,10 @@ mod tests {
 
     fn listing_d_tag() -> String {
         "AAAAAAAAAAAAAAAAAAAAAg".to_string()
+    }
+
+    fn d_tag(raw: &str) -> RadrootsDTag {
+        RadrootsDTag::parse(raw).expect("d tag")
     }
 
     fn base_event_tags() -> Vec<Vec<String>> {
@@ -844,7 +854,6 @@ mod tests {
     #[test]
     fn listing_from_event_parts_uses_json_content_and_backfills_tags() {
         let mut listing = parse_base_listing_from_tags();
-        listing.d_tag = String::new();
         listing.farm.pubkey = String::new();
         listing.farm.d_tag = String::new();
         listing.resource_area = None;
@@ -877,7 +886,7 @@ mod tests {
         let tags = base_event_tags();
 
         let mut listing = parse_base_listing_from_tags();
-        listing.d_tag = "AAAAAAAAAAAAAAAAAAAAAw".into();
+        listing.d_tag = d_tag("AAAAAAAAAAAAAAAAAAAAAw");
         let err =
             listing_from_event_parts(&tags, &serde_json::to_string(&listing).unwrap()).unwrap_err();
         assert_eq!(parse_error_tag(err), TAG_D.to_string());
@@ -2429,7 +2438,8 @@ fn build_bins(mut drafts: Vec<BinDraft>) -> Result<Vec<RadrootsListingBin>, List
             ));
         }
         let bin = RadrootsListingBin {
-            bin_id: draft.bin_id,
+            bin_id: RadrootsInventoryBinId::parse(&draft.bin_id)
+                .map_err(|_| ListingParseError::InvalidTag(TAG_RADROOTS_BIN.to_string()))?,
             quantity,
             price_per_canonical_unit: price,
             display_amount: draft.display_amount,

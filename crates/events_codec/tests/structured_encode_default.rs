@@ -11,6 +11,7 @@ use radroots_events::farm::{
     RadrootsFarm, RadrootsFarmLocation, RadrootsFarmRef, RadrootsGcsLocation, RadrootsGeoJsonPoint,
     RadrootsGeoJsonPolygon,
 };
+use radroots_events::ids::{RadrootsDTag, RadrootsInventoryBinId};
 use radroots_events::list_set::RadrootsListSet;
 use radroots_events::listing::{RadrootsListing, RadrootsListingBin, RadrootsListingProduct};
 use radroots_events::plot::{RadrootsPlot, RadrootsPlotLocation, RadrootsPlotRef};
@@ -43,6 +44,14 @@ use radroots_events_codec::resource_cap::encode::resource_harvest_cap_build_tags
 use test_fixtures::FIXTURE_ALICE_PUBLIC_KEY_HEX;
 
 const TEST_PUBKEY_HEX: &str = FIXTURE_ALICE_PUBLIC_KEY_HEX;
+
+fn listing_d_tag(raw: &str) -> RadrootsDTag {
+    raw.parse().unwrap()
+}
+
+fn bin_id(raw: &str) -> RadrootsInventoryBinId {
+    raw.parse().unwrap()
+}
 
 fn sample_gcs() -> RadrootsGcsLocation {
     RadrootsGcsLocation {
@@ -87,7 +96,7 @@ fn sample_listing(d_tag: &str) -> RadrootsListing {
         quantity.clone(),
     );
     RadrootsListing {
-        d_tag: d_tag.to_string(),
+        d_tag: listing_d_tag(d_tag),
         published_at: None,
         farm: RadrootsFarmRef {
             pubkey: TEST_PUBKEY_HEX.to_string(),
@@ -104,9 +113,9 @@ fn sample_listing(d_tag: &str) -> RadrootsListing {
             profile: None,
             year: None,
         },
-        primary_bin_id: "bin-1".to_string(),
+        primary_bin_id: bin_id("bin-1"),
         bins: vec![RadrootsListingBin {
-            bin_id: "bin-1".to_string(),
+            bin_id: bin_id("bin-1"),
             quantity,
             price_per_canonical_unit: price,
             display_amount: None,
