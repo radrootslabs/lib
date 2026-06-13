@@ -4,11 +4,11 @@ use alloc::{collections::BTreeMap, string::String, string::ToString, vec::Vec};
 use std::collections::BTreeMap;
 
 use radroots_replica_db_schema::farm::IFarmFindMany;
-use radroots_replica_db_schema::nostr_event_state::INostrEventStateFindMany;
+use radroots_replica_db_schema::nostr_event_head::INostrEventHeadFindMany;
 use radroots_sql_core::SqlExecutor;
 
 use crate::error::RadrootsReplicaEventsError;
-use crate::event_state::{event_content_hash, event_state_key, tag_value};
+use crate::event_head::{event_content_hash, event_head_key, tag_value};
 use crate::types::{RadrootsReplicaEventDraft, RadrootsReplicaFarmSelector};
 
 #[derive(Clone, Debug)]
@@ -60,7 +60,7 @@ pub fn radroots_replica_pending_publish_batch<E: SqlExecutor>(
         let bundle = crate::emit::radroots_replica_sync_all_with_options(exec, &selector, None)?;
         for event in bundle.events {
             let d_tag = tag_value(&event.tags, "d").unwrap_or("");
-            let key = event_state_key(event.kind, &event.author, d_tag);
+            let key = event_head_key(event.kind, &event.author, d_tag);
             let content_hash = draft_content_hash(&event)?;
             expected
                 .entry(key.clone())
@@ -75,9 +75,9 @@ pub fn radroots_replica_pending_publish_batch<E: SqlExecutor>(
         }
     }
 
-    let states_query = radroots_replica_db::nostr_event_state::find_many(
+    let states_query = radroots_replica_db::nostr_event_head::find_many(
         exec,
-        &INostrEventStateFindMany { filter: None },
+        &INostrEventHeadFindMany { filter: None },
     );
     let states_result = states_query?;
     let states = states_result.results;
@@ -119,13 +119,13 @@ fn draft_content_hash(
 mod tests {
     use super::{radroots_replica_pending_publish_batch, radroots_replica_sync_status};
     use crate::emit::radroots_replica_sync_all_with_options;
-    use crate::event_state::{
-        event_content_hash, event_content_hash_fail_next, event_state_key, tag_value,
+    use crate::event_head::{
+        event_content_hash, event_content_hash_fail_next, event_head_key, tag_value,
     };
     use crate::types::RadrootsReplicaFarmSelector;
-    use radroots_replica_db::{farm, migrations, nostr_event_state};
+    use radroots_replica_db::{farm, migrations, nostr_event_head};
     use radroots_replica_db_schema::farm::IFarmFields;
-    use radroots_replica_db_schema::nostr_event_state::INostrEventStateFields;
+    use radroots_replica_db_schema::nostr_event_head::INostrEventHeadFields;
     use radroots_sql_core::{SqlExecutor, SqliteExecutor};
 
     #[test]
@@ -171,9 +171,9 @@ mod tests {
         let expected_count = bundle.events.len();
         let first = bundle.events.first().expect("event");
         let d_tag = tag_value(&first.tags, "d").unwrap_or("");
-        let key = event_state_key(first.kind, &first.author, d_tag);
+        let key = event_head_key(first.kind, &first.author, d_tag);
         let content_hash = event_content_hash(&first.content, &first.tags).expect("hash");
-        let fields = INostrEventStateFields {
+        let fields = INostrEventHeadFields {
             key,
             kind: first.kind,
             pubkey: first.author.clone(),
@@ -182,7 +182,7 @@ mod tests {
             last_created_at: 1,
             content_hash,
         };
-        let _ = nostr_event_state::create(&exec, &fields).expect("state");
+        let _ = nostr_event_head::create(&exec, &fields).expect("state");
 
         let status = radroots_replica_sync_status(&exec).expect("status");
         assert_eq!(status.expected_count, expected_count);
@@ -222,9 +222,9 @@ mod tests {
             radroots_replica_sync_all_with_options(&exec, &selector, None).expect("bundle");
         let first = bundle.events.first().expect("event");
         let d_tag = tag_value(&first.tags, "d").unwrap_or("");
-        let key = event_state_key(first.kind, &first.author, d_tag);
+        let key = event_head_key(first.kind, &first.author, d_tag);
         let content_hash = event_content_hash(&first.content, &first.tags).expect("hash");
-        let fields = INostrEventStateFields {
+        let fields = INostrEventHeadFields {
             key: key.clone(),
             kind: first.kind,
             pubkey: first.author.clone(),
@@ -233,7 +233,7 @@ mod tests {
             last_created_at: 1,
             content_hash,
         };
-        let _ = nostr_event_state::create(&exec, &fields).expect("state");
+        let _ = nostr_event_head::create(&exec, &fields).expect("state");
 
         let batch = radroots_replica_pending_publish_batch(&exec).expect("batch");
 
@@ -313,8 +313,8 @@ mod tests {
         let exec = SqliteExecutor::open_memory().expect("db");
         migrations::run_all_up(&exec).expect("migrations");
         let _ = exec
-            .exec("DROP TABLE nostr_event_state;", "[]")
-            .expect("drop nostr_event_state");
+            .exec("DROP TABLE nostr_event_head;", "[]")
+            .expect("drop nostr_event_head");
         let err = radroots_replica_sync_status(&exec).expect_err("state query error");
         assert!(err.to_string().contains("invalid query"));
     }

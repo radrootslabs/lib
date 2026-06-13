@@ -141,7 +141,7 @@ fn sync_all_emits_expected_order() {
         "plot_tag",
     );
 
-    let owner_pubkey = "o".repeat(64);
+    let owner_pubkey = "8".repeat(64);
     let _ = unwrap_sql(
         farm_member::create(
             &exec,

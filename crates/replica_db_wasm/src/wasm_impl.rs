@@ -51,9 +51,9 @@ use radroots_replica_db_schema::nostr_profile::{
     INostrProfileUpdate,
 };
 
-use radroots_replica_db_schema::nostr_event_state::{
-    INostrEventStateCreate, INostrEventStateDelete, INostrEventStateFindMany,
-    INostrEventStateFindOne, INostrEventStateUpdate,
+use radroots_replica_db_schema::nostr_event_head::{
+    INostrEventHeadCreate, INostrEventHeadDelete, INostrEventHeadFindMany, INostrEventHeadFindOne,
+    INostrEventHeadUpdate,
 };
 
 use radroots_replica_db_schema::nostr_relay::{
@@ -704,48 +704,48 @@ pub fn replica_db_nostr_profile_delete(opts_json: &str) -> Result<JsValue, JsVal
     value_to_js(out)
 }
 
-#[wasm_bindgen(js_name = replica_db_nostr_event_state_create)]
-pub fn replica_db_nostr_event_state_create(opts_json: &str) -> Result<JsValue, JsValue> {
-    let opts: INostrEventStateCreate = parse_json(opts_json).map_err(err_js)?;
+#[wasm_bindgen(js_name = replica_db_nostr_event_head_create)]
+pub fn replica_db_nostr_event_head_create(opts_json: &str) -> Result<JsValue, JsValue> {
+    let opts: INostrEventHeadCreate = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
     let out =
-        radroots_replica_db::nostr_event_state::create(&exec, &opts).map_err(|e| err_js(e.err))?;
+        radroots_replica_db::nostr_event_head::create(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
-#[wasm_bindgen(js_name = replica_db_nostr_event_state_find_one)]
-pub fn replica_db_nostr_event_state_find_one(opts_json: &str) -> Result<JsValue, JsValue> {
-    let opts: INostrEventStateFindOne = parse_json(opts_json).map_err(err_js)?;
+#[wasm_bindgen(js_name = replica_db_nostr_event_head_find_one)]
+pub fn replica_db_nostr_event_head_find_one(opts_json: &str) -> Result<JsValue, JsValue> {
+    let opts: INostrEventHeadFindOne = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out = radroots_replica_db::nostr_event_state::find_one(&exec, &opts)
+    let out =
+        radroots_replica_db::nostr_event_head::find_one(&exec, &opts).map_err(|e| err_js(e.err))?;
+    value_to_js(out)
+}
+
+#[wasm_bindgen(js_name = replica_db_nostr_event_head_find_many)]
+pub fn replica_db_nostr_event_head_find_many(opts_json: &str) -> Result<JsValue, JsValue> {
+    let opts: INostrEventHeadFindMany = parse_json(opts_json).map_err(err_js)?;
+    let exec = WasmSqlExecutor::new();
+    let out = radroots_replica_db::nostr_event_head::find_many(&exec, &opts)
         .map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
-#[wasm_bindgen(js_name = replica_db_nostr_event_state_find_many)]
-pub fn replica_db_nostr_event_state_find_many(opts_json: &str) -> Result<JsValue, JsValue> {
-    let opts: INostrEventStateFindMany = parse_json(opts_json).map_err(err_js)?;
+#[wasm_bindgen(js_name = replica_db_nostr_event_head_update)]
+pub fn replica_db_nostr_event_head_update(opts_json: &str) -> Result<JsValue, JsValue> {
+    let opts: INostrEventHeadUpdate = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
-    let out = radroots_replica_db::nostr_event_state::find_many(&exec, &opts)
-        .map_err(|e| err_js(e.err))?;
+    let out =
+        radroots_replica_db::nostr_event_head::update(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 
-#[wasm_bindgen(js_name = replica_db_nostr_event_state_update)]
-pub fn replica_db_nostr_event_state_update(opts_json: &str) -> Result<JsValue, JsValue> {
-    let opts: INostrEventStateUpdate = parse_json(opts_json).map_err(err_js)?;
+#[wasm_bindgen(js_name = replica_db_nostr_event_head_delete)]
+pub fn replica_db_nostr_event_head_delete(opts_json: &str) -> Result<JsValue, JsValue> {
+    let opts: INostrEventHeadDelete = parse_json(opts_json).map_err(err_js)?;
     let exec = WasmSqlExecutor::new();
     let out =
-        radroots_replica_db::nostr_event_state::update(&exec, &opts).map_err(|e| err_js(e.err))?;
-    value_to_js(out)
-}
-
-#[wasm_bindgen(js_name = replica_db_nostr_event_state_delete)]
-pub fn replica_db_nostr_event_state_delete(opts_json: &str) -> Result<JsValue, JsValue> {
-    let opts: INostrEventStateDelete = parse_json(opts_json).map_err(err_js)?;
-    let exec = WasmSqlExecutor::new();
-    let out =
-        radroots_replica_db::nostr_event_state::delete(&exec, &opts).map_err(|e| err_js(e.err))?;
+        radroots_replica_db::nostr_event_head::delete(&exec, &opts).map_err(|e| err_js(e.err))?;
     value_to_js(out)
 }
 

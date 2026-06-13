@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 #[derive(Serialize, Deserialize)]
-pub struct NostrEventState {
+pub struct NostrEventHead {
     pub id: String,
     pub created_at: String,
     pub updated_at: String,
@@ -17,7 +17,7 @@ pub struct NostrEventState {
 }
 
 #[derive(Clone, Deserialize, Serialize)]
-pub struct INostrEventStateFields {
+pub struct INostrEventHeadFields {
     pub key: String,
     pub kind: u32,
     pub pubkey: String,
@@ -28,7 +28,7 @@ pub struct INostrEventStateFields {
 }
 
 #[derive(Clone, Deserialize, Serialize)]
-pub struct INostrEventStateFieldsPartial {
+pub struct INostrEventHeadFieldsPartial {
     pub key: Option<serde_json::Value>,
     pub kind: Option<serde_json::Value>,
     pub pubkey: Option<serde_json::Value>,
@@ -39,7 +39,7 @@ pub struct INostrEventStateFieldsPartial {
 }
 
 #[derive(Clone, Deserialize, Serialize)]
-pub struct INostrEventStateFieldsFilter {
+pub struct INostrEventHeadFieldsFilter {
     pub id: Option<String>,
     pub created_at: Option<String>,
     pub updated_at: Option<String>,
@@ -54,11 +54,11 @@ pub struct INostrEventStateFieldsFilter {
 
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(untagged)]
-pub enum NostrEventStateQueryBindValues {
+pub enum NostrEventHeadQueryBindValues {
     Id { id: String },
     Key { key: String },
 }
-impl NostrEventStateQueryBindValues {
+impl NostrEventHeadQueryBindValues {
     pub fn to_filter_param(&self) -> (&'static str, Value) {
         match self {
             Self::Id { id } => ("id", Value::from(id.clone())),
@@ -81,39 +81,39 @@ impl NostrEventStateQueryBindValues {
     }
 }
 
-pub struct INostrEventStateCreateTs;
-pub type INostrEventStateCreate = INostrEventStateFields;
-pub struct INostrEventStateCreateResolveTs;
-pub type INostrEventStateCreateResolve = IResult<NostrEventState>;
+pub struct INostrEventHeadCreateTs;
+pub type INostrEventHeadCreate = INostrEventHeadFields;
+pub struct INostrEventHeadCreateResolveTs;
+pub type INostrEventHeadCreateResolve = IResult<NostrEventHead>;
 #[derive(Deserialize, Serialize)]
-pub struct INostrEventStateFindOneArgs {
-    pub on: NostrEventStateQueryBindValues,
+pub struct INostrEventHeadFindOneArgs {
+    pub on: NostrEventHeadQueryBindValues,
 }
 
 #[derive(Deserialize, Serialize)]
 #[serde(untagged)]
-pub enum INostrEventStateFindOne {
-    On(INostrEventStateFindOneArgs),
+pub enum INostrEventHeadFindOne {
+    On(INostrEventHeadFindOneArgs),
 }
 
-pub struct INostrEventStateFindOneResolveTs;
-pub type INostrEventStateFindOneResolve = IResult<Option<NostrEventState>>;
+pub struct INostrEventHeadFindOneResolveTs;
+pub type INostrEventHeadFindOneResolve = IResult<Option<NostrEventHead>>;
 #[derive(Deserialize, Serialize)]
-pub struct INostrEventStateFindManyArgs {
-    pub filter: Option<INostrEventStateFieldsFilter>,
+pub struct INostrEventHeadFindManyArgs {
+    pub filter: Option<INostrEventHeadFieldsFilter>,
 }
-pub type INostrEventStateFindMany = INostrEventStateFindManyArgs;
-pub struct INostrEventStateFindManyResolveTs;
-pub type INostrEventStateFindManyResolve = IResultList<NostrEventState>;
-pub struct INostrEventStateDeleteTs;
-pub type INostrEventStateDelete = INostrEventStateFindOne;
-pub struct INostrEventStateDeleteResolveTs;
-pub type INostrEventStateDeleteResolve = IResult<String>;
+pub type INostrEventHeadFindMany = INostrEventHeadFindManyArgs;
+pub struct INostrEventHeadFindManyResolveTs;
+pub type INostrEventHeadFindManyResolve = IResultList<NostrEventHead>;
+pub struct INostrEventHeadDeleteTs;
+pub type INostrEventHeadDelete = INostrEventHeadFindOne;
+pub struct INostrEventHeadDeleteResolveTs;
+pub type INostrEventHeadDeleteResolve = IResult<String>;
 #[derive(Deserialize, Serialize)]
-pub struct INostrEventStateUpdateArgs {
-    pub on: NostrEventStateQueryBindValues,
-    pub fields: INostrEventStateFieldsPartial,
+pub struct INostrEventHeadUpdateArgs {
+    pub on: NostrEventHeadQueryBindValues,
+    pub fields: INostrEventHeadFieldsPartial,
 }
-pub type INostrEventStateUpdate = INostrEventStateUpdateArgs;
-pub struct INostrEventStateUpdateResolveTs;
-pub type INostrEventStateUpdateResolve = IResult<NostrEventState>;
+pub type INostrEventHeadUpdate = INostrEventHeadUpdateArgs;
+pub struct INostrEventHeadUpdateResolveTs;
+pub type INostrEventHeadUpdateResolve = IResult<NostrEventHead>;

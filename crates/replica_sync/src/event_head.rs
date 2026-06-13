@@ -35,7 +35,7 @@ mod failpoints {
     }
 }
 
-pub fn event_state_key(kind: u32, pubkey: &str, d_tag: &str) -> String {
+pub fn event_head_key(kind: u32, pubkey: &str, d_tag: &str) -> String {
     format!("{kind}:{pubkey}:{d_tag}")
 }
 
@@ -85,11 +85,11 @@ pub fn tag_value<'a>(tags: &'a [Vec<String>], key: &str) -> Option<&'a str> {
 
 #[cfg(test)]
 mod tests {
-    use super::{event_content_hash, event_state_key, tag_value};
+    use super::{event_content_hash, event_head_key, tag_value};
 
     #[test]
-    fn event_state_key_formats_consistently() {
-        let key = event_state_key(30000, "author", "d-tag");
+    fn event_head_key_formats_consistently() {
+        let key = event_head_key(30000, "author", "d-tag");
         assert_eq!(key, "30000:author:d-tag");
     }
 

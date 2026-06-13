@@ -94,9 +94,9 @@ pub static MIGRATIONS: &[Migration] = &[
         down_sql: include_str!("../migrations/0017_farm_member_claim.down.sql"),
     },
     Migration {
-        name: "0018_nostr_event_state",
-        up_sql: include_str!("../migrations/0018_nostr_event_state.up.sql"),
-        down_sql: include_str!("../migrations/0018_nostr_event_state.down.sql"),
+        name: "0018_nostr_event_head",
+        up_sql: include_str!("../migrations/0018_nostr_event_head.up.sql"),
+        down_sql: include_str!("../migrations/0018_nostr_event_head.down.sql"),
     },
     Migration {
         name: "0019_repair_missing_indexes",

@@ -1,21 +1,21 @@
-use radroots_replica_db_schema::nostr_event_state::{
-    INostrEventStateCreate, INostrEventStateCreateResolve, INostrEventStateDelete,
-    INostrEventStateDeleteResolve, INostrEventStateFieldsFilter, INostrEventStateFindMany,
-    INostrEventStateFindManyResolve, INostrEventStateFindOne, INostrEventStateFindOneResolve,
-    INostrEventStateUpdate, INostrEventStateUpdateResolve, NostrEventState,
-    NostrEventStateQueryBindValues,
+use radroots_replica_db_schema::nostr_event_head::{
+    INostrEventHeadCreate, INostrEventHeadCreateResolve, INostrEventHeadDelete,
+    INostrEventHeadDeleteResolve, INostrEventHeadFieldsFilter, INostrEventHeadFindMany,
+    INostrEventHeadFindManyResolve, INostrEventHeadFindOne, INostrEventHeadFindOneResolve,
+    INostrEventHeadUpdate, INostrEventHeadUpdateResolve, NostrEventHead,
+    NostrEventHeadQueryBindValues,
 };
 use radroots_sql_core::error::SqlError;
 use radroots_sql_core::{SqlExecutor, utils};
 use radroots_types::types::{IError, IResult, IResultList};
 use serde_json::Value;
 
-const TABLE_NAME: &str = "nostr_event_state";
+const TABLE_NAME: &str = "nostr_event_head";
 
 pub fn create(
     exec: &dyn SqlExecutor,
-    opts: &INostrEventStateCreate,
-) -> Result<INostrEventStateCreateResolve, IError<SqlError>> {
+    opts: &INostrEventHeadCreate,
+) -> Result<INostrEventHeadCreateResolve, IError<SqlError>> {
     let field_map = utils::to_object_map(opts).expect("serialize object map");
     let id = utils::uuidv4();
     let now = utils::time_created_on();
@@ -27,66 +27,66 @@ pub fn create(
     let (sql, bind_values) = utils::build_insert_query_with_meta(TABLE_NAME, &meta, &field_map);
     let params_json = utils::to_params_json(bind_values).expect("serialize bind params");
     let _ = exec.exec(&sql, &params_json)?;
-    let on = NostrEventStateQueryBindValues::Id { id: id.clone() };
+    let on = NostrEventHeadQueryBindValues::Id { id: id.clone() };
     let result = find_one_by_on(exec, &on)?.ok_or(IError::from(SqlError::NotFound(id.clone())))?;
     Ok(IResult { result })
 }
 
 pub fn find_one(
     exec: &dyn SqlExecutor,
-    opts: &INostrEventStateFindOne,
-) -> Result<INostrEventStateFindOneResolve, IError<SqlError>> {
+    opts: &INostrEventHeadFindOne,
+) -> Result<INostrEventHeadFindOneResolve, IError<SqlError>> {
     let result = match opts {
-        INostrEventStateFindOne::On(args) => find_one_by_on(exec, &args.on)?,
+        INostrEventHeadFindOne::On(args) => find_one_by_on(exec, &args.on)?,
     };
     Ok(IResult { result })
 }
 
 pub fn find_many(
     exec: &dyn SqlExecutor,
-    opts: &INostrEventStateFindMany,
-) -> Result<INostrEventStateFindManyResolve, IError<SqlError>> {
+    opts: &INostrEventHeadFindMany,
+) -> Result<INostrEventHeadFindManyResolve, IError<SqlError>> {
     let results = find_many_filter(exec, &opts.filter)?;
     Ok(IResultList { results })
 }
 
 fn find_many_filter(
     exec: &dyn SqlExecutor,
-    filter: &Option<INostrEventStateFieldsFilter>,
-) -> Result<Vec<NostrEventState>, IError<SqlError>> {
+    filter: &Option<INostrEventHeadFieldsFilter>,
+) -> Result<Vec<NostrEventHead>, IError<SqlError>> {
     let (sql, bind_values) = utils::build_select_query_with_meta(TABLE_NAME, filter.as_ref());
     let params_json = utils::to_params_json(bind_values).expect("serialize bind params");
     let json = exec.query_raw(&sql, &params_json)?;
-    let rows: Vec<NostrEventState> = utils::parse_json(&json)?;
+    let rows: Vec<NostrEventHead> = utils::parse_json(&json)?;
     Ok(rows)
 }
 
 fn find_one_by_on(
     exec: &dyn SqlExecutor,
-    on: &NostrEventStateQueryBindValues,
-) -> Result<Option<NostrEventState>, IError<SqlError>> {
+    on: &NostrEventHeadQueryBindValues,
+) -> Result<Option<NostrEventHead>, IError<SqlError>> {
     let (column, value) = on.to_filter_param();
     let sql = format!("SELECT * FROM {TABLE_NAME} WHERE {column} = ? LIMIT 1;");
     let params_json = utils::to_params_json(vec![value]).expect("serialize bind params");
     let json = exec.query_raw(&sql, &params_json)?;
-    let mut rows: Vec<NostrEventState> = utils::parse_json(&json)?;
+    let mut rows: Vec<NostrEventHead> = utils::parse_json(&json)?;
     Ok(rows.pop())
 }
 
-fn select_by_id(exec: &dyn SqlExecutor, id: &str) -> Result<NostrEventState, IError<SqlError>> {
+fn select_by_id(exec: &dyn SqlExecutor, id: &str) -> Result<NostrEventHead, IError<SqlError>> {
     let params_json =
         utils::to_params_json(vec![Value::from(id.to_owned())]).expect("serialize bind params");
     let sql = format!("SELECT * FROM {TABLE_NAME} WHERE id = ?;");
     let json = exec.query_raw(&sql, &params_json)?;
-    let mut rows: Vec<NostrEventState> = utils::parse_json(&json)?;
+    let mut rows: Vec<NostrEventHead> = utils::parse_json(&json)?;
     rows.pop()
         .ok_or(IError::from(SqlError::NotFound(id.to_owned())))
 }
 
 pub fn update(
     exec: &dyn SqlExecutor,
-    opts: &INostrEventStateUpdate,
-) -> Result<INostrEventStateUpdateResolve, IError<SqlError>> {
+    opts: &INostrEventHeadUpdate,
+) -> Result<INostrEventHeadUpdateResolve, IError<SqlError>> {
     let mut updates =
         utils::to_partial_object_map(&opts.fields).expect("serialize partial object map");
     if updates.is_empty() {
@@ -125,10 +125,10 @@ pub fn update(
 
 pub fn delete(
     exec: &dyn SqlExecutor,
-    opts: &INostrEventStateDelete,
-) -> Result<INostrEventStateDeleteResolve, IError<SqlError>> {
+    opts: &INostrEventHeadDelete,
+) -> Result<INostrEventHeadDeleteResolve, IError<SqlError>> {
     let id_for_lookup = match opts {
-        INostrEventStateDelete::On(args) => match args.on.primary_key() {
+        INostrEventHeadDelete::On(args) => match args.on.primary_key() {
             Some(id) => id,
             None => {
                 let found = find_one_by_on(exec, &args.on)?;

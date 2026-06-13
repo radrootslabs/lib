@@ -14,7 +14,7 @@ fn create_legacy_schema_without_secondary_indexes(exec: &SqliteExecutor) {
         "CREATE TABLE gcs_location (id CHAR(36) PRIMARY KEY NOT NULL UNIQUE CHECK(length(id) = 36), created_at DATETIME NOT NULL CHECK(length(created_at) = 24), updated_at DATETIME NOT NULL CHECK(length(updated_at) = 24), d_tag TEXT NOT NULL, lat REAL NOT NULL, lng REAL NOT NULL, geohash TEXT NOT NULL, point TEXT NOT NULL, polygon TEXT NOT NULL, accuracy REAL, altitude REAL, tag_0 TEXT, label TEXT, area REAL, elevation INTEGER, soil TEXT, climate TEXT, gc_id TEXT, gc_name TEXT, gc_admin1_id TEXT, gc_admin1_name TEXT, gc_country_id TEXT, gc_country_name TEXT)",
         "CREATE TABLE trade_product (id CHAR(36) PRIMARY KEY NOT NULL UNIQUE CHECK(length(id) = 36), created_at DATETIME NOT NULL CHECK(length(created_at) = 24), updated_at DATETIME NOT NULL CHECK(length(updated_at) = 24), key TEXT NOT NULL, category TEXT NOT NULL, title TEXT NOT NULL, summary TEXT NOT NULL, process TEXT NOT NULL, lot TEXT NOT NULL, profile TEXT NOT NULL, year INTEGER NOT NULL, qty_amt INTEGER NOT NULL, qty_unit CHAR(4) NOT NULL, qty_label TEXT, qty_avail INTEGER, price_amt REAL NOT NULL, price_currency CHAR(3) NOT NULL, price_qty_amt INTEGER NOT NULL, price_qty_unit CHAR(4) NOT NULL, notes TEXT)",
         "CREATE TABLE plot (id CHAR(36) PRIMARY KEY NOT NULL UNIQUE CHECK(length(id) = 36), created_at DATETIME NOT NULL CHECK(length(created_at) = 24), updated_at DATETIME NOT NULL CHECK(length(updated_at) = 24), d_tag TEXT NOT NULL, farm_id CHAR(36) NOT NULL, name TEXT NOT NULL, about TEXT, location_primary TEXT, location_city TEXT, location_region TEXT, location_country TEXT, FOREIGN KEY (farm_id) REFERENCES farm(id) ON DELETE CASCADE)",
-        "CREATE TABLE nostr_event_state (id CHAR(36) PRIMARY KEY NOT NULL UNIQUE CHECK(length(id) = 36), created_at DATETIME NOT NULL CHECK(length(created_at) = 24), updated_at DATETIME NOT NULL CHECK(length(updated_at) = 24), key TEXT NOT NULL UNIQUE, kind INTEGER NOT NULL, pubkey CHAR(64) NOT NULL CHECK(length(pubkey) = 64), d_tag TEXT NOT NULL, last_event_id CHAR(64) NOT NULL CHECK(length(last_event_id) = 64), last_created_at INTEGER NOT NULL, content_hash TEXT NOT NULL)",
+        "CREATE TABLE nostr_event_head (id CHAR(36) PRIMARY KEY NOT NULL UNIQUE CHECK(length(id) = 36), created_at DATETIME NOT NULL CHECK(length(created_at) = 24), updated_at DATETIME NOT NULL CHECK(length(updated_at) = 24), key TEXT NOT NULL UNIQUE, kind INTEGER NOT NULL, pubkey CHAR(64) NOT NULL CHECK(length(pubkey) = 64), d_tag TEXT NOT NULL, last_event_id CHAR(64) NOT NULL CHECK(length(last_event_id) = 64), last_created_at INTEGER NOT NULL, content_hash TEXT NOT NULL)",
     ];
 
     for sql in schema {
@@ -41,7 +41,7 @@ fn create_legacy_schema_without_secondary_indexes(exec: &SqliteExecutor) {
         "0015_plot_tag",
         "0016_farm_member",
         "0017_farm_member_claim",
-        "0018_nostr_event_state",
+        "0018_nostr_event_head",
     ] {
         let sql = format!("INSERT INTO __migrations(name) VALUES ('{name}')");
         exec.exec(&sql, "[]")
@@ -56,7 +56,7 @@ fn run_all_up_repairs_missing_indexes_in_legacy_sqlite_dbs() {
 
     let before = query_rows(
         &exec,
-        "SELECT name FROM sqlite_master WHERE type = 'index' AND name IN ('farm_pubkey_d_tag_idx', 'gcs_location_geohash_idx', 'plot_farm_d_tag_idx', 'nostr_event_state_kind_idx') ORDER BY name",
+        "SELECT name FROM sqlite_master WHERE type = 'index' AND name IN ('farm_pubkey_d_tag_idx', 'gcs_location_geohash_idx', 'plot_farm_d_tag_idx', 'nostr_event_head_kind_idx') ORDER BY name",
     );
     assert!(before.is_empty());
 
@@ -64,7 +64,7 @@ fn run_all_up_repairs_missing_indexes_in_legacy_sqlite_dbs() {
 
     let after = query_rows(
         &exec,
-        "SELECT name FROM sqlite_master WHERE type = 'index' AND name IN ('farm_pubkey_d_tag_idx', 'gcs_location_geohash_idx', 'plot_farm_d_tag_idx', 'nostr_event_state_kind_idx') ORDER BY name",
+        "SELECT name FROM sqlite_master WHERE type = 'index' AND name IN ('farm_pubkey_d_tag_idx', 'gcs_location_geohash_idx', 'plot_farm_d_tag_idx', 'nostr_event_head_kind_idx') ORDER BY name",
     );
     let names = after
         .iter()
@@ -80,7 +80,7 @@ fn run_all_up_repairs_missing_indexes_in_legacy_sqlite_dbs() {
         vec![
             "farm_pubkey_d_tag_idx".to_string(),
             "gcs_location_geohash_idx".to_string(),
-            "nostr_event_state_kind_idx".to_string(),
+            "nostr_event_head_kind_idx".to_string(),
             "plot_farm_d_tag_idx".to_string(),
         ]
     );

@@ -60,11 +60,11 @@ use radroots_replica_db_schema::nostr_profile::{
     INostrProfileUpdateResolve,
 };
 
-use radroots_replica_db_schema::nostr_event_state::{
-    INostrEventStateCreate, INostrEventStateCreateResolve, INostrEventStateDelete,
-    INostrEventStateDeleteResolve, INostrEventStateFindMany, INostrEventStateFindManyResolve,
-    INostrEventStateFindOne, INostrEventStateFindOneResolve, INostrEventStateUpdate,
-    INostrEventStateUpdateResolve,
+use radroots_replica_db_schema::nostr_event_head::{
+    INostrEventHeadCreate, INostrEventHeadCreateResolve, INostrEventHeadDelete,
+    INostrEventHeadDeleteResolve, INostrEventHeadFindMany, INostrEventHeadFindManyResolve,
+    INostrEventHeadFindOne, INostrEventHeadFindOneResolve, INostrEventHeadUpdate,
+    INostrEventHeadUpdateResolve,
 };
 
 use radroots_replica_db_schema::nostr_relay::{
@@ -577,39 +577,39 @@ impl<E: SqlExecutor> ReplicaSql<E> {
         models::nostr_profile::delete(self.executor(), opts)
     }
 
-    pub fn nostr_event_state_create(
+    pub fn nostr_event_head_create(
         &self,
-        opts: &INostrEventStateCreate,
-    ) -> Result<INostrEventStateCreateResolve, IError<SqlError>> {
-        models::nostr_event_state::create(self.executor(), opts)
+        opts: &INostrEventHeadCreate,
+    ) -> Result<INostrEventHeadCreateResolve, IError<SqlError>> {
+        models::nostr_event_head::create(self.executor(), opts)
     }
 
-    pub fn nostr_event_state_find_many(
+    pub fn nostr_event_head_find_many(
         &self,
-        opts: &INostrEventStateFindMany,
-    ) -> Result<INostrEventStateFindManyResolve, IError<SqlError>> {
-        models::nostr_event_state::find_many(self.executor(), opts)
+        opts: &INostrEventHeadFindMany,
+    ) -> Result<INostrEventHeadFindManyResolve, IError<SqlError>> {
+        models::nostr_event_head::find_many(self.executor(), opts)
     }
 
-    pub fn nostr_event_state_find_one(
+    pub fn nostr_event_head_find_one(
         &self,
-        opts: &INostrEventStateFindOne,
-    ) -> Result<INostrEventStateFindOneResolve, IError<SqlError>> {
-        models::nostr_event_state::find_one(self.executor(), opts)
+        opts: &INostrEventHeadFindOne,
+    ) -> Result<INostrEventHeadFindOneResolve, IError<SqlError>> {
+        models::nostr_event_head::find_one(self.executor(), opts)
     }
 
-    pub fn nostr_event_state_update(
+    pub fn nostr_event_head_update(
         &self,
-        opts: &INostrEventStateUpdate,
-    ) -> Result<INostrEventStateUpdateResolve, IError<SqlError>> {
-        models::nostr_event_state::update(self.executor(), opts)
+        opts: &INostrEventHeadUpdate,
+    ) -> Result<INostrEventHeadUpdateResolve, IError<SqlError>> {
+        models::nostr_event_head::update(self.executor(), opts)
     }
 
-    pub fn nostr_event_state_delete(
+    pub fn nostr_event_head_delete(
         &self,
-        opts: &INostrEventStateDelete,
-    ) -> Result<INostrEventStateDeleteResolve, IError<SqlError>> {
-        models::nostr_event_state::delete(self.executor(), opts)
+        opts: &INostrEventHeadDelete,
+    ) -> Result<INostrEventHeadDeleteResolve, IError<SqlError>> {
+        models::nostr_event_head::delete(self.executor(), opts)
     }
 
     pub fn nostr_relay_create(

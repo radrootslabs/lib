@@ -7,7 +7,7 @@ extern crate alloc;
 mod canonical;
 pub mod emit;
 pub mod error;
-mod event_state;
+mod event_head;
 mod geo;
 pub mod ingest;
 pub mod sync_state;
@@ -21,7 +21,7 @@ pub use emit::{
 };
 pub use error::RadrootsReplicaEventsError;
 pub use ingest::{
-    RadrootsReplicaIdFactory, RadrootsReplicaIngestOutcome, radroots_replica_ingest_event_state,
+    RadrootsReplicaIdFactory, RadrootsReplicaIngestOutcome, radroots_replica_ingest_event_head,
     radroots_replica_ingest_event_with_factory,
 };
 pub use sync_state::{

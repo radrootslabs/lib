@@ -1178,7 +1178,7 @@ mod tests {
             exec,
             &IFarmMemberFields {
                 farm_id: farm.id.clone(),
-                member_pubkey: "m".repeat(64),
+                member_pubkey: "6".repeat(64),
                 role: "member".to_string(),
             },
         )
@@ -1187,7 +1187,7 @@ mod tests {
             exec,
             &IFarmMemberFields {
                 farm_id: farm.id.clone(),
-                member_pubkey: "o".repeat(64),
+                member_pubkey: "8".repeat(64),
                 role: "owner".to_string(),
             },
         )
@@ -1196,7 +1196,7 @@ mod tests {
             exec,
             &IFarmMemberFields {
                 farm_id: farm.id.clone(),
-                member_pubkey: "u".repeat(64),
+                member_pubkey: "e".repeat(64),
                 role: "worker".to_string(),
             },
         )
@@ -1205,7 +1205,7 @@ mod tests {
             exec,
             &IFarmMemberFields {
                 farm_id: farm.id.clone(),
-                member_pubkey: "x".repeat(64),
+                member_pubkey: "1".repeat(64),
                 role: "member".to_string(),
             },
         )
@@ -1214,7 +1214,7 @@ mod tests {
         let _ = farm_member_claim::create(
             exec,
             &IFarmMemberClaimFields {
-                member_pubkey: "m".repeat(64),
+                member_pubkey: "6".repeat(64),
                 farm_pubkey: farm.pubkey.clone(),
             },
         )
@@ -1222,7 +1222,7 @@ mod tests {
         let _ = farm_member_claim::create(
             exec,
             &IFarmMemberClaimFields {
-                member_pubkey: "x".repeat(64),
+                member_pubkey: "1".repeat(64),
                 farm_pubkey: farm.pubkey.clone(),
             },
         )
@@ -1248,7 +1248,7 @@ mod tests {
         let _ = nostr_profile::create(
             exec,
             &INostrProfileFields {
-                public_key: "m".repeat(64),
+                public_key: "6".repeat(64),
                 profile_type: "legacy".to_string(),
                 name: "member profile".to_string(),
                 display_name: Some("member".to_string()),
@@ -1478,7 +1478,7 @@ mod tests {
                 .is_some()
         );
         assert!(
-            load_profile(&exec, &"z".repeat(64))
+            load_profile(&exec, &"3".repeat(64))
                 .expect("missing profile")
                 .is_none()
         );
@@ -1505,12 +1505,12 @@ mod tests {
         .expect("profile farm");
         assert!(!profile_event_farm.tags.is_empty());
         let profile_event_unknown = profile_event(
-            &"m".repeat(64),
+            &"6".repeat(64),
             radroots_replica_db_schema::nostr_profile::NostrProfile {
                 id: "00000000-0000-0000-0000-000000000002".to_string(),
                 created_at: "2024-01-01T00:00:00.000Z".to_string(),
                 updated_at: "2024-01-01T00:00:00.000Z".to_string(),
-                public_key: "m".repeat(64),
+                public_key: "6".repeat(64),
                 profile_type: "legacy".to_string(),
                 name: "legacy".to_string(),
                 display_name: None,
@@ -1548,7 +1548,7 @@ mod tests {
         let claims = load_member_claims(&exec, &farm_row.pubkey).expect("claims");
         assert!(!claims.is_empty());
         let member_claims =
-            load_member_claims_for_member(&exec, &"m".repeat(64)).expect("claims by member");
+            load_member_claims_for_member(&exec, &"6".repeat(64)).expect("claims by member");
         assert!(!member_claims.is_empty());
 
         let profile_events = radroots_replica_profile_events(&exec, &farm_row).expect("profiles");
@@ -1697,7 +1697,7 @@ mod tests {
         assert_eq!(plot_events.len(), 1);
 
         let claims =
-            radroots_replica_membership_claim_events(&exec, &"z".repeat(64)).expect("empty claims");
+            radroots_replica_membership_claim_events(&exec, &"3".repeat(64)).expect("empty claims");
         assert!(claims.is_empty());
 
         let by_pair = resolve_farm(
@@ -1721,7 +1721,7 @@ mod tests {
             &exec,
             &IFarmMemberFields {
                 farm_id: farm_row.id.clone(),
-                member_pubkey: "z".repeat(64),
+                member_pubkey: "3".repeat(64),
                 role: ROLE_MEMBER.to_string(),
             },
         )
@@ -1800,7 +1800,7 @@ mod tests {
             created_at: "now".to_string(),
             updated_at: "now".to_string(),
             d_tag: "d".to_string(),
-            pubkey: "p".repeat(64),
+            pubkey: "9".repeat(64),
             name: "farm".to_string(),
             about: None,
             website: None,
@@ -2315,7 +2315,7 @@ mod tests {
         let _ = farm_member_claim::create(
             &exec,
             &IFarmMemberClaimFields {
-                member_pubkey: "q".repeat(64),
+                member_pubkey: "a".repeat(64),
                 farm_pubkey: " ".repeat(64),
             },
         )

@@ -118,7 +118,7 @@ impl<E: SqlExecutor> ReplicaSql<E> {
 
     pub fn nostr_event_last_created_at(&self) -> Result<Option<u64>, SqlError> {
         let json = self.executor().query_raw(
-            "SELECT MAX(last_created_at) AS last_created_at FROM nostr_event_state WHERE last_created_at IS NOT NULL",
+            "SELECT MAX(last_created_at) AS last_created_at FROM nostr_event_head WHERE last_created_at IS NOT NULL",
             "[]",
         )?;
         let rows: Vec<ReplicaEventFreshnessRow> =

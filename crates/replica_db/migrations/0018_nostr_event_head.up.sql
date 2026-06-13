@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS nostr_event_state (
+CREATE TABLE IF NOT EXISTS nostr_event_head (
     id CHAR(36) PRIMARY KEY NOT NULL UNIQUE CHECK(length(id) = 36),
     created_at DATETIME NOT NULL CHECK(length(created_at) = 24),
     updated_at DATETIME NOT NULL CHECK(length(updated_at) = 24),
@@ -11,4 +11,4 @@ CREATE TABLE IF NOT EXISTS nostr_event_state (
     content_hash TEXT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS nostr_event_state_kind_idx ON nostr_event_state(kind);
+CREATE INDEX IF NOT EXISTS nostr_event_head_kind_idx ON nostr_event_head(kind);

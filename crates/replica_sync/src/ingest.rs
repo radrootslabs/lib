@@ -13,6 +13,12 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 
 use radroots_core::RadrootsCoreDecimal;
 use radroots_events::RadrootsNostrEvent;
+use radroots_events::event_head::{
+    RadrootsCurrentEventHead, RadrootsEventHeadCandidateResult, RadrootsEventHeadCoordinate,
+    RadrootsEventHeadDecision as ProtocolEventHeadDecision, event_head_candidate_for_event,
+    select_event_head,
+};
+use radroots_events::ids::RadrootsEventId;
 use radroots_events::kinds::{
     KIND_FARM, KIND_LISTING, KIND_PLOT, KIND_PROFILE, is_nip51_list_set_kind,
 };
@@ -26,7 +32,7 @@ use radroots_events_codec::plot::decode as plot_decode;
 use radroots_events_codec::profile::decode as profile_decode;
 use radroots_replica_db::{
     farm, farm_gcs_location, farm_member, farm_member_claim, farm_tag, gcs_location,
-    nostr_event_state, nostr_profile, plot, plot_gcs_location, plot_tag, trade_product,
+    nostr_event_head, nostr_profile, plot, plot_gcs_location, plot_tag, trade_product,
 };
 use radroots_replica_db_schema::farm::{
     FarmQueryBindValues, IFarmFields, IFarmFieldsFilter, IFarmFieldsPartial, IFarmFindMany,
@@ -49,9 +55,10 @@ use radroots_replica_db_schema::farm_tag::{
     IFarmTagFindOneArgs,
 };
 use radroots_replica_db_schema::gcs_location::IGcsLocationFields;
-use radroots_replica_db_schema::nostr_event_state::{
-    INostrEventStateFields, INostrEventStateFieldsPartial, INostrEventStateFindOne,
-    INostrEventStateFindOneArgs, INostrEventStateUpdate, NostrEventStateQueryBindValues,
+use radroots_replica_db_schema::nostr_event_head::{
+    INostrEventHeadFields, INostrEventHeadFieldsPartial, INostrEventHeadFindOne,
+    INostrEventHeadFindOneArgs, INostrEventHeadUpdate, NostrEventHead,
+    NostrEventHeadQueryBindValues,
 };
 use radroots_replica_db_schema::nostr_profile::{
     INostrProfileFields, INostrProfileFieldsPartial, INostrProfileFindOne,
@@ -79,7 +86,7 @@ use radroots_sql_core::error::SqlError;
 use serde_json::{Value, json};
 
 use crate::error::RadrootsReplicaEventsError;
-use crate::event_state::{event_content_hash, event_state_key};
+use crate::event_head::{event_content_hash, event_head_key};
 const ROLE_PRIMARY: &str = "primary";
 const ROLE_MEMBER: &str = "member";
 const ROLE_OWNER: &str = "owner";
@@ -218,8 +225,7 @@ fn ingest_profile_event(
         }
     };
 
-    let d_tag = "".to_string();
-    let decision = event_state_decision(exec, event, &d_tag)?;
+    let decision = event_head_decision(exec, event)?;
     if !decision.apply {
         return Ok(RadrootsReplicaIngestOutcome::Skipped);
     }
@@ -284,7 +290,7 @@ fn ingest_profile_event(
         }
     }
 
-    radroots_replica_ingest_event_state(exec, event, &d_tag, &decision.content_hash)?;
+    upsert_event_head(exec, &decision)?;
     Ok(RadrootsReplicaIngestOutcome::Applied)
 }
 
@@ -294,7 +300,7 @@ fn ingest_farm_event(
     factory: &dyn RadrootsReplicaIdFactory,
 ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
     let farm = farm_decode::farm_from_event(event.kind, &event.tags, &event.content)?;
-    let decision = event_state_decision(exec, event, &farm.d_tag)?;
+    let decision = event_head_decision(exec, event)?;
     if !decision.apply {
         return Ok(RadrootsReplicaIngestOutcome::Skipped);
     }
@@ -368,7 +374,7 @@ fn ingest_farm_event(
     upsert_farm_tags(exec, &farm_id, farm.tags)?;
     upsert_farm_location(exec, &farm_id, location, factory)?;
 
-    radroots_replica_ingest_event_state(exec, event, &farm.d_tag, &decision.content_hash)?;
+    upsert_event_head(exec, &decision)?;
     Ok(RadrootsReplicaIngestOutcome::Applied)
 }
 
@@ -378,7 +384,7 @@ fn ingest_plot_event(
     factory: &dyn RadrootsReplicaIdFactory,
 ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
     let plot = plot_decode::plot_from_event(event.kind, &event.tags, &event.content)?;
-    let decision = event_state_decision(exec, event, &plot.d_tag)?;
+    let decision = event_head_decision(exec, event)?;
     if !decision.apply {
         return Ok(RadrootsReplicaIngestOutcome::Skipped);
     }
@@ -444,7 +450,7 @@ fn ingest_plot_event(
     upsert_plot_tags(exec, &plot_id, plot.tags)?;
     upsert_plot_location(exec, &plot_id, location, factory)?;
 
-    radroots_replica_ingest_event_state(exec, event, &plot.d_tag, &decision.content_hash)?;
+    upsert_event_head(exec, &decision)?;
     Ok(RadrootsReplicaIngestOutcome::Applied)
 }
 
@@ -453,7 +459,7 @@ fn ingest_listing_event(
     event: &RadrootsNostrEvent,
 ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
     let listing = listing_decode::listing_from_event(event.kind, &event.tags, &event.content)?;
-    let decision = event_state_decision(exec, event, &listing.d_tag)?;
+    let decision = event_head_decision(exec, event)?;
     if !decision.apply {
         return Ok(RadrootsReplicaIngestOutcome::Skipped);
     }
@@ -466,7 +472,7 @@ fn ingest_listing_event(
         delete_trade_products_for_listing_addr(exec, &listing_addr)?;
     }
 
-    radroots_replica_ingest_event_state(exec, event, &listing.d_tag, &decision.content_hash)?;
+    upsert_event_head(exec, &decision)?;
     Ok(RadrootsReplicaIngestOutcome::Applied)
 }
 
@@ -495,28 +501,36 @@ fn ingest_list_set_event(
     }
 
     let d_tag = list_set.d_tag.clone();
-    let decision = event_state_decision(exec, event, &d_tag)?;
-    if !decision.apply {
-        return Ok(RadrootsReplicaIngestOutcome::Skipped);
-    }
 
     if d_tag == "member_of.farms" {
         ensure_list_set_entries_tag(&list_set, "p", "member_of.farms")?;
+        let decision = event_head_decision(exec, event)?;
+        if !decision.apply {
+            return Ok(RadrootsReplicaIngestOutcome::Skipped);
+        }
         upsert_member_claims(exec, &event.author, &list_set)?;
-        radroots_replica_ingest_event_state(exec, event, &d_tag, &decision.content_hash)?;
+        upsert_event_head(exec, &decision)?;
         return Ok(RadrootsReplicaIngestOutcome::Applied);
     }
 
     if let Some((farm_d_tag, role)) = parse_farm_list_set_d_tag(&d_tag) {
         if role == ListSetRole::Plots {
             ensure_list_set_entries_tag(&list_set, "a", "farm plots")?;
-            radroots_replica_ingest_event_state(exec, event, &d_tag, &decision.content_hash)?;
+            let decision = event_head_decision(exec, event)?;
+            if !decision.apply {
+                return Ok(RadrootsReplicaIngestOutcome::Skipped);
+            }
+            upsert_event_head(exec, &decision)?;
             return Ok(RadrootsReplicaIngestOutcome::Applied);
         }
         ensure_list_set_entries_tag(&list_set, "p", "farm members")?;
+        let decision = event_head_decision(exec, event)?;
+        if !decision.apply {
+            return Ok(RadrootsReplicaIngestOutcome::Skipped);
+        }
         let farm = find_farm_by_ref(exec, &event.author, &farm_d_tag)?;
         upsert_farm_members(exec, &farm.id, role, &list_set)?;
-        radroots_replica_ingest_event_state(exec, event, &d_tag, &decision.content_hash)?;
+        upsert_event_head(exec, &decision)?;
         return Ok(RadrootsReplicaIngestOutcome::Applied);
     }
 
@@ -606,8 +620,8 @@ fn trade_product_fields_from_listing(
         price_qty_amt_exact,
         price_qty_unit,
         listing_addr: Some(listing_addr.to_string()),
-        primary_bin_id: Some(listing.primary_bin_id.clone()),
-        verified_primary_bin_id: Some(listing.primary_bin_id.clone()),
+        primary_bin_id: Some(listing.primary_bin_id.to_string()),
+        verified_primary_bin_id: Some(listing.primary_bin_id.to_string()),
         notes: trade_product_notes_from_listing(listing)?,
     })
 }
@@ -792,95 +806,181 @@ fn trade_product_partial_from_fields(fields: &ITradeProductFields) -> ITradeProd
     }
 }
 
-pub fn radroots_replica_ingest_event_state(
+pub fn radroots_replica_ingest_event_head(
     exec: &dyn SqlExecutor,
     event: &RadrootsNostrEvent,
-    d_tag: &str,
-    content_hash: &str,
+) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
+    let decision = event_head_decision(exec, event)?;
+    if !decision.apply {
+        return Ok(RadrootsReplicaIngestOutcome::Skipped);
+    }
+    upsert_event_head(exec, &decision)?;
+    Ok(RadrootsReplicaIngestOutcome::Applied)
+}
+
+fn upsert_event_head(
+    exec: &dyn SqlExecutor,
+    decision: &EventHeadDecision,
 ) -> Result<(), RadrootsReplicaEventsError> {
-    let key = event_state_key(event.kind, &event.author, d_tag);
-    let existing_result = nostr_event_state::find_one(
+    let existing_result = nostr_event_head::find_one(
         exec,
-        &INostrEventStateFindOne::On(INostrEventStateFindOneArgs {
-            on: NostrEventStateQueryBindValues::Key { key: key.clone() },
+        &INostrEventHeadFindOne::On(INostrEventHeadFindOneArgs {
+            on: NostrEventHeadQueryBindValues::Key {
+                key: decision.key.clone(),
+            },
         }),
     );
     let existing = existing_result?.result;
 
     match existing {
         Some(state) => {
-            let fields = INostrEventStateFieldsPartial {
+            let fields = INostrEventHeadFieldsPartial {
                 key: None,
                 kind: None,
                 pubkey: None,
                 d_tag: None,
-                last_event_id: Some(Value::from(event.id.clone())),
-                last_created_at: Some(Value::from(event.created_at)),
-                content_hash: Some(Value::from(content_hash.to_string())),
+                last_event_id: Some(Value::from(decision.last_event_id.clone())),
+                last_created_at: Some(Value::from(decision.last_created_at)),
+                content_hash: Some(Value::from(decision.content_hash.clone())),
             };
-            let update_result = nostr_event_state::update(
+            let update_result = nostr_event_head::update(
                 exec,
-                &INostrEventStateUpdate {
-                    on: NostrEventStateQueryBindValues::Id { id: state.id },
+                &INostrEventHeadUpdate {
+                    on: NostrEventHeadQueryBindValues::Id { id: state.id },
                     fields,
                 },
             );
             let _updated = update_result?;
         }
         None => {
-            let fields = INostrEventStateFields {
-                key,
-                kind: event.kind,
-                pubkey: event.author.clone(),
-                d_tag: d_tag.to_string(),
-                last_event_id: event.id.clone(),
-                last_created_at: event.created_at,
-                content_hash: content_hash.to_string(),
+            let fields = INostrEventHeadFields {
+                key: decision.key.clone(),
+                kind: decision.kind,
+                pubkey: decision.pubkey.clone(),
+                d_tag: decision.d_tag.clone(),
+                last_event_id: decision.last_event_id.clone(),
+                last_created_at: decision.last_created_at,
+                content_hash: decision.content_hash.clone(),
             };
-            let _ = nostr_event_state::create(exec, &fields)?;
+            let _ = nostr_event_head::create(exec, &fields)?;
         }
     }
 
     Ok(())
 }
 
-fn event_state_decision(
+fn event_head_decision(
     exec: &dyn SqlExecutor,
     event: &RadrootsNostrEvent,
-    d_tag: &str,
-) -> Result<EventStateDecision, RadrootsReplicaEventsError> {
-    let key = event_state_key(event.kind, &event.author, d_tag);
+) -> Result<EventHeadDecision, RadrootsReplicaEventsError> {
+    let candidate = match event_head_candidate_for_event(event).map_err(|err| {
+        RadrootsReplicaEventsError::InvalidData(format!("event head contract mismatch: {err:?}"))
+    })? {
+        RadrootsEventHeadCandidateResult::Candidate(candidate) => candidate,
+        RadrootsEventHeadCandidateResult::NotHeadSelected => {
+            return Err(RadrootsReplicaEventsError::InvalidData(
+                "event is not head-selected".to_string(),
+            ));
+        }
+        RadrootsEventHeadCandidateResult::NotPersisted => {
+            return Ok(EventHeadDecision {
+                apply: false,
+                key: String::new(),
+                kind: event.kind,
+                pubkey: event.author.clone(),
+                d_tag: String::new(),
+                last_event_id: event.id.clone(),
+                last_created_at: event.created_at,
+                content_hash: String::new(),
+            });
+        }
+        RadrootsEventHeadCandidateResult::Malformed(err) => {
+            return Err(RadrootsReplicaEventsError::InvalidData(format!(
+                "malformed event head: {err:?}"
+            )));
+        }
+    };
+    let (key, kind, pubkey, d_tag) = event_head_coordinate_fields(&candidate.coordinate);
     #[cfg(test)]
     let content_hash = event_content_hash(&event.content, &event.tags)?;
     #[cfg(not(test))]
     let content_hash = event_content_hash(&event.content, &event.tags);
-    let existing_result = nostr_event_state::find_one(
+    let existing_result = nostr_event_head::find_one(
         exec,
-        &INostrEventStateFindOne::On(INostrEventStateFindOneArgs {
-            on: NostrEventStateQueryBindValues::Key { key },
+        &INostrEventHeadFindOne::On(INostrEventHeadFindOneArgs {
+            on: NostrEventHeadQueryBindValues::Key { key: key.clone() },
         }),
     );
     let existing = existing_result?.result;
+    let current = existing
+        .as_ref()
+        .map(|state| current_event_head_from_row(state, &candidate.coordinate))
+        .transpose()?;
 
-    if let Some(state) = existing {
-        if event.created_at < state.last_created_at {
-            return Ok(EventStateDecision {
-                apply: false,
-                content_hash,
-            });
+    let decision = select_event_head(candidate, current.as_ref());
+    let apply = match decision {
+        ProtocolEventHeadDecision::Applied(_) => true,
+        ProtocolEventHeadDecision::SkippedDuplicate
+        | ProtocolEventHeadDecision::SkippedOlder
+        | ProtocolEventHeadDecision::SkippedSameTimestampHigherEventId => false,
+        ProtocolEventHeadDecision::CoordinateMismatch => {
+            return Err(RadrootsReplicaEventsError::InvalidData(
+                "event head coordinate mismatch".to_string(),
+            ));
         }
-        if event.created_at == state.last_created_at && content_hash == state.content_hash {
-            return Ok(EventStateDecision {
-                apply: false,
-                content_hash,
-            });
-        }
-    }
+    };
 
-    Ok(EventStateDecision {
-        apply: true,
+    Ok(EventHeadDecision {
+        apply,
+        key,
+        kind,
+        pubkey,
+        d_tag,
+        last_event_id: event.id.clone(),
+        last_created_at: event.created_at,
         content_hash,
     })
+}
+
+fn current_event_head_from_row(
+    row: &NostrEventHead,
+    coordinate: &RadrootsEventHeadCoordinate,
+) -> Result<RadrootsCurrentEventHead, RadrootsReplicaEventsError> {
+    let event_id = RadrootsEventId::parse(&row.last_event_id).map_err(|err| {
+        RadrootsReplicaEventsError::InvalidData(format!(
+            "nostr event head last_event_id invalid: {err}"
+        ))
+    })?;
+    Ok(RadrootsCurrentEventHead {
+        coordinate: coordinate.clone(),
+        event_id,
+        created_at: row.last_created_at,
+    })
+}
+
+fn event_head_coordinate_fields(
+    coordinate: &RadrootsEventHeadCoordinate,
+) -> (String, u32, String, String) {
+    match coordinate {
+        RadrootsEventHeadCoordinate::Replaceable { kind, pubkey } => {
+            let pubkey = pubkey.to_string();
+            (
+                event_head_key(*kind, &pubkey, ""),
+                *kind,
+                pubkey,
+                String::new(),
+            )
+        }
+        RadrootsEventHeadCoordinate::Addressable {
+            kind,
+            pubkey,
+            d_tag,
+        } => {
+            let pubkey = pubkey.to_string();
+            let d_tag = d_tag.to_string();
+            (event_head_key(*kind, &pubkey, &d_tag), *kind, pubkey, d_tag)
+        }
+    }
 }
 
 fn find_farm_by_ref(
@@ -1392,8 +1492,14 @@ fn to_value_opt(value: Option<String>) -> Option<Value> {
     })
 }
 
-struct EventStateDecision {
+struct EventHeadDecision {
     apply: bool,
+    key: String,
+    kind: u32,
+    pubkey: String,
+    d_tag: String,
+    last_event_id: String,
+    last_created_at: u32,
     content_hash: String,
 }
 
@@ -1421,7 +1527,7 @@ mod tests {
     use radroots_events_codec::plot::encode as plot_encode;
     use radroots_replica_db::{
         ReplicaSql, farm, farm_gcs_location, farm_member, farm_member_claim, farm_tag,
-        gcs_location, migrations, nostr_event_state, plot, plot_gcs_location, plot_tag,
+        gcs_location, migrations, nostr_event_head, plot, plot_gcs_location, plot_tag,
         trade_product,
     };
     use radroots_replica_db_schema::farm::IFarmFields;
@@ -1890,7 +1996,7 @@ mod tests {
             exec,
             &IFarmMemberFields {
                 farm_id: farm_row.id.clone(),
-                member_pubkey: "m".repeat(64),
+                member_pubkey: "6".repeat(64),
                 role: "member".to_string(),
             },
         )
@@ -1898,7 +2004,7 @@ mod tests {
         let _ = farm_member_claim::create(
             exec,
             &IFarmMemberClaimFields {
-                member_pubkey: "m".repeat(64),
+                member_pubkey: "6".repeat(64),
                 farm_pubkey: farm_row.pubkey.clone(),
             },
         )
@@ -1994,7 +2100,7 @@ mod tests {
         let factory = RadrootsReplicaDefaultIdFactory;
         assert_eq!(factory.new_d_tag().len(), 22);
 
-        let profile_pubkey = "p".repeat(64);
+        let profile_pubkey = "9".repeat(64);
         let profile = profile_event(
             10,
             &profile_pubkey,
@@ -2030,20 +2136,27 @@ mod tests {
             Some(RadrootsProfileType::Individual),
             "alice-old",
         );
-        let decision_old = event_state_decision(&exec, &profile_older, "").expect("decision old");
+        let decision_old = event_head_decision(&exec, &profile_older).expect("decision old");
         assert!(!decision_old.apply);
-        let decision_same =
-            event_state_decision(&exec, &profile_update, "").expect("decision same");
+        let decision_same = event_head_decision(&exec, &profile_update).expect("decision same");
         assert!(!decision_same.apply);
-        let profile_same_time_diff_hash = profile_event(
+        let profile_same_time_higher_id = profile_event(
             12,
             &profile_pubkey,
             2,
             Some(RadrootsProfileType::Individual),
             "alice-3",
         );
-        let decision =
-            event_state_decision(&exec, &profile_same_time_diff_hash, "").expect("decision");
+        let decision = event_head_decision(&exec, &profile_same_time_higher_id).expect("decision");
+        assert!(!decision.apply);
+        let profile_same_time_lower_id = profile_event(
+            10,
+            &profile_pubkey,
+            2,
+            Some(RadrootsProfileType::Individual),
+            "alice-0",
+        );
+        let decision = event_head_decision(&exec, &profile_same_time_lower_id).expect("decision");
         assert!(decision.apply);
 
         let farm_pubkey = "f".repeat(64);
@@ -2135,11 +2248,11 @@ mod tests {
             RadrootsReplicaIngestOutcome::Skipped
         );
 
-        let members = farm_list_sets::farm_members_list_set(farm_d_tag, vec!["m".repeat(64)])
+        let members = farm_list_sets::farm_members_list_set(farm_d_tag, vec!["6".repeat(64)])
             .expect("members");
         let owners =
-            farm_list_sets::farm_owners_list_set(farm_d_tag, vec!["o".repeat(64)]).expect("owners");
-        let workers = farm_list_sets::farm_workers_list_set(farm_d_tag, vec!["w".repeat(64)])
+            farm_list_sets::farm_owners_list_set(farm_d_tag, vec!["8".repeat(64)]).expect("owners");
+        let workers = farm_list_sets::farm_workers_list_set(farm_d_tag, vec!["0".repeat(64)])
             .expect("workers");
         let plots = farm_list_sets::farm_plots_list_set(
             farm_d_tag,
@@ -2317,7 +2430,7 @@ mod tests {
         let exec = SqliteExecutor::open_memory().expect("db");
         migrations::run_all_up(&exec).expect("migrations");
 
-        let seller_pubkey = "s".repeat(64);
+        let seller_pubkey = "c".repeat(64);
         let listing_d_tag = "AAAAAAAAAAAAAAAAAAAAAQ";
         let listing_addr = format!("{}:{}:{}", KIND_LISTING, seller_pubkey, listing_d_tag);
 
@@ -2434,11 +2547,11 @@ mod tests {
         .results;
         assert!(product_rows.is_empty());
 
-        let state = nostr_event_state::find_one(
+        let state = nostr_event_head::find_one(
             &exec,
-            &INostrEventStateFindOne::On(INostrEventStateFindOneArgs {
-                on: NostrEventStateQueryBindValues::Key {
-                    key: event_state_key(KIND_LISTING, &seller_pubkey, listing_d_tag),
+            &INostrEventHeadFindOne::On(INostrEventHeadFindOneArgs {
+                on: NostrEventHeadQueryBindValues::Key {
+                    key: event_head_key(KIND_LISTING, &seller_pubkey, listing_d_tag),
                 },
             }),
         )
@@ -2475,7 +2588,7 @@ mod tests {
         let exec = SqliteExecutor::open_memory().expect("db");
         migrations::run_all_up(&exec).expect("migrations");
 
-        let seller_pubkey = "s".repeat(64);
+        let seller_pubkey = "c".repeat(64);
         let listing_d_tag = "AAAAAAAAAAAAAAAAAAAAAg";
         let listing_addr = format!("{}:{}:{}", KIND_LISTING, seller_pubkey, listing_d_tag);
 
@@ -2695,7 +2808,7 @@ mod tests {
         );
 
         let members_list_set =
-            farm_list_sets::farm_members_list_set(&farm_d_tag, vec!["n".repeat(64)])
+            farm_list_sets::farm_members_list_set(&farm_d_tag, vec!["7".repeat(64)])
                 .expect("members");
         assert!(
             upsert_farm_members(&exec, &farm_id, ListSetRole::Members, &members_list_set).is_ok()
@@ -2706,7 +2819,7 @@ mod tests {
             err: SqlError::NotFound("farm_member".to_string()),
         };
         let not_found_members_list_set =
-            farm_list_sets::farm_members_list_set(&farm_d_tag, vec!["q".repeat(64)])
+            farm_list_sets::farm_members_list_set(&farm_d_tag, vec!["a".repeat(64)])
                 .expect("not found members");
         assert!(
             upsert_farm_members(
@@ -2728,17 +2841,17 @@ mod tests {
         );
 
         let member_claims =
-            farm_list_sets::member_of_farms_list_set(vec!["z".repeat(64)]).expect("claims");
-        assert!(upsert_member_claims(&exec, &"m".repeat(64), &member_claims).is_ok());
+            farm_list_sets::member_of_farms_list_set(vec!["3".repeat(64)]).expect("claims");
+        assert!(upsert_member_claims(&exec, &"6".repeat(64), &member_claims).is_ok());
         let not_found_claims = DeleteErrorExecutor {
             inner: &exec,
             table_name: "farm_member_claim",
             err: SqlError::NotFound("farm_member_claim".to_string()),
         };
         let not_found_member_claims =
-            farm_list_sets::member_of_farms_list_set(vec!["y".repeat(64)]).expect("claims nf");
+            farm_list_sets::member_of_farms_list_set(vec!["2".repeat(64)]).expect("claims nf");
         assert!(
-            upsert_member_claims(&not_found_claims, &"m".repeat(64), &not_found_member_claims)
+            upsert_member_claims(&not_found_claims, &"6".repeat(64), &not_found_member_claims)
                 .is_ok()
         );
         assert!(not_found_claims.begin().is_ok());
@@ -2834,7 +2947,7 @@ mod tests {
             table_name: "farm_member_claim",
             err: SqlError::Internal,
         };
-        assert!(upsert_member_claims(&internal_claims, &"m".repeat(64), &member_claims).is_err());
+        assert!(upsert_member_claims(&internal_claims, &"6".repeat(64), &member_claims).is_err());
     }
 
     #[test]
@@ -2854,7 +2967,7 @@ mod tests {
         migrations::run_all_up(&exec).expect("migrations");
         let pass = PassExecutor { inner: &exec };
 
-        let profile_pubkey = "p".repeat(64);
+        let profile_pubkey = "9".repeat(64);
         let farm_pubkey = "f".repeat(64);
         let farm_d_tag = "AAAAAAAAAAAAAAAAAAAAAA";
         let plot_d_tag = "AAAAAAAAAAAAAAAAAAAAAQ";
@@ -2921,7 +3034,7 @@ mod tests {
         );
 
         let members =
-            farm_list_sets::farm_members_list_set(farm_d_tag, vec!["m".repeat(64)]).expect("list");
+            farm_list_sets::farm_members_list_set(farm_d_tag, vec!["6".repeat(64)]).expect("list");
         let members_event = list_set_event(503, &farm_pubkey, 53, KIND_LIST_SET_GENERIC, &members);
         assert_eq!(
             ingest_list_set_event(&pass, &members_event).expect("members list set"),
@@ -2947,7 +3060,7 @@ mod tests {
                 },
                 RadrootsListEntry {
                     tag: "p".to_string(),
-                    values: vec!["m".repeat(64)],
+                    values: vec!["6".repeat(64)],
                 },
             ],
             title: None,
@@ -3095,7 +3208,7 @@ mod tests {
             rollback_count: Arc::new(AtomicUsize::new(0)),
         };
 
-        let profile_pubkey = "p".repeat(64);
+        let profile_pubkey = "9".repeat(64);
         let profile_event_row = profile_event(
             700,
             &profile_pubkey,
@@ -3108,17 +3221,9 @@ mod tests {
             RadrootsReplicaIngestOutcome::Applied
         );
         let profile_decision =
-            event_state_decision(&pass_txn, &profile_event_row, "").expect("profile decision");
+            event_head_decision(&pass_txn, &profile_event_row).expect("profile decision");
         assert!(!profile_decision.apply);
-        assert!(
-            radroots_replica_ingest_event_state(
-                &pass_txn,
-                &profile_event_row,
-                "",
-                &profile_decision.content_hash,
-            )
-            .is_ok()
-        );
+        assert!(radroots_replica_ingest_event_head(&pass_txn, &profile_event_row).is_ok());
         assert_eq!(
             radroots_replica_ingest_event_with_factory(
                 &pass_txn,
@@ -3219,14 +3324,14 @@ mod tests {
             .is_ok()
         );
         let members_list =
-            farm_list_sets::farm_members_list_set(farm_d_tag, vec!["m".repeat(64)]).expect("list");
+            farm_list_sets::farm_members_list_set(farm_d_tag, vec!["6".repeat(64)]).expect("list");
         assert!(
             upsert_farm_members(&pass_txn, &farm_row.id, ListSetRole::Members, &members_list)
                 .is_ok()
         );
         let member_of_list =
             farm_list_sets::member_of_farms_list_set(vec![farm_pubkey.clone()]).expect("member_of");
-        assert!(upsert_member_claims(&pass_txn, &"m".repeat(64), &member_of_list).is_ok());
+        assert!(upsert_member_claims(&pass_txn, &"6".repeat(64), &member_of_list).is_ok());
 
         let rollback_count = Arc::new(AtomicUsize::new(0));
         let txn = TxnExecutor {
@@ -3237,8 +3342,8 @@ mod tests {
         };
 
         assert!(ingest_profile_event(&txn, &profile_event_row).is_err());
-        assert!(event_state_decision(&txn, &profile_event_row, "").is_err());
-        assert!(radroots_replica_ingest_event_state(&txn, &profile_event_row, "", "hash").is_err());
+        assert!(event_head_decision(&txn, &profile_event_row).is_err());
+        assert!(radroots_replica_ingest_event_head(&txn, &profile_event_row).is_err());
         assert!(
             radroots_replica_ingest_event_with_factory(&txn, &profile_event_row, &FixedFactory)
                 .is_err()
@@ -3285,7 +3390,7 @@ mod tests {
             .is_err()
         );
         assert!(upsert_farm_members(&txn, "farm-id", ListSetRole::Members, &members_list).is_err());
-        assert!(upsert_member_claims(&txn, &"m".repeat(64), &member_of_list).is_err());
+        assert!(upsert_member_claims(&txn, &"6".repeat(64), &member_of_list).is_err());
     }
 
     #[test]
@@ -3313,7 +3418,7 @@ mod tests {
         let farm_pubkey = "f".repeat(64);
         let farm_d_tag = "AAAAAAAAAAAAAAAAAAAAAA";
         let plot_d_tag = "AAAAAAAAAAAAAAAAAAAAAQ";
-        let profile_pubkey = "p".repeat(64);
+        let profile_pubkey = "9".repeat(64);
 
         let profile = profile_event(
             800,
@@ -3358,7 +3463,7 @@ mod tests {
         };
         let profile_new = profile_event(
             802,
-            &"n".repeat(64),
+            &"7".repeat(64),
             82,
             Some(RadrootsProfileType::Individual),
             "profile-new",
@@ -3367,12 +3472,12 @@ mod tests {
 
         let profile_state_fail = QueryFailExecutor {
             inner: &exec,
-            needle: "nostr_event_state",
+            needle: "nostr_event_head",
             err: SqlError::Internal,
         };
         let profile_state_event = profile_event(
             803,
-            &"s".repeat(64),
+            &"c".repeat(64),
             83,
             Some(RadrootsProfileType::Individual),
             "profile-state",
@@ -3410,7 +3515,7 @@ mod tests {
         };
         let farm_query_event = farm_event(
             811,
-            &"q".repeat(64),
+            &"a".repeat(64),
             91,
             farm_d_tag,
             "farm-query",
@@ -3458,7 +3563,7 @@ mod tests {
         };
         let farm_tag_event = farm_event(
             814,
-            &"t".repeat(64),
+            &"d".repeat(64),
             94,
             farm_d_tag,
             "farm-tag",
@@ -3474,7 +3579,7 @@ mod tests {
         };
         let farm_gcs_event = farm_event(
             815,
-            &"g".repeat(64),
+            &"0".repeat(64),
             95,
             farm_d_tag,
             "farm-gcs",
@@ -3496,7 +3601,7 @@ mod tests {
         };
         let farm_rel_event = farm_event(
             816,
-            &"r".repeat(64),
+            &"b".repeat(64),
             96,
             farm_d_tag,
             "farm-rel",
@@ -3513,12 +3618,12 @@ mod tests {
 
         let farm_state_fail = QueryFailExecutor {
             inner: &exec,
-            needle: "nostr_event_state",
+            needle: "nostr_event_head",
             err: SqlError::Internal,
         };
         let farm_state_event = farm_event(
             817,
-            &"w".repeat(64),
+            &"0".repeat(64),
             97,
             farm_d_tag,
             "farm-state",
@@ -3531,7 +3636,7 @@ mod tests {
         bad_point.point.coordinates = [f64::NAN, 13.0];
         let farm_bad_point = farm_event(
             818,
-            &"x".repeat(64),
+            &"1".repeat(64),
             98,
             farm_d_tag,
             "farm-bad-point",
@@ -3550,7 +3655,7 @@ mod tests {
         bad_polygon.polygon.coordinates[0][1][0] = f64::NAN;
         let farm_bad_polygon = farm_event(
             819,
-            &"y".repeat(64),
+            &"2".repeat(64),
             99,
             farm_d_tag,
             "farm-bad-polygon",
@@ -3727,7 +3832,7 @@ mod tests {
 
         let plot_state_fail = QueryFailExecutor {
             inner: &exec,
-            needle: "nostr_event_state",
+            needle: "nostr_event_head",
             err: SqlError::Internal,
         };
         let plot_state_event = plot_event(
@@ -3757,13 +3862,13 @@ mod tests {
         list_decode_fail.tags = Vec::new();
         assert!(ingest_list_set_event(&exec, &list_decode_fail).is_err());
 
-        let members_list = farm_list_sets::farm_members_list_set(farm_d_tag, vec!["m".repeat(64)])
+        let members_list = farm_list_sets::farm_members_list_set(farm_d_tag, vec!["6".repeat(64)])
             .expect("members list");
         let member_event =
             list_set_event(831, &farm_pubkey, 109, KIND_LIST_SET_GENERIC, &members_list);
         let list_decision_fail = QueryFailExecutor {
             inner: &exec,
-            needle: "nostr_event_state",
+            needle: "nostr_event_head",
             err: SqlError::Internal,
         };
         assert!(ingest_list_set_event(&list_decision_fail, &member_event).is_err());
@@ -3771,7 +3876,7 @@ mod tests {
         let member_of =
             farm_list_sets::member_of_farms_list_set(vec![farm_pubkey.clone()]).expect("member-of");
         let member_of_event =
-            list_set_event(832, &"m".repeat(64), 110, KIND_LIST_SET_GENERIC, &member_of);
+            list_set_event(832, &"6".repeat(64), 110, KIND_LIST_SET_GENERIC, &member_of);
         let claims_fail = QueryFailExecutor {
             inner: &exec,
             needle: "farm_member_claim",
@@ -3781,7 +3886,7 @@ mod tests {
 
         let claims_state_fail = QueryFailExecutor {
             inner: &exec,
-            needle: "nostr_event_state",
+            needle: "nostr_event_head",
             err: SqlError::Internal,
         };
         assert!(ingest_list_set_event(&claims_state_fail, &member_of_event).is_err());
@@ -3796,16 +3901,16 @@ mod tests {
             list_set_event(833, &farm_pubkey, 111, KIND_LIST_SET_GENERIC, &plots_list);
         let plots_state_fail = QueryFailExecutor {
             inner: &exec,
-            needle: "nostr_event_state",
+            needle: "nostr_event_head",
             err: SqlError::Internal,
         };
         assert!(ingest_list_set_event(&plots_state_fail, &plots_event).is_err());
 
         let missing_farm_members =
-            farm_list_sets::farm_members_list_set(farm_d_tag, vec!["n".repeat(64)]).expect("list");
+            farm_list_sets::farm_members_list_set(farm_d_tag, vec!["7".repeat(64)]).expect("list");
         let missing_farm_event = list_set_event(
             834,
-            &"z".repeat(64),
+            &"3".repeat(64),
             112,
             KIND_LIST_SET_GENERIC,
             &missing_farm_members,
@@ -3821,7 +3926,7 @@ mod tests {
 
         let members_state_fail = QueryFailExecutor {
             inner: &exec,
-            needle: "nostr_event_state",
+            needle: "nostr_event_head",
             err: SqlError::Internal,
         };
         assert!(ingest_list_set_event(&members_state_fail, &member_event).is_err());
@@ -3831,22 +3936,25 @@ mod tests {
 
         let state_create_fail = QueryFailExecutor {
             inner: &exec,
-            needle: "nostr_event_state",
+            needle: "nostr_event_head",
             err: SqlError::Internal,
         };
-        assert!(
-            radroots_replica_ingest_event_state(&state_create_fail, &profile, "", "hash").is_err()
-        );
+        assert!(radroots_replica_ingest_event_head(&state_create_fail, &profile).is_err());
 
-        radroots_replica_ingest_event_state(&exec, &profile, "", "hash").expect("seed state");
+        radroots_replica_ingest_event_head(&exec, &profile).expect("seed state");
         let state_update_fail = QueryFailExecutor {
             inner: &exec,
-            needle: "update nostr_event_state",
+            needle: "update nostr_event_head",
             err: SqlError::Internal,
         };
-        assert!(
-            radroots_replica_ingest_event_state(&state_update_fail, &profile, "", "hash2").is_err()
+        let profile_update = profile_event(
+            808,
+            &"9".repeat(64),
+            101,
+            Some(RadrootsProfileType::Individual),
+            "profile-update-error",
         );
+        assert!(radroots_replica_ingest_event_head(&state_update_fail, &profile_update).is_err());
     }
 
     #[test]
@@ -3856,14 +3964,14 @@ mod tests {
 
         let profile = profile_event(
             900,
-            &"u".repeat(64),
+            &"e".repeat(64),
             120,
             Some(RadrootsProfileType::Individual),
             "profile-state-insert",
         );
         let state_insert_fail = QueryFailExecutor {
             inner: &exec,
-            needle: "insert into nostr_event_state",
+            needle: "insert into nostr_event_head",
             err: SqlError::Internal,
         };
         assert!(ingest_profile_event(&state_insert_fail, &profile).is_err());
@@ -3894,7 +4002,7 @@ mod tests {
         );
         assert!(ingest_plot_event(&state_insert_fail, &plot_state, &FixedFactory).is_err());
 
-        let members_set = farm_list_sets::farm_members_list_set(&farm_d_tag, vec!["n".repeat(64)])
+        let members_set = farm_list_sets::farm_members_list_set(&farm_d_tag, vec!["7".repeat(64)])
             .expect("members");
         let members_event =
             list_set_event(903, &farm_pubkey, 123, KIND_LIST_SET_GENERIC, &members_set);
@@ -3913,7 +4021,7 @@ mod tests {
             farm_list_sets::member_of_farms_list_set(vec![farm_pubkey.clone()]).expect("member_of");
         let member_of_event = list_set_event(
             905,
-            &"n".repeat(64),
+            &"7".repeat(64),
             125,
             KIND_LIST_SET_GENERIC,
             &member_of_set,
@@ -3922,16 +4030,13 @@ mod tests {
 
         let state_insert_only_fail = QueryFailExecutor {
             inner: &exec,
-            needle: "insert into nostr_event_state",
+            needle: "insert into nostr_event_head",
             err: SqlError::Internal,
         };
-        assert!(
-            radroots_replica_ingest_event_state(&state_insert_only_fail, &profile, "", "hash")
-                .is_err()
-        );
+        assert!(radroots_replica_ingest_event_head(&state_insert_only_fail, &profile).is_err());
 
-        crate::event_state::event_content_hash_fail_next();
-        assert!(event_state_decision(&exec, &profile, "").is_err());
+        crate::event_head::event_content_hash_fail_next();
+        assert!(event_head_decision(&exec, &profile).is_err());
 
         let farm_tag_insert_fail = QueryFailExecutor {
             inner: &exec,
@@ -4071,7 +4176,7 @@ mod tests {
             err: SqlError::Internal,
         };
         assert!(
-            upsert_member_claims(&claims_insert_fail, &"n".repeat(64), &member_of_set).is_err()
+            upsert_member_claims(&claims_insert_fail, &"7".repeat(64), &member_of_set).is_err()
         );
 
         super::failpoints::set_gcs_point_serialize_error();
@@ -4088,7 +4193,7 @@ mod tests {
         let exec = SqliteExecutor::open_memory().expect("db");
         let (farm_id, farm_pubkey, _, _) = seed_rows(&exec);
 
-        let member_pubkey = "m".repeat(64);
+        let member_pubkey = "6".repeat(64);
         let member_list_set = RadrootsListSet {
             d_tag: "farm:AAAAAAAAAAAAAAAAAAAAAQ:members".to_string(),
             content: String::new(),
@@ -4133,7 +4238,7 @@ mod tests {
         upsert_farm_members(&exec, &farm_id, ListSetRole::Plots, &member_list_set)
             .expect("plots is no-op");
 
-        let claimant_pubkey = "n".repeat(64);
+        let claimant_pubkey = "7".repeat(64);
         let claims_list_set = RadrootsListSet {
             d_tag: "member_of.farms".to_string(),
             content: String::new(),
@@ -4199,7 +4304,7 @@ mod tests {
         bad_member_of.entries[0].tag = "x".to_string();
         let bad_member_of_event = list_set_event(
             951,
-            &"n".repeat(64),
+            &"7".repeat(64),
             221,
             KIND_LIST_SET_GENERIC,
             &bad_member_of,
@@ -4218,7 +4323,7 @@ mod tests {
         assert!(ingest_list_set_event(&exec, &bad_plots_event).is_err());
 
         let mut bad_members =
-            farm_list_sets::farm_members_list_set(&farm_d_tag, vec!["m".repeat(64)])
+            farm_list_sets::farm_members_list_set(&farm_d_tag, vec!["6".repeat(64)])
                 .expect("members");
         bad_members.entries[0].tag = "a".to_string();
         let bad_members_event =

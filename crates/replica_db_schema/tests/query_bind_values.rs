@@ -6,7 +6,7 @@ use radroots_replica_db_schema::farm_tag::FarmTagQueryBindValues;
 use radroots_replica_db_schema::gcs_location::GcsLocationQueryBindValues;
 use radroots_replica_db_schema::log_error::LogErrorQueryBindValues;
 use radroots_replica_db_schema::media_image::MediaImageQueryBindValues;
-use radroots_replica_db_schema::nostr_event_state::NostrEventStateQueryBindValues;
+use radroots_replica_db_schema::nostr_event_head::NostrEventHeadQueryBindValues;
 use radroots_replica_db_schema::nostr_profile::NostrProfileQueryBindValues;
 use radroots_replica_db_schema::nostr_relay::NostrRelayQueryBindValues;
 use radroots_replica_db_schema::plot::PlotQueryBindValues;
@@ -221,14 +221,14 @@ assert_query_bind_values!(
 );
 
 assert_query_bind_values!(
-    nostr_event_state_query_bind_values_cover_all_variants,
-    NostrEventStateQueryBindValues::Id {
+    nostr_event_head_query_bind_values_cover_all_variants,
+    NostrEventHeadQueryBindValues::Id {
         id: "nostr-event-state-id".to_string()
     },
     "id",
     "nostr-event-state-id",
     [(
-        NostrEventStateQueryBindValues::Key {
+        NostrEventHeadQueryBindValues::Key {
             key: "event-key".to_string()
         },
         "key",

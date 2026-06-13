@@ -33,9 +33,9 @@ use radroots_replica_db_schema::media_image::{
     IMediaImageFindOneRelArgs, IMediaImageUpdate, MediaImageFindManyRel,
     MediaImageTradeProductArgs,
 };
-use radroots_replica_db_schema::nostr_event_state::{
-    INostrEventStateCreate, INostrEventStateDelete, INostrEventStateFindMany,
-    INostrEventStateFindOne, INostrEventStateUpdate,
+use radroots_replica_db_schema::nostr_event_head::{
+    INostrEventHeadCreate, INostrEventHeadDelete, INostrEventHeadFindMany, INostrEventHeadFindOne,
+    INostrEventHeadUpdate,
 };
 use radroots_replica_db_schema::nostr_profile::{
     INostrProfileCreate, INostrProfileDelete, INostrProfileFindMany, INostrProfileFindOne,
@@ -530,8 +530,8 @@ assert_secondary_model_paths!(
 );
 
 assert_secondary_model_paths!(
-    nostr_event_state_scripted_region_paths,
-    INostrEventStateCreate,
+    nostr_event_head_scripted_region_paths,
+    INostrEventHeadCreate,
     json!({
         "key": "state-a",
         "kind": 30023,
@@ -541,20 +541,20 @@ assert_secondary_model_paths!(
         "last_created_at": 1,
         "content_hash": "hash-a"
     }),
-    nostr_event_state_create,
-    INostrEventStateFindMany,
+    nostr_event_head_create,
+    INostrEventHeadFindMany,
     json!({ "filter": { "id": "id-1" } }),
-    nostr_event_state_find_many,
-    INostrEventStateFindOne,
+    nostr_event_head_find_many,
+    INostrEventHeadFindOne,
     json!({ "on": { "id": "id-1" } }),
-    nostr_event_state_find_one,
-    INostrEventStateUpdate,
+    nostr_event_head_find_one,
+    INostrEventHeadUpdate,
     json!({ "on": { "id": "id-1" }, "fields": { "content_hash": "hash-z" } }),
     json!({ "on": { "key": "state-a" }, "fields": { "content_hash": "hash-y" } }),
-    nostr_event_state_update,
-    INostrEventStateDelete,
+    nostr_event_head_update,
+    INostrEventHeadDelete,
     json!({ "on": { "key": "state-a" } }),
-    nostr_event_state_delete
+    nostr_event_head_delete
 );
 
 assert_rel_model_paths!(

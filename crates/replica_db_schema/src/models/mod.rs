@@ -6,7 +6,7 @@ pub mod farm_tag;
 pub mod gcs_location;
 pub mod log_error;
 pub mod media_image;
-pub mod nostr_event_state;
+pub mod nostr_event_head;
 pub mod nostr_profile;
 pub mod nostr_profile_relay;
 pub mod nostr_relay;

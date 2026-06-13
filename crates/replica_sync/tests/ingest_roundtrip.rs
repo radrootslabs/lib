@@ -391,7 +391,7 @@ fn seed_source(
         "plot_tag",
     );
 
-    let owner_pubkey = "o".repeat(64);
+    let owner_pubkey = "8".repeat(64);
     let _ = unwrap_sql(
         farm_member::create(
             exec,
@@ -629,7 +629,7 @@ fn ingest_reports_parse_and_state_error_paths_for_all_kinds() {
     let exec = SqliteExecutor::open_memory().expect("db");
     migrations::run_all_up(&exec).expect("migrations");
 
-    let profile_pubkey = "q".repeat(64);
+    let profile_pubkey = "a".repeat(64);
     let profile_ok = profile_event(
         9_201,
         &profile_pubkey,
@@ -647,7 +647,7 @@ fn ingest_reports_parse_and_state_error_paths_for_all_kinds() {
     );
     assert!(radroots_replica_ingest_event(&exec, &profile_parse_error).is_err());
 
-    let farm_pubkey = "r".repeat(64);
+    let farm_pubkey = "b".repeat(64);
     let farm_seed_d_tag = "AAAAAAAAAAAAAAAAAAAAAA";
     let farm_seed = farm_event(
         9_203,
@@ -708,7 +708,7 @@ fn ingest_reports_parse_and_state_error_paths_for_all_kinds() {
 
     let state_query_fail = QueryFailExecutor {
         inner: &exec,
-        needle: "nostr_event_state",
+        needle: "nostr_event_head",
         err: SqlError::Internal,
     };
     assert!(radroots_replica_ingest_event(&state_query_fail, &profile_ok).is_err());
@@ -728,12 +728,12 @@ fn ingest_reports_parse_and_state_error_paths_for_all_kinds() {
 
     let state_insert_fail = QueryFailExecutor {
         inner: &exec,
-        needle: "insert into nostr_event_state",
+        needle: "insert into nostr_event_head",
         err: SqlError::Internal,
     };
     let profile_insert_state_error = profile_event(
         9_209,
-        &"s".repeat(64),
+        &"c".repeat(64),
         18,
         Some(RadrootsProfileType::Individual),
         "profile-state-insert",
@@ -787,7 +787,7 @@ fn ingest_reports_query_fail_paths_for_profile_farm_plot_and_list_sets() {
         );
     };
 
-    let profile_pubkey = "t".repeat(64);
+    let profile_pubkey = "d".repeat(64);
     let profile_create = profile_event(
         9_301,
         &profile_pubkey,
@@ -810,7 +810,7 @@ fn ingest_reports_query_fail_paths_for_profile_farm_plot_and_list_sets() {
     );
     assert_query_fail("update nostr_profile", &profile_update);
 
-    let farm_pubkey = "u".repeat(64);
+    let farm_pubkey = "e".repeat(64);
     let farm_d_tag = "AAAAAAAAAAAAAAAAAAAAAA";
     let farm_create = farm_event(
         9_303,
@@ -902,21 +902,21 @@ fn ingest_reports_query_fail_paths_for_profile_farm_plot_and_list_sets() {
     assert_query_fail("insert into farm_member_claim", &member_of_event);
 
     let members_set =
-        farm_list_sets::farm_members_list_set(farm_d_tag, vec!["m".repeat(64)]).expect("members");
+        farm_list_sets::farm_members_list_set(farm_d_tag, vec!["6".repeat(64)]).expect("members");
     let members_event =
         list_set_event(9_308, &farm_pubkey, 17, KIND_LIST_SET_GENERIC, &members_set);
     assert_query_fail("insert into farm_member", &members_event);
     assert_query_fail("select * from farm where", &members_event);
 
-    assert_query_fail("select * from nostr_event_state", &members_event);
-    assert_query_fail("insert into nostr_event_state", &members_event);
+    assert_query_fail("select * from nostr_event_head", &members_event);
+    assert_query_fail("insert into nostr_event_head", &members_event);
     assert_eq!(
         radroots_replica_ingest_event(&exec, &members_event).expect("seed members"),
         RadrootsReplicaIngestOutcome::Applied
     );
     let members_update =
         list_set_event(9_309, &farm_pubkey, 18, KIND_LIST_SET_GENERIC, &members_set);
-    assert_query_fail("update nostr_event_state", &members_update);
+    assert_query_fail("update nostr_event_head", &members_update);
 }
 
 fn event_with_parts(
@@ -1092,7 +1092,7 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
     let exec = SqliteExecutor::open_memory().expect("db");
     migrations::run_all_up(&exec).expect("migrations");
 
-    let profile_pubkey = "p".repeat(64);
+    let profile_pubkey = "9".repeat(64);
     let profile_create = profile_event(
         101,
         &profile_pubkey,
@@ -1119,7 +1119,7 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
         radroots_replica_ingest_event(&exec, &profile_older).expect("profile skip older"),
         RadrootsReplicaIngestOutcome::Skipped
     );
-    let profile_same_time_new_hash = profile_event(
+    let profile_same_time_higher_id = profile_event(
         103,
         &profile_pubkey,
         10,
@@ -1127,8 +1127,20 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
         "alice-updated",
     );
     assert_eq!(
-        radroots_replica_ingest_event(&exec, &profile_same_time_new_hash)
-            .expect("profile apply same timestamp different hash"),
+        radroots_replica_ingest_event(&exec, &profile_same_time_higher_id)
+            .expect("profile skip same timestamp higher id"),
+        RadrootsReplicaIngestOutcome::Skipped
+    );
+    let profile_same_time_lower_id = profile_event(
+        100,
+        &profile_pubkey,
+        10,
+        Some(RadrootsProfileType::Individual),
+        "alice-lower-id",
+    );
+    assert_eq!(
+        radroots_replica_ingest_event(&exec, &profile_same_time_lower_id)
+            .expect("profile apply same timestamp lower id"),
         RadrootsReplicaIngestOutcome::Applied
     );
     let profile_missing_type = profile_event(104, &profile_pubkey, 11, None, "missing-type");
@@ -1204,7 +1216,7 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
         radroots_replica_ingest_event(&exec, &farm_older).expect("farm skip older"),
         RadrootsReplicaIngestOutcome::Skipped
     );
-    let farm_update_same_time = farm_event(
+    let farm_update_same_time_higher_id = farm_event(
         202,
         &farm_pubkey,
         100,
@@ -1214,7 +1226,22 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
         Some(vec!["market".to_string()]),
     );
     assert_eq!(
-        radroots_replica_ingest_event(&exec, &farm_update_same_time).expect("farm update"),
+        radroots_replica_ingest_event(&exec, &farm_update_same_time_higher_id)
+            .expect("farm skip same timestamp higher id"),
+        RadrootsReplicaIngestOutcome::Skipped
+    );
+    let farm_update_same_time_lower_id = farm_event(
+        199,
+        &farm_pubkey,
+        100,
+        farm_d_tag,
+        "farm-a-updated",
+        None,
+        Some(vec!["market".to_string()]),
+    );
+    assert_eq!(
+        radroots_replica_ingest_event(&exec, &farm_update_same_time_lower_id)
+            .expect("farm update same timestamp lower id"),
         RadrootsReplicaIngestOutcome::Applied
     );
 
@@ -1316,7 +1343,7 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
         radroots_replica_ingest_event(&exec, &plot_older).expect("plot skip older"),
         RadrootsReplicaIngestOutcome::Skipped
     );
-    let plot_update = plot_event(
+    let plot_update_higher_id = plot_event(
         302,
         &farm_pubkey,
         200,
@@ -1330,7 +1357,26 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
         Some(vec!["updated".to_string()]),
     );
     assert_eq!(
-        radroots_replica_ingest_event(&exec, &plot_update).expect("plot update"),
+        radroots_replica_ingest_event(&exec, &plot_update_higher_id)
+            .expect("plot skip same timestamp higher id"),
+        RadrootsReplicaIngestOutcome::Skipped
+    );
+    let plot_update_lower_id = plot_event(
+        299,
+        &farm_pubkey,
+        200,
+        plot_d_tag,
+        RadrootsFarmRef {
+            pubkey: farm_pubkey.clone(),
+            d_tag: farm_d_tag.to_string(),
+        },
+        "plot-a-updated",
+        None,
+        Some(vec!["updated".to_string()]),
+    );
+    assert_eq!(
+        radroots_replica_ingest_event(&exec, &plot_update_lower_id)
+            .expect("plot update same timestamp lower id"),
         RadrootsReplicaIngestOutcome::Applied
     );
     let plot_missing_farm = plot_event(
@@ -1339,7 +1385,7 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
         201,
         "AAAAAAAAAAAAAAAAAAAAAg",
         RadrootsFarmRef {
-            pubkey: "z".repeat(64),
+            pubkey: "3".repeat(64),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
         },
         "plot-missing-farm",
@@ -1614,7 +1660,7 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
     );
 
     let members_valid =
-        farm_list_sets::farm_members_list_set(farm_d_tag, vec!["m".repeat(64), "m".repeat(64)])
+        farm_list_sets::farm_members_list_set(farm_d_tag, vec!["6".repeat(64), "6".repeat(64)])
             .expect("members list");
     let members_event = list_set_event(
         406,
@@ -1647,14 +1693,14 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
         RadrootsReplicaIngestOutcome::Applied
     );
     let owners_valid =
-        farm_list_sets::farm_owners_list_set(farm_d_tag, vec!["o".repeat(64)]).expect("owners");
+        farm_list_sets::farm_owners_list_set(farm_d_tag, vec!["8".repeat(64)]).expect("owners");
     let owners_event = list_set_event(407, &farm_pubkey, 307, KIND_LIST_SET_GENERIC, &owners_valid);
     assert_eq!(
         radroots_replica_ingest_event(&exec, &owners_event).expect("owners apply"),
         RadrootsReplicaIngestOutcome::Applied
     );
     let workers_valid =
-        farm_list_sets::farm_workers_list_set(farm_d_tag, vec!["w".repeat(64)]).expect("workers");
+        farm_list_sets::farm_workers_list_set(farm_d_tag, vec!["0".repeat(64)]).expect("workers");
     let workers_event = list_set_event(
         408,
         &farm_pubkey,
@@ -1808,7 +1854,7 @@ fn sync_status_reports_pending_when_not_all_events_are_ingested() {
     }
     target
         .exec(
-            "UPDATE nostr_event_state SET content_hash = ? WHERE id = (SELECT id FROM nostr_event_state LIMIT 1)",
+            "UPDATE nostr_event_head SET content_hash = ? WHERE id = (SELECT id FROM nostr_event_head LIMIT 1)",
             "[\"invalid_hash\"]",
         )
         .expect("mutate state hash");
@@ -1856,7 +1902,7 @@ fn sync_all_rejects_invalid_selectors_and_resolves_unique_pair() {
     assert!(missing_id_err.to_string().contains("farm not found"));
 
     let duplicate_d_tag = "AAAAAAAAAAAAAAAAAAAAAA".to_string();
-    let duplicate_pubkey = "u".repeat(64);
+    let duplicate_pubkey = "e".repeat(64);
     let fields = IFarmFields {
         d_tag: duplicate_d_tag.clone(),
         pubkey: duplicate_pubkey.clone(),
@@ -1893,7 +1939,7 @@ fn sync_emit_handles_invalid_geojson_and_unknown_profile_type() {
     let exec = SqliteExecutor::open_memory().expect("db");
     migrations::run_all_up(&exec).expect("migrations");
 
-    let farm_pubkey = "g".repeat(64);
+    let farm_pubkey = "0".repeat(64);
     let farm_d_tag = "AAAAAAAAAAAAAAAAAAAAAA".to_string();
     let farm_row = unwrap_sql(
         farm::create(
@@ -1986,7 +2032,7 @@ fn sync_emit_handles_invalid_geojson_and_unknown_profile_type() {
         "plot gcs",
     );
 
-    let member_pubkey = "m".repeat(64);
+    let member_pubkey = "6".repeat(64);
     let _ = unwrap_sql(
         farm_member::create(
             &exec,
@@ -2093,7 +2139,7 @@ fn sync_emit_reports_encode_error_for_invalid_farm_record() {
             &exec,
             &IFarmFields {
                 d_tag: String::new(),
-                pubkey: "v".repeat(64),
+                pubkey: "f".repeat(64),
                 name: "invalid farm".to_string(),
                 about: None,
                 website: None,

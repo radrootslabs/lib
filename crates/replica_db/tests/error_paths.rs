@@ -28,9 +28,9 @@ use radroots_replica_db_schema::media_image::{
     IMediaImageCreate, IMediaImageDelete, IMediaImageFindMany, IMediaImageFindOne,
     IMediaImageUpdate,
 };
-use radroots_replica_db_schema::nostr_event_state::{
-    INostrEventStateCreate, INostrEventStateDelete, INostrEventStateFindMany,
-    INostrEventStateFindOne, INostrEventStateUpdate,
+use radroots_replica_db_schema::nostr_event_head::{
+    INostrEventHeadCreate, INostrEventHeadDelete, INostrEventHeadFindMany, INostrEventHeadFindOne,
+    INostrEventHeadUpdate,
 };
 use radroots_replica_db_schema::nostr_profile::{
     INostrProfileCreate, INostrProfileDelete, INostrProfileFindMany, INostrProfileFindOne,
@@ -832,29 +832,29 @@ fn log_error_error_paths_cover_regions() {
 }
 
 #[test]
-fn nostr_event_state_error_paths_cover_regions() {
+fn nostr_event_head_error_paths_cover_regions() {
     let db = open_db();
 
-    let update_missing: INostrEventStateUpdate = parse_json(json!({
+    let update_missing: INostrEventHeadUpdate = parse_json(json!({
         "on": { "key": "state-a" },
         "fields": { "content_hash": "hash-x" }
     }));
-    assert_not_found(db.nostr_event_state_update(&update_missing));
+    assert_not_found(db.nostr_event_head_update(&update_missing));
 
-    let update_missing_id: INostrEventStateUpdate = parse_json(json!({
+    let update_missing_id: INostrEventHeadUpdate = parse_json(json!({
         "on": { "id": "missing-id" },
         "fields": { "content_hash": "hash-y" }
     }));
-    assert_not_found(db.nostr_event_state_update(&update_missing_id));
+    assert_not_found(db.nostr_event_head_update(&update_missing_id));
 
-    let delete_missing_on: INostrEventStateDelete = parse_json(json!({
+    let delete_missing_on: INostrEventHeadDelete = parse_json(json!({
         "on": { "key": "state-a" }
     }));
-    assert_not_found(db.nostr_event_state_delete(&delete_missing_on));
+    assert_not_found(db.nostr_event_head_delete(&delete_missing_on));
 
-    drop_table(&db, "nostr_event_state");
+    drop_table(&db, "nostr_event_head");
 
-    let create_opts: INostrEventStateCreate = parse_json(json!({
+    let create_opts: INostrEventHeadCreate = parse_json(json!({
         "key": "state-a",
         "kind": 30023,
         "pubkey": hex64('a'),
@@ -863,28 +863,28 @@ fn nostr_event_state_error_paths_cover_regions() {
         "last_created_at": 1,
         "content_hash": "hash-a"
     }));
-    assert_invalid_query(db.nostr_event_state_create(&create_opts));
+    assert_invalid_query(db.nostr_event_head_create(&create_opts));
 
-    let find_many_filter: INostrEventStateFindMany = parse_json(json!({
+    let find_many_filter: INostrEventHeadFindMany = parse_json(json!({
         "filter": { "id": "id-1" }
     }));
-    assert_invalid_query(db.nostr_event_state_find_many(&find_many_filter));
+    assert_invalid_query(db.nostr_event_head_find_many(&find_many_filter));
 
-    let find_one_on: INostrEventStateFindOne = parse_json(json!({
+    let find_one_on: INostrEventHeadFindOne = parse_json(json!({
         "on": { "id": "id-1" }
     }));
-    assert_invalid_query(db.nostr_event_state_find_one(&find_one_on));
+    assert_invalid_query(db.nostr_event_head_find_one(&find_one_on));
 
-    let update_id: INostrEventStateUpdate = parse_json(json!({
+    let update_id: INostrEventHeadUpdate = parse_json(json!({
         "on": { "id": "id-1" },
         "fields": { "content_hash": "hash-z" }
     }));
-    assert_invalid_query(db.nostr_event_state_update(&update_id));
+    assert_invalid_query(db.nostr_event_head_update(&update_id));
 
-    let delete_id: INostrEventStateDelete = parse_json(json!({
+    let delete_id: INostrEventHeadDelete = parse_json(json!({
         "on": { "id": "id-1" }
     }));
-    assert_invalid_query(db.nostr_event_state_delete(&delete_id));
+    assert_invalid_query(db.nostr_event_head_delete(&delete_id));
 }
 
 #[test]

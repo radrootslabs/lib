@@ -29,9 +29,9 @@ use radroots_replica_db_schema::media_image::{
     IMediaImageCreate, IMediaImageDelete, IMediaImageFindMany, IMediaImageFindOne,
     IMediaImageUpdate, MediaImageFindManyRel, MediaImageTradeProductArgs,
 };
-use radroots_replica_db_schema::nostr_event_state::{
-    INostrEventStateCreate, INostrEventStateDelete, INostrEventStateFindMany,
-    INostrEventStateFindOne, INostrEventStateUpdate,
+use radroots_replica_db_schema::nostr_event_head::{
+    INostrEventHeadCreate, INostrEventHeadDelete, INostrEventHeadFindMany, INostrEventHeadFindOne,
+    INostrEventHeadUpdate,
 };
 use radroots_replica_db_schema::nostr_profile::{
     INostrProfileCreate, INostrProfileDelete, INostrProfileFindMany, INostrProfileFindOne,
@@ -157,7 +157,7 @@ fn full_mode_shaped_query_helpers_cover_cli_reads() {
     db.trade_product_location_set(&product_location_rel)
         .expect("product location set");
 
-    let nostr_event_state: INostrEventStateCreate = parse_json(json!({
+    let nostr_event_head: INostrEventHeadCreate = parse_json(json!({
         "key": "state-a",
         "kind": 30023,
         "pubkey": hex64('d'),
@@ -166,7 +166,7 @@ fn full_mode_shaped_query_helpers_cover_cli_reads() {
         "last_created_at": 42,
         "content_hash": "hash-a"
     }));
-    db.nostr_event_state_create(&nostr_event_state)
+    db.nostr_event_head_create(&nostr_event_head)
         .expect("nostr event state create");
 
     let rows = db
@@ -342,7 +342,7 @@ fn full_mode_crud_and_relation_paths() {
         .expect("nostr relay create")
         .result;
 
-    let nostr_event_state: INostrEventStateCreate = parse_json(json!({
+    let nostr_event_head: INostrEventHeadCreate = parse_json(json!({
         "key": "state-a",
         "kind": 30023,
         "pubkey": hex64('d'),
@@ -351,8 +351,8 @@ fn full_mode_crud_and_relation_paths() {
         "last_created_at": 1,
         "content_hash": "hash-a"
     }));
-    let nostr_event_state_created = db
-        .nostr_event_state_create(&nostr_event_state)
+    let nostr_event_head_created = db
+        .nostr_event_head_create(&nostr_event_head)
         .expect("nostr event state create")
         .result;
 
@@ -1032,45 +1032,45 @@ fn full_mode_crud_and_relation_paths() {
         parse_json(json!({ "on": { "id": nostr_profile_created.id }, "fields": {} }));
     assert_invalid_argument(db.nostr_profile_update(&nostr_profile_update_empty));
 
-    let nostr_event_state_find_many: INostrEventStateFindMany =
-        parse_json(json!({ "filter": { "id": nostr_event_state_created.id } }));
+    let nostr_event_head_find_many: INostrEventHeadFindMany =
+        parse_json(json!({ "filter": { "id": nostr_event_head_created.id } }));
     assert_eq!(
-        db.nostr_event_state_find_many(&nostr_event_state_find_many)
+        db.nostr_event_head_find_many(&nostr_event_head_find_many)
             .expect("nostr event state find many")
             .results
             .len(),
         1
     );
-    let nostr_event_state_find_one: INostrEventStateFindOne =
-        parse_json(json!({ "on": { "id": nostr_event_state_created.id } }));
+    let nostr_event_head_find_one: INostrEventHeadFindOne =
+        parse_json(json!({ "on": { "id": nostr_event_head_created.id } }));
     assert!(
-        db.nostr_event_state_find_one(&nostr_event_state_find_one)
+        db.nostr_event_head_find_one(&nostr_event_head_find_one)
             .expect("nostr event state find one")
             .result
             .is_some()
     );
-    let nostr_event_state_update_alt: INostrEventStateUpdate =
+    let nostr_event_head_update_alt: INostrEventHeadUpdate =
         parse_json(json!({ "on": { "key": "state-a" }, "fields": { "content_hash": "hash-b" } }));
     assert_eq!(
-        db.nostr_event_state_update(&nostr_event_state_update_alt)
+        db.nostr_event_head_update(&nostr_event_head_update_alt)
             .expect("nostr event state update")
             .result
             .content_hash,
         "hash-b"
     );
-    let nostr_event_state_update_id: INostrEventStateUpdate = parse_json(
-        json!({ "on": { "id": nostr_event_state_created.id }, "fields": { "content_hash": "hash-c" } }),
+    let nostr_event_head_update_id: INostrEventHeadUpdate = parse_json(
+        json!({ "on": { "id": nostr_event_head_created.id }, "fields": { "content_hash": "hash-c" } }),
     );
     assert_eq!(
-        db.nostr_event_state_update(&nostr_event_state_update_id)
+        db.nostr_event_head_update(&nostr_event_head_update_id)
             .expect("nostr event state update id")
             .result
             .content_hash,
         "hash-c"
     );
-    let nostr_event_state_update_empty: INostrEventStateUpdate =
-        parse_json(json!({ "on": { "id": nostr_event_state_created.id }, "fields": {} }));
-    assert_invalid_argument(db.nostr_event_state_update(&nostr_event_state_update_empty));
+    let nostr_event_head_update_empty: INostrEventHeadUpdate =
+        parse_json(json!({ "on": { "id": nostr_event_head_created.id }, "fields": {} }));
+    assert_invalid_argument(db.nostr_event_head_update(&nostr_event_head_update_empty));
 
     for opts in [
         INostrRelayFindMany::Rel {
@@ -1292,13 +1292,13 @@ fn full_mode_crud_and_relation_paths() {
         let _ = db.nostr_relay_delete(&opts);
     }
 
-    let nostr_event_state_delete: INostrEventStateDelete =
+    let nostr_event_head_delete: INostrEventHeadDelete =
         parse_json(json!({ "on": { "key": "state-a" } }));
-    db.nostr_event_state_delete(&nostr_event_state_delete)
+    db.nostr_event_head_delete(&nostr_event_head_delete)
         .expect("nostr event state delete");
-    let nostr_event_state_delete_missing: INostrEventStateDelete =
-        parse_json(json!({ "on": { "id": nostr_event_state_created.id } }));
-    assert_not_found(db.nostr_event_state_delete(&nostr_event_state_delete_missing));
+    let nostr_event_head_delete_missing: INostrEventHeadDelete =
+        parse_json(json!({ "on": { "id": nostr_event_head_created.id } }));
+    assert_not_found(db.nostr_event_head_delete(&nostr_event_head_delete_missing));
 
     let log_error_delete: ILogErrorDelete =
         parse_json(json!({ "on": { "nostr_pubkey": hex64('c') } }));

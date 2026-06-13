@@ -417,7 +417,7 @@ mod tests {
     }
 
     #[test]
-    fn contract_bridge_keeps_regular_events_out_of_head_selection() {
+    fn contract_bridge_uses_profile_replaceable_heads() {
         let profile = event_with_content(
             KIND_PROFILE,
             &hex_64('3'),
@@ -426,11 +426,22 @@ mod tests {
             Vec::new(),
             r#"{"name":"Alice"}"#,
         );
+        let RadrootsEventHeadCandidateResult::Candidate(candidate) =
+            event_head_candidate_for_event(&profile).expect("profile contract")
+        else {
+            panic!("expected candidate")
+        };
         assert_eq!(
-            event_head_candidate_for_event(&profile).expect("profile contract"),
-            RadrootsEventHeadCandidateResult::NotHeadSelected
+            candidate.coordinate,
+            RadrootsEventHeadCoordinate::Replaceable {
+                kind: KIND_PROFILE,
+                pubkey: RadrootsPublicKey::parse(hex_64('c')).unwrap()
+            }
         );
+    }
 
+    #[test]
+    fn contract_bridge_keeps_order_events_out_of_head_selection() {
         let order = event_with_content(
             KIND_ORDER_REQUEST,
             &hex_64('4'),

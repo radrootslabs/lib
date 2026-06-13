@@ -589,7 +589,7 @@ static ALL_KIND_CONTRACTS: &[RadrootsKindContract] = &[
         KIND_PROFILE,
         "KIND_PROFILE",
         "Profile Metadata",
-        RadrootsEventClass::Regular,
+        RadrootsEventClass::Replaceable,
         RadrootsNostrStandard::Nip01,
         ["radroots.profile.metadata.v1"]
     ),
@@ -1320,7 +1320,7 @@ static ALL_EVENT_CONTRACTS: &[RadrootsEventContract] = &[
         KIND_PROFILE,
         "Profile Metadata",
         "RadrootsProfile",
-        RadrootsEventClass::Regular,
+        RadrootsEventClass::Replaceable,
         RadrootsEventPrivacy::Public,
         RadrootsActorRole::Any,
         RadrootsContentSchema::JsonObject,
