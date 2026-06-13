@@ -2591,17 +2591,14 @@ fn tag_value<'a>(tags: &'a [Vec<String>], name: &str) -> Option<&'a str> {
 }
 
 fn content_json_string_field_equals(content: &str, field: &str, value: &str) -> bool {
-    let mut quoted = content.split('"');
-    while let Some(token) = quoted.next() {
-        if token == field {
-            if let Some(separator) = quoted.next() {
-                if separator.trim_start().starts_with(':') {
-                    return quoted.next() == Some(value);
-                }
-            }
-        }
-    }
-    false
+    serde_json::from_str::<serde_json::Value>(content)
+        .ok()
+        .and_then(|json| {
+            json.get(field)
+                .and_then(|field| field.as_str())
+                .map(|field| field == value)
+        })
+        .unwrap_or(false)
 }
 
 #[cfg(test)]
@@ -2788,7 +2785,7 @@ mod tests {
     }
 
     #[test]
-    fn supports_content_field_discriminators_without_json_dependency() {
+    fn supports_content_field_discriminators() {
         assert!(discriminator_matches(
             &RadrootsEventDiscriminator::EnvelopeType("order_request"),
             &[],
