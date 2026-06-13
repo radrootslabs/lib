@@ -20,5 +20,5 @@ test_threads = 1
 
 [profiles.crates."radroots_sql_wasm_core"]
 no_default_features = true
-features = ["embedded"]
+features = ["bridge"]
 test_threads = 1

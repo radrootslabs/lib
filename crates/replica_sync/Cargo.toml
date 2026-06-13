@@ -19,6 +19,7 @@ default = ["std"]
 std = [
   "radroots_events/std",
   "radroots_events_codec/std",
+  "radroots_sql_core/std",
   "dep:base64",
   "dep:uuid",
 ]

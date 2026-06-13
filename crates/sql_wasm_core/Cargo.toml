@@ -16,21 +16,17 @@ crate-type = ["cdylib", "rlib"]
 
 [features]
 default = ["bridge"]
-bridge = ["dep:radroots_sql_wasm_bridge"]
-embedded = ["dep:rusqlite", "radroots_sql_core/native"]
+bridge = [
+  "radroots_sql_core/bridge",
+  "dep:radroots_sql_wasm_bridge",
+  "dep:serde",
+  "dep:serde-wasm-bindgen",
+  "dep:wasm-bindgen",
+]
 
 [dependencies]
 radroots_sql_core = { workspace = true }
 radroots_sql_wasm_bridge = { workspace = true, optional = true }
-rusqlite = { workspace = true, features = [
-  "bundled",
-  "serialize",
-], optional = true }
-chrono = { workspace = true, features = ["serde"] }
-serde = { workspace = true, features = ["derive"] }
-serde_json = { workspace = true }
-serde-wasm-bindgen = { workspace = true }
-thiserror = { workspace = true }
-wasm-bindgen = { workspace = true }
-js-sys = { workspace = true }
-uuid = { workspace = true, features = ["v4", "fast-rng", "js"] }
+serde = { workspace = true, optional = true }
+serde-wasm-bindgen = { workspace = true, optional = true }
+wasm-bindgen = { workspace = true, optional = true }

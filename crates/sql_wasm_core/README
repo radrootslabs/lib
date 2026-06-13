@@ -7,9 +7,7 @@ runtime facade for the `radroots` core libraries.
 
  * shared wasm entry points for SQL execution, query, export, and transaction
    control;
- * compile-time selection between the host bridge layer and an embedded SQL
-   engine;
- * an optional singleton embedded engine for self-contained wasm runtimes;
+ * host bridge integration for browser and worker SQL runtimes;
  * small JSON parsing and JavaScript error helpers for wasm callers.
 
 ## Copyright

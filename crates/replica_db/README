@@ -9,8 +9,7 @@ facades and shaped query helpers for the `radroots` core libraries.
  * migration, backup, restore, and export helpers for replica database state;
  * typed CRUD helpers over the shared replica schema models;
  * shaped query helpers for common trade, farm, and event freshness lookups;
- * feature-gated web, native, and embedded backend support through
-   `radroots_sql_core`.
+ * feature-gated web and native backend support through `radroots_sql_core`.
 
 ## Copyright
 

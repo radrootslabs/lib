@@ -21,7 +21,7 @@ radroots_sql_wasm_core = { workspace = true, default-features = false, features 
 ] }
 radroots_replica_db = { workspace = true }
 radroots_replica_db_schema = { workspace = true }
-radroots_replica_sync = { workspace = true }
+radroots_replica_sync = { workspace = true, features = ["std"] }
 js-sys = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
