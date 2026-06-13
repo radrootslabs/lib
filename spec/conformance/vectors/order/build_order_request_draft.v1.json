@@ -1,10 +1,10 @@
 {
-  "suite": "trade",
+  "suite": "order",
   "contract_version": "0.1.0",
   "vectors": [
     {
-      "id": "trade_build_order_request_draft_minimal_001",
-      "kind": "trade.build_order_request_draft",
+      "id": "order_build_order_request_draft_minimal_001",
+      "kind": "order.build_order_request_draft",
       "input": {
         "listing_event": {
           "id": "listing-snapshot",
@@ -65,8 +65,8 @@
         "wire_parts": {
           "kind": 3422,
           "content_type": "TradeOrderRequested",
-          "tags_shape": "active_trade_order_request_tags",
-          "payload_shape": "active_trade_order_request_with_economics"
+          "tags_shape": "order_order_request_tags",
+          "payload_shape": "order_order_request_with_economics"
         }
       }
     }

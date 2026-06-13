@@ -1,7 +1,6 @@
 pub use radroots_events::listing::*;
-pub use radroots_events::trade::{
-    RadrootsTradeListingParseError, RadrootsTradeListingValidationError,
-};
+pub use radroots_events::order::RadrootsListingParseError;
+pub use radroots_events::trade_validation::RadrootsTradeValidationListingError;
 pub use radroots_events_codec::error::EventEncodeError;
 pub use radroots_trade::listing::validation::RadrootsTradeListing as TradeListingValidateResult;
 
@@ -36,6 +35,6 @@ pub fn build_draft(listing: &RadrootsListing) -> Result<RadrootsListingDraft, Ev
 #[cfg(feature = "serde_json")]
 pub fn parse_event(
     event: &RadrootsNostrEvent,
-) -> Result<RadrootsListing, RadrootsTradeListingParseError> {
+) -> Result<RadrootsListing, RadrootsListingParseError> {
     radroots_trade::listing::parse_listing_event(event)
 }

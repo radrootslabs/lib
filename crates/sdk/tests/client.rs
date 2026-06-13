@@ -4,25 +4,23 @@ use radroots_core::{
 };
 use radroots_events::farm::{RadrootsFarm, RadrootsFarmRef};
 use radroots_events::kinds::{
-    KIND_FARM, KIND_LISTING, KIND_PROFILE, KIND_TRADE_CANCEL, KIND_TRADE_FULFILLMENT_UPDATE,
-    KIND_TRADE_LISTING_VALIDATE_REQ, KIND_TRADE_ORDER_REQUEST, KIND_TRADE_ORDER_RESPONSE,
-    KIND_TRADE_ORDER_REVISION, KIND_TRADE_ORDER_REVISION_RESPONSE, KIND_TRADE_RECEIPT,
+    KIND_FARM, KIND_LISTING, KIND_ORDER_CANCELLATION, KIND_ORDER_DECISION,
+    KIND_ORDER_FULFILLMENT_UPDATE, KIND_ORDER_RECEIPT, KIND_ORDER_REQUEST,
+    KIND_ORDER_REVISION_DECISION, KIND_ORDER_REVISION_PROPOSAL, KIND_PROFILE,
 };
 use radroots_events::listing::{
     RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
     RadrootsListingDeliveryMethod, RadrootsListingLocation, RadrootsListingProduct,
     RadrootsListingStatus,
 };
-use radroots_events::profile::{RadrootsProfile, RadrootsProfileType};
-use radroots_events::trade::{
-    RadrootsActiveTradeFulfillmentState, RadrootsTradeBuyerReceipt,
-    RadrootsTradeFulfillmentUpdated, RadrootsTradeInventoryCommitment,
-    RadrootsTradeListingValidateRequest, RadrootsTradeMessagePayload, RadrootsTradeOrderCancelled,
-    RadrootsTradeOrderDecision, RadrootsTradeOrderDecisionEvent, RadrootsTradeOrderEconomicItem,
-    RadrootsTradeOrderEconomics, RadrootsTradeOrderItem, RadrootsTradeOrderRequested,
-    RadrootsTradeOrderRevisionDecision, RadrootsTradeOrderRevisionDecisionEvent,
-    RadrootsTradeOrderRevisionProposed, RadrootsTradePricingBasis,
+use radroots_events::order::{
+    RadrootsOrderCancellation, RadrootsOrderDecision, RadrootsOrderDecisionOutcome,
+    RadrootsOrderEconomicItem, RadrootsOrderEconomics, RadrootsOrderFulfillmentState,
+    RadrootsOrderFulfillmentUpdate, RadrootsOrderInventoryCommitment, RadrootsOrderItem,
+    RadrootsOrderPricingBasis, RadrootsOrderReceipt, RadrootsOrderRequest,
+    RadrootsOrderRevisionDecision, RadrootsOrderRevisionOutcome, RadrootsOrderRevisionProposal,
 };
+use radroots_events::profile::{RadrootsProfile, RadrootsProfileType};
 use radroots_sdk::{
     RADROOTS_SDK_PRODUCTION_RELAY_URL, RadrootsNostrEvent, RadrootsNostrEventPtr,
     RadrootsSdkClient, RadrootsSdkConfig, RelayConfig, SdkConfigError, SdkEnvironment,
@@ -136,25 +134,22 @@ fn listing_event_ptr() -> RadrootsNostrEventPtr {
     }
 }
 
-fn sample_order_request(
-    buyer_pubkey: String,
-    seller_pubkey: String,
-) -> RadrootsTradeOrderRequested {
-    RadrootsTradeOrderRequested {
+fn sample_order_request(buyer_pubkey: String, seller_pubkey: String) -> RadrootsOrderRequest {
+    RadrootsOrderRequest {
         order_id: "order-1".into(),
         listing_addr: format!("{KIND_LISTING}:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg"),
         buyer_pubkey,
         seller_pubkey,
-        items: vec![RadrootsTradeOrderItem {
+        items: vec![RadrootsOrderItem {
             bin_id: "bin-1".into(),
             bin_count: 2,
         }],
-        economics: RadrootsTradeOrderEconomics {
+        economics: RadrootsOrderEconomics {
             quote_id: "quote-1".into(),
             quote_version: 1,
-            pricing_basis: RadrootsTradePricingBasis::ListingEvent,
+            pricing_basis: RadrootsOrderPricingBasis::ListingEvent,
             currency: RadrootsCoreCurrency::USD,
-            items: vec![RadrootsTradeOrderEconomicItem {
+            items: vec![RadrootsOrderEconomicItem {
                 bin_id: "bin-1".into(),
                 bin_count: 2,
                 quantity_amount: decimal("1"),
@@ -173,17 +168,14 @@ fn sample_order_request(
     }
 }
 
-fn sample_order_decision(
-    buyer_pubkey: String,
-    seller_pubkey: String,
-) -> RadrootsTradeOrderDecisionEvent {
-    RadrootsTradeOrderDecisionEvent {
+fn sample_order_decision(buyer_pubkey: String, seller_pubkey: String) -> RadrootsOrderDecision {
+    RadrootsOrderDecision {
         order_id: "order-1".into(),
         listing_addr: format!("{KIND_LISTING}:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg"),
         buyer_pubkey,
         seller_pubkey,
-        decision: RadrootsTradeOrderDecision::Accepted {
-            inventory_commitments: vec![RadrootsTradeInventoryCommitment {
+        decision: RadrootsOrderDecisionOutcome::Accepted {
+            inventory_commitments: vec![RadrootsOrderInventoryCommitment {
                 bin_id: "bin-1".into(),
                 bin_count: 2,
             }],
@@ -196,8 +188,8 @@ fn sample_order_revision_proposal(
     seller_pubkey: String,
     root_event_id: String,
     prev_event_id: String,
-) -> RadrootsTradeOrderRevisionProposed {
-    RadrootsTradeOrderRevisionProposed {
+) -> RadrootsOrderRevisionProposal {
+    RadrootsOrderRevisionProposal {
         revision_id: "revision-1".into(),
         order_id: "order-1".into(),
         listing_addr: format!("{KIND_LISTING}:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg"),
@@ -205,16 +197,16 @@ fn sample_order_revision_proposal(
         seller_pubkey,
         root_event_id,
         prev_event_id,
-        items: vec![RadrootsTradeOrderItem {
+        items: vec![RadrootsOrderItem {
             bin_id: "bin-1".into(),
             bin_count: 3,
         }],
-        economics: RadrootsTradeOrderEconomics {
+        economics: RadrootsOrderEconomics {
             quote_id: "revision-quote-1".into(),
             quote_version: 2,
-            pricing_basis: RadrootsTradePricingBasis::ListingEvent,
+            pricing_basis: RadrootsOrderPricingBasis::ListingEvent,
             currency: RadrootsCoreCurrency::USD,
-            items: vec![RadrootsTradeOrderEconomicItem {
+            items: vec![RadrootsOrderEconomicItem {
                 bin_id: "bin-1".into(),
                 bin_count: 3,
                 quantity_amount: decimal("1"),
@@ -235,10 +227,10 @@ fn sample_order_revision_proposal(
 }
 
 fn sample_order_revision_decision(
-    proposal: &RadrootsTradeOrderRevisionProposed,
-    decision: RadrootsTradeOrderRevisionDecision,
-) -> RadrootsTradeOrderRevisionDecisionEvent {
-    RadrootsTradeOrderRevisionDecisionEvent {
+    proposal: &RadrootsOrderRevisionProposal,
+    decision: RadrootsOrderRevisionOutcome,
+) -> RadrootsOrderRevisionDecision {
+    RadrootsOrderRevisionDecision {
         revision_id: proposal.revision_id.clone(),
         order_id: proposal.order_id.clone(),
         listing_addr: proposal.listing_addr.clone(),
@@ -253,21 +245,21 @@ fn sample_order_revision_decision(
 fn sample_fulfillment_update(
     buyer_pubkey: String,
     seller_pubkey: String,
-) -> RadrootsTradeFulfillmentUpdated {
-    RadrootsTradeFulfillmentUpdated {
+) -> RadrootsOrderFulfillmentUpdate {
+    RadrootsOrderFulfillmentUpdate {
         order_id: "order-1".into(),
         listing_addr: format!("{KIND_LISTING}:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg"),
         buyer_pubkey,
         seller_pubkey,
-        status: RadrootsActiveTradeFulfillmentState::ReadyForPickup,
+        status: RadrootsOrderFulfillmentState::ReadyForPickup,
     }
 }
 
 fn sample_order_cancellation(
     buyer_pubkey: String,
     seller_pubkey: String,
-) -> RadrootsTradeOrderCancelled {
-    RadrootsTradeOrderCancelled {
+) -> RadrootsOrderCancellation {
+    RadrootsOrderCancellation {
         order_id: "order-1".into(),
         listing_addr: format!("{KIND_LISTING}:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg"),
         buyer_pubkey,
@@ -276,8 +268,8 @@ fn sample_order_cancellation(
     }
 }
 
-fn sample_buyer_receipt(buyer_pubkey: String, seller_pubkey: String) -> RadrootsTradeBuyerReceipt {
-    RadrootsTradeBuyerReceipt {
+fn sample_buyer_receipt(buyer_pubkey: String, seller_pubkey: String) -> RadrootsOrderReceipt {
+    RadrootsOrderReceipt {
         order_id: "order-1".into(),
         listing_addr: format!("{KIND_LISTING}:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg"),
         buyer_pubkey,
@@ -398,14 +390,14 @@ fn namespace_clients_reflect_explicit_transport_mode() {
     assert_eq!(client.profile().transport(), SdkTransportMode::Radrootsd);
     assert_eq!(client.farm().transport(), SdkTransportMode::Radrootsd);
     assert_eq!(client.listing().transport(), SdkTransportMode::Radrootsd);
-    assert_eq!(client.trade().transport(), SdkTransportMode::Radrootsd);
+    assert_eq!(client.order().transport(), SdkTransportMode::Radrootsd);
     #[cfg(feature = "radrootsd-client")]
     assert_eq!(client.radrootsd().transport(), SdkTransportMode::Radrootsd);
     assert_eq!(client.signer(), SignerConfig::LocalIdentity);
     assert_eq!(client.profile().signer(), SignerConfig::LocalIdentity);
     assert_eq!(client.farm().signer(), SignerConfig::LocalIdentity);
     assert_eq!(client.listing().signer(), SignerConfig::LocalIdentity);
-    assert_eq!(client.trade().signer(), SignerConfig::LocalIdentity);
+    assert_eq!(client.order().signer(), SignerConfig::LocalIdentity);
     #[cfg(feature = "radrootsd-client")]
     assert_eq!(client.radrootsd().signer(), SignerConfig::LocalIdentity);
 }
@@ -417,13 +409,13 @@ fn namespace_clients_expose_parent_sdk_and_draft_facades() {
     let profile = client.profile();
     let farm = client.farm();
     let listing = client.listing();
-    let trade = client.trade();
+    let order = client.order();
 
     assert_eq!(client.config().environment, SdkEnvironment::Production);
     assert!(std::ptr::eq(profile.sdk(), &client));
     assert!(std::ptr::eq(farm.sdk(), &client));
     assert!(std::ptr::eq(listing.sdk(), &client));
-    assert!(std::ptr::eq(trade.sdk(), &client));
+    assert!(std::ptr::eq(order.sdk(), &client));
 
     let profile_draft = profile
         .build_draft(&sample_profile(), Some(RadrootsProfileType::Farm))
@@ -445,7 +437,7 @@ fn namespace_clients_expose_parent_sdk_and_draft_facades() {
 }
 
 #[test]
-fn listing_and_trade_clients_wrap_existing_sdk_facades() {
+fn listing_and_order_clients_wrap_existing_sdk_facades() {
     let client = RadrootsSdkClient::from_config(RadrootsSdkConfig::local()).expect("sdk client");
     let listing_value = sample_listing();
 
@@ -477,59 +469,48 @@ fn listing_and_trade_clients_wrap_existing_sdk_facades() {
     assert_eq!(parsed.d_tag, listing_value.d_tag);
 
     let validated = client
-        .trade()
+        .order()
         .validate_listing_event(&event)
         .expect("validated listing");
     assert_eq!(validated.listing_id, listing_value.d_tag);
 
     let listing_addr = format!("{KIND_LISTING}:seller:{}", listing_value.d_tag);
-    let payload =
-        RadrootsTradeMessagePayload::ListingValidateRequest(RadrootsTradeListingValidateRequest {
-            listing_event: None,
-        });
+    let payload = sample_order_request("buyer".into(), "seller".into());
     let envelope = client
-        .trade()
-        .build_envelope_draft(
-            "buyer",
-            payload.message_type(),
-            listing_addr.clone(),
-            None,
-            None,
-            None,
-            None,
-            &payload,
-        )
-        .expect("trade draft");
-    assert_eq!(envelope.kind, KIND_TRADE_LISTING_VALIDATE_REQ);
+        .order()
+        .build_order_request_draft(&listing_event_ptr(), &payload)
+        .expect("order draft");
+    assert_eq!(envelope.as_wire_parts().kind, KIND_ORDER_REQUEST);
     let envelope_event = RadrootsNostrEvent {
-        id: "trade-event-1".into(),
-        author: "seller".into(),
+        id: "order-event-1".into(),
+        author: "buyer".into(),
         created_at: 2,
-        kind: envelope.kind,
-        tags: envelope.tags,
-        content: envelope.content,
+        kind: envelope.as_wire_parts().kind,
+        tags: envelope.as_wire_parts().tags.clone(),
+        content: envelope.as_wire_parts().content.clone(),
         sig: String::new(),
     };
     assert_eq!(
         client
-            .trade()
-            .parse_envelope(&envelope_event)
-            .expect("trade envelope")
-            .message_type,
-        payload.message_type()
+            .order()
+            .parse_order_request(&envelope_event)
+            .expect("order envelope")
+            .payload
+            .order_id,
+        payload.order_id
     );
     let parsed_addr = client
-        .trade()
+        .order()
         .parse_listing_address(&listing_addr)
         .expect("listing address");
     assert_eq!(parsed_addr.listing_id, listing_value.d_tag);
 }
 
 #[test]
-fn active_trade_facades_round_trip_all_draft_types() {
+fn order_facades_round_trip_all_draft_types() {
     let client =
         RadrootsSdkClient::from_config(RadrootsSdkConfig::production()).expect("sdk client");
-    let trade = client.trade();
+    let order_client = client.order();
     let buyer_pubkey = "b".repeat(64);
     let seller_pubkey = "a".repeat(64);
     let root_event_id = "order-request-event-1";
@@ -537,30 +518,27 @@ fn active_trade_facades_round_trip_all_draft_types() {
     let proposal_event_id = "order-revision-proposal-event-1";
     let fulfillment_event_id = "fulfillment-event-1";
 
-    let order = sample_order_request(buyer_pubkey.clone(), seller_pubkey.clone());
-    let order_draft = trade
-        .build_order_request_draft(&listing_event_ptr(), &order)
+    let order_request = sample_order_request(buyer_pubkey.clone(), seller_pubkey.clone());
+    let order_draft = order_client
+        .build_order_request_draft(&listing_event_ptr(), &order_request)
         .expect("order request draft");
-    assert_eq!(order_draft.as_wire_parts().kind, KIND_TRADE_ORDER_REQUEST);
+    assert_eq!(order_draft.as_wire_parts().kind, KIND_ORDER_REQUEST);
     let order_event = event_from_parts(
         root_event_id,
         &buyer_pubkey,
         1,
         order_draft.clone().into_wire_parts(),
     );
-    let order_envelope = trade
+    let order_envelope = order_client
         .parse_order_request(&order_event)
         .expect("order request envelope");
     assert_eq!(order_envelope.payload.economics.total, usd("10"));
 
     let decision = sample_order_decision(buyer_pubkey.clone(), seller_pubkey.clone());
-    let decision_draft = trade
+    let decision_draft = order_client
         .build_order_decision_draft(root_event_id, root_event_id, &decision)
         .expect("order decision draft");
-    assert_eq!(
-        decision_draft.as_wire_parts().kind,
-        KIND_TRADE_ORDER_RESPONSE
-    );
+    assert_eq!(decision_draft.as_wire_parts().kind, KIND_ORDER_DECISION);
     let decision_event = event_from_parts(
         decision_event_id,
         &seller_pubkey,
@@ -568,7 +546,7 @@ fn active_trade_facades_round_trip_all_draft_types() {
         decision_draft.clone().into_wire_parts(),
     );
     assert_eq!(
-        trade
+        order_client
             .parse_order_decision(&decision_event)
             .expect("order decision envelope")
             .payload
@@ -582,12 +560,12 @@ fn active_trade_facades_round_trip_all_draft_types() {
         root_event_id.into(),
         decision_event_id.into(),
     );
-    let proposal_draft = trade
+    let proposal_draft = order_client
         .build_order_revision_proposal_draft(root_event_id, decision_event_id, &proposal)
         .expect("revision proposal draft");
     assert_eq!(
         proposal_draft.as_wire_parts().kind,
-        KIND_TRADE_ORDER_REVISION
+        KIND_ORDER_REVISION_PROPOSAL
     );
     let proposal_event = event_from_parts(
         proposal_event_id,
@@ -596,7 +574,7 @@ fn active_trade_facades_round_trip_all_draft_types() {
         proposal_draft.clone().into_wire_parts(),
     );
     assert_eq!(
-        trade
+        order_client
             .parse_order_revision_proposal(&proposal_event)
             .expect("revision proposal envelope")
             .payload
@@ -606,8 +584,8 @@ fn active_trade_facades_round_trip_all_draft_types() {
     );
 
     let revision_decision =
-        sample_order_revision_decision(&proposal, RadrootsTradeOrderRevisionDecision::Accepted);
-    let revision_decision_draft = trade
+        sample_order_revision_decision(&proposal, RadrootsOrderRevisionOutcome::Accepted);
+    let revision_decision_draft = order_client
         .build_order_revision_decision_draft(
             root_event_id,
             revision_decision.prev_event_id.as_str(),
@@ -616,7 +594,7 @@ fn active_trade_facades_round_trip_all_draft_types() {
         .expect("revision decision draft");
     assert_eq!(
         revision_decision_draft.as_wire_parts().kind,
-        KIND_TRADE_ORDER_REVISION_RESPONSE
+        KIND_ORDER_REVISION_DECISION
     );
     let revision_decision_event = event_from_parts(
         "order-revision-decision-event-1",
@@ -625,7 +603,7 @@ fn active_trade_facades_round_trip_all_draft_types() {
         revision_decision_draft.clone().into_wire_parts(),
     );
     assert_eq!(
-        trade
+        order_client
             .parse_order_revision_decision(&revision_decision_event)
             .expect("revision decision envelope")
             .payload
@@ -634,12 +612,12 @@ fn active_trade_facades_round_trip_all_draft_types() {
     );
 
     let fulfillment = sample_fulfillment_update(buyer_pubkey.clone(), seller_pubkey.clone());
-    let fulfillment_draft = trade
+    let fulfillment_draft = order_client
         .build_fulfillment_update_draft(root_event_id, decision_event_id, &fulfillment)
         .expect("fulfillment draft");
     assert_eq!(
         fulfillment_draft.as_wire_parts().kind,
-        KIND_TRADE_FULFILLMENT_UPDATE
+        KIND_ORDER_FULFILLMENT_UPDATE
     );
     let fulfillment_event = event_from_parts(
         fulfillment_event_id,
@@ -648,7 +626,7 @@ fn active_trade_facades_round_trip_all_draft_types() {
         fulfillment_draft.clone().into_wire_parts(),
     );
     assert_eq!(
-        trade
+        order_client
             .parse_fulfillment_update(&fulfillment_event)
             .expect("fulfillment envelope")
             .payload
@@ -657,10 +635,13 @@ fn active_trade_facades_round_trip_all_draft_types() {
     );
 
     let cancellation = sample_order_cancellation(buyer_pubkey.clone(), seller_pubkey.clone());
-    let cancellation_draft = trade
+    let cancellation_draft = order_client
         .build_order_cancellation_draft(root_event_id, decision_event_id, &cancellation)
         .expect("cancellation draft");
-    assert_eq!(cancellation_draft.as_wire_parts().kind, KIND_TRADE_CANCEL);
+    assert_eq!(
+        cancellation_draft.as_wire_parts().kind,
+        KIND_ORDER_CANCELLATION
+    );
     let cancellation_event = event_from_parts(
         "order-cancellation-event-1",
         &buyer_pubkey,
@@ -668,7 +649,7 @@ fn active_trade_facades_round_trip_all_draft_types() {
         cancellation_draft.clone().into_wire_parts(),
     );
     assert_eq!(
-        trade
+        order_client
             .parse_order_cancellation(&cancellation_event)
             .expect("cancellation envelope")
             .payload
@@ -677,10 +658,10 @@ fn active_trade_facades_round_trip_all_draft_types() {
     );
 
     let receipt = sample_buyer_receipt(buyer_pubkey.clone(), seller_pubkey.clone());
-    let receipt_draft = trade
+    let receipt_draft = order_client
         .build_buyer_receipt_draft(root_event_id, fulfillment_event_id, &receipt)
         .expect("receipt draft");
-    assert_eq!(receipt_draft.as_wire_parts().kind, KIND_TRADE_RECEIPT);
+    assert_eq!(receipt_draft.as_wire_parts().kind, KIND_ORDER_RECEIPT);
     let receipt_event = event_from_parts(
         "receipt-event-1",
         &buyer_pubkey,
@@ -688,7 +669,7 @@ fn active_trade_facades_round_trip_all_draft_types() {
         receipt_draft.clone().into_wire_parts(),
     );
     assert!(
-        trade
+        order_client
             .parse_buyer_receipt(&receipt_event)
             .expect("receipt envelope")
             .payload
@@ -697,10 +678,10 @@ fn active_trade_facades_round_trip_all_draft_types() {
 }
 
 #[test]
-fn active_trade_draft_facades_return_encoder_errors() {
+fn order_draft_facades_return_encoder_errors() {
     let client =
         RadrootsSdkClient::from_config(RadrootsSdkConfig::production()).expect("sdk client");
-    let trade = client.trade();
+    let order = client.order();
     let buyer_pubkey = "b".repeat(64);
     let seller_pubkey = "a".repeat(64);
     let root_event_id = "order-request-event-1";
@@ -709,7 +690,7 @@ fn active_trade_draft_facades_return_encoder_errors() {
     let mut invalid_order = sample_order_request(buyer_pubkey.clone(), seller_pubkey.clone());
     invalid_order.order_id.clear();
     assert!(
-        trade
+        order
             .build_order_request_draft(&listing_event_ptr(), &invalid_order)
             .is_err()
     );
@@ -717,7 +698,7 @@ fn active_trade_draft_facades_return_encoder_errors() {
     let mut invalid_decision = sample_order_decision(buyer_pubkey.clone(), seller_pubkey.clone());
     invalid_decision.buyer_pubkey.clear();
     assert!(
-        trade
+        order
             .build_order_decision_draft(root_event_id, root_event_id, &invalid_decision)
             .is_err()
     );
@@ -729,15 +710,15 @@ fn active_trade_draft_facades_return_encoder_errors() {
         decision_event_id.into(),
     );
     assert!(
-        trade
+        order
             .build_order_revision_proposal_draft("different-root", decision_event_id, &proposal)
             .is_err()
     );
 
     let revision_decision =
-        sample_order_revision_decision(&proposal, RadrootsTradeOrderRevisionDecision::Accepted);
+        sample_order_revision_decision(&proposal, RadrootsOrderRevisionOutcome::Accepted);
     assert!(
-        trade
+        order
             .build_order_revision_decision_draft(
                 root_event_id,
                 "different-prev",
@@ -747,9 +728,9 @@ fn active_trade_draft_facades_return_encoder_errors() {
     );
 
     let mut fulfillment = sample_fulfillment_update(buyer_pubkey.clone(), seller_pubkey.clone());
-    fulfillment.status = RadrootsActiveTradeFulfillmentState::AcceptedNotFulfilled;
+    fulfillment.status = RadrootsOrderFulfillmentState::AcceptedNotFulfilled;
     assert!(
-        trade
+        order
             .build_fulfillment_update_draft(root_event_id, decision_event_id, &fulfillment)
             .is_err()
     );
@@ -757,7 +738,7 @@ fn active_trade_draft_facades_return_encoder_errors() {
     let mut cancellation = sample_order_cancellation(buyer_pubkey.clone(), seller_pubkey.clone());
     cancellation.reason.clear();
     assert!(
-        trade
+        order
             .build_order_cancellation_draft(root_event_id, decision_event_id, &cancellation)
             .is_err()
     );
@@ -765,7 +746,7 @@ fn active_trade_draft_facades_return_encoder_errors() {
     let mut receipt = sample_buyer_receipt(buyer_pubkey, seller_pubkey);
     receipt.received = false;
     assert!(
-        trade
+        order
             .build_buyer_receipt_draft(root_event_id, decision_event_id, &receipt)
             .is_err()
     );
@@ -800,27 +781,27 @@ fn publish_receipts_and_errors_format_public_details() {
         SdkPublishError::Encode("encode failed".into()).to_string(),
         SdkPublishError::UnsupportedTransport {
             transport: SdkTransportMode::Radrootsd,
-            operation: "trade.publish",
+            operation: "order.publish",
         }
         .to_string(),
         SdkPublishError::UnsupportedSignerMode {
             transport: SdkTransportMode::RelayDirect,
             signer: SignerConfig::DraftOnly,
             required: SignerConfig::LocalIdentity,
-            operation: "trade.publish",
+            operation: "order.publish",
         }
         .to_string(),
         SdkPublishError::Relay("relay failed".into()).to_string(),
         SdkPublishError::RelaySetup {
             transport: SdkTransportMode::RelayDirect,
-            operation: "trade.publish",
+            operation: "order.publish",
             target_relays: Vec::new(),
             error: "setup failed".into(),
         }
         .to_string(),
         SdkPublishError::RelaySetup {
             transport: SdkTransportMode::RelayDirect,
-            operation: "trade.publish",
+            operation: "order.publish",
             target_relays: vec!["wss://relay.example".into()],
             error: "setup failed".into(),
         }

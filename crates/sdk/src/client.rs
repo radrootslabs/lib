@@ -22,8 +22,7 @@ use crate::config::{RadrootsSdkConfig, SdkConfigError, SdkTransportMode};
 use crate::identity::RadrootsIdentity;
 use crate::{
     NostrTags, RadrootsNostrEvent, RadrootsNostrEventPtr, RadrootsProfile, RadrootsProfileType,
-    RadrootsTradeEnvelope, TradeListingValidateResult, WireEventParts, farm, listing, profile,
-    trade,
+    TradeListingValidateResult, WireEventParts, farm, listing, order, profile,
 };
 #[cfg(any(
     feature = "radrootsd-client",
@@ -919,53 +918,6 @@ impl fmt::Debug for SdkRadrootsdOrderRequestPublishOptions {
     }
 }
 
-#[cfg(feature = "radrootsd-client")]
-#[derive(Clone, PartialEq, Eq)]
-pub struct SdkRadrootsdPublicTradePublishOptions {
-    session: SdkRadrootsdSignerSessionRef,
-    idempotency_key: Option<String>,
-}
-
-#[cfg(feature = "radrootsd-client")]
-impl SdkRadrootsdPublicTradePublishOptions {
-    pub fn from_signer_session(session: &SdkRadrootsdSignerSessionHandle) -> Self {
-        Self {
-            session: session.session().clone(),
-            idempotency_key: None,
-        }
-    }
-
-    pub fn from_signer_session_ref(session: &SdkRadrootsdSignerSessionRef) -> Self {
-        Self {
-            session: session.clone(),
-            idempotency_key: None,
-        }
-    }
-
-    pub fn with_idempotency_key(mut self, idempotency_key: impl Into<String>) -> Self {
-        self.idempotency_key = Some(idempotency_key.into());
-        self
-    }
-
-    pub fn session(&self) -> &SdkRadrootsdSignerSessionRef {
-        &self.session
-    }
-
-    pub fn idempotency_key(&self) -> Option<&str> {
-        self.idempotency_key.as_deref()
-    }
-}
-
-#[cfg(feature = "radrootsd-client")]
-impl fmt::Debug for SdkRadrootsdPublicTradePublishOptions {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut debug = f.debug_struct("SdkRadrootsdPublicTradePublishOptions");
-        debug.field("session", &self.session);
-        debug.field("idempotency_key", &self.idempotency_key);
-        debug.finish()
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RadrootsSdkClient {
     config: RadrootsSdkConfig,
@@ -1022,7 +974,7 @@ impl RadrootsSdkClient {
         ListingClient { client: self }
     }
 
-    pub fn trade(&self) -> TradeClient<'_> {
+    pub fn order(&self) -> TradeClient<'_> {
         TradeClient { client: self }
     }
 
@@ -1225,12 +1177,12 @@ impl RadrootsSdkClient {
         if self.transport() != SdkTransportMode::Radrootsd {
             return Err(SdkPublishError::UnsupportedTransport {
                 transport: self.transport(),
-                operation: "trade.publish_order_request_via_radrootsd",
+                operation: "order.publish_order_request_via_radrootsd",
             });
         }
         self.require_signer_mode(
             SignerConfig::Nip46,
-            "trade.publish_order_request_via_radrootsd",
+            "order.publish_order_request_via_radrootsd",
         )?;
 
         let endpoint = match &self.resolved_transport_target {
@@ -1238,7 +1190,7 @@ impl RadrootsSdkClient {
             SdkResolvedTransportTarget::RelayDirect { .. } => {
                 return Err(SdkPublishError::UnsupportedTransport {
                     transport: self.transport(),
-                    operation: "trade.publish_order_request_via_radrootsd",
+                    operation: "order.publish_order_request_via_radrootsd",
                 });
             }
         };
@@ -1246,46 +1198,6 @@ impl RadrootsSdkClient {
             endpoint,
             &self.config.radrootsd.auth,
             request,
-            Duration::from_millis(self.config.network.timeout_ms),
-        )
-        .await
-        .map_err(|err| SdkPublishError::Radrootsd(err.to_string()))?;
-        Ok(sdk_publish_receipt_from_radrootsd_bridge_response(response))
-    }
-
-    #[cfg(feature = "radrootsd-client")]
-    async fn publish_public_trade_via_radrootsd(
-        &self,
-        request: &radrootsd::SdkRadrootsdPublicTradePublishRequest,
-        signer_session: &SdkRadrootsdSignerSessionRef,
-        idempotency_key: Option<&str>,
-    ) -> Result<SdkPublishReceipt, SdkPublishError> {
-        if self.transport() != SdkTransportMode::Radrootsd {
-            return Err(SdkPublishError::UnsupportedTransport {
-                transport: self.transport(),
-                operation: "trade.publish_public_message_via_radrootsd",
-            });
-        }
-        self.require_signer_mode(
-            SignerConfig::Nip46,
-            "trade.publish_public_message_via_radrootsd",
-        )?;
-
-        let endpoint = match &self.resolved_transport_target {
-            SdkResolvedTransportTarget::Radrootsd { endpoint } => endpoint.as_str(),
-            SdkResolvedTransportTarget::RelayDirect { .. } => {
-                return Err(SdkPublishError::UnsupportedTransport {
-                    transport: self.transport(),
-                    operation: "trade.publish_public_message_via_radrootsd",
-                });
-            }
-        };
-        let response = radrootsd::publish_public_trade(
-            endpoint,
-            &self.config.radrootsd.auth,
-            request,
-            signer_session.session_id(),
-            idempotency_key,
             Duration::from_millis(self.config.network.timeout_ms),
         )
         .await
@@ -1550,184 +1462,6 @@ impl RadrootsSdkClient {
         .await
         .map_err(|err| SdkRadrootsdBridgeError::Radrootsd(err.to_string()))?;
         Ok(response.into_iter().map(Into::into).collect())
-    }
-}
-
-#[cfg(feature = "radrootsd-client")]
-#[derive(Clone, PartialEq, Eq)]
-pub struct SdkRadrootsdPublicTradeMessage {
-    request: radrootsd::SdkRadrootsdPublicTradePublishRequest,
-}
-
-#[cfg(feature = "radrootsd-client")]
-impl SdkRadrootsdPublicTradeMessage {
-    pub fn order_response(
-        route: &radrootsd::SdkRadrootsdPublicTradeRoute,
-        chain: &radrootsd::SdkRadrootsdTradeChain,
-        payload: trade::RadrootsTradeOrderResponse,
-    ) -> Result<Self, radrootsd::SdkRadrootsdPublicTradePublishValidationError> {
-        Ok(Self {
-            request: radrootsd::SdkRadrootsdPublicTradePublishRequest::order_response(
-                route, chain, payload,
-            )?,
-        })
-    }
-
-    pub fn order_revision(
-        route: &radrootsd::SdkRadrootsdPublicTradeRoute,
-        listing_event: RadrootsNostrEventPtr,
-        chain: &radrootsd::SdkRadrootsdTradeChain,
-        payload: trade::RadrootsTradeOrderRevision,
-    ) -> Result<Self, radrootsd::SdkRadrootsdPublicTradePublishValidationError> {
-        Ok(Self {
-            request: radrootsd::SdkRadrootsdPublicTradePublishRequest::order_revision(
-                route,
-                listing_event,
-                chain,
-                payload,
-            )?,
-        })
-    }
-
-    pub fn order_revision_accept(
-        route: &radrootsd::SdkRadrootsdPublicTradeRoute,
-        chain: &radrootsd::SdkRadrootsdTradeChain,
-        payload: trade::RadrootsTradeOrderRevisionResponse,
-    ) -> Result<Self, radrootsd::SdkRadrootsdPublicTradePublishValidationError> {
-        Ok(Self {
-            request: radrootsd::SdkRadrootsdPublicTradePublishRequest::order_revision_accept(
-                route, chain, payload,
-            )?,
-        })
-    }
-
-    pub fn order_revision_decline(
-        route: &radrootsd::SdkRadrootsdPublicTradeRoute,
-        chain: &radrootsd::SdkRadrootsdTradeChain,
-        payload: trade::RadrootsTradeOrderRevisionResponse,
-    ) -> Result<Self, radrootsd::SdkRadrootsdPublicTradePublishValidationError> {
-        Ok(Self {
-            request: radrootsd::SdkRadrootsdPublicTradePublishRequest::order_revision_decline(
-                route, chain, payload,
-            )?,
-        })
-    }
-
-    pub fn question(
-        route: &radrootsd::SdkRadrootsdPublicTradeRoute,
-        chain: &radrootsd::SdkRadrootsdTradeChain,
-        payload: trade::RadrootsTradeQuestion,
-    ) -> Result<Self, radrootsd::SdkRadrootsdPublicTradePublishValidationError> {
-        Ok(Self {
-            request: radrootsd::SdkRadrootsdPublicTradePublishRequest::question(
-                route, chain, payload,
-            )?,
-        })
-    }
-
-    pub fn answer(
-        route: &radrootsd::SdkRadrootsdPublicTradeRoute,
-        chain: &radrootsd::SdkRadrootsdTradeChain,
-        payload: trade::RadrootsTradeAnswer,
-    ) -> Result<Self, radrootsd::SdkRadrootsdPublicTradePublishValidationError> {
-        Ok(Self {
-            request: radrootsd::SdkRadrootsdPublicTradePublishRequest::answer(
-                route, chain, payload,
-            )?,
-        })
-    }
-
-    pub fn discount_request(
-        route: &radrootsd::SdkRadrootsdPublicTradeRoute,
-        listing_event: RadrootsNostrEventPtr,
-        chain: &radrootsd::SdkRadrootsdTradeChain,
-        payload: trade::RadrootsTradeDiscountRequest,
-    ) -> Result<Self, radrootsd::SdkRadrootsdPublicTradePublishValidationError> {
-        Ok(Self {
-            request: radrootsd::SdkRadrootsdPublicTradePublishRequest::discount_request(
-                route,
-                listing_event,
-                chain,
-                payload,
-            )?,
-        })
-    }
-
-    pub fn discount_offer(
-        route: &radrootsd::SdkRadrootsdPublicTradeRoute,
-        listing_event: RadrootsNostrEventPtr,
-        chain: &radrootsd::SdkRadrootsdTradeChain,
-        payload: trade::RadrootsTradeDiscountOffer,
-    ) -> Result<Self, radrootsd::SdkRadrootsdPublicTradePublishValidationError> {
-        Ok(Self {
-            request: radrootsd::SdkRadrootsdPublicTradePublishRequest::discount_offer(
-                route,
-                listing_event,
-                chain,
-                payload,
-            )?,
-        })
-    }
-
-    pub fn discount_accept(
-        route: &radrootsd::SdkRadrootsdPublicTradeRoute,
-        chain: &radrootsd::SdkRadrootsdTradeChain,
-        payload: trade::RadrootsTradeDiscountDecision,
-    ) -> Result<Self, radrootsd::SdkRadrootsdPublicTradePublishValidationError> {
-        Ok(Self {
-            request: radrootsd::SdkRadrootsdPublicTradePublishRequest::discount_accept(
-                route, chain, payload,
-            )?,
-        })
-    }
-
-    pub fn cancel(
-        route: &radrootsd::SdkRadrootsdPublicTradeRoute,
-        chain: &radrootsd::SdkRadrootsdTradeChain,
-        payload: trade::RadrootsTradeListingCancel,
-    ) -> Result<Self, radrootsd::SdkRadrootsdPublicTradePublishValidationError> {
-        Ok(Self {
-            request: radrootsd::SdkRadrootsdPublicTradePublishRequest::cancel(
-                route, chain, payload,
-            )?,
-        })
-    }
-
-    pub fn fulfillment_update(
-        route: &radrootsd::SdkRadrootsdPublicTradeRoute,
-        chain: &radrootsd::SdkRadrootsdTradeChain,
-        payload: trade::RadrootsTradeFulfillmentUpdate,
-    ) -> Result<Self, radrootsd::SdkRadrootsdPublicTradePublishValidationError> {
-        Ok(Self {
-            request: radrootsd::SdkRadrootsdPublicTradePublishRequest::fulfillment_update(
-                route, chain, payload,
-            )?,
-        })
-    }
-
-    pub fn receipt(
-        route: &radrootsd::SdkRadrootsdPublicTradeRoute,
-        chain: &radrootsd::SdkRadrootsdTradeChain,
-        payload: trade::RadrootsTradeReceipt,
-    ) -> Result<Self, radrootsd::SdkRadrootsdPublicTradePublishValidationError> {
-        Ok(Self {
-            request: radrootsd::SdkRadrootsdPublicTradePublishRequest::receipt(
-                route, chain, payload,
-            )?,
-        })
-    }
-
-    pub(crate) fn as_request(&self) -> &radrootsd::SdkRadrootsdPublicTradePublishRequest {
-        &self.request
-    }
-}
-
-#[cfg(feature = "radrootsd-client")]
-impl fmt::Debug for SdkRadrootsdPublicTradeMessage {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("SdkRadrootsdPublicTradeMessage")
-            .field("request", &self.request)
-            .finish()
     }
 }
 
@@ -2122,7 +1856,7 @@ impl<'a> ListingClient<'a> {
     pub fn parse_event(
         &self,
         event: &RadrootsNostrEvent,
-    ) -> Result<listing::RadrootsListing, listing::RadrootsTradeListingParseError> {
+    ) -> Result<listing::RadrootsListing, listing::RadrootsListingParseError> {
         listing::parse_event(event)
     }
 
@@ -2251,61 +1985,28 @@ impl<'a> TradeClient<'a> {
     }
 
     #[cfg(feature = "serde_json")]
-    #[allow(clippy::too_many_arguments)]
-    pub fn build_envelope_draft(
-        &self,
-        recipient_pubkey: impl Into<String>,
-        message_type: trade::RadrootsTradeMessageType,
-        listing_addr: impl Into<String>,
-        order_id: Option<String>,
-        listing_event: Option<&RadrootsNostrEventPtr>,
-        root_event_id: Option<&str>,
-        prev_event_id: Option<&str>,
-        payload: &trade::RadrootsTradeMessagePayload,
-    ) -> Result<WireEventParts, trade::EventEncodeError> {
-        trade::build_envelope_draft(
-            recipient_pubkey,
-            message_type,
-            listing_addr,
-            order_id,
-            listing_event,
-            root_event_id,
-            prev_event_id,
-            payload,
-        )
-    }
-
-    #[cfg(feature = "serde_json")]
-    pub fn parse_envelope(
-        &self,
-        event: &RadrootsNostrEvent,
-    ) -> Result<RadrootsTradeEnvelope, trade::RadrootsTradeEnvelopeParseError> {
-        trade::parse_envelope(event)
-    }
-
-    #[cfg(feature = "serde_json")]
     pub fn parse_listing_address(
         &self,
         listing_addr: &str,
-    ) -> Result<trade::RadrootsTradeListingAddress, trade::RadrootsTradeListingAddressError> {
-        trade::parse_listing_address(listing_addr)
+    ) -> Result<order::RadrootsOrderListingAddress, order::RadrootsOrderListingAddressError> {
+        order::parse_listing_address(listing_addr)
     }
 
     #[cfg(feature = "serde_json")]
     pub fn validate_listing_event(
         &self,
         event: &RadrootsNostrEvent,
-    ) -> Result<TradeListingValidateResult, trade::RadrootsTradeListingValidationError> {
-        trade::validate_listing_event(event)
+    ) -> Result<TradeListingValidateResult, order::RadrootsTradeValidationListingError> {
+        order::validate_listing_event(event)
     }
 
     #[cfg(feature = "serde_json")]
     pub fn build_order_request_draft(
         &self,
         listing_event: &RadrootsNostrEventPtr,
-        payload: &trade::RadrootsTradeOrderRequested,
-    ) -> Result<trade::RadrootsTradeOrderRequestDraft, trade::EventEncodeError> {
-        trade::build_order_request_draft(listing_event, payload)
+        payload: &order::RadrootsOrderRequest,
+    ) -> Result<order::RadrootsOrderRequestDraft, order::EventEncodeError> {
+        order::build_order_request_draft(listing_event, payload)
     }
 
     #[cfg(feature = "serde_json")]
@@ -2313,9 +2014,9 @@ impl<'a> TradeClient<'a> {
         &self,
         root_event_id: &str,
         prev_event_id: &str,
-        payload: &trade::RadrootsTradeOrderDecisionEvent,
-    ) -> Result<trade::RadrootsTradeOrderDecisionDraft, trade::EventEncodeError> {
-        trade::build_order_decision_draft(root_event_id, prev_event_id, payload)
+        payload: &order::RadrootsOrderDecision,
+    ) -> Result<order::RadrootsOrderDecisionDraft, order::EventEncodeError> {
+        order::build_order_decision_draft(root_event_id, prev_event_id, payload)
     }
 
     #[cfg(feature = "serde_json")]
@@ -2323,9 +2024,9 @@ impl<'a> TradeClient<'a> {
         &self,
         root_event_id: &str,
         prev_event_id: &str,
-        payload: &trade::RadrootsTradeOrderRevisionProposed,
-    ) -> Result<trade::RadrootsTradeOrderRevisionProposalDraft, trade::EventEncodeError> {
-        trade::build_order_revision_proposal_draft(root_event_id, prev_event_id, payload)
+        payload: &order::RadrootsOrderRevisionProposal,
+    ) -> Result<order::RadrootsOrderRevisionProposalDraft, order::EventEncodeError> {
+        order::build_order_revision_proposal_draft(root_event_id, prev_event_id, payload)
     }
 
     #[cfg(feature = "serde_json")]
@@ -2333,9 +2034,9 @@ impl<'a> TradeClient<'a> {
         &self,
         root_event_id: &str,
         prev_event_id: &str,
-        payload: &trade::RadrootsTradeOrderRevisionDecisionEvent,
-    ) -> Result<trade::RadrootsTradeOrderRevisionDecisionDraft, trade::EventEncodeError> {
-        trade::build_order_revision_decision_draft(root_event_id, prev_event_id, payload)
+        payload: &order::RadrootsOrderRevisionDecision,
+    ) -> Result<order::RadrootsOrderRevisionDecisionDraft, order::EventEncodeError> {
+        order::build_order_revision_decision_draft(root_event_id, prev_event_id, payload)
     }
 
     #[cfg(feature = "serde_json")]
@@ -2343,9 +2044,9 @@ impl<'a> TradeClient<'a> {
         &self,
         root_event_id: &str,
         prev_event_id: &str,
-        payload: &trade::RadrootsTradeFulfillmentUpdated,
-    ) -> Result<trade::RadrootsTradeFulfillmentUpdateDraft, trade::EventEncodeError> {
-        trade::build_fulfillment_update_draft(root_event_id, prev_event_id, payload)
+        payload: &order::RadrootsOrderFulfillmentUpdate,
+    ) -> Result<order::RadrootsOrderFulfillmentUpdateDraft, order::EventEncodeError> {
+        order::build_fulfillment_update_draft(root_event_id, prev_event_id, payload)
     }
 
     #[cfg(feature = "serde_json")]
@@ -2353,9 +2054,9 @@ impl<'a> TradeClient<'a> {
         &self,
         root_event_id: &str,
         prev_event_id: &str,
-        payload: &trade::RadrootsTradeOrderCancelled,
-    ) -> Result<trade::RadrootsTradeOrderCancellationDraft, trade::EventEncodeError> {
-        trade::build_order_cancellation_draft(root_event_id, prev_event_id, payload)
+        payload: &order::RadrootsOrderCancellation,
+    ) -> Result<order::RadrootsOrderCancellationDraft, order::EventEncodeError> {
+        order::build_order_cancellation_draft(root_event_id, prev_event_id, payload)
     }
 
     #[cfg(feature = "serde_json")]
@@ -2363,9 +2064,9 @@ impl<'a> TradeClient<'a> {
         &self,
         root_event_id: &str,
         prev_event_id: &str,
-        payload: &trade::RadrootsTradeBuyerReceipt,
-    ) -> Result<trade::RadrootsTradeBuyerReceiptDraft, trade::EventEncodeError> {
-        trade::build_buyer_receipt_draft(root_event_id, prev_event_id, payload)
+        payload: &order::RadrootsOrderReceipt,
+    ) -> Result<order::RadrootsOrderReceiptDraft, order::EventEncodeError> {
+        order::build_buyer_receipt_draft(root_event_id, prev_event_id, payload)
     }
 
     #[cfg(feature = "serde_json")]
@@ -2373,10 +2074,10 @@ impl<'a> TradeClient<'a> {
         &self,
         event: &RadrootsNostrEvent,
     ) -> Result<
-        trade::RadrootsActiveTradeEnvelope<trade::RadrootsTradeOrderRequested>,
-        trade::RadrootsActiveTradeEnvelopeParseError,
+        order::RadrootsOrderEnvelope<order::RadrootsOrderRequest>,
+        order::RadrootsOrderEnvelopeParseError,
     > {
-        trade::parse_order_request(event)
+        order::parse_order_request(event)
     }
 
     #[cfg(feature = "serde_json")]
@@ -2384,10 +2085,10 @@ impl<'a> TradeClient<'a> {
         &self,
         event: &RadrootsNostrEvent,
     ) -> Result<
-        trade::RadrootsActiveTradeEnvelope<trade::RadrootsTradeOrderDecisionEvent>,
-        trade::RadrootsActiveTradeEnvelopeParseError,
+        order::RadrootsOrderEnvelope<order::RadrootsOrderDecision>,
+        order::RadrootsOrderEnvelopeParseError,
     > {
-        trade::parse_order_decision(event)
+        order::parse_order_decision(event)
     }
 
     #[cfg(feature = "serde_json")]
@@ -2395,10 +2096,10 @@ impl<'a> TradeClient<'a> {
         &self,
         event: &RadrootsNostrEvent,
     ) -> Result<
-        trade::RadrootsActiveTradeEnvelope<trade::RadrootsTradeOrderRevisionProposed>,
-        trade::RadrootsActiveTradeEnvelopeParseError,
+        order::RadrootsOrderEnvelope<order::RadrootsOrderRevisionProposal>,
+        order::RadrootsOrderEnvelopeParseError,
     > {
-        trade::parse_order_revision_proposal(event)
+        order::parse_order_revision_proposal(event)
     }
 
     #[cfg(feature = "serde_json")]
@@ -2406,10 +2107,10 @@ impl<'a> TradeClient<'a> {
         &self,
         event: &RadrootsNostrEvent,
     ) -> Result<
-        trade::RadrootsActiveTradeEnvelope<trade::RadrootsTradeOrderRevisionDecisionEvent>,
-        trade::RadrootsActiveTradeEnvelopeParseError,
+        order::RadrootsOrderEnvelope<order::RadrootsOrderRevisionDecision>,
+        order::RadrootsOrderEnvelopeParseError,
     > {
-        trade::parse_order_revision_decision(event)
+        order::parse_order_revision_decision(event)
     }
 
     #[cfg(feature = "serde_json")]
@@ -2417,10 +2118,10 @@ impl<'a> TradeClient<'a> {
         &self,
         event: &RadrootsNostrEvent,
     ) -> Result<
-        trade::RadrootsActiveTradeEnvelope<trade::RadrootsTradeFulfillmentUpdated>,
-        trade::RadrootsActiveTradeEnvelopeParseError,
+        order::RadrootsOrderEnvelope<order::RadrootsOrderFulfillmentUpdate>,
+        order::RadrootsOrderEnvelopeParseError,
     > {
-        trade::parse_fulfillment_update(event)
+        order::parse_fulfillment_update(event)
     }
 
     #[cfg(feature = "serde_json")]
@@ -2428,10 +2129,10 @@ impl<'a> TradeClient<'a> {
         &self,
         event: &RadrootsNostrEvent,
     ) -> Result<
-        trade::RadrootsActiveTradeEnvelope<trade::RadrootsTradeOrderCancelled>,
-        trade::RadrootsActiveTradeEnvelopeParseError,
+        order::RadrootsOrderEnvelope<order::RadrootsOrderCancellation>,
+        order::RadrootsOrderEnvelopeParseError,
     > {
-        trade::parse_order_cancellation(event)
+        order::parse_order_cancellation(event)
     }
 
     #[cfg(feature = "serde_json")]
@@ -2439,10 +2140,10 @@ impl<'a> TradeClient<'a> {
         &self,
         event: &RadrootsNostrEvent,
     ) -> Result<
-        trade::RadrootsActiveTradeEnvelope<trade::RadrootsTradeBuyerReceipt>,
-        trade::RadrootsActiveTradeEnvelopeParseError,
+        order::RadrootsOrderEnvelope<order::RadrootsOrderReceipt>,
+        order::RadrootsOrderEnvelopeParseError,
     > {
-        trade::parse_buyer_receipt(event)
+        order::parse_buyer_receipt(event)
     }
 
     #[cfg(all(
@@ -2454,15 +2155,15 @@ impl<'a> TradeClient<'a> {
         &self,
         identity: &RadrootsIdentity,
         listing_event: &RadrootsNostrEventPtr,
-        payload: &trade::RadrootsTradeOrderRequested,
+        payload: &order::RadrootsOrderRequest,
     ) -> Result<SdkPublishReceipt, SdkPublishError> {
-        let draft = trade::build_order_request_draft(listing_event, payload)
+        let draft = order::build_order_request_draft(listing_event, payload)
             .map_err(|err| SdkPublishError::Encode(err.to_string()))?;
         self.client
             .publish_parts_via_relay_with_identity(
                 identity,
                 draft.into_wire_parts(),
-                "trade.publish_order_request_with_identity",
+                "order.publish_order_request_with_identity",
             )
             .await
     }
@@ -2477,16 +2178,16 @@ impl<'a> TradeClient<'a> {
         identity: &RadrootsIdentity,
         root_event_id: &str,
         prev_event_id: &str,
-        payload: &trade::RadrootsTradeOrderRevisionProposed,
+        payload: &order::RadrootsOrderRevisionProposal,
     ) -> Result<SdkPublishReceipt, SdkPublishError> {
         let draft =
-            trade::build_order_revision_proposal_draft(root_event_id, prev_event_id, payload)
+            order::build_order_revision_proposal_draft(root_event_id, prev_event_id, payload)
                 .map_err(|err| SdkPublishError::Encode(err.to_string()))?;
         self.client
             .publish_parts_via_relay_with_identity(
                 identity,
                 draft.into_wire_parts(),
-                "trade.publish_order_revision_proposal_with_identity",
+                "order.publish_order_revision_proposal_with_identity",
             )
             .await
     }
@@ -2501,16 +2202,16 @@ impl<'a> TradeClient<'a> {
         identity: &RadrootsIdentity,
         root_event_id: &str,
         prev_event_id: &str,
-        payload: &trade::RadrootsTradeOrderRevisionDecisionEvent,
+        payload: &order::RadrootsOrderRevisionDecision,
     ) -> Result<SdkPublishReceipt, SdkPublishError> {
         let draft =
-            trade::build_order_revision_decision_draft(root_event_id, prev_event_id, payload)
+            order::build_order_revision_decision_draft(root_event_id, prev_event_id, payload)
                 .map_err(|err| SdkPublishError::Encode(err.to_string()))?;
         self.client
             .publish_parts_via_relay_with_identity(
                 identity,
                 draft.into_wire_parts(),
-                "trade.publish_order_revision_decision_with_identity",
+                "order.publish_order_revision_decision_with_identity",
             )
             .await
     }
@@ -2525,15 +2226,15 @@ impl<'a> TradeClient<'a> {
         identity: &RadrootsIdentity,
         root_event_id: &str,
         prev_event_id: &str,
-        payload: &trade::RadrootsTradeOrderDecisionEvent,
+        payload: &order::RadrootsOrderDecision,
     ) -> Result<SdkPublishReceipt, SdkPublishError> {
-        let draft = trade::build_order_decision_draft(root_event_id, prev_event_id, payload)
+        let draft = order::build_order_decision_draft(root_event_id, prev_event_id, payload)
             .map_err(|err| SdkPublishError::Encode(err.to_string()))?;
         self.client
             .publish_parts_via_relay_with_identity(
                 identity,
                 draft.into_wire_parts(),
-                "trade.publish_order_decision_with_identity",
+                "order.publish_order_decision_with_identity",
             )
             .await
     }
@@ -2548,15 +2249,15 @@ impl<'a> TradeClient<'a> {
         identity: &RadrootsIdentity,
         root_event_id: &str,
         prev_event_id: &str,
-        payload: &trade::RadrootsTradeFulfillmentUpdated,
+        payload: &order::RadrootsOrderFulfillmentUpdate,
     ) -> Result<SdkPublishReceipt, SdkPublishError> {
-        let draft = trade::build_fulfillment_update_draft(root_event_id, prev_event_id, payload)
+        let draft = order::build_fulfillment_update_draft(root_event_id, prev_event_id, payload)
             .map_err(|err| SdkPublishError::Encode(err.to_string()))?;
         self.client
             .publish_parts_via_relay_with_identity(
                 identity,
                 draft.into_wire_parts(),
-                "trade.publish_fulfillment_update_with_identity",
+                "order.publish_fulfillment_update_with_identity",
             )
             .await
     }
@@ -2569,13 +2270,13 @@ impl<'a> TradeClient<'a> {
     pub async fn publish_order_revision_proposal_draft_with_identity(
         &self,
         identity: &RadrootsIdentity,
-        draft: trade::RadrootsTradeOrderRevisionProposalDraft,
+        draft: order::RadrootsOrderRevisionProposalDraft,
     ) -> Result<SdkPublishReceipt, SdkPublishError> {
         self.client
             .publish_parts_via_relay_with_identity(
                 identity,
                 draft.into_wire_parts(),
-                "trade.publish_order_revision_proposal_draft_with_identity",
+                "order.publish_order_revision_proposal_draft_with_identity",
             )
             .await
     }
@@ -2588,13 +2289,13 @@ impl<'a> TradeClient<'a> {
     pub async fn publish_order_revision_decision_draft_with_identity(
         &self,
         identity: &RadrootsIdentity,
-        draft: trade::RadrootsTradeOrderRevisionDecisionDraft,
+        draft: order::RadrootsOrderRevisionDecisionDraft,
     ) -> Result<SdkPublishReceipt, SdkPublishError> {
         self.client
             .publish_parts_via_relay_with_identity(
                 identity,
                 draft.into_wire_parts(),
-                "trade.publish_order_revision_decision_draft_with_identity",
+                "order.publish_order_revision_decision_draft_with_identity",
             )
             .await
     }
@@ -2609,15 +2310,15 @@ impl<'a> TradeClient<'a> {
         identity: &RadrootsIdentity,
         root_event_id: &str,
         prev_event_id: &str,
-        payload: &trade::RadrootsTradeOrderCancelled,
+        payload: &order::RadrootsOrderCancellation,
     ) -> Result<SdkPublishReceipt, SdkPublishError> {
-        let draft = trade::build_order_cancellation_draft(root_event_id, prev_event_id, payload)
+        let draft = order::build_order_cancellation_draft(root_event_id, prev_event_id, payload)
             .map_err(|err| SdkPublishError::Encode(err.to_string()))?;
         self.client
             .publish_parts_via_relay_with_identity(
                 identity,
                 draft.into_wire_parts(),
-                "trade.publish_order_cancellation_with_identity",
+                "order.publish_order_cancellation_with_identity",
             )
             .await
     }
@@ -2632,15 +2333,15 @@ impl<'a> TradeClient<'a> {
         identity: &RadrootsIdentity,
         root_event_id: &str,
         prev_event_id: &str,
-        payload: &trade::RadrootsTradeBuyerReceipt,
+        payload: &order::RadrootsOrderReceipt,
     ) -> Result<SdkPublishReceipt, SdkPublishError> {
-        let draft = trade::build_buyer_receipt_draft(root_event_id, prev_event_id, payload)
+        let draft = order::build_buyer_receipt_draft(root_event_id, prev_event_id, payload)
             .map_err(|err| SdkPublishError::Encode(err.to_string()))?;
         self.client
             .publish_parts_via_relay_with_identity(
                 identity,
                 draft.into_wire_parts(),
-                "trade.publish_buyer_receipt_with_identity",
+                "order.publish_buyer_receipt_with_identity",
             )
             .await
     }
@@ -2653,13 +2354,13 @@ impl<'a> TradeClient<'a> {
     pub async fn publish_order_request_draft_with_identity(
         &self,
         identity: &RadrootsIdentity,
-        draft: trade::RadrootsTradeOrderRequestDraft,
+        draft: order::RadrootsOrderRequestDraft,
     ) -> Result<SdkPublishReceipt, SdkPublishError> {
         self.client
             .publish_parts_via_relay_with_identity(
                 identity,
                 draft.into_wire_parts(),
-                "trade.publish_order_request_draft_with_identity",
+                "order.publish_order_request_draft_with_identity",
             )
             .await
     }
@@ -2672,13 +2373,13 @@ impl<'a> TradeClient<'a> {
     pub async fn publish_order_decision_draft_with_identity(
         &self,
         identity: &RadrootsIdentity,
-        draft: trade::RadrootsTradeOrderDecisionDraft,
+        draft: order::RadrootsOrderDecisionDraft,
     ) -> Result<SdkPublishReceipt, SdkPublishError> {
         self.client
             .publish_parts_via_relay_with_identity(
                 identity,
                 draft.into_wire_parts(),
-                "trade.publish_order_decision_draft_with_identity",
+                "order.publish_order_decision_draft_with_identity",
             )
             .await
     }
@@ -2691,13 +2392,13 @@ impl<'a> TradeClient<'a> {
     pub async fn publish_fulfillment_update_draft_with_identity(
         &self,
         identity: &RadrootsIdentity,
-        draft: trade::RadrootsTradeFulfillmentUpdateDraft,
+        draft: order::RadrootsOrderFulfillmentUpdateDraft,
     ) -> Result<SdkPublishReceipt, SdkPublishError> {
         self.client
             .publish_parts_via_relay_with_identity(
                 identity,
                 draft.into_wire_parts(),
-                "trade.publish_fulfillment_update_draft_with_identity",
+                "order.publish_fulfillment_update_draft_with_identity",
             )
             .await
     }
@@ -2710,13 +2411,13 @@ impl<'a> TradeClient<'a> {
     pub async fn publish_order_cancellation_draft_with_identity(
         &self,
         identity: &RadrootsIdentity,
-        draft: trade::RadrootsTradeOrderCancellationDraft,
+        draft: order::RadrootsOrderCancellationDraft,
     ) -> Result<SdkPublishReceipt, SdkPublishError> {
         self.client
             .publish_parts_via_relay_with_identity(
                 identity,
                 draft.into_wire_parts(),
-                "trade.publish_order_cancellation_draft_with_identity",
+                "order.publish_order_cancellation_draft_with_identity",
             )
             .await
     }
@@ -2729,13 +2430,13 @@ impl<'a> TradeClient<'a> {
     pub async fn publish_buyer_receipt_draft_with_identity(
         &self,
         identity: &RadrootsIdentity,
-        draft: trade::RadrootsTradeBuyerReceiptDraft,
+        draft: order::RadrootsOrderReceiptDraft,
     ) -> Result<SdkPublishReceipt, SdkPublishError> {
         self.client
             .publish_parts_via_relay_with_identity(
                 identity,
                 draft.into_wire_parts(),
-                "trade.publish_buyer_receipt_draft_with_identity",
+                "order.publish_buyer_receipt_draft_with_identity",
             )
             .await
     }
@@ -2743,7 +2444,7 @@ impl<'a> TradeClient<'a> {
     #[cfg(feature = "radrootsd-client")]
     pub async fn publish_order_request_via_radrootsd(
         &self,
-        order: &trade::RadrootsTradeOrderRequested,
+        order: &order::RadrootsOrderRequest,
         listing_event: &RadrootsNostrEventPtr,
         session: &SdkRadrootsdSignerSessionHandle,
     ) -> Result<SdkPublishReceipt, SdkPublishError> {
@@ -2758,7 +2459,7 @@ impl<'a> TradeClient<'a> {
     #[cfg(feature = "radrootsd-client")]
     pub async fn publish_order_request_via_radrootsd_with_options(
         &self,
-        order: &trade::RadrootsTradeOrderRequested,
+        order: &order::RadrootsOrderRequest,
         listing_event: &RadrootsNostrEventPtr,
         options: &SdkRadrootsdOrderRequestPublishOptions,
     ) -> Result<SdkPublishReceipt, SdkPublishError> {
@@ -2771,34 +2472,6 @@ impl<'a> TradeClient<'a> {
         };
         self.client
             .publish_order_request_via_radrootsd(&request)
-            .await
-    }
-
-    #[cfg(feature = "radrootsd-client")]
-    pub async fn publish_public_message_via_radrootsd(
-        &self,
-        message: &SdkRadrootsdPublicTradeMessage,
-        session: &SdkRadrootsdSignerSessionHandle,
-    ) -> Result<SdkPublishReceipt, SdkPublishError> {
-        self.publish_public_message_via_radrootsd_with_options(
-            message,
-            &SdkRadrootsdPublicTradePublishOptions::from_signer_session(session),
-        )
-        .await
-    }
-
-    #[cfg(feature = "radrootsd-client")]
-    pub async fn publish_public_message_via_radrootsd_with_options(
-        &self,
-        message: &SdkRadrootsdPublicTradeMessage,
-        options: &SdkRadrootsdPublicTradePublishOptions,
-    ) -> Result<SdkPublishReceipt, SdkPublishError> {
-        self.client
-            .publish_public_trade_via_radrootsd(
-                message.as_request(),
-                options.session(),
-                options.idempotency_key(),
-            )
             .await
     }
 }

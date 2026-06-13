@@ -45,7 +45,7 @@ pub mod seal;
 pub mod list;
 pub mod list_set;
 pub mod listing;
-pub mod trade;
+pub mod order;
 
 #[cfg(test)]
 mod test_fixtures;

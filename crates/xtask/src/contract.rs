@@ -689,28 +689,28 @@ const DVM_FEEDBACK_WITNESSES: [EventBoundarySourceWitness; 2] = [
 const TRADE_ORDER_REQUESTED_WITNESSES: [EventBoundarySourceWitness; 5] = [
     EventBoundarySourceWitness {
         relative_path: "crates/events/src/kinds.rs",
-        required_fragments: &["pub const KIND_TRADE_ORDER_REQUEST: u32 = 3422;"],
+        required_fragments: &["pub const KIND_ORDER_REQUEST: u32 = 3422;"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/trade.rs",
+        relative_path: "crates/events/src/order.rs",
         required_fragments: &[
-            "pub struct RadrootsTradeOrderRequested",
-            "Self::TradeOrderRequested => KIND_TRADE_ORDER_REQUEST",
+            "pub struct RadrootsOrderRequest",
+            "Self::OrderRequested => KIND_ORDER_REQUEST",
         ],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events_codec/src/trade/encode.rs",
-        required_fragments: &["pub fn active_trade_order_request_event_build"],
+        relative_path: "crates/events_codec/src/order/encode.rs",
+        required_fragments: &["pub fn order_request_event_build"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events_codec/src/trade/decode.rs",
-        required_fragments: &["pub fn active_trade_order_request_from_event"],
+        relative_path: "crates/events_codec/src/order/decode.rs",
+        required_fragments: &["pub fn order_request_from_event"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/trade/src/order.rs",
         required_fragments: &[
-            "pub struct RadrootsActiveOrderRequestRecord",
-            "pub fn reduce_active_order_events",
+            "pub struct RadrootsOrderRequestRecord",
+            "pub fn reduce_order_events",
         ],
     },
 ];
@@ -718,32 +718,29 @@ const TRADE_ORDER_REQUESTED_WITNESSES: [EventBoundarySourceWitness; 5] = [
 const TRADE_ORDER_DECISION_WITNESSES: [EventBoundarySourceWitness; 5] = [
     EventBoundarySourceWitness {
         relative_path: "crates/events/src/kinds.rs",
+        required_fragments: &["pub const KIND_ORDER_DECISION: u32 = 3423;"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/events/src/order.rs",
         required_fragments: &[
-            "pub const KIND_TRADE_ORDER_RESPONSE: u32 = 3423;",
-            "pub const KIND_TRADE_ORDER_DECISION: u32 = KIND_TRADE_ORDER_RESPONSE;",
+            "pub enum RadrootsOrderDecisionOutcome",
+            "pub struct RadrootsOrderDecision",
+            "Self::OrderDecision => KIND_ORDER_DECISION",
         ],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/trade.rs",
-        required_fragments: &[
-            "pub enum RadrootsTradeOrderDecision",
-            "pub struct RadrootsTradeOrderDecisionEvent",
-            "Self::TradeOrderDecision => KIND_TRADE_ORDER_DECISION",
-        ],
+        relative_path: "crates/events_codec/src/order/encode.rs",
+        required_fragments: &["pub fn order_decision_event_build"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events_codec/src/trade/encode.rs",
-        required_fragments: &["pub fn active_trade_order_decision_event_build"],
-    },
-    EventBoundarySourceWitness {
-        relative_path: "crates/events_codec/src/trade/decode.rs",
-        required_fragments: &["pub fn active_trade_order_decision_from_event"],
+        relative_path: "crates/events_codec/src/order/decode.rs",
+        required_fragments: &["pub fn order_decision_from_event"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/trade/src/order.rs",
         required_fragments: &[
-            "pub struct RadrootsActiveOrderDecisionRecord",
-            "pub fn reduce_active_order_events",
+            "pub struct RadrootsOrderDecisionRecord",
+            "pub fn reduce_order_events",
         ],
     },
 ];
@@ -751,28 +748,28 @@ const TRADE_ORDER_DECISION_WITNESSES: [EventBoundarySourceWitness; 5] = [
 const TRADE_ORDER_REVISION_PROPOSED_WITNESSES: [EventBoundarySourceWitness; 5] = [
     EventBoundarySourceWitness {
         relative_path: "crates/events/src/kinds.rs",
-        required_fragments: &["pub const KIND_TRADE_ORDER_REVISION: u32 = 3424;"],
+        required_fragments: &["pub const KIND_ORDER_REVISION_PROPOSAL: u32 = 3424;"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/trade.rs",
+        relative_path: "crates/events/src/order.rs",
         required_fragments: &[
-            "pub struct RadrootsTradeOrderRevisionProposed",
-            "Self::TradeOrderRevisionProposed => KIND_TRADE_ORDER_REVISION",
+            "pub struct RadrootsOrderRevisionProposal",
+            "Self::OrderRevisionProposed => KIND_ORDER_REVISION_PROPOSAL",
         ],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events_codec/src/trade/encode.rs",
-        required_fragments: &["pub fn active_trade_order_revision_proposal_event_build"],
+        relative_path: "crates/events_codec/src/order/encode.rs",
+        required_fragments: &["pub fn order_revision_proposal_event_build"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events_codec/src/trade/decode.rs",
-        required_fragments: &["pub fn active_trade_order_revision_proposal_from_event"],
+        relative_path: "crates/events_codec/src/order/decode.rs",
+        required_fragments: &["pub fn order_revision_proposal_from_event"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/trade/src/order.rs",
         required_fragments: &[
-            "pub struct RadrootsActiveOrderRevisionProposalRecord",
-            "pub fn reduce_active_order_events",
+            "pub struct RadrootsOrderRevisionProposalRecord",
+            "pub fn reduce_order_events",
         ],
     },
 ];
@@ -780,29 +777,29 @@ const TRADE_ORDER_REVISION_PROPOSED_WITNESSES: [EventBoundarySourceWitness; 5] =
 const TRADE_ORDER_REVISION_DECISION_WITNESSES: [EventBoundarySourceWitness; 5] = [
     EventBoundarySourceWitness {
         relative_path: "crates/events/src/kinds.rs",
-        required_fragments: &["pub const KIND_TRADE_ORDER_REVISION_RESPONSE: u32 = 3425;"],
+        required_fragments: &["pub const KIND_ORDER_REVISION_DECISION: u32 = 3425;"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/trade.rs",
+        relative_path: "crates/events/src/order.rs",
         required_fragments: &[
-            "pub enum RadrootsTradeOrderRevisionDecision",
-            "pub struct RadrootsTradeOrderRevisionDecisionEvent",
-            "Self::TradeOrderRevisionDecision => KIND_TRADE_ORDER_REVISION_RESPONSE",
+            "pub enum RadrootsOrderRevisionOutcome",
+            "pub struct RadrootsOrderRevisionDecision",
+            "Self::OrderRevisionDecision => KIND_ORDER_REVISION_DECISION",
         ],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events_codec/src/trade/encode.rs",
-        required_fragments: &["pub fn active_trade_order_revision_decision_event_build"],
+        relative_path: "crates/events_codec/src/order/encode.rs",
+        required_fragments: &["pub fn order_revision_decision_event_build"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events_codec/src/trade/decode.rs",
-        required_fragments: &["pub fn active_trade_order_revision_decision_from_event"],
+        relative_path: "crates/events_codec/src/order/decode.rs",
+        required_fragments: &["pub fn order_revision_decision_from_event"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/trade/src/order.rs",
         required_fragments: &[
-            "pub struct RadrootsActiveOrderRevisionDecisionRecord",
-            "pub fn reduce_active_order_events",
+            "pub struct RadrootsOrderRevisionDecisionRecord",
+            "pub fn reduce_order_events",
         ],
     },
 ];
@@ -810,28 +807,28 @@ const TRADE_ORDER_REVISION_DECISION_WITNESSES: [EventBoundarySourceWitness; 5] =
 const TRADE_ORDER_CANCELLED_WITNESSES: [EventBoundarySourceWitness; 5] = [
     EventBoundarySourceWitness {
         relative_path: "crates/events/src/kinds.rs",
-        required_fragments: &["pub const KIND_TRADE_CANCEL: u32 = 3432;"],
+        required_fragments: &["pub const KIND_ORDER_CANCELLATION: u32 = 3432;"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/trade.rs",
+        relative_path: "crates/events/src/order.rs",
         required_fragments: &[
-            "pub struct RadrootsTradeOrderCancelled",
-            "Self::TradeOrderCancelled => KIND_TRADE_CANCEL",
+            "pub struct RadrootsOrderCancellation",
+            "Self::OrderCancelled => KIND_ORDER_CANCELLATION",
         ],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events_codec/src/trade/encode.rs",
-        required_fragments: &["pub fn active_trade_order_cancel_event_build"],
+        relative_path: "crates/events_codec/src/order/encode.rs",
+        required_fragments: &["pub fn order_cancellation_event_build"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events_codec/src/trade/decode.rs",
-        required_fragments: &["pub fn active_trade_order_cancel_from_event"],
+        relative_path: "crates/events_codec/src/order/decode.rs",
+        required_fragments: &["pub fn order_cancellation_from_event"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/trade/src/order.rs",
         required_fragments: &[
-            "pub struct RadrootsActiveOrderCancellationRecord",
-            "pub fn reduce_active_order_events",
+            "pub struct RadrootsOrderCancellationRecord",
+            "pub fn reduce_order_events",
         ],
     },
 ];
@@ -839,28 +836,28 @@ const TRADE_ORDER_CANCELLED_WITNESSES: [EventBoundarySourceWitness; 5] = [
 const TRADE_FULFILLMENT_UPDATED_WITNESSES: [EventBoundarySourceWitness; 5] = [
     EventBoundarySourceWitness {
         relative_path: "crates/events/src/kinds.rs",
-        required_fragments: &["pub const KIND_TRADE_FULFILLMENT_UPDATE: u32 = 3433;"],
+        required_fragments: &["pub const KIND_ORDER_FULFILLMENT_UPDATE: u32 = 3433;"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/trade.rs",
+        relative_path: "crates/events/src/order.rs",
         required_fragments: &[
-            "pub struct RadrootsTradeFulfillmentUpdated",
-            "Self::TradeFulfillmentUpdated => KIND_TRADE_FULFILLMENT_UPDATE",
+            "pub struct RadrootsOrderFulfillmentUpdate",
+            "Self::FulfillmentUpdated => KIND_ORDER_FULFILLMENT_UPDATE",
         ],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events_codec/src/trade/encode.rs",
-        required_fragments: &["pub fn active_trade_fulfillment_update_event_build"],
+        relative_path: "crates/events_codec/src/order/encode.rs",
+        required_fragments: &["pub fn order_fulfillment_update_event_build"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events_codec/src/trade/decode.rs",
-        required_fragments: &["pub fn active_trade_fulfillment_update_from_event"],
+        relative_path: "crates/events_codec/src/order/decode.rs",
+        required_fragments: &["pub fn order_fulfillment_update_from_event"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/trade/src/order.rs",
         required_fragments: &[
-            "pub struct RadrootsActiveOrderFulfillmentRecord",
-            "pub fn reduce_active_order_events",
+            "pub struct RadrootsOrderFulfillmentRecord",
+            "pub fn reduce_order_events",
         ],
     },
 ];
@@ -868,28 +865,28 @@ const TRADE_FULFILLMENT_UPDATED_WITNESSES: [EventBoundarySourceWitness; 5] = [
 const TRADE_BUYER_RECEIPT_WITNESSES: [EventBoundarySourceWitness; 5] = [
     EventBoundarySourceWitness {
         relative_path: "crates/events/src/kinds.rs",
-        required_fragments: &["pub const KIND_TRADE_RECEIPT: u32 = 3434;"],
+        required_fragments: &["pub const KIND_ORDER_RECEIPT: u32 = 3434;"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/trade.rs",
+        relative_path: "crates/events/src/order.rs",
         required_fragments: &[
-            "pub struct RadrootsTradeBuyerReceipt",
-            "Self::TradeBuyerReceipt => KIND_TRADE_RECEIPT",
+            "pub struct RadrootsOrderReceipt",
+            "Self::BuyerReceipt => KIND_ORDER_RECEIPT",
         ],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events_codec/src/trade/encode.rs",
-        required_fragments: &["pub fn active_trade_buyer_receipt_event_build"],
+        relative_path: "crates/events_codec/src/order/encode.rs",
+        required_fragments: &["pub fn order_receipt_event_build"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events_codec/src/trade/decode.rs",
-        required_fragments: &["pub fn active_trade_buyer_receipt_from_event"],
+        relative_path: "crates/events_codec/src/order/decode.rs",
+        required_fragments: &["pub fn order_receipt_from_event"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/trade/src/order.rs",
         required_fragments: &[
-            "pub struct RadrootsActiveOrderReceiptRecord",
-            "pub fn reduce_active_order_events",
+            "pub struct RadrootsOrderReceiptRecord",
+            "pub fn reduce_order_events",
         ],
     },
 ];
@@ -897,28 +894,28 @@ const TRADE_BUYER_RECEIPT_WITNESSES: [EventBoundarySourceWitness; 5] = [
 const TRADE_PAYMENT_RECORDED_WITNESSES: [EventBoundarySourceWitness; 5] = [
     EventBoundarySourceWitness {
         relative_path: "crates/events/src/kinds.rs",
-        required_fragments: &["pub const KIND_TRADE_PAYMENT_RECORDED: u32 = 3435;"],
+        required_fragments: &["pub const KIND_ORDER_PAYMENT_RECORD: u32 = 3435;"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/trade.rs",
+        relative_path: "crates/events/src/order.rs",
         required_fragments: &[
-            "pub struct RadrootsTradePaymentRecorded",
-            "Self::TradePaymentRecorded => KIND_TRADE_PAYMENT_RECORDED",
+            "pub struct RadrootsOrderPaymentRecord",
+            "Self::PaymentRecorded => KIND_ORDER_PAYMENT_RECORD",
         ],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events_codec/src/trade/encode.rs",
-        required_fragments: &["pub fn active_trade_payment_recorded_event_build"],
+        relative_path: "crates/events_codec/src/order/encode.rs",
+        required_fragments: &["pub fn order_payment_record_event_build"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events_codec/src/trade/decode.rs",
-        required_fragments: &["pub fn active_trade_payment_recorded_from_event"],
+        relative_path: "crates/events_codec/src/order/decode.rs",
+        required_fragments: &["pub fn order_payment_record_from_event"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/trade/src/order.rs",
         required_fragments: &[
-            "pub struct RadrootsActiveOrderPaymentRecord",
-            "pub fn reduce_active_order_events",
+            "pub struct RadrootsOrderPaymentEventRecord",
+            "pub fn reduce_order_events",
         ],
     },
 ];
@@ -926,29 +923,29 @@ const TRADE_PAYMENT_RECORDED_WITNESSES: [EventBoundarySourceWitness; 5] = [
 const TRADE_SETTLEMENT_DECISION_WITNESSES: [EventBoundarySourceWitness; 5] = [
     EventBoundarySourceWitness {
         relative_path: "crates/events/src/kinds.rs",
-        required_fragments: &["pub const KIND_TRADE_SETTLEMENT_DECISION: u32 = 3436;"],
+        required_fragments: &["pub const KIND_ORDER_SETTLEMENT_DECISION: u32 = 3436;"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events/src/trade.rs",
+        relative_path: "crates/events/src/order.rs",
         required_fragments: &[
-            "pub enum RadrootsTradeSettlementDecision",
-            "pub struct RadrootsTradeSettlementDecisionEvent",
-            "Self::TradeSettlementDecision => KIND_TRADE_SETTLEMENT_DECISION",
+            "pub enum RadrootsOrderSettlementOutcome",
+            "pub struct RadrootsOrderSettlementDecision",
+            "Self::SettlementDecision => KIND_ORDER_SETTLEMENT_DECISION",
         ],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events_codec/src/trade/encode.rs",
-        required_fragments: &["pub fn active_trade_settlement_decision_event_build"],
+        relative_path: "crates/events_codec/src/order/encode.rs",
+        required_fragments: &["pub fn order_settlement_decision_event_build"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/events_codec/src/trade/decode.rs",
-        required_fragments: &["pub fn active_trade_settlement_decision_from_event"],
+        relative_path: "crates/events_codec/src/order/decode.rs",
+        required_fragments: &["pub fn order_settlement_decision_from_event"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/trade/src/order.rs",
         required_fragments: &[
-            "pub struct RadrootsActiveOrderSettlementRecord",
-            "pub fn reduce_active_order_events",
+            "pub struct RadrootsOrderSettlementRecord",
+            "pub fn reduce_order_events",
         ],
     },
 ];
@@ -4267,7 +4264,7 @@ public = [
   "RadrootsNostrEvent",
   "RadrootsNostrEventRef",
   "RadrootsNostrEventPtr",
-  "RadrootsTradeListingAddress",
+  "RadrootsOrderListingAddress",
   "RadrootsProfile",
   "RadrootsFarm",
   "RadrootsListing",

@@ -17,15 +17,14 @@ use radroots_sdk::listing::{
     RadrootsListingDeliveryMethod, RadrootsListingLocation, RadrootsListingProduct,
     RadrootsListingStatus,
 };
-use radroots_sdk::profile::{RadrootsProfile, RadrootsProfileType};
-use radroots_sdk::trade::{
-    RadrootsActiveTradeFulfillmentState, RadrootsTradeBuyerReceipt,
-    RadrootsTradeFulfillmentUpdated, RadrootsTradeInventoryCommitment, RadrootsTradeOrderCancelled,
-    RadrootsTradeOrderDecision, RadrootsTradeOrderDecisionEvent, RadrootsTradeOrderEconomicItem,
-    RadrootsTradeOrderEconomics, RadrootsTradeOrderItem, RadrootsTradeOrderRequested,
-    RadrootsTradeOrderRevisionDecision, RadrootsTradeOrderRevisionDecisionEvent,
-    RadrootsTradeOrderRevisionProposed, RadrootsTradePricingBasis,
+use radroots_sdk::order::{
+    RadrootsOrderCancellation, RadrootsOrderDecision, RadrootsOrderDecisionOutcome,
+    RadrootsOrderEconomicItem, RadrootsOrderEconomics, RadrootsOrderFulfillmentState,
+    RadrootsOrderFulfillmentUpdate, RadrootsOrderInventoryCommitment, RadrootsOrderItem,
+    RadrootsOrderPricingBasis, RadrootsOrderReceipt, RadrootsOrderRequest,
+    RadrootsOrderRevisionDecision, RadrootsOrderRevisionOutcome, RadrootsOrderRevisionProposal,
 };
+use radroots_sdk::profile::{RadrootsProfile, RadrootsProfileType};
 use radroots_sdk::{
     RadrootsNostrEventPtr, RadrootsSdkClient, RadrootsSdkConfig, RelayConfig, SdkEnvironment,
     SdkPublishError, SdkTransportMode, SdkTransportReceipt, SignerConfig,
@@ -220,25 +219,22 @@ fn listing_event_ptr() -> RadrootsNostrEventPtr {
     }
 }
 
-fn sample_order_request(
-    buyer_pubkey: String,
-    seller_pubkey: String,
-) -> RadrootsTradeOrderRequested {
-    RadrootsTradeOrderRequested {
+fn sample_order_request(buyer_pubkey: String, seller_pubkey: String) -> RadrootsOrderRequest {
+    RadrootsOrderRequest {
         order_id: "order-1".into(),
         listing_addr: format!("30402:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg"),
         buyer_pubkey,
         seller_pubkey,
-        items: vec![RadrootsTradeOrderItem {
+        items: vec![RadrootsOrderItem {
             bin_id: "bin-1".into(),
             bin_count: 2,
         }],
-        economics: RadrootsTradeOrderEconomics {
+        economics: RadrootsOrderEconomics {
             quote_id: "quote-1".into(),
             quote_version: 1,
-            pricing_basis: RadrootsTradePricingBasis::ListingEvent,
+            pricing_basis: RadrootsOrderPricingBasis::ListingEvent,
             currency: RadrootsCoreCurrency::USD,
-            items: vec![RadrootsTradeOrderEconomicItem {
+            items: vec![RadrootsOrderEconomicItem {
                 bin_id: "bin-1".into(),
                 bin_count: 2,
                 quantity_amount: decimal("1"),
@@ -257,17 +253,14 @@ fn sample_order_request(
     }
 }
 
-fn sample_order_decision(
-    buyer_pubkey: String,
-    seller_pubkey: String,
-) -> RadrootsTradeOrderDecisionEvent {
-    RadrootsTradeOrderDecisionEvent {
+fn sample_order_decision(buyer_pubkey: String, seller_pubkey: String) -> RadrootsOrderDecision {
+    RadrootsOrderDecision {
         order_id: "order-1".into(),
         listing_addr: format!("30402:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg"),
         buyer_pubkey,
         seller_pubkey,
-        decision: RadrootsTradeOrderDecision::Accepted {
-            inventory_commitments: vec![RadrootsTradeInventoryCommitment {
+        decision: RadrootsOrderDecisionOutcome::Accepted {
+            inventory_commitments: vec![RadrootsOrderInventoryCommitment {
                 bin_id: "bin-1".into(),
                 bin_count: 2,
             }],
@@ -280,8 +273,8 @@ fn sample_order_revision_proposal(
     seller_pubkey: String,
     root_event_id: String,
     prev_event_id: String,
-) -> RadrootsTradeOrderRevisionProposed {
-    RadrootsTradeOrderRevisionProposed {
+) -> RadrootsOrderRevisionProposal {
+    RadrootsOrderRevisionProposal {
         revision_id: "revision-1".into(),
         order_id: "order-1".into(),
         listing_addr: format!("30402:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg"),
@@ -289,16 +282,16 @@ fn sample_order_revision_proposal(
         seller_pubkey,
         root_event_id,
         prev_event_id,
-        items: vec![RadrootsTradeOrderItem {
+        items: vec![RadrootsOrderItem {
             bin_id: "bin-1".into(),
             bin_count: 3,
         }],
-        economics: RadrootsTradeOrderEconomics {
+        economics: RadrootsOrderEconomics {
             quote_id: "revision-quote-1".into(),
             quote_version: 2,
-            pricing_basis: RadrootsTradePricingBasis::ListingEvent,
+            pricing_basis: RadrootsOrderPricingBasis::ListingEvent,
             currency: RadrootsCoreCurrency::USD,
-            items: vec![RadrootsTradeOrderEconomicItem {
+            items: vec![RadrootsOrderEconomicItem {
                 bin_id: "bin-1".into(),
                 bin_count: 3,
                 quantity_amount: decimal("1"),
@@ -319,10 +312,10 @@ fn sample_order_revision_proposal(
 }
 
 fn sample_order_revision_decision(
-    proposal: &RadrootsTradeOrderRevisionProposed,
-    decision: RadrootsTradeOrderRevisionDecision,
-) -> RadrootsTradeOrderRevisionDecisionEvent {
-    RadrootsTradeOrderRevisionDecisionEvent {
+    proposal: &RadrootsOrderRevisionProposal,
+    decision: RadrootsOrderRevisionOutcome,
+) -> RadrootsOrderRevisionDecision {
+    RadrootsOrderRevisionDecision {
         revision_id: proposal.revision_id.clone(),
         order_id: proposal.order_id.clone(),
         listing_addr: proposal.listing_addr.clone(),
@@ -337,21 +330,21 @@ fn sample_order_revision_decision(
 fn sample_fulfillment_update(
     buyer_pubkey: String,
     seller_pubkey: String,
-) -> RadrootsTradeFulfillmentUpdated {
-    RadrootsTradeFulfillmentUpdated {
+) -> RadrootsOrderFulfillmentUpdate {
+    RadrootsOrderFulfillmentUpdate {
         order_id: "order-1".into(),
         listing_addr: format!("30402:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg"),
         buyer_pubkey,
         seller_pubkey,
-        status: RadrootsActiveTradeFulfillmentState::ReadyForPickup,
+        status: RadrootsOrderFulfillmentState::ReadyForPickup,
     }
 }
 
 fn sample_order_cancellation(
     buyer_pubkey: String,
     seller_pubkey: String,
-) -> RadrootsTradeOrderCancelled {
-    RadrootsTradeOrderCancelled {
+) -> RadrootsOrderCancellation {
+    RadrootsOrderCancellation {
         order_id: "order-1".into(),
         listing_addr: format!("30402:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg"),
         buyer_pubkey,
@@ -360,8 +353,8 @@ fn sample_order_cancellation(
     }
 }
 
-fn sample_buyer_receipt(buyer_pubkey: String, seller_pubkey: String) -> RadrootsTradeBuyerReceipt {
-    RadrootsTradeBuyerReceipt {
+fn sample_buyer_receipt(buyer_pubkey: String, seller_pubkey: String) -> RadrootsOrderReceipt {
+    RadrootsOrderReceipt {
         order_id: "order-1".into(),
         listing_addr: format!("30402:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg"),
         buyer_pubkey,
@@ -440,12 +433,12 @@ async fn relay_direct_order_request_publish_accepts_sdk_built_draft() -> TestRes
     };
     let client = RadrootsSdkClient::from_config(config)?;
     let draft = client
-        .trade()
+        .order()
         .build_order_request_draft(&listing_event, &payload)?;
     assert_eq!(draft.as_wire_parts().kind, 3422);
 
     let receipt = client
-        .trade()
+        .order()
         .publish_order_request_draft_with_identity(&buyer_identity, draft)
         .await?;
 
@@ -495,9 +488,9 @@ async fn relay_direct_order_request_publish_accepts_sdk_built_draft() -> TestRes
             );
             assert!(relay_receipt.failed_relays.is_empty());
             let envelope = client
-                .trade()
+                .order()
                 .parse_order_request(&relay_receipt.event)
-                .expect("active order request");
+                .expect("order request");
             assert_eq!(envelope.order_id, payload.order_id);
             assert_eq!(envelope.listing_addr, payload.listing_addr);
             assert_eq!(envelope.payload.economics.quote_id, "quote-1");
@@ -528,12 +521,12 @@ async fn relay_direct_order_decision_publish_accepts_sdk_built_draft() -> TestRe
     let client = RadrootsSdkClient::from_config(config)?;
     let draft =
         client
-            .trade()
+            .order()
             .build_order_decision_draft(root_event_id, root_event_id, &payload)?;
     assert_eq!(draft.as_wire_parts().kind, 3423);
 
     let receipt = client
-        .trade()
+        .order()
         .publish_order_decision_draft_with_identity(&seller_identity, draft)
         .await?;
 
@@ -587,9 +580,9 @@ async fn relay_direct_order_decision_publish_accepts_sdk_built_draft() -> TestRe
             );
             assert!(relay_receipt.failed_relays.is_empty());
             let envelope = client
-                .trade()
+                .order()
                 .parse_order_decision(&relay_receipt.event)
-                .expect("active order decision");
+                .expect("order decision");
             assert_eq!(envelope.order_id, payload.order_id);
             assert_eq!(envelope.listing_addr, payload.listing_addr);
             assert_eq!(envelope.payload.decision, payload.decision);
@@ -601,7 +594,7 @@ async fn relay_direct_order_decision_publish_accepts_sdk_built_draft() -> TestRe
 }
 
 #[tokio::test]
-async fn relay_direct_trade_revision_publish_accepts_sdk_built_payloads() -> TestResult<()> {
+async fn relay_direct_order_revision_publish_accepts_sdk_built_payloads() -> TestResult<()> {
     let relay = AckRelay::spawn().await?;
     let buyer_identity = RadrootsIdentity::generate();
     let seller_identity = RadrootsIdentity::generate();
@@ -616,7 +609,7 @@ async fn relay_direct_trade_revision_publish_accepts_sdk_built_payloads() -> Tes
         decision_event_id.to_owned(),
     );
     let decision =
-        sample_order_revision_decision(&proposal, RadrootsTradeOrderRevisionDecision::Accepted);
+        sample_order_revision_decision(&proposal, RadrootsOrderRevisionOutcome::Accepted);
     let mut config = RadrootsSdkConfig::for_environment(SdkEnvironment::Custom);
     config.transport = SdkTransportMode::RelayDirect;
     config.signer = SignerConfig::LocalIdentity;
@@ -626,7 +619,7 @@ async fn relay_direct_trade_revision_publish_accepts_sdk_built_payloads() -> Tes
     let client = RadrootsSdkClient::from_config(config)?;
 
     let proposal_receipt = client
-        .trade()
+        .order()
         .publish_order_revision_proposal_with_identity(
             &seller_identity,
             root_event_id,
@@ -635,7 +628,7 @@ async fn relay_direct_trade_revision_publish_accepts_sdk_built_payloads() -> Tes
         )
         .await?;
     let decision_receipt = client
-        .trade()
+        .order()
         .publish_order_revision_decision_with_identity(
             &buyer_identity,
             root_event_id,
@@ -670,9 +663,9 @@ async fn relay_direct_trade_revision_publish_accepts_sdk_built_payloads() -> Tes
                     .contains(&vec!["e_prev".to_owned(), decision_event_id.to_owned()])
             );
             let envelope = client
-                .trade()
+                .order()
                 .parse_order_revision_proposal(&relay_receipt.event)
-                .expect("active order revision proposal");
+                .expect("order revision proposal");
             assert_eq!(envelope.order_id, proposal.order_id);
             assert_eq!(envelope.listing_addr, proposal.listing_addr);
             assert_eq!(envelope.payload.revision_id, "revision-1");
@@ -703,15 +696,15 @@ async fn relay_direct_trade_revision_publish_accepts_sdk_built_payloads() -> Tes
                 "order-revision-proposal-event-1".to_owned()
             ]));
             let envelope = client
-                .trade()
+                .order()
                 .parse_order_revision_decision(&relay_receipt.event)
-                .expect("active order revision decision");
+                .expect("order revision decision");
             assert_eq!(envelope.order_id, decision.order_id);
             assert_eq!(envelope.listing_addr, decision.listing_addr);
             assert_eq!(envelope.payload.revision_id, decision.revision_id);
             assert_eq!(
                 envelope.payload.decision,
-                RadrootsTradeOrderRevisionDecision::Accepted
+                RadrootsOrderRevisionOutcome::Accepted
             );
         }
         SdkTransportReceipt::Radrootsd(_) => panic!("unexpected radrootsd receipt"),
@@ -721,7 +714,7 @@ async fn relay_direct_trade_revision_publish_accepts_sdk_built_payloads() -> Tes
 }
 
 #[tokio::test]
-async fn relay_direct_trade_lifecycle_publish_accepts_sdk_built_payloads() -> TestResult<()> {
+async fn relay_direct_order_lifecycle_publish_accepts_sdk_built_payloads() -> TestResult<()> {
     let relay = AckRelay::spawn().await?;
     let buyer_identity = RadrootsIdentity::generate();
     let seller_identity = RadrootsIdentity::generate();
@@ -742,7 +735,7 @@ async fn relay_direct_trade_lifecycle_publish_accepts_sdk_built_payloads() -> Te
     let client = RadrootsSdkClient::from_config(config)?;
 
     let fulfillment_receipt = client
-        .trade()
+        .order()
         .publish_fulfillment_update_with_identity(
             &seller_identity,
             root_event_id,
@@ -751,7 +744,7 @@ async fn relay_direct_trade_lifecycle_publish_accepts_sdk_built_payloads() -> Te
         )
         .await?;
     let cancellation_receipt = client
-        .trade()
+        .order()
         .publish_order_cancellation_with_identity(
             &buyer_identity,
             root_event_id,
@@ -760,7 +753,7 @@ async fn relay_direct_trade_lifecycle_publish_accepts_sdk_built_payloads() -> Te
         )
         .await?;
     let buyer_receipt = client
-        .trade()
+        .order()
         .publish_buyer_receipt_with_identity(
             &buyer_identity,
             root_event_id,
@@ -796,7 +789,7 @@ async fn relay_direct_trade_lifecycle_publish_accepts_sdk_built_payloads() -> Te
                     .contains(&vec!["e_prev".to_owned(), decision_event_id.to_owned()])
             );
             let envelope = client
-                .trade()
+                .order()
                 .parse_fulfillment_update(&relay_receipt.event)
                 .expect("active fulfillment update");
             assert_eq!(envelope.order_id, fulfillment.order_id);
@@ -829,9 +822,9 @@ async fn relay_direct_trade_lifecycle_publish_accepts_sdk_built_payloads() -> Te
                     .contains(&vec!["e_prev".to_owned(), root_event_id.to_owned()])
             );
             let envelope = client
-                .trade()
+                .order()
                 .parse_order_cancellation(&relay_receipt.event)
-                .expect("active order cancellation");
+                .expect("order cancellation");
             assert_eq!(envelope.order_id, cancellation.order_id);
             assert_eq!(envelope.listing_addr, cancellation.listing_addr);
             assert_eq!(envelope.payload.reason, cancellation.reason);
@@ -862,7 +855,7 @@ async fn relay_direct_trade_lifecycle_publish_accepts_sdk_built_payloads() -> Te
                     .contains(&vec!["e_prev".to_owned(), fulfillment_event_id.to_owned()])
             );
             let envelope = client
-                .trade()
+                .order()
                 .parse_buyer_receipt(&relay_receipt.event)
                 .expect("active buyer receipt");
             assert_eq!(envelope.order_id, receipt.order_id);
@@ -893,7 +886,7 @@ async fn relay_direct_order_decision_publish_builds_and_publishes_payload() -> T
     let client = RadrootsSdkClient::from_config(config)?;
 
     let receipt = client
-        .trade()
+        .order()
         .publish_order_decision_with_identity(
             &seller_identity,
             "order-request-event-1",
@@ -926,7 +919,7 @@ async fn relay_direct_order_request_publish_builds_and_publishes_payload() -> Te
     let client = RadrootsSdkClient::from_config(config)?;
 
     let receipt = client
-        .trade()
+        .order()
         .publish_order_request_with_identity(&buyer_identity, &listing_event_ptr(), &payload)
         .await?;
 
@@ -950,7 +943,7 @@ async fn relay_direct_order_request_publish_rejects_radrootsd_transport_mode() -
     let client = RadrootsSdkClient::from_config(config)?;
 
     let error = client
-        .trade()
+        .order()
         .publish_order_request_with_identity(&buyer_identity, &listing_event_ptr(), &payload)
         .await
         .expect_err("unsupported transport");
@@ -959,7 +952,7 @@ async fn relay_direct_order_request_publish_rejects_radrootsd_transport_mode() -
         error,
         SdkPublishError::UnsupportedTransport {
             transport: SdkTransportMode::Radrootsd,
-            operation: "trade.publish_order_request_with_identity",
+            operation: "order.publish_order_request_with_identity",
         }
     ));
 
@@ -984,7 +977,7 @@ async fn relay_direct_order_request_publish_rejects_draft_only_signer_mode() -> 
     let client = RadrootsSdkClient::from_config(config)?;
 
     let error = client
-        .trade()
+        .order()
         .publish_order_request_with_identity(&buyer_identity, &listing_event_ptr(), &payload)
         .await
         .expect_err("unsupported signer mode");
@@ -995,7 +988,7 @@ async fn relay_direct_order_request_publish_rejects_draft_only_signer_mode() -> 
             transport: SdkTransportMode::RelayDirect,
             signer: SignerConfig::DraftOnly,
             required: SignerConfig::LocalIdentity,
-            operation: "trade.publish_order_request_with_identity",
+            operation: "order.publish_order_request_with_identity",
         }
     ));
 
@@ -1020,7 +1013,7 @@ async fn relay_direct_order_request_publish_rejects_invalid_economics() -> TestR
     let client = RadrootsSdkClient::from_config(config)?;
 
     let error = client
-        .trade()
+        .order()
         .publish_order_request_with_identity(&buyer_identity, &listing_event_ptr(), &payload)
         .await
         .expect_err("invalid economics");
@@ -1048,7 +1041,7 @@ async fn relay_direct_order_request_publish_reports_setup_error_detail() -> Test
     let client = RadrootsSdkClient::from_config(config)?;
 
     let error = client
-        .trade()
+        .order()
         .publish_order_request_with_identity(&buyer_identity, &listing_event_ptr(), &payload)
         .await
         .expect_err("relay setup error");
@@ -1057,7 +1050,7 @@ async fn relay_direct_order_request_publish_reports_setup_error_detail() -> Test
         error,
         SdkPublishError::RelaySetup {
             transport: SdkTransportMode::RelayDirect,
-            operation: "trade.publish_order_request_with_identity",
+            operation: "order.publish_order_request_with_identity",
             target_relays,
             error: _,
         } if target_relays == vec!["ws://127.0.0.1:9".to_owned()]

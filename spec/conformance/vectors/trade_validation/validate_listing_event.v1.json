@@ -1,10 +1,10 @@
 {
-  "suite": "trade",
+  "suite": "trade_validation",
   "contract_version": "0.1.0",
   "vectors": [
     {
-      "id": "trade_validate_listing_event_minimal_001",
-      "kind": "trade.validate_listing_event",
+      "id": "trade_validation_validate_listing_event_minimal_001",
+      "kind": "trade_validation.validate_listing_event",
       "input": {
         "event": {
           "kind": "listing",

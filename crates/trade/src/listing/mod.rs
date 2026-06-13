@@ -1,25 +1,18 @@
 mod codec;
-pub(crate) mod contract;
 pub mod model;
-pub mod overlay;
 pub mod price_ext;
-pub mod projection;
 pub mod publish;
 pub mod validation;
 
 use radroots_events::{RadrootsNostrEvent, kinds::is_listing_kind, listing::RadrootsListing};
 
-pub(crate) use self::contract as dvm;
-#[allow(unused_imports)]
-pub(crate) use self::contract as kinds;
-pub(crate) use self::contract as order;
-pub use radroots_events::trade::RadrootsTradeListingParseError as TradeListingParseError;
+pub use radroots_events::order::RadrootsListingParseError as ListingParseError;
 
 pub fn parse_listing_event(
     event: &RadrootsNostrEvent,
-) -> Result<RadrootsListing, TradeListingParseError> {
+) -> Result<RadrootsListing, ListingParseError> {
     if !is_listing_kind(event.kind) {
-        return Err(TradeListingParseError::InvalidKind(event.kind));
+        return Err(ListingParseError::InvalidKind(event.kind));
     }
     self::codec::listing_from_event_parts(&event.tags, &event.content)
 }
@@ -28,7 +21,7 @@ pub fn parse_listing_event(
 mod tests {
     use super::parse_listing_event;
     use radroots_events::{
-        RadrootsNostrEvent, kinds::KIND_PROFILE, trade::RadrootsTradeListingParseError,
+        RadrootsNostrEvent, kinds::KIND_PROFILE, order::RadrootsListingParseError,
     };
 
     #[test]
@@ -45,7 +38,7 @@ mod tests {
 
         assert!(matches!(
             parse_listing_event(&event),
-            Err(RadrootsTradeListingParseError::InvalidKind(KIND_PROFILE))
+            Err(RadrootsListingParseError::InvalidKind(KIND_PROFILE))
         ));
     }
 }

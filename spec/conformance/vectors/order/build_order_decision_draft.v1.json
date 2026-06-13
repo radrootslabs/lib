@@ -1,10 +1,10 @@
 {
-  "suite": "trade",
+  "suite": "order",
   "contract_version": "0.1.0",
   "vectors": [
     {
-      "id": "trade_build_order_decision_draft_accept_minimal_001",
-      "kind": "trade.build_order_decision_draft",
+      "id": "order_build_order_decision_draft_accept_minimal_001",
+      "kind": "order.build_order_decision_draft",
       "input": {
         "root_event_id": "order-request-event",
         "prev_event_id": "order-request-event",
@@ -28,7 +28,7 @@
         "wire_parts": {
           "kind": 3423,
           "content_type": "TradeOrderDecision",
-          "tags_shape": "active_trade_order_decision_tags"
+          "tags_shape": "order_order_decision_tags"
         }
       }
     }

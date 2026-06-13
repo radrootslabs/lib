@@ -13,11 +13,11 @@ use radroots_events::{
         RadrootsListing, RadrootsListingAvailability, RadrootsListingDeliveryMethod,
         RadrootsListingLocation,
     },
-    trade::RadrootsTradeListingValidationError as TradeListingValidationError,
+    trade_validation::RadrootsTradeValidationListingError as TradeListingValidationError,
 };
+use radroots_events_codec::order::RadrootsOrderListingAddress as OrderListingAddress;
 
 use crate::listing::codec::listing_from_event_parts;
-use crate::listing::dvm::TradeListingAddress;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
@@ -54,7 +54,7 @@ pub fn validate_listing_event(
     if listing.farm.pubkey != seller_pubkey {
         return Err(TradeListingValidationError::InvalidSeller);
     }
-    let listing_addr = TradeListingAddress {
+    let listing_addr = OrderListingAddress {
         kind: event.kind as _,
         seller_pubkey: seller_pubkey.clone(),
         listing_id: listing_id.clone(),
@@ -295,7 +295,7 @@ mod tests {
         assert_eq!(
             err,
             TradeListingValidationError::ParseError {
-                error: crate::listing::codec::TradeListingParseError::MissingTag("d".to_string())
+                error: crate::listing::codec::ListingParseError::MissingTag("d".to_string())
             }
         );
     }
@@ -484,7 +484,7 @@ mod tests {
                 listing_addr: "addr".into(),
             },
             TradeListingValidationError::ParseError {
-                error: crate::listing::codec::TradeListingParseError::InvalidTag("d".into()),
+                error: crate::listing::codec::ListingParseError::InvalidTag("d".into()),
             },
             TradeListingValidationError::InvalidSeller,
             TradeListingValidationError::MissingFarmProfile,

@@ -11,6 +11,7 @@ pub mod app_data;
 pub mod article;
 pub mod calendar;
 pub mod comment;
+pub mod contract;
 pub mod coop;
 pub mod document;
 pub mod farm;
@@ -33,6 +34,8 @@ pub mod list_set;
 pub mod listing;
 pub mod message;
 pub mod message_file;
+pub mod order;
+pub mod order_economics;
 pub mod plot;
 pub mod post;
 pub mod profile;
@@ -46,7 +49,7 @@ pub mod resource_cap;
 pub mod seal;
 pub mod social;
 pub mod tags;
-pub mod trade;
+pub mod trade_validation;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]

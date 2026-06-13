@@ -3,17 +3,18 @@ use radroots_core::{
     RadrootsCoreQuantityPrice, RadrootsCoreUnit,
 };
 use radroots_events::farm::{RadrootsFarm, RadrootsFarmRef};
-use radroots_events::kinds::{
-    KIND_FARM, KIND_LISTING, KIND_PROFILE, KIND_TRADE_LISTING_VALIDATE_REQ,
-};
+use radroots_events::kinds::{KIND_FARM, KIND_LISTING, KIND_ORDER_REQUEST, KIND_PROFILE};
 use radroots_events::listing::{
     RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
     RadrootsListingDeliveryMethod, RadrootsListingLocation, RadrootsListingProduct,
     RadrootsListingStatus,
 };
+use radroots_events::order::{
+    RadrootsOrderEconomicItem, RadrootsOrderEconomics, RadrootsOrderItem,
+    RadrootsOrderPricingBasis, RadrootsOrderRequest,
+};
 use radroots_events::profile::{RadrootsProfile, RadrootsProfileType};
-use radroots_events::trade::{RadrootsTradeListingValidateRequest, RadrootsTradeMessagePayload};
-use radroots_sdk::{RadrootsNostrEvent, farm, listing, profile, trade};
+use radroots_sdk::{RadrootsNostrEvent, RadrootsNostrEventPtr, farm, listing, order, profile};
 
 fn sample_profile() -> RadrootsProfile {
     RadrootsProfile {
@@ -119,6 +120,62 @@ fn listing_event(listing_value: &RadrootsListing) -> RadrootsNostrEvent {
     }
 }
 
+fn listing_event_ptr() -> RadrootsNostrEventPtr {
+    RadrootsNostrEventPtr {
+        id: "listing-event-1".into(),
+        relays: Some("wss://listing.relay.example".into()),
+    }
+}
+
+fn sample_order_request() -> RadrootsOrderRequest {
+    RadrootsOrderRequest {
+        order_id: "order-1".into(),
+        listing_addr: format!("{KIND_LISTING}:seller:AAAAAAAAAAAAAAAAAAAAAg"),
+        buyer_pubkey: "buyer".into(),
+        seller_pubkey: "seller".into(),
+        items: vec![RadrootsOrderItem {
+            bin_id: "bin-1".into(),
+            bin_count: 2,
+        }],
+        economics: RadrootsOrderEconomics {
+            quote_id: "quote-1".into(),
+            quote_version: 1,
+            pricing_basis: RadrootsOrderPricingBasis::ListingEvent,
+            currency: RadrootsCoreCurrency::USD,
+            items: vec![RadrootsOrderEconomicItem {
+                bin_id: "bin-1".into(),
+                bin_count: 2,
+                quantity_amount: RadrootsCoreDecimal::from(1u32),
+                quantity_unit: RadrootsCoreUnit::Each,
+                unit_price_amount: RadrootsCoreDecimal::from(5u32),
+                unit_price_currency: RadrootsCoreCurrency::USD,
+                line_subtotal: RadrootsCoreMoney::new(
+                    RadrootsCoreDecimal::from(10u32),
+                    RadrootsCoreCurrency::USD,
+                ),
+            }],
+            discounts: Vec::new(),
+            adjustments: Vec::new(),
+            subtotal: RadrootsCoreMoney::new(
+                RadrootsCoreDecimal::from(10u32),
+                RadrootsCoreCurrency::USD,
+            ),
+            discount_total: RadrootsCoreMoney::new(
+                RadrootsCoreDecimal::from(0u32),
+                RadrootsCoreCurrency::USD,
+            ),
+            adjustment_total: RadrootsCoreMoney::new(
+                RadrootsCoreDecimal::from(0u32),
+                RadrootsCoreCurrency::USD,
+            ),
+            total: RadrootsCoreMoney::new(
+                RadrootsCoreDecimal::from(10u32),
+                RadrootsCoreCurrency::USD,
+            ),
+        },
+    }
+}
+
 #[test]
 fn profile_build_draft_wraps_profile_encoder() {
     let parts =
@@ -154,7 +211,7 @@ fn listing_facade_wraps_build_parse_and_validate() {
     let parsed = listing::parse_event(&event).expect("parsed listing");
     assert_eq!(parsed.d_tag, listing_value.d_tag);
 
-    let validated = trade::validate_listing_event(&event).expect("validated listing");
+    let validated = order::validate_listing_event(&event).expect("validated listing");
     assert_eq!(validated.listing_id, listing_value.d_tag);
     assert_eq!(event.kind, KIND_LISTING);
 }
@@ -167,46 +224,33 @@ fn listing_parse_rejects_non_listing_kind() {
 
     assert_eq!(
         listing::parse_event(&event).expect_err("listing kind error"),
-        listing::RadrootsTradeListingParseError::InvalidKind(KIND_PROFILE)
+        listing::RadrootsListingParseError::InvalidKind(KIND_PROFILE)
     );
 }
 
 #[test]
-fn trade_facade_wraps_build_parse_and_address_ops() {
+fn order_facade_wraps_build_parse_and_address_ops() {
     let listing_value = sample_listing();
     let listing_addr = format!("{KIND_LISTING}:seller:{}", listing_value.d_tag);
-    let payload =
-        RadrootsTradeMessagePayload::ListingValidateRequest(RadrootsTradeListingValidateRequest {
-            listing_event: None,
-        });
+    let payload = sample_order_request();
+    let parts =
+        order::build_order_request_draft(&listing_event_ptr(), &payload).expect("order draft");
 
-    let parts = trade::build_envelope_draft(
-        "buyer",
-        payload.message_type(),
-        listing_addr.clone(),
-        None,
-        None,
-        None,
-        None,
-        &payload,
-    )
-    .expect("trade envelope draft");
+    assert_eq!(parts.as_wire_parts().kind, KIND_ORDER_REQUEST);
 
-    assert_eq!(parts.kind, KIND_TRADE_LISTING_VALIDATE_REQ);
-
-    let parsed_addr = trade::parse_listing_address(&listing_addr).expect("listing address");
+    let parsed_addr = order::parse_listing_address(&listing_addr).expect("listing address");
     assert_eq!(parsed_addr.listing_id, listing_value.d_tag);
 
     let event = RadrootsNostrEvent {
-        id: "trade-event".into(),
-        author: "seller".into(),
+        id: "order-event".into(),
+        author: "buyer".into(),
         created_at: 2,
-        kind: parts.kind,
-        tags: parts.tags,
-        content: parts.content,
+        kind: parts.as_wire_parts().kind,
+        tags: parts.as_wire_parts().tags.clone(),
+        content: parts.as_wire_parts().content.clone(),
         sig: String::new(),
     };
-    let envelope = trade::parse_envelope(&event).expect("trade envelope");
-    assert_eq!(envelope.message_type, payload.message_type());
-    assert_eq!(envelope.listing_addr, listing_addr);
+    let envelope = order::parse_order_request(&event).expect("order envelope");
+    assert_eq!(envelope.payload.order_id, payload.order_id);
+    assert_eq!(envelope.payload.listing_addr, listing_addr);
 }

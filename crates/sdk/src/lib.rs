@@ -22,16 +22,15 @@ pub mod farm;
 #[cfg(feature = "identity-models")]
 pub mod identity;
 pub mod listing;
+pub mod order;
 pub mod profile;
-pub mod trade;
 
 #[cfg(feature = "radrootsd-client")]
 pub use crate::adapters::radrootsd::{
     SdkRadrootsdBridgeDeliveryPolicy, SdkRadrootsdBridgeJobStatus,
-    SdkRadrootsdBridgeRelayPublishResult, SdkRadrootsdPublicTradePublishValidationError,
-    SdkRadrootsdPublicTradeRoute, SdkRadrootsdSignerAuthority,
+    SdkRadrootsdBridgeRelayPublishResult, SdkRadrootsdSignerAuthority,
     SdkRadrootsdSignerSessionConnectRequest, SdkRadrootsdSignerSessionMode,
-    SdkRadrootsdSignerSessionRole, SdkRadrootsdTradeChain,
+    SdkRadrootsdSignerSessionRole,
 };
 pub use crate::client::{
     FarmClient, ListingClient, ProfileClient, RadrootsSdkClient, SdkPublishError,
@@ -44,7 +43,6 @@ pub use crate::client::{
     SdkRadrootsdBridgeJobRef, SdkRadrootsdBridgeJobView, SdkRadrootsdBridgeStatus,
     SdkRadrootsdFarmPublishOptions, SdkRadrootsdListingPublishOptions,
     SdkRadrootsdOrderRequestPublishOptions, SdkRadrootsdProfilePublishOptions,
-    SdkRadrootsdPublicTradeMessage, SdkRadrootsdPublicTradePublishOptions,
     SdkRadrootsdSessionError, SdkRadrootsdSignerSessionAuthorizeResult,
     SdkRadrootsdSignerSessionCloseResult, SdkRadrootsdSignerSessionHandle,
     SdkRadrootsdSignerSessionPublicKeyResult, SdkRadrootsdSignerSessionRef,
@@ -62,15 +60,12 @@ pub use radroots_events::{
     farm::RadrootsFarm,
     listing::RadrootsListing,
     profile::{RadrootsProfile, RadrootsProfileType},
-    trade::{RadrootsTradeMessagePayload, RadrootsTradeMessageType},
 };
 #[cfg(feature = "serde_json")]
-pub use radroots_events_codec::trade::{
-    RadrootsTradeEnvelopeParseError, RadrootsTradeListingAddress, RadrootsTradeListingAddressError,
+pub use radroots_events_codec::order::{
+    RadrootsOrderEnvelopeParseError, RadrootsOrderListingAddress, RadrootsOrderListingAddressError,
 };
 pub use radroots_events_codec::wire::{EventDraft as UnsignedEventDraft, WireEventParts};
 pub use radroots_trade::listing::validation::RadrootsTradeListing as TradeListingValidateResult;
 
 pub type NostrTags = Vec<Vec<String>>;
-pub type RadrootsTradeEnvelope =
-    radroots_events::trade::RadrootsTradeEnvelope<RadrootsTradeMessagePayload>;

@@ -47,7 +47,7 @@ The following decisions are approved and are treated as default design constrain
 - external SDKs optimize first for third-party app integrations, not for full Radroots internal app parity
 - publishing is the first-class use case
 - reading and validation are supported for the same Tier 1 domains, but remain secondary to publishing
-- Tier 1 domains are `profile`, `farm`, `listing`, and `trade`
+- Tier 1 domains are `profile`, `farm`, `listing`, `order`, and `trade_validation`
 - the public contract unit is an operation, not a crate
 - networking and signing remain native to each target language
 - TypeScript is the first reference SDK for the new contract
@@ -75,7 +75,7 @@ The following decisions are approved and are treated as default design constrain
 
 The public SDK contract is designed for:
 
-- third-party apps publishing Radroots-compliant profiles, farms, listings, and trade events
+- third-party apps publishing Radroots-compliant profiles, farms, listings, and order events
 - apps that need to parse or validate those supported event families
 - language SDK maintainers implementing contract-compliant APIs in TypeScript, Python, Swift, and Kotlin
 
@@ -110,10 +110,10 @@ Examples:
 - `listing.build_tags`
 - `listing.build_draft`
 - `listing.parse_event`
-- `trade.build_envelope_draft`
-- `trade.parse_envelope`
-- `trade.parse_listing_address`
-- `trade.validate_listing_event`
+- `order.build_order_request_draft`
+- `order.parse_order_request`
+- `order.parse_listing_address`
+- `trade_validation.validate_listing_event`
 
 ### 2. Shared Types
 
@@ -125,7 +125,7 @@ Examples:
 - `UnsignedEventDraft`
 - `RadrootsNostrEvent`
 - `RadrootsNostrEventRef`
-- `RadrootsTradeListingAddress`
+- `RadrootsOrderListingAddress`
 
 ### 3. Shared Errors
 
@@ -135,7 +135,7 @@ Examples:
 
 - event encode errors
 - listing parse errors
-- trade envelope parse errors
+- order envelope parse errors
 - listing validation errors
 
 ### 4. Implementation Provenance
@@ -150,7 +150,7 @@ Examples:
 
 ## Tier 1 Domains And Operations
 
-The initial approved public domains are `profile`, `farm`, `listing`, and `trade`.
+The initial approved public domains are `profile`, `farm`, `listing`, `order`, and `trade_validation`.
 
 The following operations form the recommended Tier 1 surface.
 
@@ -279,24 +279,24 @@ Determinism:
 
 ### Trade
 
-#### `trade.build_envelope_draft`
+#### `order.build_order_request_draft`
 
-Purpose: produce an unsigned trade envelope event from typed trade payload input
+Purpose: produce an unsigned order envelope event from typed order payload input
 
 Rust implementation sources:
 
-- `crates/events_codec/src/trade/encode.rs`
+- `crates/events_codec/src/order/encode.rs`
 
 Input:
 
 - recipient pubkey
-- trade message type
+- order event type
 - listing address
 - optional order id
 - optional listing event pointer
 - optional root event id
 - optional previous event id
-- typed trade payload
+- typed order payload
 
 Output:
 
@@ -306,13 +306,13 @@ Determinism:
 
 - required
 
-#### `trade.parse_envelope`
+#### `order.parse_order_request`
 
-Purpose: parse a trade event into a typed trade envelope
+Purpose: parse a order event into a typed order envelope
 
 Rust implementation sources:
 
-- `crates/events_codec/src/trade/decode.rs`
+- `crates/events_codec/src/order/decode.rs`
 
 Input:
 
@@ -320,19 +320,19 @@ Input:
 
 Output:
 
-- typed `RadrootsTradeEnvelope<T>`
+- typed `RadrootsOrderEnvelope<T>`
 
 Determinism:
 
 - required
 
-#### `trade.parse_listing_address`
+#### `order.parse_listing_address`
 
 Purpose: parse and validate the canonical listing address used by trade flows
 
 Rust implementation sources:
 
-- `crates/events_codec/src/trade/decode.rs`
+- `crates/events_codec/src/order/decode.rs`
 
 Input:
 
@@ -340,13 +340,13 @@ Input:
 
 Output:
 
-- `RadrootsTradeListingAddress`
+- `RadrootsOrderListingAddress`
 
 Determinism:
 
 - required
 
-#### `trade.validate_listing_event`
+#### `trade_validation.validate_listing_event`
 
 Purpose: validate that an event meets Radroots listing contract expectations for trade workflows
 
@@ -379,7 +379,7 @@ Recommended Tier 1 shared types:
 - `RadrootsNostrEvent`
 - `RadrootsNostrEventRef`
 - `RadrootsNostrEventPtr`
-- `RadrootsTradeListingAddress`
+- `RadrootsOrderListingAddress`
 - public model types required by Tier 1 operations:
 - `RadrootsProfile`
 - `RadrootsFarm`
@@ -506,7 +506,7 @@ public = [
   "RadrootsNostrEvent",
   "RadrootsNostrEventRef",
   "RadrootsNostrEventPtr",
-  "RadrootsTradeListingAddress",
+  "RadrootsOrderListingAddress",
   "RadrootsProfile",
   "RadrootsFarm",
   "RadrootsListing",
@@ -605,16 +605,16 @@ networking = "native"
 "listing.build_tags" = "listing.buildTags"
 "listing.build_draft" = "listing.buildDraft"
 "listing.parse_event" = "listing.parseEvent"
-"trade.build_envelope_draft" = "trade.buildEnvelopeDraft"
-"trade.parse_envelope" = "trade.parseEnvelope"
-"trade.parse_listing_address" = "trade.parseListingAddress"
-"trade.validate_listing_event" = "trade.validateListingEvent"
+"order.build_order_request_draft" = "order.buildOrderRequestDraft"
+"order.parse_order_request" = "order.parseOrderRequest"
+"order.parse_listing_address" = "order.parseListingAddress"
+"trade_validation.validate_listing_event" = "tradeValidation.validateListingEvent"
 
 [shared_types]
 "WireEventParts" = "WireEventParts"
 "UnsignedEventDraft" = "UnsignedEventDraft"
 "RadrootsNostrEvent" = "RadrootsNostrEvent"
-"RadrootsTradeListingAddress" = "TradeListingAddress"
+"RadrootsOrderListingAddress" = "OrderListingAddress"
 
 [artifacts]
 models_dir = "src/generated"
@@ -677,8 +677,8 @@ spec/conformance/
       build_draft.v1.json
       parse_event.v1.json
     trade/
-      build_envelope_draft.v1.json
-      parse_envelope.v1.json
+      build_order_request_draft.v1.json
+      parse_order_request.v1.json
       parse_listing_address.v1.json
       validate_listing_event.v1.json
 ```

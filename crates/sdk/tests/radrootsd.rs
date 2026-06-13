@@ -5,22 +5,22 @@ use radroots_core::{
     RadrootsCoreQuantityPrice, RadrootsCoreUnit,
 };
 use radroots_events::farm::{RadrootsFarm, RadrootsFarmLocation, RadrootsFarmRef};
-use radroots_events::kinds::{KIND_FARM, KIND_LISTING, KIND_LISTING_DRAFT, KIND_PROFILE};
+use radroots_events::kinds::{
+    KIND_FARM, KIND_LISTING, KIND_LISTING_DRAFT, KIND_ORDER_REQUEST, KIND_PROFILE,
+};
 use radroots_sdk::adapters::radrootsd::{
     SdkRadrootsdBridgeJob, SdkRadrootsdBridgePublishResponse, SdkRadrootsdListingPublishRequest,
-    SdkRadrootsdPublicTradePublishRequest, SdkRadrootsdSignerAuthority,
-    SdkRadrootsdSignerSessionConnectRequest, SdkRadrootsdSignerSessionMode,
+    SdkRadrootsdSignerAuthority, SdkRadrootsdSignerSessionConnectRequest,
+    SdkRadrootsdSignerSessionMode,
 };
 use radroots_sdk::listing::{
     RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
-    RadrootsListingDeliveryMethod, RadrootsListingLocation, RadrootsListingProduct,
-    RadrootsListingStatus, RadrootsTradeListingParseError,
+    RadrootsListingDeliveryMethod, RadrootsListingLocation, RadrootsListingParseError,
+    RadrootsListingProduct, RadrootsListingStatus,
 };
-use radroots_sdk::trade::{
-    RadrootsTradeDiscountDecision, RadrootsTradeMessagePayload, RadrootsTradeMessageType,
-    RadrootsTradeOrderEconomicItem, RadrootsTradeOrderEconomicLine, RadrootsTradeOrderEconomics,
-    RadrootsTradeOrderItem, RadrootsTradeOrderRequested, RadrootsTradeOrderResponse,
-    RadrootsTradeOrderRevision, RadrootsTradeOrderRevisionResponse, RadrootsTradePricingBasis,
+use radroots_sdk::order::{
+    RadrootsOrderEconomicItem, RadrootsOrderEconomicLine, RadrootsOrderEconomics,
+    RadrootsOrderItem, RadrootsOrderPricingBasis, RadrootsOrderRequest,
 };
 use radroots_sdk::{
     RadrootsNostrEvent, RadrootsNostrEventPtr, RadrootsProfile, RadrootsProfileType,
@@ -28,11 +28,9 @@ use radroots_sdk::{
     SdkEnvironment, SdkPublishError, SdkRadrootsdBridgeDeliveryPolicy, SdkRadrootsdBridgeError,
     SdkRadrootsdBridgeJobStatus, SdkRadrootsdFarmPublishOptions, SdkRadrootsdListingPublishOptions,
     SdkRadrootsdOrderRequestPublishOptions, SdkRadrootsdProfilePublishOptions,
-    SdkRadrootsdPublicTradeMessage, SdkRadrootsdPublicTradePublishOptions,
-    SdkRadrootsdPublicTradePublishValidationError, SdkRadrootsdPublicTradeRoute,
     SdkRadrootsdPublishReceipt, SdkRadrootsdSessionError, SdkRadrootsdSignerSessionHandle,
-    SdkRadrootsdSignerSessionRole, SdkRadrootsdSignerSessionView, SdkRadrootsdTradeChain,
-    SdkTransportMode, SdkTransportReceipt, SignerConfig,
+    SdkRadrootsdSignerSessionRole, SdkRadrootsdSignerSessionView, SdkTransportMode,
+    SdkTransportReceipt, SignerConfig,
 };
 use serde_json::{Value, json};
 use std::collections::VecDeque;
@@ -416,13 +414,13 @@ fn sample_farm() -> RadrootsFarm {
     }
 }
 
-fn sample_trade_order_economics() -> RadrootsTradeOrderEconomics {
-    RadrootsTradeOrderEconomics {
+fn sample_order_request_economics() -> RadrootsOrderEconomics {
+    RadrootsOrderEconomics {
         quote_id: "quote-1".to_owned(),
         quote_version: 1,
-        pricing_basis: RadrootsTradePricingBasis::ListingEvent,
+        pricing_basis: RadrootsOrderPricingBasis::ListingEvent,
         currency: RadrootsCoreCurrency::USD,
-        items: vec![RadrootsTradeOrderEconomicItem {
+        items: vec![RadrootsOrderEconomicItem {
             bin_id: "bin-1".to_owned(),
             bin_count: 2,
             quantity_amount: RadrootsCoreDecimal::from(1u32),
@@ -434,8 +432,8 @@ fn sample_trade_order_economics() -> RadrootsTradeOrderEconomics {
                 RadrootsCoreCurrency::USD,
             ),
         }],
-        discounts: Vec::<RadrootsTradeOrderEconomicLine>::new(),
-        adjustments: Vec::<RadrootsTradeOrderEconomicLine>::new(),
+        discounts: Vec::<RadrootsOrderEconomicLine>::new(),
+        adjustments: Vec::<RadrootsOrderEconomicLine>::new(),
         subtotal: RadrootsCoreMoney::new(
             RadrootsCoreDecimal::from(40u32),
             RadrootsCoreCurrency::USD,
@@ -452,44 +450,18 @@ fn sample_trade_order_economics() -> RadrootsTradeOrderEconomics {
     }
 }
 
-fn sample_trade_order() -> RadrootsTradeOrderRequested {
-    RadrootsTradeOrderRequested {
+fn sample_order_request() -> RadrootsOrderRequest {
+    RadrootsOrderRequest {
         order_id: "order-1".to_owned(),
         listing_addr: format!("{KIND_LISTING}:seller:AAAAAAAAAAAAAAAAAAAAAg"),
         buyer_pubkey: "buyer".to_owned(),
         seller_pubkey: "seller".to_owned(),
-        items: vec![RadrootsTradeOrderItem {
+        items: vec![RadrootsOrderItem {
             bin_id: "bin-1".to_owned(),
             bin_count: 2,
         }],
-        economics: sample_trade_order_economics(),
+        economics: sample_order_request_economics(),
     }
-}
-
-fn sample_public_trade_message() -> SdkRadrootsdPublicTradeMessage {
-    SdkRadrootsdPublicTradeMessage::order_response(
-        &sample_public_trade_route(),
-        &sample_trade_chain(),
-        RadrootsTradeOrderResponse {
-            accepted: true,
-            reason: None,
-        },
-    )
-    .expect("sample order response request should be valid")
-}
-
-fn sample_public_trade_route() -> SdkRadrootsdPublicTradeRoute {
-    SdkRadrootsdPublicTradeRoute::new(
-        format!("{KIND_LISTING}:seller:AAAAAAAAAAAAAAAAAAAAAg"),
-        "order-1",
-        "buyer",
-    )
-    .expect("sample public trade route should be valid")
-}
-
-fn sample_trade_chain() -> SdkRadrootsdTradeChain {
-    SdkRadrootsdTradeChain::new("root-event-1", "prev-event-1")
-        .expect("sample trade chain should be valid")
 }
 
 fn listing_event_ptr_with_relays(relays: Option<&str>) -> RadrootsNostrEventPtr {
@@ -1596,7 +1568,7 @@ async fn radrootsd_listing_publish_rejects_relay_transport_mode() -> TestResult<
 }
 
 #[tokio::test]
-async fn radrootsd_trade_order_request_publish_accepts_session_handle() -> TestResult<()> {
+async fn radrootsd_order_request_publish_accepts_session_handle() -> TestResult<()> {
     let (server, request_rx) = JsonRpcServer::spawn(
         Some("Bearer sdk-secret"),
         json!({
@@ -1612,7 +1584,7 @@ async fn radrootsd_trade_order_request_publish_accepts_session_handle() -> TestR
                     "recovered_after_restart": false,
                     "signer_mode": "nip46_session:session-order-1",
                     "signer_session_id": "session-order-1",
-                    "event_kind": RadrootsTradeMessageType::OrderRequest.kind(),
+                    "event_kind": KIND_ORDER_REQUEST,
                     "event_id": "event-order-1",
                     "event_addr": format!("{KIND_LISTING}:seller:AAAAAAAAAAAAAAAAAAAAAg"),
                     "relay_count": 1,
@@ -1634,9 +1606,9 @@ async fn radrootsd_trade_order_request_publish_accepts_session_handle() -> TestR
         });
 
     let receipt = client
-        .trade()
+        .order()
         .publish_order_request_via_radrootsd_with_options(
-            &sample_trade_order(),
+            &sample_order_request(),
             &listing_event_ptr_with_relays(Some("wss://radroots.org")),
             &options,
         )
@@ -1666,200 +1638,14 @@ async fn radrootsd_trade_order_request_publish_accepts_session_handle() -> TestR
         request_json["params"]["signer_authority"]["provider_signer_session_id"],
         "provider-session-order-1"
     );
-    assert_eq!(
-        receipt.event_kind,
-        Some(RadrootsTradeMessageType::OrderRequest.kind())
-    );
+    assert_eq!(receipt.event_kind, Some(KIND_ORDER_REQUEST));
     assert_eq!(receipt.event_id, Some("event-order-1".to_owned()));
 
     Ok(())
 }
 
 #[tokio::test]
-async fn radrootsd_trade_public_message_publish_accepts_typed_request() -> TestResult<()> {
-    let (server, request_rx) = JsonRpcServer::spawn(
-        Some("Bearer sdk-secret"),
-        json!({
-            "jsonrpc": "2.0",
-            "id": "radroots-sdk-public-trade-publish",
-            "result": {
-                "deduplicated": false,
-                "job": {
-                    "job_id": "job-response-1",
-                    "command": "bridge.order.response",
-                    "status": "published",
-                    "terminal": true,
-                    "recovered_after_restart": false,
-                    "signer_mode": "nip46_session:session-response-1",
-                    "signer_session_id": "session-response-1",
-                    "event_kind": RadrootsTradeMessageType::OrderResponse.kind(),
-                    "event_id": "event-response-1",
-                    "event_addr": format!("{KIND_LISTING}:seller:AAAAAAAAAAAAAAAAAAAAAg"),
-                    "relay_count": 1,
-                    "acknowledged_relay_count": 1
-                }
-            }
-        }),
-    )
-    .await?;
-
-    let handle = connected_bunker_session_handle("session-response-1").await?;
-    let client = radrootsd_test_client(server.endpoint())?;
-    let request = sample_public_trade_message();
-    let options = SdkRadrootsdPublicTradePublishOptions::from_signer_session(&handle)
-        .with_idempotency_key("idem-response-1");
-
-    let receipt = client
-        .trade()
-        .publish_public_message_via_radrootsd_with_options(&request, &options)
-        .await?;
-    let request_json = request_rx.await?;
-
-    assert_eq!(request_json["method"], "bridge.order.response");
-    assert_eq!(
-        request_json["params"]["signer_session_id"],
-        "session-response-1"
-    );
-    assert_eq!(request_json["params"]["idempotency_key"], "idem-response-1");
-    assert_eq!(
-        request_json["params"]["listing_addr"],
-        format!("{KIND_LISTING}:seller:AAAAAAAAAAAAAAAAAAAAAg")
-    );
-    assert_eq!(request_json["params"]["order_id"], "order-1");
-    assert_eq!(request_json["params"]["counterparty_pubkey"], "buyer");
-    assert_eq!(request_json["params"]["root_event_id"], "root-event-1");
-    assert_eq!(request_json["params"]["prev_event_id"], "prev-event-1");
-    assert_eq!(request_json["params"]["payload"]["accepted"], true);
-    assert_eq!(
-        receipt.event_kind,
-        Some(RadrootsTradeMessageType::OrderResponse.kind())
-    );
-    assert_eq!(receipt.event_id, Some("event-response-1".to_owned()));
-
-    Ok(())
-}
-
-#[test]
-fn public_trade_request_validation_rejects_order_request_payload() {
-    let request = SdkRadrootsdPublicTradePublishRequest::new(
-        sample_trade_order().listing_addr.clone(),
-        "order-1",
-        "buyer",
-        RadrootsTradeMessagePayload::TradeOrderRequested(sample_trade_order()),
-    );
-
-    let error = request
-        .validate_for_publish()
-        .expect_err("order request payload should use the dedicated trade order request path");
-
-    assert!(
-        error
-            .to_string()
-            .contains("trade.publish_order_request_via_radrootsd"),
-        "unexpected error: {error}"
-    );
-}
-
-#[test]
-fn public_trade_request_validation_requires_listing_snapshot_for_order_revision() {
-    let error = SdkRadrootsdPublicTradePublishRequest::new(
-        format!("{KIND_LISTING}:seller:AAAAAAAAAAAAAAAAAAAAAg"),
-        "order-1",
-        "buyer",
-        RadrootsTradeMessagePayload::OrderRevision(RadrootsTradeOrderRevision {
-            revision_id: "revision-1".to_owned(),
-            changes: Vec::new(),
-        }),
-    )
-    .validate_for_publish()
-    .expect_err("order revision without listing snapshot should be rejected");
-
-    assert_eq!(
-        error,
-        SdkRadrootsdPublicTradePublishValidationError::MissingListingSnapshot(
-            RadrootsTradeMessageType::OrderRevision,
-        )
-    );
-}
-
-#[test]
-fn public_trade_request_validation_requires_trade_chain_for_order_response() {
-    let error = SdkRadrootsdPublicTradePublishRequest::new(
-        format!("{KIND_LISTING}:seller:AAAAAAAAAAAAAAAAAAAAAg"),
-        "order-1",
-        "buyer",
-        RadrootsTradeMessagePayload::OrderResponse(RadrootsTradeOrderResponse {
-            accepted: true,
-            reason: None,
-        }),
-    )
-    .validate_for_publish()
-    .expect_err("order response without trade chain should be rejected");
-
-    assert_eq!(
-        error,
-        SdkRadrootsdPublicTradePublishValidationError::MissingTradeChain(
-            RadrootsTradeMessageType::OrderResponse,
-        )
-    );
-}
-
-#[test]
-fn public_trade_request_validation_rejects_blank_listing_snapshot_relays() {
-    let error = SdkRadrootsdPublicTradePublishRequest::order_revision(
-        &sample_public_trade_route(),
-        listing_event_ptr_with_relays(Some("   ")),
-        &sample_trade_chain(),
-        RadrootsTradeOrderRevision {
-            revision_id: "revision-1".to_owned(),
-            changes: Vec::new(),
-        },
-    )
-    .expect_err("blank listing_event relays should be rejected");
-
-    assert_eq!(
-        error,
-        SdkRadrootsdPublicTradePublishValidationError::ListingSnapshotRelaysEmpty
-    );
-}
-
-#[test]
-fn public_trade_request_validation_rejects_invalid_order_revision_accept_payload() {
-    let error = SdkRadrootsdPublicTradePublishRequest::order_revision_accept(
-        &sample_public_trade_route(),
-        &sample_trade_chain(),
-        RadrootsTradeOrderRevisionResponse {
-            accepted: false,
-            reason: Some("not accepted".to_owned()),
-        },
-    )
-    .expect_err("order revision accept must require accepted = true");
-
-    assert_eq!(
-        error,
-        SdkRadrootsdPublicTradePublishValidationError::InvalidOrderRevisionAcceptPayload
-    );
-}
-
-#[test]
-fn public_trade_request_validation_rejects_invalid_discount_accept_payload() {
-    let error = SdkRadrootsdPublicTradePublishRequest::discount_accept(
-        &sample_public_trade_route(),
-        &sample_trade_chain(),
-        RadrootsTradeDiscountDecision::Decline {
-            reason: Some("declined".to_owned()),
-        },
-    )
-    .expect_err("discount accept must use an accept decision");
-
-    assert_eq!(
-        error,
-        SdkRadrootsdPublicTradePublishValidationError::InvalidDiscountAcceptPayload
-    );
-}
-
-#[tokio::test]
-async fn radrootsd_sdk_workflow_chains_session_listing_trade_and_bridge_job() -> TestResult<()> {
+async fn radrootsd_sdk_workflow_chains_session_listing_order_and_bridge_job() -> TestResult<()> {
     let (server, mut request_rx) = JsonRpcSequenceServer::spawn(
         Some("Bearer sdk-secret"),
         vec![
@@ -1908,7 +1694,7 @@ async fn radrootsd_sdk_workflow_chains_session_listing_trade_and_bridge_job() ->
                         "recovered_after_restart": false,
                         "signer_mode": "nip46_session:session-workflow-1",
                         "signer_session_id": "session-workflow-1",
-                        "event_kind": RadrootsTradeMessageType::OrderRequest.kind(),
+                        "event_kind": KIND_ORDER_REQUEST,
                         "event_id": "event-workflow-order",
                         "event_addr": format!("{KIND_LISTING}:seller:AAAAAAAAAAAAAAAAAAAAAg"),
                         "relay_count": 1,
@@ -1922,7 +1708,7 @@ async fn radrootsd_sdk_workflow_chains_session_listing_trade_and_bridge_job() ->
                 "result": sample_bridge_job_json_for(
                     "job-workflow-order",
                     "bridge.order.request",
-                    RadrootsTradeMessageType::OrderRequest.kind(),
+                    KIND_ORDER_REQUEST,
                 )
             }),
         ],
@@ -1953,42 +1739,39 @@ async fn radrootsd_sdk_workflow_chains_session_listing_trade_and_bridge_job() ->
         "session-workflow-1"
     );
 
-    let trade_receipt = client
-        .trade()
+    let order_receipt = client
+        .order()
         .publish_order_request_via_radrootsd(
-            &sample_trade_order(),
+            &sample_order_request(),
             &listing_event_ptr_with_relays(Some("wss://radroots.org")),
             &handle,
         )
         .await?;
-    let trade_request = request_rx.recv().await.expect("trade publish request");
-    assert_eq!(trade_request["method"], "bridge.order.request");
+    let order_request = request_rx.recv().await.expect("order publish request");
+    assert_eq!(order_request["method"], "bridge.order.request");
     assert_eq!(
-        trade_request["params"]["signer_session_id"],
+        order_request["params"]["signer_session_id"],
         "session-workflow-1"
     );
-    assert_eq!(trade_request["params"]["order"]["order_id"], "order-1");
+    assert_eq!(order_request["params"]["order"]["order_id"], "order-1");
     assert_eq!(
-        trade_request["params"]["listing_event"]["id"],
+        order_request["params"]["listing_event"]["id"],
         "listing-event-1"
     );
 
-    let trade_job = match &trade_receipt.transport_receipt {
+    let order_job = match &order_receipt.transport_receipt {
         SdkTransportReceipt::Radrootsd(receipt) => receipt.job(),
         SdkTransportReceipt::RelayDirect(_) => None,
     }
-    .expect("trade publish receipt should expose a bridge job ref");
+    .expect("order publish receipt should expose a bridge job ref");
 
-    let job_view = client.radrootsd().bridge().job(&trade_job).await?;
+    let job_view = client.radrootsd().bridge().job(&order_job).await?;
     let job_request = request_rx.recv().await.expect("bridge job request");
     assert_eq!(job_request["method"], "bridge.job.status");
     assert_eq!(job_request["params"]["job_id"], "job-workflow-order");
 
     assert_eq!(listing_receipt.event_kind, Some(30402));
-    assert_eq!(
-        trade_receipt.event_kind,
-        Some(RadrootsTradeMessageType::OrderRequest.kind())
-    );
+    assert_eq!(order_receipt.event_kind, Some(KIND_ORDER_REQUEST));
     assert_eq!(job_view.job().job_id(), "job-workflow-order");
     assert_eq!(job_view.command, "bridge.order.request");
     assert_eq!(job_view.status, SdkRadrootsdBridgeJobStatus::Published);
@@ -2157,9 +1940,7 @@ fn radrootsd_listing_request_from_event_rejects_listing_draft_kind() -> TestResu
 
     assert!(matches!(
         SdkRadrootsdListingPublishRequest::from_event(&event, "session-123", None, None),
-        Err(RadrootsTradeListingParseError::InvalidKind(
-            KIND_LISTING_DRAFT
-        ))
+        Err(RadrootsListingParseError::InvalidKind(KIND_LISTING_DRAFT))
     ));
 
     Ok(())

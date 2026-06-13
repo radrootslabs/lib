@@ -4,7 +4,7 @@ version = "0.1.0-alpha.2"
 source = "rust"
 
 [public]
-domains = ["profile", "farm", "listing", "trade", "social"]
+domains = ["profile", "farm", "listing", "order", "trade_validation", "social"]
 
 [shared_types]
 public = [
@@ -13,7 +13,7 @@ public = [
   "RadrootsNostrEvent",
   "RadrootsNostrEventRef",
   "RadrootsNostrEventPtr",
-  "RadrootsTradeListingAddress",
+  "RadrootsOrderListingAddress",
   "RadrootsProfile",
   "RadrootsFarm",
   "RadrootsListing",
@@ -24,22 +24,21 @@ public = [
   "RadrootsFileMetadata",
   "RadrootsCalendarDateEvent",
   "RadrootsCalendarTimeEvent",
-  "RadrootsTradeEnvelope",
-  "RadrootsActiveTradeEnvelope",
-  "RadrootsActiveTradeMessageType",
-  "RadrootsTradeOrderItem",
-  "RadrootsTradePricingBasis",
-  "RadrootsTradeEconomicLineKind",
-  "RadrootsTradeEconomicActor",
-  "RadrootsTradeEconomicEffect",
-  "RadrootsTradeOrderEconomicItem",
-  "RadrootsTradeOrderEconomicLine",
-  "RadrootsTradeOrderEconomicTotals",
-  "RadrootsTradeOrderEconomics",
-  "RadrootsTradeOrderRequested",
-  "RadrootsTradeInventoryCommitment",
-  "RadrootsTradeOrderDecision",
-  "RadrootsTradeOrderDecisionEvent",
+  "RadrootsOrderEnvelope",
+  "RadrootsOrderEventType",
+  "RadrootsOrderItem",
+  "RadrootsOrderPricingBasis",
+  "RadrootsOrderEconomicLineKind",
+  "RadrootsOrderEconomicActor",
+  "RadrootsOrderEconomicEffect",
+  "RadrootsOrderEconomicItem",
+  "RadrootsOrderEconomicLine",
+  "RadrootsOrderEconomicTotals",
+  "RadrootsOrderEconomics",
+  "RadrootsOrderRequest",
+  "RadrootsOrderInventoryCommitment",
+  "RadrootsOrderDecisionOutcome",
+  "RadrootsOrderDecision",
 ]
 
 [errors]
@@ -57,7 +56,7 @@ wasm_crates = ["radroots_events_codec_wasm"]
 
 [sdk]
 rust_package = "radroots_sdk"
-primary_domains = ["profile", "farm", "listing", "trade", "social"]
+primary_domains = ["profile", "farm", "listing", "order", "trade_validation", "social"]
 public_surface = "operation_first"
 
 [operations.profile_build_draft]
@@ -285,160 +284,112 @@ rust_types = ["radroots_events::calendar::RadrootsCalendarTimeEvent"]
 [operations.social_calendar_time_event_build_tags.conformance]
 vector = "spec/conformance/vectors/social/mvp.v1.json"
 
-[operations.trade_build_envelope_draft]
-domain = "trade"
-id = "trade.build_envelope_draft"
+[operations.order_build_order_request_draft]
+domain = "order"
+id = "order.build_order_request_draft"
 stability = "beta"
-inputs = [
-  "recipient_pubkey",
-  "message_type",
-  "listing_addr",
-  "order_id?",
-  "listing_event?",
-  "root_event_id?",
-  "prev_event_id?",
-  "RadrootsTradeMessagePayload",
-]
+inputs = ["RadrootsOrderRequest", "RadrootsNostrEventPtr"]
 outputs = ["WireEventParts"]
 error_class = "encode_error"
 deterministic = true
 signing = "native"
 transport = "native"
 
-[operations.trade_build_envelope_draft.implementation]
-rust_modules = ["crates/events_codec/src/trade/encode.rs"]
-rust_types = ["radroots_events::trade::RadrootsTradeEnvelope"]
-
-[operations.trade_build_envelope_draft.conformance]
-vector = "spec/conformance/vectors/trade/build_envelope_draft.v1.json"
-
-[operations.trade_build_order_request_draft]
-domain = "trade"
-id = "trade.build_order_request_draft"
-stability = "beta"
-inputs = ["RadrootsTradeOrderRequested", "RadrootsNostrEventPtr"]
-outputs = ["WireEventParts"]
-error_class = "encode_error"
-deterministic = true
-signing = "native"
-transport = "native"
-
-[operations.trade_build_order_request_draft.implementation]
-rust_modules = ["crates/events_codec/src/trade/encode.rs"]
+[operations.order_build_order_request_draft.implementation]
+rust_modules = ["crates/events_codec/src/order/encode.rs"]
 rust_types = [
   "radroots_events::RadrootsNostrEventPtr",
-  "radroots_events::trade::RadrootsTradeOrderRequested",
+  "radroots_events::order::RadrootsOrderRequest",
 ]
 
-[operations.trade_build_order_request_draft.conformance]
-vector = "spec/conformance/vectors/trade/build_order_request_draft.v1.json"
+[operations.order_build_order_request_draft.conformance]
+vector = "spec/conformance/vectors/order/build_order_request_draft.v1.json"
 
-[operations.trade_build_order_decision_draft]
-domain = "trade"
-id = "trade.build_order_decision_draft"
+[operations.order_build_order_decision_draft]
+domain = "order"
+id = "order.build_order_decision_draft"
 stability = "beta"
-inputs = ["root_event_id", "prev_event_id", "RadrootsTradeOrderDecisionEvent"]
+inputs = ["root_event_id", "prev_event_id", "RadrootsOrderDecision"]
 outputs = ["WireEventParts"]
 error_class = "encode_error"
 deterministic = true
 signing = "native"
 transport = "native"
 
-[operations.trade_build_order_decision_draft.implementation]
-rust_modules = ["crates/events_codec/src/trade/encode.rs"]
-rust_types = ["radroots_events::trade::RadrootsTradeOrderDecisionEvent"]
+[operations.order_build_order_decision_draft.implementation]
+rust_modules = ["crates/events_codec/src/order/encode.rs"]
+rust_types = ["radroots_events::order::RadrootsOrderDecision"]
 
-[operations.trade_build_order_decision_draft.conformance]
-vector = "spec/conformance/vectors/trade/build_order_decision_draft.v1.json"
+[operations.order_build_order_decision_draft.conformance]
+vector = "spec/conformance/vectors/order/build_order_decision_draft.v1.json"
 
-[operations.trade_parse_envelope]
-domain = "trade"
-id = "trade.parse_envelope"
+[operations.order_parse_order_request]
+domain = "order"
+id = "order.parse_order_request"
 stability = "beta"
 inputs = ["RadrootsNostrEvent"]
-outputs = ["RadrootsTradeEnvelope"]
+outputs = ["RadrootsOrderEnvelope", "RadrootsOrderRequest"]
 error_class = "parse_error"
 deterministic = true
 signing = "native"
 transport = "native"
 
-[operations.trade_parse_envelope.implementation]
-rust_modules = ["crates/events_codec/src/trade/decode.rs"]
+[operations.order_parse_order_request.implementation]
+rust_modules = ["crates/events_codec/src/order/decode.rs"]
 rust_types = [
   "radroots_events::RadrootsNostrEvent",
-  "radroots_events::trade::RadrootsTradeEnvelope",
+  "radroots_events::order::RadrootsOrderEnvelope",
+  "radroots_events::order::RadrootsOrderRequest",
 ]
 
-[operations.trade_parse_envelope.conformance]
-vector = "spec/conformance/vectors/trade/parse_envelope.v1.json"
+[operations.order_parse_order_request.conformance]
+vector = "spec/conformance/vectors/order/parse_order_request.v1.json"
 
-[operations.trade_parse_order_request]
-domain = "trade"
-id = "trade.parse_order_request"
+[operations.order_parse_order_decision]
+domain = "order"
+id = "order.parse_order_decision"
 stability = "beta"
 inputs = ["RadrootsNostrEvent"]
-outputs = ["RadrootsActiveTradeEnvelope", "RadrootsTradeOrderRequested"]
+outputs = ["RadrootsOrderEnvelope", "RadrootsOrderDecision"]
 error_class = "parse_error"
 deterministic = true
 signing = "native"
 transport = "native"
 
-[operations.trade_parse_order_request.implementation]
-rust_modules = ["crates/events_codec/src/trade/decode.rs"]
+[operations.order_parse_order_decision.implementation]
+rust_modules = ["crates/events_codec/src/order/decode.rs"]
 rust_types = [
   "radroots_events::RadrootsNostrEvent",
-  "radroots_events::trade::RadrootsActiveTradeEnvelope",
-  "radroots_events::trade::RadrootsTradeOrderRequested",
+  "radroots_events::order::RadrootsOrderEnvelope",
+  "radroots_events::order::RadrootsOrderDecision",
 ]
 
-[operations.trade_parse_order_request.conformance]
-vector = "spec/conformance/vectors/trade/parse_order_request.v1.json"
+[operations.order_parse_order_decision.conformance]
+vector = "spec/conformance/vectors/order/parse_order_decision.v1.json"
 
-[operations.trade_parse_order_decision]
-domain = "trade"
-id = "trade.parse_order_decision"
-stability = "beta"
-inputs = ["RadrootsNostrEvent"]
-outputs = ["RadrootsActiveTradeEnvelope", "RadrootsTradeOrderDecisionEvent"]
-error_class = "parse_error"
-deterministic = true
-signing = "native"
-transport = "native"
-
-[operations.trade_parse_order_decision.implementation]
-rust_modules = ["crates/events_codec/src/trade/decode.rs"]
-rust_types = [
-  "radroots_events::RadrootsNostrEvent",
-  "radroots_events::trade::RadrootsActiveTradeEnvelope",
-  "radroots_events::trade::RadrootsTradeOrderDecisionEvent",
-]
-
-[operations.trade_parse_order_decision.conformance]
-vector = "spec/conformance/vectors/trade/parse_order_decision.v1.json"
-
-[operations.trade_parse_listing_address]
-domain = "trade"
-id = "trade.parse_listing_address"
+[operations.order_parse_listing_address]
+domain = "order"
+id = "order.parse_listing_address"
 stability = "beta"
 inputs = ["listing_addr"]
-outputs = ["RadrootsTradeListingAddress"]
+outputs = ["RadrootsOrderListingAddress"]
 error_class = "address_error"
 deterministic = true
 signing = "native"
 transport = "native"
 
-[operations.trade_parse_listing_address.implementation]
-rust_modules = ["crates/events_codec/src/trade/decode.rs"]
+[operations.order_parse_listing_address.implementation]
+rust_modules = ["crates/events_codec/src/order/decode.rs"]
 rust_types = [
-  "radroots_events_codec::trade::decode::RadrootsTradeListingAddress",
+  "radroots_events_codec::order::decode::RadrootsOrderListingAddress",
 ]
 
-[operations.trade_parse_listing_address.conformance]
-vector = "spec/conformance/vectors/trade/parse_listing_address.v1.json"
+[operations.order_parse_listing_address.conformance]
+vector = "spec/conformance/vectors/order/parse_listing_address.v1.json"
 
-[operations.trade_validate_listing_event]
-domain = "trade"
-id = "trade.validate_listing_event"
+[operations.trade_validation_validate_listing_event]
+domain = "trade_validation"
+id = "trade_validation.validate_listing_event"
 stability = "beta"
 inputs = ["RadrootsNostrEvent"]
 outputs = ["TradeListingValidateResult"]
@@ -447,12 +398,12 @@ deterministic = true
 signing = "native"
 transport = "native"
 
-[operations.trade_validate_listing_event.implementation]
+[operations.trade_validation_validate_listing_event.implementation]
 rust_modules = ["crates/trade/src/listing/validation.rs"]
 rust_types = [
   "radroots_events::RadrootsNostrEvent",
   "radroots_trade::listing::validation::RadrootsTradeListing",
 ]
 
-[operations.trade_validate_listing_event.conformance]
-vector = "spec/conformance/vectors/trade/validate_listing_event.v1.json"
+[operations.trade_validation_validate_listing_event.conformance]
+vector = "spec/conformance/vectors/trade_validation/validate_listing_event.v1.json"

@@ -10,7 +10,7 @@ use alloc::{
 use base64::Engine as _;
 use radroots_events::{
     RadrootsNostrEvent,
-    kinds::{KIND_TRADE_RECEIPT, KIND_TRADE_VALIDATION_RECEIPT},
+    kinds::{KIND_ORDER_RECEIPT, KIND_TRADE_VALIDATION_RECEIPT},
     tags::TAG_D,
 };
 use radroots_events_codec::wire::WireEventParts;
@@ -434,7 +434,7 @@ pub fn verify_validation_receipt_event(
     event: &RadrootsNostrEvent,
     expected: RadrootsValidationReceiptExpectedBinding<'_>,
 ) -> Result<RadrootsVerifiedValidationReceipt, RadrootsValidationReceiptError> {
-    if event.kind == KIND_TRADE_RECEIPT {
+    if event.kind == KIND_ORDER_RECEIPT {
         return Err(RadrootsValidationReceiptError::BuyerReceiptKind);
     }
     if event.kind != KIND_TRADE_VALIDATION_RECEIPT {
@@ -715,9 +715,9 @@ mod tests {
     };
     use radroots_events::{
         RadrootsNostrEvent,
-        kinds::{KIND_TRADE_RECEIPT, KIND_TRADE_VALIDATION_RECEIPT},
+        kinds::{KIND_ORDER_RECEIPT, KIND_TRADE_VALIDATION_RECEIPT},
     };
-    use radroots_events_codec::trade::active_trade_buyer_receipt_from_event;
+    use radroots_events_codec::order::order_receipt_from_event;
 
     fn hash32(c: char) -> String {
         format!("0x{}", c.to_string().repeat(64))
@@ -836,7 +836,7 @@ mod tests {
     #[test]
     fn validation_receipt_verifier_rejects_buyer_receipt_kind_3434() {
         let mut event = sample_validation_receipt_event();
-        event.kind = KIND_TRADE_RECEIPT;
+        event.kind = KIND_ORDER_RECEIPT;
         assert_eq!(
             validation_receipt_from_event(&event),
             Err(RadrootsValidationReceiptError::BuyerReceiptKind)
@@ -850,7 +850,7 @@ mod tests {
             reject_validation_receipt_as_buyer_receipt(&event),
             Err(RadrootsValidationReceiptError::ValidationReceiptKind)
         );
-        let buyer_receipt_error = active_trade_buyer_receipt_from_event(&event)
+        let buyer_receipt_error = order_receipt_from_event(&event)
             .expect_err("validation receipt must not parse as buyer receipt");
         assert!(buyer_receipt_error.to_string().contains("3440"));
     }

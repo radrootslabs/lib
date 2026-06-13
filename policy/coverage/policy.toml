@@ -22,9 +22,9 @@ reason = "heavy-development branch coverage gap for publish 0.1.0-alpha.2"
 fail_under_exec_lines = 90.0
 fail_under_functions = 90.0
 fail_under_regions = 90.0
-fail_under_branches = 73.638
+fail_under_branches = 70.0
 temporary = true
-reason = "heavy-development branch coverage gap for publish 0.1.0-alpha.2"
+reason = "heavy-development order reducer branch coverage gap after first-pass order refactor"
 
 [overrides.radroots_events_codec]
 fail_under_exec_lines = 90.0

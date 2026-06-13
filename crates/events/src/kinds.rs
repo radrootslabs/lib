@@ -80,119 +80,68 @@ pub const KIND_GROUP_ADMINS: u32 = 39001;
 pub const KIND_GROUP_MEMBERS: u32 = 39002;
 pub const KIND_GROUP_ROLES: u32 = 39003;
 
-pub const KIND_TRADE_LISTING_VALIDATE_REQ: u32 = 5321;
-pub const KIND_TRADE_LISTING_VALIDATE_RES: u32 = 6321;
-pub const KIND_WORKER_TRADE_TRANSITION_PROOF_REQ: u32 = 5322;
-pub const KIND_WORKER_TRADE_TRANSITION_PROOF_RES: u32 = 6322;
-pub const KIND_TRADE_ORDER_REQUEST: u32 = 3422;
-pub const KIND_TRADE_ORDER_RESPONSE: u32 = 3423;
-pub const KIND_TRADE_ORDER_DECISION: u32 = KIND_TRADE_ORDER_RESPONSE;
-pub const KIND_TRADE_ORDER_REVISION: u32 = 3424;
-pub const KIND_TRADE_ORDER_REVISION_RESPONSE: u32 = 3425;
-pub const KIND_TRADE_QUESTION: u32 = 3426;
-pub const KIND_TRADE_ANSWER: u32 = 3427;
-pub const KIND_TRADE_DISCOUNT_REQUEST: u32 = 3428;
-pub const KIND_TRADE_DISCOUNT_OFFER: u32 = 3429;
-pub const KIND_TRADE_DISCOUNT_ACCEPT: u32 = 3430;
-pub const KIND_TRADE_FORBIDDEN_3431: u32 = 3431;
-pub const KIND_TRADE_DISCOUNT_DECLINE: u32 = KIND_TRADE_FORBIDDEN_3431;
-pub const KIND_TRADE_CANCEL: u32 = 3432;
-pub const KIND_TRADE_FULFILLMENT_UPDATE: u32 = 3433;
-pub const KIND_TRADE_RECEIPT: u32 = 3434;
+pub const KIND_TRADE_LISTING_VALIDATION_REQUEST: u32 = 5321;
+pub const KIND_TRADE_LISTING_VALIDATION_RESULT: u32 = 6321;
+pub const KIND_TRADE_TRANSITION_PROOF_REQUEST: u32 = 5322;
+pub const KIND_TRADE_TRANSITION_PROOF_RESULT: u32 = 6322;
+pub const KIND_ORDER_REQUEST: u32 = 3422;
+pub const KIND_ORDER_DECISION: u32 = 3423;
+pub const KIND_ORDER_REVISION_PROPOSAL: u32 = 3424;
+pub const KIND_ORDER_REVISION_DECISION: u32 = 3425;
+pub const KIND_ORDER_CANCELLATION: u32 = 3432;
+pub const KIND_ORDER_FULFILLMENT_UPDATE: u32 = 3433;
+pub const KIND_ORDER_RECEIPT: u32 = 3434;
+pub const KIND_ORDER_PAYMENT_RECORD: u32 = 3435;
+pub const KIND_ORDER_SETTLEMENT_DECISION: u32 = 3436;
 pub const KIND_TRADE_VALIDATION_RECEIPT: u32 = 3440;
-pub const KIND_TRADE_PAYMENT_RECORDED: u32 = 3435;
-pub const KIND_TRADE_SETTLEMENT_DECISION: u32 = 3436;
 
-pub const KIND_TRADE_LISTING_ORDER_REQ: u32 = KIND_TRADE_ORDER_REQUEST;
-pub const KIND_TRADE_LISTING_ORDER_RES: u32 = KIND_TRADE_ORDER_RESPONSE;
-pub const KIND_TRADE_LISTING_ORDER_REVISION_REQ: u32 = KIND_TRADE_ORDER_REVISION;
-pub const KIND_TRADE_LISTING_ORDER_REVISION_RES: u32 = KIND_TRADE_ORDER_REVISION_RESPONSE;
-pub const KIND_TRADE_LISTING_QUESTION_REQ: u32 = KIND_TRADE_QUESTION;
-pub const KIND_TRADE_LISTING_ANSWER_RES: u32 = KIND_TRADE_ANSWER;
-pub const KIND_TRADE_LISTING_DISCOUNT_REQ: u32 = KIND_TRADE_DISCOUNT_REQUEST;
-pub const KIND_TRADE_LISTING_DISCOUNT_OFFER_RES: u32 = KIND_TRADE_DISCOUNT_OFFER;
-pub const KIND_TRADE_LISTING_DISCOUNT_ACCEPT_REQ: u32 = KIND_TRADE_DISCOUNT_ACCEPT;
-pub const KIND_TRADE_LISTING_DISCOUNT_DECLINE_REQ: u32 = KIND_TRADE_FORBIDDEN_3431;
-pub const KIND_TRADE_LISTING_CANCEL_REQ: u32 = KIND_TRADE_CANCEL;
-pub const KIND_TRADE_LISTING_FULFILLMENT_UPDATE_REQ: u32 = KIND_TRADE_FULFILLMENT_UPDATE;
-pub const KIND_TRADE_LISTING_RECEIPT_REQ: u32 = KIND_TRADE_RECEIPT;
+pub const LISTING_EVENT_KINDS: [u32; 2] = [KIND_LISTING, KIND_LISTING_DRAFT];
 
-pub const TRADE_SERVICE_KINDS: [u32; 4] = [
-    KIND_TRADE_LISTING_VALIDATE_REQ,
-    KIND_TRADE_LISTING_VALIDATE_RES,
-    KIND_WORKER_TRADE_TRANSITION_PROOF_REQ,
-    KIND_WORKER_TRADE_TRANSITION_PROOF_RES,
+pub const ORDER_EVENT_KINDS: [u32; 9] = [
+    KIND_ORDER_REQUEST,
+    KIND_ORDER_DECISION,
+    KIND_ORDER_REVISION_PROPOSAL,
+    KIND_ORDER_REVISION_DECISION,
+    KIND_ORDER_CANCELLATION,
+    KIND_ORDER_FULFILLMENT_UPDATE,
+    KIND_ORDER_RECEIPT,
+    KIND_ORDER_PAYMENT_RECORD,
+    KIND_ORDER_SETTLEMENT_DECISION,
 ];
 
-pub const TRADE_PUBLIC_KINDS: [u32; 14] = [
-    KIND_TRADE_ORDER_REQUEST,
-    KIND_TRADE_ORDER_RESPONSE,
-    KIND_TRADE_ORDER_REVISION,
-    KIND_TRADE_ORDER_REVISION_RESPONSE,
-    KIND_TRADE_QUESTION,
-    KIND_TRADE_ANSWER,
-    KIND_TRADE_DISCOUNT_REQUEST,
-    KIND_TRADE_DISCOUNT_OFFER,
-    KIND_TRADE_DISCOUNT_ACCEPT,
-    KIND_TRADE_CANCEL,
-    KIND_TRADE_FULFILLMENT_UPDATE,
-    KIND_TRADE_RECEIPT,
-    KIND_TRADE_PAYMENT_RECORDED,
-    KIND_TRADE_SETTLEMENT_DECISION,
+pub const TRADE_VALIDATION_SERVICE_EVENT_KINDS: [u32; 4] = [
+    KIND_TRADE_LISTING_VALIDATION_REQUEST,
+    KIND_TRADE_LISTING_VALIDATION_RESULT,
+    KIND_TRADE_TRANSITION_PROOF_REQUEST,
+    KIND_TRADE_TRANSITION_PROOF_RESULT,
 ];
 
-pub const TRADE_KINDS: [u32; 18] = [
-    KIND_TRADE_LISTING_VALIDATE_REQ,
-    KIND_TRADE_LISTING_VALIDATE_RES,
-    KIND_WORKER_TRADE_TRANSITION_PROOF_REQ,
-    KIND_WORKER_TRADE_TRANSITION_PROOF_RES,
-    KIND_TRADE_ORDER_REQUEST,
-    KIND_TRADE_ORDER_RESPONSE,
-    KIND_TRADE_ORDER_REVISION,
-    KIND_TRADE_ORDER_REVISION_RESPONSE,
-    KIND_TRADE_QUESTION,
-    KIND_TRADE_ANSWER,
-    KIND_TRADE_DISCOUNT_REQUEST,
-    KIND_TRADE_DISCOUNT_OFFER,
-    KIND_TRADE_DISCOUNT_ACCEPT,
-    KIND_TRADE_CANCEL,
-    KIND_TRADE_FULFILLMENT_UPDATE,
-    KIND_TRADE_RECEIPT,
-    KIND_TRADE_PAYMENT_RECORDED,
-    KIND_TRADE_SETTLEMENT_DECISION,
+pub const TRADE_VALIDATION_EVENT_KINDS: [u32; 5] = [
+    KIND_TRADE_LISTING_VALIDATION_REQUEST,
+    KIND_TRADE_LISTING_VALIDATION_RESULT,
+    KIND_TRADE_TRANSITION_PROOF_REQUEST,
+    KIND_TRADE_TRANSITION_PROOF_RESULT,
+    KIND_TRADE_VALIDATION_RECEIPT,
 ];
 
-pub const TRADE_LISTING_KINDS: [u32; 18] = TRADE_KINDS;
-
-pub const ACTIVE_TRADE_LISTING_KINDS: [u32; 2] = [KIND_LISTING, KIND_LISTING_DRAFT];
-
-pub const ACTIVE_TRADE_PUBLIC_KINDS: [u32; 9] = [
-    KIND_TRADE_ORDER_REQUEST,
-    KIND_TRADE_ORDER_DECISION,
-    KIND_TRADE_ORDER_REVISION,
-    KIND_TRADE_ORDER_REVISION_RESPONSE,
-    KIND_TRADE_CANCEL,
-    KIND_TRADE_FULFILLMENT_UPDATE,
-    KIND_TRADE_RECEIPT,
-    KIND_TRADE_PAYMENT_RECORDED,
-    KIND_TRADE_SETTLEMENT_DECISION,
-];
-
-pub const ACTIVE_TRADE_KINDS: [u32; 11] = [
+pub const COMMERCIAL_EVENT_KINDS: [u32; 16] = [
     KIND_LISTING,
     KIND_LISTING_DRAFT,
-    KIND_TRADE_ORDER_REQUEST,
-    KIND_TRADE_ORDER_DECISION,
-    KIND_TRADE_ORDER_REVISION,
-    KIND_TRADE_ORDER_REVISION_RESPONSE,
-    KIND_TRADE_CANCEL,
-    KIND_TRADE_FULFILLMENT_UPDATE,
-    KIND_TRADE_RECEIPT,
-    KIND_TRADE_PAYMENT_RECORDED,
-    KIND_TRADE_SETTLEMENT_DECISION,
+    KIND_ORDER_REQUEST,
+    KIND_ORDER_DECISION,
+    KIND_ORDER_REVISION_PROPOSAL,
+    KIND_ORDER_REVISION_DECISION,
+    KIND_ORDER_CANCELLATION,
+    KIND_ORDER_FULFILLMENT_UPDATE,
+    KIND_ORDER_RECEIPT,
+    KIND_ORDER_PAYMENT_RECORD,
+    KIND_ORDER_SETTLEMENT_DECISION,
+    KIND_TRADE_LISTING_VALIDATION_REQUEST,
+    KIND_TRADE_LISTING_VALIDATION_RESULT,
+    KIND_TRADE_TRANSITION_PROOF_REQUEST,
+    KIND_TRADE_TRANSITION_PROOF_RESULT,
+    KIND_TRADE_VALIDATION_RECEIPT,
 ];
-
-pub const TRADE_VALIDATION_RECEIPT_KINDS: [u32; 1] = [KIND_TRADE_VALIDATION_RECEIPT];
 
 pub const KIND_JOB_REQUEST_MIN: u32 = 5000;
 pub const KIND_JOB_REQUEST_MAX: u32 = 5999;
@@ -326,6 +275,11 @@ pub const PRODUCTION_SOCIAL_KINDS: [u32; 4] = [
 #[inline]
 pub const fn is_listing_kind(kind: u32) -> bool {
     matches!(kind, KIND_LISTING | KIND_LISTING_DRAFT)
+}
+
+#[inline]
+pub const fn is_listing_event_kind(kind: u32) -> bool {
+    is_listing_kind(kind)
 }
 
 #[inline]
@@ -480,76 +434,40 @@ pub const fn is_private_farm_ops_kind(kind: u32) -> bool {
 }
 
 #[inline]
-pub const fn is_trade_service_request_kind(kind: u32) -> bool {
+pub const fn is_trade_validation_service_request_kind(kind: u32) -> bool {
     matches!(
         kind,
-        KIND_TRADE_LISTING_VALIDATE_REQ | KIND_WORKER_TRADE_TRANSITION_PROOF_REQ
+        KIND_TRADE_LISTING_VALIDATION_REQUEST | KIND_TRADE_TRANSITION_PROOF_REQUEST
     )
 }
 
 #[inline]
-pub const fn is_trade_service_result_kind(kind: u32) -> bool {
+pub const fn is_trade_validation_service_result_kind(kind: u32) -> bool {
     matches!(
         kind,
-        KIND_TRADE_LISTING_VALIDATE_RES | KIND_WORKER_TRADE_TRANSITION_PROOF_RES
+        KIND_TRADE_LISTING_VALIDATION_RESULT | KIND_TRADE_TRANSITION_PROOF_RESULT
     )
 }
 
 #[inline]
-pub const fn is_trade_service_kind(kind: u32) -> bool {
-    is_trade_service_request_kind(kind) || is_trade_service_result_kind(kind)
+pub const fn is_trade_validation_service_event_kind(kind: u32) -> bool {
+    is_trade_validation_service_request_kind(kind) || is_trade_validation_service_result_kind(kind)
 }
 
 #[inline]
-pub const fn is_trade_public_kind(kind: u32) -> bool {
+pub const fn is_order_event_kind(kind: u32) -> bool {
     matches!(
         kind,
-        KIND_TRADE_ORDER_REQUEST
-            | KIND_TRADE_ORDER_RESPONSE
-            | KIND_TRADE_ORDER_REVISION
-            | KIND_TRADE_ORDER_REVISION_RESPONSE
-            | KIND_TRADE_QUESTION
-            | KIND_TRADE_ANSWER
-            | KIND_TRADE_DISCOUNT_REQUEST
-            | KIND_TRADE_DISCOUNT_OFFER
-            | KIND_TRADE_DISCOUNT_ACCEPT
-            | KIND_TRADE_CANCEL
-            | KIND_TRADE_FULFILLMENT_UPDATE
-            | KIND_TRADE_RECEIPT
-            | KIND_TRADE_PAYMENT_RECORDED
-            | KIND_TRADE_SETTLEMENT_DECISION
+        KIND_ORDER_REQUEST
+            | KIND_ORDER_DECISION
+            | KIND_ORDER_REVISION_PROPOSAL
+            | KIND_ORDER_REVISION_DECISION
+            | KIND_ORDER_CANCELLATION
+            | KIND_ORDER_FULFILLMENT_UPDATE
+            | KIND_ORDER_RECEIPT
+            | KIND_ORDER_PAYMENT_RECORD
+            | KIND_ORDER_SETTLEMENT_DECISION
     )
-}
-
-#[inline]
-pub const fn is_trade_kind(kind: u32) -> bool {
-    is_trade_service_kind(kind) || is_trade_public_kind(kind)
-}
-
-#[inline]
-pub const fn is_active_trade_listing_kind(kind: u32) -> bool {
-    matches!(kind, KIND_LISTING | KIND_LISTING_DRAFT)
-}
-
-#[inline]
-pub const fn is_active_trade_public_kind(kind: u32) -> bool {
-    matches!(
-        kind,
-        KIND_TRADE_ORDER_REQUEST
-            | KIND_TRADE_ORDER_DECISION
-            | KIND_TRADE_ORDER_REVISION
-            | KIND_TRADE_ORDER_REVISION_RESPONSE
-            | KIND_TRADE_CANCEL
-            | KIND_TRADE_FULFILLMENT_UPDATE
-            | KIND_TRADE_RECEIPT
-            | KIND_TRADE_PAYMENT_RECORDED
-            | KIND_TRADE_SETTLEMENT_DECISION
-    )
-}
-
-#[inline]
-pub const fn is_active_trade_kind(kind: u32) -> bool {
-    is_active_trade_listing_kind(kind) || is_active_trade_public_kind(kind)
 }
 
 #[inline]
@@ -558,76 +476,29 @@ pub const fn is_trade_validation_receipt_kind(kind: u32) -> bool {
 }
 
 #[inline]
-pub const fn is_trade_listing_request_kind(kind: u32) -> bool {
-    matches!(
-        kind,
-        KIND_TRADE_LISTING_VALIDATE_REQ
-            | KIND_TRADE_ORDER_REQUEST
-            | KIND_TRADE_ORDER_REVISION
-            | KIND_TRADE_QUESTION
-            | KIND_TRADE_DISCOUNT_REQUEST
-            | KIND_TRADE_DISCOUNT_ACCEPT
-            | KIND_TRADE_CANCEL
-            | KIND_TRADE_FULFILLMENT_UPDATE
-            | KIND_TRADE_RECEIPT
-    )
+pub const fn is_trade_validation_event_kind(kind: u32) -> bool {
+    is_trade_validation_service_event_kind(kind) || is_trade_validation_receipt_kind(kind)
 }
 
 #[inline]
-pub const fn is_trade_listing_result_kind(kind: u32) -> bool {
-    matches!(
-        kind,
-        KIND_TRADE_LISTING_VALIDATE_RES
-            | KIND_TRADE_ORDER_RESPONSE
-            | KIND_TRADE_ORDER_REVISION_RESPONSE
-            | KIND_TRADE_ANSWER
-            | KIND_TRADE_DISCOUNT_OFFER
-    )
+pub const fn is_commercial_event_kind(kind: u32) -> bool {
+    is_listing_event_kind(kind) || is_order_event_kind(kind) || is_trade_validation_event_kind(kind)
 }
 
 #[inline]
-pub const fn is_trade_listing_kind(kind: u32) -> bool {
-    is_trade_kind(kind)
-}
-
-#[inline]
-pub const fn trade_service_result_kind_for_request(kind: u32) -> Option<u32> {
+pub const fn trade_validation_service_result_kind_for_request(kind: u32) -> Option<u32> {
     match kind {
-        KIND_TRADE_LISTING_VALIDATE_REQ => Some(KIND_TRADE_LISTING_VALIDATE_RES),
-        KIND_WORKER_TRADE_TRANSITION_PROOF_REQ => Some(KIND_WORKER_TRADE_TRANSITION_PROOF_RES),
+        KIND_TRADE_LISTING_VALIDATION_REQUEST => Some(KIND_TRADE_LISTING_VALIDATION_RESULT),
+        KIND_TRADE_TRANSITION_PROOF_REQUEST => Some(KIND_TRADE_TRANSITION_PROOF_RESULT),
         _ => None,
     }
 }
 
 #[inline]
-pub const fn trade_service_request_kind_for_result(kind: u32) -> Option<u32> {
+pub const fn trade_validation_service_request_kind_for_result(kind: u32) -> Option<u32> {
     match kind {
-        KIND_TRADE_LISTING_VALIDATE_RES => Some(KIND_TRADE_LISTING_VALIDATE_REQ),
-        KIND_WORKER_TRADE_TRANSITION_PROOF_RES => Some(KIND_WORKER_TRADE_TRANSITION_PROOF_REQ),
-        _ => None,
-    }
-}
-
-#[inline]
-pub const fn trade_listing_result_kind_for_request(kind: u32) -> Option<u32> {
-    match kind {
-        KIND_TRADE_LISTING_VALIDATE_REQ => Some(KIND_TRADE_LISTING_VALIDATE_RES),
-        KIND_TRADE_ORDER_REQUEST => Some(KIND_TRADE_ORDER_RESPONSE),
-        KIND_TRADE_ORDER_REVISION => Some(KIND_TRADE_ORDER_REVISION_RESPONSE),
-        KIND_TRADE_QUESTION => Some(KIND_TRADE_ANSWER),
-        KIND_TRADE_DISCOUNT_REQUEST => Some(KIND_TRADE_DISCOUNT_OFFER),
-        _ => None,
-    }
-}
-
-#[inline]
-pub const fn trade_listing_request_kind_for_result(kind: u32) -> Option<u32> {
-    match kind {
-        KIND_TRADE_LISTING_VALIDATE_RES => Some(KIND_TRADE_LISTING_VALIDATE_REQ),
-        KIND_TRADE_ORDER_RESPONSE => Some(KIND_TRADE_ORDER_REQUEST),
-        KIND_TRADE_ORDER_REVISION_RESPONSE => Some(KIND_TRADE_ORDER_REVISION),
-        KIND_TRADE_ANSWER => Some(KIND_TRADE_QUESTION),
-        KIND_TRADE_DISCOUNT_OFFER => Some(KIND_TRADE_DISCOUNT_REQUEST),
+        KIND_TRADE_LISTING_VALIDATION_RESULT => Some(KIND_TRADE_LISTING_VALIDATION_REQUEST),
+        KIND_TRADE_TRANSITION_PROOF_RESULT => Some(KIND_TRADE_TRANSITION_PROOF_REQUEST),
         _ => None,
     }
 }
@@ -910,231 +781,134 @@ mod tests {
     }
 
     #[test]
-    fn classifies_trade_listing_kinds() {
-        assert!(is_listing_kind(KIND_LISTING));
-        assert!(is_listing_kind(KIND_LISTING_DRAFT));
-        assert!(!is_listing_kind(KIND_PROFILE));
-
-        assert!(is_trade_service_request_kind(
-            KIND_TRADE_LISTING_VALIDATE_REQ
-        ));
-        assert!(is_trade_service_request_kind(
-            KIND_WORKER_TRADE_TRANSITION_PROOF_REQ
-        ));
-        assert!(!is_trade_service_request_kind(
-            KIND_TRADE_LISTING_VALIDATE_RES
-        ));
-        assert!(is_trade_service_result_kind(
-            KIND_TRADE_LISTING_VALIDATE_RES
-        ));
-        assert!(is_trade_service_result_kind(
-            KIND_WORKER_TRADE_TRANSITION_PROOF_RES
-        ));
-        assert!(!is_trade_service_result_kind(
-            KIND_TRADE_LISTING_VALIDATE_REQ
-        ));
-        assert!(is_trade_service_kind(KIND_TRADE_LISTING_VALIDATE_REQ));
-        assert!(is_trade_service_kind(KIND_TRADE_LISTING_VALIDATE_RES));
-        assert!(is_trade_service_kind(
-            KIND_WORKER_TRADE_TRANSITION_PROOF_REQ
-        ));
-        assert!(is_trade_service_kind(
-            KIND_WORKER_TRADE_TRANSITION_PROOF_RES
-        ));
-        assert!(!is_trade_service_kind(KIND_TRADE_ORDER_REQUEST));
-        assert!(is_trade_public_kind(KIND_TRADE_ORDER_REQUEST));
-        assert!(is_trade_public_kind(KIND_TRADE_ORDER_RESPONSE));
-        assert!(is_trade_public_kind(KIND_TRADE_RECEIPT));
-        assert!(!is_trade_public_kind(KIND_TRADE_LISTING_VALIDATE_REQ));
-        assert!(is_trade_kind(KIND_TRADE_ORDER_REQUEST));
-        assert!(is_trade_kind(KIND_TRADE_LISTING_VALIDATE_REQ));
-        assert!(!is_trade_kind(KIND_LISTING));
-        assert!(is_trade_listing_request_kind(KIND_TRADE_LISTING_ORDER_REQ));
-        assert!(is_trade_listing_request_kind(
-            KIND_TRADE_LISTING_ORDER_REVISION_REQ
-        ));
-        assert!(is_trade_listing_request_kind(
-            KIND_TRADE_LISTING_QUESTION_REQ
-        ));
-        assert!(is_trade_listing_request_kind(
-            KIND_TRADE_LISTING_DISCOUNT_REQ
-        ));
-        assert!(is_trade_listing_request_kind(
-            KIND_TRADE_LISTING_DISCOUNT_ACCEPT_REQ
-        ));
-        assert!(is_trade_listing_request_kind(KIND_TRADE_LISTING_CANCEL_REQ));
-        assert!(is_trade_listing_request_kind(
-            KIND_TRADE_LISTING_FULFILLMENT_UPDATE_REQ
-        ));
-        assert!(is_trade_listing_request_kind(
-            KIND_TRADE_LISTING_RECEIPT_REQ
-        ));
-        assert!(!is_trade_listing_request_kind(KIND_TRADE_LISTING_ORDER_RES));
-        assert!(is_trade_listing_result_kind(KIND_TRADE_LISTING_ORDER_RES));
-        assert!(is_trade_listing_result_kind(
-            KIND_TRADE_LISTING_ORDER_REVISION_RES
-        ));
-        assert!(is_trade_listing_result_kind(KIND_TRADE_LISTING_ANSWER_RES));
-        assert!(is_trade_listing_result_kind(
-            KIND_TRADE_LISTING_DISCOUNT_OFFER_RES
-        ));
-        assert!(!is_trade_listing_result_kind(KIND_TRADE_LISTING_CANCEL_REQ));
-        assert!(is_trade_listing_kind(KIND_TRADE_LISTING_RECEIPT_REQ));
-        assert!(!is_trade_listing_kind(KIND_LISTING));
-        assert!(!is_trade_public_kind(KIND_TRADE_FORBIDDEN_3431));
-        assert!(!is_trade_kind(KIND_TRADE_FORBIDDEN_3431));
-        assert!(!is_trade_listing_request_kind(KIND_TRADE_FORBIDDEN_3431));
+    fn classifies_commercial_event_kinds() {
+        assert_eq!(LISTING_EVENT_KINDS, [KIND_LISTING, KIND_LISTING_DRAFT]);
         assert_eq!(
-            trade_service_result_kind_for_request(KIND_TRADE_LISTING_VALIDATE_REQ),
-            Some(KIND_TRADE_LISTING_VALIDATE_RES)
-        );
-        assert_eq!(
-            trade_service_result_kind_for_request(KIND_WORKER_TRADE_TRANSITION_PROOF_REQ),
-            Some(KIND_WORKER_TRADE_TRANSITION_PROOF_RES)
-        );
-        assert_eq!(
-            trade_service_result_kind_for_request(KIND_TRADE_ORDER_REQUEST),
-            None
-        );
-        assert_eq!(
-            trade_service_request_kind_for_result(KIND_TRADE_LISTING_VALIDATE_RES),
-            Some(KIND_TRADE_LISTING_VALIDATE_REQ)
-        );
-        assert_eq!(
-            trade_service_request_kind_for_result(KIND_WORKER_TRADE_TRANSITION_PROOF_RES),
-            Some(KIND_WORKER_TRADE_TRANSITION_PROOF_REQ)
-        );
-        assert_eq!(
-            trade_service_request_kind_for_result(KIND_TRADE_ORDER_RESPONSE),
-            None
-        );
-        assert_eq!(
-            trade_listing_result_kind_for_request(KIND_TRADE_LISTING_VALIDATE_REQ),
-            Some(KIND_TRADE_LISTING_VALIDATE_RES)
-        );
-        assert_eq!(
-            trade_listing_result_kind_for_request(KIND_TRADE_LISTING_ORDER_REQ),
-            Some(KIND_TRADE_LISTING_ORDER_RES)
-        );
-        assert_eq!(
-            trade_listing_result_kind_for_request(KIND_TRADE_LISTING_ORDER_REVISION_REQ),
-            Some(KIND_TRADE_LISTING_ORDER_REVISION_RES)
-        );
-        assert_eq!(
-            trade_listing_result_kind_for_request(KIND_TRADE_LISTING_QUESTION_REQ),
-            Some(KIND_TRADE_LISTING_ANSWER_RES)
-        );
-        assert_eq!(
-            trade_listing_result_kind_for_request(KIND_TRADE_LISTING_DISCOUNT_REQ),
-            Some(KIND_TRADE_LISTING_DISCOUNT_OFFER_RES)
-        );
-        assert_eq!(
-            trade_listing_result_kind_for_request(KIND_TRADE_LISTING_CANCEL_REQ),
-            None
-        );
-        assert_eq!(
-            trade_listing_request_kind_for_result(KIND_TRADE_LISTING_VALIDATE_RES),
-            Some(KIND_TRADE_LISTING_VALIDATE_REQ)
-        );
-        assert_eq!(
-            trade_listing_request_kind_for_result(KIND_TRADE_LISTING_ORDER_RES),
-            Some(KIND_TRADE_LISTING_ORDER_REQ)
-        );
-        assert_eq!(
-            trade_listing_request_kind_for_result(KIND_TRADE_LISTING_ORDER_REVISION_RES),
-            Some(KIND_TRADE_LISTING_ORDER_REVISION_REQ)
-        );
-        assert_eq!(
-            trade_listing_request_kind_for_result(KIND_TRADE_LISTING_ANSWER_RES),
-            Some(KIND_TRADE_LISTING_QUESTION_REQ)
-        );
-        assert_eq!(
-            trade_listing_request_kind_for_result(KIND_TRADE_LISTING_DISCOUNT_OFFER_RES),
-            Some(KIND_TRADE_LISTING_DISCOUNT_REQ)
-        );
-        assert_eq!(
-            trade_listing_request_kind_for_result(KIND_TRADE_LISTING_RECEIPT_REQ),
-            None
-        );
-    }
-
-    #[test]
-    fn active_trade_kind_set_contains_listing_order_revision_decision_fulfillment_cancellation_and_receipt()
-     {
-        assert_eq!(
-            ACTIVE_TRADE_LISTING_KINDS,
-            [KIND_LISTING, KIND_LISTING_DRAFT]
-        );
-        assert_eq!(
-            ACTIVE_TRADE_PUBLIC_KINDS,
+            ORDER_EVENT_KINDS,
             [
-                KIND_TRADE_ORDER_REQUEST,
-                KIND_TRADE_ORDER_DECISION,
-                KIND_TRADE_ORDER_REVISION,
-                KIND_TRADE_ORDER_REVISION_RESPONSE,
-                KIND_TRADE_CANCEL,
-                KIND_TRADE_FULFILLMENT_UPDATE,
-                KIND_TRADE_RECEIPT,
-                KIND_TRADE_PAYMENT_RECORDED,
-                KIND_TRADE_SETTLEMENT_DECISION,
+                KIND_ORDER_REQUEST,
+                KIND_ORDER_DECISION,
+                KIND_ORDER_REVISION_PROPOSAL,
+                KIND_ORDER_REVISION_DECISION,
+                KIND_ORDER_CANCELLATION,
+                KIND_ORDER_FULFILLMENT_UPDATE,
+                KIND_ORDER_RECEIPT,
+                KIND_ORDER_PAYMENT_RECORD,
+                KIND_ORDER_SETTLEMENT_DECISION,
             ]
         );
         assert_eq!(
-            ACTIVE_TRADE_KINDS,
+            TRADE_VALIDATION_SERVICE_EVENT_KINDS,
             [
-                KIND_LISTING,
-                KIND_LISTING_DRAFT,
-                KIND_TRADE_ORDER_REQUEST,
-                KIND_TRADE_ORDER_DECISION,
-                KIND_TRADE_ORDER_REVISION,
-                KIND_TRADE_ORDER_REVISION_RESPONSE,
-                KIND_TRADE_CANCEL,
-                KIND_TRADE_FULFILLMENT_UPDATE,
-                KIND_TRADE_RECEIPT,
-                KIND_TRADE_PAYMENT_RECORDED,
-                KIND_TRADE_SETTLEMENT_DECISION,
+                KIND_TRADE_LISTING_VALIDATION_REQUEST,
+                KIND_TRADE_LISTING_VALIDATION_RESULT,
+                KIND_TRADE_TRANSITION_PROOF_REQUEST,
+                KIND_TRADE_TRANSITION_PROOF_RESULT,
             ]
         );
-
-        assert!(is_active_trade_kind(KIND_LISTING));
-        assert!(is_active_trade_kind(KIND_LISTING_DRAFT));
-        assert!(is_active_trade_public_kind(KIND_TRADE_ORDER_REQUEST));
-        assert!(is_active_trade_public_kind(KIND_TRADE_ORDER_DECISION));
-        assert!(is_active_trade_public_kind(KIND_TRADE_ORDER_REVISION));
-        assert!(is_active_trade_public_kind(
-            KIND_TRADE_ORDER_REVISION_RESPONSE
-        ));
-        assert!(is_active_trade_public_kind(KIND_TRADE_CANCEL));
-        assert!(is_active_trade_public_kind(KIND_TRADE_FULFILLMENT_UPDATE));
-        assert!(is_active_trade_public_kind(KIND_TRADE_RECEIPT));
-        assert!(is_active_trade_public_kind(KIND_TRADE_PAYMENT_RECORDED));
-        assert!(is_active_trade_public_kind(KIND_TRADE_SETTLEMENT_DECISION));
-        assert!(!is_active_trade_public_kind(
-            KIND_TRADE_LISTING_VALIDATE_REQ
-        ));
-        assert!(!is_active_trade_public_kind(KIND_TRADE_QUESTION));
-        assert!(!is_active_trade_public_kind(KIND_TRADE_ANSWER));
-        assert!(!is_active_trade_public_kind(KIND_TRADE_DISCOUNT_REQUEST));
-        assert!(!is_active_trade_public_kind(KIND_TRADE_DISCOUNT_OFFER));
-        assert!(!is_active_trade_public_kind(KIND_TRADE_DISCOUNT_ACCEPT));
-        assert!(!is_active_trade_public_kind(KIND_TRADE_FORBIDDEN_3431));
-    }
-
-    #[test]
-    fn validation_receipt_kind_is_registered_outside_buyer_receipt_lifecycle() {
-        assert_eq!(KIND_TRADE_RECEIPT, 3434);
-        assert_eq!(KIND_TRADE_VALIDATION_RECEIPT, 3440);
-        assert_ne!(KIND_TRADE_VALIDATION_RECEIPT, KIND_TRADE_RECEIPT);
         assert_eq!(
-            TRADE_VALIDATION_RECEIPT_KINDS,
-            [KIND_TRADE_VALIDATION_RECEIPT]
+            TRADE_VALIDATION_EVENT_KINDS,
+            [
+                KIND_TRADE_LISTING_VALIDATION_REQUEST,
+                KIND_TRADE_LISTING_VALIDATION_RESULT,
+                KIND_TRADE_TRANSITION_PROOF_REQUEST,
+                KIND_TRADE_TRANSITION_PROOF_RESULT,
+                KIND_TRADE_VALIDATION_RECEIPT,
+            ]
         );
+        assert_eq!(COMMERCIAL_EVENT_KINDS.len(), 16);
+
+        assert!(is_listing_event_kind(KIND_LISTING));
+        assert!(is_listing_event_kind(KIND_LISTING_DRAFT));
+        assert!(!is_listing_event_kind(KIND_PROFILE));
+
+        assert!(is_order_event_kind(KIND_ORDER_REQUEST));
+        assert!(is_order_event_kind(KIND_ORDER_DECISION));
+        assert!(is_order_event_kind(KIND_ORDER_REVISION_PROPOSAL));
+        assert!(is_order_event_kind(KIND_ORDER_REVISION_DECISION));
+        assert!(is_order_event_kind(KIND_ORDER_CANCELLATION));
+        assert!(is_order_event_kind(KIND_ORDER_FULFILLMENT_UPDATE));
+        assert!(is_order_event_kind(KIND_ORDER_RECEIPT));
+        assert!(is_order_event_kind(KIND_ORDER_PAYMENT_RECORD));
+        assert!(is_order_event_kind(KIND_ORDER_SETTLEMENT_DECISION));
+        assert!(!is_order_event_kind(KIND_TRADE_LISTING_VALIDATION_REQUEST));
+        assert!(!is_order_event_kind(KIND_TRADE_VALIDATION_RECEIPT));
+        assert!(!is_order_event_kind(3431));
+
+        assert!(is_trade_validation_service_request_kind(
+            KIND_TRADE_LISTING_VALIDATION_REQUEST
+        ));
+        assert!(is_trade_validation_service_request_kind(
+            KIND_TRADE_TRANSITION_PROOF_REQUEST
+        ));
+        assert!(!is_trade_validation_service_request_kind(
+            KIND_TRADE_LISTING_VALIDATION_RESULT
+        ));
+        assert!(is_trade_validation_service_result_kind(
+            KIND_TRADE_LISTING_VALIDATION_RESULT
+        ));
+        assert!(is_trade_validation_service_result_kind(
+            KIND_TRADE_TRANSITION_PROOF_RESULT
+        ));
+        assert!(!is_trade_validation_service_result_kind(
+            KIND_TRADE_LISTING_VALIDATION_REQUEST
+        ));
+        assert!(is_trade_validation_service_event_kind(
+            KIND_TRADE_LISTING_VALIDATION_REQUEST
+        ));
+        assert!(is_trade_validation_service_event_kind(
+            KIND_TRADE_LISTING_VALIDATION_RESULT
+        ));
+        assert!(is_trade_validation_service_event_kind(
+            KIND_TRADE_TRANSITION_PROOF_REQUEST
+        ));
+        assert!(is_trade_validation_service_event_kind(
+            KIND_TRADE_TRANSITION_PROOF_RESULT
+        ));
+        assert!(!is_trade_validation_service_event_kind(KIND_ORDER_REQUEST));
         assert!(is_trade_validation_receipt_kind(
             KIND_TRADE_VALIDATION_RECEIPT
         ));
-        assert!(!is_trade_validation_receipt_kind(KIND_TRADE_RECEIPT));
-        assert!(!is_trade_public_kind(KIND_TRADE_VALIDATION_RECEIPT));
-        assert!(!is_active_trade_public_kind(KIND_TRADE_VALIDATION_RECEIPT));
-        assert!(!is_active_trade_kind(KIND_TRADE_VALIDATION_RECEIPT));
+        assert!(!is_trade_validation_receipt_kind(KIND_ORDER_RECEIPT));
+        assert!(is_trade_validation_event_kind(
+            KIND_TRADE_VALIDATION_RECEIPT
+        ));
+        assert!(is_trade_validation_event_kind(
+            KIND_TRADE_TRANSITION_PROOF_RESULT
+        ));
+        assert!(!is_trade_validation_event_kind(KIND_ORDER_RECEIPT));
+
+        assert!(is_commercial_event_kind(KIND_LISTING));
+        assert!(is_commercial_event_kind(KIND_ORDER_REQUEST));
+        assert!(is_commercial_event_kind(
+            KIND_TRADE_LISTING_VALIDATION_REQUEST
+        ));
+        assert!(is_commercial_event_kind(KIND_TRADE_VALIDATION_RECEIPT));
+        assert!(!is_commercial_event_kind(KIND_PROFILE));
+
+        assert_eq!(
+            trade_validation_service_result_kind_for_request(KIND_TRADE_LISTING_VALIDATION_REQUEST),
+            Some(KIND_TRADE_LISTING_VALIDATION_RESULT)
+        );
+        assert_eq!(
+            trade_validation_service_result_kind_for_request(KIND_TRADE_TRANSITION_PROOF_REQUEST),
+            Some(KIND_TRADE_TRANSITION_PROOF_RESULT)
+        );
+        assert_eq!(
+            trade_validation_service_result_kind_for_request(KIND_ORDER_REQUEST),
+            None
+        );
+        assert_eq!(
+            trade_validation_service_request_kind_for_result(KIND_TRADE_LISTING_VALIDATION_RESULT),
+            Some(KIND_TRADE_LISTING_VALIDATION_REQUEST)
+        );
+        assert_eq!(
+            trade_validation_service_request_kind_for_result(KIND_TRADE_TRANSITION_PROOF_RESULT),
+            Some(KIND_TRADE_TRANSITION_PROOF_REQUEST)
+        );
+        assert_eq!(
+            trade_validation_service_request_kind_for_result(KIND_ORDER_DECISION),
+            None
+        );
     }
 }
