@@ -311,6 +311,77 @@ async fn fetch_ingests_events_and_records_relay_observations() {
 }
 
 #[tokio::test]
+async fn fetch_event_cap_preserves_later_control_outcomes() {
+    let first = signed_post("first capped event");
+    let skipped = signed_post("skipped capped event");
+    let store = RadrootsEventStore::open_memory().await.expect("store");
+    let adapter = RadrootsMockRelayFetchAdapter::new(vec![
+        RadrootsRelayFetchItem::Event {
+            relay_url: RELAY_PRIMARY_WSS.to_owned(),
+            raw_json: first.raw_json.clone(),
+            observed_at_ms: 1_100,
+        },
+        RadrootsRelayFetchItem::Event {
+            relay_url: RELAY_PRIMARY_WSS.to_owned(),
+            raw_json: skipped.raw_json,
+            observed_at_ms: 1_101,
+        },
+        RadrootsRelayFetchItem::Event {
+            relay_url: RELAY_SECONDARY_WSS.to_owned(),
+            raw_json: "{not json".to_owned(),
+            observed_at_ms: 1_102,
+        },
+        RadrootsRelayFetchItem::Event {
+            relay_url: RELAY_SECONDARY_WSS.to_owned(),
+            raw_json: unsupported_raw_event(),
+            observed_at_ms: 1_103,
+        },
+        RadrootsRelayFetchItem::Eose {
+            relay_url: RELAY_PRIMARY_WSS.to_owned(),
+        },
+        RadrootsRelayFetchItem::Closed {
+            relay_url: RELAY_SECONDARY_WSS.to_owned(),
+            message: "auth-required: challenge".to_owned(),
+        },
+        RadrootsRelayFetchItem::Notice {
+            relay_url: RELAY_TERTIARY_WSS.to_owned(),
+            message: "notice: still visible".to_owned(),
+        },
+    ]);
+
+    let receipt =
+        fetch_and_ingest_relay_events(&adapter, &store, RadrootsRelayFetchRequest::fetch(1_100, 1))
+            .await
+            .expect("fetch ingest");
+
+    assert_eq!(receipt.inserted_count, 1);
+    assert_eq!(receipt.duplicate_count, 0);
+    assert_eq!(receipt.unsupported_count, 0);
+    assert_eq!(receipt.malformed_count, 0);
+    assert_eq!(receipt.events.len(), 1);
+    assert_eq!(receipt.eose_count, 1);
+    assert_eq!(receipt.closed_count, 1);
+    assert_eq!(receipt.notice_count, 1);
+    assert_eq!(receipt.relay_outcomes.len(), 3);
+    assert_eq!(
+        receipt.relay_outcomes[0].kind,
+        RadrootsRelayFetchOutcomeKind::Eose
+    );
+    assert_eq!(
+        receipt.relay_outcomes[1]
+            .relay_outcome
+            .as_ref()
+            .expect("closed outcome")
+            .kind,
+        RadrootsRelayOutcomeKind::AuthRequired
+    );
+    assert_eq!(
+        receipt.relay_outcomes[2].kind,
+        RadrootsRelayFetchOutcomeKind::Notice
+    );
+}
+
+#[tokio::test]
 async fn outbox_publish_persists_partial_success_and_skips_accepted_retry() {
     let signed = signed_post("hello");
     let outbox = RadrootsOutbox::open_memory().await.expect("outbox");

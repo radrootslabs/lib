@@ -141,7 +141,7 @@ where
                 observed_at_ms,
             } => {
                 if processed_events >= max_events {
-                    break;
+                    continue;
                 }
                 processed_events += 1;
                 let parsed = RadrootsNostrEvent::from_json(raw_json.as_str());
