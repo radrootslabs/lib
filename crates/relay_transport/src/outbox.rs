@@ -78,7 +78,6 @@ where
         )
         .await?;
     let publishable = publishable_relays(outbox, claimed, policy.republish_accepted_relays).await?;
-    let targets = RadrootsRelayTargetSet::new(publishable.relays, policy.relay_url_policy)?;
     let overall_quorum = policy
         .accepted_quorum
         .unwrap_or(publishable.total_target_count);
@@ -90,6 +89,33 @@ where
             now_ms,
         )
         .await?;
+    if publishable.accepted_count >= overall_quorum {
+        outbox
+            .complete_publish_attempt(
+                claimed.outbox_event_id,
+                claimed.claim_token.as_str(),
+                "relay publish incomplete",
+                "relay publish terminal",
+                policy.next_attempt_after_ms,
+                now_ms,
+            )
+            .await?;
+        let publish = RadrootsRelayPublishReceipt {
+            event_id: signed_event.id,
+            attempted_count: 0,
+            accepted_count: publishable.accepted_count,
+            retryable_count: 0,
+            terminal_count: 0,
+            quorum: overall_quorum,
+            quorum_met: true,
+            relays: Vec::new(),
+        };
+        return Ok(RadrootsOutboxPublishReceipt {
+            local_ingest,
+            publish,
+        });
+    }
+    let targets = RadrootsRelayTargetSet::new(publishable.relays, policy.relay_url_policy)?;
     let quorum = overall_quorum.saturating_sub(publishable.accepted_count);
     let request = RadrootsRelayPublishRequest::new(signed_event.clone(), targets, now_ms)
         .with_accepted_quorum(quorum);

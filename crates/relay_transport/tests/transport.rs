@@ -459,6 +459,200 @@ async fn outbox_publish_persists_partial_success_and_skips_accepted_retry() {
 }
 
 #[tokio::test]
+async fn outbox_publish_marks_published_without_adapter_when_all_relays_already_accepted() {
+    let signed = signed_post("already accepted");
+    let outbox = RadrootsOutbox::open_memory().await.expect("outbox");
+    let store = RadrootsEventStore::open_memory().await.expect("store");
+    let draft = RadrootsFrozenEventDraft::new(
+        "radroots.social.post.v1",
+        KIND_POST,
+        signed.created_at,
+        signed.tags.clone(),
+        signed.content.clone(),
+        signed.pubkey.as_str(),
+    )
+    .expect("draft");
+    let receipt = outbox
+        .enqueue_operation(RadrootsOutboxOperationInput::new(
+            "publish_post",
+            draft,
+            vec![RELAY_PRIMARY_WSS.to_owned(), RELAY_SECONDARY_WSS.to_owned()],
+            1_000,
+        ))
+        .await
+        .expect("enqueue");
+    let claimed = outbox
+        .claim_next_ready_event("signer", "sign-a", 2_000, 1_000)
+        .await
+        .expect("claim")
+        .expect("claim");
+    let signed = outbox
+        .sign_claimed_event(&claimed, &fixture_keys(), 1_100)
+        .await
+        .expect("sign");
+    outbox.recover_expired_claims(2_001).await.expect("recover");
+    let publish_claim = outbox
+        .claim_next_ready_event("publisher", "publish-a", 3_000, 2_100)
+        .await
+        .expect("claim")
+        .expect("publish claim");
+    outbox
+        .mark_relay_accepted(
+            publish_claim.outbox_event_id,
+            publish_claim.claim_token.as_str(),
+            RELAY_PRIMARY_WSS,
+            2_150,
+        )
+        .await
+        .expect("primary accepted");
+    outbox
+        .mark_relay_accepted(
+            publish_claim.outbox_event_id,
+            publish_claim.claim_token.as_str(),
+            RELAY_SECONDARY_WSS,
+            2_151,
+        )
+        .await
+        .expect("secondary accepted");
+
+    let adapter = RadrootsMockRelayPublishAdapter::new();
+    let published = publish_claimed_outbox_event(
+        &outbox,
+        &store,
+        &adapter,
+        &publish_claim,
+        RadrootsOutboxPublishPolicy::new(2_500),
+        2_200,
+    )
+    .await
+    .expect("publish");
+
+    assert_eq!(published.local_ingest.event_id, signed.id);
+    assert_eq!(published.publish.event_id, signed.id);
+    assert_eq!(published.publish.attempted_count, 0);
+    assert_eq!(published.publish.accepted_count, 2);
+    assert_eq!(published.publish.quorum, 2);
+    assert!(published.publish.quorum_met);
+    assert!(published.publish.relays.is_empty());
+    assert!(adapter.captured_raw_events().is_empty());
+
+    let event = outbox
+        .get_event(receipt.outbox_event_id)
+        .await
+        .expect("event")
+        .expect("event");
+    assert_eq!(event.state, RadrootsOutboxEventState::Published);
+    assert_eq!(event.accepted_quorum, 2);
+    assert!(event.claim_token.is_none());
+    let operation = outbox
+        .get_operation(receipt.operation_id)
+        .await
+        .expect("operation")
+        .expect("operation");
+    assert_eq!(operation.status, RadrootsOutboxOperationStatus::Complete);
+}
+
+#[tokio::test]
+async fn outbox_publish_uses_persisted_accepted_count_for_explicit_quorum() {
+    let signed = signed_post("explicit quorum already accepted");
+    let outbox = RadrootsOutbox::open_memory().await.expect("outbox");
+    let store = RadrootsEventStore::open_memory().await.expect("store");
+    let draft = RadrootsFrozenEventDraft::new(
+        "radroots.social.post.v1",
+        KIND_POST,
+        signed.created_at,
+        signed.tags.clone(),
+        signed.content.clone(),
+        signed.pubkey.as_str(),
+    )
+    .expect("draft");
+    let receipt = outbox
+        .enqueue_operation(RadrootsOutboxOperationInput::new(
+            "publish_post",
+            draft,
+            vec![
+                RELAY_PRIMARY_WSS.to_owned(),
+                RELAY_SECONDARY_WSS.to_owned(),
+                RELAY_TERTIARY_WSS.to_owned(),
+            ],
+            1_000,
+        ))
+        .await
+        .expect("enqueue");
+    let claimed = outbox
+        .claim_next_ready_event("signer", "sign-a", 2_000, 1_000)
+        .await
+        .expect("claim")
+        .expect("claim");
+    outbox
+        .sign_claimed_event(&claimed, &fixture_keys(), 1_100)
+        .await
+        .expect("sign");
+    outbox.recover_expired_claims(2_001).await.expect("recover");
+    let publish_claim = outbox
+        .claim_next_ready_event("publisher", "publish-a", 3_000, 2_100)
+        .await
+        .expect("claim")
+        .expect("publish claim");
+    outbox
+        .mark_relay_accepted(
+            publish_claim.outbox_event_id,
+            publish_claim.claim_token.as_str(),
+            RELAY_PRIMARY_WSS,
+            2_150,
+        )
+        .await
+        .expect("primary accepted");
+    outbox
+        .mark_relay_accepted(
+            publish_claim.outbox_event_id,
+            publish_claim.claim_token.as_str(),
+            RELAY_SECONDARY_WSS,
+            2_151,
+        )
+        .await
+        .expect("secondary accepted");
+
+    let adapter = RadrootsMockRelayPublishAdapter::new();
+    let published = publish_claimed_outbox_event(
+        &outbox,
+        &store,
+        &adapter,
+        &publish_claim,
+        RadrootsOutboxPublishPolicy::new(2_500).with_accepted_quorum(2),
+        2_200,
+    )
+    .await
+    .expect("publish");
+
+    assert_eq!(published.publish.attempted_count, 0);
+    assert_eq!(published.publish.accepted_count, 2);
+    assert_eq!(published.publish.quorum, 2);
+    assert!(published.publish.quorum_met);
+    assert!(adapter.captured_raw_events().is_empty());
+
+    let event = outbox
+        .get_event(receipt.outbox_event_id)
+        .await
+        .expect("event")
+        .expect("event");
+    assert_eq!(event.state, RadrootsOutboxEventState::Published);
+    assert_eq!(event.accepted_quorum, 2);
+    let statuses = outbox
+        .relay_statuses(receipt.outbox_event_id)
+        .await
+        .expect("statuses");
+    assert_eq!(
+        statuses
+            .iter()
+            .find(|status| status.relay_url == RELAY_TERTIARY_WSS)
+            .expect("tertiary")
+            .status,
+        RadrootsOutboxRelayStatus::Pending
+    );
+}
+
+#[tokio::test]
 async fn outbox_publish_marks_published_when_policy_quorum_is_met_with_failure_diagnostics() {
     let signed = signed_post("quorum");
     let outbox = RadrootsOutbox::open_memory().await.expect("outbox");
