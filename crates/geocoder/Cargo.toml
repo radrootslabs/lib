@@ -12,12 +12,10 @@ homepage.workspace = true
 readme = "README"
 
 [dependencies]
-rusqlite = { workspace = true, features = ["bundled", "serialize"] }
+rusqlite = { workspace = true, features = ["bundled"] }
 serde = { workspace = true, features = ["derive"] }
-thiserror = { workspace = true }
-
-[dev-dependencies]
 tempfile = { workspace = true }
+thiserror = { workspace = true }
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage_nightly)'] }

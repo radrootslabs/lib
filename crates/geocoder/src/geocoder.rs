@@ -2,25 +2,36 @@ use crate::error::GeocoderError;
 use crate::model::{
     GeocoderCountryListResult, GeocoderPoint, GeocoderReverseOptions, GeocoderReverseResult,
 };
-use rusqlite::{Connection, MAIN_DB, named_params};
+use rusqlite::{Connection, named_params};
+use std::io::Write;
 use std::path::Path;
 
 pub struct Geocoder {
     conn: Connection,
+    _temp_path: Option<tempfile::TempPath>,
 }
 
 impl Geocoder {
     #[cfg_attr(coverage_nightly, coverage(off))]
     pub fn open_path<P: AsRef<Path>>(path: P) -> Result<Self, GeocoderError> {
         let conn = Connection::open(path)?;
-        Ok(Self { conn })
+        Ok(Self {
+            conn,
+            _temp_path: None,
+        })
     }
 
     #[cfg_attr(coverage_nightly, coverage(off))]
     pub fn open_bytes(bytes: &[u8]) -> Result<Self, GeocoderError> {
-        let mut conn = Connection::open_in_memory()?;
-        conn.deserialize_read_exact(MAIN_DB, bytes, bytes.len(), true)?;
-        Ok(Self { conn })
+        let mut temp = tempfile::NamedTempFile::new()?;
+        temp.as_file_mut().write_all(bytes)?;
+        let temp_path = temp.into_temp_path();
+        let path: &Path = temp_path.as_ref();
+        let conn = Connection::open(path)?;
+        Ok(Self {
+            conn,
+            _temp_path: Some(temp_path),
+        })
     }
 
     pub fn reverse(
@@ -590,7 +601,10 @@ mod tests {
             "#,
         )
         .expect("create reverse/country execution error schema");
-        Geocoder { conn }
+        Geocoder {
+            conn,
+            _temp_path: None,
+        }
     }
 
     fn geocoder_with_country_list_query_execution_error() -> Geocoder {
@@ -607,7 +621,10 @@ mod tests {
             "#,
         )
         .expect("create country_list execution error schema");
-        Geocoder { conn }
+        Geocoder {
+            conn,
+            _temp_path: None,
+        }
     }
 
     fn geocoder_with_country_center_query_execution_error() -> Geocoder {
@@ -623,7 +640,10 @@ mod tests {
             "#,
         )
         .expect("create country_center execution error schema");
-        Geocoder { conn }
+        Geocoder {
+            conn,
+            _temp_path: None,
+        }
     }
 
     fn geocoder_with_country_list_sql_row(
@@ -647,7 +667,10 @@ mod tests {
             "#,
         ))
         .expect("create country_list field error schema");
-        Geocoder { conn }
+        Geocoder {
+            conn,
+            _temp_path: None,
+        }
     }
 
     fn map_country_center_row_error(latitude_sql: &str, longitude_sql: &str) -> rusqlite::Error {

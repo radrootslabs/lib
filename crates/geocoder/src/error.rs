@@ -4,6 +4,8 @@ use thiserror::Error;
 pub enum GeocoderError {
     #[error("sqlite error: {0}")]
     Sqlite(#[from] rusqlite::Error),
+    #[error("io error: {0}")]
+    Io(#[from] std::io::Error),
     #[error("country center not found for {country_id}")]
     CountryCenterNotFound { country_id: String },
 }

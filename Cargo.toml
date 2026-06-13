@@ -2,6 +2,7 @@
 members = [
   "crates/core",
   "crates/events",
+  "crates/event_store",
   "crates/events_codec",
   "crates/events_codec_wasm",
   "crates/events_indexed",
@@ -60,6 +61,7 @@ readme = "README"
 [workspace.dependencies]
 radroots_core = { path = "crates/core", version = "0.1.0-alpha.2", default-features = false }
 radroots_events = { path = "crates/events", version = "0.1.0-alpha.2", default-features = false }
+radroots_event_store = { path = "crates/event_store", version = "0.1.0-alpha.2", default-features = false }
 radroots_events_codec = { path = "crates/events_codec", version = "0.1.0-alpha.2", default-features = false }
 radroots_events_indexed = { path = "crates/events_indexed", version = "0.1.0-alpha.2", default-features = false }
 radroots_geocoder = { path = "crates/geocoder", version = "0.1.0-alpha.2" }
@@ -138,6 +140,7 @@ serde = { version = "1", default-features = false, features = [
 serde_json = { version = "1", default-features = false, features = ["alloc"] }
 serde-wasm-bindgen = { version = "0.6" }
 sha2 = { version = "0.10", default-features = false }
+sqlx = { version = "0.8.6", default-features = false }
 sp1-build = { version = "6.2.3" }
 sp1-sdk = { version = "6.2.3", default-features = false }
 sp1-zkvm = { version = "6.2.3" }
@@ -172,4 +175,4 @@ uniffi_build = { version = "=0.29.4" }
 wasm-bindgen = { version = "0.2" }
 wasm-bindgen-futures = { version = "0.4" }
 wasm-bindgen-test = { version = "0.3" }
-rusqlite = { version = "0.39", default-features = false }
+rusqlite = { version = "0.32.1", default-features = false }

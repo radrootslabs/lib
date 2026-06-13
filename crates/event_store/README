@@ -1,0 +1,3 @@
+# radroots_event_store
+
+SQLx-backed canonical raw Nostr event storage for Rad Roots protocol events.

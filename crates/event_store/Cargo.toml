@@ -1,0 +1,30 @@
+[package]
+name = "radroots_event_store"
+publish = false
+version = "0.1.0-alpha.2"
+edition.workspace = true
+authors = ["Tyson Lupul <tyson@radroots.org>"]
+rust-version.workspace = true
+license.workspace = true
+description = "Canonical event store for Radroots"
+repository.workspace = true
+homepage.workspace = true
+readme = "README"
+
+[features]
+default = ["sqlite", "runtime-tokio"]
+sqlite = ["dep:sqlx", "sqlx/sqlite"]
+runtime-tokio = ["sqlx/runtime-tokio"]
+
+[dependencies]
+radroots_events = { workspace = true, default-features = false, features = [
+  "std",
+  "serde",
+] }
+serde = { workspace = true, features = ["std"] }
+serde_json = { workspace = true, features = ["std"] }
+sqlx = { workspace = true, optional = true, features = ["derive"] }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }
