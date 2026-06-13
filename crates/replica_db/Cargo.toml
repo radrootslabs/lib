@@ -17,15 +17,8 @@ crate-type = ["rlib"]
 [features]
 default = ["std"]
 std = ["radroots_sql_core/std"]
-web = [
-  "std",
-  "radroots_sql_core/web",
-]
-native = [
-  "std",
-  "radroots_sql_core/native",
-]
-coverage-minimal = []
+web = ["std", "radroots_sql_core/web"]
+native = ["std", "radroots_sql_core/native"]
 
 [dependencies]
 radroots_sql_core = { workspace = true }

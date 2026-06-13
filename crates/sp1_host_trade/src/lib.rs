@@ -429,21 +429,30 @@ pub struct RadrootsSp1TradeExecuteBundle {
     pub report: RadrootsSp1TradeExecuteReport,
 }
 
-#[cfg(feature = "sp1_verify")]
+#[cfg(all(feature = "sp1_verify", radroots_sp1_guest_elf))]
 pub fn order_acceptance_guest_elf() -> sp1_sdk::Elf {
     sp1_sdk::include_elf!("radroots_sp1_trade_order_acceptance_guest")
 }
 
-#[cfg(feature = "sp1_verify")]
+#[cfg(all(feature = "sp1_verify", radroots_sp1_guest_elf))]
 pub fn sp1_program_hash_for_order_acceptance_guest() -> String {
     sp1_program_hash_for_elf(&order_acceptance_guest_elf())
 }
 
-#[cfg(feature = "sp1_proving")]
+#[cfg(all(feature = "sp1_proving", radroots_sp1_guest_elf))]
 pub async fn execute_order_acceptance_sp1_public_values(
     witness: &RadrootsSp1TradeOrderAcceptanceWitness,
 ) -> Result<RadrootsSp1TradeExecuteBundle, RadrootsSp1TradeHostError> {
     execute_order_acceptance_sp1_public_values_with_elf(order_acceptance_guest_elf(), witness).await
+}
+
+#[cfg(all(feature = "sp1_proving", not(radroots_sp1_guest_elf)))]
+pub async fn execute_order_acceptance_sp1_public_values(
+    _witness: &RadrootsSp1TradeOrderAcceptanceWitness,
+) -> Result<RadrootsSp1TradeExecuteBundle, RadrootsSp1TradeHostError> {
+    Err(RadrootsSp1TradeHostError::Sp1SetupFailed(
+        "SP1 guest ELF build is not enabled".to_owned(),
+    ))
 }
 
 #[cfg(feature = "sp1_proving")]
@@ -494,7 +503,7 @@ pub async fn execute_order_acceptance_sp1_public_values_with_elf(
     })
 }
 
-#[cfg(feature = "sp1_proving")]
+#[cfg(all(feature = "sp1_proving", radroots_sp1_guest_elf))]
 pub async fn generate_order_acceptance_sp1_proof(
     witness: &RadrootsSp1TradeOrderAcceptanceWitness,
     mode: RadrootsSp1TradeProofMode,
@@ -503,7 +512,17 @@ pub async fn generate_order_acceptance_sp1_proof(
         .await
 }
 
-#[cfg(feature = "sp1_proving")]
+#[cfg(all(feature = "sp1_proving", not(radroots_sp1_guest_elf)))]
+pub async fn generate_order_acceptance_sp1_proof(
+    _witness: &RadrootsSp1TradeOrderAcceptanceWitness,
+    _mode: RadrootsSp1TradeProofMode,
+) -> Result<RadrootsSp1TradeProofBundle, RadrootsSp1TradeHostError> {
+    Err(RadrootsSp1TradeHostError::Sp1SetupFailed(
+        "SP1 guest ELF build is not enabled".to_owned(),
+    ))
+}
+
+#[cfg(all(feature = "sp1_proving", radroots_sp1_guest_elf))]
 pub async fn generate_order_acceptance_sp1_proof_with_engine(
     witness: &RadrootsSp1TradeOrderAcceptanceWitness,
     mode: RadrootsSp1TradeProofMode,
@@ -520,7 +539,18 @@ pub async fn generate_order_acceptance_sp1_proof_with_engine(
     }
 }
 
-#[cfg(all(feature = "sp1_proving", feature = "sp1_cuda"))]
+#[cfg(all(feature = "sp1_proving", not(radroots_sp1_guest_elf)))]
+pub async fn generate_order_acceptance_sp1_proof_with_engine(
+    _witness: &RadrootsSp1TradeOrderAcceptanceWitness,
+    _mode: RadrootsSp1TradeProofMode,
+    _engine: RadrootsSp1TradeProofEngine,
+) -> Result<RadrootsSp1TradeProofBundle, RadrootsSp1TradeHostError> {
+    Err(RadrootsSp1TradeHostError::Sp1SetupFailed(
+        "SP1 guest ELF build is not enabled".to_owned(),
+    ))
+}
+
+#[cfg(all(feature = "sp1_proving", feature = "sp1_cuda", radroots_sp1_guest_elf))]
 async fn generate_order_acceptance_sp1_cuda_proof(
     witness: &RadrootsSp1TradeOrderAcceptanceWitness,
     mode: RadrootsSp1TradeProofMode,
@@ -533,7 +563,7 @@ async fn generate_order_acceptance_sp1_cuda_proof(
     generate_order_acceptance_sp1_proof_with_client(&client, witness, mode).await
 }
 
-#[cfg(all(feature = "sp1_proving", feature = "sp1_cuda"))]
+#[cfg(all(feature = "sp1_proving", feature = "sp1_cuda", radroots_sp1_guest_elf))]
 fn cuda_panic_to_host_error(payload: Box<dyn std::any::Any + Send>) -> RadrootsSp1TradeHostError {
     let message = payload
         .downcast_ref::<&str>()
@@ -543,7 +573,11 @@ fn cuda_panic_to_host_error(payload: Box<dyn std::any::Any + Send>) -> RadrootsS
     RadrootsSp1TradeHostError::Sp1CudaProofEngineUnavailable(message)
 }
 
-#[cfg(all(feature = "sp1_proving", not(feature = "sp1_cuda")))]
+#[cfg(all(
+    feature = "sp1_proving",
+    not(feature = "sp1_cuda"),
+    radroots_sp1_guest_elf
+))]
 async fn generate_order_acceptance_sp1_cuda_proof(
     _witness: &RadrootsSp1TradeOrderAcceptanceWitness,
     _mode: RadrootsSp1TradeProofMode,
@@ -553,7 +587,7 @@ async fn generate_order_acceptance_sp1_cuda_proof(
     ))
 }
 
-#[cfg(feature = "sp1_proving")]
+#[cfg(all(feature = "sp1_proving", radroots_sp1_guest_elf))]
 async fn generate_order_acceptance_sp1_proof_with_client<P>(
     client: &P,
     witness: &RadrootsSp1TradeOrderAcceptanceWitness,
@@ -1131,7 +1165,7 @@ pub fn referenced_order_acceptance_proof_artifact_for_execution(
     Ok(artifact)
 }
 
-#[cfg(feature = "sp1_proving")]
+#[cfg(all(feature = "sp1_proving", radroots_sp1_guest_elf))]
 fn proof_artifact_for_real_sp1_execution(
     execution: &RadrootsSp1TradePublicValuesExecution,
     mode: RadrootsSp1TradeProofMode,
@@ -1200,7 +1234,7 @@ fn proof_digest_for_execution(
     Ok(format!("0x{}", hex_lower(hasher.finalize().as_slice())))
 }
 
-#[cfg(feature = "sp1_proving")]
+#[cfg(all(feature = "sp1_proving", radroots_sp1_guest_elf))]
 fn proof_envelope_for_real_sp1_execution(
     execution: &RadrootsSp1TradePublicValuesExecution,
     system: RadrootsValidationReceiptProofSystem,
@@ -1573,7 +1607,7 @@ fn execution_from_sp1_public_values(
     ))
 }
 
-#[cfg(feature = "sp1_proving")]
+#[cfg(all(feature = "sp1_proving", radroots_sp1_guest_elf))]
 fn sp1_proof_mode(
     mode: RadrootsSp1TradeProofMode,
 ) -> Result<sp1_sdk::SP1ProofMode, RadrootsSp1TradeHostError> {
@@ -1710,7 +1744,7 @@ mod tests {
         validation_receipt_for_order_acceptance_proof,
         verify_order_acceptance_proof_artifact_structure,
     };
-    #[cfg(feature = "sp1_proving")]
+    #[cfg(all(feature = "sp1_proving", radroots_sp1_guest_elf))]
     use base64::Engine;
     use radroots_events::{RadrootsNostrEvent, kinds::KIND_TRADE_VALIDATION_RECEIPT};
     use radroots_sp1_guest_trade::{
@@ -1723,6 +1757,7 @@ mod tests {
         RadrootsSp1TradeOrderAcceptanceWitness, RadrootsSp1TradeOrderDecisionEventWitness,
         RadrootsSp1TradeOrderDecisionWitness, RadrootsSp1TradeOrderItemWitness,
         RadrootsSp1TradeOrderRequestWitness, RadrootsSp1TradeProofResult,
+        RadrootsSp1TradePublicValuesExecution,
     };
     use radroots_trade::validation_receipt::{
         RadrootsValidationReceiptExpectedBinding, RadrootsValidationReceiptProof,
@@ -1763,7 +1798,7 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "sp1_proving")]
+    #[cfg(all(feature = "sp1_proving", radroots_sp1_guest_elf))]
     fn witness_without_sp1_identity() -> RadrootsSp1TradeOrderAcceptanceWitness {
         let mut input = witness();
         input.sp1_program_hash = None;
@@ -2222,8 +2257,10 @@ mod tests {
     }
 
     #[cfg(feature = "sp1_verify")]
-    #[tokio::test]
-    async fn remote_returned_proof_artifact_verifies() {
+    fn verified_remote_returned_proof_fixture() -> (
+        RadrootsSp1TradePublicValuesExecution,
+        super::RadrootsSp1TradeProofArtifact,
+    ) {
         let fixture = remote_returned_proof_fixture();
         assert_eq!(fixture.schema_version, 1);
         assert_eq!(
@@ -2281,6 +2318,19 @@ mod tests {
         let artifact = response.proof_artifact.expect("proof artifact");
         verify_order_acceptance_proof_artifact_structure(&execution, &artifact)
             .expect("artifact structure");
+        (execution, artifact)
+    }
+
+    #[cfg(feature = "sp1_verify")]
+    #[test]
+    fn remote_returned_proof_artifact_fixture_is_structurally_valid() {
+        verified_remote_returned_proof_fixture();
+    }
+
+    #[cfg(all(feature = "sp1_verify", radroots_sp1_real_proof_tests))]
+    #[tokio::test]
+    async fn remote_returned_proof_artifact_real_sp1_verifies() {
+        let (execution, artifact) = verified_remote_returned_proof_fixture();
         super::verify_order_acceptance_resolved_sp1_proof_artifact(
             &execution,
             &super::RadrootsSp1TradeResolvedProofArtifact::inline(artifact.clone()),
@@ -2381,7 +2431,7 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "sp1_proving")]
+    #[cfg(all(feature = "sp1_proving", radroots_sp1_guest_elf))]
     #[tokio::test]
     async fn sp1_execute_public_values_match_deterministic_reducer() {
         let input = witness_without_sp1_identity();
@@ -2407,7 +2457,7 @@ mod tests {
         assert!(execution.report.total_instruction_count > 0);
     }
 
-    #[cfg(feature = "sp1_proving")]
+    #[cfg(all(feature = "sp1_proving", radroots_sp1_guest_elf))]
     #[tokio::test]
     async fn expensive_proof_generation_and_verification_is_runnable() {
         let bundle = super::generate_order_acceptance_sp1_proof(
@@ -2448,7 +2498,7 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "sp1_proving")]
+    #[cfg(all(feature = "sp1_proving", radroots_sp1_guest_elf))]
     #[tokio::test]
     async fn real_sp1_verifier_rejects_missing_and_synthetic_material() {
         let execution =

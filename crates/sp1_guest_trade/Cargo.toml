@@ -14,6 +14,7 @@ homepage.workspace = true
 name = "radroots_sp1_trade_order_acceptance_guest"
 path = "src/bin/order_acceptance_guest.rs"
 required-features = ["sp1_guest"]
+test = false
 
 [features]
 default = []

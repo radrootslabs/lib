@@ -16,16 +16,8 @@ crate-type = ["rlib"]
 
 [features]
 default = ["std"]
-std = [
-  "dep:chrono",
-  "dep:uuid",
-  "serde/std",
-  "serde_json/std",
-]
-web = [
-  "std",
-  "uuid/js",
-]
+std = ["dep:chrono", "dep:uuid", "serde/std", "serde_json/std"]
+web = ["std", "uuid/js"]
 bridge = [
   "std",
   "web",
@@ -33,10 +25,7 @@ bridge = [
   "dep:serde-wasm-bindgen",
   "dep:wasm-bindgen",
 ]
-native = [
-  "std",
-  "dep:rusqlite",
-]
+native = ["std", "dep:rusqlite"]
 embedded = []
 
 [dependencies]

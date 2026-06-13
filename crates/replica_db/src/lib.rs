@@ -1,5 +1,3 @@
-#![cfg_attr(feature = "coverage-minimal", allow(unused_imports))]
-
 pub use radroots_sql_core::error::SqlError;
 pub use radroots_sql_core::{ExecOutcome, SqlExecutor};
 use radroots_types::types::IError;
@@ -110,25 +108,16 @@ use radroots_replica_db_schema::trade_product_media::{
     ITradeProductMediaRelation, ITradeProductMediaResolve,
 };
 
-#[cfg(not(feature = "coverage-minimal"))]
 pub mod backup;
-#[cfg(not(feature = "coverage-minimal"))]
 pub mod export;
-#[cfg(not(feature = "coverage-minimal"))]
 pub mod migrations;
-#[cfg(not(feature = "coverage-minimal"))]
 pub mod models;
-#[cfg(not(feature = "coverage-minimal"))]
 pub mod query;
-#[cfg(not(feature = "coverage-minimal"))]
 pub use backup::{DatabaseBackup, MigrationBackup, SchemaEntry};
-#[cfg(not(feature = "coverage-minimal"))]
 pub use export::{
     REPLICA_DB_EXPORT_VERSION, ReplicaDbExportManifestRs, TableCount, export_manifest,
 };
-#[cfg(not(feature = "coverage-minimal"))]
 pub use models::*;
-#[cfg(not(feature = "coverage-minimal"))]
 pub use query::ReplicaTradeProductSummaryRow;
 
 pub struct ReplicaSql<E: SqlExecutor> {
@@ -141,7 +130,6 @@ impl<E: SqlExecutor> ReplicaSql<E> {
     }
 }
 
-#[cfg(not(feature = "coverage-minimal"))]
 impl<E: SqlExecutor> ReplicaSql<E> {
     pub fn new(executor: E) -> Self {
         Self { executor }
@@ -722,17 +710,6 @@ impl<E: SqlExecutor> ReplicaSql<E> {
         opts: &ITradeProductMediaRelation,
     ) -> Result<ITradeProductMediaResolve, IError<SqlError>> {
         models::trade_product_media::unset(self.executor(), opts)
-    }
-}
-
-#[cfg(feature = "coverage-minimal")]
-impl<E: SqlExecutor> ReplicaSql<E> {
-    pub fn new(executor: E) -> Self {
-        Self { executor }
-    }
-
-    pub fn executor(&self) -> &E {
-        &self.executor
     }
 }
 
