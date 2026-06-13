@@ -17,6 +17,7 @@ members = [
   "crates/nostr_signer",
   "crates/nostr_ndb",
   "crates/nostr_runtime",
+  "crates/outbox",
   "crates/runtime",
   "crates/secret_vault",
   "crates/simplex_agent_proto",
@@ -80,6 +81,7 @@ radroots_sdk = { path = "crates/sdk", version = "0.1.0-alpha.2", default-feature
 radroots_log = { path = "crates/log", version = "0.1.0-alpha.2", default-features = false }
 radroots_net = { path = "crates/net", version = "0.1.0-alpha.2", default-features = false }
 radroots_nostr_runtime = { path = "crates/nostr_runtime", version = "0.1.0-alpha.2", default-features = false }
+radroots_outbox = { path = "crates/outbox", version = "0.1.0-alpha.2", default-features = false }
 radroots_simplex_agent_proto = { path = "crates/simplex_agent_proto", version = "0.1.0-alpha.2", default-features = false }
 radroots_simplex_agent_runtime = { path = "crates/simplex_agent_runtime", version = "0.1.0-alpha.2", default-features = false }
 radroots_simplex_agent_store = { path = "crates/simplex_agent_store", version = "0.1.0-alpha.2", default-features = false }

@@ -1,0 +1,3 @@
+# radroots_outbox
+
+SQLx-backed deterministic Nostr publish outbox substrate for Rad Roots event workflows.
