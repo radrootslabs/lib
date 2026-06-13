@@ -24,6 +24,7 @@ pub mod geochat;
 pub mod gift_wrap;
 pub mod group;
 pub mod http_auth;
+pub mod ids;
 pub mod job;
 pub mod job_feedback;
 pub mod job_request;
