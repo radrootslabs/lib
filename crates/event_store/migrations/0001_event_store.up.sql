@@ -1,5 +1,6 @@
 CREATE TABLE nostr_event (
-  event_id TEXT PRIMARY KEY NOT NULL,
+  seq INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_id TEXT NOT NULL UNIQUE,
   pubkey TEXT NOT NULL,
   created_at INTEGER NOT NULL,
   kind INTEGER NOT NULL,
@@ -17,8 +18,10 @@ CREATE TABLE nostr_event (
 );
 
 CREATE INDEX nostr_event_kind_created_idx ON nostr_event(kind, created_at, event_id);
-CREATE INDEX nostr_event_contract_idx ON nostr_event(contract_id, created_at, event_id);
-CREATE INDEX nostr_event_projection_idx ON nostr_event(projection_eligible, created_at, event_id);
+CREATE INDEX nostr_event_contract_idx ON nostr_event(contract_id, seq);
+CREATE INDEX nostr_event_projection_idx ON nostr_event(projection_eligible, seq);
+CREATE INDEX nostr_event_verification_contract_idx
+ON nostr_event(verification_status, contract_status, seq);
 
 CREATE TABLE nostr_event_tag (
   event_id TEXT NOT NULL REFERENCES nostr_event(event_id) ON DELETE CASCADE,
@@ -74,7 +77,7 @@ CREATE INDEX nostr_event_head_event_idx ON nostr_event_head(event_id);
 
 CREATE TABLE projection_cursor (
   projection_id TEXT PRIMARY KEY NOT NULL,
-  last_event_id TEXT,
-  last_created_at INTEGER NOT NULL,
+  projection_version INTEGER NOT NULL DEFAULT 1,
+  last_event_seq INTEGER NOT NULL DEFAULT 0,
   updated_at_ms INTEGER NOT NULL
 );

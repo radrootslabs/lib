@@ -221,6 +221,7 @@ impl RadrootsEventHeadStoreDecision {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsEventIngestReceipt {
+    pub seq: i64,
     pub event_id: String,
     pub inserted: bool,
     pub verification_status: RadrootsEventVerificationStatus,
@@ -232,6 +233,7 @@ pub struct RadrootsEventIngestReceipt {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsStoredEvent {
+    pub seq: i64,
     pub event_id: String,
     pub pubkey: String,
     pub created_at: u32,
@@ -275,8 +277,8 @@ pub struct RadrootsStoredEventHead {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsProjectionCursor {
     pub projection_id: String,
-    pub last_event_id: Option<String>,
-    pub last_created_at: u32,
+    pub projection_version: u32,
+    pub last_event_seq: i64,
     pub updated_at_ms: i64,
 }
 
