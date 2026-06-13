@@ -1,5 +1,6 @@
 {
-    "name": "@radroots/replica-sync-wasm",
+    "name": "@radroots/radroots_replica-sync-wasm",
+    "description": "WebAssembly bindings for radroots_replica_sync",
     "version": "0.1.0",
     "private": true,
     "type": "module",

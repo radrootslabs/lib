@@ -1,5 +1,6 @@
 {
-    "name": "@radroots/events-codec-wasm",
+    "name": "@radroots/radroots_events-codec-wasm",
+    "description": "WebAssembly bindings for radroots_events_codec",
     "version": "0.1.0",
     "private": true,
     "type": "module",

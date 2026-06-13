@@ -1,5 +1,6 @@
 {
-    "name": "@radroots/replica-db-wasm",
+    "name": "@radroots/radroots_replica-db-wasm",
+    "description": "WebAssembly bindings for radroots_replica_db",
     "version": "0.1.0",
     "private": true,
     "type": "module",
