@@ -34,6 +34,8 @@ pub mod nip11;
 pub mod event_adapters;
 
 #[cfg(feature = "events")]
+pub mod draft_signing;
+#[cfg(feature = "events")]
 pub mod event_convert;
 
 #[cfg(all(feature = "client", feature = "codec"))]
@@ -122,6 +124,9 @@ pub mod prelude {
 
     #[cfg(feature = "events")]
     pub use crate::event_adapters::{to_post_event_metadata, to_profile_event_metadata};
+
+    #[cfg(feature = "events")]
+    pub use crate::draft_signing::radroots_nostr_sign_frozen_draft;
 
     #[cfg(feature = "events")]
     pub use crate::event_convert::{radroots_event_from_nostr, radroots_event_ptr_from_nostr};
