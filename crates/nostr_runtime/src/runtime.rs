@@ -1,5 +1,5 @@
 use crate::error::RadrootsNostrRuntimeError;
-use crate::store::RadrootsNostrEventStore;
+use crate::sink::RadrootsNostrEventSink;
 use crate::types::{
     RadrootsNostrConnectionSnapshot, RadrootsNostrRuntimeEvent, RadrootsNostrSubscriptionHandle,
     RadrootsNostrSubscriptionPolicy, RadrootsNostrSubscriptionSpec, RadrootsNostrTrafficLight,
@@ -25,7 +25,7 @@ pub struct RadrootsNostrRuntimeBuilder {
     relays: Vec<String>,
     queue_capacity: usize,
     monitor_capacity: usize,
-    event_store: Option<Arc<dyn RadrootsNostrEventStore>>,
+    event_sink: Option<Arc<dyn RadrootsNostrEventSink>>,
 }
 
 impl RadrootsNostrRuntimeBuilder {
@@ -38,7 +38,7 @@ impl RadrootsNostrRuntimeBuilder {
             relays: Vec::new(),
             queue_capacity: Self::DEFAULT_QUEUE_CAPACITY,
             monitor_capacity: Self::DEFAULT_MONITOR_CAPACITY,
-            event_store: None,
+            event_sink: None,
         }
     }
 
@@ -67,8 +67,8 @@ impl RadrootsNostrRuntimeBuilder {
         self
     }
 
-    pub fn event_store(mut self, store: Arc<dyn RadrootsNostrEventStore>) -> Self {
-        self.event_store = Some(store);
+    pub fn event_sink(mut self, sink: Arc<dyn RadrootsNostrEventSink>) -> Self {
+        self.event_sink = Some(sink);
         self
     }
 
@@ -102,7 +102,7 @@ impl RadrootsNostrRuntimeBuilder {
             started: AtomicBool::new(false),
             shutting_down: AtomicBool::new(false),
             next_subscription_id: AtomicU64::new(1),
-            event_store: self.event_store,
+            event_sink: self.event_sink,
         });
 
         Ok(RadrootsNostrRuntime { inner })
@@ -132,7 +132,7 @@ struct RadrootsNostrRuntimeInner {
     started: AtomicBool,
     shutting_down: AtomicBool,
     next_subscription_id: AtomicU64,
-    event_store: Option<Arc<dyn RadrootsNostrEventStore>>,
+    event_sink: Option<Arc<dyn RadrootsNostrEventSink>>,
 }
 
 impl RadrootsNostrRuntime {
@@ -413,8 +413,8 @@ fn spawn_subscription_worker(
                 let kind = event.kind.as_u16();
                 since_unix = Some(event.created_at.as_secs().saturating_add(1));
 
-                if let Some(store) = inner.event_store.as_ref() {
-                    if let Err(message) = store.ingest_event(&event) {
+                if let Some(sink) = inner.event_sink.as_ref() {
+                    if let Err(message) = sink.ingest_event(&event) {
                         if let Ok(mut guard) = inner.last_error.lock() {
                             *guard = Some(message.clone());
                         }
@@ -458,7 +458,7 @@ fn spawn_subscription_worker(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store::RadrootsNostrInMemoryEventStore;
+    use crate::sink::RadrootsNostrInMemoryEventSink;
     use alloc::sync::Arc;
     use radroots_nostr::prelude::RadrootsNostrFilter;
 
@@ -519,12 +519,12 @@ mod tests {
     }
 
     #[test]
-    fn build_accepts_event_store() {
-        let store = Arc::new(RadrootsNostrInMemoryEventStore::new());
+    fn build_accepts_event_sink() {
+        let sink = Arc::new(RadrootsNostrInMemoryEventSink::new());
         let result = RadrootsNostrRuntimeBuilder::new()
             .keys(RadrootsNostrKeys::generate())
             .add_relay("wss://relay.example.com")
-            .event_store(store)
+            .event_sink(sink)
             .build();
         assert!(result.is_ok());
     }

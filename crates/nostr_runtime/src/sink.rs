@@ -3,16 +3,16 @@ use alloc::vec::Vec;
 use radroots_nostr::prelude::RadrootsNostrEvent;
 use std::sync::Mutex;
 
-pub trait RadrootsNostrEventStore: Send + Sync {
+pub trait RadrootsNostrEventSink: Send + Sync {
     fn ingest_event(&self, event: &RadrootsNostrEvent) -> Result<(), String>;
 }
 
 #[derive(Default)]
-pub struct RadrootsNostrInMemoryEventStore {
+pub struct RadrootsNostrInMemoryEventSink {
     events: Mutex<Vec<RadrootsNostrEvent>>,
 }
 
-impl RadrootsNostrInMemoryEventStore {
+impl RadrootsNostrInMemoryEventSink {
     pub fn new() -> Self {
         Self::default()
     }
@@ -33,11 +33,11 @@ impl RadrootsNostrInMemoryEventStore {
     }
 }
 
-impl RadrootsNostrEventStore for RadrootsNostrInMemoryEventStore {
+impl RadrootsNostrEventSink for RadrootsNostrInMemoryEventSink {
     fn ingest_event(&self, event: &RadrootsNostrEvent) -> Result<(), String> {
         self.events
             .lock()
-            .map_err(|_| "in-memory store lock poisoned".to_string())
+            .map_err(|_| "in-memory sink lock poisoned".to_string())
             .map(|mut guard| {
                 guard.push(event.clone());
             })
@@ -50,17 +50,15 @@ mod tests {
     use radroots_nostr::prelude::{RadrootsNostrEventBuilder, RadrootsNostrKeys};
 
     #[test]
-    fn in_memory_store_tracks_events() {
-        let store = RadrootsNostrInMemoryEventStore::new();
+    fn in_memory_sink_tracks_events() {
+        let sink = RadrootsNostrInMemoryEventSink::new();
         let keys = RadrootsNostrKeys::generate();
         let event = RadrootsNostrEventBuilder::text_note("hello")
             .sign_with_keys(&keys)
             .expect("event should sign");
 
-        store
-            .ingest_event(&event)
-            .expect("event should be accepted");
-        assert_eq!(store.len(), 1);
-        assert!(!store.is_empty());
+        sink.ingest_event(&event).expect("event should be accepted");
+        assert_eq!(sink.len(), 1);
+        assert!(!sink.is_empty());
     }
 }

@@ -7,7 +7,7 @@ primitives for the `radroots` core libraries.
 
  * configuration, filter, ingest, query, and subscription types for
    nostrdb-backed workflows;
- * runtime-adapter hooks that let higher layers drive a nostrdb event store;
+ * runtime-adapter hooks that let higher layers drive nostrdb as an event sink;
  * feature-gated support for the `nostrdb` crate, runtime glue, and gift-wrap
    handling;
  * a `std`-based integration crate with optional async runtime support.

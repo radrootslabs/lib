@@ -40,7 +40,7 @@ pub mod prelude {
         RadrootsNostrNdbNote, RadrootsNostrNdbProfile, RadrootsNostrNdbQuerySpec,
     };
     #[cfg(all(feature = "ndb", feature = "runtime-adapter"))]
-    pub use crate::runtime_adapter::RadrootsNostrNdbEventStoreAdapter;
+    pub use crate::runtime_adapter::RadrootsNostrNdbEventSinkAdapter;
     #[cfg(all(feature = "ndb", feature = "rt"))]
     pub use crate::subscription::RadrootsNostrNdbSubscriptionStream;
     #[cfg(feature = "ndb")]

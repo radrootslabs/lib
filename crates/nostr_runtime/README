@@ -8,7 +8,7 @@ coordination for the `radroots` core libraries.
  * runtime builder, runtime events, and long-lived connection state types;
  * subscription specifications, policies, handles, and traffic-light status
    models;
- * store abstractions and snapshot types used by higher-level network
+ * sink abstractions and snapshot types used by higher-level network
    orchestration;
  * feature-gated integration with client, runtime, and nostrdb adapter crates.
 
