@@ -716,7 +716,7 @@ fn bool_i64(value: bool) -> i64 {
 mod tests {
     use super::*;
     use radroots_events::event_head::event_head_candidate_for_event;
-    use radroots_events::kinds::{KIND_POST, KIND_PROFILE};
+    use radroots_events::kinds::{KIND_LISTING, KIND_ORDER_REQUEST, KIND_POST, KIND_PROFILE};
     use radroots_nostr::prelude::{
         RadrootsNostrKeys, RadrootsNostrSecretKey, RadrootsNostrTimestamp,
         radroots_event_from_nostr, radroots_nostr_build_event,
@@ -731,6 +731,10 @@ mod tests {
         let secret_key =
             RadrootsNostrSecretKey::from_hex(FIXTURE_ALICE_SECRET_KEY_HEX).expect("secret key");
         RadrootsNostrKeys::new(secret_key)
+    }
+
+    fn event_id(character: char) -> String {
+        core::iter::repeat_n(character, 64).collect()
     }
 
     fn signed_event(
@@ -965,6 +969,57 @@ mod tests {
         assert!(tags[0].relay_indexed);
         assert_eq!(tags[1].tag_index, 1);
         assert_eq!(tags[1].tag_json, "[\"t\",\"harvest\"]");
+    }
+
+    #[tokio::test]
+    async fn listing_event_tag_persists_event_pointer_contract_metadata() {
+        let store = RadrootsEventStore::open_memory().await.expect("open");
+        let listing_event_id = event_id('f');
+        let event = signed_event(
+            KIND_ORDER_REQUEST,
+            16,
+            vec![
+                vec!["d".to_owned(), "order-1".to_owned()],
+                vec!["p".to_owned(), FIXTURE_ALICE_PUBLIC_KEY_HEX.to_owned()],
+                vec![
+                    "a".to_owned(),
+                    format!(
+                        "{KIND_LISTING}:{}:AAAAAAAAAAAAAAAAAAAAAg",
+                        FIXTURE_ALICE_PUBLIC_KEY_HEX
+                    ),
+                ],
+                vec![
+                    "listing_event".to_owned(),
+                    listing_event_id.clone(),
+                    "wss://relay.example.com".to_owned(),
+                ],
+            ],
+            "{}",
+        );
+
+        store
+            .ingest_event(RadrootsEventIngest::new(event.clone(), 3_100))
+            .await
+            .expect("ingest");
+        let tags = store.tags_for_event(event.id.as_str()).await.expect("tags");
+        let listing_tag = tags
+            .iter()
+            .find(|tag| tag.tag_name == "listing_event")
+            .expect("listing event tag");
+
+        assert_eq!(
+            listing_tag.tag_value.as_deref(),
+            Some(listing_event_id.as_str())
+        );
+        assert_eq!(
+            listing_tag.contract_semantic.as_deref(),
+            Some("listing_snapshot")
+        );
+        assert_eq!(
+            listing_tag.contract_value_type.as_deref(),
+            Some("event_pointer")
+        );
+        assert!(!listing_tag.relay_indexed);
     }
 
     #[tokio::test]

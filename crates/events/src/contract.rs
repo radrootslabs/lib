@@ -130,6 +130,7 @@ pub enum RadrootsTagValueType {
     AddressableCoordinate,
     DTag,
     EventId,
+    EventPointer,
     Kind,
     PublicKey,
     RelayUrl,
@@ -351,7 +352,7 @@ const TAG_LISTING_EVENT: RadrootsTagContract = tag(
     "listing_event",
     RadrootsTagCardinality::RequiredOne,
     RadrootsTagSemantic::ListingSnapshot,
-    RadrootsTagValueType::EventId,
+    RadrootsTagValueType::EventPointer,
     false,
 );
 const TAG_SERVICE_INPUT: RadrootsTagContract = tag(
@@ -2674,6 +2675,20 @@ mod tests {
                 assert_eq!(event.kind, kind.kind, "{}", id);
             }
         }
+    }
+
+    #[test]
+    fn order_request_listing_event_contract_is_event_pointer() {
+        let contract = event_contract("radroots.order.request.v1").expect("order request");
+        let tag = contract
+            .tags
+            .iter()
+            .find(|tag| tag.name == "listing_event")
+            .expect("listing event tag");
+
+        assert_eq!(tag.semantic, RadrootsTagSemantic::ListingSnapshot);
+        assert_eq!(tag.value_type, RadrootsTagValueType::EventPointer);
+        assert!(!tag.relay_indexed);
     }
 
     #[test]

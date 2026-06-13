@@ -842,9 +842,13 @@ mod tests {
         }
     }
 
+    fn event_id(character: char) -> String {
+        core::iter::repeat_n(character, 64).collect()
+    }
+
     fn listing_event_ptr() -> RadrootsNostrEventPtr {
         RadrootsNostrEventPtr {
-            id: "listing-snapshot".into(),
+            id: event_id('a'),
             relays: Some("wss://relay.example.com".into()),
         }
     }

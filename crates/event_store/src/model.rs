@@ -321,6 +321,7 @@ pub fn tag_value_type_name(value: RadrootsTagValueType) -> &'static str {
         RadrootsTagValueType::AddressableCoordinate => "addressable_coordinate",
         RadrootsTagValueType::DTag => "d_tag",
         RadrootsTagValueType::EventId => "event_id",
+        RadrootsTagValueType::EventPointer => "event_pointer",
         RadrootsTagValueType::Kind => "kind",
         RadrootsTagValueType::PublicKey => "public_key",
         RadrootsTagValueType::RelayUrl => "relay_url",
