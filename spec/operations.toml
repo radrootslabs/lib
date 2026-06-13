@@ -9,7 +9,8 @@ domains = ["profile", "farm", "listing", "order", "trade_validation", "social"]
 [shared_types]
 public = [
   "WireEventParts",
-  "UnsignedEventDraft",
+  "RadrootsFrozenEventDraft",
+  "RadrootsSignedNostrEvent",
   "RadrootsNostrEvent",
   "RadrootsNostrEventRef",
   "RadrootsNostrEventPtr",

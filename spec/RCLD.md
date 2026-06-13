@@ -122,7 +122,8 @@ Public cross-operation types required for operation inputs and outputs.
 Examples:
 
 - `WireEventParts`
-- `UnsignedEventDraft`
+- `RadrootsFrozenEventDraft`
+- `RadrootsSignedNostrEvent`
 - `RadrootsNostrEvent`
 - `RadrootsNostrEventRef`
 - `RadrootsOrderListingAddress`
@@ -172,7 +173,7 @@ Input:
 Output:
 
 - `WireEventParts`
-- optional `UnsignedEventDraft` helper via shared draft adapter
+- optional `RadrootsFrozenEventDraft` helper via shared draft adapter
 
 Determinism:
 
@@ -250,7 +251,7 @@ Input:
 Output:
 
 - `WireEventParts`
-- optionally adapted to `UnsignedEventDraft`
+- optionally adapted to `RadrootsFrozenEventDraft`
 
 Determinism:
 
@@ -375,7 +376,8 @@ The public contract should explicitly enumerate a minimal shared type set.
 Recommended Tier 1 shared types:
 
 - `WireEventParts`
-- `UnsignedEventDraft`
+- `RadrootsFrozenEventDraft`
+- `RadrootsSignedNostrEvent`
 - `RadrootsNostrEvent`
 - `RadrootsNostrEventRef`
 - `RadrootsNostrEventPtr`
@@ -386,7 +388,7 @@ Recommended Tier 1 shared types:
 - `RadrootsListing`
 - trade payload and envelope types required by approved trade operations
 
-`UnsignedEventDraft` should be a public contract alias or wrapper over the current `EventDraft` concept in `crates/events_codec/src/wire.rs`. The public naming should emphasize unsigned event construction rather than internal adapter mechanics.
+`RadrootsFrozenEventDraft` should be a public frozen draft contract type in `crates/events/src/draft.rs`, with `crates/events_codec/src/wire.rs` adapting codec output into the shared type. The public naming should emphasize frozen event construction rather than internal adapter mechanics.
 
 ## Shared Errors
 
@@ -502,7 +504,8 @@ domains = ["profile", "farm", "listing", "trade"]
 [shared_types]
 public = [
   "WireEventParts",
-  "UnsignedEventDraft",
+  "RadrootsFrozenEventDraft",
+  "RadrootsSignedNostrEvent",
   "RadrootsNostrEvent",
   "RadrootsNostrEventRef",
   "RadrootsNostrEventPtr",
@@ -612,7 +615,8 @@ networking = "native"
 
 [shared_types]
 "WireEventParts" = "WireEventParts"
-"UnsignedEventDraft" = "UnsignedEventDraft"
+"RadrootsFrozenEventDraft" = "RadrootsFrozenEventDraft"
+"RadrootsSignedNostrEvent" = "RadrootsSignedNostrEvent"
 "RadrootsNostrEvent" = "RadrootsNostrEvent"
 "RadrootsOrderListingAddress" = "OrderListingAddress"
 
@@ -732,7 +736,7 @@ Recommended shape:
 This facade should:
 
 - define public operation names
-- define any public wrapper naming such as `UnsignedEventDraft`
+- define any public draft naming such as `RadrootsFrozenEventDraft`
 - centralize contract documentation and source references
 - make it easier for generators and future language bindings to target one approved surface
 

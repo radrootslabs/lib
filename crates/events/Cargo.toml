@@ -18,10 +18,12 @@ serde = ["dep:serde", "radroots_core/serde"]
 
 [dependencies]
 radroots_core = { workspace = true, default-features = false }
+hex = { version = "0.4", default-features = false, features = ["alloc"] }
 serde = { workspace = true, default-features = false, features = [
   "alloc",
   "derive",
 ], optional = true }
+serde_json = { workspace = true, default-features = false, features = ["alloc"] }
+sha2 = { workspace = true, default-features = false }
 
 [dev-dependencies]
-serde_json = { workspace = true }

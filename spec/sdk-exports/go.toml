@@ -34,7 +34,8 @@ order = 3
 
 [shared_types]
 "WireEventParts" = "WireEventParts"
-"UnsignedEventDraft" = "UnsignedEventDraft"
+"RadrootsFrozenEventDraft" = "RadrootsFrozenEventDraft"
+"RadrootsSignedNostrEvent" = "RadrootsSignedNostrEvent"
 "RadrootsNostrEvent" = "RadrootsNostrEvent"
 "RadrootsNostrEventRef" = "RadrootsNostrEventRef"
 "RadrootsNostrEventPtr" = "RadrootsNostrEventPtr"

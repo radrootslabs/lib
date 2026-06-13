@@ -5,6 +5,8 @@ use alloc::{string::String, vec::Vec};
 
 use crate::kinds::*;
 
+pub const RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION: u32 = 1;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsEventClass {
     Regular,

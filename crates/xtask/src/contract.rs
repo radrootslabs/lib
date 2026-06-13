@@ -4197,7 +4197,8 @@ order = 1
 
 [shared_types]
 "WireEventParts" = "WireEventParts"
-"UnsignedEventDraft" = "UnsignedEventDraft"
+"RadrootsFrozenEventDraft" = "RadrootsFrozenEventDraft"
+"RadrootsSignedNostrEvent" = "RadrootsSignedNostrEvent"
 "RadrootsNostrEvent" = "RadrootsNostrEvent"
 "RadrootsListing" = "RadrootsListing"
 
@@ -4260,7 +4261,8 @@ domains = ["profile", "farm", "listing", "trade"]
 [shared_types]
 public = [
   "WireEventParts",
-  "UnsignedEventDraft",
+  "RadrootsFrozenEventDraft",
+  "RadrootsSignedNostrEvent",
   "RadrootsNostrEvent",
   "RadrootsNostrEventRef",
   "RadrootsNostrEventPtr",
@@ -4338,7 +4340,8 @@ order = 1
 
 [shared_types]
 "WireEventParts" = "WireEventParts"
-"UnsignedEventDraft" = "UnsignedEventDraft"
+"RadrootsFrozenEventDraft" = "RadrootsFrozenEventDraft"
+"RadrootsSignedNostrEvent" = "RadrootsSignedNostrEvent"
 "RadrootsNostrEvent" = "RadrootsNostrEvent"
 "RadrootsListing" = "RadrootsListing"
 

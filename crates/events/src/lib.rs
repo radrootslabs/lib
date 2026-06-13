@@ -14,6 +14,7 @@ pub mod comment;
 pub mod contract;
 pub mod coop;
 pub mod document;
+pub mod draft;
 pub mod event_head;
 pub mod farm;
 pub mod farm_crdt;

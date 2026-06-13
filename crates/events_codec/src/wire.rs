@@ -4,6 +4,8 @@ use alloc::{
     vec::Vec,
 };
 
+use radroots_events::draft::{RadrootsDraftError, RadrootsFrozenEventDraft};
+
 #[derive(Debug, Clone)]
 pub struct WireEventParts {
     pub kind: u32,
@@ -11,23 +13,20 @@ pub struct WireEventParts {
     pub tags: Vec<Vec<String>>,
 }
 
-#[derive(Debug, Clone)]
-pub struct EventDraft {
-    pub kind: u32,
-    pub created_at: u32,
-    pub author: String,
-    pub content: String,
-    pub tags: Vec<Vec<String>>,
-}
-
-pub fn to_draft(parts: WireEventParts, author: impl Into<String>, created_at: u32) -> EventDraft {
-    EventDraft {
-        kind: parts.kind,
+pub fn to_frozen_draft(
+    parts: WireEventParts,
+    contract_id: impl Into<String>,
+    expected_pubkey: impl AsRef<str>,
+    created_at: u32,
+) -> Result<RadrootsFrozenEventDraft, RadrootsDraftError> {
+    RadrootsFrozenEventDraft::new(
+        contract_id,
+        parts.kind,
         created_at,
-        author: author.into(),
-        content: parts.content,
-        tags: parts.tags,
-    }
+        parts.tags,
+        parts.content,
+        expected_pubkey,
+    )
 }
 
 pub fn canonicalize_tags(tags: &mut Vec<Vec<String>>) {

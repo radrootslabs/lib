@@ -57,6 +57,7 @@ pub use crate::config::{
 };
 pub use radroots_events::{
     RadrootsNostrEvent, RadrootsNostrEventPtr, RadrootsNostrEventRef,
+    draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent},
     farm::RadrootsFarm,
     listing::RadrootsListing,
     profile::{RadrootsProfile, RadrootsProfileType},
@@ -65,7 +66,7 @@ pub use radroots_events::{
 pub use radroots_events_codec::order::{
     RadrootsOrderEnvelopeParseError, RadrootsOrderListingAddress, RadrootsOrderListingAddressError,
 };
-pub use radroots_events_codec::wire::{EventDraft as UnsignedEventDraft, WireEventParts};
+pub use radroots_events_codec::wire::WireEventParts;
 pub use radroots_trade::listing::validation::RadrootsTradeListing as TradeListingValidateResult;
 
 pub type NostrTags = Vec<Vec<String>>;
