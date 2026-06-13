@@ -21,6 +21,10 @@ radroots_events = { workspace = true, default-features = false, features = [
   "std",
   "serde",
 ] }
+radroots_nostr = { workspace = true, default-features = false, features = [
+  "std",
+  "events",
+] }
 serde = { workspace = true, features = ["std"] }
 serde_json = { workspace = true, features = ["std"] }
 sqlx = { workspace = true, optional = true, features = ["derive"] }

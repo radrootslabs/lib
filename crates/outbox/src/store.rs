@@ -381,7 +381,7 @@ impl RadrootsOutbox {
             .signed_event
             .ok_or(RadrootsOutboxError::MissingSignedEvent(outbox_event_id))?;
         let event = event_from_signed(&signed_event);
-        let ingest = RadrootsEventIngest::verified(event, observed_at_ms)
+        let ingest = RadrootsEventIngest::new(event, observed_at_ms)
             .with_raw_json(signed_event.raw_json.clone());
         let receipt = event_store.ingest_event(ingest).await?;
         sqlx::query(

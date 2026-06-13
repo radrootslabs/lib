@@ -7,25 +7,34 @@ use radroots_events::event_head::RadrootsEventHeadDecision;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsEventVerificationStatus {
+    NotChecked,
+    IdVerified,
     Verified,
-    Unverified,
-    Invalid,
+    IdMismatch,
+    SignatureInvalid,
+    MalformedEnvelope,
 }
 
 impl RadrootsEventVerificationStatus {
     pub fn as_str(self) -> &'static str {
         match self {
+            Self::NotChecked => "not_checked",
+            Self::IdVerified => "id_verified",
             Self::Verified => "verified",
-            Self::Unverified => "unverified",
-            Self::Invalid => "invalid",
+            Self::IdMismatch => "id_mismatch",
+            Self::SignatureInvalid => "signature_invalid",
+            Self::MalformedEnvelope => "malformed_envelope",
         }
     }
 
     pub fn parse(value: &str) -> Result<Self, RadrootsEventStoreError> {
         match value {
+            "not_checked" => Ok(Self::NotChecked),
+            "id_verified" => Ok(Self::IdVerified),
             "verified" => Ok(Self::Verified),
-            "unverified" => Ok(Self::Unverified),
-            "invalid" => Ok(Self::Invalid),
+            "id_mismatch" => Ok(Self::IdMismatch),
+            "signature_invalid" => Ok(Self::SignatureInvalid),
+            "malformed_envelope" => Ok(Self::MalformedEnvelope),
             _ => Err(RadrootsEventStoreError::InvalidStoredEnum {
                 field: "verification_status",
                 value: value.to_owned(),
@@ -166,17 +175,15 @@ impl RadrootsRelayObservation {
 pub struct RadrootsEventIngest {
     pub event: RadrootsNostrEvent,
     pub raw_json: Option<String>,
-    pub verification_status: RadrootsEventVerificationStatus,
     pub observed_at_ms: i64,
     pub relay_observation: Option<RadrootsRelayObservation>,
 }
 
 impl RadrootsEventIngest {
-    pub fn verified(event: RadrootsNostrEvent, observed_at_ms: i64) -> Self {
+    pub fn new(event: RadrootsNostrEvent, observed_at_ms: i64) -> Self {
         Self {
             event,
             raw_json: None,
-            verification_status: RadrootsEventVerificationStatus::Verified,
             observed_at_ms,
             relay_observation: None,
         }

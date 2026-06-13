@@ -70,6 +70,8 @@ pub struct RadrootsRelayFetchEventReceipt {
     pub duplicate: bool,
     pub unsupported: bool,
     pub malformed: bool,
+    pub projection_eligible: bool,
+    pub verification_status: Option<String>,
     pub message: Option<String>,
 }
 
@@ -135,6 +137,8 @@ where
                         duplicate: false,
                         unsupported: false,
                         malformed: true,
+                        projection_eligible: false,
+                        verification_status: None,
                         message: Some("event JSON parse failed".to_owned()),
                     });
                     continue;
@@ -146,7 +150,7 @@ where
                         RadrootsRelayObservationType::Subscription
                     }
                 };
-                let ingest = RadrootsEventIngest::verified(event, observed_at_ms)
+                let ingest = RadrootsEventIngest::new(event, observed_at_ms)
                     .with_raw_json(raw_json)
                     .with_observation(RadrootsRelayObservation::new(
                         relay_url.clone(),
@@ -172,6 +176,10 @@ where
                             duplicate: !store_receipt.inserted,
                             unsupported,
                             malformed: false,
+                            projection_eligible: store_receipt.projection_eligible,
+                            verification_status: Some(
+                                store_receipt.verification_status.as_str().to_owned(),
+                            ),
                             message: None,
                         });
                     }
@@ -184,6 +192,8 @@ where
                             duplicate: false,
                             unsupported: false,
                             malformed: true,
+                            projection_eligible: false,
+                            verification_status: None,
                             message: Some(error.to_string()),
                         });
                     }

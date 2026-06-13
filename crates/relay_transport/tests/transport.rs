@@ -1,5 +1,5 @@
 use nostr::JsonUtil;
-use radroots_event_store::RadrootsEventStore;
+use radroots_event_store::{RadrootsEventStore, RadrootsEventVerificationStatus};
 use radroots_events::draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent};
 use radroots_events::kinds::KIND_POST;
 use radroots_nostr::prelude::{
@@ -51,6 +51,14 @@ fn unsupported_raw_event() -> String {
         .sign_with_keys(&fixture_keys())
         .expect("signed unsupported event");
     event.as_json()
+}
+
+fn tampered_raw_event() -> String {
+    let signed = signed_post("trusted");
+    let mut value =
+        serde_json::from_str::<serde_json::Value>(signed.raw_json.as_str()).expect("raw json");
+    value["content"] = serde_json::Value::String("tampered".to_owned());
+    serde_json::to_string(&value).expect("tampered json")
 }
 
 #[test]
@@ -198,9 +206,14 @@ async fn fetch_ingests_events_and_records_relay_observations() {
             observed_at_ms: 1_002,
         },
         RadrootsRelayFetchItem::Event {
+            relay_url: RELAY_SECONDARY_WSS.to_owned(),
+            raw_json: tampered_raw_event(),
+            observed_at_ms: 1_003,
+        },
+        RadrootsRelayFetchItem::Event {
             relay_url: RELAY_TERTIARY_WSS.to_owned(),
             raw_json: "{not json".to_owned(),
-            observed_at_ms: 1_003,
+            observed_at_ms: 1_004,
         },
         RadrootsRelayFetchItem::Eose {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
@@ -223,13 +236,35 @@ async fn fetch_ingests_events_and_records_relay_observations() {
     .await
     .expect("fetch ingest");
 
-    assert_eq!(receipt.inserted_count, 2);
+    assert_eq!(receipt.inserted_count, 3);
     assert_eq!(receipt.duplicate_count, 1);
     assert_eq!(receipt.unsupported_count, 1);
     assert_eq!(receipt.malformed_count, 1);
     assert_eq!(receipt.eose_count, 1);
     assert_eq!(receipt.closed_count, 1);
     assert_eq!(receipt.notice_count, 1);
+    assert_eq!(
+        receipt.events[0].verification_status.as_deref(),
+        Some(RadrootsEventVerificationStatus::Verified.as_str())
+    );
+    assert!(receipt.events[0].projection_eligible);
+    assert_eq!(
+        receipt.events[1].verification_status.as_deref(),
+        Some(RadrootsEventVerificationStatus::Verified.as_str())
+    );
+    assert!(!receipt.events[1].projection_eligible);
+    assert_eq!(
+        receipt.events[2].verification_status.as_deref(),
+        Some(RadrootsEventVerificationStatus::Verified.as_str())
+    );
+    assert!(!receipt.events[2].projection_eligible);
+    assert_eq!(
+        receipt.events[3].verification_status.as_deref(),
+        Some(RadrootsEventVerificationStatus::IdMismatch.as_str())
+    );
+    assert!(!receipt.events[3].projection_eligible);
+    assert_eq!(receipt.events[4].verification_status, None);
+    assert!(!receipt.events[4].projection_eligible);
 
     let observations = store
         .observations_for_event(signed.id.as_str())

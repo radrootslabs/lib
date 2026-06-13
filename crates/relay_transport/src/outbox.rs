@@ -219,7 +219,7 @@ async fn ingest_publish_observation(
     if let Some(message) = message {
         observation = observation.with_message(message);
     }
-    let ingest = RadrootsEventIngest::verified(event_from_signed(signed_event), observed_at_ms)
+    let ingest = RadrootsEventIngest::new(event_from_signed(signed_event), observed_at_ms)
         .with_raw_json(signed_event.raw_json.clone())
         .with_observation(observation);
     event_store.ingest_event(ingest).await?;

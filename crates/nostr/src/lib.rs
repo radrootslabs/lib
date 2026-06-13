@@ -37,6 +37,8 @@ pub mod event_adapters;
 pub mod draft_signing;
 #[cfg(feature = "events")]
 pub mod event_convert;
+#[cfg(feature = "events")]
+pub mod event_verify;
 
 #[cfg(all(feature = "client", feature = "codec"))]
 pub mod identity_profile;
@@ -130,6 +132,11 @@ pub mod prelude {
 
     #[cfg(feature = "events")]
     pub use crate::event_convert::{radroots_event_from_nostr, radroots_event_ptr_from_nostr};
+
+    #[cfg(feature = "events")]
+    pub use crate::event_verify::{
+        RadrootsNostrEventVerification, radroots_nostr_verify_event, radroots_nostr_verify_event_id,
+    };
 
     #[cfg(feature = "codec")]
     pub use crate::job_adapter::RadrootsNostrEventAdapter;

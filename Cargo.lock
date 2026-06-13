@@ -3999,6 +3999,7 @@ name = "radroots_event_store"
 version = "0.1.0-alpha.2"
 dependencies = [
  "radroots_events",
+ "radroots_nostr",
  "serde",
  "serde_json",
  "sqlx",
