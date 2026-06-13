@@ -1,14 +1,13 @@
-# radroots_sdk
+# radroots_core_contract
 
-Curated SDK contract for the Rad Roots cross-language SDK.
+Core wire, event, codec, and replica contract for Rad Roots SDK consumers.
 
 ## Purpose
 
-This directory defines the `radroots_sdk` contract used to align Rust,
-TypeScript, Python, Swift, and Kotlin surfaces. It defines the public
-interoperability boundary for external integrators, keeps Rust as the canonical
-source for exported models and transforms, and enforces deterministic,
-machine-verifiable governance for contract changes and releases.
+This directory defines the rr-rs core contract consumed by the first-class
+Rad Roots SDK repository. It keeps Rust event models, wire codecs, replica core
+semantics, conformance vectors, and release governance deterministic and
+machine-verifiable.
 
 ## Contract Surface
 
@@ -16,20 +15,18 @@ SDK contract metadata is defined in `spec/manifest.toml` and currently includes:
 
 - model crates: `radroots_core`, `radroots_events`, `radroots_trade`, `radroots_identity`
 - algorithm crate: `radroots_events_codec`
-- wasm crate: `radroots_events_codec_wasm`
 
-The curated public Rust entrypoint is `radroots_sdk`.
-The crate list above records implementation provenance for the contract surface;
-it is not a promise that every listed crate is a first-class end-user SDK
-package.
+The first-class Rust SDK and WebAssembly package surfaces are owned by the SDK
+repository. The crate list above records rr-rs implementation provenance for the
+core contract surface; it is not a promise that every listed crate is a
+first-class end-user SDK package.
 
 Public SDK exports are intentionally narrower than the full Rust workspace.
 
 ## Field Event Substrate
 
 Field-oriented farming operations are represented in the public Rust substrate
-through `radroots_events`, `radroots_events_codec`, and
-`radroots_events_codec_wasm`.
+through `radroots_events` and `radroots_events_codec`.
 
 The substrate includes workspace manifests, CRDT change envelopes, farm file
 metadata, NIP-42 relay auth, NIP-98 HTTP auth, and the supported NIP-29 group
@@ -49,7 +46,7 @@ matching conformance vectors and language export mappings.
 ## Public Social Event Substrate
 
 Public social events are represented as event and codec substrate in
-`radroots_events`, `radroots_events_codec`, and `radroots_events_codec_wasm`.
+`radroots_events` and `radroots_events_codec`.
 
 The active social-event contract is defined in `spec/social-events.md`. It covers
 ordinary posts, comments, reactions, articles, public generic file metadata,
@@ -59,17 +56,15 @@ NIP-65 relay lists through `RadrootsList`.
 The social surface is substrate-first. MVP social tag builders for posts,
 comments, reactions, articles, generic public file metadata, calendar date
 events, and calendar time events are promoted into curated SDK operation
-metadata after their Rust models, codecs, wasm helpers, and deterministic
-conformance vectors exist. Production-v1 repost, report, calendar collection,
-and RSVP behavior remains available through event and codec APIs by default and
-is covered by conformance vectors.
+metadata after their Rust models, codecs, SDK-owned wasm helpers, and
+deterministic conformance vectors exist. Production-v1 repost, report, calendar
+collection, and RSVP behavior remains available through event and codec APIs by
+default and is covered by conformance vectors.
 
 ## Rust Crate Tiers
 
 The public Rust story is tiered explicitly.
 
-- Curated SDK entrypoint:
-  - `radroots_sdk`
 - Advanced substrate crates:
   - `radroots_core`
   - `radroots_events`
@@ -99,14 +94,11 @@ The public Rust story is tiered explicitly.
   - `radroots_event_store`
   - `radroots_outbox`
   - `radroots_relay_transport`
-  - `radroots_events_codec_wasm`
   - `radroots_net`
   - `radroots_nostr_runtime`
   - `radroots_nostr_ndb`
   - `radroots_sql_wasm_bridge`
   - `radroots_sql_wasm_core`
-  - `radroots_replica_db_wasm`
-  - `radroots_replica_sync_wasm`
   - `radroots_simplex_chat_proto`
   - `radroots_simplex_smp_proto`
 
@@ -161,9 +153,10 @@ Internal replica crate family:
 
 - `radroots_replica_db_schema`
 - `radroots_replica_db`
-- `radroots_replica_db_wasm`
 - `radroots_replica_sync`
-- `radroots_replica_sync_wasm`
+
+SDK-owned wasm bindings for replica storage and sync are recorded in
+`spec/replica.toml`.
 
 ## Governance
 

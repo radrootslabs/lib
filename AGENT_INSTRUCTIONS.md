@@ -208,6 +208,6 @@ If Agent Mail is active for the task:
 - use `.beads/PRIME.md` for the repository coordination conventions
 - use the active Beads issue id as the Agent Mail thread id and reservation reason when both tools are active
 - reserve files before the first write for coordinated multi-agent work
-- use shared build slots for long-running singleton lanes such as contract, release-preflight, or wasm-build runs
+- use shared build slots for long-running singleton lanes such as contract or release-preflight runs
 
 If Beads or Agent Mail is not active, the repo still follows the same coding and validation standards; only the task-state and coordination backend changes.

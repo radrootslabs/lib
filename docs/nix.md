@@ -63,7 +63,6 @@ The shells provide:
 
 - Rust `1.92.0` with `wasm32-unknown-unknown`
 - pinned nightly cargo for coverage from `rust-toolchain-coverage.toml`
-- `wasm-pack`
 - `cargo-llvm-cov`
 - `pkg-config`
 - `clang` and `libclang`
@@ -84,7 +83,6 @@ nix run .#fmt
 nix run .#check
 nix run .#contract
 nix run .#coverage-report
-nix run .#wasm-builds
 nix run .#release-preflight
 ```
 
@@ -98,7 +96,6 @@ nix run .#release-preflight
 Repo-aware flows stay behind `nix run` apps because they need a real checkout:
 
 - coverage refresh and release preflight produce repo-local artifacts derived from measured per-crate gate reports
-- wasm packaging writes package output directories
 - publish commands read runtime tokens and the live checkout state
 
 ## First Verification

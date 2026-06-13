@@ -3612,9 +3612,6 @@ fn validate_contract_bundle_with_release_policy_override(
     if bundle.manifest.surface.algorithm_crates.is_empty() {
         return Err("contract surface.algorithm_crates must not be empty".to_string());
     }
-    if bundle.manifest.surface.wasm_crates.is_empty() {
-        return Err("contract surface.wasm_crates must not be empty".to_string());
-    }
     validate_export_mappings(bundle)?;
     if bundle.version.contract.version.trim().is_empty() {
         return Err("version.contract.version is required".to_string());
@@ -3982,9 +3979,6 @@ pub fn validate_contract_bundle(bundle: &ContractBundle) -> Result<(), String> {
     }
     if bundle.manifest.surface.algorithm_crates.is_empty() {
         return Err("contract surface.algorithm_crates must not be empty".to_string());
-    }
-    if bundle.manifest.surface.wasm_crates.is_empty() {
-        return Err("contract surface.wasm_crates must not be empty".to_string());
     }
     validate_export_mappings(bundle)?;
     if bundle.version.contract.version.trim().is_empty() {
@@ -5580,9 +5574,6 @@ edition = "2024"
         });
         assert_bundle_error("surface.algorithm_crates must not be empty", |bundle| {
             bundle.manifest.surface.algorithm_crates.clear();
-        });
-        assert_bundle_error("surface.wasm_crates must not be empty", |bundle| {
-            bundle.manifest.surface.wasm_crates.clear();
         });
         assert_bundle_error(
             "at least one language export mapping is required",

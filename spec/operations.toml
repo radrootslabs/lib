@@ -1,5 +1,5 @@
 [contract]
-name = "radroots_sdk"
+name = "radroots_core_contract"
 version = "0.1.0-alpha.2"
 source = "rust"
 
@@ -53,9 +53,9 @@ model_crates = [
   "radroots_identity",
 ]
 algorithm_crates = ["radroots_events_codec"]
-wasm_crates = ["radroots_events_codec_wasm"]
+wasm_crates = []
 
-[sdk]
+[consumer_sdk]
 rust_package = "radroots_sdk"
 primary_domains = [
   "profile",

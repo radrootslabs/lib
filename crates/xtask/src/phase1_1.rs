@@ -31,7 +31,6 @@ pub fn validate_invariants(root: &Path) -> Result<(), String> {
             PathBuf::from("crates/events/src"),
             PathBuf::from("crates/events_codec/src"),
             PathBuf::from("crates/trade/src"),
-            PathBuf::from("crates/sdk/src"),
         ],
         &[
             "RadrootsTradeMessageType",
@@ -55,7 +54,6 @@ pub fn validate_invariants(root: &Path) -> Result<(), String> {
             "public_trade",
             "events::trade::",
             "events_codec::trade::",
-            "radroots_sdk::trade::",
             "trade_order_economics_digest",
             "trade_revision",
             "trade_lifecycle",

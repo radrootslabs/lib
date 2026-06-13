@@ -40,8 +40,8 @@ The group codecs use bare metadata marker tags such as `private`, `restricted`,
 `hidden`, and `closed`, `supported_kinds` declarations, and `code` tags for
 invite and join flows. They preserve optional reason content on user management
 and moderation events. LiveKit room metadata and live participant state are
-deferred. The companion `radroots_events_codec_wasm` crate exposes
-deterministic JSON tag builders for the same Field and NIP-29 families.
+deferred. SDK-owned wasm bindings expose deterministic JSON tag builders for the
+same Field and NIP-29 families.
 
 ## Copyright
 

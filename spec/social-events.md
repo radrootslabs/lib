@@ -2,7 +2,7 @@
 
 Status: active implementation contract
 
-Scope: public Radroots social Nostr event models, codecs, wasm builders, and deterministic
+Scope: public Radroots social Nostr event models, codecs, SDK-owned wasm builders, and deterministic
 conformance vectors in this repository.
 
 ## Purpose
@@ -13,7 +13,7 @@ services, and private Field business documents outside this repository's event-c
 
 The target implementation is standards-first and Radroots-named. Event models live in
 `radroots_events`, canonical encode/decode behavior lives in `radroots_events_codec`, optional JSON
-to tags helpers live in `radroots_events_codec_wasm`, and deterministic fixtures live under
+to tags helpers are provided by SDK-owned wasm bindings, and deterministic fixtures live under
 `spec/conformance`.
 
 ## Implementation Inventory
@@ -116,11 +116,11 @@ helpers, and conformance vectors exist. Production-v1 repost, report, calendar c
 behavior remains substrate-visible by default unless a consumer proves that it should be promoted
 into the curated operation surface.
 
-`radroots_events_codec_wasm` exposes the canonical JSON-to-tags helper names `post_tags`,
+The SDK-owned events codec wasm binding exposes the canonical JSON-to-tags helper names `post_tags`,
 `comment_tags`, `reaction_tags`, `article_tags`, `file_metadata_tags`,
 `calendar_date_event_tags`, `calendar_time_event_tags`, `calendar_tags`,
 `calendar_event_rsvp_tags`, `repost_tags`, `generic_repost_tags`, and `report_tags` for the public
-social substrate. The same wasm crate exposes `farm_workspace_manifest_tags`,
+social substrate. The same SDK-owned wasm binding exposes `farm_workspace_manifest_tags`,
 `farm_crdt_change_tags`, `farm_file_metadata_tags`, `relay_auth_tags`, and `http_auth_tags` for the
 field event substrate.
 

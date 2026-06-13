@@ -7,7 +7,6 @@ repository = "sdk-typescript"
 "radroots_events" = "@radroots/sdk"
 "radroots_trade" = "@radroots/sdk"
 "radroots_identity" = "@radroots/sdk"
-"radroots_events_codec_wasm" = "@radroots/sdk"
 
 [artifacts]
 models_dir = "src/generated"

@@ -147,7 +147,7 @@ Examples:
 
 - operation implemented in `radroots_events_codec`
 - type defined in `radroots_events`
-- deterministic helper exposed via `radroots_events_codec_wasm`
+- deterministic helper exposed by SDK-owned wasm bindings
 
 ## Tier 1 Domains And Operations
 
@@ -572,7 +572,7 @@ model_crates = [
   "radroots_identity",
 ]
 algorithm_crates = ["radroots_events_codec"]
-wasm_crates = ["radroots_events_codec_wasm"]
+wasm_crates = []
 ```
 
 This keeps current workspace knowledge available without making it the public contract unit.

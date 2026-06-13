@@ -18,7 +18,6 @@ let
       lib.fileset.unions [
         ../Cargo.toml
         ../Cargo.lock
-        ../Makefile
         ../README
         ../rust-toolchain.toml
         ../spec
@@ -85,12 +84,7 @@ let
     toolchains.coverage
     cargoLlvmCov
   ];
-  wasmRuntimeInputs = stableRuntimeInputs ++ [
-    pkgs.wasm-pack
-  ];
-  releaseRuntimeInputs = coverageRuntimeInputs ++ [
-    pkgs.wasm-pack
-  ];
+  releaseRuntimeInputs = coverageRuntimeInputs;
   sdkContractCrates = [
     "xtask"
     "radroots_core"
@@ -100,7 +94,6 @@ let
     "radroots_identity"
     "radroots_replica_db_schema"
     "radroots_events_codec"
-    "radroots_events_codec_wasm"
     "radroots_nostr_connect"
     "radroots_nostr_signer"
   ];
@@ -185,9 +178,6 @@ let
     cargo check -q ${sdkContractCargoArgs}
     cargo test -q ${sdkContractCargoArgs}
     cargo run -q -p xtask -- sdk validate
-  '';
-  wasmBuildsCommand = ''
-    make build
   '';
   releasePreflightCommand = ''
     ./scripts/ci/release_preflight.sh
@@ -313,7 +303,6 @@ in
     sdkContractCargoArgs
     sharedEnv
     version
-    wasmBuildsCommand
     xtaskPackage
     ;
 
@@ -324,6 +313,5 @@ in
     stable = stableRuntimeInputs;
     coverage = coverageRuntimeInputs;
     release = releaseRuntimeInputs;
-    wasm = wasmRuntimeInputs;
   };
 }

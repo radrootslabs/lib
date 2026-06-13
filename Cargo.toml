@@ -4,7 +4,6 @@ members = [
   "crates/events",
   "crates/event_store",
   "crates/events_codec",
-  "crates/events_codec_wasm",
   "crates/events_indexed",
   "crates/geocoder",
   "crates/identity",
@@ -35,13 +34,10 @@ members = [
   "crates/test_fixtures",
   "crates/replica_db_schema",
   "crates/replica_sync",
-  "crates/replica_sync_wasm",
   "crates/replica_db",
-  "crates/replica_db_wasm",
   "crates/runtime_paths",
   "crates/runtime_distribution",
   "crates/runtime_manager",
-  "crates/sdk",
   "crates/sp1_guest_trade",
   "crates/sp1_host_trade",
   "crates/trade",
@@ -78,7 +74,6 @@ radroots_runtime = { path = "crates/runtime", version = "0.1.0-alpha.2", default
 radroots_runtime_paths = { path = "crates/runtime_paths", version = "0.1.0-alpha.2", default-features = false }
 radroots_runtime_distribution = { path = "crates/runtime_distribution", version = "0.1.0-alpha.2", default-features = false }
 radroots_runtime_manager = { path = "crates/runtime_manager", version = "0.1.0-alpha.2", default-features = false }
-radroots_sdk = { path = "crates/sdk", version = "0.1.0-alpha.2", default-features = false }
 radroots_log = { path = "crates/log", version = "0.1.0-alpha.2", default-features = false }
 radroots_net = { path = "crates/net", version = "0.1.0-alpha.2", default-features = false }
 radroots_nostr_runtime = { path = "crates/nostr_runtime", version = "0.1.0-alpha.2", default-features = false }
@@ -99,8 +94,6 @@ radroots_test_fixtures = { path = "crates/test_fixtures", version = "0.1.0-alpha
 radroots_replica_db_schema = { path = "crates/replica_db_schema", version = "0.1.0-alpha.2", default-features = false }
 radroots_replica_sync = { path = "crates/replica_sync", version = "0.1.0-alpha.2", default-features = false }
 radroots_replica_db = { path = "crates/replica_db", version = "0.1.0-alpha.2", default-features = false }
-radroots_replica_db_wasm = { path = "crates/replica_db_wasm", version = "0.1.0-alpha.2" }
-radroots_replica_sync_wasm = { path = "crates/replica_sync_wasm", version = "0.1.0-alpha.2" }
 radroots_trade = { path = "crates/trade", version = "0.1.0-alpha.2", default-features = false }
 radroots_types = { path = "crates/types", version = "0.1.0-alpha.2", default-features = false }
 radroots_protected_store = { path = "crates/protected_store", version = "0.1.0-alpha.2", default-features = false }

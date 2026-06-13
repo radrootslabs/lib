@@ -99,10 +99,4 @@ in
     pathPrefix = coveragePath;
   };
 
-  wasm-builds = mkRepoApp {
-    name = "wasm-builds";
-    description = "Build the wasm packages defined by the workspace makefile";
-    runtimeInputs = common.runtimeInputs.wasm;
-    command = common.wasmBuildsCommand;
-  };
 }

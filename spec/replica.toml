@@ -6,9 +6,11 @@ purpose = "offline-first local replica state and deterministic sync"
 [crate_family]
 schema = "radroots_replica_db_schema"
 storage = "radroots_replica_db"
-storage_wasm = "radroots_replica_db_wasm"
 sync = "radroots_replica_sync"
-sync_wasm = "radroots_replica_sync_wasm"
+
+[sdk_wasm_bindings]
+storage = "radroots_replica_db_wasm"
+sync = "radroots_replica_sync_wasm"
 
 [policy]
 transport_agnostic_sync_core = true

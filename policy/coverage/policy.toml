@@ -52,7 +52,6 @@ crates = [
   "radroots_runtime_paths",
   "radroots_runtime_distribution",
   "radroots_runtime_manager",
-  "radroots_sdk",
   "radroots_identity",
   "radroots_secret_vault",
   "radroots_trade",
