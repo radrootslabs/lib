@@ -109,7 +109,7 @@ impl Drop for AckRelay {
 
 fn sample_listing() -> RadrootsListing {
     RadrootsListing {
-        d_tag: "AAAAAAAAAAAAAAAAAAAAAg".into(),
+        d_tag: "AAAAAAAAAAAAAAAAAAAAAg".parse().expect("listing d tag"),
         published_at: None,
         farm: RadrootsFarmRef {
             pubkey: "seller".into(),
@@ -126,9 +126,9 @@ fn sample_listing() -> RadrootsListing {
             profile: None,
             year: None,
         },
-        primary_bin_id: "bin-1".into(),
+        primary_bin_id: "bin-1".parse().expect("primary bin id"),
         bins: vec![RadrootsListingBin {
-            bin_id: "bin-1".into(),
+            bin_id: "bin-1".parse().expect("bin id"),
             quantity: RadrootsCoreQuantity::new(
                 RadrootsCoreDecimal::from(1000u32),
                 RadrootsCoreUnit::MassG,
@@ -221,21 +221,23 @@ fn listing_event_ptr() -> RadrootsNostrEventPtr {
 
 fn sample_order_request(buyer_pubkey: String, seller_pubkey: String) -> RadrootsOrderRequest {
     RadrootsOrderRequest {
-        order_id: "order-1".into(),
-        listing_addr: format!("30402:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg"),
+        order_id: "order-1".parse().expect("order id"),
+        listing_addr: format!("30402:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg")
+            .parse()
+            .expect("listing address"),
         buyer_pubkey,
         seller_pubkey,
         items: vec![RadrootsOrderItem {
-            bin_id: "bin-1".into(),
+            bin_id: "bin-1".parse().expect("bin id"),
             bin_count: 2,
         }],
         economics: RadrootsOrderEconomics {
-            quote_id: "quote-1".into(),
+            quote_id: "quote-1".parse().expect("quote id"),
             quote_version: 1,
             pricing_basis: RadrootsOrderPricingBasis::ListingEvent,
             currency: RadrootsCoreCurrency::USD,
             items: vec![RadrootsOrderEconomicItem {
-                bin_id: "bin-1".into(),
+                bin_id: "bin-1".parse().expect("bin id"),
                 bin_count: 2,
                 quantity_amount: decimal("1"),
                 quantity_unit: RadrootsCoreUnit::Each,
@@ -255,13 +257,15 @@ fn sample_order_request(buyer_pubkey: String, seller_pubkey: String) -> Radroots
 
 fn sample_order_decision(buyer_pubkey: String, seller_pubkey: String) -> RadrootsOrderDecision {
     RadrootsOrderDecision {
-        order_id: "order-1".into(),
-        listing_addr: format!("30402:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg"),
+        order_id: "order-1".parse().expect("order id"),
+        listing_addr: format!("30402:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg")
+            .parse()
+            .expect("listing address"),
         buyer_pubkey,
         seller_pubkey,
         decision: RadrootsOrderDecisionOutcome::Accepted {
             inventory_commitments: vec![RadrootsOrderInventoryCommitment {
-                bin_id: "bin-1".into(),
+                bin_id: "bin-1".parse().expect("bin id"),
                 bin_count: 2,
             }],
         },
@@ -275,24 +279,26 @@ fn sample_order_revision_proposal(
     prev_event_id: String,
 ) -> RadrootsOrderRevisionProposal {
     RadrootsOrderRevisionProposal {
-        revision_id: "revision-1".into(),
-        order_id: "order-1".into(),
-        listing_addr: format!("30402:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg"),
+        revision_id: "revision-1".parse().expect("revision id"),
+        order_id: "order-1".parse().expect("order id"),
+        listing_addr: format!("30402:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg")
+            .parse()
+            .expect("listing address"),
         buyer_pubkey,
         seller_pubkey,
         root_event_id,
         prev_event_id,
         items: vec![RadrootsOrderItem {
-            bin_id: "bin-1".into(),
+            bin_id: "bin-1".parse().expect("bin id"),
             bin_count: 3,
         }],
         economics: RadrootsOrderEconomics {
-            quote_id: "revision-quote-1".into(),
+            quote_id: "revision-quote-1".parse().expect("revision quote id"),
             quote_version: 2,
             pricing_basis: RadrootsOrderPricingBasis::ListingEvent,
             currency: RadrootsCoreCurrency::USD,
             items: vec![RadrootsOrderEconomicItem {
-                bin_id: "bin-1".into(),
+                bin_id: "bin-1".parse().expect("bin id"),
                 bin_count: 3,
                 quantity_amount: decimal("1"),
                 quantity_unit: RadrootsCoreUnit::Each,
@@ -332,8 +338,10 @@ fn sample_fulfillment_update(
     seller_pubkey: String,
 ) -> RadrootsOrderFulfillmentUpdate {
     RadrootsOrderFulfillmentUpdate {
-        order_id: "order-1".into(),
-        listing_addr: format!("30402:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg"),
+        order_id: "order-1".parse().expect("order id"),
+        listing_addr: format!("30402:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg")
+            .parse()
+            .expect("listing address"),
         buyer_pubkey,
         seller_pubkey,
         status: RadrootsOrderFulfillmentState::ReadyForPickup,
@@ -345,8 +353,10 @@ fn sample_order_cancellation(
     seller_pubkey: String,
 ) -> RadrootsOrderCancellation {
     RadrootsOrderCancellation {
-        order_id: "order-1".into(),
-        listing_addr: format!("30402:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg"),
+        order_id: "order-1".parse().expect("order id"),
+        listing_addr: format!("30402:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg")
+            .parse()
+            .expect("listing address"),
         buyer_pubkey,
         seller_pubkey,
         reason: "schedule changed".into(),
@@ -355,8 +365,10 @@ fn sample_order_cancellation(
 
 fn sample_buyer_receipt(buyer_pubkey: String, seller_pubkey: String) -> RadrootsOrderReceipt {
     RadrootsOrderReceipt {
-        order_id: "order-1".into(),
-        listing_addr: format!("30402:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg"),
+        order_id: "order-1".parse().expect("order id"),
+        listing_addr: format!("30402:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg")
+            .parse()
+            .expect("listing address"),
         buyer_pubkey,
         seller_pubkey,
         received: true,
@@ -467,13 +479,13 @@ async fn relay_direct_order_request_publish_accepts_sdk_built_draft() -> TestRes
                 relay_receipt
                     .event
                     .tags
-                    .contains(&vec!["a".to_owned(), payload.listing_addr.clone()])
+                    .contains(&vec!["a".to_owned(), payload.listing_addr.to_string()])
             );
             assert!(
                 relay_receipt
                     .event
                     .tags
-                    .contains(&vec!["d".to_owned(), payload.order_id.clone()])
+                    .contains(&vec!["d".to_owned(), payload.order_id.to_string()])
             );
             assert!(relay_receipt.event.tags.contains(&vec![
                 "listing_event".to_owned(),
@@ -552,13 +564,13 @@ async fn relay_direct_order_decision_publish_accepts_sdk_built_draft() -> TestRe
                 relay_receipt
                     .event
                     .tags
-                    .contains(&vec!["a".to_owned(), payload.listing_addr.clone()])
+                    .contains(&vec!["a".to_owned(), payload.listing_addr.to_string()])
             );
             assert!(
                 relay_receipt
                     .event
                     .tags
-                    .contains(&vec!["d".to_owned(), payload.order_id.clone()])
+                    .contains(&vec!["d".to_owned(), payload.order_id.to_string()])
             );
             assert!(
                 relay_receipt

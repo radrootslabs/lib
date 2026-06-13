@@ -319,7 +319,7 @@ async fn write_http_response(
 
 fn sample_listing() -> RadrootsListing {
     RadrootsListing {
-        d_tag: "AAAAAAAAAAAAAAAAAAAAAg".into(),
+        d_tag: "AAAAAAAAAAAAAAAAAAAAAg".parse().expect("listing d tag"),
         published_at: None,
         farm: RadrootsFarmRef {
             pubkey: "seller".into(),
@@ -336,9 +336,9 @@ fn sample_listing() -> RadrootsListing {
             profile: None,
             year: None,
         },
-        primary_bin_id: "bin-1".into(),
+        primary_bin_id: "bin-1".parse().expect("primary bin id"),
         bins: vec![RadrootsListingBin {
-            bin_id: "bin-1".into(),
+            bin_id: "bin-1".parse().expect("bin id"),
             quantity: RadrootsCoreQuantity::new(
                 RadrootsCoreDecimal::from(1000u32),
                 RadrootsCoreUnit::MassG,
@@ -416,12 +416,12 @@ fn sample_farm() -> RadrootsFarm {
 
 fn sample_order_request_economics() -> RadrootsOrderEconomics {
     RadrootsOrderEconomics {
-        quote_id: "quote-1".to_owned(),
+        quote_id: "quote-1".parse().expect("quote id"),
         quote_version: 1,
         pricing_basis: RadrootsOrderPricingBasis::ListingEvent,
         currency: RadrootsCoreCurrency::USD,
         items: vec![RadrootsOrderEconomicItem {
-            bin_id: "bin-1".to_owned(),
+            bin_id: "bin-1".parse().expect("bin id"),
             bin_count: 2,
             quantity_amount: RadrootsCoreDecimal::from(1u32),
             quantity_unit: RadrootsCoreUnit::MassG,
@@ -451,13 +451,17 @@ fn sample_order_request_economics() -> RadrootsOrderEconomics {
 }
 
 fn sample_order_request() -> RadrootsOrderRequest {
+    let seller_pubkey = "a".repeat(64);
+
     RadrootsOrderRequest {
-        order_id: "order-1".to_owned(),
-        listing_addr: format!("{KIND_LISTING}:seller:AAAAAAAAAAAAAAAAAAAAAg"),
+        order_id: "order-1".parse().expect("order id"),
+        listing_addr: format!("{KIND_LISTING}:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg")
+            .parse()
+            .expect("listing address"),
         buyer_pubkey: "buyer".to_owned(),
         seller_pubkey: "seller".to_owned(),
         items: vec![RadrootsOrderItem {
-            bin_id: "bin-1".to_owned(),
+            bin_id: "bin-1".parse().expect("bin id"),
             bin_count: 2,
         }],
         economics: sample_order_request_economics(),
@@ -1586,7 +1590,7 @@ async fn radrootsd_order_request_publish_accepts_session_handle() -> TestResult<
                     "signer_session_id": "session-order-1",
                     "event_kind": KIND_ORDER_REQUEST,
                     "event_id": "event-order-1",
-                    "event_addr": format!("{KIND_LISTING}:seller:AAAAAAAAAAAAAAAAAAAAAg"),
+                    "event_addr": format!("{KIND_LISTING}:{}:AAAAAAAAAAAAAAAAAAAAAg", "a".repeat(64)),
                     "relay_count": 1,
                     "acknowledged_relay_count": 1
                 }
@@ -1696,7 +1700,7 @@ async fn radrootsd_sdk_workflow_chains_session_listing_order_and_bridge_job() ->
                         "signer_session_id": "session-workflow-1",
                         "event_kind": KIND_ORDER_REQUEST,
                         "event_id": "event-workflow-order",
-                        "event_addr": format!("{KIND_LISTING}:seller:AAAAAAAAAAAAAAAAAAAAAg"),
+                        "event_addr": format!("{KIND_LISTING}:{}:AAAAAAAAAAAAAAAAAAAAAg", "a".repeat(64)),
                         "relay_count": 1,
                         "acknowledged_relay_count": 1
                     }

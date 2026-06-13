@@ -46,7 +46,7 @@ fn sample_farm() -> RadrootsFarm {
 
 fn sample_listing() -> RadrootsListing {
     RadrootsListing {
-        d_tag: "AAAAAAAAAAAAAAAAAAAAAg".into(),
+        d_tag: "AAAAAAAAAAAAAAAAAAAAAg".parse().expect("listing d tag"),
         published_at: None,
         farm: RadrootsFarmRef {
             pubkey: "seller".into(),
@@ -63,9 +63,9 @@ fn sample_listing() -> RadrootsListing {
             profile: None,
             year: None,
         },
-        primary_bin_id: "bin-1".into(),
+        primary_bin_id: "bin-1".parse().expect("primary bin id"),
         bins: vec![RadrootsListingBin {
-            bin_id: "bin-1".into(),
+            bin_id: "bin-1".parse().expect("bin id"),
             quantity: RadrootsCoreQuantity::new(
                 RadrootsCoreDecimal::from(1000u32),
                 RadrootsCoreUnit::MassG,
@@ -128,22 +128,26 @@ fn listing_event_ptr() -> RadrootsNostrEventPtr {
 }
 
 fn sample_order_request() -> RadrootsOrderRequest {
+    let seller_pubkey = "a".repeat(64);
+
     RadrootsOrderRequest {
-        order_id: "order-1".into(),
-        listing_addr: format!("{KIND_LISTING}:seller:AAAAAAAAAAAAAAAAAAAAAg"),
+        order_id: "order-1".parse().expect("order id"),
+        listing_addr: format!("{KIND_LISTING}:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg")
+            .parse()
+            .expect("listing address"),
         buyer_pubkey: "buyer".into(),
         seller_pubkey: "seller".into(),
         items: vec![RadrootsOrderItem {
-            bin_id: "bin-1".into(),
+            bin_id: "bin-1".parse().expect("bin id"),
             bin_count: 2,
         }],
         economics: RadrootsOrderEconomics {
-            quote_id: "quote-1".into(),
+            quote_id: "quote-1".parse().expect("quote id"),
             quote_version: 1,
             pricing_basis: RadrootsOrderPricingBasis::ListingEvent,
             currency: RadrootsCoreCurrency::USD,
             items: vec![RadrootsOrderEconomicItem {
-                bin_id: "bin-1".into(),
+                bin_id: "bin-1".parse().expect("bin id"),
                 bin_count: 2,
                 quantity_amount: RadrootsCoreDecimal::from(1u32),
                 quantity_unit: RadrootsCoreUnit::Each,
@@ -231,7 +235,8 @@ fn listing_parse_rejects_non_listing_kind() {
 #[test]
 fn order_facade_wraps_build_parse_and_address_ops() {
     let listing_value = sample_listing();
-    let listing_addr = format!("{KIND_LISTING}:seller:{}", listing_value.d_tag);
+    let seller_pubkey = "a".repeat(64);
+    let listing_addr = format!("{KIND_LISTING}:{seller_pubkey}:{}", listing_value.d_tag);
     let payload = sample_order_request();
     let parts =
         order::build_order_request_draft(&listing_event_ptr(), &payload).expect("order draft");
