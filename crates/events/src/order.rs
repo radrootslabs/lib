@@ -7,8 +7,8 @@ use alloc::{
 };
 
 use crate::ids::{
-    RadrootsEconomicsDigest, RadrootsInventoryBinId, RadrootsListingAddress, RadrootsOrderId,
-    RadrootsOrderQuoteId, RadrootsOrderRevisionId,
+    RadrootsEconomicsDigest, RadrootsEventId, RadrootsInventoryBinId, RadrootsListingAddress,
+    RadrootsOrderId, RadrootsOrderQuoteId, RadrootsOrderRevisionId, RadrootsPublicKey,
 };
 use crate::kinds::*;
 pub use crate::order_economics::*;
@@ -164,8 +164,8 @@ impl RadrootsOrderEconomics {
 pub struct RadrootsOrderRequest {
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
-    pub buyer_pubkey: String,
-    pub seller_pubkey: String,
+    pub buyer_pubkey: RadrootsPublicKey,
+    pub seller_pubkey: RadrootsPublicKey,
     pub items: Vec<RadrootsOrderItem>,
     pub economics: RadrootsOrderEconomics,
 }
@@ -188,10 +188,10 @@ pub struct RadrootsOrderRevisionProposal {
     pub revision_id: RadrootsOrderRevisionId,
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
-    pub buyer_pubkey: String,
-    pub seller_pubkey: String,
-    pub root_event_id: String,
-    pub prev_event_id: String,
+    pub buyer_pubkey: RadrootsPublicKey,
+    pub seller_pubkey: RadrootsPublicKey,
+    pub root_event_id: RadrootsEventId,
+    pub prev_event_id: RadrootsEventId,
     pub items: Vec<RadrootsOrderItem>,
     pub economics: RadrootsOrderEconomics,
     pub reason: String,
@@ -236,10 +236,10 @@ pub struct RadrootsOrderRevisionDecision {
     pub revision_id: RadrootsOrderRevisionId,
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
-    pub buyer_pubkey: String,
-    pub seller_pubkey: String,
-    pub root_event_id: String,
-    pub prev_event_id: String,
+    pub buyer_pubkey: RadrootsPublicKey,
+    pub seller_pubkey: RadrootsPublicKey,
+    pub root_event_id: RadrootsEventId,
+    pub prev_event_id: RadrootsEventId,
     pub decision: RadrootsOrderRevisionOutcome,
 }
 
@@ -291,8 +291,8 @@ impl RadrootsOrderDecisionOutcome {
 pub struct RadrootsOrderDecision {
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
-    pub buyer_pubkey: String,
-    pub seller_pubkey: String,
+    pub buyer_pubkey: RadrootsPublicKey,
+    pub seller_pubkey: RadrootsPublicKey,
     pub decision: RadrootsOrderDecisionOutcome,
 }
 
@@ -330,8 +330,8 @@ impl RadrootsOrderFulfillmentState {
 pub struct RadrootsOrderFulfillmentUpdate {
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
-    pub buyer_pubkey: String,
-    pub seller_pubkey: String,
+    pub buyer_pubkey: RadrootsPublicKey,
+    pub seller_pubkey: RadrootsPublicKey,
     pub status: RadrootsOrderFulfillmentState,
 }
 
@@ -354,8 +354,8 @@ impl RadrootsOrderFulfillmentUpdate {
 pub struct RadrootsOrderCancellation {
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
-    pub buyer_pubkey: String,
-    pub seller_pubkey: String,
+    pub buyer_pubkey: RadrootsPublicKey,
+    pub seller_pubkey: RadrootsPublicKey,
     pub reason: String,
 }
 
@@ -374,8 +374,8 @@ impl RadrootsOrderCancellation {
 pub struct RadrootsOrderReceipt {
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
-    pub buyer_pubkey: String,
-    pub seller_pubkey: String,
+    pub buyer_pubkey: RadrootsPublicKey,
+    pub seller_pubkey: RadrootsPublicKey,
     pub received: bool,
     pub issue: Option<String>,
     pub received_at: u64,
@@ -415,11 +415,11 @@ pub enum RadrootsOrderPaymentMethod {
 pub struct RadrootsOrderPaymentRecord {
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
-    pub buyer_pubkey: String,
-    pub seller_pubkey: String,
-    pub root_event_id: String,
-    pub previous_event_id: String,
-    pub agreement_event_id: String,
+    pub buyer_pubkey: RadrootsPublicKey,
+    pub seller_pubkey: RadrootsPublicKey,
+    pub root_event_id: RadrootsEventId,
+    pub previous_event_id: RadrootsEventId,
+    pub agreement_event_id: RadrootsEventId,
     pub quote_id: RadrootsOrderQuoteId,
     pub quote_version: u32,
     pub economics_digest: RadrootsEconomicsDigest,
@@ -467,12 +467,12 @@ pub enum RadrootsOrderSettlementOutcome {
 pub struct RadrootsOrderSettlementDecision {
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
-    pub seller_pubkey: String,
-    pub buyer_pubkey: String,
-    pub root_event_id: String,
-    pub previous_event_id: String,
-    pub agreement_event_id: String,
-    pub payment_event_id: String,
+    pub seller_pubkey: RadrootsPublicKey,
+    pub buyer_pubkey: RadrootsPublicKey,
+    pub root_event_id: RadrootsEventId,
+    pub previous_event_id: RadrootsEventId,
+    pub agreement_event_id: RadrootsEventId,
+    pub payment_event_id: RadrootsEventId,
     pub quote_id: RadrootsOrderQuoteId,
     pub quote_version: u32,
     pub economics_digest: RadrootsEconomicsDigest,
@@ -1065,12 +1065,30 @@ mod tests {
         RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreUnit,
     };
 
-    fn sample_pubkey() -> String {
-        "0".repeat(64)
+    fn pubkey(character: char) -> RadrootsPublicKey {
+        core::iter::repeat_n(character, 64)
+            .collect::<String>()
+            .parse()
+            .unwrap()
+    }
+
+    fn event_id(character: char) -> RadrootsEventId {
+        core::iter::repeat_n(character, 64)
+            .collect::<String>()
+            .parse()
+            .unwrap()
+    }
+
+    fn buyer_pubkey() -> RadrootsPublicKey {
+        pubkey('b')
+    }
+
+    fn seller_pubkey() -> RadrootsPublicKey {
+        pubkey('a')
     }
 
     fn sample_listing_addr() -> RadrootsListingAddress {
-        format!("30402:{}:AAAAAAAAAAAAAAAAAAAAAg", sample_pubkey())
+        format!("30402:{}:AAAAAAAAAAAAAAAAAAAAAg", seller_pubkey())
             .parse()
             .unwrap()
     }
@@ -1099,8 +1117,8 @@ mod tests {
         RadrootsOrderRequest {
             order_id: order_id("order-1"),
             listing_addr: sample_listing_addr(),
-            buyer_pubkey: "buyer".into(),
-            seller_pubkey: "seller".into(),
+            buyer_pubkey: buyer_pubkey(),
+            seller_pubkey: seller_pubkey(),
             items: vec![RadrootsOrderItem {
                 bin_id: bin_id("bin-1"),
                 bin_count: 2,
@@ -1211,8 +1229,8 @@ mod tests {
         RadrootsOrderDecision {
             order_id: order_id("order-1"),
             listing_addr: sample_listing_addr(),
-            buyer_pubkey: "buyer".into(),
-            seller_pubkey: "seller".into(),
+            buyer_pubkey: buyer_pubkey(),
+            seller_pubkey: seller_pubkey(),
             decision: RadrootsOrderDecisionOutcome::Accepted {
                 inventory_commitments: vec![sample_inventory_commitment()],
             },
@@ -1223,8 +1241,8 @@ mod tests {
         RadrootsOrderFulfillmentUpdate {
             order_id: order_id("order-1"),
             listing_addr: sample_listing_addr(),
-            buyer_pubkey: "buyer".into(),
-            seller_pubkey: "seller".into(),
+            buyer_pubkey: buyer_pubkey(),
+            seller_pubkey: seller_pubkey(),
             status: RadrootsOrderFulfillmentState::ReadyForPickup,
         }
     }
@@ -1233,8 +1251,8 @@ mod tests {
         RadrootsOrderCancellation {
             order_id: order_id("order-1"),
             listing_addr: sample_listing_addr(),
-            buyer_pubkey: "buyer".into(),
-            seller_pubkey: "seller".into(),
+            buyer_pubkey: buyer_pubkey(),
+            seller_pubkey: seller_pubkey(),
             reason: "changed plans".into(),
         }
     }
@@ -1243,8 +1261,8 @@ mod tests {
         RadrootsOrderReceipt {
             order_id: order_id("order-1"),
             listing_addr: sample_listing_addr(),
-            buyer_pubkey: "buyer".into(),
-            seller_pubkey: "seller".into(),
+            buyer_pubkey: buyer_pubkey(),
+            seller_pubkey: seller_pubkey(),
             received,
             issue: (!received).then(|| "damaged items".into()),
             received_at: 1_777_665_600,
@@ -1256,10 +1274,10 @@ mod tests {
             revision_id: revision_id("rev-1"),
             order_id: order_id("order-1"),
             listing_addr: sample_listing_addr(),
-            buyer_pubkey: "buyer".into(),
-            seller_pubkey: "seller".into(),
-            root_event_id: "root-event".into(),
-            prev_event_id: "previous-event".into(),
+            buyer_pubkey: buyer_pubkey(),
+            seller_pubkey: seller_pubkey(),
+            root_event_id: event_id('1'),
+            prev_event_id: event_id('2'),
             items: vec![RadrootsOrderItem {
                 bin_id: bin_id("bin-1"),
                 bin_count: 2,
@@ -1276,10 +1294,10 @@ mod tests {
             revision_id: revision_id("rev-1"),
             order_id: order_id("order-1"),
             listing_addr: sample_listing_addr(),
-            buyer_pubkey: "buyer".into(),
-            seller_pubkey: "seller".into(),
-            root_event_id: "root-event".into(),
-            prev_event_id: "previous-event".into(),
+            buyer_pubkey: buyer_pubkey(),
+            seller_pubkey: seller_pubkey(),
+            root_event_id: event_id('1'),
+            prev_event_id: event_id('2'),
             decision,
         }
     }
@@ -1288,11 +1306,11 @@ mod tests {
         RadrootsOrderPaymentRecord {
             order_id: order_id("order-1"),
             listing_addr: sample_listing_addr(),
-            buyer_pubkey: "buyer".into(),
-            seller_pubkey: "seller".into(),
-            root_event_id: "root-event".into(),
-            previous_event_id: "previous-event".into(),
-            agreement_event_id: "agreement-event".into(),
+            buyer_pubkey: buyer_pubkey(),
+            seller_pubkey: seller_pubkey(),
+            root_event_id: event_id('1'),
+            previous_event_id: event_id('2'),
+            agreement_event_id: event_id('3'),
             quote_id: quote_id("quote-1"),
             quote_version: 1,
             economics_digest: digest("economics-digest"),
@@ -1311,12 +1329,12 @@ mod tests {
         RadrootsOrderSettlementDecision {
             order_id: order_id("order-1"),
             listing_addr: sample_listing_addr(),
-            seller_pubkey: "seller".into(),
-            buyer_pubkey: "buyer".into(),
-            root_event_id: "root-event".into(),
-            previous_event_id: "previous-event".into(),
-            agreement_event_id: "agreement-event".into(),
-            payment_event_id: "payment-event".into(),
+            seller_pubkey: seller_pubkey(),
+            buyer_pubkey: buyer_pubkey(),
+            root_event_id: event_id('1'),
+            previous_event_id: event_id('2'),
+            agreement_event_id: event_id('3'),
+            payment_event_id: event_id('4'),
             quote_id: quote_id("quote-1"),
             quote_version: 1,
             economics_digest: digest("economics-digest"),
@@ -1491,13 +1509,6 @@ mod tests {
     fn order_request_validation_rejects_invalid_fields() {
         assert_eq!(sample_order_request().validate(), Ok(()));
 
-        let mut missing_buyer_pubkey = sample_order_request();
-        missing_buyer_pubkey.buyer_pubkey = " ".into();
-        assert_eq!(
-            missing_buyer_pubkey.validate().unwrap_err(),
-            RadrootsOrderPayloadError::EmptyField("buyer_pubkey")
-        );
-
         let mut missing_items = sample_order_request();
         missing_items.items.clear();
         assert_eq!(
@@ -1532,6 +1543,29 @@ mod tests {
                 field: "items.bin_count"
             }
         );
+    }
+
+    #[test]
+    fn order_payload_json_rejects_invalid_protocol_identifiers() {
+        let mut request = serde_json::to_value(sample_order_request()).unwrap();
+        request["buyer_pubkey"] = serde_json::json!("not-a-pubkey");
+        assert!(serde_json::from_value::<RadrootsOrderRequest>(request).is_err());
+
+        let mut revision = serde_json::to_value(sample_order_revision_proposal()).unwrap();
+        revision["root_event_id"] = serde_json::json!("not-an-event-id");
+        assert!(serde_json::from_value::<RadrootsOrderRevisionProposal>(revision).is_err());
+
+        let mut payment = serde_json::to_value(sample_payment_recorded()).unwrap();
+        payment["agreement_event_id"] = serde_json::json!("not-an-event-id");
+        assert!(serde_json::from_value::<RadrootsOrderPaymentRecord>(payment).is_err());
+
+        let mut settlement = serde_json::to_value(sample_settlement_decision(
+            RadrootsOrderSettlementOutcome::Accepted,
+            None,
+        ))
+        .unwrap();
+        settlement["payment_event_id"] = serde_json::json!("not-an-event-id");
+        assert!(serde_json::from_value::<RadrootsOrderSettlementDecision>(settlement).is_err());
     }
 
     #[test]
@@ -1962,15 +1996,6 @@ mod tests {
             derived.validate().unwrap_err(),
             RadrootsOrderPayloadError::InvalidFulfillmentStatus
         );
-
-        let missing_seller = RadrootsOrderFulfillmentUpdate {
-            seller_pubkey: " ".into(),
-            ..sample_order_fulfillment_update()
-        };
-        assert_eq!(
-            missing_seller.validate().unwrap_err(),
-            RadrootsOrderPayloadError::EmptyField("seller_pubkey")
-        );
     }
 
     #[test]
@@ -1984,15 +2009,6 @@ mod tests {
         assert_eq!(
             missing_reason.validate().unwrap_err(),
             RadrootsOrderPayloadError::EmptyField("reason")
-        );
-
-        let missing_buyer = RadrootsOrderCancellation {
-            buyer_pubkey: " ".into(),
-            ..sample_order_cancellation()
-        };
-        assert_eq!(
-            missing_buyer.validate().unwrap_err(),
-            RadrootsOrderPayloadError::EmptyField("buyer_pubkey")
         );
     }
 

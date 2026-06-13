@@ -903,21 +903,13 @@ pub fn canonicalize_order_request_for_signer(
     let listing_addr_raw = request.listing_addr.to_string();
     let listing_addr = parse_public_listing_addr(&listing_addr_raw)?;
 
-    let buyer_pubkey = if request.buyer_pubkey.trim().is_empty() {
-        normalized_required_string(signer_pubkey.to_string(), "buyer_pubkey")?
-    } else {
-        normalized_required_string(core::mem::take(&mut request.buyer_pubkey), "buyer_pubkey")?
-    };
-    if buyer_pubkey != signer_pubkey {
+    let buyer_pubkey = request.buyer_pubkey.clone();
+    if buyer_pubkey.as_str() != signer_pubkey {
         return Err(RadrootsOrderCanonicalizationError::InvalidBuyerSigner);
     }
 
-    let seller_pubkey = if request.seller_pubkey.trim().is_empty() {
-        listing_addr.seller_pubkey.clone()
-    } else {
-        normalized_required_string(core::mem::take(&mut request.seller_pubkey), "seller_pubkey")?
-    };
-    if seller_pubkey != listing_addr.seller_pubkey {
+    let seller_pubkey = request.seller_pubkey.clone();
+    if seller_pubkey.as_str() != listing_addr.seller_pubkey {
         return Err(RadrootsOrderCanonicalizationError::InvalidSellerListing);
     }
 
@@ -941,22 +933,14 @@ pub fn canonicalize_order_decision_for_signer(
     let listing_addr_raw = decision_event.listing_addr.to_string();
     let listing_addr = parse_public_listing_addr(&listing_addr_raw)?;
 
-    let seller_pubkey = if decision_event.seller_pubkey.trim().is_empty() {
-        normalized_required_string(signer_pubkey.to_string(), "seller_pubkey")?
-    } else {
-        normalized_required_string(
-            core::mem::take(&mut decision_event.seller_pubkey),
-            "seller_pubkey",
-        )?
-    };
-    if seller_pubkey != signer_pubkey || seller_pubkey != listing_addr.seller_pubkey {
+    let seller_pubkey = decision_event.seller_pubkey.clone();
+    if seller_pubkey.as_str() != signer_pubkey
+        || seller_pubkey.as_str() != listing_addr.seller_pubkey
+    {
         return Err(RadrootsOrderCanonicalizationError::InvalidSellerListing);
     }
 
-    let buyer_pubkey = normalized_required_string(
-        core::mem::take(&mut decision_event.buyer_pubkey),
-        "buyer_pubkey",
-    )?;
+    let buyer_pubkey = decision_event.buyer_pubkey.clone();
     canonicalize_decision(&mut decision_event.decision)?;
 
     decision_event.order_id = order_id;
@@ -2223,7 +2207,7 @@ fn payment_projection_from_record(
         settlement_state,
         payment_event_id: Some(payment.event_id.clone()),
         settlement_event_id: settlement.map(|settlement| settlement.event_id.clone()),
-        agreement_event_id: Some(payment.payload.agreement_event_id.clone()),
+        agreement_event_id: Some(payment.payload.agreement_event_id.to_string()),
         quote_id: Some(payment.payload.quote_id.to_string()),
         quote_version: Some(payment.payload.quote_version),
         economics_digest: Some(payment.payload.economics_digest.to_string()),
@@ -2836,8 +2820,8 @@ fn requested_projection(
         economics: Some(request.payload.economics.clone()),
         agreement_event_id: None,
         listing_addr: Some(request.payload.listing_addr.to_string()),
-        buyer_pubkey: Some(request.payload.buyer_pubkey.clone()),
-        seller_pubkey: Some(request.payload.seller_pubkey.clone()),
+        buyer_pubkey: Some(request.payload.buyer_pubkey.to_string()),
+        seller_pubkey: Some(request.payload.seller_pubkey.to_string()),
         last_event_id: Some(request.event_id.clone()),
         issues: Vec::new(),
     }
@@ -3145,8 +3129,8 @@ fn decided_projection(
         economics,
         agreement_event_id,
         listing_addr: Some(request.payload.listing_addr.to_string()),
-        buyer_pubkey: Some(request.payload.buyer_pubkey.clone()),
-        seller_pubkey: Some(request.payload.seller_pubkey.clone()),
+        buyer_pubkey: Some(request.payload.buyer_pubkey.to_string()),
+        seller_pubkey: Some(request.payload.seller_pubkey.to_string()),
         last_event_id,
         issues: Vec::new(),
     }
@@ -3264,8 +3248,8 @@ fn cancelled_projection(
         economics: Some(economics),
         agreement_event_id,
         listing_addr: Some(request.payload.listing_addr.to_string()),
-        buyer_pubkey: Some(request.payload.buyer_pubkey.clone()),
-        seller_pubkey: Some(request.payload.seller_pubkey.clone()),
+        buyer_pubkey: Some(request.payload.buyer_pubkey.to_string()),
+        seller_pubkey: Some(request.payload.seller_pubkey.to_string()),
         last_event_id: Some(cancellation.event_id),
         issues: Vec::new(),
     }
@@ -3302,8 +3286,8 @@ fn receipt_terminal_projection(
         economics: Some(economics.clone()),
         agreement_event_id: Some(agreement_event_id.to_string()),
         listing_addr: Some(request.payload.listing_addr.to_string()),
-        buyer_pubkey: Some(request.payload.buyer_pubkey.clone()),
-        seller_pubkey: Some(request.payload.seller_pubkey.clone()),
+        buyer_pubkey: Some(request.payload.buyer_pubkey.to_string()),
+        seller_pubkey: Some(request.payload.seller_pubkey.to_string()),
         last_event_id: Some(receipt.event_id),
         issues: Vec::new(),
     }
@@ -3351,8 +3335,8 @@ fn invalid_projection_with_payment(
         economics,
         agreement_event_id: None,
         listing_addr: request.map(|request| request.payload.listing_addr.to_string()),
-        buyer_pubkey: request.map(|request| request.payload.buyer_pubkey.clone()),
-        seller_pubkey: request.map(|request| request.payload.seller_pubkey.clone()),
+        buyer_pubkey: request.map(|request| request.payload.buyer_pubkey.to_string()),
+        seller_pubkey: request.map(|request| request.payload.seller_pubkey.to_string()),
         last_event_id: request.map(|request| request.event_id.clone()),
         issues,
     }

@@ -33,6 +33,7 @@ use crate::{
     )
 ))]
 use core::time::Duration;
+use radroots_events::ids::RadrootsEventId;
 #[cfg(feature = "radrootsd-client")]
 use radroots_events::kinds::{KIND_FARM, KIND_LISTING};
 
@@ -2012,8 +2013,8 @@ impl<'a> TradeClient<'a> {
     #[cfg(feature = "serde_json")]
     pub fn build_order_decision_draft(
         &self,
-        root_event_id: &str,
-        prev_event_id: &str,
+        root_event_id: &RadrootsEventId,
+        prev_event_id: &RadrootsEventId,
         payload: &order::RadrootsOrderDecision,
     ) -> Result<order::RadrootsOrderDecisionDraft, order::EventEncodeError> {
         order::build_order_decision_draft(root_event_id, prev_event_id, payload)
@@ -2022,8 +2023,8 @@ impl<'a> TradeClient<'a> {
     #[cfg(feature = "serde_json")]
     pub fn build_order_revision_proposal_draft(
         &self,
-        root_event_id: &str,
-        prev_event_id: &str,
+        root_event_id: &RadrootsEventId,
+        prev_event_id: &RadrootsEventId,
         payload: &order::RadrootsOrderRevisionProposal,
     ) -> Result<order::RadrootsOrderRevisionProposalDraft, order::EventEncodeError> {
         order::build_order_revision_proposal_draft(root_event_id, prev_event_id, payload)
@@ -2032,8 +2033,8 @@ impl<'a> TradeClient<'a> {
     #[cfg(feature = "serde_json")]
     pub fn build_order_revision_decision_draft(
         &self,
-        root_event_id: &str,
-        prev_event_id: &str,
+        root_event_id: &RadrootsEventId,
+        prev_event_id: &RadrootsEventId,
         payload: &order::RadrootsOrderRevisionDecision,
     ) -> Result<order::RadrootsOrderRevisionDecisionDraft, order::EventEncodeError> {
         order::build_order_revision_decision_draft(root_event_id, prev_event_id, payload)
@@ -2042,8 +2043,8 @@ impl<'a> TradeClient<'a> {
     #[cfg(feature = "serde_json")]
     pub fn build_fulfillment_update_draft(
         &self,
-        root_event_id: &str,
-        prev_event_id: &str,
+        root_event_id: &RadrootsEventId,
+        prev_event_id: &RadrootsEventId,
         payload: &order::RadrootsOrderFulfillmentUpdate,
     ) -> Result<order::RadrootsOrderFulfillmentUpdateDraft, order::EventEncodeError> {
         order::build_fulfillment_update_draft(root_event_id, prev_event_id, payload)
@@ -2052,8 +2053,8 @@ impl<'a> TradeClient<'a> {
     #[cfg(feature = "serde_json")]
     pub fn build_order_cancellation_draft(
         &self,
-        root_event_id: &str,
-        prev_event_id: &str,
+        root_event_id: &RadrootsEventId,
+        prev_event_id: &RadrootsEventId,
         payload: &order::RadrootsOrderCancellation,
     ) -> Result<order::RadrootsOrderCancellationDraft, order::EventEncodeError> {
         order::build_order_cancellation_draft(root_event_id, prev_event_id, payload)
@@ -2062,8 +2063,8 @@ impl<'a> TradeClient<'a> {
     #[cfg(feature = "serde_json")]
     pub fn build_buyer_receipt_draft(
         &self,
-        root_event_id: &str,
-        prev_event_id: &str,
+        root_event_id: &RadrootsEventId,
+        prev_event_id: &RadrootsEventId,
         payload: &order::RadrootsOrderReceipt,
     ) -> Result<order::RadrootsOrderReceiptDraft, order::EventEncodeError> {
         order::build_buyer_receipt_draft(root_event_id, prev_event_id, payload)
@@ -2176,8 +2177,8 @@ impl<'a> TradeClient<'a> {
     pub async fn publish_order_revision_proposal_with_identity(
         &self,
         identity: &RadrootsIdentity,
-        root_event_id: &str,
-        prev_event_id: &str,
+        root_event_id: &RadrootsEventId,
+        prev_event_id: &RadrootsEventId,
         payload: &order::RadrootsOrderRevisionProposal,
     ) -> Result<SdkPublishReceipt, SdkPublishError> {
         let draft =
@@ -2200,8 +2201,8 @@ impl<'a> TradeClient<'a> {
     pub async fn publish_order_revision_decision_with_identity(
         &self,
         identity: &RadrootsIdentity,
-        root_event_id: &str,
-        prev_event_id: &str,
+        root_event_id: &RadrootsEventId,
+        prev_event_id: &RadrootsEventId,
         payload: &order::RadrootsOrderRevisionDecision,
     ) -> Result<SdkPublishReceipt, SdkPublishError> {
         let draft =
@@ -2224,8 +2225,8 @@ impl<'a> TradeClient<'a> {
     pub async fn publish_order_decision_with_identity(
         &self,
         identity: &RadrootsIdentity,
-        root_event_id: &str,
-        prev_event_id: &str,
+        root_event_id: &RadrootsEventId,
+        prev_event_id: &RadrootsEventId,
         payload: &order::RadrootsOrderDecision,
     ) -> Result<SdkPublishReceipt, SdkPublishError> {
         let draft = order::build_order_decision_draft(root_event_id, prev_event_id, payload)
@@ -2247,8 +2248,8 @@ impl<'a> TradeClient<'a> {
     pub async fn publish_fulfillment_update_with_identity(
         &self,
         identity: &RadrootsIdentity,
-        root_event_id: &str,
-        prev_event_id: &str,
+        root_event_id: &RadrootsEventId,
+        prev_event_id: &RadrootsEventId,
         payload: &order::RadrootsOrderFulfillmentUpdate,
     ) -> Result<SdkPublishReceipt, SdkPublishError> {
         let draft = order::build_fulfillment_update_draft(root_event_id, prev_event_id, payload)
@@ -2308,8 +2309,8 @@ impl<'a> TradeClient<'a> {
     pub async fn publish_order_cancellation_with_identity(
         &self,
         identity: &RadrootsIdentity,
-        root_event_id: &str,
-        prev_event_id: &str,
+        root_event_id: &RadrootsEventId,
+        prev_event_id: &RadrootsEventId,
         payload: &order::RadrootsOrderCancellation,
     ) -> Result<SdkPublishReceipt, SdkPublishError> {
         let draft = order::build_order_cancellation_draft(root_event_id, prev_event_id, payload)
@@ -2331,8 +2332,8 @@ impl<'a> TradeClient<'a> {
     pub async fn publish_buyer_receipt_with_identity(
         &self,
         identity: &RadrootsIdentity,
-        root_event_id: &str,
-        prev_event_id: &str,
+        root_event_id: &RadrootsEventId,
+        prev_event_id: &RadrootsEventId,
         payload: &order::RadrootsOrderReceipt,
     ) -> Result<SdkPublishReceipt, SdkPublishError> {
         let draft = order::build_buyer_receipt_draft(root_event_id, prev_event_id, payload)

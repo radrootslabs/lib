@@ -5,6 +5,7 @@ use radroots_core::{
     RadrootsCoreQuantityPrice, RadrootsCoreUnit,
 };
 use radroots_events::farm::{RadrootsFarm, RadrootsFarmLocation, RadrootsFarmRef};
+use radroots_events::ids::RadrootsPublicKey;
 use radroots_events::kinds::{
     KIND_FARM, KIND_LISTING, KIND_LISTING_DRAFT, KIND_ORDER_REQUEST, KIND_PROFILE,
 };
@@ -451,15 +452,15 @@ fn sample_order_request_economics() -> RadrootsOrderEconomics {
 }
 
 fn sample_order_request() -> RadrootsOrderRequest {
-    let seller_pubkey = "a".repeat(64);
+    let seller_pubkey: RadrootsPublicKey = "a".repeat(64).parse().expect("seller public key");
 
     RadrootsOrderRequest {
         order_id: "order-1".parse().expect("order id"),
         listing_addr: format!("{KIND_LISTING}:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg")
             .parse()
             .expect("listing address"),
-        buyer_pubkey: "buyer".to_owned(),
-        seller_pubkey: "seller".to_owned(),
+        buyer_pubkey: "b".repeat(64).parse().expect("buyer public key"),
+        seller_pubkey,
         items: vec![RadrootsOrderItem {
             bin_id: "bin-1".parse().expect("bin id"),
             bin_count: 2,
@@ -470,7 +471,7 @@ fn sample_order_request() -> RadrootsOrderRequest {
 
 fn listing_event_ptr_with_relays(relays: Option<&str>) -> RadrootsNostrEventPtr {
     RadrootsNostrEventPtr {
-        id: "listing-event-1".to_owned(),
+        id: "a".repeat(64),
         relays: relays.map(str::to_owned),
     }
 }
@@ -1628,7 +1629,7 @@ async fn radrootsd_order_request_publish_accepts_session_handle() -> TestResult<
     assert_eq!(request_json["params"]["order"]["order_id"], "order-1");
     assert_eq!(
         request_json["params"]["listing_event"]["id"],
-        "listing-event-1"
+        "a".repeat(64)
     );
     assert_eq!(
         request_json["params"]["listing_event"]["relays"],
@@ -1760,7 +1761,7 @@ async fn radrootsd_sdk_workflow_chains_session_listing_order_and_bridge_job() ->
     assert_eq!(order_request["params"]["order"]["order_id"], "order-1");
     assert_eq!(
         order_request["params"]["listing_event"]["id"],
-        "listing-event-1"
+        "a".repeat(64)
     );
 
     let order_job = match &order_receipt.transport_receipt {

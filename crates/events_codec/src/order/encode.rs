@@ -4,6 +4,7 @@ use alloc::string::String;
 #[cfg(feature = "serde_json")]
 use radroots_events::{
     RadrootsNostrEventPtr,
+    ids::RadrootsEventId,
     order::{
         RadrootsOrderCancellation, RadrootsOrderDecision, RadrootsOrderEnvelope,
         RadrootsOrderEnvelopeError, RadrootsOrderEventType, RadrootsOrderFulfillmentUpdate,
@@ -100,8 +101,8 @@ fn order_envelope_event_build<T: serde::Serialize>(
     listing_addr: &str,
     order_id: &str,
     listing_event: Option<&RadrootsNostrEventPtr>,
-    root_event_id: Option<&str>,
-    prev_event_id: Option<&str>,
+    root_event_id: Option<&RadrootsEventId>,
+    prev_event_id: Option<&RadrootsEventId>,
     payload: &T,
 ) -> Result<WireEventParts, EventEncodeError> {
     if message_type.requires_listing_snapshot() && listing_event.is_none() {
@@ -124,8 +125,8 @@ fn order_envelope_event_build<T: serde::Serialize>(
         listing_addr,
         Some(order_id),
         listing_event,
-        root_event_id,
-        prev_event_id,
+        root_event_id.map(RadrootsEventId::as_str),
+        prev_event_id.map(RadrootsEventId::as_str),
     )?;
     Ok(WireEventParts {
         kind: message_type.kind(),
@@ -154,8 +155,8 @@ pub fn order_request_event_build(
 
 #[cfg(feature = "serde_json")]
 pub fn order_decision_event_build(
-    root_event_id: &str,
-    prev_event_id: &str,
+    root_event_id: &RadrootsEventId,
+    prev_event_id: &RadrootsEventId,
     payload: &RadrootsOrderDecision,
 ) -> Result<WireEventParts, EventEncodeError> {
     payload.validate().map_err(map_order_payload_error)?;
@@ -173,15 +174,15 @@ pub fn order_decision_event_build(
 
 #[cfg(feature = "serde_json")]
 pub fn order_revision_proposal_event_build(
-    root_event_id: &str,
-    prev_event_id: &str,
+    root_event_id: &RadrootsEventId,
+    prev_event_id: &RadrootsEventId,
     payload: &RadrootsOrderRevisionProposal,
 ) -> Result<WireEventParts, EventEncodeError> {
     payload.validate().map_err(map_order_payload_error)?;
-    if payload.root_event_id != root_event_id {
+    if payload.root_event_id.as_str() != root_event_id.as_str() {
         return Err(EventEncodeError::InvalidField("root_event_id"));
     }
-    if payload.prev_event_id != prev_event_id {
+    if payload.prev_event_id.as_str() != prev_event_id.as_str() {
         return Err(EventEncodeError::InvalidField("prev_event_id"));
     }
     order_envelope_event_build(
@@ -198,15 +199,15 @@ pub fn order_revision_proposal_event_build(
 
 #[cfg(feature = "serde_json")]
 pub fn order_revision_decision_event_build(
-    root_event_id: &str,
-    prev_event_id: &str,
+    root_event_id: &RadrootsEventId,
+    prev_event_id: &RadrootsEventId,
     payload: &RadrootsOrderRevisionDecision,
 ) -> Result<WireEventParts, EventEncodeError> {
     payload.validate().map_err(map_order_payload_error)?;
-    if payload.root_event_id != root_event_id {
+    if payload.root_event_id.as_str() != root_event_id.as_str() {
         return Err(EventEncodeError::InvalidField("root_event_id"));
     }
-    if payload.prev_event_id != prev_event_id {
+    if payload.prev_event_id.as_str() != prev_event_id.as_str() {
         return Err(EventEncodeError::InvalidField("prev_event_id"));
     }
     order_envelope_event_build(
@@ -223,8 +224,8 @@ pub fn order_revision_decision_event_build(
 
 #[cfg(feature = "serde_json")]
 pub fn order_fulfillment_update_event_build(
-    root_event_id: &str,
-    prev_event_id: &str,
+    root_event_id: &RadrootsEventId,
+    prev_event_id: &RadrootsEventId,
     payload: &RadrootsOrderFulfillmentUpdate,
 ) -> Result<WireEventParts, EventEncodeError> {
     payload.validate().map_err(map_order_payload_error)?;
@@ -242,8 +243,8 @@ pub fn order_fulfillment_update_event_build(
 
 #[cfg(feature = "serde_json")]
 pub fn order_cancellation_event_build(
-    root_event_id: &str,
-    prev_event_id: &str,
+    root_event_id: &RadrootsEventId,
+    prev_event_id: &RadrootsEventId,
     payload: &RadrootsOrderCancellation,
 ) -> Result<WireEventParts, EventEncodeError> {
     payload.validate().map_err(map_order_payload_error)?;
@@ -261,8 +262,8 @@ pub fn order_cancellation_event_build(
 
 #[cfg(feature = "serde_json")]
 pub fn order_receipt_event_build(
-    root_event_id: &str,
-    prev_event_id: &str,
+    root_event_id: &RadrootsEventId,
+    prev_event_id: &RadrootsEventId,
     payload: &RadrootsOrderReceipt,
 ) -> Result<WireEventParts, EventEncodeError> {
     payload.validate().map_err(map_order_payload_error)?;
@@ -280,15 +281,15 @@ pub fn order_receipt_event_build(
 
 #[cfg(feature = "serde_json")]
 pub fn order_payment_record_event_build(
-    root_event_id: &str,
-    prev_event_id: &str,
+    root_event_id: &RadrootsEventId,
+    prev_event_id: &RadrootsEventId,
     payload: &RadrootsOrderPaymentRecord,
 ) -> Result<WireEventParts, EventEncodeError> {
     payload.validate().map_err(map_order_payload_error)?;
-    if payload.root_event_id != root_event_id {
+    if payload.root_event_id.as_str() != root_event_id.as_str() {
         return Err(EventEncodeError::InvalidField("root_event_id"));
     }
-    if payload.previous_event_id != prev_event_id {
+    if payload.previous_event_id.as_str() != prev_event_id.as_str() {
         return Err(EventEncodeError::InvalidField("previous_event_id"));
     }
     order_envelope_event_build(
@@ -305,15 +306,15 @@ pub fn order_payment_record_event_build(
 
 #[cfg(feature = "serde_json")]
 pub fn order_settlement_decision_event_build(
-    root_event_id: &str,
-    prev_event_id: &str,
+    root_event_id: &RadrootsEventId,
+    prev_event_id: &RadrootsEventId,
     payload: &RadrootsOrderSettlementDecision,
 ) -> Result<WireEventParts, EventEncodeError> {
     payload.validate().map_err(map_order_payload_error)?;
-    if payload.root_event_id != root_event_id {
+    if payload.root_event_id.as_str() != root_event_id.as_str() {
         return Err(EventEncodeError::InvalidField("root_event_id"));
     }
-    if payload.previous_event_id != prev_event_id {
+    if payload.previous_event_id.as_str() != prev_event_id.as_str() {
         return Err(EventEncodeError::InvalidField("previous_event_id"));
     }
     order_envelope_event_build(

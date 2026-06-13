@@ -10,6 +10,7 @@ use radroots_core::{
     RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
     RadrootsCoreQuantityPrice, RadrootsCoreUnit,
 };
+use radroots_events::ids::{RadrootsEventId, RadrootsPublicKey};
 use radroots_sdk::farm::{RadrootsFarm, RadrootsFarmLocation, RadrootsFarmRef};
 use radroots_sdk::identity::RadrootsIdentity;
 use radroots_sdk::listing::{
@@ -214,12 +215,29 @@ fn usd(raw: &str) -> RadrootsCoreMoney {
 
 fn listing_event_ptr() -> RadrootsNostrEventPtr {
     RadrootsNostrEventPtr {
-        id: "listing-event-1".into(),
+        id: event_id_wire('a'),
         relays: Some("wss://listing.relay.example".into()),
     }
 }
 
+fn public_key(value: String) -> RadrootsPublicKey {
+    value.parse().expect("public key")
+}
+
+fn event_id(character: char) -> RadrootsEventId {
+    core::iter::repeat_n(character, 64)
+        .collect::<String>()
+        .parse()
+        .expect("event id")
+}
+
+fn event_id_wire(character: char) -> String {
+    event_id(character).into_string()
+}
+
 fn sample_order_request(buyer_pubkey: String, seller_pubkey: String) -> RadrootsOrderRequest {
+    let buyer_pubkey = public_key(buyer_pubkey);
+    let seller_pubkey = public_key(seller_pubkey);
     RadrootsOrderRequest {
         order_id: "order-1".parse().expect("order id"),
         listing_addr: format!("30402:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg")
@@ -256,6 +274,8 @@ fn sample_order_request(buyer_pubkey: String, seller_pubkey: String) -> Radroots
 }
 
 fn sample_order_decision(buyer_pubkey: String, seller_pubkey: String) -> RadrootsOrderDecision {
+    let buyer_pubkey = public_key(buyer_pubkey);
+    let seller_pubkey = public_key(seller_pubkey);
     RadrootsOrderDecision {
         order_id: "order-1".parse().expect("order id"),
         listing_addr: format!("30402:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg")
@@ -278,6 +298,8 @@ fn sample_order_revision_proposal(
     root_event_id: String,
     prev_event_id: String,
 ) -> RadrootsOrderRevisionProposal {
+    let buyer_pubkey = public_key(buyer_pubkey);
+    let seller_pubkey = public_key(seller_pubkey);
     RadrootsOrderRevisionProposal {
         revision_id: "revision-1".parse().expect("revision id"),
         order_id: "order-1".parse().expect("order id"),
@@ -286,8 +308,8 @@ fn sample_order_revision_proposal(
             .expect("listing address"),
         buyer_pubkey,
         seller_pubkey,
-        root_event_id,
-        prev_event_id,
+        root_event_id: root_event_id.parse().expect("root event id"),
+        prev_event_id: prev_event_id.parse().expect("previous event id"),
         items: vec![RadrootsOrderItem {
             bin_id: "bin-1".parse().expect("bin id"),
             bin_count: 3,
@@ -328,7 +350,7 @@ fn sample_order_revision_decision(
         buyer_pubkey: proposal.buyer_pubkey.clone(),
         seller_pubkey: proposal.seller_pubkey.clone(),
         root_event_id: proposal.root_event_id.clone(),
-        prev_event_id: "order-revision-proposal-event-1".into(),
+        prev_event_id: event_id('3'),
         decision,
     }
 }
@@ -337,6 +359,8 @@ fn sample_fulfillment_update(
     buyer_pubkey: String,
     seller_pubkey: String,
 ) -> RadrootsOrderFulfillmentUpdate {
+    let buyer_pubkey = public_key(buyer_pubkey);
+    let seller_pubkey = public_key(seller_pubkey);
     RadrootsOrderFulfillmentUpdate {
         order_id: "order-1".parse().expect("order id"),
         listing_addr: format!("30402:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg")
@@ -352,6 +376,8 @@ fn sample_order_cancellation(
     buyer_pubkey: String,
     seller_pubkey: String,
 ) -> RadrootsOrderCancellation {
+    let buyer_pubkey = public_key(buyer_pubkey);
+    let seller_pubkey = public_key(seller_pubkey);
     RadrootsOrderCancellation {
         order_id: "order-1".parse().expect("order id"),
         listing_addr: format!("30402:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg")
@@ -364,6 +390,8 @@ fn sample_order_cancellation(
 }
 
 fn sample_buyer_receipt(buyer_pubkey: String, seller_pubkey: String) -> RadrootsOrderReceipt {
+    let buyer_pubkey = public_key(buyer_pubkey);
+    let seller_pubkey = public_key(seller_pubkey);
     RadrootsOrderReceipt {
         order_id: "order-1".parse().expect("order id"),
         listing_addr: format!("30402:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg")
@@ -519,7 +547,7 @@ async fn relay_direct_order_decision_publish_accepts_sdk_built_draft() -> TestRe
     let relay = AckRelay::spawn().await?;
     let buyer_identity = RadrootsIdentity::generate();
     let seller_identity = RadrootsIdentity::generate();
-    let root_event_id = "order-request-event-1";
+    let root_event_id = event_id('1');
     let payload = sample_order_decision(
         buyer_identity.public_key_hex(),
         seller_identity.public_key_hex(),
@@ -534,7 +562,7 @@ async fn relay_direct_order_decision_publish_accepts_sdk_built_draft() -> TestRe
     let draft =
         client
             .order()
-            .build_order_decision_draft(root_event_id, root_event_id, &payload)?;
+            .build_order_decision_draft(&root_event_id, &root_event_id, &payload)?;
     assert_eq!(draft.as_wire_parts().kind, 3423);
 
     let receipt = client
@@ -576,13 +604,13 @@ async fn relay_direct_order_decision_publish_accepts_sdk_built_draft() -> TestRe
                 relay_receipt
                     .event
                     .tags
-                    .contains(&vec!["e_root".to_owned(), root_event_id.to_owned(),])
+                    .contains(&vec!["e_root".to_owned(), root_event_id.to_string()])
             );
             assert!(
                 relay_receipt
                     .event
                     .tags
-                    .contains(&vec!["e_prev".to_owned(), root_event_id.to_owned(),])
+                    .contains(&vec!["e_prev".to_owned(), root_event_id.to_string()])
             );
             assert_eq!(relay_receipt.target_relays, vec![relay.url().to_owned()]);
             assert_eq!(relay_receipt.connected_relays, vec![relay.url().to_owned()]);
@@ -612,13 +640,13 @@ async fn relay_direct_order_revision_publish_accepts_sdk_built_payloads() -> Tes
     let seller_identity = RadrootsIdentity::generate();
     let buyer_pubkey = buyer_identity.public_key_hex();
     let seller_pubkey = seller_identity.public_key_hex();
-    let root_event_id = "order-request-event-1";
-    let decision_event_id = "order-decision-event-1";
+    let root_event_id = event_id('1');
+    let decision_event_id = event_id('2');
     let proposal = sample_order_revision_proposal(
         buyer_pubkey.clone(),
         seller_pubkey.clone(),
-        root_event_id.to_owned(),
-        decision_event_id.to_owned(),
+        root_event_id.to_string(),
+        decision_event_id.to_string(),
     );
     let decision =
         sample_order_revision_decision(&proposal, RadrootsOrderRevisionOutcome::Accepted);
@@ -634,8 +662,8 @@ async fn relay_direct_order_revision_publish_accepts_sdk_built_payloads() -> Tes
         .order()
         .publish_order_revision_proposal_with_identity(
             &seller_identity,
-            root_event_id,
-            decision_event_id,
+            &root_event_id,
+            &decision_event_id,
             &proposal,
         )
         .await?;
@@ -643,8 +671,8 @@ async fn relay_direct_order_revision_publish_accepts_sdk_built_payloads() -> Tes
         .order()
         .publish_order_revision_decision_with_identity(
             &buyer_identity,
-            root_event_id,
-            decision.prev_event_id.as_str(),
+            &root_event_id,
+            &decision.prev_event_id,
             &decision,
         )
         .await?;
@@ -666,13 +694,13 @@ async fn relay_direct_order_revision_publish_accepts_sdk_built_payloads() -> Tes
                 relay_receipt
                     .event
                     .tags
-                    .contains(&vec!["e_root".to_owned(), root_event_id.to_owned()])
+                    .contains(&vec!["e_root".to_owned(), root_event_id.to_string()])
             );
             assert!(
                 relay_receipt
                     .event
                     .tags
-                    .contains(&vec!["e_prev".to_owned(), decision_event_id.to_owned()])
+                    .contains(&vec!["e_prev".to_owned(), decision_event_id.to_string()])
             );
             let envelope = client
                 .order()
@@ -701,12 +729,14 @@ async fn relay_direct_order_revision_publish_accepts_sdk_built_payloads() -> Tes
                 relay_receipt
                     .event
                     .tags
-                    .contains(&vec!["e_root".to_owned(), root_event_id.to_owned()])
+                    .contains(&vec!["e_root".to_owned(), root_event_id.to_string()])
             );
-            assert!(relay_receipt.event.tags.contains(&vec![
-                "e_prev".to_owned(),
-                "order-revision-proposal-event-1".to_owned()
-            ]));
+            assert!(
+                relay_receipt
+                    .event
+                    .tags
+                    .contains(&vec!["e_prev".to_owned(), event_id_wire('3')])
+            );
             let envelope = client
                 .order()
                 .parse_order_revision_decision(&relay_receipt.event)
@@ -732,9 +762,9 @@ async fn relay_direct_order_lifecycle_publish_accepts_sdk_built_payloads() -> Te
     let seller_identity = RadrootsIdentity::generate();
     let buyer_pubkey = buyer_identity.public_key_hex();
     let seller_pubkey = seller_identity.public_key_hex();
-    let root_event_id = "order-request-event-1";
-    let decision_event_id = "order-decision-event-1";
-    let fulfillment_event_id = "fulfillment-event-1";
+    let root_event_id = event_id('1');
+    let decision_event_id = event_id('2');
+    let fulfillment_event_id = event_id('4');
     let fulfillment = sample_fulfillment_update(buyer_pubkey.clone(), seller_pubkey.clone());
     let cancellation = sample_order_cancellation(buyer_pubkey.clone(), seller_pubkey.clone());
     let receipt = sample_buyer_receipt(buyer_pubkey.clone(), seller_pubkey.clone());
@@ -750,8 +780,8 @@ async fn relay_direct_order_lifecycle_publish_accepts_sdk_built_payloads() -> Te
         .order()
         .publish_fulfillment_update_with_identity(
             &seller_identity,
-            root_event_id,
-            decision_event_id,
+            &root_event_id,
+            &decision_event_id,
             &fulfillment,
         )
         .await?;
@@ -759,8 +789,8 @@ async fn relay_direct_order_lifecycle_publish_accepts_sdk_built_payloads() -> Te
         .order()
         .publish_order_cancellation_with_identity(
             &buyer_identity,
-            root_event_id,
-            root_event_id,
+            &root_event_id,
+            &root_event_id,
             &cancellation,
         )
         .await?;
@@ -768,8 +798,8 @@ async fn relay_direct_order_lifecycle_publish_accepts_sdk_built_payloads() -> Te
         .order()
         .publish_buyer_receipt_with_identity(
             &buyer_identity,
-            root_event_id,
-            fulfillment_event_id,
+            &root_event_id,
+            &fulfillment_event_id,
             &receipt,
         )
         .await?;
@@ -792,13 +822,13 @@ async fn relay_direct_order_lifecycle_publish_accepts_sdk_built_payloads() -> Te
                 relay_receipt
                     .event
                     .tags
-                    .contains(&vec!["e_root".to_owned(), root_event_id.to_owned()])
+                    .contains(&vec!["e_root".to_owned(), root_event_id.to_string()])
             );
             assert!(
                 relay_receipt
                     .event
                     .tags
-                    .contains(&vec!["e_prev".to_owned(), decision_event_id.to_owned()])
+                    .contains(&vec!["e_prev".to_owned(), decision_event_id.to_string()])
             );
             let envelope = client
                 .order()
@@ -825,13 +855,13 @@ async fn relay_direct_order_lifecycle_publish_accepts_sdk_built_payloads() -> Te
                 relay_receipt
                     .event
                     .tags
-                    .contains(&vec!["e_root".to_owned(), root_event_id.to_owned()])
+                    .contains(&vec!["e_root".to_owned(), root_event_id.to_string()])
             );
             assert!(
                 relay_receipt
                     .event
                     .tags
-                    .contains(&vec!["e_prev".to_owned(), root_event_id.to_owned()])
+                    .contains(&vec!["e_prev".to_owned(), root_event_id.to_string()])
             );
             let envelope = client
                 .order()
@@ -858,13 +888,13 @@ async fn relay_direct_order_lifecycle_publish_accepts_sdk_built_payloads() -> Te
                 relay_receipt
                     .event
                     .tags
-                    .contains(&vec!["e_root".to_owned(), root_event_id.to_owned()])
+                    .contains(&vec!["e_root".to_owned(), root_event_id.to_string()])
             );
             assert!(
                 relay_receipt
                     .event
                     .tags
-                    .contains(&vec!["e_prev".to_owned(), fulfillment_event_id.to_owned()])
+                    .contains(&vec!["e_prev".to_owned(), fulfillment_event_id.to_string()])
             );
             let envelope = client
                 .order()
@@ -896,13 +926,14 @@ async fn relay_direct_order_decision_publish_builds_and_publishes_payload() -> T
         urls: vec![relay.url().to_owned()],
     };
     let client = RadrootsSdkClient::from_config(config)?;
+    let root_event_id = event_id('1');
 
     let receipt = client
         .order()
         .publish_order_decision_with_identity(
             &seller_identity,
-            "order-request-event-1",
-            "order-request-event-1",
+            &root_event_id,
+            &root_event_id,
             &payload,
         )
         .await?;

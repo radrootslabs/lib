@@ -3,6 +3,7 @@ use radroots_core::{
     RadrootsCoreQuantityPrice, RadrootsCoreUnit,
 };
 use radroots_events::farm::{RadrootsFarm, RadrootsFarmRef};
+use radroots_events::ids::RadrootsPublicKey;
 use radroots_events::kinds::{KIND_FARM, KIND_LISTING, KIND_ORDER_REQUEST, KIND_PROFILE};
 use radroots_events::listing::{
     RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
@@ -122,21 +123,28 @@ fn listing_event(listing_value: &RadrootsListing) -> RadrootsNostrEvent {
 
 fn listing_event_ptr() -> RadrootsNostrEventPtr {
     RadrootsNostrEventPtr {
-        id: "listing-event-1".into(),
+        id: core::iter::repeat_n('a', 64).collect(),
         relays: Some("wss://listing.relay.example".into()),
     }
 }
 
+fn public_key(character: char) -> RadrootsPublicKey {
+    core::iter::repeat_n(character, 64)
+        .collect::<String>()
+        .parse()
+        .expect("public key")
+}
+
 fn sample_order_request() -> RadrootsOrderRequest {
-    let seller_pubkey = "a".repeat(64);
+    let seller_pubkey = public_key('a');
 
     RadrootsOrderRequest {
         order_id: "order-1".parse().expect("order id"),
         listing_addr: format!("{KIND_LISTING}:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg")
             .parse()
             .expect("listing address"),
-        buyer_pubkey: "buyer".into(),
-        seller_pubkey: "seller".into(),
+        buyer_pubkey: public_key('b'),
+        seller_pubkey,
         items: vec![RadrootsOrderItem {
             bin_id: "bin-1".parse().expect("bin id"),
             bin_count: 2,
@@ -247,8 +255,8 @@ fn order_facade_wraps_build_parse_and_address_ops() {
     assert_eq!(parsed_addr.listing_id, listing_value.d_tag);
 
     let event = RadrootsNostrEvent {
-        id: "order-event".into(),
-        author: "buyer".into(),
+        id: core::iter::repeat_n('b', 64).collect(),
+        author: payload.buyer_pubkey.to_string(),
         created_at: 2,
         kind: parts.as_wire_parts().kind,
         tags: parts.as_wire_parts().tags.clone(),

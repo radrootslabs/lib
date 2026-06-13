@@ -9,6 +9,7 @@ pub use radroots_events_codec::order::{
 pub use radroots_trade::listing::validation::RadrootsTradeListing as TradeListingValidateResult;
 
 use crate::{RadrootsNostrEvent, RadrootsNostrEventPtr, WireEventParts};
+use radroots_events::ids::RadrootsEventId;
 
 #[derive(Debug, Clone)]
 pub struct RadrootsOrderRequestDraft {
@@ -127,8 +128,8 @@ pub fn build_order_request_draft(
 
 #[cfg(feature = "serde_json")]
 pub fn build_order_decision_draft(
-    root_event_id: &str,
-    prev_event_id: &str,
+    root_event_id: &RadrootsEventId,
+    prev_event_id: &RadrootsEventId,
     payload: &RadrootsOrderDecision,
 ) -> Result<RadrootsOrderDecisionDraft, EventEncodeError> {
     Ok(RadrootsOrderDecisionDraft {
@@ -142,8 +143,8 @@ pub fn build_order_decision_draft(
 
 #[cfg(feature = "serde_json")]
 pub fn build_order_revision_proposal_draft(
-    root_event_id: &str,
-    prev_event_id: &str,
+    root_event_id: &RadrootsEventId,
+    prev_event_id: &RadrootsEventId,
     payload: &RadrootsOrderRevisionProposal,
 ) -> Result<RadrootsOrderRevisionProposalDraft, EventEncodeError> {
     Ok(RadrootsOrderRevisionProposalDraft {
@@ -157,8 +158,8 @@ pub fn build_order_revision_proposal_draft(
 
 #[cfg(feature = "serde_json")]
 pub fn build_order_revision_decision_draft(
-    root_event_id: &str,
-    prev_event_id: &str,
+    root_event_id: &RadrootsEventId,
+    prev_event_id: &RadrootsEventId,
     payload: &RadrootsOrderRevisionDecision,
 ) -> Result<RadrootsOrderRevisionDecisionDraft, EventEncodeError> {
     Ok(RadrootsOrderRevisionDecisionDraft {
@@ -172,8 +173,8 @@ pub fn build_order_revision_decision_draft(
 
 #[cfg(feature = "serde_json")]
 pub fn build_fulfillment_update_draft(
-    root_event_id: &str,
-    prev_event_id: &str,
+    root_event_id: &RadrootsEventId,
+    prev_event_id: &RadrootsEventId,
     payload: &RadrootsOrderFulfillmentUpdate,
 ) -> Result<RadrootsOrderFulfillmentUpdateDraft, EventEncodeError> {
     Ok(RadrootsOrderFulfillmentUpdateDraft {
@@ -187,8 +188,8 @@ pub fn build_fulfillment_update_draft(
 
 #[cfg(feature = "serde_json")]
 pub fn build_order_cancellation_draft(
-    root_event_id: &str,
-    prev_event_id: &str,
+    root_event_id: &RadrootsEventId,
+    prev_event_id: &RadrootsEventId,
     payload: &RadrootsOrderCancellation,
 ) -> Result<RadrootsOrderCancellationDraft, EventEncodeError> {
     Ok(RadrootsOrderCancellationDraft {
@@ -202,8 +203,8 @@ pub fn build_order_cancellation_draft(
 
 #[cfg(feature = "serde_json")]
 pub fn build_buyer_receipt_draft(
-    root_event_id: &str,
-    prev_event_id: &str,
+    root_event_id: &RadrootsEventId,
+    prev_event_id: &RadrootsEventId,
     payload: &RadrootsOrderReceipt,
 ) -> Result<RadrootsOrderReceiptDraft, EventEncodeError> {
     Ok(RadrootsOrderReceiptDraft {

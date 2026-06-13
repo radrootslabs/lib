@@ -3,6 +3,7 @@ use radroots_core::{
     RadrootsCoreQuantityPrice, RadrootsCoreUnit,
 };
 use radroots_events::farm::{RadrootsFarm, RadrootsFarmRef};
+use radroots_events::ids::{RadrootsEventId, RadrootsPublicKey};
 use radroots_events::kinds::{
     KIND_FARM, KIND_LISTING, KIND_ORDER_CANCELLATION, KIND_ORDER_DECISION,
     KIND_ORDER_FULFILLMENT_UPDATE, KIND_ORDER_RECEIPT, KIND_ORDER_REQUEST,
@@ -129,12 +130,29 @@ fn usd(raw: &str) -> RadrootsCoreMoney {
 
 fn listing_event_ptr() -> RadrootsNostrEventPtr {
     RadrootsNostrEventPtr {
-        id: "listing-event-1".into(),
+        id: event_id_wire('a'),
         relays: Some("wss://listing.relay.example".into()),
     }
 }
 
+fn public_key(value: String) -> RadrootsPublicKey {
+    value.parse().expect("public key")
+}
+
+fn event_id(character: char) -> RadrootsEventId {
+    core::iter::repeat_n(character, 64)
+        .collect::<String>()
+        .parse()
+        .expect("event id")
+}
+
+fn event_id_wire(character: char) -> String {
+    event_id(character).into_string()
+}
+
 fn sample_order_request(buyer_pubkey: String, seller_pubkey: String) -> RadrootsOrderRequest {
+    let buyer_pubkey = public_key(buyer_pubkey);
+    let seller_pubkey = public_key(seller_pubkey);
     RadrootsOrderRequest {
         order_id: "order-1".parse().expect("order id"),
         listing_addr: format!("{KIND_LISTING}:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg")
@@ -171,6 +189,8 @@ fn sample_order_request(buyer_pubkey: String, seller_pubkey: String) -> Radroots
 }
 
 fn sample_order_decision(buyer_pubkey: String, seller_pubkey: String) -> RadrootsOrderDecision {
+    let buyer_pubkey = public_key(buyer_pubkey);
+    let seller_pubkey = public_key(seller_pubkey);
     RadrootsOrderDecision {
         order_id: "order-1".parse().expect("order id"),
         listing_addr: format!("{KIND_LISTING}:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg")
@@ -193,6 +213,8 @@ fn sample_order_revision_proposal(
     root_event_id: String,
     prev_event_id: String,
 ) -> RadrootsOrderRevisionProposal {
+    let buyer_pubkey = public_key(buyer_pubkey);
+    let seller_pubkey = public_key(seller_pubkey);
     RadrootsOrderRevisionProposal {
         revision_id: "revision-1".parse().expect("revision id"),
         order_id: "order-1".parse().expect("order id"),
@@ -201,8 +223,8 @@ fn sample_order_revision_proposal(
             .expect("listing address"),
         buyer_pubkey,
         seller_pubkey,
-        root_event_id,
-        prev_event_id,
+        root_event_id: root_event_id.parse().expect("root event id"),
+        prev_event_id: prev_event_id.parse().expect("previous event id"),
         items: vec![RadrootsOrderItem {
             bin_id: "bin-1".parse().expect("bin id"),
             bin_count: 3,
@@ -243,7 +265,7 @@ fn sample_order_revision_decision(
         buyer_pubkey: proposal.buyer_pubkey.clone(),
         seller_pubkey: proposal.seller_pubkey.clone(),
         root_event_id: proposal.root_event_id.clone(),
-        prev_event_id: "order-revision-proposal-event-1".into(),
+        prev_event_id: event_id('3'),
         decision,
     }
 }
@@ -252,6 +274,8 @@ fn sample_fulfillment_update(
     buyer_pubkey: String,
     seller_pubkey: String,
 ) -> RadrootsOrderFulfillmentUpdate {
+    let buyer_pubkey = public_key(buyer_pubkey);
+    let seller_pubkey = public_key(seller_pubkey);
     RadrootsOrderFulfillmentUpdate {
         order_id: "order-1".parse().expect("order id"),
         listing_addr: format!("{KIND_LISTING}:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg")
@@ -267,6 +291,8 @@ fn sample_order_cancellation(
     buyer_pubkey: String,
     seller_pubkey: String,
 ) -> RadrootsOrderCancellation {
+    let buyer_pubkey = public_key(buyer_pubkey);
+    let seller_pubkey = public_key(seller_pubkey);
     RadrootsOrderCancellation {
         order_id: "order-1".parse().expect("order id"),
         listing_addr: format!("{KIND_LISTING}:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg")
@@ -279,6 +305,8 @@ fn sample_order_cancellation(
 }
 
 fn sample_buyer_receipt(buyer_pubkey: String, seller_pubkey: String) -> RadrootsOrderReceipt {
+    let buyer_pubkey = public_key(buyer_pubkey);
+    let seller_pubkey = public_key(seller_pubkey);
     RadrootsOrderReceipt {
         order_id: "order-1".parse().expect("order id"),
         listing_addr: format!("{KIND_LISTING}:{seller_pubkey}:AAAAAAAAAAAAAAAAAAAAAg")
@@ -527,10 +555,10 @@ fn order_facades_round_trip_all_draft_types() {
     let order_client = client.order();
     let buyer_pubkey = "b".repeat(64);
     let seller_pubkey = "a".repeat(64);
-    let root_event_id = "order-request-event-1";
-    let decision_event_id = "order-decision-event-1";
-    let proposal_event_id = "order-revision-proposal-event-1";
-    let fulfillment_event_id = "fulfillment-event-1";
+    let root_event_id = event_id('1');
+    let decision_event_id = event_id('2');
+    let proposal_event_id = event_id('3');
+    let fulfillment_event_id = event_id('4');
 
     let order_request = sample_order_request(buyer_pubkey.clone(), seller_pubkey.clone());
     let order_draft = order_client
@@ -538,7 +566,7 @@ fn order_facades_round_trip_all_draft_types() {
         .expect("order request draft");
     assert_eq!(order_draft.as_wire_parts().kind, KIND_ORDER_REQUEST);
     let order_event = event_from_parts(
-        root_event_id,
+        root_event_id.as_str(),
         &buyer_pubkey,
         1,
         order_draft.clone().into_wire_parts(),
@@ -550,11 +578,11 @@ fn order_facades_round_trip_all_draft_types() {
 
     let decision = sample_order_decision(buyer_pubkey.clone(), seller_pubkey.clone());
     let decision_draft = order_client
-        .build_order_decision_draft(root_event_id, root_event_id, &decision)
+        .build_order_decision_draft(&root_event_id, &root_event_id, &decision)
         .expect("order decision draft");
     assert_eq!(decision_draft.as_wire_parts().kind, KIND_ORDER_DECISION);
     let decision_event = event_from_parts(
-        decision_event_id,
+        decision_event_id.as_str(),
         &seller_pubkey,
         2,
         decision_draft.clone().into_wire_parts(),
@@ -571,18 +599,18 @@ fn order_facades_round_trip_all_draft_types() {
     let proposal = sample_order_revision_proposal(
         buyer_pubkey.clone(),
         seller_pubkey.clone(),
-        root_event_id.into(),
-        decision_event_id.into(),
+        root_event_id.to_string(),
+        decision_event_id.to_string(),
     );
     let proposal_draft = order_client
-        .build_order_revision_proposal_draft(root_event_id, decision_event_id, &proposal)
+        .build_order_revision_proposal_draft(&root_event_id, &decision_event_id, &proposal)
         .expect("revision proposal draft");
     assert_eq!(
         proposal_draft.as_wire_parts().kind,
         KIND_ORDER_REVISION_PROPOSAL
     );
     let proposal_event = event_from_parts(
-        proposal_event_id,
+        proposal_event_id.as_str(),
         &seller_pubkey,
         3,
         proposal_draft.clone().into_wire_parts(),
@@ -601,8 +629,8 @@ fn order_facades_round_trip_all_draft_types() {
         sample_order_revision_decision(&proposal, RadrootsOrderRevisionOutcome::Accepted);
     let revision_decision_draft = order_client
         .build_order_revision_decision_draft(
-            root_event_id,
-            revision_decision.prev_event_id.as_str(),
+            &root_event_id,
+            &revision_decision.prev_event_id,
             &revision_decision,
         )
         .expect("revision decision draft");
@@ -627,14 +655,14 @@ fn order_facades_round_trip_all_draft_types() {
 
     let fulfillment = sample_fulfillment_update(buyer_pubkey.clone(), seller_pubkey.clone());
     let fulfillment_draft = order_client
-        .build_fulfillment_update_draft(root_event_id, decision_event_id, &fulfillment)
+        .build_fulfillment_update_draft(&root_event_id, &decision_event_id, &fulfillment)
         .expect("fulfillment draft");
     assert_eq!(
         fulfillment_draft.as_wire_parts().kind,
         KIND_ORDER_FULFILLMENT_UPDATE
     );
     let fulfillment_event = event_from_parts(
-        fulfillment_event_id,
+        fulfillment_event_id.as_str(),
         &seller_pubkey,
         5,
         fulfillment_draft.clone().into_wire_parts(),
@@ -650,7 +678,7 @@ fn order_facades_round_trip_all_draft_types() {
 
     let cancellation = sample_order_cancellation(buyer_pubkey.clone(), seller_pubkey.clone());
     let cancellation_draft = order_client
-        .build_order_cancellation_draft(root_event_id, decision_event_id, &cancellation)
+        .build_order_cancellation_draft(&root_event_id, &decision_event_id, &cancellation)
         .expect("cancellation draft");
     assert_eq!(
         cancellation_draft.as_wire_parts().kind,
@@ -673,7 +701,7 @@ fn order_facades_round_trip_all_draft_types() {
 
     let receipt = sample_buyer_receipt(buyer_pubkey.clone(), seller_pubkey.clone());
     let receipt_draft = order_client
-        .build_buyer_receipt_draft(root_event_id, fulfillment_event_id, &receipt)
+        .build_buyer_receipt_draft(&root_event_id, &fulfillment_event_id, &receipt)
         .expect("receipt draft");
     assert_eq!(receipt_draft.as_wire_parts().kind, KIND_ORDER_RECEIPT);
     let receipt_event = event_from_parts(
@@ -698,11 +726,11 @@ fn order_draft_facades_return_encoder_errors() {
     let order = client.order();
     let buyer_pubkey = "b".repeat(64);
     let seller_pubkey = "a".repeat(64);
-    let root_event_id = "order-request-event-1";
-    let decision_event_id = "order-decision-event-1";
+    let root_event_id = event_id('1');
+    let decision_event_id = event_id('2');
 
     let mut invalid_order = sample_order_request(buyer_pubkey.clone(), seller_pubkey.clone());
-    invalid_order.buyer_pubkey.clear();
+    invalid_order.items.clear();
     assert!(
         order
             .build_order_request_draft(&listing_event_ptr(), &invalid_order)
@@ -710,32 +738,40 @@ fn order_draft_facades_return_encoder_errors() {
     );
 
     let mut invalid_decision = sample_order_decision(buyer_pubkey.clone(), seller_pubkey.clone());
-    invalid_decision.buyer_pubkey.clear();
+    invalid_decision.decision = RadrootsOrderDecisionOutcome::Accepted {
+        inventory_commitments: Vec::new(),
+    };
     assert!(
         order
-            .build_order_decision_draft(root_event_id, root_event_id, &invalid_decision)
+            .build_order_decision_draft(&root_event_id, &root_event_id, &invalid_decision)
             .is_err()
     );
 
     let proposal = sample_order_revision_proposal(
         buyer_pubkey.clone(),
         seller_pubkey.clone(),
-        root_event_id.into(),
-        decision_event_id.into(),
+        root_event_id.to_string(),
+        decision_event_id.to_string(),
     );
+    let different_root_event_id = event_id('d');
     assert!(
         order
-            .build_order_revision_proposal_draft("different-root", decision_event_id, &proposal)
+            .build_order_revision_proposal_draft(
+                &different_root_event_id,
+                &decision_event_id,
+                &proposal,
+            )
             .is_err()
     );
 
     let revision_decision =
         sample_order_revision_decision(&proposal, RadrootsOrderRevisionOutcome::Accepted);
+    let different_prev_event_id = event_id('e');
     assert!(
         order
             .build_order_revision_decision_draft(
-                root_event_id,
-                "different-prev",
+                &root_event_id,
+                &different_prev_event_id,
                 &revision_decision,
             )
             .is_err()
@@ -745,7 +781,7 @@ fn order_draft_facades_return_encoder_errors() {
     fulfillment.status = RadrootsOrderFulfillmentState::AcceptedNotFulfilled;
     assert!(
         order
-            .build_fulfillment_update_draft(root_event_id, decision_event_id, &fulfillment)
+            .build_fulfillment_update_draft(&root_event_id, &decision_event_id, &fulfillment)
             .is_err()
     );
 
@@ -753,7 +789,7 @@ fn order_draft_facades_return_encoder_errors() {
     cancellation.reason.clear();
     assert!(
         order
-            .build_order_cancellation_draft(root_event_id, decision_event_id, &cancellation)
+            .build_order_cancellation_draft(&root_event_id, &decision_event_id, &cancellation)
             .is_err()
     );
 
@@ -761,7 +797,7 @@ fn order_draft_facades_return_encoder_errors() {
     receipt.received = false;
     assert!(
         order
-            .build_buyer_receipt_draft(root_event_id, decision_event_id, &receipt)
+            .build_buyer_receipt_draft(&root_event_id, &decision_event_id, &receipt)
             .is_err()
     );
 }
