@@ -4,7 +4,9 @@
 use alloc::{string::String, vec::Vec};
 
 use crate::RadrootsNostrEvent;
-use crate::contract::RadrootsEventClass;
+use crate::contract::{
+    RadrootsContractMatchError, RadrootsEventClass, RadrootsEventContract, identify_event_contract,
+};
 use crate::ids::{RadrootsDTag, RadrootsEventId, RadrootsIdParseError, RadrootsPublicKey};
 use crate::tags::TAG_D;
 
@@ -130,6 +132,20 @@ pub fn event_head_candidate_for_class(
     }
 }
 
+pub fn event_head_candidate_for_contract(
+    event: &RadrootsNostrEvent,
+    contract: &RadrootsEventContract,
+) -> RadrootsEventHeadCandidateResult {
+    event_head_candidate_for_class(event, contract.class)
+}
+
+pub fn event_head_candidate_for_event(
+    event: &RadrootsNostrEvent,
+) -> Result<RadrootsEventHeadCandidateResult, RadrootsContractMatchError> {
+    let contract = identify_event_contract(event.kind, &event.tags, &event.content)?;
+    Ok(event_head_candidate_for_contract(event, contract))
+}
+
 pub fn select_event_head(
     candidate: RadrootsEventHeadCandidate,
     current: Option<&RadrootsCurrentEventHead>,
@@ -166,6 +182,10 @@ fn first_tag_value<'a>(tags: &'a [Vec<String>], name: &str) -> Option<&'a str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::contract::RadrootsContractMatchError;
+    use crate::kinds::{
+        KIND_FOLLOW, KIND_LIST_SET_GENERIC, KIND_ORDER_REQUEST, KIND_POST, KIND_PROFILE,
+    };
 
     fn hex_64(character: char) -> String {
         core::iter::repeat_n(character, 64).collect()
@@ -187,6 +207,19 @@ mod tests {
             content: String::new(),
             sig: String::new(),
         }
+    }
+
+    fn event_with_content(
+        kind: u32,
+        id: &str,
+        author: &str,
+        created_at: u32,
+        tags: Vec<Vec<String>>,
+        content: &str,
+    ) -> RadrootsNostrEvent {
+        let mut event = event(kind, id, author, created_at, tags);
+        event.content = content.to_string();
+        event
     }
 
     fn candidate(id: char, created_at: u32) -> RadrootsEventHeadCandidate {
@@ -339,6 +372,115 @@ mod tests {
         assert_eq!(
             select_event_head(other, Some(&current)),
             RadrootsEventHeadDecision::CoordinateMismatch
+        );
+    }
+
+    #[test]
+    fn contract_bridge_uses_replaceable_event_classes() {
+        let event = event(KIND_FOLLOW, &hex_64('1'), &hex_64('a'), 1, Vec::new());
+        let RadrootsEventHeadCandidateResult::Candidate(candidate) =
+            event_head_candidate_for_event(&event).expect("contract")
+        else {
+            panic!("expected candidate")
+        };
+        assert_eq!(
+            candidate.coordinate,
+            RadrootsEventHeadCoordinate::Replaceable {
+                kind: KIND_FOLLOW,
+                pubkey: RadrootsPublicKey::parse(hex_64('a')).unwrap()
+            }
+        );
+    }
+
+    #[test]
+    fn contract_bridge_uses_addressable_event_classes() {
+        let event = event(
+            KIND_LIST_SET_GENERIC,
+            &hex_64('2'),
+            &hex_64('b'),
+            1,
+            vec![vec![TAG_D.to_string(), "member_of.farms".to_string()]],
+        );
+        let RadrootsEventHeadCandidateResult::Candidate(candidate) =
+            event_head_candidate_for_event(&event).expect("contract")
+        else {
+            panic!("expected candidate")
+        };
+        assert_eq!(
+            candidate.coordinate,
+            RadrootsEventHeadCoordinate::Addressable {
+                kind: KIND_LIST_SET_GENERIC,
+                pubkey: RadrootsPublicKey::parse(hex_64('b')).unwrap(),
+                d_tag: RadrootsDTag::parse("member_of.farms").unwrap()
+            }
+        );
+    }
+
+    #[test]
+    fn contract_bridge_keeps_regular_events_out_of_head_selection() {
+        let profile = event_with_content(
+            KIND_PROFILE,
+            &hex_64('3'),
+            &hex_64('c'),
+            1,
+            Vec::new(),
+            r#"{"name":"Alice"}"#,
+        );
+        assert_eq!(
+            event_head_candidate_for_event(&profile).expect("profile contract"),
+            RadrootsEventHeadCandidateResult::NotHeadSelected
+        );
+
+        let order = event_with_content(
+            KIND_ORDER_REQUEST,
+            &hex_64('4'),
+            &hex_64('d'),
+            1,
+            vec![
+                vec!["p".to_string(), hex_64('e')],
+                vec!["a".to_string(), format!("30402:{}:listing-1", hex_64('f'))],
+                vec![TAG_D.to_string(), "order-1".to_string()],
+            ],
+            "{}",
+        );
+        assert_eq!(
+            event_head_candidate_for_event(&order).expect("order contract"),
+            RadrootsEventHeadCandidateResult::NotHeadSelected
+        );
+    }
+
+    #[test]
+    fn contract_bridge_reports_unsupported_and_malformed_shapes() {
+        let unsupported = event(999_999, &hex_64('5'), &hex_64('a'), 1, Vec::new());
+        assert_eq!(
+            event_head_candidate_for_event(&unsupported),
+            Err(RadrootsContractMatchError::UnsupportedKind(999_999))
+        );
+
+        let malformed_addressable = event(
+            KIND_LIST_SET_GENERIC,
+            &hex_64('6'),
+            &hex_64('a'),
+            1,
+            Vec::new(),
+        );
+        assert_eq!(
+            event_head_candidate_for_event(&malformed_addressable),
+            Err(RadrootsContractMatchError::UnsupportedShape(
+                KIND_LIST_SET_GENERIC
+            ))
+        );
+
+        let regular_with_d_tag = event(
+            KIND_POST,
+            &hex_64('7'),
+            &hex_64('a'),
+            1,
+            vec![vec![TAG_D.to_string(), "not-a-head".to_string()]],
+        );
+        assert_eq!(
+            event_head_candidate_for_event(&regular_with_d_tag).expect("post contract"),
+            RadrootsEventHeadCandidateResult::NotHeadSelected
         );
     }
 }
