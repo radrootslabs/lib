@@ -1,0 +1,562 @@
+use radroots_sdk::{
+    NetworkConfig, RADROOTS_SDK_LOCAL_RADROOTSD_ENDPOINT, RADROOTS_SDK_LOCAL_RELAY_URL,
+    RADROOTS_SDK_PRODUCTION_RADROOTSD_ENDPOINT, RADROOTS_SDK_PRODUCTION_RELAY_URL,
+    RADROOTS_SDK_STAGING_RADROOTSD_ENDPOINT, RADROOTS_SDK_STAGING_RELAY_URL, RadrootsSdkConfig,
+    RadrootsdAuth, RelayConfig, SdkConfigError, SdkEnvironment, SdkTransportMode, SignerConfig,
+};
+use std::{
+    ffi::OsString,
+    sync::{Mutex, OnceLock},
+};
+
+const LOCAL_SDK_ENV_KEYS: &[&str] = &[
+    "NOSTR_RS_RELAY_PUBLIC_SCHEME",
+    "NOSTR_RS_RELAY_PUBLIC_HOST",
+    "NOSTR_RS_RELAY_PUBLIC_PORT",
+    "RADROOTSD_RPC_URL",
+    "RADROOTSD_RPC_HOST",
+    "RADROOTSD_RPC_PORT",
+];
+
+fn sdk_env_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+}
+
+struct LocalSdkEnvRestore {
+    saved: Vec<(&'static str, Option<OsString>)>,
+}
+
+impl LocalSdkEnvRestore {
+    fn apply(pairs: &[(&str, &str)]) -> Self {
+        let saved = LOCAL_SDK_ENV_KEYS
+            .iter()
+            .map(|key| (*key, std::env::var_os(key)))
+            .collect::<Vec<_>>();
+
+        for key in LOCAL_SDK_ENV_KEYS {
+            unsafe {
+                std::env::remove_var(key);
+            }
+        }
+        for (key, value) in pairs {
+            assert!(
+                LOCAL_SDK_ENV_KEYS.contains(key),
+                "unexpected local sdk env key `{key}`"
+            );
+            unsafe {
+                std::env::set_var(key, value);
+            }
+        }
+
+        Self { saved }
+    }
+}
+
+impl Drop for LocalSdkEnvRestore {
+    fn drop(&mut self) {
+        for (key, original) in self.saved.drain(..) {
+            match original {
+                Some(value) => unsafe {
+                    std::env::set_var(key, value);
+                },
+                None => unsafe {
+                    std::env::remove_var(key);
+                },
+            }
+        }
+    }
+}
+
+struct EnvKeyRestore {
+    key: &'static str,
+    saved: Option<OsString>,
+}
+
+impl EnvKeyRestore {
+    fn capture(key: &'static str) -> Self {
+        Self {
+            key,
+            saved: std::env::var_os(key),
+        }
+    }
+}
+
+impl Drop for EnvKeyRestore {
+    fn drop(&mut self) {
+        match &self.saved {
+            Some(value) => unsafe {
+                std::env::set_var(self.key, value);
+            },
+            None => unsafe {
+                std::env::remove_var(self.key);
+            },
+        }
+    }
+}
+
+fn with_local_sdk_env<F>(pairs: &[(&str, &str)], test: F)
+where
+    F: FnOnce(),
+{
+    let _guard = sdk_env_lock().lock().expect("sdk env lock");
+    let _env_restore = LocalSdkEnvRestore::apply(pairs);
+
+    test();
+}
+
+#[test]
+fn local_sdk_env_restore_preserves_original_os_string_values() {
+    let _guard = sdk_env_lock().lock().expect("sdk env lock");
+    let key = "NOSTR_RS_RELAY_PUBLIC_HOST";
+    let _restore_key = EnvKeyRestore::capture(key);
+    let original = OsString::from("relay.before.example");
+
+    unsafe {
+        std::env::set_var(key, &original);
+    }
+
+    {
+        let _env_restore = LocalSdkEnvRestore::apply(&[("RADROOTSD_RPC_PORT", "18080")]);
+
+        assert_eq!(std::env::var_os(key), None);
+    }
+
+    assert_eq!(std::env::var_os(key), Some(original));
+}
+
+#[test]
+fn env_key_restore_restores_existing_value() {
+    let _guard = sdk_env_lock().lock().expect("sdk env lock");
+    let key = "NOSTR_RS_RELAY_PUBLIC_HOST";
+    let _restore_outer = EnvKeyRestore::capture(key);
+    let original = OsString::from("relay.before.example");
+    let changed = OsString::from("relay.changed.example");
+
+    unsafe {
+        std::env::set_var(key, &original);
+    }
+
+    {
+        let _restore_inner = EnvKeyRestore::capture(key);
+
+        unsafe {
+            std::env::set_var(key, &changed);
+        }
+    }
+
+    assert_eq!(std::env::var_os(key), Some(original));
+}
+
+#[cfg(unix)]
+#[test]
+fn local_sdk_env_restore_preserves_non_unicode_original_values() {
+    use std::os::unix::ffi::OsStringExt;
+
+    let _guard = sdk_env_lock().lock().expect("sdk env lock");
+    let key = "NOSTR_RS_RELAY_PUBLIC_HOST";
+    let _restore_key = EnvKeyRestore::capture(key);
+    let original = OsString::from_vec(vec![b'r', b'e', b'l', b'a', b'y', 0x80]);
+
+    unsafe {
+        std::env::set_var(key, &original);
+    }
+
+    {
+        let _env_restore = LocalSdkEnvRestore::apply(&[("RADROOTSD_RPC_PORT", "18080")]);
+
+        assert_eq!(std::env::var_os(key), None);
+    }
+
+    assert_eq!(std::env::var_os(key), Some(original));
+}
+
+#[test]
+fn default_config_uses_production_relay_direct_draft_only() {
+    let config = RadrootsSdkConfig::default();
+
+    assert_eq!(config.environment, SdkEnvironment::Production);
+    assert_eq!(config.transport, SdkTransportMode::RelayDirect);
+    assert_eq!(config.signer, SignerConfig::DraftOnly);
+    assert_eq!(config.network, NetworkConfig::default());
+    assert_eq!(config.radrootsd.auth, RadrootsdAuth::None);
+}
+
+#[test]
+fn production_environment_resolves_radroots_org_defaults() {
+    let config = RadrootsSdkConfig::production();
+
+    assert_eq!(
+        config.resolved_relay_urls().expect("relay defaults"),
+        vec![RADROOTS_SDK_PRODUCTION_RELAY_URL.to_owned()]
+    );
+    assert_eq!(
+        config
+            .resolved_radrootsd_endpoint()
+            .expect("radrootsd endpoint"),
+        RADROOTS_SDK_PRODUCTION_RADROOTSD_ENDPOINT
+    );
+}
+
+#[test]
+fn staging_environment_resolves_staging_defaults() {
+    let config = RadrootsSdkConfig::staging();
+
+    assert_eq!(
+        config.resolved_relay_urls().expect("relay defaults"),
+        vec![RADROOTS_SDK_STAGING_RELAY_URL.to_owned()]
+    );
+    assert_eq!(
+        config
+            .resolved_radrootsd_endpoint()
+            .expect("radrootsd endpoint"),
+        RADROOTS_SDK_STAGING_RADROOTSD_ENDPOINT
+    );
+}
+
+#[test]
+fn local_environment_resolves_localhost_defaults() {
+    with_local_sdk_env(&[], || {
+        let config = RadrootsSdkConfig::local();
+
+        assert_eq!(
+            config.resolved_relay_urls().expect("relay defaults"),
+            vec![RADROOTS_SDK_LOCAL_RELAY_URL.to_owned()]
+        );
+        assert_eq!(
+            config
+                .resolved_radrootsd_endpoint()
+                .expect("radrootsd endpoint"),
+            RADROOTS_SDK_LOCAL_RADROOTSD_ENDPOINT
+        );
+    });
+}
+
+#[test]
+fn local_environment_prefers_root_env_contract_when_present() {
+    with_local_sdk_env(
+        &[
+            ("NOSTR_RS_RELAY_PUBLIC_SCHEME", "ws"),
+            ("NOSTR_RS_RELAY_PUBLIC_HOST", "127.0.0.1"),
+            ("NOSTR_RS_RELAY_PUBLIC_PORT", "18080"),
+            ("RADROOTSD_RPC_URL", "http://127.0.0.1:17070/jsonrpc"),
+        ],
+        || {
+            let config = RadrootsSdkConfig::local();
+
+            assert_eq!(
+                config.resolved_relay_urls().expect("relay defaults"),
+                vec!["ws://127.0.0.1:18080".to_owned()]
+            );
+            assert_eq!(
+                config
+                    .resolved_radrootsd_endpoint()
+                    .expect("radrootsd endpoint"),
+                "http://127.0.0.1:17070/jsonrpc"
+            );
+        },
+    );
+}
+
+#[test]
+fn local_environment_ignores_partial_or_blank_env_contracts() {
+    with_local_sdk_env(
+        &[
+            ("NOSTR_RS_RELAY_PUBLIC_SCHEME", "ws"),
+            ("NOSTR_RS_RELAY_PUBLIC_HOST", "   "),
+            ("NOSTR_RS_RELAY_PUBLIC_PORT", "18080"),
+            ("RADROOTSD_RPC_HOST", "127.0.0.1"),
+        ],
+        || {
+            let config = RadrootsSdkConfig::local();
+
+            assert_eq!(
+                config.resolved_relay_urls().expect("relay defaults"),
+                vec![RADROOTS_SDK_LOCAL_RELAY_URL.to_owned()]
+            );
+            assert_eq!(
+                config
+                    .resolved_radrootsd_endpoint()
+                    .expect("radrootsd endpoint"),
+                RADROOTS_SDK_LOCAL_RADROOTSD_ENDPOINT
+            );
+        },
+    );
+}
+
+#[test]
+fn local_environment_handles_invalid_and_missing_relay_port_env() {
+    with_local_sdk_env(
+        &[
+            ("NOSTR_RS_RELAY_PUBLIC_SCHEME", "http"),
+            ("NOSTR_RS_RELAY_PUBLIC_HOST", "127.0.0.1"),
+            ("NOSTR_RS_RELAY_PUBLIC_PORT", "18080"),
+        ],
+        || {
+            let config = RadrootsSdkConfig::local();
+
+            assert_eq!(
+                config.resolved_relay_urls().expect_err("invalid relay env"),
+                SdkConfigError::InvalidRelayUrl("http://127.0.0.1:18080".to_owned())
+            );
+        },
+    );
+
+    with_local_sdk_env(
+        &[
+            ("NOSTR_RS_RELAY_PUBLIC_SCHEME", "ws"),
+            ("NOSTR_RS_RELAY_PUBLIC_HOST", "127.0.0.1"),
+        ],
+        || {
+            let config = RadrootsSdkConfig::local();
+
+            assert_eq!(
+                config.resolved_relay_urls().expect("relay defaults"),
+                vec![RADROOTS_SDK_LOCAL_RELAY_URL.to_owned()]
+            );
+        },
+    );
+}
+
+#[test]
+fn local_environment_builds_radrootsd_endpoint_from_host_port_env() {
+    with_local_sdk_env(
+        &[
+            ("RADROOTSD_RPC_HOST", "127.0.0.1"),
+            ("RADROOTSD_RPC_PORT", "17070"),
+        ],
+        || {
+            let config = RadrootsSdkConfig::local();
+
+            assert_eq!(
+                config
+                    .resolved_radrootsd_endpoint()
+                    .expect("host port endpoint"),
+                "http://127.0.0.1:17070"
+            );
+        },
+    );
+}
+
+#[test]
+fn explicit_coordinates_override_environment_defaults_exactly() {
+    let mut config = RadrootsSdkConfig::production();
+    config.relay.urls = vec![
+        " wss://relay.custom.one ".to_owned(),
+        "wss://relay.custom.one".to_owned(),
+        "ws://relay.custom.two".to_owned(),
+    ];
+    config.radrootsd.endpoint = Some(" https://rpc.custom.radroots.org ".to_owned());
+
+    assert_eq!(
+        config.resolved_relay_urls().expect("relay overrides"),
+        vec![
+            "wss://relay.custom.one".to_owned(),
+            "ws://relay.custom.two".to_owned(),
+        ]
+    );
+    assert_eq!(
+        config
+            .resolved_radrootsd_endpoint()
+            .expect("endpoint override"),
+        "https://rpc.custom.radroots.org"
+    );
+}
+
+#[test]
+fn custom_environment_requires_explicit_coordinates() {
+    let config = RadrootsSdkConfig::custom();
+
+    assert_eq!(
+        config
+            .resolved_relay_urls()
+            .expect_err("custom relay error"),
+        SdkConfigError::MissingCustomRelayUrls
+    );
+    assert_eq!(
+        config
+            .resolved_radrootsd_endpoint()
+            .expect_err("custom radrootsd error"),
+        SdkConfigError::MissingCustomRadrootsdEndpoint
+    );
+}
+
+#[test]
+fn custom_environment_accepts_explicit_coordinates() {
+    let mut config = RadrootsSdkConfig::custom();
+    config.relay.urls = vec!["wss://relay.custom.radroots.org".to_owned()];
+    config.radrootsd.endpoint = Some("https://rpc.custom.radroots.org".to_owned());
+
+    assert_eq!(
+        config.resolved_relay_urls().expect("custom relay"),
+        vec!["wss://relay.custom.radroots.org".to_owned()]
+    );
+    assert_eq!(
+        config
+            .resolved_radrootsd_endpoint()
+            .expect("custom endpoint"),
+        "https://rpc.custom.radroots.org"
+    );
+}
+
+#[test]
+fn empty_coordinate_values_fail_loudly() {
+    let mut config = RadrootsSdkConfig::production();
+    config.relay = RelayConfig {
+        urls: vec!["   ".to_owned()],
+    };
+    config.radrootsd.endpoint = Some("   ".to_owned());
+
+    assert_eq!(
+        config.resolved_relay_urls().expect_err("empty relay"),
+        SdkConfigError::EmptyRelayUrl
+    );
+    assert_eq!(
+        config
+            .resolved_radrootsd_endpoint()
+            .expect_err("empty radrootsd endpoint"),
+        SdkConfigError::EmptyRadrootsdEndpoint
+    );
+}
+
+#[test]
+fn invalid_coordinate_schemes_fail_loudly() {
+    let mut config = RadrootsSdkConfig::production();
+    config.relay.urls = vec!["https://relay.bad".to_owned()];
+    config.radrootsd.endpoint = Some("wss://rpc.bad".to_owned());
+
+    assert_eq!(
+        config
+            .resolved_relay_urls()
+            .expect_err("relay scheme error"),
+        SdkConfigError::InvalidRelayUrl("https://relay.bad".to_owned())
+    );
+    assert_eq!(
+        config
+            .resolved_radrootsd_endpoint()
+            .expect_err("endpoint scheme error"),
+        SdkConfigError::InvalidRadrootsdEndpoint("wss://rpc.bad".to_owned())
+    );
+}
+
+#[test]
+fn invalid_relay_authorities_fail_loudly() {
+    let invalid_relays = [
+        "wss://",
+        "wss:///relay",
+        "ws://:8080",
+        "wss://relay.example:",
+        "wss://relay example",
+        "wss://user@relay.example",
+        "wss://relay.example:abc",
+        "wss://2001:db8::1",
+    ];
+
+    for relay_url in invalid_relays {
+        let mut config = RadrootsSdkConfig::production();
+        config.relay.urls = vec![relay_url.to_owned()];
+
+        assert_eq!(
+            config
+                .resolved_relay_urls()
+                .expect_err("relay authority error"),
+            SdkConfigError::InvalidRelayUrl(relay_url.to_owned())
+        );
+    }
+}
+
+#[test]
+fn invalid_bracketed_relay_authorities_fail_loudly() {
+    let invalid_relays = [
+        "wss://[2001:db8::1",
+        "wss://[]:443",
+        "wss://[2001:db8::1]suffix",
+        "wss://[2001:db8::1]:abc",
+    ];
+
+    for relay_url in invalid_relays {
+        let mut config = RadrootsSdkConfig::production();
+        config.relay.urls = vec![relay_url.to_owned()];
+
+        assert_eq!(
+            config
+                .resolved_relay_urls()
+                .expect_err("bracketed relay authority error"),
+            SdkConfigError::InvalidRelayUrl(relay_url.to_owned())
+        );
+    }
+}
+
+#[test]
+fn valid_relay_authorities_still_resolve() {
+    let mut config = RadrootsSdkConfig::production();
+    config.relay.urls = vec![
+        " wss://relay.example/nostr ".to_owned(),
+        "ws://127.0.0.1:8080".to_owned(),
+        "wss://[2001:db8::1]/relay".to_owned(),
+        "wss://[2001:db8::1]:443/relay".to_owned(),
+    ];
+
+    assert_eq!(
+        config.resolved_relay_urls().expect("valid relays"),
+        vec![
+            "wss://relay.example/nostr".to_owned(),
+            "ws://127.0.0.1:8080".to_owned(),
+            "wss://[2001:db8::1]/relay".to_owned(),
+            "wss://[2001:db8::1]:443/relay".to_owned()
+        ]
+    );
+}
+
+#[test]
+fn signer_modes_format_as_config_tokens() {
+    assert_eq!(SignerConfig::DraftOnly.to_string(), "draft_only");
+    assert_eq!(SignerConfig::LocalIdentity.to_string(), "local_identity");
+    assert_eq!(SignerConfig::Nip46.to_string(), "nip46");
+}
+
+#[test]
+fn config_errors_format_operator_facing_messages() {
+    let formatted = [
+        SdkConfigError::MissingCustomRelayUrls.to_string(),
+        SdkConfigError::MissingCustomRadrootsdEndpoint.to_string(),
+        SdkConfigError::EmptyRelayUrl.to_string(),
+        SdkConfigError::InvalidRelayUrl("http://relay.example".into()).to_string(),
+        SdkConfigError::EmptyRadrootsdEndpoint.to_string(),
+        SdkConfigError::InvalidRadrootsdEndpoint("ws://rpc.example".into()).to_string(),
+    ];
+
+    assert_eq!(
+        formatted,
+        [
+            "custom sdk environment requires explicit relay urls",
+            "custom sdk environment requires an explicit radrootsd endpoint",
+            "relay url must not be empty",
+            "relay url must use ws or wss, got `http://relay.example`",
+            "radrootsd endpoint must not be empty",
+            "radrootsd endpoint must use http or https, got `ws://rpc.example`",
+        ]
+    );
+}
+
+#[test]
+fn radrootsd_auth_debug_formats_none_and_redacts_bearer_tokens() {
+    assert_eq!(format!("{:?}", RadrootsdAuth::None), "None");
+
+    let bearer = RadrootsdAuth::BearerToken("sdk-secret-token".to_owned());
+    let debug = format!("{bearer:?}");
+
+    assert!(!debug.contains("sdk-secret-token"));
+    assert_eq!(debug, "BearerToken(\"<redacted>\")");
+}
+
+#[test]
+fn sdk_config_debug_redacts_bearer_tokens() {
+    let mut config = RadrootsSdkConfig::production();
+    config.radrootsd.auth = RadrootsdAuth::BearerToken("sdk-secret-token".to_owned());
+
+    let debug = format!("{config:?}");
+
+    assert!(!debug.contains("sdk-secret-token"));
+    assert!(debug.contains("BearerToken(\"<redacted>\")"));
+}
