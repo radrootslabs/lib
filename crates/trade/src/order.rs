@@ -3530,7 +3530,8 @@ mod tests {
         RadrootsOrderRevisionDecisionRecord, RadrootsOrderRevisionProposalRecord,
         RadrootsOrderSettlementRecord, RadrootsOrderSettlementState, RadrootsOrderStatus,
         add_inventory_reservation, canonicalize_order_decision_for_signer,
-        canonicalize_order_request_for_signer, projection_issue_event_ids,
+        canonicalize_order_request_for_signer, inventory_issue_event_ids, inventory_issue_id,
+        inventory_issue_rank, inventory_issue_sort_key, projection_issue_event_ids,
         radroots_order_economics_digest,
         reduce_listing_inventory_accounting as reduce_listing_inventory_accounting_with_revisions,
         reduce_order_events as reduce_order_events_with_revisions,
@@ -5178,6 +5179,51 @@ mod tests {
                 }
             ]
         );
+    }
+
+    #[test]
+    fn inventory_accounting_issues_sort_by_rank_id_and_event_ids() {
+        let invalid = RadrootsListingInventoryAccountingIssue::InvalidOrder {
+            order_id: "order-1".to_string(),
+            event_ids: vec!["event-c".to_string()],
+        };
+        let overflow = RadrootsListingInventoryAccountingIssue::ArithmeticOverflow {
+            bin_id: "bin-1".to_string(),
+            event_ids: vec!["event-b".to_string()],
+        };
+        let unknown = RadrootsListingInventoryAccountingIssue::UnknownInventoryBin {
+            bin_id: "bin-1".to_string(),
+            event_ids: vec!["event-a".to_string()],
+        };
+        let over_reserved = RadrootsListingInventoryAccountingIssue::OverReserved {
+            bin_id: "bin-1".to_string(),
+            available_count: 1,
+            reserved_count: 2,
+            event_ids: vec!["event-d".to_string()],
+        };
+
+        assert_eq!(inventory_issue_rank(&invalid), 0);
+        assert_eq!(inventory_issue_rank(&overflow), 1);
+        assert_eq!(inventory_issue_rank(&unknown), 2);
+        assert_eq!(inventory_issue_rank(&over_reserved), 3);
+        assert_eq!(inventory_issue_id(&invalid), "order-1");
+        assert_eq!(inventory_issue_id(&overflow), "bin-1");
+        assert_eq!(inventory_issue_id(&unknown), "bin-1");
+        assert_eq!(inventory_issue_id(&over_reserved), "bin-1");
+        assert_eq!(inventory_issue_event_ids(&invalid), ["event-c"]);
+        assert_eq!(inventory_issue_event_ids(&overflow), ["event-b"]);
+        assert_eq!(inventory_issue_event_ids(&unknown), ["event-a"]);
+        assert_eq!(inventory_issue_event_ids(&over_reserved), ["event-d"]);
+
+        let mut issues = vec![
+            over_reserved.clone(),
+            unknown.clone(),
+            overflow.clone(),
+            invalid.clone(),
+        ];
+        issues.sort_by(inventory_issue_sort_key);
+
+        assert_eq!(issues, vec![invalid, overflow, unknown, over_reserved]);
     }
 
     #[test]
