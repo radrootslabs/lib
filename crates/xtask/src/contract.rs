@@ -19,6 +19,7 @@ const EVENT_BOUNDARY_MATRIX_RELATIVES: [&str; 1] = [
 ];
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ContractManifest {
     pub contract: ManifestContract,
     pub surface: Surface,
@@ -34,10 +35,31 @@ pub struct ManifestContract {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Surface {
     pub model_crates: Vec<String>,
     pub algorithm_crates: Vec<String>,
     pub wasm_crates: Vec<String>,
+    pub rust_crate_tiers: Option<RustCrateTiers>,
+    pub internal_replica_crates: Option<InternalReplicaCrates>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RustCrateTiers {
+    pub advanced_substrate: Vec<String>,
+    pub published_support: Vec<String>,
+    pub deferred_publication: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InternalReplicaCrates {
+    pub schema: String,
+    pub storage: String,
+    pub external_storage_wasm_binding_crate: String,
+    pub sync: String,
+    pub external_sync_wasm_binding_crate: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -58,6 +80,7 @@ pub struct ManifestLanguagePackages {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct OperationsContractManifest {
     pub contract: ManifestContract,
     pub public: PublicContract,
@@ -2535,6 +2558,70 @@ fn validate_sdk_rollout(mapping: &SdkExportMapping) -> Result<(), String> {
     Ok(())
 }
 
+fn validate_crate_identifier(value: &str, field: &str) -> Result<(), String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(format!("{field} is required"));
+    }
+    if trimmed != value
+        || trimmed.contains('/')
+        || trimmed.contains('\\')
+        || trimmed.contains("..")
+        || trimmed == "radroots_sdk"
+    {
+        return Err(format!("{field} must be a crate identifier"));
+    }
+    Ok(())
+}
+
+fn validate_surface_metadata(surface: &Surface) -> Result<(), String> {
+    if let Some(tiers) = &surface.rust_crate_tiers {
+        let mut tier_crates = BTreeSet::new();
+        for (field, crates) in [
+            (
+                "surface.rust_crate_tiers.advanced_substrate",
+                &tiers.advanced_substrate,
+            ),
+            (
+                "surface.rust_crate_tiers.published_support",
+                &tiers.published_support,
+            ),
+            (
+                "surface.rust_crate_tiers.deferred_publication",
+                &tiers.deferred_publication,
+            ),
+        ] {
+            let entries = collect_unique_set(crates, field)?;
+            if entries.is_empty() {
+                return Err(format!("{field} must not be empty"));
+            }
+            for crate_name in entries {
+                if !tier_crates.insert(crate_name.clone()) {
+                    return Err(format!(
+                        "surface.rust_crate_tiers has duplicate crate {crate_name}"
+                    ));
+                }
+            }
+        }
+    }
+
+    if let Some(replica) = &surface.internal_replica_crates {
+        validate_crate_identifier(&replica.schema, "surface.internal_replica_crates.schema")?;
+        validate_crate_identifier(&replica.storage, "surface.internal_replica_crates.storage")?;
+        validate_crate_identifier(&replica.sync, "surface.internal_replica_crates.sync")?;
+        validate_crate_identifier(
+            &replica.external_storage_wasm_binding_crate,
+            "surface.internal_replica_crates.external_storage_wasm_binding_crate",
+        )?;
+        validate_crate_identifier(
+            &replica.external_sync_wasm_binding_crate,
+            "surface.internal_replica_crates.external_sync_wasm_binding_crate",
+        )?;
+    }
+
+    Ok(())
+}
+
 fn validate_operations_contract(
     bundle: &ContractBundle,
     operations_manifest: &OperationsContractManifest,
@@ -3612,6 +3699,7 @@ fn validate_contract_bundle_with_release_policy_override(
     if bundle.manifest.surface.algorithm_crates.is_empty() {
         return Err("contract surface.algorithm_crates must not be empty".to_string());
     }
+    validate_surface_metadata(&bundle.manifest.surface)?;
     validate_export_mappings(bundle)?;
     if bundle.version.contract.version.trim().is_empty() {
         return Err("version.contract.version is required".to_string());
@@ -3980,6 +4068,7 @@ pub fn validate_contract_bundle(bundle: &ContractBundle) -> Result<(), String> {
     if bundle.manifest.surface.algorithm_crates.is_empty() {
         return Err("contract surface.algorithm_crates must not be empty".to_string());
     }
+    validate_surface_metadata(&bundle.manifest.surface)?;
     validate_export_mappings(bundle)?;
     if bundle.version.contract.version.trim().is_empty() {
         return Err("version.contract.version is required".to_string());
@@ -5556,7 +5645,10 @@ edition = "2024"
         let assert_bundle_error = |expected: &str, mutator: fn(&mut ContractBundle)| {
             let mut bundle = load_contract_bundle(&root).expect("load bundle");
             mutator(&mut bundle);
-            let err = validate_contract_bundle(&bundle).expect_err("bundle validation error");
+            let err = match validate_contract_bundle(&bundle) {
+                Ok(()) => panic!("expected bundle validation error: {expected}"),
+                Err(err) => err,
+            };
             assert!(err.contains(expected), "expected `{expected}` in `{err}`");
         };
 
@@ -5575,6 +5667,18 @@ edition = "2024"
         assert_bundle_error("surface.algorithm_crates must not be empty", |bundle| {
             bundle.manifest.surface.algorithm_crates.clear();
         });
+        assert_bundle_error(
+            "surface.internal_replica_crates.external_storage_wasm_binding_crate must be a crate identifier",
+            |bundle| {
+                bundle.manifest.surface.internal_replica_crates = Some(InternalReplicaCrates {
+                    schema: "radroots_replica_db_schema".to_string(),
+                    storage: "radroots_replica_db".to_string(),
+                    external_storage_wasm_binding_crate: "crates/replica_db_wasm".to_string(),
+                    sync: "radroots_replica_sync".to_string(),
+                    external_sync_wasm_binding_crate: "radroots_replica_sync_wasm".to_string(),
+                });
+            },
+        );
         assert_bundle_error(
             "at least one language export mapping is required",
             |bundle| {
@@ -5674,6 +5778,42 @@ edition = "2024"
         });
 
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn load_contract_bundle_rejects_stale_consumer_sdk_tables() {
+        let stale_manifest_root = create_synthetic_workspace("stale_manifest_consumer_sdk");
+        let manifest_path = stale_manifest_root.join("spec").join("manifest.toml");
+        let mut manifest = fs::read_to_string(&manifest_path).expect("manifest");
+        manifest.push_str(
+            r#"
+[consumer_sdk]
+rust_package = "radroots_sdk"
+"#,
+        );
+        write_file(&manifest_path, &manifest);
+        let manifest_err =
+            load_contract_bundle(&stale_manifest_root).expect_err("stale manifest table");
+        assert!(manifest_err.contains("manifest.toml"));
+        assert!(manifest_err.contains("consumer_sdk"));
+        let _ = fs::remove_dir_all(stale_manifest_root);
+
+        let stale_operations_root = create_synthetic_workspace("stale_operations_consumer_sdk");
+        add_operation_contract_files(&stale_operations_root);
+        let operations_path = stale_operations_root.join("spec").join("operations.toml");
+        let mut operations = fs::read_to_string(&operations_path).expect("operations");
+        operations.push_str(
+            r#"
+[consumer_sdk]
+rust_package = "radroots_sdk"
+"#,
+        );
+        write_file(&operations_path, &operations);
+        let operations_err =
+            load_contract_bundle(&stale_operations_root).expect_err("stale operations table");
+        assert!(operations_err.contains("operations.toml"));
+        assert!(operations_err.contains("consumer_sdk"));
+        let _ = fs::remove_dir_all(stale_operations_root);
     }
 
     #[test]

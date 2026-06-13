@@ -13,13 +13,7 @@ model_crates = [
 algorithm_crates = ["radroots_events_codec"]
 wasm_crates = []
 
-[consumer_sdk]
-rust_package = "radroots_sdk"
-public_surface = "operation_first"
-website_ingest_contract = true
-
-[consumer_sdk.rust_story]
-entrypoints = ["radroots_sdk"]
+[surface.rust_crate_tiers]
 advanced_substrate = [
   "radroots_core",
   "radroots_events",
@@ -65,9 +59,9 @@ deferred_publication = [
 [surface.internal_replica_crates]
 schema = "radroots_replica_db_schema"
 storage = "radroots_replica_db"
-storage_wasm_binding_crate = "radroots_replica_db_wasm"
+external_storage_wasm_binding_crate = "radroots_replica_db_wasm"
 sync = "radroots_replica_sync"
-sync_wasm_binding_crate = "radroots_replica_sync_wasm"
+external_sync_wasm_binding_crate = "radroots_replica_sync_wasm"
 
 [export.ts]
 packages = ["@radroots/sdk"]

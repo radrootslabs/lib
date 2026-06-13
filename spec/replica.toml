@@ -8,7 +8,7 @@ schema = "radroots_replica_db_schema"
 storage = "radroots_replica_db"
 sync = "radroots_replica_sync"
 
-[sdk_wasm_bindings]
+[external_sdk_wasm_bindings]
 storage = "radroots_replica_db_wasm"
 sync = "radroots_replica_sync_wasm"
 

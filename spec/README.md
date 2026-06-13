@@ -11,15 +11,20 @@ machine-verifiable.
 
 ## Contract Surface
 
-SDK contract metadata is defined in `spec/manifest.toml` and currently includes:
+Core contract metadata is defined in `spec/manifest.toml` and currently includes:
 
 - model crates: `radroots_core`, `radroots_events`, `radroots_trade`, `radroots_identity`
 - algorithm crate: `radroots_events_codec`
 
-The first-class Rust SDK and WebAssembly package surfaces are owned by the SDK
-repository. The crate list above records rr-rs implementation provenance for the
-core contract surface; it is not a promise that every listed crate is a
-first-class end-user SDK package.
+The first-class Rust SDK and WebAssembly package surfaces are owned outside
+rr-rs by the SDK repository. The crate list above records rr-rs implementation
+provenance for the core contract surface; it is not a promise that every listed
+crate is a first-class end-user SDK package.
+
+`spec/manifest.toml` and `spec/operations.toml` do not carry consumer SDK
+ownership tables. Curated language package authority lives under
+`spec/sdk-exports/`; SDK-owned Rust and WebAssembly package assembly lives in
+the SDK repository.
 
 Public SDK exports are intentionally narrower than the full Rust workspace.
 
@@ -155,8 +160,9 @@ Internal replica crate family:
 - `radroots_replica_db`
 - `radroots_replica_sync`
 
-SDK-owned wasm bindings for replica storage and sync are recorded in
-`spec/replica.toml`.
+External SDK-owned wasm binding artifact identifiers for replica storage and
+sync are recorded in `spec/replica.toml`. They are provenance identifiers, not
+local rr-rs crate paths or runnable package commands.
 
 ## Governance
 
