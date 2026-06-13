@@ -2678,6 +2678,32 @@ mod tests {
     }
 
     #[test]
+    fn event_contract_classes_match_kind_contracts() {
+        for contract in all_event_contracts()
+            .iter()
+            .chain(LIST_SET_GENERIC_EVENT_CONTRACTS.iter())
+        {
+            let kind = kind_contract(contract.kind).expect("event kind contract");
+            assert_eq!(contract.class, kind.class, "{}", contract.id);
+        }
+    }
+
+    #[test]
+    fn every_event_contract_is_listed_by_its_kind_contract() {
+        for contract in all_event_contracts()
+            .iter()
+            .chain(LIST_SET_GENERIC_EVENT_CONTRACTS.iter())
+        {
+            let kind = kind_contract(contract.kind).expect("event kind contract");
+            assert!(
+                kind.accepted_event_contracts.contains(&contract.id),
+                "{}",
+                contract.id
+            );
+        }
+    }
+
+    #[test]
     fn order_request_listing_event_contract_is_event_pointer() {
         let contract = event_contract("radroots.order.request.v1").expect("order request");
         let tag = contract
