@@ -148,17 +148,16 @@ where
         }
     }
 
-    if !publish.quorum_met || publish.retryable_count > 0 || publish.terminal_count > 0 {
-        outbox
-            .mark_publish_retryable(
-                claimed.outbox_event_id,
-                claimed.claim_token.as_str(),
-                "relay publish incomplete",
-                policy.next_attempt_after_ms,
-                now_ms,
-            )
-            .await?;
-    }
+    outbox
+        .complete_publish_attempt(
+            claimed.outbox_event_id,
+            claimed.claim_token.as_str(),
+            "relay publish incomplete",
+            "relay publish terminal",
+            policy.next_attempt_after_ms,
+            now_ms,
+        )
+        .await?;
 
     Ok(RadrootsOutboxPublishReceipt {
         local_ingest,

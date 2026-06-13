@@ -4,7 +4,7 @@ CREATE TABLE outbox_operation (
   expected_pubkey TEXT NOT NULL,
   idempotency_key TEXT,
   idempotency_digest TEXT NOT NULL,
-  status TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('queued', 'complete', 'failed_terminal', 'cancelled')),
   created_at_ms INTEGER NOT NULL,
   updated_at_ms INTEGER NOT NULL
 );
@@ -24,8 +24,8 @@ CREATE TABLE outbox_event (
   draft_json TEXT NOT NULL,
   signed_event_json TEXT,
   raw_event_json TEXT,
-  state TEXT NOT NULL,
-  accepted_quorum INTEGER NOT NULL,
+  state TEXT NOT NULL CHECK (state IN ('draft_queued', 'signing', 'signed', 'publishing', 'published', 'sign_retryable', 'publish_retryable', 'failed_terminal', 'cancelled')),
+  accepted_quorum INTEGER NOT NULL CHECK (accepted_quorum >= 0),
   attempt_count INTEGER NOT NULL,
   claim_token TEXT,
   claim_owner TEXT,
@@ -48,7 +48,7 @@ ON outbox_event(event_id);
 CREATE TABLE outbox_event_relay_status (
   outbox_event_id INTEGER NOT NULL REFERENCES outbox_event(outbox_event_id) ON DELETE CASCADE,
   relay_url TEXT NOT NULL,
-  status TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('pending', 'accepted', 'failed_retryable', 'failed_terminal')),
   attempt_count INTEGER NOT NULL,
   last_attempt_at_ms INTEGER,
   acknowledged_at_ms INTEGER,

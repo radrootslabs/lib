@@ -7,6 +7,8 @@ use radroots_events::draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent}
 pub enum RadrootsOutboxOperationStatus {
     Queued,
     Complete,
+    FailedTerminal,
+    Cancelled,
 }
 
 impl RadrootsOutboxOperationStatus {
@@ -14,6 +16,8 @@ impl RadrootsOutboxOperationStatus {
         match self {
             Self::Queued => "queued",
             Self::Complete => "complete",
+            Self::FailedTerminal => "failed_terminal",
+            Self::Cancelled => "cancelled",
         }
     }
 
@@ -21,6 +25,8 @@ impl RadrootsOutboxOperationStatus {
         match value {
             "queued" => Ok(Self::Queued),
             "complete" => Ok(Self::Complete),
+            "failed_terminal" => Ok(Self::FailedTerminal),
+            "cancelled" => Ok(Self::Cancelled),
             _ => Err(RadrootsOutboxError::InvalidStoredEnum {
                 field: "outbox_operation.status",
                 value: value.to_owned(),
@@ -38,6 +44,8 @@ pub enum RadrootsOutboxEventState {
     Published,
     SignRetryable,
     PublishRetryable,
+    FailedTerminal,
+    Cancelled,
 }
 
 impl RadrootsOutboxEventState {
@@ -50,6 +58,8 @@ impl RadrootsOutboxEventState {
             Self::Published => "published",
             Self::SignRetryable => "sign_retryable",
             Self::PublishRetryable => "publish_retryable",
+            Self::FailedTerminal => "failed_terminal",
+            Self::Cancelled => "cancelled",
         }
     }
 
@@ -62,11 +72,20 @@ impl RadrootsOutboxEventState {
             "published" => Ok(Self::Published),
             "sign_retryable" => Ok(Self::SignRetryable),
             "publish_retryable" => Ok(Self::PublishRetryable),
+            "failed_terminal" => Ok(Self::FailedTerminal),
+            "cancelled" => Ok(Self::Cancelled),
             _ => Err(RadrootsOutboxError::InvalidStoredEnum {
                 field: "outbox_event.state",
                 value: value.to_owned(),
             }),
         }
+    }
+
+    pub fn is_terminal(self) -> bool {
+        matches!(
+            self,
+            Self::Published | Self::FailedTerminal | Self::Cancelled
+        )
     }
 }
 
