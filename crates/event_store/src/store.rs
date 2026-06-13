@@ -844,6 +844,10 @@ mod tests {
         assert!(!second.inserted);
         assert_eq!(first.seq, second.seq);
         assert_eq!(
+            second.head_decision,
+            RadrootsEventHeadStoreDecision::SkippedDuplicate
+        );
+        assert_eq!(
             first.verification_status,
             RadrootsEventVerificationStatus::Verified
         );
@@ -1037,12 +1041,83 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn duplicate_invalid_addressable_events_do_not_update_heads() {
+        let store = RadrootsEventStore::open_memory().await.expect("open");
+        let original = signed_event(KIND_LISTING, 21, listing_tags("listing-3"), "{}");
+        store
+            .ingest_event(RadrootsEventIngest::new(original.clone(), 2_700))
+            .await
+            .expect("original");
+        let coordinate = head_coordinate_for_event(&original);
+        let mut invalid = signed_event(KIND_LISTING, 22, listing_tags("listing-3"), "{}");
+        invalid.content = "{\"tampered\":true}".to_owned();
+
+        let first_invalid = store
+            .ingest_event(RadrootsEventIngest::new(invalid.clone(), 2_800))
+            .await
+            .expect("first invalid");
+        let second_invalid = store
+            .ingest_event(RadrootsEventIngest::new(invalid.clone(), 2_900))
+            .await
+            .expect("second invalid");
+        let head = store
+            .event_head(&coordinate)
+            .await
+            .expect("head")
+            .expect("stored head");
+
+        assert!(first_invalid.inserted);
+        assert!(!second_invalid.inserted);
+        assert_eq!(first_invalid.seq, second_invalid.seq);
+        assert_eq!(
+            first_invalid.head_decision,
+            RadrootsEventHeadStoreDecision::NotProjectionEligible
+        );
+        assert_eq!(
+            second_invalid.head_decision,
+            RadrootsEventHeadStoreDecision::SkippedDuplicate
+        );
+        assert_eq!(head.event_id, original.id);
+    }
+
+    #[tokio::test]
+    async fn duplicate_verified_addressable_events_preserve_heads() {
+        let store = RadrootsEventStore::open_memory().await.expect("open");
+        let event = signed_event(KIND_LISTING, 23, listing_tags("listing-4"), "{}");
+        let coordinate = head_coordinate_for_event(&event);
+
+        let first = store
+            .ingest_event(RadrootsEventIngest::new(event.clone(), 3_000))
+            .await
+            .expect("first");
+        let second = store
+            .ingest_event(RadrootsEventIngest::new(event.clone(), 3_100))
+            .await
+            .expect("second");
+        let head = store
+            .event_head(&coordinate)
+            .await
+            .expect("head")
+            .expect("stored head");
+
+        assert!(first.inserted);
+        assert!(!second.inserted);
+        assert_eq!(first.seq, second.seq);
+        assert_eq!(first.head_decision, RadrootsEventHeadStoreDecision::Applied);
+        assert_eq!(
+            second.head_decision,
+            RadrootsEventHeadStoreDecision::SkippedDuplicate
+        );
+        assert_eq!(head.event_id, event.id);
+    }
+
+    #[tokio::test]
     async fn verified_regular_events_remain_projection_eligible_without_head_selection() {
         let store = RadrootsEventStore::open_memory().await.expect("open");
-        let event = signed_event(KIND_POST, 21, Vec::new(), "hello");
+        let event = signed_event(KIND_POST, 24, Vec::new(), "hello");
 
         let receipt = store
-            .ingest_event(RadrootsEventIngest::new(event.clone(), 2_700))
+            .ingest_event(RadrootsEventIngest::new(event.clone(), 3_200))
             .await
             .expect("ingest");
         let stored = store
