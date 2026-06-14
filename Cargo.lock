@@ -3967,7 +3967,6 @@ version = "0.1.0-alpha.2"
 dependencies = [
  "radroots_events",
  "radroots_nostr",
- "thiserror 1.0.69",
 ]
 
 [[package]]
