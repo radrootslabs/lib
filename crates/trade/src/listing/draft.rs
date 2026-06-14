@@ -219,11 +219,11 @@ mod tests {
     }
 
     fn seller_actor() -> RadrootsActorContext {
-        RadrootsActorContext::with_roles(SELLER, [RadrootsActorRole::Seller]).expect("actor")
+        RadrootsActorContext::explicit_pubkey(SELLER, [RadrootsActorRole::Seller]).expect("actor")
     }
 
     fn buyer_actor() -> RadrootsActorContext {
-        RadrootsActorContext::with_roles(SELLER, [RadrootsActorRole::Buyer]).expect("actor")
+        RadrootsActorContext::explicit_pubkey(SELLER, [RadrootsActorRole::Buyer]).expect("actor")
     }
 
     #[test]

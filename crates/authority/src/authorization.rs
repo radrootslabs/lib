@@ -164,11 +164,11 @@ mod tests {
     }
 
     fn seller_actor(pubkey: &str) -> RadrootsActorContext {
-        RadrootsActorContext::with_roles(pubkey, [RadrootsActorRole::Seller]).expect("seller")
+        RadrootsActorContext::explicit_pubkey(pubkey, [RadrootsActorRole::Seller]).expect("seller")
     }
 
     fn buyer_actor(pubkey: &str) -> RadrootsActorContext {
-        RadrootsActorContext::with_roles(pubkey, [RadrootsActorRole::Buyer]).expect("buyer")
+        RadrootsActorContext::explicit_pubkey(pubkey, [RadrootsActorRole::Buyer]).expect("buyer")
     }
 
     fn listing_draft(pubkey: &str) -> RadrootsFrozenEventDraft {

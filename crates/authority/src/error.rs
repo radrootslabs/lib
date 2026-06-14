@@ -12,6 +12,18 @@ pub enum RadrootsAuthorityError {
     #[error("invalid actor public key")]
     InvalidActorPubkey,
 
+    #[error("invalid actor account id: empty")]
+    InvalidActorAccountIdEmpty,
+
+    #[error("invalid actor account id: contains leading or trailing whitespace")]
+    InvalidActorAccountIdUntrimmed,
+
+    #[error("invalid actor account id: contains a control character")]
+    InvalidActorAccountIdControlCharacter,
+
+    #[error("invalid actor account id: longer than {max_len} characters")]
+    InvalidActorAccountIdTooLong { max_len: usize },
+
     #[error("invalid signer public key")]
     InvalidSignerPubkey,
 
