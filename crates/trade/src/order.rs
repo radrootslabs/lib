@@ -15,7 +15,6 @@ use radroots_events::ids::{
     RadrootsEconomicsDigest, RadrootsEventId, RadrootsIdParseError, RadrootsInventoryBinId,
     RadrootsListingAddress, RadrootsOrderId, RadrootsOrderQuoteId, RadrootsPublicKey,
 };
-use radroots_events::kinds::KIND_LISTING;
 #[cfg(feature = "serde_json")]
 use radroots_events::kinds::{
     KIND_ORDER_CANCELLATION, KIND_ORDER_DECISION, KIND_ORDER_FULFILLMENT_UPDATE,
@@ -45,6 +44,10 @@ use radroots_events_codec::order::{
 #[cfg(feature = "serde_json")]
 use sha2::{Digest, Sha256};
 use thiserror::Error;
+
+use crate::listing::{
+    RadrootsPublicListingAddress, RadrootsPublicListingAddressError, parse_public_listing_address,
+};
 
 #[derive(Debug, Error)]
 pub enum RadrootsOrderCanonicalizationError {
@@ -3764,36 +3767,17 @@ fn invalid_projection_with_payment(
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct RadrootsPublicListingAddressParts {
-    address: RadrootsListingAddress,
-    seller_pubkey: RadrootsPublicKey,
-}
-
 fn parse_public_listing_addr(
     listing_addr_raw: &str,
-) -> Result<RadrootsPublicListingAddressParts, RadrootsOrderCanonicalizationError> {
-    let address = RadrootsListingAddress::parse(listing_addr_raw).map_err(|error| {
-        RadrootsOrderCanonicalizationError::InvalidListingAddress(error.to_string())
-    })?;
-    let (kind_raw, seller_and_listing) = address.as_str().split_once(':').ok_or_else(|| {
-        RadrootsOrderCanonicalizationError::InvalidListingAddress(listing_addr_raw.to_string())
-    })?;
-    let (seller_pubkey_raw, _) = seller_and_listing.split_once(':').ok_or_else(|| {
-        RadrootsOrderCanonicalizationError::InvalidListingAddress(listing_addr_raw.to_string())
-    })?;
-    let kind = kind_raw.parse::<u32>().map_err(|_| {
-        RadrootsOrderCanonicalizationError::InvalidListingAddress(listing_addr_raw.to_string())
-    })?;
-    if kind != KIND_LISTING {
-        return Err(RadrootsOrderCanonicalizationError::InvalidListingKind);
-    }
-    let seller_pubkey = RadrootsPublicKey::parse(seller_pubkey_raw).map_err(|error| {
-        RadrootsOrderCanonicalizationError::InvalidListingAddress(error.to_string())
-    })?;
-    Ok(RadrootsPublicListingAddressParts {
-        address,
-        seller_pubkey,
+) -> Result<RadrootsPublicListingAddress, RadrootsOrderCanonicalizationError> {
+    parse_public_listing_address(listing_addr_raw).map_err(|error| match error {
+        RadrootsPublicListingAddressError::InvalidAddress(error) => {
+            RadrootsOrderCanonicalizationError::InvalidListingAddress(error.to_string())
+        }
+        RadrootsPublicListingAddressError::InvalidListingKind { .. }
+        | RadrootsPublicListingAddressError::InvalidKind { .. } => {
+            RadrootsOrderCanonicalizationError::InvalidListingKind
+        }
     })
 }
 
@@ -3939,7 +3923,7 @@ mod tests {
         RadrootsEconomicsDigest, RadrootsEventId, RadrootsInventoryBinId, RadrootsListingAddress,
         RadrootsOrderId, RadrootsOrderQuoteId, RadrootsOrderRevisionId, RadrootsPublicKey,
     };
-    use radroots_events::kinds::KIND_LISTING;
+    use radroots_events::kinds::{KIND_LISTING, KIND_LISTING_DRAFT};
     use radroots_events::order::{
         RadrootsOrderCancellation, RadrootsOrderDecision, RadrootsOrderDecisionOutcome,
         RadrootsOrderEconomicItem, RadrootsOrderEconomicLine, RadrootsOrderEconomics,
@@ -5276,6 +5260,22 @@ mod tests {
         assert!(matches!(
             error,
             RadrootsOrderCanonicalizationError::InvalidBuyerSigner
+        ));
+    }
+
+    #[test]
+    fn canonicalize_order_request_rejects_draft_listing_address() {
+        let mut request = sample_order_request("", "");
+        request.listing_addr = RadrootsListingAddress::parse(format!(
+            "{KIND_LISTING_DRAFT}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg"
+        ))
+        .expect("draft listing address");
+
+        let error = canonicalize_order_request_for_signer(request, BUYER).unwrap_err();
+
+        assert!(matches!(
+            error,
+            RadrootsOrderCanonicalizationError::InvalidListingKind
         ));
     }
 
