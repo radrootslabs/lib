@@ -1,3 +1,10 @@
+//! Canonicalization for Radroots Listing v1 drafts.
+//!
+//! Listing v1 keeps the public NIP-99 listing kind and the private draft kind
+//! stable while Radroots owns the JSON content contract. Canonical drafts derive
+//! both addresses from the same seller pubkey and d-tag: the public address is
+//! for publish or update intent, and the draft address is for save-draft intent.
+
 #![forbid(unsafe_code)]
 
 #[cfg(not(feature = "std"))]

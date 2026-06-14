@@ -1,3 +1,9 @@
+//! Mutation draft preparation for Radroots Listing v1.
+//!
+//! Publish and update produce the stable public listing event, save-draft
+//! produces the stable listing-draft event, and archive remains unsupported
+//! because Listing v1 has no archive wire event.
+
 #![forbid(unsafe_code)]
 
 #[cfg(all(feature = "serde_json", not(feature = "std")))]
