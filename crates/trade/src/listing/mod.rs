@@ -1,6 +1,7 @@
 mod codec;
 pub mod draft;
 pub mod model;
+pub mod mutation;
 pub mod price_ext;
 pub mod publish;
 pub mod validation;
@@ -10,6 +11,9 @@ use radroots_events::{RadrootsNostrEvent, kinds::is_listing_kind, listing::Radro
 pub use self::draft::{
     RadrootsCanonicalListingDraft, RadrootsListingDraftDocumentV1, RadrootsListingDraftError,
     canonicalize_listing_draft,
+};
+pub use self::mutation::{
+    RadrootsListingLifecycleState, RadrootsListingMutation, RadrootsListingMutationError,
 };
 pub use radroots_events::order::RadrootsListingParseError as ListingParseError;
 
