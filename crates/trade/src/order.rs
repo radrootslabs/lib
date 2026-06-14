@@ -7,6 +7,8 @@ use alloc::{
 };
 
 use radroots_core::{RadrootsCoreCurrency, RadrootsCoreDecimal};
+#[cfg(feature = "event_store")]
+use radroots_event_store::{RadrootsEventStore, RadrootsEventStoreError, RadrootsStoredEvent};
 #[cfg(feature = "serde_json")]
 use radroots_events::RadrootsNostrEvent;
 use radroots_events::ids::{
@@ -30,6 +32,8 @@ use radroots_events::order::{
     RadrootsOrderRequest, RadrootsOrderRevisionDecision, RadrootsOrderRevisionOutcome,
     RadrootsOrderRevisionProposal, RadrootsOrderSettlementDecision, RadrootsOrderSettlementOutcome,
 };
+#[cfg(feature = "event_store")]
+use radroots_events::tags::TAG_D;
 #[cfg(feature = "serde_json")]
 use radroots_events_codec::order::{
     RadrootsOrderEnvelopeParseError, order_cancellation_from_event, order_decision_from_event,
@@ -63,6 +67,18 @@ pub enum RadrootsOrderCanonicalizationError {
     #[error("inventory_commitments[{index}].bin_count must be greater than zero")]
     InvalidInventoryCommitmentCount { index: usize },
 }
+
+pub const ORDER_EVENT_CONTRACT_IDS: [&str; 9] = [
+    "radroots.order.request.v1",
+    "radroots.order.decision.v1",
+    "radroots.order.revision_proposal.v1",
+    "radroots.order.revision_decision.v1",
+    "radroots.order.cancellation.v1",
+    "radroots.order.fulfillment_update.v1",
+    "radroots.order.receipt.v1",
+    "radroots.order.payment_record.v1",
+    "radroots.order.settlement_decision.v1",
+];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOrderRequestRecord {
@@ -340,6 +356,79 @@ pub fn order_event_record_from_event(
         }
         _ => Err(RadrootsOrderEventDecodeError::UnsupportedKind { kind: event.kind }),
     }
+}
+
+#[cfg(feature = "event_store")]
+#[derive(Debug, Error)]
+pub enum RadrootsOrderStoreQueryError {
+    #[error("{0}")]
+    Store(#[from] RadrootsEventStoreError),
+    #[error("stored order event {event_id} contains invalid tags_json: {source}")]
+    InvalidStoredTagsJson {
+        event_id: String,
+        source: serde_json::Error,
+    },
+    #[error("stored order event {event_id} could not decode as an order record: {source}")]
+    Decode {
+        event_id: String,
+        source: RadrootsOrderEventDecodeError,
+    },
+}
+
+#[cfg(feature = "event_store")]
+pub async fn order_events_for_order_id(
+    store: &RadrootsEventStore,
+    order_id: &RadrootsOrderId,
+    limit: u32,
+) -> Result<Vec<RadrootsOrderEventRecord>, RadrootsOrderStoreQueryError> {
+    let stored_events = store
+        .events_by_contract_and_tag(&ORDER_EVENT_CONTRACT_IDS, TAG_D, order_id.as_str(), limit)
+        .await?;
+    let mut records = Vec::with_capacity(stored_events.len());
+    for stored_event in stored_events {
+        let event = stored_order_event_to_nostr_event(&stored_event)?;
+        let record = order_event_record_from_event(&event).map_err(|source| {
+            RadrootsOrderStoreQueryError::Decode {
+                event_id: stored_event.event_id.clone(),
+                source,
+            }
+        })?;
+        if record.order_id() == order_id {
+            records.push(record);
+        }
+    }
+    Ok(records)
+}
+
+#[cfg(feature = "event_store")]
+pub async fn order_projection_for_order_id(
+    store: &RadrootsEventStore,
+    order_id: &RadrootsOrderId,
+    limit: u32,
+) -> Result<RadrootsOrderProjection, RadrootsOrderStoreQueryError> {
+    let records = order_events_for_order_id(store, order_id, limit).await?;
+    Ok(reduce_order_event_records(order_id, records))
+}
+
+#[cfg(feature = "event_store")]
+fn stored_order_event_to_nostr_event(
+    stored_event: &RadrootsStoredEvent,
+) -> Result<RadrootsNostrEvent, RadrootsOrderStoreQueryError> {
+    let tags = serde_json::from_str(&stored_event.tags_json).map_err(|source| {
+        RadrootsOrderStoreQueryError::InvalidStoredTagsJson {
+            event_id: stored_event.event_id.clone(),
+            source,
+        }
+    })?;
+    Ok(RadrootsNostrEvent {
+        id: stored_event.event_id.clone(),
+        author: stored_event.pubkey.clone(),
+        created_at: stored_event.created_at,
+        kind: stored_event.kind,
+        tags,
+        content: stored_event.content.clone(),
+        sig: stored_event.sig.clone(),
+    })
 }
 
 #[cfg(feature = "serde_json")]
@@ -3785,6 +3874,8 @@ mod tests {
     use radroots_core::{
         RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreUnit,
     };
+    #[cfg(feature = "event_store")]
+    use radroots_event_store::{RadrootsEventIngest, RadrootsEventStore};
     use radroots_events::ids::{
         RadrootsEconomicsDigest, RadrootsEventId, RadrootsInventoryBinId, RadrootsListingAddress,
         RadrootsOrderId, RadrootsOrderQuoteId, RadrootsOrderRevisionId, RadrootsPublicKey,
@@ -3810,7 +3901,17 @@ mod tests {
         order_settlement_decision_event_build,
     };
     use radroots_events_codec::wire::WireEventParts;
+    #[cfg(feature = "event_store")]
+    use radroots_nostr::prelude::{
+        RadrootsNostrKeys, RadrootsNostrSecretKey, RadrootsNostrTimestamp,
+        radroots_event_from_nostr, radroots_nostr_build_event,
+    };
 
+    #[cfg(feature = "event_store")]
+    use super::{
+        ORDER_EVENT_CONTRACT_IDS, RadrootsOrderStoreQueryError, order_events_for_order_id,
+        order_projection_for_order_id,
+    };
     use super::{
         RadrootsListingInventoryAccountingIssue, RadrootsListingInventoryAccountingProjection,
         RadrootsListingInventoryBinAccounting, RadrootsListingInventoryBinAvailability,
@@ -3832,6 +3933,18 @@ mod tests {
 
     const SELLER: &str = "1111111111111111111111111111111111111111111111111111111111111111";
     const BUYER: &str = "2222222222222222222222222222222222222222222222222222222222222222";
+    #[cfg(feature = "event_store")]
+    const STORE_BUYER_SECRET_KEY_HEX: &str =
+        "10c5304d6c9ae3a1a16f7860f1cc8f5e3a76225a2663b3a989a0d775919b7df5";
+    #[cfg(feature = "event_store")]
+    const STORE_BUYER_PUBLIC_KEY_HEX: &str =
+        "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df";
+    #[cfg(feature = "event_store")]
+    const STORE_SELLER_SECRET_KEY_HEX: &str =
+        "59392e9068f66431b12f70218fb61281cb6b433d7f27c55d61f1a63fe1a96ff8";
+    #[cfg(feature = "event_store")]
+    const STORE_SELLER_PUBLIC_KEY_HEX: &str =
+        "e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af";
 
     fn order_id(raw: &str) -> RadrootsOrderId {
         RadrootsOrderId::parse(raw).expect("order id")
@@ -3960,6 +4073,119 @@ mod tests {
             id: test_event_id("listing-event").into_string(),
             relays: Some("wss://relay.radroots.test".to_string()),
         }
+    }
+
+    #[cfg(feature = "event_store")]
+    fn store_fixture_keys(secret_key_hex: &str) -> RadrootsNostrKeys {
+        let secret_key = RadrootsNostrSecretKey::from_hex(secret_key_hex).expect("secret key");
+        RadrootsNostrKeys::new(secret_key)
+    }
+
+    #[cfg(feature = "event_store")]
+    fn signed_store_event_from_parts(
+        secret_key_hex: &str,
+        created_at: u32,
+        parts: WireEventParts,
+    ) -> RadrootsNostrEvent {
+        let event = radroots_nostr_build_event(parts.kind, parts.content, parts.tags)
+            .expect("event builder")
+            .custom_created_at(RadrootsNostrTimestamp::from_secs(u64::from(created_at)))
+            .sign_with_keys(&store_fixture_keys(secret_key_hex))
+            .expect("signed event");
+        radroots_event_from_nostr(&event)
+    }
+
+    #[cfg(feature = "event_store")]
+    fn signed_store_event(
+        secret_key_hex: &str,
+        kind: u32,
+        created_at: u32,
+        tags: Vec<Vec<String>>,
+        content: impl Into<String>,
+    ) -> RadrootsNostrEvent {
+        let event = radroots_nostr_build_event(kind, content, tags)
+            .expect("event builder")
+            .custom_created_at(RadrootsNostrTimestamp::from_secs(u64::from(created_at)))
+            .sign_with_keys(&store_fixture_keys(secret_key_hex))
+            .expect("signed event");
+        radroots_event_from_nostr(&event)
+    }
+
+    #[cfg(feature = "event_store")]
+    fn tamper_store_event_signature(event: &mut RadrootsNostrEvent) {
+        let replacement = if event.sig.starts_with('0') { "1" } else { "0" };
+        event.sig.replace_range(0..1, replacement);
+    }
+
+    #[cfg(feature = "event_store")]
+    fn store_listing_address() -> RadrootsListingAddress {
+        RadrootsListingAddress::parse(format!(
+            "{KIND_LISTING}:{STORE_SELLER_PUBLIC_KEY_HEX}:AAAAAAAAAAAAAAAAAAAAAg"
+        ))
+        .expect("store listing address")
+    }
+
+    #[cfg(feature = "event_store")]
+    fn store_listing_event_ptr() -> RadrootsNostrEventPtr {
+        RadrootsNostrEventPtr {
+            id: test_event_id("store-listing-event").into_string(),
+            relays: Some("wss://relay.radroots.test".to_string()),
+        }
+    }
+
+    #[cfg(feature = "event_store")]
+    fn store_order_request(raw_order_id: &str) -> RadrootsOrderRequest {
+        RadrootsOrderRequest {
+            order_id: order_id(raw_order_id),
+            listing_addr: store_listing_address(),
+            buyer_pubkey: pubkey(STORE_BUYER_PUBLIC_KEY_HEX),
+            seller_pubkey: pubkey(STORE_SELLER_PUBLIC_KEY_HEX),
+            items: vec![RadrootsOrderItem {
+                bin_id: bin_id("bin-1"),
+                bin_count: 2,
+            }],
+            economics: request_economics("bin-1", 2, "10"),
+        }
+    }
+
+    #[cfg(feature = "event_store")]
+    fn store_order_decision(raw_order_id: &str) -> RadrootsOrderDecision {
+        RadrootsOrderDecision {
+            order_id: order_id(raw_order_id),
+            listing_addr: store_listing_address(),
+            buyer_pubkey: pubkey(STORE_BUYER_PUBLIC_KEY_HEX),
+            seller_pubkey: pubkey(STORE_SELLER_PUBLIC_KEY_HEX),
+            decision: RadrootsOrderDecisionOutcome::Accepted {
+                inventory_commitments: vec![RadrootsOrderInventoryCommitment {
+                    bin_id: bin_id("bin-1"),
+                    bin_count: 2,
+                }],
+            },
+        }
+    }
+
+    #[cfg(feature = "event_store")]
+    fn store_order_request_event(raw_order_id: &str, created_at: u32) -> RadrootsNostrEvent {
+        let request = store_order_request(raw_order_id);
+        signed_store_event_from_parts(
+            STORE_BUYER_SECRET_KEY_HEX,
+            created_at,
+            order_request_event_build(&store_listing_event_ptr(), &request).unwrap(),
+        )
+    }
+
+    #[cfg(feature = "event_store")]
+    fn store_order_decision_event(
+        raw_order_id: &str,
+        root_event_id: &RadrootsEventId,
+        created_at: u32,
+    ) -> RadrootsNostrEvent {
+        let decision = store_order_decision(raw_order_id);
+        signed_store_event_from_parts(
+            STORE_SELLER_SECRET_KEY_HEX,
+            created_at,
+            order_decision_event_build(root_event_id, root_event_id, &decision).unwrap(),
+        )
     }
 
     fn event_from_parts(
@@ -4694,6 +4920,109 @@ mod tests {
                 .iter()
                 .any(|issue| matches!(issue, RadrootsOrderIssue::MultipleRequests { .. }))
         );
+    }
+
+    #[cfg(feature = "event_store")]
+    #[tokio::test]
+    async fn order_events_for_order_id_queries_d_tag_and_filters_store_rows() {
+        let store = RadrootsEventStore::open_memory().await.expect("store");
+        let request_event = store_order_request_event("order-1", 10);
+        let request_event_id = RadrootsEventId::parse(&request_event.id).expect("request id");
+        let decision_event = store_order_decision_event("order-1", &request_event_id, 11);
+        let wrong_order_event = store_order_request_event("order-2", 12);
+        let wrong_contract_event = signed_store_event(
+            STORE_BUYER_SECRET_KEY_HEX,
+            KIND_LISTING,
+            13,
+            vec![vec!["d".to_string(), "order-1".to_string()]],
+            "{}",
+        );
+        let mut unprojected_order_event = store_order_request_event("order-1", 14);
+        tamper_store_event_signature(&mut unprojected_order_event);
+
+        for (event, observed_at_ms) in [
+            (wrong_contract_event, 1_000),
+            (request_event.clone(), 1_100),
+            (wrong_order_event, 1_200),
+            (unprojected_order_event, 1_300),
+            (decision_event.clone(), 1_400),
+        ] {
+            store
+                .ingest_event(RadrootsEventIngest::new(event, observed_at_ms))
+                .await
+                .expect("ingest");
+        }
+
+        let records = order_events_for_order_id(&store, &order_id("order-1"), 10)
+            .await
+            .expect("order events");
+
+        assert_eq!(ORDER_EVENT_CONTRACT_IDS.len(), 9);
+        assert_eq!(records.len(), 2);
+        assert!(matches!(records[0], RadrootsOrderEventRecord::Request(_)));
+        assert!(matches!(records[1], RadrootsOrderEventRecord::Decision(_)));
+        assert_eq!(records[0].event_id().as_str(), request_event.id.as_str());
+        assert_eq!(records[1].event_id().as_str(), decision_event.id.as_str());
+        assert!(
+            records
+                .iter()
+                .all(|record| record.order_id().as_str() == "order-1")
+        );
+    }
+
+    #[cfg(feature = "event_store")]
+    #[tokio::test]
+    async fn order_projection_for_order_id_reduces_store_events() {
+        let store = RadrootsEventStore::open_memory().await.expect("store");
+        let request_event = store_order_request_event("order-1", 20);
+        let request_event_id = RadrootsEventId::parse(&request_event.id).expect("request id");
+        let decision_event = store_order_decision_event("order-1", &request_event_id, 21);
+
+        for (event, observed_at_ms) in [(request_event, 2_000), (decision_event.clone(), 2_100)] {
+            store
+                .ingest_event(RadrootsEventIngest::new(event, observed_at_ms))
+                .await
+                .expect("ingest");
+        }
+
+        let projection = order_projection_for_order_id(&store, &order_id("order-1"), 10)
+            .await
+            .expect("projection");
+
+        assert_eq!(projection.status, RadrootsOrderStatus::Accepted);
+        assert_eq!(
+            projection
+                .decision_event_id
+                .as_ref()
+                .map(RadrootsEventId::as_str),
+            Some(decision_event.id.as_str())
+        );
+        assert!(projection.issues.is_empty());
+    }
+
+    #[cfg(feature = "event_store")]
+    #[tokio::test]
+    async fn order_events_for_order_id_reports_invalid_stored_tags_json() {
+        let store = RadrootsEventStore::open_memory().await.expect("store");
+        let request_event = store_order_request_event("order-1", 30);
+        store
+            .ingest_event(RadrootsEventIngest::new(request_event.clone(), 3_000))
+            .await
+            .expect("ingest");
+        sqlx::query("UPDATE nostr_event SET tags_json = '[' WHERE event_id = ?")
+            .bind(request_event.id.as_str())
+            .execute(store.pool())
+            .await
+            .expect("corrupt tags_json");
+
+        let error = order_events_for_order_id(&store, &order_id("order-1"), 10)
+            .await
+            .expect_err("invalid stored tags");
+
+        assert!(matches!(
+            error,
+            RadrootsOrderStoreQueryError::InvalidStoredTagsJson { .. }
+        ));
     }
 
     fn reduce_order_events<I, J, K, L, M>(

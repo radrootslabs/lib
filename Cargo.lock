@@ -4498,12 +4498,16 @@ dependencies = [
  "base64 0.22.1",
  "hex",
  "radroots_core",
+ "radroots_event_store",
  "radroots_events",
  "radroots_events_codec",
+ "radroots_nostr",
  "serde",
  "serde_json",
  "sha2",
+ "sqlx",
  "thiserror 1.0.69",
+ "tokio",
 ]
 
 [[package]]
