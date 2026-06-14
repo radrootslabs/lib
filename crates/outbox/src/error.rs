@@ -16,6 +16,9 @@ pub enum RadrootsOutboxError {
     #[error("Event store error: {0}")]
     EventStore(#[from] radroots_event_store::RadrootsEventStoreError),
 
+    #[error("target relays cannot be empty")]
+    EmptyTargetRelays,
+
     #[error("Invalid stored enum for {field}: {value}")]
     InvalidStoredEnum { field: &'static str, value: String },
 
