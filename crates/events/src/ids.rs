@@ -188,6 +188,19 @@ validated_string_id!(RadrootsEconomicsDigest, validate_economics_digest);
 validated_string_id!(RadrootsEventPointer, validate_hex_64);
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct RadrootsAddressableCoordinateParts {
+    pub kind: u32,
+    pub pubkey: RadrootsPublicKey,
+    pub d_tag: RadrootsDTag,
+}
+
+impl RadrootsAddressableCoordinateParts {
+    pub fn parse(value: impl AsRef<str>) -> Result<Self, RadrootsIdParseError> {
+        parse_addressable_coordinate_parts(value.as_ref())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RadrootsNostrEventPointer {
     pub event_id: RadrootsEventId,
     pub relays: Vec<String>,
@@ -262,17 +275,29 @@ fn validate_economics_digest(value: &str) -> Result<String, RadrootsIdParseError
 }
 
 fn validate_addressable_coordinate(value: &str) -> Result<String, RadrootsIdParseError> {
+    parse_addressable_coordinate_parts(value)?;
+    Ok(value.to_string())
+}
+
+fn parse_addressable_coordinate_parts(
+    value: &str,
+) -> Result<RadrootsAddressableCoordinateParts, RadrootsIdParseError> {
     let (kind, remainder) = value
         .split_once(':')
         .ok_or(RadrootsIdParseError::InvalidFormat)?;
     let (pubkey, d_tag) = remainder
         .split_once(':')
         .ok_or(RadrootsIdParseError::InvalidFormat)?;
-    kind.parse::<u32>()
+    let kind = kind
+        .parse::<u32>()
         .map_err(|_| RadrootsIdParseError::InvalidFormat)?;
-    validate_hex_64(pubkey)?;
-    validate_d_tag(d_tag)?;
-    Ok(value.to_string())
+    let pubkey = RadrootsPublicKey::parse(pubkey)?;
+    let d_tag = RadrootsDTag::parse(d_tag)?;
+    Ok(RadrootsAddressableCoordinateParts {
+        kind,
+        pubkey,
+        d_tag,
+    })
 }
 
 fn validate_visible_token(value: &str, max_len: usize) -> Result<String, RadrootsIdParseError> {
@@ -379,6 +404,15 @@ mod tests {
                 actual: 7
             }
         );
+    }
+
+    #[test]
+    fn addressable_coordinate_parts_parse_kind_pubkey_and_d_tag() {
+        let addr = format!("30402:{}:farm:farm-1:members", hex_64('A'));
+        let parts = RadrootsAddressableCoordinateParts::parse(&addr).expect("coordinate parts");
+        assert_eq!(parts.kind, 30402);
+        assert_eq!(parts.pubkey.as_str(), hex_64('a'));
+        assert_eq!(parts.d_tag.as_str(), "farm:farm-1:members");
     }
 
     #[test]
