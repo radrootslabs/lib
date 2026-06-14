@@ -5,6 +5,7 @@ members = [
   "crates/event_store",
   "crates/events_codec",
   "crates/events_indexed",
+  "crates/authority",
   "crates/geocoder",
   "crates/identity",
   "crates/local_events",
@@ -62,6 +63,7 @@ radroots_events = { path = "crates/events", version = "0.1.0-alpha.2", default-f
 radroots_event_store = { path = "crates/event_store", version = "0.1.0-alpha.2", default-features = false }
 radroots_events_codec = { path = "crates/events_codec", version = "0.1.0-alpha.2", default-features = false }
 radroots_events_indexed = { path = "crates/events_indexed", version = "0.1.0-alpha.2", default-features = false }
+radroots_authority = { path = "crates/authority", version = "0.1.0-alpha.2", default-features = false }
 radroots_geocoder = { path = "crates/geocoder", version = "0.1.0-alpha.2" }
 radroots_identity = { path = "crates/identity", version = "0.1.0-alpha.2", default-features = false }
 radroots_local_events = { path = "crates/local_events", version = "0.1.0-alpha.2", default-features = false }

@@ -1,0 +1,22 @@
+[package]
+name = "radroots_authority"
+publish = ["crates-io"]
+version = "0.1.0-alpha.2"
+edition.workspace = true
+authors = ["Tyson Lupul <tyson@radroots.org>"]
+rust-version.workspace = true
+license.workspace = true
+description = "Authority model for Radroots"
+repository.workspace = true
+homepage.workspace = true
+
+[features]
+default = ["std"]
+std = ["radroots_events/std"]
+
+[dependencies]
+radroots_events = { workspace = true, default-features = false }
+thiserror = { workspace = true }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage_nightly)'] }
