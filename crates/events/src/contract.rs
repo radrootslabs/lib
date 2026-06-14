@@ -53,7 +53,7 @@ pub enum RadrootsEventStability {
     Experimental,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum RadrootsActorRole {
     Any,
     Application,

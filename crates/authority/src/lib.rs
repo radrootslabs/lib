@@ -9,6 +9,9 @@ pub mod actor;
 pub mod error;
 pub mod signer;
 
-pub use actor::RadrootsActorContext;
+pub use actor::{
+    RadrootsActorContext, RadrootsActorResolutionRequest, RadrootsActorSelector,
+    RadrootsActorSource, role_satisfies,
+};
 pub use error::RadrootsAuthorityError;
 pub use signer::RadrootsSignerIdentity;
