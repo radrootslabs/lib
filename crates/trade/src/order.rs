@@ -7,11 +7,21 @@ use alloc::{
 };
 
 use radroots_core::{RadrootsCoreCurrency, RadrootsCoreDecimal};
+#[cfg(feature = "serde_json")]
+use radroots_events::RadrootsNostrEvent;
 use radroots_events::ids::{
-    RadrootsEconomicsDigest, RadrootsEventId, RadrootsInventoryBinId, RadrootsListingAddress,
-    RadrootsOrderId, RadrootsOrderQuoteId, RadrootsPublicKey,
+    RadrootsEconomicsDigest, RadrootsEventId, RadrootsIdParseError, RadrootsInventoryBinId,
+    RadrootsListingAddress, RadrootsOrderId, RadrootsOrderQuoteId, RadrootsPublicKey,
 };
 use radroots_events::kinds::KIND_LISTING;
+#[cfg(feature = "serde_json")]
+use radroots_events::kinds::{
+    KIND_ORDER_CANCELLATION, KIND_ORDER_DECISION, KIND_ORDER_FULFILLMENT_UPDATE,
+    KIND_ORDER_PAYMENT_RECORD, KIND_ORDER_RECEIPT, KIND_ORDER_REQUEST,
+    KIND_ORDER_REVISION_DECISION, KIND_ORDER_REVISION_PROPOSAL, KIND_ORDER_SETTLEMENT_DECISION,
+};
+#[cfg(feature = "serde_json")]
+use radroots_events::order::RadrootsOrderEventType;
 use radroots_events::order::{
     RadrootsOrderCancellation, RadrootsOrderDecision, RadrootsOrderDecisionOutcome,
     RadrootsOrderEconomics, RadrootsOrderFulfillmentState, RadrootsOrderFulfillmentUpdate,
@@ -19,6 +29,14 @@ use radroots_events::order::{
     RadrootsOrderPaymentRecord as RadrootsOrderPaymentPayload, RadrootsOrderReceipt,
     RadrootsOrderRequest, RadrootsOrderRevisionDecision, RadrootsOrderRevisionOutcome,
     RadrootsOrderRevisionProposal, RadrootsOrderSettlementDecision, RadrootsOrderSettlementOutcome,
+};
+#[cfg(feature = "serde_json")]
+use radroots_events_codec::order::{
+    RadrootsOrderEnvelopeParseError, order_cancellation_from_event, order_decision_from_event,
+    order_event_context_from_tags, order_fulfillment_update_from_event,
+    order_payment_record_from_event, order_receipt_from_event, order_request_from_event,
+    order_revision_decision_from_event, order_revision_proposal_from_event,
+    order_settlement_decision_from_event,
 };
 #[cfg(feature = "serde_json")]
 use sha2::{Digest, Sha256};
@@ -174,6 +192,174 @@ impl RadrootsOrderEventRecord {
             Self::Settlement(record) => &record.payload.order_id,
         }
     }
+}
+
+#[cfg(feature = "serde_json")]
+#[derive(Debug, Error)]
+pub enum RadrootsOrderEventDecodeError {
+    #[error("unsupported order event kind: {kind}")]
+    UnsupportedKind { kind: u32 },
+    #[error("invalid order event id: {0}")]
+    InvalidEventId(RadrootsIdParseError),
+    #[error("invalid order event author: {0}")]
+    InvalidAuthor(RadrootsIdParseError),
+    #[error("order event context is missing root event id")]
+    MissingRootEventId,
+    #[error("order event context is missing previous event id")]
+    MissingPreviousEventId,
+    #[error("{0}")]
+    Envelope(#[from] RadrootsOrderEnvelopeParseError),
+}
+
+#[cfg(feature = "serde_json")]
+pub fn order_event_record_from_event(
+    event: &RadrootsNostrEvent,
+) -> Result<RadrootsOrderEventRecord, RadrootsOrderEventDecodeError> {
+    let message_type = RadrootsOrderEventType::from_kind(event.kind)
+        .ok_or(RadrootsOrderEventDecodeError::UnsupportedKind { kind: event.kind })?;
+    let context = order_event_context_from_tags(message_type, &event.tags)?;
+    let event_id =
+        RadrootsEventId::parse(&event.id).map_err(RadrootsOrderEventDecodeError::InvalidEventId)?;
+    let author_pubkey = RadrootsPublicKey::parse(&event.author)
+        .map_err(RadrootsOrderEventDecodeError::InvalidAuthor)?;
+
+    match event.kind {
+        KIND_ORDER_REQUEST => {
+            let envelope = order_request_from_event(event)?;
+            Ok(RadrootsOrderEventRecord::Request(
+                RadrootsOrderRequestRecord {
+                    event_id,
+                    author_pubkey,
+                    payload: envelope.payload,
+                },
+            ))
+        }
+        KIND_ORDER_DECISION => {
+            let envelope = order_decision_from_event(event)?;
+            Ok(RadrootsOrderEventRecord::Decision(
+                RadrootsOrderDecisionRecord {
+                    event_id,
+                    author_pubkey,
+                    counterparty_pubkey: context.counterparty_pubkey.clone(),
+                    root_event_id: require_context_root_event_id(&context)?,
+                    prev_event_id: require_context_prev_event_id(&context)?,
+                    payload: envelope.payload,
+                },
+            ))
+        }
+        KIND_ORDER_REVISION_PROPOSAL => {
+            let envelope = order_revision_proposal_from_event(event)?;
+            Ok(RadrootsOrderEventRecord::RevisionProposal(
+                RadrootsOrderRevisionProposalRecord {
+                    event_id,
+                    author_pubkey,
+                    counterparty_pubkey: context.counterparty_pubkey.clone(),
+                    root_event_id: require_context_root_event_id(&context)?,
+                    prev_event_id: require_context_prev_event_id(&context)?,
+                    payload: envelope.payload,
+                },
+            ))
+        }
+        KIND_ORDER_REVISION_DECISION => {
+            let envelope = order_revision_decision_from_event(event)?;
+            Ok(RadrootsOrderEventRecord::RevisionDecision(
+                RadrootsOrderRevisionDecisionRecord {
+                    event_id,
+                    author_pubkey,
+                    counterparty_pubkey: context.counterparty_pubkey.clone(),
+                    root_event_id: require_context_root_event_id(&context)?,
+                    prev_event_id: require_context_prev_event_id(&context)?,
+                    payload: envelope.payload,
+                },
+            ))
+        }
+        KIND_ORDER_FULFILLMENT_UPDATE => {
+            let envelope = order_fulfillment_update_from_event(event)?;
+            Ok(RadrootsOrderEventRecord::Fulfillment(
+                RadrootsOrderFulfillmentRecord {
+                    event_id,
+                    author_pubkey,
+                    counterparty_pubkey: context.counterparty_pubkey.clone(),
+                    root_event_id: require_context_root_event_id(&context)?,
+                    prev_event_id: require_context_prev_event_id(&context)?,
+                    payload: envelope.payload,
+                },
+            ))
+        }
+        KIND_ORDER_CANCELLATION => {
+            let envelope = order_cancellation_from_event(event)?;
+            Ok(RadrootsOrderEventRecord::Cancellation(
+                RadrootsOrderCancellationRecord {
+                    event_id,
+                    author_pubkey,
+                    counterparty_pubkey: context.counterparty_pubkey.clone(),
+                    root_event_id: require_context_root_event_id(&context)?,
+                    prev_event_id: require_context_prev_event_id(&context)?,
+                    payload: envelope.payload,
+                },
+            ))
+        }
+        KIND_ORDER_RECEIPT => {
+            let envelope = order_receipt_from_event(event)?;
+            Ok(RadrootsOrderEventRecord::Receipt(
+                RadrootsOrderReceiptRecord {
+                    event_id,
+                    author_pubkey,
+                    counterparty_pubkey: context.counterparty_pubkey.clone(),
+                    root_event_id: require_context_root_event_id(&context)?,
+                    prev_event_id: require_context_prev_event_id(&context)?,
+                    payload: envelope.payload,
+                },
+            ))
+        }
+        KIND_ORDER_PAYMENT_RECORD => {
+            let envelope = order_payment_record_from_event(event)?;
+            Ok(RadrootsOrderEventRecord::Payment(
+                RadrootsOrderPaymentEventRecord {
+                    event_id,
+                    author_pubkey,
+                    counterparty_pubkey: context.counterparty_pubkey.clone(),
+                    root_event_id: require_context_root_event_id(&context)?,
+                    prev_event_id: require_context_prev_event_id(&context)?,
+                    payload: envelope.payload,
+                },
+            ))
+        }
+        KIND_ORDER_SETTLEMENT_DECISION => {
+            let envelope = order_settlement_decision_from_event(event)?;
+            Ok(RadrootsOrderEventRecord::Settlement(
+                RadrootsOrderSettlementRecord {
+                    event_id,
+                    author_pubkey,
+                    counterparty_pubkey: context.counterparty_pubkey.clone(),
+                    root_event_id: require_context_root_event_id(&context)?,
+                    prev_event_id: require_context_prev_event_id(&context)?,
+                    payload: envelope.payload,
+                },
+            ))
+        }
+        _ => Err(RadrootsOrderEventDecodeError::UnsupportedKind { kind: event.kind }),
+    }
+}
+
+#[cfg(feature = "serde_json")]
+fn require_context_root_event_id(
+    context: &radroots_events_codec::order::RadrootsOrderEventContext,
+) -> Result<RadrootsEventId, RadrootsOrderEventDecodeError> {
+    context
+        .root_event_id
+        .clone()
+        .ok_or(RadrootsOrderEventDecodeError::MissingRootEventId)
+}
+
+#[cfg(feature = "serde_json")]
+fn require_context_prev_event_id(
+    context: &radroots_events_codec::order::RadrootsOrderEventContext,
+) -> Result<RadrootsEventId, RadrootsOrderEventDecodeError> {
+    context
+        .prev_event_id
+        .clone()
+        .ok_or(RadrootsOrderEventDecodeError::MissingPreviousEventId)
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -3562,20 +3748,31 @@ mod tests {
         RadrootsOrderRevisionOutcome, RadrootsOrderRevisionProposal,
         RadrootsOrderSettlementDecision, RadrootsOrderSettlementOutcome,
     };
+    use radroots_events::tags::{TAG_E_PREV, TAG_E_ROOT};
+    use radroots_events::{RadrootsNostrEvent, RadrootsNostrEventPtr};
+    use radroots_events_codec::order::{
+        RadrootsOrderEnvelopeParseError, order_cancellation_event_build,
+        order_decision_event_build, order_fulfillment_update_event_build,
+        order_payment_record_event_build, order_receipt_event_build, order_request_event_build,
+        order_revision_decision_event_build, order_revision_proposal_event_build,
+        order_settlement_decision_event_build,
+    };
+    use radroots_events_codec::wire::WireEventParts;
 
     use super::{
         RadrootsListingInventoryAccountingIssue, RadrootsListingInventoryAccountingProjection,
         RadrootsListingInventoryBinAccounting, RadrootsListingInventoryBinAvailability,
         RadrootsListingInventoryOrderReservation, RadrootsOrderCancellationRecord,
-        RadrootsOrderCanonicalizationError, RadrootsOrderDecisionRecord, RadrootsOrderEventRecord,
-        RadrootsOrderFulfillmentRecord, RadrootsOrderIssue, RadrootsOrderPaymentEventRecord,
-        RadrootsOrderPaymentProjection, RadrootsOrderPaymentState, RadrootsOrderProjection,
-        RadrootsOrderReceiptRecord, RadrootsOrderRequestRecord,
-        RadrootsOrderRevisionDecisionRecord, RadrootsOrderRevisionProposalRecord,
-        RadrootsOrderSettlementRecord, RadrootsOrderSettlementState, RadrootsOrderStatus,
-        add_inventory_reservation, canonicalize_order_decision_for_signer,
-        canonicalize_order_request_for_signer, inventory_issue_event_ids, inventory_issue_id,
-        inventory_issue_rank, inventory_issue_sort_key, projection_issue_event_ids,
+        RadrootsOrderCanonicalizationError, RadrootsOrderDecisionRecord,
+        RadrootsOrderEventDecodeError, RadrootsOrderEventRecord, RadrootsOrderFulfillmentRecord,
+        RadrootsOrderIssue, RadrootsOrderPaymentEventRecord, RadrootsOrderPaymentProjection,
+        RadrootsOrderPaymentState, RadrootsOrderProjection, RadrootsOrderReceiptRecord,
+        RadrootsOrderRequestRecord, RadrootsOrderRevisionDecisionRecord,
+        RadrootsOrderRevisionProposalRecord, RadrootsOrderSettlementRecord,
+        RadrootsOrderSettlementState, RadrootsOrderStatus, add_inventory_reservation,
+        canonicalize_order_decision_for_signer, canonicalize_order_request_for_signer,
+        inventory_issue_event_ids, inventory_issue_id, inventory_issue_rank,
+        inventory_issue_sort_key, order_event_record_from_event, projection_issue_event_ids,
         radroots_order_economics_digest,
         reduce_listing_inventory_accounting as reduce_listing_inventory_accounting_with_revisions,
         reduce_order_events as reduce_order_events_with_revisions,
@@ -3704,6 +3901,29 @@ mod tests {
 
     fn listing_addr() -> String {
         format!("{KIND_LISTING}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg")
+    }
+
+    fn listing_event_ptr() -> RadrootsNostrEventPtr {
+        RadrootsNostrEventPtr {
+            id: test_event_id("listing-event").into_string(),
+            relays: Some("wss://relay.radroots.test".to_string()),
+        }
+    }
+
+    fn event_from_parts(
+        event_id: &RadrootsEventId,
+        author_pubkey: &RadrootsPublicKey,
+        parts: WireEventParts,
+    ) -> RadrootsNostrEvent {
+        RadrootsNostrEvent {
+            id: event_id.clone().into_string(),
+            author: author_pubkey.clone().into_string(),
+            created_at: 1,
+            kind: parts.kind,
+            tags: parts.tags,
+            content: parts.content,
+            sig: "sig".to_string(),
+        }
     }
 
     fn clean_request_payload() -> RadrootsOrderRequest {
@@ -4064,6 +4284,273 @@ mod tests {
             assert_eq!(record.event_id(), &expected_event_id);
             assert_eq!(record.order_id(), &order_id("order-1"));
         }
+    }
+
+    #[test]
+    fn order_event_record_from_event_decodes_all_variants() {
+        let request = request_record_with_event_id("decode-request");
+        let request_event = event_from_parts(
+            &request.event_id,
+            &request.author_pubkey,
+            order_request_event_build(&listing_event_ptr(), &request.payload).unwrap(),
+        );
+        assert_eq!(
+            order_event_record_from_event(&request_event).unwrap(),
+            RadrootsOrderEventRecord::Request(request)
+        );
+
+        let decision = accepted_decision_record("decode-decision");
+        let decision_event = event_from_parts(
+            &decision.event_id,
+            &decision.author_pubkey,
+            order_decision_event_build(
+                &decision.root_event_id,
+                &decision.prev_event_id,
+                &decision.payload,
+            )
+            .unwrap(),
+        );
+        assert_eq!(
+            order_event_record_from_event(&decision_event).unwrap(),
+            RadrootsOrderEventRecord::Decision(decision)
+        );
+
+        let proposal = revision_proposal_record(
+            "decode-revision-proposal",
+            "decode-decision",
+            "revision-1",
+            3,
+        );
+        let proposal_event = event_from_parts(
+            &proposal.event_id,
+            &proposal.author_pubkey,
+            order_revision_proposal_event_build(
+                &proposal.root_event_id,
+                &proposal.prev_event_id,
+                &proposal.payload,
+            )
+            .unwrap(),
+        );
+        assert_eq!(
+            order_event_record_from_event(&proposal_event).unwrap(),
+            RadrootsOrderEventRecord::RevisionProposal(proposal)
+        );
+
+        let revision_decision = revision_decision_record(
+            "decode-revision-decision",
+            "decode-revision-proposal",
+            "revision-1",
+            RadrootsOrderRevisionOutcome::Accepted,
+        );
+        let revision_decision_event = event_from_parts(
+            &revision_decision.event_id,
+            &revision_decision.author_pubkey,
+            order_revision_decision_event_build(
+                &revision_decision.root_event_id,
+                &revision_decision.prev_event_id,
+                &revision_decision.payload,
+            )
+            .unwrap(),
+        );
+        assert_eq!(
+            order_event_record_from_event(&revision_decision_event).unwrap(),
+            RadrootsOrderEventRecord::RevisionDecision(revision_decision)
+        );
+
+        let fulfillment = fulfillment_record(
+            "decode-fulfillment",
+            "decode-revision-decision",
+            RadrootsOrderFulfillmentState::ReadyForPickup,
+        );
+        let fulfillment_event = event_from_parts(
+            &fulfillment.event_id,
+            &fulfillment.author_pubkey,
+            order_fulfillment_update_event_build(
+                &fulfillment.root_event_id,
+                &fulfillment.prev_event_id,
+                &fulfillment.payload,
+            )
+            .unwrap(),
+        );
+        assert_eq!(
+            order_event_record_from_event(&fulfillment_event).unwrap(),
+            RadrootsOrderEventRecord::Fulfillment(fulfillment)
+        );
+
+        let cancellation = cancellation_record("decode-cancellation", "decode-request");
+        let cancellation_event = event_from_parts(
+            &cancellation.event_id,
+            &cancellation.author_pubkey,
+            order_cancellation_event_build(
+                &cancellation.root_event_id,
+                &cancellation.prev_event_id,
+                &cancellation.payload,
+            )
+            .unwrap(),
+        );
+        assert_eq!(
+            order_event_record_from_event(&cancellation_event).unwrap(),
+            RadrootsOrderEventRecord::Cancellation(cancellation)
+        );
+
+        let receipt = receipt_record("decode-receipt", "decode-fulfillment", true);
+        let receipt_event = event_from_parts(
+            &receipt.event_id,
+            &receipt.author_pubkey,
+            order_receipt_event_build(
+                &receipt.root_event_id,
+                &receipt.prev_event_id,
+                &receipt.payload,
+            )
+            .unwrap(),
+        );
+        assert_eq!(
+            order_event_record_from_event(&receipt_event).unwrap(),
+            RadrootsOrderEventRecord::Receipt(receipt)
+        );
+
+        let payment = payment_record("decode-payment", "decode-decision");
+        let payment_event = event_from_parts(
+            &payment.event_id,
+            &payment.author_pubkey,
+            order_payment_record_event_build(
+                &payment.root_event_id,
+                &payment.prev_event_id,
+                &payment.payload,
+            )
+            .unwrap(),
+        );
+        assert_eq!(
+            order_event_record_from_event(&payment_event).unwrap(),
+            RadrootsOrderEventRecord::Payment(payment)
+        );
+
+        let settlement = settlement_record(
+            "decode-settlement",
+            "decode-payment",
+            RadrootsOrderSettlementOutcome::Accepted,
+        );
+        let settlement_event = event_from_parts(
+            &settlement.event_id,
+            &settlement.author_pubkey,
+            order_settlement_decision_event_build(
+                &settlement.root_event_id,
+                &settlement.prev_event_id,
+                &settlement.payload,
+            )
+            .unwrap(),
+        );
+        assert_eq!(
+            order_event_record_from_event(&settlement_event).unwrap(),
+            RadrootsOrderEventRecord::Settlement(settlement)
+        );
+    }
+
+    #[test]
+    fn order_event_record_from_event_rejects_wrong_kind() {
+        let request = request_record_with_event_id("decode-wrong-kind");
+        let mut event = event_from_parts(
+            &request.event_id,
+            &request.author_pubkey,
+            order_request_event_build(&listing_event_ptr(), &request.payload).unwrap(),
+        );
+        event.kind = KIND_LISTING;
+        assert!(matches!(
+            order_event_record_from_event(&event),
+            Err(RadrootsOrderEventDecodeError::UnsupportedKind { kind: KIND_LISTING })
+        ));
+    }
+
+    #[test]
+    fn order_event_record_from_event_rejects_wrong_envelope_type() {
+        let request = request_record_with_event_id("decode-request-content");
+        let request_parts =
+            order_request_event_build(&listing_event_ptr(), &request.payload).unwrap();
+        let decision = accepted_decision_record("decode-wrong-envelope");
+        let mut event = event_from_parts(
+            &decision.event_id,
+            &decision.author_pubkey,
+            order_decision_event_build(
+                &decision.root_event_id,
+                &decision.prev_event_id,
+                &decision.payload,
+            )
+            .unwrap(),
+        );
+        event.content = request_parts.content;
+        assert!(matches!(
+            order_event_record_from_event(&event),
+            Err(RadrootsOrderEventDecodeError::Envelope(_))
+        ));
+    }
+
+    #[test]
+    fn order_event_record_from_event_rejects_root_and_previous_mismatches() {
+        let proposal =
+            revision_proposal_record("decode-chain-mismatch", "decode-decision", "revision-1", 3);
+        let parts = order_revision_proposal_event_build(
+            &proposal.root_event_id,
+            &proposal.prev_event_id,
+            &proposal.payload,
+        )
+        .unwrap();
+        let mut root_event = event_from_parts(&proposal.event_id, &proposal.author_pubkey, parts);
+        root_event
+            .tags
+            .iter_mut()
+            .find(|tag| tag.first().map(String::as_str) == Some(TAG_E_ROOT))
+            .unwrap()[1] = test_event_id("wrong-root").into_string();
+        assert!(matches!(
+            order_event_record_from_event(&root_event),
+            Err(RadrootsOrderEventDecodeError::Envelope(
+                RadrootsOrderEnvelopeParseError::PayloadBindingMismatch("root_event_id")
+            ))
+        ));
+
+        let parts = order_revision_proposal_event_build(
+            &proposal.root_event_id,
+            &proposal.prev_event_id,
+            &proposal.payload,
+        )
+        .unwrap();
+        let mut prev_event = event_from_parts(&proposal.event_id, &proposal.author_pubkey, parts);
+        prev_event
+            .tags
+            .iter_mut()
+            .find(|tag| tag.first().map(String::as_str) == Some(TAG_E_PREV))
+            .unwrap()[1] = test_event_id("wrong-prev").into_string();
+        assert!(matches!(
+            order_event_record_from_event(&prev_event),
+            Err(RadrootsOrderEventDecodeError::Envelope(
+                RadrootsOrderEnvelopeParseError::PayloadBindingMismatch("prev_event_id")
+            ))
+        ));
+    }
+
+    #[test]
+    fn order_event_record_from_event_rejects_counterparty_mismatch() {
+        let decision = accepted_decision_record("decode-counterparty-mismatch");
+        let mut event = event_from_parts(
+            &decision.event_id,
+            &decision.author_pubkey,
+            order_decision_event_build(
+                &decision.root_event_id,
+                &decision.prev_event_id,
+                &decision.payload,
+            )
+            .unwrap(),
+        );
+        event
+            .tags
+            .iter_mut()
+            .find(|tag| tag.first().map(String::as_str) == Some("p"))
+            .unwrap()[1] = SELLER.to_string();
+        assert!(matches!(
+            order_event_record_from_event(&event),
+            Err(RadrootsOrderEventDecodeError::Envelope(
+                RadrootsOrderEnvelopeParseError::CounterpartyTagMismatch
+            ))
+        ));
     }
 
     fn reduce_order_events<I, J, K, L, M>(
