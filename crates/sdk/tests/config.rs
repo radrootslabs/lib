@@ -10,9 +10,9 @@ use std::{
 };
 
 const LOCAL_SDK_ENV_KEYS: &[&str] = &[
-    "NOSTR_RS_RELAY_PUBLIC_SCHEME",
-    "NOSTR_RS_RELAY_PUBLIC_HOST",
-    "NOSTR_RS_RELAY_PUBLIC_PORT",
+    "RADROOTS_LOCAL_NOSTR_RELAY_PUBLIC_SCHEME",
+    "RADROOTS_LOCAL_NOSTR_RELAY_PUBLIC_HOST",
+    "RADROOTS_LOCAL_NOSTR_RELAY_PUBLIC_PORT",
     "RADROOTSD_RPC_URL",
     "RADROOTSD_RPC_HOST",
     "RADROOTSD_RPC_PORT",
@@ -108,7 +108,7 @@ where
 #[test]
 fn local_sdk_env_restore_preserves_original_os_string_values() {
     let _guard = sdk_env_lock().lock().expect("sdk env lock");
-    let key = "NOSTR_RS_RELAY_PUBLIC_HOST";
+    let key = "RADROOTS_LOCAL_NOSTR_RELAY_PUBLIC_HOST";
     let _restore_key = EnvKeyRestore::capture(key);
     let original = OsString::from("relay.before.example");
 
@@ -128,7 +128,7 @@ fn local_sdk_env_restore_preserves_original_os_string_values() {
 #[test]
 fn env_key_restore_restores_existing_value() {
     let _guard = sdk_env_lock().lock().expect("sdk env lock");
-    let key = "NOSTR_RS_RELAY_PUBLIC_HOST";
+    let key = "RADROOTS_LOCAL_NOSTR_RELAY_PUBLIC_HOST";
     let _restore_outer = EnvKeyRestore::capture(key);
     let original = OsString::from("relay.before.example");
     let changed = OsString::from("relay.changed.example");
@@ -154,7 +154,7 @@ fn local_sdk_env_restore_preserves_non_unicode_original_values() {
     use std::os::unix::ffi::OsStringExt;
 
     let _guard = sdk_env_lock().lock().expect("sdk env lock");
-    let key = "NOSTR_RS_RELAY_PUBLIC_HOST";
+    let key = "RADROOTS_LOCAL_NOSTR_RELAY_PUBLIC_HOST";
     let _restore_key = EnvKeyRestore::capture(key);
     let original = OsString::from_vec(vec![b'r', b'e', b'l', b'a', b'y', 0x80]);
 
@@ -236,9 +236,9 @@ fn local_environment_resolves_localhost_defaults() {
 fn local_environment_prefers_root_env_contract_when_present() {
     with_local_sdk_env(
         &[
-            ("NOSTR_RS_RELAY_PUBLIC_SCHEME", "ws"),
-            ("NOSTR_RS_RELAY_PUBLIC_HOST", "127.0.0.1"),
-            ("NOSTR_RS_RELAY_PUBLIC_PORT", "18080"),
+            ("RADROOTS_LOCAL_NOSTR_RELAY_PUBLIC_SCHEME", "ws"),
+            ("RADROOTS_LOCAL_NOSTR_RELAY_PUBLIC_HOST", "127.0.0.1"),
+            ("RADROOTS_LOCAL_NOSTR_RELAY_PUBLIC_PORT", "18080"),
             ("RADROOTSD_RPC_URL", "http://127.0.0.1:17070/jsonrpc"),
         ],
         || {
@@ -262,9 +262,9 @@ fn local_environment_prefers_root_env_contract_when_present() {
 fn local_environment_ignores_partial_or_blank_env_contracts() {
     with_local_sdk_env(
         &[
-            ("NOSTR_RS_RELAY_PUBLIC_SCHEME", "ws"),
-            ("NOSTR_RS_RELAY_PUBLIC_HOST", "   "),
-            ("NOSTR_RS_RELAY_PUBLIC_PORT", "18080"),
+            ("RADROOTS_LOCAL_NOSTR_RELAY_PUBLIC_SCHEME", "ws"),
+            ("RADROOTS_LOCAL_NOSTR_RELAY_PUBLIC_HOST", "   "),
+            ("RADROOTS_LOCAL_NOSTR_RELAY_PUBLIC_PORT", "18080"),
             ("RADROOTSD_RPC_HOST", "127.0.0.1"),
         ],
         || {
@@ -288,9 +288,9 @@ fn local_environment_ignores_partial_or_blank_env_contracts() {
 fn local_environment_handles_invalid_and_missing_relay_port_env() {
     with_local_sdk_env(
         &[
-            ("NOSTR_RS_RELAY_PUBLIC_SCHEME", "http"),
-            ("NOSTR_RS_RELAY_PUBLIC_HOST", "127.0.0.1"),
-            ("NOSTR_RS_RELAY_PUBLIC_PORT", "18080"),
+            ("RADROOTS_LOCAL_NOSTR_RELAY_PUBLIC_SCHEME", "http"),
+            ("RADROOTS_LOCAL_NOSTR_RELAY_PUBLIC_HOST", "127.0.0.1"),
+            ("RADROOTS_LOCAL_NOSTR_RELAY_PUBLIC_PORT", "18080"),
         ],
         || {
             let config = RadrootsSdkConfig::local();
@@ -304,8 +304,8 @@ fn local_environment_handles_invalid_and_missing_relay_port_env() {
 
     with_local_sdk_env(
         &[
-            ("NOSTR_RS_RELAY_PUBLIC_SCHEME", "ws"),
-            ("NOSTR_RS_RELAY_PUBLIC_HOST", "127.0.0.1"),
+            ("RADROOTS_LOCAL_NOSTR_RELAY_PUBLIC_SCHEME", "ws"),
+            ("RADROOTS_LOCAL_NOSTR_RELAY_PUBLIC_HOST", "127.0.0.1"),
         ],
         || {
             let config = RadrootsSdkConfig::local();
