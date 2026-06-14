@@ -50,7 +50,7 @@ fn sample_listing() -> RadrootsListing {
         d_tag: "AAAAAAAAAAAAAAAAAAAAAg".parse().expect("listing d tag"),
         published_at: None,
         farm: RadrootsFarmRef {
-            pubkey: "seller".into(),
+            pubkey: "a".repeat(64),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".into(),
         },
         product: RadrootsListingProduct {
@@ -112,7 +112,7 @@ fn listing_event(listing_value: &RadrootsListing) -> RadrootsNostrEvent {
     let parts = listing::build_draft(listing_value).expect("listing draft");
     RadrootsNostrEvent {
         id: "event-1".into(),
-        author: "seller".into(),
+        author: listing_value.farm.pubkey.clone(),
         created_at: 1,
         kind: parts.as_wire_parts().kind,
         tags: parts.as_wire_parts().tags.clone(),
@@ -252,7 +252,7 @@ fn order_facade_wraps_build_parse_and_address_ops() {
     assert_eq!(parts.as_wire_parts().kind, KIND_ORDER_REQUEST);
 
     let parsed_addr = order::parse_listing_address(&listing_addr).expect("listing address");
-    assert_eq!(parsed_addr.listing_id, listing_value.d_tag);
+    assert_eq!(parsed_addr, listing_addr);
 
     let event = RadrootsNostrEvent {
         id: core::iter::repeat_n('b', 64).collect(),

@@ -1989,7 +1989,7 @@ impl<'a> TradeClient<'a> {
     pub fn parse_listing_address(
         &self,
         listing_addr: &str,
-    ) -> Result<order::RadrootsOrderListingAddress, order::RadrootsOrderListingAddressError> {
+    ) -> Result<order::RadrootsListingAddress, order::RadrootsIdParseError> {
         order::parse_listing_address(listing_addr)
     }
 

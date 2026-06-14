@@ -1,10 +1,10 @@
+pub use radroots_events::ids::{RadrootsIdParseError, RadrootsListingAddress};
 pub use radroots_events::order::*;
 pub use radroots_events::trade_validation::*;
 pub use radroots_events_codec::error::EventEncodeError;
 #[cfg(feature = "serde_json")]
 pub use radroots_events_codec::order::{
-    RadrootsOrderEnvelopeParseError, RadrootsOrderEventContext, RadrootsOrderListingAddress,
-    RadrootsOrderListingAddressError,
+    RadrootsOrderEnvelopeParseError, RadrootsOrderEventContext,
 };
 pub use radroots_trade::listing::validation::RadrootsTradeListing as TradeListingValidateResult;
 
@@ -269,8 +269,8 @@ pub fn parse_buyer_receipt(
 #[cfg(feature = "serde_json")]
 pub fn parse_listing_address(
     listing_addr: &str,
-) -> Result<RadrootsOrderListingAddress, RadrootsOrderListingAddressError> {
-    RadrootsOrderListingAddress::parse(listing_addr)
+) -> Result<RadrootsListingAddress, RadrootsIdParseError> {
+    RadrootsListingAddress::parse(listing_addr)
 }
 
 #[cfg(feature = "serde_json")]

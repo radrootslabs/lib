@@ -47,7 +47,7 @@ fn sample_listing() -> RadrootsListing {
         d_tag: "AAAAAAAAAAAAAAAAAAAAAg".parse().expect("listing d tag"),
         published_at: None,
         farm: RadrootsFarmRef {
-            pubkey: "seller".into(),
+            pubkey: "a".repeat(64),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".into(),
         },
         product: RadrootsListingProduct {
@@ -497,7 +497,7 @@ fn listing_and_order_clients_wrap_existing_sdk_facades() {
 
     let event = RadrootsNostrEvent {
         id: "listing-1".into(),
-        author: "seller".into(),
+        author: listing_value.farm.pubkey.clone(),
         created_at: 1,
         kind: draft.as_wire_parts().kind,
         tags: draft.as_wire_parts().tags.clone(),
@@ -545,7 +545,7 @@ fn listing_and_order_clients_wrap_existing_sdk_facades() {
         .order()
         .parse_listing_address(&listing_addr)
         .expect("listing address");
-    assert_eq!(parsed_addr.listing_id, listing_value.d_tag);
+    assert_eq!(parsed_addr, listing_addr);
 }
 
 #[test]
