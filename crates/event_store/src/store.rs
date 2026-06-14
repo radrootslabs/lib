@@ -22,6 +22,8 @@ use sqlx::{Row, SqlitePool};
 use std::path::Path;
 use std::str::FromStr;
 
+pub const RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX: u32 = 500;
+
 #[derive(Clone)]
 pub struct RadrootsEventStore {
     pool: SqlitePool,
@@ -259,6 +261,24 @@ impl RadrootsEventStore {
             "SELECT seq, event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms FROM nostr_event WHERE projection_eligible = 1 AND seq > ? ORDER BY seq ASC LIMIT ?",
         )
         .bind(last_event_seq)
+        .bind(i64::from(limit))
+        .fetch_all(&self.pool)
+        .await?;
+        rows.into_iter().map(stored_event_from_row).collect()
+    }
+
+    pub async fn events_by_tag(
+        &self,
+        tag_name: &str,
+        tag_value: &str,
+        limit: u32,
+    ) -> Result<Vec<RadrootsStoredEvent>, RadrootsEventStoreError> {
+        validate_tag_query(tag_name, limit)?;
+        let rows = sqlx::query(
+            "SELECT seq, event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms FROM nostr_event AS event WHERE projection_eligible = 1 AND EXISTS (SELECT 1 FROM nostr_event_tag AS tag WHERE tag.event_id = event.event_id AND tag.tag_name = ? AND tag.tag_value = ?) ORDER BY event.seq ASC LIMIT ?",
+        )
+        .bind(tag_name)
+        .bind(tag_value)
         .bind(i64::from(limit))
         .fetch_all(&self.pool)
         .await?;
@@ -716,6 +736,20 @@ fn bool_i64(value: bool) -> i64 {
     if value { 1 } else { 0 }
 }
 
+fn validate_tag_query(tag_name: &str, limit: u32) -> Result<(), RadrootsEventStoreError> {
+    if tag_name.is_empty() {
+        return Err(RadrootsEventStoreError::EmptyTagName);
+    }
+    if !(1..=RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX).contains(&limit) {
+        return Err(RadrootsEventStoreError::QueryLimitOutOfRange {
+            min: 1,
+            max: RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX,
+            actual: limit,
+        });
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1136,6 +1170,77 @@ mod tests {
         );
         assert!(receipt.projection_eligible);
         assert!(stored.projection_eligible);
+    }
+
+    #[tokio::test]
+    async fn events_by_tag_validates_inputs_and_returns_projection_events_in_sequence_order() {
+        let store = RadrootsEventStore::open_memory().await.expect("store");
+
+        assert!(matches!(
+            store.events_by_tag("", "soil", 1).await,
+            Err(RadrootsEventStoreError::EmptyTagName)
+        ));
+        assert!(matches!(
+            store.events_by_tag("t", "soil", 0).await,
+            Err(RadrootsEventStoreError::QueryLimitOutOfRange { .. })
+        ));
+        assert!(matches!(
+            store
+                .events_by_tag("t", "soil", RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX + 1)
+                .await,
+            Err(RadrootsEventStoreError::QueryLimitOutOfRange { .. })
+        ));
+
+        let unsupported = signed_event(
+            999,
+            40,
+            vec![vec!["t".to_owned(), "soil".to_owned()]],
+            "unsupported",
+        );
+        let high_created_at = signed_event(
+            KIND_POST,
+            60,
+            vec![
+                vec!["t".to_owned(), "soil".to_owned()],
+                vec!["t".to_owned(), "soil".to_owned()],
+            ],
+            "high-created-at",
+        );
+        let low_created_at = signed_event(
+            KIND_POST,
+            50,
+            vec![vec!["t".to_owned(), "soil".to_owned()]],
+            "low-created-at",
+        );
+
+        store
+            .ingest_event(RadrootsEventIngest::new(unsupported.clone(), 3_300))
+            .await
+            .expect("unsupported ingest");
+        store
+            .ingest_event(RadrootsEventIngest::new(high_created_at.clone(), 3_400))
+            .await
+            .expect("high ingest");
+        store
+            .ingest_event(RadrootsEventIngest::new(low_created_at.clone(), 3_500))
+            .await
+            .expect("low ingest");
+
+        let events = store
+            .events_by_tag("t", "soil", 10)
+            .await
+            .expect("tag query");
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].event_id, high_created_at.id);
+        assert_eq!(events[1].event_id, low_created_at.id);
+        assert!(events.iter().all(|event| event.projection_eligible));
+
+        let limited = store
+            .events_by_tag("t", "soil", 1)
+            .await
+            .expect("limited tag query");
+        assert_eq!(limited.len(), 1);
+        assert_eq!(limited[0].event_id, high_created_at.id);
     }
 
     #[tokio::test]

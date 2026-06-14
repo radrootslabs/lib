@@ -16,6 +16,10 @@ pub enum RadrootsEventStoreError {
     IdParse(#[from] RadrootsIdParseError),
     #[error("stored event `{0}` was not found")]
     MissingEvent(String),
+    #[error("event-store tag query tag name cannot be empty")]
+    EmptyTagName,
+    #[error("event-store query limit {actual} is outside {min}..={max}")]
+    QueryLimitOutOfRange { min: u32, max: u32, actual: u32 },
     #[error("invalid stored enum value `{value}` for {field}")]
     InvalidStoredEnum { field: &'static str, value: String },
     #[error("integer value `{value}` is outside {field} range")]

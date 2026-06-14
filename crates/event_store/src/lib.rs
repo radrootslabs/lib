@@ -21,4 +21,4 @@ pub use model::{
     RadrootsStoredEventHead, RadrootsStoredEventTag, StoredEventClass,
 };
 #[cfg(feature = "sqlite")]
-pub use store::RadrootsEventStore;
+pub use store::{RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX, RadrootsEventStore};
