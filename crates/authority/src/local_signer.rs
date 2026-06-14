@@ -16,10 +16,6 @@ impl RadrootsLocalEventSigner {
             .map_err(|_| RadrootsAuthorityError::InvalidSignerPubkey)?;
         Ok(Self { keys, pubkey })
     }
-
-    pub fn keys(&self) -> &RadrootsNostrKeys {
-        &self.keys
-    }
 }
 
 impl RadrootsEventSigner for RadrootsLocalEventSigner {
