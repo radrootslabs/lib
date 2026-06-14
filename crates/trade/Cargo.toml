@@ -13,7 +13,12 @@ readme = "README"
 
 [features]
 default = ["std", "serde", "serde_json"]
-std = ["radroots_core/std", "radroots_events/std", "radroots_events_codec/std"]
+std = [
+  "radroots_authority/std",
+  "radroots_core/std",
+  "radroots_events/std",
+  "radroots_events_codec/std",
+]
 event_store = [
   "std",
   "serde_json",
@@ -37,6 +42,7 @@ serde_json = [
 ]
 
 [dependencies]
+radroots_authority = { workspace = true, default-features = false }
 radroots_core = { workspace = true, default-features = false }
 radroots_events = { workspace = true, default-features = false }
 radroots_events_codec = { workspace = true, default-features = false }

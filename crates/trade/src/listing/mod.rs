@@ -9,6 +9,7 @@ use radroots_events::{RadrootsNostrEvent, kinds::is_listing_kind, listing::Radro
 
 pub use self::draft::{
     RadrootsCanonicalListingDraft, RadrootsListingDraftDocumentV1, RadrootsListingDraftError,
+    canonicalize_listing_draft,
 };
 pub use radroots_events::order::RadrootsListingParseError as ListingParseError;
 

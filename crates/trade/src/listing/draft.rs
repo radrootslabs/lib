@@ -1,7 +1,18 @@
 #![forbid(unsafe_code)]
 
+#[cfg(not(feature = "std"))]
+use alloc::{format, string::ToString, vec::Vec};
+
+#[cfg(feature = "std")]
+use std::{string::ToString, vec::Vec};
+
+use radroots_authority::RadrootsActorContext;
 use radroots_events::{
-    ids::{RadrootsIdParseError, RadrootsListingAddress, RadrootsPublicKey},
+    contract::RadrootsActorRole,
+    ids::{
+        RadrootsIdParseError, RadrootsInventoryBinId, RadrootsListingAddress, RadrootsPublicKey,
+    },
+    kinds::KIND_LISTING_DRAFT,
     listing::RadrootsListing,
 };
 use thiserror::Error;
@@ -46,15 +57,92 @@ pub enum RadrootsListingDraftError {
     InvalidSellerPubkey(RadrootsIdParseError),
     #[error("invalid listing draft address: {0}")]
     InvalidListingAddress(RadrootsIdParseError),
+    #[error("listing draft actor does not satisfy required role {required_role:?}")]
+    ActorRoleUnsatisfied { required_role: RadrootsActorRole },
+    #[error("listing draft farm pubkey does not match seller")]
+    FarmPubkeyMismatch {
+        expected_pubkey: RadrootsPublicKey,
+        actual_pubkey: RadrootsPublicKey,
+    },
+    #[error("listing draft primary bin is missing")]
+    MissingPrimaryBin {
+        primary_bin_id: RadrootsInventoryBinId,
+    },
+    #[error("listing draft contains duplicate bin ID")]
+    DuplicateBinId { bin_id: RadrootsInventoryBinId },
+}
+
+pub fn canonicalize_listing_draft(
+    actor: &RadrootsActorContext,
+    mut document: RadrootsListingDraftDocumentV1,
+) -> Result<RadrootsCanonicalListingDraft, RadrootsListingDraftError> {
+    if !actor.satisfies(RadrootsActorRole::Seller) {
+        return Err(RadrootsListingDraftError::ActorRoleUnsatisfied {
+            required_role: RadrootsActorRole::Seller,
+        });
+    }
+
+    let seller_pubkey = actor.pubkey().clone();
+    let farm_pubkey = document.listing.farm.pubkey.as_str();
+    if farm_pubkey.is_empty() {
+        document.listing.farm.pubkey = seller_pubkey.as_str().to_string();
+    } else {
+        let farm_pubkey = RadrootsPublicKey::parse(farm_pubkey)
+            .map_err(RadrootsListingDraftError::InvalidSellerPubkey)?;
+        if farm_pubkey != seller_pubkey {
+            return Err(RadrootsListingDraftError::FarmPubkeyMismatch {
+                expected_pubkey: seller_pubkey,
+                actual_pubkey: farm_pubkey,
+            });
+        }
+        document.listing.farm.pubkey = farm_pubkey.as_str().to_string();
+    }
+
+    let primary_bin_id = document.listing.primary_bin_id.clone();
+    let mut seen_bin_ids = Vec::new();
+    let mut primary_bin_found = false;
+    for bin in &document.listing.bins {
+        if seen_bin_ids
+            .iter()
+            .any(|seen_bin_id| seen_bin_id == &bin.bin_id)
+        {
+            return Err(RadrootsListingDraftError::DuplicateBinId {
+                bin_id: bin.bin_id.clone(),
+            });
+        }
+        if bin.bin_id == primary_bin_id {
+            primary_bin_found = true;
+        }
+        seen_bin_ids.push(bin.bin_id.clone());
+    }
+
+    if !primary_bin_found {
+        return Err(RadrootsListingDraftError::MissingPrimaryBin { primary_bin_id });
+    }
+
+    let listing_addr = RadrootsListingAddress::parse(format!(
+        "{KIND_LISTING_DRAFT}:{}:{}",
+        seller_pubkey.as_str(),
+        document.listing.d_tag.as_str()
+    ))
+    .map_err(RadrootsListingDraftError::InvalidListingAddress)?;
+
+    Ok(RadrootsCanonicalListingDraft::new(
+        seller_pubkey,
+        listing_addr,
+        document,
+    ))
 }
 
 #[cfg(test)]
 mod tests {
+    use radroots_authority::RadrootsActorContext;
     use radroots_core::{
         RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
         RadrootsCoreQuantityPrice, RadrootsCoreUnit,
     };
     use radroots_events::{
+        contract::RadrootsActorRole,
         farm::RadrootsFarmRef,
         ids::{RadrootsDTag, RadrootsInventoryBinId, RadrootsListingAddress, RadrootsPublicKey},
         kinds::KIND_LISTING_DRAFT,
@@ -63,9 +151,11 @@ mod tests {
 
     use super::{
         RadrootsCanonicalListingDraft, RadrootsListingDraftDocumentV1, RadrootsListingDraftError,
+        canonicalize_listing_draft,
     };
 
     const SELLER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const OTHER: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
     fn d_tag(raw: &str) -> RadrootsDTag {
         RadrootsDTag::parse(raw).expect("d tag")
@@ -128,6 +218,14 @@ mod tests {
         }
     }
 
+    fn seller_actor() -> RadrootsActorContext {
+        RadrootsActorContext::with_roles(SELLER, [RadrootsActorRole::Seller]).expect("actor")
+    }
+
+    fn buyer_actor() -> RadrootsActorContext {
+        RadrootsActorContext::with_roles(SELLER, [RadrootsActorRole::Buyer]).expect("actor")
+    }
+
     #[test]
     fn draft_document_wraps_listing() {
         let document = RadrootsListingDraftDocumentV1::new(listing());
@@ -173,5 +271,82 @@ mod tests {
             ),
             RadrootsListingDraftError::InvalidListingAddress(_)
         ));
+    }
+
+    #[test]
+    fn canonicalize_listing_draft_fills_missing_farm_pubkey_and_derives_address() {
+        let mut listing = listing();
+        listing.farm.pubkey.clear();
+        let document = RadrootsListingDraftDocumentV1::new(listing);
+
+        let canonical =
+            canonicalize_listing_draft(&seller_actor(), document).expect("canonical draft");
+
+        assert_eq!(canonical.seller_pubkey.as_str(), SELLER);
+        assert_eq!(
+            canonical.listing_addr.as_str(),
+            format!("{KIND_LISTING_DRAFT}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg")
+        );
+        assert_eq!(canonical.document.listing.farm.pubkey, SELLER);
+    }
+
+    #[test]
+    fn canonicalize_listing_draft_rejects_non_seller_actor() {
+        let document = RadrootsListingDraftDocumentV1::new(listing());
+
+        let error = canonicalize_listing_draft(&buyer_actor(), document).unwrap_err();
+
+        assert_eq!(
+            error,
+            RadrootsListingDraftError::ActorRoleUnsatisfied {
+                required_role: RadrootsActorRole::Seller
+            }
+        );
+    }
+
+    #[test]
+    fn canonicalize_listing_draft_rejects_mismatched_farm_pubkey() {
+        let mut listing = listing();
+        listing.farm.pubkey = OTHER.to_string();
+        let document = RadrootsListingDraftDocumentV1::new(listing);
+
+        let error = canonicalize_listing_draft(&seller_actor(), document).unwrap_err();
+
+        assert!(matches!(
+            error,
+            RadrootsListingDraftError::FarmPubkeyMismatch { .. }
+        ));
+    }
+
+    #[test]
+    fn canonicalize_listing_draft_rejects_missing_primary_bin() {
+        let mut listing = listing();
+        listing.primary_bin_id = bin_id("bin-2");
+        let document = RadrootsListingDraftDocumentV1::new(listing);
+
+        let error = canonicalize_listing_draft(&seller_actor(), document).unwrap_err();
+
+        assert_eq!(
+            error,
+            RadrootsListingDraftError::MissingPrimaryBin {
+                primary_bin_id: bin_id("bin-2")
+            }
+        );
+    }
+
+    #[test]
+    fn canonicalize_listing_draft_rejects_duplicate_bin_ids() {
+        let mut listing = listing();
+        listing.bins.push(listing.bins[0].clone());
+        let document = RadrootsListingDraftDocumentV1::new(listing);
+
+        let error = canonicalize_listing_draft(&seller_actor(), document).unwrap_err();
+
+        assert_eq!(
+            error,
+            RadrootsListingDraftError::DuplicateBinId {
+                bin_id: bin_id("bin-1")
+            }
+        );
     }
 }
