@@ -13,5 +13,5 @@ pub use actor::{
     RadrootsActorContext, RadrootsActorResolutionRequest, RadrootsActorSelector,
     RadrootsActorSource, role_satisfies,
 };
-pub use error::RadrootsAuthorityError;
-pub use signer::RadrootsSignerIdentity;
+pub use error::{RadrootsAuthorityError, RadrootsSignerError};
+pub use signer::{RadrootsEventSigner, RadrootsSignerIdentity};

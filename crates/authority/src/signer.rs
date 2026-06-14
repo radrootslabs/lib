@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
-use crate::RadrootsAuthorityError;
+use crate::{RadrootsAuthorityError, RadrootsSignerError};
+use radroots_events::draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent};
 use radroots_events::ids::RadrootsPublicKey;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -17,5 +18,139 @@ impl RadrootsSignerIdentity {
 
     pub fn pubkey(&self) -> &RadrootsPublicKey {
         &self.pubkey
+    }
+}
+
+pub trait RadrootsEventSigner {
+    fn pubkey(&self) -> &RadrootsPublicKey;
+
+    fn sign_frozen_draft(
+        &self,
+        draft: &RadrootsFrozenEventDraft,
+    ) -> Result<RadrootsSignedNostrEvent, RadrootsSignerError>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use radroots_events::kinds::KIND_POST;
+
+    fn hex_64(character: char) -> String {
+        std::iter::repeat_n(character, 64).collect()
+    }
+
+    fn hex_128(character: char) -> String {
+        std::iter::repeat_n(character, 128).collect()
+    }
+
+    fn draft_for(pubkey: &str) -> RadrootsFrozenEventDraft {
+        RadrootsFrozenEventDraft::new(
+            "radroots.social.post.v1",
+            KIND_POST,
+            1_700_000_000,
+            vec![vec!["t".to_owned(), "soil".to_owned()]],
+            "hello",
+            pubkey,
+        )
+        .expect("draft")
+    }
+
+    struct MockSigner {
+        pubkey: RadrootsPublicKey,
+        failure: Option<RadrootsSignerError>,
+    }
+
+    impl MockSigner {
+        fn new(pubkey: &str) -> Self {
+            Self {
+                pubkey: RadrootsPublicKey::parse(pubkey).expect("pubkey"),
+                failure: None,
+            }
+        }
+
+        fn failing(pubkey: &str, failure: RadrootsSignerError) -> Self {
+            Self {
+                pubkey: RadrootsPublicKey::parse(pubkey).expect("pubkey"),
+                failure: Some(failure),
+            }
+        }
+    }
+
+    impl RadrootsEventSigner for MockSigner {
+        fn pubkey(&self) -> &RadrootsPublicKey {
+            &self.pubkey
+        }
+
+        fn sign_frozen_draft(
+            &self,
+            draft: &RadrootsFrozenEventDraft,
+        ) -> Result<RadrootsSignedNostrEvent, RadrootsSignerError> {
+            if let Some(failure) = &self.failure {
+                return Err(match failure {
+                    RadrootsSignerError::Unavailable => RadrootsSignerError::Unavailable,
+                    RadrootsSignerError::Rejected => RadrootsSignerError::Rejected,
+                    RadrootsSignerError::SigningFailed { message } => {
+                        RadrootsSignerError::SigningFailed {
+                            message: message.clone(),
+                        }
+                    }
+                });
+            }
+            RadrootsSignedNostrEvent::new(
+                draft.expected_event_id.as_str(),
+                self.pubkey.as_str(),
+                draft.created_at,
+                draft.kind,
+                draft.tags.clone(),
+                draft.content.as_str(),
+                hex_128('f'),
+                "{}",
+            )
+            .map_err(|error| RadrootsSignerError::SigningFailed {
+                message: error.to_string(),
+            })
+        }
+    }
+
+    #[test]
+    fn mock_signer_reports_public_key() {
+        let pubkey = hex_64('a');
+        let signer = MockSigner::new(pubkey.as_str());
+
+        assert_eq!(signer.pubkey().as_str(), pubkey);
+    }
+
+    #[test]
+    fn mock_signer_returns_signed_frozen_draft() {
+        let pubkey = hex_64('a');
+        let signer = MockSigner::new(pubkey.as_str());
+        let draft = draft_for(pubkey.as_str());
+
+        let signed = signer.sign_frozen_draft(&draft).expect("signed");
+
+        assert_eq!(signed.id, draft.expected_event_id);
+        assert_eq!(signed.pubkey, pubkey);
+        assert_eq!(signed.kind, KIND_POST);
+    }
+
+    #[test]
+    fn mock_signer_propagates_signing_errors() {
+        let pubkey = hex_64('a');
+        let signer = MockSigner::failing(
+            pubkey.as_str(),
+            RadrootsSignerError::SigningFailed {
+                message: "deterministic failure".to_owned(),
+            },
+        );
+        let draft = draft_for(pubkey.as_str());
+
+        let err = signer.sign_frozen_draft(&draft).expect_err("failure");
+
+        assert_eq!(
+            err,
+            RadrootsSignerError::SigningFailed {
+                message: "deterministic failure".to_owned()
+            }
+        );
     }
 }
