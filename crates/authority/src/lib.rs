@@ -8,6 +8,8 @@ extern crate alloc;
 pub mod actor;
 pub mod authorization;
 pub mod error;
+#[cfg(feature = "local_signer")]
+pub mod local_signer;
 pub mod signer;
 
 pub use actor::{
@@ -19,4 +21,6 @@ pub use authorization::{
     sign_authorized_draft,
 };
 pub use error::{RadrootsAuthorityError, RadrootsSignerError};
+#[cfg(feature = "local_signer")]
+pub use local_signer::RadrootsLocalEventSigner;
 pub use signer::{RadrootsEventSigner, RadrootsSignerIdentity};

@@ -13,9 +13,16 @@ homepage.workspace = true
 [features]
 default = ["std"]
 std = ["radroots_events/std"]
+local_signer = [
+  "std",
+  "dep:radroots_nostr",
+  "radroots_nostr/events",
+  "radroots_nostr/std",
+]
 
 [dependencies]
 radroots_events = { workspace = true, default-features = false }
+radroots_nostr = { workspace = true, optional = true, default-features = false }
 thiserror = { workspace = true }
 
 [lints.rust]
