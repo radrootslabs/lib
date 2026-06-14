@@ -130,13 +130,19 @@ mod tests {
         RadrootsCoreQuantityPrice, RadrootsCoreUnit,
     };
     use radroots_events::{
+        RadrootsNostrEvent,
         farm::RadrootsFarmRef,
         ids::{RadrootsDTag, RadrootsInventoryBinId, RadrootsListingAddress, RadrootsPublicKey},
         kinds::{KIND_LISTING, KIND_LISTING_DRAFT},
-        listing::{RadrootsListing, RadrootsListingBin, RadrootsListingProduct},
+        listing::{
+            RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
+            RadrootsListingDeliveryMethod, RadrootsListingLocation, RadrootsListingProduct,
+            RadrootsListingStatus,
+        },
     };
 
     use crate::listing::draft::{RadrootsCanonicalListingDraft, RadrootsListingDraftDocumentV1};
+    use crate::listing::validation::validate_listing_event;
 
     use super::{
         LISTING_DRAFT_CONTRACT_ID, LISTING_PUBLISHED_CONTRACT_ID, RadrootsListingLifecycleState,
@@ -198,10 +204,20 @@ mod tests {
             resource_area: None,
             plot: None,
             discounts: None,
-            inventory_available: None,
-            availability: None,
-            delivery_method: None,
-            location: None,
+            inventory_available: Some(RadrootsCoreDecimal::from(5u32)),
+            availability: Some(RadrootsListingAvailability::Status {
+                status: RadrootsListingStatus::Active,
+            }),
+            delivery_method: Some(RadrootsListingDeliveryMethod::Pickup),
+            location: Some(RadrootsListingLocation {
+                primary: "Farm".to_string(),
+                city: None,
+                region: None,
+                country: None,
+                lat: None,
+                lng: None,
+                geohash: None,
+            }),
             images: None,
         }
     }
@@ -333,5 +349,25 @@ mod tests {
         assert_eq!(first.expected_event_id.len(), 64);
         assert_eq!(first.tags, second.tags);
         assert_eq!(first.content, second.content);
+    }
+
+    #[test]
+    fn build_listing_mutation_draft_output_validates_as_trade_listing() {
+        let publish = RadrootsListingMutation::publish(canonical_draft());
+        let draft = build_listing_mutation_draft(&publish, 1_700_000_000).expect("draft");
+
+        let event = RadrootsNostrEvent {
+            id: String::new(),
+            author: draft.expected_pubkey.clone(),
+            created_at: draft.created_at,
+            kind: draft.kind,
+            tags: draft.tags,
+            content: draft.content,
+            sig: String::new(),
+        };
+        let validated = validate_listing_event(&event).expect("validated listing");
+
+        assert_eq!(validated.seller_pubkey, SELLER);
+        assert!(validated.listing_addr.contains(&format!(":{SELLER}:")));
     }
 }

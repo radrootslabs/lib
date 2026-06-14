@@ -3,7 +3,6 @@ pub mod draft;
 pub mod model;
 pub mod mutation;
 pub mod price_ext;
-pub mod publish;
 pub mod validation;
 
 use radroots_events::{RadrootsNostrEvent, kinds::is_listing_kind, listing::RadrootsListing};
