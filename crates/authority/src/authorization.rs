@@ -4,12 +4,14 @@ use crate::{RadrootsActorContext, RadrootsAuthorityError, RadrootsEventSigner};
 use radroots_events::contract::{RadrootsEventContract, event_contract};
 #[cfg(test)]
 use radroots_events::draft::RadrootsSignedNostrEventParts;
-use radroots_events::draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent};
+use radroots_events::draft::{
+    RadrootsFrozenEventDraft, RadrootsSignedNostrEvent, compute_nip01_event_id,
+};
 
 #[cfg(not(feature = "std"))]
-use alloc::borrow::ToOwned;
+use alloc::{borrow::ToOwned, string::ToString};
 #[cfg(feature = "std")]
-use std::borrow::ToOwned;
+use std::{borrow::ToOwned, string::ToString};
 
 pub fn authorize_actor_for_contract(
     actor: &RadrootsActorContext,
@@ -79,19 +81,70 @@ where
     authorize_actor_for_draft(actor, draft)?;
     authorize_signer_for_draft(signer, draft)?;
     let signed_event = signer.sign_frozen_draft(draft)?;
+    validate_signed_event_matches_draft(&signed_event, draft)?;
+    Ok(signed_event)
+}
+
+pub fn validate_signed_event_matches_draft(
+    signed_event: &RadrootsSignedNostrEvent,
+    draft: &RadrootsFrozenEventDraft,
+) -> Result<(), RadrootsAuthorityError> {
     if signed_event.pubkey.as_str() != draft.expected_pubkey.as_str() {
         return Err(RadrootsAuthorityError::SignedEventPubkeyMismatch {
             expected_pubkey: draft.expected_pubkey.clone(),
-            actual_pubkey: signed_event.pubkey,
+            actual_pubkey: signed_event.pubkey.clone(),
         });
     }
     if signed_event.id.as_str() != draft.expected_event_id.as_str() {
         return Err(RadrootsAuthorityError::SignedEventIdMismatch {
             expected_event_id: draft.expected_event_id.clone(),
-            actual_event_id: signed_event.id,
+            actual_event_id: signed_event.id.clone(),
         });
     }
-    Ok(signed_event)
+    if signed_event.created_at != draft.created_at {
+        return Err(RadrootsAuthorityError::SignedEventCreatedAtMismatch {
+            expected_created_at: draft.created_at,
+            actual_created_at: signed_event.created_at,
+        });
+    }
+    if signed_event.kind != draft.kind {
+        return Err(RadrootsAuthorityError::SignedEventKindMismatch {
+            expected_kind: draft.kind,
+            actual_kind: signed_event.kind,
+        });
+    }
+    if signed_event.tags != draft.tags {
+        return Err(RadrootsAuthorityError::SignedEventTagsMismatch {
+            expected_tags: draft.tags.clone(),
+            actual_tags: signed_event.tags.clone(),
+        });
+    }
+    if signed_event.content != draft.content {
+        return Err(RadrootsAuthorityError::SignedEventContentMismatch {
+            expected_content: draft.content.clone(),
+            actual_content: signed_event.content.clone(),
+        });
+    }
+    let computed_event_id = compute_nip01_event_id(
+        signed_event.pubkey.as_str(),
+        signed_event.created_at,
+        signed_event.kind,
+        &signed_event.tags,
+        signed_event.content.as_str(),
+    )
+    .map_err(
+        |error| RadrootsAuthorityError::SignedEventComputedIdInvalid {
+            message: error.to_string(),
+        },
+    )?
+    .into_string();
+    if computed_event_id.as_str() != signed_event.id.as_str() {
+        return Err(RadrootsAuthorityError::SignedEventComputedIdMismatch {
+            expected_event_id: signed_event.id.clone(),
+            computed_event_id,
+        });
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -130,23 +183,42 @@ mod tests {
         .expect("listing draft")
     }
 
+    #[derive(Default)]
+    struct SignedEventOverrides {
+        event_id: Option<String>,
+        created_at: Option<u32>,
+        kind: Option<u32>,
+        tags: Option<Vec<Vec<String>>>,
+        content: Option<String>,
+    }
+
     struct StaticSigner {
         pubkey: RadrootsPublicKey,
-        event_id: Option<String>,
+        overrides: SignedEventOverrides,
     }
 
     impl StaticSigner {
         fn new(pubkey: &str) -> Self {
             Self {
                 pubkey: RadrootsPublicKey::parse(pubkey).expect("pubkey"),
-                event_id: None,
+                overrides: SignedEventOverrides::default(),
             }
         }
 
         fn with_event_id(pubkey: &str, event_id: String) -> Self {
+            Self::with_overrides(
+                pubkey,
+                SignedEventOverrides {
+                    event_id: Some(event_id),
+                    ..SignedEventOverrides::default()
+                },
+            )
+        }
+
+        fn with_overrides(pubkey: &str, overrides: SignedEventOverrides) -> Self {
             Self {
                 pubkey: RadrootsPublicKey::parse(pubkey).expect("pubkey"),
-                event_id: Some(event_id),
+                overrides,
             }
         }
     }
@@ -162,15 +234,24 @@ mod tests {
         ) -> Result<RadrootsSignedNostrEvent, RadrootsSignerError> {
             RadrootsSignedNostrEvent::new(RadrootsSignedNostrEventParts {
                 id: self
+                    .overrides
                     .event_id
                     .as_deref()
                     .unwrap_or(draft.expected_event_id.as_str())
                     .to_owned(),
                 pubkey: self.pubkey.to_string(),
-                created_at: draft.created_at,
-                kind: draft.kind,
-                tags: draft.tags.clone(),
-                content: draft.content.clone(),
+                created_at: self.overrides.created_at.unwrap_or(draft.created_at),
+                kind: self.overrides.kind.unwrap_or(draft.kind),
+                tags: self
+                    .overrides
+                    .tags
+                    .clone()
+                    .unwrap_or_else(|| draft.tags.clone()),
+                content: self
+                    .overrides
+                    .content
+                    .clone()
+                    .unwrap_or_else(|| draft.content.clone()),
                 sig: hex_128('f'),
                 raw_json: "{}".to_owned(),
             })
@@ -178,6 +259,20 @@ mod tests {
                 message: error.to_string(),
             })
         }
+    }
+
+    fn signed_event_from_draft(draft: &RadrootsFrozenEventDraft) -> RadrootsSignedNostrEvent {
+        RadrootsSignedNostrEvent::new(RadrootsSignedNostrEventParts {
+            id: draft.expected_event_id.clone(),
+            pubkey: draft.expected_pubkey.clone(),
+            created_at: draft.created_at,
+            kind: draft.kind,
+            tags: draft.tags.clone(),
+            content: draft.content.clone(),
+            sig: hex_128('f'),
+            raw_json: "{}".to_owned(),
+        })
+        .expect("signed event")
     }
 
     #[test]
@@ -270,6 +365,137 @@ mod tests {
         assert!(matches!(
             sign_authorized_draft(&actor, &signer, &draft),
             Err(RadrootsAuthorityError::SignedEventIdMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn signed_event_created_at_mismatch_fails() {
+        let pubkey = hex_64('a');
+        let draft = listing_draft(pubkey.as_str());
+        let actor = seller_actor(pubkey.as_str());
+        let signer = StaticSigner::with_overrides(
+            pubkey.as_str(),
+            SignedEventOverrides {
+                created_at: Some(draft.created_at + 1),
+                ..SignedEventOverrides::default()
+            },
+        );
+
+        assert!(matches!(
+            sign_authorized_draft(&actor, &signer, &draft),
+            Err(RadrootsAuthorityError::SignedEventCreatedAtMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn signed_event_kind_mismatch_fails() {
+        let pubkey = hex_64('a');
+        let draft = listing_draft(pubkey.as_str());
+        let actor = seller_actor(pubkey.as_str());
+        let signer = StaticSigner::with_overrides(
+            pubkey.as_str(),
+            SignedEventOverrides {
+                kind: Some(KIND_POST),
+                ..SignedEventOverrides::default()
+            },
+        );
+
+        assert!(matches!(
+            sign_authorized_draft(&actor, &signer, &draft),
+            Err(RadrootsAuthorityError::SignedEventKindMismatch {
+                expected_kind: KIND_LISTING,
+                actual_kind: KIND_POST
+            })
+        ));
+    }
+
+    #[test]
+    fn signed_event_tags_mismatch_fails() {
+        let pubkey = hex_64('a');
+        let draft = listing_draft(pubkey.as_str());
+        let actor = seller_actor(pubkey.as_str());
+        let signer = StaticSigner::with_overrides(
+            pubkey.as_str(),
+            SignedEventOverrides {
+                tags: Some(vec![vec!["d".to_owned(), "listing-b".to_owned()]]),
+                ..SignedEventOverrides::default()
+            },
+        );
+
+        assert!(matches!(
+            sign_authorized_draft(&actor, &signer, &draft),
+            Err(RadrootsAuthorityError::SignedEventTagsMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn signed_event_content_mismatch_fails() {
+        let pubkey = hex_64('a');
+        let draft = listing_draft(pubkey.as_str());
+        let actor = seller_actor(pubkey.as_str());
+        let signer = StaticSigner::with_overrides(
+            pubkey.as_str(),
+            SignedEventOverrides {
+                content: Some("{\"changed\":true}".to_owned()),
+                ..SignedEventOverrides::default()
+            },
+        );
+
+        assert!(matches!(
+            sign_authorized_draft(&actor, &signer, &draft),
+            Err(RadrootsAuthorityError::SignedEventContentMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn signed_event_exactly_matching_draft_passes() {
+        let pubkey = hex_64('a');
+        let draft = listing_draft(pubkey.as_str());
+        let signed = signed_event_from_draft(&draft);
+
+        validate_signed_event_matches_draft(&signed, &draft).expect("signed event matches draft");
+    }
+
+    #[test]
+    fn signed_event_computed_id_mismatch_fails() {
+        let pubkey = hex_64('a');
+        let inconsistent_draft = RadrootsFrozenEventDraft {
+            contract_id: "radroots.listing.published.v1".to_owned(),
+            contract_registry_version: 1,
+            kind: KIND_LISTING,
+            created_at: 1_700_000_000,
+            tags: vec![vec!["d".to_owned(), "listing-a".to_owned()]],
+            content: "{}".to_owned(),
+            expected_pubkey: pubkey,
+            expected_event_id: hex_64('e'),
+        };
+        let signed = signed_event_from_draft(&inconsistent_draft);
+
+        assert!(matches!(
+            validate_signed_event_matches_draft(&signed, &inconsistent_draft),
+            Err(RadrootsAuthorityError::SignedEventComputedIdMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn sign_authorized_draft_calls_full_integrity_check() {
+        let pubkey = hex_64('a');
+        let inconsistent_draft = RadrootsFrozenEventDraft {
+            contract_id: "radroots.listing.published.v1".to_owned(),
+            contract_registry_version: 1,
+            kind: KIND_LISTING,
+            created_at: 1_700_000_000,
+            tags: vec![vec!["d".to_owned(), "listing-a".to_owned()]],
+            content: "{}".to_owned(),
+            expected_pubkey: pubkey.clone(),
+            expected_event_id: hex_64('e'),
+        };
+        let actor = seller_actor(pubkey.as_str());
+        let signer = StaticSigner::new(pubkey.as_str());
+
+        assert!(matches!(
+            sign_authorized_draft(&actor, &signer, &inconsistent_draft),
+            Err(RadrootsAuthorityError::SignedEventComputedIdMismatch { .. })
         ));
     }
 

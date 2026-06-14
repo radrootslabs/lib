@@ -3,9 +3,9 @@
 use thiserror::Error;
 
 #[cfg(not(feature = "std"))]
-use alloc::string::String;
+use alloc::{string::String, vec::Vec};
 #[cfg(feature = "std")]
-use std::string::String;
+use std::{string::String, vec::Vec};
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum RadrootsAuthorityError {
@@ -53,6 +53,43 @@ pub enum RadrootsAuthorityError {
     SignedEventIdMismatch {
         expected_event_id: String,
         actual_event_id: String,
+    },
+
+    #[error(
+        "signed event created_at mismatch: expected {expected_created_at}, got {actual_created_at}"
+    )]
+    SignedEventCreatedAtMismatch {
+        expected_created_at: u32,
+        actual_created_at: u32,
+    },
+
+    #[error("signed event kind mismatch: expected {expected_kind}, got {actual_kind}")]
+    SignedEventKindMismatch {
+        expected_kind: u32,
+        actual_kind: u32,
+    },
+
+    #[error("signed event tags mismatch: expected {expected_tags:?}, got {actual_tags:?}")]
+    SignedEventTagsMismatch {
+        expected_tags: Vec<Vec<String>>,
+        actual_tags: Vec<Vec<String>>,
+    },
+
+    #[error("signed event content mismatch")]
+    SignedEventContentMismatch {
+        expected_content: String,
+        actual_content: String,
+    },
+
+    #[error("signed event computed id could not be derived: {message}")]
+    SignedEventComputedIdInvalid { message: String },
+
+    #[error(
+        "signed event computed id mismatch: expected {expected_event_id}, computed {computed_event_id}"
+    )]
+    SignedEventComputedIdMismatch {
+        expected_event_id: String,
+        computed_event_id: String,
     },
 
     #[error("signer error: {0}")]
