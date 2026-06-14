@@ -607,18 +607,18 @@ fn clean_value(value: &str) -> Option<String> {
 }
 
 fn set_if_empty(target: &mut String, value: Option<&String>) {
-    if target.trim().is_empty() {
-        if let Some(value) = value.and_then(|value| clean_value(value)) {
-            *target = value;
-        }
+    if target.trim().is_empty()
+        && let Some(value) = value.and_then(|value| clean_value(value))
+    {
+        *target = value;
     }
 }
 
 fn set_optional(target: &mut Option<String>, value: Option<&String>) {
-    if target.is_none() {
-        if let Some(value) = value.and_then(|value| clean_value(value)) {
-            *target = Some(value);
-        }
+    if target.is_none()
+        && let Some(value) = value.and_then(|value| clean_value(value))
+    {
+        *target = Some(value);
     }
 }
 

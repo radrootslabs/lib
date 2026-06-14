@@ -195,7 +195,9 @@ pub fn decode_x25519_public_key_x509(
     let raw = encoded
         .strip_prefix(X25519_SPKI_DER_PREFIX)
         .or_else(|| encoded.strip_prefix(X25519_SPKI_DER_PREFIX_WRAPPED))
-        .ok_or_else(|| RadrootsSimplexSmpCryptoError::InvalidPublicKeyLength(encoded.len()))?;
+        .ok_or(RadrootsSimplexSmpCryptoError::InvalidPublicKeyLength(
+            encoded.len(),
+        ))?;
     let key: [u8; 32] = raw
         .try_into()
         .map_err(|_| RadrootsSimplexSmpCryptoError::InvalidPublicKeyLength(encoded.len()))?;

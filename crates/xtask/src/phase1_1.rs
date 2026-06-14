@@ -153,8 +153,7 @@ fn is_raw_protocol_field(line: &str) -> bool {
         "pub bin_id: String,",
         "pub economics_digest: String,",
     ]
-    .iter()
-    .any(|field| line == *field)
+    .contains(&line)
 }
 
 fn is_allowed_raw_boundary(struct_name: &str) -> bool {

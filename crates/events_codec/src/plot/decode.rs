@@ -25,7 +25,7 @@ const DEFAULT_KIND: u32 = KIND_PLOT;
 fn parse_d_tag(tags: &[Vec<String>]) -> Result<String, EventParseError> {
     let tag = tags
         .iter()
-        .find(|t| t.get(0).map(|s| s.as_str()) == Some(TAG_D))
+        .find(|t| t.first().map(|s| s.as_str()) == Some(TAG_D))
         .ok_or(EventParseError::MissingTag(TAG_D))?;
     let value = tag
         .get(1)
@@ -41,7 +41,7 @@ fn parse_d_tag(tags: &[Vec<String>]) -> Result<String, EventParseError> {
 fn parse_farm_ref(tags: &[Vec<String>]) -> Result<RadrootsFarmRef, EventParseError> {
     let tag = tags
         .iter()
-        .find(|t| t.get(0).map(|s| s.as_str()) == Some(TAG_A))
+        .find(|t| t.first().map(|s| s.as_str()) == Some(TAG_A))
         .ok_or(EventParseError::MissingTag(TAG_A))?;
     let value = tag
         .get(1)
@@ -73,7 +73,7 @@ fn parse_farm_ref(tags: &[Vec<String>]) -> Result<RadrootsFarmRef, EventParseErr
 fn parse_farm_pubkey(tags: &[Vec<String>]) -> Result<String, EventParseError> {
     let tag = tags
         .iter()
-        .find(|t| t.get(0).map(|s| s.as_str()) == Some(TAG_P))
+        .find(|t| t.first().map(|s| s.as_str()) == Some(TAG_P))
         .ok_or(EventParseError::MissingTag(TAG_P))?;
     let value = tag
         .get(1)

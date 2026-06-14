@@ -194,7 +194,7 @@ pub type IGcsLocationFindOneResolve = IResult<Option<GcsLocation>>;
 #[serde(untagged)]
 pub enum IGcsLocationFindMany {
     Filter {
-        filter: Option<IGcsLocationFieldsFilter>,
+        filter: Box<Option<IGcsLocationFieldsFilter>>,
     },
     Rel {
         rel: GcsLocationFindManyRel,

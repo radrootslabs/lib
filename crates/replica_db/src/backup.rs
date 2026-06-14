@@ -196,7 +196,7 @@ fn insert_row(
         placeholders
     );
 
-    let binds: Vec<Value> = cols.values().map(|v| utils::to_db_bind_value(*v)).collect();
+    let binds: Vec<Value> = cols.values().map(|v| utils::to_db_bind_value(v)).collect();
     let params_json = Value::Array(binds).to_string();
     executor.exec(&sql, &params_json)?;
     Ok(())

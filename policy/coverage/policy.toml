@@ -34,6 +34,15 @@ fail_under_branches = 81.264
 temporary = true
 reason = "heavy-development branch coverage gap for publish 0.1.0-alpha.2"
 
+[overrides.radroots_log]
+fail_under_exec_lines = 90.0
+fail_under_functions = 90.0
+fail_under_regions = 90.0
+fail_under_branches = 90.0
+require_branches = false
+temporary = true
+reason = "branch coverage is not applicable while the crate has no measured branch records"
+
 [overrides.radroots_nostr_signer]
 fail_under_exec_lines = 89.185
 fail_under_functions = 90.0
@@ -41,6 +50,15 @@ fail_under_regions = 90.0
 fail_under_branches = 90.0
 temporary = true
 reason = "heavy-development executable-line coverage gap for publish 0.1.0-alpha.2"
+
+[overrides.radroots_replica_db_schema]
+fail_under_exec_lines = 90.0
+fail_under_functions = 90.0
+fail_under_regions = 90.0
+fail_under_branches = 90.0
+require_branches = false
+temporary = true
+reason = "branch coverage is not applicable while the crate has no measured branch records"
 
 [required]
 crates = [

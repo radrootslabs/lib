@@ -20,10 +20,7 @@ const TAG_T: &str = "t";
 const TAG_G: &str = "g";
 
 fn push_tag(tags: &mut Vec<Vec<String>>, key: &str, value: &str) {
-    let mut tag = Vec::with_capacity(2);
-    tag.push(key.to_string());
-    tag.push(value.to_string());
-    tags.push(tag);
+    tags.push(vec![key.to_string(), value.to_string()]);
 }
 
 pub fn farm_build_tags(farm: &RadrootsFarm) -> Result<Vec<Vec<String>>, EventEncodeError> {

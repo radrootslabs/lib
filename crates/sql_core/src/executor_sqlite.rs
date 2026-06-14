@@ -40,7 +40,7 @@ impl SqlExecutor for SqliteExecutor {
             });
         }
         let n = conn
-            .execute(sql, params_from_iter(binds.into_iter()))
+            .execute(sql, params_from_iter(binds))
             .map_err(SqlError::from)?;
         let last_insert_id = conn.last_insert_rowid();
         Ok(ExecOutcome {
@@ -54,11 +54,8 @@ impl SqlExecutor for SqliteExecutor {
         let rows = {
             let conn = self.conn.lock().map_err(|_| SqlError::Internal)?;
             let mut stmt = conn.prepare(sql).map_err(SqlError::from)?;
-            let mapped = stmt.query_map(params_from_iter(binds.into_iter()), |row| {
-                sqlite_util::row_to_json(row)
-            })?;
-            let collected = mapped.collect::<Result<Vec<_>, _>>()?;
-            collected
+            let mapped = stmt.query_map(params_from_iter(binds), sqlite_util::row_to_json)?;
+            mapped.collect::<Result<Vec<_>, _>>()?
         };
         Ok(Value::from(rows).to_string())
     }

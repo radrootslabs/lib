@@ -119,15 +119,15 @@ fn push_comment_target(
             let parsed = parse_address_tag(address, keys.field)
                 .map_err(|_| EventEncodeError::InvalidField(keys.field))?;
             validate_comment_target_kind(parsed.kind, keys.field)?;
-            if let Some(kind) = event_kind {
-                if *kind != parsed.kind {
-                    return Err(EventEncodeError::InvalidField(keys.field));
-                }
+            if let Some(kind) = event_kind
+                && *kind != parsed.kind
+            {
+                return Err(EventEncodeError::InvalidField(keys.field));
             }
-            if let Some(author) = author.as_deref() {
-                if author != parsed.pubkey {
-                    return Err(EventEncodeError::InvalidField(keys.field));
-                }
+            if let Some(author) = author.as_deref()
+                && author != parsed.pubkey
+            {
+                return Err(EventEncodeError::InvalidField(keys.field));
             }
             let mut address_tag = Vec::with_capacity(2 + relays.as_ref().map_or(0, Vec::len));
             address_tag.push(keys.address.to_string());

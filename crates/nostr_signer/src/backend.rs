@@ -44,7 +44,7 @@ pub enum RadrootsNostrSignerPublishTransition {
     MarkedPublished(RadrootsNostrSignerPublishWorkflowRecord),
     Finalized {
         workflow_id: RadrootsNostrSignerWorkflowId,
-        connection: RadrootsNostrSignerConnectionRecord,
+        connection: Box<RadrootsNostrSignerConnectionRecord>,
     },
     Cancelled(RadrootsNostrSignerPublishWorkflowRecord),
 }
@@ -251,12 +251,15 @@ impl RadrootsNostrSignerBackendCapabilities {
     pub fn all_signers(&self) -> Vec<RadrootsNostrSignerCapability> {
         let mut signers = Vec::new();
         if let Some(local_signer) = self.local_signer.clone() {
-            signers.push(RadrootsNostrSignerCapability::LocalAccount(local_signer));
+            signers.push(RadrootsNostrSignerCapability::LocalAccount(Box::new(
+                local_signer,
+            )));
         }
         signers.extend(
             self.remote_sessions
                 .iter()
                 .cloned()
+                .map(Box::new)
                 .map(RadrootsNostrSignerCapability::RemoteSession),
         );
         signers
@@ -284,7 +287,7 @@ impl RadrootsNostrSignerPublishTransition {
     ) -> Self {
         Self::Finalized {
             workflow_id,
-            connection,
+            connection: Box::new(connection),
         }
     }
 
@@ -303,7 +306,7 @@ impl RadrootsNostrSignerPublishTransition {
 
     pub fn finalized_connection(&self) -> Option<&RadrootsNostrSignerConnectionRecord> {
         match self {
-            Self::Finalized { connection, .. } => Some(connection),
+            Self::Finalized { connection, .. } => Some(connection.as_ref()),
             _ => None,
         }
     }
@@ -623,7 +626,7 @@ impl RadrootsNostrSignerBackend for RadrootsNostrEmbeddedSignerBackend {
     ) -> Result<RadrootsNostrSignerSignOutput, RadrootsNostrSignerError> {
         let event = unsigned_event.sign_with_keys(self.signer_identity.keys())?;
         Ok(RadrootsNostrSignerSignOutput::new(
-            RadrootsNostrSignerCapability::LocalAccount(self.local_signer_capability()),
+            RadrootsNostrSignerCapability::LocalAccount(Box::new(self.local_signer_capability())),
             event,
         ))
     }
@@ -700,7 +703,7 @@ mod tests {
         lookup: RadrootsNostrSignerSessionLookup,
     ) -> RadrootsNostrSignerConnectionRecord {
         match lookup {
-            RadrootsNostrSignerSessionLookup::Connection(found) => found,
+            RadrootsNostrSignerSessionLookup::Connection(found) => *found,
             other => panic!("unexpected session lookup: {other:?}"),
         }
     }
@@ -724,7 +727,7 @@ mod tests {
             RadrootsNostrSignerPublishTransition::Finalized {
                 workflow_id,
                 connection,
-            } => (workflow_id, connection),
+            } => (workflow_id, *connection),
             other => panic!("unexpected finalize transition: {other:?}"),
         }
     }
@@ -1738,7 +1741,9 @@ mod tests {
 
         assert_eq!(
             capabilities.all_signers(),
-            vec![crate::capability::RadrootsNostrSignerCapability::RemoteSession(remote)]
+            vec![
+                crate::capability::RadrootsNostrSignerCapability::RemoteSession(Box::new(remote,))
+            ]
         );
 
         let valid_identity = synthetic_public_identity(0xb2);
@@ -1786,7 +1791,9 @@ mod tests {
         assert!(
             std::panic::catch_unwind(|| {
                 expect_registration_required(
-                    RadrootsNostrSignerConnectEvaluation::ExistingConnection(connection.clone()),
+                    RadrootsNostrSignerConnectEvaluation::ExistingConnection(Box::new(
+                        connection.clone(),
+                    )),
                 )
             })
             .is_err()

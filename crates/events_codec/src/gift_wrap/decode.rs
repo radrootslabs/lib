@@ -18,7 +18,7 @@ const DEFAULT_KIND: u32 = KIND_GIFT_WRAP;
 fn parse_recipient(tags: &[Vec<String>]) -> Result<RadrootsGiftWrapRecipient, EventParseError> {
     let tag = tags
         .iter()
-        .find(|t| t.get(0).map(|s| s.as_str()) == Some("p"))
+        .find(|t| t.first().map(|s| s.as_str()) == Some("p"))
         .ok_or(EventParseError::MissingTag("p"))?;
     let public_key = tag.get(1).ok_or(EventParseError::InvalidTag("p"))?;
     if public_key.trim().is_empty() {
@@ -38,7 +38,7 @@ fn parse_recipient(tags: &[Vec<String>]) -> Result<RadrootsGiftWrapRecipient, Ev
 fn parse_expiration(tags: &[Vec<String>]) -> Result<Option<u32>, EventParseError> {
     let value = tags
         .iter()
-        .find(|t| t.get(0).map(|s| s.as_str()) == Some("expiration"))
+        .find(|t| t.first().map(|s| s.as_str()) == Some("expiration"))
         .and_then(|t| t.get(1));
     let Some(value) = value else {
         return Ok(None);

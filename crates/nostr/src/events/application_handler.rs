@@ -55,10 +55,10 @@ pub fn radroots_nostr_build_application_handler_event(
         .unwrap_or_else(|| spec.kinds[0].to_string());
 
     let mut content = String::new();
-    if let Some(md) = spec.metadata.as_ref() {
-        if radroots_nostr_metadata_has_fields(md) {
-            content = serde_json::to_string(md).unwrap_or_default();
-        }
+    if let Some(md) = spec.metadata.as_ref()
+        && radroots_nostr_metadata_has_fields(md)
+    {
+        content = serde_json::to_string(md).unwrap_or_default();
     }
 
     let mut tags = Vec::new();
@@ -109,10 +109,10 @@ pub async fn radroots_nostr_publish_application_handler(
 ) -> Result<crate::types::RadrootsNostrOutput<crate::types::RadrootsNostrEventId>, RadrootsNostrError>
 {
     let mut spec = spec.clone();
-    if spec.identifier.is_none() {
-        if let Some(existing) = fetch_existing_identifier(client, &spec).await? {
-            spec.identifier = Some(existing);
-        }
+    if spec.identifier.is_none()
+        && let Some(existing) = fetch_existing_identifier(client, &spec).await?
+    {
+        spec.identifier = Some(existing);
     }
     let builder = radroots_nostr_build_application_handler_event(&spec)?;
     crate::client::radroots_nostr_send_event(client, builder).await

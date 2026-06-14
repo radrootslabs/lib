@@ -172,22 +172,24 @@ impl RadrootsNostrSignerManager {
         client_public_key: &PublicKey,
         connect_secret: Option<&str>,
     ) -> Result<RadrootsNostrSignerSessionLookup, RadrootsNostrSignerError> {
-        if let Some(connect_secret) = connect_secret {
-            if let Some(connection) = self.find_connection_by_connect_secret(connect_secret)? {
-                if &connection.client_public_key != client_public_key {
-                    return Err(RadrootsNostrSignerError::InvalidState(
-                        "connect secret is bound to a different client public key".into(),
-                    ));
-                }
-                return Ok(RadrootsNostrSignerSessionLookup::Connection(connection));
+        if let Some(connect_secret) = connect_secret
+            && let Some(connection) = self.find_connection_by_connect_secret(connect_secret)?
+        {
+            if &connection.client_public_key != client_public_key {
+                return Err(RadrootsNostrSignerError::InvalidState(
+                    "connect secret is bound to a different client public key".into(),
+                ));
             }
+            return Ok(RadrootsNostrSignerSessionLookup::Connection(Box::new(
+                connection,
+            )));
         }
 
         let mut matches = self.find_connections_by_client_public_key(client_public_key)?;
         matches.retain(|record| !record.is_terminal());
         Ok(match matches.len() {
             0 => RadrootsNostrSignerSessionLookup::None,
-            1 => RadrootsNostrSignerSessionLookup::Connection(matches.remove(0)),
+            1 => RadrootsNostrSignerSessionLookup::Connection(Box::new(matches.remove(0))),
             _ => RadrootsNostrSignerSessionLookup::Ambiguous(matches),
         })
     }
@@ -217,7 +219,7 @@ impl RadrootsNostrSignerManager {
                 ));
             }
             return Ok(RadrootsNostrSignerConnectEvaluation::ExistingConnection(
-                connection,
+                Box::new(connection),
             ));
         }
 
@@ -272,13 +274,13 @@ impl RadrootsNostrSignerManager {
                 .connect_secret
                 .as_deref()
                 .and_then(RadrootsNostrSignerConnectSecretHash::from_secret);
-            if let Some(secret_hash) = connect_secret_hash.as_ref() {
-                if state.connections.iter().any(|record| {
+            if let Some(secret_hash) = connect_secret_hash.as_ref()
+                && state.connections.iter().any(|record| {
                     record.connect_secret_hash.as_ref() == Some(secret_hash)
                         && (!record.is_terminal() || record.connect_secret_is_consumed())
-                }) {
-                    return Err(RadrootsNostrSignerError::ConnectSecretAlreadyInUse);
-                }
+                })
+            {
+                return Err(RadrootsNostrSignerError::ConnectSecretAlreadyInUse);
             }
 
             if state.connections.iter().any(|record| {
@@ -923,13 +925,8 @@ impl RadrootsNostrSignerManager {
             .write()
             .map_err(|_| RadrootsNostrSignerError::Store("signer state lock poisoned".into()))?;
         let mut next = guard.clone();
-        let value = match update(&mut next) {
-            Ok(value) => value,
-            Err(err) => return Err(err),
-        };
-        if let Err(err) = self.store.save(&next) {
-            return Err(err);
-        }
+        let value = update(&mut next)?;
+        self.store.save(&next)?;
         *guard = next;
         Ok(value)
     }
@@ -1257,7 +1254,7 @@ mod tests {
         lookup: RadrootsNostrSignerSessionLookup,
     ) -> RadrootsNostrSignerConnectionRecord {
         match lookup {
-            RadrootsNostrSignerSessionLookup::Connection(found) => found,
+            RadrootsNostrSignerSessionLookup::Connection(found) => *found,
             other => panic!("unexpected lookup result: {other:?}"),
         }
     }
@@ -1277,7 +1274,7 @@ mod tests {
         evaluation: RadrootsNostrSignerConnectEvaluation,
     ) -> RadrootsNostrSignerConnectionRecord {
         match evaluation {
-            RadrootsNostrSignerConnectEvaluation::ExistingConnection(found) => found,
+            RadrootsNostrSignerConnectEvaluation::ExistingConnection(found) => *found,
             other => panic!("unexpected existing connect result: {other:?}"),
         }
     }

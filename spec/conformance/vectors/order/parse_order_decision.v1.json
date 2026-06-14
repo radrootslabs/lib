@@ -8,7 +8,7 @@
       "input": {
         "event": {
           "kind": 3423,
-          "author": "seller_pubkey",
+          "author": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "content_type": "TradeOrderDecision",
           "tags_shape": "order_order_decision_tags"
         }

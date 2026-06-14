@@ -416,10 +416,10 @@ impl RadrootsNostrConnectResponse {
         method: &RadrootsNostrConnectMethod,
         envelope: RadrootsNostrConnectResponseEnvelope,
     ) -> Result<Self, RadrootsNostrConnectError> {
-        if let (Some(Value::String(result)), Some(url)) = (&envelope.result, &envelope.error) {
-            if result == "auth_url" {
-                return Ok(Self::AuthUrl(validate_url(url)?));
-            }
+        if let (Some(Value::String(result)), Some(url)) = (&envelope.result, &envelope.error)
+            && result == "auth_url"
+        {
+            return Ok(Self::AuthUrl(validate_url(url)?));
         }
 
         if let Some(error) = envelope.error {

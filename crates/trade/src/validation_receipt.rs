@@ -501,61 +501,61 @@ fn validate_expected_binding(
     receipt: &RadrootsTradeValidationReceipt,
     expected: RadrootsValidationReceiptExpectedBinding<'_>,
 ) -> Result<(), RadrootsValidationReceiptError> {
-    if let Some(order_id) = expected.order_id {
-        if tags.order_id != order_id {
-            return Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
-                "order_id",
-            ));
-        }
+    if let Some(order_id) = expected.order_id
+        && tags.order_id != order_id
+    {
+        return Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
+            "order_id",
+        ));
     }
-    if let Some(listing_event_id) = expected.listing_event_id {
-        if tags.listing_event_id != listing_event_id {
-            return Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
-                "listing_event_id",
-            ));
-        }
+    if let Some(listing_event_id) = expected.listing_event_id
+        && tags.listing_event_id != listing_event_id
+    {
+        return Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
+            "listing_event_id",
+        ));
     }
-    if let Some(event_set_root) = expected.event_set_root {
-        if tags.event_set_root != event_set_root {
-            return Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
-                "event_set_root",
-            ));
-        }
+    if let Some(event_set_root) = expected.event_set_root
+        && tags.event_set_root != event_set_root
+    {
+        return Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
+            "event_set_root",
+        ));
     }
-    if let Some(reducer_output_root) = expected.reducer_output_root {
-        if tags.reducer_output_root != reducer_output_root {
-            return Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
-                "reducer_output_root",
-            ));
-        }
+    if let Some(reducer_output_root) = expected.reducer_output_root
+        && tags.reducer_output_root != reducer_output_root
+    {
+        return Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
+            "reducer_output_root",
+        ));
     }
-    if let Some(public_values_hash) = expected.public_values_hash {
-        if tags.public_values_hash != public_values_hash {
-            return Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
-                "public_values_hash",
-            ));
-        }
+    if let Some(public_values_hash) = expected.public_values_hash
+        && tags.public_values_hash != public_values_hash
+    {
+        return Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
+            "public_values_hash",
+        ));
     }
-    if let Some(proof_system) = expected.proof_system {
-        if tags.proof_system != proof_system {
-            return Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
-                "proof_system",
-            ));
-        }
+    if let Some(proof_system) = expected.proof_system
+        && tags.proof_system != proof_system
+    {
+        return Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
+            "proof_system",
+        ));
     }
-    if let Some(program_hash) = expected.program_hash {
-        if receipt.proof.program_hash.as_deref() != Some(program_hash) {
-            return Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
-                "program_hash",
-            ));
-        }
+    if let Some(program_hash) = expected.program_hash
+        && receipt.proof.program_hash.as_deref() != Some(program_hash)
+    {
+        return Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
+            "program_hash",
+        ));
     }
-    if let Some(verifying_key_hash) = expected.verifying_key_hash {
-        if receipt.proof.verifying_key_hash.as_deref() != Some(verifying_key_hash) {
-            return Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
-                "verifying_key_hash",
-            ));
-        }
+    if let Some(verifying_key_hash) = expected.verifying_key_hash
+        && receipt.proof.verifying_key_hash.as_deref() != Some(verifying_key_hash)
+    {
+        return Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
+            "verifying_key_hash",
+        ));
     }
     Ok(())
 }

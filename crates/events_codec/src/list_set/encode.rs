@@ -17,10 +17,7 @@ const TAG_DESCRIPTION: &str = "description";
 const TAG_IMAGE: &str = "image";
 
 fn push_tag(tags: &mut Vec<Vec<String>>, key: &str, value: &str) {
-    let mut tag = Vec::with_capacity(2);
-    tag.push(key.to_string());
-    tag.push(value.to_string());
-    tags.push(tag);
+    tags.push(vec![key.to_string(), value.to_string()]);
 }
 
 pub fn list_set_build_tags(list: &RadrootsListSet) -> Result<Vec<Vec<String>>, EventEncodeError> {
@@ -47,7 +44,7 @@ pub fn list_set_build_tags(list: &RadrootsListSet) -> Result<Vec<Vec<String>>, E
         }
         let first = entry
             .values
-            .get(0)
+            .first()
             .ok_or(EventEncodeError::EmptyRequiredField("entry.values"))?;
         if first.trim().is_empty() {
             return Err(EventEncodeError::EmptyRequiredField("entry.values"));

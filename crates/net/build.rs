@@ -38,12 +38,11 @@ fn main() {
     println!("cargo:rustc-env=BUILD_TIME_UNIX={}", build_time_unix);
 
     let rustc_bin = env::var("RUSTC").expect("missing required env var RUSTC");
-    if let Ok(out) = Command::new(rustc_bin).arg("--version").output() {
-        if out.status.success() {
-            if let Ok(ver) = String::from_utf8(out.stdout) {
-                println!("cargo:rustc-env=RUSTC_VERSION={}", ver.trim());
-            }
-        }
+    if let Ok(out) = Command::new(rustc_bin).arg("--version").output()
+        && out.status.success()
+        && let Ok(ver) = String::from_utf8(out.stdout)
+    {
+        println!("cargo:rustc-env=RUSTC_VERSION={}", ver.trim());
     }
 
     let git_hash = Command::new("git")

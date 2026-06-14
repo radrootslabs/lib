@@ -218,7 +218,7 @@ pub async fn radroots_nostr_send_event(
     client: &RadrootsNostrClient,
     event: RadrootsNostrEventBuilder,
 ) -> Result<RadrootsNostrOutput<RadrootsNostrEventId>, RadrootsNostrError> {
-    Ok(client.send_event_builder(event).await?)
+    client.send_event_builder(event).await
 }
 
 pub async fn radroots_nostr_fetch_event_by_id(

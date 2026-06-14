@@ -121,7 +121,7 @@ pub struct RadrootsNostrSignerNip46Handler<B, P, S> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RadrootsNostrSignerHandledRequest {
     Respond {
-        response: RadrootsNostrConnectResponse,
+        response: Box<RadrootsNostrConnectResponse>,
         connection_id: Option<RadrootsNostrSignerConnectionId>,
         consume_connect_secret_for: Option<RadrootsNostrSignerConnectionId>,
     },
@@ -139,7 +139,7 @@ enum RadrootsNostrSignerPreparedRequestEvaluation {
         reason: String,
         audit: RadrootsNostrSignerRequestAuditRecord,
     },
-    Evaluation(RadrootsNostrSignerRequestEvaluation),
+    Evaluation(Box<RadrootsNostrSignerRequestEvaluation>),
 }
 
 impl<S: RadrootsNostrSignerNip46Signer> RadrootsNostrSignerNip46Codec<S> {
@@ -352,36 +352,32 @@ where
         secret: Option<String>,
     ) -> Result<RadrootsNostrSignerHandledRequestOutcome, RadrootsNostrSignerError> {
         let connect_decision = self.policy.connect_decision(&client_public_key);
-        if let Some(connect_secret) = secret.as_deref() {
-            if let Some(connection) = self
+        if let Some(connect_secret) = secret.as_deref()
+            && let Some(connection) = self
                 .backend
                 .find_connection_by_connect_secret(connect_secret)?
-            {
-                if connection.connect_secret_is_consumed() {
-                    return Ok(RadrootsNostrSignerHandledRequestOutcome::ignore());
-                }
-            }
+            && connection.connect_secret_is_consumed()
+        {
+            return Ok(RadrootsNostrSignerHandledRequestOutcome::ignore());
         }
         if !matches!(
             connect_decision,
             RadrootsNostrSignerNip46ConnectDecision::Deny
-        ) {
-            if let Some(reason) = self
-                .policy
-                .connect_rate_limit_denied_reason(&client_public_key)
-            {
-                return Ok(RadrootsNostrSignerHandledRequestOutcome::respond(
-                    RadrootsNostrConnectResponse::Error {
-                        result: None,
-                        error: reason,
-                    },
-                ));
-            }
+        ) && let Some(reason) = self
+            .policy
+            .connect_rate_limit_denied_reason(&client_public_key)
+        {
+            return Ok(RadrootsNostrSignerHandledRequestOutcome::respond(
+                RadrootsNostrConnectResponse::Error {
+                    result: None,
+                    error: reason,
+                },
+            ));
         }
 
         let evaluation = self
             .backend
-            .evaluate_connect_request(client_public_key.clone(), request)?;
+            .evaluate_connect_request(client_public_key, request)?;
 
         match evaluation {
             RadrootsNostrSignerConnectEvaluation::ExistingConnection(connection) => {
@@ -467,6 +463,7 @@ where
                 ))
             }
             RadrootsNostrSignerPreparedRequestEvaluation::Evaluation(evaluation) => {
+                let evaluation = *evaluation;
                 let audit = evaluation.audit.clone();
                 let response_hint = match &evaluation.action {
                     RadrootsNostrSignerRequestAction::Allowed { response_hint, .. } => {
@@ -514,6 +511,7 @@ where
                 ))
             }
             RadrootsNostrSignerPreparedRequestEvaluation::Evaluation(evaluation) => {
+                let evaluation = *evaluation;
                 Ok(RadrootsNostrSignerHandledRequestOutcome::new(
                     self.handled_request_for_authorized_action(
                         &evaluation.connection,
@@ -553,6 +551,7 @@ where
                 ))
             }
             RadrootsNostrSignerPreparedRequestEvaluation::Evaluation(evaluation) => {
+                let evaluation = *evaluation;
                 Ok(RadrootsNostrSignerHandledRequestOutcome::new(
                     self.handled_request_for_authorized_action(
                         &evaluation.connection,
@@ -649,8 +648,10 @@ where
         }
 
         Ok(RadrootsNostrSignerPreparedRequestEvaluation::Evaluation(
-            self.backend
-                .evaluate_request(&connection.connection_id, request_message)?,
+            Box::new(
+                self.backend
+                    .evaluate_request(&connection.connection_id, request_message)?,
+            ),
         ))
     }
 
@@ -663,7 +664,7 @@ where
     > {
         Ok(
             match self.backend.lookup_session(&client_public_key, None)? {
-                RadrootsNostrSignerSessionLookup::Connection(connection) => Ok(connection),
+                RadrootsNostrSignerSessionLookup::Connection(connection) => Ok(*connection),
                 RadrootsNostrSignerSessionLookup::None => {
                     Err(RadrootsNostrConnectResponse::Error {
                         result: None,
@@ -691,7 +692,7 @@ impl RadrootsNostrSignerHandledRequest {
         response: RadrootsNostrConnectResponse,
     ) -> Self {
         Self::Respond {
-            response,
+            response: Box::new(response),
             connection_id,
             consume_connect_secret_for: None,
         }
@@ -709,7 +710,7 @@ impl RadrootsNostrSignerHandledRequest {
                 response,
                 connection_id,
                 consume_connect_secret_for,
-            } => Some((response, connection_id, consume_connect_secret_for)),
+            } => Some((*response, connection_id, consume_connect_secret_for)),
             Self::Ignore => None,
         }
     }
@@ -741,10 +742,10 @@ pub fn connect_response_outcome(
 ) -> RadrootsNostrSignerHandledRequest {
     let consume_connect_secret_for = secret.as_ref().map(|_| connection.connection_id.clone());
     RadrootsNostrSignerHandledRequest::Respond {
-        response: match secret {
+        response: Box::new(match secret {
             Some(secret) => RadrootsNostrConnectResponse::ConnectSecretEcho(secret),
             None => RadrootsNostrConnectResponse::ConnectAcknowledged,
-        },
+        }),
         connection_id: Some(connection.connection_id.clone()),
         consume_connect_secret_for,
     }
@@ -1012,7 +1013,7 @@ mod tests {
         assert!(connect.audit.is_none());
         match connect.handled_request {
             RadrootsNostrSignerHandledRequest::Respond { response, .. } => {
-                assert_eq!(response, RadrootsNostrConnectResponse::ConnectAcknowledged);
+                assert_eq!(*response, RadrootsNostrConnectResponse::ConnectAcknowledged);
             }
             other => panic!("unexpected connect outcome: {other:?}"),
         }
@@ -1028,7 +1029,7 @@ mod tests {
             .expect("ping outcome");
         match ping.handled_request {
             RadrootsNostrSignerHandledRequest::Respond { response, .. } => {
-                assert_eq!(response, RadrootsNostrConnectResponse::Pong);
+                assert_eq!(*response, RadrootsNostrConnectResponse::Pong);
             }
             other => panic!("unexpected ping outcome: {other:?}"),
         }

@@ -24,7 +24,7 @@ pub async fn radroots_nostr_post_metadata_event(
     md: &RadrootsNostrMetadata,
 ) -> Result<RadrootsNostrOutput<RadrootsNostrEventId>, RadrootsNostrError> {
     let builder = radroots_nostr_build_metadata_event(md);
-    Ok(client.send_event_builder(builder).await?)
+    client.send_event_builder(builder).await
 }
 
 #[cfg(feature = "client")]
@@ -40,7 +40,7 @@ pub async fn radroots_nostr_fetch_metadata_for_author(
     let fetched = client.fetch_events(filter, timeout).await?;
 
     let mut latest: Option<RadrootsNostrEvent> = None;
-    for ev in stored.into_iter().chain(fetched.into_iter()) {
+    for ev in stored.into_iter().chain(fetched) {
         if ev.kind != RadrootsNostrKind::Metadata {
             continue;
         }

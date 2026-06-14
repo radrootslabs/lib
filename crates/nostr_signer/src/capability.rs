@@ -28,8 +28,8 @@ pub struct RadrootsNostrRemoteSessionSignerCapability {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RadrootsNostrSignerCapability {
-    LocalAccount(RadrootsNostrLocalSignerCapability),
-    RemoteSession(RadrootsNostrRemoteSessionSignerCapability),
+    LocalAccount(Box<RadrootsNostrLocalSignerCapability>),
+    RemoteSession(Box<RadrootsNostrRemoteSessionSignerCapability>),
 }
 
 fn public_identity_eq(left: &RadrootsIdentityPublic, right: &RadrootsIdentityPublic) -> bool {
@@ -92,14 +92,14 @@ impl RadrootsNostrSignerCapability {
 
     pub fn local_account(&self) -> Option<&RadrootsNostrLocalSignerCapability> {
         match self {
-            Self::LocalAccount(capability) => Some(capability),
+            Self::LocalAccount(capability) => Some(capability.as_ref()),
             Self::RemoteSession(_) => None,
         }
     }
 
     pub fn remote_session(&self) -> Option<&RadrootsNostrRemoteSessionSignerCapability> {
         match self {
-            Self::RemoteSession(capability) => Some(capability),
+            Self::RemoteSession(capability) => Some(capability.as_ref()),
             Self::LocalAccount(_) => None,
         }
     }
@@ -130,8 +130,12 @@ impl Eq for RadrootsNostrRemoteSessionSignerCapability {}
 impl PartialEq for RadrootsNostrSignerCapability {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::LocalAccount(left), Self::LocalAccount(right)) => left == right,
-            (Self::RemoteSession(left), Self::RemoteSession(right)) => left == right,
+            (Self::LocalAccount(left), Self::LocalAccount(right)) => {
+                left.as_ref() == right.as_ref()
+            }
+            (Self::RemoteSession(left), Self::RemoteSession(right)) => {
+                left.as_ref() == right.as_ref()
+            }
             _ => false,
         }
     }
@@ -153,9 +157,9 @@ impl From<&RadrootsNostrSignerConnectionRecord> for RadrootsNostrRemoteSessionSi
 
 impl RadrootsNostrSignerConnectionRecord {
     pub fn remote_session_capability(&self) -> RadrootsNostrSignerCapability {
-        RadrootsNostrSignerCapability::RemoteSession(
+        RadrootsNostrSignerCapability::RemoteSession(Box::new(
             RadrootsNostrRemoteSessionSignerCapability::from(self),
-        )
+        ))
     }
 }
 
@@ -184,12 +188,13 @@ mod tests {
     #[test]
     fn local_capability_reports_secret_backing_and_public_identity() {
         let public_identity = fixture_alice_identity();
-        let capability =
-            RadrootsNostrSignerCapability::LocalAccount(RadrootsNostrLocalSignerCapability::new(
+        let capability = RadrootsNostrSignerCapability::LocalAccount(Box::new(
+            RadrootsNostrLocalSignerCapability::new(
                 public_identity.id.clone(),
                 public_identity.clone(),
                 RadrootsNostrLocalSignerAvailability::SecretBacked,
-            ));
+            ),
+        ));
 
         assert_public_identity_matches(capability.public_identity(), &public_identity);
         assert!(
@@ -330,16 +335,16 @@ mod tests {
         assert_ne!(remote, remote_changed);
 
         assert_eq!(
-            RadrootsNostrSignerCapability::LocalAccount(local.clone()),
-            RadrootsNostrSignerCapability::LocalAccount(local_same)
+            RadrootsNostrSignerCapability::LocalAccount(Box::new(local.clone())),
+            RadrootsNostrSignerCapability::LocalAccount(Box::new(local_same))
         );
         assert_eq!(
-            RadrootsNostrSignerCapability::RemoteSession(remote.clone()),
-            RadrootsNostrSignerCapability::RemoteSession(remote)
+            RadrootsNostrSignerCapability::RemoteSession(Box::new(remote.clone())),
+            RadrootsNostrSignerCapability::RemoteSession(Box::new(remote))
         );
         assert_ne!(
-            RadrootsNostrSignerCapability::LocalAccount(local),
-            RadrootsNostrSignerCapability::RemoteSession(remote_changed)
+            RadrootsNostrSignerCapability::LocalAccount(Box::new(local)),
+            RadrootsNostrSignerCapability::RemoteSession(Box::new(remote_changed))
         );
     }
 

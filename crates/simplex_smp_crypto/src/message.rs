@@ -16,6 +16,12 @@ const RADROOTS_SIMPLEX_SMP_SECRETBOX_CHAIN_KEY_LENGTH: usize = 32;
 const RADROOTS_SIMPLEX_SMP_SECRETBOX_CHAIN_INIT_OUTPUT_LENGTH: usize = 64;
 const RADROOTS_SIMPLEX_SMP_SECRETBOX_CHAIN_STEP_OUTPUT_LENGTH: usize = 88;
 
+type RadrootsSimplexSmpSecretBoxKeyAndNonce = (Vec<u8>, [u8; RADROOTS_SIMPLEX_SMP_NONCE_LENGTH]);
+type RadrootsSimplexSmpSecretBoxChainStep = (
+    RadrootsSimplexSmpSecretBoxKeyAndNonce,
+    RadrootsSimplexSmpSecretBoxChainKey,
+);
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RadrootsSimplexSmpX25519Keypair {
     pub public_key: Vec<u8>,
@@ -98,13 +104,7 @@ pub fn init_secretbox_chain(
 
 pub fn advance_secretbox_chain(
     chain_key: &RadrootsSimplexSmpSecretBoxChainKey,
-) -> Result<
-    (
-        (Vec<u8>, [u8; RADROOTS_SIMPLEX_SMP_NONCE_LENGTH]),
-        RadrootsSimplexSmpSecretBoxChainKey,
-    ),
-    RadrootsSimplexSmpCryptoError,
-> {
+) -> Result<RadrootsSimplexSmpSecretBoxChainStep, RadrootsSimplexSmpCryptoError> {
     let output = hkdf_expand(
         b"",
         &chain_key.bytes,
@@ -228,11 +228,8 @@ fn cipher(shared_secret: &[u8]) -> Result<XSalsa20Poly1305, RadrootsSimplexSmpCr
             shared_secret.len(),
         ));
     }
-    Ok(
-        XSalsa20Poly1305::new_from_slice(shared_secret).map_err(|_| {
-            RadrootsSimplexSmpCryptoError::InvalidSharedSecretLength(shared_secret.len())
-        })?,
-    )
+    XSalsa20Poly1305::new_from_slice(shared_secret)
+        .map_err(|_| RadrootsSimplexSmpCryptoError::InvalidSharedSecretLength(shared_secret.len()))
 }
 
 fn nonce_array(

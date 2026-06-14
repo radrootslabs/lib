@@ -167,7 +167,7 @@ pub fn radroots_replica_ingest_event_with_factory(
         ));
     }
 
-    let outcome = match ingest_event_inner(exec, event, factory) {
+    match ingest_event_inner(exec, event, factory) {
         Ok(outcome) => {
             if let Err(err) = exec.commit() {
                 return Err(RadrootsReplicaEventsError::from(
@@ -180,9 +180,7 @@ pub fn radroots_replica_ingest_event_with_factory(
             let _ = exec.rollback();
             Err(err)
         }
-    };
-
-    outcome
+    }
 }
 
 fn ingest_event_inner(
@@ -331,7 +329,7 @@ fn ingest_farm_event(
     let location = farm.location.clone();
     let (location_primary, location_city, location_region, location_country) =
         unpack_farm_location_strings(location.as_ref());
-    let farm_id = if let Some(row) = existing.results.get(0) {
+    let farm_id = if let Some(row) = existing.results.first() {
         let fields = IFarmFieldsPartial {
             d_tag: Some(Value::from(farm.d_tag.clone())),
             pubkey: Some(Value::from(event.author.clone())),
@@ -413,7 +411,7 @@ fn ingest_plot_event(
     let location = plot.location.clone();
     let (location_primary, location_city, location_region, location_country) =
         unpack_plot_location_strings(location.as_ref());
-    let plot_id = if let Some(row) = existing.results.get(0) {
+    let plot_id = if let Some(row) = existing.results.first() {
         let fields = IPlotFieldsPartial {
             d_tag: Some(Value::from(plot.d_tag.clone())),
             farm_id: Some(Value::from(farm.id.clone())),
@@ -1112,16 +1110,16 @@ fn upsert_farm_location(
     factory: &dyn RadrootsReplicaIdFactory,
 ) -> Result<(), RadrootsReplicaEventsError> {
     clear_farm_locations(exec, farm_id)?;
-    if let Some(location) = location {
-        if let Some(gcs) = location.gcs {
-            let gcs_id = create_gcs_location(exec, gcs, factory)?;
-            let fields = IFarmGcsLocationFields {
-                farm_id: farm_id.to_string(),
-                gcs_location_id: gcs_id,
-                role: ROLE_PRIMARY.to_string(),
-            };
-            let _ = farm_gcs_location::create(exec, &fields)?;
-        }
+    if let Some(location) = location
+        && let Some(gcs) = location.gcs
+    {
+        let gcs_id = create_gcs_location(exec, gcs, factory)?;
+        let fields = IFarmGcsLocationFields {
+            farm_id: farm_id.to_string(),
+            gcs_location_id: gcs_id,
+            role: ROLE_PRIMARY.to_string(),
+        };
+        let _ = farm_gcs_location::create(exec, &fields)?;
     }
     Ok(())
 }

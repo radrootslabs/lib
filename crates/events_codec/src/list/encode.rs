@@ -16,7 +16,7 @@ fn entry_tag(entry: &RadrootsListEntry) -> Result<Vec<String>, EventEncodeError>
     }
     let first = entry
         .values
-        .get(0)
+        .first()
         .ok_or(EventEncodeError::EmptyRequiredField("entry.values"))?;
     if first.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("entry.values"));
@@ -80,10 +80,11 @@ fn validate_relay_entries(entries: &[RadrootsListEntry]) -> Result<(), EventEnco
         if entry.values.len() > 2 {
             return Err(EventEncodeError::InvalidField("relay.marker"));
         }
-        if let Some(marker) = entry.values.get(1) {
-            if marker != "read" && marker != "write" {
-                return Err(EventEncodeError::InvalidField("relay.marker"));
-            }
+        if let Some(marker) = entry.values.get(1)
+            && marker != "read"
+            && marker != "write"
+        {
+            return Err(EventEncodeError::InvalidField("relay.marker"));
         }
     }
     Ok(())

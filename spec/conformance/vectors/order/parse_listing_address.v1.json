@@ -6,7 +6,7 @@
       "id": "order_parse_listing_address_minimal_001",
       "kind": "order.parse_listing_address",
       "input": {
-        "listing_addr": "30402:seller_pubkey:AAAAAAAAAAAAAAAAAAAAAg"
+        "listing_addr": "30402:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:AAAAAAAAAAAAAAAAAAAAAg"
       },
       "expected": {
         "address_shape": "trade_listing_address"

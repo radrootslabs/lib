@@ -68,7 +68,7 @@ pub enum RuntimeProtectedFileError {
 #[derive(Debug, Error)]
 pub enum RuntimeError {
     #[error(transparent)]
-    Config(#[from] RuntimeConfigError),
+    Config(#[from] Box<RuntimeConfigError>),
 
     #[cfg(feature = "cli")]
     #[error(transparent)]
@@ -76,6 +76,12 @@ pub enum RuntimeError {
 
     #[error(transparent)]
     Tracing(#[from] RuntimeTracingError),
+}
+
+impl From<RuntimeConfigError> for RuntimeError {
+    fn from(value: RuntimeConfigError) -> Self {
+        Self::Config(Box::new(value))
+    }
 }
 
 #[cfg(test)]

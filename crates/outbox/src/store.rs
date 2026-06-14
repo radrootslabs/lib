@@ -85,33 +85,32 @@ impl RadrootsOutbox {
         let accepted_quorum = target_relays.len() as i64;
         let mut tx = self.pool.begin().await?;
 
-        if let Some(idempotency_key) = input.idempotency_key.as_deref() {
-            if let Some(existing) = existing_idempotent_operation(
+        if let Some(idempotency_key) = input.idempotency_key.as_deref()
+            && let Some(existing) = existing_idempotent_operation(
                 &mut tx,
                 input.operation_kind.as_str(),
                 input.draft.expected_pubkey.as_str(),
                 idempotency_key,
             )
             .await?
-            {
-                if existing.idempotency_digest != digest {
-                    return Err(RadrootsOutboxError::IdempotencyConflict {
-                        operation_kind: input.operation_kind,
-                        expected_pubkey: input.draft.expected_pubkey,
-                        idempotency_key: idempotency_key.to_owned(),
-                        existing_digest: existing.idempotency_digest,
-                        new_digest: digest,
-                    });
-                }
-                tx.commit().await?;
-                return Ok(RadrootsOutboxEnqueueReceipt {
-                    status: RadrootsOutboxEnqueueStatus::Existing,
-                    operation_id: existing.operation_id,
-                    outbox_event_id: existing.outbox_event_id,
-                    expected_event_id: existing.event_id,
-                    idempotency_digest: digest,
+        {
+            if existing.idempotency_digest != digest {
+                return Err(RadrootsOutboxError::IdempotencyConflict {
+                    operation_kind: input.operation_kind,
+                    expected_pubkey: input.draft.expected_pubkey,
+                    idempotency_key: idempotency_key.to_owned(),
+                    existing_digest: existing.idempotency_digest,
+                    new_digest: digest,
                 });
             }
+            tx.commit().await?;
+            return Ok(RadrootsOutboxEnqueueReceipt {
+                status: RadrootsOutboxEnqueueStatus::Existing,
+                operation_id: existing.operation_id,
+                outbox_event_id: existing.outbox_event_id,
+                expected_event_id: existing.event_id,
+                idempotency_digest: digest,
+            });
         }
 
         let operation = sqlx::query(

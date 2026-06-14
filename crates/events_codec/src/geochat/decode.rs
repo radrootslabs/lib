@@ -18,7 +18,7 @@ const TAG_T_TELEPORT: &str = "teleport";
 fn parse_geohash_tag(tags: &[Vec<String>]) -> Result<String, EventParseError> {
     let tag = tags
         .iter()
-        .find(|t| t.get(0).map(|s| s.as_str()) == Some(TAG_G))
+        .find(|t| t.first().map(|s| s.as_str()) == Some(TAG_G))
         .ok_or(EventParseError::MissingTag("g"))?;
     let geohash = tag.get(1).ok_or(EventParseError::InvalidTag("g"))?;
     if geohash.trim().is_empty() {
@@ -30,7 +30,7 @@ fn parse_geohash_tag(tags: &[Vec<String>]) -> Result<String, EventParseError> {
 fn parse_nickname_tag(tags: &[Vec<String>]) -> Result<Option<String>, EventParseError> {
     let tag = match tags
         .iter()
-        .find(|t| t.get(0).map(|s| s.as_str()) == Some(TAG_N))
+        .find(|t| t.first().map(|s| s.as_str()) == Some(TAG_N))
     {
         Some(tag) => tag,
         None => return Ok(None),
@@ -45,7 +45,7 @@ fn parse_nickname_tag(tags: &[Vec<String>]) -> Result<Option<String>, EventParse
 fn parse_teleport_tag(tags: &[Vec<String>]) -> Result<bool, EventParseError> {
     for tag in tags
         .iter()
-        .filter(|t| t.get(0).map(|s| s.as_str()) == Some(TAG_T))
+        .filter(|t| t.first().map(|s| s.as_str()) == Some(TAG_T))
     {
         let value = tag.get(1).ok_or(EventParseError::InvalidTag("t"))?;
         if value.trim().is_empty() {

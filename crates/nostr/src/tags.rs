@@ -34,7 +34,7 @@ pub fn radroots_nostr_tag_relays_parse(
     }
 }
 
-pub fn radroots_nostr_tags_match<'a>(tag: &'a RadrootsNostrTag) -> Option<(&'a str, &'a [String])> {
+pub fn radroots_nostr_tags_match(tag: &RadrootsNostrTag) -> Option<(&str, &[String])> {
     let values = tag.as_slice();
     values
         .split_first()
@@ -43,10 +43,11 @@ pub fn radroots_nostr_tags_match<'a>(tag: &'a RadrootsNostrTag) -> Option<(&'a s
 
 pub fn radroots_nostr_tag_match_l(tag: &RadrootsNostrTag) -> Option<(&str, f64)> {
     let values = tag.as_slice();
-    if values.len() >= 3 && values[0].eq_ignore_ascii_case("l") {
-        if let Ok(value) = values[1].parse::<f64>() {
-            return Some((values[2].as_str(), value));
-        }
+    if values.len() >= 3
+        && values[0].eq_ignore_ascii_case("l")
+        && let Ok(value) = values[1].parse::<f64>()
+    {
+        return Some((values[2].as_str(), value));
     }
     None
 }
@@ -102,7 +103,7 @@ pub fn radroots_nostr_tags_resolve(
                 None
             }
         })
-        .ok_or_else(|| RadrootsNostrTagsResolveError::MissingPTag(event.clone()))?;
+        .ok_or_else(|| RadrootsNostrTagsResolveError::MissingPTag(Box::new(event.clone())))?;
     if recipient != keys.public_key() {
         return Err(RadrootsNostrTagsResolveError::NotRecipient);
     }

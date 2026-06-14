@@ -22,10 +22,10 @@ pub fn job_result_from_tags(
 ) -> Result<RadrootsJobResult, JobParseError> {
     let etag = tags
         .iter()
-        .find(|t| t.get(0).map(|s| s.as_str()) == Some("e"))
+        .find(|t| t.first().map(|s| s.as_str()) == Some("e"))
         .or_else(|| {
             tags.iter()
-                .find(|t| t.get(0).map(|s| s.as_str()) == Some("e_ref"))
+                .find(|t| t.first().map(|s| s.as_str()) == Some("e_ref"))
         })
         .ok_or(JobParseError::MissingTag("e"))?;
 
@@ -34,7 +34,7 @@ pub fn job_result_from_tags(
 
     let request_json = tags
         .iter()
-        .find(|t| t.get(0).map(|s| s.as_str()) == Some("request"))
+        .find(|t| t.first().map(|s| s.as_str()) == Some("request"))
         .and_then(|t| t.get(1).cloned());
 
     let inputs: Vec<RadrootsJobInput> = parse_i_tags(tags);
@@ -48,7 +48,7 @@ pub fn job_result_from_tags(
 
     let customer_pubkey = tags
         .iter()
-        .find(|t| t.get(0).map(|s| s.as_str()) == Some("p"))
+        .find(|t| t.first().map(|s| s.as_str()) == Some("p"))
         .and_then(|t| t.get(1).cloned());
 
     Ok(RadrootsJobResult {

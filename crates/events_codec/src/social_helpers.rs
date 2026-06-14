@@ -36,16 +36,16 @@ pub(crate) fn validate_date_tag(value: &str, tag: &'static str) -> Result<(), Ev
 pub(crate) fn is_date(value: &str) -> bool {
     let bytes = value.as_bytes();
     bytes.len() == 10
-        && matches!(bytes[0], b'0'..=b'9')
-        && matches!(bytes[1], b'0'..=b'9')
-        && matches!(bytes[2], b'0'..=b'9')
-        && matches!(bytes[3], b'0'..=b'9')
+        && bytes[0].is_ascii_digit()
+        && bytes[1].is_ascii_digit()
+        && bytes[2].is_ascii_digit()
+        && bytes[3].is_ascii_digit()
         && bytes[4] == b'-'
-        && matches!(bytes[5], b'0'..=b'9')
-        && matches!(bytes[6], b'0'..=b'9')
+        && bytes[5].is_ascii_digit()
+        && bytes[6].is_ascii_digit()
         && bytes[7] == b'-'
-        && matches!(bytes[8], b'0'..=b'9')
-        && matches!(bytes[9], b'0'..=b'9')
+        && bytes[8].is_ascii_digit()
+        && bytes[9].is_ascii_digit()
 }
 
 pub(crate) fn validate_end_after_start(

@@ -21,7 +21,7 @@ pub fn job_request_from_tags(
 
     let output = tags
         .iter()
-        .find(|t| t.get(0).map(|s| s.as_str()) == Some("output"))
+        .find(|t| t.first().map(|s| s.as_str()) == Some("output"))
         .and_then(|t| t.get(1).cloned());
 
     let params: Vec<RadrootsJobParam> = parse_params(tags);
@@ -30,19 +30,19 @@ pub fn job_request_from_tags(
 
     let relays = tags
         .iter()
-        .filter(|t| t.get(0).map(|s| s.as_str()) == Some("relays"))
+        .filter(|t| t.first().map(|s| s.as_str()) == Some("relays"))
         .filter_map(|t| t.get(1).cloned())
         .collect::<Vec<_>>();
 
     let providers = tags
         .iter()
-        .filter(|t| t.get(0).map(|s| s.as_str()) == Some("p"))
+        .filter(|t| t.first().map(|s| s.as_str()) == Some("p"))
         .filter_map(|t| t.get(1).cloned())
         .collect::<Vec<_>>();
 
     let topics = tags
         .iter()
-        .filter(|t| t.get(0).map(|s| s.as_str()) == Some("t"))
+        .filter(|t| t.first().map(|s| s.as_str()) == Some("t"))
         .filter_map(|t| t.get(1).cloned())
         .collect::<Vec<_>>();
 

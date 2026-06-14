@@ -86,10 +86,10 @@ fn validate_metadata(metadata: &RadrootsFileMetadata) -> Result<(), EventEncodeE
     if let Some(hash) = metadata.original_sha256.as_deref() {
         validate_lowercase_hex_64(hash, "original_sha256")?;
     }
-    if let Some(dimensions) = metadata.dimensions.as_ref() {
-        if dimensions.width == 0 || dimensions.height == 0 {
-            return Err(EventEncodeError::InvalidField("dimensions"));
-        }
+    if let Some(dimensions) = metadata.dimensions.as_ref()
+        && (dimensions.width == 0 || dimensions.height == 0)
+    {
+        return Err(EventEncodeError::InvalidField("dimensions"));
     }
     if let Some(thumbnails) = metadata.thumbnails.as_ref() {
         for thumbnail in thumbnails {

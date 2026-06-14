@@ -2394,9 +2394,15 @@ fn should_synthesize_owner_contracts_for_tests(workspace_root: &Path) -> bool {
         .is_file()
         && workspace_root
             .join("crates")
-            .join("sdk")
+            .join("events_codec")
             .join("Cargo.toml")
             .is_file()
+        && workspace_root
+            .join("crates")
+            .join("trade")
+            .join("Cargo.toml")
+            .is_file()
+        && workspace_root.join("spec").join("manifest.toml").is_file()
         && workspace_root
             .join("policy")
             .join("coverage")
@@ -2858,13 +2864,13 @@ fn validate_operations_contract(
                 mapping.language.id
             ));
         }
-        if let Some(module_format) = mapping.sdk.module_format.as_deref() {
-            if module_format.trim().is_empty() {
-                return Err(format!(
-                    "sdk module_format must be non-empty for {}",
-                    mapping.language.id
-                ));
-            }
+        if let Some(module_format) = mapping.sdk.module_format.as_deref()
+            && module_format.trim().is_empty()
+        {
+            return Err(format!(
+                "sdk module_format must be non-empty for {}",
+                mapping.language.id
+            ));
         }
         if mapping.operations.is_empty() {
             return Err(format!(
@@ -3072,14 +3078,14 @@ fn validate_export_mappings(bundle: &ContractBundle) -> Result<(), String> {
             {
                 return Err("artifacts fields must be non-empty for ts".to_string());
             }
-            if let Some(expected_packages) = ts_packages.as_ref() {
-                if mapped_packages != *expected_packages {
-                    return Err(format!(
-                        "ts export packages {} must match manifest export.ts.packages {}",
-                        join_set(&mapped_packages),
-                        join_set(expected_packages)
-                    ));
-                }
+            if let Some(expected_packages) = ts_packages.as_ref()
+                && mapped_packages != *expected_packages
+            {
+                return Err(format!(
+                    "ts export packages {} must match manifest export.ts.packages {}",
+                    join_set(&mapped_packages),
+                    join_set(expected_packages)
+                ));
             }
         }
     }
@@ -3115,13 +3121,13 @@ fn validate_export_mappings(bundle: &ContractBundle) -> Result<(), String> {
                 mapping.language.id
             ));
         }
-        if let Some(module_format) = mapping.sdk.module_format.as_deref() {
-            if module_format.trim().is_empty() {
-                return Err(format!(
-                    "sdk module_format must be non-empty for {}",
-                    mapping.language.id
-                ));
-            }
+        if let Some(module_format) = mapping.sdk.module_format.as_deref()
+            && module_format.trim().is_empty()
+        {
+            return Err(format!(
+                "sdk module_format must be non-empty for {}",
+                mapping.language.id
+            ));
         }
         if mapping.operations.is_empty() {
             return Err(format!(
@@ -3210,9 +3216,29 @@ fn parse_coverage_percent(raw: &str, field: &str, crate_name: &str) -> Result<f6
     }
 }
 
-fn load_coverage_refresh_rows(
-    workspace_root: &Path,
-) -> Result<BTreeMap<String, (String, f64, f64, f64, f64)>, String> {
+fn parse_branch_coverage_percent(raw: &str, crate_name: &str) -> Result<Option<f64>, String> {
+    if raw == "unavailable" {
+        return Ok(None);
+    }
+    parse_coverage_percent(raw, "branch", crate_name).map(Some)
+}
+
+fn branch_coverage_fails(branch: Option<f64>, thresholds: CoverageThresholds) -> bool {
+    match branch {
+        Some(value) => value < thresholds.fail_under_branches,
+        None => thresholds.require_branches,
+    }
+}
+
+fn branch_coverage_display(branch: Option<f64>) -> String {
+    branch
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| "unavailable".to_string())
+}
+
+type CoverageRefreshRows = BTreeMap<String, (String, f64, f64, Option<f64>, f64)>;
+
+fn load_coverage_refresh_rows(workspace_root: &Path) -> Result<CoverageRefreshRows, String> {
     let report_path = workspace_root
         .join("target")
         .join("coverage")
@@ -3239,7 +3265,7 @@ fn load_coverage_refresh_rows(
         let status = parts[1].to_string();
         let exec = parse_coverage_percent(parts[2], "exec", &crate_name)?;
         let func = parse_coverage_percent(parts[3], "func", &crate_name)?;
-        let branch = parse_coverage_percent(parts[4], "branch", &crate_name)?;
+        let branch = parse_branch_coverage_percent(parts[4], &crate_name)?;
         let region = parse_coverage_percent(parts[5], "region", &crate_name)?;
         if rows
             .insert(crate_name.clone(), (status, exec, func, branch, region))
@@ -3277,7 +3303,7 @@ fn validate_required_coverage_summary(
         }
         if *exec < thresholds.fail_under_exec_lines
             || *func < thresholds.fail_under_functions
-            || *branch < thresholds.fail_under_branches
+            || branch_coverage_fails(*branch, thresholds)
             || *region < thresholds.fail_under_regions
         {
             return Err(format!(
@@ -3289,7 +3315,7 @@ fn validate_required_coverage_summary(
                 thresholds.fail_under_regions,
                 exec,
                 func,
-                branch,
+                branch_coverage_display(*branch),
                 region
             ));
         }
@@ -3319,7 +3345,7 @@ fn validate_required_coverage_summary_with_policy(
         let thresholds = policy.thresholds_for_scope(crate_name);
         if *exec < thresholds.fail_under_exec_lines
             || *func < thresholds.fail_under_functions
-            || *branch < thresholds.fail_under_branches
+            || branch_coverage_fails(*branch, thresholds)
             || *region < thresholds.fail_under_regions
         {
             return Err(format!(
@@ -3331,7 +3357,7 @@ fn validate_required_coverage_summary_with_policy(
                 thresholds.fail_under_regions,
                 exec,
                 func,
-                branch,
+                branch_coverage_display(*branch),
                 region
             ));
         }
@@ -4836,6 +4862,16 @@ pub enum RadrootsCoreUnitDimension {
 
         fs::write(
             coverage_dir.join("coverage-refresh.tsv"),
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots_core\tpass\t100.0\t100.0\tunavailable\t100.0\tfile\n",
+        )
+        .expect("write unavailable branch coverage file");
+        let missing_branch_err =
+            validate_required_coverage_summary(&root, &required, strict_thresholds())
+                .expect_err("branch coverage missing under strict policy");
+        assert!(missing_branch_err.contains("unavailable"));
+
+        fs::write(
+            coverage_dir.join("coverage-refresh.tsv"),
             "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots_core\tpass\t100.0\t100.0\t100.0\t99.9\tfile\n",
         )
         .expect("write region coverage file");
@@ -4852,19 +4888,22 @@ pub enum RadrootsCoreUnitDimension {
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         fs::write(
             coverage_dir.join("coverage-refresh.tsv"),
-            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots_events_codec\tpass\t100.0\t100.0\t100.0\t99.946385\tfile\n",
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots_events_codec\tpass\t100.0\t100.0\t100.0\t99.946385\tfile\nradroots_log\tpass\t100.0\t100.0\tunavailable\t100.0\tfile\n",
         )
         .expect("write coverage file");
         let policy_dir = root.join("policy").join("coverage");
         fs::create_dir_all(&policy_dir).expect("create policy dir");
         fs::write(
             policy_dir.join("policy.toml"),
-            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[overrides.radroots_events_codec]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 99.946\nfail_under_branches = 100.0\ntemporary = true\nreason = \"publish 0.1.0-alpha.2 temporary coverage override\"\n\n[required]\ncrates = [\"radroots_events_codec\"]\n",
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[overrides.radroots_events_codec]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 99.946\nfail_under_branches = 100.0\ntemporary = true\nreason = \"publish 0.1.0-alpha.2 temporary coverage override\"\n\n[overrides.radroots_log]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = false\ntemporary = true\nreason = \"branch coverage is not applicable while the crate has no measured branch records\"\n\n[required]\ncrates = [\"radroots_events_codec\", \"radroots_log\"]\n",
         )
         .expect("write coverage policy");
-        let required = ["radroots_events_codec".to_string()]
-            .into_iter()
-            .collect::<BTreeSet<_>>();
+        let required = [
+            "radroots_events_codec".to_string(),
+            "radroots_log".to_string(),
+        ]
+        .into_iter()
+        .collect::<BTreeSet<_>>();
         let policy = read_coverage_policy(&policy_dir.join("policy.toml"))
             .expect("parse override coverage policy");
         validate_required_coverage_summary_with_policy(&root, &required, &policy)

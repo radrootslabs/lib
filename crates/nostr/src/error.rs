@@ -57,7 +57,7 @@ pub enum RadrootsNostrError {
 #[derive(Debug, Error)]
 pub enum RadrootsNostrTagsResolveError {
     #[error("Missing public key 'p' tag in encrypted event: {0:?}")]
-    MissingPTag(nostr::Event),
+    MissingPTag(Box<nostr::Event>),
 
     #[error("Encrypted event recipient mismatch")]
     NotRecipient,

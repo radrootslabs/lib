@@ -260,9 +260,9 @@ fn decode_wire_message(
         "x.info.probe.ok" => {
             RadrootsSimplexChatEvent::InfoProbeOk(decode_probe_event(wire.params)?)
         }
-        "x.msg.new" => RadrootsSimplexChatEvent::MsgNew(RadrootsSimplexChatMsgNewEvent {
+        "x.msg.new" => RadrootsSimplexChatEvent::MsgNew(Box::new(RadrootsSimplexChatMsgNewEvent {
             container: decode_message_container(wire.params)?,
-        }),
+        })),
         "x.msg.file.descr" => {
             RadrootsSimplexChatEvent::MsgFileDescr(decode_file_description_event(wire.params)?)
         }
@@ -613,10 +613,10 @@ fn decode_message_container(
     mut params: RadrootsSimplexChatObject,
 ) -> Result<RadrootsSimplexChatMessageContainer, RadrootsSimplexChatProtoError> {
     let kind = if let Some(value) = params.remove("quote") {
-        RadrootsSimplexChatContainerKind::Quote(
+        RadrootsSimplexChatContainerKind::Quote(Box::new(
             serde_json::from_value::<RadrootsSimplexChatQuotedMessage>(value)
                 .map_err(|source| RadrootsSimplexChatProtoError::InvalidJson(source.to_string()))?,
-        )
+        ))
     } else if let Some(value) = params.remove("parent") {
         RadrootsSimplexChatContainerKind::Comment(
             serde_json::from_value::<RadrootsSimplexChatMessageRef>(value)

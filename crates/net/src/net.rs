@@ -222,13 +222,13 @@ mod tests {
         assert!(net.selected_nostr_keys().is_some());
         assert!(net.selected_nostr_signer().is_some());
 
-        let remote = RadrootsNostrSignerCapability::RemoteSession(
+        let remote = RadrootsNostrSignerCapability::RemoteSession(Box::new(
             RadrootsNostrRemoteSessionSignerCapability::new(
                 RadrootsNostrSignerConnectionId::new_v7(),
                 RadrootsIdentity::generate().to_public(),
                 RadrootsIdentity::generate().to_public(),
             ),
-        );
+        ));
         net.set_nostr_signer(Some(remote.clone()));
         assert_eq!(net.selected_nostr_signer(), Some(remote));
         assert!(net.selected_nostr_keys().is_none());

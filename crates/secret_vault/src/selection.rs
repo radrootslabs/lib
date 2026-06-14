@@ -34,10 +34,10 @@ impl RadrootsSecretBackendSelection {
             });
         }
 
-        if let RadrootsSecretBackend::HostVault(policy) = self.primary {
-            if availability.host_vault.available {
-                availability.host_vault.validate(policy)?;
-            }
+        if let RadrootsSecretBackend::HostVault(policy) = self.primary
+            && availability.host_vault.available
+        {
+            availability.host_vault.validate(policy)?;
         }
 
         match self.fallback {

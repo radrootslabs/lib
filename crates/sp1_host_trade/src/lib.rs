@@ -1543,18 +1543,16 @@ fn witness_with_sp1_identity(
     if let (Some(existing), Some(actual)) = (
         witness.sp1_program_hash.as_deref(),
         sp1_program_hash.as_deref(),
-    ) {
-        if existing != actual {
-            return Err(RadrootsSp1TradeHostError::Sp1ProgramHashMismatch);
-        }
+    ) && existing != actual
+    {
+        return Err(RadrootsSp1TradeHostError::Sp1ProgramHashMismatch);
     }
     if let (Some(existing), Some(actual)) = (
         witness.sp1_verifying_key_hash.as_deref(),
         sp1_verifying_key_hash.as_deref(),
-    ) {
-        if existing != actual {
-            return Err(RadrootsSp1TradeHostError::Sp1VerifyingKeyHashMismatch);
-        }
+    ) && existing != actual
+    {
+        return Err(RadrootsSp1TradeHostError::Sp1VerifyingKeyHashMismatch);
     }
 
     let mut bound = witness.clone();
@@ -1649,7 +1647,7 @@ fn decode_sp1_proof_artifact(
 fn decode_sp1_proof_envelope(
     envelope: &RadrootsSp1TradeProofEnvelope,
 ) -> Result<sp1_sdk::SP1ProofWithPublicValues, RadrootsSp1TradeHostError> {
-    let proof_bytes = proof_content_bytes_from_envelope(&envelope)?;
+    let proof_bytes = proof_content_bytes_from_envelope(envelope)?;
     bincode::deserialize::<sp1_sdk::SP1ProofWithPublicValues>(&proof_bytes)
         .map_err(|error| RadrootsSp1TradeHostError::Sp1ProofMaterialDecode(error.to_string()))
 }

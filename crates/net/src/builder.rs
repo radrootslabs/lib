@@ -2,19 +2,10 @@ use crate::config::NetConfig;
 use crate::error::Result;
 use crate::{Net, NetHandle};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct NetBuilder {
     config: NetConfig,
     manage_runtime: bool,
-}
-
-impl Default for NetBuilder {
-    fn default() -> Self {
-        Self {
-            config: NetConfig::default(),
-            manage_runtime: false,
-        }
-    }
 }
 
 impl NetBuilder {
@@ -45,7 +36,7 @@ impl NetBuilder {
 }
 
 pub fn coverage_branch_probe(input: bool) -> bool {
-    if input { true } else { false }
+    input
 }
 
 #[cfg(test)]

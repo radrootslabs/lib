@@ -16,10 +16,10 @@ fn validate_recipient(recipient: &RadrootsMessageRecipient) -> Result<(), EventE
             "recipients.public_key",
         ));
     }
-    if let Some(relay_url) = &recipient.relay_url {
-        if relay_url.trim().is_empty() {
-            return Err(EventEncodeError::EmptyRequiredField("recipients.relay_url"));
-        }
+    if let Some(relay_url) = &recipient.relay_url
+        && relay_url.trim().is_empty()
+    {
+        return Err(EventEncodeError::EmptyRequiredField("recipients.relay_url"));
     }
     Ok(())
 }
@@ -102,7 +102,7 @@ pub(crate) fn parse_recipients(
     let mut recipients = Vec::new();
     for tag in tags
         .iter()
-        .filter(|t| t.get(0).map(|s| s.as_str()) == Some("p"))
+        .filter(|t| t.first().map(|s| s.as_str()) == Some("p"))
     {
         recipients.push(parse_recipient_tag(tag)?);
     }
@@ -117,7 +117,7 @@ pub(crate) fn parse_reply_tag(
 ) -> Result<Option<RadrootsNostrEventPtr>, EventParseError> {
     let tag = match tags
         .iter()
-        .find(|t| t.get(0).map(|s| s.as_str()) == Some("e"))
+        .find(|t| t.first().map(|s| s.as_str()) == Some("e"))
     {
         Some(tag) => tag,
         None => return Ok(None),
@@ -140,7 +140,7 @@ pub(crate) fn parse_reply_tag(
 pub(crate) fn parse_subject_tag(tags: &[Vec<String>]) -> Result<Option<String>, EventParseError> {
     let tag = match tags
         .iter()
-        .find(|t| t.get(0).map(|s| s.as_str()) == Some("subject"))
+        .find(|t| t.first().map(|s| s.as_str()) == Some("subject"))
     {
         Some(tag) => tag,
         None => return Ok(None),

@@ -144,10 +144,7 @@ fn finalize_country_center(
     result: Result<Option<GeocoderPoint>, GeocoderError>,
     country_id: &str,
 ) -> Result<GeocoderPoint, GeocoderError> {
-    let maybe_point = match result {
-        Ok(maybe_point) => maybe_point,
-        Err(err) => return Err(err),
-    };
+    let maybe_point = result?;
     if let Some(point) = maybe_point {
         return Ok(point);
     }

@@ -11,6 +11,12 @@ impl EmbeddedSqlExecutor {
     }
 }
 
+impl Default for EmbeddedSqlExecutor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SqlExecutor for EmbeddedSqlExecutor {
     fn exec(&self, _sql: &str, _params_json: &str) -> Result<ExecOutcome, SqlError> {
         Ok(ExecOutcome {

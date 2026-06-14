@@ -16,10 +16,7 @@ pub const TAG_LISTING_EVENT: &str = "listing_event";
 
 #[inline]
 fn push_tag(tags: &mut Vec<Vec<String>>, name: &'static str, value: impl Into<String>) {
-    let mut tag = Vec::with_capacity(2);
-    tag.push(name.to_owned());
-    tag.push(value.into());
-    tags.push(tag);
+    tags.push(vec![name.to_owned(), value.into()]);
 }
 
 fn build_event_ptr_tag(

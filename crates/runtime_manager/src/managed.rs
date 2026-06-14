@@ -190,10 +190,10 @@ pub fn load_management_context_with_selection(
     load_management_context(contract, resolver, selection.profile, &overrides)
 }
 
-pub fn active_management_mode_for_profile<'a>(
-    contract: &'a RadrootsRuntimeManagementContract,
+pub fn active_management_mode_for_profile(
+    contract: &RadrootsRuntimeManagementContract,
     profile: RadrootsPathProfile,
-) -> Result<&'a str, RadrootsRuntimeManagerError> {
+) -> Result<&str, RadrootsRuntimeManagerError> {
     let profile_id = profile.to_string();
     contract
         .mode

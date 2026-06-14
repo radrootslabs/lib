@@ -19,7 +19,7 @@ const DEFAULT_KIND: u32 = KIND_MESSAGE_FILE;
 fn required_tag_value(tags: &[Vec<String>], key: &'static str) -> Result<String, EventParseError> {
     let value = tags
         .iter()
-        .find(|t| t.get(0).map(|s| s.as_str()) == Some(key))
+        .find(|t| t.first().map(|s| s.as_str()) == Some(key))
         .and_then(|t| t.get(1));
     let value = value.ok_or(EventParseError::MissingTag(key))?;
     if value.trim().is_empty() {
@@ -34,7 +34,7 @@ fn optional_tag_value(
 ) -> Result<Option<String>, EventParseError> {
     let value = tags
         .iter()
-        .find(|t| t.get(0).map(|s| s.as_str()) == Some(key))
+        .find(|t| t.first().map(|s| s.as_str()) == Some(key))
         .and_then(|t| t.get(1));
     match value {
         Some(value) if value.trim().is_empty() => Err(EventParseError::InvalidTag(key)),
@@ -59,7 +59,7 @@ fn parse_dimensions(value: &str) -> Result<RadrootsMessageFileDimensions, EventP
 fn parse_size(tags: &[Vec<String>]) -> Result<Option<u64>, EventParseError> {
     let value = tags
         .iter()
-        .find(|t| t.get(0).map(|s| s.as_str()) == Some("size"))
+        .find(|t| t.first().map(|s| s.as_str()) == Some("size"))
         .and_then(|t| t.get(1));
     let Some(value) = value else {
         return Ok(None);
@@ -78,7 +78,7 @@ fn parse_dimensions_tag(
 ) -> Result<Option<RadrootsMessageFileDimensions>, EventParseError> {
     let value = tags
         .iter()
-        .find(|t| t.get(0).map(|s| s.as_str()) == Some("dim"))
+        .find(|t| t.first().map(|s| s.as_str()) == Some("dim"))
         .and_then(|t| t.get(1));
     let Some(value) = value else {
         return Ok(None);
@@ -93,7 +93,7 @@ fn parse_fallbacks(tags: &[Vec<String>]) -> Result<Vec<String>, EventParseError>
     let mut fallbacks = Vec::new();
     for tag in tags
         .iter()
-        .filter(|t| t.get(0).map(|s| s.as_str()) == Some("fallback"))
+        .filter(|t| t.first().map(|s| s.as_str()) == Some("fallback"))
     {
         let value = tag.get(1).ok_or(EventParseError::InvalidTag("fallback"))?;
         if value.trim().is_empty() {

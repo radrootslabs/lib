@@ -67,8 +67,9 @@ pub enum RadrootsNostrSignerRequestDecision {
     Challenged,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RadrootsNostrSignerAuthState {
+    #[default]
     NotRequired,
     Pending,
     Authorized,
@@ -439,12 +440,6 @@ impl RadrootsNostrSignerAuthorizationOutcome {
             connection,
             pending_request,
         }
-    }
-}
-
-impl Default for RadrootsNostrSignerAuthState {
-    fn default() -> Self {
-        Self::NotRequired
     }
 }
 

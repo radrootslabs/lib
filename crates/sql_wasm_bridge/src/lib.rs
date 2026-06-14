@@ -88,15 +88,11 @@ pub fn rollback_tx() {
     let _ = js_exec(&format!("release savepoint {}", SAVEPOINT), "[]");
 }
 
-pub fn coverage_branch_probe(input: bool) -> &'static str {
-    if input { "bridge" } else { "bridge" }
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
-        begin_tx, commit_tx, coverage_branch_probe, exec, exec_calls, export_bytes, export_calls,
-        query, query_calls, rollback_tx,
+        begin_tx, commit_tx, exec, exec_calls, export_bytes, export_calls, query, query_calls,
+        rollback_tx,
     };
 
     #[test]
@@ -138,11 +134,5 @@ mod tests {
                 .iter()
                 .any(|(sql, _)| sql == "rollback to savepoint radroots_schema_tx")
         );
-    }
-
-    #[test]
-    fn coverage_branch_probe_hits_both_paths() {
-        assert_eq!(coverage_branch_probe(true), "bridge");
-        assert_eq!(coverage_branch_probe(false), "bridge");
     }
 }

@@ -2,6 +2,8 @@
 
 use crate::{RadrootsActorContext, RadrootsAuthorityError, RadrootsEventSigner};
 use radroots_events::contract::{RadrootsEventContract, event_contract};
+#[cfg(test)]
+use radroots_events::draft::RadrootsSignedNostrEventParts;
 use radroots_events::draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent};
 
 #[cfg(not(feature = "std"))]
@@ -158,18 +160,20 @@ mod tests {
             &self,
             draft: &RadrootsFrozenEventDraft,
         ) -> Result<RadrootsSignedNostrEvent, RadrootsSignerError> {
-            RadrootsSignedNostrEvent::new(
-                self.event_id
+            RadrootsSignedNostrEvent::new(RadrootsSignedNostrEventParts {
+                id: self
+                    .event_id
                     .as_deref()
-                    .unwrap_or(draft.expected_event_id.as_str()),
-                self.pubkey.as_str(),
-                draft.created_at,
-                draft.kind,
-                draft.tags.clone(),
-                draft.content.as_str(),
-                hex_128('f'),
-                "{}",
-            )
+                    .unwrap_or(draft.expected_event_id.as_str())
+                    .to_owned(),
+                pubkey: self.pubkey.to_string(),
+                created_at: draft.created_at,
+                kind: draft.kind,
+                tags: draft.tags.clone(),
+                content: draft.content.clone(),
+                sig: hex_128('f'),
+                raw_json: "{}".to_owned(),
+            })
             .map_err(|error| RadrootsSignerError::SigningFailed {
                 message: error.to_string(),
             })

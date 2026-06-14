@@ -189,71 +189,71 @@ pub fn listing_tags_with_options(
         return Err(EventEncodeError::Json);
     }
 
-    if options.include_inventory {
-        if let Some(inventory) = &listing.inventory_available {
-            tags.push(vec![TAG_INVENTORY.to_string(), inventory.to_string()]);
-        }
+    if options.include_inventory
+        && let Some(inventory) = &listing.inventory_available
+    {
+        tags.push(vec![TAG_INVENTORY.to_string(), inventory.to_string()]);
     }
 
-    if options.include_availability {
-        if let Some(availability) = &listing.availability {
-            match availability {
-                RadrootsListingAvailability::Status { status } => {
+    if options.include_availability
+        && let Some(availability) = &listing.availability
+    {
+        match availability {
+            RadrootsListingAvailability::Status { status } => {
+                tags.push(vec![
+                    TAG_STATUS.to_string(),
+                    status_as_str(status).to_string(),
+                ]);
+            }
+            RadrootsListingAvailability::Window { start, end } => {
+                if let Some(start) = start {
                     tags.push(vec![
-                        TAG_STATUS.to_string(),
-                        status_as_str(status).to_string(),
+                        TAG_RADROOTS_AVAILABILITY_START.to_string(),
+                        start.to_string(),
                     ]);
                 }
-                RadrootsListingAvailability::Window { start, end } => {
-                    if let Some(start) = start {
-                        tags.push(vec![
-                            TAG_RADROOTS_AVAILABILITY_START.to_string(),
-                            start.to_string(),
-                        ]);
-                    }
-                    if let Some(end) = end {
-                        tags.push(vec![TAG_EXPIRES_AT.to_string(), end.to_string()]);
-                    }
+                if let Some(end) = end {
+                    tags.push(vec![TAG_EXPIRES_AT.to_string(), end.to_string()]);
                 }
             }
         }
     }
 
-    if options.include_delivery {
-        if let Some(method) = &listing.delivery_method {
-            let mut tag = Vec::with_capacity(3);
-            tag.push(TAG_DELIVERY.to_string());
-            match method {
-                RadrootsListingDeliveryMethod::Pickup => tag.push("pickup".into()),
-                RadrootsListingDeliveryMethod::LocalDelivery => tag.push("local_delivery".into()),
-                RadrootsListingDeliveryMethod::Shipping => tag.push("shipping".into()),
-                RadrootsListingDeliveryMethod::Other { method } => {
-                    tag.push("other".into());
-                    tag.push(method.clone());
-                }
+    if options.include_delivery
+        && let Some(method) = &listing.delivery_method
+    {
+        let mut tag = Vec::with_capacity(3);
+        tag.push(TAG_DELIVERY.to_string());
+        match method {
+            RadrootsListingDeliveryMethod::Pickup => tag.push("pickup".into()),
+            RadrootsListingDeliveryMethod::LocalDelivery => tag.push("local_delivery".into()),
+            RadrootsListingDeliveryMethod::Shipping => tag.push("shipping".into()),
+            RadrootsListingDeliveryMethod::Other { method } => {
+                tag.push("other".into());
+                tag.push(method.clone());
             }
-            tags.push(tag);
         }
+        tags.push(tag);
     }
 
-    if let Some(location) = &listing.location {
-        if let Some(primary) = clean_value(&location.primary) {
-            let mut tag = Vec::with_capacity(5);
-            tag.push(TAG_LOCATION.to_string());
-            tag.push(primary);
-            if let Some(city) = location.city.as_deref().and_then(clean_value) {
-                tag.push(city);
-            }
-            if let Some(region) = location.region.as_deref().and_then(clean_value) {
-                tag.push(region);
-            }
-            if let Some(country) = location.country.as_deref().and_then(clean_value) {
-                tag.push(country);
-            }
-            tags.push(tag);
-            if options.include_geohash || options.include_gps {
-                push_location_geotags(&mut tags, location, options);
-            }
+    if let Some(location) = &listing.location
+        && let Some(primary) = clean_value(&location.primary)
+    {
+        let mut tag = Vec::with_capacity(5);
+        tag.push(TAG_LOCATION.to_string());
+        tag.push(primary);
+        if let Some(city) = location.city.as_deref().and_then(clean_value) {
+            tag.push(city);
+        }
+        if let Some(region) = location.region.as_deref().and_then(clean_value) {
+            tag.push(region);
+        }
+        if let Some(country) = location.country.as_deref().and_then(clean_value) {
+            tag.push(country);
+        }
+        tags.push(tag);
+        if options.include_geohash || options.include_gps {
+            push_location_geotags(&mut tags, location, options);
         }
     }
 
@@ -447,13 +447,12 @@ fn push_location_geotags(
     }
 
     if options.include_gps {
-        if lat.is_none() || lon.is_none() {
-            if let Some(geohash) = geohash.as_deref().or(location_geohash.as_deref()) {
-                if let Some((decoded_lat, decoded_lon)) = geohash_decode(geohash) {
-                    lat = Some(decoded_lat);
-                    lon = Some(decoded_lon);
-                }
-            }
+        if (lat.is_none() || lon.is_none())
+            && let Some(geohash) = geohash.as_deref().or(location_geohash.as_deref())
+            && let Some((decoded_lat, decoded_lon)) = geohash_decode(geohash)
+        {
+            lat = Some(decoded_lat);
+            lon = Some(decoded_lon);
         }
         if let (Some(lat), Some(lon)) = (lat, lon) {
             tags.push(vec![
@@ -509,7 +508,7 @@ fn geohash_encode(latitude: f64, longitude: f64, precision: usize) -> String {
     let mut min_lon = -180.0;
 
     while out.len() < precision {
-        if bits_total % 2 == 0 {
+        if bits_total.is_multiple_of(2) {
             let mid = (max_lon + min_lon) / 2.0;
             if longitude > mid {
                 hash_value = (hash_value << 1) + 1;
@@ -599,7 +598,7 @@ fn clean_value(value: &str) -> Option<String> {
 fn discount_tag_payload(discount: &RadrootsCoreDiscount) -> Result<String, EventEncodeError> {
     #[cfg(feature = "serde_json")]
     {
-        return serde_json::to_string(discount).map_err(|_| EventEncodeError::Json);
+        serde_json::to_string(discount).map_err(|_| EventEncodeError::Json)
     }
     #[cfg(not(feature = "serde_json"))]
     {

@@ -8,7 +8,7 @@
       "input": {
         "event": {
           "kind": 3422,
-          "author": "buyer_pubkey",
+          "author": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
           "content_type": "TradeOrderRequested",
           "tags_shape": "order_order_request_tags",
           "payload_shape": "order_order_request_with_economics"

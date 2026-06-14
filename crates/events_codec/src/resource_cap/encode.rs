@@ -25,10 +25,7 @@ const TAG_START: &str = "start";
 const TAG_END: &str = "end";
 
 fn push_tag(tags: &mut Vec<Vec<String>>, key: &str, value: &str) {
-    let mut tag = Vec::with_capacity(2);
-    tag.push(key.to_string());
-    tag.push(value.to_string());
-    tags.push(tag);
+    tags.push(vec![key.to_string(), value.to_string()]);
 }
 
 fn resource_area_address(cap: &RadrootsResourceHarvestCap) -> Result<String, EventEncodeError> {
@@ -65,10 +62,10 @@ pub fn resource_harvest_cap_build_tags(
     push_tag(&mut tags, TAG_A, &addr);
     push_tag(&mut tags, TAG_P, &cap.resource_area.pubkey);
     push_tag(&mut tags, TAG_KEY, &cap.product.key);
-    if let Some(category) = cap.product.category.as_deref() {
-        if !category.trim().is_empty() {
-            push_tag(&mut tags, TAG_CATEGORY, category);
-        }
+    if let Some(category) = cap.product.category.as_deref()
+        && !category.trim().is_empty()
+    {
+        push_tag(&mut tags, TAG_CATEGORY, category);
     }
     push_tag(&mut tags, TAG_START, &cap.start.to_string());
     push_tag(&mut tags, TAG_END, &cap.end.to_string());

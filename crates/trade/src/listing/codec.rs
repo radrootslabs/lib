@@ -66,7 +66,7 @@ fn parse_u64_tag_value(value: Option<&String>, field: &str) -> Result<u64, Listi
 fn parse_d_tag(tags: &[Vec<String>]) -> Result<String, ListingParseError> {
     let tag = tags
         .iter()
-        .find(|t| t.get(0).map(|s| s.as_str()) == Some(TAG_D))
+        .find(|t| t.first().map(|s| s.as_str()) == Some(TAG_D))
         .ok_or_else(|| ListingParseError::MissingTag(TAG_D.to_string()))?;
     let value = tag
         .get(1)
@@ -205,7 +205,7 @@ fn listing_from_tags(
 
     let has_structured_location = tags
         .iter()
-        .any(|tag| tag.get(0).map(|k| k.as_str()) == Some(TAG_LOCATION) && tag.len() >= 3);
+        .any(|tag| tag.first().map(|k| k.as_str()) == Some(TAG_LOCATION) && tag.len() >= 3);
 
     for tag in tags {
         if tag.is_empty() {
@@ -490,7 +490,7 @@ fn listing_from_tags(
 fn parse_farm_ref(tags: &[Vec<String>]) -> Result<RadrootsFarmRef, ListingParseError> {
     for tag in tags
         .iter()
-        .filter(|t| t.get(0).map(|s| s.as_str()) == Some(TAG_A))
+        .filter(|t| t.first().map(|s| s.as_str()) == Some(TAG_A))
     {
         let value = tag
             .get(1)
@@ -526,7 +526,7 @@ fn parse_farm_ref(tags: &[Vec<String>]) -> Result<RadrootsFarmRef, ListingParseE
 fn parse_farm_pubkey(tags: &[Vec<String>]) -> Result<String, ListingParseError> {
     let tag = tags
         .iter()
-        .find(|t| t.get(0).map(|s| s.as_str()) == Some(TAG_P))
+        .find(|t| t.first().map(|s| s.as_str()) == Some(TAG_P))
         .ok_or_else(|| ListingParseError::MissingTag(TAG_P.to_string()))?;
     let value = tag
         .get(1)
@@ -543,7 +543,7 @@ fn parse_resource_area(
 ) -> Result<Option<RadrootsResourceAreaRef>, ListingParseError> {
     let tag = tags
         .iter()
-        .find(|t| t.get(0).map(|s| s.as_str()) == Some(TAG_RADROOTS_RESOURCE_AREA));
+        .find(|t| t.first().map(|s| s.as_str()) == Some(TAG_RADROOTS_RESOURCE_AREA));
     let Some(tag) = tag else {
         return Ok(None);
     };
@@ -585,7 +585,7 @@ fn parse_resource_area(
 fn parse_plot_ref(tags: &[Vec<String>]) -> Result<Option<RadrootsPlotRef>, ListingParseError> {
     let tag = tags
         .iter()
-        .find(|t| t.get(0).map(|s| s.as_str()) == Some(TAG_RADROOTS_PLOT));
+        .find(|t| t.first().map(|s| s.as_str()) == Some(TAG_RADROOTS_PLOT));
     let Some(tag) = tag else {
         return Ok(None);
     };
@@ -2339,18 +2339,18 @@ fn clean_value(value: &str) -> Option<String> {
 }
 
 fn set_if_empty(target: &mut String, value: Option<&String>) {
-    if target.trim().is_empty() {
-        if let Some(v) = value.and_then(|v| clean_value(v)) {
-            *target = v;
-        }
+    if target.trim().is_empty()
+        && let Some(v) = value.and_then(|v| clean_value(v))
+    {
+        *target = v;
     }
 }
 
 fn set_optional(target: &mut Option<String>, value: Option<&String>) {
-    if target.is_none() {
-        if let Some(v) = value.and_then(|v| clean_value(v)) {
-            *target = Some(v);
-        }
+    if target.is_none()
+        && let Some(v) = value.and_then(|v| clean_value(v))
+    {
+        *target = Some(v);
     }
 }
 

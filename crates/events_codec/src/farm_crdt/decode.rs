@@ -123,12 +123,11 @@ fn farm_crdt_change_from_event_inner(
     {
         return Err(EventParseError::MissingTag(TAG_T));
     }
-    if let Some(tag_author) = optional_tag_value(tags, TAG_P)? {
-        if let Some(author_pubkey) = author_pubkey {
-            if tag_author != author_pubkey {
-                return Err(EventParseError::InvalidTag(TAG_P));
-            }
-        }
+    if let Some(tag_author) = optional_tag_value(tags, TAG_P)?
+        && let Some(author_pubkey) = author_pubkey
+        && tag_author != author_pubkey
+    {
+        return Err(EventParseError::InvalidTag(TAG_P));
     }
 
     let change: RadrootsFarmCrdtChange =

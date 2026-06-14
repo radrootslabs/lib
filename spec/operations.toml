@@ -375,10 +375,8 @@ signing = "native"
 transport = "native"
 
 [operations.order_parse_listing_address.implementation]
-rust_modules = ["crates/events_codec/src/order/decode.rs"]
-rust_types = [
-  "radroots_events::ids::RadrootsListingAddress",
-]
+rust_modules = ["crates/events/src/ids.rs"]
+rust_types = ["radroots_events::ids::RadrootsListingAddress"]
 
 [operations.order_parse_listing_address.conformance]
 vector = "spec/conformance/vectors/order/parse_listing_address.v1.json"

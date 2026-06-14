@@ -333,7 +333,7 @@ Purpose: parse and validate the canonical listing address used by trade flows
 
 Rust implementation sources:
 
-- `crates/events_codec/src/order/decode.rs`
+- `crates/events/src/ids.rs`
 
 Input:
 

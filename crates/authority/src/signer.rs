@@ -1,6 +1,8 @@
 #![forbid(unsafe_code)]
 
 use crate::{RadrootsAuthorityError, RadrootsSignerError};
+#[cfg(test)]
+use radroots_events::draft::RadrootsSignedNostrEventParts;
 use radroots_events::draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent};
 use radroots_events::ids::RadrootsPublicKey;
 
@@ -96,16 +98,16 @@ mod tests {
                     }
                 });
             }
-            RadrootsSignedNostrEvent::new(
-                draft.expected_event_id.as_str(),
-                self.pubkey.as_str(),
-                draft.created_at,
-                draft.kind,
-                draft.tags.clone(),
-                draft.content.as_str(),
-                hex_128('f'),
-                "{}",
-            )
+            RadrootsSignedNostrEvent::new(RadrootsSignedNostrEventParts {
+                id: draft.expected_event_id.to_string(),
+                pubkey: self.pubkey.to_string(),
+                created_at: draft.created_at,
+                kind: draft.kind,
+                tags: draft.tags.clone(),
+                content: draft.content.clone(),
+                sig: hex_128('f'),
+                raw_json: "{}".to_owned(),
+            })
             .map_err(|error| RadrootsSignerError::SigningFailed {
                 message: error.to_string(),
             })

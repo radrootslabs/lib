@@ -14,7 +14,7 @@ use radroots_nostr_connect::prelude::{
 #[derive(Debug, Clone)]
 pub enum RadrootsNostrSignerSessionLookup {
     None,
-    Connection(RadrootsNostrSignerConnectionRecord),
+    Connection(Box<RadrootsNostrSignerConnectionRecord>),
     Ambiguous(Vec<RadrootsNostrSignerConnectionRecord>),
 }
 
@@ -27,7 +27,7 @@ pub struct RadrootsNostrSignerConnectProposal {
 
 #[derive(Debug, Clone)]
 pub enum RadrootsNostrSignerConnectEvaluation {
-    ExistingConnection(RadrootsNostrSignerConnectionRecord),
+    ExistingConnection(Box<RadrootsNostrSignerConnectionRecord>),
     RegistrationRequired(RadrootsNostrSignerConnectProposal),
 }
 

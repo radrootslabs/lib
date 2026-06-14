@@ -79,15 +79,15 @@ fn push_reaction_target(
         } => {
             let parsed = parse_address_tag(address, "target.address")
                 .map_err(|_| EventEncodeError::InvalidField("target.address"))?;
-            if let Some(kind) = event_kind {
-                if *kind != parsed.kind {
-                    return Err(EventEncodeError::InvalidField("target.kind"));
-                }
+            if let Some(kind) = event_kind
+                && *kind != parsed.kind
+            {
+                return Err(EventEncodeError::InvalidField("target.kind"));
             }
-            if let Some(author) = author.as_deref() {
-                if author != parsed.pubkey {
-                    return Err(EventEncodeError::InvalidField("target.author"));
-                }
+            if let Some(author) = author.as_deref()
+                && author != parsed.pubkey
+            {
+                return Err(EventEncodeError::InvalidField("target.author"));
             }
             let mut address_tag = Vec::with_capacity(2 + relays.as_ref().map_or(0, Vec::len));
             address_tag.push("a".to_string());

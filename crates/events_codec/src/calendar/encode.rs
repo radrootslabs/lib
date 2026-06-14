@@ -104,15 +104,15 @@ pub fn rsvp_build_tags(
     push_calendar_event_address(&mut tags, &rsvp.event, "event")?;
     if let Some(event_id) = rsvp.event_id.as_deref() {
         let mut tag = vec![TAG_E.to_string(), event_id.to_string()];
-        if let RadrootsSocialTarget::Address { relays, .. } = &rsvp.event {
-            if let Some(relays) = relays.as_ref() {
-                tag.extend(
-                    relays
-                        .iter()
-                        .filter(|relay| !relay.trim().is_empty())
-                        .cloned(),
-                );
-            }
+        if let RadrootsSocialTarget::Address { relays, .. } = &rsvp.event
+            && let Some(relays) = relays.as_ref()
+        {
+            tag.extend(
+                relays
+                    .iter()
+                    .filter(|relay| !relay.trim().is_empty())
+                    .cloned(),
+            );
         }
         tags.push(tag);
     }
@@ -265,10 +265,10 @@ fn push_calendar_event_address(
     if !is_calendar_event_kind(address.kind) {
         return Err(EventEncodeError::InvalidField(field));
     }
-    if let Some(event_kind) = event_kind {
-        if *event_kind != address.kind {
-            return Err(EventEncodeError::InvalidField(field));
-        }
+    if let Some(event_kind) = event_kind
+        && *event_kind != address.kind
+    {
+        return Err(EventEncodeError::InvalidField(field));
     }
     let value = format!("{}:{}:{}", address.kind, address.pubkey, address.d_tag);
     if let Some(relays) = relays.as_ref() {

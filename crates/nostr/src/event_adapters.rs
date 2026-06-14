@@ -43,7 +43,7 @@ pub fn to_profile_event_metadata(
         .iter()
         .filter_map(|tag| {
             let values = tag.as_slice();
-            if values.get(0).map(|v| v.as_str()) != Some(RADROOTS_PROFILE_TYPE_TAG_KEY) {
+            if values.first().map(|v| v.as_str()) != Some(RADROOTS_PROFILE_TYPE_TAG_KEY) {
                 return None;
             }
             values

@@ -131,6 +131,19 @@ impl RadrootsFrozenEventDraft {
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsSignedNostrEventParts {
+    pub id: String,
+    pub pubkey: String,
+    pub created_at: u32,
+    pub kind: u32,
+    pub tags: Vec<Vec<String>>,
+    pub content: String,
+    pub sig: String,
+    pub raw_json: String,
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsSignedNostrEvent {
     pub id: String,
     pub pubkey: String,
@@ -143,28 +156,19 @@ pub struct RadrootsSignedNostrEvent {
 }
 
 impl RadrootsSignedNostrEvent {
-    pub fn new(
-        id: impl AsRef<str>,
-        pubkey: impl AsRef<str>,
-        created_at: u32,
-        kind: u32,
-        tags: Vec<Vec<String>>,
-        content: impl Into<String>,
-        sig: impl AsRef<str>,
-        raw_json: impl Into<String>,
-    ) -> Result<Self, RadrootsDraftError> {
-        let id = RadrootsEventId::parse(id.as_ref())?.into_string();
-        let pubkey = RadrootsPublicKey::parse(pubkey.as_ref())?.into_string();
-        let sig = RadrootsEventSignature::parse(sig.as_ref())?.into_string();
+    pub fn new(parts: RadrootsSignedNostrEventParts) -> Result<Self, RadrootsDraftError> {
+        let id = RadrootsEventId::parse(parts.id)?.into_string();
+        let pubkey = RadrootsPublicKey::parse(parts.pubkey)?.into_string();
+        let sig = RadrootsEventSignature::parse(parts.sig)?.into_string();
         Ok(Self {
             id,
             pubkey,
-            created_at,
-            kind,
-            tags,
-            content: content.into(),
+            created_at: parts.created_at,
+            kind: parts.kind,
+            tags: parts.tags,
+            content: parts.content,
             sig,
-            raw_json: raw_json.into(),
+            raw_json: parts.raw_json,
         })
     }
 
@@ -172,16 +176,16 @@ impl RadrootsSignedNostrEvent {
         event: RadrootsNostrEvent,
         raw_json: impl Into<String>,
     ) -> Result<Self, RadrootsDraftError> {
-        Self::new(
-            event.id,
-            event.author,
-            event.created_at,
-            event.kind,
-            event.tags,
-            event.content,
-            event.sig,
-            raw_json,
-        )
+        Self::new(RadrootsSignedNostrEventParts {
+            id: event.id,
+            pubkey: event.author,
+            created_at: event.created_at,
+            kind: event.kind,
+            tags: event.tags,
+            content: event.content,
+            sig: event.sig,
+            raw_json: raw_json.into(),
+        })
     }
 }
 
@@ -343,16 +347,16 @@ mod tests {
 
     #[test]
     fn signed_event_validates_ids_and_roundtrips_with_serde() {
-        let signed = RadrootsSignedNostrEvent::new(
-            hex_64('d'),
-            hex_64('e'),
-            10,
-            KIND_POST,
-            Vec::new(),
-            "hello",
-            "f".repeat(128),
-            "{\"id\":\"fixture\"}",
-        )
+        let signed = RadrootsSignedNostrEvent::new(RadrootsSignedNostrEventParts {
+            id: hex_64('d'),
+            pubkey: hex_64('e'),
+            created_at: 10,
+            kind: KIND_POST,
+            tags: Vec::new(),
+            content: "hello".to_owned(),
+            sig: "f".repeat(128),
+            raw_json: "{\"id\":\"fixture\"}".to_owned(),
+        })
         .expect("signed event");
         let json = serde_json::to_string(&signed).expect("serialize");
         let decoded: RadrootsSignedNostrEvent = serde_json::from_str(&json).expect("deserialize");

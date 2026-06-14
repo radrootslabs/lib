@@ -131,7 +131,7 @@ pub type INostrProfileFindOneResolve = IResult<Option<NostrProfile>>;
 #[serde(untagged)]
 pub enum INostrProfileFindMany {
     Filter {
-        filter: Option<INostrProfileFieldsFilter>,
+        filter: Box<Option<INostrProfileFieldsFilter>>,
     },
     Rel {
         rel: NostrProfileFindManyRel,

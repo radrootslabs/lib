@@ -513,7 +513,7 @@ impl<'de> Deserialize<'de> for RadrootsSimplexChatScope {
 #[derive(Debug, Clone, PartialEq)]
 pub enum RadrootsSimplexChatContainerKind {
     Simple,
-    Quote(RadrootsSimplexChatQuotedMessage),
+    Quote(Box<RadrootsSimplexChatQuotedMessage>),
     Comment(RadrootsSimplexChatMessageRef),
     Forward(RadrootsSimplexChatForwardMarker),
 }
@@ -626,7 +626,7 @@ pub enum RadrootsSimplexChatEvent {
     InfoProbe(RadrootsSimplexChatProbeEvent),
     InfoProbeCheck(RadrootsSimplexChatProbeCheckEvent),
     InfoProbeOk(RadrootsSimplexChatProbeEvent),
-    MsgNew(RadrootsSimplexChatMsgNewEvent),
+    MsgNew(Box<RadrootsSimplexChatMsgNewEvent>),
     MsgFileDescr(RadrootsSimplexChatFileDescriptionEvent),
     MsgUpdate(RadrootsSimplexChatMsgUpdateEvent),
     MsgDel(RadrootsSimplexChatDeleteEvent),

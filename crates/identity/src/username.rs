@@ -12,7 +12,7 @@ pub fn radroots_username_is_valid(username: &str) -> bool {
         return false;
     }
     let len = username.len();
-    if len < RADROOTS_USERNAME_MIN_LEN || len > RADROOTS_USERNAME_MAX_LEN {
+    if !(RADROOTS_USERNAME_MIN_LEN..=RADROOTS_USERNAME_MAX_LEN).contains(&len) {
         return false;
     }
     let bytes = username.as_bytes();

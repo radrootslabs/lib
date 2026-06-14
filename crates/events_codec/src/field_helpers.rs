@@ -149,10 +149,10 @@ pub(crate) fn push_tag(tags: &mut Vec<Vec<String>>, key: &str, value: impl Into<
 }
 
 pub(crate) fn push_optional_tag(tags: &mut Vec<Vec<String>>, key: &str, value: Option<&str>) {
-    if let Some(value) = value {
-        if !value.trim().is_empty() {
-            push_tag(tags, key, value);
-        }
+    if let Some(value) = value
+        && !value.trim().is_empty()
+    {
+        push_tag(tags, key, value);
     }
 }
 

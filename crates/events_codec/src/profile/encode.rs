@@ -16,10 +16,7 @@ use alloc::{string::String, vec::Vec};
 use crate::wire::WireEventParts;
 
 fn push_tag(tags: &mut Vec<Vec<String>>, key: &str, value: &str) {
-    let mut tag = Vec::with_capacity(2);
-    tag.push(key.to_string());
-    tag.push(value.to_string());
-    tags.push(tag);
+    tags.push(vec![key.to_string(), value.to_string()]);
 }
 
 pub fn profile_type_tags(profile_type: RadrootsProfileType) -> Vec<Vec<String>> {

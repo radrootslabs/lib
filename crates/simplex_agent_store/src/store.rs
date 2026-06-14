@@ -264,7 +264,7 @@ struct RadrootsSimplexAgentMessageReceiptSnapshot {
     receipt_info: Vec<u8>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct RadrootsSimplexAgentStore {
     next_connection_sequence: u64,
     next_command_sequence: u64,
@@ -272,19 +272,6 @@ pub struct RadrootsSimplexAgentStore {
     pending_commands: BTreeMap<u64, RadrootsSimplexAgentPendingCommand>,
     #[cfg(feature = "std")]
     persistence_path: Option<PathBuf>,
-}
-
-impl Default for RadrootsSimplexAgentStore {
-    fn default() -> Self {
-        Self {
-            next_connection_sequence: 0,
-            next_command_sequence: 0,
-            connections: BTreeMap::new(),
-            pending_commands: BTreeMap::new(),
-            #[cfg(feature = "std")]
-            persistence_path: None,
-        }
-    }
 }
 
 impl RadrootsSimplexAgentStore {
@@ -296,9 +283,10 @@ impl RadrootsSimplexAgentStore {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, RadrootsSimplexAgentStoreError> {
         let path = path.as_ref().to_path_buf();
         if !path.exists() {
-            let mut store = Self::default();
-            store.persistence_path = Some(path);
-            return Ok(store);
+            return Ok(Self {
+                persistence_path: Some(path),
+                ..Default::default()
+            });
         }
 
         let raw = fs::read(&path).map_err(|error| {

@@ -59,7 +59,7 @@ pub fn follow_from_tags(
     let mut list = Vec::new();
     for tag in tags
         .iter()
-        .filter(|t| t.get(0).map(|s| s.as_str()) == Some("p"))
+        .filter(|t| t.first().map(|s| s.as_str()) == Some("p"))
     {
         list.push(parse_follow_tag(tag, published_at)?);
     }

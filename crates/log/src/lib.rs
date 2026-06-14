@@ -41,23 +41,19 @@ pub fn init_no_std() -> Result<()> {
 pub fn init_default() -> Result<()> {
     #[cfg(feature = "std")]
     {
-        return init_stdout();
+        init_stdout()
     }
     #[cfg(not(feature = "std"))]
     {
-        return init_no_std();
+        init_no_std()
     }
-}
-
-pub fn coverage_branch_probe(input: bool) -> &'static str {
-    if input { "log" } else { "log" }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{coverage_branch_probe, log_debug, log_error, log_info};
     #[cfg(not(feature = "std"))]
     use super::{init_default, init_no_std};
+    use super::{log_debug, log_error, log_info};
 
     #[test]
     fn logging_helpers_are_callable() {
@@ -104,12 +100,6 @@ mod tests {
         log_info("info");
         log_error("error");
         log_debug("debug");
-    }
-
-    #[test]
-    fn coverage_branch_probe_hits_both_paths() {
-        assert_eq!(coverage_branch_probe(true), "log");
-        assert_eq!(coverage_branch_probe(false), "log");
     }
 
     #[cfg(not(feature = "std"))]

@@ -78,7 +78,7 @@ pub(crate) fn event_content_hash_fail_next() {
 
 pub fn tag_value<'a>(tags: &'a [Vec<String>], key: &str) -> Option<&'a str> {
     tags.iter()
-        .find(|tag| tag.get(0).map(|v| v.as_str()) == Some(key))
+        .find(|tag| tag.first().map(|v| v.as_str()) == Some(key))
         .and_then(|tag| tag.get(1))
         .map(|value| value.as_str())
 }

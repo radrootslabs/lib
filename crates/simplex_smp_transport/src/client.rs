@@ -193,18 +193,18 @@ fn encode_live_transport_block(
     session: &mut RadrootsSimplexSmpLiveSession,
     block: &RadrootsSimplexSmpTransportBlock,
 ) -> Result<Vec<u8>, RadrootsSimplexSmpTransportError> {
-    if session.transport_version >= RADROOTS_SIMPLEX_SMP_ENCRYPTED_BLOCK_TRANSPORT_VERSION {
-        if let Some(chain_key) = session.send_chain_key.as_ref() {
-            let ((secretbox_key, nonce), next_chain_key) = advance_secretbox_chain(chain_key)?;
-            session.send_chain_key = Some(next_chain_key);
-            return encrypt_padded(
-                &secretbox_key,
-                &nonce,
-                &block.encode_payload()?,
-                RADROOTS_SIMPLEX_SMP_TRANSPORT_BLOCK_SIZE - 16,
-            )
-            .map_err(Into::into);
-        }
+    if session.transport_version >= RADROOTS_SIMPLEX_SMP_ENCRYPTED_BLOCK_TRANSPORT_VERSION
+        && let Some(chain_key) = session.send_chain_key.as_ref()
+    {
+        let ((secretbox_key, nonce), next_chain_key) = advance_secretbox_chain(chain_key)?;
+        session.send_chain_key = Some(next_chain_key);
+        return encrypt_padded(
+            &secretbox_key,
+            &nonce,
+            &block.encode_payload()?,
+            RADROOTS_SIMPLEX_SMP_TRANSPORT_BLOCK_SIZE - 16,
+        )
+        .map_err(Into::into);
     }
     block.encode()
 }
@@ -213,50 +213,46 @@ fn decode_live_transport_block(
     session: &mut RadrootsSimplexSmpLiveSession,
     bytes: &[u8],
 ) -> Result<RadrootsSimplexSmpTransportBlock, RadrootsSimplexSmpTransportError> {
-    if session.transport_version >= RADROOTS_SIMPLEX_SMP_ENCRYPTED_BLOCK_TRANSPORT_VERSION {
-        if let Some(chain_key) = session.receive_chain_key.as_ref() {
-            let ((secretbox_key, nonce), next_chain_key) = advance_secretbox_chain(chain_key)?;
-            match radroots_simplex_smp_crypto::prelude::decrypt_padded(
-                &secretbox_key,
-                &nonce,
-                bytes,
-            ) {
-                Ok(payload) => {
-                    session.receive_chain_key = Some(next_chain_key);
-                    debug_sha256_label("live-response-payload", &payload);
-                    return RadrootsSimplexSmpTransportBlock::from_payload(&payload);
+    if session.transport_version >= RADROOTS_SIMPLEX_SMP_ENCRYPTED_BLOCK_TRANSPORT_VERSION
+        && let Some(chain_key) = session.receive_chain_key.as_ref()
+    {
+        let ((secretbox_key, nonce), next_chain_key) = advance_secretbox_chain(chain_key)?;
+        match radroots_simplex_smp_crypto::prelude::decrypt_padded(&secretbox_key, &nonce, bytes) {
+            Ok(payload) => {
+                session.receive_chain_key = Some(next_chain_key);
+                debug_sha256_label("live-response-payload", &payload);
+                return RadrootsSimplexSmpTransportBlock::from_payload(&payload);
+            }
+            Err(error) => {
+                if transport_debug_enabled() {
+                    eprintln!("[simplex-smp-transport] live response decrypt failed: {error}");
+                    debug_sha256_label("live-response-ciphertext", bytes);
                 }
-                Err(error) => {
-                    if transport_debug_enabled() {
-                        eprintln!("[simplex-smp-transport] live response decrypt failed: {error}");
-                        debug_sha256_label("live-response-ciphertext", bytes);
-                    }
-                    if let Some(send_chain_key) = session.send_chain_key.as_ref() {
-                        let ((alt_secretbox_key, alt_nonce), _) =
-                            advance_secretbox_chain(send_chain_key)?;
-                        if radroots_simplex_smp_crypto::prelude::decrypt_padded(
-                            &alt_secretbox_key,
-                            &alt_nonce,
-                            bytes,
-                        )
-                        .is_ok()
-                        {
-                            return Err(RadrootsSimplexSmpTransportError::InvalidServerAddress(
-                                "server response decrypted with the outbound chain key; live SMP block direction is assigned incorrectly".into(),
-                            ));
-                        }
-                    }
-                    debug_probe_transport_candidates(session, bytes);
-                    if let Ok(block) = RadrootsSimplexSmpTransportBlock::decode(bytes) {
+                if let Some(send_chain_key) = session.send_chain_key.as_ref() {
+                    let ((alt_secretbox_key, alt_nonce), _) =
+                        advance_secretbox_chain(send_chain_key)?;
+                    if radroots_simplex_smp_crypto::prelude::decrypt_padded(
+                        &alt_secretbox_key,
+                        &alt_nonce,
+                        bytes,
+                    )
+                    .is_ok()
+                    {
                         return Err(RadrootsSimplexSmpTransportError::InvalidServerAddress(
-                            format!(
-                                "server returned plaintext SMP block while encrypted transport was expected: {:?}",
-                                block.transmissions.first().map(|t| &t[..t.len().min(8)])
-                            ),
+                            "server response decrypted with the outbound chain key; live SMP block direction is assigned incorrectly".into(),
                         ));
                     }
-                    return Err(error.into());
                 }
+                debug_probe_transport_candidates(session, bytes);
+                if let Ok(block) = RadrootsSimplexSmpTransportBlock::decode(bytes) {
+                    return Err(RadrootsSimplexSmpTransportError::InvalidServerAddress(
+                        format!(
+                            "server returned plaintext SMP block while encrypted transport was expected: {:?}",
+                            block.transmissions.first().map(|t| &t[..t.len().min(8)])
+                        ),
+                    ));
+                }
+                return Err(error.into());
             }
         }
     }
@@ -670,7 +666,7 @@ fn matching_server_identity(
         }
     }
     Err(RadrootsSimplexSmpTransportError::ServerIdentityMismatch {
-        expected: expected_identity.into(),
+        expected: expected_identity,
         actual: chain
             .first()
             .map(|certificate| server_identity_from_certificate(certificate.as_ref()))

@@ -39,7 +39,7 @@ fn looks_like_ws_relay(s: &str) -> bool {
 
 pub fn parse_bool_encrypted(tags: &[Vec<String>]) -> bool {
     tags.iter()
-        .any(|t| t.get(0).map(|s| s.as_str()) == Some("encrypted"))
+        .any(|t| t.first().map(|s| s.as_str()) == Some("encrypted"))
 }
 
 #[inline]
@@ -90,7 +90,7 @@ pub fn parse_i_tags(tags: &[Vec<String>]) -> Vec<RadrootsJobInput> {
     let mut out = Vec::new();
     for t in tags
         .iter()
-        .filter(|t| t.get(0).map(|s| s.as_str()) == Some("i"))
+        .filter(|t| t.first().map(|s| s.as_str()) == Some("i"))
     {
         if t.len() < 2 {
             continue;
@@ -163,7 +163,7 @@ pub fn parse_params(tags: &[Vec<String>]) -> Vec<RadrootsJobParam> {
     let mut params = Vec::new();
     for t in tags
         .iter()
-        .filter(|t| t.get(0).map(|s| s.as_str()) == Some("param"))
+        .filter(|t| t.first().map(|s| s.as_str()) == Some("param"))
     {
         if t.len() >= 3 {
             params.push(RadrootsJobParam {
@@ -180,7 +180,7 @@ pub fn parse_amount_tag_sat(
 ) -> Result<Option<(u32, Option<String>)>, JobParseError> {
     let amt = match tags
         .iter()
-        .find(|t| t.get(0).map(|s| s.as_str()) == Some("amount"))
+        .find(|t| t.first().map(|s| s.as_str()) == Some("amount"))
     {
         Some(a) => a,
         None => return Ok(None),
@@ -189,7 +189,7 @@ pub fn parse_amount_tag_sat(
     let msat_u64: u64 = msat_s
         .parse()
         .map_err(|e| JobParseError::InvalidNumber("amount", e))?;
-    if msat_u64 % 1000 != 0 {
+    if !msat_u64.is_multiple_of(1000) {
         return Err(JobParseError::NonWholeSats("amount"));
     }
     let sat_u64 = msat_u64 / 1000;
@@ -212,7 +212,7 @@ pub fn push_amount_tag_msat(tags: &mut Vec<Vec<String>>, sat: u32, bolt11: Optio
 pub fn parse_bid_tag_sat(tags: &[Vec<String>]) -> Result<Option<u32>, JobParseError> {
     let bid = match tags
         .iter()
-        .find(|t| t.get(0).map(|s| s.as_str()) == Some("bid"))
+        .find(|t| t.first().map(|s| s.as_str()) == Some("bid"))
     {
         Some(b) => b,
         None => return Ok(None),

@@ -52,5 +52,5 @@ pub fn push_relay_tag(tags: &mut Vec<Vec<String>>, r: &str) {
 pub fn assert_no_inputs_when_encrypted(tags: &[Vec<String>]) -> bool {
     !tags
         .iter()
-        .any(|t| t.get(0).map(|s| s == "i").unwrap_or(false))
+        .any(|t| t.first().map(|s| s == "i").unwrap_or(false))
 }

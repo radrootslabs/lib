@@ -127,7 +127,7 @@ pub type INostrRelayFindOneResolve = IResult<Option<NostrRelay>>;
 #[serde(untagged)]
 pub enum INostrRelayFindMany {
     Filter {
-        filter: Option<INostrRelayFieldsFilter>,
+        filter: Box<Option<INostrRelayFieldsFilter>>,
     },
     Rel {
         rel: NostrRelayFindManyRel,

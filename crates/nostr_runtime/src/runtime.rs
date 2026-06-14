@@ -178,10 +178,10 @@ impl RadrootsNostrRuntime {
             }
         }
 
-        if let Ok(mut guard) = self.inner.monitor_task.lock() {
-            if let Some(handle) = guard.take() {
-                handle.abort();
-            }
+        if let Ok(mut guard) = self.inner.monitor_task.lock()
+            && let Some(handle) = guard.take()
+        {
+            handle.abort();
         }
 
         let _ = self
@@ -347,10 +347,10 @@ impl RadrootsNostrRuntime {
             }
         });
 
-        if let Ok(mut guard) = self.inner.monitor_task.lock() {
-            if let Some(existing) = guard.replace(handle) {
-                existing.abort();
-            }
+        if let Ok(mut guard) = self.inner.monitor_task.lock()
+            && let Some(existing) = guard.replace(handle)
+        {
+            existing.abort();
         }
     }
 
@@ -413,16 +413,16 @@ fn spawn_subscription_worker(
                 let kind = event.kind.as_u16();
                 since_unix = Some(event.created_at.as_secs().saturating_add(1));
 
-                if let Some(sink) = inner.event_sink.as_ref() {
-                    if let Err(message) = sink.ingest_event(&event) {
-                        if let Ok(mut guard) = inner.last_error.lock() {
-                            *guard = Some(message.clone());
-                        }
-                        let _ = inner
-                            .queue_tx
-                            .send(RadrootsNostrRuntimeEvent::Error { message })
-                            .await;
+                if let Some(sink) = inner.event_sink.as_ref()
+                    && let Err(message) = sink.ingest_event(&event)
+                {
+                    if let Ok(mut guard) = inner.last_error.lock() {
+                        *guard = Some(message.clone());
                     }
+                    let _ = inner
+                        .queue_tx
+                        .send(RadrootsNostrRuntimeEvent::Error { message })
+                        .await;
                 }
 
                 let _ = inner

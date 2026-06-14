@@ -739,18 +739,83 @@ pub struct RadrootsListingInventoryAccountingProjection {
     pub issues: Vec<RadrootsListingInventoryAccountingIssue>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsOrderReductionInputs<I, J, K, L, M, N, O, P, Q> {
+    pub requests: I,
+    pub decisions: J,
+    pub revision_proposals: K,
+    pub revision_decisions: L,
+    pub fulfillments: M,
+    pub cancellations: N,
+    pub receipts: O,
+    pub payments: P,
+    pub settlements: Q,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RadrootsGroupedOrderEventRecords {
+    pub requests: Vec<RadrootsOrderRequestRecord>,
+    pub decisions: Vec<RadrootsOrderDecisionRecord>,
+    pub revision_proposals: Vec<RadrootsOrderRevisionProposalRecord>,
+    pub revision_decisions: Vec<RadrootsOrderRevisionDecisionRecord>,
+    pub fulfillments: Vec<RadrootsOrderFulfillmentRecord>,
+    pub cancellations: Vec<RadrootsOrderCancellationRecord>,
+    pub receipts: Vec<RadrootsOrderReceiptRecord>,
+    pub payments: Vec<RadrootsOrderPaymentEventRecord>,
+    pub settlements: Vec<RadrootsOrderSettlementRecord>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsListingInventoryAccountingInputs<I, J, K, L, M, N, O, P> {
+    pub bins: I,
+    pub requests: J,
+    pub decisions: K,
+    pub revision_proposals: L,
+    pub revision_decisions: M,
+    pub fulfillments: N,
+    pub cancellations: O,
+    pub receipts: P,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct RadrootsListingInventoryAccountingRecords {
+    bins: Vec<RadrootsListingInventoryBinAvailability>,
+    requests: Vec<RadrootsOrderRequestRecord>,
+    decisions: Vec<RadrootsOrderDecisionRecord>,
+    revision_proposals: Vec<RadrootsOrderRevisionProposalRecord>,
+    revision_decisions: Vec<RadrootsOrderRevisionDecisionRecord>,
+    fulfillments: Vec<RadrootsOrderFulfillmentRecord>,
+    cancellations: Vec<RadrootsOrderCancellationRecord>,
+    receipts: Vec<RadrootsOrderReceiptRecord>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct RadrootsOrderDecisionProjectionRecords {
+    revision_proposals: Vec<RadrootsOrderRevisionProposalRecord>,
+    revision_decisions: Vec<RadrootsOrderRevisionDecisionRecord>,
+    fulfillments: Vec<RadrootsOrderFulfillmentRecord>,
+    cancellations: Vec<RadrootsOrderCancellationRecord>,
+    receipts: Vec<RadrootsOrderReceiptRecord>,
+    payments: Vec<RadrootsOrderPaymentEventRecord>,
+    settlements: Vec<RadrootsOrderSettlementRecord>,
+}
+
+struct RadrootsReceiptProjectionInput<'a> {
+    order_id: &'a RadrootsOrderId,
+    request: &'a RadrootsOrderRequestRecord,
+    decision: &'a RadrootsOrderDecisionRecord,
+    agreement_event_id: &'a RadrootsEventId,
+    economics: &'a RadrootsOrderEconomics,
+    latest_fulfillment: Option<&'a RadrootsOrderFulfillmentRecord>,
+    fulfillments: &'a [RadrootsOrderFulfillmentRecord],
+    receipts: Vec<RadrootsOrderReceiptRecord>,
+    issues: &'a mut Vec<RadrootsOrderIssue>,
+}
+
 #[cfg_attr(coverage_nightly, coverage(off))]
 pub fn reduce_order_events<I, J, K, L, M, N, O, P, Q>(
     order_id: &RadrootsOrderId,
-    requests: I,
-    decisions: J,
-    revision_proposals: K,
-    revision_decisions: L,
-    fulfillments: M,
-    cancellations: N,
-    receipts: O,
-    payments: P,
-    settlements: Q,
+    inputs: RadrootsOrderReductionInputs<I, J, K, L, M, N, O, P, Q>,
 ) -> RadrootsOrderProjection
 where
     I: IntoIterator<Item = RadrootsOrderRequestRecord>,
@@ -765,15 +830,17 @@ where
 {
     reduce_grouped_order_event_records(
         order_id,
-        requests.into_iter().collect(),
-        decisions.into_iter().collect(),
-        revision_proposals.into_iter().collect(),
-        revision_decisions.into_iter().collect(),
-        fulfillments.into_iter().collect(),
-        cancellations.into_iter().collect(),
-        receipts.into_iter().collect(),
-        payments.into_iter().collect(),
-        settlements.into_iter().collect(),
+        RadrootsGroupedOrderEventRecords {
+            requests: inputs.requests.into_iter().collect(),
+            decisions: inputs.decisions.into_iter().collect(),
+            revision_proposals: inputs.revision_proposals.into_iter().collect(),
+            revision_decisions: inputs.revision_decisions.into_iter().collect(),
+            fulfillments: inputs.fulfillments.into_iter().collect(),
+            cancellations: inputs.cancellations.into_iter().collect(),
+            receipts: inputs.receipts.into_iter().collect(),
+            payments: inputs.payments.into_iter().collect(),
+            settlements: inputs.settlements.into_iter().collect(),
+        },
     )
 }
 
@@ -817,39 +884,33 @@ where
 
     reduce_grouped_order_event_records(
         order_id,
-        requests,
-        decisions,
-        revision_proposals,
-        revision_decisions,
-        fulfillments,
-        cancellations,
-        receipts,
-        payments,
-        settlements,
+        RadrootsGroupedOrderEventRecords {
+            requests,
+            decisions,
+            revision_proposals,
+            revision_decisions,
+            fulfillments,
+            cancellations,
+            receipts,
+            payments,
+            settlements,
+        },
     )
 }
 
 fn reduce_grouped_order_event_records(
     order_id: &RadrootsOrderId,
-    requests: Vec<RadrootsOrderRequestRecord>,
-    decisions: Vec<RadrootsOrderDecisionRecord>,
-    revision_proposals: Vec<RadrootsOrderRevisionProposalRecord>,
-    revision_decisions: Vec<RadrootsOrderRevisionDecisionRecord>,
-    fulfillments: Vec<RadrootsOrderFulfillmentRecord>,
-    cancellations: Vec<RadrootsOrderCancellationRecord>,
-    receipts: Vec<RadrootsOrderReceiptRecord>,
-    payments: Vec<RadrootsOrderPaymentEventRecord>,
-    settlements: Vec<RadrootsOrderSettlementRecord>,
+    records: RadrootsGroupedOrderEventRecords,
 ) -> RadrootsOrderProjection {
-    let requests = unique_request_records(requests);
-    let decisions = unique_decision_records(decisions);
-    let revision_proposals = unique_revision_proposal_records(revision_proposals);
-    let revision_decisions = unique_revision_decision_records(revision_decisions);
-    let fulfillments = unique_fulfillment_records(fulfillments);
-    let cancellations = unique_cancellation_records(cancellations);
-    let receipts = unique_receipt_records(receipts);
-    let payments = unique_payment_records(payments);
-    let settlements = unique_settlement_records(settlements);
+    let requests = unique_request_records(records.requests);
+    let decisions = unique_decision_records(records.decisions);
+    let revision_proposals = unique_revision_proposal_records(records.revision_proposals);
+    let revision_decisions = unique_revision_decision_records(records.revision_decisions);
+    let fulfillments = unique_fulfillment_records(records.fulfillments);
+    let cancellations = unique_cancellation_records(records.cancellations);
+    let receipts = unique_receipt_records(records.receipts);
+    let payments = unique_payment_records(records.payments);
+    let settlements = unique_settlement_records(records.settlements);
     if requests.is_empty()
         && decisions.is_empty()
         && revision_proposals.is_empty()
@@ -1016,13 +1077,15 @@ fn reduce_grouped_order_event_records(
             order_id,
             request,
             &valid_decisions[0],
-            valid_revision_proposals,
-            valid_revision_decisions,
-            fulfillments,
-            valid_cancellations,
-            valid_receipts,
-            payments,
-            settlements,
+            RadrootsOrderDecisionProjectionRecords {
+                revision_proposals: valid_revision_proposals,
+                revision_decisions: valid_revision_decisions,
+                fulfillments,
+                cancellations: valid_cancellations,
+                receipts: valid_receipts,
+                payments,
+                settlements,
+            },
         ),
         _ => {
             let mut event_ids = valid_decisions
@@ -1043,14 +1106,7 @@ fn reduce_grouped_order_event_records(
 pub fn reduce_listing_inventory_accounting<I, J, K, L, M, N, O, P>(
     listing_addr: &RadrootsListingAddress,
     listing_event_id: &RadrootsEventId,
-    bins: I,
-    requests: J,
-    decisions: K,
-    revision_proposals: L,
-    revision_decisions: M,
-    fulfillments: N,
-    cancellations: O,
-    receipts: P,
+    inputs: RadrootsListingInventoryAccountingInputs<I, J, K, L, M, N, O, P>,
 ) -> RadrootsListingInventoryAccountingProjection
 where
     I: IntoIterator<Item = RadrootsListingInventoryBinAvailability>,
@@ -1065,55 +1121,50 @@ where
     reduce_listing_inventory_accounting_records(
         listing_addr,
         listing_event_id,
-        bins.into_iter().collect(),
-        requests.into_iter().collect(),
-        decisions.into_iter().collect(),
-        revision_proposals.into_iter().collect(),
-        revision_decisions.into_iter().collect(),
-        fulfillments.into_iter().collect(),
-        cancellations.into_iter().collect(),
-        receipts.into_iter().collect(),
+        RadrootsListingInventoryAccountingRecords {
+            bins: inputs.bins.into_iter().collect(),
+            requests: inputs.requests.into_iter().collect(),
+            decisions: inputs.decisions.into_iter().collect(),
+            revision_proposals: inputs.revision_proposals.into_iter().collect(),
+            revision_decisions: inputs.revision_decisions.into_iter().collect(),
+            fulfillments: inputs.fulfillments.into_iter().collect(),
+            cancellations: inputs.cancellations.into_iter().collect(),
+            receipts: inputs.receipts.into_iter().collect(),
+        },
     )
 }
 
 fn reduce_listing_inventory_accounting_records(
     listing_addr: &RadrootsListingAddress,
     listing_event_id: &RadrootsEventId,
-    bins: Vec<RadrootsListingInventoryBinAvailability>,
-    requests: Vec<RadrootsOrderRequestRecord>,
-    decisions: Vec<RadrootsOrderDecisionRecord>,
-    revision_proposals: Vec<RadrootsOrderRevisionProposalRecord>,
-    revision_decisions: Vec<RadrootsOrderRevisionDecisionRecord>,
-    fulfillments: Vec<RadrootsOrderFulfillmentRecord>,
-    cancellations: Vec<RadrootsOrderCancellationRecord>,
-    receipts: Vec<RadrootsOrderReceiptRecord>,
+    records: RadrootsListingInventoryAccountingRecords,
 ) -> RadrootsListingInventoryAccountingProjection {
-    let (mut bins, mut issues) = normalized_listing_inventory_bins(bins);
-    let requests = unique_request_records(requests)
+    let (mut bins, mut issues) = normalized_listing_inventory_bins(records.bins);
+    let requests = unique_request_records(records.requests)
         .into_iter()
         .filter(|request| request.payload.listing_addr.as_str() == listing_addr.as_str())
         .collect::<Vec<_>>();
-    let decisions = unique_decision_records(decisions)
+    let decisions = unique_decision_records(records.decisions)
         .into_iter()
         .filter(|decision| decision.payload.listing_addr.as_str() == listing_addr.as_str())
         .collect::<Vec<_>>();
-    let revision_proposals = unique_revision_proposal_records(revision_proposals)
+    let revision_proposals = unique_revision_proposal_records(records.revision_proposals)
         .into_iter()
         .filter(|proposal| proposal.payload.listing_addr.as_str() == listing_addr.as_str())
         .collect::<Vec<_>>();
-    let revision_decisions = unique_revision_decision_records(revision_decisions)
+    let revision_decisions = unique_revision_decision_records(records.revision_decisions)
         .into_iter()
         .filter(|decision| decision.payload.listing_addr.as_str() == listing_addr.as_str())
         .collect::<Vec<_>>();
-    let fulfillments = unique_fulfillment_records(fulfillments)
+    let fulfillments = unique_fulfillment_records(records.fulfillments)
         .into_iter()
         .filter(|fulfillment| fulfillment.payload.listing_addr.as_str() == listing_addr.as_str())
         .collect::<Vec<_>>();
-    let cancellations = unique_cancellation_records(cancellations)
+    let cancellations = unique_cancellation_records(records.cancellations)
         .into_iter()
         .filter(|cancellation| cancellation.payload.listing_addr.as_str() == listing_addr.as_str())
         .collect::<Vec<_>>();
-    let receipts = unique_receipt_records(receipts)
+    let receipts = unique_receipt_records(records.receipts)
         .into_iter()
         .filter(|receipt| receipt.payload.listing_addr.as_str() == listing_addr.as_str())
         .collect::<Vec<_>>();
@@ -1168,15 +1219,17 @@ fn reduce_listing_inventory_accounting_records(
             .collect::<Vec<_>>();
         let projection = reduce_order_events(
             &order_id,
-            order_requests.clone(),
-            order_decisions.clone(),
-            order_revision_proposals.clone(),
-            order_revision_decisions.clone(),
-            order_fulfillments.clone(),
-            order_cancellations.clone(),
-            order_receipts.clone(),
-            Vec::<RadrootsOrderPaymentEventRecord>::new(),
-            Vec::<RadrootsOrderSettlementRecord>::new(),
+            RadrootsOrderReductionInputs {
+                requests: order_requests.clone(),
+                decisions: order_decisions.clone(),
+                revision_proposals: order_revision_proposals.clone(),
+                revision_decisions: order_revision_decisions.clone(),
+                fulfillments: order_fulfillments.clone(),
+                cancellations: order_cancellations.clone(),
+                receipts: order_receipts.clone(),
+                payments: Vec::<RadrootsOrderPaymentEventRecord>::new(),
+                settlements: Vec::<RadrootsOrderSettlementRecord>::new(),
+            },
         );
         match projection.status {
             RadrootsOrderStatus::Accepted
@@ -3229,14 +3282,17 @@ fn decided_projection(
     order_id: &RadrootsOrderId,
     request: &RadrootsOrderRequestRecord,
     decision: &RadrootsOrderDecisionRecord,
-    revision_proposals: Vec<RadrootsOrderRevisionProposalRecord>,
-    revision_decisions: Vec<RadrootsOrderRevisionDecisionRecord>,
-    fulfillments: Vec<RadrootsOrderFulfillmentRecord>,
-    cancellations: Vec<RadrootsOrderCancellationRecord>,
-    receipts: Vec<RadrootsOrderReceiptRecord>,
-    payments: Vec<RadrootsOrderPaymentEventRecord>,
-    settlements: Vec<RadrootsOrderSettlementRecord>,
+    records: RadrootsOrderDecisionProjectionRecords,
 ) -> RadrootsOrderProjection {
+    let RadrootsOrderDecisionProjectionRecords {
+        revision_proposals,
+        revision_decisions,
+        fulfillments,
+        cancellations,
+        receipts,
+        payments,
+        settlements,
+    } = records;
     let status = match &decision.payload.decision {
         RadrootsOrderDecisionOutcome::Accepted { .. } => RadrootsOrderStatus::Accepted,
         RadrootsOrderDecisionOutcome::Declined { .. } => RadrootsOrderStatus::Declined,
@@ -3305,10 +3361,10 @@ fn decided_projection(
             }
             let decision_cancellations = cancellations
                 .iter()
-                .cloned()
                 .filter(|cancellation| {
                     cancellation.prev_event_id == revision_state.lifecycle_parent_event_id
                 })
+                .cloned()
                 .collect::<Vec<_>>();
             for cancellation in cancellations.iter().filter(|cancellation| {
                 cancellation.prev_event_id != revision_state.lifecycle_parent_event_id
@@ -3391,17 +3447,17 @@ fn decided_projection(
                     RadrootsOrderPaymentProjection::invalid(),
                 );
             }
-            let receipt_result = receipt_projection(
+            let receipt_result = receipt_projection(RadrootsReceiptProjectionInput {
                 order_id,
                 request,
                 decision,
-                &revision_state.agreement_event_id,
-                &revision_state.economics,
-                latest.as_ref(),
-                &fulfillment_records,
+                agreement_event_id: &revision_state.agreement_event_id,
+                economics: &revision_state.economics,
+                latest_fulfillment: latest.as_ref(),
+                fulfillments: &fulfillment_records,
                 receipts,
-                &mut issues,
-            );
+                issues: &mut issues,
+            });
             if let Some(mut projection) = receipt_result {
                 projection.payment = payment;
                 return projection;
@@ -3500,16 +3556,19 @@ fn decided_projection(
 }
 
 fn receipt_projection(
-    order_id: &RadrootsOrderId,
-    request: &RadrootsOrderRequestRecord,
-    decision: &RadrootsOrderDecisionRecord,
-    agreement_event_id: &RadrootsEventId,
-    economics: &RadrootsOrderEconomics,
-    latest_fulfillment: Option<&RadrootsOrderFulfillmentRecord>,
-    fulfillments: &[RadrootsOrderFulfillmentRecord],
-    receipts: Vec<RadrootsOrderReceiptRecord>,
-    issues: &mut Vec<RadrootsOrderIssue>,
+    input: RadrootsReceiptProjectionInput<'_>,
 ) -> Option<RadrootsOrderProjection> {
+    let RadrootsReceiptProjectionInput {
+        order_id,
+        request,
+        decision,
+        agreement_event_id,
+        economics,
+        latest_fulfillment,
+        fulfillments,
+        receipts,
+        issues,
+    } = input;
     if receipts.is_empty() {
         return None;
     }
@@ -3558,8 +3617,8 @@ fn receipt_projection(
     }
     let matching = receipts
         .iter()
-        .cloned()
         .filter(|receipt| receipt.prev_event_id == fulfillment.event_id)
+        .cloned()
         .collect::<Vec<_>>();
     match single_lifecycle_child(&matching, |record| &record.event_id) {
         Ok(Some(receipt)) => Some(receipt_terminal_projection(
@@ -3913,22 +3972,23 @@ mod tests {
         order_projection_for_order_id,
     };
     use super::{
-        RadrootsListingInventoryAccountingIssue, RadrootsListingInventoryAccountingProjection,
-        RadrootsListingInventoryBinAccounting, RadrootsListingInventoryBinAvailability,
-        RadrootsListingInventoryOrderReservation, RadrootsOrderCancellationRecord,
-        RadrootsOrderCanonicalizationError, RadrootsOrderDecisionRecord,
-        RadrootsOrderEventDecodeError, RadrootsOrderEventRecord, RadrootsOrderFulfillmentRecord,
-        RadrootsOrderIssue, RadrootsOrderPaymentEventRecord, RadrootsOrderPaymentProjection,
-        RadrootsOrderPaymentState, RadrootsOrderProjection, RadrootsOrderReceiptRecord,
-        RadrootsOrderRequestRecord, RadrootsOrderRevisionDecisionRecord,
-        RadrootsOrderRevisionProposalRecord, RadrootsOrderSettlementRecord,
-        RadrootsOrderSettlementState, RadrootsOrderStatus, add_inventory_reservation,
-        canonicalize_order_decision_for_signer, canonicalize_order_request_for_signer,
-        inventory_issue_event_ids, inventory_issue_id, inventory_issue_rank,
-        inventory_issue_sort_key, order_event_record_from_event, projection_issue_event_ids,
-        radroots_order_economics_digest,
-        reduce_listing_inventory_accounting as reduce_listing_inventory_accounting_with_revisions,
-        reduce_order_event_records, reduce_order_events as reduce_order_events_with_revisions,
+        RadrootsListingInventoryAccountingInputs, RadrootsListingInventoryAccountingIssue,
+        RadrootsListingInventoryAccountingProjection, RadrootsListingInventoryBinAccounting,
+        RadrootsListingInventoryBinAvailability, RadrootsListingInventoryOrderReservation,
+        RadrootsOrderCancellationRecord, RadrootsOrderCanonicalizationError,
+        RadrootsOrderDecisionRecord, RadrootsOrderEventDecodeError, RadrootsOrderEventRecord,
+        RadrootsOrderFulfillmentRecord, RadrootsOrderIssue, RadrootsOrderPaymentEventRecord,
+        RadrootsOrderPaymentProjection, RadrootsOrderPaymentState, RadrootsOrderProjection,
+        RadrootsOrderReceiptRecord, RadrootsOrderReductionInputs, RadrootsOrderRequestRecord,
+        RadrootsOrderRevisionDecisionRecord, RadrootsOrderRevisionProposalRecord,
+        RadrootsOrderSettlementRecord, RadrootsOrderSettlementState, RadrootsOrderStatus,
+        add_inventory_reservation, canonicalize_order_decision_for_signer,
+        canonicalize_order_request_for_signer, inventory_issue_event_ids, inventory_issue_id,
+        inventory_issue_rank, inventory_issue_sort_key, order_event_record_from_event,
+        projection_issue_event_ids, radroots_order_economics_digest,
+        reduce_listing_inventory_accounting as reduce_listing_inventory_accounting_with_revisions_inner,
+        reduce_order_event_records,
+        reduce_order_events as reduce_order_events_with_revisions_inner,
     };
 
     const SELLER: &str = "1111111111111111111111111111111111111111111111111111111111111111";
@@ -5055,6 +5115,45 @@ mod tests {
         )
     }
 
+    fn reduce_order_events_with_revisions<I, J, K, L, M, N, O, P, Q>(
+        order_id: &RadrootsOrderId,
+        requests: I,
+        decisions: J,
+        revision_proposals: K,
+        revision_decisions: L,
+        fulfillments: M,
+        cancellations: N,
+        receipts: O,
+        payments: P,
+        settlements: Q,
+    ) -> RadrootsOrderProjection
+    where
+        I: IntoIterator<Item = RadrootsOrderRequestRecord>,
+        J: IntoIterator<Item = RadrootsOrderDecisionRecord>,
+        K: IntoIterator<Item = RadrootsOrderRevisionProposalRecord>,
+        L: IntoIterator<Item = RadrootsOrderRevisionDecisionRecord>,
+        M: IntoIterator<Item = RadrootsOrderFulfillmentRecord>,
+        N: IntoIterator<Item = RadrootsOrderCancellationRecord>,
+        O: IntoIterator<Item = RadrootsOrderReceiptRecord>,
+        P: IntoIterator<Item = RadrootsOrderPaymentEventRecord>,
+        Q: IntoIterator<Item = RadrootsOrderSettlementRecord>,
+    {
+        reduce_order_events_with_revisions_inner(
+            order_id,
+            RadrootsOrderReductionInputs {
+                requests,
+                decisions,
+                revision_proposals,
+                revision_decisions,
+                fulfillments,
+                cancellations,
+                receipts,
+                payments,
+                settlements,
+            },
+        )
+    }
+
     fn reduce_listing_inventory_accounting<I, J, K, L, M, N>(
         listing_addr: &str,
         listing_event_id: &str,
@@ -5086,6 +5185,44 @@ mod tests {
             fulfillments,
             cancellations,
             receipts,
+        )
+    }
+
+    fn reduce_listing_inventory_accounting_with_revisions<I, J, K, L, M, N, O, P>(
+        listing_addr: &RadrootsListingAddress,
+        listing_event_id: &RadrootsEventId,
+        bins: I,
+        requests: J,
+        decisions: K,
+        revision_proposals: L,
+        revision_decisions: M,
+        fulfillments: N,
+        cancellations: O,
+        receipts: P,
+    ) -> RadrootsListingInventoryAccountingProjection
+    where
+        I: IntoIterator<Item = RadrootsListingInventoryBinAvailability>,
+        J: IntoIterator<Item = RadrootsOrderRequestRecord>,
+        K: IntoIterator<Item = RadrootsOrderDecisionRecord>,
+        L: IntoIterator<Item = RadrootsOrderRevisionProposalRecord>,
+        M: IntoIterator<Item = RadrootsOrderRevisionDecisionRecord>,
+        N: IntoIterator<Item = RadrootsOrderFulfillmentRecord>,
+        O: IntoIterator<Item = RadrootsOrderCancellationRecord>,
+        P: IntoIterator<Item = RadrootsOrderReceiptRecord>,
+    {
+        reduce_listing_inventory_accounting_with_revisions_inner(
+            listing_addr,
+            listing_event_id,
+            RadrootsListingInventoryAccountingInputs {
+                bins,
+                requests,
+                decisions,
+                revision_proposals,
+                revision_decisions,
+                fulfillments,
+                cancellations,
+                receipts,
+            },
         )
     }
 

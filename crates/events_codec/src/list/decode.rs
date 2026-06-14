@@ -75,10 +75,11 @@ fn validate_relay_tags(tags: &[Vec<String>]) -> Result<(), EventParseError> {
         if tag.len() > 3 {
             return Err(EventParseError::InvalidTag(TAG_R));
         }
-        if let Some(marker) = tag.get(2) {
-            if marker != "read" && marker != "write" {
-                return Err(EventParseError::InvalidTag(TAG_R));
-            }
+        if let Some(marker) = tag.get(2)
+            && marker != "read"
+            && marker != "write"
+        {
+            return Err(EventParseError::InvalidTag(TAG_R));
         }
     }
     Ok(())

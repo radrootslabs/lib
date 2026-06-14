@@ -44,7 +44,7 @@ pub enum RadrootsNip17Error {
 #[derive(Clone, Debug)]
 pub enum RadrootsNip17Rumor {
     Message(RadrootsParsedData<RadrootsMessage>),
-    MessageFile(RadrootsParsedData<RadrootsMessageFile>),
+    MessageFile(Box<RadrootsParsedData<RadrootsMessageFile>>),
 }
 
 #[derive(Clone, Debug)]
@@ -205,7 +205,7 @@ where
                 content,
                 tags,
             )?;
-            Ok(RadrootsNip17Rumor::MessageFile(metadata))
+            Ok(RadrootsNip17Rumor::MessageFile(Box::new(metadata)))
         }
         other => Err(RadrootsNip17Error::UnsupportedRumorKind(other)),
     }

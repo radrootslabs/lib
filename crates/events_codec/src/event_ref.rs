@@ -30,7 +30,7 @@ pub fn parse_event_ref_tag(
     tag: &[String],
     tag_name: &'static str,
 ) -> Result<RadrootsNostrEventRef, EventParseError> {
-    if tag.get(0).map(|s| s.as_str()) != Some(tag_name) {
+    if tag.first().map(|s| s.as_str()) != Some(tag_name) {
         return Err(EventParseError::InvalidTag(tag_name));
     }
     let id = tag.get(1).ok_or(EventParseError::InvalidTag(tag_name))?;
@@ -67,7 +67,7 @@ pub fn find_event_ref_tag<'a>(
     tag_name: &'static str,
 ) -> Option<&'a Vec<String>> {
     tags.iter()
-        .find(|t| t.get(0).map(|s| s.as_str()) == Some(tag_name))
+        .find(|t| t.first().map(|s| s.as_str()) == Some(tag_name))
 }
 
 pub fn push_nip10_ref_tags(
@@ -89,14 +89,10 @@ pub fn push_nip10_ref_tags(
     }
     tags.push(e_tag);
 
-    let mut p_tag = Vec::with_capacity(2);
-    p_tag.push(tag_p.to_string());
-    p_tag.push(event.author.clone());
+    let p_tag = vec![tag_p.to_string(), event.author.clone()];
     tags.push(p_tag);
 
-    let mut k_tag = Vec::with_capacity(2);
-    k_tag.push(tag_k.to_string());
-    k_tag.push(kind_str.clone());
+    let k_tag = vec![tag_k.to_string(), kind_str.clone()];
     tags.push(k_tag);
 
     if let Some(d_tag) = event.d_tag.as_deref().filter(|v| !v.is_empty()) {
@@ -151,7 +147,7 @@ pub fn parse_nip10_ref_tags(
     let mut addr_relays: Option<Vec<String>> = None;
     for tag in tags
         .iter()
-        .filter(|t| t.get(0).map(|s| s.as_str()) == Some(tag_a))
+        .filter(|t| t.first().map(|s| s.as_str()) == Some(tag_a))
     {
         let value = match tag.get(1) {
             Some(v) => v,
@@ -164,10 +160,10 @@ pub fn parse_nip10_ref_tags(
         if kind_part != Some(kind_key.as_str()) || author_part != Some(author.as_str()) {
             continue;
         }
-        if let Some(d) = d_part {
-            if !d.is_empty() {
-                d_tag = Some(d.to_string());
-            }
+        if let Some(d) = d_part
+            && !d.is_empty()
+        {
+            d_tag = Some(d.to_string());
         }
         if tag.len() > 2 {
             addr_relays = Some(tag[2..].to_vec());

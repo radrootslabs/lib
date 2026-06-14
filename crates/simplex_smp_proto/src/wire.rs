@@ -426,6 +426,13 @@ pub struct RadrootsSimplexSmpBrokerTransmission {
     pub message: RadrootsSimplexSmpBrokerMessage,
 }
 
+type RadrootsSimplexSmpDecodedTransmission<'a> = (
+    Vec<u8>,
+    Option<RadrootsSimplexSmpCorrelationId>,
+    Vec<u8>,
+    &'a [u8],
+);
+
 impl RadrootsSimplexSmpCommand {
     pub fn encode(&self) -> Result<Vec<u8>, RadrootsSimplexSmpProtoError> {
         self.encode_for_version(RADROOTS_SIMPLEX_SMP_CURRENT_TRANSPORT_VERSION)
@@ -1327,15 +1334,7 @@ fn encode_transmission(
 fn decode_transmission(
     transport_version: u16,
     bytes: &[u8],
-) -> Result<
-    (
-        Vec<u8>,
-        Option<RadrootsSimplexSmpCorrelationId>,
-        Vec<u8>,
-        &[u8],
-    ),
-    RadrootsSimplexSmpProtoError,
-> {
+) -> Result<RadrootsSimplexSmpDecodedTransmission<'_>, RadrootsSimplexSmpProtoError> {
     let mut cursor = Cursor::new(bytes);
     let authorization = cursor.read_short_bytes()?;
     if transport_version >= RADROOTS_SIMPLEX_SMP_SERVICE_CERTS_TRANSPORT_VERSION

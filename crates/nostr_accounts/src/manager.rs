@@ -506,13 +506,13 @@ impl RadrootsNostrAccountsManager {
         record: RadrootsNostrAccountRecord,
     ) -> Result<RadrootsNostrSignerCapability, RadrootsNostrAccountsError> {
         let availability = self.local_signer_availability(&record)?;
-        Ok(RadrootsNostrSignerCapability::LocalAccount(
+        Ok(RadrootsNostrSignerCapability::LocalAccount(Box::new(
             RadrootsNostrLocalSignerCapability::new(
                 record.account_id,
                 record.public_identity,
                 availability,
             ),
-        ))
+        )))
     }
 
     fn local_signer_availability(
@@ -1839,13 +1839,13 @@ mod tests {
                 .is_some()
         );
 
-        let remote_signer = RadrootsNostrSignerCapability::RemoteSession(
+        let remote_signer = RadrootsNostrSignerCapability::RemoteSession(Box::new(
             radroots_nostr_signer::prelude::RadrootsNostrRemoteSessionSignerCapability::new(
                 radroots_nostr_signer::prelude::RadrootsNostrSignerConnectionId::new_v7(),
                 RadrootsIdentity::generate().to_public(),
                 RadrootsIdentity::generate().to_public(),
             ),
-        );
+        ));
         assert!(
             manager
                 .resolve_signing_identity_for_signer(&remote_signer)

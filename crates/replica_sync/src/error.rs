@@ -19,7 +19,7 @@ pub enum RadrootsReplicaEventsError {
 impl fmt::Display for RadrootsReplicaEventsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Sql(err) => write!(f, "replica_sync.sql: {}", err.err.to_string()),
+            Self::Sql(err) => write!(f, "replica_sync.sql: {}", err.err),
             Self::Encode(err) => write!(f, "replica_sync.encode: {err}"),
             Self::Parse(err) => write!(f, "replica_sync.parse: {err}"),
             Self::InvalidSelector(msg) => write!(f, "replica_sync.selector: {msg}"),

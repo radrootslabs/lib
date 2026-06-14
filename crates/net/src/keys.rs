@@ -57,8 +57,7 @@ impl KeysManager {
     }
 
     pub fn is_valid_hex32(s: &str) -> bool {
-        let is_hex = s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit());
-        is_hex
+        s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit())
     }
     pub fn is_valid_nsec(s: &str) -> bool {
         s.starts_with("nsec1")
@@ -111,26 +110,23 @@ impl KeysManager {
 
     pub fn load_from_path_auto(&mut self, path: impl AsRef<Path>) -> Result<()> {
         let p = path.as_ref();
-        match std::fs::read_to_string(p) {
-            Ok(s) => {
-                if let Ok(jf) = serde_json::from_str::<KeysFile>(&s) {
-                    return self.load_from_hex32(&jf.key).map(|_| {
-                        self.state.source = Some(p.to_path_buf());
-                    });
-                }
-                let trimmed = s.trim();
-                if Self::is_valid_nsec(trimmed) {
-                    return self.load_from_nsec(trimmed).map(|_| {
-                        self.state.source = Some(p.to_path_buf());
-                    });
-                }
-                if Self::is_valid_hex32(trimmed) {
-                    return self.load_from_hex32(trimmed).map(|_| {
-                        self.state.source = Some(p.to_path_buf());
-                    });
-                }
+        if let Ok(s) = std::fs::read_to_string(p) {
+            if let Ok(jf) = serde_json::from_str::<KeysFile>(&s) {
+                return self.load_from_hex32(&jf.key).map(|_| {
+                    self.state.source = Some(p.to_path_buf());
+                });
             }
-            Err(_) => {}
+            let trimmed = s.trim();
+            if Self::is_valid_nsec(trimmed) {
+                return self.load_from_nsec(trimmed).map(|_| {
+                    self.state.source = Some(p.to_path_buf());
+                });
+            }
+            if Self::is_valid_hex32(trimmed) {
+                return self.load_from_hex32(trimmed).map(|_| {
+                    self.state.source = Some(p.to_path_buf());
+                });
+            }
         }
         match std::fs::read(p) {
             Ok(bytes) if bytes.len() == 32 => {

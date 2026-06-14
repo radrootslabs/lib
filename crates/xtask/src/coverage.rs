@@ -361,15 +361,15 @@ fn read_detailed_summary(
         if !variants.iter().any(|function| function.count > 0) {
             continue;
         }
-        if let Some(scope_filter) = scope_filter.as_deref() {
-            if !variants.iter().any(|function| {
+        if let Some(scope_filter) = scope_filter.as_deref()
+            && !variants.iter().any(|function| {
                 function
                     .filenames
                     .iter()
                     .any(|filename| filename.contains(scope_filter))
-            }) {
-                continue;
-            }
+            })
+        {
+            continue;
         }
         functions_total = functions_total.saturating_add(1);
         functions_covered = functions_covered.saturating_add(1);
@@ -457,10 +457,9 @@ fn is_ignorable_synthetic_region(
         return true;
     }
 
-    let is_unexpected_panic_fallback = filename.ends_with("/tests.rs")
+    filename.ends_with("/tests.rs")
         && line.contains("panic!(\"unexpected")
-        && matches!(slice, Some("other") | Some("panic!"));
-    is_unexpected_panic_fallback
+        && matches!(slice, Some("other") | Some("panic!"))
 }
 
 impl CoveragePolicyFile {
@@ -1550,7 +1549,7 @@ fn list_required_crates_with_root(root: &Path, writer: &mut dyn Write) -> Result
 }
 
 fn list_workspace_crates_with_root(root: &Path, writer: &mut dyn Write) -> Result<(), String> {
-    let crates = read_workspace_crates(&root)?;
+    let crates = read_workspace_crates(root)?;
     write_crate_names_output(writer, crates, "workspace crates")
 }
 
@@ -1582,10 +1581,8 @@ fn run_with_root(args: &[String], root: &Path) -> Result<(), String> {
                 Some(raw) => PathBuf::from(raw),
                 None => PathBuf::from("target/coverage/coverage-refresh.tsv"),
             };
-            let status_out_path = match parse_optional_string_arg(&args[1..], "status-out") {
-                Some(raw) => Some(PathBuf::from(raw)),
-                None => None,
-            };
+            let status_out_path =
+                parse_optional_string_arg(&args[1..], "status-out").map(PathBuf::from);
             let required_crates = read_required_crates(&coverage_policy_path(root))?;
 
             let mut refresh_rows =
@@ -1596,9 +1593,13 @@ fn run_with_root(args: &[String], root: &Path) -> Result<(), String> {
                 let report_path = coverage_report_path(&reports_root, &crate_name);
                 let report = read_gate_report(&report_path)?;
                 let status = if report.result.pass { "pass" } else { "fail" };
-                let branch = report.measured.branches_percent.unwrap_or(0.0);
+                let branch = report
+                    .measured
+                    .branches_percent
+                    .map(|value| format!("{value:.6}"))
+                    .unwrap_or_else(|| "unavailable".to_string());
                 refresh_rows.push_str(&format!(
-                    "{}\t{}\t{:.6}\t{:.6}\t{:.6}\t{:.6}\t{}\n",
+                    "{}\t{}\t{:.6}\t{:.6}\t{}\t{:.6}\t{}\n",
                     crate_name,
                     status,
                     report.measured.executable_lines_percent,
@@ -1610,23 +1611,21 @@ fn run_with_root(args: &[String], root: &Path) -> Result<(), String> {
                 status_rows.push_str(&format!("{}\t{}\n", crate_name, status));
             }
 
-            if let Some(parent) = out_path.parent() {
-                if !parent.as_os_str().is_empty() {
-                    if let Err(err) = fs::create_dir_all(parent) {
-                        return Err(format!("failed to create {}: {err}", parent.display()));
-                    }
-                }
+            if let Some(parent) = out_path.parent()
+                && !parent.as_os_str().is_empty()
+                && let Err(err) = fs::create_dir_all(parent)
+            {
+                return Err(format!("failed to create {}: {err}", parent.display()));
             }
             fs::write(&out_path, refresh_rows)
                 .map_err(|err| format!("failed to write {}: {err}", out_path.display()))?;
 
             if let Some(status_out_path) = status_out_path {
-                if let Some(parent) = status_out_path.parent() {
-                    if !parent.as_os_str().is_empty() {
-                        fs::create_dir_all(parent).map_err(|err| {
-                            format!("failed to create {}: {err}", parent.display())
-                        })?;
-                    }
+                if let Some(parent) = status_out_path.parent()
+                    && !parent.as_os_str().is_empty()
+                {
+                    fs::create_dir_all(parent)
+                        .map_err(|err| format!("failed to create {}: {err}", parent.display()))?;
                 }
                 fs::write(&status_out_path, status_rows).map_err(|err| {
                     format!("failed to write {}: {err}", status_out_path.display())
@@ -2306,7 +2305,7 @@ mod tests {
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         write_file(
             &coverage_dir.join("policy.toml"),
-            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n",
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\", \"radroots_b\"]\n",
         );
 
         let reports_root = root.join("target").join("coverage");
@@ -2348,6 +2347,44 @@ mod tests {
   }
 }"#,
         );
+        let no_branch_crate_dir = reports_root.join("radroots_b");
+        fs::create_dir_all(&no_branch_crate_dir).expect("create no branch crate dir");
+        write_file(
+            &no_branch_crate_dir.join("gate-report.json"),
+            r#"{
+  "scope": "radroots_b",
+  "thresholds": {
+    "executable_lines": 100.0,
+    "functions": 100.0,
+    "regions": 100.0,
+    "branches": 100.0,
+    "branches_required": false
+  },
+  "measured": {
+    "executable_lines_percent": 100.0,
+    "executable_lines_source": "da",
+    "functions_percent": 100.0,
+    "branches_percent": null,
+    "branches_available": false,
+    "summary_lines_percent": 100.0,
+    "summary_regions_percent": 100.0
+  },
+  "counts": {
+    "executable_lines": {
+      "covered": 4,
+      "total": 4
+    },
+    "branches": {
+      "covered": 0,
+      "total": 0
+    }
+  },
+  "result": {
+    "pass": true,
+    "fail_reasons": []
+  }
+}"#,
+        );
 
         let refresh_out = reports_root.join("coverage-refresh.tsv");
         let status_out = reports_root.join("coverage-refresh-status.tsv");
@@ -2370,9 +2407,15 @@ mod tests {
         assert!(
             refresh.contains("radroots_a\tpass\t100.000000\t100.000000\t100.000000\t97.500000\t")
         );
+        assert!(
+            refresh.contains("radroots_b\tpass\t100.000000\t100.000000\tunavailable\t100.000000\t")
+        );
 
         let status = fs::read_to_string(&status_out).expect("read status summary");
-        assert_eq!(status, "crate\tstatus\nradroots_a\tpass\n");
+        assert_eq!(
+            status,
+            "crate\tstatus\nradroots_a\tpass\nradroots_b\tpass\n"
+        );
 
         fs::remove_dir_all(root).expect("remove root");
 

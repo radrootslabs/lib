@@ -231,9 +231,9 @@ impl RadrootsNostrSignerStore for RadrootsNostrSqliteSignerStore {
                 })?;
             state.connections[index].auth_challenge = Some(
                 RadrootsNostrSignerAuthChallenge::new(row.auth_url.as_str(), row.required_at_unix)
-                    .and_then(|mut challenge| {
+                    .map(|mut challenge| {
                         challenge.authorized_at_unix = row.authorized_at_unix;
-                        Ok(challenge)
+                        challenge
                     })?,
             );
         }

@@ -22,10 +22,10 @@ pub fn job_feedback_from_tags(
 ) -> Result<RadrootsJobFeedback, JobParseError> {
     let etag = tags
         .iter()
-        .find(|t| t.get(0).map(|s| s.as_str()) == Some("e"))
+        .find(|t| t.first().map(|s| s.as_str()) == Some("e"))
         .or_else(|| {
             tags.iter()
-                .find(|t| t.get(0).map(|s| s.as_str()) == Some("e_ref"))
+                .find(|t| t.first().map(|s| s.as_str()) == Some("e_ref"))
         })
         .ok_or(JobParseError::MissingTag("e"))?;
     let req_id = etag.get(1).ok_or(JobParseError::InvalidTag("e"))?.clone();
@@ -33,7 +33,7 @@ pub fn job_feedback_from_tags(
 
     let status_tag = tags
         .iter()
-        .find(|t| t.get(0).map(|s| s.as_str()) == Some("status"))
+        .find(|t| t.first().map(|s| s.as_str()) == Some("status"))
         .ok_or(JobParseError::MissingTag("status"))?;
 
     let status = match status_tag.get(1).and_then(|s| feedback_status_from_tag(s)) {
@@ -52,7 +52,7 @@ pub fn job_feedback_from_tags(
 
     let customer_pubkey = tags
         .iter()
-        .find(|t| t.get(0).map(|s| s.as_str()) == Some("p"))
+        .find(|t| t.first().map(|s| s.as_str()) == Some("p"))
         .and_then(|t| t.get(1).cloned());
 
     Ok(RadrootsJobFeedback {

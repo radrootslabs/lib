@@ -55,10 +55,10 @@ pub fn farm_workspace_from_event(
     if manifest.farm_group_id != farm_group_id {
         return Err(EventParseError::InvalidTag(TAG_H));
     }
-    if let Some(owner_pubkey) = optional_tag_value(tags, TAG_P)? {
-        if owner_pubkey != manifest.owner_pubkey {
-            return Err(EventParseError::InvalidTag(TAG_P));
-        }
+    if let Some(owner_pubkey) = optional_tag_value(tags, TAG_P)?
+        && owner_pubkey != manifest.owner_pubkey
+    {
+        return Err(EventParseError::InvalidTag(TAG_P));
     }
     let marker_tags = tag_values(tags, TAG_T)?;
     if !marker_tags

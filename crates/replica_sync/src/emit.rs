@@ -711,21 +711,21 @@ fn gcs_location_to_event(
 }
 
 fn parse_point(value: &str, lat: f64, lng: f64) -> RadrootsGeoJsonPoint {
-    if !value.trim().is_empty() {
-        if let Ok(parsed) = serde_json::from_str::<RadrootsGeoJsonPoint>(value) {
-            return parsed;
-        }
+    if !value.trim().is_empty()
+        && let Ok(parsed) = serde_json::from_str::<RadrootsGeoJsonPoint>(value)
+    {
+        return parsed;
     }
     geojson_point_from_lat_lng(lat, lng)
 }
 
 fn parse_polygon(value: &str, lat: f64, lng: f64) -> RadrootsGeoJsonPolygon {
-    if !value.trim().is_empty() {
-        if let Ok(parsed) = serde_json::from_str::<RadrootsGeoJsonPolygon>(value) {
-            if !parsed.coordinates.is_empty() && !parsed.coordinates[0].is_empty() {
-                return parsed;
-            }
-        }
+    if !value.trim().is_empty()
+        && let Ok(parsed) = serde_json::from_str::<RadrootsGeoJsonPolygon>(value)
+        && !parsed.coordinates.is_empty()
+        && !parsed.coordinates[0].is_empty()
+    {
+        return parsed;
     }
     geojson_polygon_circle_wgs84(lat, lng, 100.0, 64)
 }
@@ -775,9 +775,10 @@ fn profile_event(
     let content = serialize_profile_content(&profile_event)?;
     let mut tags = Vec::new();
     if let Some(profile_type) = profile_type {
-        let mut tag = Vec::with_capacity(2);
-        tag.push(RADROOTS_PROFILE_TYPE_TAG_KEY.to_string());
-        tag.push(radroots_profile_type_tag_value(profile_type).to_string());
+        let tag = vec![
+            RADROOTS_PROFILE_TYPE_TAG_KEY.to_string(),
+            radroots_profile_type_tag_value(profile_type).to_string(),
+        ];
         tags.push(tag);
     }
     Ok(RadrootsReplicaEventDraft {

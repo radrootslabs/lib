@@ -106,10 +106,7 @@ pub fn build_select_query_with_meta<T: Serialize>(
     filter: Option<&T>,
 ) -> (String, Vec<Value>) {
     let (where_clause, binds) = match filter {
-        Some(f) => match build_where_clause_eq(f) {
-            Ok(t) => t,
-            Err(_) => (String::new(), Vec::new()),
-        },
+        Some(f) => build_where_clause_eq(f).unwrap_or_default(),
         None => (String::new(), Vec::new()),
     };
     let sql = format!("SELECT * FROM {table}{where_clause};");

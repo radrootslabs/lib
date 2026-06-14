@@ -115,15 +115,15 @@ fn push_address_ref(
     if parsed.kind == KIND_FARM {
         return Err(EventEncodeError::InvalidField("address_refs"));
     }
-    if let Some(kind) = event_kind {
-        if *kind != parsed.kind {
-            return Err(EventEncodeError::InvalidField("address_refs"));
-        }
+    if let Some(kind) = event_kind
+        && *kind != parsed.kind
+    {
+        return Err(EventEncodeError::InvalidField("address_refs"));
     }
-    if let Some(author) = author.as_deref() {
-        if author != parsed.pubkey {
-            return Err(EventEncodeError::InvalidField("address_refs"));
-        }
+    if let Some(author) = author.as_deref()
+        && author != parsed.pubkey
+    {
+        return Err(EventEncodeError::InvalidField("address_refs"));
     }
     let mut tag = Vec::with_capacity(2 + relays.as_ref().map_or(0, Vec::len));
     tag.push(TAG_A.to_string());
@@ -162,10 +162,10 @@ fn push_quote_ref(
         } => {
             let parsed = parse_address_tag(address, "quote_refs")
                 .map_err(|_| EventEncodeError::InvalidField("quote_refs"))?;
-            if let Some(kind) = event_kind {
-                if *kind != parsed.kind {
-                    return Err(EventEncodeError::InvalidField("quote_refs"));
-                }
+            if let Some(kind) = event_kind
+                && *kind != parsed.kind
+            {
+                return Err(EventEncodeError::InvalidField("quote_refs"));
             }
             let mut tag = Vec::with_capacity(2 + relays.as_ref().map_or(0, Vec::len));
             tag.push(TAG_Q.to_string());

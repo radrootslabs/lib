@@ -125,7 +125,6 @@ pub fn validate_listing_event(
 
     let inventory_available = listing
         .inventory_available
-        .clone()
         .ok_or(TradeListingValidationError::MissingInventory)?;
     if inventory_available.is_sign_negative() {
         return Err(TradeListingValidationError::InvalidInventory);

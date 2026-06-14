@@ -1,7 +1,10 @@
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Default, Eq, PartialEq)]
 pub enum RadrootsNostrNdbIngestSource {
+    #[default]
     Client,
-    Relay { relay_url: Option<String> },
+    Relay {
+        relay_url: Option<String>,
+    },
 }
 
 impl RadrootsNostrNdbIngestSource {
@@ -31,11 +34,5 @@ impl RadrootsNostrNdbIngestSource {
                 }
             }
         }
-    }
-}
-
-impl Default for RadrootsNostrNdbIngestSource {
-    fn default() -> Self {
-        Self::Client
     }
 }

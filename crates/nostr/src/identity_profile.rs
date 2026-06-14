@@ -63,12 +63,9 @@ pub async fn radroots_nostr_bootstrap_service_presence(
     client.wait_for_connection(connect_timeout).await;
 
     let profile_published =
-        match radroots_nostr_publish_identity_profile_with_type(client, identity, profile_type)
+        radroots_nostr_publish_identity_profile_with_type(client, identity, profile_type)
             .await?
-        {
-            Some(_) => true,
-            None => false,
-        };
+            .is_some();
 
     if radroots_nostr_metadata_has_fields(metadata) && !profile_published {
         let builder =

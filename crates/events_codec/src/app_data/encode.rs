@@ -17,9 +17,7 @@ pub fn app_data_build_tags(
     if app_data.d_tag.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("d_tag"));
     }
-    let mut tags = Vec::with_capacity(1);
-    tags.push(vec![TAG_D.to_string(), app_data.d_tag.clone()]);
-    Ok(tags)
+    Ok(vec![vec![TAG_D.to_string(), app_data.d_tag.clone()]])
 }
 
 pub fn to_wire_parts(app_data: &RadrootsAppData) -> Result<WireEventParts, EventEncodeError> {

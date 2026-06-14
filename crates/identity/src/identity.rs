@@ -380,14 +380,14 @@ impl RadrootsIdentity {
         };
         #[cfg(feature = "profile")]
         {
-            return RadrootsIdentityFile {
+            RadrootsIdentityFile {
                 secret_key,
                 public_key: Some(self.public_key_hex()),
                 identifier,
                 metadata,
                 application_handler,
                 profile,
-            };
+            }
         }
         #[cfg(not(feature = "profile"))]
         {

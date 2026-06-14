@@ -74,10 +74,10 @@ impl NostrClientManager {
     }
 
     pub fn stop_post_event_stream(&self) {
-        if let Ok(mut g) = self.inner.post_events_stream.lock() {
-            if let Some(h) = g.take() {
-                h.abort();
-            }
+        if let Ok(mut g) = self.inner.post_events_stream.lock()
+            && let Some(h) = g.take()
+        {
+            h.abort();
         }
     }
 

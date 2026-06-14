@@ -39,7 +39,7 @@ fn parse_bot(value: &Value) -> Option<String> {
 
 fn profile_type_from_tags(tags: &[Vec<String>]) -> Option<RadrootsProfileType> {
     tags.iter()
-        .filter(|tag| tag.get(0).map(|v| v.as_str()) == Some(RADROOTS_PROFILE_TYPE_TAG_KEY))
+        .filter(|tag| tag.first().map(|v| v.as_str()) == Some(RADROOTS_PROFILE_TYPE_TAG_KEY))
         .filter_map(|tag| tag.get(1))
         .find_map(|value| radroots_profile_type_from_tag_value(value))
 }

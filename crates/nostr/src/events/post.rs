@@ -37,12 +37,11 @@ pub fn radroots_nostr_build_post_reply_event(
     let parent_pubkey = RadrootsNostrPublicKey::from_hex(parent_author_hex)?;
     let mut tags: Vec<RadrootsNostrTag> = Vec::new();
 
-    if let Some(root_hex) = root_event_id_hex {
-        if !root_hex.is_empty() {
-            if let Ok(root_id) = RadrootsNostrEventId::from_hex(root_hex) {
-                tags.push(RadrootsNostrTag::event(root_id));
-            }
-        }
+    if let Some(root_hex) = root_event_id_hex
+        && !root_hex.is_empty()
+        && let Ok(root_id) = RadrootsNostrEventId::from_hex(root_hex)
+    {
+        tags.push(RadrootsNostrTag::event(root_id));
     }
 
     tags.push(RadrootsNostrTag::event(parent_id));
