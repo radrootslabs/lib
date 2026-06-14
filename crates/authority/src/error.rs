@@ -15,6 +15,46 @@ pub enum RadrootsAuthorityError {
     #[error("invalid signer public key")]
     InvalidSignerPubkey,
 
+    #[error("unknown event contract `{contract_id}`")]
+    UnknownContract { contract_id: String },
+
+    #[error("event contract `{contract_id}` expects kind {expected_kind}, got {actual_kind}")]
+    DraftKindMismatch {
+        contract_id: String,
+        expected_kind: u32,
+        actual_kind: u32,
+    },
+
+    #[error("actor does not satisfy role {required_role:?} for contract `{contract_id}`")]
+    ActorRoleUnsatisfied {
+        contract_id: String,
+        required_role: radroots_events::contract::RadrootsActorRole,
+    },
+
+    #[error("actor pubkey mismatch: expected {expected_pubkey}, got {actor_pubkey}")]
+    ActorPubkeyMismatch {
+        expected_pubkey: String,
+        actor_pubkey: String,
+    },
+
+    #[error("signer pubkey mismatch: expected {expected_pubkey}, got {signer_pubkey}")]
+    SignerPubkeyMismatch {
+        expected_pubkey: String,
+        signer_pubkey: String,
+    },
+
+    #[error("signed event pubkey mismatch: expected {expected_pubkey}, got {actual_pubkey}")]
+    SignedEventPubkeyMismatch {
+        expected_pubkey: String,
+        actual_pubkey: String,
+    },
+
+    #[error("signed event id mismatch: expected {expected_event_id}, got {actual_event_id}")]
+    SignedEventIdMismatch {
+        expected_event_id: String,
+        actual_event_id: String,
+    },
+
     #[error("signer error: {0}")]
     Signer(#[from] RadrootsSignerError),
 }
