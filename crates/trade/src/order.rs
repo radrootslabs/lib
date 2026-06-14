@@ -134,6 +134,49 @@ pub struct RadrootsOrderSettlementRecord {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RadrootsOrderEventRecord {
+    Request(RadrootsOrderRequestRecord),
+    Decision(RadrootsOrderDecisionRecord),
+    RevisionProposal(RadrootsOrderRevisionProposalRecord),
+    RevisionDecision(RadrootsOrderRevisionDecisionRecord),
+    Fulfillment(RadrootsOrderFulfillmentRecord),
+    Cancellation(RadrootsOrderCancellationRecord),
+    Receipt(RadrootsOrderReceiptRecord),
+    Payment(RadrootsOrderPaymentEventRecord),
+    Settlement(RadrootsOrderSettlementRecord),
+}
+
+impl RadrootsOrderEventRecord {
+    pub fn event_id(&self) -> &RadrootsEventId {
+        match self {
+            Self::Request(record) => &record.event_id,
+            Self::Decision(record) => &record.event_id,
+            Self::RevisionProposal(record) => &record.event_id,
+            Self::RevisionDecision(record) => &record.event_id,
+            Self::Fulfillment(record) => &record.event_id,
+            Self::Cancellation(record) => &record.event_id,
+            Self::Receipt(record) => &record.event_id,
+            Self::Payment(record) => &record.event_id,
+            Self::Settlement(record) => &record.event_id,
+        }
+    }
+
+    pub fn order_id(&self) -> &RadrootsOrderId {
+        match self {
+            Self::Request(record) => &record.payload.order_id,
+            Self::Decision(record) => &record.payload.order_id,
+            Self::RevisionProposal(record) => &record.payload.order_id,
+            Self::RevisionDecision(record) => &record.payload.order_id,
+            Self::Fulfillment(record) => &record.payload.order_id,
+            Self::Cancellation(record) => &record.payload.order_id,
+            Self::Receipt(record) => &record.payload.order_id,
+            Self::Payment(record) => &record.payload.order_id,
+            Self::Settlement(record) => &record.payload.order_id,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsOrderStatus {
     Missing,
     Requested,
@@ -3524,7 +3567,7 @@ mod tests {
         RadrootsListingInventoryAccountingIssue, RadrootsListingInventoryAccountingProjection,
         RadrootsListingInventoryBinAccounting, RadrootsListingInventoryBinAvailability,
         RadrootsListingInventoryOrderReservation, RadrootsOrderCancellationRecord,
-        RadrootsOrderCanonicalizationError, RadrootsOrderDecisionRecord,
+        RadrootsOrderCanonicalizationError, RadrootsOrderDecisionRecord, RadrootsOrderEventRecord,
         RadrootsOrderFulfillmentRecord, RadrootsOrderIssue, RadrootsOrderPaymentEventRecord,
         RadrootsOrderPaymentProjection, RadrootsOrderPaymentState, RadrootsOrderProjection,
         RadrootsOrderReceiptRecord, RadrootsOrderRequestRecord,
@@ -3947,6 +3990,79 @@ mod tests {
                 prev_event_id: test_event_id(prev_event_id),
                 decision,
             },
+        }
+    }
+
+    #[test]
+    fn order_event_record_accessors_cover_all_variants() {
+        let records = vec![
+            (
+                RadrootsOrderEventRecord::Request(request_record_with_event_id("record-request")),
+                "record-request",
+            ),
+            (
+                RadrootsOrderEventRecord::Decision(accepted_decision_record("record-decision")),
+                "record-decision",
+            ),
+            (
+                RadrootsOrderEventRecord::RevisionProposal(revision_proposal_record(
+                    "record-revision-proposal",
+                    "decision-1",
+                    "revision-1",
+                    3,
+                )),
+                "record-revision-proposal",
+            ),
+            (
+                RadrootsOrderEventRecord::RevisionDecision(revision_decision_record(
+                    "record-revision-decision",
+                    "record-revision-proposal",
+                    "revision-1",
+                    RadrootsOrderRevisionOutcome::Accepted,
+                )),
+                "record-revision-decision",
+            ),
+            (
+                RadrootsOrderEventRecord::Fulfillment(fulfillment_record(
+                    "record-fulfillment",
+                    "decision-1",
+                    RadrootsOrderFulfillmentState::ReadyForPickup,
+                )),
+                "record-fulfillment",
+            ),
+            (
+                RadrootsOrderEventRecord::Cancellation(cancellation_record(
+                    "record-cancellation",
+                    "request-1",
+                )),
+                "record-cancellation",
+            ),
+            (
+                RadrootsOrderEventRecord::Receipt(receipt_record(
+                    "record-receipt",
+                    "record-fulfillment",
+                    true,
+                )),
+                "record-receipt",
+            ),
+            (
+                RadrootsOrderEventRecord::Payment(payment_record("record-payment", "decision-1")),
+                "record-payment",
+            ),
+            (
+                RadrootsOrderEventRecord::Settlement(settlement_record(
+                    "record-settlement",
+                    "record-payment",
+                    RadrootsOrderSettlementOutcome::Accepted,
+                )),
+                "record-settlement",
+            ),
+        ];
+
+        for (record, event_id_raw) in records {
+            let expected_event_id = test_event_id(event_id_raw);
+            assert_eq!(record.event_id(), &expected_event_id);
+            assert_eq!(record.order_id(), &order_id("order-1"));
         }
     }
 
