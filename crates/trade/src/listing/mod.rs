@@ -1,4 +1,5 @@
 mod codec;
+pub mod draft;
 pub mod model;
 pub mod price_ext;
 pub mod publish;
@@ -6,6 +7,9 @@ pub mod validation;
 
 use radroots_events::{RadrootsNostrEvent, kinds::is_listing_kind, listing::RadrootsListing};
 
+pub use self::draft::{
+    RadrootsCanonicalListingDraft, RadrootsListingDraftDocumentV1, RadrootsListingDraftError,
+};
 pub use radroots_events::order::RadrootsListingParseError as ListingParseError;
 
 pub fn parse_listing_event(
