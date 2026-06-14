@@ -12,7 +12,7 @@ use radroots_events::{
     ids::{
         RadrootsIdParseError, RadrootsInventoryBinId, RadrootsListingAddress, RadrootsPublicKey,
     },
-    kinds::KIND_LISTING_DRAFT,
+    kinds::{KIND_LISTING, KIND_LISTING_DRAFT},
     listing::RadrootsListing,
 };
 use thiserror::Error;
@@ -32,21 +32,24 @@ impl RadrootsListingDraftDocumentV1 {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsCanonicalListingDraft {
+    pub listing: RadrootsListing,
     pub seller_pubkey: RadrootsPublicKey,
-    pub listing_addr: RadrootsListingAddress,
-    pub document: RadrootsListingDraftDocumentV1,
+    pub public_listing_addr: RadrootsListingAddress,
+    pub draft_listing_addr: RadrootsListingAddress,
 }
 
 impl RadrootsCanonicalListingDraft {
     pub fn new(
+        listing: RadrootsListing,
         seller_pubkey: RadrootsPublicKey,
-        listing_addr: RadrootsListingAddress,
-        document: RadrootsListingDraftDocumentV1,
+        public_listing_addr: RadrootsListingAddress,
+        draft_listing_addr: RadrootsListingAddress,
     ) -> Self {
         Self {
+            listing,
             seller_pubkey,
-            listing_addr,
-            document,
+            public_listing_addr,
+            draft_listing_addr,
         }
     }
 }
@@ -120,7 +123,13 @@ pub fn canonicalize_listing_draft(
         return Err(RadrootsListingDraftError::MissingPrimaryBin { primary_bin_id });
     }
 
-    let listing_addr = RadrootsListingAddress::parse(format!(
+    let public_listing_addr = RadrootsListingAddress::parse(format!(
+        "{KIND_LISTING}:{}:{}",
+        seller_pubkey.as_str(),
+        document.listing.d_tag.as_str()
+    ))
+    .map_err(RadrootsListingDraftError::InvalidListingAddress)?;
+    let draft_listing_addr = RadrootsListingAddress::parse(format!(
         "{KIND_LISTING_DRAFT}:{}:{}",
         seller_pubkey.as_str(),
         document.listing.d_tag.as_str()
@@ -128,9 +137,10 @@ pub fn canonicalize_listing_draft(
     .map_err(RadrootsListingDraftError::InvalidListingAddress)?;
 
     Ok(RadrootsCanonicalListingDraft::new(
+        document.listing,
         seller_pubkey,
-        listing_addr,
-        document,
+        public_listing_addr,
+        draft_listing_addr,
     ))
 }
 
@@ -145,7 +155,7 @@ mod tests {
         contract::RadrootsActorRole,
         farm::RadrootsFarmRef,
         ids::{RadrootsDTag, RadrootsInventoryBinId, RadrootsListingAddress, RadrootsPublicKey},
-        kinds::KIND_LISTING_DRAFT,
+        kinds::{KIND_LISTING, KIND_LISTING_DRAFT},
         listing::{RadrootsListing, RadrootsListingBin, RadrootsListingProduct},
     };
 
@@ -235,26 +245,29 @@ mod tests {
     }
 
     #[test]
-    fn canonical_draft_carries_seller_and_address() {
+    fn canonical_draft_carries_seller_listing_and_addresses() {
         let seller_pubkey = RadrootsPublicKey::parse(SELLER).expect("seller");
-        let listing_addr = RadrootsListingAddress::parse(format!(
+        let public_listing_addr = RadrootsListingAddress::parse(format!(
+            "{KIND_LISTING}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg"
+        ))
+        .expect("public listing address");
+        let draft_listing_addr = RadrootsListingAddress::parse(format!(
             "{KIND_LISTING_DRAFT}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg"
         ))
-        .expect("listing address");
-        let document = RadrootsListingDraftDocumentV1::new(listing());
+        .expect("draft listing address");
+        let listing = listing();
 
         let canonical = RadrootsCanonicalListingDraft::new(
+            listing,
             seller_pubkey.clone(),
-            listing_addr.clone(),
-            document,
+            public_listing_addr.clone(),
+            draft_listing_addr.clone(),
         );
 
         assert_eq!(canonical.seller_pubkey, seller_pubkey);
-        assert_eq!(canonical.listing_addr, listing_addr);
-        assert_eq!(
-            canonical.document.listing.d_tag.as_str(),
-            "AAAAAAAAAAAAAAAAAAAAAg"
-        );
+        assert_eq!(canonical.public_listing_addr, public_listing_addr);
+        assert_eq!(canonical.draft_listing_addr, draft_listing_addr);
+        assert_eq!(canonical.listing.d_tag.as_str(), "AAAAAAAAAAAAAAAAAAAAAg");
     }
 
     #[test]
@@ -284,10 +297,14 @@ mod tests {
 
         assert_eq!(canonical.seller_pubkey.as_str(), SELLER);
         assert_eq!(
-            canonical.listing_addr.as_str(),
+            canonical.public_listing_addr.as_str(),
+            format!("{KIND_LISTING}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg")
+        );
+        assert_eq!(
+            canonical.draft_listing_addr.as_str(),
             format!("{KIND_LISTING_DRAFT}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg")
         );
-        assert_eq!(canonical.document.listing.farm.pubkey, SELLER);
+        assert_eq!(canonical.listing.farm.pubkey, SELLER);
     }
 
     #[test]

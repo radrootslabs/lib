@@ -99,6 +99,14 @@ impl RadrootsListingMutation {
             Self::Archive { .. } => Err(RadrootsListingMutationError::UnsupportedMutation),
         }
     }
+
+    pub fn listing_addr(&self) -> Result<&RadrootsListingAddress, RadrootsListingMutationError> {
+        match self {
+            Self::Publish { draft } | Self::Update { draft } => Ok(&draft.public_listing_addr),
+            Self::SaveDraft { draft } => Ok(&draft.draft_listing_addr),
+            Self::Archive { .. } => Err(RadrootsListingMutationError::UnsupportedMutation),
+        }
+    }
 }
 
 #[cfg(feature = "serde_json")]
@@ -117,7 +125,7 @@ pub fn build_listing_mutation_draft(
             return Err(RadrootsListingMutationError::UnsupportedMutation);
         }
     };
-    let parts = to_wire_parts_with_kind(&draft.document.listing, kind)
+    let parts = to_wire_parts_with_kind(&draft.listing, kind)
         .map_err(|error| RadrootsListingMutationError::EncodeListing(error.to_string()))?;
     to_frozen_draft(parts, contract_id, draft.seller_pubkey.as_str(), created_at)
         .map_err(RadrootsListingMutationError::FrozenDraft)
@@ -141,7 +149,7 @@ mod tests {
         },
     };
 
-    use crate::listing::draft::{RadrootsCanonicalListingDraft, RadrootsListingDraftDocumentV1};
+    use crate::listing::draft::RadrootsCanonicalListingDraft;
     use crate::listing::validation::validate_listing_event;
 
     use super::{
@@ -224,12 +232,16 @@ mod tests {
 
     fn canonical_draft() -> RadrootsCanonicalListingDraft {
         RadrootsCanonicalListingDraft::new(
+            listing(),
             RadrootsPublicKey::parse(SELLER).expect("seller"),
+            RadrootsListingAddress::parse(format!(
+                "{KIND_LISTING}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg"
+            ))
+            .expect("public listing address"),
             RadrootsListingAddress::parse(format!(
                 "{KIND_LISTING_DRAFT}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg"
             ))
-            .expect("listing address"),
-            RadrootsListingDraftDocumentV1::new(listing()),
+            .expect("draft listing address"),
         )
     }
 
@@ -273,13 +285,42 @@ mod tests {
             save_draft.canonical_draft().expect("draft").seller_pubkey,
             SELLER
         );
+        assert_eq!(
+            publish
+                .canonical_draft()
+                .expect("draft")
+                .listing
+                .d_tag
+                .as_str(),
+            "AAAAAAAAAAAAAAAAAAAAAg"
+        );
+    }
+
+    #[test]
+    fn supported_mutations_report_listing_addresses() {
+        let publish = RadrootsListingMutation::publish(canonical_draft());
+        let update = RadrootsListingMutation::update(canonical_draft());
+        let save_draft = RadrootsListingMutation::save_draft(canonical_draft());
+
+        assert_eq!(
+            publish.listing_addr().expect("address").as_str(),
+            format!("{KIND_LISTING}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg")
+        );
+        assert_eq!(
+            update.listing_addr().expect("address").as_str(),
+            format!("{KIND_LISTING}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg")
+        );
+        assert_eq!(
+            save_draft.listing_addr().expect("address").as_str(),
+            format!("{KIND_LISTING_DRAFT}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg")
+        );
     }
 
     #[test]
     fn archive_is_explicitly_unsupported() {
         let archive = RadrootsListingMutation::archive(
             RadrootsListingAddress::parse(format!(
-                "{KIND_LISTING_DRAFT}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg"
+                "{KIND_LISTING}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg"
             ))
             .expect("listing address"),
         );
@@ -290,6 +331,10 @@ mod tests {
         );
         assert_eq!(
             archive.canonical_draft().unwrap_err(),
+            RadrootsListingMutationError::UnsupportedMutation
+        );
+        assert_eq!(
+            archive.listing_addr().unwrap_err(),
             RadrootsListingMutationError::UnsupportedMutation
         );
     }
@@ -327,7 +372,7 @@ mod tests {
     fn build_listing_mutation_draft_rejects_archive() {
         let archive = RadrootsListingMutation::archive(
             RadrootsListingAddress::parse(format!(
-                "{KIND_LISTING_DRAFT}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg"
+                "{KIND_LISTING}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg"
             ))
             .expect("listing address"),
         );
