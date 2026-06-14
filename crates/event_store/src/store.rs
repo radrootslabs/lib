@@ -23,6 +23,7 @@ use std::path::Path;
 use std::str::FromStr;
 
 pub const RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX: u32 = 500;
+pub const RADROOTS_EVENT_STORE_CONTRACT_QUERY_LIMIT_MAX: usize = 16;
 
 #[derive(Clone)]
 pub struct RadrootsEventStore {
@@ -282,6 +283,36 @@ impl RadrootsEventStore {
         .bind(i64::from(limit))
         .fetch_all(&self.pool)
         .await?;
+        rows.into_iter().map(stored_event_from_row).collect()
+    }
+
+    pub async fn events_by_contract_and_tag<S>(
+        &self,
+        contract_ids: &[S],
+        tag_name: &str,
+        tag_value: &str,
+        limit: u32,
+    ) -> Result<Vec<RadrootsStoredEvent>, RadrootsEventStoreError>
+    where
+        S: AsRef<str>,
+    {
+        validate_contract_tag_query(contract_ids, tag_name, limit)?;
+        let placeholders = core::iter::repeat_n("?", contract_ids.len())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = format!(
+            "SELECT seq, event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms FROM nostr_event AS event WHERE projection_eligible = 1 AND contract_id IN ({placeholders}) AND EXISTS (SELECT 1 FROM nostr_event_tag AS tag WHERE tag.event_id = event.event_id AND tag.tag_name = ? AND tag.tag_value = ?) ORDER BY event.seq ASC LIMIT ?"
+        );
+        let mut query = sqlx::query(sql.as_str());
+        for contract_id in contract_ids {
+            query = query.bind(contract_id.as_ref());
+        }
+        let rows = query
+            .bind(tag_name)
+            .bind(tag_value)
+            .bind(i64::from(limit))
+            .fetch_all(&self.pool)
+            .await?;
         rows.into_iter().map(stored_event_from_row).collect()
     }
 }
@@ -748,6 +779,26 @@ fn validate_tag_query(tag_name: &str, limit: u32) -> Result<(), RadrootsEventSto
         });
     }
     Ok(())
+}
+
+fn validate_contract_tag_query<S>(
+    contract_ids: &[S],
+    tag_name: &str,
+    limit: u32,
+) -> Result<(), RadrootsEventStoreError>
+where
+    S: AsRef<str>,
+{
+    if contract_ids.is_empty() {
+        return Err(RadrootsEventStoreError::EmptyContractList);
+    }
+    if contract_ids.len() > RADROOTS_EVENT_STORE_CONTRACT_QUERY_LIMIT_MAX {
+        return Err(RadrootsEventStoreError::ContractListTooLarge {
+            max: RADROOTS_EVENT_STORE_CONTRACT_QUERY_LIMIT_MAX,
+            actual: contract_ids.len(),
+        });
+    }
+    validate_tag_query(tag_name, limit)
 }
 
 #[cfg(test)]
@@ -1241,6 +1292,97 @@ mod tests {
             .expect("limited tag query");
         assert_eq!(limited.len(), 1);
         assert_eq!(limited[0].event_id, high_created_at.id);
+    }
+
+    #[tokio::test]
+    async fn events_by_contract_and_tag_enforces_contract_tag_and_projection_filters() {
+        let store = RadrootsEventStore::open_memory().await.expect("store");
+
+        assert!(matches!(
+            store
+                .events_by_contract_and_tag::<&str>(&[], "p", FIXTURE_ALICE_PUBLIC_KEY_HEX, 1)
+                .await,
+            Err(RadrootsEventStoreError::EmptyContractList)
+        ));
+        let too_many_contracts =
+            vec!["radroots.order.request.v1"; RADROOTS_EVENT_STORE_CONTRACT_QUERY_LIMIT_MAX + 1];
+        assert!(matches!(
+            store
+                .events_by_contract_and_tag(
+                    too_many_contracts.as_slice(),
+                    "p",
+                    FIXTURE_ALICE_PUBLIC_KEY_HEX,
+                    1,
+                )
+                .await,
+            Err(RadrootsEventStoreError::ContractListTooLarge { .. })
+        ));
+
+        let matching_order = signed_event(
+            KIND_ORDER_REQUEST,
+            70,
+            vec![
+                vec!["d".to_owned(), "order-1".to_owned()],
+                vec!["p".to_owned(), FIXTURE_ALICE_PUBLIC_KEY_HEX.to_owned()],
+            ],
+            "{}",
+        );
+        let wrong_tag_order = signed_event(
+            KIND_ORDER_REQUEST,
+            71,
+            vec![
+                vec!["d".to_owned(), "order-2".to_owned()],
+                vec!["p".to_owned(), event_id('b')],
+            ],
+            "{}",
+        );
+        let same_tag_wrong_contract = signed_event(
+            KIND_POST,
+            72,
+            vec![vec![
+                "p".to_owned(),
+                FIXTURE_ALICE_PUBLIC_KEY_HEX.to_owned(),
+            ]],
+            "hello",
+        );
+        let unsupported_same_tag = signed_event(
+            999,
+            73,
+            vec![vec![
+                "p".to_owned(),
+                FIXTURE_ALICE_PUBLIC_KEY_HEX.to_owned(),
+            ]],
+            "unsupported",
+        );
+
+        for (event, observed_at_ms) in [
+            (matching_order.clone(), 3_600),
+            (wrong_tag_order, 3_700),
+            (same_tag_wrong_contract, 3_800),
+            (unsupported_same_tag, 3_900),
+        ] {
+            store
+                .ingest_event(RadrootsEventIngest::new(event, observed_at_ms))
+                .await
+                .expect("ingest");
+        }
+
+        let events = store
+            .events_by_contract_and_tag(
+                &["radroots.order.request.v1"],
+                "p",
+                FIXTURE_ALICE_PUBLIC_KEY_HEX,
+                10,
+            )
+            .await
+            .expect("contract tag query");
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_id, matching_order.id);
+        assert_eq!(
+            events[0].contract_id.as_deref(),
+            Some("radroots.order.request.v1")
+        );
+        assert!(events[0].projection_eligible);
     }
 
     #[tokio::test]

@@ -18,6 +18,10 @@ pub enum RadrootsEventStoreError {
     MissingEvent(String),
     #[error("event-store tag query tag name cannot be empty")]
     EmptyTagName,
+    #[error("event-store contract tag query contract list cannot be empty")]
+    EmptyContractList,
+    #[error("event-store contract list length {actual} exceeds {max}")]
+    ContractListTooLarge { max: usize, actual: usize },
     #[error("event-store query limit {actual} is outside {min}..={max}")]
     QueryLimitOutOfRange { min: u32, max: u32, actual: u32 },
     #[error("invalid stored enum value `{value}` for {field}")]
