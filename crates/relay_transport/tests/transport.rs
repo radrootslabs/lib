@@ -7,8 +7,8 @@ use radroots_nostr::prelude::{
     radroots_nostr_sign_frozen_draft,
 };
 use radroots_outbox::{
-    RadrootsOutbox, RadrootsOutboxEventState, RadrootsOutboxOperationInput,
-    RadrootsOutboxOperationStatus, RadrootsOutboxRelayStatus,
+    RadrootsOutbox, RadrootsOutboxClaimedEvent, RadrootsOutboxEventState,
+    RadrootsOutboxOperationInput, RadrootsOutboxOperationStatus, RadrootsOutboxRelayStatus,
 };
 use radroots_relay_transport::{
     RadrootsMockRelayFetchAdapter, RadrootsMockRelayPublishAdapter, RadrootsOutboxPublishPolicy,
@@ -43,6 +43,27 @@ fn signed_post(content: &str) -> RadrootsSignedNostrEvent {
     )
     .expect("draft");
     radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event")
+}
+
+async fn complete_claimed_signing(
+    outbox: &RadrootsOutbox,
+    claimed: &RadrootsOutboxClaimedEvent,
+    now_ms: i64,
+) -> RadrootsSignedNostrEvent {
+    if let Some(signed_event) = claimed.signed_event.clone() {
+        return signed_event;
+    }
+    let signed_event =
+        radroots_nostr_sign_frozen_draft(&fixture_keys(), &claimed.draft).expect("signed event");
+    outbox
+        .complete_signing(
+            claimed.outbox_event_id,
+            claimed.claim_token.as_str(),
+            signed_event,
+            now_ms,
+        )
+        .await
+        .expect("complete signing")
 }
 
 fn unsupported_raw_event() -> String {
@@ -413,10 +434,7 @@ async fn outbox_publish_persists_partial_success_and_skips_accepted_retry() {
         .await
         .expect("claim")
         .expect("claim");
-    let signed = outbox
-        .sign_claimed_event(&claimed, &fixture_keys(), 1_100)
-        .await
-        .expect("sign");
+    let signed = complete_claimed_signing(&outbox, &claimed, 1_100).await;
     outbox.recover_expired_claims(2_001).await.expect("recover");
     let publish_claim = outbox
         .claim_next_ready_event("publisher", "publish-a", 3_000, 2_100)
@@ -557,10 +575,7 @@ async fn outbox_publish_marks_published_without_adapter_when_all_relays_already_
         .await
         .expect("claim")
         .expect("claim");
-    let signed = outbox
-        .sign_claimed_event(&claimed, &fixture_keys(), 1_100)
-        .await
-        .expect("sign");
+    let signed = complete_claimed_signing(&outbox, &claimed, 1_100).await;
     outbox.recover_expired_claims(2_001).await.expect("recover");
     let publish_claim = outbox
         .claim_next_ready_event("publisher", "publish-a", 3_000, 2_100)
@@ -655,10 +670,7 @@ async fn outbox_publish_uses_persisted_accepted_count_for_explicit_quorum() {
         .await
         .expect("claim")
         .expect("claim");
-    outbox
-        .sign_claimed_event(&claimed, &fixture_keys(), 1_100)
-        .await
-        .expect("sign");
+    complete_claimed_signing(&outbox, &claimed, 1_100).await;
     outbox.recover_expired_claims(2_001).await.expect("recover");
     let publish_claim = outbox
         .claim_next_ready_event("publisher", "publish-a", 3_000, 2_100)
@@ -755,10 +767,7 @@ async fn outbox_publish_marks_published_when_policy_quorum_is_met_with_failure_d
         .await
         .expect("claim")
         .expect("claim");
-    let signed = outbox
-        .sign_claimed_event(&claimed, &fixture_keys(), 1_100)
-        .await
-        .expect("sign");
+    let signed = complete_claimed_signing(&outbox, &claimed, 1_100).await;
     outbox.recover_expired_claims(2_001).await.expect("recover");
     let publish_claim = outbox
         .claim_next_ready_event("publisher", "publish-a", 3_000, 2_100)

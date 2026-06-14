@@ -11,7 +11,6 @@ use crate::model::{
 use radroots_event_store::{RadrootsEventIngest, RadrootsEventStore};
 use radroots_events::RadrootsNostrEvent;
 use radroots_events::draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent};
-use radroots_nostr::prelude::{RadrootsNostrKeys, radroots_nostr_sign_frozen_draft};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions, SqliteQueryResult};
@@ -288,25 +287,6 @@ impl RadrootsOutbox {
         self.ensure_claimed_update(outbox_event_id, claim_token, changed)
             .await?;
         Ok(signed_event)
-    }
-
-    pub async fn sign_claimed_event(
-        &self,
-        claimed: &RadrootsOutboxClaimedEvent,
-        keys: &RadrootsNostrKeys,
-        now_ms: i64,
-    ) -> Result<RadrootsSignedNostrEvent, RadrootsOutboxError> {
-        if let Some(signed_event) = claimed.signed_event.clone() {
-            return Ok(signed_event);
-        }
-        let signed_event = radroots_nostr_sign_frozen_draft(keys, &claimed.draft)?;
-        self.complete_signing(
-            claimed.outbox_event_id,
-            claimed.claim_token.as_str(),
-            signed_event,
-            now_ms,
-        )
-        .await
     }
 
     pub async fn mark_sign_retryable(
@@ -992,7 +972,9 @@ fn bool_i64(value: bool) -> i64 {
 mod tests {
     use super::*;
     use radroots_events::kinds::KIND_POST;
-    use radroots_nostr::prelude::RadrootsNostrSecretKey;
+    use radroots_nostr::prelude::{
+        RadrootsNostrKeys, RadrootsNostrSecretKey, radroots_nostr_sign_frozen_draft,
+    };
 
     const FIXTURE_ALICE_SECRET_KEY_HEX: &str =
         "10c5304d6c9ae3a1a16f7860f1cc8f5e3a76225a2663b3a989a0d775919b7df5";
@@ -1053,6 +1035,28 @@ mod tests {
             .expect("claim")
             .expect("claimed event");
         (receipt, claimed)
+    }
+
+    async fn complete_claimed_signing(
+        outbox: &RadrootsOutbox,
+        claimed: &RadrootsOutboxClaimedEvent,
+        keys: &RadrootsNostrKeys,
+        now_ms: i64,
+    ) -> RadrootsSignedNostrEvent {
+        if let Some(signed_event) = claimed.signed_event.clone() {
+            return signed_event;
+        }
+        let signed_event =
+            radroots_nostr_sign_frozen_draft(keys, &claimed.draft).expect("signed event");
+        outbox
+            .complete_signing(
+                claimed.outbox_event_id,
+                claimed.claim_token.as_str(),
+                signed_event,
+                now_ms,
+            )
+            .await
+            .expect("complete signing")
     }
 
     async fn table_count(outbox: &RadrootsOutbox, table_name: &str) -> i64 {
@@ -1363,10 +1367,7 @@ mod tests {
             .await
             .expect("claim")
             .expect("claim");
-        let signed = outbox
-            .sign_claimed_event(&first_claim, &fixture_keys(), 1_050)
-            .await
-            .expect("sign");
+        let signed = complete_claimed_signing(&outbox, &first_claim, &fixture_keys(), 1_050).await;
         outbox.recover_expired_claims(1_101).await.expect("recover");
         let second_claim = outbox
             .claim_next_ready_event("worker-b", "claim-b", 1_500, 1_200)
@@ -1430,10 +1431,7 @@ mod tests {
         let (receipt, claimed) = enqueue_signed_fixture(&outbox).await;
         let keys = fixture_keys();
 
-        let signed = outbox
-            .sign_claimed_event(&claimed, &keys, 1_100)
-            .await
-            .expect("sign");
+        let signed = complete_claimed_signing(&outbox, &claimed, &keys, 1_100).await;
         assert_eq!(signed.id, receipt.expected_event_id);
 
         let recovered = outbox.recover_expired_claims(2_001).await.expect("recover");
@@ -1447,10 +1445,7 @@ mod tests {
         assert_eq!(publish_claim.state, RadrootsOutboxEventState::Publishing);
         assert_eq!(publish_claim.signed_event.as_ref(), Some(&signed));
 
-        let reused = outbox
-            .sign_claimed_event(&publish_claim, &keys, 2_200)
-            .await
-            .expect("reuse signed event");
+        let reused = complete_claimed_signing(&outbox, &publish_claim, &keys, 2_200).await;
         assert_eq!(reused, signed);
 
         let event = outbox
@@ -1470,10 +1465,7 @@ mod tests {
             .expect("event store");
         let (receipt, claimed) = enqueue_signed_fixture(&outbox).await;
         let keys = fixture_keys();
-        let signed = outbox
-            .sign_claimed_event(&claimed, &keys, 1_100)
-            .await
-            .expect("sign");
+        let signed = complete_claimed_signing(&outbox, &claimed, &keys, 1_100).await;
 
         let first = outbox
             .ingest_signed_event_local(&event_store, receipt.outbox_event_id, "claim-a", 1_200)
@@ -1646,10 +1638,7 @@ mod tests {
             .await
             .expect("claim")
             .expect("claim");
-        outbox
-            .sign_claimed_event(&sign_claim, &fixture_keys(), 1_100)
-            .await
-            .expect("sign");
+        complete_claimed_signing(&outbox, &sign_claim, &fixture_keys(), 1_100).await;
         outbox.recover_expired_claims(2_001).await.expect("recover");
         outbox
             .claim_next_ready_event("publisher", "publish-a", 3_000, 2_100)

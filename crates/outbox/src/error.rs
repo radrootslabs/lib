@@ -10,9 +10,6 @@ pub enum RadrootsOutboxError {
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
 
-    #[error("Nostr error: {0}")]
-    Nostr(#[from] radroots_nostr::prelude::RadrootsNostrError),
-
     #[error("Event store error: {0}")]
     EventStore(#[from] radroots_event_store::RadrootsEventStoreError),
 
