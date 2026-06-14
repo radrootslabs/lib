@@ -12,6 +12,8 @@ pub use self::draft::{
     RadrootsCanonicalListingDraft, RadrootsListingDraftDocumentV1, RadrootsListingDraftError,
     canonicalize_listing_draft,
 };
+#[cfg(feature = "serde_json")]
+pub use self::mutation::build_listing_mutation_draft;
 pub use self::mutation::{
     RadrootsListingLifecycleState, RadrootsListingMutation, RadrootsListingMutationError,
 };
