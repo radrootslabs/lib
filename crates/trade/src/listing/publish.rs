@@ -74,6 +74,8 @@ mod tests {
         canonicalize_listing_for_seller, resolve_listing_kind, validate_listing_for_seller,
     };
 
+    const SELLER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
     fn d_tag(raw: &str) -> RadrootsDTag {
         RadrootsDTag::parse(raw).expect("d tag")
     }
@@ -159,17 +161,17 @@ mod tests {
 
     #[test]
     fn canonicalize_listing_sets_missing_farm_pubkey() {
-        let listing = canonicalize_listing_for_seller(base_listing(), "seller");
-        assert_eq!(listing.farm.pubkey, "seller");
+        let listing = canonicalize_listing_for_seller(base_listing(), SELLER);
+        assert_eq!(listing.farm.pubkey, SELLER);
     }
 
     #[test]
     fn validate_listing_for_seller_returns_listing_addr() {
-        let listing = canonicalize_listing_for_seller(base_listing(), "seller");
+        let listing = canonicalize_listing_for_seller(base_listing(), SELLER);
         let validated =
-            validate_listing_for_seller(listing, "seller", radroots_events::kinds::KIND_LISTING)
+            validate_listing_for_seller(listing, SELLER, radroots_events::kinds::KIND_LISTING)
                 .expect("validated listing");
-        assert_eq!(validated.seller_pubkey, "seller");
-        assert!(validated.listing_addr.contains(":seller:"));
+        assert_eq!(validated.seller_pubkey, SELLER);
+        assert!(validated.listing_addr.contains(&format!(":{SELLER}:")));
     }
 }

@@ -96,6 +96,7 @@ The public Rust story is tiered explicitly.
   - `radroots_replica_sync`
 - Deferred crates.io publication:
   - `radroots_types`
+  - `radroots_authority`
   - `radroots_event_store`
   - `radroots_outbox`
   - `radroots_relay_transport`

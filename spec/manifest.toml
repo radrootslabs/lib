@@ -42,6 +42,7 @@ published_support = [
 ]
 deferred_publication = [
   "radroots_types",
+  "radroots_authority",
   "radroots_event_store",
   "radroots_outbox",
   "radroots_relay_transport",

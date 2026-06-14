@@ -20,7 +20,6 @@ use radroots_events::order::{
     RadrootsOrderRequest, RadrootsOrderRevisionDecision, RadrootsOrderRevisionOutcome,
     RadrootsOrderRevisionProposal, RadrootsOrderSettlementDecision, RadrootsOrderSettlementOutcome,
 };
-use radroots_events_codec::order::RadrootsOrderListingAddress as OrderListingAddress;
 #[cfg(feature = "serde_json")]
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -912,17 +911,14 @@ pub fn canonicalize_order_request_for_signer(
     }
 
     let seller_pubkey = request.seller_pubkey.clone();
-    if seller_pubkey.as_str() != listing_addr.seller_pubkey {
+    if seller_pubkey != listing_addr.seller_pubkey {
         return Err(RadrootsOrderCanonicalizationError::InvalidSellerListing);
     }
 
     canonicalize_items(&mut request.items)?;
     request.economics.canonicalize();
     request.order_id = order_id;
-    request.listing_addr =
-        RadrootsListingAddress::parse(listing_addr.as_str()).map_err(|error| {
-            RadrootsOrderCanonicalizationError::InvalidListingAddress(error.to_string())
-        })?;
+    request.listing_addr = listing_addr.address;
     request.buyer_pubkey = buyer_pubkey;
     request.seller_pubkey = seller_pubkey;
     Ok(request)
@@ -937,9 +933,7 @@ pub fn canonicalize_order_decision_for_signer(
     let listing_addr = parse_public_listing_addr(&listing_addr_raw)?;
 
     let seller_pubkey = decision_event.seller_pubkey.clone();
-    if seller_pubkey.as_str() != signer_pubkey
-        || seller_pubkey.as_str() != listing_addr.seller_pubkey
-    {
+    if seller_pubkey.as_str() != signer_pubkey || seller_pubkey != listing_addr.seller_pubkey {
         return Err(RadrootsOrderCanonicalizationError::InvalidSellerListing);
     }
 
@@ -947,10 +941,7 @@ pub fn canonicalize_order_decision_for_signer(
     canonicalize_decision(&mut decision_event.decision)?;
 
     decision_event.order_id = order_id;
-    decision_event.listing_addr =
-        RadrootsListingAddress::parse(listing_addr.as_str()).map_err(|error| {
-            RadrootsOrderCanonicalizationError::InvalidListingAddress(error.to_string())
-        })?;
+    decision_event.listing_addr = listing_addr.address;
     decision_event.buyer_pubkey = buyer_pubkey;
     decision_event.seller_pubkey = seller_pubkey;
     Ok(decision_event)
@@ -3344,16 +3335,37 @@ fn invalid_projection_with_payment(
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct RadrootsPublicListingAddressParts {
+    address: RadrootsListingAddress,
+    seller_pubkey: RadrootsPublicKey,
+}
+
 fn parse_public_listing_addr(
     listing_addr_raw: &str,
-) -> Result<OrderListingAddress, RadrootsOrderCanonicalizationError> {
-    let listing_addr = OrderListingAddress::parse(listing_addr_raw).map_err(|error| {
+) -> Result<RadrootsPublicListingAddressParts, RadrootsOrderCanonicalizationError> {
+    let address = RadrootsListingAddress::parse(listing_addr_raw).map_err(|error| {
         RadrootsOrderCanonicalizationError::InvalidListingAddress(error.to_string())
     })?;
-    if u32::from(listing_addr.kind) != KIND_LISTING {
+    let (kind_raw, seller_and_listing) = address.as_str().split_once(':').ok_or_else(|| {
+        RadrootsOrderCanonicalizationError::InvalidListingAddress(listing_addr_raw.to_string())
+    })?;
+    let (seller_pubkey_raw, _) = seller_and_listing.split_once(':').ok_or_else(|| {
+        RadrootsOrderCanonicalizationError::InvalidListingAddress(listing_addr_raw.to_string())
+    })?;
+    let kind = kind_raw.parse::<u32>().map_err(|_| {
+        RadrootsOrderCanonicalizationError::InvalidListingAddress(listing_addr_raw.to_string())
+    })?;
+    if kind != KIND_LISTING {
         return Err(RadrootsOrderCanonicalizationError::InvalidListingKind);
     }
-    Ok(listing_addr)
+    let seller_pubkey = RadrootsPublicKey::parse(seller_pubkey_raw).map_err(|error| {
+        RadrootsOrderCanonicalizationError::InvalidListingAddress(error.to_string())
+    })?;
+    Ok(RadrootsPublicListingAddressParts {
+        address,
+        seller_pubkey,
+    })
 }
 
 fn canonicalize_items(

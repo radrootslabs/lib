@@ -126,7 +126,7 @@ Examples:
 - `RadrootsSignedNostrEvent`
 - `RadrootsNostrEvent`
 - `RadrootsNostrEventRef`
-- `RadrootsOrderListingAddress`
+- `RadrootsListingAddress`
 
 ### 3. Shared Errors
 
@@ -341,7 +341,7 @@ Input:
 
 Output:
 
-- `RadrootsOrderListingAddress`
+- `RadrootsListingAddress`
 
 Determinism:
 
@@ -381,7 +381,7 @@ Recommended Tier 1 shared types:
 - `RadrootsNostrEvent`
 - `RadrootsNostrEventRef`
 - `RadrootsNostrEventPtr`
-- `RadrootsOrderListingAddress`
+- `RadrootsListingAddress`
 - public model types required by Tier 1 operations:
 - `RadrootsProfile`
 - `RadrootsFarm`
@@ -509,7 +509,7 @@ public = [
   "RadrootsNostrEvent",
   "RadrootsNostrEventRef",
   "RadrootsNostrEventPtr",
-  "RadrootsOrderListingAddress",
+  "RadrootsListingAddress",
   "RadrootsProfile",
   "RadrootsFarm",
   "RadrootsListing",
@@ -618,7 +618,7 @@ networking = "native"
 "RadrootsFrozenEventDraft" = "RadrootsFrozenEventDraft"
 "RadrootsSignedNostrEvent" = "RadrootsSignedNostrEvent"
 "RadrootsNostrEvent" = "RadrootsNostrEvent"
-"RadrootsOrderListingAddress" = "OrderListingAddress"
+"RadrootsListingAddress" = "ListingAddress"
 
 [artifacts]
 models_dir = "src/generated"

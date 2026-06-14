@@ -4,8 +4,8 @@ use alloc::{borrow::ToOwned, format, string::String, vec::Vec};
 #[cfg(feature = "serde_json")]
 use radroots_events::{
     RadrootsNostrEvent, RadrootsNostrEventPtr,
-    ids::{RadrootsEventId, RadrootsPublicKey},
-    kinds::{KIND_PROFILE, is_order_event_kind},
+    ids::{RadrootsEventId, RadrootsIdParseError, RadrootsListingAddress, RadrootsPublicKey},
+    kinds::is_order_event_kind,
     order::{
         RadrootsOrderCancellation, RadrootsOrderDecision, RadrootsOrderEnvelope,
         RadrootsOrderEnvelopeError, RadrootsOrderEventType, RadrootsOrderFulfillmentUpdate,
@@ -18,8 +18,6 @@ use radroots_events::{
 #[cfg(feature = "serde_json")]
 use serde::de::DeserializeOwned;
 
-#[cfg(feature = "serde_json")]
-use crate::d_tag::is_d_tag_base64url;
 #[cfg(feature = "serde_json")]
 use crate::order::tags::{
     TAG_LISTING_EVENT, parse_order_counterparty_tag, parse_order_listing_event_tag,
@@ -44,7 +42,7 @@ pub enum RadrootsOrderEnvelopeParseError {
     PayloadBindingMismatch(&'static str),
     AuthorMismatch,
     CounterpartyTagMismatch,
-    InvalidListingAddr(RadrootsOrderListingAddressError),
+    InvalidListingAddr(RadrootsIdParseError),
 }
 
 #[cfg(feature = "serde_json")]
@@ -104,69 +102,6 @@ pub struct RadrootsOrderEventContext {
 }
 
 #[cfg(feature = "serde_json")]
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsOrderListingAddress {
-    pub kind: u32,
-    pub seller_pubkey: String,
-    pub listing_id: String,
-}
-
-#[cfg(feature = "serde_json")]
-impl RadrootsOrderListingAddress {
-    pub fn parse(addr: &str) -> Result<Self, RadrootsOrderListingAddressError> {
-        let (kind_raw, seller_and_listing) = addr
-            .split_once(':')
-            .ok_or(RadrootsOrderListingAddressError::InvalidFormat)?;
-        let (seller_pubkey_raw, listing_id_raw) = seller_and_listing
-            .split_once(':')
-            .ok_or(RadrootsOrderListingAddressError::InvalidFormat)?;
-        if listing_id_raw.contains(':') {
-            return Err(RadrootsOrderListingAddressError::InvalidFormat);
-        }
-        let kind = kind_raw
-            .parse::<u32>()
-            .map_err(|_| RadrootsOrderListingAddressError::InvalidFormat)?;
-        let seller_pubkey = seller_pubkey_raw.to_owned();
-        let listing_id = listing_id_raw.to_owned();
-        if kind == KIND_PROFILE
-            || seller_pubkey.trim().is_empty()
-            || listing_id.trim().is_empty()
-            || !is_d_tag_base64url(&listing_id)
-        {
-            return Err(RadrootsOrderListingAddressError::InvalidFormat);
-        }
-        Ok(Self {
-            kind,
-            seller_pubkey,
-            listing_id,
-        })
-    }
-
-    #[inline]
-    pub fn as_str(&self) -> String {
-        format!("{}:{}:{}", self.kind, self.seller_pubkey, self.listing_id)
-    }
-}
-
-#[cfg(feature = "serde_json")]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RadrootsOrderListingAddressError {
-    InvalidFormat,
-}
-
-#[cfg(feature = "serde_json")]
-impl core::fmt::Display for RadrootsOrderListingAddressError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::InvalidFormat => write!(f, "invalid listing address format"),
-        }
-    }
-}
-
-#[cfg(all(feature = "std", feature = "serde_json"))]
-impl std::error::Error for RadrootsOrderListingAddressError {}
-
-#[cfg(feature = "serde_json")]
 pub fn order_envelope_from_event<T: DeserializeOwned>(
     event: &RadrootsNostrEvent,
 ) -> Result<RadrootsOrderEnvelope<T>, RadrootsOrderEnvelopeParseError> {
@@ -189,7 +124,7 @@ pub fn order_envelope_from_event<T: DeserializeOwned>(
     if envelope.listing_addr != listing_addr {
         return Err(RadrootsOrderEnvelopeParseError::ListingAddrTagMismatch);
     }
-    RadrootsOrderListingAddress::parse(&envelope.listing_addr)
+    RadrootsListingAddress::parse(&envelope.listing_addr)
         .map_err(RadrootsOrderEnvelopeParseError::InvalidListingAddr)?;
 
     let tag_order_id = required_order_tag_value(&event.tags, TAG_D)?;
@@ -603,11 +538,11 @@ fn validate_order_binding<T>(
 #[cfg(all(test, feature = "serde_json"))]
 mod tests {
     use super::{
-        RadrootsOrderEnvelopeParseError, RadrootsOrderListingAddress,
-        order_cancellation_from_event, order_decision_from_event, order_envelope_from_event,
-        order_fulfillment_update_from_event, order_payment_record_from_event,
-        order_receipt_from_event, order_request_from_event, order_revision_decision_from_event,
-        order_revision_proposal_from_event, order_settlement_decision_from_event,
+        RadrootsOrderEnvelopeParseError, order_cancellation_from_event, order_decision_from_event,
+        order_envelope_from_event, order_fulfillment_update_from_event,
+        order_payment_record_from_event, order_receipt_from_event, order_request_from_event,
+        order_revision_decision_from_event, order_revision_proposal_from_event,
+        order_settlement_decision_from_event,
     };
     use crate::order::encode::{
         order_cancellation_event_build, order_decision_event_build,
@@ -896,8 +831,8 @@ mod tests {
 
     #[test]
     fn listing_address_roundtrips() {
-        let raw = format!("30402:{}:AAAAAAAAAAAAAAAAAAAAAg", seller_pubkey_wire());
-        let addr = RadrootsOrderListingAddress::parse(&raw).expect("parse listing address");
+        let raw = format!("30402:{}:listing-1", seller_pubkey_wire());
+        let addr = RadrootsListingAddress::parse(&raw).expect("parse listing address");
         assert_eq!(addr.as_str(), raw);
     }
 

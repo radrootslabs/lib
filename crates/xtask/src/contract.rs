@@ -4349,7 +4349,7 @@ public = [
   "RadrootsNostrEvent",
   "RadrootsNostrEventRef",
   "RadrootsNostrEventPtr",
-  "RadrootsOrderListingAddress",
+  "RadrootsListingAddress",
   "RadrootsProfile",
   "RadrootsFarm",
   "RadrootsListing",

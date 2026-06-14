@@ -14,7 +14,7 @@ public = [
   "RadrootsNostrEvent",
   "RadrootsNostrEventRef",
   "RadrootsNostrEventPtr",
-  "RadrootsOrderListingAddress",
+  "RadrootsListingAddress",
   "RadrootsProfile",
   "RadrootsFarm",
   "RadrootsListing",
@@ -368,7 +368,7 @@ domain = "order"
 id = "order.parse_listing_address"
 stability = "beta"
 inputs = ["listing_addr"]
-outputs = ["RadrootsOrderListingAddress"]
+outputs = ["RadrootsListingAddress"]
 error_class = "address_error"
 deterministic = true
 signing = "native"
@@ -377,7 +377,7 @@ transport = "native"
 [operations.order_parse_listing_address.implementation]
 rust_modules = ["crates/events_codec/src/order/decode.rs"]
 rust_types = [
-  "radroots_events_codec::order::decode::RadrootsOrderListingAddress",
+  "radroots_events::ids::RadrootsListingAddress",
 ]
 
 [operations.order_parse_listing_address.conformance]
