@@ -37,7 +37,7 @@ impl RadrootsListingDraftDocumentV1 {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsCanonicalListingDraft {
     listing: RadrootsListing,
@@ -264,6 +264,21 @@ mod tests {
 
         assert_eq!(document.listing.d_tag.as_str(), "AAAAAAAAAAAAAAAAAAAAAg");
         assert_eq!(document.listing.product.title, "Coffee");
+    }
+
+    #[cfg(feature = "serde_json")]
+    #[test]
+    fn draft_document_deserializes_as_untrusted_input() {
+        let json = serde_json::to_string(&RadrootsListingDraftDocumentV1::new(listing()))
+            .expect("serialize document");
+
+        let document: RadrootsListingDraftDocumentV1 =
+            serde_json::from_str(&json).expect("deserialize document");
+        let canonical =
+            canonicalize_listing_draft(&seller_actor(), document).expect("canonical draft");
+
+        assert_eq!(canonical.seller_pubkey().as_str(), SELLER);
+        assert_eq!(canonical.listing().product.title, "Coffee");
     }
 
     #[test]
