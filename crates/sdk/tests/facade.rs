@@ -15,7 +15,9 @@ use radroots_events::order::{
     RadrootsOrderPricingBasis, RadrootsOrderRequest,
 };
 use radroots_events::profile::{RadrootsProfile, RadrootsProfileType};
-use radroots_sdk::{RadrootsNostrEvent, RadrootsNostrEventPtr, farm, listing, order, profile};
+use radroots_sdk::protocol::{
+    RadrootsNostrEvent, RadrootsNostrEventPtr, farm, listing, order, profile,
+};
 
 fn sample_profile() -> RadrootsProfile {
     RadrootsProfile {

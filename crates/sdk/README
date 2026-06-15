@@ -1,18 +1,22 @@
 # radroots_sdk
 
-Curated Rad Roots Rust SDK for the public marketplace event contract.
+Curated Rad Roots Rust SDK for local-first Rad Roots product workflows.
 
-This crate provides the recommended Rust entrypoint for building, parsing, and
-validating Rad Roots profile, farm, listing, and trade events. It is a thin
-facade over the underlying `rr-rs` substrate crates and does not duplicate the
-core event or trade implementations.
+The SDK v1 product runtime is centered on `RadrootsSdk::builder()`,
+`sdk.listings()`, `sdk.sync()`, and `sdk.orders()`. Product callers use the
+runtime clients to prepare listing publishes, enqueue signed local mutations,
+push the signed outbox through an explicit relay transport adapter, and read
+local order status projections.
 
-The deterministic event contract lives at the crate root:
+Low-level event-contract and transport helpers are intentionally scoped under
+`protocol`:
 
-- `profile`
-- `farm`
-- `listing`
-- `trade`
+- `protocol::profile`
+- `protocol::farm`
+- `protocol::listing`
+- `protocol::order`
+- `protocol::client`
+- `protocol::config`
 
 Optional advanced substrate is explicitly feature-scoped:
 

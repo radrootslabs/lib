@@ -22,7 +22,7 @@ use radroots_events::order::{
     RadrootsOrderRevisionDecision, RadrootsOrderRevisionOutcome, RadrootsOrderRevisionProposal,
 };
 use radroots_events::profile::{RadrootsProfile, RadrootsProfileType};
-use radroots_sdk::{
+use radroots_sdk::protocol::{
     RADROOTS_SDK_PRODUCTION_RELAY_URL, RadrootsNostrEvent, RadrootsNostrEventPtr,
     RadrootsSdkClient, RadrootsSdkConfig, RelayConfig, SdkConfigError, SdkEnvironment,
     SdkPublishError, SdkRadrootsdPublishReceipt, SdkRelayFailure, SdkResolvedTransportTarget,

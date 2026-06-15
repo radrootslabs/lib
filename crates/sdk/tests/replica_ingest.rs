@@ -1,7 +1,7 @@
 use radroots_replica_db::ReplicaSql;
 use radroots_replica_db_schema::farm::IFarmFindMany;
 use radroots_replica_sync::{RadrootsReplicaIngestOutcome, radroots_replica_ingest_event};
-use radroots_sdk::{RadrootsFarm, RadrootsNostrEvent, farm};
+use radroots_sdk::protocol::{RadrootsFarm, RadrootsNostrEvent, farm};
 use radroots_sql_core::{SqlExecutor, SqliteExecutor};
 use tempfile::{TempDir, tempdir};
 

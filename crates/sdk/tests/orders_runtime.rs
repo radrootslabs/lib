@@ -13,8 +13,9 @@ use radroots_nostr::prelude::{
     RadrootsNostrKeys, RadrootsNostrSecretKey, RadrootsNostrTimestamp, radroots_event_from_nostr,
     radroots_nostr_build_event,
 };
-use radroots_sdk::WireEventParts;
-use radroots_sdk::order::{
+use radroots_sdk::protocol::RadrootsNostrEventPtr;
+use radroots_sdk::protocol::WireEventParts;
+use radroots_sdk::protocol::order::{
     RadrootsListingAddress, RadrootsOrderDecision, RadrootsOrderDecisionOutcome,
     RadrootsOrderEconomicItem, RadrootsOrderEconomicLine, RadrootsOrderEconomics,
     RadrootsOrderInventoryCommitment, RadrootsOrderItem, RadrootsOrderPricingBasis,
@@ -22,8 +23,8 @@ use radroots_sdk::order::{
 };
 use radroots_sdk::{
     ORDER_STATUS_DEFAULT_LIMIT, ORDER_STATUS_MAX_LIMIT, OrderPaymentStateKind,
-    OrderSettlementStateKind, OrderStatusKind, OrderStatusRequest, RadrootsNostrEventPtr,
-    RadrootsSdk, RadrootsSdkError, RadrootsSdkTimestamp,
+    OrderSettlementStateKind, OrderStatusKind, OrderStatusRequest, RadrootsSdk, RadrootsSdkError,
+    RadrootsSdkTimestamp,
 };
 
 const BUYER_SECRET_KEY_HEX: &str =
@@ -163,7 +164,7 @@ fn signed_event(
 }
 
 fn signed_order_request_event(raw_order_id: &str, created_at: u32) -> RadrootsNostrEvent {
-    let draft = radroots_sdk::order::build_order_request_draft(
+    let draft = radroots_sdk::protocol::order::build_order_request_draft(
         &listing_event_ptr(),
         &order_request(raw_order_id),
     )
@@ -176,7 +177,7 @@ fn signed_order_decision_event(
     root_event_id: &RadrootsEventId,
     created_at: u32,
 ) -> RadrootsNostrEvent {
-    let draft = radroots_sdk::order::build_order_decision_draft(
+    let draft = radroots_sdk::protocol::order::build_order_decision_draft(
         root_event_id,
         root_event_id,
         &order_decision(raw_order_id),

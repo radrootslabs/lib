@@ -9,21 +9,21 @@ use radroots_events::ids::RadrootsPublicKey;
 use radroots_events::kinds::{
     KIND_FARM, KIND_LISTING, KIND_LISTING_DRAFT, KIND_ORDER_REQUEST, KIND_PROFILE,
 };
-use radroots_sdk::adapters::radrootsd::{
+use radroots_sdk::protocol::adapters::radrootsd::{
     SdkRadrootsdBridgeJob, SdkRadrootsdBridgePublishResponse, SdkRadrootsdListingPublishRequest,
     SdkRadrootsdSignerAuthority, SdkRadrootsdSignerSessionConnectRequest,
     SdkRadrootsdSignerSessionMode,
 };
-use radroots_sdk::listing::{
+use radroots_sdk::protocol::listing::{
     RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
     RadrootsListingDeliveryMethod, RadrootsListingLocation, RadrootsListingParseError,
     RadrootsListingProduct, RadrootsListingStatus,
 };
-use radroots_sdk::order::{
+use radroots_sdk::protocol::order::{
     RadrootsOrderEconomicItem, RadrootsOrderEconomicLine, RadrootsOrderEconomics,
     RadrootsOrderItem, RadrootsOrderPricingBasis, RadrootsOrderRequest,
 };
-use radroots_sdk::{
+use radroots_sdk::protocol::{
     RadrootsNostrEvent, RadrootsNostrEventPtr, RadrootsProfile, RadrootsProfileType,
     RadrootsSdkClient, RadrootsSdkConfig, RadrootsdAuth, RadrootsdConfig, SdkConfigError,
     SdkEnvironment, SdkPublishError, SdkRadrootsdBridgeDeliveryPolicy, SdkRadrootsdBridgeError,
@@ -479,7 +479,7 @@ fn listing_event_ptr_with_relays(relays: Option<&str>) -> RadrootsNostrEventPtr 
 fn sdk_event(
     author: &str,
     created_at: u32,
-    draft: radroots_sdk::listing::RadrootsListingDraft,
+    draft: radroots_sdk::protocol::listing::RadrootsListingDraft,
 ) -> RadrootsNostrEvent {
     let parts = draft.into_wire_parts();
     RadrootsNostrEvent {
@@ -1939,7 +1939,7 @@ async fn radrootsd_bridge_status_rejects_relay_transport_mode() -> TestResult<()
 
 #[test]
 fn radrootsd_listing_request_from_event_rejects_listing_draft_kind() -> TestResult<()> {
-    let draft = radroots_sdk::listing::build_draft(&sample_listing())?;
+    let draft = radroots_sdk::protocol::listing::build_draft(&sample_listing())?;
     let mut event = sdk_event("seller", 1_720_000_000, draft);
     event.kind = KIND_LISTING_DRAFT;
 
