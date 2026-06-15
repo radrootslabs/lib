@@ -115,14 +115,14 @@ pub fn validate_signed_event_matches_draft(
     }
     if signed_event.tags != draft.tags {
         return Err(RadrootsAuthorityError::SignedEventTagsMismatch {
-            expected_tags: draft.tags.clone(),
-            actual_tags: signed_event.tags.clone(),
+            expected_len: draft.tags.len(),
+            actual_len: signed_event.tags.len(),
         });
     }
     if signed_event.content != draft.content {
         return Err(RadrootsAuthorityError::SignedEventContentMismatch {
-            expected_content: draft.content.clone(),
-            actual_content: signed_event.content.clone(),
+            expected_len: draft.content.len(),
+            actual_len: signed_event.content.len(),
         });
     }
     let computed_event_id = compute_nip01_event_id(
@@ -422,10 +422,17 @@ mod tests {
             },
         );
 
-        assert!(matches!(
-            sign_authorized_draft(&actor, &signer, &draft),
-            Err(RadrootsAuthorityError::SignedEventTagsMismatch { .. })
-        ));
+        let error = sign_authorized_draft(&actor, &signer, &draft).unwrap_err();
+
+        assert_eq!(
+            error,
+            RadrootsAuthorityError::SignedEventTagsMismatch {
+                expected_len: 1,
+                actual_len: 1
+            }
+        );
+        assert!(!format!("{error:?}").contains("listing-b"));
+        assert!(!error.to_string().contains("listing-b"));
     }
 
     #[test]
@@ -441,10 +448,17 @@ mod tests {
             },
         );
 
-        assert!(matches!(
-            sign_authorized_draft(&actor, &signer, &draft),
-            Err(RadrootsAuthorityError::SignedEventContentMismatch { .. })
-        ));
+        let error = sign_authorized_draft(&actor, &signer, &draft).unwrap_err();
+
+        assert_eq!(
+            error,
+            RadrootsAuthorityError::SignedEventContentMismatch {
+                expected_len: 2,
+                actual_len: 16
+            }
+        );
+        assert!(!format!("{error:?}").contains("changed"));
+        assert!(!error.to_string().contains("changed"));
     }
 
     #[test]

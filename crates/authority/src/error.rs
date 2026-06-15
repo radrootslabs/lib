@@ -3,9 +3,9 @@
 use core::fmt;
 
 #[cfg(not(feature = "std"))]
-use alloc::{string::String, vec::Vec};
+use alloc::string::String;
 #[cfg(feature = "std")]
-use std::{string::String, vec::Vec};
+use std::string::String;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum RadrootsAuthorityError {
@@ -69,13 +69,13 @@ pub enum RadrootsAuthorityError {
     },
 
     SignedEventTagsMismatch {
-        expected_tags: Vec<Vec<String>>,
-        actual_tags: Vec<Vec<String>>,
+        expected_len: usize,
+        actual_len: usize,
     },
 
     SignedEventContentMismatch {
-        expected_content: String,
-        actual_content: String,
+        expected_len: usize,
+        actual_len: usize,
     },
 
     SignedEventComputedIdInvalid {
@@ -172,15 +172,19 @@ impl fmt::Display for RadrootsAuthorityError {
                 "signed event kind mismatch: expected {expected_kind}, got {actual_kind}"
             ),
             Self::SignedEventTagsMismatch {
-                expected_tags,
-                actual_tags,
+                expected_len,
+                actual_len,
             } => write!(
                 f,
-                "signed event tags mismatch: expected {expected_tags:?}, got {actual_tags:?}"
+                "signed event tags mismatch: expected {expected_len} tags, got {actual_len} tags"
             ),
-            Self::SignedEventContentMismatch { .. } => {
-                write!(f, "signed event content mismatch")
-            }
+            Self::SignedEventContentMismatch {
+                expected_len,
+                actual_len,
+            } => write!(
+                f,
+                "signed event content mismatch: expected {expected_len} bytes, got {actual_len} bytes"
+            ),
             Self::SignedEventComputedIdInvalid { message } => {
                 write!(
                     f,
@@ -259,11 +263,19 @@ mod tests {
         );
         assert_eq!(
             RadrootsAuthorityError::SignedEventTagsMismatch {
-                expected_tags: vec![vec!["t".to_owned(), "soil".to_owned()]],
-                actual_tags: vec![vec!["t".to_owned(), "seed".to_owned()]],
+                expected_len: 2,
+                actual_len: 1,
             }
             .to_string(),
-            "signed event tags mismatch: expected [[\"t\", \"soil\"]], got [[\"t\", \"seed\"]]"
+            "signed event tags mismatch: expected 2 tags, got 1 tags"
+        );
+        assert_eq!(
+            RadrootsAuthorityError::SignedEventContentMismatch {
+                expected_len: 17,
+                actual_len: 2,
+            }
+            .to_string(),
+            "signed event content mismatch: expected 17 bytes, got 2 bytes"
         );
     }
 
