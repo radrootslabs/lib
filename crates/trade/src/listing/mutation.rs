@@ -1,8 +1,10 @@
 //! Mutation draft preparation for Radroots Listing v1.
 //!
-//! Publish and update produce the stable public listing event, save-draft
-//! produces the stable listing-draft event, and archive remains unsupported
-//! because Listing v1 has no archive wire event.
+//! Publish and update produce the stable public NIP-99 listing-kind event with
+//! Radroots-specific JSON content, save-draft produces the stable listing-draft
+//! event, and archive remains unsupported because Listing v1 has no archive
+//! wire event. Strict NIP-99 Markdown-content interoperability is protocol-v2
+//! work.
 
 #![forbid(unsafe_code)]
 
