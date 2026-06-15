@@ -108,8 +108,8 @@ impl RadrootsListingMutation {
 
     pub fn listing_addr(&self) -> Result<&RadrootsListingAddress, RadrootsListingMutationError> {
         match self {
-            Self::Publish { draft } | Self::Update { draft } => Ok(&draft.public_listing_addr),
-            Self::SaveDraft { draft } => Ok(&draft.draft_listing_addr),
+            Self::Publish { draft } | Self::Update { draft } => Ok(draft.public_listing_addr()),
+            Self::SaveDraft { draft } => Ok(draft.draft_listing_addr()),
             Self::Archive { .. } => Err(RadrootsListingMutationError::UnsupportedMutation),
         }
     }
@@ -131,10 +131,15 @@ pub fn build_listing_mutation_draft(
             return Err(RadrootsListingMutationError::UnsupportedMutation);
         }
     };
-    let parts = to_wire_parts_with_kind(&draft.listing, kind)
+    let parts = to_wire_parts_with_kind(draft.listing(), kind)
         .map_err(|error| RadrootsListingMutationError::EncodeListing(error.to_string()))?;
-    to_frozen_draft(parts, contract_id, draft.seller_pubkey.as_str(), created_at)
-        .map_err(RadrootsListingMutationError::FrozenDraft)
+    to_frozen_draft(
+        parts,
+        contract_id,
+        draft.seller_pubkey().as_str(),
+        created_at,
+    )
+    .map_err(RadrootsListingMutationError::FrozenDraft)
 }
 
 #[cfg(test)]
@@ -273,22 +278,34 @@ mod tests {
         let save_draft = RadrootsListingMutation::save_draft(canonical_draft());
 
         assert_eq!(
-            publish.canonical_draft().expect("draft").seller_pubkey,
+            publish
+                .canonical_draft()
+                .expect("draft")
+                .seller_pubkey()
+                .as_str(),
             SELLER
         );
         assert_eq!(
-            update.canonical_draft().expect("draft").seller_pubkey,
+            update
+                .canonical_draft()
+                .expect("draft")
+                .seller_pubkey()
+                .as_str(),
             SELLER
         );
         assert_eq!(
-            save_draft.canonical_draft().expect("draft").seller_pubkey,
+            save_draft
+                .canonical_draft()
+                .expect("draft")
+                .seller_pubkey()
+                .as_str(),
             SELLER
         );
         assert_eq!(
             publish
                 .canonical_draft()
                 .expect("draft")
-                .listing
+                .listing()
                 .d_tag
                 .as_str(),
             "AAAAAAAAAAAAAAAAAAAAAg"

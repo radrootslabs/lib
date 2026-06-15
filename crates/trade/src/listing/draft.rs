@@ -39,10 +39,10 @@ impl RadrootsListingDraftDocumentV1 {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsCanonicalListingDraft {
-    pub listing: RadrootsListing,
-    pub seller_pubkey: RadrootsPublicKey,
-    pub public_listing_addr: RadrootsListingAddress,
-    pub draft_listing_addr: RadrootsListingAddress,
+    listing: RadrootsListing,
+    seller_pubkey: RadrootsPublicKey,
+    public_listing_addr: RadrootsListingAddress,
+    draft_listing_addr: RadrootsListingAddress,
 }
 
 impl RadrootsCanonicalListingDraft {
@@ -72,6 +72,22 @@ impl RadrootsCanonicalListingDraft {
             public_listing_addr,
             draft_listing_addr,
         })
+    }
+
+    pub fn listing(&self) -> &RadrootsListing {
+        &self.listing
+    }
+
+    pub fn seller_pubkey(&self) -> &RadrootsPublicKey {
+        &self.seller_pubkey
+    }
+
+    pub fn public_listing_addr(&self) -> &RadrootsListingAddress {
+        &self.public_listing_addr
+    }
+
+    pub fn draft_listing_addr(&self) -> &RadrootsListingAddress {
+        &self.draft_listing_addr
     }
 }
 
@@ -257,16 +273,16 @@ mod tests {
         let canonical =
             RadrootsCanonicalListingDraft::new(listing, seller_pubkey.clone()).expect("canonical");
 
-        assert_eq!(canonical.seller_pubkey, seller_pubkey);
+        assert_eq!(canonical.seller_pubkey(), &seller_pubkey);
         assert_eq!(
-            canonical.public_listing_addr.as_str(),
+            canonical.public_listing_addr().as_str(),
             format!("{KIND_LISTING}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg")
         );
         assert_eq!(
-            canonical.draft_listing_addr.as_str(),
+            canonical.draft_listing_addr().as_str(),
             format!("{KIND_LISTING_DRAFT}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg")
         );
-        assert_eq!(canonical.listing.d_tag.as_str(), "AAAAAAAAAAAAAAAAAAAAAg");
+        assert_eq!(canonical.listing().d_tag.as_str(), "AAAAAAAAAAAAAAAAAAAAAg");
     }
 
     #[test]
@@ -294,16 +310,16 @@ mod tests {
         let canonical =
             canonicalize_listing_draft(&seller_actor(), document).expect("canonical draft");
 
-        assert_eq!(canonical.seller_pubkey.as_str(), SELLER);
+        assert_eq!(canonical.seller_pubkey().as_str(), SELLER);
         assert_eq!(
-            canonical.public_listing_addr.as_str(),
+            canonical.public_listing_addr().as_str(),
             format!("{KIND_LISTING}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg")
         );
         assert_eq!(
-            canonical.draft_listing_addr.as_str(),
+            canonical.draft_listing_addr().as_str(),
             format!("{KIND_LISTING_DRAFT}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg")
         );
-        assert_eq!(canonical.listing.farm.pubkey, SELLER);
+        assert_eq!(canonical.listing().farm.pubkey, SELLER);
     }
 
     #[test]
