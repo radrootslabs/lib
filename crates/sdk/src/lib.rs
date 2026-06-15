@@ -24,6 +24,8 @@ pub mod farm;
 #[cfg(feature = "identity-models")]
 pub mod identity;
 pub mod listing;
+#[cfg(feature = "runtime")]
+mod listings_runtime;
 pub mod order;
 #[cfg(feature = "runtime")]
 mod product_clients;
@@ -66,6 +68,10 @@ pub use crate::config::{
 #[cfg(feature = "runtime")]
 pub use crate::error::{
     RadrootsSdkError, RadrootsSdkPartialLocalMutationError, RadrootsSdkRecoveryAction,
+};
+#[cfg(feature = "runtime")]
+pub use crate::listings_runtime::{
+    ListingEnqueueReceipt, ListingPublishRequest, PreparedListingPublish,
 };
 #[cfg(feature = "runtime")]
 pub use crate::product_clients::{ListingsClient, OrdersClient, SyncClient};

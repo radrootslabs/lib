@@ -25,6 +25,8 @@ pub enum RadrootsSdkError {
     TimestampOutOfRange { value: u64 },
     Authority { message: String },
     EventStore { message: String },
+    ListingDraft { message: String },
+    ListingMutation { message: String },
     Outbox { message: String },
     RelayTransport { message: String },
     Projection { message: String },
@@ -62,6 +64,10 @@ impl fmt::Display for RadrootsSdkError {
             }
             Self::Authority { message } => write!(f, "sdk authority error: {message}"),
             Self::EventStore { message } => write!(f, "sdk event store error: {message}"),
+            Self::ListingDraft { message } => write!(f, "sdk listing draft error: {message}"),
+            Self::ListingMutation { message } => {
+                write!(f, "sdk listing mutation error: {message}")
+            }
             Self::Outbox { message } => write!(f, "sdk outbox error: {message}"),
             Self::RelayTransport { message } => {
                 write!(f, "sdk relay transport error: {message}")
@@ -92,6 +98,24 @@ impl From<radroots_authority::RadrootsAuthorityError> for RadrootsSdkError {
 impl From<radroots_event_store::RadrootsEventStoreError> for RadrootsSdkError {
     fn from(error: radroots_event_store::RadrootsEventStoreError) -> Self {
         Self::EventStore {
+            message: error.to_string(),
+        }
+    }
+}
+
+#[cfg(feature = "runtime")]
+impl From<radroots_trade::listing::RadrootsListingDraftError> for RadrootsSdkError {
+    fn from(error: radroots_trade::listing::RadrootsListingDraftError) -> Self {
+        Self::ListingDraft {
+            message: error.to_string(),
+        }
+    }
+}
+
+#[cfg(feature = "runtime")]
+impl From<radroots_trade::listing::RadrootsListingMutationError> for RadrootsSdkError {
+    fn from(error: radroots_trade::listing::RadrootsListingMutationError) -> Self {
+        Self::ListingMutation {
             message: error.to_string(),
         }
     }
