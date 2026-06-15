@@ -6,11 +6,13 @@ use crate::model::{
     RadrootsOutboxClaimedEvent, RadrootsOutboxEnqueueReceipt, RadrootsOutboxEnqueueStatus,
     RadrootsOutboxEventRecord, RadrootsOutboxEventState, RadrootsOutboxEventStoreIngestReceipt,
     RadrootsOutboxOperationInput, RadrootsOutboxOperationRecord, RadrootsOutboxOperationStatus,
-    RadrootsOutboxRelayStatus, RadrootsOutboxRelayStatusRecord,
+    RadrootsOutboxRelayStatus, RadrootsOutboxRelayStatusRecord, RadrootsOutboxSignedOperationInput,
 };
 use radroots_event_store::{RadrootsEventIngest, RadrootsEventStore};
 use radroots_events::RadrootsNostrEvent;
-use radroots_events::draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent};
+use radroots_events::draft::{
+    RadrootsFrozenEventDraft, RadrootsSignedNostrEvent, validate_signed_nostr_event_matches_draft,
+};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions, SqliteQueryResult};
@@ -137,6 +139,108 @@ impl RadrootsOutbox {
         .bind(RadrootsOutboxEventState::DraftQueued.as_str())
         .bind(accepted_quorum)
         .bind(input.created_at_ms)
+        .bind(input.created_at_ms)
+        .bind(input.created_at_ms)
+        .execute(&mut *tx)
+        .await?;
+        let outbox_event_id = event.last_insert_rowid();
+
+        for relay_url in target_relays {
+            sqlx::query(
+                "INSERT INTO outbox_event_relay_status(outbox_event_id, relay_url, status, attempt_count) VALUES (?, ?, ?, 0)",
+            )
+            .bind(outbox_event_id)
+            .bind(relay_url.as_str())
+            .bind(RadrootsOutboxRelayStatus::Pending.as_str())
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        tx.commit().await?;
+        Ok(RadrootsOutboxEnqueueReceipt {
+            status: RadrootsOutboxEnqueueStatus::Inserted,
+            operation_id,
+            outbox_event_id,
+            expected_event_id: input.draft.expected_event_id,
+            idempotency_digest: digest,
+        })
+    }
+
+    pub async fn enqueue_signed_operation(
+        &self,
+        input: RadrootsOutboxSignedOperationInput,
+    ) -> Result<RadrootsOutboxEnqueueReceipt, RadrootsOutboxError> {
+        validate_signed_nostr_event_matches_draft(&input.signed_event, &input.draft)?;
+        let target_relays = canonical_relays(input.target_relays);
+        if target_relays.is_empty() {
+            return Err(RadrootsOutboxError::EmptyTargetRelays);
+        }
+        let digest = idempotency_digest(
+            input.operation_kind.as_str(),
+            input.draft.expected_pubkey.as_str(),
+            &input.draft,
+            &target_relays,
+        )?;
+        let accepted_quorum = target_relays.len() as i64;
+        let mut tx = self.pool.begin().await?;
+
+        if let Some(idempotency_key) = input.idempotency_key.as_deref()
+            && let Some(existing) = existing_idempotent_operation(
+                &mut tx,
+                input.operation_kind.as_str(),
+                input.draft.expected_pubkey.as_str(),
+                idempotency_key,
+            )
+            .await?
+        {
+            if existing.idempotency_digest != digest {
+                return Err(RadrootsOutboxError::IdempotencyConflict {
+                    operation_kind: input.operation_kind,
+                    expected_pubkey: input.draft.expected_pubkey,
+                    idempotency_key: idempotency_key.to_owned(),
+                    existing_digest: existing.idempotency_digest,
+                    new_digest: digest,
+                });
+            }
+            tx.commit().await?;
+            return Ok(RadrootsOutboxEnqueueReceipt {
+                status: RadrootsOutboxEnqueueStatus::Existing,
+                operation_id: existing.operation_id,
+                outbox_event_id: existing.outbox_event_id,
+                expected_event_id: existing.event_id,
+                idempotency_digest: digest,
+            });
+        }
+
+        let operation = sqlx::query(
+            "INSERT INTO outbox_operation(operation_kind, expected_pubkey, idempotency_key, idempotency_digest, status, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(input.operation_kind.as_str())
+        .bind(input.draft.expected_pubkey.as_str())
+        .bind(input.idempotency_key.as_deref())
+        .bind(digest.as_str())
+        .bind(RadrootsOutboxOperationStatus::Queued.as_str())
+        .bind(input.created_at_ms)
+        .bind(input.created_at_ms)
+        .execute(&mut *tx)
+        .await?;
+        let operation_id = operation.last_insert_rowid();
+        let draft_json = serde_json::to_string(&input.draft)?;
+        let signed_event_json = serde_json::to_string(&input.signed_event)?;
+        let event = sqlx::query(
+            "INSERT INTO outbox_event(operation_id, event_id, expected_pubkey, draft_json, signed_event_json, raw_event_json, state, accepted_quorum, attempt_count, next_attempt_after_ms, event_store_ingested, event_store_inserted, event_store_ingested_at_ms, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 1, ?, ?, ?, ?)",
+        )
+        .bind(operation_id)
+        .bind(input.draft.expected_event_id.as_str())
+        .bind(input.draft.expected_pubkey.as_str())
+        .bind(draft_json.as_str())
+        .bind(signed_event_json.as_str())
+        .bind(input.signed_event.raw_json.as_str())
+        .bind(RadrootsOutboxEventState::Signed.as_str())
+        .bind(accepted_quorum)
+        .bind(input.created_at_ms)
+        .bind(bool_i64(input.event_store_inserted))
+        .bind(input.event_store_ingested_at_ms)
         .bind(input.created_at_ms)
         .bind(input.created_at_ms)
         .execute(&mut *tx)
@@ -1014,6 +1118,26 @@ mod tests {
         )
     }
 
+    fn signed_operation_input(
+        draft: RadrootsFrozenEventDraft,
+        signed_event: RadrootsSignedNostrEvent,
+        created_at_ms: i64,
+    ) -> RadrootsOutboxSignedOperationInput {
+        RadrootsOutboxSignedOperationInput::new(
+            "publish_post",
+            draft,
+            signed_event,
+            vec![
+                RELAY_PRIMARY_WSS.to_owned(),
+                RELAY_SECONDARY_WSS.to_owned(),
+                RELAY_PRIMARY_WSS.to_owned(),
+            ],
+            true,
+            created_at_ms + 7,
+            created_at_ms,
+        )
+    }
+
     fn fixture_keys() -> RadrootsNostrKeys {
         let secret_key =
             RadrootsNostrSecretKey::from_hex(FIXTURE_ALICE_SECRET_KEY_HEX).expect("secret key");
@@ -1286,6 +1410,151 @@ mod tests {
                 .await
                 .expect("zero quorum count");
         assert_eq!(zero_quorum_count, 0);
+    }
+
+    #[tokio::test]
+    async fn enqueue_signed_operation_stores_pushable_signed_event_without_claim() {
+        let outbox = RadrootsOutbox::open_memory().await.expect("open");
+        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "signed");
+        let signed_event =
+            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
+        let expected_raw_json = signed_event.raw_json.clone();
+
+        let receipt = outbox
+            .enqueue_signed_operation(
+                signed_operation_input(draft.clone(), signed_event.clone(), 1_000)
+                    .with_idempotency_key("signed-a"),
+            )
+            .await
+            .expect("signed enqueue");
+
+        assert_eq!(receipt.status, RadrootsOutboxEnqueueStatus::Inserted);
+        assert_eq!(receipt.expected_event_id, draft.expected_event_id);
+
+        let event = outbox
+            .get_event(receipt.outbox_event_id)
+            .await
+            .expect("event")
+            .expect("event");
+        assert_eq!(event.state, RadrootsOutboxEventState::Signed);
+        assert_eq!(event.signed_event, Some(signed_event.clone()));
+        assert_eq!(event.raw_event_json, Some(expected_raw_json));
+        assert!(event.event_store_ingested);
+        assert!(event.event_store_inserted);
+        assert_eq!(event.event_store_ingested_at_ms, Some(1_007));
+        assert_eq!(event.claim_token, None);
+        assert_eq!(event.claim_owner, None);
+        assert_eq!(event.claim_expires_at_ms, None);
+
+        let statuses = outbox
+            .relay_statuses(receipt.outbox_event_id)
+            .await
+            .expect("statuses");
+        assert_eq!(statuses.len(), 2);
+        assert!(
+            statuses
+                .iter()
+                .all(|status| status.status == RadrootsOutboxRelayStatus::Pending)
+        );
+
+        let claimed = outbox
+            .claim_next_ready_event("publisher-a", "claim-a", 2_000, 1_000)
+            .await
+            .expect("claim")
+            .expect("claimed");
+        assert_eq!(claimed.state, RadrootsOutboxEventState::Publishing);
+        assert_eq!(claimed.signed_event, Some(signed_event));
+        assert_eq!(
+            claimed.target_relays,
+            vec![RELAY_SECONDARY_WSS.to_owned(), RELAY_PRIMARY_WSS.to_owned()]
+        );
+    }
+
+    #[tokio::test]
+    async fn enqueue_signed_operation_idempotency_reuses_existing_signed_record() {
+        let outbox = RadrootsOutbox::open_memory().await.expect("open");
+        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "idem-signed");
+        let signed_event =
+            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
+
+        let first = outbox
+            .enqueue_signed_operation(
+                signed_operation_input(draft.clone(), signed_event.clone(), 1_000)
+                    .with_idempotency_key("signed-idem"),
+            )
+            .await
+            .expect("first");
+        let second = outbox
+            .enqueue_signed_operation(
+                signed_operation_input(draft.clone(), signed_event, 1_100)
+                    .with_idempotency_key("signed-idem"),
+            )
+            .await
+            .expect("second");
+
+        assert_eq!(first.status, RadrootsOutboxEnqueueStatus::Inserted);
+        assert_eq!(second.status, RadrootsOutboxEnqueueStatus::Existing);
+        assert_eq!(first.operation_id, second.operation_id);
+        assert_eq!(first.outbox_event_id, second.outbox_event_id);
+        assert_eq!(table_count(&outbox, "outbox_operation").await, 1);
+        assert_eq!(table_count(&outbox, "outbox_event").await, 1);
+
+        let changed_draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "changed");
+        let changed_signed =
+            radroots_nostr_sign_frozen_draft(&fixture_keys(), &changed_draft).expect("signed");
+        let conflict = outbox
+            .enqueue_signed_operation(
+                signed_operation_input(changed_draft, changed_signed, 1_200)
+                    .with_idempotency_key("signed-idem"),
+            )
+            .await
+            .expect_err("conflict");
+        assert!(matches!(
+            conflict,
+            RadrootsOutboxError::IdempotencyConflict { .. }
+        ));
+    }
+
+    #[tokio::test]
+    async fn enqueue_signed_operation_rejects_mismatched_signed_event() {
+        let outbox = RadrootsOutbox::open_memory().await.expect("open");
+        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "trusted");
+        let other_draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "other");
+        let signed_event =
+            radroots_nostr_sign_frozen_draft(&fixture_keys(), &other_draft).expect("signed event");
+
+        let error = outbox
+            .enqueue_signed_operation(signed_operation_input(draft, signed_event, 1_000))
+            .await
+            .expect_err("mismatch");
+
+        assert!(matches!(
+            error,
+            RadrootsOutboxError::SignedEventDraftMismatch(_)
+        ));
+        assert_eq!(table_count(&outbox, "outbox_operation").await, 0);
+        assert_eq!(table_count(&outbox, "outbox_event").await, 0);
+    }
+
+    #[tokio::test]
+    async fn enqueue_signed_operation_rejects_event_id_mismatch() {
+        let outbox = RadrootsOutbox::open_memory().await.expect("open");
+        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "bad-id");
+        let mut signed_event =
+            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
+        signed_event.id = hex_64('f');
+
+        let error = outbox
+            .enqueue_signed_operation(signed_operation_input(draft, signed_event, 1_000))
+            .await
+            .expect_err("mismatch");
+
+        assert!(matches!(
+            error,
+            RadrootsOutboxError::SignedEventDraftMismatch(_)
+        ));
+        assert_eq!(table_count(&outbox, "outbox_operation").await, 0);
+        assert_eq!(table_count(&outbox, "outbox_event").await, 0);
     }
 
     #[tokio::test]

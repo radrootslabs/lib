@@ -30,6 +30,34 @@ pub enum RadrootsDraftError {
         expected_kind: u32,
         actual_kind: u32,
     },
+    SignedEventPubkeyMismatch {
+        expected_pubkey: String,
+        actual_pubkey: String,
+    },
+    SignedEventIdMismatch {
+        expected_event_id: String,
+        actual_event_id: String,
+    },
+    SignedEventCreatedAtMismatch {
+        expected_created_at: u32,
+        actual_created_at: u32,
+    },
+    SignedEventKindMismatch {
+        expected_kind: u32,
+        actual_kind: u32,
+    },
+    SignedEventTagsMismatch {
+        expected_len: usize,
+        actual_len: usize,
+    },
+    SignedEventContentMismatch {
+        expected_len: usize,
+        actual_len: usize,
+    },
+    SignedEventComputedIdMismatch {
+        expected_event_id: String,
+        computed_event_id: String,
+    },
     IdParse(RadrootsIdParseError),
     JsonString(String),
 }
@@ -47,6 +75,55 @@ impl fmt::Display for RadrootsDraftError {
             } => write!(
                 f,
                 "event contract `{contract_id}` expects kind {expected_kind}, got {actual_kind}"
+            ),
+            Self::SignedEventPubkeyMismatch {
+                expected_pubkey,
+                actual_pubkey,
+            } => write!(
+                f,
+                "signed event pubkey mismatch: expected {expected_pubkey}, got {actual_pubkey}"
+            ),
+            Self::SignedEventIdMismatch {
+                expected_event_id,
+                actual_event_id,
+            } => write!(
+                f,
+                "signed event id mismatch: expected {expected_event_id}, got {actual_event_id}"
+            ),
+            Self::SignedEventCreatedAtMismatch {
+                expected_created_at,
+                actual_created_at,
+            } => write!(
+                f,
+                "signed event created_at mismatch: expected {expected_created_at}, got {actual_created_at}"
+            ),
+            Self::SignedEventKindMismatch {
+                expected_kind,
+                actual_kind,
+            } => write!(
+                f,
+                "signed event kind mismatch: expected {expected_kind}, got {actual_kind}"
+            ),
+            Self::SignedEventTagsMismatch {
+                expected_len,
+                actual_len,
+            } => write!(
+                f,
+                "signed event tags mismatch: expected {expected_len} tags, got {actual_len} tags"
+            ),
+            Self::SignedEventContentMismatch {
+                expected_len,
+                actual_len,
+            } => write!(
+                f,
+                "signed event content mismatch: expected {expected_len} bytes, got {actual_len} bytes"
+            ),
+            Self::SignedEventComputedIdMismatch {
+                expected_event_id,
+                computed_event_id,
+            } => write!(
+                f,
+                "signed event computed id mismatch: expected {expected_event_id}, computed {computed_event_id}"
             ),
             Self::IdParse(error) => write!(f, "{error}"),
             Self::JsonString(error) => write!(f, "json string serialization failed: {error}"),
@@ -187,6 +264,63 @@ impl RadrootsSignedNostrEvent {
             raw_json: raw_json.into(),
         })
     }
+}
+
+pub fn validate_signed_nostr_event_matches_draft(
+    signed_event: &RadrootsSignedNostrEvent,
+    draft: &RadrootsFrozenEventDraft,
+) -> Result<(), RadrootsDraftError> {
+    if signed_event.pubkey.as_str() != draft.expected_pubkey.as_str() {
+        return Err(RadrootsDraftError::SignedEventPubkeyMismatch {
+            expected_pubkey: draft.expected_pubkey.clone(),
+            actual_pubkey: signed_event.pubkey.clone(),
+        });
+    }
+    if signed_event.id.as_str() != draft.expected_event_id.as_str() {
+        return Err(RadrootsDraftError::SignedEventIdMismatch {
+            expected_event_id: draft.expected_event_id.clone(),
+            actual_event_id: signed_event.id.clone(),
+        });
+    }
+    if signed_event.created_at != draft.created_at {
+        return Err(RadrootsDraftError::SignedEventCreatedAtMismatch {
+            expected_created_at: draft.created_at,
+            actual_created_at: signed_event.created_at,
+        });
+    }
+    if signed_event.kind != draft.kind {
+        return Err(RadrootsDraftError::SignedEventKindMismatch {
+            expected_kind: draft.kind,
+            actual_kind: signed_event.kind,
+        });
+    }
+    if signed_event.tags != draft.tags {
+        return Err(RadrootsDraftError::SignedEventTagsMismatch {
+            expected_len: draft.tags.len(),
+            actual_len: signed_event.tags.len(),
+        });
+    }
+    if signed_event.content != draft.content {
+        return Err(RadrootsDraftError::SignedEventContentMismatch {
+            expected_len: draft.content.len(),
+            actual_len: signed_event.content.len(),
+        });
+    }
+    let computed_event_id = compute_nip01_event_id(
+        signed_event.pubkey.as_str(),
+        signed_event.created_at,
+        signed_event.kind,
+        &signed_event.tags,
+        signed_event.content.as_str(),
+    )?
+    .into_string();
+    if computed_event_id.as_str() != signed_event.id.as_str() {
+        return Err(RadrootsDraftError::SignedEventComputedIdMismatch {
+            expected_event_id: signed_event.id.clone(),
+            computed_event_id,
+        });
+    }
+    Ok(())
 }
 
 pub fn compute_nip01_event_id(
@@ -363,5 +497,36 @@ mod tests {
 
         assert_eq!(decoded, signed);
         assert_eq!(decoded.pubkey, hex_64('e'));
+    }
+
+    #[test]
+    fn signed_event_validation_rejects_draft_mismatches() {
+        let draft = RadrootsFrozenEventDraft::new(
+            "radroots.social.post.v1",
+            KIND_POST,
+            1_700_000_000,
+            vec![vec!["t".to_owned(), "soil".to_owned()]],
+            "hello",
+            "a".repeat(64),
+        )
+        .expect("draft");
+        let signed = RadrootsSignedNostrEvent::new(RadrootsSignedNostrEventParts {
+            id: draft.expected_event_id.clone(),
+            pubkey: draft.expected_pubkey.clone(),
+            created_at: draft.created_at,
+            kind: draft.kind,
+            tags: draft.tags.clone(),
+            content: "changed".to_owned(),
+            sig: "b".repeat(128),
+            raw_json: "{}".to_owned(),
+        })
+        .expect("signed");
+
+        let error =
+            validate_signed_nostr_event_matches_draft(&signed, &draft).expect_err("mismatch");
+        assert!(matches!(
+            error,
+            RadrootsDraftError::SignedEventContentMismatch { .. }
+        ));
     }
 }

@@ -5,7 +5,8 @@ use radroots_events::contract::{RadrootsEventContract, event_contract};
 #[cfg(test)]
 use radroots_events::draft::RadrootsSignedNostrEventParts;
 use radroots_events::draft::{
-    RadrootsFrozenEventDraft, RadrootsSignedNostrEvent, compute_nip01_event_id,
+    RadrootsDraftError, RadrootsFrozenEventDraft, RadrootsSignedNostrEvent,
+    validate_signed_nostr_event_matches_draft,
 };
 
 #[cfg(not(feature = "std"))]
@@ -89,62 +90,65 @@ pub fn validate_signed_event_matches_draft(
     signed_event: &RadrootsSignedNostrEvent,
     draft: &RadrootsFrozenEventDraft,
 ) -> Result<(), RadrootsAuthorityError> {
-    if signed_event.pubkey.as_str() != draft.expected_pubkey.as_str() {
-        return Err(RadrootsAuthorityError::SignedEventPubkeyMismatch {
-            expected_pubkey: draft.expected_pubkey.clone(),
-            actual_pubkey: signed_event.pubkey.clone(),
-        });
-    }
-    if signed_event.id.as_str() != draft.expected_event_id.as_str() {
-        return Err(RadrootsAuthorityError::SignedEventIdMismatch {
-            expected_event_id: draft.expected_event_id.clone(),
-            actual_event_id: signed_event.id.clone(),
-        });
-    }
-    if signed_event.created_at != draft.created_at {
-        return Err(RadrootsAuthorityError::SignedEventCreatedAtMismatch {
-            expected_created_at: draft.created_at,
-            actual_created_at: signed_event.created_at,
-        });
-    }
-    if signed_event.kind != draft.kind {
-        return Err(RadrootsAuthorityError::SignedEventKindMismatch {
-            expected_kind: draft.kind,
-            actual_kind: signed_event.kind,
-        });
-    }
-    if signed_event.tags != draft.tags {
-        return Err(RadrootsAuthorityError::SignedEventTagsMismatch {
-            expected_len: draft.tags.len(),
-            actual_len: signed_event.tags.len(),
-        });
-    }
-    if signed_event.content != draft.content {
-        return Err(RadrootsAuthorityError::SignedEventContentMismatch {
-            expected_len: draft.content.len(),
-            actual_len: signed_event.content.len(),
-        });
-    }
-    let computed_event_id = compute_nip01_event_id(
-        signed_event.pubkey.as_str(),
-        signed_event.created_at,
-        signed_event.kind,
-        &signed_event.tags,
-        signed_event.content.as_str(),
-    )
-    .map_err(
-        |error| RadrootsAuthorityError::SignedEventComputedIdInvalid {
+    validate_signed_nostr_event_matches_draft(signed_event, draft)
+        .map_err(authority_error_from_draft_validation)
+}
+
+fn authority_error_from_draft_validation(error: RadrootsDraftError) -> RadrootsAuthorityError {
+    match error {
+        RadrootsDraftError::SignedEventPubkeyMismatch {
+            expected_pubkey,
+            actual_pubkey,
+        } => RadrootsAuthorityError::SignedEventPubkeyMismatch {
+            expected_pubkey,
+            actual_pubkey,
+        },
+        RadrootsDraftError::SignedEventIdMismatch {
+            expected_event_id,
+            actual_event_id,
+        } => RadrootsAuthorityError::SignedEventIdMismatch {
+            expected_event_id,
+            actual_event_id,
+        },
+        RadrootsDraftError::SignedEventCreatedAtMismatch {
+            expected_created_at,
+            actual_created_at,
+        } => RadrootsAuthorityError::SignedEventCreatedAtMismatch {
+            expected_created_at,
+            actual_created_at,
+        },
+        RadrootsDraftError::SignedEventKindMismatch {
+            expected_kind,
+            actual_kind,
+        } => RadrootsAuthorityError::SignedEventKindMismatch {
+            expected_kind,
+            actual_kind,
+        },
+        RadrootsDraftError::SignedEventTagsMismatch {
+            expected_len,
+            actual_len,
+        } => RadrootsAuthorityError::SignedEventTagsMismatch {
+            expected_len,
+            actual_len,
+        },
+        RadrootsDraftError::SignedEventContentMismatch {
+            expected_len,
+            actual_len,
+        } => RadrootsAuthorityError::SignedEventContentMismatch {
+            expected_len,
+            actual_len,
+        },
+        RadrootsDraftError::SignedEventComputedIdMismatch {
+            expected_event_id,
+            computed_event_id,
+        } => RadrootsAuthorityError::SignedEventComputedIdMismatch {
+            expected_event_id,
+            computed_event_id,
+        },
+        error => RadrootsAuthorityError::SignedEventComputedIdInvalid {
             message: error.to_string(),
         },
-    )?
-    .into_string();
-    if computed_event_id.as_str() != signed_event.id.as_str() {
-        return Err(RadrootsAuthorityError::SignedEventComputedIdMismatch {
-            expected_event_id: signed_event.id.clone(),
-            computed_event_id,
-        });
     }
-    Ok(())
 }
 
 #[cfg(test)]

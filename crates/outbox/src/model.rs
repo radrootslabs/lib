@@ -152,6 +152,46 @@ impl RadrootsOutboxOperationInput {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsOutboxSignedOperationInput {
+    pub operation_kind: String,
+    pub draft: RadrootsFrozenEventDraft,
+    pub signed_event: RadrootsSignedNostrEvent,
+    pub target_relays: Vec<String>,
+    pub idempotency_key: Option<String>,
+    pub event_store_inserted: bool,
+    pub event_store_ingested_at_ms: i64,
+    pub created_at_ms: i64,
+}
+
+impl RadrootsOutboxSignedOperationInput {
+    pub fn new(
+        operation_kind: impl Into<String>,
+        draft: RadrootsFrozenEventDraft,
+        signed_event: RadrootsSignedNostrEvent,
+        target_relays: Vec<String>,
+        event_store_inserted: bool,
+        event_store_ingested_at_ms: i64,
+        created_at_ms: i64,
+    ) -> Self {
+        Self {
+            operation_kind: operation_kind.into(),
+            draft,
+            signed_event,
+            target_relays,
+            idempotency_key: None,
+            event_store_inserted,
+            event_store_ingested_at_ms,
+            created_at_ms,
+        }
+    }
+
+    pub fn with_idempotency_key(mut self, idempotency_key: impl Into<String>) -> Self {
+        self.idempotency_key = Some(idempotency_key.into());
+        self
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsOutboxEnqueueStatus {
     Inserted,
