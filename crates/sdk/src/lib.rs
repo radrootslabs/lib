@@ -18,12 +18,20 @@ use std::{string::String, vec::Vec};
 pub mod adapters;
 pub mod client;
 pub mod config;
+#[cfg(feature = "runtime")]
+mod error;
 pub mod farm;
 #[cfg(feature = "identity-models")]
 pub mod identity;
 pub mod listing;
 pub mod order;
+#[cfg(feature = "runtime")]
+mod product_clients;
 pub mod profile;
+#[cfg(feature = "runtime")]
+mod receipt;
+#[cfg(feature = "runtime")]
+mod runtime;
 
 #[cfg(feature = "radrootsd-client")]
 pub use crate::adapters::radrootsd::{
@@ -54,6 +62,19 @@ pub use crate::config::{
     RADROOTS_SDK_STAGING_RADROOTSD_ENDPOINT, RADROOTS_SDK_STAGING_RELAY_URL, RadrootsSdkConfig,
     RadrootsdAuth, RadrootsdConfig, RelayConfig, SdkConfigError, SdkEnvironment, SdkTransportMode,
     SignerConfig,
+};
+#[cfg(feature = "runtime")]
+pub use crate::error::{
+    RadrootsSdkError, RadrootsSdkPartialLocalMutationError, RadrootsSdkRecoveryAction,
+};
+#[cfg(feature = "runtime")]
+pub use crate::product_clients::{ListingsClient, OrdersClient, SyncClient};
+#[cfg(feature = "runtime")]
+pub use crate::receipt::{RadrootsSdkEventReference, RadrootsSdkLocalMutationReceipt};
+#[cfg(feature = "runtime")]
+pub use crate::runtime::{
+    RadrootsSdk, RadrootsSdkBuilder, RadrootsSdkClock, RadrootsSdkStorageConfig,
+    RadrootsSdkStoragePaths, RadrootsSdkTimestamp,
 };
 pub use radroots_events::{
     RadrootsNostrEvent, RadrootsNostrEventPtr, RadrootsNostrEventRef,

@@ -39,10 +39,32 @@ signer-adapters = [
   "dep:radroots_nostr_connect",
   "dep:radroots_nostr_signer",
 ]
+runtime = [
+  "std",
+  "serde_json",
+  "dep:radroots_authority",
+  "dep:radroots_event_store",
+  "dep:radroots_outbox",
+  "dep:radroots_relay_transport",
+  "radroots_authority/std",
+  "radroots_event_store/sqlite",
+  "radroots_event_store/runtime-tokio",
+  "radroots_outbox/sqlite",
+  "radroots_outbox/runtime-tokio",
+  "radroots_relay_transport/std",
+  "radroots_relay_transport/storage",
+  "radroots_relay_transport/runtime-tokio",
+]
+local-signer = ["runtime", "radroots_authority/local_signer"]
+relay-runtime = ["runtime", "radroots_relay_transport/client"]
 
 [dependencies]
+radroots_authority = { workspace = true, optional = true, default-features = false }
+radroots_event_store = { workspace = true, optional = true, default-features = false }
 radroots_events = { workspace = true, default-features = false }
 radroots_events_codec = { workspace = true, default-features = false }
+radroots_outbox = { workspace = true, optional = true, default-features = false }
+radroots_relay_transport = { workspace = true, optional = true, default-features = false }
 radroots_trade = { workspace = true, default-features = false }
 radroots_identity = { workspace = true, optional = true, default-features = false }
 radroots_nostr = { workspace = true, optional = true, default-features = false }
