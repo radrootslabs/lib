@@ -22,7 +22,7 @@ use sqlx::{Row, SqlitePool};
 use std::path::Path;
 use std::str::FromStr;
 
-pub const RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX: u32 = 500;
+pub const RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX: u32 = 1_000;
 pub const RADROOTS_EVENT_STORE_CONTRACT_QUERY_LIMIT_MAX: usize = 16;
 
 #[derive(Clone)]
