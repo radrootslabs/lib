@@ -117,9 +117,9 @@ impl RadrootsActorSelector {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsActorResolutionRequest {
-    pub selector: RadrootsActorSelector,
-    pub required_role: RadrootsActorRole,
-    pub contract_id: Option<String>,
+    selector: RadrootsActorSelector,
+    required_role: RadrootsActorRole,
+    contract_id: Option<String>,
 }
 
 impl RadrootsActorResolutionRequest {
@@ -133,6 +133,18 @@ impl RadrootsActorResolutionRequest {
             required_role,
             contract_id,
         }
+    }
+
+    pub fn selector(&self) -> &RadrootsActorSelector {
+        &self.selector
+    }
+
+    pub fn required_role(&self) -> RadrootsActorRole {
+        self.required_role
+    }
+
+    pub fn contract_id(&self) -> Option<&str> {
+        self.contract_id.as_deref()
     }
 }
 
@@ -403,7 +415,7 @@ mod tests {
     }
 
     #[test]
-    fn selector_supports_account_and_draft_resolution() {
+    fn resolution_request_getters_return_constructor_values() {
         let selector = RadrootsActorSelector::account_id("acct-field-01").expect("selector");
         let request = RadrootsActorResolutionRequest::new(
             selector,
@@ -412,14 +424,19 @@ mod tests {
         );
 
         assert!(matches!(
-            request.selector,
+            request.selector(),
+            RadrootsActorSelector::AccountId(account_id) if account_id.as_str() == "acct-field-01"
+        ));
+        assert_eq!(request.required_role(), RadrootsActorRole::Seller);
+        assert_eq!(request.contract_id(), Some("radroots.listing.published.v1"));
+    }
+
+    #[test]
+    fn selector_supports_account_and_draft_resolution() {
+        assert!(matches!(
+            RadrootsActorSelector::account_id("acct-field-01").expect("selector"),
             RadrootsActorSelector::AccountId(ref account_id) if account_id.as_str() == "acct-field-01"
         ));
-        assert_eq!(request.required_role, RadrootsActorRole::Seller);
-        assert_eq!(
-            request.contract_id.as_deref(),
-            Some("radroots.listing.published.v1")
-        );
         assert!(matches!(
             RadrootsActorSelector::SelectedAccount,
             RadrootsActorSelector::SelectedAccount
