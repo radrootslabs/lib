@@ -1218,6 +1218,19 @@ mod tests {
         assert!(row.is_none());
     }
 
+    #[tokio::test]
+    async fn file_outbox_reopens_existing_schema() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let path = tempdir.path().join("outbox.sqlite");
+
+        let first = RadrootsOutbox::open_file(&path).await.expect("first");
+        assert_eq!(first.pragma_foreign_keys().await.expect("foreign keys"), 1);
+        drop(first);
+
+        let second = RadrootsOutbox::open_file(&path).await.expect("second");
+        assert_eq!(second.pragma_foreign_keys().await.expect("foreign keys"), 1);
+    }
+
     #[test]
     fn terminal_and_cancelled_event_states_round_trip() {
         assert_eq!(

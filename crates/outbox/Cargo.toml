@@ -37,4 +37,5 @@ radroots_nostr = { workspace = true, default-features = false, features = [
   "std",
   "events",
 ] }
+tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt"] }

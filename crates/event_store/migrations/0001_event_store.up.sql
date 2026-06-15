@@ -1,4 +1,4 @@
-CREATE TABLE nostr_event (
+CREATE TABLE IF NOT EXISTS nostr_event (
   seq INTEGER PRIMARY KEY AUTOINCREMENT,
   event_id TEXT NOT NULL UNIQUE,
   pubkey TEXT NOT NULL,
@@ -17,13 +17,13 @@ CREATE TABLE nostr_event (
   updated_at_ms INTEGER NOT NULL
 );
 
-CREATE INDEX nostr_event_kind_created_idx ON nostr_event(kind, created_at, event_id);
-CREATE INDEX nostr_event_contract_idx ON nostr_event(contract_id, seq);
-CREATE INDEX nostr_event_projection_idx ON nostr_event(projection_eligible, seq);
-CREATE INDEX nostr_event_verification_contract_idx
+CREATE INDEX IF NOT EXISTS nostr_event_kind_created_idx ON nostr_event(kind, created_at, event_id);
+CREATE INDEX IF NOT EXISTS nostr_event_contract_idx ON nostr_event(contract_id, seq);
+CREATE INDEX IF NOT EXISTS nostr_event_projection_idx ON nostr_event(projection_eligible, seq);
+CREATE INDEX IF NOT EXISTS nostr_event_verification_contract_idx
 ON nostr_event(verification_status, contract_status, seq);
 
-CREATE TABLE nostr_event_tag (
+CREATE TABLE IF NOT EXISTS nostr_event_tag (
   event_id TEXT NOT NULL REFERENCES nostr_event(event_id) ON DELETE CASCADE,
   tag_index INTEGER NOT NULL,
   tag_name TEXT NOT NULL,
@@ -35,10 +35,10 @@ CREATE TABLE nostr_event_tag (
   PRIMARY KEY (event_id, tag_index)
 );
 
-CREATE INDEX nostr_event_tag_lookup_idx ON nostr_event_tag(tag_name, tag_value, event_id);
-CREATE INDEX nostr_event_tag_relay_idx ON nostr_event_tag(relay_indexed, tag_name, tag_value, event_id);
+CREATE INDEX IF NOT EXISTS nostr_event_tag_lookup_idx ON nostr_event_tag(tag_name, tag_value, event_id);
+CREATE INDEX IF NOT EXISTS nostr_event_tag_relay_idx ON nostr_event_tag(relay_indexed, tag_name, tag_value, event_id);
 
-CREATE TABLE relay_event_seen (
+CREATE TABLE IF NOT EXISTS relay_event_seen (
   event_id TEXT NOT NULL REFERENCES nostr_event(event_id) ON DELETE CASCADE,
   relay_url TEXT NOT NULL,
   observation_type TEXT NOT NULL,
@@ -49,9 +49,9 @@ CREATE TABLE relay_event_seen (
   PRIMARY KEY (event_id, relay_url, observation_type)
 );
 
-CREATE INDEX relay_event_seen_relay_idx ON relay_event_seen(relay_url, last_seen_at_ms, event_id);
+CREATE INDEX IF NOT EXISTS relay_event_seen_relay_idx ON relay_event_seen(relay_url, last_seen_at_ms, event_id);
 
-CREATE TABLE nostr_event_head (
+CREATE TABLE IF NOT EXISTS nostr_event_head (
   coordinate_type TEXT NOT NULL,
   kind INTEGER NOT NULL,
   pubkey TEXT NOT NULL,
@@ -65,17 +65,17 @@ CREATE TABLE nostr_event_head (
   )
 );
 
-CREATE UNIQUE INDEX nostr_event_head_replaceable_idx
+CREATE UNIQUE INDEX IF NOT EXISTS nostr_event_head_replaceable_idx
 ON nostr_event_head(kind, pubkey)
 WHERE coordinate_type = 'replaceable';
 
-CREATE UNIQUE INDEX nostr_event_head_addressable_idx
+CREATE UNIQUE INDEX IF NOT EXISTS nostr_event_head_addressable_idx
 ON nostr_event_head(kind, pubkey, d_tag)
 WHERE coordinate_type = 'addressable';
 
-CREATE INDEX nostr_event_head_event_idx ON nostr_event_head(event_id);
+CREATE INDEX IF NOT EXISTS nostr_event_head_event_idx ON nostr_event_head(event_id);
 
-CREATE TABLE projection_cursor (
+CREATE TABLE IF NOT EXISTS projection_cursor (
   projection_id TEXT PRIMARY KEY NOT NULL,
   projection_version INTEGER NOT NULL DEFAULT 1,
   last_event_seq INTEGER NOT NULL DEFAULT 0,

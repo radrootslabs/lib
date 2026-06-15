@@ -888,6 +888,19 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn file_store_reopens_existing_schema() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let path = tempdir.path().join("event_store.sqlite");
+
+        let first = RadrootsEventStore::open_file(&path).await.expect("first");
+        assert_eq!(first.pragma_foreign_keys().await.expect("foreign_keys"), 1);
+        drop(first);
+
+        let second = RadrootsEventStore::open_file(&path).await.expect("second");
+        assert_eq!(second.pragma_foreign_keys().await.expect("foreign_keys"), 1);
+    }
+
+    #[tokio::test]
     async fn migration_can_run_down() {
         let store = RadrootsEventStore::open_memory().await.expect("open");
         store.migrate_down().await.expect("down");
