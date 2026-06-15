@@ -1,9 +1,9 @@
 #![cfg(feature = "runtime")]
 
 use radroots_sdk::{
-    RadrootsSdk, RadrootsSdkClock, RadrootsSdkError, RadrootsSdkRecoveryAction,
-    RadrootsSdkStorageConfig, RadrootsSdkTimestamp, SDK_IDEMPOTENCY_KEY_MAX_LEN,
-    SDK_RELAY_TARGET_MAX_COUNT, SdkIdempotencyKey, SdkRelayTargetSet, SdkRelayUrlPolicy,
+    RadrootsSdk, RadrootsSdkClock, RadrootsSdkError, RadrootsSdkStorageConfig,
+    RadrootsSdkTimestamp, SDK_IDEMPOTENCY_KEY_MAX_LEN, SDK_RELAY_TARGET_MAX_COUNT,
+    SdkIdempotencyKey, SdkRelayTargetSet, SdkRelayUrlPolicy,
 };
 
 #[tokio::test]
@@ -127,13 +127,16 @@ fn sdk_timestamp_rejects_values_outside_nostr_created_at_range() {
 
 #[test]
 fn sdk_partial_local_mutation_error_is_sanitized() {
-    let error = RadrootsSdkError::partial_local_mutation(
-        true,
-        false,
-        RadrootsSdkRecoveryAction::RetryOperationWithSameIdempotencyKey,
+    let event_id = "a".repeat(64);
+    let error = RadrootsSdkError::partial_outbox_enqueue_mutation(
+        event_id,
+        "listing.publish.v1",
+        "abcdef123456",
     );
     let message = error.to_string();
 
+    assert!(message.contains("listing.publish.v1"));
+    assert!(message.contains("abcdef123456"));
     assert!(message.contains("stored=true"));
     assert!(message.contains("queued=false"));
     assert!(!message.contains("sig"));

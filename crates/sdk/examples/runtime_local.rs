@@ -108,7 +108,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     assert_eq!(
         prepared.public_listing_addr.as_str(),
-        enqueue.listing_address.as_str()
+        enqueue.public_listing_addr.as_str()
     );
     assert_eq!(push.attempted_events, 1);
     assert!(!order_status.found);

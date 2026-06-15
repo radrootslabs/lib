@@ -1,7 +1,7 @@
 #[cfg(feature = "runtime")]
 use crate::{
     ListingsClient, OrdersClient, RadrootsSdkError, SdkRelayTargetSet, SdkRelayUrlPolicy,
-    SyncClient, error::RadrootsSdkRecoveryAction,
+    SyncClient,
 };
 #[cfg(feature = "runtime")]
 use radroots_event_store::RadrootsEventStore;
@@ -227,15 +227,4 @@ async fn open_directory_storage(path: &Path) -> Result<OpenedRuntimeStorage, Rad
         outbox: RadrootsOutbox::open_file(&paths.outbox_path).await?,
         paths: Some(paths),
     })
-}
-
-#[cfg(feature = "runtime")]
-impl RadrootsSdk {
-    pub fn partial_local_mutation_error(stored: bool, queued: bool) -> RadrootsSdkError {
-        RadrootsSdkError::partial_local_mutation(
-            stored,
-            queued,
-            RadrootsSdkRecoveryAction::RetryOperationWithSameIdempotencyKey,
-        )
-    }
 }

@@ -41,8 +41,6 @@ mod product_clients;
 mod profile;
 pub mod protocol;
 #[cfg(feature = "runtime")]
-mod receipt;
-#[cfg(feature = "runtime")]
 mod runtime;
 #[cfg(feature = "runtime")]
 mod runtime_targets;
@@ -51,12 +49,13 @@ mod sync_runtime;
 
 #[cfg(feature = "runtime")]
 pub use crate::error::{
-    RadrootsSdkError, RadrootsSdkPartialLocalMutationError, RadrootsSdkRecoveryAction,
+    RadrootsSdkError, RadrootsSdkPartialLocalMutationError, RadrootsSdkPartialLocalMutationFailure,
+    RadrootsSdkRecoveryAction,
 };
 #[cfg(feature = "runtime")]
 pub use crate::listings_runtime::{
     ListingEnqueuePublishRequest, ListingEnqueueReceipt, ListingPreparePublishRequest,
-    ListingPublishPlan,
+    ListingPublishPlan, SdkMutationState,
 };
 #[cfg(feature = "runtime")]
 pub use crate::orders_runtime::{
@@ -66,9 +65,6 @@ pub use crate::orders_runtime::{
 };
 #[cfg(feature = "runtime")]
 pub use crate::product_clients::{ListingsClient, OrdersClient, SyncClient};
-#[cfg(feature = "runtime")]
-pub use crate::receipt::{RadrootsSdkEventReference, RadrootsSdkLocalMutationReceipt};
-#[cfg(feature = "runtime")]
 pub use crate::runtime::{
     RadrootsSdk, RadrootsSdkBuilder, RadrootsSdkClock, RadrootsSdkStorageConfig,
     RadrootsSdkStoragePaths, RadrootsSdkTimestamp,

@@ -19,8 +19,8 @@ use radroots_events::{
 use radroots_outbox::{RadrootsOutbox, RadrootsOutboxEventState};
 use radroots_sdk::{
     ListingEnqueuePublishRequest, ListingPreparePublishRequest, RadrootsSdk, RadrootsSdkError,
-    RadrootsSdkRecoveryAction, RadrootsSdkTimestamp, SdkRelayTargetPolicy, SdkRelayTargetSet,
-    SdkRelayUrlPolicy,
+    RadrootsSdkRecoveryAction, RadrootsSdkTimestamp, SdkMutationState, SdkRelayTargetPolicy,
+    SdkRelayTargetSet, SdkRelayUrlPolicy,
 };
 
 const SELLER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -239,14 +239,15 @@ async fn enqueue_publish_stores_event_and_queues_signed_outbox_without_publish()
         .await
         .expect("enqueue");
 
-    assert_eq!(
-        receipt.local.event.event_id,
-        prepared.expected_event_id.as_str()
-    );
-    assert_eq!(receipt.local.event.kind, KIND_LISTING);
-    assert!(receipt.local.stored);
-    assert!(receipt.local.queued);
-    assert!(receipt.local.idempotency_key_digest_prefix.is_some());
+    assert_eq!(receipt.expected_event_id, prepared.expected_event_id);
+    assert_eq!(receipt.signed_event_id, receipt.expected_event_id);
+    assert_eq!(receipt.public_listing_addr, prepared.public_listing_addr);
+    assert_eq!(receipt.draft_listing_addr, prepared.draft_listing_addr);
+    assert_eq!(receipt.local_event_seq, 1);
+    assert_eq!(receipt.outbox_operation_id, 1);
+    assert_eq!(receipt.outbox_event_id, 1);
+    assert_eq!(receipt.state, SdkMutationState::Inserted);
+    assert!(receipt.idempotency_digest_prefix.is_some());
 
     let paths = sdk.storage_paths().expect("paths");
     let event_store = RadrootsEventStore::open_file(&paths.event_store_path)
@@ -254,7 +255,7 @@ async fn enqueue_publish_stores_event_and_queues_signed_outbox_without_publish()
         .expect("event store");
     assert!(
         event_store
-            .get_event(receipt.local.event.event_id.as_str())
+            .get_event(receipt.signed_event_id.as_str())
             .await
             .expect("event lookup")
             .is_some()
@@ -264,7 +265,7 @@ async fn enqueue_publish_stores_event_and_queues_signed_outbox_without_publish()
         .await
         .expect("outbox");
     let outbox_event = outbox
-        .get_event(receipt.local.outbox_event_id.expect("outbox event"))
+        .get_event(receipt.outbox_event_id)
         .await
         .expect("outbox event")
         .expect("outbox event");
@@ -325,6 +326,9 @@ async fn enqueue_publish_reports_partial_local_mutation_after_outbox_conflict() 
         RadrootsSdkError::PartialLocalMutation(ref partial)
             if partial.stored
                 && !partial.queued
+                && partial.event_id.is_some()
+                && partial.operation_kind == "listing.publish.v1"
+                && partial.idempotency_digest_prefix.is_some()
                 && partial.recovery == RadrootsSdkRecoveryAction::RetryOperationWithSameIdempotencyKey
     ));
     assert!(!error.to_string().contains("idem-d"));
@@ -361,11 +365,12 @@ async fn enqueue_publish_derives_order_independent_idempotency_key() {
         .expect("second enqueue");
 
     assert_eq!(
-        first_receipt.local.outbox_event_id,
-        second_receipt.local.outbox_event_id
+        first_receipt.outbox_event_id,
+        second_receipt.outbox_event_id
     );
     assert_eq!(
-        first_receipt.local.idempotency_key_digest_prefix,
-        second_receipt.local.idempotency_key_digest_prefix
+        first_receipt.idempotency_digest_prefix,
+        second_receipt.idempotency_digest_prefix
     );
+    assert_eq!(second_receipt.state, SdkMutationState::Existing);
 }

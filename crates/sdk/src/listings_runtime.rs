@@ -1,8 +1,7 @@
 #[cfg(feature = "runtime")]
 use crate::{
-    ListingsClient, RadrootsSdkError, RadrootsSdkEventReference, RadrootsSdkLocalMutationReceipt,
-    RadrootsSdkRecoveryAction, RadrootsSdkTimestamp, SdkIdempotencyKey, SdkRelayTargetPolicy,
-    SdkRelayTargetSet, SdkRelayUrlPolicy,
+    ListingsClient, RadrootsSdkError, RadrootsSdkTimestamp, SdkIdempotencyKey,
+    SdkRelayTargetPolicy, SdkRelayTargetSet, SdkRelayUrlPolicy,
 };
 #[cfg(feature = "runtime")]
 use radroots_authority::{RadrootsActorContext, RadrootsEventSigner, sign_authorized_draft};
@@ -16,12 +15,14 @@ use radroots_events::{
     listing::RadrootsListing,
 };
 #[cfg(feature = "runtime")]
-use radroots_outbox::RadrootsOutboxSignedOperationInput;
+use radroots_outbox::{RadrootsOutboxEnqueueStatus, RadrootsOutboxSignedOperationInput};
 #[cfg(feature = "runtime")]
 use radroots_trade::listing::{
     RadrootsCanonicalListingDraft, RadrootsListingDraftDocumentV1, RadrootsListingMutation,
     build_listing_mutation_draft, canonicalize_listing_draft,
 };
+#[cfg(feature = "runtime")]
+use sha2::{Digest, Sha256};
 
 #[cfg(feature = "runtime")]
 const LISTING_PUBLISH_OPERATION_KIND: &str = "listing.publish.v1";
@@ -143,9 +144,33 @@ pub struct ListingPublishPlan {
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SdkMutationState {
+    Inserted,
+    Existing,
+}
+
+#[cfg(feature = "runtime")]
+impl From<RadrootsOutboxEnqueueStatus> for SdkMutationState {
+    fn from(value: RadrootsOutboxEnqueueStatus) -> Self {
+        match value {
+            RadrootsOutboxEnqueueStatus::Inserted => Self::Inserted,
+            RadrootsOutboxEnqueueStatus::Existing => Self::Existing,
+        }
+    }
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ListingEnqueueReceipt {
-    pub listing_address: String,
-    pub local: RadrootsSdkLocalMutationReceipt,
+    pub public_listing_addr: RadrootsListingAddress,
+    pub draft_listing_addr: RadrootsListingAddress,
+    pub expected_event_id: RadrootsEventId,
+    pub signed_event_id: RadrootsEventId,
+    pub local_event_seq: i64,
+    pub outbox_operation_id: i64,
+    pub outbox_event_id: i64,
+    pub state: SdkMutationState,
+    pub idempotency_digest_prefix: Option<String>,
 }
 
 #[cfg(feature = "runtime")]
@@ -181,14 +206,18 @@ impl<'sdk> ListingsClient<'sdk> {
             )?,
         };
         let observed_at_ms = i64::from(plan.frozen_draft.created_at) * 1_000;
+        let signed_event_id = parse_event_id(signed_event.id.as_str(), "signed event id")?;
         let event = event_from_signed(&signed_event);
         let ingest = RadrootsEventIngest::new(event, observed_at_ms)
             .with_raw_json(signed_event.raw_json.clone());
         let ingest_receipt = self.sdk._event_store.ingest_event(ingest).await?;
+        let target_relay_values = target_relays.into_vec();
+        let partial_failure_digest_prefix =
+            outbox_idempotency_digest_prefix(&plan, target_relay_values.as_slice())?;
         let outbox_input = signed_outbox_input(
             &plan,
             signed_event.clone(),
-            target_relays.into_vec(),
+            target_relay_values,
             idempotency_key,
             ingest_receipt.inserted,
             observed_at_ms,
@@ -199,28 +228,23 @@ impl<'sdk> ListingsClient<'sdk> {
             .enqueue_signed_operation(outbox_input)
             .await
             .map_err(|_| {
-                RadrootsSdkError::partial_local_mutation(
-                    true,
-                    false,
-                    RadrootsSdkRecoveryAction::RetryOperationWithSameIdempotencyKey,
+                RadrootsSdkError::partial_outbox_enqueue_mutation(
+                    signed_event_id.as_str(),
+                    LISTING_PUBLISH_OPERATION_KIND,
+                    partial_failure_digest_prefix.as_str(),
                 )
             })?;
+        let idempotency_digest_prefix = digest_prefix(outbox_receipt.idempotency_digest.as_str());
         Ok(ListingEnqueueReceipt {
-            listing_address: plan.public_listing_addr.into_string(),
-            local: RadrootsSdkLocalMutationReceipt {
-                event: RadrootsSdkEventReference {
-                    event_id: signed_event.id,
-                    pubkey: signed_event.pubkey,
-                    kind: signed_event.kind,
-                    created_at: signed_event.created_at,
-                },
-                stored: true,
-                queued: true,
-                outbox_event_id: Some(outbox_receipt.outbox_event_id),
-                idempotency_key_digest_prefix: Some(
-                    outbox_receipt.idempotency_digest.chars().take(12).collect(),
-                ),
-            },
+            public_listing_addr: plan.public_listing_addr,
+            draft_listing_addr: plan.draft_listing_addr,
+            expected_event_id: plan.expected_event_id,
+            signed_event_id,
+            local_event_seq: ingest_receipt.seq,
+            outbox_operation_id: outbox_receipt.operation_id,
+            outbox_event_id: outbox_receipt.outbox_event_id,
+            state: outbox_receipt.status.into(),
+            idempotency_digest_prefix: Some(idempotency_digest_prefix),
         })
     }
 
@@ -277,6 +301,44 @@ fn listing_publish_plan(
         expected_event_id,
         frozen_draft,
         created_at,
+    })
+}
+
+#[cfg(feature = "runtime")]
+#[derive(serde::Serialize)]
+struct ListingOutboxDigestInput<'a> {
+    operation_kind: &'static str,
+    expected_pubkey: &'a str,
+    draft: &'a RadrootsFrozenEventDraft,
+    target_relays: &'a [String],
+}
+
+#[cfg(feature = "runtime")]
+fn outbox_idempotency_digest_prefix(
+    plan: &ListingPublishPlan,
+    target_relays: &[String],
+) -> Result<String, RadrootsSdkError> {
+    let input = ListingOutboxDigestInput {
+        operation_kind: LISTING_PUBLISH_OPERATION_KIND,
+        expected_pubkey: plan.frozen_draft.expected_pubkey.as_str(),
+        draft: &plan.frozen_draft,
+        target_relays,
+    };
+    let bytes = serde_json::to_vec(&input).map_err(|error| RadrootsSdkError::InvalidRequest {
+        message: format!("listing outbox idempotency digest failed: {error}"),
+    })?;
+    Ok(digest_prefix(hex::encode(Sha256::digest(bytes)).as_str()))
+}
+
+#[cfg(feature = "runtime")]
+fn digest_prefix(digest: &str) -> String {
+    digest.chars().take(12).collect()
+}
+
+#[cfg(feature = "runtime")]
+fn parse_event_id(value: &str, field: &str) -> Result<RadrootsEventId, RadrootsSdkError> {
+    RadrootsEventId::parse(value).map_err(|error| RadrootsSdkError::InvalidRequest {
+        message: format!("{field} is invalid: {error}"),
     })
 }
 

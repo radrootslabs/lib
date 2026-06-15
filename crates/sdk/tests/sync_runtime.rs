@@ -168,9 +168,7 @@ async fn enqueue_listing(sdk: &RadrootsSdk, d_tag: &str, title: &str, relays: &[
         )
         .await
         .expect("enqueue")
-        .local
         .outbox_event_id
-        .expect("outbox event")
 }
 
 #[tokio::test]

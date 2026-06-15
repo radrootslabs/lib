@@ -11,10 +11,20 @@ pub enum RadrootsSdkRecoveryAction {
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RadrootsSdkPartialLocalMutationFailure {
+    OutboxEnqueue,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsSdkPartialLocalMutationError {
+    pub event_id: Option<String>,
+    pub operation_kind: String,
+    pub idempotency_digest_prefix: Option<String>,
     pub stored: bool,
     pub queued: bool,
     pub recovery: RadrootsSdkRecoveryAction,
+    pub failure: RadrootsSdkPartialLocalMutationFailure,
 }
 
 #[cfg(feature = "runtime")]
@@ -36,15 +46,23 @@ pub enum RadrootsSdkError {
 
 #[cfg(feature = "runtime")]
 impl RadrootsSdkError {
-    pub fn partial_local_mutation(
-        stored: bool,
-        queued: bool,
-        recovery: RadrootsSdkRecoveryAction,
+    pub fn partial_local_mutation(error: RadrootsSdkPartialLocalMutationError) -> Self {
+        Self::PartialLocalMutation(error)
+    }
+
+    pub fn partial_outbox_enqueue_mutation(
+        event_id: impl Into<String>,
+        operation_kind: impl Into<String>,
+        idempotency_digest_prefix: impl Into<String>,
     ) -> Self {
         Self::PartialLocalMutation(RadrootsSdkPartialLocalMutationError {
-            stored,
-            queued,
-            recovery,
+            event_id: Some(event_id.into()),
+            operation_kind: operation_kind.into(),
+            idempotency_digest_prefix: Some(idempotency_digest_prefix.into()),
+            stored: true,
+            queued: false,
+            recovery: RadrootsSdkRecoveryAction::RetryOperationWithSameIdempotencyKey,
+            failure: RadrootsSdkPartialLocalMutationFailure::OutboxEnqueue,
         })
     }
 }
@@ -77,8 +95,17 @@ impl fmt::Display for RadrootsSdkError {
             Self::Projection { message } => write!(f, "sdk projection error: {message}"),
             Self::PartialLocalMutation(error) => write!(
                 f,
-                "sdk local mutation partially completed: stored={}, queued={}, recovery={:?}",
-                error.stored, error.queued, error.recovery
+                "sdk local mutation partially completed: event_id={}, operation_kind={}, idempotency_digest_prefix={}, stored={}, queued={}, failure={:?}, recovery={:?}",
+                error.event_id.as_deref().unwrap_or("<unknown>"),
+                error.operation_kind,
+                error
+                    .idempotency_digest_prefix
+                    .as_deref()
+                    .unwrap_or("<none>"),
+                error.stored,
+                error.queued,
+                error.failure,
+                error.recovery
             ),
         }
     }
