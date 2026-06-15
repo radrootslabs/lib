@@ -1,7 +1,11 @@
 #[cfg(feature = "runtime")]
 use crate::{RadrootsSdkError, SyncClient};
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
+use radroots_nostr::prelude::RadrootsNostrClient;
 #[cfg(feature = "runtime")]
 use radroots_outbox::RadrootsOutboxEventState;
+#[cfg(all(feature = "runtime", feature = "relay-runtime"))]
+use radroots_relay_transport::RadrootsNostrClientPublishAdapter;
 #[cfg(feature = "runtime")]
 use radroots_relay_transport::{
     RadrootsOutboxPublishPolicy, RadrootsRelayOutcomeKind, RadrootsRelayPublishAdapter,
@@ -181,7 +185,32 @@ impl From<RadrootsRelayOutcomeKind> for PushOutboxRelayOutcomeKind {
 
 #[cfg(feature = "runtime")]
 impl<'sdk> SyncClient<'sdk> {
-    pub async fn push_outbox<A>(
+    pub async fn push_outbox(
+        &self,
+        request: PushOutboxRequest,
+    ) -> Result<PushOutboxReceipt, RadrootsSdkError> {
+        #[cfg(feature = "relay-runtime")]
+        {
+            if self.sdk.relay_urls().is_empty() {
+                return Err(RadrootsSdkError::InvalidRequest {
+                    message: "sync push requires configured relay URLs".to_owned(),
+                });
+            }
+            let adapter =
+                RadrootsNostrClientPublishAdapter::new(RadrootsNostrClient::new_signerless());
+            self.push_outbox_with_adapter(&adapter, request).await
+        }
+
+        #[cfg(not(feature = "relay-runtime"))]
+        {
+            let _ = request;
+            Err(RadrootsSdkError::RelayTransport {
+                message: "sync push requires the relay-runtime feature".to_owned(),
+            })
+        }
+    }
+
+    pub async fn push_outbox_with_adapter<A>(
         &self,
         adapter: &A,
         request: PushOutboxRequest,

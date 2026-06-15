@@ -59,7 +59,12 @@ runtime = [
   "radroots_trade/event_store",
 ]
 local-signer = ["runtime", "radroots_authority/local_signer"]
-relay-runtime = ["runtime", "radroots_relay_transport/client"]
+relay-runtime = [
+  "runtime",
+  "dep:radroots_nostr",
+  "radroots_nostr/client",
+  "radroots_relay_transport/client",
+]
 
 [dependencies]
 radroots_authority = { workspace = true, optional = true, default-features = false }

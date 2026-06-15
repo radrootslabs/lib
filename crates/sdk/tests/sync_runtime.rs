@@ -181,13 +181,56 @@ async fn push_outbox_empty_queue_returns_zero_counts() {
 
     let receipt = sdk
         .sync()
-        .push_outbox(&adapter, request)
+        .push_outbox_with_adapter(&adapter, request)
         .await
         .expect("push");
 
     assert_eq!(receipt.attempted_events, 0);
     assert!(receipt.events.is_empty());
     assert!(adapter.captured_raw_events().is_empty());
+}
+
+#[cfg(not(feature = "relay-runtime"))]
+#[tokio::test]
+async fn product_push_outbox_without_relay_runtime_returns_structured_error() {
+    let (_tempdir, sdk) = directory_sdk(&[RELAY_A]).await;
+
+    let error = sdk
+        .sync()
+        .push_outbox(PushOutboxRequest::new())
+        .await
+        .expect_err("unsupported product push");
+
+    assert!(matches!(error, RadrootsSdkError::RelayTransport { .. }));
+}
+
+#[cfg(feature = "relay-runtime")]
+#[tokio::test]
+async fn product_push_outbox_empty_queue_uses_configured_relays() {
+    let (_tempdir, sdk) = directory_sdk(&[RELAY_A]).await;
+
+    let receipt = sdk
+        .sync()
+        .push_outbox(PushOutboxRequest::default())
+        .await
+        .expect("product push");
+
+    assert_eq!(receipt.attempted_events, 0);
+    assert!(receipt.events.is_empty());
+}
+
+#[cfg(feature = "relay-runtime")]
+#[tokio::test]
+async fn product_push_outbox_requires_configured_relays() {
+    let (_tempdir, sdk) = directory_sdk(&[]).await;
+
+    let error = sdk
+        .sync()
+        .push_outbox(PushOutboxRequest::new())
+        .await
+        .expect_err("missing configured relays");
+
+    assert!(matches!(error, RadrootsSdkError::InvalidRequest { .. }));
 }
 
 #[tokio::test]
@@ -197,12 +240,12 @@ async fn push_outbox_rejects_invalid_limits_before_claiming() {
 
     let zero = sdk
         .sync()
-        .push_outbox(&adapter, PushOutboxRequest::new().with_limit(0))
+        .push_outbox_with_adapter(&adapter, PushOutboxRequest::new().with_limit(0))
         .await
         .expect_err("zero limit");
     let too_large = sdk
         .sync()
-        .push_outbox(
+        .push_outbox_with_adapter(
             &adapter,
             PushOutboxRequest::new().with_limit(PUSH_OUTBOX_MAX_LIMIT + 1),
         )
@@ -222,7 +265,7 @@ async fn push_outbox_publishes_signed_listing_and_marks_outbox_published() {
 
     let receipt = sdk
         .sync()
-        .push_outbox(&adapter, PushOutboxRequest::new().with_limit(1))
+        .push_outbox_with_adapter(&adapter, PushOutboxRequest::new().with_limit(1))
         .await
         .expect("push");
 
@@ -284,7 +327,7 @@ async fn push_outbox_preserves_retryable_and_terminal_relay_outcomes() {
 
     let receipt = sdk
         .sync()
-        .push_outbox(&adapter, PushOutboxRequest::new().with_limit(1))
+        .push_outbox_with_adapter(&adapter, PushOutboxRequest::new().with_limit(1))
         .await
         .expect("push");
 
@@ -353,7 +396,7 @@ async fn push_outbox_does_not_claim_unsigned_outbox_work() {
 
     let receipt = sdk
         .sync()
-        .push_outbox(&adapter, PushOutboxRequest::new().with_limit(1))
+        .push_outbox_with_adapter(&adapter, PushOutboxRequest::new().with_limit(1))
         .await
         .expect("push");
 

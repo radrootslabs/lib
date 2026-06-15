@@ -96,7 +96,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     let push = sdk
         .sync()
-        .push_outbox(
+        .push_outbox_with_adapter(
             &RadrootsMockRelayPublishAdapter::new(),
             PushOutboxRequest::new().with_limit(1),
         )
