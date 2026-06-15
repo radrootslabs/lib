@@ -34,6 +34,8 @@ pub mod profile;
 mod receipt;
 #[cfg(feature = "runtime")]
 mod runtime;
+#[cfg(feature = "runtime")]
+mod sync_runtime;
 
 #[cfg(feature = "radrootsd-client")]
 pub use crate::adapters::radrootsd::{
@@ -81,6 +83,11 @@ pub use crate::receipt::{RadrootsSdkEventReference, RadrootsSdkLocalMutationRece
 pub use crate::runtime::{
     RadrootsSdk, RadrootsSdkBuilder, RadrootsSdkClock, RadrootsSdkStorageConfig,
     RadrootsSdkStoragePaths, RadrootsSdkTimestamp,
+};
+#[cfg(feature = "runtime")]
+pub use crate::sync_runtime::{
+    PUSH_OUTBOX_DEFAULT_LIMIT, PUSH_OUTBOX_MAX_LIMIT, PushOutboxEventReceipt, PushOutboxEventState,
+    PushOutboxReceipt, PushOutboxRelayOutcomeKind, PushOutboxRelayReceipt, PushOutboxRequest,
 };
 pub use radroots_events::{
     RadrootsNostrEvent, RadrootsNostrEventPtr, RadrootsNostrEventRef,

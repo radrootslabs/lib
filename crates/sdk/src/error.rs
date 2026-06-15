@@ -25,6 +25,7 @@ pub enum RadrootsSdkError {
     TimestampOutOfRange { value: u64 },
     Authority { message: String },
     EventStore { message: String },
+    InvalidRequest { message: String },
     ListingDraft { message: String },
     ListingMutation { message: String },
     Outbox { message: String },
@@ -64,6 +65,7 @@ impl fmt::Display for RadrootsSdkError {
             }
             Self::Authority { message } => write!(f, "sdk authority error: {message}"),
             Self::EventStore { message } => write!(f, "sdk event store error: {message}"),
+            Self::InvalidRequest { message } => write!(f, "sdk invalid request: {message}"),
             Self::ListingDraft { message } => write!(f, "sdk listing draft error: {message}"),
             Self::ListingMutation { message } => {
                 write!(f, "sdk listing mutation error: {message}")
