@@ -52,7 +52,7 @@ impl RadrootsCanonicalListingDraft {
         seller_pubkey: RadrootsPublicKey,
     ) -> Result<Self, RadrootsListingDraftError> {
         let farm_pubkey = RadrootsPublicKey::parse(listing.farm.pubkey.as_str())
-            .map_err(RadrootsListingDraftError::InvalidSellerPubkey)?;
+            .map_err(RadrootsListingDraftError::InvalidFarmPubkey)?;
         if farm_pubkey != seller_pubkey {
             return Err(RadrootsListingDraftError::FarmPubkeyMismatch {
                 expected_pubkey: seller_pubkey,
@@ -94,8 +94,8 @@ impl RadrootsCanonicalListingDraft {
 
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum RadrootsListingDraftError {
-    #[error("invalid listing draft seller pubkey: {0}")]
-    InvalidSellerPubkey(RadrootsIdParseError),
+    #[error("invalid listing draft farm pubkey: {0}")]
+    InvalidFarmPubkey(RadrootsIdParseError),
     #[error("invalid listing draft address: {0}")]
     InvalidListingAddress(RadrootsIdParseError),
     #[error("listing draft actor does not satisfy required role {required_role:?}")]
@@ -289,10 +289,10 @@ mod tests {
     #[test]
     fn listing_draft_error_variants_are_precise() {
         assert!(matches!(
-            RadrootsListingDraftError::InvalidSellerPubkey(
+            RadrootsListingDraftError::InvalidFarmPubkey(
                 RadrootsPublicKey::parse("bad").unwrap_err()
             ),
-            RadrootsListingDraftError::InvalidSellerPubkey(_)
+            RadrootsListingDraftError::InvalidFarmPubkey(_)
         ));
         assert!(matches!(
             RadrootsListingDraftError::InvalidListingAddress(
@@ -352,6 +352,20 @@ mod tests {
     }
 
     #[test]
+    fn canonicalize_listing_draft_rejects_invalid_farm_pubkey() {
+        let mut listing = listing();
+        listing.farm.pubkey = "bad".to_string();
+        let document = RadrootsListingDraftDocumentV1::new(listing);
+
+        let error = canonicalize_listing_draft(&seller_actor(), document).unwrap_err();
+
+        assert!(matches!(
+            error,
+            RadrootsListingDraftError::InvalidFarmPubkey(_)
+        ));
+    }
+
+    #[test]
     fn canonical_draft_new_rejects_mismatched_farm_pubkey() {
         let mut listing = listing();
         listing.farm.pubkey = OTHER.to_string();
@@ -369,6 +383,23 @@ mod tests {
     }
 
     #[test]
+    fn canonical_draft_new_rejects_invalid_farm_pubkey() {
+        let mut listing = listing();
+        listing.farm.pubkey = "bad".to_string();
+
+        let error = RadrootsCanonicalListingDraft::new(
+            listing,
+            RadrootsPublicKey::parse(SELLER).expect("seller"),
+        )
+        .unwrap_err();
+
+        assert!(matches!(
+            error,
+            RadrootsListingDraftError::InvalidFarmPubkey(_)
+        ));
+    }
+
+    #[test]
     fn canonical_draft_new_rejects_empty_farm_pubkey() {
         let mut listing = listing();
         listing.farm.pubkey.clear();
@@ -381,7 +412,7 @@ mod tests {
 
         assert!(matches!(
             error,
-            RadrootsListingDraftError::InvalidSellerPubkey(_)
+            RadrootsListingDraftError::InvalidFarmPubkey(_)
         ));
     }
 
