@@ -13,8 +13,8 @@ pub mod local_signer;
 pub mod signer;
 
 pub use actor::{
-    RadrootsActorContext, RadrootsActorResolutionRequest, RadrootsActorSelector,
-    RadrootsActorSource, role_satisfies,
+    RadrootsActorAccountId, RadrootsActorContext, RadrootsActorResolutionRequest,
+    RadrootsActorSelector, RadrootsActorSource, role_satisfies,
 };
 pub use authorization::{
     authorize_actor_for_contract, authorize_actor_for_draft, authorize_signer_for_draft,

@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 use crate::RadrootsAuthorityError;
+use core::{fmt, str::FromStr};
 use radroots_events::contract::RadrootsActorRole;
 use radroots_events::ids::RadrootsPublicKey;
 
@@ -10,6 +11,80 @@ use alloc::{collections::BTreeSet, string::String};
 use std::{collections::BTreeSet, string::String};
 
 pub const MAX_ACTOR_ACCOUNT_ID_LEN: usize = 128;
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct RadrootsActorAccountId(String);
+
+impl RadrootsActorAccountId {
+    pub fn parse(account_id: impl Into<String>) -> Result<Self, RadrootsAuthorityError> {
+        let account_id = account_id.into();
+        if account_id.is_empty() {
+            return Err(RadrootsAuthorityError::InvalidActorAccountIdEmpty);
+        }
+        if account_id.as_str() != account_id.trim() {
+            return Err(RadrootsAuthorityError::InvalidActorAccountIdUntrimmed);
+        }
+        if account_id.chars().any(char::is_control) {
+            return Err(RadrootsAuthorityError::InvalidActorAccountIdControlCharacter);
+        }
+        if account_id.chars().count() > MAX_ACTOR_ACCOUNT_ID_LEN {
+            return Err(RadrootsAuthorityError::InvalidActorAccountIdTooLong {
+                max_len: MAX_ACTOR_ACCOUNT_ID_LEN,
+            });
+        }
+        Ok(Self(account_id))
+    }
+
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+
+    pub fn into_string(self) -> String {
+        self.0
+    }
+}
+
+impl fmt::Display for RadrootsActorAccountId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl FromStr for RadrootsActorAccountId {
+    type Err = RadrootsAuthorityError;
+
+    fn from_str(account_id: &str) -> Result<Self, Self::Err> {
+        Self::parse(account_id)
+    }
+}
+
+impl TryFrom<&str> for RadrootsActorAccountId {
+    type Error = RadrootsAuthorityError;
+
+    fn try_from(account_id: &str) -> Result<Self, Self::Error> {
+        Self::parse(account_id)
+    }
+}
+
+impl TryFrom<String> for RadrootsActorAccountId {
+    type Error = RadrootsAuthorityError;
+
+    fn try_from(account_id: String) -> Result<Self, Self::Error> {
+        Self::parse(account_id)
+    }
+}
+
+impl AsRef<str> for RadrootsActorAccountId {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl PartialEq<&str> for RadrootsActorAccountId {
+    fn eq(&self, other: &&str) -> bool {
+        self.as_str() == *other
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsActorSource {
@@ -23,14 +98,14 @@ pub enum RadrootsActorSource {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsActorSelector {
     SelectedAccount,
-    AccountId(String),
+    AccountId(RadrootsActorAccountId),
     PublicKey(RadrootsPublicKey),
     DraftExpectedPubkey,
 }
 
 impl RadrootsActorSelector {
     pub fn account_id(account_id: impl Into<String>) -> Result<Self, RadrootsAuthorityError> {
-        Ok(Self::AccountId(validate_account_id(account_id)?))
+        Ok(Self::AccountId(RadrootsActorAccountId::parse(account_id)?))
     }
 
     pub fn public_key(pubkey: impl AsRef<str>) -> Result<Self, RadrootsAuthorityError> {
@@ -65,7 +140,7 @@ impl RadrootsActorResolutionRequest {
 pub struct RadrootsActorContext {
     pub pubkey: RadrootsPublicKey,
     pub roles: BTreeSet<RadrootsActorRole>,
-    pub account_id: Option<String>,
+    pub account_id: Option<RadrootsActorAccountId>,
     pub source: RadrootsActorSource,
 }
 
@@ -90,7 +165,7 @@ impl RadrootsActorContext {
     {
         Self::with_provenance(
             pubkey,
-            Some(validate_account_id(account_id)?),
+            Some(RadrootsActorAccountId::parse(account_id)?),
             RadrootsActorSource::LocalAccount,
             roles,
         )
@@ -106,7 +181,7 @@ impl RadrootsActorContext {
     {
         Self::with_provenance(
             pubkey,
-            Some(validate_account_id(account_id)?),
+            Some(RadrootsActorAccountId::parse(account_id)?),
             RadrootsActorSource::RemoteSigner,
             roles,
         )
@@ -122,7 +197,7 @@ impl RadrootsActorContext {
     {
         Self::with_provenance(
             pubkey,
-            Some(validate_account_id(account_id)?),
+            Some(RadrootsActorAccountId::parse(account_id)?),
             RadrootsActorSource::Service,
             roles,
         )
@@ -137,7 +212,7 @@ impl RadrootsActorContext {
 
     fn with_provenance<I>(
         pubkey: impl AsRef<str>,
-        account_id: Option<String>,
+        account_id: Option<RadrootsActorAccountId>,
         source: RadrootsActorSource,
         roles: I,
     ) -> Result<Self, RadrootsAuthorityError>
@@ -162,8 +237,8 @@ impl RadrootsActorContext {
         &self.roles
     }
 
-    pub fn account_id(&self) -> Option<&str> {
-        self.account_id.as_deref()
+    pub fn account_id(&self) -> Option<&RadrootsActorAccountId> {
+        self.account_id.as_ref()
     }
 
     pub fn source(&self) -> RadrootsActorSource {
@@ -173,25 +248,6 @@ impl RadrootsActorContext {
     pub fn satisfies(&self, required_role: RadrootsActorRole) -> bool {
         role_satisfies(&self.roles, required_role)
     }
-}
-
-fn validate_account_id(account_id: impl Into<String>) -> Result<String, RadrootsAuthorityError> {
-    let account_id = account_id.into();
-    if account_id.is_empty() {
-        return Err(RadrootsAuthorityError::InvalidActorAccountIdEmpty);
-    }
-    if account_id.as_str() != account_id.trim() {
-        return Err(RadrootsAuthorityError::InvalidActorAccountIdUntrimmed);
-    }
-    if account_id.chars().any(char::is_control) {
-        return Err(RadrootsAuthorityError::InvalidActorAccountIdControlCharacter);
-    }
-    if account_id.chars().count() > MAX_ACTOR_ACCOUNT_ID_LEN {
-        return Err(RadrootsAuthorityError::InvalidActorAccountIdTooLong {
-            max_len: MAX_ACTOR_ACCOUNT_ID_LEN,
-        });
-    }
-    Ok(account_id)
 }
 
 pub fn role_satisfies(
@@ -259,7 +315,9 @@ mod tests {
         .expect("actor");
 
         assert_eq!(actor.source(), RadrootsActorSource::LocalAccount);
-        assert_eq!(actor.account_id(), Some("acct-field-01"));
+        let account_id = actor.account_id().expect("account id");
+        assert_eq!(account_id.as_str(), "acct-field-01");
+        assert_eq!(account_id.to_string(), "acct-field-01");
     }
 
     #[test]
@@ -284,9 +342,15 @@ mod tests {
                 .expect("service actor");
 
         assert_eq!(remote.source(), RadrootsActorSource::RemoteSigner);
-        assert_eq!(remote.account_id(), Some("acct-remote"));
+        assert_eq!(
+            remote.account_id().map(RadrootsActorAccountId::as_str),
+            Some("acct-remote")
+        );
         assert_eq!(service.source(), RadrootsActorSource::Service);
-        assert_eq!(service.account_id(), Some("acct-service"));
+        assert_eq!(
+            service.account_id().map(RadrootsActorAccountId::as_str),
+            Some("acct-service")
+        );
     }
 
     #[test]
@@ -316,6 +380,20 @@ mod tests {
     }
 
     #[test]
+    fn account_id_type_exposes_canonical_value() {
+        let parsed = RadrootsActorAccountId::parse("acct-field-01").expect("account id");
+        let from_str = "acct-field-01"
+            .parse::<RadrootsActorAccountId>()
+            .expect("from str");
+        let from_owned =
+            RadrootsActorAccountId::try_from("acct-field-01".to_owned()).expect("from owned");
+
+        assert_eq!(parsed, "acct-field-01");
+        assert_eq!(from_str.as_ref(), "acct-field-01");
+        assert_eq!(from_owned.into_string(), "acct-field-01");
+    }
+
+    #[test]
     fn selector_supports_account_and_draft_resolution() {
         let selector = RadrootsActorSelector::account_id("acct-field-01").expect("selector");
         let request = RadrootsActorResolutionRequest::new(
@@ -326,7 +404,7 @@ mod tests {
 
         assert!(matches!(
             request.selector,
-            RadrootsActorSelector::AccountId(ref account_id) if account_id == "acct-field-01"
+            RadrootsActorSelector::AccountId(ref account_id) if account_id.as_str() == "acct-field-01"
         ));
         assert_eq!(request.required_role, RadrootsActorRole::Seller);
         assert_eq!(
