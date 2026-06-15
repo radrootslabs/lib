@@ -138,10 +138,10 @@ impl RadrootsActorResolutionRequest {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsActorContext {
-    pub pubkey: RadrootsPublicKey,
-    pub roles: BTreeSet<RadrootsActorRole>,
-    pub account_id: Option<RadrootsActorAccountId>,
-    pub source: RadrootsActorSource,
+    pubkey: RadrootsPublicKey,
+    roles: BTreeSet<RadrootsActorRole>,
+    account_id: Option<RadrootsActorAccountId>,
+    source: RadrootsActorSource,
 }
 
 impl RadrootsActorContext {
@@ -326,6 +326,15 @@ mod tests {
             .expect("actor");
 
         assert_eq!(actor.source(), RadrootsActorSource::ExplicitPubkey);
+        assert_eq!(actor.account_id(), None);
+    }
+
+    #[test]
+    fn test_context_has_no_account_id() {
+        let actor =
+            RadrootsActorContext::test(hex_64('a'), [RadrootsActorRole::Farmer]).expect("actor");
+
+        assert_eq!(actor.source(), RadrootsActorSource::Test);
         assert_eq!(actor.account_id(), None);
     }
 

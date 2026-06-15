@@ -44,10 +44,10 @@ pub fn authorize_actor_for_draft(
         });
     }
     authorize_actor_for_contract(actor, contract)?;
-    if actor.pubkey.as_str() != draft.expected_pubkey.as_str() {
+    if actor.pubkey().as_str() != draft.expected_pubkey.as_str() {
         return Err(RadrootsAuthorityError::ActorPubkeyMismatch {
             expected_pubkey: draft.expected_pubkey.clone(),
-            actor_pubkey: actor.pubkey.as_str().to_owned(),
+            actor_pubkey: actor.pubkey().as_str().to_owned(),
         });
     }
     Ok(contract)
