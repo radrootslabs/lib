@@ -28,6 +28,8 @@ pub mod listing;
 mod listings_runtime;
 pub mod order;
 #[cfg(feature = "runtime")]
+mod orders_runtime;
+#[cfg(feature = "runtime")]
 mod product_clients;
 pub mod profile;
 #[cfg(feature = "runtime")]
@@ -74,6 +76,12 @@ pub use crate::error::{
 #[cfg(feature = "runtime")]
 pub use crate::listings_runtime::{
     ListingEnqueueReceipt, ListingPublishRequest, PreparedListingPublish,
+};
+#[cfg(feature = "runtime")]
+pub use crate::orders_runtime::{
+    ORDER_STATUS_DEFAULT_LIMIT, ORDER_STATUS_MAX_LIMIT, OrderFulfillmentStatusKind,
+    OrderPaymentStateKind, OrderSettlementStateKind, OrderStatusKind, OrderStatusReceipt,
+    OrderStatusRequest,
 };
 #[cfg(feature = "runtime")]
 pub use crate::product_clients::{ListingsClient, OrdersClient, SyncClient};
