@@ -45,6 +45,8 @@ mod receipt;
 #[cfg(feature = "runtime")]
 mod runtime;
 #[cfg(feature = "runtime")]
+mod runtime_targets;
+#[cfg(feature = "runtime")]
 mod sync_runtime;
 
 #[cfg(feature = "runtime")]
@@ -69,6 +71,11 @@ pub use crate::receipt::{RadrootsSdkEventReference, RadrootsSdkLocalMutationRece
 pub use crate::runtime::{
     RadrootsSdk, RadrootsSdkBuilder, RadrootsSdkClock, RadrootsSdkStorageConfig,
     RadrootsSdkStoragePaths, RadrootsSdkTimestamp,
+};
+#[cfg(feature = "runtime")]
+pub use crate::runtime_targets::{
+    SDK_IDEMPOTENCY_KEY_MAX_LEN, SDK_RELAY_TARGET_MAX_COUNT, SdkIdempotencyKey,
+    SdkRelayTargetPolicy, SdkRelayTargetSet,
 };
 #[cfg(feature = "runtime")]
 pub use crate::sync_runtime::{

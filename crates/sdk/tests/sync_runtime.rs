@@ -19,7 +19,7 @@ use radroots_relay_transport::{RadrootsMockRelayPublishAdapter, RadrootsRelayOut
 use radroots_sdk::{
     ListingPublishRequest, PUSH_OUTBOX_DEFAULT_LIMIT, PUSH_OUTBOX_MAX_LIMIT, PushOutboxEventState,
     PushOutboxRelayOutcomeKind, PushOutboxRequest, RadrootsSdk, RadrootsSdkError,
-    RadrootsSdkTimestamp,
+    RadrootsSdkTimestamp, SdkRelayTargetPolicy,
 };
 
 const SELLER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -159,7 +159,9 @@ async fn enqueue_listing(sdk: &RadrootsSdk, d_tag: &str, title: &str, relays: &[
         .enqueue_publish(
             &actor(),
             &FixtureSigner::new(SELLER),
-            ListingPublishRequest::new(listing(d_tag, title)).with_target_relays(relays.to_vec()),
+            ListingPublishRequest::new(listing(d_tag, title))
+                .try_with_target_relays(relays, SdkRelayTargetPolicy::Public)
+                .expect("relay targets"),
         )
         .await
         .expect("enqueue")

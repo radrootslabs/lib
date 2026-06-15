@@ -79,7 +79,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build()
         .await?;
     let actor = RadrootsActorContext::test(SELLER, [RadrootsActorRole::Seller])?;
-    let request = ListingPublishRequest::new(sample_listing()).with_idempotency_key("example-1");
+    let request =
+        ListingPublishRequest::new(sample_listing()).try_with_idempotency_key("example-1")?;
 
     let prepared = sdk.listings().prepare_publish(&actor, request.clone())?;
     let enqueue = sdk

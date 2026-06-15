@@ -19,7 +19,7 @@ use radroots_events::{
 use radroots_outbox::{RadrootsOutbox, RadrootsOutboxEventState};
 use radroots_sdk::{
     ListingPublishRequest, RadrootsSdk, RadrootsSdkError, RadrootsSdkRecoveryAction,
-    RadrootsSdkTimestamp,
+    RadrootsSdkTimestamp, SdkRelayTargetPolicy, SdkRelayTargetSet,
 };
 
 const SELLER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -30,7 +30,9 @@ const LISTING_B_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAg";
 const LISTING_C_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAw";
 const LISTING_D_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAABA";
 const LISTING_E_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAABQ";
+const LISTING_F_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAABg";
 const RELAY: &str = "wss://relay.example.com";
+const RELAY_B: &str = "wss://relay-b.example.com";
 
 #[derive(Clone)]
 struct FixtureSigner {
@@ -194,7 +196,8 @@ async fn prepare_publish_is_side_effect_free() {
 async fn enqueue_publish_stores_event_and_queues_signed_outbox_without_publish() {
     let (_tempdir, sdk) = directory_sdk().await;
     let request = ListingPublishRequest::new(listing(LISTING_B_D_TAG, "Coffee"))
-        .with_idempotency_key("idem-b");
+        .try_with_idempotency_key("idem-b")
+        .expect("idempotency key");
     let prepared = sdk
         .listings()
         .prepare_publish(&actor(), request.clone())
@@ -258,14 +261,16 @@ async fn enqueue_publish_returns_sanitized_signer_errors() {
 async fn enqueue_publish_reports_partial_local_mutation_after_outbox_conflict() {
     let (_tempdir, sdk) = directory_sdk().await;
     let first = ListingPublishRequest::new(listing(LISTING_D_D_TAG, "Coffee"))
-        .with_idempotency_key("idem-d");
+        .try_with_idempotency_key("idem-d")
+        .expect("idempotency key");
     sdk.listings()
         .enqueue_publish(&actor(), &FixtureSigner::new(SELLER), first)
         .await
         .expect("first enqueue");
 
     let second = ListingPublishRequest::new(listing(LISTING_E_D_TAG, "Changed"))
-        .with_idempotency_key("idem-d");
+        .try_with_idempotency_key("idem-d")
+        .expect("idempotency key");
     let error = sdk
         .listings()
         .enqueue_publish(&actor(), &FixtureSigner::new(SELLER), second)
@@ -280,4 +285,36 @@ async fn enqueue_publish_reports_partial_local_mutation_after_outbox_conflict() 
                 && partial.recovery == RadrootsSdkRecoveryAction::RetryOperationWithSameIdempotencyKey
     ));
     assert!(!error.to_string().contains("idem-d"));
+}
+
+#[tokio::test]
+async fn enqueue_publish_derives_order_independent_idempotency_key() {
+    let (_tempdir, sdk) = directory_sdk().await;
+    let first = ListingPublishRequest::new(listing(LISTING_F_D_TAG, "Coffee"))
+        .try_with_target_relays([RELAY_B, RELAY, RELAY], SdkRelayTargetPolicy::Public)
+        .expect("first target relays");
+    let second = ListingPublishRequest::new(listing(LISTING_F_D_TAG, "Coffee")).with_target_relays(
+        SdkRelayTargetSet::new([RELAY, RELAY_B], SdkRelayTargetPolicy::Public)
+            .expect("second target relays"),
+    );
+
+    let first_receipt = sdk
+        .listings()
+        .enqueue_publish(&actor(), &FixtureSigner::new(SELLER), first)
+        .await
+        .expect("first enqueue");
+    let second_receipt = sdk
+        .listings()
+        .enqueue_publish(&actor(), &FixtureSigner::new(SELLER), second)
+        .await
+        .expect("second enqueue");
+
+    assert_eq!(
+        first_receipt.local.outbox_event_id,
+        second_receipt.local.outbox_event_id
+    );
+    assert_eq!(
+        first_receipt.local.idempotency_key_digest_prefix,
+        second_receipt.local.idempotency_key_digest_prefix
+    );
 }

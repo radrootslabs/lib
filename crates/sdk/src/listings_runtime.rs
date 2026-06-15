@@ -1,7 +1,8 @@
 #[cfg(feature = "runtime")]
 use crate::{
     ListingsClient, RadrootsSdkError, RadrootsSdkEventReference, RadrootsSdkLocalMutationReceipt,
-    RadrootsSdkRecoveryAction, RadrootsSdkTimestamp,
+    RadrootsSdkRecoveryAction, RadrootsSdkTimestamp, SdkIdempotencyKey, SdkRelayTargetPolicy,
+    SdkRelayTargetSet,
 };
 #[cfg(feature = "runtime")]
 use radroots_authority::{RadrootsActorContext, RadrootsEventSigner, sign_authorized_draft};
@@ -22,11 +23,14 @@ use radroots_trade::listing::{
 };
 
 #[cfg(feature = "runtime")]
+const LISTING_PUBLISH_OPERATION_KIND: &str = "listing.publish.v1";
+
+#[cfg(feature = "runtime")]
 #[derive(Clone, Debug)]
 pub struct ListingPublishRequest {
     pub listing: RadrootsListing,
-    pub target_relays: Option<Vec<String>>,
-    pub idempotency_key: Option<String>,
+    pub target_relays: Option<SdkRelayTargetSet>,
+    pub idempotency_key: Option<SdkIdempotencyKey>,
 }
 
 #[cfg(feature = "runtime")]
@@ -39,18 +43,35 @@ impl ListingPublishRequest {
         }
     }
 
-    pub fn with_target_relays<I, S>(mut self, target_relays: I) -> Self
-    where
-        I: IntoIterator<Item = S>,
-        S: Into<String>,
-    {
-        self.target_relays = Some(target_relays.into_iter().map(Into::into).collect());
+    pub fn with_target_relays(mut self, target_relays: SdkRelayTargetSet) -> Self {
+        self.target_relays = Some(target_relays);
         self
     }
 
-    pub fn with_idempotency_key(mut self, idempotency_key: impl Into<String>) -> Self {
+    pub fn try_with_target_relays<I, S>(
+        mut self,
+        target_relays: I,
+        policy: SdkRelayTargetPolicy,
+    ) -> Result<Self, RadrootsSdkError>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        self.target_relays = Some(SdkRelayTargetSet::new(target_relays, policy)?);
+        Ok(self)
+    }
+
+    pub fn with_idempotency_key(mut self, idempotency_key: SdkIdempotencyKey) -> Self {
         self.idempotency_key = Some(idempotency_key.into());
         self
+    }
+
+    pub fn try_with_idempotency_key(
+        mut self,
+        idempotency_key: impl AsRef<str>,
+    ) -> Result<Self, RadrootsSdkError> {
+        self.idempotency_key = Some(SdkIdempotencyKey::new(idempotency_key)?);
+        Ok(self)
     }
 }
 
@@ -98,15 +119,19 @@ impl<'sdk> ListingsClient<'sdk> {
     where
         S: RadrootsEventSigner + ?Sized,
     {
-        let target_relays = self.resolved_target_relays(&request);
-        if target_relays.is_empty() {
-            return Err(RadrootsSdkError::Outbox {
-                message: "listing enqueue requires at least one target relay".to_owned(),
-            });
-        }
+        let target_relays = self.resolved_target_relays(&request)?;
         let idempotency_key = request.idempotency_key.clone();
         let prepared = self.prepare_publish(actor, request)?;
         let signed_event = sign_authorized_draft(actor, signer, &prepared.draft)?;
+        let idempotency_key = match idempotency_key {
+            Some(idempotency_key) => idempotency_key,
+            None => SdkIdempotencyKey::derive(
+                LISTING_PUBLISH_OPERATION_KIND,
+                prepared.draft.expected_event_id.as_str(),
+                prepared.draft.expected_pubkey.as_str(),
+                target_relays.relays(),
+            )?,
+        };
         let observed_at_ms = i64::from(prepared.draft.created_at) * 1_000;
         let event = event_from_signed(&signed_event);
         let ingest = RadrootsEventIngest::new(event, observed_at_ms)
@@ -115,7 +140,7 @@ impl<'sdk> ListingsClient<'sdk> {
         let outbox_input = signed_outbox_input(
             &prepared,
             signed_event.clone(),
-            target_relays,
+            target_relays.into_vec(),
             idempotency_key,
             ingest_receipt.inserted,
             observed_at_ms,
@@ -151,11 +176,14 @@ impl<'sdk> ListingsClient<'sdk> {
         })
     }
 
-    fn resolved_target_relays(&self, request: &ListingPublishRequest) -> Vec<String> {
-        request
-            .target_relays
-            .clone()
-            .unwrap_or_else(|| self.sdk.relay_urls().to_vec())
+    fn resolved_target_relays(
+        &self,
+        request: &ListingPublishRequest,
+    ) -> Result<SdkRelayTargetSet, RadrootsSdkError> {
+        match request.target_relays.as_ref() {
+            Some(target_relays) => Ok(target_relays.clone()),
+            None => SdkRelayTargetSet::from_normalized_relays(self.sdk.relay_urls().to_vec()),
+        }
     }
 }
 
@@ -173,23 +201,20 @@ fn signed_outbox_input(
     prepared: &PreparedListingPublish,
     signed_event: RadrootsSignedNostrEvent,
     target_relays: Vec<String>,
-    idempotency_key: Option<String>,
+    idempotency_key: SdkIdempotencyKey,
     event_store_inserted: bool,
     observed_at_ms: i64,
 ) -> RadrootsOutboxSignedOperationInput {
-    let input = RadrootsOutboxSignedOperationInput::new(
-        "listing.publish.v1",
+    RadrootsOutboxSignedOperationInput::new(
+        LISTING_PUBLISH_OPERATION_KIND,
         prepared.draft.clone(),
         signed_event,
         target_relays,
         event_store_inserted,
         observed_at_ms,
         observed_at_ms,
-    );
-    match idempotency_key {
-        Some(idempotency_key) => input.with_idempotency_key(idempotency_key),
-        None => input,
-    }
+    )
+    .with_idempotency_key(idempotency_key.into_string())
 }
 
 #[cfg(feature = "runtime")]
