@@ -240,15 +240,8 @@ mod tests {
         RadrootsCanonicalListingDraft::new(
             listing(),
             RadrootsPublicKey::parse(SELLER).expect("seller"),
-            RadrootsListingAddress::parse(format!(
-                "{KIND_LISTING}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg"
-            ))
-            .expect("public listing address"),
-            RadrootsListingAddress::parse(format!(
-                "{KIND_LISTING_DRAFT}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg"
-            ))
-            .expect("draft listing address"),
         )
+        .expect("canonical listing draft")
     }
 
     #[test]
