@@ -17,9 +17,9 @@ use radroots_events::{
 use radroots_outbox::{RadrootsOutbox, RadrootsOutboxEventState, RadrootsOutboxOperationInput};
 use radroots_relay_transport::{RadrootsMockRelayPublishAdapter, RadrootsRelayOutcome};
 use radroots_sdk::{
-    ListingPublishRequest, PUSH_OUTBOX_DEFAULT_LIMIT, PUSH_OUTBOX_MAX_LIMIT, PushOutboxEventState,
-    PushOutboxRelayOutcomeKind, PushOutboxRequest, RadrootsSdk, RadrootsSdkError,
-    RadrootsSdkTimestamp, SdkRelayTargetPolicy,
+    ListingEnqueuePublishRequest, ListingPreparePublishRequest, PUSH_OUTBOX_DEFAULT_LIMIT,
+    PUSH_OUTBOX_MAX_LIMIT, PushOutboxEventState, PushOutboxRelayOutcomeKind, PushOutboxRequest,
+    RadrootsSdk, RadrootsSdkError, RadrootsSdkTimestamp, SdkRelayTargetPolicy, SdkRelayUrlPolicy,
 };
 
 const SELLER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -157,11 +157,14 @@ async fn directory_sdk(relays: &[&str]) -> (tempfile::TempDir, RadrootsSdk) {
 async fn enqueue_listing(sdk: &RadrootsSdk, d_tag: &str, title: &str, relays: &[&str]) -> i64 {
     sdk.listings()
         .enqueue_publish(
-            &actor(),
+            ListingEnqueuePublishRequest::new(
+                actor(),
+                listing(d_tag, title),
+                SdkRelayTargetPolicy::UseConfiguredRelays,
+            )
+            .try_with_target_relays(relays, SdkRelayUrlPolicy::Public)
+            .expect("relay targets"),
             &FixtureSigner::new(SELLER),
-            ListingPublishRequest::new(listing(d_tag, title))
-                .try_with_target_relays(relays, SdkRelayTargetPolicy::Public)
-                .expect("relay targets"),
         )
         .await
         .expect("enqueue")
@@ -331,10 +334,10 @@ async fn push_outbox_does_not_claim_unsigned_outbox_work() {
     let (_tempdir, sdk) = directory_sdk(&[RELAY_A]).await;
     let prepared = sdk
         .listings()
-        .prepare_publish(
-            &actor(),
-            ListingPublishRequest::new(listing(LISTING_C_D_TAG, "Unsigned")),
-        )
+        .prepare_publish(ListingPreparePublishRequest::new(
+            actor(),
+            listing(LISTING_C_D_TAG, "Unsigned"),
+        ))
         .expect("prepared");
     let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").outbox_path)
         .await
@@ -342,7 +345,7 @@ async fn push_outbox_does_not_claim_unsigned_outbox_work() {
     let unsigned = outbox
         .enqueue_operation(RadrootsOutboxOperationInput::new(
             "listing.publish.v1",
-            prepared.draft,
+            prepared.frozen_draft,
             vec![RELAY_A.to_owned()],
             1_700_000_000_000,
         ))

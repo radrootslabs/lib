@@ -1,6 +1,6 @@
 #[cfg(feature = "runtime")]
 use crate::{
-    ListingsClient, OrdersClient, RadrootsSdkError, SdkRelayTargetPolicy, SdkRelayTargetSet,
+    ListingsClient, OrdersClient, RadrootsSdkError, SdkRelayTargetSet, SdkRelayUrlPolicy,
     SyncClient, error::RadrootsSdkRecoveryAction,
 };
 #[cfg(feature = "runtime")]
@@ -89,7 +89,7 @@ pub struct RadrootsSdkBuilder {
     storage: RadrootsSdkStorageConfig,
     clock: RadrootsSdkClock,
     relay_urls: Vec<String>,
-    relay_target_policy: SdkRelayTargetPolicy,
+    relay_url_policy: SdkRelayUrlPolicy,
 }
 
 #[cfg(feature = "runtime")]
@@ -99,7 +99,7 @@ impl Default for RadrootsSdkBuilder {
             storage: RadrootsSdkStorageConfig::Memory,
             clock: RadrootsSdkClock::System,
             relay_urls: Vec::new(),
-            relay_target_policy: SdkRelayTargetPolicy::Public,
+            relay_url_policy: SdkRelayUrlPolicy::Public,
         }
     }
 }
@@ -131,15 +131,15 @@ impl RadrootsSdkBuilder {
         self
     }
 
-    pub fn relay_target_policy(mut self, policy: SdkRelayTargetPolicy) -> Self {
-        self.relay_target_policy = policy;
+    pub fn relay_url_policy(mut self, policy: SdkRelayUrlPolicy) -> Self {
+        self.relay_url_policy = policy;
         self
     }
 
     pub async fn build(self) -> Result<RadrootsSdk, RadrootsSdkError> {
         let storage = open_storage(&self.storage).await?;
         let relay_urls =
-            SdkRelayTargetSet::from_configured_relays(&self.relay_urls, self.relay_target_policy)?;
+            SdkRelayTargetSet::from_configured_relays(&self.relay_urls, self.relay_url_policy)?;
         Ok(RadrootsSdk {
             _event_store: storage.event_store,
             _outbox: storage.outbox,

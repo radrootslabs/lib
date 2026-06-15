@@ -3,7 +3,7 @@
 use radroots_sdk::{
     RadrootsSdk, RadrootsSdkClock, RadrootsSdkError, RadrootsSdkRecoveryAction,
     RadrootsSdkStorageConfig, RadrootsSdkTimestamp, SDK_IDEMPOTENCY_KEY_MAX_LEN,
-    SDK_RELAY_TARGET_MAX_COUNT, SdkIdempotencyKey, SdkRelayTargetPolicy, SdkRelayTargetSet,
+    SDK_RELAY_TARGET_MAX_COUNT, SdkIdempotencyKey, SdkRelayTargetSet, SdkRelayUrlPolicy,
 };
 
 #[tokio::test]
@@ -52,7 +52,7 @@ async fn sdk_builder_rejects_ws_relay_without_localhost_policy() {
 #[tokio::test]
 async fn sdk_builder_allows_only_local_ws_targets_with_localhost_policy() {
     let sdk = RadrootsSdk::builder()
-        .relay_target_policy(SdkRelayTargetPolicy::Localhost)
+        .relay_url_policy(SdkRelayUrlPolicy::Localhost)
         .relay_url("ws://localhost:8080")
         .relay_url("ws://127.0.0.1:8081")
         .relay_url("ws://[::1]:8082")
@@ -63,7 +63,7 @@ async fn sdk_builder_allows_only_local_ws_targets_with_localhost_policy() {
     assert_eq!(sdk.relay_urls().len(), 3);
 
     let result = RadrootsSdk::builder()
-        .relay_target_policy(SdkRelayTargetPolicy::Localhost)
+        .relay_url_policy(SdkRelayUrlPolicy::Localhost)
         .relay_url("ws://relay.example.com")
         .build()
         .await;
@@ -149,7 +149,7 @@ fn relay_target_set_validates_normalizes_dedupes_sorts_and_caps() {
             "wss://relay-a.example.com",
             "wss://relay-a.example.com",
         ],
-        SdkRelayTargetPolicy::Public,
+        SdkRelayUrlPolicy::Public,
     )
     .expect("targets");
 
@@ -162,7 +162,7 @@ fn relay_target_set_validates_normalizes_dedupes_sorts_and_caps() {
     );
 
     assert!(matches!(
-        SdkRelayTargetSet::new(Vec::<String>::new(), SdkRelayTargetPolicy::Public),
+        SdkRelayTargetSet::new(Vec::<String>::new(), SdkRelayUrlPolicy::Public),
         Err(RadrootsSdkError::InvalidRequest { .. })
     ));
 
@@ -170,7 +170,7 @@ fn relay_target_set_validates_normalizes_dedupes_sorts_and_caps() {
         .map(|index| format!("wss://relay-{index}.example.com"))
         .collect::<Vec<_>>();
     assert!(matches!(
-        SdkRelayTargetSet::new(too_many, SdkRelayTargetPolicy::Public),
+        SdkRelayTargetSet::new(too_many, SdkRelayUrlPolicy::Public),
         Err(RadrootsSdkError::InvalidRequest { .. })
     ));
 }

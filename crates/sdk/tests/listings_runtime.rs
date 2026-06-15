@@ -18,8 +18,9 @@ use radroots_events::{
 };
 use radroots_outbox::{RadrootsOutbox, RadrootsOutboxEventState};
 use radroots_sdk::{
-    ListingPublishRequest, RadrootsSdk, RadrootsSdkError, RadrootsSdkRecoveryAction,
-    RadrootsSdkTimestamp, SdkRelayTargetPolicy, SdkRelayTargetSet,
+    ListingEnqueuePublishRequest, ListingPreparePublishRequest, RadrootsSdk, RadrootsSdkError,
+    RadrootsSdkRecoveryAction, RadrootsSdkTimestamp, SdkRelayTargetPolicy, SdkRelayTargetSet,
+    SdkRelayUrlPolicy,
 };
 
 const SELLER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -92,6 +93,10 @@ fn actor() -> RadrootsActorContext {
     RadrootsActorContext::test(SELLER, [RadrootsActorRole::Seller]).expect("actor")
 }
 
+fn non_seller_actor() -> RadrootsActorContext {
+    RadrootsActorContext::test(SELLER, [RadrootsActorRole::Buyer]).expect("actor")
+}
+
 fn listing(d_tag: &str, title: &str) -> RadrootsListing {
     RadrootsListing {
         d_tag: RadrootsDTag::parse(d_tag).expect("d tag"),
@@ -160,14 +165,19 @@ async fn directory_sdk() -> (tempfile::TempDir, RadrootsSdk) {
 #[tokio::test]
 async fn prepare_publish_is_side_effect_free() {
     let (_tempdir, sdk) = directory_sdk().await;
-    let request = ListingPublishRequest::new(listing(LISTING_A_D_TAG, "Coffee"));
-    let prepared = sdk
-        .listings()
-        .prepare_publish(&actor(), request)
-        .expect("prepared");
+    let request = ListingPreparePublishRequest::new(actor(), listing(LISTING_A_D_TAG, "Coffee"));
+    let prepared = sdk.listings().prepare_publish(request).expect("prepared");
 
-    assert_eq!(prepared.draft.kind, KIND_LISTING);
+    assert_eq!(prepared.frozen_draft.kind, KIND_LISTING);
     assert_eq!(prepared.created_at.unix_seconds(), 1_700_000_000);
+    assert_eq!(
+        prepared.expected_event_id,
+        prepared.frozen_draft.expected_event_id
+    );
+    assert_eq!(
+        prepared.public_listing_addr.as_str(),
+        format!("{KIND_LISTING}:{SELLER}:{LISTING_A_D_TAG}")
+    );
 
     let paths = sdk.storage_paths().expect("paths");
     let event_store = RadrootsEventStore::open_file(&paths.event_store_path)
@@ -175,7 +185,7 @@ async fn prepare_publish_is_side_effect_free() {
         .expect("event store");
     assert!(
         event_store
-            .get_event(prepared.draft.expected_event_id.as_str())
+            .get_event(prepared.expected_event_id.as_str())
             .await
             .expect("event lookup")
             .is_none()
@@ -193,24 +203,45 @@ async fn prepare_publish_is_side_effect_free() {
 }
 
 #[tokio::test]
+async fn prepare_publish_rejects_non_seller_actor() {
+    let (_tempdir, sdk) = directory_sdk().await;
+    let request =
+        ListingPreparePublishRequest::new(non_seller_actor(), listing(LISTING_B_D_TAG, "Coffee"));
+
+    let error = sdk
+        .listings()
+        .prepare_publish(request)
+        .expect_err("non seller");
+
+    assert!(matches!(error, RadrootsSdkError::ListingDraft { .. }));
+}
+
+#[tokio::test]
 async fn enqueue_publish_stores_event_and_queues_signed_outbox_without_publish() {
     let (_tempdir, sdk) = directory_sdk().await;
-    let request = ListingPublishRequest::new(listing(LISTING_B_D_TAG, "Coffee"))
-        .try_with_idempotency_key("idem-b")
-        .expect("idempotency key");
+    let request = ListingEnqueuePublishRequest::new(
+        actor(),
+        listing(LISTING_B_D_TAG, "Coffee"),
+        SdkRelayTargetPolicy::UseConfiguredRelays,
+    )
+    .try_with_idempotency_key("idem-b")
+    .expect("idempotency key");
     let prepared = sdk
         .listings()
-        .prepare_publish(&actor(), request.clone())
+        .prepare_publish(ListingPreparePublishRequest::new(
+            actor(),
+            listing(LISTING_B_D_TAG, "Coffee"),
+        ))
         .expect("prepared");
     let receipt = sdk
         .listings()
-        .enqueue_publish(&actor(), &FixtureSigner::new(SELLER), request)
+        .enqueue_publish(request, &FixtureSigner::new(SELLER))
         .await
         .expect("enqueue");
 
     assert_eq!(
         receipt.local.event.event_id,
-        prepared.draft.expected_event_id
+        prepared.expected_event_id.as_str()
     );
     assert_eq!(receipt.local.event.kind, KIND_LISTING);
     assert!(receipt.local.stored);
@@ -244,10 +275,14 @@ async fn enqueue_publish_stores_event_and_queues_signed_outbox_without_publish()
 #[tokio::test]
 async fn enqueue_publish_returns_sanitized_signer_errors() {
     let (_tempdir, sdk) = directory_sdk().await;
-    let request = ListingPublishRequest::new(listing(LISTING_C_D_TAG, "Coffee"));
+    let request = ListingEnqueuePublishRequest::new(
+        actor(),
+        listing(LISTING_C_D_TAG, "Coffee"),
+        SdkRelayTargetPolicy::UseConfiguredRelays,
+    );
     let error = sdk
         .listings()
-        .enqueue_publish(&actor(), &FixtureSigner::new(OTHER), request)
+        .enqueue_publish(request, &FixtureSigner::new(OTHER))
         .await
         .expect_err("signer error");
     let message = error.to_string();
@@ -260,20 +295,28 @@ async fn enqueue_publish_returns_sanitized_signer_errors() {
 #[tokio::test]
 async fn enqueue_publish_reports_partial_local_mutation_after_outbox_conflict() {
     let (_tempdir, sdk) = directory_sdk().await;
-    let first = ListingPublishRequest::new(listing(LISTING_D_D_TAG, "Coffee"))
-        .try_with_idempotency_key("idem-d")
-        .expect("idempotency key");
+    let first = ListingEnqueuePublishRequest::new(
+        actor(),
+        listing(LISTING_D_D_TAG, "Coffee"),
+        SdkRelayTargetPolicy::UseConfiguredRelays,
+    )
+    .try_with_idempotency_key("idem-d")
+    .expect("idempotency key");
     sdk.listings()
-        .enqueue_publish(&actor(), &FixtureSigner::new(SELLER), first)
+        .enqueue_publish(first, &FixtureSigner::new(SELLER))
         .await
         .expect("first enqueue");
 
-    let second = ListingPublishRequest::new(listing(LISTING_E_D_TAG, "Changed"))
-        .try_with_idempotency_key("idem-d")
-        .expect("idempotency key");
+    let second = ListingEnqueuePublishRequest::new(
+        actor(),
+        listing(LISTING_E_D_TAG, "Changed"),
+        SdkRelayTargetPolicy::UseConfiguredRelays,
+    )
+    .try_with_idempotency_key("idem-d")
+    .expect("idempotency key");
     let error = sdk
         .listings()
-        .enqueue_publish(&actor(), &FixtureSigner::new(SELLER), second)
+        .enqueue_publish(second, &FixtureSigner::new(SELLER))
         .await
         .expect_err("partial");
 
@@ -290,22 +333,30 @@ async fn enqueue_publish_reports_partial_local_mutation_after_outbox_conflict() 
 #[tokio::test]
 async fn enqueue_publish_derives_order_independent_idempotency_key() {
     let (_tempdir, sdk) = directory_sdk().await;
-    let first = ListingPublishRequest::new(listing(LISTING_F_D_TAG, "Coffee"))
-        .try_with_target_relays([RELAY_B, RELAY, RELAY], SdkRelayTargetPolicy::Public)
-        .expect("first target relays");
-    let second = ListingPublishRequest::new(listing(LISTING_F_D_TAG, "Coffee")).with_target_relays(
-        SdkRelayTargetSet::new([RELAY, RELAY_B], SdkRelayTargetPolicy::Public)
-            .expect("second target relays"),
+    let first = ListingEnqueuePublishRequest::new(
+        actor(),
+        listing(LISTING_F_D_TAG, "Coffee"),
+        SdkRelayTargetPolicy::UseConfiguredRelays,
+    )
+    .try_with_target_relays([RELAY_B, RELAY, RELAY], SdkRelayUrlPolicy::Public)
+    .expect("first target relays");
+    let second = ListingEnqueuePublishRequest::new(
+        actor(),
+        listing(LISTING_F_D_TAG, "Coffee"),
+        SdkRelayTargetPolicy::explicit(
+            SdkRelayTargetSet::new([RELAY, RELAY_B], SdkRelayUrlPolicy::Public)
+                .expect("second target relays"),
+        ),
     );
 
     let first_receipt = sdk
         .listings()
-        .enqueue_publish(&actor(), &FixtureSigner::new(SELLER), first)
+        .enqueue_publish(first, &FixtureSigner::new(SELLER))
         .await
         .expect("first enqueue");
     let second_receipt = sdk
         .listings()
-        .enqueue_publish(&actor(), &FixtureSigner::new(SELLER), second)
+        .enqueue_publish(second, &FixtureSigner::new(SELLER))
         .await
         .expect("second enqueue");
 

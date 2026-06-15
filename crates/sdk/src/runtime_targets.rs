@@ -8,12 +8,12 @@ pub const SDK_RELAY_TARGET_MAX_COUNT: usize = 20;
 pub const SDK_IDEMPOTENCY_KEY_MAX_LEN: usize = 256;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum SdkRelayTargetPolicy {
+pub enum SdkRelayUrlPolicy {
     Public,
     Localhost,
 }
 
-impl SdkRelayTargetPolicy {
+impl SdkRelayUrlPolicy {
     fn relay_transport_policy(self) -> RadrootsRelayUrlPolicy {
         match self {
             Self::Public => RadrootsRelayUrlPolicy::Public,
@@ -23,12 +23,35 @@ impl SdkRelayTargetPolicy {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SdkRelayTargetPolicy {
+    Explicit(SdkRelayTargetSet),
+    UseConfiguredRelays,
+}
+
+impl SdkRelayTargetPolicy {
+    pub fn explicit(targets: SdkRelayTargetSet) -> Self {
+        Self::Explicit(targets)
+    }
+
+    pub fn try_explicit<I, S>(
+        relays: I,
+        url_policy: SdkRelayUrlPolicy,
+    ) -> Result<Self, RadrootsSdkError>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        Ok(Self::Explicit(SdkRelayTargetSet::new(relays, url_policy)?))
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SdkRelayTargetSet {
     relays: Vec<String>,
 }
 
 impl SdkRelayTargetSet {
-    pub fn new<I, S>(relays: I, policy: SdkRelayTargetPolicy) -> Result<Self, RadrootsSdkError>
+    pub fn new<I, S>(relays: I, policy: SdkRelayUrlPolicy) -> Result<Self, RadrootsSdkError>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
@@ -58,7 +81,7 @@ impl SdkRelayTargetSet {
 
     pub(crate) fn from_configured_relays<I, S>(
         relays: I,
-        policy: SdkRelayTargetPolicy,
+        policy: SdkRelayUrlPolicy,
     ) -> Result<Vec<String>, RadrootsSdkError>
     where
         I: IntoIterator<Item = S>,
@@ -161,7 +184,7 @@ struct SdkIdempotencyDerivationInput<'a> {
 
 fn normalized_relay_url(
     value: &str,
-    policy: SdkRelayTargetPolicy,
+    policy: SdkRelayUrlPolicy,
 ) -> Result<String, RadrootsSdkError> {
     let relay = RadrootsRelayUrl::parse(value, policy.relay_transport_policy())
         .map_err(|error| invalid_request(format!("invalid relay target: {error}")))?;

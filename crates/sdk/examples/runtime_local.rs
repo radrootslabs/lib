@@ -16,7 +16,8 @@ use radroots_sdk::protocol::listing::{
     RadrootsListing, RadrootsListingBin, RadrootsListingProduct,
 };
 use radroots_sdk::{
-    ListingPublishRequest, OrderStatusRequest, PushOutboxRequest, RadrootsSdk, RadrootsSdkTimestamp,
+    ListingEnqueuePublishRequest, ListingPreparePublishRequest, OrderStatusRequest,
+    PushOutboxRequest, RadrootsSdk, RadrootsSdkTimestamp, SdkRelayTargetPolicy,
 };
 
 const SELLER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -79,13 +80,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build()
         .await?;
     let actor = RadrootsActorContext::test(SELLER, [RadrootsActorRole::Seller])?;
-    let request =
-        ListingPublishRequest::new(sample_listing()).try_with_idempotency_key("example-1")?;
+    let listing = sample_listing();
+    let prepare_request = ListingPreparePublishRequest::new(actor.clone(), listing.clone());
+    let enqueue_request = ListingEnqueuePublishRequest::new(
+        actor,
+        listing,
+        SdkRelayTargetPolicy::UseConfiguredRelays,
+    )
+    .try_with_idempotency_key("example-1")?;
 
-    let prepared = sdk.listings().prepare_publish(&actor, request.clone())?;
+    let prepared = sdk.listings().prepare_publish(prepare_request)?;
     let enqueue = sdk
         .listings()
-        .enqueue_publish(&actor, &FixtureSigner::new(SELLER), request)
+        .enqueue_publish(enqueue_request, &FixtureSigner::new(SELLER))
         .await?;
     let push = sdk
         .sync()
@@ -99,7 +106,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .status(OrderStatusRequest::new("example-order-1"))
         .await?;
 
-    assert_eq!(prepared.listing_address, enqueue.listing_address);
+    assert_eq!(
+        prepared.public_listing_addr.as_str(),
+        enqueue.listing_address.as_str()
+    );
     assert_eq!(push.attempted_events, 1);
     assert!(!order_status.found);
     Ok(())

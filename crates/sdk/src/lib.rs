@@ -55,7 +55,8 @@ pub use crate::error::{
 };
 #[cfg(feature = "runtime")]
 pub use crate::listings_runtime::{
-    ListingEnqueueReceipt, ListingPublishRequest, PreparedListingPublish,
+    ListingEnqueuePublishRequest, ListingEnqueueReceipt, ListingPreparePublishRequest,
+    ListingPublishPlan,
 };
 #[cfg(feature = "runtime")]
 pub use crate::orders_runtime::{
@@ -75,7 +76,7 @@ pub use crate::runtime::{
 #[cfg(feature = "runtime")]
 pub use crate::runtime_targets::{
     SDK_IDEMPOTENCY_KEY_MAX_LEN, SDK_RELAY_TARGET_MAX_COUNT, SdkIdempotencyKey,
-    SdkRelayTargetPolicy, SdkRelayTargetSet,
+    SdkRelayTargetPolicy, SdkRelayTargetSet, SdkRelayUrlPolicy,
 };
 #[cfg(feature = "runtime")]
 pub use crate::sync_runtime::{
