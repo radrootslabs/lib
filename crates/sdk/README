@@ -3,20 +3,49 @@
 Curated Rad Roots Rust SDK for local-first Rad Roots product workflows.
 
 The SDK v1 product runtime is centered on `RadrootsSdk::builder()`,
-`sdk.listings()`, `sdk.sync()`, and `sdk.orders()`. Product callers use the
-runtime clients to prepare listing publishes, enqueue signed local mutations,
-push the signed outbox through an explicit relay transport adapter, and read
-local order status projections.
+`sdk.listings()`, `sdk.sync()`, and `sdk.orders()`.
+
+`RadrootsSdk::builder()` defaults to memory storage, the system clock, no relay
+URLs, and no production network publishing. Directory storage is opt-in and
+creates `event_store.sqlite` and `outbox.sqlite` in the selected directory.
+Configured relay URLs are also opt-in. Product sync publish requires configured
+relay URLs and the `relay-runtime` feature.
+
+`sdk.listings().prepare_publish(...)` is side-effect-free and returns a typed
+`ListingPublishPlan`. `sdk.listings().enqueue_publish(...)` signs the authorized
+listing event, ingests it into the local event store, queues signed outbox work,
+and returns a typed `ListingEnqueueReceipt`. The enqueue request uses typed relay
+target and idempotency inputs; omitted idempotency keys are derived
+deterministically.
+
+`sdk.sync().push_outbox(...)` is the product sync entrypoint. It publishes queued
+signed outbox work only when relay runtime support and configured relay URLs are
+present. `push_outbox_with_adapter(...)` remains available for tests and
+controlled adapter-level substrate checks.
+
+`sdk.orders().status(...)` reads local order projections and returns typed
+source, event count, limit state, event IDs, and reducer issues. It is not a
+network fetch.
 
 Low-level event-contract and transport helpers are intentionally scoped under
-`protocol`:
+explicit modules:
 
+- `protocol::events`
+- `protocol::wire`
 - `protocol::profile`
 - `protocol::farm`
 - `protocol::listing`
 - `protocol::order`
-- `protocol::client`
-- `protocol::config`
+- `protocol::identity` when `identity-models` is enabled
+- `client`
+- `config`
+- `adapters`
+
+Product runtime callers do not need `WireEventParts`. Wire helpers are exposed
+only through `protocol::wire`.
+
+SDK v1 does not claim strict NIP-99 Markdown-content interoperability. It emits
+and consumes Rad Roots v1 listing and trade event contracts.
 
 Optional advanced substrate is explicitly feature-scoped:
 
@@ -25,3 +54,8 @@ Optional advanced substrate is explicitly feature-scoped:
 - `signing`: Nostr builder and local signing adapters
 - `relay-client`: relay client and publish adapters
 - `signer-adapters`: NIP-46 and signer-session primitives
+
+The crate is licensed as `MIT OR Apache-2.0`. Its manifest is configured for a
+future crates.io release, but a public release still requires the full SDK check
+lane, generated artifact reproducibility checks, metadata review, and a publish
+dry run.

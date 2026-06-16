@@ -10,14 +10,14 @@ use radroots_events::draft::{
     RadrootsFrozenEventDraft, RadrootsSignedNostrEvent, RadrootsSignedNostrEventParts,
 };
 use radroots_events::ids::{RadrootsDTag, RadrootsInventoryBinId};
-use radroots_relay_transport::RadrootsMockRelayPublishAdapter;
 use radroots_sdk::protocol::farm::RadrootsFarmRef;
 use radroots_sdk::protocol::listing::{
     RadrootsListing, RadrootsListingBin, RadrootsListingProduct,
 };
 use radroots_sdk::{
     ListingEnqueuePublishRequest, ListingPreparePublishRequest, OrderStatusRequest,
-    PushOutboxRequest, RadrootsSdk, RadrootsSdkTimestamp, SdkRelayTargetPolicy,
+    PushOutboxRequest, RadrootsSdk, RadrootsSdkError, RadrootsSdkTimestamp, SdkRelayTargetPolicy,
+    SdkRelayUrlPolicy,
 };
 
 const SELLER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -76,7 +76,6 @@ impl RadrootsEventSigner for FixtureSigner {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let sdk = RadrootsSdk::builder()
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
-        .relay_url(RELAY)
         .build()
         .await?;
     let actor = RadrootsActorContext::test(SELLER, [RadrootsActorRole::Seller])?;
@@ -87,6 +86,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         listing,
         SdkRelayTargetPolicy::UseConfiguredRelays,
     )
+    .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)?
     .try_with_idempotency_key("example-1")?;
 
     let prepared = sdk.listings().prepare_publish(prepare_request)?;
@@ -96,11 +96,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     let push = sdk
         .sync()
-        .push_outbox_with_adapter(
-            &RadrootsMockRelayPublishAdapter::new(),
-            PushOutboxRequest::new().with_limit(1),
-        )
-        .await?;
+        .push_outbox(PushOutboxRequest::new().with_limit(1))
+        .await;
     let order_status = sdk
         .orders()
         .status(OrderStatusRequest::parse("example-order-1")?)
@@ -110,7 +107,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         prepared.public_listing_addr.as_str(),
         enqueue.public_listing_addr.as_str()
     );
-    assert_eq!(push.attempted_events, 1);
+    #[cfg(feature = "relay-runtime")]
+    assert!(matches!(
+        push,
+        Err(RadrootsSdkError::ProductSyncRelaySetupFailure { .. })
+    ));
+    #[cfg(not(feature = "relay-runtime"))]
+    assert!(matches!(
+        push,
+        Err(RadrootsSdkError::ProductSyncUnsupported { .. })
+    ));
     assert!(!order_status.found);
     Ok(())
 }
