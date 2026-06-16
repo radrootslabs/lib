@@ -229,15 +229,29 @@ async fn order_status_rejects_invalid_limits_before_querying() {
         .await
         .expect_err("too large");
 
-    assert!(matches!(zero, RadrootsSdkError::InvalidRequest { .. }));
-    assert!(matches!(too_large, RadrootsSdkError::InvalidRequest { .. }));
+    assert!(matches!(
+        zero,
+        RadrootsSdkError::OrderStatusLimitInvalid {
+            limit: 0,
+            min: 1,
+            max: ORDER_STATUS_MAX_LIMIT
+        }
+    ));
+    assert!(matches!(
+        too_large,
+        RadrootsSdkError::OrderStatusLimitInvalid {
+            limit,
+            min: 1,
+            max: ORDER_STATUS_MAX_LIMIT
+        } if limit == ORDER_STATUS_MAX_LIMIT + 1
+    ));
 }
 
 #[test]
 fn order_status_parse_rejects_invalid_order_ids() {
     let error = OrderStatusRequest::parse("bad order id").expect_err("invalid order id");
 
-    assert!(matches!(error, RadrootsSdkError::InvalidRequest { .. }));
+    assert!(matches!(error, RadrootsSdkError::InvalidOrderId { .. }));
 }
 
 #[tokio::test]

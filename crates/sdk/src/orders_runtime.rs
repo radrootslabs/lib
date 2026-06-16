@@ -36,9 +36,7 @@ impl OrderStatusRequest {
     pub fn parse(order_id: &str) -> Result<Self, RadrootsSdkError> {
         RadrootsOrderId::parse(order_id)
             .map(Self::new)
-            .map_err(|error| RadrootsSdkError::InvalidRequest {
-                message: format!("order_id is invalid: {error}"),
-            })
+            .map_err(|error| RadrootsSdkError::invalid_order_id(order_id, error.to_string()))
     }
 
     pub fn with_limit(mut self, limit: u32) -> Self {
@@ -48,11 +46,11 @@ impl OrderStatusRequest {
 
     fn validate(&self) -> Result<(), RadrootsSdkError> {
         if self.limit == 0 || self.limit > ORDER_STATUS_MAX_LIMIT {
-            return Err(RadrootsSdkError::InvalidRequest {
-                message: format!(
-                    "order status limit must be between 1 and {ORDER_STATUS_MAX_LIMIT}"
-                ),
-            });
+            return Err(RadrootsSdkError::order_status_limit_invalid(
+                self.limit,
+                1,
+                ORDER_STATUS_MAX_LIMIT,
+            ));
         }
         Ok(())
     }

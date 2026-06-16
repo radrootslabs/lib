@@ -221,7 +221,10 @@ async fn product_push_outbox_without_relay_runtime_returns_structured_error() {
         .await
         .expect_err("unsupported product push");
 
-    assert!(matches!(error, RadrootsSdkError::RelayTransport { .. }));
+    assert!(matches!(
+        error,
+        RadrootsSdkError::ProductSyncUnsupported { .. }
+    ));
 }
 
 #[cfg(feature = "relay-runtime")]
@@ -250,7 +253,10 @@ async fn product_push_outbox_requires_configured_relays() {
         .await
         .expect_err("missing configured relays");
 
-    assert!(matches!(error, RadrootsSdkError::InvalidRequest { .. }));
+    assert!(matches!(
+        error,
+        RadrootsSdkError::ProductSyncRelaySetupFailure { .. }
+    ));
 }
 
 #[tokio::test]

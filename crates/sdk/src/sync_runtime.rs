@@ -192,7 +192,7 @@ impl<'sdk> SyncClient<'sdk> {
         #[cfg(feature = "relay-runtime")]
         {
             if self.sdk.relay_urls().is_empty() {
-                return Err(RadrootsSdkError::InvalidRequest {
+                return Err(RadrootsSdkError::ProductSyncRelaySetupFailure {
                     message: "sync push requires configured relay URLs".to_owned(),
                 });
             }
@@ -204,8 +204,9 @@ impl<'sdk> SyncClient<'sdk> {
         #[cfg(not(feature = "relay-runtime"))]
         {
             let _ = request;
-            Err(RadrootsSdkError::RelayTransport {
-                message: "sync push requires the relay-runtime feature".to_owned(),
+            Err(RadrootsSdkError::ProductSyncUnsupported {
+                operation: "sync.push_outbox",
+                required_feature: "relay-runtime",
             })
         }
     }

@@ -227,12 +227,23 @@ impl<'sdk> ListingsClient<'sdk> {
             ._outbox
             .enqueue_signed_operation(outbox_input)
             .await
-            .map_err(|_| {
-                RadrootsSdkError::partial_outbox_enqueue_mutation(
-                    signed_event_id.as_str(),
-                    LISTING_PUBLISH_OPERATION_KIND,
-                    partial_failure_digest_prefix.as_str(),
-                )
+            .map_err(|error| {
+                if matches!(
+                    error,
+                    radroots_outbox::RadrootsOutboxError::IdempotencyConflict { .. }
+                ) {
+                    RadrootsSdkError::partial_outbox_idempotency_conflict_mutation(
+                        signed_event_id.as_str(),
+                        LISTING_PUBLISH_OPERATION_KIND,
+                        partial_failure_digest_prefix.as_str(),
+                    )
+                } else {
+                    RadrootsSdkError::partial_outbox_enqueue_mutation(
+                        signed_event_id.as_str(),
+                        LISTING_PUBLISH_OPERATION_KIND,
+                        partial_failure_digest_prefix.as_str(),
+                    )
+                }
             })?;
         let idempotency_digest_prefix = digest_prefix(outbox_receipt.idempotency_digest.as_str());
         Ok(ListingEnqueueReceipt {

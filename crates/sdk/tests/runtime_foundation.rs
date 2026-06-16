@@ -45,8 +45,22 @@ async fn sdk_builder_rejects_ws_relay_without_localhost_policy() {
 
     assert!(matches!(
         result,
-        Err(RadrootsSdkError::InvalidRequest { .. })
+        Err(RadrootsSdkError::InvalidRelayUrl { .. })
     ));
+}
+
+#[test]
+fn invalid_relay_url_errors_redact_userinfo() {
+    let error = SdkRelayTargetSet::new(
+        ["wss://user:password@relay.example.com"],
+        SdkRelayUrlPolicy::Public,
+    )
+    .expect_err("invalid relay");
+    let message = error.to_string();
+
+    assert!(matches!(error, RadrootsSdkError::InvalidRelayUrl { .. }));
+    assert!(message.contains("<redacted>@relay.example.com"));
+    assert!(!message.contains("password"));
 }
 
 #[tokio::test]
@@ -70,7 +84,7 @@ async fn sdk_builder_allows_only_local_ws_targets_with_localhost_policy() {
 
     assert!(matches!(
         result,
-        Err(RadrootsSdkError::InvalidRequest { .. })
+        Err(RadrootsSdkError::InvalidRelayUrl { .. })
     ));
 }
 
@@ -166,7 +180,7 @@ fn relay_target_set_validates_normalizes_dedupes_sorts_and_caps() {
 
     assert!(matches!(
         SdkRelayTargetSet::new(Vec::<String>::new(), SdkRelayUrlPolicy::Public),
-        Err(RadrootsSdkError::InvalidRequest { .. })
+        Err(RadrootsSdkError::EmptyTargetRelays { .. })
     ));
 
     let too_many = (0..=SDK_RELAY_TARGET_MAX_COUNT)
@@ -174,7 +188,10 @@ fn relay_target_set_validates_normalizes_dedupes_sorts_and_caps() {
         .collect::<Vec<_>>();
     assert!(matches!(
         SdkRelayTargetSet::new(too_many, SdkRelayUrlPolicy::Public),
-        Err(RadrootsSdkError::InvalidRequest { .. })
+        Err(RadrootsSdkError::RelayTargetLimitExceeded {
+            max: SDK_RELAY_TARGET_MAX_COUNT,
+            actual
+        }) if actual == SDK_RELAY_TARGET_MAX_COUNT + 1
     ));
 }
 
@@ -198,4 +215,32 @@ fn idempotency_key_validation_is_bounded_and_debug_redacted() {
         SdkIdempotencyKey::new("x".repeat(SDK_IDEMPOTENCY_KEY_MAX_LEN + 1)),
         Err(RadrootsSdkError::InvalidRequest { .. })
     ));
+}
+
+#[test]
+fn outbox_idempotency_conflict_maps_to_structured_sdk_error() {
+    let error = RadrootsSdkError::from(radroots_outbox::RadrootsOutboxError::IdempotencyConflict {
+        operation_kind: "listing.publish.v1".to_owned(),
+        expected_pubkey: "a".repeat(64),
+        idempotency_key: "secret-idempotency-key".to_owned(),
+        existing_digest: "b".repeat(64),
+        new_digest: "c".repeat(64),
+    });
+    let message = error.to_string();
+
+    assert!(matches!(
+        error,
+        RadrootsSdkError::IdempotencyConflict {
+            operation_kind,
+            expected_pubkey_prefix,
+            existing_digest_prefix,
+            new_digest_prefix,
+        } if operation_kind == "listing.publish.v1"
+            && expected_pubkey_prefix == "aaaaaaaaaaaa"
+            && existing_digest_prefix == "bbbbbbbbbbbb"
+            && new_digest_prefix == "cccccccccccc"
+    ));
+    assert!(!message.contains("secret-idempotency-key"));
+    assert!(!message.contains(&"b".repeat(64)));
+    assert!(!message.contains(&"c".repeat(64)));
 }

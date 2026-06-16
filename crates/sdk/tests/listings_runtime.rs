@@ -19,8 +19,8 @@ use radroots_events::{
 use radroots_outbox::{RadrootsOutbox, RadrootsOutboxEventState};
 use radroots_sdk::{
     ListingEnqueuePublishRequest, ListingPreparePublishRequest, RadrootsSdk, RadrootsSdkError,
-    RadrootsSdkRecoveryAction, RadrootsSdkTimestamp, SdkMutationState, SdkRelayTargetPolicy,
-    SdkRelayTargetSet, SdkRelayUrlPolicy,
+    RadrootsSdkPartialLocalMutationFailure, RadrootsSdkRecoveryAction, RadrootsSdkTimestamp,
+    SdkMutationState, SdkRelayTargetPolicy, SdkRelayTargetSet, SdkRelayUrlPolicy,
 };
 
 const SELLER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -213,7 +213,7 @@ async fn prepare_publish_rejects_non_seller_actor() {
         .prepare_publish(request)
         .expect_err("non seller");
 
-    assert!(matches!(error, RadrootsSdkError::ListingDraft { .. }));
+    assert!(matches!(error, RadrootsSdkError::UnauthorizedActor { .. }));
 }
 
 #[tokio::test]
@@ -288,7 +288,10 @@ async fn enqueue_publish_returns_sanitized_signer_errors() {
         .expect_err("signer error");
     let message = error.to_string();
 
-    assert!(matches!(error, RadrootsSdkError::Authority { .. }));
+    assert!(matches!(
+        error,
+        RadrootsSdkError::SignerPubkeyMismatch { .. }
+    ));
     assert!(!message.contains("raw"));
     assert!(!message.contains("ffff"));
 }
@@ -329,6 +332,7 @@ async fn enqueue_publish_reports_partial_local_mutation_after_outbox_conflict() 
                 && partial.event_id.is_some()
                 && partial.operation_kind == "listing.publish.v1"
                 && partial.idempotency_digest_prefix.is_some()
+                && partial.failure == RadrootsSdkPartialLocalMutationFailure::OutboxIdempotencyConflict
                 && partial.recovery == RadrootsSdkRecoveryAction::RetryOperationWithSameIdempotencyKey
     ));
     assert!(!error.to_string().contains("idem-d"));

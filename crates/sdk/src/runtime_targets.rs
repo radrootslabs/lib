@@ -101,12 +101,15 @@ impl SdkRelayTargetSet {
 
     fn from_normalized_set(normalized: BTreeSet<String>) -> Result<Self, RadrootsSdkError> {
         if normalized.is_empty() {
-            return Err(invalid_request("relay target set must not be empty"));
+            return Err(RadrootsSdkError::empty_target_relays(
+                "sdk relay target set",
+            ));
         }
         if normalized.len() > SDK_RELAY_TARGET_MAX_COUNT {
-            return Err(invalid_request(format!(
-                "relay target set must contain at most {SDK_RELAY_TARGET_MAX_COUNT} relays"
-            )));
+            return Err(RadrootsSdkError::relay_target_limit_exceeded(
+                SDK_RELAY_TARGET_MAX_COUNT,
+                normalized.len(),
+            ));
         }
         Ok(Self {
             relays: normalized.into_iter().collect(),
@@ -186,11 +189,11 @@ fn normalized_relay_url(
     value: &str,
     policy: SdkRelayUrlPolicy,
 ) -> Result<String, RadrootsSdkError> {
-    let relay = RadrootsRelayUrl::parse(value, policy.relay_transport_policy())
-        .map_err(|error| invalid_request(format!("invalid relay target: {error}")))?;
+    let relay = RadrootsRelayUrl::parse(value, policy.relay_transport_policy())?;
     let normalized = relay.into_string();
     if normalized.starts_with("ws://") && !is_local_ws_relay(normalized.as_str()) {
-        return Err(invalid_request(
+        return Err(RadrootsSdkError::invalid_relay_url(
+            normalized,
             "ws relay targets are limited to localhost, 127.0.0.1, or [::1]",
         ));
     }
