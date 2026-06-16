@@ -191,11 +191,6 @@ impl<'sdk> SyncClient<'sdk> {
     ) -> Result<PushOutboxReceipt, RadrootsSdkError> {
         #[cfg(feature = "relay-runtime")]
         {
-            if self.sdk.relay_urls().is_empty() {
-                return Err(RadrootsSdkError::ProductSyncRelaySetupFailure {
-                    message: "sync push requires configured relay URLs".to_owned(),
-                });
-            }
             let adapter =
                 RadrootsNostrClientPublishAdapter::new(RadrootsNostrClient::new_signerless());
             self.push_outbox_with_adapter(&adapter, request).await

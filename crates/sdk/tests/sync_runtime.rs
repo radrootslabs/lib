@@ -229,8 +229,8 @@ async fn product_push_outbox_without_relay_runtime_returns_structured_error() {
 
 #[cfg(feature = "relay-runtime")]
 #[tokio::test]
-async fn product_push_outbox_empty_queue_uses_configured_relays() {
-    let (_tempdir, sdk) = directory_sdk(&[RELAY_A]).await;
+async fn product_push_outbox_empty_queue_does_not_require_builder_relays() {
+    let (_tempdir, sdk) = directory_sdk(&[]).await;
 
     let receipt = sdk
         .sync()
@@ -240,23 +240,6 @@ async fn product_push_outbox_empty_queue_uses_configured_relays() {
 
     assert_eq!(receipt.attempted_events, 0);
     assert!(receipt.events.is_empty());
-}
-
-#[cfg(feature = "relay-runtime")]
-#[tokio::test]
-async fn product_push_outbox_requires_configured_relays() {
-    let (_tempdir, sdk) = directory_sdk(&[]).await;
-
-    let error = sdk
-        .sync()
-        .push_outbox(PushOutboxRequest::new())
-        .await
-        .expect_err("missing configured relays");
-
-    assert!(matches!(
-        error,
-        RadrootsSdkError::ProductSyncRelaySetupFailure { .. }
-    ));
 }
 
 #[tokio::test]
@@ -284,8 +267,8 @@ async fn push_outbox_rejects_invalid_limits_before_claiming() {
 }
 
 #[tokio::test]
-async fn push_outbox_publishes_signed_listing_and_marks_outbox_published() {
-    let (_tempdir, sdk) = directory_sdk(&[RELAY_A]).await;
+async fn push_outbox_with_adapter_uses_queued_targets_without_builder_relays() {
+    let (_tempdir, sdk) = directory_sdk(&[]).await;
     let outbox_event_id = enqueue_listing(&sdk, LISTING_A_D_TAG, "Coffee", &[RELAY_A]).await;
     let adapter = RadrootsMockRelayPublishAdapter::new();
 
