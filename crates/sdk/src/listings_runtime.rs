@@ -191,11 +191,36 @@ impl<'sdk> ListingsClient<'sdk> {
     where
         S: RadrootsEventSigner + ?Sized,
     {
-        let target_relays = self.resolved_target_relays(&request.target_relays)?;
-        let idempotency_key = request.idempotency_key.clone();
-        let created_at = self.resolved_created_at(request.created_at)?;
-        let plan = listing_publish_plan(&request.actor, request.document, created_at)?;
-        let signed_event = sign_authorized_draft(&request.actor, signer, &plan.frozen_draft)?;
+        let ListingEnqueuePublishRequest {
+            actor,
+            document,
+            target_relays,
+            idempotency_key,
+            created_at,
+        } = request;
+        let prepare_request = ListingPreparePublishRequest {
+            actor: actor.clone(),
+            document,
+            created_at,
+        };
+        let plan = self.prepare_publish(prepare_request)?;
+        self.enqueue_prepared_publish(&actor, plan, target_relays, idempotency_key, signer)
+            .await
+    }
+
+    pub async fn enqueue_prepared_publish<S>(
+        &self,
+        actor: &RadrootsActorContext,
+        plan: ListingPublishPlan,
+        target_relays: SdkRelayTargetPolicy,
+        idempotency_key: Option<SdkIdempotencyKey>,
+        signer: &S,
+    ) -> Result<ListingEnqueueReceipt, RadrootsSdkError>
+    where
+        S: RadrootsEventSigner + ?Sized,
+    {
+        let target_relays = self.resolved_target_relays(&target_relays)?;
+        let signed_event = sign_authorized_draft(actor, signer, &plan.frozen_draft)?;
         let idempotency_key = match idempotency_key {
             Some(idempotency_key) => idempotency_key,
             None => SdkIdempotencyKey::derive(

@@ -32,6 +32,10 @@ const LISTING_C_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAw";
 const LISTING_D_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAABA";
 const LISTING_E_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAABQ";
 const LISTING_F_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAABg";
+const LISTING_G_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAABw";
+const LISTING_H_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAACA";
+const LISTING_I_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAACQ";
+const LISTING_J_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAACg";
 const RELAY: &str = "wss://relay.example.com";
 const RELAY_B: &str = "wss://relay-b.example.com";
 
@@ -271,6 +275,150 @@ async fn enqueue_publish_stores_event_and_queues_signed_outbox_without_publish()
         .expect("outbox event");
     assert_eq!(outbox_event.state, RadrootsOutboxEventState::Signed);
     assert!(outbox_event.signed_event.is_some());
+}
+
+#[tokio::test]
+async fn prepare_then_enqueue_prepared_uses_same_event_id() {
+    let (_tempdir, sdk) = directory_sdk().await;
+    let actor = actor();
+    let prepared = sdk
+        .listings()
+        .prepare_publish(ListingPreparePublishRequest::new(
+            actor.clone(),
+            listing(LISTING_G_D_TAG, "Coffee"),
+        ))
+        .expect("prepared");
+    let receipt = sdk
+        .listings()
+        .enqueue_prepared_publish(
+            &actor,
+            prepared.clone(),
+            SdkRelayTargetPolicy::UseConfiguredRelays,
+            None,
+            &FixtureSigner::new(SELLER),
+        )
+        .await
+        .expect("prepared enqueue");
+
+    assert_eq!(receipt.expected_event_id, prepared.expected_event_id);
+    assert_eq!(receipt.signed_event_id, prepared.expected_event_id);
+
+    let paths = sdk.storage_paths().expect("paths");
+    let event_store = RadrootsEventStore::open_file(&paths.event_store_path)
+        .await
+        .expect("event store");
+    assert!(
+        event_store
+            .get_event(prepared.expected_event_id.as_str())
+            .await
+            .expect("event lookup")
+            .is_some()
+    );
+
+    let outbox = RadrootsOutbox::open_file(&paths.outbox_path)
+        .await
+        .expect("outbox");
+    let outbox_event = outbox
+        .get_event(receipt.outbox_event_id)
+        .await
+        .expect("outbox event")
+        .expect("outbox event");
+    assert_eq!(outbox_event.event_id, prepared.expected_event_id.as_str());
+}
+
+#[tokio::test]
+async fn enqueue_publish_convenience_matches_prepare_plus_enqueue_prepared() {
+    let (_prepared_tempdir, prepared_sdk) = directory_sdk().await;
+    let prepared_actor = actor();
+    let prepared_plan = prepared_sdk
+        .listings()
+        .prepare_publish(ListingPreparePublishRequest::new(
+            prepared_actor.clone(),
+            listing(LISTING_H_D_TAG, "Coffee"),
+        ))
+        .expect("prepared plan");
+    let prepared_receipt = prepared_sdk
+        .listings()
+        .enqueue_prepared_publish(
+            &prepared_actor,
+            prepared_plan,
+            SdkRelayTargetPolicy::UseConfiguredRelays,
+            None,
+            &FixtureSigner::new(SELLER),
+        )
+        .await
+        .expect("prepared enqueue");
+
+    let (_convenience_tempdir, convenience_sdk) = directory_sdk().await;
+    let convenience_request = ListingEnqueuePublishRequest::new(
+        actor(),
+        listing(LISTING_H_D_TAG, "Coffee"),
+        SdkRelayTargetPolicy::UseConfiguredRelays,
+    );
+    let convenience_receipt = convenience_sdk
+        .listings()
+        .enqueue_publish(convenience_request, &FixtureSigner::new(SELLER))
+        .await
+        .expect("convenience enqueue");
+
+    assert_eq!(convenience_receipt, prepared_receipt);
+}
+
+#[tokio::test]
+async fn enqueue_prepared_publish_returns_structured_actor_errors() {
+    let (_tempdir, sdk) = directory_sdk().await;
+    let prepared = sdk
+        .listings()
+        .prepare_publish(ListingPreparePublishRequest::new(
+            actor(),
+            listing(LISTING_I_D_TAG, "Coffee"),
+        ))
+        .expect("prepared");
+    let error = sdk
+        .listings()
+        .enqueue_prepared_publish(
+            &non_seller_actor(),
+            prepared,
+            SdkRelayTargetPolicy::UseConfiguredRelays,
+            None,
+            &FixtureSigner::new(SELLER),
+        )
+        .await
+        .expect_err("actor error");
+
+    assert!(matches!(error, RadrootsSdkError::UnauthorizedActor { .. }));
+}
+
+#[tokio::test]
+async fn enqueue_prepared_publish_returns_sanitized_signer_errors() {
+    let (_tempdir, sdk) = directory_sdk().await;
+    let actor = actor();
+    let prepared = sdk
+        .listings()
+        .prepare_publish(ListingPreparePublishRequest::new(
+            actor.clone(),
+            listing(LISTING_J_D_TAG, "Coffee"),
+        ))
+        .expect("prepared");
+    let error = sdk
+        .listings()
+        .enqueue_prepared_publish(
+            &actor,
+            prepared,
+            SdkRelayTargetPolicy::UseConfiguredRelays,
+            None,
+            &FixtureSigner::new(OTHER),
+        )
+        .await
+        .expect_err("signer error");
+    let message = error.to_string();
+
+    assert!(matches!(
+        error,
+        RadrootsSdkError::SignerPubkeyMismatch { .. }
+    ));
+    assert!(!message.contains("raw"));
+    assert!(!message.contains("ffff"));
 }
 
 #[tokio::test]
