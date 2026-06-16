@@ -9,7 +9,8 @@ use radroots_relay_transport::RadrootsNostrClientPublishAdapter;
 #[cfg(feature = "runtime")]
 use radroots_relay_transport::{
     RadrootsOutboxPublishPolicy, RadrootsRelayOutcomeKind, RadrootsRelayPublishAdapter,
-    RadrootsRelayPublishReceipt, RadrootsRelayPublishRelayReceipt, publish_claimed_outbox_event,
+    RadrootsRelayPublishReceipt, RadrootsRelayPublishRelayReceipt, RadrootsRelayUrlPolicy,
+    publish_claimed_outbox_event,
 };
 
 #[cfg(feature = "runtime")]
@@ -234,7 +235,8 @@ impl<'sdk> SyncClient<'sdk> {
             };
             let policy =
                 RadrootsOutboxPublishPolicy::new(now_ms.saturating_add(NEXT_ATTEMPT_DELAY_MS))
-                    .republish_accepted_relays(request.republish_accepted_relays);
+                    .republish_accepted_relays(request.republish_accepted_relays)
+                    .relay_url_policy(RadrootsRelayUrlPolicy::LocalDev);
             let publish = publish_claimed_outbox_event(
                 &self.sdk._outbox,
                 &self.sdk._event_store,

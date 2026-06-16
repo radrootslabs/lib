@@ -25,6 +25,7 @@ use radroots_sdk::{
     PUSH_OUTBOX_MAX_LIMIT, PushOutboxEventState, PushOutboxRelayOutcomeKind, PushOutboxRequest,
     RadrootsSdk, RadrootsSdkError, RadrootsSdkTimestamp, SdkRelayTargetPolicy, SdkRelayUrlPolicy,
 };
+use std::collections::BTreeSet;
 
 const SELLER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const FARM_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAA";
@@ -34,6 +35,10 @@ const LISTING_C_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAw";
 const RELAY_A: &str = "wss://relay-a.example.com";
 const RELAY_B: &str = "wss://relay-b.example.com";
 const RELAY_C: &str = "wss://relay-c.example.com";
+const LOCAL_RELAY_A: &str = "ws://localhost:8080";
+const LOCAL_RELAY_B: &str = "ws://127.0.0.1:8081";
+const LOCAL_RELAY_C: &str = "ws://[::1]:8082";
+const NONLOCAL_WS_RELAY: &str = "ws://relay.example.com";
 
 #[derive(Clone)]
 struct FixtureSigner {
@@ -175,6 +180,16 @@ async fn directory_sdk(relays: &[&str]) -> (tempfile::TempDir, RadrootsSdk) {
 }
 
 async fn enqueue_listing(sdk: &RadrootsSdk, d_tag: &str, title: &str, relays: &[&str]) -> i64 {
+    enqueue_listing_with_policy(sdk, d_tag, title, relays, SdkRelayUrlPolicy::Public).await
+}
+
+async fn enqueue_listing_with_policy(
+    sdk: &RadrootsSdk,
+    d_tag: &str,
+    title: &str,
+    relays: &[&str],
+    url_policy: SdkRelayUrlPolicy,
+) -> i64 {
     sdk.listings()
         .enqueue_publish(
             ListingEnqueuePublishRequest::new(
@@ -182,7 +197,7 @@ async fn enqueue_listing(sdk: &RadrootsSdk, d_tag: &str, title: &str, relays: &[
                 listing(d_tag, title),
                 SdkRelayTargetPolicy::UseConfiguredRelays,
             )
-            .try_with_target_relays(relays, SdkRelayUrlPolicy::Public)
+            .try_with_target_relays(relays, url_policy)
             .expect("relay targets"),
             &FixtureSigner::new(SELLER),
         )
@@ -308,6 +323,71 @@ async fn push_outbox_with_adapter_uses_queued_targets_without_builder_relays() {
         .expect("stored")
         .expect("stored");
     assert_eq!(stored.state, RadrootsOutboxEventState::Published);
+}
+
+#[tokio::test]
+async fn push_outbox_with_adapter_accepts_queued_localhost_ws_targets() {
+    let (_tempdir, sdk) = directory_sdk(&[]).await;
+    let outbox_event_id = enqueue_listing_with_policy(
+        &sdk,
+        LISTING_A_D_TAG,
+        "Local Coffee",
+        &[LOCAL_RELAY_A, LOCAL_RELAY_B, LOCAL_RELAY_C],
+        SdkRelayUrlPolicy::Localhost,
+    )
+    .await;
+    let adapter = RadrootsMockRelayPublishAdapter::new();
+
+    let receipt = sdk
+        .sync()
+        .push_outbox_with_adapter(&adapter, PushOutboxRequest::new().with_limit(1))
+        .await
+        .expect("push");
+
+    assert_eq!(receipt.attempted_events, 1);
+    assert_eq!(receipt.published_events, 1);
+    assert_eq!(receipt.retryable_events, 0);
+    assert_eq!(receipt.terminal_events, 0);
+    assert_eq!(receipt.events.len(), 1);
+    let event = &receipt.events[0];
+    assert_eq!(event.outbox_event_id, outbox_event_id);
+    assert_eq!(event.final_state, PushOutboxEventState::Published);
+    assert_eq!(event.attempted_count, 3);
+    assert_eq!(event.accepted_count, 3);
+    assert_eq!(event.retryable_count, 0);
+    assert_eq!(event.terminal_count, 0);
+    assert_eq!(event.quorum, 3);
+    assert!(event.quorum_met);
+    assert_eq!(event.relays.len(), 3);
+    assert!(
+        event
+            .relays
+            .iter()
+            .all(|relay| relay.outcome_kind == PushOutboxRelayOutcomeKind::Accepted)
+    );
+    let relay_urls = event
+        .relays
+        .iter()
+        .map(|relay| relay.relay_url.as_str())
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        relay_urls,
+        BTreeSet::from([LOCAL_RELAY_A, LOCAL_RELAY_B, LOCAL_RELAY_C])
+    );
+    assert_eq!(adapter.captured_raw_events().len(), 1);
+}
+
+#[test]
+fn enqueue_publish_rejects_nonlocal_ws_relay_targets() {
+    let error = ListingEnqueuePublishRequest::new(
+        actor(),
+        listing(LISTING_C_D_TAG, "Nonlocal Coffee"),
+        SdkRelayTargetPolicy::UseConfiguredRelays,
+    )
+    .try_with_target_relays([NONLOCAL_WS_RELAY], SdkRelayUrlPolicy::Localhost)
+    .expect_err("nonlocal ws relay target");
+
+    assert!(matches!(error, RadrootsSdkError::InvalidRelayUrl { .. }));
 }
 
 #[tokio::test]
