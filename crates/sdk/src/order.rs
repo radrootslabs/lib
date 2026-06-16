@@ -8,6 +8,7 @@ pub use radroots_events_codec::order::{
 };
 pub use radroots_trade::listing::validation::RadrootsTradeListing as TradeListingValidateResult;
 
+#[cfg(feature = "serde_json")]
 use radroots_events::{RadrootsNostrEvent, RadrootsNostrEventPtr, ids::RadrootsEventId};
 use radroots_events_codec::wire::WireEventParts;
 

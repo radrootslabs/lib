@@ -20,7 +20,9 @@ use crate::config::{RadrootsSdkConfig, SdkConfigError, SdkTransportMode};
     feature = "signing"
 ))]
 use crate::identity::RadrootsIdentity;
-use crate::{farm, listing, order, profile};
+use crate::listing;
+#[cfg(feature = "serde_json")]
+use crate::{farm, order, profile};
 #[cfg(any(
     feature = "radrootsd-client",
     all(
@@ -30,14 +32,18 @@ use crate::{farm, listing, order, profile};
     )
 ))]
 use core::time::Duration;
+use radroots_events::RadrootsNostrEvent;
 #[cfg(feature = "radrootsd-client")]
 use radroots_events::kinds::{KIND_FARM, KIND_LISTING};
+#[cfg(feature = "serde_json")]
 use radroots_events::{
-    RadrootsNostrEvent, RadrootsNostrEventPtr,
+    RadrootsNostrEventPtr,
     ids::RadrootsEventId,
     profile::{RadrootsProfile, RadrootsProfileType},
 };
+#[cfg(feature = "serde_json")]
 use radroots_events_codec::wire::WireEventParts;
+#[cfg(feature = "serde_json")]
 use radroots_trade::listing::validation::RadrootsTradeListing as TradeListingValidateResult;
 
 type NostrTags = Vec<Vec<String>>;

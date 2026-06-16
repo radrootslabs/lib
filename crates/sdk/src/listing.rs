@@ -9,6 +9,7 @@ use alloc::{string::String, vec::Vec};
 #[cfg(feature = "std")]
 use std::{string::String, vec::Vec};
 
+#[cfg(feature = "serde_json")]
 use radroots_events::RadrootsNostrEvent;
 use radroots_events_codec::wire::WireEventParts;
 
