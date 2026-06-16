@@ -94,6 +94,16 @@ serde_json = { workspace = true, optional = true, default-features = false, feat
 sha2 = { workspace = true, optional = true }
 uuid = { workspace = true, optional = true }
 
+[[example]]
+name = "sdk_v1_listing_prepare"
+path = "examples/sdk_v1_listing_prepare.rs"
+required-features = ["runtime"]
+
+[[example]]
+name = "sdk_v1_local_enqueue_and_mock_sync"
+path = "examples/sdk_v1_local_enqueue_and_mock_sync.rs"
+required-features = ["runtime", "local-signer"]
+
 [dev-dependencies]
 futures = { workspace = true }
 nostr = { workspace = true }
