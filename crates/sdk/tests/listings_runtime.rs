@@ -328,6 +328,44 @@ async fn prepare_then_enqueue_prepared_uses_same_event_id() {
 }
 
 #[tokio::test]
+async fn enqueue_receipt_debug_omits_signed_event_payload_material() {
+    let (_tempdir, sdk) = directory_sdk().await;
+    let request = ListingEnqueuePublishRequest::new(
+        actor(),
+        listing(LISTING_A_D_TAG, "Coffee"),
+        SdkRelayTargetPolicy::UseConfiguredRelays,
+    )
+    .try_with_idempotency_key("debug-secret-idempotency")
+    .expect("idempotency key");
+    let receipt = sdk
+        .listings()
+        .enqueue_publish(request, &FixtureSigner::new(SELLER))
+        .await
+        .expect("enqueue");
+    let debug = format!("{receipt:?}");
+
+    assert!(debug.contains("ListingEnqueueReceipt"));
+    assert!(debug.contains("StoredAndQueued"));
+    assert!(!debug.contains("debug-secret-idempotency"));
+    assert!(!debug.contains("raw_json"));
+    assert!(!debug.contains("\"tags\""));
+    assert!(!debug.contains("\"content\""));
+    assert!(!debug.contains(&"f".repeat(128)));
+}
+
+#[test]
+fn mutation_state_debug_uses_product_state_names() {
+    assert_eq!(
+        format!("{:?}", SdkMutationState::StoredAndQueued),
+        "StoredAndQueued"
+    );
+    assert_eq!(
+        format!("{:?}", SdkMutationState::AlreadyQueued),
+        "AlreadyQueued"
+    );
+}
+
+#[tokio::test]
 async fn enqueue_publish_convenience_matches_prepare_plus_enqueue_prepared() {
     let (_prepared_tempdir, prepared_sdk) = directory_sdk().await;
     let prepared_actor = actor();

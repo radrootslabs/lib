@@ -244,3 +244,14 @@ fn outbox_idempotency_conflict_maps_to_structured_sdk_error() {
     assert!(!message.contains(&"b".repeat(64)));
     assert!(!message.contains(&"c".repeat(64)));
 }
+
+#[test]
+fn runtime_local_example_stays_on_product_api_boundary() {
+    let example = include_str!("../examples/runtime_local.rs");
+
+    assert!(example.contains("prepare_publish"));
+    assert!(example.contains("push_outbox"));
+    assert!(!example.contains("WireEventParts"));
+    assert!(!example.contains(".as_wire_parts("));
+    assert!(!example.contains(".into_wire_parts("));
+}
