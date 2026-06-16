@@ -14,7 +14,7 @@ impl SdkRelayUrlPolicy {
     fn relay_transport_policy(self) -> RadrootsRelayUrlPolicy {
         match self {
             Self::Public => RadrootsRelayUrlPolicy::Public,
-            Self::Localhost => RadrootsRelayUrlPolicy::LocalDev,
+            Self::Localhost => RadrootsRelayUrlPolicy::Localhost,
         }
     }
 }

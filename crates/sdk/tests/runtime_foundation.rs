@@ -86,6 +86,17 @@ async fn sdk_builder_allows_only_local_ws_targets_with_localhost_policy() {
         result,
         Err(RadrootsSdkError::InvalidRelayUrl { .. })
     ));
+
+    let result = RadrootsSdk::builder()
+        .relay_url_policy(SdkRelayUrlPolicy::Localhost)
+        .relay_url("ws://192.168.1.10:8080")
+        .build()
+        .await;
+
+    assert!(matches!(
+        result,
+        Err(RadrootsSdkError::InvalidRelayUrl { .. })
+    ));
 }
 
 #[tokio::test]

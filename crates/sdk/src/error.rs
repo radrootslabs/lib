@@ -377,7 +377,7 @@ impl From<radroots_relay_transport::RadrootsRelayTransportError> for RadrootsSdk
                 url,
                 reason,
             } => Self::invalid_relay_url(url, reason),
-            radroots_relay_transport::RadrootsRelayTransportError::WsRequiresLocalPolicy {
+            radroots_relay_transport::RadrootsRelayTransportError::WsRequiresLocalhostPolicy {
                 url,
             } => Self::invalid_relay_url(url, "ws relay URL requires localhost policy"),
             radroots_relay_transport::RadrootsRelayTransportError::UnsupportedRelayScheme {

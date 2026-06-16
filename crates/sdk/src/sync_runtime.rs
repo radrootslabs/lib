@@ -238,7 +238,7 @@ impl<'sdk> SyncClient<'sdk> {
             let policy =
                 RadrootsOutboxPublishPolicy::new(now_ms.saturating_add(NEXT_ATTEMPT_DELAY_MS))
                     .republish_accepted_relays(request.republish_accepted_relays)
-                    .relay_url_policy(RadrootsRelayUrlPolicy::LocalDev);
+                    .relay_url_policy(RadrootsRelayUrlPolicy::Localhost);
             let publish = publish_claimed_outbox_event(
                 &self.sdk._outbox,
                 &self.sdk._event_store,

@@ -39,6 +39,7 @@ const LOCAL_RELAY_A: &str = "ws://localhost:8080";
 const LOCAL_RELAY_B: &str = "ws://127.0.0.1:8081";
 const LOCAL_RELAY_C: &str = "ws://[::1]:8082";
 const NONLOCAL_WS_RELAY: &str = "ws://relay.example.com";
+const PRIVATE_LAN_WS_RELAY: &str = "ws://192.168.1.10:8080";
 
 #[derive(Clone)]
 struct FixtureSigner {
@@ -386,6 +387,16 @@ fn enqueue_publish_rejects_nonlocal_ws_relay_targets() {
     )
     .try_with_target_relays([NONLOCAL_WS_RELAY], SdkRelayUrlPolicy::Localhost)
     .expect_err("nonlocal ws relay target");
+
+    assert!(matches!(error, RadrootsSdkError::InvalidRelayUrl { .. }));
+
+    let error = ListingEnqueuePublishRequest::new(
+        actor(),
+        listing(LISTING_C_D_TAG, "Private LAN Coffee"),
+        SdkRelayTargetPolicy::UseConfiguredRelays,
+    )
+    .try_with_target_relays([PRIVATE_LAN_WS_RELAY], SdkRelayUrlPolicy::Localhost)
+    .expect_err("private LAN ws relay target");
 
     assert!(matches!(error, RadrootsSdkError::InvalidRelayUrl { .. }));
 }
