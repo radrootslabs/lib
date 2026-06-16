@@ -12,11 +12,18 @@ Configured relay URLs are also opt-in. Product sync publish requires configured
 relay URLs and the `relay-runtime` feature.
 
 `sdk.listings().prepare_publish(...)` is side-effect-free and returns a typed
-`ListingPublishPlan`. `sdk.listings().enqueue_publish(...)` signs the authorized
-listing event, ingests it into the local event store, queues signed outbox work,
-and returns a typed `ListingEnqueueReceipt`. The enqueue request uses typed relay
-target and idempotency inputs; omitted idempotency keys are derived
-deterministically.
+`ListingPublishPlan`. `sdk.listings().enqueue_prepared_publish(...)` signs that
+prepared plan, ingests it into the local event store, queues signed outbox work,
+and returns a typed `ListingEnqueueReceipt`. `sdk.listings().enqueue_publish(...)`
+is the convenience path that prepares once and delegates to
+`enqueue_prepared_publish(...)`. The enqueue path uses typed relay target and
+idempotency inputs; omitted idempotency keys are derived deterministically.
+
+Event `created_at` and local observation time are separate contracts. The event
+timestamp remains the authored Nostr event timestamp, while event-store and
+outbox mutation timestamps use the SDK clock at enqueue time. Listing enqueue
+receipts report mutation state with the product names `StoredAndQueued` and
+`AlreadyQueued`.
 
 `sdk.sync().push_outbox(...)` is the product sync entrypoint. It publishes queued
 signed outbox work only when relay runtime support and configured relay URLs are

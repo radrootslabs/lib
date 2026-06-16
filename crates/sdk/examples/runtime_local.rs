@@ -15,8 +15,8 @@ use radroots_sdk::protocol::listing::{
     RadrootsListing, RadrootsListingBin, RadrootsListingProduct,
 };
 use radroots_sdk::{
-    ListingEnqueuePublishRequest, ListingPreparePublishRequest, OrderStatusRequest,
-    PushOutboxRequest, RadrootsSdk, RadrootsSdkError, RadrootsSdkTimestamp, SdkRelayTargetPolicy,
+    ListingPreparePublishRequest, OrderStatusRequest, PushOutboxRequest, RadrootsSdk,
+    RadrootsSdkError, RadrootsSdkTimestamp, SdkIdempotencyKey, SdkRelayTargetPolicy,
     SdkRelayUrlPolicy,
 };
 
@@ -80,19 +80,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     let actor = RadrootsActorContext::test(SELLER, [RadrootsActorRole::Seller])?;
     let listing = sample_listing();
-    let prepare_request = ListingPreparePublishRequest::new(actor.clone(), listing.clone());
-    let enqueue_request = ListingEnqueuePublishRequest::new(
-        actor,
-        listing,
-        SdkRelayTargetPolicy::UseConfiguredRelays,
-    )
-    .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)?
-    .try_with_idempotency_key("example-1")?;
+    let prepare_request = ListingPreparePublishRequest::new(actor.clone(), listing);
+    let target_relays = SdkRelayTargetPolicy::try_explicit([RELAY], SdkRelayUrlPolicy::Public)?;
+    let idempotency_key = SdkIdempotencyKey::new("example-1")?;
 
     let prepared = sdk.listings().prepare_publish(prepare_request)?;
     let enqueue = sdk
         .listings()
-        .enqueue_publish(enqueue_request, &FixtureSigner::new(SELLER))
+        .enqueue_prepared_publish(
+            &actor,
+            prepared.clone(),
+            target_relays,
+            Some(idempotency_key),
+            &FixtureSigner::new(SELLER),
+        )
         .await?;
     let push = sdk
         .sync()
