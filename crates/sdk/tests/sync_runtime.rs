@@ -521,6 +521,43 @@ async fn push_outbox_continues_after_adapter_transport_failure_and_releases_clai
 }
 
 #[tokio::test]
+async fn push_outbox_returns_fatal_error_for_malformed_signed_event_data() {
+    let (_tempdir, sdk) = directory_sdk(&[RELAY_A, RELAY_B]).await;
+    let corrupt_outbox_event_id =
+        enqueue_listing(&sdk, LISTING_A_D_TAG, "Corrupt Coffee", &[RELAY_A]).await;
+    let safe_outbox_event_id =
+        enqueue_listing(&sdk, LISTING_B_D_TAG, "Safe Coffee", &[RELAY_B]).await;
+    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").outbox_path)
+        .await
+        .expect("outbox");
+    let changed =
+        sqlx::query("UPDATE outbox_event SET signed_event_json = ? WHERE outbox_event_id = ?")
+            .bind("{malformed-signed-event-json")
+            .bind(corrupt_outbox_event_id)
+            .execute(outbox.pool())
+            .await
+            .expect("corrupt signed event");
+    assert_eq!(changed.rows_affected(), 1);
+    let adapter = RadrootsMockRelayPublishAdapter::new();
+
+    let error = sdk
+        .sync()
+        .push_outbox_with_adapter(&adapter, PushOutboxRequest::new().with_limit(2))
+        .await
+        .expect_err("fatal malformed outbox data");
+
+    assert!(matches!(error, RadrootsSdkError::Outbox { .. }));
+    assert!(adapter.captured_raw_events().is_empty());
+    let safe_event = outbox
+        .get_event(safe_outbox_event_id)
+        .await
+        .expect("safe event")
+        .expect("safe event");
+    assert_eq!(safe_event.state, RadrootsOutboxEventState::Signed);
+    assert!(safe_event.claim_token.is_none());
+}
+
+#[tokio::test]
 async fn push_outbox_does_not_claim_unsigned_outbox_work() {
     let (_tempdir, sdk) = directory_sdk(&[RELAY_A]).await;
     let prepared = sdk
