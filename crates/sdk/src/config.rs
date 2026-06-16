@@ -1,5 +1,5 @@
 #[cfg(not(feature = "std"))]
-use alloc::{string::String, vec::Vec};
+use alloc::{borrow::ToOwned, string::String, vec, vec::Vec};
 use core::fmt;
 #[cfg(feature = "std")]
 use std::{env, string::String, vec::Vec};

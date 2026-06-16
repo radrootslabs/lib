@@ -61,6 +61,7 @@ pub use crate::product_clients::{ListingsClient, OrdersClient, SyncClient};
 pub use crate::relay_targets::{
     SDK_RELAY_TARGET_MAX_COUNT, SdkRelayTargetPolicy, SdkRelayTargetSet, SdkRelayUrlPolicy,
 };
+#[cfg(feature = "runtime")]
 pub use crate::runtime::{
     RadrootsSdk, RadrootsSdkBuilder, RadrootsSdkClock, RadrootsSdkStorageConfig,
     RadrootsSdkStoragePaths, RadrootsSdkTimestamp,
