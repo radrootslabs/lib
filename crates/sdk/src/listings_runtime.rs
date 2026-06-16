@@ -1,7 +1,7 @@
 #[cfg(feature = "runtime")]
 use crate::{
     ListingsClient, RadrootsSdkError, RadrootsSdkTimestamp, SdkIdempotencyKey,
-    SdkRelayTargetPolicy, SdkRelayTargetSet, SdkRelayUrlPolicy,
+    SdkRelayTargetPolicy, SdkRelayTargetSet, SdkRelayUrlPolicy, runtime::sdk_now_ms,
 };
 #[cfg(feature = "runtime")]
 use radroots_authority::{RadrootsActorContext, RadrootsEventSigner, sign_authorized_draft};
@@ -145,16 +145,16 @@ pub struct ListingPublishPlan {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SdkMutationState {
-    Inserted,
-    Existing,
+    StoredAndQueued,
+    AlreadyQueued,
 }
 
 #[cfg(feature = "runtime")]
 impl From<RadrootsOutboxEnqueueStatus> for SdkMutationState {
     fn from(value: RadrootsOutboxEnqueueStatus) -> Self {
         match value {
-            RadrootsOutboxEnqueueStatus::Inserted => Self::Inserted,
-            RadrootsOutboxEnqueueStatus::Existing => Self::Existing,
+            RadrootsOutboxEnqueueStatus::Inserted => Self::StoredAndQueued,
+            RadrootsOutboxEnqueueStatus::Existing => Self::AlreadyQueued,
         }
     }
 }
@@ -230,7 +230,7 @@ impl<'sdk> ListingsClient<'sdk> {
                 target_relays.relays(),
             )?,
         };
-        let observed_at_ms = i64::from(plan.frozen_draft.created_at) * 1_000;
+        let observed_at_ms = sdk_now_ms(self.sdk)?;
         let signed_event_id = parse_event_id(signed_event.id.as_str(), "signed event id")?;
         let event = event_from_signed(&signed_event);
         let ingest = RadrootsEventIngest::new(event, observed_at_ms)

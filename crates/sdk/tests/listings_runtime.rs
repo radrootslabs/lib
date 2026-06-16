@@ -36,6 +36,7 @@ const LISTING_G_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAABw";
 const LISTING_H_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAACA";
 const LISTING_I_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAACQ";
 const LISTING_J_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAACg";
+const LISTING_K_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAACw";
 const RELAY: &str = "wss://relay.example.com";
 const RELAY_B: &str = "wss://relay-b.example.com";
 
@@ -250,7 +251,7 @@ async fn enqueue_publish_stores_event_and_queues_signed_outbox_without_publish()
     assert_eq!(receipt.local_event_seq, 1);
     assert_eq!(receipt.outbox_operation_id, 1);
     assert_eq!(receipt.outbox_event_id, 1);
-    assert_eq!(receipt.state, SdkMutationState::Inserted);
+    assert_eq!(receipt.state, SdkMutationState::StoredAndQueued);
     assert!(receipt.idempotency_digest_prefix.is_some());
 
     let paths = sdk.storage_paths().expect("paths");
@@ -422,6 +423,54 @@ async fn enqueue_prepared_publish_returns_sanitized_signer_errors() {
 }
 
 #[tokio::test]
+async fn explicit_historical_created_at_does_not_backdate_observed_at_ms() {
+    let (_tempdir, sdk) = directory_sdk().await;
+    let created_at = RadrootsSdkTimestamp::from_unix_seconds(1_600_000_000);
+    let observed_at_ms = 1_700_000_000_000;
+    let request = ListingEnqueuePublishRequest::new(
+        actor(),
+        listing(LISTING_K_D_TAG, "Coffee"),
+        SdkRelayTargetPolicy::UseConfiguredRelays,
+    )
+    .with_created_at(created_at);
+
+    let receipt = sdk
+        .listings()
+        .enqueue_publish(request, &FixtureSigner::new(SELLER))
+        .await
+        .expect("enqueue");
+
+    let paths = sdk.storage_paths().expect("paths");
+    let event_store = RadrootsEventStore::open_file(&paths.event_store_path)
+        .await
+        .expect("event store");
+    let stored_event = event_store
+        .get_event(receipt.signed_event_id.as_str())
+        .await
+        .expect("event lookup")
+        .expect("stored event");
+    assert_eq!(stored_event.created_at, 1_600_000_000);
+    assert_eq!(stored_event.inserted_at_ms, observed_at_ms);
+    assert_eq!(stored_event.updated_at_ms, observed_at_ms);
+
+    let outbox = RadrootsOutbox::open_file(&paths.outbox_path)
+        .await
+        .expect("outbox");
+    let outbox_event = outbox
+        .get_event(receipt.outbox_event_id)
+        .await
+        .expect("outbox event")
+        .expect("outbox event");
+    assert_eq!(outbox_event.draft.created_at, 1_600_000_000);
+    assert_eq!(
+        outbox_event.event_store_ingested_at_ms,
+        Some(observed_at_ms)
+    );
+    assert_eq!(outbox_event.created_at_ms, observed_at_ms);
+    assert_eq!(outbox_event.updated_at_ms, observed_at_ms);
+}
+
+#[tokio::test]
 async fn enqueue_publish_returns_sanitized_signer_errors() {
     let (_tempdir, sdk) = directory_sdk().await;
     let request = ListingEnqueuePublishRequest::new(
@@ -524,5 +573,5 @@ async fn enqueue_publish_derives_order_independent_idempotency_key() {
         first_receipt.idempotency_digest_prefix,
         second_receipt.idempotency_digest_prefix
     );
-    assert_eq!(second_receipt.state, SdkMutationState::Existing);
+    assert_eq!(second_receipt.state, SdkMutationState::AlreadyQueued);
 }

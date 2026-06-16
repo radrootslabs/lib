@@ -192,6 +192,15 @@ impl RadrootsSdk {
 }
 
 #[cfg(feature = "runtime")]
+pub(crate) fn sdk_now_ms(sdk: &RadrootsSdk) -> Result<i64, RadrootsSdkError> {
+    let seconds = sdk.now()?.unix_seconds();
+    let millis = seconds
+        .checked_mul(1_000)
+        .ok_or(RadrootsSdkError::TimestampOutOfRange { value: seconds })?;
+    i64::try_from(millis).map_err(|_| RadrootsSdkError::TimestampOutOfRange { value: seconds })
+}
+
+#[cfg(feature = "runtime")]
 struct OpenedRuntimeStorage {
     event_store: RadrootsEventStore,
     outbox: RadrootsOutbox,

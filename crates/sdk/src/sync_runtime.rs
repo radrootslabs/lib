@@ -1,5 +1,5 @@
 #[cfg(feature = "runtime")]
-use crate::{RadrootsSdkError, SyncClient};
+use crate::{RadrootsSdkError, SyncClient, runtime::sdk_now_ms};
 #[cfg(all(feature = "runtime", feature = "relay-runtime"))]
 use radroots_nostr::prelude::RadrootsNostrClient;
 #[cfg(feature = "runtime")]
@@ -265,15 +265,6 @@ impl<'sdk> SyncClient<'sdk> {
         }
         Ok(receipt)
     }
-}
-
-#[cfg(feature = "runtime")]
-fn sdk_now_ms(sdk: &crate::RadrootsSdk) -> Result<i64, RadrootsSdkError> {
-    let seconds = sdk.now()?.unix_seconds();
-    let millis = seconds
-        .checked_mul(1_000)
-        .ok_or(RadrootsSdkError::TimestampOutOfRange { value: seconds })?;
-    i64::try_from(millis).map_err(|_| RadrootsSdkError::TimestampOutOfRange { value: seconds })
 }
 
 #[cfg(feature = "runtime")]
