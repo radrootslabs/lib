@@ -7,8 +7,8 @@ pub enum RadrootsRelayTransportError {
     #[error("Relay URL parse failed for `{url}`: {reason}")]
     RelayUrlParse { url: String, reason: String },
 
-    #[error("Relay URL `{url}` uses ws outside local-dev policy")]
-    WsRequiresLocalPolicy { url: String },
+    #[error("Relay URL `{url}` uses ws outside localhost relay policy")]
+    WsRequiresLocalhostPolicy { url: String },
 
     #[error("Relay URL `{url}` has unsupported scheme `{scheme}`")]
     UnsupportedRelayScheme { url: String, scheme: String },

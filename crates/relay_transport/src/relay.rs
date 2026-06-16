@@ -9,12 +9,13 @@ use url::Url;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsRelayUrlPolicy {
     Public,
-    LocalDev,
+    Localhost,
 }
 
 impl RadrootsRelayUrlPolicy {
-    fn accepts_ws(self) -> bool {
-        matches!(self, Self::LocalDev)
+    fn accepts_ws_host(self, host: &str) -> bool {
+        matches!(self, Self::Localhost)
+            && matches!(host, "localhost" | "127.0.0.1" | "::1" | "[::1]")
     }
 }
 
@@ -32,12 +33,27 @@ impl RadrootsRelayUrl {
                 url: original.to_owned(),
                 reason: error.to_string(),
             })?;
+        if !parsed.username().is_empty() || parsed.password().is_some() {
+            return Err(RadrootsRelayTransportError::RelayUrlUserinfo {
+                url: original.to_owned(),
+            });
+        }
+        let Some(host) = parsed.host_str().filter(|host| !host.is_empty()) else {
+            return Err(RadrootsRelayTransportError::EmptyRelayHost {
+                url: original.to_owned(),
+            });
+        };
+        if parsed.query().is_some() || parsed.fragment().is_some() {
+            return Err(RadrootsRelayTransportError::RelayUrlQueryOrFragment {
+                url: original.to_owned(),
+            });
+        }
         let scheme = parsed.scheme();
         match scheme {
             "wss" => {}
-            "ws" if policy.accepts_ws() => {}
+            "ws" if policy.accepts_ws_host(host) => {}
             "ws" => {
-                return Err(RadrootsRelayTransportError::WsRequiresLocalPolicy {
+                return Err(RadrootsRelayTransportError::WsRequiresLocalhostPolicy {
                     url: original.to_owned(),
                 });
             }
@@ -47,21 +63,6 @@ impl RadrootsRelayUrl {
                     scheme: other.to_owned(),
                 });
             }
-        }
-        if !parsed.username().is_empty() || parsed.password().is_some() {
-            return Err(RadrootsRelayTransportError::RelayUrlUserinfo {
-                url: original.to_owned(),
-            });
-        }
-        if parsed.host_str().is_none_or(str::is_empty) {
-            return Err(RadrootsRelayTransportError::EmptyRelayHost {
-                url: original.to_owned(),
-            });
-        }
-        if parsed.query().is_some() || parsed.fragment().is_some() {
-            return Err(RadrootsRelayTransportError::RelayUrlQueryOrFragment {
-                url: original.to_owned(),
-            });
         }
         let mut normalized = parsed.to_string();
         if parsed.path() == "/" {

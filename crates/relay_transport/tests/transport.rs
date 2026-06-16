@@ -106,13 +106,33 @@ fn relay_url_validation_and_target_normalization() {
     let relay = RadrootsRelayUrl::parse("wss://Relay.Example.com", RadrootsRelayUrlPolicy::Public)
         .expect("relay");
     assert_eq!(relay.as_str(), RELAY_PRIMARY_WSS);
+    let relay_path = RadrootsRelayUrl::parse(
+        "wss://Relay.Example.com/nostr",
+        RadrootsRelayUrlPolicy::Public,
+    )
+    .expect("relay path");
+    assert_eq!(relay_path.as_str(), "wss://relay.example.com/nostr");
 
     assert!(
         RadrootsRelayUrl::parse("ws://127.0.0.1:7777", RadrootsRelayUrlPolicy::Public).is_err()
     );
-    let local = RadrootsRelayUrl::parse("ws://127.0.0.1:7777", RadrootsRelayUrlPolicy::LocalDev)
+    let local = RadrootsRelayUrl::parse("ws://localhost:7777", RadrootsRelayUrlPolicy::Localhost)
         .expect("local relay");
-    assert_eq!(local.as_str(), "ws://127.0.0.1:7777");
+    assert_eq!(local.as_str(), "ws://localhost:7777");
+    let local_ipv4 =
+        RadrootsRelayUrl::parse("ws://127.0.0.1:7777", RadrootsRelayUrlPolicy::Localhost)
+            .expect("local ipv4 relay");
+    assert_eq!(local_ipv4.as_str(), "ws://127.0.0.1:7777");
+    let local_ipv6 = RadrootsRelayUrl::parse("ws://[::1]:7777", RadrootsRelayUrlPolicy::Localhost)
+        .expect("local ipv6 relay");
+    assert_eq!(local_ipv6.as_str(), "ws://[::1]:7777");
+    assert!(
+        RadrootsRelayUrl::parse("ws://example.com", RadrootsRelayUrlPolicy::Localhost).is_err()
+    );
+    assert!(
+        RadrootsRelayUrl::parse("ws://192.168.1.10:7777", RadrootsRelayUrlPolicy::Localhost)
+            .is_err()
+    );
 
     assert!(
         RadrootsRelayUrl::parse("https://relay.example.com", RadrootsRelayUrlPolicy::Public)
@@ -133,6 +153,20 @@ fn relay_url_validation_and_target_normalization() {
         .is_err()
     );
     assert!(RadrootsRelayUrl::parse("wss://", RadrootsRelayUrlPolicy::Public).is_err());
+    assert!(
+        RadrootsRelayUrl::parse(
+            "wss://relay.example.com?subscription=1",
+            RadrootsRelayUrlPolicy::Public
+        )
+        .is_err()
+    );
+    assert!(
+        RadrootsRelayUrl::parse(
+            "wss://relay.example.com#fragment",
+            RadrootsRelayUrlPolicy::Public
+        )
+        .is_err()
+    );
 
     let targets = RadrootsRelayTargetSet::new(
         vec![

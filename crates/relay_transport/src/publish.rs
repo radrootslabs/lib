@@ -240,7 +240,7 @@ impl RadrootsRelayPublishAdapter for RadrootsNostrClientPublishAdapter {
             let mut receipts = Vec::new();
             for relay_url in &target_strings {
                 let relay =
-                    crate::RadrootsRelayUrl::parse(relay_url, RadrootsRelayUrlPolicy::LocalDev)?;
+                    crate::RadrootsRelayUrl::parse(relay_url, RadrootsRelayUrlPolicy::Localhost)?;
                 let success = output.success.iter().any(|success_url| {
                     success_url.to_string().trim_end_matches('/') == relay.as_str()
                 });
