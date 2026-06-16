@@ -1,5 +1,6 @@
 #![cfg(feature = "runtime")]
 
+use futures::future::BoxFuture;
 use radroots_authority::{
     RadrootsActorContext, RadrootsEventSigner, RadrootsSignerError, RadrootsSignerIdentity,
 };
@@ -15,7 +16,10 @@ use radroots_events::{
     listing::{RadrootsListing, RadrootsListingBin, RadrootsListingProduct},
 };
 use radroots_outbox::{RadrootsOutbox, RadrootsOutboxEventState, RadrootsOutboxOperationInput};
-use radroots_relay_transport::{RadrootsMockRelayPublishAdapter, RadrootsRelayOutcome};
+use radroots_relay_transport::{
+    RadrootsMockRelayPublishAdapter, RadrootsRelayOutcome, RadrootsRelayPublishAdapter,
+    RadrootsRelayPublishRelayReceipt, RadrootsRelayPublishRequest, RadrootsRelayTransportError,
+};
 use radroots_sdk::{
     ListingEnqueuePublishRequest, ListingPreparePublishRequest, PUSH_OUTBOX_DEFAULT_LIMIT,
     PUSH_OUTBOX_MAX_LIMIT, PushOutboxEventState, PushOutboxRelayOutcomeKind, PushOutboxRequest,
@@ -34,6 +38,22 @@ const RELAY_C: &str = "wss://relay-c.example.com";
 #[derive(Clone)]
 struct FixtureSigner {
     identity: RadrootsSignerIdentity,
+}
+
+struct TransportFailurePublishAdapter;
+
+impl RadrootsRelayPublishAdapter for TransportFailurePublishAdapter {
+    fn publish<'a>(
+        &'a self,
+        _request: RadrootsRelayPublishRequest,
+    ) -> BoxFuture<'a, Result<Vec<RadrootsRelayPublishRelayReceipt>, RadrootsRelayTransportError>>
+    {
+        Box::pin(async {
+            Err(RadrootsRelayTransportError::Transport(
+                "adapter boundary unavailable".to_owned(),
+            ))
+        })
+    }
 }
 
 impl FixtureSigner {
@@ -368,6 +388,67 @@ async fn push_outbox_preserves_retryable_and_terminal_relay_outcomes() {
     );
     assert_eq!(relay_c.outcome_kind, PushOutboxRelayOutcomeKind::Restricted);
     assert_eq!(relay_b.message.as_deref(), Some("auth-required: login"));
+}
+
+#[tokio::test]
+async fn push_outbox_continues_after_adapter_transport_failure_and_releases_claims() {
+    let (_tempdir, sdk) = directory_sdk(&[RELAY_A, RELAY_B]).await;
+    let first_outbox_event_id =
+        enqueue_listing(&sdk, LISTING_A_D_TAG, "Coffee One", &[RELAY_A]).await;
+    let second_outbox_event_id =
+        enqueue_listing(&sdk, LISTING_B_D_TAG, "Coffee Two", &[RELAY_B]).await;
+
+    let receipt = sdk
+        .sync()
+        .push_outbox_with_adapter(
+            &TransportFailurePublishAdapter,
+            PushOutboxRequest::new().with_limit(2),
+        )
+        .await
+        .expect("push");
+
+    assert_eq!(receipt.attempted_events, 2);
+    assert_eq!(receipt.published_events, 0);
+    assert_eq!(receipt.retryable_events, 2);
+    assert_eq!(receipt.terminal_events, 0);
+    assert_eq!(
+        receipt
+            .events
+            .iter()
+            .map(|event| event.outbox_event_id)
+            .collect::<Vec<_>>(),
+        vec![first_outbox_event_id, second_outbox_event_id]
+    );
+    assert!(
+        receipt
+            .events
+            .iter()
+            .all(|event| event.final_state == PushOutboxEventState::PublishRetryable)
+    );
+    assert!(
+        receipt
+            .events
+            .iter()
+            .flat_map(|event| event.relays.iter())
+            .all(|relay| {
+                relay.attempted
+                    && relay.outcome_kind == PushOutboxRelayOutcomeKind::ConnectionFailed
+                    && relay.message.as_deref() == Some("adapter boundary unavailable")
+            })
+    );
+
+    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").outbox_path)
+        .await
+        .expect("outbox");
+    for outbox_event_id in [first_outbox_event_id, second_outbox_event_id] {
+        let stored = outbox
+            .get_event(outbox_event_id)
+            .await
+            .expect("stored")
+            .expect("stored");
+        assert_eq!(stored.state, RadrootsOutboxEventState::PublishRetryable);
+        assert!(stored.claim_token.is_none());
+    }
 }
 
 #[tokio::test]

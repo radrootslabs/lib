@@ -221,8 +221,8 @@ impl<'sdk> SyncClient<'sdk> {
         request.validate()?;
         let now_ms = sdk_now_ms(self.sdk)?;
         let mut receipt = PushOutboxReceipt::default();
-        for index in 0..request.limit {
-            let claim_token = format!("radroots-sdk-sync-{now_ms}-{index}");
+        for _ in 0..request.limit {
+            let claim_token = push_outbox_claim_token();
             let Some(claimed) = self
                 .sdk
                 ._outbox
@@ -276,6 +276,11 @@ fn sdk_now_ms(sdk: &crate::RadrootsSdk) -> Result<i64, RadrootsSdkError> {
 }
 
 #[cfg(feature = "runtime")]
+fn push_outbox_claim_token() -> String {
+    format!("radroots-sdk-sync-{}", uuid::Uuid::now_v7())
+}
+
+#[cfg(feature = "runtime")]
 fn push_event_receipt(
     outbox_event_id: i64,
     final_state: PushOutboxEventState,
@@ -302,5 +307,21 @@ fn push_relay_receipt(relay: RadrootsRelayPublishRelayReceipt) -> PushOutboxRela
         outcome_kind: relay.outcome.kind.into(),
         attempted: relay.attempted,
         message: relay.outcome.message,
+    }
+}
+
+#[cfg(all(test, feature = "runtime"))]
+mod tests {
+    use super::push_outbox_claim_token;
+    use std::collections::BTreeSet;
+
+    #[test]
+    fn push_outbox_claim_tokens_are_unique_under_immediate_generation() {
+        let mut tokens = BTreeSet::new();
+        for _ in 0..1_024 {
+            let token = push_outbox_claim_token();
+            assert!(token.starts_with("radroots-sdk-sync-"));
+            assert!(tokens.insert(token));
+        }
     }
 }
