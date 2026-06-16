@@ -1,7 +1,7 @@
 pub use radroots_events::farm::*;
 pub use radroots_events_codec::error::EventEncodeError;
 
-use crate::WireEventParts;
+use radroots_events_codec::wire::WireEventParts;
 
 #[cfg(feature = "serde_json")]
 pub fn build_draft(farm: &RadrootsFarm) -> Result<WireEventParts, EventEncodeError> {

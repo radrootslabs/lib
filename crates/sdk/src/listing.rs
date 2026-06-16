@@ -4,7 +4,15 @@ pub use radroots_events::trade_validation::RadrootsTradeValidationListingError;
 pub use radroots_events_codec::error::EventEncodeError;
 pub use radroots_trade::listing::validation::RadrootsTradeListing as TradeListingValidateResult;
 
-use crate::{NostrTags, RadrootsNostrEvent, WireEventParts};
+#[cfg(not(feature = "std"))]
+use alloc::{string::String, vec::Vec};
+#[cfg(feature = "std")]
+use std::{string::String, vec::Vec};
+
+use radroots_events::RadrootsNostrEvent;
+use radroots_events_codec::wire::WireEventParts;
+
+pub type NostrTags = Vec<Vec<String>>;
 
 #[derive(Debug, Clone)]
 pub struct RadrootsListingDraft {

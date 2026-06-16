@@ -8,8 +8,8 @@ pub use radroots_events_codec::order::{
 };
 pub use radroots_trade::listing::validation::RadrootsTradeListing as TradeListingValidateResult;
 
-use crate::{RadrootsNostrEvent, RadrootsNostrEventPtr, WireEventParts};
-use radroots_events::ids::RadrootsEventId;
+use radroots_events::{RadrootsNostrEvent, RadrootsNostrEventPtr, ids::RadrootsEventId};
+use radroots_events_codec::wire::WireEventParts;
 
 #[derive(Debug, Clone)]
 pub struct RadrootsOrderRequestDraft {

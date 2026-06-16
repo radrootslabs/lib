@@ -1,7 +1,7 @@
 pub use radroots_events::profile::{RadrootsProfile, RadrootsProfileType};
 pub use radroots_events_codec::profile::error::ProfileEncodeError;
 
-use crate::WireEventParts;
+use radroots_events_codec::wire::WireEventParts;
 
 #[cfg(feature = "serde_json")]
 pub fn build_draft(

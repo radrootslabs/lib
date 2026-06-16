@@ -20,10 +20,7 @@ use crate::config::{RadrootsSdkConfig, SdkConfigError, SdkTransportMode};
     feature = "signing"
 ))]
 use crate::identity::RadrootsIdentity;
-use crate::{
-    NostrTags, RadrootsNostrEvent, RadrootsNostrEventPtr, RadrootsProfile, RadrootsProfileType,
-    TradeListingValidateResult, WireEventParts, farm, listing, order, profile,
-};
+use crate::{farm, listing, order, profile};
 #[cfg(any(
     feature = "radrootsd-client",
     all(
@@ -33,9 +30,17 @@ use crate::{
     )
 ))]
 use core::time::Duration;
-use radroots_events::ids::RadrootsEventId;
 #[cfg(feature = "radrootsd-client")]
 use radroots_events::kinds::{KIND_FARM, KIND_LISTING};
+use radroots_events::{
+    RadrootsNostrEvent, RadrootsNostrEventPtr,
+    ids::RadrootsEventId,
+    profile::{RadrootsProfile, RadrootsProfileType},
+};
+use radroots_events_codec::wire::WireEventParts;
+use radroots_trade::listing::validation::RadrootsTradeListing as TradeListingValidateResult;
+
+type NostrTags = Vec<Vec<String>>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SdkPublishReceipt {
@@ -2602,10 +2607,10 @@ mod tests {
     use super::{
         SdkPublishError, SdkRelayFailure, SdkTransportMode, sdk_publish_receipt_from_relay_output,
     };
-    use crate::WireEventParts;
     use crate::adapters::relay::RelayOutput;
     use crate::adapters::signing::sign_parts_with_identity;
     use crate::identity::RadrootsIdentity;
+    use radroots_events_codec::wire::WireEventParts;
     use radroots_nostr::prelude::RadrootsNostrEventId;
     use std::collections::{HashMap, HashSet};
 

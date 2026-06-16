@@ -9,11 +9,23 @@ use radroots_events::ids::RadrootsPublicKey;
 use radroots_events::kinds::{
     KIND_FARM, KIND_LISTING, KIND_LISTING_DRAFT, KIND_ORDER_REQUEST, KIND_PROFILE,
 };
-use radroots_sdk::protocol::adapters::radrootsd::{
-    SdkRadrootsdBridgeJob, SdkRadrootsdBridgePublishResponse, SdkRadrootsdListingPublishRequest,
+use radroots_sdk::adapters::radrootsd::{
+    SdkRadrootsdBridgeDeliveryPolicy, SdkRadrootsdBridgeJob, SdkRadrootsdBridgeJobStatus,
+    SdkRadrootsdBridgePublishResponse, SdkRadrootsdListingPublishRequest,
     SdkRadrootsdSignerAuthority, SdkRadrootsdSignerSessionConnectRequest,
-    SdkRadrootsdSignerSessionMode,
+    SdkRadrootsdSignerSessionMode, SdkRadrootsdSignerSessionRole,
 };
+use radroots_sdk::client::{
+    RadrootsSdkClient, SdkPublishError, SdkRadrootsdBridgeError, SdkRadrootsdFarmPublishOptions,
+    SdkRadrootsdListingPublishOptions, SdkRadrootsdOrderRequestPublishOptions,
+    SdkRadrootsdProfilePublishOptions, SdkRadrootsdPublishReceipt, SdkRadrootsdSessionError,
+    SdkRadrootsdSignerSessionHandle, SdkRadrootsdSignerSessionView, SdkTransportReceipt,
+};
+use radroots_sdk::config::{
+    RadrootsSdkConfig, RadrootsdAuth, RadrootsdConfig, SdkConfigError, SdkEnvironment,
+    SdkTransportMode, SignerConfig,
+};
+use radroots_sdk::protocol::events::{RadrootsNostrEvent, RadrootsNostrEventPtr};
 use radroots_sdk::protocol::listing::{
     RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
     RadrootsListingDeliveryMethod, RadrootsListingLocation, RadrootsListingParseError,
@@ -23,16 +35,7 @@ use radroots_sdk::protocol::order::{
     RadrootsOrderEconomicItem, RadrootsOrderEconomicLine, RadrootsOrderEconomics,
     RadrootsOrderItem, RadrootsOrderPricingBasis, RadrootsOrderRequest,
 };
-use radroots_sdk::protocol::{
-    RadrootsNostrEvent, RadrootsNostrEventPtr, RadrootsProfile, RadrootsProfileType,
-    RadrootsSdkClient, RadrootsSdkConfig, RadrootsdAuth, RadrootsdConfig, SdkConfigError,
-    SdkEnvironment, SdkPublishError, SdkRadrootsdBridgeDeliveryPolicy, SdkRadrootsdBridgeError,
-    SdkRadrootsdBridgeJobStatus, SdkRadrootsdFarmPublishOptions, SdkRadrootsdListingPublishOptions,
-    SdkRadrootsdOrderRequestPublishOptions, SdkRadrootsdProfilePublishOptions,
-    SdkRadrootsdPublishReceipt, SdkRadrootsdSessionError, SdkRadrootsdSignerSessionHandle,
-    SdkRadrootsdSignerSessionRole, SdkRadrootsdSignerSessionView, SdkTransportMode,
-    SdkTransportReceipt, SignerConfig,
-};
+use radroots_sdk::protocol::profile::{RadrootsProfile, RadrootsProfileType};
 use serde_json::{Value, json};
 use std::collections::VecDeque;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};

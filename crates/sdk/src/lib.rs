@@ -4,27 +4,15 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
-#[cfg(not(feature = "std"))]
-use alloc::{string::String, vec::Vec};
-#[cfg(feature = "std")]
-use std::{string::String, vec::Vec};
-
-pub(crate) use radroots_events::{
-    RadrootsNostrEvent, RadrootsNostrEventPtr,
-    profile::{RadrootsProfile, RadrootsProfileType},
-};
-pub(crate) use radroots_events_codec::wire::WireEventParts;
-pub(crate) use radroots_trade::listing::validation::RadrootsTradeListing as TradeListingValidateResult;
-
 #[cfg(any(
     feature = "radrootsd-client",
     feature = "signing",
     feature = "relay-client",
     feature = "signer-adapters"
 ))]
-mod adapters;
-mod client;
-mod config;
+pub mod adapters;
+pub mod client;
+pub mod config;
 #[cfg(feature = "runtime")]
 mod error;
 mod farm;
@@ -79,5 +67,3 @@ pub use crate::sync_runtime::{
     PUSH_OUTBOX_DEFAULT_LIMIT, PUSH_OUTBOX_MAX_LIMIT, PushOutboxEventReceipt, PushOutboxEventState,
     PushOutboxReceipt, PushOutboxRelayOutcomeKind, PushOutboxRelayReceipt, PushOutboxRequest,
 };
-
-pub(crate) type NostrTags = Vec<Vec<String>>;

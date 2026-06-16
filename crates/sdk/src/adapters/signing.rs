@@ -1,5 +1,5 @@
-use crate::WireEventParts;
 use crate::identity::RadrootsIdentity;
+use radroots_events_codec::wire::WireEventParts;
 use radroots_nostr::prelude::{RadrootsNostrError, radroots_nostr_build_event};
 
 pub type SignedNostrEvent = radroots_nostr::prelude::RadrootsNostrEvent;
@@ -28,7 +28,8 @@ pub fn sign_builder_with_identity(
 #[cfg(test)]
 mod tests {
     use super::{event_builder_from_parts, sign_parts_with_identity};
-    use crate::{WireEventParts, identity::RadrootsIdentity};
+    use crate::identity::RadrootsIdentity;
+    use radroots_events_codec::wire::WireEventParts;
 
     #[test]
     fn event_builder_from_parts_preserves_kind_and_content() {

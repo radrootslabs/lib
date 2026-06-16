@@ -13,14 +13,14 @@ use radroots_nostr::prelude::{
     RadrootsNostrKeys, RadrootsNostrSecretKey, RadrootsNostrTimestamp, radroots_event_from_nostr,
     radroots_nostr_build_event,
 };
-use radroots_sdk::protocol::RadrootsNostrEventPtr;
-use radroots_sdk::protocol::WireEventParts;
+use radroots_sdk::protocol::events::RadrootsNostrEventPtr;
 use radroots_sdk::protocol::order::{
     RadrootsListingAddress, RadrootsOrderDecision, RadrootsOrderDecisionOutcome,
     RadrootsOrderEconomicItem, RadrootsOrderEconomicLine, RadrootsOrderEconomics,
     RadrootsOrderInventoryCommitment, RadrootsOrderItem, RadrootsOrderPricingBasis,
     RadrootsOrderRequest,
 };
+use radroots_sdk::protocol::wire::WireEventParts;
 use radroots_sdk::{
     ORDER_STATUS_DEFAULT_LIMIT, ORDER_STATUS_MAX_LIMIT, OrderPaymentStateKind,
     OrderSettlementStateKind, OrderStatusKind, OrderStatusRequest, RadrootsSdk, RadrootsSdkError,

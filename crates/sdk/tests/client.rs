@@ -22,12 +22,16 @@ use radroots_events::order::{
     RadrootsOrderRevisionDecision, RadrootsOrderRevisionOutcome, RadrootsOrderRevisionProposal,
 };
 use radroots_events::profile::{RadrootsProfile, RadrootsProfileType};
-use radroots_sdk::protocol::{
-    RADROOTS_SDK_PRODUCTION_RELAY_URL, RadrootsNostrEvent, RadrootsNostrEventPtr,
-    RadrootsSdkClient, RadrootsSdkConfig, RelayConfig, SdkConfigError, SdkEnvironment,
-    SdkPublishError, SdkRadrootsdPublishReceipt, SdkRelayFailure, SdkResolvedTransportTarget,
-    SdkTransportMode, SignerConfig, WireEventParts,
+use radroots_sdk::client::{
+    RadrootsSdkClient, SdkPublishError, SdkRadrootsdPublishReceipt, SdkRelayFailure,
+    SdkResolvedTransportTarget,
 };
+use radroots_sdk::config::{
+    RADROOTS_SDK_PRODUCTION_RELAY_URL, RadrootsSdkConfig, RelayConfig, SdkConfigError,
+    SdkEnvironment, SdkTransportMode, SignerConfig,
+};
+use radroots_sdk::protocol::events::{RadrootsNostrEvent, RadrootsNostrEventPtr};
+use radroots_sdk::protocol::wire::WireEventParts;
 
 fn sample_farm() -> RadrootsFarm {
     RadrootsFarm {
