@@ -156,14 +156,18 @@ fn listing(d_tag: &str, title: &str) -> RadrootsListing {
 }
 
 async fn directory_sdk() -> (tempfile::TempDir, RadrootsSdk) {
+    directory_sdk_with_relays(&[RELAY]).await
+}
+
+async fn directory_sdk_with_relays(relays: &[&str]) -> (tempfile::TempDir, RadrootsSdk) {
     let tempdir = tempfile::tempdir().expect("tempdir");
-    let sdk = RadrootsSdk::builder()
+    let mut builder = RadrootsSdk::builder()
         .directory_storage(tempdir.path().join("sdk"))
-        .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
-        .relay_url(RELAY)
-        .build()
-        .await
-        .expect("sdk");
+        .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000));
+    for relay in relays {
+        builder = builder.relay_url(*relay);
+    }
+    let sdk = builder.build().await.expect("sdk");
     (tempdir, sdk)
 }
 
@@ -276,6 +280,28 @@ async fn enqueue_publish_stores_event_and_queues_signed_outbox_without_publish()
         .expect("outbox event");
     assert_eq!(outbox_event.state, RadrootsOutboxEventState::Signed);
     assert!(outbox_event.signed_event.is_some());
+}
+
+#[tokio::test]
+async fn enqueue_publish_use_configured_relays_rejects_empty_builder_relays() {
+    let (_tempdir, sdk) = directory_sdk_with_relays(&[]).await;
+    let request = ListingEnqueuePublishRequest::new(
+        actor(),
+        listing(LISTING_A_D_TAG, "Coffee"),
+        SdkRelayTargetPolicy::UseConfiguredRelays,
+    );
+
+    let error = sdk
+        .listings()
+        .enqueue_publish(request, &FixtureSigner::new(SELLER))
+        .await
+        .expect_err("empty configured relays");
+
+    assert!(matches!(
+        error,
+        RadrootsSdkError::EmptyTargetRelays { operation }
+            if operation == "sdk relay target set"
+    ));
 }
 
 #[tokio::test]
