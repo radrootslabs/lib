@@ -1,9 +1,10 @@
 #![forbid(unsafe_code)]
 
 use crate::{
-    RadrootsRelayOutcomeKind, RadrootsRelayPublishAdapter, RadrootsRelayPublishReceipt,
-    RadrootsRelayPublishRequest, RadrootsRelayTargetSet, RadrootsRelayTransportError,
-    RadrootsRelayUrlPolicy, publish_signed_event,
+    RadrootsRelayOutcome, RadrootsRelayOutcomeKind, RadrootsRelayPublishAdapter,
+    RadrootsRelayPublishReceipt, RadrootsRelayPublishRelayReceipt, RadrootsRelayPublishRequest,
+    RadrootsRelayTargetSet, RadrootsRelayTransportError, RadrootsRelayUrlPolicy,
+    publish_signed_event,
 };
 use radroots_event_store::{
     RadrootsEventIngest, RadrootsEventStore, RadrootsRelayObservation, RadrootsRelayObservationType,
@@ -116,10 +117,20 @@ where
         });
     }
     let targets = RadrootsRelayTargetSet::new(publishable.relays, policy.relay_url_policy)?;
+    let target_strings = targets.relay_strings();
     let quorum = overall_quorum.saturating_sub(publishable.accepted_count);
     let request = RadrootsRelayPublishRequest::new(signed_event.clone(), targets, now_ms)
         .with_accepted_quorum(quorum);
-    let publish = publish_signed_event(adapter, request).await?;
+    let publish = match publish_signed_event(adapter, request).await {
+        Ok(receipt) => receipt,
+        Err(RadrootsRelayTransportError::Transport(message)) => adapter_transport_failure_receipt(
+            signed_event.id.clone(),
+            target_strings,
+            quorum,
+            message,
+        ),
+        Err(error) => return Err(error),
+    };
 
     for relay in &publish.relays {
         match relay.outcome.kind {
@@ -189,6 +200,33 @@ where
         local_ingest,
         publish,
     })
+}
+
+fn adapter_transport_failure_receipt(
+    event_id: String,
+    relay_urls: Vec<String>,
+    quorum: usize,
+    message: String,
+) -> RadrootsRelayPublishReceipt {
+    let relays = relay_urls
+        .into_iter()
+        .map(|relay_url| {
+            RadrootsRelayPublishRelayReceipt::attempted(
+                relay_url,
+                RadrootsRelayOutcome::connection_failed(message.clone()),
+            )
+        })
+        .collect::<Vec<_>>();
+    RadrootsRelayPublishReceipt {
+        event_id,
+        attempted_count: relays.len(),
+        accepted_count: 0,
+        retryable_count: relays.len(),
+        terminal_count: 0,
+        quorum,
+        quorum_met: false,
+        relays,
+    }
 }
 
 struct PublishableRelays {

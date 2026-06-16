@@ -1,3 +1,4 @@
+use futures::future::BoxFuture;
 use nostr::JsonUtil;
 use radroots_event_store::{RadrootsEventStore, RadrootsEventVerificationStatus};
 use radroots_events::draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent};
@@ -13,9 +14,10 @@ use radroots_outbox::{
 use radroots_relay_transport::{
     RadrootsMockRelayFetchAdapter, RadrootsMockRelayPublishAdapter, RadrootsOutboxPublishPolicy,
     RadrootsRelayFetchItem, RadrootsRelayFetchOutcomeKind, RadrootsRelayFetchRequest,
-    RadrootsRelayOutcome, RadrootsRelayOutcomeKind, RadrootsRelayTargetSet, RadrootsRelayUrl,
-    RadrootsRelayUrlPolicy, fetch_and_ingest_relay_events, publish_claimed_outbox_event,
-    publish_signed_event,
+    RadrootsRelayOutcome, RadrootsRelayOutcomeKind, RadrootsRelayPublishAdapter,
+    RadrootsRelayPublishRelayReceipt, RadrootsRelayPublishRequest, RadrootsRelayTargetSet,
+    RadrootsRelayTransportError, RadrootsRelayUrl, RadrootsRelayUrlPolicy,
+    fetch_and_ingest_relay_events, publish_claimed_outbox_event, publish_signed_event,
 };
 
 const FIXTURE_ALICE_SECRET_KEY_HEX: &str =
@@ -25,6 +27,22 @@ const FIXTURE_ALICE_PUBLIC_KEY_HEX: &str =
 const RELAY_PRIMARY_WSS: &str = "wss://relay.example.com";
 const RELAY_SECONDARY_WSS: &str = "wss://relay-2.example.com";
 const RELAY_TERTIARY_WSS: &str = "wss://relay-3.example.com";
+
+struct TransportFailurePublishAdapter;
+
+impl RadrootsRelayPublishAdapter for TransportFailurePublishAdapter {
+    fn publish<'a>(
+        &'a self,
+        _request: RadrootsRelayPublishRequest,
+    ) -> BoxFuture<'a, Result<Vec<RadrootsRelayPublishRelayReceipt>, RadrootsRelayTransportError>>
+    {
+        Box::pin(async {
+            Err(RadrootsRelayTransportError::Transport(
+                "adapter boundary unavailable".to_owned(),
+            ))
+        })
+    }
+}
 
 fn fixture_keys() -> RadrootsNostrKeys {
     let secret_key =
@@ -545,6 +563,101 @@ async fn outbox_publish_persists_partial_success_and_skips_accepted_retry() {
         .await
         .expect("observations");
     assert_eq!(observations.len(), 3);
+}
+
+#[tokio::test]
+async fn outbox_publish_transport_failure_releases_retryable_claim() {
+    let signed = signed_post("adapter transport failure");
+    let outbox = RadrootsOutbox::open_memory().await.expect("outbox");
+    let store = RadrootsEventStore::open_memory().await.expect("store");
+    let draft = RadrootsFrozenEventDraft::new(
+        "radroots.social.post.v1",
+        KIND_POST,
+        signed.created_at,
+        signed.tags.clone(),
+        signed.content.clone(),
+        signed.pubkey.as_str(),
+    )
+    .expect("draft");
+    let receipt = outbox
+        .enqueue_operation(RadrootsOutboxOperationInput::new(
+            "publish_post",
+            draft,
+            vec![RELAY_PRIMARY_WSS.to_owned(), RELAY_SECONDARY_WSS.to_owned()],
+            1_000,
+        ))
+        .await
+        .expect("enqueue");
+    let claimed = outbox
+        .claim_next_ready_event("signer", "sign-a", 2_000, 1_000)
+        .await
+        .expect("claim")
+        .expect("claim");
+    complete_claimed_signing(&outbox, &claimed, 1_100).await;
+    outbox.recover_expired_claims(2_001).await.expect("recover");
+    let publish_claim = outbox
+        .claim_next_ready_event("publisher", "publish-a", 3_000, 2_100)
+        .await
+        .expect("claim")
+        .expect("publish claim");
+
+    let published = publish_claimed_outbox_event(
+        &outbox,
+        &store,
+        &TransportFailurePublishAdapter,
+        &publish_claim,
+        RadrootsOutboxPublishPolicy::new(2_500),
+        2_200,
+    )
+    .await
+    .expect("publish");
+
+    assert_eq!(published.publish.attempted_count, 2);
+    assert_eq!(published.publish.accepted_count, 0);
+    assert_eq!(published.publish.retryable_count, 2);
+    assert_eq!(published.publish.terminal_count, 0);
+    assert!(!published.publish.quorum_met);
+    assert!(
+        published
+            .publish
+            .relays
+            .iter()
+            .all(|relay| relay.outcome.kind == RadrootsRelayOutcomeKind::ConnectionFailed)
+    );
+
+    let event = outbox
+        .get_event(receipt.outbox_event_id)
+        .await
+        .expect("event")
+        .expect("event");
+    assert_eq!(event.state, RadrootsOutboxEventState::PublishRetryable);
+    assert!(event.claim_token.is_none());
+    assert_eq!(event.next_attempt_after_ms, 2_500);
+
+    let statuses = outbox
+        .relay_statuses(receipt.outbox_event_id)
+        .await
+        .expect("statuses");
+    assert_eq!(statuses.len(), 2);
+    assert!(
+        statuses
+            .iter()
+            .all(|status| status.status == RadrootsOutboxRelayStatus::FailedRetryable)
+    );
+    assert!(
+        outbox
+            .claim_next_ready_event("publisher", "publish-b", 4_000, 2_499)
+            .await
+            .expect("early claim")
+            .is_none()
+    );
+    let retry_claim = outbox
+        .claim_next_ready_event("publisher", "publish-b", 4_000, 2_500)
+        .await
+        .expect("retry claim")
+        .expect("retry claim");
+    assert_eq!(retry_claim.outbox_event_id, receipt.outbox_event_id);
+    assert_eq!(retry_claim.state, RadrootsOutboxEventState::Publishing);
 }
 
 #[tokio::test]
