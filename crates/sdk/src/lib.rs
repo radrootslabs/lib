@@ -16,6 +16,8 @@ pub mod config;
 #[cfg(feature = "runtime")]
 mod error;
 mod farm;
+#[cfg(feature = "runtime")]
+mod idempotency;
 #[cfg(feature = "identity-models")]
 mod identity;
 mod listing;
@@ -29,9 +31,9 @@ mod product_clients;
 mod profile;
 pub mod protocol;
 #[cfg(feature = "runtime")]
-mod runtime;
+mod relay_targets;
 #[cfg(feature = "runtime")]
-mod runtime_targets;
+mod runtime;
 #[cfg(feature = "runtime")]
 mod sync_runtime;
 
@@ -40,6 +42,8 @@ pub use crate::error::{
     RadrootsSdkError, RadrootsSdkPartialLocalMutationError, RadrootsSdkPartialLocalMutationFailure,
     RadrootsSdkRecoveryAction,
 };
+#[cfg(feature = "runtime")]
+pub use crate::idempotency::{SDK_IDEMPOTENCY_KEY_MAX_LEN, SdkIdempotencyKey};
 #[cfg(feature = "runtime")]
 pub use crate::listings_runtime::{
     ListingEnqueuePublishRequest, ListingEnqueueReceipt, ListingPreparePublishRequest,
@@ -53,14 +57,13 @@ pub use crate::orders_runtime::{
 };
 #[cfg(feature = "runtime")]
 pub use crate::product_clients::{ListingsClient, OrdersClient, SyncClient};
+#[cfg(feature = "runtime")]
+pub use crate::relay_targets::{
+    SDK_RELAY_TARGET_MAX_COUNT, SdkRelayTargetPolicy, SdkRelayTargetSet, SdkRelayUrlPolicy,
+};
 pub use crate::runtime::{
     RadrootsSdk, RadrootsSdkBuilder, RadrootsSdkClock, RadrootsSdkStorageConfig,
     RadrootsSdkStoragePaths, RadrootsSdkTimestamp,
-};
-#[cfg(feature = "runtime")]
-pub use crate::runtime_targets::{
-    SDK_IDEMPOTENCY_KEY_MAX_LEN, SDK_RELAY_TARGET_MAX_COUNT, SdkIdempotencyKey,
-    SdkRelayTargetPolicy, SdkRelayTargetSet, SdkRelayUrlPolicy,
 };
 #[cfg(feature = "runtime")]
 pub use crate::sync_runtime::{
