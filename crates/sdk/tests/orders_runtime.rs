@@ -24,7 +24,7 @@ use radroots_sdk::protocol::order::{
 use radroots_sdk::{
     ORDER_STATUS_DEFAULT_LIMIT, ORDER_STATUS_MAX_LIMIT, OrderPaymentStateKind,
     OrderSettlementStateKind, OrderStatusKind, OrderStatusRequest, RadrootsSdk, RadrootsSdkError,
-    RadrootsSdkTimestamp,
+    RadrootsSdkTimestamp, SdkOrderStatusIssueKind, SdkOrderStatusSource,
 };
 
 const BUYER_SECRET_KEY_HEX: &str =
@@ -53,6 +53,10 @@ async fn directory_sdk_and_store() -> (tempfile::TempDir, RadrootsSdk, RadrootsE
 
 fn order_id(raw: &str) -> RadrootsOrderId {
     RadrootsOrderId::parse(raw).expect("order id")
+}
+
+fn status_request(raw: &str) -> OrderStatusRequest {
+    OrderStatusRequest::parse(raw).expect("order status request")
 }
 
 fn listing_address() -> RadrootsListingAddress {
@@ -189,21 +193,25 @@ fn signed_order_decision_event(
 #[tokio::test]
 async fn order_status_returns_not_found_for_missing_local_order() {
     let (_tempdir, sdk, _store) = directory_sdk_and_store().await;
-    let request = OrderStatusRequest::new("order-1");
+    let request = status_request("order-1");
 
     assert_eq!(request.limit, ORDER_STATUS_DEFAULT_LIMIT);
 
     let receipt = sdk.orders().status(request).await.expect("status");
 
     assert!(!receipt.found);
-    assert_eq!(receipt.order_id, "order-1");
+    assert_eq!(receipt.order_id.as_str(), "order-1");
+    assert_eq!(receipt.source, SdkOrderStatusSource::LocalEventStore);
+    assert_eq!(receipt.event_count, 0);
+    assert_eq!(receipt.limit_applied, ORDER_STATUS_DEFAULT_LIMIT);
+    assert!(receipt.event_ids.is_empty());
     assert_eq!(receipt.status, OrderStatusKind::Missing);
     assert_eq!(receipt.payment_state, OrderPaymentStateKind::NotRecorded);
     assert_eq!(
         receipt.settlement_state,
         OrderSettlementStateKind::NotRequired
     );
-    assert_eq!(receipt.issue_count, 0);
+    assert!(receipt.issues.is_empty());
 }
 
 #[tokio::test]
@@ -212,17 +220,24 @@ async fn order_status_rejects_invalid_limits_before_querying() {
 
     let zero = sdk
         .orders()
-        .status(OrderStatusRequest::new("order-1").with_limit(0))
+        .status(status_request("order-1").with_limit(0))
         .await
         .expect_err("zero limit");
     let too_large = sdk
         .orders()
-        .status(OrderStatusRequest::new("order-1").with_limit(ORDER_STATUS_MAX_LIMIT + 1))
+        .status(status_request("order-1").with_limit(ORDER_STATUS_MAX_LIMIT + 1))
         .await
         .expect_err("too large");
 
     assert!(matches!(zero, RadrootsSdkError::InvalidRequest { .. }));
     assert!(matches!(too_large, RadrootsSdkError::InvalidRequest { .. }));
+}
+
+#[test]
+fn order_status_parse_rejects_invalid_order_ids() {
+    let error = OrderStatusRequest::parse("bad order id").expect_err("invalid order id");
+
+    assert!(matches!(error, RadrootsSdkError::InvalidRequest { .. }));
 }
 
 #[tokio::test]
@@ -244,26 +259,145 @@ async fn order_status_projects_local_request_and_decision_events() {
 
     let receipt = sdk
         .orders()
-        .status(OrderStatusRequest::new("order-1").with_limit(1_000))
+        .status(status_request("order-1").with_limit(1_000))
         .await
         .expect("status");
 
     assert!(receipt.found);
+    assert_eq!(receipt.order_id.as_str(), "order-1");
+    assert_eq!(receipt.source, SdkOrderStatusSource::LocalEventStore);
+    assert_eq!(receipt.event_count, 2);
+    assert_eq!(receipt.limit_applied, 1_000);
+    assert_eq!(
+        receipt
+            .event_ids
+            .iter()
+            .map(RadrootsEventId::as_str)
+            .collect::<Vec<_>>(),
+        vec![request_event.id.as_str(), decision_event.id.as_str()]
+    );
     assert_eq!(receipt.status, OrderStatusKind::Accepted);
     assert_eq!(
-        receipt.request_event_id.as_deref(),
+        receipt
+            .request_event_id
+            .as_ref()
+            .map(RadrootsEventId::as_str),
         Some(request_event.id.as_str())
     );
     assert_eq!(
-        receipt.decision_event_id.as_deref(),
+        receipt
+            .decision_event_id
+            .as_ref()
+            .map(RadrootsEventId::as_str),
         Some(decision_event.id.as_str())
     );
     assert_eq!(
-        receipt.last_event_id.as_deref(),
+        receipt.last_event_id.as_ref().map(RadrootsEventId::as_str),
         Some(decision_event.id.as_str())
     );
-    assert_eq!(receipt.issue_count, 0);
+    assert!(receipt.issues.is_empty());
     assert!(!receipt.lifecycle_terminal);
+}
+
+#[tokio::test]
+async fn order_status_reports_limited_local_results() {
+    let (_tempdir, sdk, store) = directory_sdk_and_store().await;
+    let request_event = signed_order_request_event("order-1", 25);
+    let request_event_id = RadrootsEventId::parse(request_event.id.as_str()).expect("request id");
+    let decision_event = signed_order_decision_event("order-1", &request_event_id, 26);
+
+    for (event, observed_at_ms) in [(request_event.clone(), 2_500), (decision_event, 2_600)] {
+        store
+            .ingest_event(RadrootsEventIngest::new(event, observed_at_ms))
+            .await
+            .expect("ingest");
+    }
+
+    let receipt = sdk
+        .orders()
+        .status(status_request("order-1").with_limit(1))
+        .await
+        .expect("status");
+
+    assert!(receipt.found);
+    assert_eq!(receipt.status, OrderStatusKind::Requested);
+    assert_eq!(receipt.event_count, 1);
+    assert_eq!(receipt.limit_applied, 1);
+    assert_eq!(
+        receipt
+            .event_ids
+            .iter()
+            .map(RadrootsEventId::as_str)
+            .collect::<Vec<_>>(),
+        vec![request_event.id.as_str()]
+    );
+    assert_eq!(
+        receipt
+            .request_event_id
+            .as_ref()
+            .map(RadrootsEventId::as_str),
+        Some(request_event.id.as_str())
+    );
+    assert!(receipt.decision_event_id.is_none());
+    assert_eq!(
+        receipt.last_event_id.as_ref().map(RadrootsEventId::as_str),
+        Some(request_event.id.as_str())
+    );
+    assert!(receipt.issues.is_empty());
+}
+
+#[tokio::test]
+async fn order_status_reports_typed_reducer_issues() {
+    let (_tempdir, sdk, store) = directory_sdk_and_store().await;
+    let first_request_event = signed_order_request_event("order-1", 27);
+    let second_request_event = signed_order_request_event("order-1", 28);
+
+    for (event, observed_at_ms) in [
+        (first_request_event.clone(), 2_700),
+        (second_request_event.clone(), 2_800),
+    ] {
+        store
+            .ingest_event(RadrootsEventIngest::new(event, observed_at_ms))
+            .await
+            .expect("ingest");
+    }
+
+    let receipt = sdk
+        .orders()
+        .status(status_request("order-1"))
+        .await
+        .expect("status");
+
+    assert!(receipt.found);
+    assert_eq!(receipt.status, OrderStatusKind::Invalid);
+    assert_eq!(receipt.event_count, 2);
+    assert_eq!(
+        receipt
+            .event_ids
+            .iter()
+            .map(RadrootsEventId::as_str)
+            .collect::<Vec<_>>(),
+        vec![
+            first_request_event.id.as_str(),
+            second_request_event.id.as_str()
+        ]
+    );
+    let issue = receipt
+        .issues
+        .iter()
+        .find(|issue| issue.kind == SdkOrderStatusIssueKind::MultipleRequests)
+        .expect("multiple request issue");
+    assert_eq!(
+        issue
+            .event_ids
+            .iter()
+            .map(RadrootsEventId::as_str)
+            .collect::<Vec<_>>(),
+        vec![
+            first_request_event.id.as_str(),
+            second_request_event.id.as_str()
+        ]
+    );
 }
 
 #[tokio::test]
@@ -283,7 +417,7 @@ async fn order_status_maps_malformed_local_data_to_sanitized_error() {
 
     let error = sdk
         .orders()
-        .status(OrderStatusRequest::new("order-1"))
+        .status(status_request("order-1"))
         .await
         .expect_err("projection error");
     let message = error.to_string();

@@ -103,7 +103,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     let order_status = sdk
         .orders()
-        .status(OrderStatusRequest::new("example-order-1"))
+        .status(OrderStatusRequest::parse("example-order-1")?)
         .await?;
 
     assert_eq!(

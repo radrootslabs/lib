@@ -61,7 +61,7 @@ pub use crate::listings_runtime::{
 pub use crate::orders_runtime::{
     ORDER_STATUS_DEFAULT_LIMIT, ORDER_STATUS_MAX_LIMIT, OrderFulfillmentStatusKind,
     OrderPaymentStateKind, OrderSettlementStateKind, OrderStatusKind, OrderStatusReceipt,
-    OrderStatusRequest,
+    OrderStatusRequest, SdkOrderStatusIssue, SdkOrderStatusIssueKind, SdkOrderStatusSource,
 };
 #[cfg(feature = "runtime")]
 pub use crate::product_clients::{ListingsClient, OrdersClient, SyncClient};
