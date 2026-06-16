@@ -379,6 +379,15 @@ pub enum RadrootsOrderStoreQueryError {
 }
 
 #[cfg(feature = "event_store")]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsOrderProjectionQueryResult {
+    pub projection: RadrootsOrderProjection,
+    pub event_count: usize,
+    pub limit_applied: u32,
+    pub event_ids: Vec<RadrootsEventId>,
+}
+
+#[cfg(feature = "event_store")]
 pub async fn order_events_for_order_id(
     store: &RadrootsEventStore,
     order_id: &RadrootsOrderId,
@@ -409,8 +418,29 @@ pub async fn order_projection_for_order_id(
     order_id: &RadrootsOrderId,
     limit: u32,
 ) -> Result<RadrootsOrderProjection, RadrootsOrderStoreQueryError> {
+    order_projection_query_for_order_id(store, order_id, limit)
+        .await
+        .map(|result| result.projection)
+}
+
+#[cfg(feature = "event_store")]
+pub async fn order_projection_query_for_order_id(
+    store: &RadrootsEventStore,
+    order_id: &RadrootsOrderId,
+    limit: u32,
+) -> Result<RadrootsOrderProjectionQueryResult, RadrootsOrderStoreQueryError> {
     let records = order_events_for_order_id(store, order_id, limit).await?;
-    Ok(reduce_order_event_records(order_id, records))
+    let event_ids = records
+        .iter()
+        .map(|record| record.event_id().clone())
+        .collect::<Vec<_>>();
+    let event_count = records.len();
+    Ok(RadrootsOrderProjectionQueryResult {
+        projection: reduce_order_event_records(order_id, records),
+        event_count,
+        limit_applied: limit,
+        event_ids,
+    })
 }
 
 #[cfg(feature = "event_store")]
@@ -3953,7 +3983,7 @@ mod tests {
     #[cfg(feature = "event_store")]
     use super::{
         ORDER_EVENT_CONTRACT_IDS, RadrootsOrderStoreQueryError, order_events_for_order_id,
-        order_projection_for_order_id,
+        order_projection_for_order_id, order_projection_query_for_order_id,
     };
     use super::{
         RadrootsListingInventoryAccountingInputs, RadrootsListingInventoryAccountingIssue,
@@ -5042,6 +5072,22 @@ mod tests {
             Some(decision_event.id.as_str())
         );
         assert!(projection.issues.is_empty());
+
+        let result = order_projection_query_for_order_id(&store, &order_id("order-1"), 10)
+            .await
+            .expect("projection result");
+
+        assert_eq!(result.event_count, 2);
+        assert_eq!(result.limit_applied, 10);
+        assert_eq!(
+            result
+                .event_ids
+                .iter()
+                .map(RadrootsEventId::as_str)
+                .collect::<Vec<_>>(),
+            vec![request_event_id.as_str(), decision_event.id.as_str()]
+        );
+        assert_eq!(result.projection.status, RadrootsOrderStatus::Accepted);
     }
 
     #[cfg(feature = "event_store")]
