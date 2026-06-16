@@ -257,12 +257,42 @@ fn outbox_idempotency_conflict_maps_to_structured_sdk_error() {
 }
 
 #[test]
-fn runtime_local_example_stays_on_product_api_boundary() {
-    let example = include_str!("../examples/runtime_local.rs");
+fn sdk_examples_stay_on_product_api_boundary() {
+    let examples = [
+        (
+            "runtime_local",
+            include_str!("../examples/runtime_local.rs"),
+        ),
+        (
+            "sdk_v1_listing_prepare",
+            include_str!("../examples/sdk_v1_listing_prepare.rs"),
+        ),
+        (
+            "sdk_v1_local_enqueue_and_mock_sync",
+            include_str!("../examples/sdk_v1_local_enqueue_and_mock_sync.rs"),
+        ),
+    ];
 
-    assert!(example.contains("prepare_publish"));
-    assert!(example.contains("push_outbox"));
-    assert!(!example.contains("WireEventParts"));
-    assert!(!example.contains(".as_wire_parts("));
-    assert!(!example.contains(".into_wire_parts("));
+    for (name, example) in examples {
+        assert!(!example.contains("WireEventParts"), "{name}");
+        assert!(!example.contains("protocol::wire"), "{name}");
+        assert!(!example.contains("events_codec::wire"), "{name}");
+        assert!(!example.contains(".as_wire_parts("), "{name}");
+        assert!(!example.contains(".into_wire_parts("), "{name}");
+    }
+
+    let listing_prepare = include_str!("../examples/sdk_v1_listing_prepare.rs");
+    assert!(listing_prepare.contains("RadrootsSdk::builder()"));
+    assert!(listing_prepare.contains("ListingPreparePublishRequest"));
+    assert!(listing_prepare.contains("prepare_publish"));
+
+    let local_enqueue = include_str!("../examples/sdk_v1_local_enqueue_and_mock_sync.rs");
+    assert!(local_enqueue.contains("RadrootsSdk::builder()"));
+    assert!(local_enqueue.contains("ListingPreparePublishRequest"));
+    assert!(local_enqueue.contains("SdkRelayTargetPolicy"));
+    assert!(local_enqueue.contains("SdkRelayTargetSet"));
+    assert!(local_enqueue.contains("SdkRelayUrlPolicy::Localhost"));
+    assert!(local_enqueue.contains("enqueue_prepared_publish"));
+    assert!(local_enqueue.contains("push_outbox_with_adapter"));
+    assert!(local_enqueue.contains("OrderStatusRequest"));
 }

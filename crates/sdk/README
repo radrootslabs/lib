@@ -31,6 +31,11 @@ targets already stored on each queued outbox event, so already queued work does
 not require configured builder relays. `push_outbox_with_adapter(...)` remains
 available for tests and controlled adapter-level substrate checks.
 
+Relay URL policy is explicit. Public relay URLs must use `wss://`. Local
+development `ws://` relay URLs are accepted only under `SdkRelayUrlPolicy::Localhost`
+and only for `localhost`, `127.0.0.1`, or `[::1]`. Non-local insecure `ws://`
+targets, including private LAN addresses, are rejected.
+
 `sdk.orders().status(...)` reads local order projections and returns typed
 source, event count, limit state, event IDs, and reducer issues. It is not a
 network fetch.
@@ -51,6 +56,22 @@ explicit modules:
 
 Product runtime callers do not need `WireEventParts`. Wire helpers are exposed
 only through `protocol::wire`.
+
+## Examples
+
+Compile the SDK v1 product examples with:
+
+```bash
+cargo check -p radroots_sdk --example sdk_v1_listing_prepare --features runtime
+cargo check -p radroots_sdk --example sdk_v1_local_enqueue_and_mock_sync --features runtime,local-signer
+```
+
+`sdk_v1_listing_prepare` shows `RadrootsSdk::builder()`,
+`ListingPreparePublishRequest`, and `ListingPublishPlan`.
+`sdk_v1_local_enqueue_and_mock_sync` shows localhost relay target selection,
+prepared listing enqueue, `push_outbox_with_adapter(...)` with a mock relay
+adapter, and `OrderStatusRequest`. The examples stay on product APIs and do not
+use `WireEventParts`.
 
 SDK v1 does not claim strict NIP-99 Markdown-content interoperability. It emits
 and consumes Rad Roots v1 listing and trade event contracts.
