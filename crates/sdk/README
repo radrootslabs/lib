@@ -8,8 +8,8 @@ The SDK v1 product runtime is centered on `RadrootsSdk::builder()`,
 `RadrootsSdk::builder()` defaults to memory storage, the system clock, no relay
 URLs, and no production network publishing. Directory storage is opt-in and
 creates `event_store.sqlite` and `outbox.sqlite` in the selected directory.
-Configured relay URLs are also opt-in. Product sync publish requires configured
-relay URLs and the `relay-runtime` feature.
+Configured relay URLs are also opt-in enqueue defaults used when a publish
+request chooses `SdkRelayTargetPolicy::UseConfiguredRelays`.
 
 `sdk.listings().prepare_publish(...)` is side-effect-free and returns a typed
 `ListingPublishPlan`. `sdk.listings().enqueue_prepared_publish(...)` signs that
@@ -26,9 +26,10 @@ receipts report mutation state with the product names `StoredAndQueued` and
 `AlreadyQueued`.
 
 `sdk.sync().push_outbox(...)` is the product sync entrypoint. It publishes queued
-signed outbox work only when relay runtime support and configured relay URLs are
-present. `push_outbox_with_adapter(...)` remains available for tests and
-controlled adapter-level substrate checks.
+signed outbox work when `relay-runtime` is enabled. Push time uses the relay
+targets already stored on each queued outbox event, so already queued work does
+not require configured builder relays. `push_outbox_with_adapter(...)` remains
+available for tests and controlled adapter-level substrate checks.
 
 `sdk.orders().status(...)` reads local order projections and returns typed
 source, event count, limit state, event IDs, and reducer issues. It is not a
