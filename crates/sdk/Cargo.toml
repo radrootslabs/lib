@@ -48,6 +48,7 @@ runtime = [
   "dep:radroots_outbox",
   "dep:radroots_relay_transport",
   "dep:sha2",
+  "dep:sqlx",
   "dep:uuid",
   "radroots_authority/std",
   "radroots_event_store/sqlite",
@@ -102,6 +103,10 @@ serde_json = { workspace = true, optional = true, default-features = false, feat
   "alloc",
 ] }
 sha2 = { workspace = true, optional = true }
+sqlx = { workspace = true, optional = true, default-features = false, features = [
+  "runtime-tokio",
+  "sqlite",
+] }
 uuid = { workspace = true, optional = true }
 
 [[example]]
@@ -129,10 +134,6 @@ radroots_sql_core = { workspace = true, features = ["native"] }
 radroots_nostr = { workspace = true, default-features = false, features = [
   "std",
   "events",
-] }
-sqlx = { workspace = true, default-features = false, features = [
-  "runtime-tokio",
-  "sqlite",
 ] }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

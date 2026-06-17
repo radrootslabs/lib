@@ -8,11 +8,27 @@ use radroots_event_store::RadrootsEventStore;
 #[cfg(feature = "runtime")]
 use radroots_outbox::RadrootsOutbox;
 #[cfg(feature = "runtime")]
+use sqlx::{Row, SqlitePool};
+#[cfg(feature = "runtime")]
 use std::{
     fs,
+    io::ErrorKind,
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
+
+#[cfg(feature = "runtime")]
+const SDK_STORAGE_MANIFEST_VERSION: u16 = 1;
+#[cfg(feature = "runtime")]
+const SDK_EVENT_STORE_SCHEMA_VERSION: i64 = 1;
+#[cfg(feature = "runtime")]
+const SDK_OUTBOX_SCHEMA_VERSION: i64 = 1;
+#[cfg(feature = "runtime")]
+const EVENT_STORE_BACKUP_FILE: &str = "event_store.sqlite";
+#[cfg(feature = "runtime")]
+const OUTBOX_BACKUP_FILE: &str = "outbox.sqlite";
+#[cfg(feature = "runtime")]
+const BACKUP_MANIFEST_FILE: &str = "manifest.json";
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
@@ -95,6 +111,8 @@ pub struct StorageStatusRequest {}
 pub struct StorageStatusReceipt {
     pub storage: SdkStorageKind,
     pub paths: Option<RadrootsSdkStoragePaths>,
+    pub event_store: SdkEventStoreStorageStatus,
+    pub outbox: SdkOutboxStorageStatus,
 }
 
 #[cfg(feature = "runtime")]
@@ -104,6 +122,43 @@ pub struct StorageStatusReceipt {
 pub enum SdkStorageKind {
     Memory,
     Directory,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct SdkSqliteStoreStatus {
+    pub schema_version: i64,
+    pub journal_mode: String,
+    pub foreign_keys_enabled: bool,
+    pub busy_timeout_ms: i64,
+    pub integrity_ok: bool,
+    pub integrity_result: String,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct SdkEventStoreStorageStatus {
+    pub store: SdkSqliteStoreStatus,
+    pub total_events: i64,
+    pub projection_eligible_events: i64,
+    pub relay_observations: i64,
+    pub last_event_seq: Option<i64>,
+    pub last_event_updated_at_ms: Option<i64>,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct SdkOutboxStorageStatus {
+    pub store: SdkSqliteStoreStatus,
+    pub total_events: i64,
+    pub pending_events: i64,
+    pub retryable_events: i64,
+    pub terminal_events: i64,
+    pub failed_terminal_events: i64,
+    pub ready_signed_events: i64,
+    pub publishing_events: i64,
+    pub last_attempt_at_ms: Option<i64>,
+    pub last_error: Option<String>,
 }
 
 #[cfg(feature = "runtime")]
@@ -120,6 +175,8 @@ pub struct BackupReceipt {
     pub state: SdkBackupState,
     pub event_store_path: Option<PathBuf>,
     pub outbox_path: Option<PathBuf>,
+    pub manifest_path: Option<PathBuf>,
+    pub manifest: SdkBackupManifest,
 }
 
 #[cfg(feature = "runtime")]
@@ -132,6 +189,28 @@ pub enum SdkBackupState {
 }
 
 #[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct SdkBackupManifest {
+    pub manifest_version: u16,
+    pub sdk_version: &'static str,
+    pub created_at_ms: i64,
+    pub source_storage: SdkStorageKind,
+    pub source_paths: Option<RadrootsSdkStoragePaths>,
+    pub backup_paths: RadrootsSdkStoragePaths,
+    pub source_status: StorageStatusReceipt,
+    pub backup_verification: SdkBackupVerification,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct SdkBackupVerification {
+    pub event_store_ok: bool,
+    pub outbox_ok: bool,
+    pub event_store_events: i64,
+    pub outbox_events: i64,
+}
+
+#[cfg(feature = "runtime")]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize)]
 pub struct IntegrityRequest {}
 
@@ -141,6 +220,8 @@ pub struct IntegrityReceipt {
     pub checked_paths: Vec<PathBuf>,
     pub event_store_ok: bool,
     pub outbox_ok: bool,
+    pub event_store_result: String,
+    pub outbox_result: String,
 }
 
 #[cfg(feature = "runtime")]
@@ -249,6 +330,131 @@ impl RadrootsSdk {
     pub fn storage_paths(&self) -> Option<&RadrootsSdkStoragePaths> {
         self.storage_paths.as_ref()
     }
+
+    pub async fn storage_status(
+        &self,
+        _request: StorageStatusRequest,
+    ) -> Result<StorageStatusReceipt, RadrootsSdkError> {
+        let now_ms = sdk_now_ms(self)?;
+        let event_summary = self._event_store.status_summary().await?;
+        let outbox_summary = self._outbox.status_summary(now_ms).await?;
+        Ok(StorageStatusReceipt {
+            storage: self.storage_kind(),
+            paths: self.storage_paths.clone(),
+            event_store: SdkEventStoreStorageStatus {
+                store: sqlite_store_status(
+                    self._event_store.pool(),
+                    SDK_EVENT_STORE_SCHEMA_VERSION,
+                    self._event_store.pragma_journal_mode().await?,
+                    self._event_store.pragma_foreign_keys().await? != 0,
+                    self._event_store.pragma_busy_timeout().await?,
+                )
+                .await?,
+                total_events: event_summary.total_events,
+                projection_eligible_events: event_summary.projection_eligible_events,
+                relay_observations: event_summary.relay_observations,
+                last_event_seq: event_summary.last_event_seq,
+                last_event_updated_at_ms: event_summary.last_event_updated_at_ms,
+            },
+            outbox: SdkOutboxStorageStatus {
+                store: sqlite_store_status(
+                    self._outbox.pool(),
+                    SDK_OUTBOX_SCHEMA_VERSION,
+                    self._outbox.pragma_journal_mode().await?,
+                    self._outbox.pragma_foreign_keys().await? != 0,
+                    self._outbox.pragma_busy_timeout().await?,
+                )
+                .await?,
+                total_events: outbox_summary.total_events,
+                pending_events: outbox_summary.pending_events,
+                retryable_events: outbox_summary.retryable_events,
+                terminal_events: outbox_summary.terminal_events,
+                failed_terminal_events: outbox_summary.failed_terminal_events,
+                ready_signed_events: outbox_summary.ready_signed_events,
+                publishing_events: outbox_summary.publishing_events,
+                last_attempt_at_ms: outbox_summary.last_attempt_at_ms,
+                last_error: outbox_summary.last_error,
+            },
+        })
+    }
+
+    pub async fn integrity(
+        &self,
+        _request: IntegrityRequest,
+    ) -> Result<IntegrityReceipt, RadrootsSdkError> {
+        let event_store_integrity = sqlite_integrity_result(self._event_store.pool()).await?;
+        let outbox_integrity = sqlite_integrity_result(self._outbox.pool()).await?;
+        let checked_paths = self
+            .storage_paths
+            .as_ref()
+            .map(|paths| vec![paths.event_store_path.clone(), paths.outbox_path.clone()])
+            .unwrap_or_default();
+        Ok(IntegrityReceipt {
+            checked_paths,
+            event_store_ok: event_store_integrity.ok,
+            outbox_ok: outbox_integrity.ok,
+            event_store_result: event_store_integrity.result,
+            outbox_result: outbox_integrity.result,
+        })
+    }
+
+    pub async fn backup(&self, request: BackupRequest) -> Result<BackupReceipt, RadrootsSdkError> {
+        if request.destination.as_os_str().is_empty() {
+            return Err(RadrootsSdkError::InvalidRequest {
+                message: "backup destination must not be empty".to_owned(),
+            });
+        }
+        prepare_backup_destination(&request.destination, request.overwrite)?;
+        let backup_paths = RadrootsSdkStoragePaths {
+            event_store_path: request.destination.join(EVENT_STORE_BACKUP_FILE),
+            outbox_path: request.destination.join(OUTBOX_BACKUP_FILE),
+        };
+        let manifest_path = request.destination.join(BACKUP_MANIFEST_FILE);
+        let source_status = self.storage_status(StorageStatusRequest::default()).await?;
+        sqlite_vacuum_into(
+            self._event_store.pool(),
+            &backup_paths.event_store_path,
+            "event store",
+        )
+        .await?;
+        sqlite_vacuum_into(self._outbox.pool(), &backup_paths.outbox_path, "outbox").await?;
+        let backup_verification = verify_backup_paths(&backup_paths).await?;
+        let manifest = SdkBackupManifest {
+            manifest_version: SDK_STORAGE_MANIFEST_VERSION,
+            sdk_version: env!("CARGO_PKG_VERSION"),
+            created_at_ms: sdk_now_ms(self)?,
+            source_storage: self.storage_kind(),
+            source_paths: self.storage_paths.clone(),
+            backup_paths: backup_paths.clone(),
+            source_status,
+            backup_verification,
+        };
+        let manifest_json = serde_json::to_vec_pretty(&manifest).map_err(|error| {
+            RadrootsSdkError::InvalidRequest {
+                message: error.to_string(),
+            }
+        })?;
+        fs::write(&manifest_path, manifest_json).map_err(|error| RadrootsSdkError::Io {
+            path: manifest_path.clone(),
+            message: error.to_string(),
+        })?;
+        Ok(BackupReceipt {
+            destination: request.destination,
+            state: SdkBackupState::Completed,
+            event_store_path: Some(backup_paths.event_store_path),
+            outbox_path: Some(backup_paths.outbox_path),
+            manifest_path: Some(manifest_path),
+            manifest,
+        })
+    }
+
+    fn storage_kind(&self) -> SdkStorageKind {
+        if self.storage_paths.is_some() {
+            SdkStorageKind::Directory
+        } else {
+            SdkStorageKind::Memory
+        }
+    }
 }
 
 #[cfg(feature = "runtime")]
@@ -295,5 +501,132 @@ async fn open_directory_storage(path: &Path) -> Result<OpenedRuntimeStorage, Rad
         event_store: RadrootsEventStore::open_file(&paths.event_store_path).await?,
         outbox: RadrootsOutbox::open_file(&paths.outbox_path).await?,
         paths: Some(paths),
+    })
+}
+
+#[cfg(feature = "runtime")]
+struct SqliteIntegrityResult {
+    ok: bool,
+    result: String,
+}
+
+#[cfg(feature = "runtime")]
+async fn sqlite_store_status(
+    pool: &SqlitePool,
+    schema_version: i64,
+    journal_mode: String,
+    foreign_keys_enabled: bool,
+    busy_timeout_ms: i64,
+) -> Result<SdkSqliteStoreStatus, RadrootsSdkError> {
+    let integrity = sqlite_integrity_result(pool).await?;
+    Ok(SdkSqliteStoreStatus {
+        schema_version,
+        journal_mode,
+        foreign_keys_enabled,
+        busy_timeout_ms,
+        integrity_ok: integrity.ok,
+        integrity_result: integrity.result,
+    })
+}
+
+#[cfg(feature = "runtime")]
+async fn sqlite_integrity_result(
+    pool: &SqlitePool,
+) -> Result<SqliteIntegrityResult, RadrootsSdkError> {
+    let rows = sqlx::query("PRAGMA integrity_check")
+        .fetch_all(pool)
+        .await
+        .map_err(|error| RadrootsSdkError::EventStore {
+            message: error.to_string(),
+        })?;
+    let results = rows
+        .into_iter()
+        .map(|row| row.try_get::<String, _>(0))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| RadrootsSdkError::EventStore {
+            message: error.to_string(),
+        })?;
+    let result = results.join("; ");
+    Ok(SqliteIntegrityResult {
+        ok: result == "ok",
+        result,
+    })
+}
+
+#[cfg(feature = "runtime")]
+fn prepare_backup_destination(path: &Path, overwrite: bool) -> Result<(), RadrootsSdkError> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            return Err(RadrootsSdkError::InvalidRequest {
+                message: "backup destination must not be a symbolic link".to_owned(),
+            });
+        }
+        Ok(metadata) if overwrite && metadata.is_dir() => {
+            fs::remove_dir_all(path).map_err(|error| RadrootsSdkError::Io {
+                path: path.to_path_buf(),
+                message: error.to_string(),
+            })?;
+        }
+        Ok(metadata) if overwrite && metadata.is_file() => {
+            fs::remove_file(path).map_err(|error| RadrootsSdkError::Io {
+                path: path.to_path_buf(),
+                message: error.to_string(),
+            })?;
+        }
+        Ok(_) => {
+            return Err(RadrootsSdkError::InvalidRequest {
+                message: "backup destination already exists and overwrite is false".to_owned(),
+            });
+        }
+        Err(error) if error.kind() == ErrorKind::NotFound => {}
+        Err(error) => {
+            return Err(RadrootsSdkError::Io {
+                path: path.to_path_buf(),
+                message: error.to_string(),
+            });
+        }
+    }
+    fs::create_dir_all(path).map_err(|error| RadrootsSdkError::Io {
+        path: path.to_path_buf(),
+        message: error.to_string(),
+    })
+}
+
+#[cfg(feature = "runtime")]
+async fn sqlite_vacuum_into(
+    pool: &SqlitePool,
+    destination: &Path,
+    store_name: &'static str,
+) -> Result<(), RadrootsSdkError> {
+    let Some(destination) = destination.to_str() else {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: format!("{store_name} backup destination must be valid UTF-8"),
+        });
+    };
+    sqlx::query("VACUUM INTO ?")
+        .bind(destination)
+        .execute(pool)
+        .await
+        .map(|_| ())
+        .map_err(|error| RadrootsSdkError::EventStore {
+            message: format!("{store_name} backup failed: {error}"),
+        })
+}
+
+#[cfg(feature = "runtime")]
+async fn verify_backup_paths(
+    paths: &RadrootsSdkStoragePaths,
+) -> Result<SdkBackupVerification, RadrootsSdkError> {
+    let event_store = RadrootsEventStore::open_file(&paths.event_store_path).await?;
+    let outbox = RadrootsOutbox::open_file(&paths.outbox_path).await?;
+    let event_store_integrity = sqlite_integrity_result(event_store.pool()).await?;
+    let outbox_integrity = sqlite_integrity_result(outbox.pool()).await?;
+    let event_summary = event_store.status_summary().await?;
+    let outbox_summary = outbox.status_summary(i64::MAX).await?;
+    Ok(SdkBackupVerification {
+        event_store_ok: event_store_integrity.ok,
+        outbox_ok: outbox_integrity.ok,
+        event_store_events: event_summary.total_events,
+        outbox_events: outbox_summary.total_events,
     })
 }

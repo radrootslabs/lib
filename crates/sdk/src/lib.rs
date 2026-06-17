@@ -65,8 +65,9 @@ pub use crate::relay_targets::{
 pub use crate::runtime::{
     BackupReceipt, BackupRequest, IntegrityReceipt, IntegrityRequest, RadrootsSdk,
     RadrootsSdkBuilder, RadrootsSdkClock, RadrootsSdkStorageConfig, RadrootsSdkStoragePaths,
-    RadrootsSdkTimestamp, SdkBackupState, SdkStorageKind, StorageStatusReceipt,
-    StorageStatusRequest,
+    RadrootsSdkTimestamp, SdkBackupManifest, SdkBackupState, SdkBackupVerification,
+    SdkEventStoreStorageStatus, SdkOutboxStorageStatus, SdkSqliteStoreStatus, SdkStorageKind,
+    StorageStatusReceipt, StorageStatusRequest,
 };
 #[cfg(feature = "runtime")]
 pub use crate::sync_runtime::{

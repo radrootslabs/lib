@@ -4,8 +4,9 @@ use radroots_sdk::{
     BackupRequest, IntegrityRequest, RadrootsSdk, RadrootsSdkClock, RadrootsSdkError,
     RadrootsSdkErrorClass, RadrootsSdkRecoveryAction, RadrootsSdkStorageConfig,
     RadrootsSdkTimestamp, SDK_IDEMPOTENCY_KEY_MAX_LEN, SDK_RELAY_TARGET_MAX_COUNT, SdkBackupState,
-    SdkIdempotencyKey, SdkRelayTargetPolicy, SdkRelayTargetSet, SdkRelayUrlPolicy, SdkStorageKind,
-    StorageStatusReceipt, StorageStatusRequest,
+    SdkBackupVerification, SdkEventStoreStorageStatus, SdkIdempotencyKey, SdkOutboxStorageStatus,
+    SdkRelayTargetPolicy, SdkRelayTargetSet, SdkRelayUrlPolicy, SdkSqliteStoreStatus,
+    SdkStorageKind, StorageStatusReceipt, StorageStatusRequest,
 };
 use std::path::PathBuf;
 
@@ -144,6 +145,41 @@ async fn sdk_directory_storage_creates_deterministic_sqlite_files() {
     );
     assert!(paths.event_store_path.exists());
     assert!(paths.outbox_path.exists());
+}
+
+#[tokio::test]
+async fn sdk_memory_storage_status_and_integrity_report_canonical_stores() {
+    let sdk = RadrootsSdk::builder()
+        .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
+        .build()
+        .await
+        .expect("sdk");
+
+    let status = sdk
+        .storage_status(StorageStatusRequest::default())
+        .await
+        .expect("status");
+    assert_eq!(status.storage, SdkStorageKind::Memory);
+    assert_eq!(status.paths, None);
+    assert_eq!(status.event_store.store.schema_version, 1);
+    assert_eq!(status.outbox.store.schema_version, 1);
+    assert!(status.event_store.store.foreign_keys_enabled);
+    assert!(status.outbox.store.foreign_keys_enabled);
+    assert_eq!(status.event_store.total_events, 0);
+    assert_eq!(status.outbox.total_events, 0);
+    assert_eq!(status.outbox.failed_terminal_events, 0);
+    assert!(status.event_store.store.integrity_ok);
+    assert!(status.outbox.store.integrity_ok);
+
+    let integrity = sdk
+        .integrity(IntegrityRequest::default())
+        .await
+        .expect("integrity");
+    assert!(integrity.checked_paths.is_empty());
+    assert!(integrity.event_store_ok);
+    assert!(integrity.outbox_ok);
+    assert_eq!(integrity.event_store_result, "ok");
+    assert_eq!(integrity.outbox_result, "ok");
 }
 
 #[tokio::test]
@@ -502,6 +538,14 @@ fn idempotency_key_validation_is_bounded_and_debug_redacted() {
 
 #[test]
 fn storage_backup_and_integrity_contract_dtos_serialize() {
+    let store = SdkSqliteStoreStatus {
+        schema_version: 1,
+        journal_mode: "wal".to_owned(),
+        foreign_keys_enabled: true,
+        busy_timeout_ms: 5_000,
+        integrity_ok: true,
+        integrity_result: "ok".to_owned(),
+    };
     assert_eq!(
         serde_json::to_value(StorageStatusRequest::default()).expect("status request"),
         serde_json::json!({})
@@ -510,11 +554,65 @@ fn storage_backup_and_integrity_contract_dtos_serialize() {
         serde_json::to_value(StorageStatusReceipt {
             storage: SdkStorageKind::Directory,
             paths: None,
+            event_store: SdkEventStoreStorageStatus {
+                store: store.clone(),
+                total_events: 2,
+                projection_eligible_events: 1,
+                relay_observations: 1,
+                last_event_seq: Some(2),
+                last_event_updated_at_ms: Some(1_700_000_000_000),
+            },
+            outbox: SdkOutboxStorageStatus {
+                store,
+                total_events: 3,
+                pending_events: 1,
+                retryable_events: 1,
+                terminal_events: 1,
+                failed_terminal_events: 0,
+                ready_signed_events: 1,
+                publishing_events: 0,
+                last_attempt_at_ms: Some(1_700_000_000_000),
+                last_error: Some("relay publish incomplete".to_owned()),
+            },
         })
         .expect("status receipt"),
         serde_json::json!({
             "storage": "directory",
-            "paths": null
+            "paths": null,
+            "event_store": {
+                "store": {
+                    "schema_version": 1,
+                    "journal_mode": "wal",
+                    "foreign_keys_enabled": true,
+                    "busy_timeout_ms": 5000,
+                    "integrity_ok": true,
+                    "integrity_result": "ok"
+                },
+                "total_events": 2,
+                "projection_eligible_events": 1,
+                "relay_observations": 1,
+                "last_event_seq": 2,
+                "last_event_updated_at_ms": 1700000000000i64
+            },
+            "outbox": {
+                "store": {
+                    "schema_version": 1,
+                    "journal_mode": "wal",
+                    "foreign_keys_enabled": true,
+                    "busy_timeout_ms": 5000,
+                    "integrity_ok": true,
+                    "integrity_result": "ok"
+                },
+                "total_events": 3,
+                "pending_events": 1,
+                "retryable_events": 1,
+                "terminal_events": 1,
+                "failed_terminal_events": 0,
+                "ready_signed_events": 1,
+                "publishing_events": 0,
+                "last_attempt_at_ms": 1700000000000i64,
+                "last_error": "relay publish incomplete"
+            }
         })
     );
     assert_eq!(
@@ -531,6 +629,21 @@ fn storage_backup_and_integrity_contract_dtos_serialize() {
     assert_eq!(
         serde_json::to_value(SdkBackupState::Completed).expect("backup state"),
         serde_json::json!("completed")
+    );
+    assert_eq!(
+        serde_json::to_value(SdkBackupVerification {
+            event_store_ok: true,
+            outbox_ok: true,
+            event_store_events: 2,
+            outbox_events: 3,
+        })
+        .expect("backup verification"),
+        serde_json::json!({
+            "event_store_ok": true,
+            "outbox_ok": true,
+            "event_store_events": 2,
+            "outbox_events": 3
+        })
     );
     assert_eq!(
         serde_json::to_value(IntegrityRequest::default()).expect("integrity request"),

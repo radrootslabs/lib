@@ -8,6 +8,7 @@ use radroots_core::{
     RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
     RadrootsCoreQuantityPrice, RadrootsCoreUnit,
 };
+use radroots_event_store::RadrootsEventStore;
 use radroots_events::{
     contract::RadrootsActorRole,
     draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent, RadrootsSignedNostrEventParts},
@@ -21,11 +22,12 @@ use radroots_relay_transport::{
     RadrootsRelayPublishRelayReceipt, RadrootsRelayPublishRequest, RadrootsRelayTransportError,
 };
 use radroots_sdk::{
-    ListingEnqueuePublishRequest, ListingPreparePublishRequest, PUSH_OUTBOX_DEFAULT_CLAIM_TTL_MS,
-    PUSH_OUTBOX_DEFAULT_LIMIT, PUSH_OUTBOX_DEFAULT_NEXT_ATTEMPT_DELAY_MS, PUSH_OUTBOX_MAX_LIMIT,
-    PushOutboxEventReceipt, PushOutboxEventState, PushOutboxReceipt, PushOutboxRelayOutcomeKind,
-    PushOutboxRelayReceipt, PushOutboxRequest, RadrootsSdk, RadrootsSdkError, RadrootsSdkTimestamp,
-    SdkRelayAuthPolicy, SdkRelayTargetPolicy, SdkRelayUrlPolicy, SyncStatusRequest,
+    BackupRequest, IntegrityRequest, ListingEnqueuePublishRequest, ListingPreparePublishRequest,
+    PUSH_OUTBOX_DEFAULT_CLAIM_TTL_MS, PUSH_OUTBOX_DEFAULT_LIMIT,
+    PUSH_OUTBOX_DEFAULT_NEXT_ATTEMPT_DELAY_MS, PUSH_OUTBOX_MAX_LIMIT, PushOutboxEventReceipt,
+    PushOutboxEventState, PushOutboxReceipt, PushOutboxRelayOutcomeKind, PushOutboxRelayReceipt,
+    PushOutboxRequest, RadrootsSdk, RadrootsSdkError, RadrootsSdkTimestamp, SdkRelayAuthPolicy,
+    SdkRelayTargetPolicy, SdkRelayUrlPolicy, StorageStatusRequest, SyncStatusRequest,
     SyncStatusSource,
 };
 use std::sync::{Arc, Mutex};
@@ -302,6 +304,7 @@ async fn sync_status_empty_store_reports_canonical_sources_and_configured_relays
     assert_eq!(receipt.outbox.pending_events, 0);
     assert_eq!(receipt.outbox.retryable_events, 0);
     assert_eq!(receipt.outbox.terminal_events, 0);
+    assert_eq!(receipt.outbox.failed_terminal_events, 0);
     assert_eq!(receipt.outbox.ready_signed_events, 0);
     assert_eq!(receipt.relay_targets.configured_count, 2);
     assert_eq!(
@@ -325,6 +328,7 @@ async fn sync_status_empty_store_reports_canonical_sources_and_configured_relays
                 "pending_events": 0,
                 "retryable_events": 0,
                 "terminal_events": 0,
+                "failed_terminal_events": 0,
                 "ready_signed_events": 0,
                 "publishing_events": 0,
                 "last_attempt_at_ms": null,
@@ -370,6 +374,7 @@ async fn sync_status_reports_pending_retryable_terminal_and_last_attempt_metadat
     assert_eq!(receipt.outbox.pending_events, 1);
     assert_eq!(receipt.outbox.retryable_events, 1);
     assert_eq!(receipt.outbox.terminal_events, 1);
+    assert_eq!(receipt.outbox.failed_terminal_events, 0);
     assert_eq!(receipt.outbox.ready_signed_events, 1);
     assert_eq!(receipt.outbox.publishing_events, 0);
     assert_eq!(receipt.outbox.last_attempt_at_ms, Some(1_700_000_000_000));
@@ -377,6 +382,131 @@ async fn sync_status_reports_pending_retryable_terminal_and_last_attempt_metadat
         receipt.outbox.last_error.as_deref(),
         Some("relay publish incomplete")
     );
+}
+
+#[tokio::test]
+async fn sdk_directory_backup_creates_verified_canonical_store_copy() {
+    let (tempdir, sdk) = directory_sdk(&[RELAY_A]).await;
+    let outbox_event_id = enqueue_listing(&sdk, LISTING_A_D_TAG, "Backup Coffee", &[RELAY_A]).await;
+
+    let status = sdk
+        .storage_status(StorageStatusRequest::default())
+        .await
+        .expect("storage status");
+    let source_paths = sdk.storage_paths().expect("source paths");
+    assert_eq!(status.paths.as_ref(), Some(source_paths));
+    assert_eq!(status.event_store.total_events, 1);
+    assert_eq!(status.outbox.total_events, 1);
+    assert_eq!(status.outbox.ready_signed_events, 1);
+    assert!(status.event_store.store.integrity_ok);
+    assert!(status.outbox.store.integrity_ok);
+    assert_eq!(status.event_store.store.journal_mode, "wal");
+    assert_eq!(status.outbox.store.journal_mode, "wal");
+
+    let integrity = sdk
+        .integrity(IntegrityRequest::default())
+        .await
+        .expect("integrity");
+    assert_eq!(
+        integrity.checked_paths,
+        vec![
+            source_paths.event_store_path.clone(),
+            source_paths.outbox_path.clone()
+        ]
+    );
+    assert!(integrity.event_store_ok);
+    assert!(integrity.outbox_ok);
+
+    let backup_destination = tempdir.path().join("backup");
+    let backup = sdk
+        .backup(BackupRequest {
+            destination: backup_destination.clone(),
+            overwrite: false,
+        })
+        .await
+        .expect("backup");
+    let event_store_path = backup
+        .event_store_path
+        .as_ref()
+        .expect("event store backup");
+    let outbox_path = backup.outbox_path.as_ref().expect("outbox backup");
+    let manifest_path = backup.manifest_path.as_ref().expect("manifest");
+    assert!(event_store_path.exists());
+    assert!(outbox_path.exists());
+    assert!(manifest_path.exists());
+    assert_eq!(backup.manifest.created_at_ms, 1_700_000_000_000);
+    assert_eq!(backup.manifest.source_status.event_store.total_events, 1);
+    assert_eq!(backup.manifest.source_status.outbox.total_events, 1);
+    assert!(backup.manifest.backup_verification.event_store_ok);
+    assert!(backup.manifest.backup_verification.outbox_ok);
+
+    let backup_event_store = RadrootsEventStore::open_file(event_store_path)
+        .await
+        .expect("backup event store");
+    let backup_outbox = RadrootsOutbox::open_file(outbox_path)
+        .await
+        .expect("backup outbox");
+    assert_eq!(
+        backup_event_store
+            .status_summary()
+            .await
+            .expect("backup event status")
+            .total_events,
+        1
+    );
+    assert_eq!(
+        backup_outbox
+            .status_summary(i64::MAX)
+            .await
+            .expect("backup outbox status")
+            .total_events,
+        1
+    );
+    assert_eq!(
+        backup_outbox
+            .get_event(outbox_event_id)
+            .await
+            .expect("backup event")
+            .expect("backup event")
+            .state,
+        RadrootsOutboxEventState::Signed
+    );
+
+    let duplicate = sdk
+        .backup(BackupRequest {
+            destination: backup_destination.clone(),
+            overwrite: false,
+        })
+        .await
+        .expect_err("duplicate backup");
+    assert!(matches!(duplicate, RadrootsSdkError::InvalidRequest { .. }));
+
+    sdk.backup(BackupRequest {
+        destination: backup_destination,
+        overwrite: true,
+    })
+    .await
+    .expect("overwrite backup");
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn sdk_backup_rejects_symlink_destination_even_with_overwrite() {
+    let (tempdir, sdk) = directory_sdk(&[RELAY_A]).await;
+    let target = tempdir.path().join("backup-target");
+    let destination = tempdir.path().join("backup-link");
+    std::fs::create_dir(&target).expect("target");
+    std::os::unix::fs::symlink(&target, &destination).expect("symlink");
+
+    let error = sdk
+        .backup(BackupRequest {
+            destination,
+            overwrite: true,
+        })
+        .await
+        .expect_err("symlink destination");
+    assert!(matches!(error, RadrootsSdkError::InvalidRequest { .. }));
+    assert!(target.exists());
 }
 
 #[tokio::test]
