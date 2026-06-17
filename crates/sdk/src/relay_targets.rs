@@ -14,7 +14,7 @@ pub enum SdkRelayUrlPolicy {
 }
 
 impl SdkRelayUrlPolicy {
-    fn relay_transport_policy(self) -> RadrootsRelayUrlPolicy {
+    pub(crate) fn relay_transport_policy(self) -> RadrootsRelayUrlPolicy {
         match self {
             Self::Public => RadrootsRelayUrlPolicy::Public,
             Self::Localhost => RadrootsRelayUrlPolicy::Localhost,

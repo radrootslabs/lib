@@ -21,12 +21,15 @@ use radroots_relay_transport::{
     RadrootsRelayPublishRelayReceipt, RadrootsRelayPublishRequest, RadrootsRelayTransportError,
 };
 use radroots_sdk::{
-    ListingEnqueuePublishRequest, ListingPreparePublishRequest, PUSH_OUTBOX_DEFAULT_LIMIT,
-    PUSH_OUTBOX_MAX_LIMIT, PushOutboxEventReceipt, PushOutboxEventState, PushOutboxReceipt,
-    PushOutboxRelayOutcomeKind, PushOutboxRelayReceipt, PushOutboxRequest, RadrootsSdk,
-    RadrootsSdkError, RadrootsSdkTimestamp, SdkRelayTargetPolicy, SdkRelayUrlPolicy,
+    ListingEnqueuePublishRequest, ListingPreparePublishRequest, PUSH_OUTBOX_DEFAULT_CLAIM_TTL_MS,
+    PUSH_OUTBOX_DEFAULT_LIMIT, PUSH_OUTBOX_DEFAULT_NEXT_ATTEMPT_DELAY_MS, PUSH_OUTBOX_MAX_LIMIT,
+    PushOutboxEventReceipt, PushOutboxEventState, PushOutboxReceipt, PushOutboxRelayOutcomeKind,
+    PushOutboxRelayReceipt, PushOutboxRequest, RadrootsSdk, RadrootsSdkError, RadrootsSdkTimestamp,
+    SdkRelayAuthPolicy, SdkRelayTargetPolicy, SdkRelayUrlPolicy, SyncStatusRequest,
+    SyncStatusSource,
 };
-use std::collections::BTreeSet;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 const SELLER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const FARM_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAA";
@@ -49,6 +52,13 @@ struct FixtureSigner {
 
 struct TransportFailurePublishAdapter;
 
+#[derive(Clone)]
+struct RecordingPublishAdapter {
+    delay: Duration,
+    raw_events: Arc<Mutex<Vec<String>>>,
+    request_times_ms: Arc<Mutex<Vec<i64>>>,
+}
+
 impl RadrootsRelayPublishAdapter for TransportFailurePublishAdapter {
     fn publish<'a>(
         &'a self,
@@ -59,6 +69,60 @@ impl RadrootsRelayPublishAdapter for TransportFailurePublishAdapter {
             Err(RadrootsRelayTransportError::Transport(
                 "adapter boundary unavailable".to_owned(),
             ))
+        })
+    }
+}
+
+impl RecordingPublishAdapter {
+    fn new(delay: Duration) -> Self {
+        Self {
+            delay,
+            raw_events: Arc::new(Mutex::new(Vec::new())),
+            request_times_ms: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    fn captured_raw_events(&self) -> Vec<String> {
+        self.raw_events.lock().expect("raw event lock").clone()
+    }
+
+    fn request_times_ms(&self) -> Vec<i64> {
+        self.request_times_ms
+            .lock()
+            .expect("request time lock")
+            .clone()
+    }
+}
+
+impl RadrootsRelayPublishAdapter for RecordingPublishAdapter {
+    fn publish<'a>(
+        &'a self,
+        request: RadrootsRelayPublishRequest,
+    ) -> BoxFuture<'a, Result<Vec<RadrootsRelayPublishRelayReceipt>, RadrootsRelayTransportError>>
+    {
+        Box::pin(async move {
+            if !self.delay.is_zero() {
+                tokio::time::sleep(self.delay).await;
+            }
+            self.raw_events
+                .lock()
+                .expect("raw event lock")
+                .push(request.signed_event.raw_json.clone());
+            self.request_times_ms
+                .lock()
+                .expect("request time lock")
+                .push(request.now_ms);
+            Ok(request
+                .targets
+                .relays()
+                .iter()
+                .map(|relay| {
+                    RadrootsRelayPublishRelayReceipt::attempted(
+                        relay.as_str(),
+                        RadrootsRelayOutcome::accepted(),
+                    )
+                })
+                .collect())
         })
     }
 }
@@ -181,6 +245,16 @@ async fn directory_sdk(relays: &[&str]) -> (tempfile::TempDir, RadrootsSdk) {
     (tempdir, sdk)
 }
 
+async fn system_clock_directory_sdk(relays: &[&str]) -> (tempfile::TempDir, RadrootsSdk) {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let mut builder = RadrootsSdk::builder().directory_storage(tempdir.path().join("sdk"));
+    for relay in relays {
+        builder = builder.relay_url(*relay);
+    }
+    let sdk = builder.build().await.expect("sdk");
+    (tempdir, sdk)
+}
+
 async fn enqueue_listing(sdk: &RadrootsSdk, d_tag: &str, title: &str, relays: &[&str]) -> i64 {
     enqueue_listing_with_policy(sdk, d_tag, title, relays, SdkRelayUrlPolicy::Public).await
 }
@@ -209,6 +283,103 @@ async fn enqueue_listing_with_policy(
 }
 
 #[tokio::test]
+async fn sync_status_empty_store_reports_canonical_sources_and_configured_relays() {
+    let (_tempdir, sdk) = directory_sdk(&[RELAY_B, RELAY_A]).await;
+
+    let receipt = sdk
+        .sync()
+        .status(SyncStatusRequest::new())
+        .await
+        .expect("status");
+
+    assert_eq!(receipt.source, SyncStatusSource::SdkCanonicalStores);
+    assert_eq!(receipt.observed_at_ms, 1_700_000_000_000);
+    assert_eq!(receipt.event_store.total_events, 0);
+    assert_eq!(receipt.event_store.projection_eligible_events, 0);
+    assert_eq!(receipt.event_store.relay_observations, 0);
+    assert_eq!(receipt.event_store.last_event_seq, None);
+    assert_eq!(receipt.outbox.total_events, 0);
+    assert_eq!(receipt.outbox.pending_events, 0);
+    assert_eq!(receipt.outbox.retryable_events, 0);
+    assert_eq!(receipt.outbox.terminal_events, 0);
+    assert_eq!(receipt.outbox.ready_signed_events, 0);
+    assert_eq!(receipt.relay_targets.configured_count, 2);
+    assert_eq!(
+        receipt.relay_targets.configured_relays,
+        vec![RELAY_B.to_owned(), RELAY_A.to_owned()]
+    );
+    assert_eq!(
+        serde_json::to_value(&receipt).expect("status json"),
+        serde_json::json!({
+            "source": "sdk_canonical_stores",
+            "observed_at_ms": 1700000000000i64,
+            "event_store": {
+                "total_events": 0,
+                "projection_eligible_events": 0,
+                "relay_observations": 0,
+                "last_event_seq": null,
+                "last_event_updated_at_ms": null
+            },
+            "outbox": {
+                "total_events": 0,
+                "pending_events": 0,
+                "retryable_events": 0,
+                "terminal_events": 0,
+                "ready_signed_events": 0,
+                "publishing_events": 0,
+                "last_attempt_at_ms": null,
+                "last_error": null
+            },
+            "relay_targets": {
+                "configured_count": 2,
+                "configured_relays": [RELAY_B, RELAY_A]
+            }
+        })
+    );
+}
+
+#[tokio::test]
+async fn sync_status_reports_pending_retryable_terminal_and_last_attempt_metadata() {
+    let (_tempdir, sdk) = directory_sdk(&[RELAY_A, RELAY_B, RELAY_C]).await;
+    enqueue_listing(&sdk, LISTING_A_D_TAG, "Retryable Coffee", &[RELAY_A]).await;
+    sdk.sync()
+        .push_outbox_with_adapter(
+            &TransportFailurePublishAdapter,
+            PushOutboxRequest::new().with_limit(1),
+        )
+        .await
+        .expect("retryable push");
+    enqueue_listing(&sdk, LISTING_B_D_TAG, "Published Coffee", &[RELAY_B]).await;
+    sdk.sync()
+        .push_outbox_with_adapter(
+            &RadrootsMockRelayPublishAdapter::new(),
+            PushOutboxRequest::new().with_limit(1),
+        )
+        .await
+        .expect("published push");
+    enqueue_listing(&sdk, LISTING_C_D_TAG, "Pending Coffee", &[RELAY_C]).await;
+
+    let receipt = sdk
+        .sync()
+        .status(SyncStatusRequest::new())
+        .await
+        .expect("status");
+
+    assert_eq!(receipt.event_store.total_events, 3);
+    assert_eq!(receipt.outbox.total_events, 3);
+    assert_eq!(receipt.outbox.pending_events, 1);
+    assert_eq!(receipt.outbox.retryable_events, 1);
+    assert_eq!(receipt.outbox.terminal_events, 1);
+    assert_eq!(receipt.outbox.ready_signed_events, 1);
+    assert_eq!(receipt.outbox.publishing_events, 0);
+    assert_eq!(receipt.outbox.last_attempt_at_ms, Some(1_700_000_000_000));
+    assert_eq!(
+        receipt.outbox.last_error.as_deref(),
+        Some("relay publish incomplete")
+    );
+}
+
+#[tokio::test]
 async fn push_outbox_empty_queue_returns_zero_counts() {
     let (_tempdir, sdk) = directory_sdk(&[]).await;
     let adapter = RadrootsMockRelayPublishAdapter::new();
@@ -231,14 +402,24 @@ async fn push_outbox_empty_queue_returns_zero_counts() {
 fn push_outbox_contract_dtos_serialize_deterministically() {
     let request = PushOutboxRequest::new()
         .with_limit(2)
-        .republish_accepted_relays(true);
+        .republish_accepted_relays(true)
+        .with_relay_url_policy(SdkRelayUrlPolicy::Localhost)
+        .with_auth_policy(SdkRelayAuthPolicy::DetectOnly)
+        .with_claim_ttl_ms(1_000)
+        .with_next_attempt_delay_ms(2_000);
     assert_eq!(
         serde_json::to_value(&request).expect("request json"),
         serde_json::json!({
             "limit": 2,
-            "republish_accepted_relays": true
+            "republish_accepted_relays": true,
+            "relay_url_policy": "localhost",
+            "auth_policy": "detect_only",
+            "claim_ttl_ms": 1000,
+            "next_attempt_delay_ms": 2000
         })
     );
+    assert_eq!(PUSH_OUTBOX_DEFAULT_CLAIM_TTL_MS, 30_000);
+    assert_eq!(PUSH_OUTBOX_DEFAULT_NEXT_ATTEMPT_DELAY_MS, 60_000);
 
     let receipt = PushOutboxReceipt {
         attempted_events: 1,
@@ -341,9 +522,27 @@ async fn push_outbox_rejects_invalid_limits_before_claiming() {
         )
         .await
         .expect_err("too large");
+    let zero_ttl = sdk
+        .sync()
+        .push_outbox_with_adapter(&adapter, PushOutboxRequest::new().with_claim_ttl_ms(0))
+        .await
+        .expect_err("zero ttl");
+    let zero_delay = sdk
+        .sync()
+        .push_outbox_with_adapter(
+            &adapter,
+            PushOutboxRequest::new().with_next_attempt_delay_ms(0),
+        )
+        .await
+        .expect_err("zero delay");
 
     assert!(matches!(zero, RadrootsSdkError::InvalidRequest { .. }));
     assert!(matches!(too_large, RadrootsSdkError::InvalidRequest { .. }));
+    assert!(matches!(zero_ttl, RadrootsSdkError::InvalidRequest { .. }));
+    assert!(matches!(
+        zero_delay,
+        RadrootsSdkError::InvalidRequest { .. }
+    ));
     assert!(adapter.captured_raw_events().is_empty());
 }
 
@@ -392,7 +591,30 @@ async fn push_outbox_with_adapter_uses_queued_targets_without_builder_relays() {
 }
 
 #[tokio::test]
-async fn push_outbox_with_adapter_accepts_queued_localhost_ws_targets() {
+async fn push_outbox_default_public_policy_rejects_queued_localhost_ws_targets() {
+    let (_tempdir, sdk) = directory_sdk(&[]).await;
+    enqueue_listing_with_policy(
+        &sdk,
+        LISTING_A_D_TAG,
+        "Local Coffee",
+        &[LOCAL_RELAY_A],
+        SdkRelayUrlPolicy::Localhost,
+    )
+    .await;
+    let adapter = RadrootsMockRelayPublishAdapter::new();
+
+    let error = sdk
+        .sync()
+        .push_outbox_with_adapter(&adapter, PushOutboxRequest::new().with_limit(1))
+        .await
+        .expect_err("public push should reject ws target");
+
+    assert!(matches!(error, RadrootsSdkError::InvalidRelayUrl { .. }));
+    assert!(adapter.captured_raw_events().is_empty());
+}
+
+#[tokio::test]
+async fn push_outbox_with_adapter_accepts_explicit_queued_localhost_ws_targets() {
     let (_tempdir, sdk) = directory_sdk(&[]).await;
     let outbox_event_id = enqueue_listing_with_policy(
         &sdk,
@@ -406,7 +628,12 @@ async fn push_outbox_with_adapter_accepts_queued_localhost_ws_targets() {
 
     let receipt = sdk
         .sync()
-        .push_outbox_with_adapter(&adapter, PushOutboxRequest::new().with_limit(1))
+        .push_outbox_with_adapter(
+            &adapter,
+            PushOutboxRequest::new()
+                .with_limit(1)
+                .with_relay_url_policy(SdkRelayUrlPolicy::Localhost),
+        )
         .await
         .expect("push");
 
@@ -435,10 +662,10 @@ async fn push_outbox_with_adapter_accepts_queued_localhost_ws_targets() {
         .relays
         .iter()
         .map(|relay| relay.relay_url.as_str())
-        .collect::<BTreeSet<_>>();
+        .collect::<Vec<_>>();
     assert_eq!(
         relay_urls,
-        BTreeSet::from([LOCAL_RELAY_A, LOCAL_RELAY_B, LOCAL_RELAY_C])
+        vec![LOCAL_RELAY_A, LOCAL_RELAY_B, LOCAL_RELAY_C]
     );
     assert_eq!(adapter.captured_raw_events().len(), 1);
 }
@@ -594,6 +821,48 @@ async fn push_outbox_continues_after_adapter_transport_failure_and_releases_clai
         assert_eq!(stored.state, RadrootsOutboxEventState::PublishRetryable);
         assert!(stored.claim_token.is_none());
     }
+}
+
+#[tokio::test]
+async fn concurrent_push_outbox_claims_do_not_publish_the_same_event_twice() {
+    let (_tempdir, sdk) = directory_sdk(&[RELAY_A]).await;
+    enqueue_listing(&sdk, LISTING_A_D_TAG, "Coffee", &[RELAY_A]).await;
+    let adapter = RecordingPublishAdapter::new(Duration::from_millis(50));
+    let request = PushOutboxRequest::new().with_limit(1);
+    let sync = sdk.sync();
+
+    let (left, right) = tokio::join!(
+        sync.push_outbox_with_adapter(&adapter, request.clone()),
+        sync.push_outbox_with_adapter(&adapter, request)
+    );
+    let left = left.expect("left push");
+    let right = right.expect("right push");
+
+    assert_eq!(left.attempted_events + right.attempted_events, 1);
+    assert_eq!(left.published_events + right.published_events, 1);
+    assert_eq!(adapter.captured_raw_events().len(), 1);
+}
+
+#[tokio::test]
+async fn push_outbox_computes_publish_time_for_each_iteration() {
+    let (_tempdir, sdk) = system_clock_directory_sdk(&[RELAY_A, RELAY_B]).await;
+    enqueue_listing(&sdk, LISTING_A_D_TAG, "Coffee One", &[RELAY_A]).await;
+    enqueue_listing(&sdk, LISTING_B_D_TAG, "Coffee Two", &[RELAY_B]).await;
+    let adapter = RecordingPublishAdapter::new(Duration::from_millis(1_200));
+
+    let receipt = sdk
+        .sync()
+        .push_outbox_with_adapter(&adapter, PushOutboxRequest::new().with_limit(2))
+        .await
+        .expect("push");
+
+    assert_eq!(receipt.attempted_events, 2);
+    let request_times_ms = adapter.request_times_ms();
+    assert_eq!(request_times_ms.len(), 2);
+    assert!(
+        request_times_ms[1] > request_times_ms[0],
+        "request publish times should advance between iterations: {request_times_ms:?}"
+    );
 }
 
 #[tokio::test]

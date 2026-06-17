@@ -70,6 +70,9 @@ pub use crate::runtime::{
 };
 #[cfg(feature = "runtime")]
 pub use crate::sync_runtime::{
-    PUSH_OUTBOX_DEFAULT_LIMIT, PUSH_OUTBOX_MAX_LIMIT, PushOutboxEventReceipt, PushOutboxEventState,
-    PushOutboxReceipt, PushOutboxRelayOutcomeKind, PushOutboxRelayReceipt, PushOutboxRequest,
+    PUSH_OUTBOX_DEFAULT_CLAIM_TTL_MS, PUSH_OUTBOX_DEFAULT_LIMIT,
+    PUSH_OUTBOX_DEFAULT_NEXT_ATTEMPT_DELAY_MS, PUSH_OUTBOX_MAX_LIMIT, PushOutboxEventReceipt,
+    PushOutboxEventState, PushOutboxReceipt, PushOutboxRelayOutcomeKind, PushOutboxRelayReceipt,
+    PushOutboxRequest, SdkRelayAuthPolicy, SyncEventStoreStatus, SyncOutboxStatus,
+    SyncRelayTargetSummary, SyncStatusReceipt, SyncStatusRequest, SyncStatusSource,
 };

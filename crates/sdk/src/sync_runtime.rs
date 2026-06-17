@@ -1,37 +1,145 @@
 #[cfg(feature = "runtime")]
-use crate::{RadrootsSdkError, SyncClient, runtime::sdk_now_ms};
+use crate::{RadrootsSdkError, SdkRelayUrlPolicy, SyncClient, runtime::sdk_now_ms};
+#[cfg(feature = "runtime")]
+use radroots_event_store::RadrootsEventStoreStatusSummary;
 #[cfg(feature = "runtime")]
 use radroots_events::ids::RadrootsEventId;
 #[cfg(all(feature = "runtime", feature = "relay-runtime"))]
 use radroots_nostr::prelude::RadrootsNostrClient;
 #[cfg(feature = "runtime")]
-use radroots_outbox::RadrootsOutboxEventState;
+use radroots_outbox::{RadrootsOutboxEventState, RadrootsOutboxStatusSummary};
 #[cfg(all(feature = "runtime", feature = "relay-runtime"))]
 use radroots_relay_transport::RadrootsNostrClientPublishAdapter;
 #[cfg(feature = "runtime")]
 use radroots_relay_transport::{
     RadrootsOutboxPublishPolicy, RadrootsRelayOutcomeKind, RadrootsRelayPublishAdapter,
-    RadrootsRelayPublishReceipt, RadrootsRelayPublishRelayReceipt, RadrootsRelayUrlPolicy,
-    publish_claimed_outbox_event,
+    RadrootsRelayPublishReceipt, RadrootsRelayPublishRelayReceipt, publish_claimed_outbox_event,
 };
 
 #[cfg(feature = "runtime")]
 pub const PUSH_OUTBOX_DEFAULT_LIMIT: usize = 20;
 #[cfg(feature = "runtime")]
 pub const PUSH_OUTBOX_MAX_LIMIT: usize = 100;
+#[cfg(feature = "runtime")]
+pub const PUSH_OUTBOX_DEFAULT_CLAIM_TTL_MS: i64 = 30_000;
+#[cfg(feature = "runtime")]
+pub const PUSH_OUTBOX_DEFAULT_NEXT_ATTEMPT_DELAY_MS: i64 = 60_000;
 
 #[cfg(feature = "runtime")]
 const CLAIM_OWNER: &str = "radroots_sdk.sync.push_outbox";
+
 #[cfg(feature = "runtime")]
-const CLAIM_TTL_MS: i64 = 30_000;
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize)]
+pub struct SyncStatusRequest {}
+
 #[cfg(feature = "runtime")]
-const NEXT_ATTEMPT_DELAY_MS: i64 = 60_000;
+impl SyncStatusRequest {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct SyncStatusReceipt {
+    pub source: SyncStatusSource,
+    pub observed_at_ms: i64,
+    pub event_store: SyncEventStoreStatus,
+    pub outbox: SyncOutboxStatus,
+    pub relay_targets: SyncRelayTargetSummary,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum SyncStatusSource {
+    SdkCanonicalStores,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct SyncEventStoreStatus {
+    pub total_events: i64,
+    pub projection_eligible_events: i64,
+    pub relay_observations: i64,
+    pub last_event_seq: Option<i64>,
+    pub last_event_updated_at_ms: Option<i64>,
+}
+
+#[cfg(feature = "runtime")]
+impl From<RadrootsEventStoreStatusSummary> for SyncEventStoreStatus {
+    fn from(summary: RadrootsEventStoreStatusSummary) -> Self {
+        Self {
+            total_events: summary.total_events,
+            projection_eligible_events: summary.projection_eligible_events,
+            relay_observations: summary.relay_observations,
+            last_event_seq: summary.last_event_seq,
+            last_event_updated_at_ms: summary.last_event_updated_at_ms,
+        }
+    }
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct SyncOutboxStatus {
+    pub total_events: i64,
+    pub pending_events: i64,
+    pub retryable_events: i64,
+    pub terminal_events: i64,
+    pub ready_signed_events: i64,
+    pub publishing_events: i64,
+    pub last_attempt_at_ms: Option<i64>,
+    pub last_error: Option<String>,
+}
+
+#[cfg(feature = "runtime")]
+impl From<RadrootsOutboxStatusSummary> for SyncOutboxStatus {
+    fn from(summary: RadrootsOutboxStatusSummary) -> Self {
+        Self {
+            total_events: summary.total_events,
+            pending_events: summary.pending_events,
+            retryable_events: summary.retryable_events,
+            terminal_events: summary.terminal_events,
+            ready_signed_events: summary.ready_signed_events,
+            publishing_events: summary.publishing_events,
+            last_attempt_at_ms: summary.last_attempt_at_ms,
+            last_error: summary.last_error,
+        }
+    }
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct SyncRelayTargetSummary {
+    pub configured_count: usize,
+    pub configured_relays: Vec<String>,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum SdkRelayAuthPolicy {
+    DetectOnly,
+}
+
+#[cfg(feature = "runtime")]
+impl Default for SdkRelayAuthPolicy {
+    fn default() -> Self {
+        Self::DetectOnly
+    }
+}
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct PushOutboxRequest {
     pub limit: usize,
     pub republish_accepted_relays: bool,
+    pub relay_url_policy: SdkRelayUrlPolicy,
+    pub auth_policy: SdkRelayAuthPolicy,
+    pub claim_ttl_ms: i64,
+    pub next_attempt_delay_ms: i64,
 }
 
 #[cfg(feature = "runtime")]
@@ -40,6 +148,10 @@ impl Default for PushOutboxRequest {
         Self {
             limit: PUSH_OUTBOX_DEFAULT_LIMIT,
             republish_accepted_relays: false,
+            relay_url_policy: SdkRelayUrlPolicy::Public,
+            auth_policy: SdkRelayAuthPolicy::DetectOnly,
+            claim_ttl_ms: PUSH_OUTBOX_DEFAULT_CLAIM_TTL_MS,
+            next_attempt_delay_ms: PUSH_OUTBOX_DEFAULT_NEXT_ATTEMPT_DELAY_MS,
         }
     }
 }
@@ -60,10 +172,40 @@ impl PushOutboxRequest {
         self
     }
 
+    pub fn with_relay_url_policy(mut self, policy: SdkRelayUrlPolicy) -> Self {
+        self.relay_url_policy = policy;
+        self
+    }
+
+    pub fn with_auth_policy(mut self, policy: SdkRelayAuthPolicy) -> Self {
+        self.auth_policy = policy;
+        self
+    }
+
+    pub fn with_claim_ttl_ms(mut self, claim_ttl_ms: i64) -> Self {
+        self.claim_ttl_ms = claim_ttl_ms;
+        self
+    }
+
+    pub fn with_next_attempt_delay_ms(mut self, next_attempt_delay_ms: i64) -> Self {
+        self.next_attempt_delay_ms = next_attempt_delay_ms;
+        self
+    }
+
     fn validate(&self) -> Result<(), RadrootsSdkError> {
         if self.limit == 0 || self.limit > PUSH_OUTBOX_MAX_LIMIT {
             return Err(RadrootsSdkError::InvalidRequest {
                 message: format!("push_outbox limit must be between 1 and {PUSH_OUTBOX_MAX_LIMIT}"),
+            });
+        }
+        if self.claim_ttl_ms <= 0 {
+            return Err(RadrootsSdkError::InvalidRequest {
+                message: "push_outbox claim TTL must be positive".to_owned(),
+            });
+        }
+        if self.next_attempt_delay_ms <= 0 {
+            return Err(RadrootsSdkError::InvalidRequest {
+                message: "push_outbox next attempt delay must be positive".to_owned(),
             });
         }
         Ok(())
@@ -192,6 +334,25 @@ impl From<RadrootsRelayOutcomeKind> for PushOutboxRelayOutcomeKind {
 
 #[cfg(feature = "runtime")]
 impl<'sdk> SyncClient<'sdk> {
+    pub async fn status(
+        &self,
+        _request: SyncStatusRequest,
+    ) -> Result<SyncStatusReceipt, RadrootsSdkError> {
+        let observed_at_ms = sdk_now_ms(self.sdk)?;
+        let event_store = self.sdk._event_store.status_summary().await?;
+        let outbox = self.sdk._outbox.status_summary(observed_at_ms).await?;
+        Ok(SyncStatusReceipt {
+            source: SyncStatusSource::SdkCanonicalStores,
+            observed_at_ms,
+            event_store: event_store.into(),
+            outbox: outbox.into(),
+            relay_targets: SyncRelayTargetSummary {
+                configured_count: self.sdk.relay_urls().len(),
+                configured_relays: self.sdk.relay_urls().to_vec(),
+            },
+        })
+    }
+
     pub async fn push_outbox(
         &self,
         request: PushOutboxRequest,
@@ -222,9 +383,9 @@ impl<'sdk> SyncClient<'sdk> {
         A: RadrootsRelayPublishAdapter,
     {
         request.validate()?;
-        let now_ms = sdk_now_ms(self.sdk)?;
         let mut receipt = PushOutboxReceipt::default();
         for _ in 0..request.limit {
+            let claim_now_ms = sdk_now_ms(self.sdk)?;
             let claim_token = push_outbox_claim_token();
             let Some(claimed) = self
                 .sdk
@@ -232,24 +393,26 @@ impl<'sdk> SyncClient<'sdk> {
                 .claim_next_ready_signed_event(
                     CLAIM_OWNER,
                     claim_token.as_str(),
-                    now_ms.saturating_add(CLAIM_TTL_MS),
-                    now_ms,
+                    claim_now_ms.saturating_add(request.claim_ttl_ms),
+                    claim_now_ms,
                 )
                 .await?
             else {
                 break;
             };
-            let policy =
-                RadrootsOutboxPublishPolicy::new(now_ms.saturating_add(NEXT_ATTEMPT_DELAY_MS))
-                    .republish_accepted_relays(request.republish_accepted_relays)
-                    .relay_url_policy(RadrootsRelayUrlPolicy::Localhost);
+            let publish_now_ms = sdk_now_ms(self.sdk)?;
+            let policy = RadrootsOutboxPublishPolicy::new(
+                publish_now_ms.saturating_add(request.next_attempt_delay_ms),
+            )
+            .republish_accepted_relays(request.republish_accepted_relays)
+            .relay_url_policy(request.relay_url_policy.relay_transport_policy());
             let publish = publish_claimed_outbox_event(
                 &self.sdk._outbox,
                 &self.sdk._event_store,
                 adapter,
                 &claimed,
                 policy,
-                now_ms,
+                publish_now_ms,
             )
             .await?;
             let outbox_event = self
