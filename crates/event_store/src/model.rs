@@ -240,6 +240,15 @@ pub struct RadrootsEventIngestReceipt {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsEventStoreStatusSummary {
+    pub total_events: i64,
+    pub projection_eligible_events: i64,
+    pub relay_observations: i64,
+    pub last_event_seq: Option<i64>,
+    pub last_event_updated_at_ms: Option<i64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsStoredEvent {
     pub seq: i64,
     pub event_id: String,

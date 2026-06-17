@@ -2,7 +2,6 @@
 
 use crate::RadrootsRelayTransportError;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
 use std::fmt;
 use url::Url;
 
@@ -100,12 +99,14 @@ impl RadrootsRelayTargetSet {
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
-        let relays = relays
-            .into_iter()
-            .map(|relay| RadrootsRelayUrl::parse(relay, policy))
-            .collect::<Result<BTreeSet<_>, _>>()?
-            .into_iter()
-            .collect::<Vec<_>>();
+        let mut ordered_relays = Vec::new();
+        for relay in relays {
+            let relay = RadrootsRelayUrl::parse(relay, policy)?;
+            if !ordered_relays.iter().any(|existing| existing == &relay) {
+                ordered_relays.push(relay);
+            }
+        }
+        let relays = ordered_relays;
         if relays.is_empty() {
             return Err(RadrootsRelayTransportError::EmptyTargetSet);
         }
@@ -113,11 +114,13 @@ impl RadrootsRelayTargetSet {
     }
 
     pub fn from_urls(relays: Vec<RadrootsRelayUrl>) -> Result<Self, RadrootsRelayTransportError> {
-        let relays = relays
-            .into_iter()
-            .collect::<BTreeSet<_>>()
-            .into_iter()
-            .collect::<Vec<_>>();
+        let mut ordered_relays = Vec::new();
+        for relay in relays {
+            if !ordered_relays.iter().any(|existing| existing == &relay) {
+                ordered_relays.push(relay);
+            }
+        }
+        let relays = ordered_relays;
         if relays.is_empty() {
             return Err(RadrootsRelayTransportError::EmptyTargetSet);
         }

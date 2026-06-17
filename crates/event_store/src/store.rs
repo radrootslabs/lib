@@ -2,9 +2,10 @@ use crate::RadrootsEventStoreError;
 use crate::migrations::{EVENT_STORE_MIGRATION_DOWN, EVENT_STORE_MIGRATION_UP};
 use crate::model::{
     RadrootsEventContractStatus, RadrootsEventHeadStoreDecision, RadrootsEventIngest,
-    RadrootsEventIngestReceipt, RadrootsEventVerificationStatus, RadrootsProjectionCursor,
-    RadrootsRelayObservation, RadrootsStoredEvent, RadrootsStoredEventHead, RadrootsStoredEventTag,
-    StoredEventClass, tag_semantic_name, tag_value_type_name,
+    RadrootsEventIngestReceipt, RadrootsEventStoreStatusSummary, RadrootsEventVerificationStatus,
+    RadrootsProjectionCursor, RadrootsRelayObservation, RadrootsStoredEvent,
+    RadrootsStoredEventHead, RadrootsStoredEventTag, StoredEventClass, tag_semantic_name,
+    tag_value_type_name,
 };
 use radroots_events::RadrootsNostrEvent;
 use radroots_events::contract::{
@@ -73,6 +74,25 @@ impl RadrootsEventStore {
 
     pub async fn pragma_journal_mode(&self) -> Result<String, RadrootsEventStoreError> {
         query_string(&self.pool, "PRAGMA journal_mode").await
+    }
+
+    pub async fn status_summary(
+        &self,
+    ) -> Result<RadrootsEventStoreStatusSummary, RadrootsEventStoreError> {
+        let row = sqlx::query(
+            "SELECT COUNT(*) AS total_events, COALESCE(SUM(CASE WHEN projection_eligible = 1 THEN 1 ELSE 0 END), 0) AS projection_eligible_events, MAX(seq) AS last_event_seq, MAX(updated_at_ms) AS last_event_updated_at_ms FROM nostr_event",
+        )
+        .fetch_one(&self.pool)
+        .await?;
+        let relay_observations =
+            query_i64(&self.pool, "SELECT COUNT(*) FROM relay_event_seen").await?;
+        Ok(RadrootsEventStoreStatusSummary {
+            total_events: row.try_get("total_events")?,
+            projection_eligible_events: row.try_get("projection_eligible_events")?,
+            relay_observations,
+            last_event_seq: row.try_get("last_event_seq")?,
+            last_event_updated_at_ms: row.try_get("last_event_updated_at_ms")?,
+        })
     }
 
     pub async fn ingest_event(
@@ -885,6 +905,45 @@ mod tests {
             store.pragma_busy_timeout().await.expect("busy_timeout"),
             5000
         );
+    }
+
+    #[tokio::test]
+    async fn status_summary_counts_events_projections_and_relay_observations() {
+        let store = RadrootsEventStore::open_memory().await.expect("open");
+
+        let empty = store.status_summary().await.expect("empty status");
+        assert_eq!(empty.total_events, 0);
+        assert_eq!(empty.projection_eligible_events, 0);
+        assert_eq!(empty.relay_observations, 0);
+        assert_eq!(empty.last_event_seq, None);
+        assert_eq!(empty.last_event_updated_at_ms, None);
+
+        let event = signed_event(
+            KIND_POST,
+            10,
+            vec![vec!["t".to_owned(), "soil".to_owned()]],
+            "hello",
+        );
+        let observation = RadrootsRelayObservation::new(
+            "wss://relay.example.com",
+            crate::RadrootsRelayObservationType::PublishAck,
+            1_100,
+        );
+        store
+            .ingest_event(RadrootsEventIngest::new(event.clone(), 1_000))
+            .await
+            .expect("event ingest");
+        store
+            .ingest_event(RadrootsEventIngest::new(event, 1_100).with_observation(observation))
+            .await
+            .expect("observation ingest");
+
+        let status = store.status_summary().await.expect("status");
+        assert_eq!(status.total_events, 1);
+        assert_eq!(status.projection_eligible_events, 1);
+        assert_eq!(status.relay_observations, 1);
+        assert_eq!(status.last_event_seq, Some(1));
+        assert_eq!(status.last_event_updated_at_ms, Some(1_000));
     }
 
     #[tokio::test]

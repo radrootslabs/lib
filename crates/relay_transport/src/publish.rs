@@ -2,7 +2,7 @@
 
 use crate::{
     RadrootsRelayOutcome, RadrootsRelayOutcomeKind, RadrootsRelayTargetSet,
-    RadrootsRelayTransportError, RadrootsRelayUrlPolicy,
+    RadrootsRelayTransportError,
 };
 use futures::future::BoxFuture;
 use radroots_events::draft::RadrootsSignedNostrEvent;
@@ -239,11 +239,11 @@ impl RadrootsRelayPublishAdapter for RadrootsNostrClientPublishAdapter {
             };
             let mut receipts = Vec::new();
             for relay_url in &target_strings {
-                let relay =
-                    crate::RadrootsRelayUrl::parse(relay_url, RadrootsRelayUrlPolicy::Localhost)?;
-                let success = output.success.iter().any(|success_url| {
-                    success_url.to_string().trim_end_matches('/') == relay.as_str()
-                });
+                let target_url = relay_url.trim_end_matches('/');
+                let success = output
+                    .success
+                    .iter()
+                    .any(|success_url| success_url.to_string().trim_end_matches('/') == target_url);
                 if success {
                     receipts.push(RadrootsRelayPublishRelayReceipt::attempted(
                         relay_url,
@@ -257,7 +257,7 @@ impl RadrootsRelayPublishAdapter for RadrootsNostrClientPublishAdapter {
                     continue;
                 }
                 let failed = output.failed.iter().find_map(|(failed_url, message)| {
-                    if failed_url.to_string().trim_end_matches('/') == relay.as_str() {
+                    if failed_url.to_string().trim_end_matches('/') == target_url {
                         Some(message.clone())
                     } else {
                         None

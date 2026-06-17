@@ -273,3 +273,15 @@ pub struct RadrootsOutboxEventStoreIngestReceipt {
     pub already_ingested: bool,
     pub event_store_inserted: bool,
 }
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsOutboxStatusSummary {
+    pub total_events: i64,
+    pub pending_events: i64,
+    pub retryable_events: i64,
+    pub terminal_events: i64,
+    pub ready_signed_events: i64,
+    pub publishing_events: i64,
+    pub last_attempt_at_ms: Option<i64>,
+    pub last_error: Option<String>,
+}

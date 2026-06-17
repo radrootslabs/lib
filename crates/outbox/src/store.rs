@@ -7,6 +7,7 @@ use crate::model::{
     RadrootsOutboxEventRecord, RadrootsOutboxEventState, RadrootsOutboxEventStoreIngestReceipt,
     RadrootsOutboxOperationInput, RadrootsOutboxOperationRecord, RadrootsOutboxOperationStatus,
     RadrootsOutboxRelayStatus, RadrootsOutboxRelayStatusRecord, RadrootsOutboxSignedOperationInput,
+    RadrootsOutboxStatusSummary,
 };
 use radroots_event_store::{RadrootsEventIngest, RadrootsEventStore};
 use radroots_events::RadrootsNostrEvent;
@@ -68,6 +69,47 @@ impl RadrootsOutbox {
 
     pub async fn pragma_journal_mode(&self) -> Result<String, RadrootsOutboxError> {
         query_string(&self.pool, "PRAGMA journal_mode").await
+    }
+
+    pub async fn status_summary(
+        &self,
+        now_ms: i64,
+    ) -> Result<RadrootsOutboxStatusSummary, RadrootsOutboxError> {
+        let row = sqlx::query(
+            "SELECT COUNT(*) AS total_events, COALESCE(SUM(CASE WHEN state IN ('draft_queued', 'signing', 'signed', 'publishing') THEN 1 ELSE 0 END), 0) AS pending_events, COALESCE(SUM(CASE WHEN state IN ('sign_retryable', 'publish_retryable') THEN 1 ELSE 0 END), 0) AS retryable_events, COALESCE(SUM(CASE WHEN state IN ('published', 'failed_terminal', 'cancelled') THEN 1 ELSE 0 END), 0) AS terminal_events, COALESCE(SUM(CASE WHEN state = 'publishing' THEN 1 ELSE 0 END), 0) AS publishing_events FROM outbox_event",
+        )
+        .fetch_one(&self.pool)
+        .await?;
+        let ready_signed_events = sqlx::query(
+            "SELECT COUNT(*) FROM outbox_event WHERE state IN ('signed', 'publish_retryable') AND signed_event_json IS NOT NULL AND next_attempt_after_ms <= ? AND (claim_token IS NULL OR claim_expires_at_ms <= ?)",
+        )
+        .bind(now_ms)
+        .bind(now_ms)
+        .fetch_one(&self.pool)
+        .await?
+        .try_get(0)?;
+        let last_attempt_at_ms =
+            sqlx::query("SELECT MAX(last_attempt_at_ms) FROM outbox_event_relay_status")
+                .fetch_one(&self.pool)
+                .await?
+                .try_get(0)?;
+        let last_error = sqlx::query(
+            "SELECT last_error FROM outbox_event WHERE last_error IS NOT NULL ORDER BY updated_at_ms DESC, outbox_event_id DESC LIMIT 1",
+        )
+        .fetch_optional(&self.pool)
+        .await?
+        .map(|row| row.try_get("last_error"))
+        .transpose()?;
+        Ok(RadrootsOutboxStatusSummary {
+            total_events: row.try_get("total_events")?,
+            pending_events: row.try_get("pending_events")?,
+            retryable_events: row.try_get("retryable_events")?,
+            terminal_events: row.try_get("terminal_events")?,
+            ready_signed_events,
+            publishing_events: row.try_get("publishing_events")?,
+            last_attempt_at_ms,
+            last_error,
+        })
     }
 
     pub async fn enqueue_operation(
@@ -1289,6 +1331,89 @@ mod tests {
 
         let second = RadrootsOutbox::open_file(&path).await.expect("second");
         assert_eq!(second.pragma_foreign_keys().await.expect("foreign keys"), 1);
+    }
+
+    #[tokio::test]
+    async fn status_summary_counts_ready_publishing_retryable_and_terminal_work() {
+        let outbox = RadrootsOutbox::open_memory().await.expect("open");
+
+        let empty = outbox.status_summary(1_000).await.expect("empty status");
+        assert_eq!(empty.total_events, 0);
+        assert_eq!(empty.pending_events, 0);
+        assert_eq!(empty.retryable_events, 0);
+        assert_eq!(empty.terminal_events, 0);
+        assert_eq!(empty.ready_signed_events, 0);
+        assert_eq!(empty.publishing_events, 0);
+        assert_eq!(empty.last_attempt_at_ms, None);
+        assert_eq!(empty.last_error, None);
+
+        let keys = fixture_keys();
+        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "ready");
+        let signed_event = radroots_nostr_sign_frozen_draft(&keys, &draft).expect("signed event");
+        let receipt = outbox
+            .enqueue_signed_operation(signed_operation_input(draft, signed_event, 1_000))
+            .await
+            .expect("signed enqueue");
+        let ready = outbox.status_summary(1_000).await.expect("ready status");
+        assert_eq!(ready.total_events, 1);
+        assert_eq!(ready.pending_events, 1);
+        assert_eq!(ready.retryable_events, 0);
+        assert_eq!(ready.terminal_events, 0);
+        assert_eq!(ready.ready_signed_events, 1);
+
+        let claimed = outbox
+            .claim_next_ready_signed_event("publisher", "claim-a", 2_500, 2_000)
+            .await
+            .expect("claim")
+            .expect("claimed");
+        let publishing = outbox
+            .status_summary(2_000)
+            .await
+            .expect("publishing status");
+        assert_eq!(publishing.pending_events, 1);
+        assert_eq!(publishing.publishing_events, 1);
+        assert_eq!(publishing.ready_signed_events, 0);
+
+        outbox
+            .mark_relay_failed_retryable(
+                receipt.outbox_event_id,
+                claimed.claim_token.as_str(),
+                RELAY_PRIMARY_WSS,
+                "timeout: relay unavailable",
+                2_100,
+            )
+            .await
+            .expect("relay failed");
+        outbox
+            .mark_publish_retryable(
+                receipt.outbox_event_id,
+                claimed.claim_token.as_str(),
+                "relay publish incomplete",
+                3_000,
+                2_200,
+            )
+            .await
+            .expect("retryable");
+
+        let retry_wait = outbox
+            .status_summary(2_900)
+            .await
+            .expect("retry wait status");
+        assert_eq!(retry_wait.pending_events, 0);
+        assert_eq!(retry_wait.retryable_events, 1);
+        assert_eq!(retry_wait.terminal_events, 0);
+        assert_eq!(retry_wait.ready_signed_events, 0);
+        assert_eq!(retry_wait.last_attempt_at_ms, Some(2_100));
+        assert_eq!(
+            retry_wait.last_error.as_deref(),
+            Some("relay publish incomplete")
+        );
+
+        let retry_ready = outbox
+            .status_summary(3_000)
+            .await
+            .expect("retry ready status");
+        assert_eq!(retry_ready.ready_signed_events, 1);
     }
 
     #[test]

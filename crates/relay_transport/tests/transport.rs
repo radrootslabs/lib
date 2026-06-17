@@ -181,9 +181,9 @@ fn relay_url_validation_and_target_normalization() {
     assert_eq!(
         targets.relay_strings(),
         vec![
-            RELAY_SECONDARY_WSS.to_owned(),
             RELAY_TERTIARY_WSS.to_owned(),
-            RELAY_PRIMARY_WSS.to_owned()
+            RELAY_PRIMARY_WSS.to_owned(),
+            RELAY_SECONDARY_WSS.to_owned()
         ]
     );
 }
