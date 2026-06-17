@@ -119,6 +119,11 @@ name = "sdk_v1_local_enqueue_and_mock_sync"
 path = "examples/sdk_v1_local_enqueue_and_mock_sync.rs"
 required-features = ["runtime", "local-signer"]
 
+[[example]]
+name = "runtime_local"
+path = "examples/runtime_local.rs"
+required-features = ["cli-runtime"]
+
 [dev-dependencies]
 futures = { workspace = true }
 nostr = { workspace = true }
