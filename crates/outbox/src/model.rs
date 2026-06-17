@@ -280,6 +280,7 @@ pub struct RadrootsOutboxStatusSummary {
     pub pending_events: i64,
     pub retryable_events: i64,
     pub terminal_events: i64,
+    pub failed_terminal_events: i64,
     pub ready_signed_events: i64,
     pub publishing_events: i64,
     pub last_attempt_at_ms: Option<i64>,

@@ -76,7 +76,7 @@ impl RadrootsOutbox {
         now_ms: i64,
     ) -> Result<RadrootsOutboxStatusSummary, RadrootsOutboxError> {
         let row = sqlx::query(
-            "SELECT COUNT(*) AS total_events, COALESCE(SUM(CASE WHEN state IN ('draft_queued', 'signing', 'signed', 'publishing') THEN 1 ELSE 0 END), 0) AS pending_events, COALESCE(SUM(CASE WHEN state IN ('sign_retryable', 'publish_retryable') THEN 1 ELSE 0 END), 0) AS retryable_events, COALESCE(SUM(CASE WHEN state IN ('published', 'failed_terminal', 'cancelled') THEN 1 ELSE 0 END), 0) AS terminal_events, COALESCE(SUM(CASE WHEN state = 'publishing' THEN 1 ELSE 0 END), 0) AS publishing_events FROM outbox_event",
+            "SELECT COUNT(*) AS total_events, COALESCE(SUM(CASE WHEN state IN ('draft_queued', 'signing', 'signed', 'publishing') THEN 1 ELSE 0 END), 0) AS pending_events, COALESCE(SUM(CASE WHEN state IN ('sign_retryable', 'publish_retryable') THEN 1 ELSE 0 END), 0) AS retryable_events, COALESCE(SUM(CASE WHEN state IN ('published', 'failed_terminal', 'cancelled') THEN 1 ELSE 0 END), 0) AS terminal_events, COALESCE(SUM(CASE WHEN state = 'failed_terminal' THEN 1 ELSE 0 END), 0) AS failed_terminal_events, COALESCE(SUM(CASE WHEN state = 'publishing' THEN 1 ELSE 0 END), 0) AS publishing_events FROM outbox_event",
         )
         .fetch_one(&self.pool)
         .await?;
@@ -105,6 +105,7 @@ impl RadrootsOutbox {
             pending_events: row.try_get("pending_events")?,
             retryable_events: row.try_get("retryable_events")?,
             terminal_events: row.try_get("terminal_events")?,
+            failed_terminal_events: row.try_get("failed_terminal_events")?,
             ready_signed_events,
             publishing_events: row.try_get("publishing_events")?,
             last_attempt_at_ms,
@@ -1342,6 +1343,7 @@ mod tests {
         assert_eq!(empty.pending_events, 0);
         assert_eq!(empty.retryable_events, 0);
         assert_eq!(empty.terminal_events, 0);
+        assert_eq!(empty.failed_terminal_events, 0);
         assert_eq!(empty.ready_signed_events, 0);
         assert_eq!(empty.publishing_events, 0);
         assert_eq!(empty.last_attempt_at_ms, None);
@@ -1402,6 +1404,7 @@ mod tests {
         assert_eq!(retry_wait.pending_events, 0);
         assert_eq!(retry_wait.retryable_events, 1);
         assert_eq!(retry_wait.terminal_events, 0);
+        assert_eq!(retry_wait.failed_terminal_events, 0);
         assert_eq!(retry_wait.ready_signed_events, 0);
         assert_eq!(retry_wait.last_attempt_at_ms, Some(2_100));
         assert_eq!(
