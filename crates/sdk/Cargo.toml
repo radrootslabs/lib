@@ -66,6 +66,16 @@ relay-runtime = [
   "radroots_nostr/client",
   "radroots_relay_transport/client",
 ]
+cli-runtime = [
+  "std",
+  "serde",
+  "serde_json",
+  "runtime",
+  "local-signer",
+  "relay-runtime",
+  "signing",
+  "relay-client",
+]
 
 [dependencies]
 radroots_authority = { workspace = true, optional = true, default-features = false }
