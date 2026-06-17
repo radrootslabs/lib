@@ -39,8 +39,8 @@ mod sync_runtime;
 
 #[cfg(feature = "runtime")]
 pub use crate::error::{
-    RadrootsSdkError, RadrootsSdkPartialLocalMutationError, RadrootsSdkPartialLocalMutationFailure,
-    RadrootsSdkRecoveryAction,
+    RadrootsSdkError, RadrootsSdkErrorClass, RadrootsSdkPartialLocalMutationError,
+    RadrootsSdkPartialLocalMutationFailure, RadrootsSdkRecoveryAction,
 };
 #[cfg(feature = "runtime")]
 pub use crate::idempotency::{SDK_IDEMPOTENCY_KEY_MAX_LEN, SdkIdempotencyKey};
@@ -63,8 +63,10 @@ pub use crate::relay_targets::{
 };
 #[cfg(feature = "runtime")]
 pub use crate::runtime::{
-    RadrootsSdk, RadrootsSdkBuilder, RadrootsSdkClock, RadrootsSdkStorageConfig,
-    RadrootsSdkStoragePaths, RadrootsSdkTimestamp,
+    BackupReceipt, BackupRequest, IntegrityReceipt, IntegrityRequest, RadrootsSdk,
+    RadrootsSdkBuilder, RadrootsSdkClock, RadrootsSdkStorageConfig, RadrootsSdkStoragePaths,
+    RadrootsSdkTimestamp, SdkBackupState, SdkStorageKind, StorageStatusReceipt,
+    StorageStatusRequest,
 };
 #[cfg(feature = "runtime")]
 pub use crate::sync_runtime::{

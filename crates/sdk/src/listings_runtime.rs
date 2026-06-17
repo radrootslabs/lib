@@ -4,12 +4,15 @@ use crate::{
     SdkRelayTargetPolicy, SdkRelayTargetSet, SdkRelayUrlPolicy, runtime::sdk_now_ms,
 };
 #[cfg(feature = "runtime")]
-use radroots_authority::{RadrootsActorContext, RadrootsEventSigner, sign_authorized_draft};
+use radroots_authority::{
+    RadrootsActorContext, RadrootsActorSource, RadrootsEventSigner, sign_authorized_draft,
+};
 #[cfg(feature = "runtime")]
 use radroots_event_store::RadrootsEventIngest;
 #[cfg(feature = "runtime")]
 use radroots_events::{
     RadrootsNostrEvent,
+    contract::RadrootsActorRole,
     draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent},
     ids::{RadrootsEventId, RadrootsListingAddress},
     listing::RadrootsListing,
@@ -22,6 +25,8 @@ use radroots_trade::listing::{
     build_listing_mutation_draft, canonicalize_listing_draft,
 };
 #[cfg(feature = "runtime")]
+use serde::ser::SerializeStruct;
+#[cfg(feature = "runtime")]
 use sha2::{Digest, Sha256};
 
 #[cfg(feature = "runtime")]
@@ -33,6 +38,20 @@ pub struct ListingPreparePublishRequest {
     pub actor: RadrootsActorContext,
     pub document: RadrootsListingDraftDocumentV1,
     pub created_at: Option<RadrootsSdkTimestamp>,
+}
+
+#[cfg(feature = "runtime")]
+impl serde::Serialize for ListingPreparePublishRequest {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut state = serializer.serialize_struct("ListingPreparePublishRequest", 3)?;
+        state.serialize_field("actor", &SdkActorContextJson(&self.actor))?;
+        state.serialize_field("document", &self.document)?;
+        state.serialize_field("created_at", &self.created_at)?;
+        state.end()
+    }
 }
 
 #[cfg(feature = "runtime")]
@@ -70,6 +89,22 @@ pub struct ListingEnqueuePublishRequest {
     pub target_relays: SdkRelayTargetPolicy,
     pub idempotency_key: Option<SdkIdempotencyKey>,
     pub created_at: Option<RadrootsSdkTimestamp>,
+}
+
+#[cfg(feature = "runtime")]
+impl serde::Serialize for ListingEnqueuePublishRequest {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut state = serializer.serialize_struct("ListingEnqueuePublishRequest", 5)?;
+        state.serialize_field("actor", &SdkActorContextJson(&self.actor))?;
+        state.serialize_field("document", &self.document)?;
+        state.serialize_field("target_relays", &self.target_relays)?;
+        state.serialize_field("idempotency_key", &self.idempotency_key)?;
+        state.serialize_field("created_at", &self.created_at)?;
+        state.end()
+    }
 }
 
 #[cfg(feature = "runtime")]
@@ -133,7 +168,7 @@ impl ListingEnqueuePublishRequest {
 }
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct ListingPublishPlan {
     pub public_listing_addr: RadrootsListingAddress,
     pub draft_listing_addr: RadrootsListingAddress,
@@ -143,7 +178,9 @@ pub struct ListingPublishPlan {
 }
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum SdkMutationState {
     StoredAndQueued,
     AlreadyQueued,
@@ -160,7 +197,7 @@ impl From<RadrootsOutboxEnqueueStatus> for SdkMutationState {
 }
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct ListingEnqueueReceipt {
     pub public_listing_addr: RadrootsListingAddress,
     pub draft_listing_addr: RadrootsListingAddress,
@@ -227,7 +264,7 @@ impl<'sdk> ListingsClient<'sdk> {
                 LISTING_PUBLISH_OPERATION_KIND,
                 plan.frozen_draft.expected_event_id.as_str(),
                 plan.frozen_draft.expected_pubkey.as_str(),
-                target_relays.relays(),
+                target_relays.canonical_relays(),
             )?,
         };
         let observed_at_ms = sdk_now_ms(self.sdk)?;
@@ -236,9 +273,10 @@ impl<'sdk> ListingsClient<'sdk> {
         let ingest = RadrootsEventIngest::new(event, observed_at_ms)
             .with_raw_json(signed_event.raw_json.clone());
         let ingest_receipt = self.sdk._event_store.ingest_event(ingest).await?;
+        let canonical_target_relays = target_relays.canonical_relays().to_vec();
         let target_relay_values = target_relays.into_vec();
         let partial_failure_digest_prefix =
-            outbox_idempotency_digest_prefix(&plan, target_relay_values.as_slice())?;
+            outbox_idempotency_digest_prefix(&plan, canonical_target_relays.as_slice())?;
         let outbox_input = signed_outbox_input(
             &plan,
             signed_event.clone(),
@@ -409,5 +447,56 @@ fn event_from_signed(signed_event: &RadrootsSignedNostrEvent) -> RadrootsNostrEv
         tags: signed_event.tags.clone(),
         content: signed_event.content.clone(),
         sig: signed_event.sig.clone(),
+    }
+}
+
+#[cfg(feature = "runtime")]
+struct SdkActorContextJson<'a>(&'a RadrootsActorContext);
+
+#[cfg(feature = "runtime")]
+impl serde::Serialize for SdkActorContextJson<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let roles = self
+            .0
+            .roles()
+            .iter()
+            .map(actor_role_code)
+            .collect::<Vec<_>>();
+        let account_id = self.0.account_id().map(|account_id| account_id.as_str());
+        let mut state = serializer.serialize_struct("SdkActorContext", 4)?;
+        state.serialize_field("pubkey", self.0.pubkey().as_str())?;
+        state.serialize_field("roles", &roles)?;
+        state.serialize_field("account_id", &account_id)?;
+        state.serialize_field("source", actor_source_code(self.0.source()))?;
+        state.end()
+    }
+}
+
+#[cfg(feature = "runtime")]
+fn actor_role_code(role: &RadrootsActorRole) -> &'static str {
+    match role {
+        RadrootsActorRole::Any => "any",
+        RadrootsActorRole::Application => "application",
+        RadrootsActorRole::Buyer => "buyer",
+        RadrootsActorRole::Farmer => "farmer",
+        RadrootsActorRole::Member => "member",
+        RadrootsActorRole::Moderator => "moderator",
+        RadrootsActorRole::Relay => "relay",
+        RadrootsActorRole::Seller => "seller",
+        RadrootsActorRole::Service => "service",
+    }
+}
+
+#[cfg(feature = "runtime")]
+fn actor_source_code(source: RadrootsActorSource) -> &'static str {
+    match source {
+        RadrootsActorSource::LocalAccount => "local_account",
+        RadrootsActorSource::ExplicitPubkey => "explicit_pubkey",
+        RadrootsActorSource::RemoteSigner => "remote_signer",
+        RadrootsActorSource::Service => "service",
+        RadrootsActorSource::Test => "test",
     }
 }

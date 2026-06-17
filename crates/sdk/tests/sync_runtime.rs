@@ -12,7 +12,7 @@ use radroots_events::{
     contract::RadrootsActorRole,
     draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent, RadrootsSignedNostrEventParts},
     farm::RadrootsFarmRef,
-    ids::{RadrootsDTag, RadrootsInventoryBinId},
+    ids::{RadrootsDTag, RadrootsEventId, RadrootsInventoryBinId},
     listing::{RadrootsListing, RadrootsListingBin, RadrootsListingProduct},
 };
 use radroots_outbox::{RadrootsOutbox, RadrootsOutboxEventState, RadrootsOutboxOperationInput};
@@ -22,8 +22,9 @@ use radroots_relay_transport::{
 };
 use radroots_sdk::{
     ListingEnqueuePublishRequest, ListingPreparePublishRequest, PUSH_OUTBOX_DEFAULT_LIMIT,
-    PUSH_OUTBOX_MAX_LIMIT, PushOutboxEventState, PushOutboxRelayOutcomeKind, PushOutboxRequest,
-    RadrootsSdk, RadrootsSdkError, RadrootsSdkTimestamp, SdkRelayTargetPolicy, SdkRelayUrlPolicy,
+    PUSH_OUTBOX_MAX_LIMIT, PushOutboxEventReceipt, PushOutboxEventState, PushOutboxReceipt,
+    PushOutboxRelayOutcomeKind, PushOutboxRelayReceipt, PushOutboxRequest, RadrootsSdk,
+    RadrootsSdkError, RadrootsSdkTimestamp, SdkRelayTargetPolicy, SdkRelayUrlPolicy,
 };
 use std::collections::BTreeSet;
 
@@ -224,6 +225,70 @@ async fn push_outbox_empty_queue_returns_zero_counts() {
     assert_eq!(receipt.attempted_events, 0);
     assert!(receipt.events.is_empty());
     assert!(adapter.captured_raw_events().is_empty());
+}
+
+#[test]
+fn push_outbox_contract_dtos_serialize_deterministically() {
+    let request = PushOutboxRequest::new()
+        .with_limit(2)
+        .republish_accepted_relays(true);
+    assert_eq!(
+        serde_json::to_value(&request).expect("request json"),
+        serde_json::json!({
+            "limit": 2,
+            "republish_accepted_relays": true
+        })
+    );
+
+    let receipt = PushOutboxReceipt {
+        attempted_events: 1,
+        published_events: 1,
+        retryable_events: 0,
+        terminal_events: 0,
+        events: vec![PushOutboxEventReceipt {
+            event_id: RadrootsEventId::parse(&"a".repeat(64)).expect("event id"),
+            outbox_event_id: 7,
+            final_state: PushOutboxEventState::Published,
+            attempted_count: 2,
+            accepted_count: 1,
+            retryable_count: 1,
+            terminal_count: 0,
+            quorum: 1,
+            quorum_met: true,
+            relays: vec![PushOutboxRelayReceipt {
+                relay_url: RELAY_A.to_owned(),
+                outcome_kind: PushOutboxRelayOutcomeKind::DuplicateAccepted,
+                attempted: true,
+                message: Some("duplicate".to_owned()),
+            }],
+        }],
+    };
+    assert_eq!(
+        serde_json::to_value(receipt).expect("receipt json"),
+        serde_json::json!({
+            "attempted_events": 1,
+            "published_events": 1,
+            "retryable_events": 0,
+            "terminal_events": 0,
+            "events": [{
+                "event_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "outbox_event_id": 7,
+                "final_state": "published",
+                "attempted_count": 2,
+                "accepted_count": 1,
+                "retryable_count": 1,
+                "terminal_count": 0,
+                "quorum": 1,
+                "quorum_met": true,
+                "relays": [{
+                    "relay_url": RELAY_A,
+                    "outcome_kind": "duplicate_accepted",
+                    "attempted": true,
+                    "message": "duplicate"
+                }]
+            }]
+        })
+    );
 }
 
 #[cfg(not(feature = "relay-runtime"))]

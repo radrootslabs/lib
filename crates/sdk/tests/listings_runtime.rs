@@ -392,6 +392,66 @@ fn mutation_state_debug_uses_product_state_names() {
 }
 
 #[tokio::test]
+async fn listing_runtime_dtos_serialize_deterministically() {
+    let (_tempdir, sdk) = directory_sdk().await;
+    let created_at = RadrootsSdkTimestamp::from_unix_seconds(1_700_000_123);
+    let prepare_request =
+        ListingPreparePublishRequest::new(actor(), listing(LISTING_A_D_TAG, "Serialized Coffee"))
+            .with_created_at(created_at);
+    let prepare_json = serde_json::to_value(&prepare_request).expect("prepare request json");
+
+    assert_eq!(prepare_json["actor"]["pubkey"], SELLER);
+    assert_eq!(
+        prepare_json["actor"]["roles"],
+        serde_json::json!(["seller"])
+    );
+    assert_eq!(prepare_json["actor"]["source"], "test");
+    assert_eq!(prepare_json["created_at"], 1_700_000_123);
+    assert_eq!(
+        prepare_json["document"]["listing"]["product"]["title"],
+        "Serialized Coffee"
+    );
+
+    let enqueue_request = ListingEnqueuePublishRequest::new(
+        actor(),
+        listing(LISTING_B_D_TAG, "Queued Coffee"),
+        SdkRelayTargetPolicy::UseConfiguredRelays,
+    )
+    .try_with_target_relays([RELAY, RELAY_B], SdkRelayUrlPolicy::Public)
+    .expect("relay targets")
+    .try_with_idempotency_key("serialized-idempotency")
+    .expect("idempotency")
+    .with_created_at(created_at);
+    let enqueue_json = serde_json::to_value(&enqueue_request).expect("enqueue request json");
+
+    assert_eq!(enqueue_json["target_relays"]["kind"], "explicit");
+    assert_eq!(
+        enqueue_json["target_relays"]["relays"],
+        serde_json::json!([RELAY, RELAY_B])
+    );
+    assert_eq!(
+        enqueue_json["target_relays"]["canonical_relays"],
+        serde_json::json!([RELAY_B, RELAY])
+    );
+    assert_eq!(
+        enqueue_json["idempotency_key"],
+        serde_json::json!({ "value": "<redacted>", "len": 22 })
+    );
+    assert!(!enqueue_json.to_string().contains("serialized-idempotency"));
+
+    let receipt = sdk
+        .listings()
+        .enqueue_publish(enqueue_request, &FixtureSigner::new(SELLER))
+        .await
+        .expect("enqueue");
+    let receipt_json = serde_json::to_value(&receipt).expect("receipt json");
+
+    assert_eq!(receipt_json["state"], "stored_and_queued");
+    assert_eq!(receipt_json["local_event_seq"], 1);
+    assert!(receipt_json["idempotency_digest_prefix"].is_string());
+}
+
+#[tokio::test]
 async fn enqueue_publish_convenience_matches_prepare_plus_enqueue_prepared() {
     let (_prepared_tempdir, prepared_sdk) = directory_sdk().await;
     let prepared_actor = actor();
@@ -638,4 +698,17 @@ async fn enqueue_publish_derives_order_independent_idempotency_key() {
         second_receipt.idempotency_digest_prefix
     );
     assert_eq!(second_receipt.state, SdkMutationState::AlreadyQueued);
+
+    let paths = sdk.storage_paths().expect("paths");
+    let outbox = RadrootsOutbox::open_file(&paths.outbox_path)
+        .await
+        .expect("outbox");
+    let relay_urls = outbox
+        .relay_statuses(first_receipt.outbox_event_id)
+        .await
+        .expect("relay statuses")
+        .into_iter()
+        .map(|status| status.relay_url)
+        .collect::<Vec<_>>();
+    assert_eq!(relay_urls, vec![RELAY_B.to_owned(), RELAY.to_owned()]);
 }

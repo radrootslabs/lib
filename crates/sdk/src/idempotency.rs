@@ -1,5 +1,6 @@
 use crate::RadrootsSdkError;
 use core::fmt;
+use serde::ser::SerializeStruct;
 use sha2::{Digest, Sha256};
 
 pub const SDK_IDEMPOTENCY_KEY_MAX_LEN: usize = 256;
@@ -9,9 +10,14 @@ pub struct SdkIdempotencyKey(String);
 
 impl SdkIdempotencyKey {
     pub fn new(value: impl AsRef<str>) -> Result<Self, RadrootsSdkError> {
-        let value = value.as_ref().trim();
+        let value = value.as_ref();
         if value.is_empty() {
             return Err(invalid_request("idempotency key must not be empty"));
+        }
+        if value.trim() != value {
+            return Err(invalid_request(
+                "idempotency key must not include boundary whitespace",
+            ));
         }
         if value.len() > SDK_IDEMPOTENCY_KEY_MAX_LEN {
             return Err(invalid_request(format!(
@@ -61,6 +67,18 @@ impl fmt::Debug for SdkIdempotencyKey {
             .field("value", &"<redacted>")
             .field("len", &self.0.len())
             .finish()
+    }
+}
+
+impl serde::Serialize for SdkIdempotencyKey {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut state = serializer.serialize_struct("SdkIdempotencyKey", 2)?;
+        state.serialize_field("value", "<redacted>")?;
+        state.serialize_field("len", &self.0.len())?;
+        state.end()
     }
 }
 

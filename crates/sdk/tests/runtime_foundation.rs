@@ -1,10 +1,13 @@
 #![cfg(feature = "runtime")]
 
 use radroots_sdk::{
-    RadrootsSdk, RadrootsSdkClock, RadrootsSdkError, RadrootsSdkStorageConfig,
-    RadrootsSdkTimestamp, SDK_IDEMPOTENCY_KEY_MAX_LEN, SDK_RELAY_TARGET_MAX_COUNT,
-    SdkIdempotencyKey, SdkRelayTargetSet, SdkRelayUrlPolicy,
+    BackupRequest, IntegrityRequest, RadrootsSdk, RadrootsSdkClock, RadrootsSdkError,
+    RadrootsSdkErrorClass, RadrootsSdkRecoveryAction, RadrootsSdkStorageConfig,
+    RadrootsSdkTimestamp, SDK_IDEMPOTENCY_KEY_MAX_LEN, SDK_RELAY_TARGET_MAX_COUNT, SdkBackupState,
+    SdkIdempotencyKey, SdkRelayTargetPolicy, SdkRelayTargetSet, SdkRelayUrlPolicy, SdkStorageKind,
+    StorageStatusReceipt, StorageStatusRequest,
 };
+use std::path::PathBuf;
 
 #[tokio::test]
 async fn sdk_builder_defaults_to_memory_storage_and_no_relays() {
@@ -30,8 +33,8 @@ async fn sdk_builder_validates_configured_relay_targets() {
     assert_eq!(
         sdk.relay_urls(),
         &[
-            "wss://relay-a.example.com".to_owned(),
-            "wss://relay-b.example.com".to_owned()
+            "wss://relay-b.example.com".to_owned(),
+            "wss://relay-a.example.com".to_owned()
         ]
     );
 }
@@ -52,15 +55,32 @@ async fn sdk_builder_rejects_ws_relay_without_localhost_policy() {
 #[test]
 fn invalid_relay_url_errors_redact_userinfo() {
     let error = SdkRelayTargetSet::new(
-        ["wss://user:password@relay.example.com"],
+        ["wss://user:password@relay.example.com/path?token=secret#frag"],
         SdkRelayUrlPolicy::Public,
     )
     .expect_err("invalid relay");
     let message = error.to_string();
+    let detail = error.detail_json();
 
     assert!(matches!(error, RadrootsSdkError::InvalidRelayUrl { .. }));
-    assert!(message.contains("<redacted>@relay.example.com"));
+    assert_eq!(error.code(), "invalid_relay_url");
+    assert_eq!(error.class(), RadrootsSdkErrorClass::Configuration);
+    assert!(!error.retryable());
+    assert_eq!(
+        error.recovery_actions(),
+        vec![RadrootsSdkRecoveryAction::ConfigureRelayTargets]
+    );
+    assert!(message.contains("<redacted>@relay.example.com/path?<redacted>"));
     assert!(!message.contains("password"));
+    assert!(!message.contains("token=secret"));
+    assert!(!message.contains("frag"));
+    assert_eq!(detail["code"], "invalid_relay_url");
+    assert_eq!(detail["class"], "configuration");
+    assert_eq!(detail["retryable"], false);
+    assert_eq!(detail["recovery_actions"][0], "configure_relay_targets");
+    assert!(!detail.to_string().contains("password"));
+    assert!(!detail.to_string().contains("token=secret"));
+    assert!(!detail.to_string().contains("frag"));
 }
 
 #[tokio::test]
@@ -170,7 +190,232 @@ fn sdk_partial_local_mutation_error_is_sanitized() {
 }
 
 #[test]
-fn relay_target_set_validates_normalizes_dedupes_sorts_and_caps() {
+fn sdk_error_contract_methods_cover_all_variants() {
+    let cases = vec![
+        (
+            RadrootsSdkError::Io {
+                path: PathBuf::from("store.sqlite"),
+                message: "permission denied".to_owned(),
+            },
+            "io",
+            RadrootsSdkErrorClass::Storage,
+            true,
+            vec![RadrootsSdkRecoveryAction::InspectLocalStores],
+        ),
+        (
+            RadrootsSdkError::ClockBeforeUnixEpoch,
+            "clock_before_unix_epoch",
+            RadrootsSdkErrorClass::Clock,
+            false,
+            vec![RadrootsSdkRecoveryAction::FixRequest],
+        ),
+        (
+            RadrootsSdkError::TimestampOutOfRange { value: u64::MAX },
+            "timestamp_out_of_range",
+            RadrootsSdkErrorClass::Clock,
+            false,
+            vec![RadrootsSdkRecoveryAction::FixRequest],
+        ),
+        (
+            RadrootsSdkError::UnauthorizedActor {
+                operation: "listing.prepare_publish".to_owned(),
+                reason: "missing role".to_owned(),
+            },
+            "unauthorized_actor",
+            RadrootsSdkErrorClass::Authorization,
+            false,
+            vec![RadrootsSdkRecoveryAction::SelectAuthorizedActor],
+        ),
+        (
+            RadrootsSdkError::SignerPubkeyMismatch {
+                operation: "event signing".to_owned(),
+                expected_pubkey_prefix: "aaaaaaaaaaaa".to_owned(),
+                signer_pubkey_prefix: "bbbbbbbbbbbb".to_owned(),
+            },
+            "signer_pubkey_mismatch",
+            RadrootsSdkErrorClass::Authorization,
+            false,
+            vec![RadrootsSdkRecoveryAction::SelectAuthorizedActor],
+        ),
+        (
+            RadrootsSdkError::EmptyTargetRelays {
+                operation: "listing.publish".to_owned(),
+            },
+            "empty_target_relays",
+            RadrootsSdkErrorClass::Configuration,
+            false,
+            vec![RadrootsSdkRecoveryAction::ConfigureRelayTargets],
+        ),
+        (
+            RadrootsSdkError::RelayTargetLimitExceeded {
+                max: 20,
+                actual: 21,
+            },
+            "relay_target_limit_exceeded",
+            RadrootsSdkErrorClass::Configuration,
+            false,
+            vec![RadrootsSdkRecoveryAction::ConfigureRelayTargets],
+        ),
+        (
+            SdkRelayTargetSet::new(["wss://u:p@relay.example.com"], SdkRelayUrlPolicy::Public)
+                .expect_err("invalid relay"),
+            "invalid_relay_url",
+            RadrootsSdkErrorClass::Configuration,
+            false,
+            vec![RadrootsSdkRecoveryAction::ConfigureRelayTargets],
+        ),
+        (
+            RadrootsSdkError::IdempotencyConflict {
+                operation_kind: "listing.publish.v1".to_owned(),
+                expected_pubkey_prefix: "aaaaaaaaaaaa".to_owned(),
+                existing_digest_prefix: "bbbbbbbbbbbb".to_owned(),
+                new_digest_prefix: "cccccccccccc".to_owned(),
+            },
+            "idempotency_conflict",
+            RadrootsSdkErrorClass::Request,
+            false,
+            vec![RadrootsSdkRecoveryAction::RetryOperationWithSameIdempotencyKey],
+        ),
+        (
+            RadrootsSdkError::OrderStatusLimitInvalid {
+                limit: 0,
+                min: 1,
+                max: 1000,
+            },
+            "order_status_limit_invalid",
+            RadrootsSdkErrorClass::Request,
+            false,
+            vec![RadrootsSdkRecoveryAction::FixRequest],
+        ),
+        (
+            RadrootsSdkError::InvalidOrderId {
+                value: "bad".to_owned(),
+                message: "invalid".to_owned(),
+            },
+            "invalid_order_id",
+            RadrootsSdkErrorClass::Request,
+            false,
+            vec![RadrootsSdkRecoveryAction::FixRequest],
+        ),
+        (
+            RadrootsSdkError::ProductSyncUnsupported {
+                operation: "sync.push_outbox",
+                required_feature: "relay-runtime",
+            },
+            "product_sync_unsupported",
+            RadrootsSdkErrorClass::Unsupported,
+            false,
+            vec![RadrootsSdkRecoveryAction::EnableRequiredFeature],
+        ),
+        (
+            RadrootsSdkError::ProductSyncRelaySetupFailure {
+                message: "relay setup".to_owned(),
+            },
+            "product_sync_relay_setup_failure",
+            RadrootsSdkErrorClass::Transport,
+            true,
+            vec![RadrootsSdkRecoveryAction::RetryAfterTransportFailure],
+        ),
+        (
+            RadrootsSdkError::Authority {
+                message: "authority".to_owned(),
+            },
+            "authority",
+            RadrootsSdkErrorClass::Authorization,
+            false,
+            vec![RadrootsSdkRecoveryAction::SelectAuthorizedActor],
+        ),
+        (
+            RadrootsSdkError::EventStore {
+                message: "store".to_owned(),
+            },
+            "event_store",
+            RadrootsSdkErrorClass::Storage,
+            true,
+            vec![RadrootsSdkRecoveryAction::InspectLocalStores],
+        ),
+        (
+            RadrootsSdkError::InvalidRequest {
+                message: "bad input".to_owned(),
+            },
+            "invalid_request",
+            RadrootsSdkErrorClass::Request,
+            false,
+            vec![RadrootsSdkRecoveryAction::FixRequest],
+        ),
+        (
+            RadrootsSdkError::ListingDraft {
+                message: "draft".to_owned(),
+            },
+            "listing_draft",
+            RadrootsSdkErrorClass::Request,
+            false,
+            vec![RadrootsSdkRecoveryAction::FixRequest],
+        ),
+        (
+            RadrootsSdkError::ListingMutation {
+                message: "mutation".to_owned(),
+            },
+            "listing_mutation",
+            RadrootsSdkErrorClass::Request,
+            false,
+            vec![RadrootsSdkRecoveryAction::FixRequest],
+        ),
+        (
+            RadrootsSdkError::Outbox {
+                message: "outbox".to_owned(),
+            },
+            "outbox",
+            RadrootsSdkErrorClass::Storage,
+            true,
+            vec![RadrootsSdkRecoveryAction::InspectLocalStores],
+        ),
+        (
+            RadrootsSdkError::RelayTransport {
+                message: "relay".to_owned(),
+            },
+            "relay_transport",
+            RadrootsSdkErrorClass::Transport,
+            true,
+            vec![RadrootsSdkRecoveryAction::RetryAfterTransportFailure],
+        ),
+        (
+            RadrootsSdkError::Projection {
+                message: "projection".to_owned(),
+            },
+            "projection",
+            RadrootsSdkErrorClass::Storage,
+            true,
+            vec![RadrootsSdkRecoveryAction::InspectLocalStores],
+        ),
+        (
+            RadrootsSdkError::partial_outbox_enqueue_mutation(
+                "a".repeat(64),
+                "listing.publish.v1",
+                "abcdef123456",
+            ),
+            "partial_local_mutation",
+            RadrootsSdkErrorClass::LocalMutation,
+            true,
+            vec![RadrootsSdkRecoveryAction::RetryOperationWithSameIdempotencyKey],
+        ),
+    ];
+
+    for (error, code, class, retryable, recovery_actions) in cases {
+        assert_eq!(error.code(), code);
+        assert_eq!(error.class(), class);
+        assert_eq!(error.retryable(), retryable);
+        assert_eq!(error.recovery_actions(), recovery_actions);
+        let detail = error.detail_json();
+        assert_eq!(detail["code"], code);
+        assert_eq!(detail["retryable"], retryable);
+        assert!(detail["message"].is_string());
+        assert!(detail["detail"].is_object());
+    }
+}
+
+#[test]
+fn relay_target_set_validates_normalizes_dedupes_preserves_order_and_caps() {
     let targets = SdkRelayTargetSet::new(
         [
             " wss://relay-b.example.com/ ",
@@ -184,9 +429,25 @@ fn relay_target_set_validates_normalizes_dedupes_sorts_and_caps() {
     assert_eq!(
         targets.relays(),
         &[
+            "wss://relay-b.example.com".to_owned(),
+            "wss://relay-a.example.com".to_owned()
+        ]
+    );
+    assert_eq!(
+        targets.canonical_relays(),
+        &[
             "wss://relay-a.example.com".to_owned(),
             "wss://relay-b.example.com".to_owned()
         ]
+    );
+    assert_eq!(
+        serde_json::to_value(SdkRelayTargetPolicy::explicit(targets.clone()))
+            .expect("relay target policy json"),
+        serde_json::json!({
+            "kind": "explicit",
+            "relays": ["wss://relay-b.example.com", "wss://relay-a.example.com"],
+            "canonical_relays": ["wss://relay-a.example.com", "wss://relay-b.example.com"]
+        })
     );
 
     assert!(matches!(
@@ -208,16 +469,27 @@ fn relay_target_set_validates_normalizes_dedupes_sorts_and_caps() {
 
 #[test]
 fn idempotency_key_validation_is_bounded_and_debug_redacted() {
-    let key = SdkIdempotencyKey::new(" idem-a ").expect("key");
+    let key = SdkIdempotencyKey::new("idem-a").expect("key");
     assert_eq!(key.as_str(), "idem-a");
     let debug = format!("{key:?}");
     assert!(debug.contains("<redacted>"));
     assert!(!debug.contains("idem-a"));
+    assert_eq!(
+        serde_json::to_value(&key).expect("key json"),
+        serde_json::json!({ "value": "<redacted>", "len": 6 })
+    );
 
     assert!(matches!(
         SdkIdempotencyKey::new(" "),
         Err(RadrootsSdkError::InvalidRequest { .. })
     ));
+    let untrimmed = SdkIdempotencyKey::new(" idem-a ").expect_err("untrimmed");
+    assert!(matches!(
+        untrimmed,
+        RadrootsSdkError::InvalidRequest { ref message }
+            if message == "idempotency key must not include boundary whitespace"
+    ));
+    assert!(!untrimmed.to_string().contains("idem-a"));
     assert!(matches!(
         SdkIdempotencyKey::new("idem\nbad"),
         Err(RadrootsSdkError::InvalidRequest { .. })
@@ -226,6 +498,44 @@ fn idempotency_key_validation_is_bounded_and_debug_redacted() {
         SdkIdempotencyKey::new("x".repeat(SDK_IDEMPOTENCY_KEY_MAX_LEN + 1)),
         Err(RadrootsSdkError::InvalidRequest { .. })
     ));
+}
+
+#[test]
+fn storage_backup_and_integrity_contract_dtos_serialize() {
+    assert_eq!(
+        serde_json::to_value(StorageStatusRequest::default()).expect("status request"),
+        serde_json::json!({})
+    );
+    assert_eq!(
+        serde_json::to_value(StorageStatusReceipt {
+            storage: SdkStorageKind::Directory,
+            paths: None,
+        })
+        .expect("status receipt"),
+        serde_json::json!({
+            "storage": "directory",
+            "paths": null
+        })
+    );
+    assert_eq!(
+        serde_json::to_value(BackupRequest {
+            destination: PathBuf::from("backup"),
+            overwrite: false,
+        })
+        .expect("backup request"),
+        serde_json::json!({
+            "destination": "backup",
+            "overwrite": false
+        })
+    );
+    assert_eq!(
+        serde_json::to_value(SdkBackupState::Completed).expect("backup state"),
+        serde_json::json!("completed")
+    );
+    assert_eq!(
+        serde_json::to_value(IntegrityRequest::default()).expect("integrity request"),
+        serde_json::json!({})
+    );
 }
 
 #[test]

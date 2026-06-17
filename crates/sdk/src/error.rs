@@ -2,22 +2,49 @@
 use std::{fmt, path::PathBuf};
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Debug, PartialEq, Eq)]
+use serde_json::{Value, json};
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum RadrootsSdkErrorClass {
+    Authorization,
+    Clock,
+    Configuration,
+    LocalMutation,
+    Request,
+    Storage,
+    Transport,
+    Unsupported,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum RadrootsSdkRecoveryAction {
     RetryOutboxEnqueue,
     InspectLocalStores,
     RetryOperationWithSameIdempotencyKey,
+    ConfigureRelayTargets,
+    FixRequest,
+    SelectAuthorizedActor,
+    RetryAfterTransportFailure,
+    EnableRequiredFeature,
 }
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum RadrootsSdkPartialLocalMutationFailure {
     OutboxEnqueue,
     OutboxIdempotencyConflict,
 }
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct RadrootsSdkPartialLocalMutationError {
     pub event_id: Option<String>,
     pub operation_kind: String,
@@ -110,6 +137,175 @@ pub enum RadrootsSdkError {
 
 #[cfg(feature = "runtime")]
 impl RadrootsSdkError {
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::Io { .. } => "io",
+            Self::ClockBeforeUnixEpoch => "clock_before_unix_epoch",
+            Self::TimestampOutOfRange { .. } => "timestamp_out_of_range",
+            Self::UnauthorizedActor { .. } => "unauthorized_actor",
+            Self::SignerPubkeyMismatch { .. } => "signer_pubkey_mismatch",
+            Self::EmptyTargetRelays { .. } => "empty_target_relays",
+            Self::RelayTargetLimitExceeded { .. } => "relay_target_limit_exceeded",
+            Self::InvalidRelayUrl { .. } => "invalid_relay_url",
+            Self::IdempotencyConflict { .. } => "idempotency_conflict",
+            Self::OrderStatusLimitInvalid { .. } => "order_status_limit_invalid",
+            Self::InvalidOrderId { .. } => "invalid_order_id",
+            Self::ProductSyncUnsupported { .. } => "product_sync_unsupported",
+            Self::ProductSyncRelaySetupFailure { .. } => "product_sync_relay_setup_failure",
+            Self::Authority { .. } => "authority",
+            Self::EventStore { .. } => "event_store",
+            Self::InvalidRequest { .. } => "invalid_request",
+            Self::ListingDraft { .. } => "listing_draft",
+            Self::ListingMutation { .. } => "listing_mutation",
+            Self::Outbox { .. } => "outbox",
+            Self::RelayTransport { .. } => "relay_transport",
+            Self::Projection { .. } => "projection",
+            Self::PartialLocalMutation(_) => "partial_local_mutation",
+        }
+    }
+
+    pub fn class(&self) -> RadrootsSdkErrorClass {
+        match self {
+            Self::Io { .. }
+            | Self::EventStore { .. }
+            | Self::Outbox { .. }
+            | Self::Projection { .. } => RadrootsSdkErrorClass::Storage,
+            Self::ClockBeforeUnixEpoch | Self::TimestampOutOfRange { .. } => {
+                RadrootsSdkErrorClass::Clock
+            }
+            Self::UnauthorizedActor { .. }
+            | Self::SignerPubkeyMismatch { .. }
+            | Self::Authority { .. } => RadrootsSdkErrorClass::Authorization,
+            Self::EmptyTargetRelays { .. }
+            | Self::RelayTargetLimitExceeded { .. }
+            | Self::InvalidRelayUrl { .. } => RadrootsSdkErrorClass::Configuration,
+            Self::IdempotencyConflict { .. }
+            | Self::OrderStatusLimitInvalid { .. }
+            | Self::InvalidOrderId { .. }
+            | Self::InvalidRequest { .. }
+            | Self::ListingDraft { .. }
+            | Self::ListingMutation { .. } => RadrootsSdkErrorClass::Request,
+            Self::ProductSyncUnsupported { .. } => RadrootsSdkErrorClass::Unsupported,
+            Self::ProductSyncRelaySetupFailure { .. } | Self::RelayTransport { .. } => {
+                RadrootsSdkErrorClass::Transport
+            }
+            Self::PartialLocalMutation(_) => RadrootsSdkErrorClass::LocalMutation,
+        }
+    }
+
+    pub fn retryable(&self) -> bool {
+        matches!(
+            self,
+            Self::Io { .. }
+                | Self::ProductSyncRelaySetupFailure { .. }
+                | Self::EventStore { .. }
+                | Self::Outbox { .. }
+                | Self::RelayTransport { .. }
+                | Self::Projection { .. }
+                | Self::PartialLocalMutation(_)
+        )
+    }
+
+    pub fn recovery_actions(&self) -> Vec<RadrootsSdkRecoveryAction> {
+        match self {
+            Self::Io { .. }
+            | Self::EventStore { .. }
+            | Self::Outbox { .. }
+            | Self::Projection { .. } => vec![RadrootsSdkRecoveryAction::InspectLocalStores],
+            Self::UnauthorizedActor { .. }
+            | Self::SignerPubkeyMismatch { .. }
+            | Self::Authority { .. } => vec![RadrootsSdkRecoveryAction::SelectAuthorizedActor],
+            Self::EmptyTargetRelays { .. }
+            | Self::RelayTargetLimitExceeded { .. }
+            | Self::InvalidRelayUrl { .. } => {
+                vec![RadrootsSdkRecoveryAction::ConfigureRelayTargets]
+            }
+            Self::IdempotencyConflict { .. } => {
+                vec![RadrootsSdkRecoveryAction::RetryOperationWithSameIdempotencyKey]
+            }
+            Self::ProductSyncUnsupported { .. } => {
+                vec![RadrootsSdkRecoveryAction::EnableRequiredFeature]
+            }
+            Self::ProductSyncRelaySetupFailure { .. } | Self::RelayTransport { .. } => {
+                vec![RadrootsSdkRecoveryAction::RetryAfterTransportFailure]
+            }
+            Self::PartialLocalMutation(error) => vec![error.recovery],
+            Self::ClockBeforeUnixEpoch
+            | Self::TimestampOutOfRange { .. }
+            | Self::OrderStatusLimitInvalid { .. }
+            | Self::InvalidOrderId { .. }
+            | Self::InvalidRequest { .. }
+            | Self::ListingDraft { .. }
+            | Self::ListingMutation { .. } => vec![RadrootsSdkRecoveryAction::FixRequest],
+        }
+    }
+
+    pub fn detail_json(&self) -> Value {
+        let detail = match self {
+            Self::Io { path, message } => {
+                json!({ "path": path.display().to_string(), "message": message })
+            }
+            Self::ClockBeforeUnixEpoch => json!({}),
+            Self::TimestampOutOfRange { value } => json!({ "value": value }),
+            Self::UnauthorizedActor { operation, reason } => {
+                json!({ "operation": operation, "reason": reason })
+            }
+            Self::SignerPubkeyMismatch {
+                operation,
+                expected_pubkey_prefix,
+                signer_pubkey_prefix,
+            } => json!({
+                "operation": operation,
+                "expected_pubkey_prefix": expected_pubkey_prefix,
+                "signer_pubkey_prefix": signer_pubkey_prefix
+            }),
+            Self::EmptyTargetRelays { operation } => json!({ "operation": operation }),
+            Self::RelayTargetLimitExceeded { max, actual } => {
+                json!({ "max": max, "actual": actual })
+            }
+            Self::InvalidRelayUrl { url, reason } => json!({ "url": url, "reason": reason }),
+            Self::IdempotencyConflict {
+                operation_kind,
+                expected_pubkey_prefix,
+                existing_digest_prefix,
+                new_digest_prefix,
+            } => json!({
+                "operation_kind": operation_kind,
+                "expected_pubkey_prefix": expected_pubkey_prefix,
+                "existing_digest_prefix": existing_digest_prefix,
+                "new_digest_prefix": new_digest_prefix
+            }),
+            Self::OrderStatusLimitInvalid { limit, min, max } => {
+                json!({ "limit": limit, "min": min, "max": max })
+            }
+            Self::InvalidOrderId { value, message } => {
+                json!({ "value": value, "message": message })
+            }
+            Self::ProductSyncUnsupported {
+                operation,
+                required_feature,
+            } => json!({ "operation": operation, "required_feature": required_feature }),
+            Self::ProductSyncRelaySetupFailure { message }
+            | Self::Authority { message }
+            | Self::EventStore { message }
+            | Self::InvalidRequest { message }
+            | Self::ListingDraft { message }
+            | Self::ListingMutation { message }
+            | Self::Outbox { message }
+            | Self::RelayTransport { message }
+            | Self::Projection { message } => json!({ "message": message }),
+            Self::PartialLocalMutation(error) => json!(error),
+        };
+        json!({
+            "code": self.code(),
+            "class": self.class(),
+            "retryable": self.retryable(),
+            "message": self.to_string(),
+            "recovery_actions": self.recovery_actions(),
+            "detail": detail
+        })
+    }
+
     pub fn partial_local_mutation(error: RadrootsSdkPartialLocalMutationError) -> Self {
         Self::PartialLocalMutation(error)
     }
@@ -412,13 +608,24 @@ fn redacted_prefix(value: &str) -> String {
 
 #[cfg(feature = "runtime")]
 fn redacted_relay_url(value: String) -> String {
-    let Some((scheme, rest)) = value.split_once("://") else {
-        return value;
+    let redacted = redact_query_or_fragment(value.as_str());
+    let Some((scheme, rest)) = redacted.split_once("://") else {
+        return redacted;
     };
     let authority = rest.split('/').next().unwrap_or(rest);
     let Some((_, after_userinfo)) = authority.rsplit_once('@') else {
-        return value;
+        return redacted;
     };
     let path = rest.strip_prefix(authority).unwrap_or_default();
     format!("{scheme}://<redacted>@{after_userinfo}{path}")
+}
+
+#[cfg(feature = "runtime")]
+fn redact_query_or_fragment(value: &str) -> String {
+    let Some((index, marker)) = value.char_indices().find_map(|(index, character)| {
+        matches!(character, '?' | '#').then_some((index, character))
+    }) else {
+        return value.to_owned();
+    };
+    format!("{}{}<redacted>", &value[..index], marker)
 }

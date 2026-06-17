@@ -24,7 +24,7 @@ use radroots_sdk::protocol::wire::WireEventParts;
 use radroots_sdk::{
     ORDER_STATUS_DEFAULT_LIMIT, ORDER_STATUS_MAX_LIMIT, OrderPaymentStateKind,
     OrderSettlementStateKind, OrderStatusKind, OrderStatusRequest, RadrootsSdk, RadrootsSdkError,
-    RadrootsSdkTimestamp, SdkOrderStatusIssueKind, SdkOrderStatusSource,
+    RadrootsSdkTimestamp, SdkOrderStatusIssue, SdkOrderStatusIssueKind, SdkOrderStatusSource,
 };
 
 const BUYER_SECRET_KEY_HEX: &str =
@@ -252,6 +252,43 @@ fn order_status_parse_rejects_invalid_order_ids() {
     let error = OrderStatusRequest::parse("bad order id").expect_err("invalid order id");
 
     assert!(matches!(error, RadrootsSdkError::InvalidOrderId { .. }));
+}
+
+#[tokio::test]
+async fn order_status_contract_dtos_serialize_deterministically() {
+    let (_tempdir, sdk, _store) = directory_sdk_and_store().await;
+    let request = status_request("order-1").with_limit(25);
+    let request_json = serde_json::to_value(&request).expect("request json");
+
+    assert_eq!(
+        request_json,
+        serde_json::json!({
+            "order_id": "order-1",
+            "limit": 25
+        })
+    );
+
+    let receipt = sdk.orders().status(request).await.expect("status");
+    let receipt_json = serde_json::to_value(&receipt).expect("receipt json");
+
+    assert_eq!(receipt_json["source"], "local_event_store");
+    assert_eq!(receipt_json["status"], "missing");
+    assert_eq!(receipt_json["payment_state"], "not_recorded");
+    assert_eq!(receipt_json["settlement_state"], "not_required");
+
+    let issue = SdkOrderStatusIssue {
+        kind: SdkOrderStatusIssueKind::DecisionPayloadInvalid,
+        event_ids: vec![deterministic_event_id("issue-event")],
+    };
+    assert_eq!(issue.code(), "decision_payload_invalid");
+    assert_eq!(
+        serde_json::to_value(issue).expect("issue json"),
+        serde_json::json!({
+            "code": "decision_payload_invalid",
+            "kind": "decision_payload_invalid",
+            "event_ids": [deterministic_event_id("issue-event")]
+        })
+    );
 }
 
 #[tokio::test]

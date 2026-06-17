@@ -15,7 +15,8 @@ use std::{
 };
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[non_exhaustive]
 pub enum RadrootsSdkStorageConfig {
     Memory,
     Directory(PathBuf),
@@ -29,7 +30,7 @@ impl Default for RadrootsSdkStorageConfig {
 }
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
 pub struct RadrootsSdkTimestamp(u64);
 
 #[cfg(feature = "runtime")]
@@ -48,7 +49,9 @@ impl RadrootsSdkTimestamp {
 }
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum RadrootsSdkClock {
     System,
     Fixed(RadrootsSdkTimestamp),
@@ -77,10 +80,67 @@ impl RadrootsSdkClock {
 }
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct RadrootsSdkStoragePaths {
     pub event_store_path: PathBuf,
     pub outbox_path: PathBuf,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize)]
+pub struct StorageStatusRequest {}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct StorageStatusReceipt {
+    pub storage: SdkStorageKind,
+    pub paths: Option<RadrootsSdkStoragePaths>,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum SdkStorageKind {
+    Memory,
+    Directory,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct BackupRequest {
+    pub destination: PathBuf,
+    pub overwrite: bool,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct BackupReceipt {
+    pub destination: PathBuf,
+    pub state: SdkBackupState,
+    pub event_store_path: Option<PathBuf>,
+    pub outbox_path: Option<PathBuf>,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum SdkBackupState {
+    Planned,
+    Completed,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize)]
+pub struct IntegrityRequest {}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct IntegrityReceipt {
+    pub checked_paths: Vec<PathBuf>,
+    pub event_store_ok: bool,
+    pub outbox_ok: bool,
 }
 
 #[cfg(feature = "runtime")]

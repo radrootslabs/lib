@@ -11,6 +11,8 @@ use radroots_trade::order::{
     RadrootsOrderSettlementState, RadrootsOrderStatus, RadrootsOrderStoreQueryError,
     order_projection_query_for_order_id,
 };
+#[cfg(feature = "runtime")]
+use serde::ser::SerializeStruct;
 
 #[cfg(feature = "runtime")]
 pub const ORDER_STATUS_DEFAULT_LIMIT: u32 = 500;
@@ -18,7 +20,7 @@ pub const ORDER_STATUS_DEFAULT_LIMIT: u32 = 500;
 pub const ORDER_STATUS_MAX_LIMIT: u32 = 1_000;
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct OrderStatusRequest {
     pub order_id: RadrootsOrderId,
     pub limit: u32,
@@ -57,7 +59,7 @@ impl OrderStatusRequest {
 }
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct OrderStatusReceipt {
     pub order_id: RadrootsOrderId,
     pub source: SdkOrderStatusSource,
@@ -80,13 +82,17 @@ pub struct OrderStatusReceipt {
 }
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum SdkOrderStatusSource {
     LocalEventStore,
 }
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum OrderStatusKind {
     Missing,
     Requested,
@@ -99,7 +105,9 @@ pub enum OrderStatusKind {
 }
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum OrderFulfillmentStatusKind {
     AcceptedNotFulfilled,
     Preparing,
@@ -110,7 +118,9 @@ pub enum OrderFulfillmentStatusKind {
 }
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum OrderPaymentStateKind {
     NotRecorded,
     Recorded,
@@ -120,7 +130,9 @@ pub enum OrderPaymentStateKind {
 }
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum OrderSettlementStateKind {
     NotRequired,
     Pending,
@@ -145,10 +157,30 @@ impl SdkOrderStatusIssue {
     fn single(kind: SdkOrderStatusIssueKind, event_id: RadrootsEventId) -> Self {
         Self::new(kind, vec![event_id])
     }
+
+    pub fn code(&self) -> String {
+        self.kind.code()
+    }
 }
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+impl serde::Serialize for SdkOrderStatusIssue {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut state = serializer.serialize_struct("SdkOrderStatusIssue", 3)?;
+        state.serialize_field("code", &self.code())?;
+        state.serialize_field("kind", &self.kind)?;
+        state.serialize_field("event_ids", &self.event_ids)?;
+        state.end()
+    }
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum SdkOrderStatusIssueKind {
     MissingRequest,
     MultipleRequests,
@@ -271,6 +303,13 @@ pub enum SdkOrderStatusIssueKind {
     SettlementCurrencyMismatch,
     DuplicateSettlements,
     ForkedLifecycle,
+}
+
+#[cfg(feature = "runtime")]
+impl SdkOrderStatusIssueKind {
+    pub fn code(self) -> String {
+        camel_to_snake(format!("{self:?}").as_str())
+    }
 }
 
 #[cfg(feature = "runtime")]
@@ -826,4 +865,20 @@ fn projection_error(error: RadrootsOrderStoreQueryError) -> RadrootsSdkError {
     RadrootsSdkError::Projection {
         message: message.to_owned(),
     }
+}
+
+#[cfg(feature = "runtime")]
+fn camel_to_snake(value: &str) -> String {
+    let mut output = String::new();
+    for (index, character) in value.chars().enumerate() {
+        if character.is_ascii_uppercase() {
+            if index > 0 {
+                output.push('_');
+            }
+            output.push(character.to_ascii_lowercase());
+        } else {
+            output.push(character);
+        }
+    }
+    output
 }

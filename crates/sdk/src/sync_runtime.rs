@@ -28,7 +28,7 @@ const CLAIM_TTL_MS: i64 = 30_000;
 const NEXT_ATTEMPT_DELAY_MS: i64 = 60_000;
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct PushOutboxRequest {
     pub limit: usize,
     pub republish_accepted_relays: bool,
@@ -71,7 +71,7 @@ impl PushOutboxRequest {
 }
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize)]
 pub struct PushOutboxReceipt {
     pub attempted_events: usize,
     pub published_events: usize,
@@ -95,7 +95,7 @@ impl PushOutboxReceipt {
 }
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct PushOutboxEventReceipt {
     pub event_id: RadrootsEventId,
     pub outbox_event_id: i64,
@@ -110,7 +110,7 @@ pub struct PushOutboxEventReceipt {
 }
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct PushOutboxRelayReceipt {
     pub relay_url: String,
     pub outcome_kind: PushOutboxRelayOutcomeKind,
@@ -119,7 +119,9 @@ pub struct PushOutboxRelayReceipt {
 }
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum PushOutboxEventState {
     DraftQueued,
     Signing,
@@ -150,7 +152,9 @@ impl From<RadrootsOutboxEventState> for PushOutboxEventState {
 }
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum PushOutboxRelayOutcomeKind {
     Accepted,
     DuplicateAccepted,
