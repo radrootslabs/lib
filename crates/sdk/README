@@ -100,3 +100,20 @@ dry run.
 Runtime errors use a non-exhaustive `RadrootsSdkError` enum. Public callers
 should branch on the stable method surface: `code`, `class`, `retryable`,
 `detail_json`, and `recovery_actions`.
+
+## Runtime DTO Stability
+
+Runtime request DTOs are constructor-led and marked non-exhaustive where they
+carry public fields: `ListingPreparePublishRequest`,
+`ListingEnqueuePublishRequest`, `OrderStatusRequest`, `StorageStatusRequest`,
+`BackupRequest`, `IntegrityRequest`, `SyncStatusRequest`, and
+`PushOutboxRequest`. Use `new`, `parse`, `default`, and `with_*` methods rather
+than struct literals.
+
+Runtime enums that may gain variants are non-exhaustive. This includes storage,
+clock, relay-target, mutation-state, order-status, sync-status, relay-auth, and
+push-outbox state or outcome enums.
+
+Runtime receipts and status records expose stable serialized public fields for
+CLI and local-runtime reporting. Future additive reporting should preserve
+serde compatibility for existing fields.

@@ -30,6 +30,7 @@ const CLAIM_OWNER: &str = "radroots_sdk.sync.push_outbox";
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize)]
+#[non_exhaustive]
 pub struct SyncStatusRequest {}
 
 #[cfg(feature = "runtime")]
@@ -135,6 +136,7 @@ impl Default for SdkRelayAuthPolicy {
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[non_exhaustive]
 pub struct PushOutboxRequest {
     pub limit: usize,
     pub republish_accepted_relays: bool,

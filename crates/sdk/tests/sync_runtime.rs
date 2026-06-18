@@ -390,7 +390,7 @@ async fn sdk_directory_backup_creates_verified_canonical_store_copy() {
     let outbox_event_id = enqueue_listing(&sdk, LISTING_A_D_TAG, "Backup Coffee", &[RELAY_A]).await;
 
     let status = sdk
-        .storage_status(StorageStatusRequest::default())
+        .storage_status(StorageStatusRequest::new())
         .await
         .expect("storage status");
     let source_paths = sdk.storage_paths().expect("source paths");
@@ -404,7 +404,7 @@ async fn sdk_directory_backup_creates_verified_canonical_store_copy() {
     assert_eq!(status.outbox.store.journal_mode, "wal");
 
     let integrity = sdk
-        .integrity(IntegrityRequest::default())
+        .integrity(IntegrityRequest::new())
         .await
         .expect("integrity");
     assert_eq!(
@@ -419,10 +419,7 @@ async fn sdk_directory_backup_creates_verified_canonical_store_copy() {
 
     let backup_destination = tempdir.path().join("backup");
     let backup = sdk
-        .backup(BackupRequest {
-            destination: backup_destination.clone(),
-            overwrite: false,
-        })
+        .backup(BackupRequest::new(backup_destination.clone()))
         .await
         .expect("backup");
     let event_store_path = backup
@@ -473,20 +470,14 @@ async fn sdk_directory_backup_creates_verified_canonical_store_copy() {
     );
 
     let duplicate = sdk
-        .backup(BackupRequest {
-            destination: backup_destination.clone(),
-            overwrite: false,
-        })
+        .backup(BackupRequest::new(backup_destination.clone()))
         .await
         .expect_err("duplicate backup");
     assert!(matches!(duplicate, RadrootsSdkError::InvalidRequest { .. }));
 
-    sdk.backup(BackupRequest {
-        destination: backup_destination,
-        overwrite: true,
-    })
-    .await
-    .expect("overwrite backup");
+    sdk.backup(BackupRequest::new(backup_destination).with_overwrite(true))
+        .await
+        .expect("overwrite backup");
 }
 
 #[cfg(unix)]
@@ -499,10 +490,7 @@ async fn sdk_backup_rejects_symlink_destination_even_with_overwrite() {
     std::os::unix::fs::symlink(&target, &destination).expect("symlink");
 
     let error = sdk
-        .backup(BackupRequest {
-            destination,
-            overwrite: true,
-        })
+        .backup(BackupRequest::new(destination).with_overwrite(true))
         .await
         .expect_err("symlink destination");
     assert!(matches!(error, RadrootsSdkError::InvalidRequest { .. }));

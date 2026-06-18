@@ -21,6 +21,7 @@ pub const ORDER_STATUS_MAX_LIMIT: u32 = 1_000;
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[non_exhaustive]
 pub struct OrderStatusRequest {
     pub order_id: RadrootsOrderId,
     pub limit: u32,

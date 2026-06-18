@@ -34,6 +34,7 @@ const LISTING_PUBLISH_OPERATION_KIND: &str = "listing.publish.v1";
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug)]
+#[non_exhaustive]
 pub struct ListingPreparePublishRequest {
     pub actor: RadrootsActorContext,
     pub document: RadrootsListingDraftDocumentV1,
@@ -83,6 +84,7 @@ impl ListingPreparePublishRequest {
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug)]
+#[non_exhaustive]
 pub struct ListingEnqueuePublishRequest {
     pub actor: RadrootsActorContext,
     pub document: RadrootsListingDraftDocumentV1,

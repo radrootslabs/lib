@@ -156,7 +156,7 @@ async fn sdk_memory_storage_status_and_integrity_report_canonical_stores() {
         .expect("sdk");
 
     let status = sdk
-        .storage_status(StorageStatusRequest::default())
+        .storage_status(StorageStatusRequest::new())
         .await
         .expect("status");
     assert_eq!(status.storage, SdkStorageKind::Memory);
@@ -172,7 +172,7 @@ async fn sdk_memory_storage_status_and_integrity_report_canonical_stores() {
     assert!(status.outbox.store.integrity_ok);
 
     let integrity = sdk
-        .integrity(IntegrityRequest::default())
+        .integrity(IntegrityRequest::new())
         .await
         .expect("integrity");
     assert!(integrity.checked_paths.is_empty());
@@ -555,7 +555,7 @@ fn storage_backup_and_integrity_contract_dtos_serialize() {
         integrity_result: "ok".to_owned(),
     };
     assert_eq!(
-        serde_json::to_value(StorageStatusRequest::default()).expect("status request"),
+        serde_json::to_value(StorageStatusRequest::new()).expect("status request"),
         serde_json::json!({})
     );
     assert_eq!(
@@ -624,11 +624,7 @@ fn storage_backup_and_integrity_contract_dtos_serialize() {
         })
     );
     assert_eq!(
-        serde_json::to_value(BackupRequest {
-            destination: PathBuf::from("backup"),
-            overwrite: false,
-        })
-        .expect("backup request"),
+        serde_json::to_value(BackupRequest::new("backup")).expect("backup request"),
         serde_json::json!({
             "destination": "backup",
             "overwrite": false
@@ -654,7 +650,7 @@ fn storage_backup_and_integrity_contract_dtos_serialize() {
         })
     );
     assert_eq!(
-        serde_json::to_value(IntegrityRequest::default()).expect("integrity request"),
+        serde_json::to_value(IntegrityRequest::new()).expect("integrity request"),
         serde_json::json!({})
     );
 }

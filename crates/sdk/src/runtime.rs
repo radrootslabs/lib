@@ -104,7 +104,15 @@ pub struct RadrootsSdkStoragePaths {
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize)]
+#[non_exhaustive]
 pub struct StorageStatusRequest {}
+
+#[cfg(feature = "runtime")]
+impl StorageStatusRequest {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
@@ -163,9 +171,25 @@ pub struct SdkOutboxStorageStatus {
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[non_exhaustive]
 pub struct BackupRequest {
     pub destination: PathBuf,
     pub overwrite: bool,
+}
+
+#[cfg(feature = "runtime")]
+impl BackupRequest {
+    pub fn new(destination: impl Into<PathBuf>) -> Self {
+        Self {
+            destination: destination.into(),
+            overwrite: false,
+        }
+    }
+
+    pub fn with_overwrite(mut self, overwrite: bool) -> Self {
+        self.overwrite = overwrite;
+        self
+    }
 }
 
 #[cfg(feature = "runtime")]
@@ -212,7 +236,15 @@ pub struct SdkBackupVerification {
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize)]
+#[non_exhaustive]
 pub struct IntegrityRequest {}
+
+#[cfg(feature = "runtime")]
+impl IntegrityRequest {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
@@ -410,7 +442,7 @@ impl RadrootsSdk {
             outbox_path: request.destination.join(OUTBOX_BACKUP_FILE),
         };
         let manifest_path = request.destination.join(BACKUP_MANIFEST_FILE);
-        let source_status = self.storage_status(StorageStatusRequest::default()).await?;
+        let source_status = self.storage_status(StorageStatusRequest::new()).await?;
         sqlite_vacuum_into(
             self._event_store.pool(),
             &backup_paths.event_store_path,
