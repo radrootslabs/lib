@@ -598,22 +598,27 @@ impl RadrootsSdk {
                 })?;
         let destination_paths =
             preflight_restore_destination(&archive.source, &destination, request.overwrite)?;
-        if !request.dry_run {
-            return Err(RadrootsSdkError::InvalidRequest {
-                message: "restore finalization requires staged restore execution".to_owned(),
-            });
-        }
+        let restored_paths = if request.dry_run {
+            None
+        } else {
+            Some(restore_archive_to_destination(&archive, &destination, &destination_paths).await?)
+        };
+        let state = if request.dry_run {
+            SdkRestoreState::DryRun
+        } else {
+            SdkRestoreState::Completed
+        };
         Ok(RestoreReceipt {
             source: archive.source,
             destination: Some(destination),
-            state: SdkRestoreState::DryRun,
+            state,
             destination_paths: Some(destination_paths),
             event_store_path: archive.event_store_path,
             outbox_path: archive.outbox_path,
             manifest_path: archive.manifest_path,
             manifest: archive.manifest,
             verification: archive.verification,
-            restored_paths: None,
+            restored_paths,
         })
     }
 }
@@ -894,6 +899,173 @@ fn reject_restore_destination_overlap(
         });
     }
     Ok(())
+}
+
+#[cfg(feature = "runtime")]
+async fn restore_archive_to_destination(
+    archive: &RestoreArchive,
+    destination: &Path,
+    destination_paths: &RadrootsSdkStoragePaths,
+) -> Result<RadrootsSdkStoragePaths, RadrootsSdkError> {
+    let parent = destination
+        .parent()
+        .ok_or_else(|| RadrootsSdkError::InvalidRequest {
+            message: "restore destination parent is required".to_owned(),
+        })?;
+    let staging = unique_restore_sidecar_path(parent, destination, "staging")?;
+    let previous = unique_restore_sidecar_path(parent, destination, "previous")?;
+    fs::create_dir(&staging).map_err(|error| RadrootsSdkError::Io {
+        path: staging.clone(),
+        message: error.to_string(),
+    })?;
+    let staging_paths = RadrootsSdkStoragePaths {
+        event_store_path: staging.join(EVENT_STORE_BACKUP_FILE),
+        outbox_path: staging.join(OUTBOX_BACKUP_FILE),
+    };
+    if let Err(error) = copy_restore_archive_to_staging(archive, &staging_paths).await {
+        let _ = remove_existing_restore_path(&staging);
+        return Err(error);
+    }
+
+    let mut previous_installed = false;
+    if fs::symlink_metadata(destination).is_ok() {
+        rename_restore_path(destination, &previous, "previous destination")?;
+        previous_installed = true;
+    }
+
+    if let Err(error) = rename_restore_path(&staging, destination, "staged restore") {
+        if previous_installed {
+            let _ = rename_restore_path(&previous, destination, "previous destination rollback");
+        }
+        let _ = remove_existing_restore_path(&staging);
+        return Err(error);
+    }
+
+    let destination_verification = verify_backup_paths(destination_paths).await;
+    match destination_verification {
+        Ok(verification) => {
+            if let Err(error) = validate_restore_verification(&verification, &archive.verification)
+            {
+                rollback_restore_destination(destination, &previous, previous_installed);
+                return Err(error);
+            }
+        }
+        Err(error) => {
+            rollback_restore_destination(destination, &previous, previous_installed);
+            return Err(error);
+        }
+    }
+
+    if previous_installed {
+        remove_existing_restore_path(&previous)?;
+    }
+    Ok(destination_paths.clone())
+}
+
+#[cfg(feature = "runtime")]
+async fn copy_restore_archive_to_staging(
+    archive: &RestoreArchive,
+    staging_paths: &RadrootsSdkStoragePaths,
+) -> Result<(), RadrootsSdkError> {
+    copy_restore_file(
+        &archive.event_store_path,
+        &staging_paths.event_store_path,
+        "event store",
+    )?;
+    copy_restore_file(&archive.outbox_path, &staging_paths.outbox_path, "outbox")?;
+    let staging_verification = verify_backup_paths(staging_paths).await?;
+    validate_restore_verification(&staging_verification, &archive.verification)
+}
+
+#[cfg(feature = "runtime")]
+fn copy_restore_file(
+    source: &Path,
+    destination: &Path,
+    label: &str,
+) -> Result<(), RadrootsSdkError> {
+    fs::copy(source, destination)
+        .map(|_| ())
+        .map_err(|error| RadrootsSdkError::Io {
+            path: destination.to_path_buf(),
+            message: format!("restore {label} copy failed: {error}"),
+        })
+}
+
+#[cfg(feature = "runtime")]
+fn unique_restore_sidecar_path(
+    parent: &Path,
+    destination: &Path,
+    purpose: &str,
+) -> Result<PathBuf, RadrootsSdkError> {
+    let name = destination
+        .file_name()
+        .ok_or_else(|| RadrootsSdkError::InvalidRequest {
+            message: "restore destination path must include a directory name".to_owned(),
+        })?
+        .to_string_lossy();
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| RadrootsSdkError::ClockBeforeUnixEpoch)?
+        .as_nanos();
+    for attempt in 0..100u8 {
+        let path = parent.join(format!(
+            ".{name}.radroots-restore-{purpose}-{nanos}-{attempt}"
+        ));
+        match fs::symlink_metadata(&path) {
+            Ok(_) => {}
+            Err(error) if error.kind() == ErrorKind::NotFound => return Ok(path),
+            Err(error) => {
+                return Err(RadrootsSdkError::Io {
+                    path,
+                    message: error.to_string(),
+                });
+            }
+        }
+    }
+    Err(RadrootsSdkError::InvalidRequest {
+        message: format!("restore could not reserve {purpose} sidecar path"),
+    })
+}
+
+#[cfg(feature = "runtime")]
+fn rename_restore_path(
+    source: &Path,
+    destination: &Path,
+    label: &str,
+) -> Result<(), RadrootsSdkError> {
+    fs::rename(source, destination).map_err(|error| RadrootsSdkError::Io {
+        path: destination.to_path_buf(),
+        message: format!("restore {label} rename failed: {error}"),
+    })
+}
+
+#[cfg(feature = "runtime")]
+fn remove_existing_restore_path(path: &Path) -> Result<(), RadrootsSdkError> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => {
+            fs::remove_dir_all(path).map_err(|error| RadrootsSdkError::Io {
+                path: path.to_path_buf(),
+                message: error.to_string(),
+            })
+        }
+        Ok(_) => fs::remove_file(path).map_err(|error| RadrootsSdkError::Io {
+            path: path.to_path_buf(),
+            message: error.to_string(),
+        }),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(RadrootsSdkError::Io {
+            path: path.to_path_buf(),
+            message: error.to_string(),
+        }),
+    }
+}
+
+#[cfg(feature = "runtime")]
+fn rollback_restore_destination(destination: &Path, previous: &Path, previous_installed: bool) {
+    let _ = remove_existing_restore_path(destination);
+    if previous_installed {
+        let _ = rename_restore_path(previous, destination, "previous destination rollback");
+    }
 }
 
 #[cfg(feature = "runtime")]
