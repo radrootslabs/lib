@@ -302,6 +302,10 @@ impl RestoreRequest {
         self.dry_run = dry_run;
         self
     }
+
+    pub fn dry_run(self) -> Self {
+        self.with_dry_run(true)
+    }
 }
 
 #[cfg(feature = "runtime")]
@@ -331,6 +335,7 @@ pub struct RestoreReceipt {
     pub source: PathBuf,
     pub destination: Option<PathBuf>,
     pub state: SdkRestoreState,
+    pub destination_paths: Option<RadrootsSdkStoragePaths>,
     pub event_store_path: PathBuf,
     pub outbox_path: PathBuf,
     pub manifest_path: PathBuf,
@@ -581,6 +586,36 @@ impl RadrootsSdk {
     ) -> Result<RestoreArchive, RadrootsSdkError> {
         inspect_restore_archive(source.into()).await
     }
+
+    pub async fn restore(request: RestoreRequest) -> Result<RestoreReceipt, RadrootsSdkError> {
+        let archive = inspect_restore_archive(request.source.clone()).await?;
+        let destination =
+            request
+                .destination
+                .clone()
+                .ok_or_else(|| RadrootsSdkError::InvalidRequest {
+                    message: "restore destination is required".to_owned(),
+                })?;
+        let destination_paths =
+            preflight_restore_destination(&archive.source, &destination, request.overwrite)?;
+        if !request.dry_run {
+            return Err(RadrootsSdkError::InvalidRequest {
+                message: "restore finalization requires staged restore execution".to_owned(),
+            });
+        }
+        Ok(RestoreReceipt {
+            source: archive.source,
+            destination: Some(destination),
+            state: SdkRestoreState::DryRun,
+            destination_paths: Some(destination_paths),
+            event_store_path: archive.event_store_path,
+            outbox_path: archive.outbox_path,
+            manifest_path: archive.manifest_path,
+            manifest: archive.manifest,
+            verification: archive.verification,
+            restored_paths: None,
+        })
+    }
 }
 
 #[cfg(feature = "runtime")]
@@ -753,6 +788,109 @@ fn validate_restore_verification(
     if actual != manifest {
         return Err(RadrootsSdkError::InvalidRequest {
             message: "restore backup verification does not match manifest".to_owned(),
+        });
+    }
+    Ok(())
+}
+
+#[cfg(feature = "runtime")]
+fn preflight_restore_destination(
+    source: &Path,
+    destination: &Path,
+    overwrite: bool,
+) -> Result<RadrootsSdkStoragePaths, RadrootsSdkError> {
+    if destination.as_os_str().is_empty() {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: "restore destination must not be empty".to_owned(),
+        });
+    }
+    let source_root = canonical_restore_directory(source)?;
+    match fs::symlink_metadata(destination) {
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            return Err(RadrootsSdkError::InvalidRequest {
+                message: "restore destination must not be a symbolic link".to_owned(),
+            });
+        }
+        Ok(metadata) if metadata.is_dir() => {
+            let destination_root =
+                fs::canonicalize(destination).map_err(|error| RadrootsSdkError::Io {
+                    path: destination.to_path_buf(),
+                    message: error.to_string(),
+                })?;
+            reject_restore_destination_overlap(&source_root, &destination_root)?;
+            let mut entries = fs::read_dir(destination).map_err(|error| RadrootsSdkError::Io {
+                path: destination.to_path_buf(),
+                message: error.to_string(),
+            })?;
+            let has_entries = entries
+                .next()
+                .transpose()
+                .map_err(|error| RadrootsSdkError::Io {
+                    path: destination.to_path_buf(),
+                    message: error.to_string(),
+                })?
+                .is_some();
+            if !overwrite && has_entries {
+                return Err(RadrootsSdkError::InvalidRequest {
+                    message: "restore destination already exists and overwrite is false".to_owned(),
+                });
+            }
+        }
+        Ok(metadata) if metadata.is_file() => {
+            let destination_root =
+                fs::canonicalize(destination).map_err(|error| RadrootsSdkError::Io {
+                    path: destination.to_path_buf(),
+                    message: error.to_string(),
+                })?;
+            reject_restore_destination_overlap(&source_root, &destination_root)?;
+            if !overwrite {
+                return Err(RadrootsSdkError::InvalidRequest {
+                    message: "restore destination already exists and overwrite is false".to_owned(),
+                });
+            }
+        }
+        Ok(_) => {
+            return Err(RadrootsSdkError::InvalidRequest {
+                message: "restore destination must be a directory path".to_owned(),
+            });
+        }
+        Err(error) if error.kind() == ErrorKind::NotFound => {
+            let parent = destination
+                .parent()
+                .ok_or_else(|| RadrootsSdkError::InvalidRequest {
+                    message: "restore destination parent is required".to_owned(),
+                })?;
+            let parent_root = canonical_restore_directory(parent)?;
+            let destination_name =
+                destination
+                    .file_name()
+                    .ok_or_else(|| RadrootsSdkError::InvalidRequest {
+                        message: "restore destination path must include a directory name"
+                            .to_owned(),
+                    })?;
+            reject_restore_destination_overlap(&source_root, &parent_root.join(destination_name))?;
+        }
+        Err(error) => {
+            return Err(RadrootsSdkError::Io {
+                path: destination.to_path_buf(),
+                message: error.to_string(),
+            });
+        }
+    }
+    Ok(RadrootsSdkStoragePaths {
+        event_store_path: destination.join(EVENT_STORE_BACKUP_FILE),
+        outbox_path: destination.join(OUTBOX_BACKUP_FILE),
+    })
+}
+
+#[cfg(feature = "runtime")]
+fn reject_restore_destination_overlap(
+    source_root: &Path,
+    destination_root: &Path,
+) -> Result<(), RadrootsSdkError> {
+    if destination_root.starts_with(source_root) || source_root.starts_with(destination_root) {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: "restore destination must not overlap the backup source".to_owned(),
         });
     }
     Ok(())

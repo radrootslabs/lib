@@ -26,9 +26,9 @@ use radroots_sdk::{
     PUSH_OUTBOX_DEFAULT_CLAIM_TTL_MS, PUSH_OUTBOX_DEFAULT_LIMIT,
     PUSH_OUTBOX_DEFAULT_NEXT_ATTEMPT_DELAY_MS, PUSH_OUTBOX_MAX_LIMIT, PushOutboxEventReceipt,
     PushOutboxEventState, PushOutboxReceipt, PushOutboxRelayOutcomeKind, PushOutboxRelayReceipt,
-    PushOutboxRequest, RadrootsSdk, RadrootsSdkError, RadrootsSdkTimestamp, SdkBackupManifestKind,
-    SdkRelayAuthPolicy, SdkRelayTargetPolicy, SdkRelayUrlPolicy, StorageStatusRequest,
-    SyncStatusRequest, SyncStatusSource,
+    PushOutboxRequest, RadrootsSdk, RadrootsSdkError, RadrootsSdkTimestamp, RestoreRequest,
+    SdkBackupManifestKind, SdkRelayAuthPolicy, SdkRelayTargetPolicy, SdkRelayUrlPolicy,
+    SdkRestoreState, StorageStatusRequest, SyncStatusRequest, SyncStatusSource,
 };
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -598,6 +598,164 @@ async fn sdk_restore_archive_rejects_symlink_store_member() {
         .await
         .expect_err("symlink member");
     assert!(matches!(error, RadrootsSdkError::InvalidRequest { .. }));
+}
+
+#[tokio::test]
+async fn sdk_restore_dry_run_validates_destination_without_writing() {
+    let (tempdir, sdk) = directory_sdk(&[RELAY_A]).await;
+    enqueue_listing(&sdk, LISTING_A_D_TAG, "Backup Coffee", &[RELAY_A]).await;
+    let source = tempdir.path().join("backup");
+    let destination = tempdir.path().join("restore");
+    sdk.backup(BackupRequest::new(source.clone()))
+        .await
+        .expect("backup");
+
+    let receipt = RadrootsSdk::restore(
+        RestoreRequest::new(source.clone())
+            .with_destination(destination.clone())
+            .dry_run(),
+    )
+    .await
+    .expect("restore dry run");
+
+    assert_eq!(receipt.state, SdkRestoreState::DryRun);
+    assert_eq!(receipt.destination.as_deref(), Some(destination.as_path()));
+    assert_eq!(
+        receipt
+            .destination_paths
+            .as_ref()
+            .expect("destination paths")
+            .event_store_path,
+        destination.join("event_store.sqlite")
+    );
+    assert!(!destination.exists());
+    assert_eq!(receipt.restored_paths, None);
+}
+
+#[tokio::test]
+async fn sdk_restore_dry_run_rejects_existing_destination_without_overwrite() {
+    let (tempdir, sdk) = directory_sdk(&[RELAY_A]).await;
+    enqueue_listing(&sdk, LISTING_A_D_TAG, "Backup Coffee", &[RELAY_A]).await;
+    let source = tempdir.path().join("backup");
+    let destination = tempdir.path().join("restore");
+    sdk.backup(BackupRequest::new(source.clone()))
+        .await
+        .expect("backup");
+    std::fs::create_dir(&destination).expect("destination");
+    std::fs::write(destination.join("event_store.sqlite"), b"existing").expect("existing file");
+
+    let error = RadrootsSdk::restore(
+        RestoreRequest::new(source)
+            .with_destination(destination.clone())
+            .dry_run(),
+    )
+    .await
+    .expect_err("existing destination");
+
+    assert!(matches!(error, RadrootsSdkError::InvalidRequest { .. }));
+    assert!(destination.join("event_store.sqlite").exists());
+}
+
+#[tokio::test]
+async fn sdk_restore_dry_run_overwrite_keeps_existing_destination_untouched() {
+    let (tempdir, sdk) = directory_sdk(&[RELAY_A]).await;
+    enqueue_listing(&sdk, LISTING_A_D_TAG, "Backup Coffee", &[RELAY_A]).await;
+    let source = tempdir.path().join("backup");
+    let destination = tempdir.path().join("restore");
+    sdk.backup(BackupRequest::new(source.clone()))
+        .await
+        .expect("backup");
+    std::fs::create_dir(&destination).expect("destination");
+    std::fs::write(destination.join("event_store.sqlite"), b"existing").expect("existing file");
+
+    let receipt = RadrootsSdk::restore(
+        RestoreRequest::new(source)
+            .with_destination(destination.clone())
+            .with_overwrite(true)
+            .dry_run(),
+    )
+    .await
+    .expect("overwrite dry run");
+
+    assert_eq!(receipt.state, SdkRestoreState::DryRun);
+    assert_eq!(
+        std::fs::read(destination.join("event_store.sqlite")).expect("existing file"),
+        b"existing"
+    );
+}
+
+#[tokio::test]
+async fn sdk_restore_dry_run_rejects_destination_inside_source() {
+    let (tempdir, sdk) = directory_sdk(&[RELAY_A]).await;
+    enqueue_listing(&sdk, LISTING_A_D_TAG, "Backup Coffee", &[RELAY_A]).await;
+    let source = tempdir.path().join("backup");
+    sdk.backup(BackupRequest::new(source.clone()))
+        .await
+        .expect("backup");
+
+    let error = RadrootsSdk::restore(
+        RestoreRequest::new(source.clone())
+            .with_destination(source.join("restore"))
+            .with_overwrite(true)
+            .dry_run(),
+    )
+    .await
+    .expect_err("destination inside source");
+
+    assert!(matches!(error, RadrootsSdkError::InvalidRequest { .. }));
+}
+
+#[tokio::test]
+async fn sdk_restore_dry_run_rejects_corrupt_source_without_destination_writes() {
+    let (tempdir, sdk) = directory_sdk(&[RELAY_A]).await;
+    enqueue_listing(&sdk, LISTING_A_D_TAG, "Backup Coffee", &[RELAY_A]).await;
+    let source = tempdir.path().join("backup");
+    let destination = tempdir.path().join("restore");
+    sdk.backup(BackupRequest::new(source.clone()))
+        .await
+        .expect("backup");
+    std::fs::write(source.join("event_store.sqlite"), b"not sqlite").expect("corrupt store");
+
+    let error = RadrootsSdk::restore(
+        RestoreRequest::new(source)
+            .with_destination(destination.clone())
+            .dry_run(),
+    )
+    .await
+    .expect_err("corrupt source");
+
+    assert!(matches!(
+        error,
+        RadrootsSdkError::EventStore { .. } | RadrootsSdkError::InvalidRequest { .. }
+    ));
+    assert!(!destination.exists());
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn sdk_restore_dry_run_rejects_symlink_destination() {
+    let (tempdir, sdk) = directory_sdk(&[RELAY_A]).await;
+    enqueue_listing(&sdk, LISTING_A_D_TAG, "Backup Coffee", &[RELAY_A]).await;
+    let source = tempdir.path().join("backup");
+    let destination = tempdir.path().join("restore-link");
+    let target = tempdir.path().join("restore-target");
+    sdk.backup(BackupRequest::new(source.clone()))
+        .await
+        .expect("backup");
+    std::fs::create_dir(&target).expect("target");
+    std::os::unix::fs::symlink(&target, &destination).expect("symlink");
+
+    let error = RadrootsSdk::restore(
+        RestoreRequest::new(source)
+            .with_destination(destination)
+            .with_overwrite(true)
+            .dry_run(),
+    )
+    .await
+    .expect_err("symlink destination");
+
+    assert!(matches!(error, RadrootsSdkError::InvalidRequest { .. }));
+    assert!(target.exists());
 }
 
 #[cfg(unix)]
