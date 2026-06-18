@@ -3,10 +3,11 @@
 use radroots_sdk::{
     BackupRequest, IntegrityRequest, RadrootsSdk, RadrootsSdkClock, RadrootsSdkError,
     RadrootsSdkErrorClass, RadrootsSdkRecoveryAction, RadrootsSdkStorageConfig,
-    RadrootsSdkTimestamp, SDK_IDEMPOTENCY_KEY_MAX_LEN, SDK_RELAY_TARGET_MAX_COUNT, SdkBackupState,
-    SdkBackupVerification, SdkEventStoreStorageStatus, SdkIdempotencyKey, SdkOutboxStorageStatus,
-    SdkRelayTargetPolicy, SdkRelayTargetSet, SdkRelayUrlPolicy, SdkSqliteStoreStatus,
-    SdkStorageKind, StorageStatusReceipt, StorageStatusRequest,
+    RadrootsSdkTimestamp, RestoreRequest, SDK_IDEMPOTENCY_KEY_MAX_LEN, SDK_RELAY_TARGET_MAX_COUNT,
+    SdkBackupState, SdkBackupVerification, SdkEventStoreStorageStatus, SdkIdempotencyKey,
+    SdkOutboxStorageStatus, SdkRelayTargetPolicy, SdkRelayTargetSet, SdkRelayUrlPolicy,
+    SdkRestoreState, SdkSqliteStoreStatus, SdkStorageKind, StorageStatusReceipt,
+    StorageStatusRequest,
 };
 use std::path::PathBuf;
 
@@ -633,6 +634,25 @@ fn storage_backup_and_integrity_contract_dtos_serialize() {
     assert_eq!(
         serde_json::to_value(SdkBackupState::Completed).expect("backup state"),
         serde_json::json!("completed")
+    );
+    assert_eq!(
+        serde_json::to_value(
+            RestoreRequest::new("backup")
+                .with_destination("sdk-runtime")
+                .with_overwrite(true)
+                .with_dry_run(true)
+        )
+        .expect("restore request"),
+        serde_json::json!({
+            "source": "backup",
+            "destination": "sdk-runtime",
+            "overwrite": true,
+            "dry_run": true
+        })
+    );
+    assert_eq!(
+        serde_json::to_value(SdkRestoreState::Validated).expect("restore state"),
+        serde_json::json!("validated")
     );
     assert_eq!(
         serde_json::to_value(SdkBackupVerification {

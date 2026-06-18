@@ -107,7 +107,8 @@ Runtime request DTOs are constructor-led and marked non-exhaustive where they
 carry public fields: `ListingPreparePublishRequest`,
 `ListingEnqueuePublishRequest`, `OrderStatusRequest`, `StorageStatusRequest`,
 `BackupRequest`, `IntegrityRequest`, `SyncStatusRequest`, and
-`PushOutboxRequest`. Use `new`, `parse`, `default`, and `with_*` methods rather
+`PushOutboxRequest`. Restore uses the same request posture through
+`RestoreRequest`. Use `new`, `parse`, `default`, and `with_*` methods rather
 than struct literals.
 
 Runtime enums that may gain variants are non-exhaustive. This includes storage,
@@ -116,4 +117,5 @@ push-outbox state or outcome enums.
 
 Runtime receipts and status records expose stable serialized public fields for
 CLI and local-runtime reporting. Future additive reporting should preserve
-serde compatibility for existing fields.
+serde compatibility for existing fields. Restore archive and receipt records
+follow that same stable serialized-field stance.

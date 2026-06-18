@@ -26,10 +26,11 @@ use radroots_sdk::{
     PUSH_OUTBOX_DEFAULT_CLAIM_TTL_MS, PUSH_OUTBOX_DEFAULT_LIMIT,
     PUSH_OUTBOX_DEFAULT_NEXT_ATTEMPT_DELAY_MS, PUSH_OUTBOX_MAX_LIMIT, PushOutboxEventReceipt,
     PushOutboxEventState, PushOutboxReceipt, PushOutboxRelayOutcomeKind, PushOutboxRelayReceipt,
-    PushOutboxRequest, RadrootsSdk, RadrootsSdkError, RadrootsSdkTimestamp, SdkRelayAuthPolicy,
-    SdkRelayTargetPolicy, SdkRelayUrlPolicy, StorageStatusRequest, SyncStatusRequest,
-    SyncStatusSource,
+    PushOutboxRequest, RadrootsSdk, RadrootsSdkError, RadrootsSdkTimestamp, SdkBackupManifestKind,
+    SdkRelayAuthPolicy, SdkRelayTargetPolicy, SdkRelayUrlPolicy, StorageStatusRequest,
+    SyncStatusRequest, SyncStatusSource,
 };
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -431,11 +432,40 @@ async fn sdk_directory_backup_creates_verified_canonical_store_copy() {
     assert!(event_store_path.exists());
     assert!(outbox_path.exists());
     assert!(manifest_path.exists());
+    assert_eq!(
+        backup.manifest.manifest_kind,
+        SdkBackupManifestKind::StorageBackup
+    );
+    assert_eq!(
+        backup.manifest.backup_paths.event_store_path,
+        PathBuf::from("event_store.sqlite")
+    );
+    assert_eq!(
+        backup.manifest.backup_paths.outbox_path,
+        PathBuf::from("outbox.sqlite")
+    );
     assert_eq!(backup.manifest.created_at_ms, 1_700_000_000_000);
     assert_eq!(backup.manifest.source_status.event_store.total_events, 1);
     assert_eq!(backup.manifest.source_status.outbox.total_events, 1);
     assert!(backup.manifest.backup_verification.event_store_ok);
     assert!(backup.manifest.backup_verification.outbox_ok);
+
+    let restore_archive = RadrootsSdk::inspect_restore_archive(backup_destination.clone())
+        .await
+        .expect("restore archive");
+    assert_eq!(restore_archive.manifest, backup.manifest);
+    assert_eq!(
+        restore_archive.verification,
+        backup.manifest.backup_verification
+    );
+    assert_eq!(
+        restore_archive.event_store_path,
+        event_store_path.canonicalize().expect("event canonical")
+    );
+    assert_eq!(
+        restore_archive.outbox_path,
+        outbox_path.canonicalize().expect("outbox canonical")
+    );
 
     let backup_event_store = RadrootsEventStore::open_file(event_store_path)
         .await
@@ -478,6 +508,96 @@ async fn sdk_directory_backup_creates_verified_canonical_store_copy() {
     sdk.backup(BackupRequest::new(backup_destination).with_overwrite(true))
         .await
         .expect("overwrite backup");
+}
+
+#[tokio::test]
+async fn sdk_restore_archive_rejects_missing_manifest() {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let source = tempdir.path().join("backup");
+    std::fs::create_dir(&source).expect("source");
+
+    let error = RadrootsSdk::inspect_restore_archive(source)
+        .await
+        .expect_err("missing manifest");
+    assert!(matches!(error, RadrootsSdkError::Io { .. }));
+}
+
+#[tokio::test]
+async fn sdk_restore_archive_rejects_malformed_manifest() {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let source = tempdir.path().join("backup");
+    std::fs::create_dir(&source).expect("source");
+    std::fs::write(source.join("manifest.json"), b"{not json").expect("manifest");
+
+    let error = RadrootsSdk::inspect_restore_archive(source)
+        .await
+        .expect_err("malformed manifest");
+    assert!(matches!(error, RadrootsSdkError::InvalidRequest { .. }));
+}
+
+#[tokio::test]
+async fn sdk_restore_archive_rejects_traversal_backup_paths() {
+    let (tempdir, sdk) = directory_sdk(&[RELAY_A]).await;
+    enqueue_listing(&sdk, LISTING_A_D_TAG, "Backup Coffee", &[RELAY_A]).await;
+    let source = tempdir.path().join("backup");
+    sdk.backup(BackupRequest::new(source.clone()))
+        .await
+        .expect("backup");
+
+    let manifest_path = source.join("manifest.json");
+    let mut manifest: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&manifest_path).expect("read manifest"))
+            .expect("manifest json");
+    manifest["backup_paths"]["event_store_path"] = serde_json::json!("../event_store.sqlite");
+    std::fs::write(
+        &manifest_path,
+        serde_json::to_vec_pretty(&manifest).expect("manifest bytes"),
+    )
+    .expect("write manifest");
+
+    let error = RadrootsSdk::inspect_restore_archive(source)
+        .await
+        .expect_err("traversal path");
+    assert!(matches!(error, RadrootsSdkError::InvalidRequest { .. }));
+}
+
+#[tokio::test]
+async fn sdk_restore_archive_rejects_corrupt_store() {
+    let (tempdir, sdk) = directory_sdk(&[RELAY_A]).await;
+    enqueue_listing(&sdk, LISTING_A_D_TAG, "Backup Coffee", &[RELAY_A]).await;
+    let source = tempdir.path().join("backup");
+    sdk.backup(BackupRequest::new(source.clone()))
+        .await
+        .expect("backup");
+    std::fs::write(source.join("event_store.sqlite"), b"not sqlite").expect("corrupt store");
+
+    let error = RadrootsSdk::inspect_restore_archive(source)
+        .await
+        .expect_err("corrupt store");
+    assert!(matches!(
+        error,
+        RadrootsSdkError::EventStore { .. } | RadrootsSdkError::InvalidRequest { .. }
+    ));
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn sdk_restore_archive_rejects_symlink_store_member() {
+    let (tempdir, sdk) = directory_sdk(&[RELAY_A]).await;
+    enqueue_listing(&sdk, LISTING_A_D_TAG, "Backup Coffee", &[RELAY_A]).await;
+    let source = tempdir.path().join("backup");
+    sdk.backup(BackupRequest::new(source.clone()))
+        .await
+        .expect("backup");
+    let event_store_path = source.join("event_store.sqlite");
+    let target = tempdir.path().join("sdk").join("event_store.sqlite");
+    std::fs::remove_file(&event_store_path).expect("remove backup event store");
+    std::os::unix::fs::symlink(target, &event_store_path).expect("symlink");
+
+    let error = RadrootsSdk::inspect_restore_archive(source)
+        .await
+        .expect_err("symlink member");
+    assert!(matches!(error, RadrootsSdkError::InvalidRequest { .. }));
 }
 
 #[cfg(unix)]

@@ -13,12 +13,14 @@ use sqlx::{Row, SqlitePool};
 use std::{
     fs,
     io::ErrorKind,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
 
 #[cfg(feature = "runtime")]
 const SDK_STORAGE_MANIFEST_VERSION: u16 = 1;
+#[cfg(feature = "runtime")]
+const SDK_STORAGE_MANIFEST_KIND: SdkBackupManifestKind = SdkBackupManifestKind::StorageBackup;
 #[cfg(feature = "runtime")]
 const SDK_EVENT_STORE_SCHEMA_VERSION: i64 = 1;
 #[cfg(feature = "runtime")]
@@ -96,14 +98,14 @@ impl RadrootsSdkClock {
 }
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RadrootsSdkStoragePaths {
     pub event_store_path: PathBuf,
     pub outbox_path: PathBuf,
 }
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[non_exhaustive]
 pub struct StorageStatusRequest {}
 
@@ -115,7 +117,7 @@ impl StorageStatusRequest {
 }
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct StorageStatusReceipt {
     pub storage: SdkStorageKind,
     pub paths: Option<RadrootsSdkStoragePaths>,
@@ -124,7 +126,7 @@ pub struct StorageStatusReceipt {
 }
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum SdkStorageKind {
@@ -133,7 +135,7 @@ pub enum SdkStorageKind {
 }
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SdkSqliteStoreStatus {
     pub schema_version: i64,
     pub journal_mode: String,
@@ -144,7 +146,7 @@ pub struct SdkSqliteStoreStatus {
 }
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SdkEventStoreStorageStatus {
     pub store: SdkSqliteStoreStatus,
     pub total_events: i64,
@@ -155,7 +157,7 @@ pub struct SdkEventStoreStorageStatus {
 }
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SdkOutboxStorageStatus {
     pub store: SdkSqliteStoreStatus,
     pub total_events: i64,
@@ -170,7 +172,7 @@ pub struct SdkOutboxStorageStatus {
 }
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[non_exhaustive]
 pub struct BackupRequest {
     pub destination: PathBuf,
@@ -193,7 +195,7 @@ impl BackupRequest {
 }
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct BackupReceipt {
     pub destination: PathBuf,
     pub state: SdkBackupState,
@@ -204,7 +206,7 @@ pub struct BackupReceipt {
 }
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum SdkBackupState {
@@ -213,10 +215,19 @@ pub enum SdkBackupState {
 }
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum SdkBackupManifestKind {
+    StorageBackup,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SdkBackupManifest {
+    pub manifest_kind: SdkBackupManifestKind,
     pub manifest_version: u16,
-    pub sdk_version: &'static str,
+    pub sdk_version: String,
     pub created_at_ms: i64,
     pub source_storage: SdkStorageKind,
     pub source_paths: Option<RadrootsSdkStoragePaths>,
@@ -226,7 +237,7 @@ pub struct SdkBackupManifest {
 }
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SdkBackupVerification {
     pub event_store_ok: bool,
     pub outbox_ok: bool,
@@ -235,7 +246,7 @@ pub struct SdkBackupVerification {
 }
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[non_exhaustive]
 pub struct IntegrityRequest {}
 
@@ -247,13 +258,85 @@ impl IntegrityRequest {
 }
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct IntegrityReceipt {
     pub checked_paths: Vec<PathBuf>,
     pub event_store_ok: bool,
     pub outbox_ok: bool,
     pub event_store_result: String,
     pub outbox_result: String,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[non_exhaustive]
+pub struct RestoreRequest {
+    pub source: PathBuf,
+    pub destination: Option<PathBuf>,
+    pub overwrite: bool,
+    pub dry_run: bool,
+}
+
+#[cfg(feature = "runtime")]
+impl RestoreRequest {
+    pub fn new(source: impl Into<PathBuf>) -> Self {
+        Self {
+            source: source.into(),
+            destination: None,
+            overwrite: false,
+            dry_run: false,
+        }
+    }
+
+    pub fn with_destination(mut self, destination: impl Into<PathBuf>) -> Self {
+        self.destination = Some(destination.into());
+        self
+    }
+
+    pub fn with_overwrite(mut self, overwrite: bool) -> Self {
+        self.overwrite = overwrite;
+        self
+    }
+
+    pub fn with_dry_run(mut self, dry_run: bool) -> Self {
+        self.dry_run = dry_run;
+        self
+    }
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum SdkRestoreState {
+    Validated,
+    DryRun,
+    Completed,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct RestoreArchive {
+    pub source: PathBuf,
+    pub event_store_path: PathBuf,
+    pub outbox_path: PathBuf,
+    pub manifest_path: PathBuf,
+    pub manifest: SdkBackupManifest,
+    pub verification: SdkBackupVerification,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct RestoreReceipt {
+    pub source: PathBuf,
+    pub destination: Option<PathBuf>,
+    pub state: SdkRestoreState,
+    pub event_store_path: PathBuf,
+    pub outbox_path: PathBuf,
+    pub manifest_path: PathBuf,
+    pub manifest: SdkBackupManifest,
+    pub verification: SdkBackupVerification,
+    pub restored_paths: Option<RadrootsSdkStoragePaths>,
 }
 
 #[cfg(feature = "runtime")]
@@ -441,6 +524,10 @@ impl RadrootsSdk {
             event_store_path: request.destination.join(EVENT_STORE_BACKUP_FILE),
             outbox_path: request.destination.join(OUTBOX_BACKUP_FILE),
         };
+        let manifest_backup_paths = RadrootsSdkStoragePaths {
+            event_store_path: PathBuf::from(EVENT_STORE_BACKUP_FILE),
+            outbox_path: PathBuf::from(OUTBOX_BACKUP_FILE),
+        };
         let manifest_path = request.destination.join(BACKUP_MANIFEST_FILE);
         let source_status = self.storage_status(StorageStatusRequest::new()).await?;
         sqlite_vacuum_into(
@@ -452,12 +539,13 @@ impl RadrootsSdk {
         sqlite_vacuum_into(self._outbox.pool(), &backup_paths.outbox_path, "outbox").await?;
         let backup_verification = verify_backup_paths(&backup_paths).await?;
         let manifest = SdkBackupManifest {
+            manifest_kind: SDK_STORAGE_MANIFEST_KIND,
             manifest_version: SDK_STORAGE_MANIFEST_VERSION,
-            sdk_version: env!("CARGO_PKG_VERSION"),
+            sdk_version: env!("CARGO_PKG_VERSION").to_owned(),
             created_at_ms: sdk_now_ms(self)?,
             source_storage: self.storage_kind(),
             source_paths: self.storage_paths.clone(),
-            backup_paths: backup_paths.clone(),
+            backup_paths: manifest_backup_paths,
             source_status,
             backup_verification,
         };
@@ -487,6 +575,12 @@ impl RadrootsSdk {
             SdkStorageKind::Memory
         }
     }
+
+    pub async fn inspect_restore_archive(
+        source: impl Into<PathBuf>,
+    ) -> Result<RestoreArchive, RadrootsSdkError> {
+        inspect_restore_archive(source.into()).await
+    }
 }
 
 #[cfg(feature = "runtime")]
@@ -496,6 +590,172 @@ pub(crate) fn sdk_now_ms(sdk: &RadrootsSdk) -> Result<i64, RadrootsSdkError> {
         .checked_mul(1_000)
         .ok_or(RadrootsSdkError::TimestampOutOfRange { value: seconds })?;
     i64::try_from(millis).map_err(|_| RadrootsSdkError::TimestampOutOfRange { value: seconds })
+}
+
+#[cfg(feature = "runtime")]
+async fn inspect_restore_archive(source: PathBuf) -> Result<RestoreArchive, RadrootsSdkError> {
+    if source.as_os_str().is_empty() {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: "restore source must not be empty".to_owned(),
+        });
+    }
+    let source_root = canonical_restore_directory(&source)?;
+    let manifest_path = source.join(BACKUP_MANIFEST_FILE);
+    let manifest_path = validate_restore_member_path(&source_root, &manifest_path, "manifest")?;
+    let manifest_json = fs::read(&manifest_path).map_err(|error| RadrootsSdkError::Io {
+        path: manifest_path.clone(),
+        message: error.to_string(),
+    })?;
+    let manifest: SdkBackupManifest = serde_json::from_slice(&manifest_json).map_err(|error| {
+        RadrootsSdkError::InvalidRequest {
+            message: format!("restore manifest is invalid JSON: {error}"),
+        }
+    })?;
+    validate_restore_manifest(&manifest)?;
+    let event_store_path = restore_archive_member_path(
+        &source_root,
+        &manifest.backup_paths.event_store_path,
+        "event store",
+    )?;
+    let outbox_path =
+        restore_archive_member_path(&source_root, &manifest.backup_paths.outbox_path, "outbox")?;
+    let verification = verify_backup_paths(&RadrootsSdkStoragePaths {
+        event_store_path: event_store_path.clone(),
+        outbox_path: outbox_path.clone(),
+    })
+    .await?;
+    validate_restore_verification(&verification, &manifest.backup_verification)?;
+    Ok(RestoreArchive {
+        source,
+        event_store_path,
+        outbox_path,
+        manifest_path,
+        manifest,
+        verification,
+    })
+}
+
+#[cfg(feature = "runtime")]
+fn canonical_restore_directory(path: &Path) -> Result<PathBuf, RadrootsSdkError> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            Err(RadrootsSdkError::InvalidRequest {
+                message: "restore source must not be a symbolic link".to_owned(),
+            })
+        }
+        Ok(metadata) if metadata.is_dir() => {
+            fs::canonicalize(path).map_err(|error| RadrootsSdkError::Io {
+                path: path.to_path_buf(),
+                message: error.to_string(),
+            })
+        }
+        Ok(_) => Err(RadrootsSdkError::InvalidRequest {
+            message: "restore source must be a directory".to_owned(),
+        }),
+        Err(error) => Err(RadrootsSdkError::Io {
+            path: path.to_path_buf(),
+            message: error.to_string(),
+        }),
+    }
+}
+
+#[cfg(feature = "runtime")]
+fn validate_restore_member_path(
+    source_root: &Path,
+    path: &Path,
+    label: &'static str,
+) -> Result<PathBuf, RadrootsSdkError> {
+    let metadata = fs::symlink_metadata(path).map_err(|error| RadrootsSdkError::Io {
+        path: path.to_path_buf(),
+        message: error.to_string(),
+    })?;
+    if metadata.file_type().is_symlink() {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: format!("restore {label} must not be a symbolic link"),
+        });
+    }
+    if !metadata.is_file() {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: format!("restore {label} must be a regular file"),
+        });
+    }
+    let canonical_path = fs::canonicalize(path).map_err(|error| RadrootsSdkError::Io {
+        path: path.to_path_buf(),
+        message: error.to_string(),
+    })?;
+    if !canonical_path.starts_with(source_root) {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: format!("restore {label} must stay inside the backup directory"),
+        });
+    }
+    Ok(canonical_path)
+}
+
+#[cfg(feature = "runtime")]
+fn restore_archive_member_path(
+    source_root: &Path,
+    archive_path: &Path,
+    label: &'static str,
+) -> Result<PathBuf, RadrootsSdkError> {
+    validate_relative_archive_path(archive_path, label)?;
+    validate_restore_member_path(source_root, &source_root.join(archive_path), label)
+}
+
+#[cfg(feature = "runtime")]
+fn validate_relative_archive_path(
+    path: &Path,
+    label: &'static str,
+) -> Result<(), RadrootsSdkError> {
+    if path.as_os_str().is_empty() {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: format!("restore {label} archive path must not be empty"),
+        });
+    }
+    if path
+        .components()
+        .any(|component| !matches!(component, Component::Normal(_)))
+    {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: format!("restore {label} archive path must be relative and contained"),
+        });
+    }
+    Ok(())
+}
+
+#[cfg(feature = "runtime")]
+fn validate_restore_manifest(manifest: &SdkBackupManifest) -> Result<(), RadrootsSdkError> {
+    if manifest.manifest_kind != SDK_STORAGE_MANIFEST_KIND {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: "restore manifest kind is unsupported".to_owned(),
+        });
+    }
+    if manifest.manifest_version != SDK_STORAGE_MANIFEST_VERSION {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: format!(
+                "restore manifest version {} is unsupported",
+                manifest.manifest_version
+            ),
+        });
+    }
+    Ok(())
+}
+
+#[cfg(feature = "runtime")]
+fn validate_restore_verification(
+    actual: &SdkBackupVerification,
+    manifest: &SdkBackupVerification,
+) -> Result<(), RadrootsSdkError> {
+    if !actual.event_store_ok || !actual.outbox_ok {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: "restore backup stores failed integrity checks".to_owned(),
+        });
+    }
+    if actual != manifest {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: "restore backup verification does not match manifest".to_owned(),
+        });
+    }
+    Ok(())
 }
 
 #[cfg(feature = "runtime")]
