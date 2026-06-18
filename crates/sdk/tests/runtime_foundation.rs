@@ -444,7 +444,15 @@ fn sdk_error_contract_methods_cover_all_variants() {
         assert_eq!(error.recovery_actions(), recovery_actions);
         let detail = error.detail_json();
         assert_eq!(detail["code"], code);
+        assert_eq!(
+            detail["class"],
+            serde_json::to_value(class).expect("class json")
+        );
         assert_eq!(detail["retryable"], retryable);
+        assert_eq!(
+            detail["recovery_actions"],
+            serde_json::to_value(&recovery_actions).expect("recovery actions json")
+        );
         assert!(detail["message"].is_string());
         assert!(detail["detail"].is_object());
     }

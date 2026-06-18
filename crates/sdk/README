@@ -96,3 +96,7 @@ The crate is licensed as `MIT OR Apache-2.0`. Its manifest is configured for a
 future crates.io release, but a public release still requires the full SDK check
 lane, generated artifact reproducibility checks, metadata review, and a publish
 dry run.
+
+Runtime errors use a non-exhaustive `RadrootsSdkError` enum. Public callers
+should branch on the stable method surface: `code`, `class`, `retryable`,
+`detail_json`, and `recovery_actions`.

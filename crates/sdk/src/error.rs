@@ -57,6 +57,7 @@ pub struct RadrootsSdkPartialLocalMutationError {
 
 #[cfg(feature = "runtime")]
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum RadrootsSdkError {
     Io {
         path: PathBuf,
