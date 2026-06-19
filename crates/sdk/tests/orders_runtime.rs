@@ -439,6 +439,25 @@ async fn order_submit_enqueue_stores_event_queues_outbox_and_status_sees_request
         receipt.workflow.idempotency_digest_prefix,
         receipt.idempotency_digest_prefix
     );
+    assert_eq!(
+        receipt.workflow.idempotency.digest_prefix,
+        receipt.idempotency_digest_prefix
+    );
+    assert!(!receipt.workflow.idempotency.replayed_existing_operation);
+    assert!(
+        receipt
+            .workflow
+            .idempotency
+            .safe_to_retry_with_same_idempotency_key
+    );
+    assert!(!receipt.workflow.retry.retryable_after_error);
+    assert!(
+        receipt
+            .workflow
+            .retry
+            .safe_to_retry_enqueue_with_same_idempotency_key
+    );
+    assert!(receipt.workflow.retry.recovery_actions.is_empty());
     assert_eq!(receipt.expected_event_id, prepared.expected_event_id);
     assert_eq!(receipt.signed_event_id, receipt.expected_event_id);
     assert_eq!(receipt.local_event_seq, 1);
@@ -584,6 +603,32 @@ async fn order_submit_enqueue_derives_order_independent_idempotency_key() {
         second_receipt.idempotency_digest_prefix
     );
     assert_eq!(second_receipt.state, SdkMutationState::AlreadyQueued);
+    assert!(
+        !first_receipt
+            .workflow
+            .idempotency
+            .replayed_existing_operation
+    );
+    assert!(
+        second_receipt
+            .workflow
+            .idempotency
+            .replayed_existing_operation
+    );
+    assert!(
+        second_receipt
+            .workflow
+            .idempotency
+            .safe_to_retry_with_same_idempotency_key
+    );
+    assert!(
+        second_receipt
+            .workflow
+            .retry
+            .safe_to_retry_enqueue_with_same_idempotency_key
+    );
+    assert!(!second_receipt.workflow.retry.retryable_after_error);
+    assert!(second_receipt.workflow.retry.recovery_actions.is_empty());
 
     let paths = sdk.storage_paths().expect("paths");
     let outbox = RadrootsOutbox::open_file(&paths.outbox_path)
@@ -702,6 +747,18 @@ async fn order_submit_enqueue_reports_partial_local_mutation_after_outbox_confli
                 && partial.failure == RadrootsSdkPartialLocalMutationFailure::OutboxIdempotencyConflict
                 && partial.recovery == RadrootsSdkRecoveryAction::RetryOperationWithSameIdempotencyKey
     ));
+    assert!(error.retryable());
+    assert_eq!(
+        error.recovery_actions(),
+        vec![RadrootsSdkRecoveryAction::RetryOperationWithSameIdempotencyKey]
+    );
+    let detail = error.detail_json();
+    assert_eq!(detail["code"], "partial_local_mutation");
+    assert_eq!(detail["retryable"], true);
+    assert_eq!(
+        detail["recovery_actions"],
+        serde_json::json!(["retry_operation_with_same_idempotency_key"])
+    );
     assert!(
         !error
             .to_string()
@@ -802,7 +859,17 @@ async fn order_submit_runtime_dtos_serialize_deterministically() {
                 "outbox_operation_id": 1,
                 "outbox_event_id": 1,
                 "state": "stored_and_queued",
-                "idempotency_digest_prefix": receipt.workflow.idempotency_digest_prefix.as_deref()
+                "idempotency_digest_prefix": receipt.workflow.idempotency_digest_prefix.as_deref(),
+                "idempotency": {
+                    "digest_prefix": receipt.workflow.idempotency.digest_prefix.as_deref(),
+                    "replayed_existing_operation": false,
+                    "safe_to_retry_with_same_idempotency_key": true
+                },
+                "retry": {
+                    "retryable_after_error": false,
+                    "safe_to_retry_enqueue_with_same_idempotency_key": true,
+                    "recovery_actions": []
+                }
             },
             "order_id": receipt.order_id.as_str(),
             "listing_addr": receipt.listing_addr.as_str(),
@@ -1433,6 +1500,14 @@ async fn order_decision_runtime_dtos_serialize_deterministically() {
         receipt.workflow.idempotency_digest_prefix,
         receipt.idempotency_digest_prefix
     );
+    assert!(
+        receipt
+            .workflow
+            .idempotency
+            .safe_to_retry_with_same_idempotency_key
+    );
+    assert!(!receipt.workflow.retry.retryable_after_error);
+    assert!(receipt.workflow.retry.recovery_actions.is_empty());
     let receipt_json = serde_json::to_value(&receipt).expect("receipt json");
 
     assert_eq!(
@@ -1447,7 +1522,17 @@ async fn order_decision_runtime_dtos_serialize_deterministically() {
                 "outbox_operation_id": 1,
                 "outbox_event_id": 1,
                 "state": "stored_and_queued",
-                "idempotency_digest_prefix": receipt.workflow.idempotency_digest_prefix.as_deref()
+                "idempotency_digest_prefix": receipt.workflow.idempotency_digest_prefix.as_deref(),
+                "idempotency": {
+                    "digest_prefix": receipt.workflow.idempotency.digest_prefix.as_deref(),
+                    "replayed_existing_operation": false,
+                    "safe_to_retry_with_same_idempotency_key": true
+                },
+                "retry": {
+                    "retryable_after_error": false,
+                    "safe_to_retry_enqueue_with_same_idempotency_key": true,
+                    "recovery_actions": []
+                }
             },
             "order_id": receipt.order_id.as_str(),
             "listing_addr": receipt.listing_addr.as_str(),

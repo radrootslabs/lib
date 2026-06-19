@@ -1,7 +1,7 @@
 #[cfg(feature = "runtime")]
 use crate::{
-    OrdersClient, RadrootsSdkError, RadrootsSdkTimestamp, SdkIdempotencyKey, SdkMutationState,
-    SdkRelayTargetPolicy, SdkRelayUrlPolicy,
+    OrdersClient, RadrootsSdkError, RadrootsSdkRecoveryAction, RadrootsSdkTimestamp,
+    SdkIdempotencyKey, SdkMutationState, SdkRelayTargetPolicy, SdkRelayUrlPolicy,
     actor_json::SdkActorContextJson,
     order,
     workflow_runtime::{SdkWorkflowEnqueueRequest, enqueue_signed_workflow},
@@ -143,6 +143,24 @@ pub struct OrderWorkflowEnqueueReceipt {
     pub outbox_event_id: i64,
     pub state: SdkMutationState,
     pub idempotency_digest_prefix: Option<String>,
+    pub idempotency: OrderWorkflowIdempotencyReceipt,
+    pub retry: OrderWorkflowRetryAdvice,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct OrderWorkflowIdempotencyReceipt {
+    pub digest_prefix: Option<String>,
+    pub replayed_existing_operation: bool,
+    pub safe_to_retry_with_same_idempotency_key: bool,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct OrderWorkflowRetryAdvice {
+    pub retryable_after_error: bool,
+    pub safe_to_retry_enqueue_with_same_idempotency_key: bool,
+    pub recovery_actions: Vec<RadrootsSdkRecoveryAction>,
 }
 
 #[cfg(feature = "runtime")]
@@ -3228,6 +3246,10 @@ fn order_workflow_enqueue_receipt(
     expected_event_id: RadrootsEventId,
     enqueue: &crate::workflow_runtime::SdkWorkflowEnqueueReceipt,
 ) -> OrderWorkflowEnqueueReceipt {
+    let state = SdkMutationState::from(enqueue.state);
+    let digest_prefix = Some(enqueue.idempotency_digest_prefix.clone());
+    let safe_retry_same_key = true;
+    let replayed_existing_operation = state == SdkMutationState::AlreadyQueued;
     OrderWorkflowEnqueueReceipt {
         kind,
         operation_kind: kind.operation_kind(),
@@ -3236,8 +3258,18 @@ fn order_workflow_enqueue_receipt(
         local_event_seq: enqueue.local_event_seq,
         outbox_operation_id: enqueue.outbox_operation_id,
         outbox_event_id: enqueue.outbox_event_id,
-        state: enqueue.state.into(),
-        idempotency_digest_prefix: Some(enqueue.idempotency_digest_prefix.clone()),
+        state,
+        idempotency_digest_prefix: digest_prefix.clone(),
+        idempotency: OrderWorkflowIdempotencyReceipt {
+            digest_prefix,
+            replayed_existing_operation,
+            safe_to_retry_with_same_idempotency_key: safe_retry_same_key,
+        },
+        retry: OrderWorkflowRetryAdvice {
+            retryable_after_error: false,
+            safe_to_retry_enqueue_with_same_idempotency_key: safe_retry_same_key,
+            recovery_actions: Vec::new(),
+        },
     }
 }
 
