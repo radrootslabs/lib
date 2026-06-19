@@ -702,6 +702,7 @@ pub struct RadrootsOrderProjection {
     pub payment: RadrootsOrderPaymentProjection,
     pub economics: Option<RadrootsOrderEconomics>,
     pub agreement_event_id: Option<RadrootsEventId>,
+    pub pending_revision_event_id: Option<RadrootsEventId>,
     pub listing_addr: Option<RadrootsListingAddress>,
     pub buyer_pubkey: Option<RadrootsPublicKey>,
     pub seller_pubkey: Option<RadrootsPublicKey>,
@@ -970,6 +971,7 @@ fn reduce_grouped_order_event_records(
             payment: RadrootsOrderPaymentProjection::not_recorded(),
             economics: None,
             agreement_event_id: None,
+            pending_revision_event_id: None,
             listing_addr: None,
             buyer_pubkey: None,
             seller_pubkey: None,
@@ -3268,6 +3270,7 @@ fn requested_projection(
         payment: RadrootsOrderPaymentProjection::not_recorded(),
         economics: Some(request.payload.economics.clone()),
         agreement_event_id: None,
+        pending_revision_event_id: None,
         listing_addr: Some(request.payload.listing_addr.clone()),
         buyer_pubkey: Some(request.payload.buyer_pubkey.clone()),
         seller_pubkey: Some(request.payload.seller_pubkey.clone()),
@@ -3336,6 +3339,7 @@ fn decided_projection(
         fulfillment_status,
         last_event_id,
         agreement_event_id,
+        pending_revision_event_id,
         economics,
         payment,
     ) = match status {
@@ -3519,6 +3523,7 @@ fn decided_projection(
                 fulfillment_status,
                 last_event_id,
                 Some(revision_state.agreement_event_id),
+                revision_state.pending_revision_event_id,
                 Some(revision_state.economics),
                 projection_payment,
             )
@@ -3541,6 +3546,7 @@ fn decided_projection(
                     Some(decision.event_id.clone()),
                     None,
                     None,
+                    None,
                     RadrootsOrderPaymentProjection::not_recorded(),
                 )
             } else {
@@ -3559,6 +3565,7 @@ fn decided_projection(
             None,
             None,
             Some(decision.event_id.clone()),
+            None,
             None,
             None,
             RadrootsOrderPaymentProjection::not_recorded(),
@@ -3580,6 +3587,7 @@ fn decided_projection(
         payment,
         economics,
         agreement_event_id,
+        pending_revision_event_id,
         listing_addr: Some(request.payload.listing_addr.clone()),
         buyer_pubkey: Some(request.payload.buyer_pubkey.clone()),
         seller_pubkey: Some(request.payload.seller_pubkey.clone()),
@@ -3702,6 +3710,7 @@ fn cancelled_projection(
         payment: RadrootsOrderPaymentProjection::not_recorded(),
         economics: Some(economics),
         agreement_event_id,
+        pending_revision_event_id: None,
         listing_addr: Some(request.payload.listing_addr.clone()),
         buyer_pubkey: Some(request.payload.buyer_pubkey.clone()),
         seller_pubkey: Some(request.payload.seller_pubkey.clone()),
@@ -3740,6 +3749,7 @@ fn receipt_terminal_projection(
         payment: RadrootsOrderPaymentProjection::not_recorded(),
         economics: Some(economics.clone()),
         agreement_event_id: Some(agreement_event_id.clone()),
+        pending_revision_event_id: None,
         listing_addr: Some(request.payload.listing_addr.clone()),
         buyer_pubkey: Some(request.payload.buyer_pubkey.clone()),
         seller_pubkey: Some(request.payload.seller_pubkey.clone()),
@@ -3789,6 +3799,7 @@ fn invalid_projection_with_payment(
         payment,
         economics,
         agreement_event_id: None,
+        pending_revision_event_id: None,
         listing_addr: request.map(|request| request.payload.listing_addr.clone()),
         buyer_pubkey: request.map(|request| request.payload.buyer_pubkey.clone()),
         seller_pubkey: request.map(|request| request.payload.seller_pubkey.clone()),
@@ -5414,6 +5425,7 @@ mod tests {
             projection.economics,
             Some(request_economics("bin-1", 2, "10"))
         );
+        assert_eq!(projection.pending_revision_event_id, None);
     }
 
     #[test]
@@ -5445,6 +5457,7 @@ mod tests {
             projection.economics,
             Some(request_economics("bin-1", 2, "10"))
         );
+        assert_eq!(projection.pending_revision_event_id, None);
     }
 
     #[test]
@@ -5614,6 +5627,43 @@ mod tests {
             projection.economics,
             Some(request_economics("bin-1", 1, "5"))
         );
+        assert_eq!(projection.pending_revision_event_id, None);
+        assert!(projection.issues.is_empty());
+    }
+
+    #[test]
+    fn reduce_order_events_reports_pending_revision_proposal() {
+        let projection = reduce_order_events_with_revisions(
+            &order_id("order-1"),
+            [request_record()],
+            [accepted_decision_record("decision-1")],
+            [revision_proposal_record(
+                "revision-proposal-1",
+                "decision-1",
+                "revision-1",
+                1,
+            )],
+            Vec::<RadrootsOrderRevisionDecisionRecord>::new(),
+            Vec::<RadrootsOrderFulfillmentRecord>::new(),
+            Vec::<RadrootsOrderCancellationRecord>::new(),
+            Vec::<RadrootsOrderReceiptRecord>::new(),
+            Vec::<RadrootsOrderPaymentEventRecord>::new(),
+            Vec::<RadrootsOrderSettlementRecord>::new(),
+        );
+
+        assert_eq!(projection.status, RadrootsOrderStatus::Accepted);
+        assert_eq!(
+            projection.agreement_event_id.as_ref(),
+            Some(&test_event_id("decision-1"))
+        );
+        assert_eq!(
+            projection.last_event_id.as_ref(),
+            Some(&test_event_id("revision-proposal-1"))
+        );
+        assert_eq!(
+            projection.pending_revision_event_id.as_ref(),
+            Some(&test_event_id("revision-proposal-1"))
+        );
         assert!(projection.issues.is_empty());
     }
 
@@ -5657,6 +5707,59 @@ mod tests {
             projection.economics,
             Some(request_economics("bin-1", 2, "10"))
         );
+        assert_eq!(projection.pending_revision_event_id, None);
+        assert!(projection.issues.is_empty());
+    }
+
+    #[test]
+    fn reduce_order_events_continues_lifecycle_after_declined_revision() {
+        let projection = reduce_order_events_with_revisions(
+            &order_id("order-1"),
+            [request_record()],
+            [accepted_decision_record("decision-1")],
+            [revision_proposal_record(
+                "revision-proposal-1",
+                "decision-1",
+                "revision-1",
+                1,
+            )],
+            [revision_decision_record(
+                "revision-decision-1",
+                "revision-proposal-1",
+                "revision-1",
+                RadrootsOrderRevisionOutcome::Declined {
+                    reason: "keep original order".to_string(),
+                },
+            )],
+            [fulfillment_record(
+                "fulfillment-1",
+                "revision-decision-1",
+                RadrootsOrderFulfillmentState::ReadyForPickup,
+            )],
+            Vec::<RadrootsOrderCancellationRecord>::new(),
+            Vec::<RadrootsOrderReceiptRecord>::new(),
+            Vec::<RadrootsOrderPaymentEventRecord>::new(),
+            Vec::<RadrootsOrderSettlementRecord>::new(),
+        );
+
+        assert_eq!(projection.status, RadrootsOrderStatus::Accepted);
+        assert_eq!(
+            projection.agreement_event_id.as_ref(),
+            Some(&test_event_id("decision-1"))
+        );
+        assert_eq!(
+            projection.fulfillment_event_id.as_ref(),
+            Some(&test_event_id("fulfillment-1"))
+        );
+        assert_eq!(
+            projection.fulfillment_status,
+            Some(RadrootsOrderFulfillmentState::ReadyForPickup)
+        );
+        assert_eq!(
+            projection.last_event_id.as_ref(),
+            Some(&test_event_id("fulfillment-1"))
+        );
+        assert_eq!(projection.pending_revision_event_id, None);
         assert!(projection.issues.is_empty());
     }
 
