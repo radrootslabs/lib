@@ -1,17 +1,31 @@
 use core::fmt;
 use core::time::Duration;
 
-use crate::config::RadrootsdAuth;
 use crate::farm::RadrootsFarm;
 use crate::listing;
 use crate::listing::RadrootsListing;
-use crate::order;
 use crate::profile::{RadrootsProfile, RadrootsProfileType};
+use radroots_events::RadrootsNostrEvent;
 use radroots_events::kinds::KIND_LISTING;
-use radroots_events::{RadrootsNostrEvent, RadrootsNostrEventPtr};
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::{Value, json};
+
+#[derive(Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum RadrootsdAuth {
+    #[default]
+    None,
+    BearerToken(String),
+}
+
+impl fmt::Debug for RadrootsdAuth {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::None => f.write_str("None"),
+            Self::BearerToken(_) => f.write_str("BearerToken(<redacted>)"),
+        }
+    }
+}
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SdkRadrootsdSignerAuthority {
@@ -185,29 +199,6 @@ impl fmt::Debug for SdkRadrootsdListingPublishRequest {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Serialize)]
-pub(crate) struct SdkRadrootsdOrderRequestPublishRequest {
-    pub order: order::RadrootsOrderRequest,
-    pub listing_event: RadrootsNostrEventPtr,
-    pub signer_session_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub signer_authority: Option<SdkRadrootsdSignerAuthority>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub idempotency_key: Option<String>,
-}
-
-impl fmt::Debug for SdkRadrootsdOrderRequestPublishRequest {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut debug = f.debug_struct("SdkRadrootsdOrderRequestPublishRequest");
-        debug.field("order", &self.order);
-        debug.field("listing_event", &self.listing_event);
-        debug.field("signer_session_id", &"<redacted>");
-        debug.field("signer_authority", &self.signer_authority);
-        debug.field("idempotency_key", &self.idempotency_key);
-        debug.finish()
-    }
-}
-
 impl SdkRadrootsdListingPublishRequest {
     pub fn from_event(
         event: &RadrootsNostrEvent,
@@ -226,84 +217,6 @@ impl SdkRadrootsdListingPublishRequest {
             idempotency_key,
         })
     }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
-pub(crate) struct SdkRadrootsdSignerSessionConnectResponse {
-    pub session_id: String,
-    pub mode: SdkRadrootsdSignerSessionMode,
-    pub remote_signer_pubkey: String,
-    pub client_pubkey: String,
-    pub relays: Vec<String>,
-}
-
-#[derive(Clone, PartialEq, Eq, Deserialize)]
-pub(crate) struct SdkRadrootsdSignerSessionViewResponse {
-    pub session_id: String,
-    pub role: SdkRadrootsdSignerSessionRole,
-    pub client_pubkey: String,
-    pub signer_pubkey: String,
-    #[serde(default)]
-    pub user_pubkey: Option<String>,
-    pub relays: Vec<String>,
-    pub permissions: Vec<String>,
-    #[serde(default)]
-    pub name: Option<String>,
-    #[serde(default)]
-    pub url: Option<String>,
-    #[serde(default)]
-    pub image: Option<String>,
-    pub auth_required: bool,
-    pub authorized: bool,
-    #[serde(default)]
-    pub auth_url: Option<String>,
-    #[serde(default)]
-    pub expires_in_secs: Option<u64>,
-    #[serde(default)]
-    pub signer_authority: Option<SdkRadrootsdSignerAuthority>,
-}
-
-impl fmt::Debug for SdkRadrootsdSignerSessionViewResponse {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut debug = f.debug_struct("SdkRadrootsdSignerSessionViewResponse");
-        debug.field("session_id", &"<redacted>");
-        debug.field("role", &self.role);
-        debug.field("client_pubkey", &self.client_pubkey);
-        debug.field("signer_pubkey", &self.signer_pubkey);
-        debug.field("user_pubkey", &self.user_pubkey);
-        debug.field("relays", &self.relays);
-        debug.field("permissions", &self.permissions);
-        debug.field("name", &self.name);
-        debug.field("url", &self.url);
-        debug.field("image", &self.image);
-        debug.field("auth_required", &self.auth_required);
-        debug.field("authorized", &self.authorized);
-        debug.field("auth_url", &self.auth_url);
-        debug.field("expires_in_secs", &self.expires_in_secs);
-        debug.field("signer_authority", &self.signer_authority);
-        debug.finish()
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
-pub(crate) struct SdkRadrootsdSignerSessionAuthorizeResponse {
-    pub authorized: bool,
-    pub replayed: bool,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
-pub(crate) struct SdkRadrootsdSignerSessionPublicKeyResponse {
-    pub pubkey: String,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
-pub(crate) struct SdkRadrootsdSignerSessionRequireAuthResponse {
-    pub required: bool,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
-pub(crate) struct SdkRadrootsdSignerSessionCloseResponse {
-    pub closed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -491,22 +404,6 @@ struct JsonRpcError {
     message: String,
 }
 
-#[derive(Debug, Serialize)]
-struct SdkRadrootsdSignerSessionParams<'a> {
-    session_id: &'a str,
-}
-
-#[derive(Debug, Serialize)]
-struct SdkRadrootsdSignerSessionRequireAuthParams<'a> {
-    session_id: &'a str,
-    auth_url: &'a str,
-}
-
-#[derive(Debug, Serialize)]
-struct SdkRadrootsdBridgeJobParams<'a> {
-    job_id: &'a str,
-}
-
 pub async fn publish_listing(
     endpoint: &str,
     auth: &RadrootsdAuth,
@@ -519,228 +416,6 @@ pub async fn publish_listing(
         "radroots-sdk-listing-publish",
         "bridge.listing.publish",
         request,
-        timeout,
-    )
-    .await
-}
-
-pub(crate) async fn publish_profile(
-    endpoint: &str,
-    auth: &RadrootsdAuth,
-    request: &SdkRadrootsdProfilePublishRequest,
-    timeout: Duration,
-) -> Result<SdkRadrootsdBridgePublishResponse, RadrootsdError> {
-    jsonrpc_call(
-        endpoint,
-        auth,
-        "radroots-sdk-profile-publish",
-        "bridge.profile.publish",
-        request,
-        timeout,
-    )
-    .await
-}
-
-pub(crate) async fn publish_farm(
-    endpoint: &str,
-    auth: &RadrootsdAuth,
-    request: &SdkRadrootsdFarmPublishRequest,
-    timeout: Duration,
-) -> Result<SdkRadrootsdBridgePublishResponse, RadrootsdError> {
-    jsonrpc_call(
-        endpoint,
-        auth,
-        "radroots-sdk-farm-publish",
-        "bridge.farm.publish",
-        request,
-        timeout,
-    )
-    .await
-}
-
-pub(crate) async fn publish_order_request(
-    endpoint: &str,
-    auth: &RadrootsdAuth,
-    request: &SdkRadrootsdOrderRequestPublishRequest,
-    timeout: Duration,
-) -> Result<SdkRadrootsdBridgePublishResponse, RadrootsdError> {
-    jsonrpc_call(
-        endpoint,
-        auth,
-        "radroots-sdk-order-request-publish",
-        "bridge.order.request",
-        request,
-        timeout,
-    )
-    .await
-}
-
-pub(crate) async fn connect_signer_session(
-    endpoint: &str,
-    auth: &RadrootsdAuth,
-    request: &SdkRadrootsdSignerSessionConnectRequest,
-    timeout: Duration,
-) -> Result<SdkRadrootsdSignerSessionConnectResponse, RadrootsdError> {
-    jsonrpc_call(
-        endpoint,
-        auth,
-        "radroots-sdk-nip46-connect",
-        "nip46.connect",
-        request,
-        timeout,
-    )
-    .await
-}
-
-pub(crate) async fn signer_session_status(
-    endpoint: &str,
-    auth: &RadrootsdAuth,
-    session_id: &str,
-    timeout: Duration,
-) -> Result<SdkRadrootsdSignerSessionViewResponse, RadrootsdError> {
-    jsonrpc_call(
-        endpoint,
-        auth,
-        "radroots-sdk-nip46-session-status",
-        "nip46.session.status",
-        &SdkRadrootsdSignerSessionParams { session_id },
-        timeout,
-    )
-    .await
-}
-
-pub(crate) async fn list_signer_sessions(
-    endpoint: &str,
-    auth: &RadrootsdAuth,
-    timeout: Duration,
-) -> Result<Vec<SdkRadrootsdSignerSessionViewResponse>, RadrootsdError> {
-    jsonrpc_call(
-        endpoint,
-        auth,
-        "radroots-sdk-nip46-session-list",
-        "nip46.session.list",
-        &json!({}),
-        timeout,
-    )
-    .await
-}
-
-pub(crate) async fn authorize_signer_session(
-    endpoint: &str,
-    auth: &RadrootsdAuth,
-    session_id: &str,
-    timeout: Duration,
-) -> Result<SdkRadrootsdSignerSessionAuthorizeResponse, RadrootsdError> {
-    jsonrpc_call(
-        endpoint,
-        auth,
-        "radroots-sdk-nip46-session-authorize",
-        "nip46.session.authorize",
-        &SdkRadrootsdSignerSessionParams { session_id },
-        timeout,
-    )
-    .await
-}
-
-pub(crate) async fn get_signer_session_public_key(
-    endpoint: &str,
-    auth: &RadrootsdAuth,
-    session_id: &str,
-    timeout: Duration,
-) -> Result<SdkRadrootsdSignerSessionPublicKeyResponse, RadrootsdError> {
-    jsonrpc_call(
-        endpoint,
-        auth,
-        "radroots-sdk-nip46-get-public-key",
-        "nip46.get_public_key",
-        &SdkRadrootsdSignerSessionParams { session_id },
-        timeout,
-    )
-    .await
-}
-
-pub(crate) async fn require_signer_session_auth(
-    endpoint: &str,
-    auth: &RadrootsdAuth,
-    session_id: &str,
-    auth_url: &str,
-    timeout: Duration,
-) -> Result<SdkRadrootsdSignerSessionRequireAuthResponse, RadrootsdError> {
-    jsonrpc_call(
-        endpoint,
-        auth,
-        "radroots-sdk-nip46-session-require-auth",
-        "nip46.session.require_auth",
-        &SdkRadrootsdSignerSessionRequireAuthParams {
-            session_id,
-            auth_url,
-        },
-        timeout,
-    )
-    .await
-}
-
-pub(crate) async fn close_signer_session(
-    endpoint: &str,
-    auth: &RadrootsdAuth,
-    session_id: &str,
-    timeout: Duration,
-) -> Result<SdkRadrootsdSignerSessionCloseResponse, RadrootsdError> {
-    jsonrpc_call(
-        endpoint,
-        auth,
-        "radroots-sdk-nip46-session-close",
-        "nip46.session.close",
-        &SdkRadrootsdSignerSessionParams { session_id },
-        timeout,
-    )
-    .await
-}
-
-pub(crate) async fn bridge_status(
-    endpoint: &str,
-    auth: &RadrootsdAuth,
-    timeout: Duration,
-) -> Result<SdkRadrootsdBridgeStatusResponse, RadrootsdError> {
-    jsonrpc_call(
-        endpoint,
-        auth,
-        "radroots-sdk-bridge-status",
-        "bridge.status",
-        &json!({}),
-        timeout,
-    )
-    .await
-}
-
-pub(crate) async fn bridge_job_status(
-    endpoint: &str,
-    auth: &RadrootsdAuth,
-    job_id: &str,
-    timeout: Duration,
-) -> Result<SdkRadrootsdBridgeJobView, RadrootsdError> {
-    jsonrpc_call(
-        endpoint,
-        auth,
-        "radroots-sdk-bridge-job-status",
-        "bridge.job.status",
-        &SdkRadrootsdBridgeJobParams { job_id },
-        timeout,
-    )
-    .await
-}
-
-pub(crate) async fn list_bridge_jobs(
-    endpoint: &str,
-    auth: &RadrootsdAuth,
-    timeout: Duration,
-) -> Result<Vec<SdkRadrootsdBridgeJobView>, RadrootsdError> {
-    jsonrpc_call(
-        endpoint,
-        auth,
-        "radroots-sdk-bridge-job-list",
-        "bridge.job.list",
-        &json!({}),
         timeout,
     )
     .await

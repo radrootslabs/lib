@@ -13,8 +13,6 @@ mod actor_json;
     feature = "signer-adapters"
 ))]
 pub mod adapters;
-pub mod client;
-pub mod config;
 #[cfg(feature = "runtime")]
 mod error;
 mod farm;
@@ -43,29 +41,6 @@ mod sync_runtime;
 #[cfg(feature = "runtime")]
 mod workflow_runtime;
 
-pub use crate::client::{
-    FarmClient, ListingClient, ProfileClient, RadrootsSdkClient, SdkPublishError,
-    SdkPublishReceipt, SdkRadrootsdPublishReceipt, SdkRelayFailure, SdkRelayPublishReceipt,
-    SdkResolvedTransportTarget, SdkTransportReceipt,
-};
-#[cfg(feature = "radrootsd-client")]
-pub use crate::client::{
-    RadrootsdBridgeClient, RadrootsdClient, RadrootsdSignerSessionClient, SdkRadrootsdBridgeError,
-    SdkRadrootsdBridgeJobRef, SdkRadrootsdBridgeJobView, SdkRadrootsdBridgeStatus,
-    SdkRadrootsdFarmPublishOptions, SdkRadrootsdListingPublishOptions,
-    SdkRadrootsdOrderRequestPublishOptions, SdkRadrootsdProfilePublishOptions,
-    SdkRadrootsdSessionError, SdkRadrootsdSignerSessionAuthorizeResult,
-    SdkRadrootsdSignerSessionCloseResult, SdkRadrootsdSignerSessionHandle,
-    SdkRadrootsdSignerSessionPublicKeyResult, SdkRadrootsdSignerSessionRef,
-    SdkRadrootsdSignerSessionRequireAuthResult, SdkRadrootsdSignerSessionView,
-};
-pub use crate::config::{
-    NetworkConfig, RADROOTS_SDK_DEFAULT_TIMEOUT_MS, RADROOTS_SDK_LOCAL_RADROOTSD_ENDPOINT,
-    RADROOTS_SDK_LOCAL_RELAY_URL, RADROOTS_SDK_PRODUCTION_RADROOTSD_ENDPOINT,
-    RADROOTS_SDK_PRODUCTION_RELAY_URL, RADROOTS_SDK_STAGING_RADROOTSD_ENDPOINT,
-    RADROOTS_SDK_STAGING_RELAY_URL, RadrootsSdkConfig, RadrootsdAuth, RadrootsdConfig, RelayConfig,
-    SdkConfigError, SdkEnvironment, SdkTransportMode, SignerConfig,
-};
 #[cfg(feature = "runtime")]
 pub use crate::error::{
     RadrootsSdkError, RadrootsSdkErrorClass, RadrootsSdkPartialLocalMutationError,

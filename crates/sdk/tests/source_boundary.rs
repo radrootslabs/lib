@@ -86,47 +86,14 @@ fn migrated_runtime_tests_stay_on_product_runtime_boundary() {
 }
 
 #[test]
-fn legacy_order_direct_publish_facades_are_removed_from_sdk_client() {
-    let source = read_source(
-        Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("src/client.rs")
-            .as_path(),
-    );
+fn legacy_client_and_config_modules_are_removed() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
 
-    for forbidden in [
-        "publish_order_request_with_identity",
-        "publish_order_decision_with_identity",
-        "publish_order_revision_proposal_with_identity",
-        "publish_order_revision_decision_with_identity",
-        "publish_order_cancellation_with_identity",
-        "publish_fulfillment_update_with_identity",
-        "publish_buyer_receipt_with_identity",
-        "publish_order_request_draft_with_identity",
-        "publish_order_decision_draft_with_identity",
-        "publish_order_revision_proposal_draft_with_identity",
-        "publish_order_revision_decision_draft_with_identity",
-        "publish_order_cancellation_draft_with_identity",
-        "publish_fulfillment_update_draft_with_identity",
-        "publish_buyer_receipt_draft_with_identity",
-        "build_order_request_draft",
-        "build_order_decision_draft",
-        "build_order_revision_proposal_draft",
-        "build_order_revision_decision_draft",
-        "build_order_cancellation_draft",
-        "build_fulfillment_update_draft",
-        "build_buyer_receipt_draft",
-        "parse_order_request",
-        "parse_order_decision",
-        "parse_order_revision_proposal",
-        "parse_order_revision_decision",
-        "parse_order_cancellation",
-        "parse_fulfillment_update",
-        "parse_buyer_receipt",
-        "validate_listing_event",
-    ] {
+    for relative_path in ["src/client.rs", "src/config.rs"] {
+        let path = manifest_dir.join(relative_path);
         assert!(
-            !source.contains(forbidden),
-            "src/client.rs must not expose legacy order direct facade `{forbidden}`"
+            !path.exists(),
+            "{relative_path} must not exist after SDK runtime surface closure"
         );
     }
 }
@@ -143,6 +110,35 @@ fn legacy_trade_client_root_export_is_removed() {
         !source.contains("TradeClient"),
         "src/lib.rs must not re-export the legacy TradeClient facade"
     );
+}
+
+#[test]
+fn legacy_client_config_modules_are_not_public() {
+    let source = read_source(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src/lib.rs")
+            .as_path(),
+    );
+
+    for forbidden in [
+        "pub mod client;",
+        "pub mod config;",
+        "pub use crate::client",
+        "pub use crate::config",
+        "RadrootsSdkClient",
+        "RadrootsSdkConfig",
+        "SdkTransportMode",
+        "ProfileClient",
+        "FarmClient",
+        "ListingClient",
+        "SdkPublishReceipt",
+        "SdkTransportReceipt",
+    ] {
+        assert!(
+            !source.contains(forbidden),
+            "src/lib.rs must not expose legacy SDK client/config concept `{forbidden}`"
+        );
+    }
 }
 
 fn product_runtime_file_stays_on_boundary(relative_path: &str) {
