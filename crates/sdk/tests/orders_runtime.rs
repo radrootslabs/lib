@@ -1,18 +1,24 @@
 #![cfg(feature = "runtime")]
 
+use radroots_authority::{
+    RadrootsActorContext, RadrootsEventSigner, RadrootsSignerError, RadrootsSignerIdentity,
+};
 use radroots_core::{
     RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreUnit,
 };
 use radroots_event_store::{RadrootsEventIngest, RadrootsEventStore};
-use radroots_events::kinds::KIND_LISTING;
 use radroots_events::{
     RadrootsNostrEvent,
+    contract::RadrootsActorRole,
+    draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent},
     ids::{RadrootsEventId, RadrootsOrderId},
+    kinds::{KIND_LISTING, KIND_ORDER_REQUEST},
 };
 use radroots_nostr::prelude::{
     RadrootsNostrKeys, RadrootsNostrSecretKey, RadrootsNostrTimestamp, radroots_event_from_nostr,
-    radroots_nostr_build_event,
+    radroots_nostr_build_event, radroots_nostr_sign_frozen_draft,
 };
+use radroots_outbox::{RadrootsOutbox, RadrootsOutboxEventState};
 use radroots_sdk::protocol::events::RadrootsNostrEventPtr;
 use radroots_sdk::protocol::order::{
     RadrootsListingAddress, RadrootsOrderDecision, RadrootsOrderDecisionOutcome,
@@ -22,9 +28,12 @@ use radroots_sdk::protocol::order::{
 };
 use radroots_sdk::protocol::wire::WireEventParts;
 use radroots_sdk::{
-    ORDER_STATUS_DEFAULT_LIMIT, ORDER_STATUS_MAX_LIMIT, OrderPaymentStateKind,
-    OrderSettlementStateKind, OrderStatusKind, OrderStatusRequest, RadrootsSdk, RadrootsSdkError,
-    RadrootsSdkTimestamp, SdkOrderStatusIssue, SdkOrderStatusIssueKind, SdkOrderStatusSource,
+    ORDER_STATUS_DEFAULT_LIMIT, ORDER_STATUS_MAX_LIMIT, ORDER_SUBMIT_OPERATION_KIND,
+    OrderPaymentStateKind, OrderSettlementStateKind, OrderStatusKind, OrderStatusRequest,
+    OrderSubmitEnqueueRequest, OrderSubmitPrepareRequest, RadrootsSdk, RadrootsSdkError,
+    RadrootsSdkPartialLocalMutationFailure, RadrootsSdkRecoveryAction, RadrootsSdkTimestamp,
+    SdkMutationState, SdkOrderStatusIssue, SdkOrderStatusIssueKind, SdkOrderStatusSource,
+    SdkRelayTargetPolicy, SdkRelayTargetSet, SdkRelayUrlPolicy,
 };
 
 const BUYER_SECRET_KEY_HEX: &str =
@@ -35,6 +44,45 @@ const SELLER_SECRET_KEY_HEX: &str =
     "59392e9068f66431b12f70218fb61281cb6b433d7f27c55d61f1a63fe1a96ff8";
 const SELLER_PUBLIC_KEY_HEX: &str =
     "e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af";
+const OTHER_PUBLIC_KEY_HEX: &str =
+    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+const RELAY: &str = "wss://relay.radroots.test";
+const RELAY_B: &str = "wss://relay-b.radroots.test";
+
+#[derive(Clone)]
+struct FixtureSigner {
+    identity: RadrootsSignerIdentity,
+    keys: RadrootsNostrKeys,
+}
+
+impl FixtureSigner {
+    fn new(secret_key_hex: &str) -> Self {
+        let secret_key = RadrootsNostrSecretKey::from_hex(secret_key_hex).expect("secret key");
+        let keys = RadrootsNostrKeys::new(secret_key);
+        let pubkey = keys.public_key().to_hex();
+        Self {
+            identity: RadrootsSignerIdentity::new(pubkey).expect("identity"),
+            keys,
+        }
+    }
+}
+
+impl RadrootsEventSigner for FixtureSigner {
+    fn pubkey(&self) -> &radroots_events::ids::RadrootsPublicKey {
+        self.identity.pubkey()
+    }
+
+    fn sign_frozen_draft(
+        &self,
+        draft: &RadrootsFrozenEventDraft,
+    ) -> Result<RadrootsSignedNostrEvent, RadrootsSignerError> {
+        radroots_nostr_sign_frozen_draft(&self.keys, draft).map_err(|error| {
+            RadrootsSignerError::SigningFailed {
+                message: error.to_string(),
+            }
+        })
+    }
+}
 
 async fn directory_sdk_and_store() -> (tempfile::TempDir, RadrootsSdk, RadrootsEventStore) {
     let tempdir = tempfile::tempdir().expect("tempdir");
@@ -59,6 +107,18 @@ fn status_request(raw: &str) -> OrderStatusRequest {
     OrderStatusRequest::parse(raw).expect("order status request")
 }
 
+fn buyer_actor() -> RadrootsActorContext {
+    RadrootsActorContext::test(BUYER_PUBLIC_KEY_HEX, [RadrootsActorRole::Buyer]).expect("actor")
+}
+
+fn other_buyer_actor() -> RadrootsActorContext {
+    RadrootsActorContext::test(OTHER_PUBLIC_KEY_HEX, [RadrootsActorRole::Buyer]).expect("actor")
+}
+
+fn non_buyer_actor() -> RadrootsActorContext {
+    RadrootsActorContext::test(BUYER_PUBLIC_KEY_HEX, [RadrootsActorRole::Farmer]).expect("actor")
+}
+
 fn listing_address() -> RadrootsListingAddress {
     RadrootsListingAddress::parse(format!(
         "{KIND_LISTING}:{SELLER_PUBLIC_KEY_HEX}:AAAAAAAAAAAAAAAAAAAAAg"
@@ -69,7 +129,7 @@ fn listing_address() -> RadrootsListingAddress {
 fn listing_event_ptr() -> RadrootsNostrEventPtr {
     RadrootsNostrEventPtr {
         id: deterministic_event_id("listing-event").into_string(),
-        relays: Some("wss://relay.radroots.test".to_owned()),
+        relays: Some(RELAY.to_owned()),
     }
 }
 
@@ -135,6 +195,501 @@ fn order_request(raw_order_id: &str) -> RadrootsOrderRequest {
         }],
         economics: economics(),
     }
+}
+
+fn invalid_listing_event_ptr() -> RadrootsNostrEventPtr {
+    RadrootsNostrEventPtr {
+        id: String::new(),
+        relays: Some(RELAY.to_owned()),
+    }
+}
+
+#[tokio::test]
+async fn order_submit_prepare_is_side_effect_free() {
+    let (_tempdir, sdk, store) = directory_sdk_and_store().await;
+    let listing_event = listing_event_ptr();
+    let request = OrderSubmitPrepareRequest::new(
+        buyer_actor(),
+        listing_event.clone(),
+        order_request("order-submit-prepare"),
+    );
+
+    let prepared = sdk.orders().prepare_submit(request).expect("prepared");
+
+    assert_eq!(prepared.order_id.as_str(), "order-submit-prepare");
+    assert_eq!(prepared.listing_addr, listing_address());
+    assert_eq!(
+        prepared.listing_event_id.as_str(),
+        listing_event.id.as_str()
+    );
+    assert_eq!(prepared.frozen_draft.kind, KIND_ORDER_REQUEST);
+    assert_eq!(prepared.created_at.unix_seconds(), 1_700_000_000);
+    assert_eq!(
+        prepared.expected_event_id,
+        prepared.frozen_draft.expected_event_id
+    );
+    assert_eq!(
+        store
+            .status_summary()
+            .await
+            .expect("event store status")
+            .total_events,
+        0
+    );
+    assert!(
+        store
+            .get_event(prepared.expected_event_id.as_str())
+            .await
+            .expect("event lookup")
+            .is_none()
+    );
+
+    let paths = sdk.storage_paths().expect("paths");
+    let outbox = RadrootsOutbox::open_file(&paths.outbox_path)
+        .await
+        .expect("outbox");
+    assert!(
+        outbox
+            .claim_next_ready_event("worker", "claim", 2_000, 1_700_000_000_000)
+            .await
+            .expect("claim")
+            .is_none()
+    );
+}
+
+#[tokio::test]
+async fn order_submit_prepare_rejects_missing_listing_evidence() {
+    let (_tempdir, sdk, _store) = directory_sdk_and_store().await;
+    let request = OrderSubmitPrepareRequest::new(
+        buyer_actor(),
+        invalid_listing_event_ptr(),
+        order_request("order-submit-missing-listing"),
+    );
+
+    let error = sdk
+        .orders()
+        .prepare_submit(request)
+        .expect_err("missing listing evidence");
+
+    assert!(matches!(error, RadrootsSdkError::InvalidRequest { .. }));
+}
+
+#[tokio::test]
+async fn order_submit_prepare_rejects_invalid_actor_or_payload() {
+    let (_tempdir, sdk, _store) = directory_sdk_and_store().await;
+
+    let non_buyer = sdk
+        .orders()
+        .prepare_submit(OrderSubmitPrepareRequest::new(
+            non_buyer_actor(),
+            listing_event_ptr(),
+            order_request("order-submit-non-buyer"),
+        ))
+        .expect_err("non buyer");
+    assert!(matches!(
+        non_buyer,
+        RadrootsSdkError::UnauthorizedActor { .. }
+    ));
+
+    let wrong_actor = sdk
+        .orders()
+        .prepare_submit(OrderSubmitPrepareRequest::new(
+            other_buyer_actor(),
+            listing_event_ptr(),
+            order_request("order-submit-wrong-actor"),
+        ))
+        .expect_err("wrong actor");
+    assert!(matches!(
+        wrong_actor,
+        RadrootsSdkError::UnauthorizedActor { .. }
+    ));
+
+    let mut seller_mismatch = order_request("order-submit-seller-mismatch");
+    seller_mismatch.seller_pubkey = OTHER_PUBLIC_KEY_HEX.parse().expect("seller pubkey");
+    let seller_error = sdk
+        .orders()
+        .prepare_submit(OrderSubmitPrepareRequest::new(
+            buyer_actor(),
+            listing_event_ptr(),
+            seller_mismatch,
+        ))
+        .expect_err("seller mismatch");
+    assert!(matches!(
+        seller_error,
+        RadrootsSdkError::InvalidRequest { .. }
+    ));
+
+    let mut empty_items = order_request("order-submit-empty-items");
+    empty_items.items.clear();
+    let empty_items_error = sdk
+        .orders()
+        .prepare_submit(OrderSubmitPrepareRequest::new(
+            buyer_actor(),
+            listing_event_ptr(),
+            empty_items,
+        ))
+        .expect_err("empty items");
+    assert!(matches!(
+        empty_items_error,
+        RadrootsSdkError::InvalidRequest { .. }
+    ));
+
+    let mut empty_economics = order_request("order-submit-empty-economics");
+    empty_economics.economics.items.clear();
+    let empty_economics_error = sdk
+        .orders()
+        .prepare_submit(OrderSubmitPrepareRequest::new(
+            buyer_actor(),
+            listing_event_ptr(),
+            empty_economics,
+        ))
+        .expect_err("empty economics");
+    assert!(matches!(
+        empty_economics_error,
+        RadrootsSdkError::InvalidRequest { .. }
+    ));
+}
+
+#[tokio::test]
+async fn order_submit_enqueue_stores_event_queues_outbox_and_status_sees_request() {
+    let (_tempdir, sdk, store) = directory_sdk_and_store().await;
+    let order = order_request("order-submit-enqueue");
+    let prepared = sdk
+        .orders()
+        .prepare_submit(OrderSubmitPrepareRequest::new(
+            buyer_actor(),
+            listing_event_ptr(),
+            order.clone(),
+        ))
+        .expect("prepared");
+    let request = OrderSubmitEnqueueRequest::new(
+        buyer_actor(),
+        listing_event_ptr(),
+        order,
+        SdkRelayTargetPolicy::UseConfiguredRelays,
+    )
+    .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+    .expect("target relays")
+    .try_with_idempotency_key("order-submit-enqueue-idempotency")
+    .expect("idempotency key");
+
+    let receipt = sdk
+        .orders()
+        .enqueue_submit(request, &FixtureSigner::new(BUYER_SECRET_KEY_HEX))
+        .await
+        .expect("enqueue");
+
+    assert_eq!(receipt.order_id, prepared.order_id);
+    assert_eq!(receipt.listing_addr, prepared.listing_addr);
+    assert_eq!(receipt.listing_event_id, prepared.listing_event_id);
+    assert_eq!(receipt.expected_event_id, prepared.expected_event_id);
+    assert_eq!(receipt.signed_event_id, receipt.expected_event_id);
+    assert_eq!(receipt.local_event_seq, 1);
+    assert_eq!(receipt.outbox_operation_id, 1);
+    assert_eq!(receipt.outbox_event_id, 1);
+    assert_eq!(receipt.state, SdkMutationState::StoredAndQueued);
+    assert!(receipt.idempotency_digest_prefix.is_some());
+
+    assert_eq!(
+        store
+            .status_summary()
+            .await
+            .expect("event store status")
+            .total_events,
+        1
+    );
+    let stored_event = store
+        .get_event(receipt.signed_event_id.as_str())
+        .await
+        .expect("event lookup")
+        .expect("stored event");
+    assert_eq!(stored_event.kind, KIND_ORDER_REQUEST);
+    assert_eq!(
+        stored_event.contract_id.as_deref(),
+        Some("radroots.order.request.v1")
+    );
+
+    let paths = sdk.storage_paths().expect("paths");
+    let outbox = RadrootsOutbox::open_file(&paths.outbox_path)
+        .await
+        .expect("outbox");
+    let outbox_event = outbox
+        .get_event(receipt.outbox_event_id)
+        .await
+        .expect("outbox event")
+        .expect("outbox event");
+    assert_eq!(outbox_event.state, RadrootsOutboxEventState::Signed);
+    assert_eq!(outbox_event.draft.kind, KIND_ORDER_REQUEST);
+    assert!(outbox_event.signed_event.is_some());
+
+    let status = sdk
+        .orders()
+        .status(status_request("order-submit-enqueue"))
+        .await
+        .expect("status");
+    assert!(status.found);
+    assert_eq!(status.status, OrderStatusKind::Requested);
+    assert_eq!(status.event_count, 1);
+    assert_eq!(
+        status
+            .request_event_id
+            .as_ref()
+            .map(RadrootsEventId::as_str),
+        Some(receipt.signed_event_id.as_str())
+    );
+}
+
+#[tokio::test]
+async fn order_submit_enqueue_returns_sanitized_signer_errors_before_mutation() {
+    let (_tempdir, sdk, store) = directory_sdk_and_store().await;
+    let request = OrderSubmitEnqueueRequest::new(
+        buyer_actor(),
+        listing_event_ptr(),
+        order_request("order-submit-wrong-signer"),
+        SdkRelayTargetPolicy::UseConfiguredRelays,
+    )
+    .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+    .expect("target relays");
+
+    let error = sdk
+        .orders()
+        .enqueue_submit(request, &FixtureSigner::new(SELLER_SECRET_KEY_HEX))
+        .await
+        .expect_err("signer error");
+    let message = error.to_string();
+
+    assert!(matches!(
+        error,
+        RadrootsSdkError::SignerPubkeyMismatch { .. }
+    ));
+    assert!(!message.contains("raw"));
+    assert!(!message.contains("ffff"));
+    assert_eq!(
+        store
+            .status_summary()
+            .await
+            .expect("event store status")
+            .total_events,
+        0
+    );
+
+    let paths = sdk.storage_paths().expect("paths");
+    let outbox = RadrootsOutbox::open_file(&paths.outbox_path)
+        .await
+        .expect("outbox");
+    assert!(
+        outbox
+            .claim_next_ready_event("worker", "claim", 2_000, 1_700_000_000_000)
+            .await
+            .expect("claim")
+            .is_none()
+    );
+}
+
+#[tokio::test]
+async fn order_submit_enqueue_derives_order_independent_idempotency_key() {
+    let (_tempdir, sdk, _store) = directory_sdk_and_store().await;
+    let first = OrderSubmitEnqueueRequest::new(
+        buyer_actor(),
+        listing_event_ptr(),
+        order_request("order-submit-idempotent"),
+        SdkRelayTargetPolicy::UseConfiguredRelays,
+    )
+    .try_with_target_relays([RELAY_B, RELAY, RELAY], SdkRelayUrlPolicy::Public)
+    .expect("first target relays");
+    let second = OrderSubmitEnqueueRequest::new(
+        buyer_actor(),
+        listing_event_ptr(),
+        order_request("order-submit-idempotent"),
+        SdkRelayTargetPolicy::explicit(
+            SdkRelayTargetSet::new([RELAY, RELAY_B], SdkRelayUrlPolicy::Public)
+                .expect("second target relays"),
+        ),
+    );
+
+    let first_receipt = sdk
+        .orders()
+        .enqueue_submit(first, &FixtureSigner::new(BUYER_SECRET_KEY_HEX))
+        .await
+        .expect("first enqueue");
+    let second_receipt = sdk
+        .orders()
+        .enqueue_submit(second, &FixtureSigner::new(BUYER_SECRET_KEY_HEX))
+        .await
+        .expect("second enqueue");
+
+    assert_eq!(
+        first_receipt.outbox_event_id,
+        second_receipt.outbox_event_id
+    );
+    assert_eq!(
+        first_receipt.idempotency_digest_prefix,
+        second_receipt.idempotency_digest_prefix
+    );
+    assert_eq!(second_receipt.state, SdkMutationState::AlreadyQueued);
+
+    let paths = sdk.storage_paths().expect("paths");
+    let outbox = RadrootsOutbox::open_file(&paths.outbox_path)
+        .await
+        .expect("outbox");
+    let relay_urls = outbox
+        .relay_statuses(first_receipt.outbox_event_id)
+        .await
+        .expect("relay statuses")
+        .into_iter()
+        .map(|status| status.relay_url)
+        .collect::<Vec<_>>();
+    assert_eq!(relay_urls, vec![RELAY_B.to_owned(), RELAY.to_owned()]);
+}
+
+#[tokio::test]
+async fn order_submit_enqueue_reports_partial_local_mutation_after_outbox_conflict() {
+    let (_tempdir, sdk, _store) = directory_sdk_and_store().await;
+    let first = OrderSubmitEnqueueRequest::new(
+        buyer_actor(),
+        listing_event_ptr(),
+        order_request("order-submit-conflict-a"),
+        SdkRelayTargetPolicy::UseConfiguredRelays,
+    )
+    .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+    .expect("first target relays")
+    .try_with_idempotency_key("order-submit-conflict-idempotency")
+    .expect("first idempotency key");
+    sdk.orders()
+        .enqueue_submit(first, &FixtureSigner::new(BUYER_SECRET_KEY_HEX))
+        .await
+        .expect("first enqueue");
+
+    let second = OrderSubmitEnqueueRequest::new(
+        buyer_actor(),
+        listing_event_ptr(),
+        order_request("order-submit-conflict-b"),
+        SdkRelayTargetPolicy::UseConfiguredRelays,
+    )
+    .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+    .expect("second target relays")
+    .try_with_idempotency_key("order-submit-conflict-idempotency")
+    .expect("second idempotency key");
+    let error = sdk
+        .orders()
+        .enqueue_submit(second, &FixtureSigner::new(BUYER_SECRET_KEY_HEX))
+        .await
+        .expect_err("partial");
+
+    assert!(matches!(
+        error,
+        RadrootsSdkError::PartialLocalMutation(ref partial)
+            if partial.stored
+                && !partial.queued
+                && partial.event_id.is_some()
+                && partial.operation_kind == ORDER_SUBMIT_OPERATION_KIND
+                && partial.idempotency_digest_prefix.is_some()
+                && partial.failure == RadrootsSdkPartialLocalMutationFailure::OutboxIdempotencyConflict
+                && partial.recovery == RadrootsSdkRecoveryAction::RetryOperationWithSameIdempotencyKey
+    ));
+    assert!(
+        !error
+            .to_string()
+            .contains("order-submit-conflict-idempotency")
+    );
+}
+
+#[tokio::test]
+async fn order_submit_runtime_dtos_serialize_deterministically() {
+    let (_tempdir, sdk, _store) = directory_sdk_and_store().await;
+    let created_at = RadrootsSdkTimestamp::from_unix_seconds(1_700_000_123);
+    let prepare_request = OrderSubmitPrepareRequest::new(
+        buyer_actor(),
+        listing_event_ptr(),
+        order_request("order-submit-serialized"),
+    )
+    .with_created_at(created_at);
+    let prepare_json = serde_json::to_value(&prepare_request).expect("prepare request json");
+
+    assert_eq!(
+        prepare_json["actor"],
+        serde_json::json!({
+            "pubkey": BUYER_PUBLIC_KEY_HEX,
+            "roles": ["buyer"],
+            "account_id": null,
+            "source": "test"
+        })
+    );
+    assert_eq!(
+        prepare_json["listing_event"],
+        serde_json::json!({
+            "id": deterministic_event_id("listing-event").as_str(),
+            "relays": RELAY
+        })
+    );
+    assert_eq!(prepare_json["order"]["order_id"], "order-submit-serialized");
+    assert_eq!(
+        prepare_json["order"]["listing_addr"],
+        listing_address().as_str()
+    );
+    assert_eq!(prepare_json["order"]["buyer_pubkey"], BUYER_PUBLIC_KEY_HEX);
+    assert_eq!(
+        prepare_json["order"]["seller_pubkey"],
+        SELLER_PUBLIC_KEY_HEX
+    );
+    assert_eq!(prepare_json["order"]["items"][0]["bin_id"], "bin-1");
+    assert_eq!(prepare_json["order"]["items"][0]["bin_count"], 2);
+    assert_eq!(prepare_json["created_at"], 1_700_000_123);
+
+    let enqueue_request = OrderSubmitEnqueueRequest::new(
+        buyer_actor(),
+        listing_event_ptr(),
+        order_request("order-submit-serialized-enqueue"),
+        SdkRelayTargetPolicy::UseConfiguredRelays,
+    )
+    .try_with_target_relays([RELAY, RELAY_B], SdkRelayUrlPolicy::Public)
+    .expect("relay targets")
+    .try_with_idempotency_key("order-serialized-idempotency")
+    .expect("idempotency")
+    .with_created_at(created_at);
+    let enqueue_json = serde_json::to_value(&enqueue_request).expect("enqueue request json");
+
+    assert_eq!(
+        enqueue_json["target_relays"],
+        serde_json::json!({
+            "kind": "explicit",
+            "relays": [RELAY, RELAY_B],
+            "canonical_relays": [RELAY_B, RELAY]
+        })
+    );
+    assert_eq!(
+        enqueue_json["idempotency_key"],
+        serde_json::json!({ "value": "<redacted>", "len": 28 })
+    );
+    assert_eq!(enqueue_json["created_at"], 1_700_000_123);
+    assert!(
+        !enqueue_json
+            .to_string()
+            .contains("order-serialized-idempotency")
+    );
+
+    let receipt = sdk
+        .orders()
+        .enqueue_submit(enqueue_request, &FixtureSigner::new(BUYER_SECRET_KEY_HEX))
+        .await
+        .expect("enqueue");
+    let receipt_json = serde_json::to_value(&receipt).expect("receipt json");
+
+    assert_eq!(
+        receipt_json,
+        serde_json::json!({
+            "order_id": receipt.order_id.as_str(),
+            "listing_addr": receipt.listing_addr.as_str(),
+            "listing_event_id": receipt.listing_event_id.as_str(),
+            "expected_event_id": receipt.expected_event_id.as_str(),
+            "signed_event_id": receipt.signed_event_id.as_str(),
+            "local_event_seq": 1,
+            "outbox_operation_id": 1,
+            "outbox_event_id": 1,
+            "state": "stored_and_queued",
+            "idempotency_digest_prefix": receipt.idempotency_digest_prefix.as_deref()
+        })
+    );
 }
 
 fn order_decision(raw_order_id: &str) -> RadrootsOrderDecision {
