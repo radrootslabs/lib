@@ -55,8 +55,8 @@ pub use crate::farms_runtime::{
 pub use crate::idempotency::{SDK_IDEMPOTENCY_KEY_MAX_LEN, SdkIdempotencyKey};
 #[cfg(feature = "runtime")]
 pub use crate::listings_runtime::{
-    ListingEnqueuePublishRequest, ListingEnqueueReceipt, ListingPreparePublishRequest,
-    ListingPublishPlan, SdkMutationState,
+    LISTING_PUBLISH_OPERATION_KIND, ListingEnqueuePublishRequest, ListingEnqueueReceipt,
+    ListingPreparePublishRequest, ListingPublishPlan, SdkMutationState,
 };
 #[cfg(feature = "runtime")]
 pub use crate::orders_runtime::{

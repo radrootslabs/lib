@@ -1,8 +1,8 @@
 #![cfg(feature = "runtime")]
 
 use radroots_sdk::{
-    BackupRequest, IntegrityRequest, RadrootsSdk, RadrootsSdkClock, RadrootsSdkError,
-    RadrootsSdkErrorClass, RadrootsSdkRecoveryAction, RadrootsSdkStorageConfig,
+    BackupRequest, IntegrityRequest, LISTING_PUBLISH_OPERATION_KIND, RadrootsSdk, RadrootsSdkClock,
+    RadrootsSdkError, RadrootsSdkErrorClass, RadrootsSdkRecoveryAction, RadrootsSdkStorageConfig,
     RadrootsSdkTimestamp, RestoreRequest, SDK_IDEMPOTENCY_KEY_MAX_LEN, SDK_RELAY_TARGET_MAX_COUNT,
     SdkBackupState, SdkBackupVerification, SdkEventStoreStorageStatus, SdkIdempotencyKey,
     SdkOutboxStorageStatus, SdkRelayTargetPolicy, SdkRelayTargetSet, SdkRelayUrlPolicy,
@@ -212,12 +212,12 @@ fn sdk_partial_local_mutation_error_is_sanitized() {
     let event_id = "a".repeat(64);
     let error = RadrootsSdkError::partial_outbox_enqueue_mutation(
         event_id,
-        "listing.publish.v1",
+        LISTING_PUBLISH_OPERATION_KIND,
         "abcdef123456",
     );
     let message = error.to_string();
 
-    assert!(message.contains("listing.publish.v1"));
+    assert!(message.contains(LISTING_PUBLISH_OPERATION_KIND));
     assert!(message.contains("abcdef123456"));
     assert!(message.contains("stored=true"));
     assert!(message.contains("queued=false"));
@@ -303,7 +303,7 @@ fn sdk_error_contract_methods_cover_all_variants() {
         ),
         (
             RadrootsSdkError::IdempotencyConflict {
-                operation_kind: "listing.publish.v1".to_owned(),
+                operation_kind: LISTING_PUBLISH_OPERATION_KIND.to_owned(),
                 expected_pubkey_prefix: "aaaaaaaaaaaa".to_owned(),
                 existing_digest_prefix: "bbbbbbbbbbbb".to_owned(),
                 new_digest_prefix: "cccccccccccc".to_owned(),
@@ -428,7 +428,7 @@ fn sdk_error_contract_methods_cover_all_variants() {
         (
             RadrootsSdkError::partial_outbox_enqueue_mutation(
                 "a".repeat(64),
-                "listing.publish.v1",
+                LISTING_PUBLISH_OPERATION_KIND,
                 "abcdef123456",
             ),
             "partial_local_mutation",
@@ -678,7 +678,7 @@ fn storage_backup_and_integrity_contract_dtos_serialize() {
 #[test]
 fn outbox_idempotency_conflict_maps_to_structured_sdk_error() {
     let error = RadrootsSdkError::from(radroots_outbox::RadrootsOutboxError::IdempotencyConflict {
-        operation_kind: "listing.publish.v1".to_owned(),
+        operation_kind: LISTING_PUBLISH_OPERATION_KIND.to_owned(),
         expected_pubkey: "a".repeat(64),
         idempotency_key: "secret-idempotency-key".to_owned(),
         existing_digest: "b".repeat(64),
@@ -693,7 +693,7 @@ fn outbox_idempotency_conflict_maps_to_structured_sdk_error() {
             expected_pubkey_prefix,
             existing_digest_prefix,
             new_digest_prefix,
-        } if operation_kind == "listing.publish.v1"
+        } if operation_kind == LISTING_PUBLISH_OPERATION_KIND
             && expected_pubkey_prefix == "aaaaaaaaaaaa"
             && existing_digest_prefix == "bbbbbbbbbbbb"
             && new_digest_prefix == "cccccccccccc"

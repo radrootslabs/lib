@@ -18,9 +18,10 @@ use radroots_events::{
 };
 use radroots_outbox::{RadrootsOutbox, RadrootsOutboxEventState};
 use radroots_sdk::{
-    ListingEnqueuePublishRequest, ListingPreparePublishRequest, RadrootsSdk, RadrootsSdkError,
-    RadrootsSdkPartialLocalMutationFailure, RadrootsSdkRecoveryAction, RadrootsSdkTimestamp,
-    SdkMutationState, SdkRelayTargetPolicy, SdkRelayTargetSet, SdkRelayUrlPolicy,
+    LISTING_PUBLISH_OPERATION_KIND, ListingEnqueuePublishRequest, ListingPreparePublishRequest,
+    RadrootsSdk, RadrootsSdkError, RadrootsSdkPartialLocalMutationFailure,
+    RadrootsSdkRecoveryAction, RadrootsSdkTimestamp, SdkMutationState, SdkRelayTargetPolicy,
+    SdkRelayTargetSet, SdkRelayUrlPolicy,
 };
 
 const SELLER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -651,7 +652,7 @@ async fn enqueue_publish_reports_partial_local_mutation_after_outbox_conflict() 
             if partial.stored
                 && !partial.queued
                 && partial.event_id.is_some()
-                && partial.operation_kind == "listing.publish.v1"
+                && partial.operation_kind == LISTING_PUBLISH_OPERATION_KIND
                 && partial.idempotency_digest_prefix.is_some()
                 && partial.failure == RadrootsSdkPartialLocalMutationFailure::OutboxIdempotencyConflict
                 && partial.recovery == RadrootsSdkRecoveryAction::RetryOperationWithSameIdempotencyKey

@@ -24,7 +24,7 @@ use radroots_trade::listing::{
 use serde::ser::SerializeStruct;
 
 #[cfg(feature = "runtime")]
-const LISTING_PUBLISH_OPERATION_KIND: &str = "listing.publish.v1";
+pub const LISTING_PUBLISH_OPERATION_KIND: &str = "listing.publish.v1";
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug)]

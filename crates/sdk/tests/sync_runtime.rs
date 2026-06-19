@@ -22,8 +22,8 @@ use radroots_relay_transport::{
     RadrootsRelayPublishRelayReceipt, RadrootsRelayPublishRequest, RadrootsRelayTransportError,
 };
 use radroots_sdk::{
-    BackupRequest, IntegrityRequest, ListingEnqueuePublishRequest, ListingPreparePublishRequest,
-    PUSH_OUTBOX_DEFAULT_CLAIM_TTL_MS, PUSH_OUTBOX_DEFAULT_LIMIT,
+    BackupRequest, IntegrityRequest, LISTING_PUBLISH_OPERATION_KIND, ListingEnqueuePublishRequest,
+    ListingPreparePublishRequest, PUSH_OUTBOX_DEFAULT_CLAIM_TTL_MS, PUSH_OUTBOX_DEFAULT_LIMIT,
     PUSH_OUTBOX_DEFAULT_NEXT_ATTEMPT_DELAY_MS, PUSH_OUTBOX_MAX_LIMIT, PushOutboxEventReceipt,
     PushOutboxEventState, PushOutboxReceipt, PushOutboxRelayOutcomeKind, PushOutboxRelayReceipt,
     PushOutboxRequest, RadrootsSdk, RadrootsSdkError, RadrootsSdkTimestamp, RestoreRequest,
@@ -1447,7 +1447,7 @@ async fn push_outbox_does_not_claim_unsigned_outbox_work() {
         .expect("outbox");
     let unsigned = outbox
         .enqueue_operation(RadrootsOutboxOperationInput::new(
-            "listing.publish.v1",
+            LISTING_PUBLISH_OPERATION_KIND,
             prepared.frozen_draft,
             vec![RELAY_A.to_owned()],
             1_700_000_000_000,
