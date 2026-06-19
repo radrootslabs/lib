@@ -283,6 +283,10 @@ mod tests {
     fn buyer_and_seller_contract_roles_match_current_contracts() {
         let listing = event_contract("radroots.listing.published.v1").expect("listing contract");
         let order_request = event_contract("radroots.order.request.v1").expect("order contract");
+        let order_revision_proposal =
+            event_contract("radroots.order.revision_proposal.v1").expect("revision proposal");
+        let order_revision_decision =
+            event_contract("radroots.order.revision_decision.v1").expect("revision decision");
         let seller = seller_actor(hex_64('a').as_str());
         let buyer = buyer_actor(hex_64('b').as_str());
 
@@ -295,6 +299,24 @@ mod tests {
         assert!(authorize_actor_for_contract(&buyer, order_request).is_ok());
         assert!(matches!(
             authorize_actor_for_contract(&seller, order_request),
+            Err(RadrootsAuthorityError::ActorRoleUnsatisfied { .. })
+        ));
+        assert_eq!(
+            order_revision_proposal.author_role,
+            RadrootsActorRole::Seller
+        );
+        assert!(authorize_actor_for_contract(&seller, order_revision_proposal).is_ok());
+        assert!(matches!(
+            authorize_actor_for_contract(&buyer, order_revision_proposal),
+            Err(RadrootsAuthorityError::ActorRoleUnsatisfied { .. })
+        ));
+        assert_eq!(
+            order_revision_decision.author_role,
+            RadrootsActorRole::Buyer
+        );
+        assert!(authorize_actor_for_contract(&buyer, order_revision_decision).is_ok());
+        assert!(matches!(
+            authorize_actor_for_contract(&seller, order_revision_decision),
             Err(RadrootsAuthorityError::ActorRoleUnsatisfied { .. })
         ));
     }
