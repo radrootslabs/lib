@@ -70,10 +70,25 @@ fn sdk_manifest_does_not_depend_on_app_or_cli_crates() {
 
 #[test]
 fn farm_runtime_stays_on_product_runtime_boundary() {
+    product_runtime_file_stays_on_boundary("src/farms_runtime.rs");
+}
+
+#[test]
+fn order_runtime_stays_on_product_runtime_boundary() {
+    product_runtime_file_stays_on_boundary("src/orders_runtime.rs");
+}
+
+#[test]
+fn migrated_runtime_tests_stay_on_product_runtime_boundary() {
+    for file in ["tests/farms_runtime.rs", "tests/orders_runtime.rs"] {
+        product_runtime_file_stays_on_boundary(file);
+    }
+}
+
+fn product_runtime_file_stays_on_boundary(relative_path: &str) {
     let source = read_source(
         Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("src")
-            .join("farms_runtime.rs")
+            .join(relative_path)
             .as_path(),
     );
 
@@ -84,10 +99,13 @@ fn farm_runtime_stays_on_product_runtime_boundary() {
         "radrootsd",
         "publish_with_identity",
         "publish_parts_via_relay",
+        "publish_listing_via_radrootsd",
+        "publish_order_request_via_radrootsd",
+        "publish_farm_via_radrootsd",
     ] {
         assert!(
             !source.contains(forbidden),
-            "farms_runtime.rs must not use legacy SDK client or transport concept `{forbidden}`"
+            "{relative_path} must not use legacy SDK client or transport concept `{forbidden}`"
         );
     }
 }

@@ -11,8 +11,10 @@ use radroots_events::{
     kinds::{KIND_FARM, KIND_PROFILE},
 };
 use radroots_outbox::{RadrootsOutbox, RadrootsOutboxEventState};
+use radroots_relay_transport::RadrootsMockRelayPublishAdapter;
 use radroots_sdk::{
-    FARM_PUBLISH_OPERATION_KIND, FarmEnqueuePublishRequest, FarmPreparePublishRequest, RadrootsSdk,
+    FARM_PUBLISH_OPERATION_KIND, FarmEnqueuePublishRequest, FarmPreparePublishRequest,
+    PushOutboxEventState, PushOutboxRelayOutcomeKind, PushOutboxRequest, RadrootsSdk,
     RadrootsSdkError, RadrootsSdkPartialLocalMutationFailure, RadrootsSdkRecoveryAction,
     RadrootsSdkTimestamp, SdkMutationState, SdkRelayTargetPolicy, SdkRelayTargetSet,
     SdkRelayUrlPolicy,
@@ -346,6 +348,63 @@ async fn farm_enqueue_publish_derives_order_independent_idempotency_key() {
         .map(|status| status.relay_url)
         .collect::<Vec<_>>();
     assert_eq!(relay_urls, vec![RELAY_B.to_owned(), RELAY.to_owned()]);
+}
+
+#[tokio::test]
+async fn farm_enqueue_publish_pushes_queued_event_with_mock_relay_sync() {
+    let (_tempdir, sdk) = directory_sdk().await;
+    let enqueue_request = FarmEnqueuePublishRequest::new(
+        farmer_actor(),
+        farm(FARM_D_D_TAG, "Sync Farm"),
+        SdkRelayTargetPolicy::UseConfiguredRelays,
+    )
+    .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+    .expect("target relays");
+    let enqueue_receipt = sdk
+        .farms()
+        .enqueue_publish(enqueue_request, &FixtureSigner::new(FARMER))
+        .await
+        .expect("enqueue");
+    let adapter = RadrootsMockRelayPublishAdapter::new();
+
+    let push_receipt = sdk
+        .sync()
+        .push_outbox_with_adapter(&adapter, PushOutboxRequest::new().with_limit(1))
+        .await
+        .expect("push");
+
+    assert_eq!(push_receipt.attempted_events, 1);
+    assert_eq!(push_receipt.published_events, 1);
+    assert_eq!(push_receipt.retryable_events, 0);
+    assert_eq!(push_receipt.terminal_events, 0);
+    assert_eq!(push_receipt.events.len(), 1);
+    let event = &push_receipt.events[0];
+    assert_eq!(event.event_id, enqueue_receipt.signed_event_id);
+    assert_eq!(event.outbox_event_id, enqueue_receipt.outbox_event_id);
+    assert_eq!(event.final_state, PushOutboxEventState::Published);
+    assert_eq!(event.attempted_count, 1);
+    assert_eq!(event.accepted_count, 1);
+    assert_eq!(event.retryable_count, 0);
+    assert_eq!(event.terminal_count, 0);
+    assert_eq!(event.quorum, 1);
+    assert!(event.quorum_met);
+    assert_eq!(event.relays.len(), 1);
+    assert_eq!(event.relays[0].relay_url, RELAY);
+    assert_eq!(
+        event.relays[0].outcome_kind,
+        PushOutboxRelayOutcomeKind::Accepted
+    );
+    assert_eq!(adapter.captured_raw_events().len(), 1);
+
+    let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").outbox_path)
+        .await
+        .expect("outbox");
+    let stored = outbox
+        .get_event(enqueue_receipt.outbox_event_id)
+        .await
+        .expect("stored")
+        .expect("stored");
+    assert_eq!(stored.state, RadrootsOutboxEventState::Published);
 }
 
 #[tokio::test]
