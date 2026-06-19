@@ -36,6 +36,8 @@ mod relay_targets;
 mod runtime;
 #[cfg(feature = "runtime")]
 mod sync_runtime;
+#[cfg(feature = "runtime")]
+mod workflow_runtime;
 
 pub use crate::client::{
     FarmClient, ListingClient, ProfileClient, RadrootsSdkClient, SdkPublishError,
