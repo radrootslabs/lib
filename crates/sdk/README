@@ -37,8 +37,8 @@ runtime consumers. It enables `std`, `serde`, `serde_json`, `runtime`,
 is retained in this bundle only for current direct relay publish callers that
 have not migrated to the product runtime yet; it is classified for removal once
 those callers are SDK-runtime backed. `local-runtime` does not enable
-`radrootsd-client`. `cli-runtime` is an alias for `local-runtime` so CLI
-consumers stay on the same runtime contract as local app consumers.
+`radrootsd-client`. CLI, app, and local tooling consumers should depend on this
+feature directly so they stay on the same runtime contract.
 
 Relay URL policy is explicit. Public relay URLs must use `wss://`. Local
 development `ws://` relay URLs are accepted only under `SdkRelayUrlPolicy::Localhost`

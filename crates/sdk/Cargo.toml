@@ -77,7 +77,6 @@ local-runtime = [
   "signing",
   "relay-client",
 ]
-cli-runtime = ["local-runtime"]
 
 [dependencies]
 radroots_authority = { workspace = true, optional = true, default-features = false }
@@ -123,7 +122,7 @@ required-features = ["runtime", "local-signer"]
 [[example]]
 name = "runtime_local"
 path = "examples/runtime_local.rs"
-required-features = ["cli-runtime"]
+required-features = ["local-runtime"]
 
 [dev-dependencies]
 futures = { workspace = true }
