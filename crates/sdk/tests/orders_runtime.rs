@@ -44,8 +44,8 @@ use radroots_sdk::{
     OrderPaymentStateKind, OrderReceiptRecordEnqueueRequest, OrderRequestEvidenceIngestRequest,
     OrderRevisionDecisionEnqueueRequest, OrderRevisionProposalEnqueueRequest,
     OrderSettlementStateKind, OrderStatusKind, OrderStatusRequest, OrderSubmitEnqueueRequest,
-    OrderSubmitPrepareRequest, PushOutboxEventState, PushOutboxRelayOutcomeKind, PushOutboxRequest,
-    RadrootsSdk, RadrootsSdkError, RadrootsSdkPartialLocalMutationFailure,
+    OrderSubmitPrepareRequest, OrderWorkflowKind, PushOutboxEventState, PushOutboxRelayOutcomeKind,
+    PushOutboxRequest, RadrootsSdk, RadrootsSdkError, RadrootsSdkPartialLocalMutationFailure,
     RadrootsSdkRecoveryAction, RadrootsSdkTimestamp, SdkMutationState, SdkOrderStatusIssue,
     SdkOrderStatusIssueKind, SdkOrderStatusSource, SdkRelayTargetPolicy, SdkRelayTargetSet,
     SdkRelayUrlPolicy,
@@ -389,6 +389,17 @@ async fn order_submit_enqueue_stores_event_queues_outbox_and_status_sees_request
             order.clone(),
         ))
         .expect("prepared");
+    assert_eq!(prepared.workflow.kind, OrderWorkflowKind::Submit);
+    assert_eq!(
+        prepared.workflow.operation_kind,
+        ORDER_SUBMIT_OPERATION_KIND
+    );
+    assert_eq!(prepared.workflow.contract_id, "radroots.order.request.v1");
+    assert_eq!(
+        prepared.workflow.expected_event_id,
+        prepared.expected_event_id
+    );
+    assert_eq!(prepared.workflow.created_at, prepared.created_at);
     let request = OrderSubmitEnqueueRequest::new(
         buyer_actor(),
         listing_event_ptr(),
@@ -409,6 +420,24 @@ async fn order_submit_enqueue_stores_event_queues_outbox_and_status_sees_request
     assert_eq!(receipt.order_id, prepared.order_id);
     assert_eq!(receipt.listing_addr, prepared.listing_addr);
     assert_eq!(receipt.listing_event_id, prepared.listing_event_id);
+    assert_eq!(receipt.workflow.kind, OrderWorkflowKind::Submit);
+    assert_eq!(receipt.workflow.operation_kind, ORDER_SUBMIT_OPERATION_KIND);
+    assert_eq!(
+        receipt.workflow.expected_event_id,
+        prepared.expected_event_id
+    );
+    assert_eq!(receipt.workflow.signed_event_id, receipt.signed_event_id);
+    assert_eq!(receipt.workflow.local_event_seq, receipt.local_event_seq);
+    assert_eq!(
+        receipt.workflow.outbox_operation_id,
+        receipt.outbox_operation_id
+    );
+    assert_eq!(receipt.workflow.outbox_event_id, receipt.outbox_event_id);
+    assert_eq!(receipt.workflow.state, receipt.state);
+    assert_eq!(
+        receipt.workflow.idempotency_digest_prefix,
+        receipt.idempotency_digest_prefix
+    );
     assert_eq!(receipt.expected_event_id, prepared.expected_event_id);
     assert_eq!(receipt.signed_event_id, receipt.expected_event_id);
     assert_eq!(receipt.local_event_seq, 1);
@@ -763,6 +792,17 @@ async fn order_submit_runtime_dtos_serialize_deterministically() {
     assert_eq!(
         receipt_json,
         serde_json::json!({
+            "workflow": {
+                "kind": "submit",
+                "operation_kind": ORDER_SUBMIT_OPERATION_KIND,
+                "expected_event_id": receipt.workflow.expected_event_id.as_str(),
+                "signed_event_id": receipt.workflow.signed_event_id.as_str(),
+                "local_event_seq": 1,
+                "outbox_operation_id": 1,
+                "outbox_event_id": 1,
+                "state": "stored_and_queued",
+                "idempotency_digest_prefix": receipt.workflow.idempotency_digest_prefix.as_deref()
+            },
             "order_id": receipt.order_id.as_str(),
             "listing_addr": receipt.listing_addr.as_str(),
             "listing_event_id": receipt.listing_event_id.as_str(),
@@ -1371,11 +1411,43 @@ async fn order_decision_runtime_dtos_serialize_deterministically() {
         .enqueue_decision(enqueue_request, &FixtureSigner::new(SELLER_SECRET_KEY_HEX))
         .await
         .expect("enqueue");
+    assert_eq!(receipt.workflow.kind, OrderWorkflowKind::Decision);
+    assert_eq!(
+        receipt.workflow.operation_kind,
+        ORDER_DECISION_OPERATION_KIND
+    );
+    assert_eq!(
+        receipt.workflow.expected_event_id,
+        receipt.expected_event_id
+    );
+    assert_eq!(receipt.workflow.signed_event_id, receipt.signed_event_id);
+    assert_eq!(receipt.workflow.local_event_seq, receipt.local_event_seq);
+    assert_eq!(
+        receipt.workflow.outbox_operation_id,
+        receipt.outbox_operation_id
+    );
+    assert_eq!(receipt.workflow.outbox_event_id, receipt.outbox_event_id);
+    assert_eq!(receipt.workflow.state, receipt.state);
+    assert_eq!(
+        receipt.workflow.idempotency_digest_prefix,
+        receipt.idempotency_digest_prefix
+    );
     let receipt_json = serde_json::to_value(&receipt).expect("receipt json");
 
     assert_eq!(
         receipt_json,
         serde_json::json!({
+            "workflow": {
+                "kind": "decision",
+                "operation_kind": ORDER_DECISION_OPERATION_KIND,
+                "expected_event_id": receipt.workflow.expected_event_id.as_str(),
+                "signed_event_id": receipt.workflow.signed_event_id.as_str(),
+                "local_event_seq": 2,
+                "outbox_operation_id": 1,
+                "outbox_event_id": 1,
+                "state": "stored_and_queued",
+                "idempotency_digest_prefix": receipt.workflow.idempotency_digest_prefix.as_deref()
+            },
             "order_id": receipt.order_id.as_str(),
             "listing_addr": receipt.listing_addr.as_str(),
             "buyer_pubkey": BUYER_PUBLIC_KEY_HEX,

@@ -81,6 +81,71 @@ const ORDER_FULFILLMENT_UPDATE_CONTRACT_ID: &str = "radroots.order.fulfillment_u
 const ORDER_RECEIPT_CONTRACT_ID: &str = "radroots.order.receipt.v1";
 
 #[cfg(feature = "runtime")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum OrderWorkflowKind {
+    Submit,
+    Decision,
+    RevisionProposal,
+    RevisionDecision,
+    Cancellation,
+    FulfillmentUpdate,
+    ReceiptRecord,
+}
+
+#[cfg(feature = "runtime")]
+impl OrderWorkflowKind {
+    pub fn operation_kind(self) -> &'static str {
+        match self {
+            Self::Submit => ORDER_SUBMIT_OPERATION_KIND,
+            Self::Decision => ORDER_DECISION_OPERATION_KIND,
+            Self::RevisionProposal => ORDER_REVISION_PROPOSAL_OPERATION_KIND,
+            Self::RevisionDecision => ORDER_REVISION_DECISION_OPERATION_KIND,
+            Self::Cancellation => ORDER_CANCELLATION_OPERATION_KIND,
+            Self::FulfillmentUpdate => ORDER_FULFILLMENT_UPDATE_OPERATION_KIND,
+            Self::ReceiptRecord => ORDER_RECEIPT_RECORD_OPERATION_KIND,
+        }
+    }
+
+    pub fn contract_id(self) -> &'static str {
+        match self {
+            Self::Submit => ORDER_REQUEST_CONTRACT_ID,
+            Self::Decision => ORDER_DECISION_CONTRACT_ID,
+            Self::RevisionProposal => ORDER_REVISION_PROPOSAL_CONTRACT_ID,
+            Self::RevisionDecision => ORDER_REVISION_DECISION_CONTRACT_ID,
+            Self::Cancellation => ORDER_CANCELLATION_CONTRACT_ID,
+            Self::FulfillmentUpdate => ORDER_FULFILLMENT_UPDATE_CONTRACT_ID,
+            Self::ReceiptRecord => ORDER_RECEIPT_CONTRACT_ID,
+        }
+    }
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct OrderWorkflowPlan {
+    pub kind: OrderWorkflowKind,
+    pub operation_kind: &'static str,
+    pub contract_id: &'static str,
+    pub expected_event_id: RadrootsEventId,
+    pub created_at: RadrootsSdkTimestamp,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct OrderWorkflowEnqueueReceipt {
+    pub kind: OrderWorkflowKind,
+    pub operation_kind: &'static str,
+    pub expected_event_id: RadrootsEventId,
+    pub signed_event_id: RadrootsEventId,
+    pub local_event_seq: i64,
+    pub outbox_operation_id: i64,
+    pub outbox_event_id: i64,
+    pub state: SdkMutationState,
+    pub idempotency_digest_prefix: Option<String>,
+}
+
+#[cfg(feature = "runtime")]
 #[derive(Clone, Debug)]
 #[non_exhaustive]
 pub struct OrderSubmitPrepareRequest {
@@ -208,6 +273,7 @@ impl OrderSubmitEnqueueRequest {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct OrderSubmitPlan {
+    pub workflow: OrderWorkflowPlan,
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
     pub listing_event_id: RadrootsEventId,
@@ -219,6 +285,7 @@ pub struct OrderSubmitPlan {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct OrderSubmitReceipt {
+    pub workflow: OrderWorkflowEnqueueReceipt,
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
     pub listing_event_id: RadrootsEventId,
@@ -454,6 +521,7 @@ impl OrderDecisionEnqueueRequest {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct OrderDecisionPlan {
+    pub workflow: OrderWorkflowPlan,
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
     pub buyer_pubkey: RadrootsPublicKey,
@@ -467,6 +535,7 @@ pub struct OrderDecisionPlan {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct OrderDecisionReceipt {
+    pub workflow: OrderWorkflowEnqueueReceipt,
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
     pub buyer_pubkey: RadrootsPublicKey,
@@ -617,6 +686,7 @@ impl OrderRevisionProposalEnqueueRequest {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct OrderRevisionProposalPlan {
+    pub workflow: OrderWorkflowPlan,
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
     pub buyer_pubkey: RadrootsPublicKey,
@@ -631,6 +701,7 @@ pub struct OrderRevisionProposalPlan {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct OrderRevisionProposalReceipt {
+    pub workflow: OrderWorkflowEnqueueReceipt,
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
     pub buyer_pubkey: RadrootsPublicKey,
@@ -782,6 +853,7 @@ impl OrderRevisionDecisionEnqueueRequest {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct OrderRevisionDecisionPlan {
+    pub workflow: OrderWorkflowPlan,
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
     pub buyer_pubkey: RadrootsPublicKey,
@@ -796,6 +868,7 @@ pub struct OrderRevisionDecisionPlan {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct OrderRevisionDecisionReceipt {
+    pub workflow: OrderWorkflowEnqueueReceipt,
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
     pub buyer_pubkey: RadrootsPublicKey,
@@ -947,6 +1020,7 @@ impl OrderCancellationEnqueueRequest {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct OrderCancellationPlan {
+    pub workflow: OrderWorkflowPlan,
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
     pub buyer_pubkey: RadrootsPublicKey,
@@ -961,6 +1035,7 @@ pub struct OrderCancellationPlan {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct OrderCancellationReceipt {
+    pub workflow: OrderWorkflowEnqueueReceipt,
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
     pub buyer_pubkey: RadrootsPublicKey,
@@ -1112,6 +1187,7 @@ impl OrderFulfillmentUpdateEnqueueRequest {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct OrderFulfillmentUpdatePlan {
+    pub workflow: OrderWorkflowPlan,
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
     pub buyer_pubkey: RadrootsPublicKey,
@@ -1126,6 +1202,7 @@ pub struct OrderFulfillmentUpdatePlan {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct OrderFulfillmentUpdateReceipt {
+    pub workflow: OrderWorkflowEnqueueReceipt,
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
     pub buyer_pubkey: RadrootsPublicKey,
@@ -1277,6 +1354,7 @@ impl OrderReceiptRecordEnqueueRequest {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct OrderReceiptRecordPlan {
+    pub workflow: OrderWorkflowPlan,
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
     pub buyer_pubkey: RadrootsPublicKey,
@@ -1291,6 +1369,7 @@ pub struct OrderReceiptRecordPlan {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct OrderReceiptRecordReceipt {
+    pub workflow: OrderWorkflowEnqueueReceipt,
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
     pub buyer_pubkey: RadrootsPublicKey,
@@ -1709,7 +1788,7 @@ impl<'sdk> OrdersClient<'sdk> {
         let enqueue = enqueue_signed_workflow(
             self.sdk,
             SdkWorkflowEnqueueRequest {
-                operation_kind: ORDER_SUBMIT_OPERATION_KIND,
+                operation_kind: OrderWorkflowKind::Submit.operation_kind(),
                 actor,
                 frozen_draft: &plan.frozen_draft,
                 target_relays,
@@ -1719,6 +1798,11 @@ impl<'sdk> OrdersClient<'sdk> {
         )
         .await?;
         Ok(OrderSubmitReceipt {
+            workflow: order_workflow_enqueue_receipt(
+                OrderWorkflowKind::Submit,
+                plan.expected_event_id.clone(),
+                &enqueue,
+            ),
             order_id: plan.order_id,
             listing_addr: plan.listing_addr,
             listing_event_id: plan.listing_event_id,
@@ -1792,7 +1876,7 @@ impl<'sdk> OrdersClient<'sdk> {
         let enqueue = enqueue_signed_workflow(
             self.sdk,
             SdkWorkflowEnqueueRequest {
-                operation_kind: ORDER_DECISION_OPERATION_KIND,
+                operation_kind: OrderWorkflowKind::Decision.operation_kind(),
                 actor,
                 frozen_draft: &plan.frozen_draft,
                 target_relays,
@@ -1802,6 +1886,11 @@ impl<'sdk> OrdersClient<'sdk> {
         )
         .await?;
         Ok(OrderDecisionReceipt {
+            workflow: order_workflow_enqueue_receipt(
+                OrderWorkflowKind::Decision,
+                plan.expected_event_id.clone(),
+                &enqueue,
+            ),
             order_id: plan.order_id,
             listing_addr: plan.listing_addr,
             buyer_pubkey: plan.buyer_pubkey,
@@ -1886,7 +1975,7 @@ impl<'sdk> OrdersClient<'sdk> {
         let enqueue = enqueue_signed_workflow(
             self.sdk,
             SdkWorkflowEnqueueRequest {
-                operation_kind: ORDER_REVISION_PROPOSAL_OPERATION_KIND,
+                operation_kind: OrderWorkflowKind::RevisionProposal.operation_kind(),
                 actor,
                 frozen_draft: &plan.frozen_draft,
                 target_relays,
@@ -1896,6 +1985,11 @@ impl<'sdk> OrdersClient<'sdk> {
         )
         .await?;
         Ok(OrderRevisionProposalReceipt {
+            workflow: order_workflow_enqueue_receipt(
+                OrderWorkflowKind::RevisionProposal,
+                plan.expected_event_id.clone(),
+                &enqueue,
+            ),
             order_id: plan.order_id,
             listing_addr: plan.listing_addr,
             buyer_pubkey: plan.buyer_pubkey,
@@ -1981,7 +2075,7 @@ impl<'sdk> OrdersClient<'sdk> {
         let enqueue = enqueue_signed_workflow(
             self.sdk,
             SdkWorkflowEnqueueRequest {
-                operation_kind: ORDER_REVISION_DECISION_OPERATION_KIND,
+                operation_kind: OrderWorkflowKind::RevisionDecision.operation_kind(),
                 actor,
                 frozen_draft: &plan.frozen_draft,
                 target_relays,
@@ -1991,6 +2085,11 @@ impl<'sdk> OrdersClient<'sdk> {
         )
         .await?;
         Ok(OrderRevisionDecisionReceipt {
+            workflow: order_workflow_enqueue_receipt(
+                OrderWorkflowKind::RevisionDecision,
+                plan.expected_event_id.clone(),
+                &enqueue,
+            ),
             order_id: plan.order_id,
             listing_addr: plan.listing_addr,
             buyer_pubkey: plan.buyer_pubkey,
@@ -2070,7 +2169,7 @@ impl<'sdk> OrdersClient<'sdk> {
         let enqueue = enqueue_signed_workflow(
             self.sdk,
             SdkWorkflowEnqueueRequest {
-                operation_kind: ORDER_CANCELLATION_OPERATION_KIND,
+                operation_kind: OrderWorkflowKind::Cancellation.operation_kind(),
                 actor,
                 frozen_draft: &plan.frozen_draft,
                 target_relays,
@@ -2080,6 +2179,11 @@ impl<'sdk> OrdersClient<'sdk> {
         )
         .await?;
         Ok(OrderCancellationReceipt {
+            workflow: order_workflow_enqueue_receipt(
+                OrderWorkflowKind::Cancellation,
+                plan.expected_event_id.clone(),
+                &enqueue,
+            ),
             order_id: plan.order_id,
             listing_addr: plan.listing_addr,
             buyer_pubkey: plan.buyer_pubkey,
@@ -2165,7 +2269,7 @@ impl<'sdk> OrdersClient<'sdk> {
         let enqueue = enqueue_signed_workflow(
             self.sdk,
             SdkWorkflowEnqueueRequest {
-                operation_kind: ORDER_FULFILLMENT_UPDATE_OPERATION_KIND,
+                operation_kind: OrderWorkflowKind::FulfillmentUpdate.operation_kind(),
                 actor,
                 frozen_draft: &plan.frozen_draft,
                 target_relays,
@@ -2175,6 +2279,11 @@ impl<'sdk> OrdersClient<'sdk> {
         )
         .await?;
         Ok(OrderFulfillmentUpdateReceipt {
+            workflow: order_workflow_enqueue_receipt(
+                OrderWorkflowKind::FulfillmentUpdate,
+                plan.expected_event_id.clone(),
+                &enqueue,
+            ),
             order_id: plan.order_id,
             listing_addr: plan.listing_addr,
             buyer_pubkey: plan.buyer_pubkey,
@@ -2254,7 +2363,7 @@ impl<'sdk> OrdersClient<'sdk> {
         let enqueue = enqueue_signed_workflow(
             self.sdk,
             SdkWorkflowEnqueueRequest {
-                operation_kind: ORDER_RECEIPT_RECORD_OPERATION_KIND,
+                operation_kind: OrderWorkflowKind::ReceiptRecord.operation_kind(),
                 actor,
                 frozen_draft: &plan.frozen_draft,
                 target_relays,
@@ -2264,6 +2373,11 @@ impl<'sdk> OrdersClient<'sdk> {
         )
         .await?;
         Ok(OrderReceiptRecordReceipt {
+            workflow: order_workflow_enqueue_receipt(
+                OrderWorkflowKind::ReceiptRecord,
+                plan.expected_event_id.clone(),
+                &enqueue,
+            ),
             order_id: plan.order_id,
             listing_addr: plan.listing_addr,
             buyer_pubkey: plan.buyer_pubkey,
@@ -2542,6 +2656,11 @@ fn order_submit_plan(
             message: format!("order submit draft produced invalid event id: {error}"),
         })?;
     Ok(OrderSubmitPlan {
+        workflow: order_workflow_plan(
+            OrderWorkflowKind::Submit,
+            expected_event_id.clone(),
+            created_at,
+        ),
         order_id,
         listing_addr,
         listing_event_id,
@@ -2591,6 +2710,11 @@ fn order_decision_plan(
             message: format!("order decision draft produced invalid event id: {error}"),
         })?;
     Ok(OrderDecisionPlan {
+        workflow: order_workflow_plan(
+            OrderWorkflowKind::Decision,
+            expected_event_id.clone(),
+            created_at,
+        ),
         order_id,
         listing_addr,
         buyer_pubkey,
@@ -2644,6 +2768,11 @@ fn order_revision_proposal_plan(
         "order revision proposal",
     )?;
     Ok(OrderRevisionProposalPlan {
+        workflow: order_workflow_plan(
+            OrderWorkflowKind::RevisionProposal,
+            expected_event_id.clone(),
+            created_at,
+        ),
         order_id,
         listing_addr,
         buyer_pubkey,
@@ -2698,6 +2827,11 @@ fn order_revision_decision_plan(
         "order revision decision",
     )?;
     Ok(OrderRevisionDecisionPlan {
+        workflow: order_workflow_plan(
+            OrderWorkflowKind::RevisionDecision,
+            expected_event_id.clone(),
+            created_at,
+        ),
         order_id,
         listing_addr,
         buyer_pubkey,
@@ -2745,6 +2879,11 @@ fn order_cancellation_plan(
         "order cancellation",
     )?;
     Ok(OrderCancellationPlan {
+        workflow: order_workflow_plan(
+            OrderWorkflowKind::Cancellation,
+            expected_event_id.clone(),
+            created_at,
+        ),
         order_id,
         listing_addr,
         buyer_pubkey,
@@ -2792,6 +2931,11 @@ fn order_fulfillment_update_plan(
         "order fulfillment update",
     )?;
     Ok(OrderFulfillmentUpdatePlan {
+        workflow: order_workflow_plan(
+            OrderWorkflowKind::FulfillmentUpdate,
+            expected_event_id.clone(),
+            created_at,
+        ),
         order_id,
         listing_addr,
         buyer_pubkey,
@@ -2838,6 +2982,11 @@ fn order_receipt_record_plan(
         "order receipt record",
     )?;
     Ok(OrderReceiptRecordPlan {
+        workflow: order_workflow_plan(
+            OrderWorkflowKind::ReceiptRecord,
+            expected_event_id.clone(),
+            created_at,
+        ),
         order_id,
         listing_addr,
         buyer_pubkey,
@@ -2848,6 +2997,40 @@ fn order_receipt_record_plan(
         frozen_draft,
         created_at,
     })
+}
+
+#[cfg(feature = "runtime")]
+fn order_workflow_plan(
+    kind: OrderWorkflowKind,
+    expected_event_id: RadrootsEventId,
+    created_at: RadrootsSdkTimestamp,
+) -> OrderWorkflowPlan {
+    OrderWorkflowPlan {
+        kind,
+        operation_kind: kind.operation_kind(),
+        contract_id: kind.contract_id(),
+        expected_event_id,
+        created_at,
+    }
+}
+
+#[cfg(feature = "runtime")]
+fn order_workflow_enqueue_receipt(
+    kind: OrderWorkflowKind,
+    expected_event_id: RadrootsEventId,
+    enqueue: &crate::workflow_runtime::SdkWorkflowEnqueueReceipt,
+) -> OrderWorkflowEnqueueReceipt {
+    OrderWorkflowEnqueueReceipt {
+        kind,
+        operation_kind: kind.operation_kind(),
+        expected_event_id,
+        signed_event_id: enqueue.signed_event_id.clone(),
+        local_event_seq: enqueue.local_event_seq,
+        outbox_operation_id: enqueue.outbox_operation_id,
+        outbox_event_id: enqueue.outbox_event_id,
+        state: enqueue.state.into(),
+        idempotency_digest_prefix: Some(enqueue.idempotency_digest_prefix.clone()),
+    }
 }
 
 #[cfg(feature = "runtime")]

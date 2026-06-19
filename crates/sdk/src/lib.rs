@@ -77,8 +77,9 @@ pub use crate::orders_runtime::{
     OrderRevisionProposalEnqueueRequest, OrderRevisionProposalPlan,
     OrderRevisionProposalPrepareRequest, OrderRevisionProposalReceipt, OrderSettlementStateKind,
     OrderStatusKind, OrderStatusReceipt, OrderStatusRequest, OrderSubmitEnqueueRequest,
-    OrderSubmitPlan, OrderSubmitPrepareRequest, OrderSubmitReceipt, SdkOrderStatusIssue,
-    SdkOrderStatusIssueKind, SdkOrderStatusSource,
+    OrderSubmitPlan, OrderSubmitPrepareRequest, OrderSubmitReceipt, OrderWorkflowEnqueueReceipt,
+    OrderWorkflowKind, OrderWorkflowPlan, SdkOrderStatusIssue, SdkOrderStatusIssueKind,
+    SdkOrderStatusSource,
 };
 #[cfg(feature = "runtime")]
 pub use crate::product_clients::{FarmsClient, ListingsClient, OrdersClient, SyncClient};
