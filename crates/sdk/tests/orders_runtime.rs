@@ -12,7 +12,11 @@ use radroots_events::{
     contract::RadrootsActorRole,
     draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent},
     ids::{RadrootsEventId, RadrootsOrderId},
-    kinds::{KIND_LISTING, KIND_ORDER_DECISION, KIND_ORDER_REQUEST},
+    kinds::{
+        KIND_LISTING, KIND_ORDER_CANCELLATION, KIND_ORDER_DECISION, KIND_ORDER_FULFILLMENT_UPDATE,
+        KIND_ORDER_RECEIPT, KIND_ORDER_REQUEST, KIND_ORDER_REVISION_DECISION,
+        KIND_ORDER_REVISION_PROPOSAL,
+    },
 };
 use radroots_nostr::prelude::{
     RadrootsNostrKeys, RadrootsNostrSecretKey, RadrootsNostrTimestamp, radroots_event_from_nostr,
@@ -22,21 +26,29 @@ use radroots_outbox::{RadrootsOutbox, RadrootsOutboxEventState};
 use radroots_relay_transport::RadrootsMockRelayPublishAdapter;
 use radroots_sdk::protocol::events::RadrootsNostrEventPtr;
 use radroots_sdk::protocol::order::{
-    RadrootsListingAddress, RadrootsOrderDecision, RadrootsOrderDecisionOutcome,
-    RadrootsOrderEconomicItem, RadrootsOrderEconomicLine, RadrootsOrderEconomics,
+    RadrootsListingAddress, RadrootsOrderCancellation, RadrootsOrderDecision,
+    RadrootsOrderDecisionOutcome, RadrootsOrderEconomicItem, RadrootsOrderEconomicLine,
+    RadrootsOrderEconomics, RadrootsOrderFulfillmentState, RadrootsOrderFulfillmentUpdate,
     RadrootsOrderInventoryCommitment, RadrootsOrderItem, RadrootsOrderPricingBasis,
-    RadrootsOrderRequest,
+    RadrootsOrderReceipt, RadrootsOrderRequest, RadrootsOrderRevisionDecision,
+    RadrootsOrderRevisionOutcome, RadrootsOrderRevisionProposal,
 };
 use radroots_sdk::protocol::wire::WireEventParts;
 use radroots_sdk::{
-    ORDER_DECISION_OPERATION_KIND, ORDER_STATUS_DEFAULT_LIMIT, ORDER_STATUS_MAX_LIMIT,
-    ORDER_SUBMIT_OPERATION_KIND, OrderDecisionEnqueueRequest, OrderDecisionPrepareRequest,
-    OrderPaymentStateKind, OrderRequestEvidenceIngestRequest, OrderSettlementStateKind,
-    OrderStatusKind, OrderStatusRequest, OrderSubmitEnqueueRequest, OrderSubmitPrepareRequest,
-    PushOutboxEventState, PushOutboxRelayOutcomeKind, PushOutboxRequest, RadrootsSdk,
-    RadrootsSdkError, RadrootsSdkPartialLocalMutationFailure, RadrootsSdkRecoveryAction,
-    RadrootsSdkTimestamp, SdkMutationState, SdkOrderStatusIssue, SdkOrderStatusIssueKind,
-    SdkOrderStatusSource, SdkRelayTargetPolicy, SdkRelayTargetSet, SdkRelayUrlPolicy,
+    ORDER_CANCELLATION_OPERATION_KIND, ORDER_DECISION_OPERATION_KIND,
+    ORDER_FULFILLMENT_UPDATE_OPERATION_KIND, ORDER_RECEIPT_RECORD_OPERATION_KIND,
+    ORDER_REVISION_DECISION_OPERATION_KIND, ORDER_REVISION_PROPOSAL_OPERATION_KIND,
+    ORDER_STATUS_DEFAULT_LIMIT, ORDER_STATUS_MAX_LIMIT, ORDER_SUBMIT_OPERATION_KIND,
+    OrderCancellationEnqueueRequest, OrderDecisionEnqueueRequest, OrderDecisionPrepareRequest,
+    OrderFulfillmentStatusKind, OrderFulfillmentUpdateEnqueueRequest, OrderPaymentStateKind,
+    OrderReceiptRecordEnqueueRequest, OrderRequestEvidenceIngestRequest,
+    OrderRevisionDecisionEnqueueRequest, OrderRevisionProposalEnqueueRequest,
+    OrderSettlementStateKind, OrderStatusKind, OrderStatusRequest, OrderSubmitEnqueueRequest,
+    OrderSubmitPrepareRequest, PushOutboxEventState, PushOutboxRelayOutcomeKind, PushOutboxRequest,
+    RadrootsSdk, RadrootsSdkError, RadrootsSdkPartialLocalMutationFailure,
+    RadrootsSdkRecoveryAction, RadrootsSdkTimestamp, SdkMutationState, SdkOrderStatusIssue,
+    SdkOrderStatusIssueKind, SdkOrderStatusSource, SdkRelayTargetPolicy, SdkRelayTargetSet,
+    SdkRelayUrlPolicy,
 };
 
 const BUYER_SECRET_KEY_HEX: &str =
@@ -780,6 +792,110 @@ fn order_decision(raw_order_id: &str) -> RadrootsOrderDecision {
     }
 }
 
+fn order_revision_proposal(
+    raw_order_id: &str,
+    root_event_id: &RadrootsEventId,
+    previous_event_id: &RadrootsEventId,
+) -> RadrootsOrderRevisionProposal {
+    RadrootsOrderRevisionProposal {
+        revision_id: format!("revision-{raw_order_id}")
+            .parse()
+            .expect("revision id"),
+        order_id: order_id(raw_order_id),
+        listing_addr: listing_address(),
+        buyer_pubkey: BUYER_PUBLIC_KEY_HEX.parse().expect("buyer pubkey"),
+        seller_pubkey: SELLER_PUBLIC_KEY_HEX.parse().expect("seller pubkey"),
+        root_event_id: root_event_id.clone(),
+        prev_event_id: previous_event_id.clone(),
+        items: vec![RadrootsOrderItem {
+            bin_id: "bin-1".parse().expect("bin id"),
+            bin_count: 3,
+        }],
+        economics: revision_economics(),
+        reason: "increase quantity".to_owned(),
+    }
+}
+
+fn order_revision_decision(
+    proposal: &RadrootsOrderRevisionProposal,
+    previous_event_id: &RadrootsEventId,
+    decision: RadrootsOrderRevisionOutcome,
+) -> RadrootsOrderRevisionDecision {
+    RadrootsOrderRevisionDecision {
+        revision_id: proposal.revision_id.clone(),
+        order_id: proposal.order_id.clone(),
+        listing_addr: proposal.listing_addr.clone(),
+        buyer_pubkey: proposal.buyer_pubkey.clone(),
+        seller_pubkey: proposal.seller_pubkey.clone(),
+        root_event_id: proposal.root_event_id.clone(),
+        prev_event_id: previous_event_id.clone(),
+        decision,
+    }
+}
+
+fn order_fulfillment_update(
+    raw_order_id: &str,
+    status: RadrootsOrderFulfillmentState,
+) -> RadrootsOrderFulfillmentUpdate {
+    RadrootsOrderFulfillmentUpdate {
+        order_id: order_id(raw_order_id),
+        listing_addr: listing_address(),
+        buyer_pubkey: BUYER_PUBLIC_KEY_HEX.parse().expect("buyer pubkey"),
+        seller_pubkey: SELLER_PUBLIC_KEY_HEX.parse().expect("seller pubkey"),
+        status,
+    }
+}
+
+fn order_cancellation(raw_order_id: &str) -> RadrootsOrderCancellation {
+    RadrootsOrderCancellation {
+        order_id: order_id(raw_order_id),
+        listing_addr: listing_address(),
+        buyer_pubkey: BUYER_PUBLIC_KEY_HEX.parse().expect("buyer pubkey"),
+        seller_pubkey: SELLER_PUBLIC_KEY_HEX.parse().expect("seller pubkey"),
+        reason: "buyer changed pickup plan".to_owned(),
+    }
+}
+
+fn order_receipt_record(raw_order_id: &str, received: bool) -> RadrootsOrderReceipt {
+    RadrootsOrderReceipt {
+        order_id: order_id(raw_order_id),
+        listing_addr: listing_address(),
+        buyer_pubkey: BUYER_PUBLIC_KEY_HEX.parse().expect("buyer pubkey"),
+        seller_pubkey: SELLER_PUBLIC_KEY_HEX.parse().expect("seller pubkey"),
+        received,
+        issue: if received {
+            None
+        } else {
+            Some("missing one item".to_owned())
+        },
+        received_at: 1_785_000_000,
+    }
+}
+
+fn revision_economics() -> RadrootsOrderEconomics {
+    RadrootsOrderEconomics {
+        quote_id: "revision-quote-1".parse().expect("revision quote id"),
+        quote_version: 2,
+        pricing_basis: RadrootsOrderPricingBasis::ListingEvent,
+        currency: RadrootsCoreCurrency::USD,
+        items: vec![RadrootsOrderEconomicItem {
+            bin_id: "bin-1".parse().expect("bin id"),
+            bin_count: 3,
+            quantity_amount: decimal("1"),
+            quantity_unit: RadrootsCoreUnit::Each,
+            unit_price_amount: decimal("5"),
+            unit_price_currency: RadrootsCoreCurrency::USD,
+            line_subtotal: usd("15"),
+        }],
+        discounts: Vec::<RadrootsOrderEconomicLine>::new(),
+        adjustments: Vec::<RadrootsOrderEconomicLine>::new(),
+        subtotal: usd("15"),
+        discount_total: usd("0"),
+        adjustment_total: usd("0"),
+        total: usd("15"),
+    }
+}
+
 fn signed_event(
     secret_key_hex: &str,
     created_at: u32,
@@ -809,6 +925,26 @@ fn request_event_ptr(event: &RadrootsNostrEvent) -> RadrootsNostrEventPtr {
         id: event.id.clone(),
         relays: Some(RELAY.to_owned()),
     }
+}
+
+fn order_event_ptr(event_id: &RadrootsEventId) -> RadrootsNostrEventPtr {
+    RadrootsNostrEventPtr {
+        id: event_id.as_str().to_owned(),
+        relays: Some(RELAY.to_owned()),
+    }
+}
+
+async fn outbox_operation_kind(sdk: &RadrootsSdk, operation_id: i64) -> String {
+    let paths = sdk.storage_paths().expect("paths");
+    let outbox = RadrootsOutbox::open_file(&paths.outbox_path)
+        .await
+        .expect("outbox");
+    outbox
+        .get_operation(operation_id)
+        .await
+        .expect("outbox operation")
+        .expect("outbox operation")
+        .operation_kind
 }
 
 fn signed_order_decision_event(
@@ -1443,6 +1579,411 @@ async fn order_decision_enqueue_rejects_existing_decision_state_before_mutation(
             .as_ref()
             .map(RadrootsEventId::as_str),
         Some(decision_event.id.as_str())
+    );
+}
+
+#[tokio::test]
+async fn order_revision_order_fulfillment_order_receipt_lifecycle_enqueue_updates_status() {
+    let (_tempdir, sdk, store) = directory_sdk_and_store().await;
+    let request_event = signed_order_request_event("order-lifecycle-complete", 50);
+    let request_event_id = RadrootsEventId::parse(request_event.id.as_str()).expect("request id");
+    store
+        .ingest_event(RadrootsEventIngest::new(request_event.clone(), 5_000))
+        .await
+        .expect("ingest request");
+    let decision_receipt = sdk
+        .orders()
+        .enqueue_decision(
+            OrderDecisionEnqueueRequest::new(
+                seller_actor(),
+                request_event_ptr(&request_event),
+                order_decision("order-lifecycle-complete"),
+                SdkRelayTargetPolicy::UseConfiguredRelays,
+            )
+            .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+            .expect("decision target relays"),
+            &FixtureSigner::new(SELLER_SECRET_KEY_HEX),
+        )
+        .await
+        .expect("enqueue decision");
+    let proposal = order_revision_proposal(
+        "order-lifecycle-complete",
+        &request_event_id,
+        &decision_receipt.signed_event_id,
+    );
+    let proposal_receipt = sdk
+        .orders()
+        .enqueue_revision_proposal(
+            OrderRevisionProposalEnqueueRequest::new(
+                seller_actor(),
+                request_event_ptr(&request_event),
+                order_event_ptr(&decision_receipt.signed_event_id),
+                proposal.clone(),
+                SdkRelayTargetPolicy::UseConfiguredRelays,
+            )
+            .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+            .expect("proposal target relays")
+            .try_with_idempotency_key("order-lifecycle-revision-proposal")
+            .expect("proposal idempotency"),
+            &FixtureSigner::new(SELLER_SECRET_KEY_HEX),
+        )
+        .await
+        .expect("enqueue revision proposal");
+    assert_eq!(
+        proposal_receipt.signed_event_id,
+        proposal_receipt.expected_event_id
+    );
+    assert_eq!(
+        outbox_operation_kind(&sdk, proposal_receipt.outbox_operation_id).await,
+        ORDER_REVISION_PROPOSAL_OPERATION_KIND
+    );
+    let stored_proposal = store
+        .get_event(proposal_receipt.signed_event_id.as_str())
+        .await
+        .expect("proposal event lookup")
+        .expect("proposal event");
+    assert_eq!(stored_proposal.kind, KIND_ORDER_REVISION_PROPOSAL);
+    assert_eq!(
+        stored_proposal.contract_id.as_deref(),
+        Some("radroots.order.revision_proposal.v1")
+    );
+
+    let revision_decision = order_revision_decision(
+        &proposal,
+        &proposal_receipt.signed_event_id,
+        RadrootsOrderRevisionOutcome::Accepted,
+    );
+    let revision_decision_receipt = sdk
+        .orders()
+        .enqueue_revision_decision(
+            OrderRevisionDecisionEnqueueRequest::new(
+                buyer_actor(),
+                request_event_ptr(&request_event),
+                order_event_ptr(&proposal_receipt.signed_event_id),
+                revision_decision,
+                SdkRelayTargetPolicy::UseConfiguredRelays,
+            )
+            .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+            .expect("revision decision target relays"),
+            &FixtureSigner::new(BUYER_SECRET_KEY_HEX),
+        )
+        .await
+        .expect("enqueue revision decision");
+    assert_eq!(
+        outbox_operation_kind(&sdk, revision_decision_receipt.outbox_operation_id).await,
+        ORDER_REVISION_DECISION_OPERATION_KIND
+    );
+    assert_eq!(
+        store
+            .get_event(revision_decision_receipt.signed_event_id.as_str())
+            .await
+            .expect("revision decision lookup")
+            .expect("revision decision")
+            .kind,
+        KIND_ORDER_REVISION_DECISION
+    );
+
+    let fulfillment_receipt = sdk
+        .orders()
+        .enqueue_fulfillment_update(
+            OrderFulfillmentUpdateEnqueueRequest::new(
+                seller_actor(),
+                request_event_ptr(&request_event),
+                order_event_ptr(&revision_decision_receipt.signed_event_id),
+                order_fulfillment_update(
+                    "order-lifecycle-complete",
+                    RadrootsOrderFulfillmentState::ReadyForPickup,
+                ),
+                SdkRelayTargetPolicy::UseConfiguredRelays,
+            )
+            .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+            .expect("fulfillment target relays"),
+            &FixtureSigner::new(SELLER_SECRET_KEY_HEX),
+        )
+        .await
+        .expect("enqueue fulfillment");
+    assert_eq!(
+        outbox_operation_kind(&sdk, fulfillment_receipt.outbox_operation_id).await,
+        ORDER_FULFILLMENT_UPDATE_OPERATION_KIND
+    );
+    assert_eq!(
+        store
+            .get_event(fulfillment_receipt.signed_event_id.as_str())
+            .await
+            .expect("fulfillment lookup")
+            .expect("fulfillment")
+            .kind,
+        KIND_ORDER_FULFILLMENT_UPDATE
+    );
+
+    let receipt = sdk
+        .orders()
+        .enqueue_receipt_record(
+            OrderReceiptRecordEnqueueRequest::new(
+                buyer_actor(),
+                request_event_ptr(&request_event),
+                order_event_ptr(&fulfillment_receipt.signed_event_id),
+                order_receipt_record("order-lifecycle-complete", true),
+                SdkRelayTargetPolicy::UseConfiguredRelays,
+            )
+            .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+            .expect("receipt target relays"),
+            &FixtureSigner::new(BUYER_SECRET_KEY_HEX),
+        )
+        .await
+        .expect("enqueue receipt");
+    assert_eq!(
+        outbox_operation_kind(&sdk, receipt.outbox_operation_id).await,
+        ORDER_RECEIPT_RECORD_OPERATION_KIND
+    );
+    assert_eq!(
+        store
+            .get_event(receipt.signed_event_id.as_str())
+            .await
+            .expect("receipt lookup")
+            .expect("receipt")
+            .kind,
+        KIND_ORDER_RECEIPT
+    );
+
+    let status = sdk
+        .orders()
+        .status(status_request("order-lifecycle-complete"))
+        .await
+        .expect("status");
+    assert_eq!(status.status, OrderStatusKind::Completed);
+    assert_eq!(status.event_count, 6);
+    assert_eq!(
+        status
+            .fulfillment_event_id
+            .as_ref()
+            .map(RadrootsEventId::as_str),
+        Some(fulfillment_receipt.signed_event_id.as_str())
+    );
+    assert_eq!(
+        status
+            .receipt_event_id
+            .as_ref()
+            .map(RadrootsEventId::as_str),
+        Some(receipt.signed_event_id.as_str())
+    );
+    assert_eq!(
+        status.fulfillment_status,
+        Some(OrderFulfillmentStatusKind::ReadyForPickup)
+    );
+    assert!(status.lifecycle_terminal);
+    assert!(status.issues.is_empty());
+}
+
+#[tokio::test]
+async fn order_cancel_lifecycle_enqueue_updates_status() {
+    let (_tempdir, sdk, store) = directory_sdk_and_store().await;
+    let request_event = signed_order_request_event("order-lifecycle-cancel", 60);
+    let request_event_id = RadrootsEventId::parse(request_event.id.as_str()).expect("request id");
+    store
+        .ingest_event(RadrootsEventIngest::new(request_event.clone(), 6_000))
+        .await
+        .expect("ingest request");
+    let decision_receipt = sdk
+        .orders()
+        .enqueue_decision(
+            OrderDecisionEnqueueRequest::new(
+                seller_actor(),
+                request_event_ptr(&request_event),
+                order_decision("order-lifecycle-cancel"),
+                SdkRelayTargetPolicy::UseConfiguredRelays,
+            )
+            .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+            .expect("decision target relays"),
+            &FixtureSigner::new(SELLER_SECRET_KEY_HEX),
+        )
+        .await
+        .expect("enqueue decision");
+    let cancellation = sdk
+        .orders()
+        .enqueue_cancellation(
+            OrderCancellationEnqueueRequest::new(
+                buyer_actor(),
+                request_event_ptr(&request_event),
+                order_event_ptr(&decision_receipt.signed_event_id),
+                order_cancellation("order-lifecycle-cancel"),
+                SdkRelayTargetPolicy::UseConfiguredRelays,
+            )
+            .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+            .expect("cancellation target relays")
+            .try_with_idempotency_key("order-lifecycle-cancel")
+            .expect("cancellation idempotency"),
+            &FixtureSigner::new(BUYER_SECRET_KEY_HEX),
+        )
+        .await
+        .expect("enqueue cancellation");
+
+    assert_eq!(cancellation.root_event_id, request_event_id);
+    assert_eq!(
+        cancellation.previous_event_id,
+        decision_receipt.signed_event_id
+    );
+    assert_eq!(
+        outbox_operation_kind(&sdk, cancellation.outbox_operation_id).await,
+        ORDER_CANCELLATION_OPERATION_KIND
+    );
+    assert_eq!(
+        store
+            .get_event(cancellation.signed_event_id.as_str())
+            .await
+            .expect("cancellation lookup")
+            .expect("cancellation")
+            .kind,
+        KIND_ORDER_CANCELLATION
+    );
+    let replay = sdk
+        .orders()
+        .enqueue_cancellation(
+            OrderCancellationEnqueueRequest::new(
+                buyer_actor(),
+                request_event_ptr(&request_event),
+                order_event_ptr(&decision_receipt.signed_event_id),
+                order_cancellation("order-lifecycle-cancel"),
+                SdkRelayTargetPolicy::UseConfiguredRelays,
+            )
+            .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+            .expect("replay target relays")
+            .try_with_idempotency_key("order-lifecycle-cancel")
+            .expect("replay idempotency"),
+            &FixtureSigner::new(BUYER_SECRET_KEY_HEX),
+        )
+        .await
+        .expect("replay cancellation");
+    assert_eq!(replay.state, SdkMutationState::AlreadyQueued);
+    assert_eq!(replay.signed_event_id, cancellation.signed_event_id);
+    assert_eq!(replay.outbox_event_id, cancellation.outbox_event_id);
+    let status = sdk
+        .orders()
+        .status(status_request("order-lifecycle-cancel"))
+        .await
+        .expect("status");
+    assert_eq!(status.status, OrderStatusKind::Cancelled);
+    assert_eq!(
+        status
+            .cancellation_event_id
+            .as_ref()
+            .map(RadrootsEventId::as_str),
+        Some(cancellation.signed_event_id.as_str())
+    );
+    assert!(status.lifecycle_terminal);
+    assert!(status.issues.is_empty());
+}
+
+#[tokio::test]
+async fn order_lifecycle_enqueue_rejects_invalid_state_before_mutation() {
+    let (_tempdir, sdk, store) = directory_sdk_and_store().await;
+    let request_event = signed_order_request_event("order-lifecycle-invalid", 70);
+    let request_event_id = RadrootsEventId::parse(request_event.id.as_str()).expect("request id");
+    let missing = sdk
+        .orders()
+        .enqueue_fulfillment_update(
+            OrderFulfillmentUpdateEnqueueRequest::new(
+                seller_actor(),
+                request_event_ptr(&request_event),
+                order_event_ptr(&request_event_id),
+                order_fulfillment_update(
+                    "order-lifecycle-invalid",
+                    RadrootsOrderFulfillmentState::ReadyForPickup,
+                ),
+                SdkRelayTargetPolicy::UseConfiguredRelays,
+            )
+            .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+            .expect("missing target relays"),
+            &FixtureSigner::new(SELLER_SECRET_KEY_HEX),
+        )
+        .await
+        .expect_err("missing local evidence");
+    assert!(matches!(missing, RadrootsSdkError::InvalidRequest { .. }));
+    assert_eq!(
+        store
+            .status_summary()
+            .await
+            .expect("event store status")
+            .total_events,
+        0
+    );
+
+    store
+        .ingest_event(RadrootsEventIngest::new(request_event.clone(), 7_000))
+        .await
+        .expect("ingest request");
+    let decision_receipt = sdk
+        .orders()
+        .enqueue_decision(
+            OrderDecisionEnqueueRequest::new(
+                seller_actor(),
+                request_event_ptr(&request_event),
+                order_decision("order-lifecycle-invalid"),
+                SdkRelayTargetPolicy::UseConfiguredRelays,
+            )
+            .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+            .expect("decision target relays"),
+            &FixtureSigner::new(SELLER_SECRET_KEY_HEX),
+        )
+        .await
+        .expect("enqueue decision");
+    let revision_without_proposal = order_revision_decision(
+        &order_revision_proposal(
+            "order-lifecycle-invalid",
+            &request_event_id,
+            &decision_receipt.signed_event_id,
+        ),
+        &decision_receipt.signed_event_id,
+        RadrootsOrderRevisionOutcome::Accepted,
+    );
+    let revision_error = sdk
+        .orders()
+        .enqueue_revision_decision(
+            OrderRevisionDecisionEnqueueRequest::new(
+                buyer_actor(),
+                request_event_ptr(&request_event),
+                order_event_ptr(&decision_receipt.signed_event_id),
+                revision_without_proposal,
+                SdkRelayTargetPolicy::UseConfiguredRelays,
+            )
+            .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+            .expect("revision decision target relays"),
+            &FixtureSigner::new(BUYER_SECRET_KEY_HEX),
+        )
+        .await
+        .expect_err("revision decision without proposal");
+    assert!(matches!(
+        revision_error,
+        RadrootsSdkError::InvalidRequest { .. }
+    ));
+
+    let receipt_error = sdk
+        .orders()
+        .enqueue_receipt_record(
+            OrderReceiptRecordEnqueueRequest::new(
+                buyer_actor(),
+                request_event_ptr(&request_event),
+                order_event_ptr(&decision_receipt.signed_event_id),
+                order_receipt_record("order-lifecycle-invalid", true),
+                SdkRelayTargetPolicy::UseConfiguredRelays,
+            )
+            .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+            .expect("receipt target relays"),
+            &FixtureSigner::new(BUYER_SECRET_KEY_HEX),
+        )
+        .await
+        .expect_err("receipt without fulfillment");
+    assert!(matches!(
+        receipt_error,
+        RadrootsSdkError::InvalidRequest { .. }
+    ));
+    assert_eq!(
+        store
+            .status_summary()
+            .await
+            .expect("event store status")
+            .total_events,
+        2
     );
 }
 

@@ -85,13 +85,24 @@ pub use crate::listings_runtime::{
 };
 #[cfg(feature = "runtime")]
 pub use crate::orders_runtime::{
-    ORDER_DECISION_OPERATION_KIND, ORDER_STATUS_DEFAULT_LIMIT, ORDER_STATUS_MAX_LIMIT,
-    ORDER_SUBMIT_OPERATION_KIND, OrderDecisionEnqueueRequest, OrderDecisionPlan,
+    ORDER_CANCELLATION_OPERATION_KIND, ORDER_DECISION_OPERATION_KIND,
+    ORDER_FULFILLMENT_UPDATE_OPERATION_KIND, ORDER_RECEIPT_RECORD_OPERATION_KIND,
+    ORDER_REVISION_DECISION_OPERATION_KIND, ORDER_REVISION_PROPOSAL_OPERATION_KIND,
+    ORDER_STATUS_DEFAULT_LIMIT, ORDER_STATUS_MAX_LIMIT, ORDER_SUBMIT_OPERATION_KIND,
+    OrderCancellationEnqueueRequest, OrderCancellationPlan, OrderCancellationPrepareRequest,
+    OrderCancellationReceipt, OrderDecisionEnqueueRequest, OrderDecisionPlan,
     OrderDecisionPrepareRequest, OrderDecisionReceipt, OrderFulfillmentStatusKind,
-    OrderPaymentStateKind, OrderRequestEvidenceIngestReceipt, OrderRequestEvidenceIngestRequest,
-    OrderSettlementStateKind, OrderStatusKind, OrderStatusReceipt, OrderStatusRequest,
-    OrderSubmitEnqueueRequest, OrderSubmitPlan, OrderSubmitPrepareRequest, OrderSubmitReceipt,
-    SdkOrderStatusIssue, SdkOrderStatusIssueKind, SdkOrderStatusSource,
+    OrderFulfillmentUpdateEnqueueRequest, OrderFulfillmentUpdatePlan,
+    OrderFulfillmentUpdatePrepareRequest, OrderFulfillmentUpdateReceipt, OrderPaymentStateKind,
+    OrderReceiptRecordEnqueueRequest, OrderReceiptRecordPlan, OrderReceiptRecordPrepareRequest,
+    OrderReceiptRecordReceipt, OrderRequestEvidenceIngestReceipt,
+    OrderRequestEvidenceIngestRequest, OrderRevisionDecisionEnqueueRequest,
+    OrderRevisionDecisionPlan, OrderRevisionDecisionPrepareRequest, OrderRevisionDecisionReceipt,
+    OrderRevisionProposalEnqueueRequest, OrderRevisionProposalPlan,
+    OrderRevisionProposalPrepareRequest, OrderRevisionProposalReceipt, OrderSettlementStateKind,
+    OrderStatusKind, OrderStatusReceipt, OrderStatusRequest, OrderSubmitEnqueueRequest,
+    OrderSubmitPlan, OrderSubmitPrepareRequest, OrderSubmitReceipt, SdkOrderStatusIssue,
+    SdkOrderStatusIssueKind, SdkOrderStatusSource,
 };
 #[cfg(feature = "runtime")]
 pub use crate::product_clients::{FarmsClient, ListingsClient, OrdersClient, SyncClient};
