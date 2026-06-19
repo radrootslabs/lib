@@ -31,12 +31,12 @@ use radroots_sdk::protocol::wire::WireEventParts;
 use radroots_sdk::{
     ORDER_DECISION_OPERATION_KIND, ORDER_STATUS_DEFAULT_LIMIT, ORDER_STATUS_MAX_LIMIT,
     ORDER_SUBMIT_OPERATION_KIND, OrderDecisionEnqueueRequest, OrderDecisionPrepareRequest,
-    OrderPaymentStateKind, OrderSettlementStateKind, OrderStatusKind, OrderStatusRequest,
-    OrderSubmitEnqueueRequest, OrderSubmitPrepareRequest, PushOutboxEventState,
-    PushOutboxRelayOutcomeKind, PushOutboxRequest, RadrootsSdk, RadrootsSdkError,
-    RadrootsSdkPartialLocalMutationFailure, RadrootsSdkRecoveryAction, RadrootsSdkTimestamp,
-    SdkMutationState, SdkOrderStatusIssue, SdkOrderStatusIssueKind, SdkOrderStatusSource,
-    SdkRelayTargetPolicy, SdkRelayTargetSet, SdkRelayUrlPolicy,
+    OrderPaymentStateKind, OrderRequestEvidenceIngestRequest, OrderSettlementStateKind,
+    OrderStatusKind, OrderStatusRequest, OrderSubmitEnqueueRequest, OrderSubmitPrepareRequest,
+    PushOutboxEventState, PushOutboxRelayOutcomeKind, PushOutboxRequest, RadrootsSdk,
+    RadrootsSdkError, RadrootsSdkPartialLocalMutationFailure, RadrootsSdkRecoveryAction,
+    RadrootsSdkTimestamp, SdkMutationState, SdkOrderStatusIssue, SdkOrderStatusIssueKind,
+    SdkOrderStatusSource, SdkRelayTargetPolicy, SdkRelayTargetSet, SdkRelayUrlPolicy,
 };
 
 const BUYER_SECRET_KEY_HEX: &str =
@@ -823,6 +823,85 @@ fn signed_order_decision_event(
     )
     .expect("decision draft");
     signed_event(SELLER_SECRET_KEY_HEX, created_at, draft.into_wire_parts())
+}
+
+#[tokio::test]
+async fn order_request_evidence_ingest_stores_request_and_enables_decision_enqueue() {
+    let (_tempdir, sdk, store) = directory_sdk_and_store().await;
+    let request_event = signed_order_request_event("order-decision-ingested", 39);
+    let request_event_id = RadrootsEventId::parse(request_event.id.as_str()).expect("request id");
+    let ingest_request = OrderRequestEvidenceIngestRequest::new(request_event.clone())
+        .with_observed_at(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_039));
+
+    let ingest_receipt = sdk
+        .orders()
+        .ingest_request_evidence(ingest_request)
+        .await
+        .expect("ingest request evidence");
+
+    assert_eq!(ingest_receipt.order_id.as_str(), "order-decision-ingested");
+    assert_eq!(ingest_receipt.listing_addr, listing_address());
+    assert_eq!(ingest_receipt.buyer_pubkey.as_str(), BUYER_PUBLIC_KEY_HEX);
+    assert_eq!(ingest_receipt.seller_pubkey.as_str(), SELLER_PUBLIC_KEY_HEX);
+    assert_eq!(ingest_receipt.request_event_id, request_event_id);
+    assert_eq!(ingest_receipt.local_event_seq, 1);
+    assert!(ingest_receipt.inserted);
+
+    let request = OrderDecisionEnqueueRequest::new(
+        seller_actor(),
+        request_event_ptr(&request_event),
+        order_decision("order-decision-ingested"),
+        SdkRelayTargetPolicy::UseConfiguredRelays,
+    )
+    .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+    .expect("target relays");
+    let receipt = sdk
+        .orders()
+        .enqueue_decision(request, &FixtureSigner::new(SELLER_SECRET_KEY_HEX))
+        .await
+        .expect("enqueue decision");
+
+    assert_eq!(receipt.local_event_seq, 2);
+    let duplicate_receipt = sdk
+        .orders()
+        .ingest_request_evidence(OrderRequestEvidenceIngestRequest::new(
+            request_event.clone(),
+        ))
+        .await
+        .expect("duplicate request evidence");
+    assert_eq!(duplicate_receipt.local_event_seq, 1);
+    assert!(!duplicate_receipt.inserted);
+    assert_eq!(
+        store
+            .status_summary()
+            .await
+            .expect("event store status")
+            .total_events,
+        2
+    );
+}
+
+#[tokio::test]
+async fn order_request_evidence_ingest_rejects_non_request_events() {
+    let (_tempdir, sdk, store) = directory_sdk_and_store().await;
+    let root_event_id = deterministic_event_id("non-request-root");
+    let decision_event = signed_order_decision_event("non-request-root", &root_event_id, 40);
+
+    let error = sdk
+        .orders()
+        .ingest_request_evidence(OrderRequestEvidenceIngestRequest::new(decision_event))
+        .await
+        .expect_err("non request event");
+
+    assert!(matches!(error, RadrootsSdkError::InvalidRequest { .. }));
+    assert_eq!(
+        store
+            .status_summary()
+            .await
+            .expect("event store status")
+            .total_events,
+        0
+    );
 }
 
 #[tokio::test]

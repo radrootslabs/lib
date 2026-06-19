@@ -9,8 +9,10 @@ use crate::{
 #[cfg(feature = "runtime")]
 use radroots_authority::{RadrootsActorContext, RadrootsEventSigner};
 #[cfg(feature = "runtime")]
+use radroots_event_store::RadrootsEventIngest;
+#[cfg(feature = "runtime")]
 use radroots_events::{
-    RadrootsNostrEventPtr,
+    RadrootsNostrEvent, RadrootsNostrEventPtr,
     contract::RadrootsActorRole,
     draft::RadrootsFrozenEventDraft,
     ids::{RadrootsEventId, RadrootsListingAddress, RadrootsOrderId, RadrootsPublicKey},
@@ -191,6 +193,54 @@ pub struct OrderSubmitReceipt {
     pub outbox_event_id: i64,
     pub state: SdkMutationState,
     pub idempotency_digest_prefix: Option<String>,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug)]
+#[non_exhaustive]
+pub struct OrderRequestEvidenceIngestRequest {
+    pub event: RadrootsNostrEvent,
+    pub observed_at: Option<RadrootsSdkTimestamp>,
+}
+
+#[cfg(feature = "runtime")]
+impl serde::Serialize for OrderRequestEvidenceIngestRequest {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut state = serializer.serialize_struct("OrderRequestEvidenceIngestRequest", 2)?;
+        state.serialize_field("event", &self.event)?;
+        state.serialize_field("observed_at", &self.observed_at)?;
+        state.end()
+    }
+}
+
+#[cfg(feature = "runtime")]
+impl OrderRequestEvidenceIngestRequest {
+    pub fn new(event: RadrootsNostrEvent) -> Self {
+        Self {
+            event,
+            observed_at: None,
+        }
+    }
+
+    pub fn with_observed_at(mut self, observed_at: RadrootsSdkTimestamp) -> Self {
+        self.observed_at = Some(observed_at);
+        self
+    }
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct OrderRequestEvidenceIngestReceipt {
+    pub order_id: RadrootsOrderId,
+    pub listing_addr: RadrootsListingAddress,
+    pub buyer_pubkey: RadrootsPublicKey,
+    pub seller_pubkey: RadrootsPublicKey,
+    pub request_event_id: RadrootsEventId,
+    pub local_event_seq: i64,
+    pub inserted: bool,
 }
 
 #[cfg(feature = "runtime")]
@@ -644,6 +694,32 @@ impl SdkOrderStatusIssueKind {
 
 #[cfg(feature = "runtime")]
 impl<'sdk> OrdersClient<'sdk> {
+    pub async fn ingest_request_evidence(
+        &self,
+        request: OrderRequestEvidenceIngestRequest,
+    ) -> Result<OrderRequestEvidenceIngestReceipt, RadrootsSdkError> {
+        let evidence = parse_order_request_evidence(&request.event)?;
+        let observed_at = self.resolved_created_at(request.observed_at)?;
+        let observed_at_ms = sdk_timestamp_ms(observed_at)?;
+        let receipt = self
+            .sdk
+            ._event_store
+            .ingest_event(RadrootsEventIngest::new(request.event, observed_at_ms))
+            .await
+            .map_err(|error| RadrootsSdkError::EventStore {
+                message: error.to_string(),
+            })?;
+        Ok(OrderRequestEvidenceIngestReceipt {
+            order_id: evidence.order_id,
+            listing_addr: evidence.listing_addr,
+            buyer_pubkey: evidence.buyer_pubkey,
+            seller_pubkey: evidence.seller_pubkey,
+            request_event_id: evidence.request_event_id,
+            local_event_seq: receipt.seq,
+            inserted: receipt.inserted,
+        })
+    }
+
     pub fn prepare_submit(
         &self,
         request: OrderSubmitPrepareRequest,
@@ -962,6 +1038,67 @@ fn order_decision_plan(
         frozen_draft,
         created_at,
     })
+}
+
+#[cfg(feature = "runtime")]
+struct OrderRequestEvidence {
+    order_id: RadrootsOrderId,
+    listing_addr: RadrootsListingAddress,
+    buyer_pubkey: RadrootsPublicKey,
+    seller_pubkey: RadrootsPublicKey,
+    request_event_id: RadrootsEventId,
+}
+
+#[cfg(feature = "runtime")]
+fn parse_order_request_evidence(
+    event: &RadrootsNostrEvent,
+) -> Result<OrderRequestEvidence, RadrootsSdkError> {
+    let request_event_id = RadrootsEventId::parse(event.id.as_str()).map_err(|error| {
+        RadrootsSdkError::InvalidRequest {
+            message: format!("order request evidence event id is invalid: {error}"),
+        }
+    })?;
+    let author_pubkey = RadrootsPublicKey::parse(event.author.as_str()).map_err(|error| {
+        RadrootsSdkError::InvalidRequest {
+            message: format!("order request evidence author is invalid: {error}"),
+        }
+    })?;
+    let envelope =
+        order::parse_order_request(event).map_err(|error| RadrootsSdkError::InvalidRequest {
+            message: format!("order request evidence decode failed: {error}"),
+        })?;
+    let payload = envelope.payload;
+    if payload.buyer_pubkey != author_pubkey {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: "order request evidence author must match buyer_pubkey".to_owned(),
+        });
+    }
+    if envelope.order_id != payload.order_id.as_str() {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: "order request evidence order_id envelope mismatch".to_owned(),
+        });
+    }
+    if envelope.listing_addr != payload.listing_addr.as_str() {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: "order request evidence listing_addr envelope mismatch".to_owned(),
+        });
+    }
+    Ok(OrderRequestEvidence {
+        order_id: payload.order_id,
+        listing_addr: payload.listing_addr,
+        buyer_pubkey: payload.buyer_pubkey,
+        seller_pubkey: payload.seller_pubkey,
+        request_event_id,
+    })
+}
+
+#[cfg(feature = "runtime")]
+fn sdk_timestamp_ms(timestamp: RadrootsSdkTimestamp) -> Result<i64, RadrootsSdkError> {
+    let seconds = timestamp.unix_seconds();
+    let millis = seconds
+        .checked_mul(1_000)
+        .ok_or(RadrootsSdkError::TimestampOutOfRange { value: seconds })?;
+    i64::try_from(millis).map_err(|_| RadrootsSdkError::TimestampOutOfRange { value: seconds })
 }
 
 #[cfg(feature = "runtime")]
