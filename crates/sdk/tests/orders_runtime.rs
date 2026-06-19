@@ -12,7 +12,7 @@ use radroots_events::{
     contract::RadrootsActorRole,
     draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent},
     ids::{RadrootsEventId, RadrootsOrderId},
-    kinds::{KIND_LISTING, KIND_ORDER_REQUEST},
+    kinds::{KIND_LISTING, KIND_ORDER_DECISION, KIND_ORDER_REQUEST},
 };
 use radroots_nostr::prelude::{
     RadrootsNostrKeys, RadrootsNostrSecretKey, RadrootsNostrTimestamp, radroots_event_from_nostr,
@@ -29,7 +29,8 @@ use radroots_sdk::protocol::order::{
 };
 use radroots_sdk::protocol::wire::WireEventParts;
 use radroots_sdk::{
-    ORDER_STATUS_DEFAULT_LIMIT, ORDER_STATUS_MAX_LIMIT, ORDER_SUBMIT_OPERATION_KIND,
+    ORDER_DECISION_OPERATION_KIND, ORDER_STATUS_DEFAULT_LIMIT, ORDER_STATUS_MAX_LIMIT,
+    ORDER_SUBMIT_OPERATION_KIND, OrderDecisionEnqueueRequest, OrderDecisionPrepareRequest,
     OrderPaymentStateKind, OrderSettlementStateKind, OrderStatusKind, OrderStatusRequest,
     OrderSubmitEnqueueRequest, OrderSubmitPrepareRequest, PushOutboxEventState,
     PushOutboxRelayOutcomeKind, PushOutboxRequest, RadrootsSdk, RadrootsSdkError,
@@ -113,12 +114,24 @@ fn buyer_actor() -> RadrootsActorContext {
     RadrootsActorContext::test(BUYER_PUBLIC_KEY_HEX, [RadrootsActorRole::Buyer]).expect("actor")
 }
 
+fn seller_actor() -> RadrootsActorContext {
+    RadrootsActorContext::test(SELLER_PUBLIC_KEY_HEX, [RadrootsActorRole::Seller]).expect("actor")
+}
+
 fn other_buyer_actor() -> RadrootsActorContext {
     RadrootsActorContext::test(OTHER_PUBLIC_KEY_HEX, [RadrootsActorRole::Buyer]).expect("actor")
 }
 
+fn other_seller_actor() -> RadrootsActorContext {
+    RadrootsActorContext::test(OTHER_PUBLIC_KEY_HEX, [RadrootsActorRole::Seller]).expect("actor")
+}
+
 fn non_buyer_actor() -> RadrootsActorContext {
     RadrootsActorContext::test(BUYER_PUBLIC_KEY_HEX, [RadrootsActorRole::Farmer]).expect("actor")
+}
+
+fn non_seller_actor() -> RadrootsActorContext {
+    RadrootsActorContext::test(SELLER_PUBLIC_KEY_HEX, [RadrootsActorRole::Buyer]).expect("actor")
 }
 
 fn listing_address() -> RadrootsListingAddress {
@@ -791,6 +804,13 @@ fn signed_order_request_event(raw_order_id: &str, created_at: u32) -> RadrootsNo
     signed_event(BUYER_SECRET_KEY_HEX, created_at, draft.into_wire_parts())
 }
 
+fn request_event_ptr(event: &RadrootsNostrEvent) -> RadrootsNostrEventPtr {
+    RadrootsNostrEventPtr {
+        id: event.id.clone(),
+        relays: Some(RELAY.to_owned()),
+    }
+}
+
 fn signed_order_decision_event(
     raw_order_id: &str,
     root_event_id: &RadrootsEventId,
@@ -803,6 +823,548 @@ fn signed_order_decision_event(
     )
     .expect("decision draft");
     signed_event(SELLER_SECRET_KEY_HEX, created_at, draft.into_wire_parts())
+}
+
+#[tokio::test]
+async fn order_decision_prepare_accept_and_decline_are_side_effect_free() {
+    let (_tempdir, sdk, store) = directory_sdk_and_store().await;
+    let request_event_id = deterministic_event_id("order-decision-prepare-request");
+    let request_event = RadrootsNostrEventPtr {
+        id: request_event_id.as_str().to_owned(),
+        relays: Some(RELAY.to_owned()),
+    };
+    let accepted_request = OrderDecisionPrepareRequest::new(
+        seller_actor(),
+        request_event.clone(),
+        order_decision("order-decision-prepare-accept"),
+    );
+
+    let accepted = sdk
+        .orders()
+        .prepare_decision(accepted_request)
+        .expect("accepted plan");
+
+    assert_eq!(accepted.order_id.as_str(), "order-decision-prepare-accept");
+    assert_eq!(accepted.listing_addr, listing_address());
+    assert_eq!(accepted.buyer_pubkey.as_str(), BUYER_PUBLIC_KEY_HEX);
+    assert_eq!(accepted.seller_pubkey.as_str(), SELLER_PUBLIC_KEY_HEX);
+    assert_eq!(accepted.request_event_id, request_event_id);
+    assert_eq!(accepted.frozen_draft.kind, KIND_ORDER_DECISION);
+    assert_eq!(accepted.created_at.unix_seconds(), 1_700_000_000);
+    assert_eq!(
+        accepted.expected_event_id,
+        accepted.frozen_draft.expected_event_id
+    );
+
+    let mut declined_payload = order_decision("order-decision-prepare-decline");
+    declined_payload.decision = RadrootsOrderDecisionOutcome::Declined {
+        reason: " out of stock ".to_owned(),
+    };
+    let declined = sdk
+        .orders()
+        .prepare_decision(OrderDecisionPrepareRequest::new(
+            seller_actor(),
+            request_event,
+            declined_payload,
+        ))
+        .expect("declined plan");
+
+    assert_eq!(declined.order_id.as_str(), "order-decision-prepare-decline");
+    assert_eq!(declined.frozen_draft.kind, KIND_ORDER_DECISION);
+    assert_eq!(
+        store
+            .status_summary()
+            .await
+            .expect("event store status")
+            .total_events,
+        0
+    );
+
+    let paths = sdk.storage_paths().expect("paths");
+    let outbox = RadrootsOutbox::open_file(&paths.outbox_path)
+        .await
+        .expect("outbox");
+    assert!(
+        outbox
+            .claim_next_ready_event("worker", "claim", 2_000, 1_700_000_000_000)
+            .await
+            .expect("claim")
+            .is_none()
+    );
+}
+
+#[tokio::test]
+async fn order_decision_prepare_rejects_invalid_actor_evidence_and_payload() {
+    let (_tempdir, sdk, _store) = directory_sdk_and_store().await;
+    let request_event = RadrootsNostrEventPtr {
+        id: deterministic_event_id("order-decision-invalid-request")
+            .as_str()
+            .to_owned(),
+        relays: Some(RELAY.to_owned()),
+    };
+
+    let non_seller = sdk
+        .orders()
+        .prepare_decision(OrderDecisionPrepareRequest::new(
+            non_seller_actor(),
+            request_event.clone(),
+            order_decision("order-decision-non-seller"),
+        ))
+        .expect_err("non seller");
+    assert!(matches!(
+        non_seller,
+        RadrootsSdkError::UnauthorizedActor { .. }
+    ));
+
+    let wrong_actor = sdk
+        .orders()
+        .prepare_decision(OrderDecisionPrepareRequest::new(
+            other_seller_actor(),
+            request_event.clone(),
+            order_decision("order-decision-wrong-seller"),
+        ))
+        .expect_err("wrong seller");
+    assert!(matches!(
+        wrong_actor,
+        RadrootsSdkError::UnauthorizedActor { .. }
+    ));
+
+    let invalid_evidence = sdk
+        .orders()
+        .prepare_decision(OrderDecisionPrepareRequest::new(
+            seller_actor(),
+            RadrootsNostrEventPtr {
+                id: String::new(),
+                relays: Some(RELAY.to_owned()),
+            },
+            order_decision("order-decision-invalid-evidence"),
+        ))
+        .expect_err("invalid evidence");
+    assert!(matches!(
+        invalid_evidence,
+        RadrootsSdkError::InvalidRequest { .. }
+    ));
+
+    let mut empty_commitments = order_decision("order-decision-empty-commitments");
+    empty_commitments.decision = RadrootsOrderDecisionOutcome::Accepted {
+        inventory_commitments: Vec::new(),
+    };
+    let commitment_error = sdk
+        .orders()
+        .prepare_decision(OrderDecisionPrepareRequest::new(
+            seller_actor(),
+            request_event.clone(),
+            empty_commitments,
+        ))
+        .expect_err("missing commitments");
+    assert!(matches!(
+        commitment_error,
+        RadrootsSdkError::InvalidRequest { .. }
+    ));
+
+    let mut missing_reason = order_decision("order-decision-missing-reason");
+    missing_reason.decision = RadrootsOrderDecisionOutcome::Declined {
+        reason: " ".to_owned(),
+    };
+    let reason_error = sdk
+        .orders()
+        .prepare_decision(OrderDecisionPrepareRequest::new(
+            seller_actor(),
+            request_event,
+            missing_reason,
+        ))
+        .expect_err("missing reason");
+    assert!(matches!(
+        reason_error,
+        RadrootsSdkError::InvalidRequest { .. }
+    ));
+}
+
+#[tokio::test]
+async fn order_decision_runtime_dtos_serialize_deterministically() {
+    let (_tempdir, sdk, store) = directory_sdk_and_store().await;
+    let created_at = RadrootsSdkTimestamp::from_unix_seconds(1_700_000_321);
+    let prepare_event_id = deterministic_event_id("order-decision-serialized-request");
+    let prepare_request = OrderDecisionPrepareRequest::new(
+        seller_actor(),
+        RadrootsNostrEventPtr {
+            id: prepare_event_id.as_str().to_owned(),
+            relays: Some(RELAY.to_owned()),
+        },
+        order_decision("order-decision-serialized"),
+    )
+    .with_created_at(created_at);
+    let prepare_json = serde_json::to_value(&prepare_request).expect("prepare request json");
+
+    assert_eq!(
+        prepare_json["actor"],
+        serde_json::json!({
+            "pubkey": SELLER_PUBLIC_KEY_HEX,
+            "roles": ["seller"],
+            "account_id": null,
+            "source": "test"
+        })
+    );
+    assert_eq!(
+        prepare_json["request_event"],
+        serde_json::json!({
+            "id": prepare_event_id.as_str(),
+            "relays": RELAY
+        })
+    );
+    assert_eq!(
+        prepare_json["decision"]["order_id"],
+        "order-decision-serialized"
+    );
+    assert_eq!(
+        prepare_json["decision"]["seller_pubkey"],
+        SELLER_PUBLIC_KEY_HEX
+    );
+    assert_eq!(prepare_json["created_at"], 1_700_000_321);
+
+    let request_event = signed_order_request_event("order-decision-serialized-enqueue", 45);
+    store
+        .ingest_event(RadrootsEventIngest::new(request_event.clone(), 4_500))
+        .await
+        .expect("ingest request");
+    let enqueue_request = OrderDecisionEnqueueRequest::new(
+        seller_actor(),
+        request_event_ptr(&request_event),
+        order_decision("order-decision-serialized-enqueue"),
+        SdkRelayTargetPolicy::UseConfiguredRelays,
+    )
+    .try_with_target_relays([RELAY, RELAY_B], SdkRelayUrlPolicy::Public)
+    .expect("target relays")
+    .try_with_idempotency_key("order-decision-serialized-idempotency")
+    .expect("idempotency")
+    .with_created_at(created_at);
+    let enqueue_json = serde_json::to_value(&enqueue_request).expect("enqueue request json");
+
+    assert_eq!(
+        enqueue_json["target_relays"],
+        serde_json::json!({
+            "kind": "explicit",
+            "relays": [RELAY, RELAY_B],
+            "canonical_relays": [RELAY_B, RELAY]
+        })
+    );
+    assert_eq!(
+        enqueue_json["idempotency_key"],
+        serde_json::json!({ "value": "<redacted>", "len": 37 })
+    );
+    assert_eq!(enqueue_json["created_at"], 1_700_000_321);
+    assert!(
+        !enqueue_json
+            .to_string()
+            .contains("order-decision-serialized-idempotency")
+    );
+
+    let receipt = sdk
+        .orders()
+        .enqueue_decision(enqueue_request, &FixtureSigner::new(SELLER_SECRET_KEY_HEX))
+        .await
+        .expect("enqueue");
+    let receipt_json = serde_json::to_value(&receipt).expect("receipt json");
+
+    assert_eq!(
+        receipt_json,
+        serde_json::json!({
+            "order_id": receipt.order_id.as_str(),
+            "listing_addr": receipt.listing_addr.as_str(),
+            "buyer_pubkey": BUYER_PUBLIC_KEY_HEX,
+            "seller_pubkey": SELLER_PUBLIC_KEY_HEX,
+            "request_event_id": request_event.id.as_str(),
+            "expected_event_id": receipt.expected_event_id.as_str(),
+            "signed_event_id": receipt.signed_event_id.as_str(),
+            "local_event_seq": 2,
+            "outbox_operation_id": 1,
+            "outbox_event_id": 1,
+            "state": "stored_and_queued",
+            "idempotency_digest_prefix": receipt.idempotency_digest_prefix.as_deref()
+        })
+    );
+}
+
+#[tokio::test]
+async fn order_decision_enqueue_accept_stores_event_queues_outbox_and_updates_status() {
+    let (_tempdir, sdk, store) = directory_sdk_and_store().await;
+    let request_event = signed_order_request_event("order-decision-accept", 40);
+    let request_event_id = RadrootsEventId::parse(request_event.id.as_str()).expect("request id");
+    store
+        .ingest_event(RadrootsEventIngest::new(request_event.clone(), 4_000))
+        .await
+        .expect("ingest request");
+    let request = OrderDecisionEnqueueRequest::new(
+        seller_actor(),
+        request_event_ptr(&request_event),
+        order_decision("order-decision-accept"),
+        SdkRelayTargetPolicy::UseConfiguredRelays,
+    )
+    .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+    .expect("target relays")
+    .try_with_idempotency_key("order-decision-accept-idempotency")
+    .expect("idempotency");
+
+    let receipt = sdk
+        .orders()
+        .enqueue_decision(request, &FixtureSigner::new(SELLER_SECRET_KEY_HEX))
+        .await
+        .expect("enqueue");
+
+    assert_eq!(receipt.order_id.as_str(), "order-decision-accept");
+    assert_eq!(receipt.listing_addr, listing_address());
+    assert_eq!(receipt.buyer_pubkey.as_str(), BUYER_PUBLIC_KEY_HEX);
+    assert_eq!(receipt.seller_pubkey.as_str(), SELLER_PUBLIC_KEY_HEX);
+    assert_eq!(receipt.request_event_id, request_event_id);
+    assert_eq!(receipt.signed_event_id, receipt.expected_event_id);
+    assert_eq!(receipt.local_event_seq, 2);
+    assert_eq!(receipt.outbox_operation_id, 1);
+    assert_eq!(receipt.outbox_event_id, 1);
+    assert_eq!(receipt.state, SdkMutationState::StoredAndQueued);
+    assert!(receipt.idempotency_digest_prefix.is_some());
+
+    let stored_event = store
+        .get_event(receipt.signed_event_id.as_str())
+        .await
+        .expect("event lookup")
+        .expect("stored event");
+    assert_eq!(stored_event.kind, KIND_ORDER_DECISION);
+    assert_eq!(
+        stored_event.contract_id.as_deref(),
+        Some("radroots.order.decision.v1")
+    );
+
+    let paths = sdk.storage_paths().expect("paths");
+    let outbox = RadrootsOutbox::open_file(&paths.outbox_path)
+        .await
+        .expect("outbox");
+    let operation = outbox
+        .get_operation(receipt.outbox_operation_id)
+        .await
+        .expect("outbox operation")
+        .expect("outbox operation");
+    assert_eq!(operation.operation_kind, ORDER_DECISION_OPERATION_KIND);
+    let outbox_event = outbox
+        .get_event(receipt.outbox_event_id)
+        .await
+        .expect("outbox event")
+        .expect("outbox event");
+    assert_eq!(outbox_event.state, RadrootsOutboxEventState::Signed);
+    assert_eq!(outbox_event.draft.kind, KIND_ORDER_DECISION);
+    assert!(outbox_event.signed_event.is_some());
+
+    let status = sdk
+        .orders()
+        .status(status_request("order-decision-accept"))
+        .await
+        .expect("status");
+    assert!(status.found);
+    assert_eq!(status.status, OrderStatusKind::Accepted);
+    assert_eq!(status.event_count, 2);
+    assert_eq!(
+        status
+            .request_event_id
+            .as_ref()
+            .map(RadrootsEventId::as_str),
+        Some(request_event.id.as_str())
+    );
+    assert_eq!(
+        status
+            .decision_event_id
+            .as_ref()
+            .map(RadrootsEventId::as_str),
+        Some(receipt.signed_event_id.as_str())
+    );
+    assert!(status.issues.is_empty());
+}
+
+#[tokio::test]
+async fn order_decision_enqueue_decline_stores_event_and_status_sees_declined() {
+    let (_tempdir, sdk, store) = directory_sdk_and_store().await;
+    let request_event = signed_order_request_event("order-decision-decline", 41);
+    store
+        .ingest_event(RadrootsEventIngest::new(request_event.clone(), 4_100))
+        .await
+        .expect("ingest request");
+    let mut decision = order_decision("order-decision-decline");
+    decision.decision = RadrootsOrderDecisionOutcome::Declined {
+        reason: " unavailable ".to_owned(),
+    };
+    let request = OrderDecisionEnqueueRequest::new(
+        seller_actor(),
+        request_event_ptr(&request_event),
+        decision,
+        SdkRelayTargetPolicy::UseConfiguredRelays,
+    )
+    .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+    .expect("target relays");
+
+    let receipt = sdk
+        .orders()
+        .enqueue_decision(request, &FixtureSigner::new(SELLER_SECRET_KEY_HEX))
+        .await
+        .expect("enqueue");
+
+    assert_eq!(receipt.state, SdkMutationState::StoredAndQueued);
+    let status = sdk
+        .orders()
+        .status(status_request("order-decision-decline"))
+        .await
+        .expect("status");
+    assert_eq!(status.status, OrderStatusKind::Declined);
+    assert_eq!(
+        status
+            .decision_event_id
+            .as_ref()
+            .map(RadrootsEventId::as_str),
+        Some(receipt.signed_event_id.as_str())
+    );
+    assert!(status.issues.is_empty());
+}
+
+#[tokio::test]
+async fn order_decision_enqueue_rejects_missing_request_evidence_before_mutation() {
+    let (_tempdir, sdk, store) = directory_sdk_and_store().await;
+    let missing_request = RadrootsNostrEventPtr {
+        id: deterministic_event_id("missing-order-request")
+            .as_str()
+            .to_owned(),
+        relays: Some(RELAY.to_owned()),
+    };
+    let request = OrderDecisionEnqueueRequest::new(
+        seller_actor(),
+        missing_request,
+        order_decision("order-decision-missing-request"),
+        SdkRelayTargetPolicy::UseConfiguredRelays,
+    )
+    .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+    .expect("target relays");
+
+    let error = sdk
+        .orders()
+        .enqueue_decision(request, &FixtureSigner::new(SELLER_SECRET_KEY_HEX))
+        .await
+        .expect_err("missing request evidence");
+
+    assert!(matches!(error, RadrootsSdkError::InvalidRequest { .. }));
+    assert_eq!(
+        store
+            .status_summary()
+            .await
+            .expect("event store status")
+            .total_events,
+        0
+    );
+    let paths = sdk.storage_paths().expect("paths");
+    let outbox = RadrootsOutbox::open_file(&paths.outbox_path)
+        .await
+        .expect("outbox");
+    assert!(
+        outbox
+            .claim_next_ready_event("worker", "claim", 2_000, 1_700_000_000_000)
+            .await
+            .expect("claim")
+            .is_none()
+    );
+}
+
+#[tokio::test]
+async fn order_decision_enqueue_returns_sanitized_signer_errors_before_decision_mutation() {
+    let (_tempdir, sdk, store) = directory_sdk_and_store().await;
+    let request_event = signed_order_request_event("order-decision-wrong-signer", 42);
+    store
+        .ingest_event(RadrootsEventIngest::new(request_event.clone(), 4_200))
+        .await
+        .expect("ingest request");
+    let request = OrderDecisionEnqueueRequest::new(
+        seller_actor(),
+        request_event_ptr(&request_event),
+        order_decision("order-decision-wrong-signer"),
+        SdkRelayTargetPolicy::UseConfiguredRelays,
+    )
+    .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+    .expect("target relays");
+
+    let error = sdk
+        .orders()
+        .enqueue_decision(request, &FixtureSigner::new(BUYER_SECRET_KEY_HEX))
+        .await
+        .expect_err("signer error");
+    let message = error.to_string();
+
+    assert!(matches!(
+        error,
+        RadrootsSdkError::SignerPubkeyMismatch { .. }
+    ));
+    assert!(!message.contains("raw"));
+    assert!(!message.contains("ffff"));
+    assert_eq!(
+        store
+            .status_summary()
+            .await
+            .expect("event store status")
+            .total_events,
+        1
+    );
+}
+
+#[tokio::test]
+async fn order_decision_enqueue_rejects_existing_decision_state_before_mutation() {
+    let (_tempdir, sdk, store) = directory_sdk_and_store().await;
+    let request_event = signed_order_request_event("order-decision-conflict", 43);
+    let request_event_id = RadrootsEventId::parse(request_event.id.as_str()).expect("request id");
+    let decision_event =
+        signed_order_decision_event("order-decision-conflict", &request_event_id, 44);
+    for (event, observed_at_ms) in [
+        (request_event.clone(), 4_300),
+        (decision_event.clone(), 4_400),
+    ] {
+        store
+            .ingest_event(RadrootsEventIngest::new(event, observed_at_ms))
+            .await
+            .expect("ingest");
+    }
+    let mut decline = order_decision("order-decision-conflict");
+    decline.decision = RadrootsOrderDecisionOutcome::Declined {
+        reason: "too late".to_owned(),
+    };
+    let request = OrderDecisionEnqueueRequest::new(
+        seller_actor(),
+        request_event_ptr(&request_event),
+        decline,
+        SdkRelayTargetPolicy::UseConfiguredRelays,
+    )
+    .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
+    .expect("target relays");
+
+    let error = sdk
+        .orders()
+        .enqueue_decision(request, &FixtureSigner::new(SELLER_SECRET_KEY_HEX))
+        .await
+        .expect_err("existing decision");
+
+    assert!(matches!(error, RadrootsSdkError::InvalidRequest { .. }));
+    assert_eq!(
+        store
+            .status_summary()
+            .await
+            .expect("event store status")
+            .total_events,
+        2
+    );
+    let status = sdk
+        .orders()
+        .status(status_request("order-decision-conflict"))
+        .await
+        .expect("status");
+    assert_eq!(status.status, OrderStatusKind::Accepted);
+    assert_eq!(
+        status
+            .decision_event_id
+            .as_ref()
+            .map(RadrootsEventId::as_str),
+        Some(decision_event.id.as_str())
+    );
 }
 
 #[tokio::test]

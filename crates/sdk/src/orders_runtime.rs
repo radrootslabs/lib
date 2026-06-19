@@ -13,17 +13,17 @@ use radroots_events::{
     RadrootsNostrEventPtr,
     contract::RadrootsActorRole,
     draft::RadrootsFrozenEventDraft,
-    ids::{RadrootsEventId, RadrootsListingAddress, RadrootsOrderId},
-    order::{RadrootsOrderFulfillmentState, RadrootsOrderRequest},
+    ids::{RadrootsEventId, RadrootsListingAddress, RadrootsOrderId, RadrootsPublicKey},
+    order::{RadrootsOrderDecision, RadrootsOrderFulfillmentState, RadrootsOrderRequest},
 };
 #[cfg(feature = "runtime")]
 use radroots_events_codec::wire::to_frozen_draft;
 #[cfg(feature = "runtime")]
 use radroots_trade::order::{
     RadrootsOrderCanonicalizationError, RadrootsOrderIssue, RadrootsOrderPaymentState,
-    RadrootsOrderProjectionQueryResult, RadrootsOrderSettlementState, RadrootsOrderStatus,
-    RadrootsOrderStoreQueryError, canonicalize_order_request_for_signer,
-    order_projection_query_for_order_id,
+    RadrootsOrderProjection, RadrootsOrderProjectionQueryResult, RadrootsOrderSettlementState,
+    RadrootsOrderStatus, RadrootsOrderStoreQueryError, canonicalize_order_decision_for_signer,
+    canonicalize_order_request_for_signer, order_projection_query_for_order_id,
 };
 #[cfg(feature = "runtime")]
 use serde::ser::SerializeStruct;
@@ -34,9 +34,13 @@ pub const ORDER_STATUS_DEFAULT_LIMIT: u32 = 500;
 pub const ORDER_STATUS_MAX_LIMIT: u32 = 1_000;
 #[cfg(feature = "runtime")]
 pub const ORDER_SUBMIT_OPERATION_KIND: &str = "order.submit.v1";
+#[cfg(feature = "runtime")]
+pub const ORDER_DECISION_OPERATION_KIND: &str = "order.decision.v1";
 
 #[cfg(feature = "runtime")]
 const ORDER_REQUEST_CONTRACT_ID: &str = "radroots.order.request.v1";
+#[cfg(feature = "runtime")]
+const ORDER_DECISION_CONTRACT_ID: &str = "radroots.order.decision.v1";
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug)]
@@ -180,6 +184,161 @@ pub struct OrderSubmitReceipt {
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsListingAddress,
     pub listing_event_id: RadrootsEventId,
+    pub expected_event_id: RadrootsEventId,
+    pub signed_event_id: RadrootsEventId,
+    pub local_event_seq: i64,
+    pub outbox_operation_id: i64,
+    pub outbox_event_id: i64,
+    pub state: SdkMutationState,
+    pub idempotency_digest_prefix: Option<String>,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug)]
+#[non_exhaustive]
+pub struct OrderDecisionPrepareRequest {
+    pub actor: RadrootsActorContext,
+    pub request_event: RadrootsNostrEventPtr,
+    pub decision: RadrootsOrderDecision,
+    pub created_at: Option<RadrootsSdkTimestamp>,
+}
+
+#[cfg(feature = "runtime")]
+impl serde::Serialize for OrderDecisionPrepareRequest {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut state = serializer.serialize_struct("OrderDecisionPrepareRequest", 4)?;
+        state.serialize_field("actor", &SdkActorContextJson(&self.actor))?;
+        state.serialize_field("request_event", &self.request_event)?;
+        state.serialize_field("decision", &self.decision)?;
+        state.serialize_field("created_at", &self.created_at)?;
+        state.end()
+    }
+}
+
+#[cfg(feature = "runtime")]
+impl OrderDecisionPrepareRequest {
+    pub fn new(
+        actor: RadrootsActorContext,
+        request_event: RadrootsNostrEventPtr,
+        decision: RadrootsOrderDecision,
+    ) -> Self {
+        Self {
+            actor,
+            request_event,
+            decision,
+            created_at: None,
+        }
+    }
+
+    pub fn with_created_at(mut self, created_at: RadrootsSdkTimestamp) -> Self {
+        self.created_at = Some(created_at);
+        self
+    }
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug)]
+#[non_exhaustive]
+pub struct OrderDecisionEnqueueRequest {
+    pub actor: RadrootsActorContext,
+    pub request_event: RadrootsNostrEventPtr,
+    pub decision: RadrootsOrderDecision,
+    pub target_relays: SdkRelayTargetPolicy,
+    pub idempotency_key: Option<SdkIdempotencyKey>,
+    pub created_at: Option<RadrootsSdkTimestamp>,
+}
+
+#[cfg(feature = "runtime")]
+impl serde::Serialize for OrderDecisionEnqueueRequest {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut state = serializer.serialize_struct("OrderDecisionEnqueueRequest", 6)?;
+        state.serialize_field("actor", &SdkActorContextJson(&self.actor))?;
+        state.serialize_field("request_event", &self.request_event)?;
+        state.serialize_field("decision", &self.decision)?;
+        state.serialize_field("target_relays", &self.target_relays)?;
+        state.serialize_field("idempotency_key", &self.idempotency_key)?;
+        state.serialize_field("created_at", &self.created_at)?;
+        state.end()
+    }
+}
+
+#[cfg(feature = "runtime")]
+impl OrderDecisionEnqueueRequest {
+    pub fn new(
+        actor: RadrootsActorContext,
+        request_event: RadrootsNostrEventPtr,
+        decision: RadrootsOrderDecision,
+        target_relays: SdkRelayTargetPolicy,
+    ) -> Self {
+        Self {
+            actor,
+            request_event,
+            decision,
+            target_relays,
+            idempotency_key: None,
+            created_at: None,
+        }
+    }
+
+    pub fn try_with_target_relays<I, S>(
+        mut self,
+        target_relays: I,
+        policy: SdkRelayUrlPolicy,
+    ) -> Result<Self, RadrootsSdkError>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        self.target_relays = SdkRelayTargetPolicy::try_explicit(target_relays, policy)?;
+        Ok(self)
+    }
+
+    pub fn with_idempotency_key(mut self, idempotency_key: SdkIdempotencyKey) -> Self {
+        self.idempotency_key = Some(idempotency_key.into());
+        self
+    }
+
+    pub fn try_with_idempotency_key(
+        mut self,
+        idempotency_key: impl AsRef<str>,
+    ) -> Result<Self, RadrootsSdkError> {
+        self.idempotency_key = Some(SdkIdempotencyKey::new(idempotency_key)?);
+        Ok(self)
+    }
+
+    pub fn with_created_at(mut self, created_at: RadrootsSdkTimestamp) -> Self {
+        self.created_at = Some(created_at);
+        self
+    }
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct OrderDecisionPlan {
+    pub order_id: RadrootsOrderId,
+    pub listing_addr: RadrootsListingAddress,
+    pub buyer_pubkey: RadrootsPublicKey,
+    pub seller_pubkey: RadrootsPublicKey,
+    pub request_event_id: RadrootsEventId,
+    pub expected_event_id: RadrootsEventId,
+    pub frozen_draft: RadrootsFrozenEventDraft,
+    pub created_at: RadrootsSdkTimestamp,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct OrderDecisionReceipt {
+    pub order_id: RadrootsOrderId,
+    pub listing_addr: RadrootsListingAddress,
+    pub buyer_pubkey: RadrootsPublicKey,
+    pub seller_pubkey: RadrootsPublicKey,
+    pub request_event_id: RadrootsEventId,
     pub expected_event_id: RadrootsEventId,
     pub signed_event_id: RadrootsEventId,
     pub local_event_seq: i64,
@@ -562,6 +721,86 @@ impl<'sdk> OrdersClient<'sdk> {
         })
     }
 
+    pub fn prepare_decision(
+        &self,
+        request: OrderDecisionPrepareRequest,
+    ) -> Result<OrderDecisionPlan, RadrootsSdkError> {
+        let created_at = self.resolved_created_at(request.created_at)?;
+        order_decision_plan(
+            &request.actor,
+            request.request_event,
+            request.decision,
+            created_at,
+        )
+    }
+
+    pub async fn enqueue_decision<S>(
+        &self,
+        request: OrderDecisionEnqueueRequest,
+        signer: &S,
+    ) -> Result<OrderDecisionReceipt, RadrootsSdkError>
+    where
+        S: RadrootsEventSigner + ?Sized,
+    {
+        let OrderDecisionEnqueueRequest {
+            actor,
+            request_event,
+            decision,
+            target_relays,
+            idempotency_key,
+            created_at,
+        } = request;
+        let prepare_request = OrderDecisionPrepareRequest {
+            actor: actor.clone(),
+            request_event,
+            decision,
+            created_at,
+        };
+        let plan = self.prepare_decision(prepare_request)?;
+        self.enqueue_prepared_decision(&actor, plan, target_relays, idempotency_key, signer)
+            .await
+    }
+
+    pub async fn enqueue_prepared_decision<S>(
+        &self,
+        actor: &RadrootsActorContext,
+        plan: OrderDecisionPlan,
+        target_relays: SdkRelayTargetPolicy,
+        idempotency_key: Option<SdkIdempotencyKey>,
+        signer: &S,
+    ) -> Result<OrderDecisionReceipt, RadrootsSdkError>
+    where
+        S: RadrootsEventSigner + ?Sized,
+    {
+        self.require_decision_preflight(&plan).await?;
+        let enqueue = enqueue_signed_workflow(
+            self.sdk,
+            SdkWorkflowEnqueueRequest {
+                operation_kind: ORDER_DECISION_OPERATION_KIND,
+                actor,
+                frozen_draft: &plan.frozen_draft,
+                target_relays,
+                idempotency_key,
+            },
+            signer,
+        )
+        .await?;
+        Ok(OrderDecisionReceipt {
+            order_id: plan.order_id,
+            listing_addr: plan.listing_addr,
+            buyer_pubkey: plan.buyer_pubkey,
+            seller_pubkey: plan.seller_pubkey,
+            request_event_id: plan.request_event_id,
+            expected_event_id: plan.expected_event_id,
+            signed_event_id: enqueue.signed_event_id,
+            local_event_seq: enqueue.local_event_seq,
+            outbox_operation_id: enqueue.outbox_operation_id,
+            outbox_event_id: enqueue.outbox_event_id,
+            state: enqueue.state.into(),
+            idempotency_digest_prefix: Some(enqueue.idempotency_digest_prefix),
+        })
+    }
+
     pub async fn status(
         &self,
         request: OrderStatusRequest,
@@ -585,6 +824,20 @@ impl<'sdk> OrdersClient<'sdk> {
             Some(created_at) => Ok(created_at),
             None => self.sdk.now(),
         }
+    }
+
+    async fn require_decision_preflight(
+        &self,
+        plan: &OrderDecisionPlan,
+    ) -> Result<(), RadrootsSdkError> {
+        let query_result = order_projection_query_for_order_id(
+            &self.sdk._event_store,
+            &plan.order_id,
+            ORDER_STATUS_MAX_LIMIT,
+        )
+        .await
+        .map_err(projection_error)?;
+        require_decision_request_evidence(plan, &query_result.projection)
     }
 }
 
@@ -661,6 +914,141 @@ fn order_submit_plan(
 }
 
 #[cfg(feature = "runtime")]
+fn order_decision_plan(
+    actor: &RadrootsActorContext,
+    request_event: RadrootsNostrEventPtr,
+    decision: RadrootsOrderDecision,
+    created_at: RadrootsSdkTimestamp,
+) -> Result<OrderDecisionPlan, RadrootsSdkError> {
+    require_seller_actor(actor, "order.prepare_decision")?;
+    let request_event_id = request_event_id(&request_event)?;
+    if decision.seller_pubkey.as_str() != actor.pubkey().as_str() {
+        return Err(RadrootsSdkError::UnauthorizedActor {
+            operation: "order.prepare_decision".to_owned(),
+            reason: "actor pubkey must match order seller_pubkey".to_owned(),
+        });
+    }
+    let decision = canonicalize_order_decision_for_signer(decision, actor.pubkey().as_str())
+        .map_err(order_decision_canonicalization_error)?;
+    let created_at_nostr = created_at.try_into_nostr_created_at()?;
+    let order_id = decision.order_id.clone();
+    let listing_addr = decision.listing_addr.clone();
+    let buyer_pubkey = decision.buyer_pubkey.clone();
+    let seller_pubkey = decision.seller_pubkey.clone();
+    let draft = order::build_order_decision_draft(&request_event_id, &request_event_id, &decision)
+        .map_err(|error| RadrootsSdkError::InvalidRequest {
+            message: format!("order decision draft encode failed: {error}"),
+        })?;
+    let frozen_draft = to_frozen_draft(
+        draft.into_wire_parts(),
+        ORDER_DECISION_CONTRACT_ID,
+        decision.seller_pubkey.as_str(),
+        created_at_nostr,
+    )
+    .map_err(|error| RadrootsSdkError::InvalidRequest {
+        message: format!("order decision draft freeze failed: {error}"),
+    })?;
+    let expected_event_id = RadrootsEventId::parse(frozen_draft.expected_event_id.as_str())
+        .map_err(|error| RadrootsSdkError::InvalidRequest {
+            message: format!("order decision draft produced invalid event id: {error}"),
+        })?;
+    Ok(OrderDecisionPlan {
+        order_id,
+        listing_addr,
+        buyer_pubkey,
+        seller_pubkey,
+        request_event_id,
+        expected_event_id,
+        frozen_draft,
+        created_at,
+    })
+}
+
+#[cfg(feature = "runtime")]
+fn require_decision_request_evidence(
+    plan: &OrderDecisionPlan,
+    projection: &RadrootsOrderProjection,
+) -> Result<(), RadrootsSdkError> {
+    let Some(request_event_id) = &projection.request_event_id else {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: format!(
+                "order decision requires local request evidence for order {}",
+                plan.order_id
+            ),
+        });
+    };
+    if request_event_id != &plan.request_event_id {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: format!(
+                "order decision request evidence {} does not match local request {} for order {}",
+                plan.request_event_id, request_event_id, plan.order_id
+            ),
+        });
+    }
+    if !matches!(&projection.status, RadrootsOrderStatus::Requested) {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: format!(
+                "order decision requires requested local state for order {}; current state is {:?}",
+                plan.order_id, projection.status
+            ),
+        });
+    }
+    if !projection.issues.is_empty() {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: format!(
+                "order decision request evidence for order {} has {} reducer issue(s)",
+                plan.order_id,
+                projection.issues.len()
+            ),
+        });
+    }
+    require_projection_match(
+        "listing_addr",
+        projection.listing_addr.as_ref(),
+        &plan.listing_addr,
+        &plan.order_id,
+    )?;
+    require_projection_match(
+        "buyer_pubkey",
+        projection.buyer_pubkey.as_ref(),
+        &plan.buyer_pubkey,
+        &plan.order_id,
+    )?;
+    require_projection_match(
+        "seller_pubkey",
+        projection.seller_pubkey.as_ref(),
+        &plan.seller_pubkey,
+        &plan.order_id,
+    )?;
+    Ok(())
+}
+
+#[cfg(feature = "runtime")]
+fn require_projection_match<T>(
+    field: &'static str,
+    actual: Option<&T>,
+    expected: &T,
+    order_id: &RadrootsOrderId,
+) -> Result<(), RadrootsSdkError>
+where
+    T: core::fmt::Display + PartialEq,
+{
+    match actual {
+        Some(actual) if actual == expected => Ok(()),
+        Some(actual) => Err(RadrootsSdkError::InvalidRequest {
+            message: format!(
+                "order decision {field} {expected} does not match local request {actual} for order {order_id}"
+            ),
+        }),
+        None => Err(RadrootsSdkError::InvalidRequest {
+            message: format!(
+                "order decision request evidence is missing {field} for order {order_id}"
+            ),
+        }),
+    }
+}
+
+#[cfg(feature = "runtime")]
 fn require_buyer_actor(
     actor: &RadrootsActorContext,
     operation: &'static str,
@@ -671,6 +1059,21 @@ fn require_buyer_actor(
         Err(RadrootsSdkError::UnauthorizedActor {
             operation: operation.to_owned(),
             reason: "missing role Buyer".to_owned(),
+        })
+    }
+}
+
+#[cfg(feature = "runtime")]
+fn require_seller_actor(
+    actor: &RadrootsActorContext,
+    operation: &'static str,
+) -> Result<(), RadrootsSdkError> {
+    if actor.satisfies(RadrootsActorRole::Seller) {
+        Ok(())
+    } else {
+        Err(RadrootsSdkError::UnauthorizedActor {
+            operation: operation.to_owned(),
+            reason: "missing role Seller".to_owned(),
         })
     }
 }
@@ -687,6 +1090,17 @@ fn listing_event_id(
 }
 
 #[cfg(feature = "runtime")]
+fn request_event_id(
+    request_event: &RadrootsNostrEventPtr,
+) -> Result<RadrootsEventId, RadrootsSdkError> {
+    RadrootsEventId::parse(request_event.id.as_str()).map_err(|error| {
+        RadrootsSdkError::InvalidRequest {
+            message: format!("order request evidence event id is invalid: {error}"),
+        }
+    })
+}
+
+#[cfg(feature = "runtime")]
 fn order_canonicalization_error(error: RadrootsOrderCanonicalizationError) -> RadrootsSdkError {
     match error {
         RadrootsOrderCanonicalizationError::InvalidBuyerSigner => {
@@ -698,6 +1112,15 @@ fn order_canonicalization_error(error: RadrootsOrderCanonicalizationError) -> Ra
         error => RadrootsSdkError::InvalidRequest {
             message: format!("order submit request is invalid: {error}"),
         },
+    }
+}
+
+#[cfg(feature = "runtime")]
+fn order_decision_canonicalization_error(
+    error: RadrootsOrderCanonicalizationError,
+) -> RadrootsSdkError {
+    RadrootsSdkError::InvalidRequest {
+        message: format!("order decision request is invalid: {error}"),
     }
 }
 
