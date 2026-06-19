@@ -40,8 +40,8 @@ use radroots_sdk::{
     ORDER_REVISION_DECISION_OPERATION_KIND, ORDER_REVISION_PROPOSAL_OPERATION_KIND,
     ORDER_STATUS_DEFAULT_LIMIT, ORDER_STATUS_MAX_LIMIT, ORDER_SUBMIT_OPERATION_KIND,
     OrderCancellationEnqueueRequest, OrderDecisionEnqueueRequest, OrderDecisionPrepareRequest,
-    OrderFulfillmentStatusKind, OrderFulfillmentUpdateEnqueueRequest, OrderPaymentStateKind,
-    OrderReceiptRecordEnqueueRequest, OrderRequestEvidenceIngestRequest,
+    OrderEvidenceIngestRequest, OrderFulfillmentStatusKind, OrderFulfillmentUpdateEnqueueRequest,
+    OrderPaymentStateKind, OrderReceiptRecordEnqueueRequest, OrderRequestEvidenceIngestRequest,
     OrderRevisionDecisionEnqueueRequest, OrderRevisionProposalEnqueueRequest,
     OrderSettlementStateKind, OrderStatusKind, OrderStatusRequest, OrderSubmitEnqueueRequest,
     OrderSubmitPrepareRequest, PushOutboxEventState, PushOutboxRelayOutcomeKind, PushOutboxRequest,
@@ -961,6 +961,18 @@ fn signed_order_decision_event(
     signed_event(SELLER_SECRET_KEY_HEX, created_at, draft.into_wire_parts())
 }
 
+fn signed_non_order_event(created_at: u32) -> RadrootsNostrEvent {
+    signed_event(
+        SELLER_SECRET_KEY_HEX,
+        created_at,
+        WireEventParts {
+            kind: KIND_LISTING,
+            content: "{}".to_owned(),
+            tags: vec![vec!["d".to_owned(), "not-an-order".to_owned()]],
+        },
+    )
+}
+
 #[tokio::test]
 async fn order_request_evidence_ingest_stores_request_and_enables_decision_enqueue() {
     let (_tempdir, sdk, store) = directory_sdk_and_store().await;
@@ -1014,6 +1026,86 @@ async fn order_request_evidence_ingest_stores_request_and_enables_decision_enque
             .expect("event store status")
             .total_events,
         2
+    );
+}
+
+#[tokio::test]
+async fn order_evidence_ingest_stores_lifecycle_evidence_for_projection() {
+    let (_tempdir, sdk, store) = directory_sdk_and_store().await;
+    let request_event = signed_order_request_event("order-evidence-ingest", 39);
+    let request_event_id = RadrootsEventId::parse(request_event.id.as_str()).expect("request id");
+    let decision_event =
+        signed_order_decision_event("order-evidence-ingest", &request_event_id, 40);
+
+    let request_receipt = sdk
+        .orders()
+        .ingest_evidence(OrderEvidenceIngestRequest::new(request_event.clone()))
+        .await
+        .expect("request evidence");
+    assert_eq!(request_receipt.order_id.as_str(), "order-evidence-ingest");
+    assert_eq!(request_receipt.event_kind, KIND_ORDER_REQUEST);
+    assert_eq!(request_receipt.local_event_seq, 1);
+    assert!(request_receipt.inserted);
+
+    let decision_receipt = sdk
+        .orders()
+        .ingest_evidence(OrderEvidenceIngestRequest::new(decision_event.clone()))
+        .await
+        .expect("decision evidence");
+    assert_eq!(decision_receipt.order_id.as_str(), "order-evidence-ingest");
+    assert_eq!(decision_receipt.event_kind, KIND_ORDER_DECISION);
+    assert_eq!(decision_receipt.local_event_seq, 2);
+    assert!(decision_receipt.inserted);
+
+    let duplicate_receipt = sdk
+        .orders()
+        .ingest_evidence(OrderEvidenceIngestRequest::new(decision_event))
+        .await
+        .expect("duplicate decision evidence");
+    assert_eq!(duplicate_receipt.local_event_seq, 2);
+    assert!(!duplicate_receipt.inserted);
+    assert_eq!(
+        store
+            .status_summary()
+            .await
+            .expect("event store status")
+            .total_events,
+        2
+    );
+
+    let status = sdk
+        .orders()
+        .status(status_request("order-evidence-ingest"))
+        .await
+        .expect("status");
+    assert_eq!(status.status, OrderStatusKind::Accepted);
+    assert_eq!(status.event_count, 2);
+    assert_eq!(
+        status
+            .decision_event_id
+            .as_ref()
+            .map(RadrootsEventId::as_str),
+        Some(decision_receipt.event_id.as_str())
+    );
+}
+
+#[tokio::test]
+async fn order_evidence_ingest_rejects_non_order_events() {
+    let (_tempdir, sdk, store) = directory_sdk_and_store().await;
+    let error = sdk
+        .orders()
+        .ingest_evidence(OrderEvidenceIngestRequest::new(signed_non_order_event(41)))
+        .await
+        .expect_err("non order event");
+
+    assert!(matches!(error, RadrootsSdkError::InvalidRequest { .. }));
+    assert_eq!(
+        store
+            .status_summary()
+            .await
+            .expect("event store status")
+            .total_events,
+        0
     );
 }
 

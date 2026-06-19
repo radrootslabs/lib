@@ -16,11 +16,23 @@ use radroots_events::{
     contract::RadrootsActorRole,
     draft::RadrootsFrozenEventDraft,
     ids::{RadrootsEventId, RadrootsListingAddress, RadrootsOrderId, RadrootsPublicKey},
+    kinds::{
+        KIND_ORDER_CANCELLATION, KIND_ORDER_DECISION, KIND_ORDER_FULFILLMENT_UPDATE,
+        KIND_ORDER_PAYMENT_RECORD, KIND_ORDER_RECEIPT, KIND_ORDER_REQUEST,
+        KIND_ORDER_REVISION_DECISION, KIND_ORDER_REVISION_PROPOSAL, KIND_ORDER_SETTLEMENT_DECISION,
+    },
     order::{
         RadrootsOrderCancellation, RadrootsOrderDecision, RadrootsOrderFulfillmentState,
         RadrootsOrderFulfillmentUpdate, RadrootsOrderReceipt, RadrootsOrderRequest,
         RadrootsOrderRevisionDecision, RadrootsOrderRevisionProposal,
     },
+};
+#[cfg(feature = "runtime")]
+use radroots_events_codec::order::{
+    order_cancellation_from_event, order_decision_from_event, order_fulfillment_update_from_event,
+    order_payment_record_from_event, order_receipt_from_event, order_request_from_event,
+    order_revision_decision_from_event, order_revision_proposal_from_event,
+    order_settlement_decision_from_event,
 };
 #[cfg(feature = "runtime")]
 use radroots_events_codec::wire::{WireEventParts, to_frozen_draft};
@@ -263,6 +275,53 @@ pub struct OrderRequestEvidenceIngestReceipt {
     pub buyer_pubkey: RadrootsPublicKey,
     pub seller_pubkey: RadrootsPublicKey,
     pub request_event_id: RadrootsEventId,
+    pub local_event_seq: i64,
+    pub inserted: bool,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug)]
+#[non_exhaustive]
+pub struct OrderEvidenceIngestRequest {
+    pub event: RadrootsNostrEvent,
+    pub observed_at: Option<RadrootsSdkTimestamp>,
+}
+
+#[cfg(feature = "runtime")]
+impl serde::Serialize for OrderEvidenceIngestRequest {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut state = serializer.serialize_struct("OrderEvidenceIngestRequest", 2)?;
+        state.serialize_field("event", &self.event)?;
+        state.serialize_field("observed_at", &self.observed_at)?;
+        state.end()
+    }
+}
+
+#[cfg(feature = "runtime")]
+impl OrderEvidenceIngestRequest {
+    pub fn new(event: RadrootsNostrEvent) -> Self {
+        Self {
+            event,
+            observed_at: None,
+        }
+    }
+
+    pub fn with_observed_at(mut self, observed_at: RadrootsSdkTimestamp) -> Self {
+        self.observed_at = Some(observed_at);
+        self
+    }
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct OrderEvidenceIngestReceipt {
+    pub order_id: RadrootsOrderId,
+    pub listing_addr: RadrootsListingAddress,
+    pub event_id: RadrootsEventId,
+    pub event_kind: u32,
     pub local_event_seq: i64,
     pub inserted: bool,
 }
@@ -1543,6 +1602,31 @@ impl SdkOrderStatusIssueKind {
 
 #[cfg(feature = "runtime")]
 impl<'sdk> OrdersClient<'sdk> {
+    pub async fn ingest_evidence(
+        &self,
+        request: OrderEvidenceIngestRequest,
+    ) -> Result<OrderEvidenceIngestReceipt, RadrootsSdkError> {
+        let evidence = parse_order_evidence(&request.event)?;
+        let observed_at = self.resolved_created_at(request.observed_at)?;
+        let observed_at_ms = sdk_timestamp_ms(observed_at)?;
+        let receipt = self
+            .sdk
+            ._event_store
+            .ingest_event(RadrootsEventIngest::new(request.event, observed_at_ms))
+            .await
+            .map_err(|error| RadrootsSdkError::EventStore {
+                message: error.to_string(),
+            })?;
+        Ok(OrderEvidenceIngestReceipt {
+            order_id: evidence.order_id,
+            listing_addr: evidence.listing_addr,
+            event_id: evidence.event_id,
+            event_kind: evidence.event_kind,
+            local_event_seq: receipt.seq,
+            inserted: receipt.inserted,
+        })
+    }
+
     pub async fn ingest_request_evidence(
         &self,
         request: OrderRequestEvidenceIngestRequest,
@@ -2292,6 +2376,102 @@ impl<'sdk> OrdersClient<'sdk> {
             .map_err(|error| RadrootsSdkError::EventStore {
                 message: error.to_string(),
             })
+    }
+}
+
+#[cfg(feature = "runtime")]
+struct ParsedOrderEvidence {
+    order_id: RadrootsOrderId,
+    listing_addr: RadrootsListingAddress,
+    event_id: RadrootsEventId,
+    event_kind: u32,
+}
+
+#[cfg(feature = "runtime")]
+fn parse_order_evidence(
+    event: &RadrootsNostrEvent,
+) -> Result<ParsedOrderEvidence, RadrootsSdkError> {
+    let event_id = RadrootsEventId::parse(event.id.as_str()).map_err(|error| {
+        RadrootsSdkError::InvalidRequest {
+            message: format!("order evidence event id is invalid: {error}"),
+        }
+    })?;
+    let (order_id, listing_addr) = match event.kind {
+        KIND_ORDER_REQUEST => {
+            let payload = order_request_from_event(event)
+                .map_err(order_evidence_parse_error)?
+                .payload;
+            (payload.order_id, payload.listing_addr)
+        }
+        KIND_ORDER_DECISION => {
+            let payload = order_decision_from_event(event)
+                .map_err(order_evidence_parse_error)?
+                .payload;
+            (payload.order_id, payload.listing_addr)
+        }
+        KIND_ORDER_REVISION_PROPOSAL => {
+            let payload = order_revision_proposal_from_event(event)
+                .map_err(order_evidence_parse_error)?
+                .payload;
+            (payload.order_id, payload.listing_addr)
+        }
+        KIND_ORDER_REVISION_DECISION => {
+            let payload = order_revision_decision_from_event(event)
+                .map_err(order_evidence_parse_error)?
+                .payload;
+            (payload.order_id, payload.listing_addr)
+        }
+        KIND_ORDER_CANCELLATION => {
+            let payload = order_cancellation_from_event(event)
+                .map_err(order_evidence_parse_error)?
+                .payload;
+            (payload.order_id, payload.listing_addr)
+        }
+        KIND_ORDER_FULFILLMENT_UPDATE => {
+            let payload = order_fulfillment_update_from_event(event)
+                .map_err(order_evidence_parse_error)?
+                .payload;
+            (payload.order_id, payload.listing_addr)
+        }
+        KIND_ORDER_RECEIPT => {
+            let payload = order_receipt_from_event(event)
+                .map_err(order_evidence_parse_error)?
+                .payload;
+            (payload.order_id, payload.listing_addr)
+        }
+        KIND_ORDER_PAYMENT_RECORD => {
+            let payload = order_payment_record_from_event(event)
+                .map_err(order_evidence_parse_error)?
+                .payload;
+            (payload.order_id, payload.listing_addr)
+        }
+        KIND_ORDER_SETTLEMENT_DECISION => {
+            let payload = order_settlement_decision_from_event(event)
+                .map_err(order_evidence_parse_error)?
+                .payload;
+            (payload.order_id, payload.listing_addr)
+        }
+        other => {
+            return Err(RadrootsSdkError::InvalidRequest {
+                message: format!("order evidence event kind {other} is not supported"),
+            });
+        }
+    };
+
+    Ok(ParsedOrderEvidence {
+        order_id,
+        listing_addr,
+        event_id,
+        event_kind: event.kind,
+    })
+}
+
+#[cfg(feature = "runtime")]
+fn order_evidence_parse_error(
+    error: radroots_events_codec::order::RadrootsOrderEnvelopeParseError,
+) -> RadrootsSdkError {
+    RadrootsSdkError::InvalidRequest {
+        message: format!("order evidence event is invalid: {error}"),
     }
 }
 
