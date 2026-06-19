@@ -128,6 +128,41 @@ const REQUIRED_ORDERS_CLIENT_METHODS: &[&str] = &[
     "pub async fn status(",
 ];
 
+const FORBIDDEN_PAYMENT_WRITE_PUBLIC_EXPORTS: &[&str] = &[
+    "CheckoutClient",
+    "EscrowClient",
+    "InvoiceClient",
+    "OrderPaymentRecordEnqueueRequest",
+    "OrderPaymentRecordPrepareRequest",
+    "OrderPaymentRecordReceipt",
+    "OrderSettlementDecisionEnqueueRequest",
+    "OrderSettlementDecisionPrepareRequest",
+    "OrderSettlementDecisionReceipt",
+    "PaymentClient",
+    "PaymentsClient",
+    "RefundClient",
+    "WalletClient",
+    "ORDER_PAYMENT_RECORD_OPERATION_KIND",
+    "ORDER_SETTLEMENT_DECISION_OPERATION_KIND",
+];
+
+const FORBIDDEN_PAYMENT_WRITE_ORDER_METHODS: &[&str] = &[
+    "accept_settlement",
+    "checkout",
+    "enqueue_payment",
+    "enqueue_settlement",
+    "escrow",
+    "invoice",
+    "payment_provider",
+    "prepare_payment",
+    "prepare_settlement",
+    "record_payment",
+    "refund",
+    "reject_settlement",
+    "settle_payment",
+    "wallet",
+];
+
 #[test]
 fn sdk_sources_do_not_import_app_or_cli_concepts() {
     for path in rust_source_files(Path::new(env!("CARGO_MANIFEST_DIR")).join("src").as_path()) {
@@ -171,6 +206,45 @@ fn order_runtime_stays_on_product_runtime_boundary() {
 fn migrated_runtime_tests_stay_on_product_runtime_boundary() {
     for file in ["tests/farms_runtime.rs", "tests/orders_runtime.rs"] {
         product_runtime_file_stays_on_boundary(file);
+    }
+}
+
+#[test]
+fn payment_deferral_keeps_sdk_public_runtime_surface_passive_only() {
+    let lib_source = read_source(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src/lib.rs")
+            .as_path(),
+    );
+    let order_source = read_source(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src/orders_runtime.rs")
+            .as_path(),
+    );
+
+    for passive_export in [
+        "OrderPaymentHandoffKind",
+        "OrderPaymentStateKind",
+        "OrderSettlementStateKind",
+    ] {
+        assert!(
+            lib_source.contains(passive_export),
+            "src/lib.rs must keep passive order payment status export `{passive_export}`"
+        );
+    }
+
+    for forbidden in FORBIDDEN_PAYMENT_WRITE_PUBLIC_EXPORTS {
+        assert!(
+            !lib_source.contains(forbidden),
+            "src/lib.rs must not expose deferred payment write surface `{forbidden}`"
+        );
+    }
+
+    for forbidden in FORBIDDEN_PAYMENT_WRITE_ORDER_METHODS {
+        assert!(
+            !order_source.contains(forbidden),
+            "src/orders_runtime.rs must not add deferred payment write method or capability `{forbidden}`"
+        );
     }
 }
 
