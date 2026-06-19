@@ -39,6 +39,86 @@ const FORBIDDEN_SDK_SOURCE_CONCEPTS: &[ForbiddenSdkConcept] = &[
     },
 ];
 
+const REQUIRED_ORDER_RUNTIME_EXPORTS: &[&str] = &[
+    "ORDER_CANCELLATION_OPERATION_KIND",
+    "ORDER_DECISION_OPERATION_KIND",
+    "ORDER_FULFILLMENT_UPDATE_OPERATION_KIND",
+    "ORDER_RECEIPT_RECORD_OPERATION_KIND",
+    "ORDER_REVISION_DECISION_OPERATION_KIND",
+    "ORDER_REVISION_PROPOSAL_OPERATION_KIND",
+    "ORDER_STATUS_DEFAULT_LIMIT",
+    "ORDER_STATUS_MAX_LIMIT",
+    "ORDER_SUBMIT_OPERATION_KIND",
+    "OrderCancellationEnqueueRequest",
+    "OrderCancellationPlan",
+    "OrderCancellationPrepareRequest",
+    "OrderCancellationReceipt",
+    "OrderDecisionEnqueueRequest",
+    "OrderDecisionPlan",
+    "OrderDecisionPrepareRequest",
+    "OrderDecisionReceipt",
+    "OrderEvidenceIngestReceipt",
+    "OrderEvidenceIngestRequest",
+    "OrderFulfillmentStatusKind",
+    "OrderFulfillmentUpdateEnqueueRequest",
+    "OrderFulfillmentUpdatePlan",
+    "OrderFulfillmentUpdatePrepareRequest",
+    "OrderFulfillmentUpdateReceipt",
+    "OrderPaymentStateKind",
+    "OrderReceiptRecordEnqueueRequest",
+    "OrderReceiptRecordPlan",
+    "OrderReceiptRecordPrepareRequest",
+    "OrderReceiptRecordReceipt",
+    "OrderRequestEvidenceIngestReceipt",
+    "OrderRequestEvidenceIngestRequest",
+    "OrderRevisionDecisionEnqueueRequest",
+    "OrderRevisionDecisionPlan",
+    "OrderRevisionDecisionPrepareRequest",
+    "OrderRevisionDecisionReceipt",
+    "OrderRevisionProposalEnqueueRequest",
+    "OrderRevisionProposalPlan",
+    "OrderRevisionProposalPrepareRequest",
+    "OrderRevisionProposalReceipt",
+    "OrderSettlementStateKind",
+    "OrderStatusKind",
+    "OrderStatusReceipt",
+    "OrderStatusRequest",
+    "OrderSubmitEnqueueRequest",
+    "OrderSubmitPlan",
+    "OrderSubmitPrepareRequest",
+    "OrderSubmitReceipt",
+    "SdkOrderStatusIssue",
+    "SdkOrderStatusIssueKind",
+    "SdkOrderStatusSource",
+];
+
+const REQUIRED_ORDERS_CLIENT_METHODS: &[&str] = &[
+    "pub async fn ingest_evidence(",
+    "pub async fn ingest_request_evidence(",
+    "pub fn prepare_submit(",
+    "pub async fn enqueue_submit<",
+    "pub async fn enqueue_prepared_submit<",
+    "pub fn prepare_decision(",
+    "pub async fn enqueue_decision<",
+    "pub async fn enqueue_prepared_decision<",
+    "pub fn prepare_revision_proposal(",
+    "pub async fn enqueue_revision_proposal<",
+    "pub async fn enqueue_prepared_revision_proposal<",
+    "pub fn prepare_revision_decision(",
+    "pub async fn enqueue_revision_decision<",
+    "pub async fn enqueue_prepared_revision_decision<",
+    "pub fn prepare_cancellation(",
+    "pub async fn enqueue_cancellation<",
+    "pub async fn enqueue_prepared_cancellation<",
+    "pub fn prepare_fulfillment_update(",
+    "pub async fn enqueue_fulfillment_update<",
+    "pub async fn enqueue_prepared_fulfillment_update<",
+    "pub fn prepare_receipt_record(",
+    "pub async fn enqueue_receipt_record<",
+    "pub async fn enqueue_prepared_receipt_record<",
+    "pub async fn status(",
+];
+
 #[test]
 fn sdk_sources_do_not_import_app_or_cli_concepts() {
     for path in rust_source_files(Path::new(env!("CARGO_MANIFEST_DIR")).join("src").as_path()) {
@@ -82,6 +162,99 @@ fn order_runtime_stays_on_product_runtime_boundary() {
 fn migrated_runtime_tests_stay_on_product_runtime_boundary() {
     for file in ["tests/farms_runtime.rs", "tests/orders_runtime.rs"] {
         product_runtime_file_stays_on_boundary(file);
+    }
+}
+
+#[test]
+fn order_runtime_public_exports_are_explicit() {
+    let source = read_source(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src/lib.rs")
+            .as_path(),
+    );
+
+    assert!(
+        source.contains("mod orders_runtime;"),
+        "src/lib.rs must keep orders_runtime as an internal implementation module"
+    );
+    assert!(
+        source.contains("pub use crate::orders_runtime::{"),
+        "src/lib.rs must explicitly re-export approved order runtime types"
+    );
+    assert!(
+        !source.contains("pub mod orders_runtime;"),
+        "src/lib.rs must not expose the orders_runtime module path"
+    );
+    assert!(
+        !source.contains("pub use crate::orders_runtime::*;"),
+        "src/lib.rs must not wildcard-export the order runtime"
+    );
+
+    for export in REQUIRED_ORDER_RUNTIME_EXPORTS {
+        assert!(
+            source.contains(export),
+            "src/lib.rs must explicitly expose order SDK runtime export `{export}`"
+        );
+    }
+}
+
+#[test]
+fn orders_client_surface_is_inventory_guarded() {
+    let source = read_source(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src/orders_runtime.rs")
+            .as_path(),
+    );
+
+    assert!(
+        source.contains("impl<'sdk> OrdersClient<'sdk> {"),
+        "src/orders_runtime.rs must own OrdersClient runtime methods"
+    );
+
+    for method in REQUIRED_ORDERS_CLIENT_METHODS {
+        assert!(
+            source.contains(method),
+            "OrdersClient must expose inventory-guarded method `{method}`"
+        );
+    }
+}
+
+#[test]
+fn product_clients_remain_thin_sdk_handles() {
+    let lib_source = read_source(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src/lib.rs")
+            .as_path(),
+    );
+    let clients_source = read_source(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src/product_clients.rs")
+            .as_path(),
+    );
+
+    assert!(
+        lib_source.contains("mod product_clients;"),
+        "src/lib.rs must keep product_clients internal"
+    );
+    assert!(
+        lib_source.contains("pub use crate::product_clients::{FarmsClient, ListingsClient, OrdersClient, SyncClient};"),
+        "src/lib.rs must explicitly export product client handles"
+    );
+    assert!(
+        !lib_source.contains("pub mod product_clients;"),
+        "src/lib.rs must not expose the product_clients module path"
+    );
+
+    for client in [
+        "FarmsClient",
+        "ListingsClient",
+        "OrdersClient",
+        "SyncClient",
+    ] {
+        assert!(
+            clients_source.contains(format!("pub struct {client}<'sdk>").as_str()),
+            "product_clients.rs must define thin handle `{client}`"
+        );
     }
 }
 
