@@ -1362,6 +1362,8 @@ pub struct OrderStatusReceipt {
     pub event_ids: Vec<RadrootsEventId>,
     pub request_event_id: Option<RadrootsEventId>,
     pub decision_event_id: Option<RadrootsEventId>,
+    pub agreement_event_id: Option<RadrootsEventId>,
+    pub pending_revision_event_id: Option<RadrootsEventId>,
     pub fulfillment_event_id: Option<RadrootsEventId>,
     pub cancellation_event_id: Option<RadrootsEventId>,
     pub receipt_event_id: Option<RadrootsEventId>,
@@ -2494,6 +2496,8 @@ impl OrderStatusReceipt {
             event_ids: query_result.event_ids,
             request_event_id: projection.request_event_id,
             decision_event_id: projection.decision_event_id,
+            agreement_event_id: projection.agreement_event_id,
+            pending_revision_event_id: projection.pending_revision_event_id,
             fulfillment_event_id: projection.fulfillment_event_id,
             cancellation_event_id: projection.cancellation_event_id,
             receipt_event_id: projection.receipt_event_id,
@@ -3278,14 +3282,23 @@ fn require_pending_revision(
     refs: &OrderLifecycleReferences<'_>,
     projection: &RadrootsOrderProjection,
 ) -> Result<(), RadrootsSdkError> {
-    if has_pending_revision(projection) {
-        Ok(())
-    } else {
-        Err(lifecycle_invalid(
+    match projection.pending_revision_event_id.as_ref() {
+        Some(pending_revision_event_id) if pending_revision_event_id == refs.previous_event_id => {
+            Ok(())
+        }
+        Some(pending_revision_event_id) => Err(lifecycle_invalid(
+            refs.operation,
+            refs.order_id,
+            format!(
+                "previous event {} does not match pending revision proposal {}",
+                refs.previous_event_id, pending_revision_event_id
+            ),
+        )),
+        None => Err(lifecycle_invalid(
             refs.operation,
             refs.order_id,
             "requires pending revision proposal local state",
-        ))
+        )),
     }
 }
 
@@ -3294,24 +3307,15 @@ fn require_no_pending_revision(
     refs: &OrderLifecycleReferences<'_>,
     projection: &RadrootsOrderProjection,
 ) -> Result<(), RadrootsSdkError> {
-    if has_pending_revision(projection) {
+    if let Some(pending_revision_event_id) = projection.pending_revision_event_id.as_ref() {
         Err(lifecycle_invalid(
             refs.operation,
             refs.order_id,
-            "cannot follow pending revision proposal local state",
+            format!("cannot follow pending revision proposal {pending_revision_event_id}"),
         ))
     } else {
         Ok(())
     }
-}
-
-#[cfg(feature = "runtime")]
-fn has_pending_revision(projection: &RadrootsOrderProjection) -> bool {
-    matches!(projection.status, RadrootsOrderStatus::Accepted)
-        && projection.fulfillment_event_id.is_none()
-        && projection.agreement_event_id.is_some()
-        && projection.last_event_id.is_some()
-        && projection.agreement_event_id != projection.last_event_id
 }
 
 #[cfg(feature = "runtime")]
