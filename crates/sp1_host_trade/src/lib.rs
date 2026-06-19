@@ -1518,7 +1518,10 @@ fn is_lower_hex(value: &str) -> bool {
         .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
-#[cfg(feature = "sp1_verify")]
+#[cfg(any(
+    feature = "sp1_proving",
+    all(feature = "sp1_verify", radroots_sp1_guest_elf)
+))]
 fn sp1_program_hash_for_elf(elf: &sp1_sdk::Elf) -> String {
     let bytes: &[u8] = match elf {
         sp1_sdk::Elf::Static(bytes) => bytes,
