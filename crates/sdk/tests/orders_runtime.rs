@@ -41,9 +41,10 @@ use radroots_sdk::{
     ORDER_STATUS_DEFAULT_LIMIT, ORDER_STATUS_MAX_LIMIT, ORDER_SUBMIT_OPERATION_KIND,
     OrderCancellationEnqueueRequest, OrderDecisionEnqueueRequest, OrderDecisionPrepareRequest,
     OrderEvidenceIngestRequest, OrderFulfillmentStatusKind, OrderFulfillmentUpdateEnqueueRequest,
-    OrderPaymentStateKind, OrderReceiptRecordEnqueueRequest, OrderRequestEvidenceIngestRequest,
-    OrderRevisionDecisionEnqueueRequest, OrderRevisionProposalEnqueueRequest,
-    OrderSettlementStateKind, OrderStatusKind, OrderStatusRequest, OrderSubmitEnqueueRequest,
+    OrderPaymentHandoffKind, OrderPaymentStateKind, OrderReceiptRecordEnqueueRequest,
+    OrderRequestEvidenceIngestRequest, OrderRevisionDecisionEnqueueRequest,
+    OrderRevisionProposalEnqueueRequest, OrderSettlementStateKind, OrderStatusKind,
+    OrderStatusNextActionKind, OrderStatusRequest, OrderSubmitEnqueueRequest,
     OrderSubmitPrepareRequest, OrderWorkflowKind, PushOutboxEventState, PushOutboxRelayOutcomeKind,
     PushOutboxRequest, RadrootsSdk, RadrootsSdkError, RadrootsSdkPartialLocalMutationFailure,
     RadrootsSdkRecoveryAction, RadrootsSdkTimestamp, SdkMutationState, SdkOrderStatusIssue,
@@ -1952,6 +1953,23 @@ async fn order_revision_order_fulfillment_order_receipt_lifecycle_enqueue_update
     );
     assert_eq!(status.pending_revision_event_id, None);
     assert!(status.lifecycle_terminal);
+    assert_eq!(
+        status.payment_handoff,
+        OrderPaymentHandoffKind::InPersonOrOffPlatformPending
+    );
+    assert_eq!(status.next_action, OrderStatusNextActionKind::Terminal);
+    assert!(status.evidence.has_request);
+    assert!(status.evidence.has_decision);
+    assert!(status.evidence.has_agreement);
+    assert!(status.evidence.has_fulfillment);
+    assert!(status.evidence.has_receipt);
+    assert!(!status.evidence.has_issues);
+    assert!(!status.eligibility.can_decide);
+    assert!(!status.eligibility.can_propose_revision);
+    assert!(!status.eligibility.can_decide_revision);
+    assert!(!status.eligibility.can_cancel);
+    assert!(!status.eligibility.can_update_fulfillment);
+    assert!(!status.eligibility.can_record_receipt);
     assert!(status.issues.is_empty());
 }
 
@@ -2359,6 +2377,14 @@ async fn order_cancel_lifecycle_enqueue_updates_status() {
         Some(cancellation.signed_event_id.as_str())
     );
     assert!(status.lifecycle_terminal);
+    assert_eq!(status.payment_handoff, OrderPaymentHandoffKind::NotRequired);
+    assert_eq!(status.next_action, OrderStatusNextActionKind::Terminal);
+    assert!(status.evidence.has_request);
+    assert!(status.evidence.has_decision);
+    assert!(status.evidence.has_cancellation);
+    assert!(!status.evidence.has_issues);
+    assert!(!status.eligibility.can_cancel);
+    assert!(!status.eligibility.can_update_fulfillment);
     assert!(status.issues.is_empty());
 }
 
@@ -2496,6 +2522,15 @@ async fn order_status_returns_not_found_for_missing_local_order() {
         receipt.settlement_state,
         OrderSettlementStateKind::NotRequired
     );
+    assert_eq!(receipt.payment_handoff, OrderPaymentHandoffKind::NotReady);
+    assert_eq!(receipt.next_action, OrderStatusNextActionKind::NoLocalOrder);
+    assert_eq!(receipt.evidence.event_count, 0);
+    assert_eq!(receipt.evidence.limit_applied, ORDER_STATUS_DEFAULT_LIMIT);
+    assert!(!receipt.evidence.has_request);
+    assert!(!receipt.evidence.has_issues);
+    assert!(!receipt.eligibility.can_decide);
+    assert!(!receipt.eligibility.can_cancel);
+    assert!(!receipt.eligibility.can_update_fulfillment);
     assert!(receipt.issues.is_empty());
 }
 
@@ -2560,6 +2595,13 @@ async fn order_status_contract_dtos_serialize_deterministically() {
     assert_eq!(receipt_json["status"], "missing");
     assert_eq!(receipt_json["payment_state"], "not_recorded");
     assert_eq!(receipt_json["settlement_state"], "not_required");
+    assert_eq!(receipt_json["payment_handoff"], "not_ready");
+    assert_eq!(receipt_json["next_action"], "no_local_order");
+    assert_eq!(receipt_json["evidence"]["event_count"], 0);
+    assert_eq!(receipt_json["evidence"]["limit_applied"], 25);
+    assert_eq!(receipt_json["evidence"]["has_request"], false);
+    assert_eq!(receipt_json["eligibility"]["can_decide"], false);
+    assert_eq!(receipt_json["eligibility"]["can_cancel"], false);
 
     let issue = SdkOrderStatusIssue {
         kind: SdkOrderStatusIssueKind::DecisionPayloadInvalid,
@@ -2633,6 +2675,26 @@ async fn order_status_projects_local_request_and_decision_events() {
     );
     assert!(receipt.issues.is_empty());
     assert!(!receipt.lifecycle_terminal);
+    assert_eq!(
+        receipt.payment_handoff,
+        OrderPaymentHandoffKind::InPersonOrOffPlatformPending
+    );
+    assert_eq!(
+        receipt.next_action,
+        OrderStatusNextActionKind::ArrangeInPersonOrOffPlatformPayment
+    );
+    assert_eq!(receipt.evidence.event_count, 2);
+    assert!(receipt.evidence.has_request);
+    assert!(receipt.evidence.has_decision);
+    assert!(receipt.evidence.has_agreement);
+    assert!(!receipt.evidence.has_pending_revision);
+    assert!(!receipt.evidence.has_issues);
+    assert!(!receipt.eligibility.can_decide);
+    assert!(receipt.eligibility.can_propose_revision);
+    assert!(!receipt.eligibility.can_decide_revision);
+    assert!(receipt.eligibility.can_cancel);
+    assert!(receipt.eligibility.can_update_fulfillment);
+    assert!(!receipt.eligibility.can_record_receipt);
 }
 
 #[tokio::test]

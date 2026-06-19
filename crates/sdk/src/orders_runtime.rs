@@ -1438,6 +1438,10 @@ pub struct OrderStatusReceipt {
     pub payment_state: OrderPaymentStateKind,
     pub settlement_state: OrderSettlementStateKind,
     pub lifecycle_terminal: bool,
+    pub evidence: OrderStatusEvidenceSummary,
+    pub eligibility: OrderStatusEligibility,
+    pub payment_handoff: OrderPaymentHandoffKind,
+    pub next_action: OrderStatusNextActionKind,
     pub event_ids: Vec<RadrootsEventId>,
     pub request_event_id: Option<RadrootsEventId>,
     pub decision_event_id: Option<RadrootsEventId>,
@@ -1448,6 +1452,61 @@ pub struct OrderStatusReceipt {
     pub receipt_event_id: Option<RadrootsEventId>,
     pub last_event_id: Option<RadrootsEventId>,
     pub issues: Vec<SdkOrderStatusIssue>,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct OrderStatusEvidenceSummary {
+    pub event_count: usize,
+    pub limit_applied: u32,
+    pub has_request: bool,
+    pub has_decision: bool,
+    pub has_agreement: bool,
+    pub has_pending_revision: bool,
+    pub has_fulfillment: bool,
+    pub has_cancellation: bool,
+    pub has_receipt: bool,
+    pub has_issues: bool,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct OrderStatusEligibility {
+    pub can_decide: bool,
+    pub can_propose_revision: bool,
+    pub can_decide_revision: bool,
+    pub can_cancel: bool,
+    pub can_update_fulfillment: bool,
+    pub can_record_receipt: bool,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum OrderPaymentHandoffKind {
+    NotReady,
+    NotRequired,
+    InPersonOrOffPlatformPending,
+    InPersonOrOffPlatformRecorded,
+    InPersonOrOffPlatformSettled,
+    Rejected,
+    Invalid,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum OrderStatusNextActionKind {
+    NoLocalOrder,
+    InspectEvidenceIssues,
+    AwaitSellerDecision,
+    ArrangeInPersonOrOffPlatformPayment,
+    DecideRevision,
+    FulfillOrder,
+    RecordReceipt,
+    Terminal,
 }
 
 #[cfg(feature = "runtime")]
@@ -2596,6 +2655,15 @@ impl OrderStatusReceipt {
     fn from_query_result(query_result: RadrootsOrderProjectionQueryResult) -> Self {
         let projection = query_result.projection;
         let found = projection.status != RadrootsOrderStatus::Missing;
+        let evidence = OrderStatusEvidenceSummary::from_projection(
+            &projection,
+            query_result.event_count,
+            query_result.limit_applied,
+        );
+        let eligibility = OrderStatusEligibility::from_projection(&projection);
+        let payment_handoff = OrderPaymentHandoffKind::from_projection(&projection);
+        let next_action =
+            OrderStatusNextActionKind::from_projection(&projection, &eligibility, payment_handoff);
         Self {
             order_id: projection.order_id,
             source: SdkOrderStatusSource::LocalEventStore,
@@ -2607,6 +2675,10 @@ impl OrderStatusReceipt {
             payment_state: projection.payment.state.into(),
             settlement_state: projection.payment.settlement_state.into(),
             lifecycle_terminal: projection.lifecycle_terminal,
+            evidence,
+            eligibility,
+            payment_handoff,
+            next_action,
             event_ids: query_result.event_ids,
             request_event_id: projection.request_event_id,
             decision_event_id: projection.decision_event_id,
@@ -2618,6 +2690,142 @@ impl OrderStatusReceipt {
             last_event_id: projection.last_event_id,
             issues: projection.issues.into_iter().map(Into::into).collect(),
         }
+    }
+}
+
+#[cfg(feature = "runtime")]
+impl OrderStatusEvidenceSummary {
+    fn from_projection(
+        projection: &RadrootsOrderProjection,
+        event_count: usize,
+        limit_applied: u32,
+    ) -> Self {
+        Self {
+            event_count,
+            limit_applied,
+            has_request: projection.request_event_id.is_some(),
+            has_decision: projection.decision_event_id.is_some(),
+            has_agreement: projection.agreement_event_id.is_some(),
+            has_pending_revision: projection.pending_revision_event_id.is_some(),
+            has_fulfillment: projection.fulfillment_event_id.is_some(),
+            has_cancellation: projection.cancellation_event_id.is_some(),
+            has_receipt: projection.receipt_event_id.is_some(),
+            has_issues: !projection.issues.is_empty(),
+        }
+    }
+}
+
+#[cfg(feature = "runtime")]
+impl OrderStatusEligibility {
+    fn from_projection(projection: &RadrootsOrderProjection) -> Self {
+        let clean = projection.issues.is_empty();
+        let open = clean && !projection.lifecycle_terminal;
+        let requested = projection.status == RadrootsOrderStatus::Requested;
+        let accepted = projection.status == RadrootsOrderStatus::Accepted;
+        let has_pending_revision = projection.pending_revision_event_id.is_some();
+        let has_fulfillment = projection.fulfillment_event_id.is_some();
+        let fulfillment_terminal = matches!(
+            projection.fulfillment_status,
+            Some(
+                RadrootsOrderFulfillmentState::Delivered
+                    | RadrootsOrderFulfillmentState::SellerCancelled
+            )
+        );
+        let receipt_ready = matches!(
+            projection.fulfillment_status,
+            Some(
+                RadrootsOrderFulfillmentState::ReadyForPickup
+                    | RadrootsOrderFulfillmentState::Delivered
+            )
+        );
+        let revision_payment_open =
+            projection.payment.state == RadrootsOrderPaymentState::NotRecorded;
+
+        Self {
+            can_decide: open && requested && projection.decision_event_id.is_none(),
+            can_propose_revision: open
+                && accepted
+                && !has_pending_revision
+                && !has_fulfillment
+                && revision_payment_open,
+            can_decide_revision: open && accepted && has_pending_revision,
+            can_cancel: open
+                && matches!(
+                    projection.status,
+                    RadrootsOrderStatus::Requested | RadrootsOrderStatus::Accepted
+                )
+                && !has_pending_revision
+                && !has_fulfillment,
+            can_update_fulfillment: open
+                && accepted
+                && !has_pending_revision
+                && !fulfillment_terminal,
+            can_record_receipt: open
+                && accepted
+                && receipt_ready
+                && projection.receipt_event_id.is_none(),
+        }
+    }
+}
+
+#[cfg(feature = "runtime")]
+impl OrderPaymentHandoffKind {
+    fn from_projection(projection: &RadrootsOrderProjection) -> Self {
+        if !projection.issues.is_empty() || projection.status == RadrootsOrderStatus::Invalid {
+            return Self::Invalid;
+        }
+        match projection.status {
+            RadrootsOrderStatus::Missing | RadrootsOrderStatus::Requested => Self::NotReady,
+            RadrootsOrderStatus::Declined | RadrootsOrderStatus::Cancelled => Self::NotRequired,
+            RadrootsOrderStatus::Accepted
+            | RadrootsOrderStatus::Completed
+            | RadrootsOrderStatus::Disputed => match projection.payment.state {
+                RadrootsOrderPaymentState::NotRecorded => Self::InPersonOrOffPlatformPending,
+                RadrootsOrderPaymentState::Recorded => Self::InPersonOrOffPlatformRecorded,
+                RadrootsOrderPaymentState::Settled => Self::InPersonOrOffPlatformSettled,
+                RadrootsOrderPaymentState::Rejected => Self::Rejected,
+                RadrootsOrderPaymentState::Invalid => Self::Invalid,
+            },
+            RadrootsOrderStatus::Invalid => Self::Invalid,
+        }
+    }
+}
+
+#[cfg(feature = "runtime")]
+impl OrderStatusNextActionKind {
+    fn from_projection(
+        projection: &RadrootsOrderProjection,
+        eligibility: &OrderStatusEligibility,
+        payment_handoff: OrderPaymentHandoffKind,
+    ) -> Self {
+        if projection.status == RadrootsOrderStatus::Missing {
+            return Self::NoLocalOrder;
+        }
+        if !projection.issues.is_empty() || projection.status == RadrootsOrderStatus::Invalid {
+            return Self::InspectEvidenceIssues;
+        }
+        if projection.lifecycle_terminal {
+            return Self::Terminal;
+        }
+        if eligibility.can_decide {
+            return Self::AwaitSellerDecision;
+        }
+        if eligibility.can_decide_revision {
+            return Self::DecideRevision;
+        }
+        if eligibility.can_record_receipt {
+            return Self::RecordReceipt;
+        }
+        if matches!(
+            payment_handoff,
+            OrderPaymentHandoffKind::InPersonOrOffPlatformPending
+        ) {
+            return Self::ArrangeInPersonOrOffPlatformPayment;
+        }
+        if eligibility.can_update_fulfillment {
+            return Self::FulfillOrder;
+        }
+        Self::Terminal
     }
 }
 
