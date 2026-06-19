@@ -85,6 +85,66 @@ fn migrated_runtime_tests_stay_on_product_runtime_boundary() {
     }
 }
 
+#[test]
+fn legacy_order_direct_publish_facades_are_removed_from_sdk_client() {
+    let source = read_source(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src/client.rs")
+            .as_path(),
+    );
+
+    for forbidden in [
+        "publish_order_request_with_identity",
+        "publish_order_decision_with_identity",
+        "publish_order_revision_proposal_with_identity",
+        "publish_order_revision_decision_with_identity",
+        "publish_order_cancellation_with_identity",
+        "publish_fulfillment_update_with_identity",
+        "publish_buyer_receipt_with_identity",
+        "publish_order_request_draft_with_identity",
+        "publish_order_decision_draft_with_identity",
+        "publish_order_revision_proposal_draft_with_identity",
+        "publish_order_revision_decision_draft_with_identity",
+        "publish_order_cancellation_draft_with_identity",
+        "publish_fulfillment_update_draft_with_identity",
+        "publish_buyer_receipt_draft_with_identity",
+        "build_order_request_draft",
+        "build_order_decision_draft",
+        "build_order_revision_proposal_draft",
+        "build_order_revision_decision_draft",
+        "build_order_cancellation_draft",
+        "build_fulfillment_update_draft",
+        "build_buyer_receipt_draft",
+        "parse_order_request",
+        "parse_order_decision",
+        "parse_order_revision_proposal",
+        "parse_order_revision_decision",
+        "parse_order_cancellation",
+        "parse_fulfillment_update",
+        "parse_buyer_receipt",
+        "validate_listing_event",
+    ] {
+        assert!(
+            !source.contains(forbidden),
+            "src/client.rs must not expose legacy order direct facade `{forbidden}`"
+        );
+    }
+}
+
+#[test]
+fn legacy_trade_client_root_export_is_removed() {
+    let source = read_source(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src/lib.rs")
+            .as_path(),
+    );
+
+    assert!(
+        !source.contains("TradeClient"),
+        "src/lib.rs must not re-export the legacy TradeClient facade"
+    );
+}
+
 fn product_runtime_file_stays_on_boundary(relative_path: &str) {
     let source = read_source(
         Path::new(env!("CARGO_MANIFEST_DIR"))

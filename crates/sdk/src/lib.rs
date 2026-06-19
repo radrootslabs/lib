@@ -46,7 +46,7 @@ mod workflow_runtime;
 pub use crate::client::{
     FarmClient, ListingClient, ProfileClient, RadrootsSdkClient, SdkPublishError,
     SdkPublishReceipt, SdkRadrootsdPublishReceipt, SdkRelayFailure, SdkRelayPublishReceipt,
-    SdkResolvedTransportTarget, SdkTransportReceipt, TradeClient,
+    SdkResolvedTransportTarget, SdkTransportReceipt,
 };
 #[cfg(feature = "radrootsd-client")]
 pub use crate::client::{
