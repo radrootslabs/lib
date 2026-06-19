@@ -1,7 +1,7 @@
 #[cfg(feature = "runtime")]
 use crate::{
-    ListingsClient, OrdersClient, RadrootsSdkError, SdkRelayTargetSet, SdkRelayUrlPolicy,
-    SyncClient,
+    FarmsClient, ListingsClient, OrdersClient, RadrootsSdkError, SdkRelayTargetSet,
+    SdkRelayUrlPolicy, SyncClient,
 };
 #[cfg(feature = "runtime")]
 use radroots_event_store::RadrootsEventStore;
@@ -425,6 +425,10 @@ pub struct RadrootsSdk {
 impl RadrootsSdk {
     pub fn builder() -> RadrootsSdkBuilder {
         RadrootsSdkBuilder::default()
+    }
+
+    pub fn farms(&self) -> FarmsClient<'_> {
+        FarmsClient::new(self)
     }
 
     pub fn listings(&self) -> ListingsClient<'_> {

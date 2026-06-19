@@ -4,6 +4,8 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
+#[cfg(feature = "runtime")]
+mod actor_json;
 #[cfg(any(
     feature = "radrootsd-client",
     feature = "signing",
@@ -16,6 +18,8 @@ pub mod config;
 #[cfg(feature = "runtime")]
 mod error;
 mod farm;
+#[cfg(feature = "runtime")]
+mod farms_runtime;
 #[cfg(feature = "runtime")]
 mod idempotency;
 #[cfg(feature = "identity-models")]
@@ -68,6 +72,11 @@ pub use crate::error::{
     RadrootsSdkPartialLocalMutationFailure, RadrootsSdkRecoveryAction,
 };
 #[cfg(feature = "runtime")]
+pub use crate::farms_runtime::{
+    FARM_PUBLISH_OPERATION_KIND, FarmEnqueuePublishRequest, FarmEnqueueReceipt,
+    FarmPreparePublishRequest, FarmPublishPlan,
+};
+#[cfg(feature = "runtime")]
 pub use crate::idempotency::{SDK_IDEMPOTENCY_KEY_MAX_LEN, SdkIdempotencyKey};
 #[cfg(feature = "runtime")]
 pub use crate::listings_runtime::{
@@ -81,7 +90,7 @@ pub use crate::orders_runtime::{
     OrderStatusRequest, SdkOrderStatusIssue, SdkOrderStatusIssueKind, SdkOrderStatusSource,
 };
 #[cfg(feature = "runtime")]
-pub use crate::product_clients::{ListingsClient, OrdersClient, SyncClient};
+pub use crate::product_clients::{FarmsClient, ListingsClient, OrdersClient, SyncClient};
 #[cfg(feature = "runtime")]
 pub use crate::relay_targets::{
     SDK_RELAY_TARGET_MAX_COUNT, SdkRelayTargetPolicy, SdkRelayTargetSet, SdkRelayUrlPolicy,

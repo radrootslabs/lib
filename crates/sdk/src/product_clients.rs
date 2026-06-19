@@ -3,6 +3,19 @@ use crate::RadrootsSdk;
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Copy)]
+pub struct FarmsClient<'sdk> {
+    pub(crate) sdk: &'sdk RadrootsSdk,
+}
+
+#[cfg(feature = "runtime")]
+impl<'sdk> FarmsClient<'sdk> {
+    pub(crate) fn new(sdk: &'sdk RadrootsSdk) -> Self {
+        Self { sdk }
+    }
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Copy)]
 pub struct ListingsClient<'sdk> {
     pub(crate) sdk: &'sdk RadrootsSdk,
 }

@@ -68,6 +68,30 @@ fn sdk_manifest_does_not_depend_on_app_or_cli_crates() {
     }
 }
 
+#[test]
+fn farm_runtime_stays_on_product_runtime_boundary() {
+    let source = read_source(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("farms_runtime.rs")
+            .as_path(),
+    );
+
+    for forbidden in [
+        "RadrootsSdkClient",
+        "SdkTransportMode",
+        "SdkPublishReceipt",
+        "radrootsd",
+        "publish_with_identity",
+        "publish_parts_via_relay",
+    ] {
+        assert!(
+            !source.contains(forbidden),
+            "farms_runtime.rs must not use legacy SDK client or transport concept `{forbidden}`"
+        );
+    }
+}
+
 fn read_source(path: &Path) -> String {
     fs::read_to_string(path)
         .unwrap_or_else(|error| panic!("failed to read source {}: {error}", path.display()))
