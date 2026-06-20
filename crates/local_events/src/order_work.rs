@@ -54,12 +54,6 @@ pub fn validate_buyer_order_request_local_work_payload(
     )?;
     validate_bool_field(payload, &["currentness", "current"], true)?;
     validate_string_field(payload, &["currentness", "source"], "app_sqlite_order")?;
-    validate_string_field(payload, &["payment_display", "state"], "not_recorded")?;
-    validate_bool_field(
-        payload,
-        &["payment_display", "allows_payment_action"],
-        false,
-    )?;
 
     let order_id = validate_required_string(payload, &["document", "order", "order_id"])?;
     let currentness_order_id = validate_required_string(payload, &["currentness", "order_id"])?;
@@ -535,10 +529,6 @@ mod tests {
         let mut bad_created_at = supported_payload();
         bad_created_at["currentness"]["created_at_ms"] = json!(0);
         assert_invalid(bad_created_at, "created_at_ms");
-
-        let mut wrong_payment_state = supported_payload();
-        wrong_payment_state["payment_display"]["state"] = json!("recorded");
-        assert_invalid(wrong_payment_state, "payment_display.state");
     }
 
     #[test]
@@ -677,10 +667,6 @@ mod tests {
                 "order_id": "ord_1",
                 "order_updated_at": "2026-05-24T12:00:00Z",
                 "created_at_ms": 1777777777000_i64
-            },
-            "payment_display": {
-                "state": "not_recorded",
-                "allows_payment_action": false
             },
             "document": {
                 "kind": BUYER_ORDER_REQUEST_DOCUMENT_KIND,

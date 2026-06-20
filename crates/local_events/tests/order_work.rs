@@ -67,14 +67,6 @@ fn buyer_order_request_payload_accepts_explicit_unsupported_work() {
 }
 
 #[test]
-fn buyer_order_request_payload_rejects_payment_actions() {
-    let mut payload = supported_payload();
-    payload["payment_display"]["allows_payment_action"] = json!(true);
-
-    assert_invalid(payload, "allows_payment_action");
-}
-
-#[test]
 fn buyer_order_request_payload_rejects_missing_identity() {
     for (path, expected) in [
         (vec!["document", "order", "listing_addr"], "listing_addr"),
@@ -174,10 +166,6 @@ fn supported_payload() -> Value {
             "order_id": "ord_1",
             "order_updated_at": "2026-05-24T12:00:00Z",
             "created_at_ms": 1777777777000_i64
-        },
-        "payment_display": {
-            "state": "not_recorded",
-            "allows_payment_action": false
         },
         "document": {
             "version": 1,
