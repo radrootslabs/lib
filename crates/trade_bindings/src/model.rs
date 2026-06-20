@@ -179,38 +179,6 @@ pub fn types_module() -> ts::TsModule {
             ]),
         ),
         ts::type_alias(
-            "RadrootsTradeFulfillmentException",
-            ts::object(vec![
-                ts::field("code", ts::string()),
-                ts::field(
-                    "severity",
-                    ts::reference("RadrootsTradeFulfillmentExceptionSeverity"),
-                ),
-                ts::field(
-                    "status",
-                    ts::reference("RadrootsTradeFulfillmentExceptionStatus"),
-                ),
-                ts::optional_field("source", ts::union(vec![ts::string(), ts::null()])),
-                ts::optional_field("notes", ts::union(vec![ts::string(), ts::null()])),
-            ]),
-        ),
-        ts::type_alias(
-            "RadrootsTradeFulfillmentExceptionSeverity",
-            ts::union(vec![
-                ts::string_literal("notice"),
-                ts::string_literal("warning"),
-                ts::string_literal("blocking"),
-            ]),
-        ),
-        ts::type_alias(
-            "RadrootsTradeFulfillmentExceptionStatus",
-            ts::union(vec![
-                ts::string_literal("open"),
-                ts::string_literal("monitoring"),
-                ts::string_literal("resolved"),
-            ]),
-        ),
-        ts::type_alias(
             "RadrootsTradeListing",
             ts::object(vec![
                 ts::field("listing_id", ts::string()),
@@ -526,8 +494,6 @@ pub fn types_module() -> ts::TsModule {
                 ts::string_literal("discount_accept"),
                 ts::string_literal("discount_decline"),
                 ts::string_literal("cancel"),
-                ts::string_literal("fulfillment_update"),
-                ts::string_literal("receipt"),
             ]),
         ),
         ts::type_alias(
@@ -571,10 +537,6 @@ pub fn types_module() -> ts::TsModule {
                     "moderation_flags",
                     ts::array(ts::reference("RadrootsTradeModerationFlag")),
                 ),
-                ts::field(
-                    "fulfillment_exceptions",
-                    ts::array(ts::reference("RadrootsTradeFulfillmentException")),
-                ),
             ]),
         ),
         ts::type_alias(
@@ -587,10 +549,6 @@ pub fn types_module() -> ts::TsModule {
                 ),
                 ts::optional_field(
                     "has_open_moderation_flags",
-                    ts::union(vec![ts::boolean(), ts::null()]),
-                ),
-                ts::optional_field(
-                    "has_open_fulfillment_exceptions",
                     ts::union(vec![ts::boolean(), ts::null()]),
                 ),
             ]),
@@ -615,7 +573,6 @@ pub fn types_module() -> ts::TsModule {
                 ),
                 ts::field("requires_review", ts::boolean()),
                 ts::field("open_moderation_flag_count", ts::number()),
-                ts::field("open_fulfillment_exception_count", ts::number()),
             ]),
         ),
         ts::type_alias(
@@ -681,8 +638,6 @@ pub fn types_module() -> ts::TsModule {
                 ts::string_literal("accepted"),
                 ts::string_literal("declined"),
                 ts::string_literal("cancelled"),
-                ts::string_literal("fulfilled"),
-                ts::string_literal("completed"),
             ]),
         ),
         ts::type_alias(
@@ -736,18 +691,6 @@ pub fn types_module() -> ts::TsModule {
                     "accepted_discount",
                     ts::union(vec![ts::reference("RadrootsCoreDiscountValue"), ts::null()]),
                 ),
-                ts::optional_field(
-                    "last_fulfillment_status",
-                    ts::union(vec![
-                        ts::reference("RadrootsTradeFulfillmentStatus"),
-                        ts::null(),
-                    ]),
-                ),
-                ts::optional_field(
-                    "receipt_acknowledged",
-                    ts::union(vec![ts::boolean(), ts::null()]),
-                ),
-                ts::optional_field("receipt_at", ts::union(vec![ts::number(), ts::null()])),
                 ts::optional_field("last_reason", ts::union(vec![ts::string(), ts::null()])),
                 ts::optional_field(
                     "last_discount_decline_reason",
@@ -761,8 +704,6 @@ pub fn types_module() -> ts::TsModule {
                 ts::field("discount_accept_count", ts::number()),
                 ts::field("discount_decline_count", ts::number()),
                 ts::field("cancellation_count", ts::number()),
-                ts::field("fulfillment_update_count", ts::number()),
-                ts::field("receipt_count", ts::number()),
                 ts::field(
                     "last_message_type",
                     ts::reference("RadrootsTradeMessageType"),
