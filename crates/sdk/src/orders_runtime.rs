@@ -17,31 +17,27 @@ use radroots_events::{
     draft::RadrootsFrozenEventDraft,
     ids::{RadrootsEventId, RadrootsListingAddress, RadrootsOrderId, RadrootsPublicKey},
     kinds::{
-        KIND_ORDER_CANCELLATION, KIND_ORDER_DECISION, KIND_ORDER_FULFILLMENT_UPDATE,
-        KIND_ORDER_PAYMENT_RECORD, KIND_ORDER_RECEIPT, KIND_ORDER_REQUEST,
-        KIND_ORDER_REVISION_DECISION, KIND_ORDER_REVISION_PROPOSAL, KIND_ORDER_SETTLEMENT_DECISION,
+        KIND_ORDER_CANCELLATION, KIND_ORDER_DECISION, KIND_ORDER_REQUEST,
+        KIND_ORDER_REVISION_DECISION, KIND_ORDER_REVISION_PROPOSAL,
     },
     order::{
-        RadrootsOrderCancellation, RadrootsOrderDecision, RadrootsOrderFulfillmentState,
-        RadrootsOrderFulfillmentUpdate, RadrootsOrderReceipt, RadrootsOrderRequest,
-        RadrootsOrderRevisionDecision, RadrootsOrderRevisionProposal,
+        RadrootsOrderCancellation, RadrootsOrderDecision, RadrootsOrderEconomics,
+        RadrootsOrderRequest, RadrootsOrderRevisionDecision, RadrootsOrderRevisionProposal,
     },
 };
 #[cfg(feature = "runtime")]
 use radroots_events_codec::order::{
-    order_cancellation_from_event, order_decision_from_event, order_fulfillment_update_from_event,
-    order_payment_record_from_event, order_receipt_from_event, order_request_from_event,
+    order_cancellation_from_event, order_decision_from_event, order_request_from_event,
     order_revision_decision_from_event, order_revision_proposal_from_event,
-    order_settlement_decision_from_event,
 };
 #[cfg(feature = "runtime")]
 use radroots_events_codec::wire::{WireEventParts, to_frozen_draft};
 #[cfg(feature = "runtime")]
 use radroots_trade::order::{
-    RadrootsOrderCanonicalizationError, RadrootsOrderIssue, RadrootsOrderPaymentState,
-    RadrootsOrderProjection, RadrootsOrderProjectionQueryResult, RadrootsOrderSettlementState,
-    RadrootsOrderStatus, RadrootsOrderStoreQueryError, canonicalize_order_decision_for_signer,
-    canonicalize_order_request_for_signer, order_projection_query_for_order_id,
+    RadrootsOrderCanonicalizationError, RadrootsOrderIssue, RadrootsOrderProjection,
+    RadrootsOrderProjectionQueryResult, RadrootsOrderStatus, RadrootsOrderStoreQueryError,
+    canonicalize_order_decision_for_signer, canonicalize_order_request_for_signer,
+    order_projection_query_for_order_id,
 };
 #[cfg(feature = "runtime")]
 use serde::ser::SerializeStruct;
@@ -60,10 +56,6 @@ pub const ORDER_REVISION_PROPOSAL_OPERATION_KIND: &str = "order.revision.proposa
 pub const ORDER_REVISION_DECISION_OPERATION_KIND: &str = "order.revision.decision.v1";
 #[cfg(feature = "runtime")]
 pub const ORDER_CANCELLATION_OPERATION_KIND: &str = "order.cancellation.v1";
-#[cfg(feature = "runtime")]
-pub const ORDER_FULFILLMENT_UPDATE_OPERATION_KIND: &str = "order.fulfillment.update.v1";
-#[cfg(feature = "runtime")]
-pub const ORDER_RECEIPT_RECORD_OPERATION_KIND: &str = "order.receipt.record.v1";
 
 #[cfg(feature = "runtime")]
 const ORDER_REQUEST_CONTRACT_ID: &str = "radroots.order.request.v1";
@@ -75,10 +67,6 @@ const ORDER_REVISION_PROPOSAL_CONTRACT_ID: &str = "radroots.order.revision_propo
 const ORDER_REVISION_DECISION_CONTRACT_ID: &str = "radroots.order.revision_decision.v1";
 #[cfg(feature = "runtime")]
 const ORDER_CANCELLATION_CONTRACT_ID: &str = "radroots.order.cancellation.v1";
-#[cfg(feature = "runtime")]
-const ORDER_FULFILLMENT_UPDATE_CONTRACT_ID: &str = "radroots.order.fulfillment_update.v1";
-#[cfg(feature = "runtime")]
-const ORDER_RECEIPT_CONTRACT_ID: &str = "radroots.order.receipt.v1";
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
@@ -90,8 +78,6 @@ pub enum OrderWorkflowKind {
     RevisionProposal,
     RevisionDecision,
     Cancellation,
-    FulfillmentUpdate,
-    ReceiptRecord,
 }
 
 #[cfg(feature = "runtime")]
@@ -103,8 +89,6 @@ impl OrderWorkflowKind {
             Self::RevisionProposal => ORDER_REVISION_PROPOSAL_OPERATION_KIND,
             Self::RevisionDecision => ORDER_REVISION_DECISION_OPERATION_KIND,
             Self::Cancellation => ORDER_CANCELLATION_OPERATION_KIND,
-            Self::FulfillmentUpdate => ORDER_FULFILLMENT_UPDATE_OPERATION_KIND,
-            Self::ReceiptRecord => ORDER_RECEIPT_RECORD_OPERATION_KIND,
         }
     }
 
@@ -115,8 +99,6 @@ impl OrderWorkflowKind {
             Self::RevisionProposal => ORDER_REVISION_PROPOSAL_CONTRACT_ID,
             Self::RevisionDecision => ORDER_REVISION_DECISION_CONTRACT_ID,
             Self::Cancellation => ORDER_CANCELLATION_CONTRACT_ID,
-            Self::FulfillmentUpdate => ORDER_FULFILLMENT_UPDATE_CONTRACT_ID,
-            Self::ReceiptRecord => ORDER_RECEIPT_CONTRACT_ID,
         }
     }
 }
@@ -1070,340 +1052,6 @@ pub struct OrderCancellationReceipt {
 }
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Debug)]
-#[non_exhaustive]
-pub struct OrderFulfillmentUpdatePrepareRequest {
-    pub actor: RadrootsActorContext,
-    pub root_event: RadrootsNostrEventPtr,
-    pub previous_event: RadrootsNostrEventPtr,
-    pub fulfillment: RadrootsOrderFulfillmentUpdate,
-    pub created_at: Option<RadrootsSdkTimestamp>,
-}
-
-#[cfg(feature = "runtime")]
-impl serde::Serialize for OrderFulfillmentUpdatePrepareRequest {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let mut state = serializer.serialize_struct("OrderFulfillmentUpdatePrepareRequest", 5)?;
-        state.serialize_field("actor", &SdkActorContextJson(&self.actor))?;
-        state.serialize_field("root_event", &self.root_event)?;
-        state.serialize_field("previous_event", &self.previous_event)?;
-        state.serialize_field("fulfillment", &self.fulfillment)?;
-        state.serialize_field("created_at", &self.created_at)?;
-        state.end()
-    }
-}
-
-#[cfg(feature = "runtime")]
-impl OrderFulfillmentUpdatePrepareRequest {
-    pub fn new(
-        actor: RadrootsActorContext,
-        root_event: RadrootsNostrEventPtr,
-        previous_event: RadrootsNostrEventPtr,
-        fulfillment: RadrootsOrderFulfillmentUpdate,
-    ) -> Self {
-        Self {
-            actor,
-            root_event,
-            previous_event,
-            fulfillment,
-            created_at: None,
-        }
-    }
-
-    pub fn with_created_at(mut self, created_at: RadrootsSdkTimestamp) -> Self {
-        self.created_at = Some(created_at);
-        self
-    }
-}
-
-#[cfg(feature = "runtime")]
-#[derive(Clone, Debug)]
-#[non_exhaustive]
-pub struct OrderFulfillmentUpdateEnqueueRequest {
-    pub actor: RadrootsActorContext,
-    pub root_event: RadrootsNostrEventPtr,
-    pub previous_event: RadrootsNostrEventPtr,
-    pub fulfillment: RadrootsOrderFulfillmentUpdate,
-    pub target_relays: SdkRelayTargetPolicy,
-    pub idempotency_key: Option<SdkIdempotencyKey>,
-    pub created_at: Option<RadrootsSdkTimestamp>,
-}
-
-#[cfg(feature = "runtime")]
-impl serde::Serialize for OrderFulfillmentUpdateEnqueueRequest {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let mut state = serializer.serialize_struct("OrderFulfillmentUpdateEnqueueRequest", 7)?;
-        state.serialize_field("actor", &SdkActorContextJson(&self.actor))?;
-        state.serialize_field("root_event", &self.root_event)?;
-        state.serialize_field("previous_event", &self.previous_event)?;
-        state.serialize_field("fulfillment", &self.fulfillment)?;
-        state.serialize_field("target_relays", &self.target_relays)?;
-        state.serialize_field("idempotency_key", &self.idempotency_key)?;
-        state.serialize_field("created_at", &self.created_at)?;
-        state.end()
-    }
-}
-
-#[cfg(feature = "runtime")]
-impl OrderFulfillmentUpdateEnqueueRequest {
-    pub fn new(
-        actor: RadrootsActorContext,
-        root_event: RadrootsNostrEventPtr,
-        previous_event: RadrootsNostrEventPtr,
-        fulfillment: RadrootsOrderFulfillmentUpdate,
-        target_relays: SdkRelayTargetPolicy,
-    ) -> Self {
-        Self {
-            actor,
-            root_event,
-            previous_event,
-            fulfillment,
-            target_relays,
-            idempotency_key: None,
-            created_at: None,
-        }
-    }
-
-    pub fn try_with_target_relays<I, S>(
-        mut self,
-        target_relays: I,
-        policy: SdkRelayUrlPolicy,
-    ) -> Result<Self, RadrootsSdkError>
-    where
-        I: IntoIterator<Item = S>,
-        S: AsRef<str>,
-    {
-        self.target_relays = SdkRelayTargetPolicy::try_explicit(target_relays, policy)?;
-        Ok(self)
-    }
-
-    pub fn with_idempotency_key(mut self, idempotency_key: SdkIdempotencyKey) -> Self {
-        self.idempotency_key = Some(idempotency_key.into());
-        self
-    }
-
-    pub fn try_with_idempotency_key(
-        mut self,
-        idempotency_key: impl AsRef<str>,
-    ) -> Result<Self, RadrootsSdkError> {
-        self.idempotency_key = Some(SdkIdempotencyKey::new(idempotency_key)?);
-        Ok(self)
-    }
-
-    pub fn with_created_at(mut self, created_at: RadrootsSdkTimestamp) -> Self {
-        self.created_at = Some(created_at);
-        self
-    }
-}
-
-#[cfg(feature = "runtime")]
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
-pub struct OrderFulfillmentUpdatePlan {
-    pub workflow: OrderWorkflowPlan,
-    pub order_id: RadrootsOrderId,
-    pub listing_addr: RadrootsListingAddress,
-    pub buyer_pubkey: RadrootsPublicKey,
-    pub seller_pubkey: RadrootsPublicKey,
-    pub root_event_id: RadrootsEventId,
-    pub previous_event_id: RadrootsEventId,
-    pub expected_event_id: RadrootsEventId,
-    pub frozen_draft: RadrootsFrozenEventDraft,
-    pub created_at: RadrootsSdkTimestamp,
-}
-
-#[cfg(feature = "runtime")]
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
-pub struct OrderFulfillmentUpdateReceipt {
-    pub workflow: OrderWorkflowEnqueueReceipt,
-    pub order_id: RadrootsOrderId,
-    pub listing_addr: RadrootsListingAddress,
-    pub buyer_pubkey: RadrootsPublicKey,
-    pub seller_pubkey: RadrootsPublicKey,
-    pub root_event_id: RadrootsEventId,
-    pub previous_event_id: RadrootsEventId,
-    pub expected_event_id: RadrootsEventId,
-    pub signed_event_id: RadrootsEventId,
-    pub local_event_seq: i64,
-    pub outbox_operation_id: i64,
-    pub outbox_event_id: i64,
-    pub state: SdkMutationState,
-    pub idempotency_digest_prefix: Option<String>,
-}
-
-#[cfg(feature = "runtime")]
-#[derive(Clone, Debug)]
-#[non_exhaustive]
-pub struct OrderReceiptRecordPrepareRequest {
-    pub actor: RadrootsActorContext,
-    pub root_event: RadrootsNostrEventPtr,
-    pub previous_event: RadrootsNostrEventPtr,
-    pub receipt: RadrootsOrderReceipt,
-    pub created_at: Option<RadrootsSdkTimestamp>,
-}
-
-#[cfg(feature = "runtime")]
-impl serde::Serialize for OrderReceiptRecordPrepareRequest {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let mut state = serializer.serialize_struct("OrderReceiptRecordPrepareRequest", 5)?;
-        state.serialize_field("actor", &SdkActorContextJson(&self.actor))?;
-        state.serialize_field("root_event", &self.root_event)?;
-        state.serialize_field("previous_event", &self.previous_event)?;
-        state.serialize_field("receipt", &self.receipt)?;
-        state.serialize_field("created_at", &self.created_at)?;
-        state.end()
-    }
-}
-
-#[cfg(feature = "runtime")]
-impl OrderReceiptRecordPrepareRequest {
-    pub fn new(
-        actor: RadrootsActorContext,
-        root_event: RadrootsNostrEventPtr,
-        previous_event: RadrootsNostrEventPtr,
-        receipt: RadrootsOrderReceipt,
-    ) -> Self {
-        Self {
-            actor,
-            root_event,
-            previous_event,
-            receipt,
-            created_at: None,
-        }
-    }
-
-    pub fn with_created_at(mut self, created_at: RadrootsSdkTimestamp) -> Self {
-        self.created_at = Some(created_at);
-        self
-    }
-}
-
-#[cfg(feature = "runtime")]
-#[derive(Clone, Debug)]
-#[non_exhaustive]
-pub struct OrderReceiptRecordEnqueueRequest {
-    pub actor: RadrootsActorContext,
-    pub root_event: RadrootsNostrEventPtr,
-    pub previous_event: RadrootsNostrEventPtr,
-    pub receipt: RadrootsOrderReceipt,
-    pub target_relays: SdkRelayTargetPolicy,
-    pub idempotency_key: Option<SdkIdempotencyKey>,
-    pub created_at: Option<RadrootsSdkTimestamp>,
-}
-
-#[cfg(feature = "runtime")]
-impl serde::Serialize for OrderReceiptRecordEnqueueRequest {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let mut state = serializer.serialize_struct("OrderReceiptRecordEnqueueRequest", 7)?;
-        state.serialize_field("actor", &SdkActorContextJson(&self.actor))?;
-        state.serialize_field("root_event", &self.root_event)?;
-        state.serialize_field("previous_event", &self.previous_event)?;
-        state.serialize_field("receipt", &self.receipt)?;
-        state.serialize_field("target_relays", &self.target_relays)?;
-        state.serialize_field("idempotency_key", &self.idempotency_key)?;
-        state.serialize_field("created_at", &self.created_at)?;
-        state.end()
-    }
-}
-
-#[cfg(feature = "runtime")]
-impl OrderReceiptRecordEnqueueRequest {
-    pub fn new(
-        actor: RadrootsActorContext,
-        root_event: RadrootsNostrEventPtr,
-        previous_event: RadrootsNostrEventPtr,
-        receipt: RadrootsOrderReceipt,
-        target_relays: SdkRelayTargetPolicy,
-    ) -> Self {
-        Self {
-            actor,
-            root_event,
-            previous_event,
-            receipt,
-            target_relays,
-            idempotency_key: None,
-            created_at: None,
-        }
-    }
-
-    pub fn try_with_target_relays<I, S>(
-        mut self,
-        target_relays: I,
-        policy: SdkRelayUrlPolicy,
-    ) -> Result<Self, RadrootsSdkError>
-    where
-        I: IntoIterator<Item = S>,
-        S: AsRef<str>,
-    {
-        self.target_relays = SdkRelayTargetPolicy::try_explicit(target_relays, policy)?;
-        Ok(self)
-    }
-
-    pub fn with_idempotency_key(mut self, idempotency_key: SdkIdempotencyKey) -> Self {
-        self.idempotency_key = Some(idempotency_key.into());
-        self
-    }
-
-    pub fn try_with_idempotency_key(
-        mut self,
-        idempotency_key: impl AsRef<str>,
-    ) -> Result<Self, RadrootsSdkError> {
-        self.idempotency_key = Some(SdkIdempotencyKey::new(idempotency_key)?);
-        Ok(self)
-    }
-
-    pub fn with_created_at(mut self, created_at: RadrootsSdkTimestamp) -> Self {
-        self.created_at = Some(created_at);
-        self
-    }
-}
-
-#[cfg(feature = "runtime")]
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
-pub struct OrderReceiptRecordPlan {
-    pub workflow: OrderWorkflowPlan,
-    pub order_id: RadrootsOrderId,
-    pub listing_addr: RadrootsListingAddress,
-    pub buyer_pubkey: RadrootsPublicKey,
-    pub seller_pubkey: RadrootsPublicKey,
-    pub root_event_id: RadrootsEventId,
-    pub previous_event_id: RadrootsEventId,
-    pub expected_event_id: RadrootsEventId,
-    pub frozen_draft: RadrootsFrozenEventDraft,
-    pub created_at: RadrootsSdkTimestamp,
-}
-
-#[cfg(feature = "runtime")]
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
-pub struct OrderReceiptRecordReceipt {
-    pub workflow: OrderWorkflowEnqueueReceipt,
-    pub order_id: RadrootsOrderId,
-    pub listing_addr: RadrootsListingAddress,
-    pub buyer_pubkey: RadrootsPublicKey,
-    pub seller_pubkey: RadrootsPublicKey,
-    pub root_event_id: RadrootsEventId,
-    pub previous_event_id: RadrootsEventId,
-    pub expected_event_id: RadrootsEventId,
-    pub signed_event_id: RadrootsEventId,
-    pub local_event_seq: i64,
-    pub outbox_operation_id: i64,
-    pub outbox_event_id: i64,
-    pub state: SdkMutationState,
-    pub idempotency_digest_prefix: Option<String>,
-}
-
-#[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 #[non_exhaustive]
 pub struct OrderStatusRequest {
@@ -1452,22 +1100,20 @@ pub struct OrderStatusReceipt {
     pub event_count: usize,
     pub limit_applied: u32,
     pub status: OrderStatusKind,
-    pub fulfillment_status: Option<OrderFulfillmentStatusKind>,
-    pub payment_state: OrderPaymentStateKind,
-    pub settlement_state: OrderSettlementStateKind,
     pub lifecycle_terminal: bool,
+    pub listing_addr: Option<RadrootsListingAddress>,
+    pub buyer_pubkey: Option<RadrootsPublicKey>,
+    pub seller_pubkey: Option<RadrootsPublicKey>,
+    pub economics: Option<RadrootsOrderEconomics>,
     pub evidence: OrderStatusEvidenceSummary,
     pub eligibility: OrderStatusEligibility,
-    pub payment_handoff: OrderPaymentHandoffKind,
     pub next_action: OrderStatusNextActionKind,
     pub event_ids: Vec<RadrootsEventId>,
     pub request_event_id: Option<RadrootsEventId>,
     pub decision_event_id: Option<RadrootsEventId>,
     pub agreement_event_id: Option<RadrootsEventId>,
     pub pending_revision_event_id: Option<RadrootsEventId>,
-    pub fulfillment_event_id: Option<RadrootsEventId>,
     pub cancellation_event_id: Option<RadrootsEventId>,
-    pub receipt_event_id: Option<RadrootsEventId>,
     pub last_event_id: Option<RadrootsEventId>,
     pub issues: Vec<SdkOrderStatusIssue>,
 }
@@ -1481,9 +1127,7 @@ pub struct OrderStatusEvidenceSummary {
     pub has_decision: bool,
     pub has_agreement: bool,
     pub has_pending_revision: bool,
-    pub has_fulfillment: bool,
     pub has_cancellation: bool,
-    pub has_receipt: bool,
     pub has_issues: bool,
 }
 
@@ -1494,22 +1138,6 @@ pub struct OrderStatusEligibility {
     pub can_propose_revision: bool,
     pub can_decide_revision: bool,
     pub can_cancel: bool,
-    pub can_update_fulfillment: bool,
-    pub can_record_receipt: bool,
-}
-
-#[cfg(feature = "runtime")]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
-#[serde(rename_all = "snake_case")]
-#[non_exhaustive]
-pub enum OrderPaymentHandoffKind {
-    NotReady,
-    NotRequired,
-    InPersonOrOffPlatformPending,
-    InPersonOrOffPlatformRecorded,
-    InPersonOrOffPlatformSettled,
-    Rejected,
-    Invalid,
 }
 
 #[cfg(feature = "runtime")]
@@ -1520,10 +1148,7 @@ pub enum OrderStatusNextActionKind {
     NoLocalOrder,
     InspectEvidenceIssues,
     AwaitSellerDecision,
-    ArrangeInPersonOrOffPlatformPayment,
     DecideRevision,
-    FulfillOrder,
-    RecordReceipt,
     Terminal,
 }
 
@@ -1545,45 +1170,6 @@ pub enum OrderStatusKind {
     Accepted,
     Declined,
     Cancelled,
-    Completed,
-    Disputed,
-    Invalid,
-}
-
-#[cfg(feature = "runtime")]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
-#[serde(rename_all = "snake_case")]
-#[non_exhaustive]
-pub enum OrderFulfillmentStatusKind {
-    AcceptedNotFulfilled,
-    Preparing,
-    ReadyForPickup,
-    OutForDelivery,
-    Delivered,
-    SellerCancelled,
-}
-
-#[cfg(feature = "runtime")]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
-#[serde(rename_all = "snake_case")]
-#[non_exhaustive]
-pub enum OrderPaymentStateKind {
-    NotRecorded,
-    Recorded,
-    Settled,
-    Rejected,
-    Invalid,
-}
-
-#[cfg(feature = "runtime")]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
-#[serde(rename_all = "snake_case")]
-#[non_exhaustive]
-pub enum OrderSettlementStateKind {
-    NotRequired,
-    Pending,
-    Accepted,
-    Rejected,
     Invalid,
 }
 
@@ -1649,7 +1235,6 @@ pub enum SdkOrderStatusIssueKind {
     DecisionInventoryCommitmentMismatch,
     DecisionMissingReason,
     ConflictingDecisions,
-    RevisionProposalWithoutAcceptedDecision,
     RevisionProposalPayloadInvalid,
     RevisionProposalOrderIdMismatch,
     RevisionProposalAuthorMismatch,
@@ -1672,20 +1257,6 @@ pub enum SdkOrderStatusIssueKind {
     RevisionDecisionRootMismatch,
     RevisionDecisionPreviousMismatch,
     RevisionDecisionRevisionIdMismatch,
-    FulfillmentWithoutAcceptedDecision,
-    FulfillmentPayloadInvalid,
-    FulfillmentOrderIdMismatch,
-    FulfillmentAuthorMismatch,
-    FulfillmentCounterpartyMismatch,
-    FulfillmentBuyerMismatch,
-    FulfillmentSellerMismatch,
-    FulfillmentListingAddressInvalid,
-    FulfillmentListingMismatch,
-    FulfillmentRootMismatch,
-    FulfillmentPreviousMismatch,
-    FulfillmentStatusNotPublishable,
-    FulfillmentUnsupportedTransition,
-    ForkedFulfillments,
     CancellationWithoutCancellableOrder,
     CancellationPayloadInvalid,
     CancellationOrderIdMismatch,
@@ -1697,57 +1268,6 @@ pub enum SdkOrderStatusIssueKind {
     CancellationListingMismatch,
     CancellationRootMismatch,
     CancellationPreviousMismatch,
-    CancellationAfterFulfillment,
-    ReceiptWithoutEligibleFulfillment,
-    ReceiptPayloadInvalid,
-    ReceiptOrderIdMismatch,
-    ReceiptAuthorMismatch,
-    ReceiptCounterpartyMismatch,
-    ReceiptBuyerMismatch,
-    ReceiptSellerMismatch,
-    ReceiptListingAddressInvalid,
-    ReceiptListingMismatch,
-    ReceiptRootMismatch,
-    ReceiptPreviousMismatch,
-    PaymentWithoutAcceptedAgreement,
-    PaymentPayloadInvalid,
-    PaymentOrderIdMismatch,
-    PaymentAuthorMismatch,
-    PaymentCounterpartyMismatch,
-    PaymentBuyerMismatch,
-    PaymentSellerMismatch,
-    PaymentListingAddressInvalid,
-    PaymentListingMismatch,
-    PaymentRootMismatch,
-    PaymentPreviousMismatch,
-    PaymentAgreementMismatch,
-    PaymentQuoteMismatch,
-    PaymentQuoteVersionMismatch,
-    PaymentEconomicsDigestMismatch,
-    PaymentAmountMismatch,
-    PaymentCurrencyMismatch,
-    PaymentAfterCancellation,
-    RevisionAfterPayment,
-    DuplicatePayments,
-    SettlementWithoutValidPayment,
-    SettlementPayloadInvalid,
-    SettlementOrderIdMismatch,
-    SettlementAuthorMismatch,
-    SettlementCounterpartyMismatch,
-    SettlementBuyerMismatch,
-    SettlementSellerMismatch,
-    SettlementListingAddressInvalid,
-    SettlementListingMismatch,
-    SettlementRootMismatch,
-    SettlementPreviousMismatch,
-    SettlementPaymentEventMismatch,
-    SettlementAgreementMismatch,
-    SettlementQuoteMismatch,
-    SettlementQuoteVersionMismatch,
-    SettlementEconomicsDigestMismatch,
-    SettlementAmountMismatch,
-    SettlementCurrencyMismatch,
-    DuplicateSettlements,
     ForkedLifecycle,
 }
 
@@ -2277,200 +1797,6 @@ impl<'sdk> OrdersClient<'sdk> {
         })
     }
 
-    pub fn prepare_fulfillment_update(
-        &self,
-        request: OrderFulfillmentUpdatePrepareRequest,
-    ) -> Result<OrderFulfillmentUpdatePlan, RadrootsSdkError> {
-        let created_at = self.resolved_created_at(request.created_at)?;
-        order_fulfillment_update_plan(
-            &request.actor,
-            request.root_event,
-            request.previous_event,
-            request.fulfillment,
-            created_at,
-        )
-    }
-
-    pub async fn enqueue_fulfillment_update<S>(
-        &self,
-        request: OrderFulfillmentUpdateEnqueueRequest,
-        signer: &S,
-    ) -> Result<OrderFulfillmentUpdateReceipt, RadrootsSdkError>
-    where
-        S: RadrootsEventSigner + ?Sized,
-    {
-        let OrderFulfillmentUpdateEnqueueRequest {
-            actor,
-            root_event,
-            previous_event,
-            fulfillment,
-            target_relays,
-            idempotency_key,
-            created_at,
-        } = request;
-        let prepare_request = OrderFulfillmentUpdatePrepareRequest {
-            actor: actor.clone(),
-            root_event,
-            previous_event,
-            fulfillment,
-            created_at,
-        };
-        let plan = self.prepare_fulfillment_update(prepare_request)?;
-        self.enqueue_prepared_fulfillment_update(
-            &actor,
-            plan,
-            target_relays,
-            idempotency_key,
-            signer,
-        )
-        .await
-    }
-
-    pub async fn enqueue_prepared_fulfillment_update<S>(
-        &self,
-        actor: &RadrootsActorContext,
-        plan: OrderFulfillmentUpdatePlan,
-        target_relays: SdkRelayTargetPolicy,
-        idempotency_key: Option<SdkIdempotencyKey>,
-        signer: &S,
-    ) -> Result<OrderFulfillmentUpdateReceipt, RadrootsSdkError>
-    where
-        S: RadrootsEventSigner + ?Sized,
-    {
-        if !self
-            .prepared_order_event_exists(&plan.expected_event_id)
-            .await?
-        {
-            self.require_fulfillment_update_preflight(&plan).await?;
-        }
-        let enqueue = enqueue_signed_workflow(
-            self.sdk,
-            SdkWorkflowEnqueueRequest {
-                operation_kind: OrderWorkflowKind::FulfillmentUpdate.operation_kind(),
-                actor,
-                frozen_draft: &plan.frozen_draft,
-                target_relays,
-                idempotency_key,
-            },
-            signer,
-        )
-        .await?;
-        Ok(OrderFulfillmentUpdateReceipt {
-            workflow: order_workflow_enqueue_receipt(
-                OrderWorkflowKind::FulfillmentUpdate,
-                plan.expected_event_id.clone(),
-                &enqueue,
-            ),
-            order_id: plan.order_id,
-            listing_addr: plan.listing_addr,
-            buyer_pubkey: plan.buyer_pubkey,
-            seller_pubkey: plan.seller_pubkey,
-            root_event_id: plan.root_event_id,
-            previous_event_id: plan.previous_event_id,
-            expected_event_id: plan.expected_event_id,
-            signed_event_id: enqueue.signed_event_id,
-            local_event_seq: enqueue.local_event_seq,
-            outbox_operation_id: enqueue.outbox_operation_id,
-            outbox_event_id: enqueue.outbox_event_id,
-            state: enqueue.state.into(),
-            idempotency_digest_prefix: Some(enqueue.idempotency_digest_prefix),
-        })
-    }
-
-    pub fn prepare_receipt_record(
-        &self,
-        request: OrderReceiptRecordPrepareRequest,
-    ) -> Result<OrderReceiptRecordPlan, RadrootsSdkError> {
-        let created_at = self.resolved_created_at(request.created_at)?;
-        order_receipt_record_plan(
-            &request.actor,
-            request.root_event,
-            request.previous_event,
-            request.receipt,
-            created_at,
-        )
-    }
-
-    pub async fn enqueue_receipt_record<S>(
-        &self,
-        request: OrderReceiptRecordEnqueueRequest,
-        signer: &S,
-    ) -> Result<OrderReceiptRecordReceipt, RadrootsSdkError>
-    where
-        S: RadrootsEventSigner + ?Sized,
-    {
-        let OrderReceiptRecordEnqueueRequest {
-            actor,
-            root_event,
-            previous_event,
-            receipt,
-            target_relays,
-            idempotency_key,
-            created_at,
-        } = request;
-        let prepare_request = OrderReceiptRecordPrepareRequest {
-            actor: actor.clone(),
-            root_event,
-            previous_event,
-            receipt,
-            created_at,
-        };
-        let plan = self.prepare_receipt_record(prepare_request)?;
-        self.enqueue_prepared_receipt_record(&actor, plan, target_relays, idempotency_key, signer)
-            .await
-    }
-
-    pub async fn enqueue_prepared_receipt_record<S>(
-        &self,
-        actor: &RadrootsActorContext,
-        plan: OrderReceiptRecordPlan,
-        target_relays: SdkRelayTargetPolicy,
-        idempotency_key: Option<SdkIdempotencyKey>,
-        signer: &S,
-    ) -> Result<OrderReceiptRecordReceipt, RadrootsSdkError>
-    where
-        S: RadrootsEventSigner + ?Sized,
-    {
-        if !self
-            .prepared_order_event_exists(&plan.expected_event_id)
-            .await?
-        {
-            self.require_receipt_record_preflight(&plan).await?;
-        }
-        let enqueue = enqueue_signed_workflow(
-            self.sdk,
-            SdkWorkflowEnqueueRequest {
-                operation_kind: OrderWorkflowKind::ReceiptRecord.operation_kind(),
-                actor,
-                frozen_draft: &plan.frozen_draft,
-                target_relays,
-                idempotency_key,
-            },
-            signer,
-        )
-        .await?;
-        Ok(OrderReceiptRecordReceipt {
-            workflow: order_workflow_enqueue_receipt(
-                OrderWorkflowKind::ReceiptRecord,
-                plan.expected_event_id.clone(),
-                &enqueue,
-            ),
-            order_id: plan.order_id,
-            listing_addr: plan.listing_addr,
-            buyer_pubkey: plan.buyer_pubkey,
-            seller_pubkey: plan.seller_pubkey,
-            root_event_id: plan.root_event_id,
-            previous_event_id: plan.previous_event_id,
-            expected_event_id: plan.expected_event_id,
-            signed_event_id: enqueue.signed_event_id,
-            local_event_seq: enqueue.local_event_seq,
-            outbox_operation_id: enqueue.outbox_operation_id,
-            outbox_event_id: enqueue.outbox_event_id,
-            state: enqueue.state.into(),
-            idempotency_digest_prefix: Some(enqueue.idempotency_digest_prefix),
-        })
-    }
-
     pub async fn status(
         &self,
         request: OrderStatusRequest,
@@ -2526,22 +1852,6 @@ impl<'sdk> OrdersClient<'sdk> {
     ) -> Result<(), RadrootsSdkError> {
         let query_result = self.query_order_projection(&plan.order_id).await?;
         require_cancellation_state(plan, &query_result.projection)
-    }
-
-    async fn require_fulfillment_update_preflight(
-        &self,
-        plan: &OrderFulfillmentUpdatePlan,
-    ) -> Result<(), RadrootsSdkError> {
-        let query_result = self.query_order_projection(&plan.order_id).await?;
-        require_fulfillment_update_state(plan, &query_result.projection)
-    }
-
-    async fn require_receipt_record_preflight(
-        &self,
-        plan: &OrderReceiptRecordPlan,
-    ) -> Result<(), RadrootsSdkError> {
-        let query_result = self.query_order_projection(&plan.order_id).await?;
-        require_receipt_record_state(plan, &query_result.projection)
     }
 
     async fn query_order_projection(
@@ -2620,30 +1930,6 @@ fn parse_order_evidence(
                 .payload;
             (payload.order_id, payload.listing_addr)
         }
-        KIND_ORDER_FULFILLMENT_UPDATE => {
-            let payload = order_fulfillment_update_from_event(event)
-                .map_err(order_evidence_parse_error)?
-                .payload;
-            (payload.order_id, payload.listing_addr)
-        }
-        KIND_ORDER_RECEIPT => {
-            let payload = order_receipt_from_event(event)
-                .map_err(order_evidence_parse_error)?
-                .payload;
-            (payload.order_id, payload.listing_addr)
-        }
-        KIND_ORDER_PAYMENT_RECORD => {
-            let payload = order_payment_record_from_event(event)
-                .map_err(order_evidence_parse_error)?
-                .payload;
-            (payload.order_id, payload.listing_addr)
-        }
-        KIND_ORDER_SETTLEMENT_DECISION => {
-            let payload = order_settlement_decision_from_event(event)
-                .map_err(order_evidence_parse_error)?
-                .payload;
-            (payload.order_id, payload.listing_addr)
-        }
         other => {
             return Err(RadrootsSdkError::InvalidRequest {
                 message: format!("order evidence event kind {other} is not supported"),
@@ -2679,9 +1965,7 @@ impl OrderStatusReceipt {
             query_result.limit_applied,
         );
         let eligibility = OrderStatusEligibility::from_projection(&projection);
-        let payment_handoff = OrderPaymentHandoffKind::from_projection(&projection);
-        let next_action =
-            OrderStatusNextActionKind::from_projection(&projection, &eligibility, payment_handoff);
+        let next_action = OrderStatusNextActionKind::from_projection(&projection, &eligibility);
         Self {
             order_id: projection.order_id,
             source: SdkOrderStatusSource::LocalEventStore,
@@ -2689,22 +1973,20 @@ impl OrderStatusReceipt {
             event_count: query_result.event_count,
             limit_applied: query_result.limit_applied,
             status: projection.status.into(),
-            fulfillment_status: projection.fulfillment_status.map(Into::into),
-            payment_state: projection.payment.state.into(),
-            settlement_state: projection.payment.settlement_state.into(),
             lifecycle_terminal: projection.lifecycle_terminal,
+            listing_addr: projection.listing_addr,
+            buyer_pubkey: projection.buyer_pubkey,
+            seller_pubkey: projection.seller_pubkey,
+            economics: projection.economics,
             evidence,
             eligibility,
-            payment_handoff,
             next_action,
             event_ids: query_result.event_ids,
             request_event_id: projection.request_event_id,
             decision_event_id: projection.decision_event_id,
             agreement_event_id: projection.agreement_event_id,
             pending_revision_event_id: projection.pending_revision_event_id,
-            fulfillment_event_id: projection.fulfillment_event_id,
             cancellation_event_id: projection.cancellation_event_id,
-            receipt_event_id: projection.receipt_event_id,
             last_event_id: projection.last_event_id,
             issues: projection.issues.into_iter().map(Into::into).collect(),
         }
@@ -2725,9 +2007,7 @@ impl OrderStatusEvidenceSummary {
             has_decision: projection.decision_event_id.is_some(),
             has_agreement: projection.agreement_event_id.is_some(),
             has_pending_revision: projection.pending_revision_event_id.is_some(),
-            has_fulfillment: projection.fulfillment_event_id.is_some(),
             has_cancellation: projection.cancellation_event_id.is_some(),
-            has_receipt: projection.receipt_event_id.is_some(),
             has_issues: !projection.issues.is_empty(),
         }
     }
@@ -2739,72 +2019,16 @@ impl OrderStatusEligibility {
         let clean = projection.issues.is_empty();
         let open = clean && !projection.lifecycle_terminal;
         let requested = projection.status == RadrootsOrderStatus::Requested;
-        let accepted = projection.status == RadrootsOrderStatus::Accepted;
         let has_pending_revision = projection.pending_revision_event_id.is_some();
-        let has_fulfillment = projection.fulfillment_event_id.is_some();
-        let fulfillment_terminal = matches!(
-            projection.fulfillment_status,
-            Some(
-                RadrootsOrderFulfillmentState::Delivered
-                    | RadrootsOrderFulfillmentState::SellerCancelled
-            )
-        );
-        let receipt_ready = matches!(
-            projection.fulfillment_status,
-            Some(
-                RadrootsOrderFulfillmentState::ReadyForPickup
-                    | RadrootsOrderFulfillmentState::Delivered
-            )
-        );
-        let revision_payment_open =
-            projection.payment.state == RadrootsOrderPaymentState::NotRecorded;
 
         Self {
-            can_decide: open && requested && projection.decision_event_id.is_none(),
-            can_propose_revision: open
-                && accepted
-                && !has_pending_revision
-                && !has_fulfillment
-                && revision_payment_open,
-            can_decide_revision: open && accepted && has_pending_revision,
-            can_cancel: open
-                && matches!(
-                    projection.status,
-                    RadrootsOrderStatus::Requested | RadrootsOrderStatus::Accepted
-                )
-                && !has_pending_revision
-                && !has_fulfillment,
-            can_update_fulfillment: open
-                && accepted
-                && !has_pending_revision
-                && !fulfillment_terminal,
-            can_record_receipt: open
-                && accepted
-                && receipt_ready
-                && projection.receipt_event_id.is_none(),
-        }
-    }
-}
-
-#[cfg(feature = "runtime")]
-impl OrderPaymentHandoffKind {
-    fn from_projection(projection: &RadrootsOrderProjection) -> Self {
-        if !projection.issues.is_empty() || projection.status == RadrootsOrderStatus::Invalid {
-            return Self::Invalid;
-        }
-        match projection.status {
-            RadrootsOrderStatus::Missing | RadrootsOrderStatus::Requested => Self::NotReady,
-            RadrootsOrderStatus::Declined | RadrootsOrderStatus::Cancelled => Self::NotRequired,
-            RadrootsOrderStatus::Accepted
-            | RadrootsOrderStatus::Completed
-            | RadrootsOrderStatus::Disputed => match projection.payment.state {
-                RadrootsOrderPaymentState::NotRecorded => Self::InPersonOrOffPlatformPending,
-                RadrootsOrderPaymentState::Recorded => Self::InPersonOrOffPlatformRecorded,
-                RadrootsOrderPaymentState::Settled => Self::InPersonOrOffPlatformSettled,
-                RadrootsOrderPaymentState::Rejected => Self::Rejected,
-                RadrootsOrderPaymentState::Invalid => Self::Invalid,
-            },
-            RadrootsOrderStatus::Invalid => Self::Invalid,
+            can_decide: open
+                && requested
+                && projection.decision_event_id.is_none()
+                && !has_pending_revision,
+            can_propose_revision: open && requested && !has_pending_revision,
+            can_decide_revision: open && requested && has_pending_revision,
+            can_cancel: open && requested && !has_pending_revision,
         }
     }
 }
@@ -2814,7 +2038,6 @@ impl OrderStatusNextActionKind {
     fn from_projection(
         projection: &RadrootsOrderProjection,
         eligibility: &OrderStatusEligibility,
-        payment_handoff: OrderPaymentHandoffKind,
     ) -> Self {
         if projection.status == RadrootsOrderStatus::Missing {
             return Self::NoLocalOrder;
@@ -2830,18 +2053,6 @@ impl OrderStatusNextActionKind {
         }
         if eligibility.can_decide_revision {
             return Self::DecideRevision;
-        }
-        if eligibility.can_record_receipt {
-            return Self::RecordReceipt;
-        }
-        if matches!(
-            payment_handoff,
-            OrderPaymentHandoffKind::InPersonOrOffPlatformPending
-        ) {
-            return Self::ArrangeInPersonOrOffPlatformPayment;
-        }
-        if eligibility.can_update_fulfillment {
-            return Self::FulfillOrder;
         }
         Self::Terminal
     }
@@ -3123,109 +2334,6 @@ fn order_cancellation_plan(
 }
 
 #[cfg(feature = "runtime")]
-fn order_fulfillment_update_plan(
-    actor: &RadrootsActorContext,
-    root_event: RadrootsNostrEventPtr,
-    previous_event: RadrootsNostrEventPtr,
-    fulfillment: RadrootsOrderFulfillmentUpdate,
-    created_at: RadrootsSdkTimestamp,
-) -> Result<OrderFulfillmentUpdatePlan, RadrootsSdkError> {
-    require_seller_actor(actor, "order.prepare_fulfillment_update")?;
-    let root_event_id = order_reference_event_id(&root_event, "root")?;
-    let previous_event_id = order_reference_event_id(&previous_event, "previous")?;
-    if fulfillment.seller_pubkey.as_str() != actor.pubkey().as_str() {
-        return Err(RadrootsSdkError::UnauthorizedActor {
-            operation: "order.prepare_fulfillment_update".to_owned(),
-            reason: "actor pubkey must match order seller_pubkey".to_owned(),
-        });
-    }
-    let created_at_nostr = created_at.try_into_nostr_created_at()?;
-    let order_id = fulfillment.order_id.clone();
-    let listing_addr = fulfillment.listing_addr.clone();
-    let buyer_pubkey = fulfillment.buyer_pubkey.clone();
-    let seller_pubkey = fulfillment.seller_pubkey.clone();
-    let draft =
-        order::build_fulfillment_update_draft(&root_event_id, &previous_event_id, &fulfillment)
-            .map_err(|error| RadrootsSdkError::InvalidRequest {
-                message: format!("order fulfillment update draft encode failed: {error}"),
-            })?;
-    let (frozen_draft, expected_event_id) = freeze_order_workflow_draft(
-        draft.into_wire_parts(),
-        ORDER_FULFILLMENT_UPDATE_CONTRACT_ID,
-        seller_pubkey.as_str(),
-        created_at_nostr,
-        "order fulfillment update",
-    )?;
-    Ok(OrderFulfillmentUpdatePlan {
-        workflow: order_workflow_plan(
-            OrderWorkflowKind::FulfillmentUpdate,
-            expected_event_id.clone(),
-            created_at,
-        ),
-        order_id,
-        listing_addr,
-        buyer_pubkey,
-        seller_pubkey,
-        root_event_id,
-        previous_event_id,
-        expected_event_id,
-        frozen_draft,
-        created_at,
-    })
-}
-
-#[cfg(feature = "runtime")]
-fn order_receipt_record_plan(
-    actor: &RadrootsActorContext,
-    root_event: RadrootsNostrEventPtr,
-    previous_event: RadrootsNostrEventPtr,
-    receipt: RadrootsOrderReceipt,
-    created_at: RadrootsSdkTimestamp,
-) -> Result<OrderReceiptRecordPlan, RadrootsSdkError> {
-    require_buyer_actor(actor, "order.prepare_receipt_record")?;
-    let root_event_id = order_reference_event_id(&root_event, "root")?;
-    let previous_event_id = order_reference_event_id(&previous_event, "previous")?;
-    if receipt.buyer_pubkey.as_str() != actor.pubkey().as_str() {
-        return Err(RadrootsSdkError::UnauthorizedActor {
-            operation: "order.prepare_receipt_record".to_owned(),
-            reason: "actor pubkey must match order buyer_pubkey".to_owned(),
-        });
-    }
-    let created_at_nostr = created_at.try_into_nostr_created_at()?;
-    let order_id = receipt.order_id.clone();
-    let listing_addr = receipt.listing_addr.clone();
-    let buyer_pubkey = receipt.buyer_pubkey.clone();
-    let seller_pubkey = receipt.seller_pubkey.clone();
-    let draft = order::build_buyer_receipt_draft(&root_event_id, &previous_event_id, &receipt)
-        .map_err(|error| RadrootsSdkError::InvalidRequest {
-            message: format!("order receipt record draft encode failed: {error}"),
-        })?;
-    let (frozen_draft, expected_event_id) = freeze_order_workflow_draft(
-        draft.into_wire_parts(),
-        ORDER_RECEIPT_CONTRACT_ID,
-        buyer_pubkey.as_str(),
-        created_at_nostr,
-        "order receipt record",
-    )?;
-    Ok(OrderReceiptRecordPlan {
-        workflow: order_workflow_plan(
-            OrderWorkflowKind::ReceiptRecord,
-            expected_event_id.clone(),
-            created_at,
-        ),
-        order_id,
-        listing_addr,
-        buyer_pubkey,
-        seller_pubkey,
-        root_event_id,
-        previous_event_id,
-        expected_event_id,
-        frozen_draft,
-        created_at,
-    })
-}
-
-#[cfg(feature = "runtime")]
 fn order_workflow_plan(
     kind: OrderWorkflowKind,
     expected_event_id: RadrootsEventId,
@@ -3384,6 +2492,14 @@ fn require_decision_request_evidence(
             ),
         });
     }
+    if let Some(pending_revision_event_id) = projection.pending_revision_event_id.as_ref() {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: format!(
+                "order decision for order {} cannot follow pending revision proposal {}",
+                plan.order_id, pending_revision_event_id
+            ),
+        });
+    }
     if !projection.issues.is_empty() {
         return Err(RadrootsSdkError::InvalidRequest {
             message: format!(
@@ -3444,17 +2560,9 @@ fn require_revision_proposal_state(
         previous_event_id: &plan.previous_event_id,
     };
     require_clean_lifecycle_projection(refs, projection)?;
-    require_lifecycle_status(&refs, projection, RadrootsOrderStatus::Accepted)?;
+    require_lifecycle_status(&refs, projection, RadrootsOrderStatus::Requested)?;
     require_no_lifecycle_terminal(&refs, projection)?;
-    require_no_payment_for_revision(&refs, projection)?;
     require_no_pending_revision(&refs, projection)?;
-    if projection.fulfillment_event_id.is_some() {
-        return Err(lifecycle_invalid(
-            refs.operation,
-            refs.order_id,
-            "revision proposal requires order before fulfillment",
-        ));
-    }
     require_lifecycle_previous_is_current(&refs, projection)
 }
 
@@ -3473,7 +2581,7 @@ fn require_revision_decision_state(
         previous_event_id: &plan.previous_event_id,
     };
     require_clean_lifecycle_projection(refs, projection)?;
-    require_lifecycle_status(&refs, projection, RadrootsOrderStatus::Accepted)?;
+    require_lifecycle_status(&refs, projection, RadrootsOrderStatus::Requested)?;
     require_no_lifecycle_terminal(&refs, projection)?;
     require_pending_revision(&refs, projection)?;
     require_lifecycle_previous_is_current(&refs, projection)
@@ -3494,102 +2602,18 @@ fn require_cancellation_state(
         previous_event_id: &plan.previous_event_id,
     };
     require_clean_lifecycle_projection(refs, projection)?;
-    if !matches!(
-        projection.status,
-        RadrootsOrderStatus::Requested | RadrootsOrderStatus::Accepted
-    ) {
+    if projection.status != RadrootsOrderStatus::Requested {
         return Err(lifecycle_invalid(
             refs.operation,
             refs.order_id,
             format!(
-                "cancellation requires requested or accepted local state; current state is {:?}",
+                "cancellation requires requested local state; current state is {:?}",
                 projection.status
             ),
         ));
     }
     require_no_lifecycle_terminal(&refs, projection)?;
     require_no_pending_revision(&refs, projection)?;
-    if projection.fulfillment_event_id.is_some() {
-        return Err(lifecycle_invalid(
-            refs.operation,
-            refs.order_id,
-            "cancellation requires order before fulfillment",
-        ));
-    }
-    require_lifecycle_previous_is_current(&refs, projection)
-}
-
-#[cfg(feature = "runtime")]
-fn require_fulfillment_update_state(
-    plan: &OrderFulfillmentUpdatePlan,
-    projection: &RadrootsOrderProjection,
-) -> Result<(), RadrootsSdkError> {
-    let refs = OrderLifecycleReferences {
-        operation: "order fulfillment update",
-        order_id: &plan.order_id,
-        listing_addr: &plan.listing_addr,
-        buyer_pubkey: &plan.buyer_pubkey,
-        seller_pubkey: &plan.seller_pubkey,
-        root_event_id: &plan.root_event_id,
-        previous_event_id: &plan.previous_event_id,
-    };
-    require_clean_lifecycle_projection(refs, projection)?;
-    require_lifecycle_status(&refs, projection, RadrootsOrderStatus::Accepted)?;
-    require_no_lifecycle_terminal(&refs, projection)?;
-    require_no_pending_revision(&refs, projection)?;
-    if matches!(
-        projection.fulfillment_status,
-        Some(
-            RadrootsOrderFulfillmentState::Delivered
-                | RadrootsOrderFulfillmentState::SellerCancelled
-        )
-    ) {
-        return Err(lifecycle_invalid(
-            refs.operation,
-            refs.order_id,
-            "fulfillment update cannot follow terminal fulfillment status",
-        ));
-    }
-    require_lifecycle_previous_is_current(&refs, projection)
-}
-
-#[cfg(feature = "runtime")]
-fn require_receipt_record_state(
-    plan: &OrderReceiptRecordPlan,
-    projection: &RadrootsOrderProjection,
-) -> Result<(), RadrootsSdkError> {
-    let refs = OrderLifecycleReferences {
-        operation: "order receipt record",
-        order_id: &plan.order_id,
-        listing_addr: &plan.listing_addr,
-        buyer_pubkey: &plan.buyer_pubkey,
-        seller_pubkey: &plan.seller_pubkey,
-        root_event_id: &plan.root_event_id,
-        previous_event_id: &plan.previous_event_id,
-    };
-    require_clean_lifecycle_projection(refs, projection)?;
-    require_lifecycle_status(&refs, projection, RadrootsOrderStatus::Accepted)?;
-    require_no_lifecycle_terminal(&refs, projection)?;
-    if projection.fulfillment_event_id.as_ref() != Some(refs.previous_event_id) {
-        return Err(lifecycle_invalid(
-            refs.operation,
-            refs.order_id,
-            "receipt record requires previous event to be the current fulfillment event",
-        ));
-    }
-    if !matches!(
-        projection.fulfillment_status,
-        Some(
-            RadrootsOrderFulfillmentState::ReadyForPickup
-                | RadrootsOrderFulfillmentState::Delivered
-        )
-    ) {
-        return Err(lifecycle_invalid(
-            refs.operation,
-            refs.order_id,
-            "receipt record requires ready-for-pickup or delivered fulfillment state",
-        ));
-    }
     require_lifecycle_previous_is_current(&refs, projection)
 }
 
@@ -3681,22 +2705,6 @@ fn require_no_lifecycle_terminal(
         ))
     } else {
         Ok(())
-    }
-}
-
-#[cfg(feature = "runtime")]
-fn require_no_payment_for_revision(
-    refs: &OrderLifecycleReferences<'_>,
-    projection: &RadrootsOrderProjection,
-) -> Result<(), RadrootsSdkError> {
-    if projection.payment.state == RadrootsOrderPaymentState::NotRecorded {
-        Ok(())
-    } else {
-        Err(lifecycle_invalid(
-            refs.operation,
-            refs.order_id,
-            "revision proposal cannot follow recorded payment state",
-        ))
     }
 }
 
@@ -3923,49 +2931,7 @@ impl From<RadrootsOrderStatus> for OrderStatusKind {
             RadrootsOrderStatus::Accepted => Self::Accepted,
             RadrootsOrderStatus::Declined => Self::Declined,
             RadrootsOrderStatus::Cancelled => Self::Cancelled,
-            RadrootsOrderStatus::Completed => Self::Completed,
-            RadrootsOrderStatus::Disputed => Self::Disputed,
             RadrootsOrderStatus::Invalid => Self::Invalid,
-        }
-    }
-}
-
-#[cfg(feature = "runtime")]
-impl From<RadrootsOrderFulfillmentState> for OrderFulfillmentStatusKind {
-    fn from(status: RadrootsOrderFulfillmentState) -> Self {
-        match status {
-            RadrootsOrderFulfillmentState::AcceptedNotFulfilled => Self::AcceptedNotFulfilled,
-            RadrootsOrderFulfillmentState::Preparing => Self::Preparing,
-            RadrootsOrderFulfillmentState::ReadyForPickup => Self::ReadyForPickup,
-            RadrootsOrderFulfillmentState::OutForDelivery => Self::OutForDelivery,
-            RadrootsOrderFulfillmentState::Delivered => Self::Delivered,
-            RadrootsOrderFulfillmentState::SellerCancelled => Self::SellerCancelled,
-        }
-    }
-}
-
-#[cfg(feature = "runtime")]
-impl From<RadrootsOrderPaymentState> for OrderPaymentStateKind {
-    fn from(state: RadrootsOrderPaymentState) -> Self {
-        match state {
-            RadrootsOrderPaymentState::NotRecorded => Self::NotRecorded,
-            RadrootsOrderPaymentState::Recorded => Self::Recorded,
-            RadrootsOrderPaymentState::Settled => Self::Settled,
-            RadrootsOrderPaymentState::Rejected => Self::Rejected,
-            RadrootsOrderPaymentState::Invalid => Self::Invalid,
-        }
-    }
-}
-
-#[cfg(feature = "runtime")]
-impl From<RadrootsOrderSettlementState> for OrderSettlementStateKind {
-    fn from(state: RadrootsOrderSettlementState) -> Self {
-        match state {
-            RadrootsOrderSettlementState::NotRequired => Self::NotRequired,
-            RadrootsOrderSettlementState::Pending => Self::Pending,
-            RadrootsOrderSettlementState::Accepted => Self::Accepted,
-            RadrootsOrderSettlementState::Rejected => Self::Rejected,
-            RadrootsOrderSettlementState::Invalid => Self::Invalid,
         }
     }
 }
@@ -4042,12 +3008,6 @@ impl From<RadrootsOrderIssue> for SdkOrderStatusIssue {
             }
             RadrootsOrderIssue::ConflictingDecisions { event_ids } => {
                 Self::new(SdkOrderStatusIssueKind::ConflictingDecisions, event_ids)
-            }
-            RadrootsOrderIssue::RevisionProposalWithoutAcceptedDecision { event_id } => {
-                Self::single(
-                    SdkOrderStatusIssueKind::RevisionProposalWithoutAcceptedDecision,
-                    event_id,
-                )
             }
             RadrootsOrderIssue::RevisionProposalPayloadInvalid { event_id } => Self::single(
                 SdkOrderStatusIssueKind::RevisionProposalPayloadInvalid,
@@ -4137,56 +3097,6 @@ impl From<RadrootsOrderIssue> for SdkOrderStatusIssue {
                 SdkOrderStatusIssueKind::RevisionDecisionRevisionIdMismatch,
                 event_id,
             ),
-            RadrootsOrderIssue::FulfillmentWithoutAcceptedDecision { event_id } => Self::single(
-                SdkOrderStatusIssueKind::FulfillmentWithoutAcceptedDecision,
-                event_id,
-            ),
-            RadrootsOrderIssue::FulfillmentPayloadInvalid { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::FulfillmentPayloadInvalid, event_id)
-            }
-            RadrootsOrderIssue::FulfillmentOrderIdMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::FulfillmentOrderIdMismatch,
-                event_id,
-            ),
-            RadrootsOrderIssue::FulfillmentAuthorMismatch { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::FulfillmentAuthorMismatch, event_id)
-            }
-            RadrootsOrderIssue::FulfillmentCounterpartyMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::FulfillmentCounterpartyMismatch,
-                event_id,
-            ),
-            RadrootsOrderIssue::FulfillmentBuyerMismatch { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::FulfillmentBuyerMismatch, event_id)
-            }
-            RadrootsOrderIssue::FulfillmentSellerMismatch { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::FulfillmentSellerMismatch, event_id)
-            }
-            RadrootsOrderIssue::FulfillmentListingAddressInvalid { event_id } => Self::single(
-                SdkOrderStatusIssueKind::FulfillmentListingAddressInvalid,
-                event_id,
-            ),
-            RadrootsOrderIssue::FulfillmentListingMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::FulfillmentListingMismatch,
-                event_id,
-            ),
-            RadrootsOrderIssue::FulfillmentRootMismatch { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::FulfillmentRootMismatch, event_id)
-            }
-            RadrootsOrderIssue::FulfillmentPreviousMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::FulfillmentPreviousMismatch,
-                event_id,
-            ),
-            RadrootsOrderIssue::FulfillmentStatusNotPublishable { event_id } => Self::single(
-                SdkOrderStatusIssueKind::FulfillmentStatusNotPublishable,
-                event_id,
-            ),
-            RadrootsOrderIssue::FulfillmentUnsupportedTransition { event_id } => Self::single(
-                SdkOrderStatusIssueKind::FulfillmentUnsupportedTransition,
-                event_id,
-            ),
-            RadrootsOrderIssue::ForkedFulfillments { event_ids } => {
-                Self::new(SdkOrderStatusIssueKind::ForkedFulfillments, event_ids)
-            }
             RadrootsOrderIssue::CancellationWithoutCancellableOrder { event_id } => Self::single(
                 SdkOrderStatusIssueKind::CancellationWithoutCancellableOrder,
                 event_id,
@@ -4229,177 +3139,6 @@ impl From<RadrootsOrderIssue> for SdkOrderStatusIssue {
                 SdkOrderStatusIssueKind::CancellationPreviousMismatch,
                 event_id,
             ),
-            RadrootsOrderIssue::CancellationAfterFulfillment { event_id } => Self::single(
-                SdkOrderStatusIssueKind::CancellationAfterFulfillment,
-                event_id,
-            ),
-            RadrootsOrderIssue::ReceiptWithoutEligibleFulfillment { event_id } => Self::single(
-                SdkOrderStatusIssueKind::ReceiptWithoutEligibleFulfillment,
-                event_id,
-            ),
-            RadrootsOrderIssue::ReceiptPayloadInvalid { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::ReceiptPayloadInvalid, event_id)
-            }
-            RadrootsOrderIssue::ReceiptOrderIdMismatch { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::ReceiptOrderIdMismatch, event_id)
-            }
-            RadrootsOrderIssue::ReceiptAuthorMismatch { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::ReceiptAuthorMismatch, event_id)
-            }
-            RadrootsOrderIssue::ReceiptCounterpartyMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::ReceiptCounterpartyMismatch,
-                event_id,
-            ),
-            RadrootsOrderIssue::ReceiptBuyerMismatch { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::ReceiptBuyerMismatch, event_id)
-            }
-            RadrootsOrderIssue::ReceiptSellerMismatch { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::ReceiptSellerMismatch, event_id)
-            }
-            RadrootsOrderIssue::ReceiptListingAddressInvalid { event_id } => Self::single(
-                SdkOrderStatusIssueKind::ReceiptListingAddressInvalid,
-                event_id,
-            ),
-            RadrootsOrderIssue::ReceiptListingMismatch { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::ReceiptListingMismatch, event_id)
-            }
-            RadrootsOrderIssue::ReceiptRootMismatch { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::ReceiptRootMismatch, event_id)
-            }
-            RadrootsOrderIssue::ReceiptPreviousMismatch { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::ReceiptPreviousMismatch, event_id)
-            }
-            RadrootsOrderIssue::PaymentWithoutAcceptedAgreement { event_id } => Self::single(
-                SdkOrderStatusIssueKind::PaymentWithoutAcceptedAgreement,
-                event_id,
-            ),
-            RadrootsOrderIssue::PaymentPayloadInvalid { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::PaymentPayloadInvalid, event_id)
-            }
-            RadrootsOrderIssue::PaymentOrderIdMismatch { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::PaymentOrderIdMismatch, event_id)
-            }
-            RadrootsOrderIssue::PaymentAuthorMismatch { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::PaymentAuthorMismatch, event_id)
-            }
-            RadrootsOrderIssue::PaymentCounterpartyMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::PaymentCounterpartyMismatch,
-                event_id,
-            ),
-            RadrootsOrderIssue::PaymentBuyerMismatch { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::PaymentBuyerMismatch, event_id)
-            }
-            RadrootsOrderIssue::PaymentSellerMismatch { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::PaymentSellerMismatch, event_id)
-            }
-            RadrootsOrderIssue::PaymentListingAddressInvalid { event_id } => Self::single(
-                SdkOrderStatusIssueKind::PaymentListingAddressInvalid,
-                event_id,
-            ),
-            RadrootsOrderIssue::PaymentListingMismatch { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::PaymentListingMismatch, event_id)
-            }
-            RadrootsOrderIssue::PaymentRootMismatch { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::PaymentRootMismatch, event_id)
-            }
-            RadrootsOrderIssue::PaymentPreviousMismatch { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::PaymentPreviousMismatch, event_id)
-            }
-            RadrootsOrderIssue::PaymentAgreementMismatch { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::PaymentAgreementMismatch, event_id)
-            }
-            RadrootsOrderIssue::PaymentQuoteMismatch { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::PaymentQuoteMismatch, event_id)
-            }
-            RadrootsOrderIssue::PaymentQuoteVersionMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::PaymentQuoteVersionMismatch,
-                event_id,
-            ),
-            RadrootsOrderIssue::PaymentEconomicsDigestMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::PaymentEconomicsDigestMismatch,
-                event_id,
-            ),
-            RadrootsOrderIssue::PaymentAmountMismatch { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::PaymentAmountMismatch, event_id)
-            }
-            RadrootsOrderIssue::PaymentCurrencyMismatch { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::PaymentCurrencyMismatch, event_id)
-            }
-            RadrootsOrderIssue::PaymentAfterCancellation { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::PaymentAfterCancellation, event_id)
-            }
-            RadrootsOrderIssue::RevisionAfterPayment { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::RevisionAfterPayment, event_id)
-            }
-            RadrootsOrderIssue::DuplicatePayments { event_ids } => {
-                Self::new(SdkOrderStatusIssueKind::DuplicatePayments, event_ids)
-            }
-            RadrootsOrderIssue::SettlementWithoutValidPayment { event_id } => Self::single(
-                SdkOrderStatusIssueKind::SettlementWithoutValidPayment,
-                event_id,
-            ),
-            RadrootsOrderIssue::SettlementPayloadInvalid { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::SettlementPayloadInvalid, event_id)
-            }
-            RadrootsOrderIssue::SettlementOrderIdMismatch { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::SettlementOrderIdMismatch, event_id)
-            }
-            RadrootsOrderIssue::SettlementAuthorMismatch { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::SettlementAuthorMismatch, event_id)
-            }
-            RadrootsOrderIssue::SettlementCounterpartyMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::SettlementCounterpartyMismatch,
-                event_id,
-            ),
-            RadrootsOrderIssue::SettlementBuyerMismatch { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::SettlementBuyerMismatch, event_id)
-            }
-            RadrootsOrderIssue::SettlementSellerMismatch { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::SettlementSellerMismatch, event_id)
-            }
-            RadrootsOrderIssue::SettlementListingAddressInvalid { event_id } => Self::single(
-                SdkOrderStatusIssueKind::SettlementListingAddressInvalid,
-                event_id,
-            ),
-            RadrootsOrderIssue::SettlementListingMismatch { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::SettlementListingMismatch, event_id)
-            }
-            RadrootsOrderIssue::SettlementRootMismatch { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::SettlementRootMismatch, event_id)
-            }
-            RadrootsOrderIssue::SettlementPreviousMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::SettlementPreviousMismatch,
-                event_id,
-            ),
-            RadrootsOrderIssue::SettlementPaymentEventMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::SettlementPaymentEventMismatch,
-                event_id,
-            ),
-            RadrootsOrderIssue::SettlementAgreementMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::SettlementAgreementMismatch,
-                event_id,
-            ),
-            RadrootsOrderIssue::SettlementQuoteMismatch { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::SettlementQuoteMismatch, event_id)
-            }
-            RadrootsOrderIssue::SettlementQuoteVersionMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::SettlementQuoteVersionMismatch,
-                event_id,
-            ),
-            RadrootsOrderIssue::SettlementEconomicsDigestMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::SettlementEconomicsDigestMismatch,
-                event_id,
-            ),
-            RadrootsOrderIssue::SettlementAmountMismatch { event_id } => {
-                Self::single(SdkOrderStatusIssueKind::SettlementAmountMismatch, event_id)
-            }
-            RadrootsOrderIssue::SettlementCurrencyMismatch { event_id } => Self::single(
-                SdkOrderStatusIssueKind::SettlementCurrencyMismatch,
-                event_id,
-            ),
-            RadrootsOrderIssue::DuplicateSettlements { event_ids } => {
-                Self::new(SdkOrderStatusIssueKind::DuplicateSettlements, event_ids)
-            }
             RadrootsOrderIssue::ForkedLifecycle { event_ids } => {
                 Self::new(SdkOrderStatusIssueKind::ForkedLifecycle, event_ids)
             }

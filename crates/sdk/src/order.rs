@@ -33,17 +33,7 @@ pub struct RadrootsOrderRevisionDecisionDraft {
 }
 
 #[derive(Debug, Clone)]
-pub struct RadrootsOrderFulfillmentUpdateDraft {
-    parts: WireEventParts,
-}
-
-#[derive(Debug, Clone)]
 pub struct RadrootsOrderCancellationDraft {
-    parts: WireEventParts,
-}
-
-#[derive(Debug, Clone)]
-pub struct RadrootsOrderReceiptDraft {
     parts: WireEventParts,
 }
 
@@ -87,27 +77,7 @@ impl RadrootsOrderRevisionDecisionDraft {
     }
 }
 
-impl RadrootsOrderFulfillmentUpdateDraft {
-    pub fn as_wire_parts(&self) -> &WireEventParts {
-        &self.parts
-    }
-
-    pub fn into_wire_parts(self) -> WireEventParts {
-        self.parts
-    }
-}
-
 impl RadrootsOrderCancellationDraft {
-    pub fn as_wire_parts(&self) -> &WireEventParts {
-        &self.parts
-    }
-
-    pub fn into_wire_parts(self) -> WireEventParts {
-        self.parts
-    }
-}
-
-impl RadrootsOrderReceiptDraft {
     pub fn as_wire_parts(&self) -> &WireEventParts {
         &self.parts
     }
@@ -173,21 +143,6 @@ pub fn build_order_revision_decision_draft(
 }
 
 #[cfg(feature = "serde_json")]
-pub fn build_fulfillment_update_draft(
-    root_event_id: &RadrootsEventId,
-    prev_event_id: &RadrootsEventId,
-    payload: &RadrootsOrderFulfillmentUpdate,
-) -> Result<RadrootsOrderFulfillmentUpdateDraft, EventEncodeError> {
-    Ok(RadrootsOrderFulfillmentUpdateDraft {
-        parts: radroots_events_codec::order::order_fulfillment_update_event_build(
-            root_event_id,
-            prev_event_id,
-            payload,
-        )?,
-    })
-}
-
-#[cfg(feature = "serde_json")]
 pub fn build_order_cancellation_draft(
     root_event_id: &RadrootsEventId,
     prev_event_id: &RadrootsEventId,
@@ -195,21 +150,6 @@ pub fn build_order_cancellation_draft(
 ) -> Result<RadrootsOrderCancellationDraft, EventEncodeError> {
     Ok(RadrootsOrderCancellationDraft {
         parts: radroots_events_codec::order::order_cancellation_event_build(
-            root_event_id,
-            prev_event_id,
-            payload,
-        )?,
-    })
-}
-
-#[cfg(feature = "serde_json")]
-pub fn build_buyer_receipt_draft(
-    root_event_id: &RadrootsEventId,
-    prev_event_id: &RadrootsEventId,
-    payload: &RadrootsOrderReceipt,
-) -> Result<RadrootsOrderReceiptDraft, EventEncodeError> {
-    Ok(RadrootsOrderReceiptDraft {
-        parts: radroots_events_codec::order::order_receipt_event_build(
             root_event_id,
             prev_event_id,
             payload,
@@ -246,25 +186,10 @@ pub fn parse_order_revision_decision(
 }
 
 #[cfg(feature = "serde_json")]
-pub fn parse_fulfillment_update(
-    event: &RadrootsNostrEvent,
-) -> Result<RadrootsOrderEnvelope<RadrootsOrderFulfillmentUpdate>, RadrootsOrderEnvelopeParseError>
-{
-    radroots_events_codec::order::order_fulfillment_update_from_event(event)
-}
-
-#[cfg(feature = "serde_json")]
 pub fn parse_order_cancellation(
     event: &RadrootsNostrEvent,
 ) -> Result<RadrootsOrderEnvelope<RadrootsOrderCancellation>, RadrootsOrderEnvelopeParseError> {
     radroots_events_codec::order::order_cancellation_from_event(event)
-}
-
-#[cfg(feature = "serde_json")]
-pub fn parse_buyer_receipt(
-    event: &RadrootsNostrEvent,
-) -> Result<RadrootsOrderEnvelope<RadrootsOrderReceipt>, RadrootsOrderEnvelopeParseError> {
-    radroots_events_codec::order::order_receipt_from_event(event)
 }
 
 #[cfg(feature = "serde_json")]

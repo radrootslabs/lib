@@ -42,8 +42,6 @@ const FORBIDDEN_SDK_SOURCE_CONCEPTS: &[ForbiddenSdkConcept] = &[
 const REQUIRED_ORDER_RUNTIME_EXPORTS: &[&str] = &[
     "ORDER_CANCELLATION_OPERATION_KIND",
     "ORDER_DECISION_OPERATION_KIND",
-    "ORDER_FULFILLMENT_UPDATE_OPERATION_KIND",
-    "ORDER_RECEIPT_RECORD_OPERATION_KIND",
     "ORDER_REVISION_DECISION_OPERATION_KIND",
     "ORDER_REVISION_PROPOSAL_OPERATION_KIND",
     "ORDER_STATUS_DEFAULT_LIMIT",
@@ -59,17 +57,6 @@ const REQUIRED_ORDER_RUNTIME_EXPORTS: &[&str] = &[
     "OrderDecisionReceipt",
     "OrderEvidenceIngestReceipt",
     "OrderEvidenceIngestRequest",
-    "OrderFulfillmentStatusKind",
-    "OrderFulfillmentUpdateEnqueueRequest",
-    "OrderFulfillmentUpdatePlan",
-    "OrderFulfillmentUpdatePrepareRequest",
-    "OrderFulfillmentUpdateReceipt",
-    "OrderPaymentHandoffKind",
-    "OrderPaymentStateKind",
-    "OrderReceiptRecordEnqueueRequest",
-    "OrderReceiptRecordPlan",
-    "OrderReceiptRecordPrepareRequest",
-    "OrderReceiptRecordReceipt",
     "OrderRequestEvidenceIngestReceipt",
     "OrderRequestEvidenceIngestRequest",
     "OrderRevisionDecisionEnqueueRequest",
@@ -80,7 +67,6 @@ const REQUIRED_ORDER_RUNTIME_EXPORTS: &[&str] = &[
     "OrderRevisionProposalPlan",
     "OrderRevisionProposalPrepareRequest",
     "OrderRevisionProposalReceipt",
-    "OrderSettlementStateKind",
     "OrderStatusEligibility",
     "OrderStatusEvidenceSummary",
     "OrderStatusKind",
@@ -119,43 +105,57 @@ const REQUIRED_ORDERS_CLIENT_METHODS: &[&str] = &[
     "pub fn prepare_cancellation(",
     "pub async fn enqueue_cancellation<",
     "pub async fn enqueue_prepared_cancellation<",
-    "pub fn prepare_fulfillment_update(",
-    "pub async fn enqueue_fulfillment_update<",
-    "pub async fn enqueue_prepared_fulfillment_update<",
-    "pub fn prepare_receipt_record(",
-    "pub async fn enqueue_receipt_record<",
-    "pub async fn enqueue_prepared_receipt_record<",
     "pub async fn status(",
 ];
 
-const FORBIDDEN_PAYMENT_WRITE_PUBLIC_EXPORTS: &[&str] = &[
+const FORBIDDEN_ORDER_RUNTIME_PUBLIC_EXPORTS: &[&str] = &[
     "CheckoutClient",
     "EscrowClient",
     "InvoiceClient",
-    "OrderPaymentRecordEnqueueRequest",
-    "OrderPaymentRecordPrepareRequest",
-    "OrderPaymentRecordReceipt",
-    "OrderSettlementDecisionEnqueueRequest",
-    "OrderSettlementDecisionPrepareRequest",
-    "OrderSettlementDecisionReceipt",
+    concat!("Order", "FulfillmentStatusKind"),
+    concat!("Order", "FulfillmentUpdateEnqueueRequest"),
+    concat!("Order", "FulfillmentUpdatePlan"),
+    concat!("Order", "FulfillmentUpdatePrepareRequest"),
+    concat!("Order", "FulfillmentUpdateReceipt"),
+    concat!("Order", "Payment", "HandoffKind"),
+    concat!("Order", "PaymentRecordEnqueueRequest"),
+    concat!("Order", "PaymentRecordPrepareRequest"),
+    concat!("Order", "Payment", "Record", "Receipt"),
+    concat!("Order", "Payment", "StateKind"),
+    concat!("Order", "ReceiptRecordEnqueueRequest"),
+    concat!("Order", "ReceiptRecordPlan"),
+    concat!("Order", "ReceiptRecordPrepareRequest"),
+    concat!("Order", "ReceiptRecord", "Receipt"),
+    concat!("Order", "SettlementDecisionEnqueueRequest"),
+    concat!("Order", "SettlementDecisionPrepareRequest"),
+    concat!("Order", "SettlementDecisionReceipt"),
+    concat!("Order", "Settlement", "StateKind"),
     "PaymentClient",
     "PaymentsClient",
     "RefundClient",
     "WalletClient",
+    "ORDER_FULFILLMENT_UPDATE_OPERATION_KIND",
     "ORDER_PAYMENT_RECORD_OPERATION_KIND",
+    "ORDER_RECEIPT_RECORD_OPERATION_KIND",
     "ORDER_SETTLEMENT_DECISION_OPERATION_KIND",
 ];
 
-const FORBIDDEN_PAYMENT_WRITE_ORDER_METHODS: &[&str] = &[
+const FORBIDDEN_ORDER_RUNTIME_METHODS: &[&str] = &[
     "accept_settlement",
     "checkout",
+    "enqueue_fulfillment",
     "enqueue_payment",
+    "enqueue_receipt_record",
     "enqueue_settlement",
     "escrow",
+    "fulfillment",
     "invoice",
     "payment_provider",
+    "prepare_fulfillment",
     "prepare_payment",
+    "prepare_receipt_record",
     "prepare_settlement",
+    "receipt_record",
     "record_payment",
     "refund",
     "reject_settlement",
@@ -210,7 +210,7 @@ fn migrated_runtime_tests_stay_on_product_runtime_boundary() {
 }
 
 #[test]
-fn payment_deferral_keeps_sdk_public_runtime_surface_passive_only() {
+fn agreement_order_runtime_excludes_post_agreement_surfaces() {
     let lib_source = read_source(
         Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("src/lib.rs")
@@ -222,28 +222,17 @@ fn payment_deferral_keeps_sdk_public_runtime_surface_passive_only() {
             .as_path(),
     );
 
-    for passive_export in [
-        "OrderPaymentHandoffKind",
-        "OrderPaymentStateKind",
-        "OrderSettlementStateKind",
-    ] {
-        assert!(
-            lib_source.contains(passive_export),
-            "src/lib.rs must keep passive order payment status export `{passive_export}`"
-        );
-    }
-
-    for forbidden in FORBIDDEN_PAYMENT_WRITE_PUBLIC_EXPORTS {
+    for forbidden in FORBIDDEN_ORDER_RUNTIME_PUBLIC_EXPORTS {
         assert!(
             !lib_source.contains(forbidden),
-            "src/lib.rs must not expose deferred payment write surface `{forbidden}`"
+            "src/lib.rs must not expose unsupported order runtime surface `{forbidden}`"
         );
     }
 
-    for forbidden in FORBIDDEN_PAYMENT_WRITE_ORDER_METHODS {
+    for forbidden in FORBIDDEN_ORDER_RUNTIME_METHODS {
         assert!(
             !order_source.contains(forbidden),
-            "src/orders_runtime.rs must not add deferred payment write method or capability `{forbidden}`"
+            "src/orders_runtime.rs must not expose unsupported order runtime method or capability `{forbidden}`"
         );
     }
 }
