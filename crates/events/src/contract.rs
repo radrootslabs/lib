@@ -1276,38 +1276,6 @@ static ALL_KIND_CONTRACTS: &[RadrootsKindContract] = &[
         ["radroots.order.cancellation.v1"]
     ),
     kind_contract!(
-        KIND_ORDER_FULFILLMENT_UPDATE,
-        "KIND_ORDER_FULFILLMENT_UPDATE",
-        "Order Fulfillment Update",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Radroots,
-        ["radroots.order.fulfillment_update.v1"]
-    ),
-    kind_contract!(
-        KIND_ORDER_RECEIPT,
-        "KIND_ORDER_RECEIPT",
-        "Order Receipt",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Radroots,
-        ["radroots.order.receipt.v1"]
-    ),
-    kind_contract!(
-        KIND_ORDER_PAYMENT_RECORD,
-        "KIND_ORDER_PAYMENT_RECORD",
-        "Order Payment Record",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Radroots,
-        ["radroots.order.payment_record.v1"]
-    ),
-    kind_contract!(
-        KIND_ORDER_SETTLEMENT_DECISION,
-        "KIND_ORDER_SETTLEMENT_DECISION",
-        "Order Settlement Decision",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Radroots,
-        ["radroots.order.settlement_decision.v1"]
-    ),
-    kind_contract!(
         KIND_TRADE_VALIDATION_RECEIPT,
         "KIND_TRADE_VALIDATION_RECEIPT",
         "Trade Validation Receipt",
@@ -2405,58 +2373,6 @@ static ALL_EVENT_CONTRACTS: &[RadrootsEventContract] = &[
         RadrootsEventClass::Regular,
         RadrootsEventPrivacy::Public,
         RadrootsActorRole::Buyer,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
-        CHAINED_ORDER_TAGS,
-        ORDER_REDUCERS
-    ),
-    event_contract!(
-        "radroots.order.fulfillment_update.v1",
-        KIND_ORDER_FULFILLMENT_UPDATE,
-        "Order Fulfillment Update",
-        "RadrootsOrderFulfillmentUpdate",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
-        RadrootsActorRole::Seller,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
-        CHAINED_ORDER_TAGS,
-        ORDER_REDUCERS
-    ),
-    event_contract!(
-        "radroots.order.receipt.v1",
-        KIND_ORDER_RECEIPT,
-        "Order Receipt",
-        "RadrootsOrderReceipt",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
-        RadrootsActorRole::Buyer,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
-        CHAINED_ORDER_TAGS,
-        ORDER_REDUCERS
-    ),
-    event_contract!(
-        "radroots.order.payment_record.v1",
-        KIND_ORDER_PAYMENT_RECORD,
-        "Order Payment Record",
-        "RadrootsOrderPaymentRecord",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
-        RadrootsActorRole::Buyer,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
-        CHAINED_ORDER_TAGS,
-        ORDER_REDUCERS
-    ),
-    event_contract!(
-        "radroots.order.settlement_decision.v1",
-        KIND_ORDER_SETTLEMENT_DECISION,
-        "Order Settlement Decision",
-        "RadrootsOrderSettlementDecision",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
-        RadrootsActorRole::Seller,
         RadrootsContentSchema::JsonObject,
         RadrootsEventDiscriminator::KindOnly,
         CHAINED_ORDER_TAGS,

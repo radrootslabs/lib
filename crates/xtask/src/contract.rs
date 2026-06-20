@@ -856,123 +856,6 @@ const TRADE_ORDER_CANCELLED_WITNESSES: [EventBoundarySourceWitness; 5] = [
     },
 ];
 
-const TRADE_FULFILLMENT_UPDATED_WITNESSES: [EventBoundarySourceWitness; 5] = [
-    EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
-        required_fragments: &["pub const KIND_ORDER_FULFILLMENT_UPDATE: u32 = 3433;"],
-    },
-    EventBoundarySourceWitness {
-        relative_path: "crates/events/src/order.rs",
-        required_fragments: &[
-            "pub struct RadrootsOrderFulfillmentUpdate",
-            "Self::FulfillmentUpdated => KIND_ORDER_FULFILLMENT_UPDATE",
-        ],
-    },
-    EventBoundarySourceWitness {
-        relative_path: "crates/events_codec/src/order/encode.rs",
-        required_fragments: &["pub fn order_fulfillment_update_event_build"],
-    },
-    EventBoundarySourceWitness {
-        relative_path: "crates/events_codec/src/order/decode.rs",
-        required_fragments: &["pub fn order_fulfillment_update_from_event"],
-    },
-    EventBoundarySourceWitness {
-        relative_path: "crates/trade/src/order.rs",
-        required_fragments: &[
-            "pub struct RadrootsOrderFulfillmentRecord",
-            "pub fn reduce_order_events",
-        ],
-    },
-];
-
-const TRADE_BUYER_RECEIPT_WITNESSES: [EventBoundarySourceWitness; 5] = [
-    EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
-        required_fragments: &["pub const KIND_ORDER_RECEIPT: u32 = 3434;"],
-    },
-    EventBoundarySourceWitness {
-        relative_path: "crates/events/src/order.rs",
-        required_fragments: &[
-            "pub struct RadrootsOrderReceipt",
-            "Self::BuyerReceipt => KIND_ORDER_RECEIPT",
-        ],
-    },
-    EventBoundarySourceWitness {
-        relative_path: "crates/events_codec/src/order/encode.rs",
-        required_fragments: &["pub fn order_receipt_event_build"],
-    },
-    EventBoundarySourceWitness {
-        relative_path: "crates/events_codec/src/order/decode.rs",
-        required_fragments: &["pub fn order_receipt_from_event"],
-    },
-    EventBoundarySourceWitness {
-        relative_path: "crates/trade/src/order.rs",
-        required_fragments: &[
-            "pub struct RadrootsOrderReceiptRecord",
-            "pub fn reduce_order_events",
-        ],
-    },
-];
-
-const TRADE_PAYMENT_RECORDED_WITNESSES: [EventBoundarySourceWitness; 5] = [
-    EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
-        required_fragments: &["pub const KIND_ORDER_PAYMENT_RECORD: u32 = 3435;"],
-    },
-    EventBoundarySourceWitness {
-        relative_path: "crates/events/src/order.rs",
-        required_fragments: &[
-            "pub struct RadrootsOrderPaymentRecord",
-            "Self::PaymentRecorded => KIND_ORDER_PAYMENT_RECORD",
-        ],
-    },
-    EventBoundarySourceWitness {
-        relative_path: "crates/events_codec/src/order/encode.rs",
-        required_fragments: &["pub fn order_payment_record_event_build"],
-    },
-    EventBoundarySourceWitness {
-        relative_path: "crates/events_codec/src/order/decode.rs",
-        required_fragments: &["pub fn order_payment_record_from_event"],
-    },
-    EventBoundarySourceWitness {
-        relative_path: "crates/trade/src/order.rs",
-        required_fragments: &[
-            "pub struct RadrootsOrderPaymentEventRecord",
-            "pub fn reduce_order_events",
-        ],
-    },
-];
-
-const TRADE_SETTLEMENT_DECISION_WITNESSES: [EventBoundarySourceWitness; 5] = [
-    EventBoundarySourceWitness {
-        relative_path: "crates/events/src/kinds.rs",
-        required_fragments: &["pub const KIND_ORDER_SETTLEMENT_DECISION: u32 = 3436;"],
-    },
-    EventBoundarySourceWitness {
-        relative_path: "crates/events/src/order.rs",
-        required_fragments: &[
-            "pub enum RadrootsOrderSettlementOutcome",
-            "pub struct RadrootsOrderSettlementDecision",
-            "Self::SettlementDecision => KIND_ORDER_SETTLEMENT_DECISION",
-        ],
-    },
-    EventBoundarySourceWitness {
-        relative_path: "crates/events_codec/src/order/encode.rs",
-        required_fragments: &["pub fn order_settlement_decision_event_build"],
-    },
-    EventBoundarySourceWitness {
-        relative_path: "crates/events_codec/src/order/decode.rs",
-        required_fragments: &["pub fn order_settlement_decision_from_event"],
-    },
-    EventBoundarySourceWitness {
-        relative_path: "crates/trade/src/order.rs",
-        required_fragments: &[
-            "pub struct RadrootsOrderSettlementRecord",
-            "pub fn reduce_order_events",
-        ],
-    },
-];
-
 const TRADE_VALIDATION_RECEIPT_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
         relative_path: "crates/trade/src/validation_receipt.rs",
@@ -997,7 +880,7 @@ const RELAY_DOC_WITNESSES: [EventBoundarySourceWitness; 2] = [
     },
 ];
 
-const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 45] = [
+const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 41] = [
     EventBoundaryExpectation {
         domain: "profile",
         kind: "0",
@@ -1404,45 +1287,6 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 45] = [
             "trade reducer",
         ],
         witnesses: &TRADE_ORDER_CANCELLED_WITNESSES,
-    },
-    EventBoundaryExpectation {
-        domain: "trade:fulfillment_updated",
-        kind: "3433",
-        radroots_type: "TradeFulfillmentUpdated",
-        rpc_methods: &[
-            "active CLI `order fulfillment update`",
-            "SDK encode/decode/validate",
-            "trade reducer",
-        ],
-        witnesses: &TRADE_FULFILLMENT_UPDATED_WITNESSES,
-    },
-    EventBoundaryExpectation {
-        domain: "trade:buyer_receipt",
-        kind: "3434",
-        radroots_type: "TradeBuyerReceipt",
-        rpc_methods: &[
-            "active CLI `order receipt record`",
-            "SDK encode/decode/validate",
-            "trade reducer",
-        ],
-        witnesses: &TRADE_BUYER_RECEIPT_WITNESSES,
-    },
-    EventBoundaryExpectation {
-        domain: "trade:payment_record",
-        kind: "3435",
-        radroots_type: "TradePaymentRecorded",
-        rpc_methods: &["reserved CLI `order payment record`"],
-        witnesses: &TRADE_PAYMENT_RECORDED_WITNESSES,
-    },
-    EventBoundaryExpectation {
-        domain: "trade:settlement_decision",
-        kind: "3436",
-        radroots_type: "TradeSettlementDecision",
-        rpc_methods: &[
-            "reserved CLI `order settlement accept`",
-            "reserved CLI `order settlement reject`",
-        ],
-        witnesses: &TRADE_SETTLEMENT_DECISION_WITNESSES,
     },
     EventBoundaryExpectation {
         domain: "trade:validation_receipt",

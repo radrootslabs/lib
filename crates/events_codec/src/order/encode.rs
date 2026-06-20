@@ -7,10 +7,8 @@ use radroots_events::{
     ids::RadrootsEventId,
     order::{
         RadrootsOrderCancellation, RadrootsOrderDecision, RadrootsOrderEnvelope,
-        RadrootsOrderEnvelopeError, RadrootsOrderEventType, RadrootsOrderFulfillmentUpdate,
-        RadrootsOrderPayloadError, RadrootsOrderPaymentRecord, RadrootsOrderReceipt,
+        RadrootsOrderEnvelopeError, RadrootsOrderEventType, RadrootsOrderPayloadError,
         RadrootsOrderRequest, RadrootsOrderRevisionDecision, RadrootsOrderRevisionProposal,
-        RadrootsOrderSettlementDecision,
     },
 };
 
@@ -72,24 +70,6 @@ fn map_order_payload_error(error: RadrootsOrderPayloadError) -> EventEncodeError
         }
         RadrootsOrderPayloadError::InvalidInventoryCommitmentCount { .. } => {
             EventEncodeError::InvalidField("inventory_commitments.bin_count")
-        }
-        RadrootsOrderPayloadError::InvalidFulfillmentStatus => {
-            EventEncodeError::InvalidField("fulfillment.status")
-        }
-        RadrootsOrderPayloadError::MissingReceiptIssue => {
-            EventEncodeError::EmptyRequiredField("receipt.issue")
-        }
-        RadrootsOrderPayloadError::UnexpectedReceiptIssue => {
-            EventEncodeError::InvalidField("receipt.issue")
-        }
-        RadrootsOrderPayloadError::InvalidPaymentAmount => {
-            EventEncodeError::InvalidField("payment.amount")
-        }
-        RadrootsOrderPayloadError::MissingSettlementReason => {
-            EventEncodeError::EmptyRequiredField("settlement.reason")
-        }
-        RadrootsOrderPayloadError::UnexpectedSettlementReason => {
-            EventEncodeError::InvalidField("settlement.reason")
         }
     }
 }
@@ -233,25 +213,6 @@ pub fn order_revision_decision_event_build(
 }
 
 #[cfg(feature = "serde_json")]
-pub fn order_fulfillment_update_event_build(
-    root_event_id: &RadrootsEventId,
-    prev_event_id: &RadrootsEventId,
-    payload: &RadrootsOrderFulfillmentUpdate,
-) -> Result<WireEventParts, EventEncodeError> {
-    payload.validate().map_err(map_order_payload_error)?;
-    order_envelope_event_build(OrderEnvelopeEventBuildParts {
-        recipient_pubkey: &payload.buyer_pubkey,
-        message_type: RadrootsOrderEventType::FulfillmentUpdated,
-        listing_addr: &payload.listing_addr,
-        order_id: &payload.order_id,
-        listing_event: None,
-        root_event_id: Some(root_event_id),
-        prev_event_id: Some(prev_event_id),
-        payload,
-    })
-}
-
-#[cfg(feature = "serde_json")]
 pub fn order_cancellation_event_build(
     root_event_id: &RadrootsEventId,
     prev_event_id: &RadrootsEventId,
@@ -261,75 +222,6 @@ pub fn order_cancellation_event_build(
     order_envelope_event_build(OrderEnvelopeEventBuildParts {
         recipient_pubkey: &payload.seller_pubkey,
         message_type: RadrootsOrderEventType::OrderCancelled,
-        listing_addr: &payload.listing_addr,
-        order_id: &payload.order_id,
-        listing_event: None,
-        root_event_id: Some(root_event_id),
-        prev_event_id: Some(prev_event_id),
-        payload,
-    })
-}
-
-#[cfg(feature = "serde_json")]
-pub fn order_receipt_event_build(
-    root_event_id: &RadrootsEventId,
-    prev_event_id: &RadrootsEventId,
-    payload: &RadrootsOrderReceipt,
-) -> Result<WireEventParts, EventEncodeError> {
-    payload.validate().map_err(map_order_payload_error)?;
-    order_envelope_event_build(OrderEnvelopeEventBuildParts {
-        recipient_pubkey: &payload.seller_pubkey,
-        message_type: RadrootsOrderEventType::BuyerReceipt,
-        listing_addr: &payload.listing_addr,
-        order_id: &payload.order_id,
-        listing_event: None,
-        root_event_id: Some(root_event_id),
-        prev_event_id: Some(prev_event_id),
-        payload,
-    })
-}
-
-#[cfg(feature = "serde_json")]
-pub fn order_payment_record_event_build(
-    root_event_id: &RadrootsEventId,
-    prev_event_id: &RadrootsEventId,
-    payload: &RadrootsOrderPaymentRecord,
-) -> Result<WireEventParts, EventEncodeError> {
-    payload.validate().map_err(map_order_payload_error)?;
-    if payload.root_event_id.as_str() != root_event_id.as_str() {
-        return Err(EventEncodeError::InvalidField("root_event_id"));
-    }
-    if payload.previous_event_id.as_str() != prev_event_id.as_str() {
-        return Err(EventEncodeError::InvalidField("previous_event_id"));
-    }
-    order_envelope_event_build(OrderEnvelopeEventBuildParts {
-        recipient_pubkey: &payload.seller_pubkey,
-        message_type: RadrootsOrderEventType::PaymentRecorded,
-        listing_addr: &payload.listing_addr,
-        order_id: &payload.order_id,
-        listing_event: None,
-        root_event_id: Some(root_event_id),
-        prev_event_id: Some(prev_event_id),
-        payload,
-    })
-}
-
-#[cfg(feature = "serde_json")]
-pub fn order_settlement_decision_event_build(
-    root_event_id: &RadrootsEventId,
-    prev_event_id: &RadrootsEventId,
-    payload: &RadrootsOrderSettlementDecision,
-) -> Result<WireEventParts, EventEncodeError> {
-    payload.validate().map_err(map_order_payload_error)?;
-    if payload.root_event_id.as_str() != root_event_id.as_str() {
-        return Err(EventEncodeError::InvalidField("root_event_id"));
-    }
-    if payload.previous_event_id.as_str() != prev_event_id.as_str() {
-        return Err(EventEncodeError::InvalidField("previous_event_id"));
-    }
-    order_envelope_event_build(OrderEnvelopeEventBuildParts {
-        recipient_pubkey: &payload.buyer_pubkey,
-        message_type: RadrootsOrderEventType::SettlementDecision,
         listing_addr: &payload.listing_addr,
         order_id: &payload.order_id,
         listing_event: None,

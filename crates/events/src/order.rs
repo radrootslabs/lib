@@ -6,9 +6,11 @@ use alloc::{
     vec::Vec,
 };
 
+#[cfg(test)]
+use crate::ids::RadrootsOrderQuoteId;
 use crate::ids::{
-    RadrootsEconomicsDigest, RadrootsEventId, RadrootsInventoryBinId, RadrootsListingAddress,
-    RadrootsOrderId, RadrootsOrderQuoteId, RadrootsOrderRevisionId, RadrootsPublicKey,
+    RadrootsEventId, RadrootsInventoryBinId, RadrootsListingAddress, RadrootsOrderId,
+    RadrootsOrderRevisionId, RadrootsPublicKey,
 };
 use crate::kinds::*;
 pub use crate::order_economics::*;
@@ -307,49 +309,6 @@ impl RadrootsOrderDecision {
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RadrootsOrderFulfillmentState {
-    AcceptedNotFulfilled,
-    Preparing,
-    ReadyForPickup,
-    OutForDelivery,
-    Delivered,
-    SellerCancelled,
-}
-
-impl RadrootsOrderFulfillmentState {
-    #[inline]
-    pub const fn is_publishable_update(self) -> bool {
-        !matches!(self, Self::AcceptedNotFulfilled)
-    }
-}
-
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsOrderFulfillmentUpdate {
-    pub order_id: RadrootsOrderId,
-    pub listing_addr: RadrootsListingAddress,
-    pub buyer_pubkey: RadrootsPublicKey,
-    pub seller_pubkey: RadrootsPublicKey,
-    pub status: RadrootsOrderFulfillmentState,
-}
-
-impl RadrootsOrderFulfillmentUpdate {
-    pub fn validate(&self) -> Result<(), RadrootsOrderPayloadError> {
-        validate_required_field(&self.order_id, "order_id")?;
-        validate_required_field(&self.listing_addr, "listing_addr")?;
-        validate_required_field(&self.buyer_pubkey, "buyer_pubkey")?;
-        validate_required_field(&self.seller_pubkey, "seller_pubkey")?;
-        if self.status.is_publishable_update() {
-            Ok(())
-        } else {
-            Err(RadrootsOrderPayloadError::InvalidFulfillmentStatus)
-        }
-    }
-}
-
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOrderCancellation {
     pub order_id: RadrootsOrderId,
@@ -366,152 +325,6 @@ impl RadrootsOrderCancellation {
         validate_required_field(&self.buyer_pubkey, "buyer_pubkey")?;
         validate_required_field(&self.seller_pubkey, "seller_pubkey")?;
         validate_required_field(&self.reason, "reason")
-    }
-}
-
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsOrderReceipt {
-    pub order_id: RadrootsOrderId,
-    pub listing_addr: RadrootsListingAddress,
-    pub buyer_pubkey: RadrootsPublicKey,
-    pub seller_pubkey: RadrootsPublicKey,
-    pub received: bool,
-    pub issue: Option<String>,
-    pub received_at: u64,
-}
-
-impl RadrootsOrderReceipt {
-    pub fn validate(&self) -> Result<(), RadrootsOrderPayloadError> {
-        validate_required_field(&self.order_id, "order_id")?;
-        validate_required_field(&self.listing_addr, "listing_addr")?;
-        validate_required_field(&self.buyer_pubkey, "buyer_pubkey")?;
-        validate_required_field(&self.seller_pubkey, "seller_pubkey")?;
-        if self.received {
-            if self.issue.is_some() {
-                return Err(RadrootsOrderPayloadError::UnexpectedReceiptIssue);
-            }
-        } else {
-            match self.issue.as_deref() {
-                Some(issue) => validate_required_field(issue, "issue")?,
-                None => return Err(RadrootsOrderPayloadError::MissingReceiptIssue),
-            }
-        }
-        Ok(())
-    }
-}
-
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RadrootsOrderPaymentMethod {
-    Cash,
-    ManualTransfer,
-    Other,
-}
-
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsOrderPaymentRecord {
-    pub order_id: RadrootsOrderId,
-    pub listing_addr: RadrootsListingAddress,
-    pub buyer_pubkey: RadrootsPublicKey,
-    pub seller_pubkey: RadrootsPublicKey,
-    pub root_event_id: RadrootsEventId,
-    pub previous_event_id: RadrootsEventId,
-    pub agreement_event_id: RadrootsEventId,
-    pub quote_id: RadrootsOrderQuoteId,
-    pub quote_version: u32,
-    pub economics_digest: RadrootsEconomicsDigest,
-    pub amount: RadrootsCoreDecimal,
-    pub currency: RadrootsCoreCurrency,
-    pub method: RadrootsOrderPaymentMethod,
-    pub reference: Option<String>,
-    pub paid_at: Option<u64>,
-}
-
-impl RadrootsOrderPaymentRecord {
-    pub fn validate(&self) -> Result<(), RadrootsOrderPayloadError> {
-        validate_required_field(&self.order_id, "order_id")?;
-        validate_required_field(&self.listing_addr, "listing_addr")?;
-        validate_required_field(&self.buyer_pubkey, "buyer_pubkey")?;
-        validate_required_field(&self.seller_pubkey, "seller_pubkey")?;
-        validate_required_field(&self.root_event_id, "root_event_id")?;
-        validate_required_field(&self.previous_event_id, "previous_event_id")?;
-        validate_required_field(&self.agreement_event_id, "agreement_event_id")?;
-        validate_required_field(&self.quote_id, "quote_id")?;
-        validate_required_field(&self.economics_digest, "economics_digest")?;
-        if self.quote_version == 0 {
-            return Err(RadrootsOrderPayloadError::InvalidQuoteVersion);
-        }
-        if self.amount.is_zero() || self.amount.is_sign_negative() {
-            return Err(RadrootsOrderPayloadError::InvalidPaymentAmount);
-        }
-        if let Some(reference) = self.reference.as_deref() {
-            validate_required_field(reference, "reference")?;
-        }
-        Ok(())
-    }
-}
-
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RadrootsOrderSettlementOutcome {
-    Accepted,
-    Rejected,
-}
-
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsOrderSettlementDecision {
-    pub order_id: RadrootsOrderId,
-    pub listing_addr: RadrootsListingAddress,
-    pub seller_pubkey: RadrootsPublicKey,
-    pub buyer_pubkey: RadrootsPublicKey,
-    pub root_event_id: RadrootsEventId,
-    pub previous_event_id: RadrootsEventId,
-    pub agreement_event_id: RadrootsEventId,
-    pub payment_event_id: RadrootsEventId,
-    pub quote_id: RadrootsOrderQuoteId,
-    pub quote_version: u32,
-    pub economics_digest: RadrootsEconomicsDigest,
-    pub amount: RadrootsCoreDecimal,
-    pub currency: RadrootsCoreCurrency,
-    pub decision: RadrootsOrderSettlementOutcome,
-    pub reason: Option<String>,
-}
-
-impl RadrootsOrderSettlementDecision {
-    pub fn validate(&self) -> Result<(), RadrootsOrderPayloadError> {
-        validate_required_field(&self.order_id, "order_id")?;
-        validate_required_field(&self.listing_addr, "listing_addr")?;
-        validate_required_field(&self.seller_pubkey, "seller_pubkey")?;
-        validate_required_field(&self.buyer_pubkey, "buyer_pubkey")?;
-        validate_required_field(&self.root_event_id, "root_event_id")?;
-        validate_required_field(&self.previous_event_id, "previous_event_id")?;
-        validate_required_field(&self.agreement_event_id, "agreement_event_id")?;
-        validate_required_field(&self.payment_event_id, "payment_event_id")?;
-        validate_required_field(&self.quote_id, "quote_id")?;
-        validate_required_field(&self.economics_digest, "economics_digest")?;
-        if self.quote_version == 0 {
-            return Err(RadrootsOrderPayloadError::InvalidQuoteVersion);
-        }
-        if self.amount.is_zero() || self.amount.is_sign_negative() {
-            return Err(RadrootsOrderPayloadError::InvalidPaymentAmount);
-        }
-        match self.decision {
-            RadrootsOrderSettlementOutcome::Accepted => {
-                if self.reason.is_some() {
-                    return Err(RadrootsOrderPayloadError::UnexpectedSettlementReason);
-                }
-            }
-            RadrootsOrderSettlementOutcome::Rejected => match self.reason.as_deref() {
-                Some(reason) => validate_required_field(reason, "reason")?,
-                None => return Err(RadrootsOrderPayloadError::MissingSettlementReason),
-            },
-        }
-        Ok(())
     }
 }
 
@@ -536,14 +349,6 @@ pub enum RadrootsOrderEventType {
     OrderRevisionDecision,
     #[cfg_attr(feature = "serde", serde(rename = "TradeOrderCancelled"))]
     OrderCancelled,
-    #[cfg_attr(feature = "serde", serde(rename = "TradeFulfillmentUpdated"))]
-    FulfillmentUpdated,
-    #[cfg_attr(feature = "serde", serde(rename = "TradeBuyerReceipt"))]
-    BuyerReceipt,
-    #[cfg_attr(feature = "serde", serde(rename = "TradePaymentRecorded"))]
-    PaymentRecorded,
-    #[cfg_attr(feature = "serde", serde(rename = "TradeSettlementDecision"))]
-    SettlementDecision,
 }
 
 impl RadrootsOrderEventType {
@@ -555,10 +360,6 @@ impl RadrootsOrderEventType {
             KIND_ORDER_REVISION_PROPOSAL => Some(Self::OrderRevisionProposed),
             KIND_ORDER_REVISION_DECISION => Some(Self::OrderRevisionDecision),
             KIND_ORDER_CANCELLATION => Some(Self::OrderCancelled),
-            KIND_ORDER_FULFILLMENT_UPDATE => Some(Self::FulfillmentUpdated),
-            KIND_ORDER_RECEIPT => Some(Self::BuyerReceipt),
-            KIND_ORDER_PAYMENT_RECORD => Some(Self::PaymentRecorded),
-            KIND_ORDER_SETTLEMENT_DECISION => Some(Self::SettlementDecision),
             _ => None,
         }
     }
@@ -571,10 +372,6 @@ impl RadrootsOrderEventType {
             Self::OrderRevisionProposed => KIND_ORDER_REVISION_PROPOSAL,
             Self::OrderRevisionDecision => KIND_ORDER_REVISION_DECISION,
             Self::OrderCancelled => KIND_ORDER_CANCELLATION,
-            Self::FulfillmentUpdated => KIND_ORDER_FULFILLMENT_UPDATE,
-            Self::BuyerReceipt => KIND_ORDER_RECEIPT,
-            Self::PaymentRecorded => KIND_ORDER_PAYMENT_RECORD,
-            Self::SettlementDecision => KIND_ORDER_SETTLEMENT_DECISION,
         }
     }
 
@@ -586,10 +383,6 @@ impl RadrootsOrderEventType {
             Self::OrderRevisionProposed => "TradeOrderRevisionProposed",
             Self::OrderRevisionDecision => "TradeOrderRevisionDecision",
             Self::OrderCancelled => "TradeOrderCancelled",
-            Self::FulfillmentUpdated => "TradeFulfillmentUpdated",
-            Self::BuyerReceipt => "TradeBuyerReceipt",
-            Self::PaymentRecorded => "TradePaymentRecorded",
-            Self::SettlementDecision => "TradeSettlementDecision",
         }
     }
 
@@ -606,10 +399,6 @@ impl RadrootsOrderEventType {
                 | Self::OrderRevisionProposed
                 | Self::OrderRevisionDecision
                 | Self::OrderCancelled
-                | Self::FulfillmentUpdated
-                | Self::BuyerReceipt
-                | Self::PaymentRecorded
-                | Self::SettlementDecision
         )
     }
 }
@@ -706,12 +495,6 @@ pub enum RadrootsOrderPayloadError {
     InvalidQuoteVersion,
     MissingInventoryCommitments,
     InvalidInventoryCommitmentCount { index: usize },
-    InvalidFulfillmentStatus,
-    MissingReceiptIssue,
-    UnexpectedReceiptIssue,
-    InvalidPaymentAmount,
-    MissingSettlementReason,
-    UnexpectedSettlementReason,
 }
 
 impl core::fmt::Display for RadrootsOrderPayloadError {
@@ -777,27 +560,6 @@ impl core::fmt::Display for RadrootsOrderPayloadError {
                 f,
                 "inventory_commitments[{index}].bin_count must be greater than zero"
             ),
-            Self::InvalidFulfillmentStatus => {
-                write!(f, "fulfillment status is not publishable")
-            }
-            Self::MissingReceiptIssue => {
-                write!(f, "receipt issue is required when received is false")
-            }
-            Self::UnexpectedReceiptIssue => {
-                write!(f, "receipt issue must be absent when received is true")
-            }
-            Self::InvalidPaymentAmount => {
-                write!(f, "payment amount must be greater than zero")
-            }
-            Self::MissingSettlementReason => {
-                write!(f, "settlement reason is required when decision is rejected")
-            }
-            Self::UnexpectedSettlementReason => {
-                write!(
-                    f,
-                    "settlement reason must be absent when decision is accepted"
-                )
-            }
         }
     }
 }
@@ -1109,10 +871,6 @@ mod tests {
         raw.parse().unwrap()
     }
 
-    fn digest(raw: &str) -> RadrootsEconomicsDigest {
-        raw.parse().unwrap()
-    }
-
     fn sample_order_request() -> RadrootsOrderRequest {
         RadrootsOrderRequest {
             order_id: order_id("order-1"),
@@ -1237,16 +995,6 @@ mod tests {
         }
     }
 
-    fn sample_order_fulfillment_update() -> RadrootsOrderFulfillmentUpdate {
-        RadrootsOrderFulfillmentUpdate {
-            order_id: order_id("order-1"),
-            listing_addr: sample_listing_addr(),
-            buyer_pubkey: buyer_pubkey(),
-            seller_pubkey: seller_pubkey(),
-            status: RadrootsOrderFulfillmentState::ReadyForPickup,
-        }
-    }
-
     fn sample_order_cancellation() -> RadrootsOrderCancellation {
         RadrootsOrderCancellation {
             order_id: order_id("order-1"),
@@ -1254,18 +1002,6 @@ mod tests {
             buyer_pubkey: buyer_pubkey(),
             seller_pubkey: seller_pubkey(),
             reason: "changed plans".into(),
-        }
-    }
-
-    fn sample_order_buyer_receipt(received: bool) -> RadrootsOrderReceipt {
-        RadrootsOrderReceipt {
-            order_id: order_id("order-1"),
-            listing_addr: sample_listing_addr(),
-            buyer_pubkey: buyer_pubkey(),
-            seller_pubkey: seller_pubkey(),
-            received,
-            issue: (!received).then(|| "damaged items".into()),
-            received_at: 1_777_665_600,
         }
     }
 
@@ -1302,49 +1038,6 @@ mod tests {
         }
     }
 
-    fn sample_payment_recorded() -> RadrootsOrderPaymentRecord {
-        RadrootsOrderPaymentRecord {
-            order_id: order_id("order-1"),
-            listing_addr: sample_listing_addr(),
-            buyer_pubkey: buyer_pubkey(),
-            seller_pubkey: seller_pubkey(),
-            root_event_id: event_id('1'),
-            previous_event_id: event_id('2'),
-            agreement_event_id: event_id('3'),
-            quote_id: quote_id("quote-1"),
-            quote_version: 1,
-            economics_digest: digest("economics-digest"),
-            amount: decimal("16"),
-            currency: RadrootsCoreCurrency::USD,
-            method: RadrootsOrderPaymentMethod::ManualTransfer,
-            reference: Some("bank-ref".into()),
-            paid_at: Some(1_777_665_600),
-        }
-    }
-
-    fn sample_settlement_decision(
-        decision: RadrootsOrderSettlementOutcome,
-        reason: Option<&str>,
-    ) -> RadrootsOrderSettlementDecision {
-        RadrootsOrderSettlementDecision {
-            order_id: order_id("order-1"),
-            listing_addr: sample_listing_addr(),
-            seller_pubkey: seller_pubkey(),
-            buyer_pubkey: buyer_pubkey(),
-            root_event_id: event_id('1'),
-            previous_event_id: event_id('2'),
-            agreement_event_id: event_id('3'),
-            payment_event_id: event_id('4'),
-            quote_id: quote_id("quote-1"),
-            quote_version: 1,
-            economics_digest: digest("economics-digest"),
-            amount: decimal("16"),
-            currency: RadrootsCoreCurrency::USD,
-            decision,
-            reason: reason.map(Into::into),
-        }
-    }
-
     #[test]
     fn order_message_type_uses_canonical_names_and_kinds() {
         assert_eq!(
@@ -1364,25 +1057,13 @@ mod tests {
             Some(RadrootsOrderEventType::OrderRevisionDecision)
         );
         assert_eq!(
-            RadrootsOrderEventType::from_kind(KIND_ORDER_FULFILLMENT_UPDATE),
-            Some(RadrootsOrderEventType::FulfillmentUpdated)
-        );
-        assert_eq!(
             RadrootsOrderEventType::from_kind(KIND_ORDER_CANCELLATION),
             Some(RadrootsOrderEventType::OrderCancelled)
         );
-        assert_eq!(
-            RadrootsOrderEventType::from_kind(KIND_ORDER_RECEIPT),
-            Some(RadrootsOrderEventType::BuyerReceipt)
-        );
-        assert_eq!(
-            RadrootsOrderEventType::from_kind(KIND_ORDER_PAYMENT_RECORD),
-            Some(RadrootsOrderEventType::PaymentRecorded)
-        );
-        assert_eq!(
-            RadrootsOrderEventType::from_kind(KIND_ORDER_SETTLEMENT_DECISION),
-            Some(RadrootsOrderEventType::SettlementDecision)
-        );
+        assert_eq!(RadrootsOrderEventType::from_kind(3433), None);
+        assert_eq!(RadrootsOrderEventType::from_kind(3434), None);
+        assert_eq!(RadrootsOrderEventType::from_kind(3435), None);
+        assert_eq!(RadrootsOrderEventType::from_kind(3436), None);
         assert_eq!(RadrootsOrderEventType::from_kind(3431), None);
         assert_eq!(
             RadrootsOrderEventType::OrderRequested.kind(),
@@ -1401,24 +1082,8 @@ mod tests {
             KIND_ORDER_REVISION_DECISION
         );
         assert_eq!(
-            RadrootsOrderEventType::FulfillmentUpdated.kind(),
-            KIND_ORDER_FULFILLMENT_UPDATE
-        );
-        assert_eq!(
             RadrootsOrderEventType::OrderCancelled.kind(),
             KIND_ORDER_CANCELLATION
-        );
-        assert_eq!(
-            RadrootsOrderEventType::BuyerReceipt.kind(),
-            KIND_ORDER_RECEIPT
-        );
-        assert_eq!(
-            RadrootsOrderEventType::PaymentRecorded.kind(),
-            KIND_ORDER_PAYMENT_RECORD
-        );
-        assert_eq!(
-            RadrootsOrderEventType::SettlementDecision.kind(),
-            KIND_ORDER_SETTLEMENT_DECISION
         );
         assert_eq!(
             RadrootsOrderEventType::OrderRequested.name(),
@@ -1437,36 +1102,15 @@ mod tests {
             "TradeOrderRevisionDecision"
         );
         assert_eq!(
-            RadrootsOrderEventType::FulfillmentUpdated.name(),
-            "TradeFulfillmentUpdated"
-        );
-        assert_eq!(
             RadrootsOrderEventType::OrderCancelled.name(),
             "TradeOrderCancelled"
-        );
-        assert_eq!(
-            RadrootsOrderEventType::BuyerReceipt.name(),
-            "TradeBuyerReceipt"
-        );
-        assert_eq!(
-            RadrootsOrderEventType::PaymentRecorded.name(),
-            "TradePaymentRecorded"
-        );
-        assert_eq!(
-            RadrootsOrderEventType::SettlementDecision.name(),
-            "TradeSettlementDecision"
         );
         assert!(RadrootsOrderEventType::OrderRequested.requires_listing_snapshot());
         assert!(RadrootsOrderEventType::OrderDecision.requires_order_chain());
         assert!(RadrootsOrderEventType::OrderRevisionProposed.requires_order_chain());
         assert!(RadrootsOrderEventType::OrderRevisionDecision.requires_order_chain());
-        assert!(RadrootsOrderEventType::FulfillmentUpdated.requires_order_chain());
         assert!(RadrootsOrderEventType::OrderCancelled.requires_order_chain());
-        assert!(RadrootsOrderEventType::BuyerReceipt.requires_order_chain());
-        assert!(RadrootsOrderEventType::PaymentRecorded.requires_order_chain());
-        assert!(RadrootsOrderEventType::SettlementDecision.requires_order_chain());
         assert!(!RadrootsOrderEventType::OrderRequested.requires_order_chain());
-        assert!(!RadrootsOrderEventType::PaymentRecorded.requires_listing_snapshot());
 
         let request_name = serde_json::to_value(RadrootsOrderEventType::OrderRequested).unwrap();
         let decision_name = serde_json::to_value(RadrootsOrderEventType::OrderDecision).unwrap();
@@ -1474,14 +1118,8 @@ mod tests {
             serde_json::to_value(RadrootsOrderEventType::OrderRevisionProposed).unwrap();
         let revision_decision_name =
             serde_json::to_value(RadrootsOrderEventType::OrderRevisionDecision).unwrap();
-        let fulfillment_name =
-            serde_json::to_value(RadrootsOrderEventType::FulfillmentUpdated).unwrap();
         let cancellation_name =
             serde_json::to_value(RadrootsOrderEventType::OrderCancelled).unwrap();
-        let receipt_name = serde_json::to_value(RadrootsOrderEventType::BuyerReceipt).unwrap();
-        let payment_name = serde_json::to_value(RadrootsOrderEventType::PaymentRecorded).unwrap();
-        let settlement_name =
-            serde_json::to_value(RadrootsOrderEventType::SettlementDecision).unwrap();
         assert_eq!(request_name, serde_json::json!("TradeOrderRequested"));
         assert_eq!(decision_name, serde_json::json!("TradeOrderDecision"));
         assert_eq!(
@@ -1492,17 +1130,7 @@ mod tests {
             revision_decision_name,
             serde_json::json!("TradeOrderRevisionDecision")
         );
-        assert_eq!(
-            fulfillment_name,
-            serde_json::json!("TradeFulfillmentUpdated")
-        );
         assert_eq!(cancellation_name, serde_json::json!("TradeOrderCancelled"));
-        assert_eq!(receipt_name, serde_json::json!("TradeBuyerReceipt"));
-        assert_eq!(payment_name, serde_json::json!("TradePaymentRecorded"));
-        assert_eq!(
-            settlement_name,
-            serde_json::json!("TradeSettlementDecision")
-        );
     }
 
     #[test]
@@ -1554,18 +1182,6 @@ mod tests {
         let mut revision = serde_json::to_value(sample_order_revision_proposal()).unwrap();
         revision["root_event_id"] = serde_json::json!("not-an-event-id");
         assert!(serde_json::from_value::<RadrootsOrderRevisionProposal>(revision).is_err());
-
-        let mut payment = serde_json::to_value(sample_payment_recorded()).unwrap();
-        payment["agreement_event_id"] = serde_json::json!("not-an-event-id");
-        assert!(serde_json::from_value::<RadrootsOrderPaymentRecord>(payment).is_err());
-
-        let mut settlement = serde_json::to_value(sample_settlement_decision(
-            RadrootsOrderSettlementOutcome::Accepted,
-            None,
-        ))
-        .unwrap();
-        settlement["payment_event_id"] = serde_json::json!("not-an-event-id");
-        assert!(serde_json::from_value::<RadrootsOrderSettlementDecision>(settlement).is_err());
     }
 
     #[test]
@@ -1985,20 +1601,6 @@ mod tests {
     }
 
     #[test]
-    fn order_fulfillment_update_validation_rejects_derived_state() {
-        assert_eq!(sample_order_fulfillment_update().validate(), Ok(()));
-
-        let derived = RadrootsOrderFulfillmentUpdate {
-            status: RadrootsOrderFulfillmentState::AcceptedNotFulfilled,
-            ..sample_order_fulfillment_update()
-        };
-        assert_eq!(
-            derived.validate().unwrap_err(),
-            RadrootsOrderPayloadError::InvalidFulfillmentStatus
-        );
-    }
-
-    #[test]
     fn order_cancellation_validation_requires_buyer_bindings_and_reason() {
         assert_eq!(sample_order_cancellation().validate(), Ok(()));
 
@@ -2009,144 +1611,6 @@ mod tests {
         assert_eq!(
             missing_reason.validate().unwrap_err(),
             RadrootsOrderPayloadError::EmptyField("reason")
-        );
-    }
-
-    #[test]
-    fn order_buyer_receipt_validation_requires_consistent_received_and_issue() {
-        assert_eq!(sample_order_buyer_receipt(true).validate(), Ok(()));
-        assert_eq!(sample_order_buyer_receipt(false).validate(), Ok(()));
-
-        let received_with_issue = RadrootsOrderReceipt {
-            issue: Some("damaged".into()),
-            ..sample_order_buyer_receipt(true)
-        };
-        assert_eq!(
-            received_with_issue.validate().unwrap_err(),
-            RadrootsOrderPayloadError::UnexpectedReceiptIssue
-        );
-
-        let not_received_without_issue = RadrootsOrderReceipt {
-            issue: None,
-            ..sample_order_buyer_receipt(false)
-        };
-        assert_eq!(
-            not_received_without_issue.validate().unwrap_err(),
-            RadrootsOrderPayloadError::MissingReceiptIssue
-        );
-
-        let not_received_blank_issue = RadrootsOrderReceipt {
-            issue: Some(" ".into()),
-            ..sample_order_buyer_receipt(false)
-        };
-        assert_eq!(
-            not_received_blank_issue.validate().unwrap_err(),
-            RadrootsOrderPayloadError::EmptyField("issue")
-        );
-    }
-
-    #[test]
-    fn order_payment_and_settlement_validation_covers_amount_and_reason_paths() {
-        assert_eq!(sample_payment_recorded().validate(), Ok(()));
-
-        let unreferenced_payment = RadrootsOrderPaymentRecord {
-            reference: None,
-            ..sample_payment_recorded()
-        };
-        assert_eq!(unreferenced_payment.validate(), Ok(()));
-
-        let invalid_quote_version = RadrootsOrderPaymentRecord {
-            quote_version: 0,
-            ..sample_payment_recorded()
-        };
-        assert_eq!(
-            invalid_quote_version.validate().unwrap_err(),
-            RadrootsOrderPayloadError::InvalidQuoteVersion
-        );
-
-        let invalid_amount = RadrootsOrderPaymentRecord {
-            amount: decimal("0"),
-            ..sample_payment_recorded()
-        };
-        assert_eq!(
-            invalid_amount.validate().unwrap_err(),
-            RadrootsOrderPayloadError::InvalidPaymentAmount
-        );
-
-        let negative_amount = RadrootsOrderPaymentRecord {
-            amount: decimal("-1"),
-            ..sample_payment_recorded()
-        };
-        assert_eq!(
-            negative_amount.validate().unwrap_err(),
-            RadrootsOrderPayloadError::InvalidPaymentAmount
-        );
-
-        let blank_reference = RadrootsOrderPaymentRecord {
-            reference: Some(" ".into()),
-            ..sample_payment_recorded()
-        };
-        assert_eq!(
-            blank_reference.validate().unwrap_err(),
-            RadrootsOrderPayloadError::EmptyField("reference")
-        );
-
-        assert_eq!(
-            sample_settlement_decision(RadrootsOrderSettlementOutcome::Accepted, None).validate(),
-            Ok(())
-        );
-        assert_eq!(
-            sample_settlement_decision(RadrootsOrderSettlementOutcome::Rejected, Some("damaged"))
-                .validate(),
-            Ok(())
-        );
-
-        let accepted_with_reason =
-            sample_settlement_decision(RadrootsOrderSettlementOutcome::Accepted, Some("extra"));
-        assert_eq!(
-            accepted_with_reason.validate().unwrap_err(),
-            RadrootsOrderPayloadError::UnexpectedSettlementReason
-        );
-
-        let rejected_without_reason =
-            sample_settlement_decision(RadrootsOrderSettlementOutcome::Rejected, None);
-        assert_eq!(
-            rejected_without_reason.validate().unwrap_err(),
-            RadrootsOrderPayloadError::MissingSettlementReason
-        );
-
-        let rejected_blank_reason =
-            sample_settlement_decision(RadrootsOrderSettlementOutcome::Rejected, Some(" "));
-        assert_eq!(
-            rejected_blank_reason.validate().unwrap_err(),
-            RadrootsOrderPayloadError::EmptyField("reason")
-        );
-
-        let invalid_quote_version = RadrootsOrderSettlementDecision {
-            quote_version: 0,
-            ..sample_settlement_decision(RadrootsOrderSettlementOutcome::Accepted, None)
-        };
-        assert_eq!(
-            invalid_quote_version.validate().unwrap_err(),
-            RadrootsOrderPayloadError::InvalidQuoteVersion
-        );
-
-        let zero_amount = RadrootsOrderSettlementDecision {
-            amount: decimal("0"),
-            ..sample_settlement_decision(RadrootsOrderSettlementOutcome::Accepted, None)
-        };
-        assert_eq!(
-            zero_amount.validate().unwrap_err(),
-            RadrootsOrderPayloadError::InvalidPaymentAmount
-        );
-
-        let invalid_amount = RadrootsOrderSettlementDecision {
-            amount: decimal("-1"),
-            ..sample_settlement_decision(RadrootsOrderSettlementOutcome::Accepted, None)
-        };
-        assert_eq!(
-            invalid_amount.validate().unwrap_err(),
-            RadrootsOrderPayloadError::InvalidPaymentAmount
         );
     }
 
@@ -2439,30 +1903,6 @@ mod tests {
             (
                 RadrootsOrderPayloadError::InvalidInventoryCommitmentCount { index: 1 },
                 "inventory_commitments[1].bin_count must be greater than zero",
-            ),
-            (
-                RadrootsOrderPayloadError::InvalidFulfillmentStatus,
-                "fulfillment status is not publishable",
-            ),
-            (
-                RadrootsOrderPayloadError::MissingReceiptIssue,
-                "receipt issue is required when received is false",
-            ),
-            (
-                RadrootsOrderPayloadError::UnexpectedReceiptIssue,
-                "receipt issue must be absent when received is true",
-            ),
-            (
-                RadrootsOrderPayloadError::InvalidPaymentAmount,
-                "payment amount must be greater than zero",
-            ),
-            (
-                RadrootsOrderPayloadError::MissingSettlementReason,
-                "settlement reason is required when decision is rejected",
-            ),
-            (
-                RadrootsOrderPayloadError::UnexpectedSettlementReason,
-                "settlement reason must be absent when decision is accepted",
             ),
         ];
 

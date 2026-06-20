@@ -8,11 +8,7 @@ use alloc::{
 };
 
 use base64::Engine as _;
-use radroots_events::{
-    RadrootsNostrEvent,
-    kinds::{KIND_ORDER_RECEIPT, KIND_TRADE_VALIDATION_RECEIPT},
-    tags::TAG_D,
-};
+use radroots_events::{RadrootsNostrEvent, kinds::KIND_TRADE_VALIDATION_RECEIPT, tags::TAG_D};
 use radroots_events_codec::wire::WireEventParts;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -184,10 +180,6 @@ pub enum RadrootsValidationReceiptError {
     EmptyField(&'static str),
     #[error("invalid event kind {got}; expected {expected}")]
     InvalidKind { expected: u32, got: u32 },
-    #[error("buyer receipt kind 3434 is not a validation receipt")]
-    BuyerReceiptKind,
-    #[error("validation receipt kind 3440 is not a buyer receipt")]
-    ValidationReceiptKind,
     #[error("invalid validation receipt json")]
     InvalidJson,
     #[error("validation receipt json is not canonical")]
@@ -434,9 +426,6 @@ pub fn verify_validation_receipt_event(
     event: &RadrootsNostrEvent,
     expected: RadrootsValidationReceiptExpectedBinding<'_>,
 ) -> Result<RadrootsVerifiedValidationReceipt, RadrootsValidationReceiptError> {
-    if event.kind == KIND_ORDER_RECEIPT {
-        return Err(RadrootsValidationReceiptError::BuyerReceiptKind);
-    }
     if event.kind != KIND_TRADE_VALIDATION_RECEIPT {
         return Err(RadrootsValidationReceiptError::InvalidKind {
             expected: KIND_TRADE_VALIDATION_RECEIPT,
@@ -485,15 +474,6 @@ pub fn verify_validation_receipt_event(
     validate_expected_binding(&tags, &receipt, expected)?;
 
     Ok(RadrootsVerifiedValidationReceipt { receipt, tags })
-}
-
-pub fn reject_validation_receipt_as_buyer_receipt(
-    event: &RadrootsNostrEvent,
-) -> Result<(), RadrootsValidationReceiptError> {
-    if event.kind == KIND_TRADE_VALIDATION_RECEIPT {
-        return Err(RadrootsValidationReceiptError::ValidationReceiptKind);
-    }
-    Ok(())
 }
 
 fn validate_expected_binding(
@@ -708,16 +688,12 @@ mod tests {
         RadrootsValidationReceiptExpectedBinding, RadrootsValidationReceiptProof,
         RadrootsValidationReceiptProofSystem, RadrootsValidationReceiptResult,
         RadrootsValidationReceiptStatement, RadrootsValidationReceiptType,
-        reject_validation_receipt_as_buyer_receipt, validation_receipt_canonical_content,
-        validation_receipt_content_from_str, validation_receipt_event_build,
-        validation_receipt_from_event, validation_receipt_public_values_hash_hex,
-        validation_receipt_tags, verify_validation_receipt_event,
+        validation_receipt_canonical_content, validation_receipt_content_from_str,
+        validation_receipt_event_build, validation_receipt_from_event,
+        validation_receipt_public_values_hash_hex, validation_receipt_tags,
+        verify_validation_receipt_event,
     };
-    use radroots_events::{
-        RadrootsNostrEvent,
-        kinds::{KIND_ORDER_RECEIPT, KIND_TRADE_VALIDATION_RECEIPT},
-    };
-    use radroots_events_codec::order::order_receipt_from_event;
+    use radroots_events::{RadrootsNostrEvent, kinds::KIND_TRADE_VALIDATION_RECEIPT};
 
     fn hash32(c: char) -> String {
         format!("0x{}", c.to_string().repeat(64))
@@ -834,25 +810,16 @@ mod tests {
     }
 
     #[test]
-    fn validation_receipt_verifier_rejects_buyer_receipt_kind_3434() {
+    fn validation_receipt_verifier_rejects_non_validation_receipt_kind() {
         let mut event = sample_validation_receipt_event();
-        event.kind = KIND_ORDER_RECEIPT;
+        event.kind = 3434;
         assert_eq!(
             validation_receipt_from_event(&event),
-            Err(RadrootsValidationReceiptError::BuyerReceiptKind)
+            Err(RadrootsValidationReceiptError::InvalidKind {
+                expected: KIND_TRADE_VALIDATION_RECEIPT,
+                got: 3434
+            })
         );
-    }
-
-    #[test]
-    fn validation_receipt_kind_3440_is_rejected_as_buyer_receipt() {
-        let event = sample_validation_receipt_event();
-        assert_eq!(
-            reject_validation_receipt_as_buyer_receipt(&event),
-            Err(RadrootsValidationReceiptError::ValidationReceiptKind)
-        );
-        let buyer_receipt_error = order_receipt_from_event(&event)
-            .expect_err("validation receipt must not parse as buyer receipt");
-        assert!(buyer_receipt_error.to_string().contains("3440"));
     }
 
     #[test]

@@ -89,24 +89,16 @@ pub const KIND_ORDER_DECISION: u32 = 3423;
 pub const KIND_ORDER_REVISION_PROPOSAL: u32 = 3424;
 pub const KIND_ORDER_REVISION_DECISION: u32 = 3425;
 pub const KIND_ORDER_CANCELLATION: u32 = 3432;
-pub const KIND_ORDER_FULFILLMENT_UPDATE: u32 = 3433;
-pub const KIND_ORDER_RECEIPT: u32 = 3434;
-pub const KIND_ORDER_PAYMENT_RECORD: u32 = 3435;
-pub const KIND_ORDER_SETTLEMENT_DECISION: u32 = 3436;
 pub const KIND_TRADE_VALIDATION_RECEIPT: u32 = 3440;
 
 pub const LISTING_EVENT_KINDS: [u32; 2] = [KIND_LISTING, KIND_LISTING_DRAFT];
 
-pub const ORDER_EVENT_KINDS: [u32; 9] = [
+pub const ORDER_EVENT_KINDS: [u32; 5] = [
     KIND_ORDER_REQUEST,
     KIND_ORDER_DECISION,
     KIND_ORDER_REVISION_PROPOSAL,
     KIND_ORDER_REVISION_DECISION,
     KIND_ORDER_CANCELLATION,
-    KIND_ORDER_FULFILLMENT_UPDATE,
-    KIND_ORDER_RECEIPT,
-    KIND_ORDER_PAYMENT_RECORD,
-    KIND_ORDER_SETTLEMENT_DECISION,
 ];
 
 pub const TRADE_VALIDATION_SERVICE_EVENT_KINDS: [u32; 4] = [
@@ -124,7 +116,7 @@ pub const TRADE_VALIDATION_EVENT_KINDS: [u32; 5] = [
     KIND_TRADE_VALIDATION_RECEIPT,
 ];
 
-pub const COMMERCIAL_EVENT_KINDS: [u32; 16] = [
+pub const COMMERCIAL_EVENT_KINDS: [u32; 12] = [
     KIND_LISTING,
     KIND_LISTING_DRAFT,
     KIND_ORDER_REQUEST,
@@ -132,10 +124,6 @@ pub const COMMERCIAL_EVENT_KINDS: [u32; 16] = [
     KIND_ORDER_REVISION_PROPOSAL,
     KIND_ORDER_REVISION_DECISION,
     KIND_ORDER_CANCELLATION,
-    KIND_ORDER_FULFILLMENT_UPDATE,
-    KIND_ORDER_RECEIPT,
-    KIND_ORDER_PAYMENT_RECORD,
-    KIND_ORDER_SETTLEMENT_DECISION,
     KIND_TRADE_LISTING_VALIDATION_REQUEST,
     KIND_TRADE_LISTING_VALIDATION_RESULT,
     KIND_TRADE_TRANSITION_PROOF_REQUEST,
@@ -463,10 +451,6 @@ pub const fn is_order_event_kind(kind: u32) -> bool {
             | KIND_ORDER_REVISION_PROPOSAL
             | KIND_ORDER_REVISION_DECISION
             | KIND_ORDER_CANCELLATION
-            | KIND_ORDER_FULFILLMENT_UPDATE
-            | KIND_ORDER_RECEIPT
-            | KIND_ORDER_PAYMENT_RECORD
-            | KIND_ORDER_SETTLEMENT_DECISION
     )
 }
 
@@ -791,10 +775,6 @@ mod tests {
                 KIND_ORDER_REVISION_PROPOSAL,
                 KIND_ORDER_REVISION_DECISION,
                 KIND_ORDER_CANCELLATION,
-                KIND_ORDER_FULFILLMENT_UPDATE,
-                KIND_ORDER_RECEIPT,
-                KIND_ORDER_PAYMENT_RECORD,
-                KIND_ORDER_SETTLEMENT_DECISION,
             ]
         );
         assert_eq!(
@@ -816,7 +796,7 @@ mod tests {
                 KIND_TRADE_VALIDATION_RECEIPT,
             ]
         );
-        assert_eq!(COMMERCIAL_EVENT_KINDS.len(), 16);
+        assert_eq!(COMMERCIAL_EVENT_KINDS.len(), 12);
 
         assert!(is_listing_event_kind(KIND_LISTING));
         assert!(is_listing_event_kind(KIND_LISTING_DRAFT));
@@ -827,10 +807,10 @@ mod tests {
         assert!(is_order_event_kind(KIND_ORDER_REVISION_PROPOSAL));
         assert!(is_order_event_kind(KIND_ORDER_REVISION_DECISION));
         assert!(is_order_event_kind(KIND_ORDER_CANCELLATION));
-        assert!(is_order_event_kind(KIND_ORDER_FULFILLMENT_UPDATE));
-        assert!(is_order_event_kind(KIND_ORDER_RECEIPT));
-        assert!(is_order_event_kind(KIND_ORDER_PAYMENT_RECORD));
-        assert!(is_order_event_kind(KIND_ORDER_SETTLEMENT_DECISION));
+        assert!(!is_order_event_kind(3433));
+        assert!(!is_order_event_kind(3434));
+        assert!(!is_order_event_kind(3435));
+        assert!(!is_order_event_kind(3436));
         assert!(!is_order_event_kind(KIND_TRADE_LISTING_VALIDATION_REQUEST));
         assert!(!is_order_event_kind(KIND_TRADE_VALIDATION_RECEIPT));
         assert!(!is_order_event_kind(3431));
@@ -869,14 +849,14 @@ mod tests {
         assert!(is_trade_validation_receipt_kind(
             KIND_TRADE_VALIDATION_RECEIPT
         ));
-        assert!(!is_trade_validation_receipt_kind(KIND_ORDER_RECEIPT));
+        assert!(!is_trade_validation_receipt_kind(3434));
         assert!(is_trade_validation_event_kind(
             KIND_TRADE_VALIDATION_RECEIPT
         ));
         assert!(is_trade_validation_event_kind(
             KIND_TRADE_TRANSITION_PROOF_RESULT
         ));
-        assert!(!is_trade_validation_event_kind(KIND_ORDER_RECEIPT));
+        assert!(!is_trade_validation_event_kind(3434));
 
         assert!(is_commercial_event_kind(KIND_LISTING));
         assert!(is_commercial_event_kind(KIND_ORDER_REQUEST));
