@@ -44,6 +44,17 @@ fn external_target(id: &str, kind: &str) -> RadrootsSocialTarget {
     }
 }
 
+fn event_comment_tags() -> Vec<Vec<String>> {
+    vec![
+        vec!["E".to_string(), ROOT_ID.to_string()],
+        vec!["P".to_string(), AUTHOR.to_string()],
+        vec!["K".to_string(), KIND_ARTICLE.to_string()],
+        vec!["e".to_string(), PARENT_ID.to_string()],
+        vec!["p".to_string(), PARENT_AUTHOR.to_string()],
+        vec!["k".to_string(), KIND_ARTICLE.to_string()],
+    ]
+}
+
 fn assert_event_target(target: &RadrootsSocialTarget, id: &str, author: &str, kind: u32) {
     match target {
         RadrootsSocialTarget::Event {
@@ -234,6 +245,82 @@ fn comment_roundtrips_external_targets() {
 }
 
 #[test]
+fn comment_from_tags_covers_target_decode_edges() {
+    let mut tags = event_comment_tags();
+    tags.push(vec![
+        "A".to_string(),
+        format!("{KIND_ARTICLE}:{AUTHOR}:{D_TAG}"),
+    ]);
+    assert!(matches!(
+        comment_from_tags(KIND_COMMENT, &tags, "hello"),
+        Err(EventParseError::InvalidTag("E"))
+    ));
+
+    let mut tags = event_comment_tags();
+    tags[0] = vec!["E".to_string()];
+    assert!(matches!(
+        comment_from_tags(KIND_COMMENT, &tags, "hello"),
+        Err(EventParseError::InvalidTag("E"))
+    ));
+
+    let mut tags = event_comment_tags();
+    tags[1] = vec!["P".to_string(), " ".to_string()];
+    assert!(matches!(
+        comment_from_tags(KIND_COMMENT, &tags, "hello"),
+        Err(EventParseError::InvalidTag("P"))
+    ));
+
+    let mut tags = event_comment_tags();
+    tags[2] = vec!["K".to_string(), " ".to_string()];
+    assert!(matches!(
+        comment_from_tags(KIND_COMMENT, &tags, "hello"),
+        Err(EventParseError::InvalidTag("K"))
+    ));
+
+    let mut tags = event_comment_tags();
+    tags[0] = vec!["A".to_string(), format!("{KIND_ARTICLE}:{AUTHOR}:{D_TAG}")];
+    let parsed = comment_from_tags(KIND_COMMENT, &tags, "hello").unwrap();
+    match parsed.root {
+        RadrootsSocialTarget::Address { relays, .. } => {
+            assert_eq!(relays, None);
+        }
+        _ => panic!("expected address target"),
+    }
+
+    let mut tags = event_comment_tags();
+    tags[0] = vec!["A".to_string(), format!("{KIND_ARTICLE}:{AUTHOR}:{D_TAG}")];
+    tags[2] = vec!["K".to_string(), KIND_COMMENT.to_string()];
+    assert!(matches!(
+        comment_from_tags(KIND_COMMENT, &tags, "hello"),
+        Err(EventParseError::InvalidTag("K"))
+    ));
+
+    let mut tags = event_comment_tags();
+    tags[0] = vec!["A".to_string(), format!("{KIND_ARTICLE}:{AUTHOR}:{D_TAG}")];
+    tags[1] = vec!["P".to_string(), "other_pubkey".to_string()];
+    assert!(matches!(
+        comment_from_tags(KIND_COMMENT, &tags, "hello"),
+        Err(EventParseError::InvalidTag("P"))
+    ));
+
+    let mut tags = event_comment_tags();
+    tags[0] = vec!["I".to_string(), " ".to_string()];
+    tags[2] = vec!["K".to_string(), "web".to_string()];
+    assert!(matches!(
+        comment_from_tags(KIND_COMMENT, &tags, "hello"),
+        Err(EventParseError::InvalidTag("I"))
+    ));
+
+    let mut tags = event_comment_tags();
+    tags[0] = vec!["I".to_string(), "https://example.test/root".to_string()];
+    tags[2] = vec!["K".to_string(), "1".to_string()];
+    assert!(matches!(
+        comment_from_tags(KIND_COMMENT, &tags, "hello"),
+        Err(EventParseError::InvalidTag("K"))
+    ));
+}
+
+#[test]
 fn comment_from_tags_rejects_legacy_and_missing_shapes() {
     let legacy_tags = vec![vec![
         TAG_E_ROOT.to_string(),
@@ -316,6 +403,24 @@ fn comment_metadata_and_index_from_event_roundtrip() {
     assert_eq!(metadata.id, "id");
     assert_eq!(metadata.published_at, 77);
     assert_event_target(&metadata.data.root, ROOT_ID, AUTHOR, KIND_ARTICLE);
+
+    let err = parsed_from_event(
+        "id".to_string(),
+        "author".to_string(),
+        77,
+        KIND_POST,
+        parts.content.clone(),
+        parts.tags.clone(),
+        "sig".to_string(),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        EventParseError::InvalidKind {
+            expected: "1111",
+            got: KIND_POST
+        }
+    ));
 
     let index = parsed_from_event(
         "id".to_string(),
