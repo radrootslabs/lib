@@ -558,7 +558,6 @@ struct RadrootsListingInventoryAccountingRecords {
     cancellations: Vec<RadrootsOrderCancellationRecord>,
 }
 
-#[cfg_attr(coverage_nightly, coverage(off))]
 pub fn reduce_order_events<I, J, K, L, M>(
     order_id: &RadrootsOrderId,
     inputs: RadrootsOrderReductionInputs<I, J, K, L, M>,
@@ -582,7 +581,6 @@ where
     )
 }
 
-#[cfg_attr(coverage_nightly, coverage(off))]
 pub fn reduce_order_event_records<I>(
     order_id: &RadrootsOrderId,
     records: I,
@@ -750,7 +748,6 @@ fn reduce_grouped_order_event_records(
     }
 }
 
-#[cfg_attr(coverage_nightly, coverage(off))]
 pub fn reduce_listing_inventory_accounting<I, J, K, L, M, N>(
     listing_addr: &RadrootsListingAddress,
     listing_event_id: &RadrootsEventId,

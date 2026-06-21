@@ -20,7 +20,6 @@ pub struct RadrootsEncryptedIdentityFile {
 
 impl RadrootsEncryptedIdentityFile {
     #[must_use]
-    #[cfg_attr(coverage_nightly, coverage(off))]
     pub fn new(path: impl AsRef<Path>) -> Self {
         Self::new_path(path.as_ref())
     }
@@ -31,7 +30,6 @@ impl RadrootsEncryptedIdentityFile {
     }
 
     #[must_use]
-    #[cfg_attr(coverage_nightly, coverage(off))]
     pub fn with_key_slot(path: impl AsRef<Path>, key_slot: impl Into<Cow<'static, str>>) -> Self {
         Self::with_key_slot_path(path.as_ref(), key_slot)
     }
@@ -152,7 +150,6 @@ struct EncryptedIdentityRotationBackup {
 }
 
 #[must_use]
-#[cfg_attr(coverage_nightly, coverage(off))]
 pub fn encrypted_identity_wrapping_key_path(path: impl AsRef<Path>) -> PathBuf {
     encrypted_identity_wrapping_key_path_ref(path.as_ref())
 }
@@ -161,7 +158,6 @@ fn encrypted_identity_wrapping_key_path_ref(path: &Path) -> PathBuf {
     sidecar_path(path, RADROOTS_ENCRYPTED_IDENTITY_KEY_SUFFIX)
 }
 
-#[cfg_attr(coverage_nightly, coverage(off))]
 pub fn store_encrypted_identity(
     path: impl AsRef<Path>,
     identity: &RadrootsIdentity,
@@ -176,7 +172,6 @@ fn store_encrypted_identity_path(
     RadrootsEncryptedIdentityFile::new_path(path).store(identity)
 }
 
-#[cfg_attr(coverage_nightly, coverage(off))]
 pub fn store_encrypted_identity_with_key_slot(
     path: impl AsRef<Path>,
     key_slot: impl Into<Cow<'static, str>>,
@@ -193,7 +188,6 @@ fn store_encrypted_identity_with_key_slot_path(
     RadrootsEncryptedIdentityFile::with_key_slot_path(path, key_slot).store(identity)
 }
 
-#[cfg_attr(coverage_nightly, coverage(off))]
 pub fn rotate_encrypted_identity(path: impl AsRef<Path>) -> Result<(), IdentityError> {
     rotate_encrypted_identity_path(path.as_ref())
 }
@@ -202,7 +196,6 @@ fn rotate_encrypted_identity_path(path: &Path) -> Result<(), IdentityError> {
     RadrootsEncryptedIdentityFile::new_path(path).rotate()
 }
 
-#[cfg_attr(coverage_nightly, coverage(off))]
 pub fn rotate_encrypted_identity_with_key_slot(
     path: impl AsRef<Path>,
     key_slot: impl Into<Cow<'static, str>>,
@@ -217,7 +210,6 @@ fn rotate_encrypted_identity_with_key_slot_path(
     RadrootsEncryptedIdentityFile::with_key_slot_path(path, key_slot).rotate()
 }
 
-#[cfg_attr(coverage_nightly, coverage(off))]
 pub fn load_encrypted_identity(path: impl AsRef<Path>) -> Result<RadrootsIdentity, IdentityError> {
     load_encrypted_identity_path(path.as_ref())
 }
@@ -226,7 +218,6 @@ fn load_encrypted_identity_path(path: &Path) -> Result<RadrootsIdentity, Identit
     RadrootsEncryptedIdentityFile::new_path(path).load()
 }
 
-#[cfg_attr(coverage_nightly, coverage(off))]
 pub fn load_encrypted_identity_with_key_slot(
     path: impl AsRef<Path>,
     key_slot: impl Into<Cow<'static, str>>,
@@ -241,7 +232,6 @@ fn load_encrypted_identity_with_key_slot_path(
     RadrootsEncryptedIdentityFile::with_key_slot_path(path, key_slot).load()
 }
 
-#[cfg_attr(coverage_nightly, coverage(off))]
 pub fn store_identity_profile(
     path: impl AsRef<Path>,
     identity: &RadrootsIdentity,
@@ -266,7 +256,6 @@ fn store_identity_profile_path(
     Ok(())
 }
 
-#[cfg_attr(coverage_nightly, coverage(off))]
 pub fn load_identity_profile(
     path: impl AsRef<Path>,
 ) -> Result<RadrootsIdentityPublic, IdentityError> {
@@ -287,18 +276,15 @@ fn load_identity_profile_path(path: &Path) -> Result<RadrootsIdentityPublic, Ide
     RadrootsIdentity::load_from_path_auto(path).map(|identity| identity.to_public())
 }
 
-#[cfg_attr(coverage_nightly, coverage(off))]
 fn identity_file_payload(identity: &RadrootsIdentity) -> Vec<u8> {
     serde_json::to_vec(&identity.to_file()).expect("identity file serialization is infallible")
 }
 
-#[cfg_attr(coverage_nightly, coverage(off))]
 fn identity_profile_payload(identity: &RadrootsIdentity) -> Vec<u8> {
     serde_json::to_vec_pretty(&identity.to_public())
         .expect("identity profile serialization is infallible")
 }
 
-#[cfg_attr(coverage_nightly, coverage(off))]
 fn encode_encrypted_identity(envelope: &RadrootsProtectedStoreEnvelope) -> Vec<u8> {
     envelope
         .encode_json()
@@ -321,7 +307,6 @@ fn protected_storage_message(
     }
 }
 
-#[cfg_attr(coverage_nightly, coverage(off))]
 fn secret_permission_error(path: &Path, error: RadrootsSecretVaultAccessError) -> IdentityError {
     protected_storage_message(path, "update secret-file permissions", &error)
 }

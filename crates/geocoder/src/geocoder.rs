@@ -12,7 +12,6 @@ pub struct Geocoder {
 }
 
 impl Geocoder {
-    #[cfg_attr(coverage_nightly, coverage(off))]
     pub fn open_path<P: AsRef<Path>>(path: P) -> Result<Self, GeocoderError> {
         let conn = Connection::open(path)?;
         Ok(Self {
@@ -21,7 +20,6 @@ impl Geocoder {
         })
     }
 
-    #[cfg_attr(coverage_nightly, coverage(off))]
     pub fn open_bytes(bytes: &[u8]) -> Result<Self, GeocoderError> {
         let mut temp = tempfile::NamedTempFile::new()?;
         temp.as_file_mut().write_all(bytes)?;
@@ -153,7 +151,6 @@ fn finalize_country_center(
     })
 }
 
-#[cfg_attr(coverage_nightly, coverage(off))]
 fn country_center_impl(
     conn: &Connection,
     country_id: &str,
@@ -174,7 +171,6 @@ fn country_center_impl(
     Ok(None)
 }
 
-#[cfg_attr(coverage_nightly, coverage(off))]
 fn collect_mapped_rows<T, P, F>(
     stmt: &mut rusqlite::Statement<'_>,
     params: P,

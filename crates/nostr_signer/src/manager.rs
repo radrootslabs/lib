@@ -931,7 +931,6 @@ impl RadrootsNostrSignerManager {
         Ok(value)
     }
 
-    #[cfg_attr(coverage_nightly, coverage(off))]
     fn resolve_connect_request_context(
         &self,
         remote_signer_public_key: PublicKey,
