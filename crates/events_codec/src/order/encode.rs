@@ -230,3 +230,187 @@ pub fn order_cancellation_event_build(
         payload,
     })
 }
+
+#[cfg(all(test, feature = "serde_json"))]
+mod tests {
+    use super::{
+        OrderEnvelopeEventBuildParts, map_order_envelope_error, map_order_payload_error,
+        order_envelope_event_build,
+    };
+    use crate::error::EventEncodeError;
+    use radroots_events::{
+        ids::RadrootsEventId,
+        order::{RadrootsOrderEnvelopeError, RadrootsOrderEventType, RadrootsOrderPayloadError},
+    };
+
+    fn event_id(character: char) -> RadrootsEventId {
+        core::iter::repeat_n(character, 64)
+            .collect::<String>()
+            .parse()
+            .unwrap()
+    }
+
+    fn payload() -> serde_json::Value {
+        serde_json::json!({})
+    }
+
+    #[test]
+    fn order_encode_error_mappers_cover_envelope_and_payload_variants() {
+        assert_empty_required(
+            map_order_envelope_error(RadrootsOrderEnvelopeError::MissingOrderId),
+            "order_id",
+        );
+        assert_empty_required(
+            map_order_envelope_error(RadrootsOrderEnvelopeError::MissingListingAddr),
+            "listing_addr",
+        );
+        assert_invalid_field(
+            map_order_envelope_error(RadrootsOrderEnvelopeError::InvalidVersion {
+                expected: 1,
+                got: 2,
+            }),
+            "version",
+        );
+        assert_empty_required(
+            map_order_payload_error(RadrootsOrderPayloadError::EmptyField("buyer_pubkey")),
+            "buyer_pubkey",
+        );
+        assert_empty_required(
+            map_order_payload_error(RadrootsOrderPayloadError::MissingItems),
+            "items",
+        );
+        assert_invalid_field(
+            map_order_payload_error(RadrootsOrderPayloadError::InvalidItemBinCount { index: 0 }),
+            "items.bin_count",
+        );
+        assert_empty_required(
+            map_order_payload_error(RadrootsOrderPayloadError::MissingEconomicItems),
+            "economics.items",
+        );
+        assert_invalid_field(
+            map_order_payload_error(RadrootsOrderPayloadError::InvalidEconomicItemBinCount {
+                index: 0,
+            }),
+            "economics.items.bin_count",
+        );
+        assert_invalid_field(
+            map_order_payload_error(RadrootsOrderPayloadError::InvalidEconomicItemQuantity {
+                index: 0,
+            }),
+            "economics.items.quantity_amount",
+        );
+        assert_invalid_field(
+            map_order_payload_error(RadrootsOrderPayloadError::InvalidEconomicItemPrice {
+                index: 0,
+            }),
+            "economics.items.unit_price_amount",
+        );
+        assert_invalid_field(
+            map_order_payload_error(RadrootsOrderPayloadError::InvalidEconomicItemSubtotal {
+                index: 0,
+            }),
+            "economics.items.line_subtotal",
+        );
+        for error in [
+            RadrootsOrderPayloadError::InvalidEconomicLineAmount {
+                field: "adjustments.amount",
+                index: 0,
+            },
+            RadrootsOrderPayloadError::InvalidEconomicLineKind {
+                field: "discounts.kind",
+                index: 0,
+            },
+            RadrootsOrderPayloadError::InvalidEconomicLineEffect {
+                field: "discounts.effect",
+                index: 0,
+            },
+            RadrootsOrderPayloadError::InvalidEconomicCurrency {
+                field: "subtotal.currency",
+            },
+            RadrootsOrderPayloadError::InvalidEconomicOrdering {
+                field: "adjustments",
+            },
+            RadrootsOrderPayloadError::InvalidEconomicTotal { field: "total" },
+            RadrootsOrderPayloadError::InvalidOrderEconomicsBinding { field: "items" },
+        ] {
+            assert!(matches!(
+                map_order_payload_error(error),
+                EventEncodeError::InvalidField(_)
+            ));
+        }
+        assert_invalid_field(
+            map_order_payload_error(RadrootsOrderPayloadError::InvalidQuoteVersion),
+            "economics.quote_version",
+        );
+        assert_empty_required(
+            map_order_payload_error(RadrootsOrderPayloadError::MissingInventoryCommitments),
+            "inventory_commitments",
+        );
+        assert_invalid_field(
+            map_order_payload_error(RadrootsOrderPayloadError::InvalidInventoryCommitmentCount {
+                index: 0,
+            }),
+            "inventory_commitments.bin_count",
+        );
+    }
+
+    #[test]
+    fn order_envelope_event_build_requires_context_tags_by_message_type() {
+        let payload = payload();
+        let root_event_id = event_id('1');
+        let prev_event_id = event_id('2');
+
+        let missing_listing_event = order_envelope_event_build(OrderEnvelopeEventBuildParts {
+            recipient_pubkey: "recipient",
+            message_type: RadrootsOrderEventType::OrderRequested,
+            listing_addr: "listing-address",
+            order_id: "order-1",
+            listing_event: None,
+            root_event_id: None,
+            prev_event_id: None,
+            payload: &payload,
+        })
+        .unwrap_err();
+        assert_empty_required(missing_listing_event, "listing_event.id");
+
+        let missing_root = order_envelope_event_build(OrderEnvelopeEventBuildParts {
+            recipient_pubkey: "recipient",
+            message_type: RadrootsOrderEventType::OrderDecision,
+            listing_addr: "listing-address",
+            order_id: "order-1",
+            listing_event: None,
+            root_event_id: None,
+            prev_event_id: Some(&prev_event_id),
+            payload: &payload,
+        })
+        .unwrap_err();
+        assert_empty_required(missing_root, "root_event_id");
+
+        let missing_prev = order_envelope_event_build(OrderEnvelopeEventBuildParts {
+            recipient_pubkey: "recipient",
+            message_type: RadrootsOrderEventType::OrderDecision,
+            listing_addr: "listing-address",
+            order_id: "order-1",
+            listing_event: None,
+            root_event_id: Some(&root_event_id),
+            prev_event_id: None,
+            payload: &payload,
+        })
+        .unwrap_err();
+        assert_empty_required(missing_prev, "prev_event_id");
+    }
+
+    fn assert_empty_required(error: EventEncodeError, field: &'static str) {
+        assert!(matches!(
+            error,
+            EventEncodeError::EmptyRequiredField(found) if found == field
+        ));
+    }
+
+    fn assert_invalid_field(error: EventEncodeError, field: &'static str) {
+        assert!(matches!(
+            error,
+            EventEncodeError::InvalidField(found) if found == field
+        ));
+    }
+}

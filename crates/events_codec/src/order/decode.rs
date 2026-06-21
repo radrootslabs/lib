@@ -408,9 +408,10 @@ fn validate_order_binding<T>(
 #[cfg(all(test, feature = "serde_json"))]
 mod tests {
     use super::{
-        RadrootsOrderEnvelopeParseError, order_cancellation_from_event, order_decision_from_event,
-        order_envelope_from_event, order_request_from_event, order_revision_decision_from_event,
-        order_revision_proposal_from_event,
+        RadrootsOrderEnvelopeParseError, map_tag_parse_error_for_order_envelope,
+        order_cancellation_from_event, order_decision_from_event, order_envelope_from_event,
+        order_event_context_from_tags, order_request_from_event,
+        order_revision_decision_from_event, order_revision_proposal_from_event,
     };
     use crate::order::encode::{
         order_cancellation_event_build, order_decision_event_build, order_request_event_build,
@@ -433,10 +434,10 @@ mod tests {
         order::{
             RadrootsOrderCancellation, RadrootsOrderDecision, RadrootsOrderDecisionOutcome,
             RadrootsOrderEconomicItem, RadrootsOrderEconomicLine, RadrootsOrderEconomics,
-            RadrootsOrderEnvelope, RadrootsOrderEventType, RadrootsOrderInventoryCommitment,
-            RadrootsOrderItem, RadrootsOrderPayloadError, RadrootsOrderPricingBasis,
-            RadrootsOrderRequest, RadrootsOrderRevisionDecision, RadrootsOrderRevisionOutcome,
-            RadrootsOrderRevisionProposal,
+            RadrootsOrderEnvelope, RadrootsOrderEnvelopeError, RadrootsOrderEventType,
+            RadrootsOrderInventoryCommitment, RadrootsOrderItem, RadrootsOrderPayloadError,
+            RadrootsOrderPricingBasis, RadrootsOrderRequest, RadrootsOrderRevisionDecision,
+            RadrootsOrderRevisionOutcome, RadrootsOrderRevisionProposal,
         },
         tags::{TAG_D, TAG_E_PREV, TAG_E_ROOT},
     };
@@ -617,6 +618,46 @@ mod tests {
         RadrootsNostrEventPtr {
             id: event_id_wire('a'),
             relays: Some("wss://relay.example.com".into()),
+        }
+    }
+
+    fn order_request_tags() -> Vec<Vec<String>> {
+        vec![
+            vec!["p".into(), seller_pubkey_wire()],
+            vec!["a".into(), listing_addr_wire()],
+            vec![TAG_D.into(), "order-1".into()],
+            vec![TAG_LISTING_EVENT.into(), event_id_wire('a')],
+        ]
+    }
+
+    fn order_chain_tags(counterparty_pubkey: String) -> Vec<Vec<String>> {
+        vec![
+            vec!["p".into(), counterparty_pubkey],
+            vec!["a".into(), listing_addr_wire()],
+            vec![TAG_D.into(), "order-1".into()],
+            vec![TAG_E_ROOT.into(), event_id_wire('1')],
+            vec![TAG_E_PREV.into(), event_id_wire('2')],
+        ]
+    }
+
+    fn order_event_with_envelope<T: serde::Serialize>(
+        kind: u32,
+        author: String,
+        message_type: RadrootsOrderEventType,
+        listing_addr: impl Into<String>,
+        order_id: impl Into<String>,
+        payload: &T,
+        tags: Vec<Vec<String>>,
+    ) -> RadrootsNostrEvent {
+        let envelope = RadrootsOrderEnvelope::new(message_type, listing_addr, order_id, payload);
+        RadrootsNostrEvent {
+            id: event_id_wire('e'),
+            author,
+            created_at: 1,
+            kind,
+            tags,
+            content: serde_json::to_string(&envelope).unwrap(),
+            sig: "sig".into(),
         }
     }
 
@@ -953,6 +994,446 @@ mod tests {
         event.author = seller_pubkey_wire();
         let err = order_revision_decision_from_event(&event).unwrap_err();
         assert_eq!(err, RadrootsOrderEnvelopeParseError::AuthorMismatch);
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn order_parse_error_display_and_source_cover_variants() {
+        use std::error::Error as _;
+
+        let invalid_envelope = RadrootsOrderEnvelopeParseError::InvalidEnvelope(
+            RadrootsOrderEnvelopeError::MissingOrderId,
+        );
+        let invalid_payload = RadrootsOrderEnvelopeParseError::InvalidPayload(
+            RadrootsOrderPayloadError::MissingItems,
+        );
+        let invalid_listing_addr = RadrootsOrderEnvelopeParseError::InvalidListingAddr(
+            RadrootsListingAddress::parse("not-a-listing-address").unwrap_err(),
+        );
+        let errors = [
+            RadrootsOrderEnvelopeParseError::InvalidKind(3431),
+            RadrootsOrderEnvelopeParseError::InvalidJson,
+            invalid_envelope.clone(),
+            invalid_payload.clone(),
+            RadrootsOrderEnvelopeParseError::MessageTypeKindMismatch {
+                event_kind: KIND_ORDER_REQUEST,
+                message_type: RadrootsOrderEventType::OrderDecision,
+            },
+            RadrootsOrderEnvelopeParseError::MissingTag("a"),
+            RadrootsOrderEnvelopeParseError::InvalidTag("p"),
+            RadrootsOrderEnvelopeParseError::ListingAddrTagMismatch,
+            RadrootsOrderEnvelopeParseError::OrderIdTagMismatch,
+            RadrootsOrderEnvelopeParseError::PayloadBindingMismatch("order_id"),
+            RadrootsOrderEnvelopeParseError::AuthorMismatch,
+            RadrootsOrderEnvelopeParseError::CounterpartyTagMismatch,
+            invalid_listing_addr.clone(),
+        ];
+
+        for error in errors {
+            assert!(!error.to_string().is_empty());
+        }
+        assert!(invalid_envelope.source().is_some());
+        assert!(invalid_payload.source().is_some());
+        assert!(invalid_listing_addr.source().is_some());
+        assert!(
+            RadrootsOrderEnvelopeParseError::AuthorMismatch
+                .source()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn order_envelope_parse_rejects_content_tag_and_envelope_mismatches() {
+        let payload = serde_json::json!({});
+        let invalid_json = RadrootsNostrEvent {
+            id: event_id_wire('e'),
+            author: buyer_pubkey_wire(),
+            created_at: 1,
+            kind: KIND_ORDER_REQUEST,
+            tags: Vec::new(),
+            content: "{".into(),
+            sig: "sig".into(),
+        };
+        assert_eq!(
+            order_envelope_from_event::<serde_json::Value>(&invalid_json).unwrap_err(),
+            RadrootsOrderEnvelopeParseError::InvalidJson
+        );
+
+        let mut invalid_version_envelope = RadrootsOrderEnvelope::new(
+            RadrootsOrderEventType::OrderRequested,
+            listing_addr_wire(),
+            "order-1",
+            &payload,
+        );
+        invalid_version_envelope.version = 99;
+        let invalid_version = RadrootsNostrEvent {
+            id: event_id_wire('e'),
+            author: buyer_pubkey_wire(),
+            created_at: 1,
+            kind: KIND_ORDER_REQUEST,
+            tags: order_request_tags(),
+            content: serde_json::to_string(&invalid_version_envelope).unwrap(),
+            sig: "sig".into(),
+        };
+        assert!(matches!(
+            order_envelope_from_event::<serde_json::Value>(&invalid_version).unwrap_err(),
+            RadrootsOrderEnvelopeParseError::InvalidEnvelope(
+                RadrootsOrderEnvelopeError::InvalidVersion { .. }
+            )
+        ));
+
+        let message_type_mismatch = order_event_with_envelope(
+            KIND_ORDER_REQUEST,
+            buyer_pubkey_wire(),
+            RadrootsOrderEventType::OrderDecision,
+            listing_addr_wire(),
+            "order-1",
+            &payload,
+            Vec::new(),
+        );
+        assert_eq!(
+            order_envelope_from_event::<serde_json::Value>(&message_type_mismatch).unwrap_err(),
+            RadrootsOrderEnvelopeParseError::MessageTypeKindMismatch {
+                event_kind: KIND_ORDER_REQUEST,
+                message_type: RadrootsOrderEventType::OrderDecision
+            }
+        );
+
+        let listing_addr_mismatch = order_event_with_envelope(
+            KIND_ORDER_REQUEST,
+            buyer_pubkey_wire(),
+            RadrootsOrderEventType::OrderRequested,
+            listing_addr_wire(),
+            "order-1",
+            &payload,
+            vec![
+                vec!["a".into(), "30402:pubkey:AAAAAAAAAAAAAAAAAAAAAg".into()],
+                vec![TAG_D.into(), "order-1".into()],
+            ],
+        );
+        assert_eq!(
+            order_envelope_from_event::<serde_json::Value>(&listing_addr_mismatch).unwrap_err(),
+            RadrootsOrderEnvelopeParseError::ListingAddrTagMismatch
+        );
+
+        let order_id_mismatch = order_event_with_envelope(
+            KIND_ORDER_REQUEST,
+            buyer_pubkey_wire(),
+            RadrootsOrderEventType::OrderRequested,
+            listing_addr_wire(),
+            "order-1",
+            &payload,
+            vec![
+                vec!["a".into(), listing_addr_wire()],
+                vec![TAG_D.into(), "other-order".into()],
+            ],
+        );
+        assert_eq!(
+            order_envelope_from_event::<serde_json::Value>(&order_id_mismatch).unwrap_err(),
+            RadrootsOrderEnvelopeParseError::OrderIdTagMismatch
+        );
+
+        for tags in [
+            Vec::<Vec<String>>::new(),
+            vec![vec!["a".into()]],
+            vec![vec!["a".into(), " ".into()]],
+        ] {
+            let event = order_event_with_envelope(
+                KIND_ORDER_REQUEST,
+                buyer_pubkey_wire(),
+                RadrootsOrderEventType::OrderRequested,
+                listing_addr_wire(),
+                "order-1",
+                &payload,
+                tags,
+            );
+            let err = order_envelope_from_event::<serde_json::Value>(&event).unwrap_err();
+            assert!(matches!(
+                err,
+                RadrootsOrderEnvelopeParseError::MissingTag("a")
+                    | RadrootsOrderEnvelopeParseError::InvalidTag("a")
+            ));
+        }
+
+        let invalid_listing_addr = order_event_with_envelope(
+            KIND_ORDER_REQUEST,
+            buyer_pubkey_wire(),
+            RadrootsOrderEventType::OrderRequested,
+            "not-a-listing-address",
+            "order-1",
+            &payload,
+            vec![
+                vec!["a".into(), "not-a-listing-address".into()],
+                vec![TAG_D.into(), "order-1".into()],
+            ],
+        );
+        assert!(matches!(
+            order_envelope_from_event::<serde_json::Value>(&invalid_listing_addr).unwrap_err(),
+            RadrootsOrderEnvelopeParseError::InvalidListingAddr(_)
+        ));
+    }
+
+    #[test]
+    fn order_typed_parsers_reject_message_type_mismatches() {
+        let request_payload = order_request();
+        let decision_payload = order_decision();
+        let proposal_payload = order_revision_proposal();
+        let revision_decision_payload =
+            order_revision_decision(RadrootsOrderRevisionOutcome::Accepted);
+        let cancellation_payload = order_cancelled();
+
+        let request_as_decision = order_event_with_envelope(
+            KIND_ORDER_DECISION,
+            buyer_pubkey_wire(),
+            RadrootsOrderEventType::OrderDecision,
+            listing_addr_wire(),
+            "order-1",
+            &request_payload,
+            order_chain_tags(seller_pubkey_wire()),
+        );
+        assert!(matches!(
+            order_request_from_event(&request_as_decision).unwrap_err(),
+            RadrootsOrderEnvelopeParseError::MessageTypeKindMismatch { .. }
+        ));
+
+        let decision_as_request = order_event_with_envelope(
+            KIND_ORDER_REQUEST,
+            seller_pubkey_wire(),
+            RadrootsOrderEventType::OrderRequested,
+            listing_addr_wire(),
+            "order-1",
+            &decision_payload,
+            order_request_tags(),
+        );
+        assert!(matches!(
+            order_decision_from_event(&decision_as_request).unwrap_err(),
+            RadrootsOrderEnvelopeParseError::MessageTypeKindMismatch { .. }
+        ));
+
+        let proposal_as_cancellation = order_event_with_envelope(
+            KIND_ORDER_CANCELLATION,
+            seller_pubkey_wire(),
+            RadrootsOrderEventType::OrderCancelled,
+            listing_addr_wire(),
+            "order-1",
+            &proposal_payload,
+            order_chain_tags(buyer_pubkey_wire()),
+        );
+        assert!(matches!(
+            order_revision_proposal_from_event(&proposal_as_cancellation).unwrap_err(),
+            RadrootsOrderEnvelopeParseError::MessageTypeKindMismatch { .. }
+        ));
+
+        let revision_decision_as_cancellation = order_event_with_envelope(
+            KIND_ORDER_CANCELLATION,
+            buyer_pubkey_wire(),
+            RadrootsOrderEventType::OrderCancelled,
+            listing_addr_wire(),
+            "order-1",
+            &revision_decision_payload,
+            order_chain_tags(seller_pubkey_wire()),
+        );
+        assert!(matches!(
+            order_revision_decision_from_event(&revision_decision_as_cancellation).unwrap_err(),
+            RadrootsOrderEnvelopeParseError::MessageTypeKindMismatch { .. }
+        ));
+
+        let cancellation_as_decision = order_event_with_envelope(
+            KIND_ORDER_DECISION,
+            buyer_pubkey_wire(),
+            RadrootsOrderEventType::OrderDecision,
+            listing_addr_wire(),
+            "order-1",
+            &cancellation_payload,
+            order_chain_tags(seller_pubkey_wire()),
+        );
+        assert!(matches!(
+            order_cancellation_from_event(&cancellation_as_decision).unwrap_err(),
+            RadrootsOrderEnvelopeParseError::MessageTypeKindMismatch { .. }
+        ));
+    }
+
+    #[test]
+    fn order_parse_rejects_payload_and_chain_binding_mismatches() {
+        let mut request_payload = order_request();
+        request_payload.order_id = order_id("other-order");
+        let request_built =
+            order_request_event_build(&listing_event_ptr(), &order_request()).unwrap();
+        let mut request_event = RadrootsNostrEvent {
+            id: event_id_wire('e'),
+            author: buyer_pubkey_wire(),
+            created_at: 1,
+            kind: request_built.kind,
+            tags: request_built.tags.clone(),
+            content: serde_json::to_string(&RadrootsOrderEnvelope::new(
+                RadrootsOrderEventType::OrderRequested,
+                listing_addr_wire(),
+                "order-1",
+                &request_payload,
+            ))
+            .unwrap(),
+            sig: "sig".into(),
+        };
+        assert_eq!(
+            order_request_from_event(&request_event).unwrap_err(),
+            RadrootsOrderEnvelopeParseError::PayloadBindingMismatch("order_id")
+        );
+
+        request_payload = order_request();
+        request_payload.listing_addr =
+            format!("30402:{}:BBBBBBBBBBBBBBBBBBBBBA", seller_pubkey_wire())
+                .parse()
+                .unwrap();
+        request_event.content = serde_json::to_string(&RadrootsOrderEnvelope::new(
+            RadrootsOrderEventType::OrderRequested,
+            listing_addr_wire(),
+            "order-1",
+            &request_payload,
+        ))
+        .unwrap();
+        assert_eq!(
+            order_request_from_event(&request_event).unwrap_err(),
+            RadrootsOrderEnvelopeParseError::PayloadBindingMismatch("listing_addr")
+        );
+
+        let proposal_payload = order_revision_proposal();
+        let proposal_built = order_revision_proposal_event_build(
+            &proposal_payload.root_event_id,
+            &proposal_payload.prev_event_id,
+            &proposal_payload,
+        )
+        .unwrap();
+        let mut proposal_event = RadrootsNostrEvent {
+            id: event_id_wire('e'),
+            author: seller_pubkey_wire(),
+            created_at: 1,
+            kind: proposal_built.kind,
+            tags: proposal_built.tags.clone(),
+            content: proposal_built.content.clone(),
+            sig: "sig".into(),
+        };
+        proposal_event
+            .tags
+            .iter_mut()
+            .find(|tag| tag.first().map(String::as_str) == Some(TAG_E_ROOT))
+            .unwrap()[1] = event_id_wire('4');
+        assert_eq!(
+            order_revision_proposal_from_event(&proposal_event).unwrap_err(),
+            RadrootsOrderEnvelopeParseError::PayloadBindingMismatch("root_event_id")
+        );
+
+        proposal_event.tags = proposal_built.tags;
+        proposal_event
+            .tags
+            .iter_mut()
+            .find(|tag| tag.first().map(String::as_str) == Some(TAG_E_PREV))
+            .unwrap()[1] = event_id_wire('5');
+        assert_eq!(
+            order_revision_proposal_from_event(&proposal_event).unwrap_err(),
+            RadrootsOrderEnvelopeParseError::PayloadBindingMismatch("prev_event_id")
+        );
+
+        let revision_decision_payload =
+            order_revision_decision(RadrootsOrderRevisionOutcome::Accepted);
+        let revision_decision_built = order_revision_decision_event_build(
+            &revision_decision_payload.root_event_id,
+            &revision_decision_payload.prev_event_id,
+            &revision_decision_payload,
+        )
+        .unwrap();
+        let mut revision_decision_event = RadrootsNostrEvent {
+            id: event_id_wire('e'),
+            author: buyer_pubkey_wire(),
+            created_at: 1,
+            kind: revision_decision_built.kind,
+            tags: revision_decision_built.tags.clone(),
+            content: revision_decision_built.content,
+            sig: "sig".into(),
+        };
+        revision_decision_event
+            .tags
+            .iter_mut()
+            .find(|tag| tag.first().map(String::as_str) == Some(TAG_E_ROOT))
+            .unwrap()[1] = event_id_wire('6');
+        assert_eq!(
+            order_revision_decision_from_event(&revision_decision_event).unwrap_err(),
+            RadrootsOrderEnvelopeParseError::PayloadBindingMismatch("root_event_id")
+        );
+
+        revision_decision_event.tags = revision_decision_built.tags;
+        revision_decision_event
+            .tags
+            .iter_mut()
+            .find(|tag| tag.first().map(String::as_str) == Some(TAG_E_PREV))
+            .unwrap()[1] = event_id_wire('7');
+        assert_eq!(
+            order_revision_decision_from_event(&revision_decision_event).unwrap_err(),
+            RadrootsOrderEnvelopeParseError::PayloadBindingMismatch("prev_event_id")
+        );
+    }
+
+    #[test]
+    fn order_event_context_and_parse_error_mapping_cover_missing_context() {
+        let err = order_event_context_from_tags(
+            RadrootsOrderEventType::OrderRequested,
+            &[vec!["p".into(), seller_pubkey_wire()]],
+        )
+        .unwrap_err();
+        assert_eq!(
+            err,
+            RadrootsOrderEnvelopeParseError::MissingTag(TAG_LISTING_EVENT)
+        );
+
+        let err = order_event_context_from_tags(
+            RadrootsOrderEventType::OrderDecision,
+            &[
+                vec!["p".into(), buyer_pubkey_wire()],
+                vec![TAG_E_PREV.into(), event_id_wire('2')],
+            ],
+        )
+        .unwrap_err();
+        assert_eq!(err, RadrootsOrderEnvelopeParseError::MissingTag(TAG_E_ROOT));
+
+        let err = order_event_context_from_tags(
+            RadrootsOrderEventType::OrderDecision,
+            &[
+                vec!["p".into(), buyer_pubkey_wire()],
+                vec![TAG_E_ROOT.into(), event_id_wire('1')],
+                vec![TAG_E_PREV.into(), "not-an-event-id".into()],
+            ],
+        )
+        .unwrap_err();
+        assert_eq!(err, RadrootsOrderEnvelopeParseError::InvalidTag(TAG_E_PREV));
+
+        let invalid_number = "x".parse::<u32>().unwrap_err();
+        assert_eq!(
+            map_tag_parse_error_for_order_envelope(crate::error::EventParseError::MissingTag("p")),
+            RadrootsOrderEnvelopeParseError::MissingTag("p")
+        );
+        assert_eq!(
+            map_tag_parse_error_for_order_envelope(crate::error::EventParseError::InvalidTag("p")),
+            RadrootsOrderEnvelopeParseError::InvalidTag("p")
+        );
+        assert_eq!(
+            map_tag_parse_error_for_order_envelope(crate::error::EventParseError::InvalidKind {
+                expected: "1",
+                got: 2,
+            }),
+            RadrootsOrderEnvelopeParseError::InvalidKind(2)
+        );
+        assert_eq!(
+            map_tag_parse_error_for_order_envelope(crate::error::EventParseError::InvalidNumber(
+                "n",
+                invalid_number,
+            )),
+            RadrootsOrderEnvelopeParseError::InvalidTag("n")
+        );
+        assert_eq!(
+            map_tag_parse_error_for_order_envelope(crate::error::EventParseError::InvalidJson(
+                "json",
+            )),
+            RadrootsOrderEnvelopeParseError::InvalidTag("json")
+        );
     }
 
     #[test]
