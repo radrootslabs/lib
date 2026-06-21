@@ -10,3 +10,8 @@ readme = "README"
 publish = false
 description = "Shared fixture library for Radroots"
 authors = ["Tyson Lupul <tyson@radroots.org>"]
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = [
+  'cfg(coverage_nightly)',
+] }

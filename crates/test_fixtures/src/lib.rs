@@ -1,3 +1,4 @@
+#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 #![forbid(unsafe_code)]
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -97,6 +98,23 @@ pub const FIXTURE_DIEGO: ApprovedFixtureIdentity = ApprovedFixtureIdentity {
     npub: FIXTURE_DIEGO_NPUB,
 };
 
+pub const APPROVED_FIXTURE_IDENTITIES: [ApprovedFixtureIdentity; 4] =
+    [FIXTURE_ALICE, FIXTURE_BOB, FIXTURE_CAROL, FIXTURE_DIEGO];
+
+pub fn approved_fixture_identities() -> &'static [ApprovedFixtureIdentity; 4] {
+    &APPROVED_FIXTURE_IDENTITIES
+}
+
+pub fn approved_fixture_identity(label: &str) -> Option<ApprovedFixtureIdentity> {
+    match label {
+        FIXTURE_ALICE_LABEL => Some(FIXTURE_ALICE),
+        FIXTURE_BOB_LABEL => Some(FIXTURE_BOB),
+        FIXTURE_CAROL_LABEL => Some(FIXTURE_CAROL),
+        FIXTURE_DIEGO_LABEL => Some(FIXTURE_DIEGO),
+        _ => None,
+    }
+}
+
 pub const RELAY_PRIMARY_WSS: &str = "wss://relay.example.com";
 pub const RELAY_SECONDARY_WSS: &str = "wss://relay-2.example.com";
 pub const RELAY_TERTIARY_WSS: &str = "wss://relay-3.example.com";
@@ -104,3 +122,46 @@ pub const RELAY_TERTIARY_WSS: &str = "wss://relay-3.example.com";
 pub const APP_PRIMARY_HTTPS: &str = "https://app.example.com";
 pub const API_PRIMARY_HTTPS: &str = "https://api.example.com";
 pub const CDN_PRIMARY_HTTPS: &str = "https://cdn.example.com";
+
+#[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
+mod tests {
+    use super::{
+        API_PRIMARY_HTTPS, APP_PRIMARY_HTTPS, APPROVED_FIXTURE_NAMESPACE, CDN_PRIMARY_HTTPS,
+        FIXTURE_ALICE, FIXTURE_BOB, FIXTURE_CAROL, FIXTURE_DIEGO, RELAY_PRIMARY_WSS,
+        RELAY_SECONDARY_WSS, RELAY_TERTIARY_WSS, approved_fixture_identities,
+        approved_fixture_identity,
+    };
+
+    #[test]
+    fn fixture_lookup_covers_known_and_missing_labels() {
+        let fixtures = approved_fixture_identities();
+        assert_eq!(
+            fixtures,
+            &[FIXTURE_ALICE, FIXTURE_BOB, FIXTURE_CAROL, FIXTURE_DIEGO]
+        );
+        for fixture in fixtures {
+            assert_eq!(approved_fixture_identity(fixture.label), Some(*fixture));
+            assert_eq!(fixture.label, fixture.username);
+            assert!(fixture.email.ends_with("@fixtures.test"));
+            assert_eq!(fixture.secret_key_hex.len(), 64);
+            assert_eq!(fixture.public_key_hex.len(), 64);
+            assert!(fixture.nsec.starts_with("nsec1"));
+            assert!(fixture.npub.starts_with("npub1"));
+        }
+        assert_eq!(approved_fixture_identity("fixture_unknown"), None);
+    }
+
+    #[test]
+    fn endpoint_constants_use_expected_schemes() {
+        assert_eq!(APPROVED_FIXTURE_NAMESPACE, "radroots-approved-fixture-v1");
+        for relay in [RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS, RELAY_TERTIARY_WSS] {
+            assert!(relay.starts_with("wss://"));
+            assert!(relay.ends_with(".example.com"));
+        }
+        for origin in [APP_PRIMARY_HTTPS, API_PRIMARY_HTTPS, CDN_PRIMARY_HTTPS] {
+            assert!(origin.starts_with("https://"));
+            assert!(origin.ends_with(".example.com"));
+        }
+    }
+}
