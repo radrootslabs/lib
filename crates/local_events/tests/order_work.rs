@@ -30,6 +30,7 @@ fn buyer_order_request_payload_accepts_supported_exportable_work() {
         validation.support_state,
         BuyerOrderRequestSupportState::Supported
     );
+    assert_eq!(validation.support_state.as_str(), "supported");
     assert!(validation.support_issues.is_empty());
     assert_eq!(supported, validation);
 }
@@ -61,6 +62,7 @@ fn buyer_order_request_payload_accepts_explicit_unsupported_work() {
         validation.support_state,
         BuyerOrderRequestSupportState::Unsupported
     );
+    assert_eq!(validation.support_state.as_str(), "unsupported");
     assert_eq!(validation.support_issues, vec!["buyer_pubkey_required"]);
     assert_eq!(unsupported, validation);
     assert!(supported_error.to_string().contains("support_status.state"));
@@ -106,8 +108,15 @@ fn buyer_order_request_payload_rejects_invalid_item_identity() {
 #[test]
 fn buyer_order_request_payload_rejects_invalid_economics() {
     let mut missing_economics = supported_payload();
-    missing_economics["document"]["order"]["economics"] = Value::Null;
+    missing_economics["document"]["order"]
+        .as_object_mut()
+        .expect("order object")
+        .remove("economics");
     assert_invalid(missing_economics, "economics");
+
+    let mut non_object_economics = supported_payload();
+    non_object_economics["document"]["order"]["economics"] = Value::Null;
+    assert_invalid(non_object_economics, "economics");
 
     let mut mismatched_currency = supported_payload();
     mismatched_currency["document"]["order"]["economics"]["items"][0]["unit_price_currency"] =
@@ -115,12 +124,44 @@ fn buyer_order_request_payload_rejects_invalid_economics() {
     assert_invalid(mismatched_currency, "unit_price_currency");
 
     let mut mismatched_items = supported_payload();
-    mismatched_items["document"]["order"]["economics"]["items"] = json!([]);
+    mismatched_items["document"]["order"]["economics"]["items"] = json!([
+        {
+            "bin_id": "dozen-eggs",
+            "bin_count": 2,
+            "quantity_amount": "1",
+            "quantity_unit": "dozen",
+            "unit_price_amount": "8.00",
+            "unit_price_currency": "USD",
+            "line_subtotal": {
+                "amount": "16.00",
+                "currency": "USD"
+            }
+        },
+        {
+            "bin_id": "half-dozen-eggs",
+            "bin_count": 1
+        }
+    ]);
     assert_invalid(mismatched_items, "economics.items");
+
+    let mut empty_economics_items = supported_payload();
+    empty_economics_items["document"]["order"]["economics"]["items"] = json!([]);
+    assert_invalid(empty_economics_items, "economics.items");
 
     let mut mismatched_bin = supported_payload();
     mismatched_bin["document"]["order"]["economics"]["items"][0]["bin_id"] = json!("other-bin");
     assert_invalid(mismatched_bin, "economics.items[0].bin_id");
+
+    let mut bad_currency_length = supported_payload();
+    bad_currency_length["document"]["order"]["economics"]["currency"] = json!("US");
+    assert_invalid(bad_currency_length, "currency");
+
+    let mut missing_line_subtotal = supported_payload();
+    missing_line_subtotal["document"]["order"]["economics"]["items"][0]
+        .as_object_mut()
+        .expect("economics item")
+        .remove("line_subtotal");
+    assert_invalid(missing_line_subtotal, "line_subtotal");
 }
 
 #[test]
@@ -128,6 +169,10 @@ fn buyer_order_request_payload_rejects_stale_or_conflicting_currentness() {
     let mut stale = supported_payload();
     stale["currentness"]["current"] = json!(false);
     assert_invalid(stale, "currentness.current");
+
+    let mut missing_current = supported_payload();
+    missing_current["currentness"]["current"] = Value::Null;
+    assert_invalid(missing_current, "currentness.current");
 
     let mut wrong_order = supported_payload();
     wrong_order["currentness"]["order_id"] = json!("ord_other");

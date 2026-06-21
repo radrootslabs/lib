@@ -67,7 +67,7 @@ pub fn validate_buyer_order_request_local_work_payload(
     validate_positive_i64(payload, &["currentness", "created_at_ms"])?;
     validate_required_string(payload, &["currentness", "order_updated_at"])?;
 
-    let support_state = validate_support_status(payload)?;
+    let (support_state, support_issues) = validate_support_status(payload)?;
     validate_exportability(payload, support_state)?;
     validate_order_identity(payload, support_state)?;
     validate_order_items(payload)?;
@@ -76,7 +76,7 @@ pub fn validate_buyer_order_request_local_work_payload(
     Ok(BuyerOrderRequestLocalWorkValidation {
         order_id: order_id.to_owned(),
         support_state,
-        support_issues: support_issues(payload)?,
+        support_issues,
     })
 }
 
@@ -108,7 +108,7 @@ pub fn validate_unsupported_buyer_order_request_local_work_payload(
 
 fn validate_support_status(
     payload: &Value,
-) -> Result<BuyerOrderRequestSupportState, LocalEventsError> {
+) -> Result<(BuyerOrderRequestSupportState, Vec<String>), LocalEventsError> {
     let state = validate_required_string(payload, &["support_status", "state"])?;
     let issues = support_issues(payload)?;
     match state {
@@ -119,7 +119,7 @@ fn validate_support_status(
                     "must be empty when support_status.state is supported",
                 ));
             }
-            Ok(BuyerOrderRequestSupportState::Supported)
+            Ok((BuyerOrderRequestSupportState::Supported, issues))
         }
         "unsupported" => {
             if issues.is_empty() {
@@ -128,7 +128,7 @@ fn validate_support_status(
                     "must contain at least one issue when support_status.state is unsupported",
                 ));
             }
-            Ok(BuyerOrderRequestSupportState::Unsupported)
+            Ok((BuyerOrderRequestSupportState::Unsupported, issues))
         }
         _ => Err(invalid_field(
             "support_status.state",
@@ -142,8 +142,6 @@ fn validate_exportability(
     support_state: BuyerOrderRequestSupportState,
 ) -> Result<(), LocalEventsError> {
     let state = validate_required_string(payload, &["exportability", "state"])?;
-    let buyer_actor_source =
-        validate_required_string(payload, &["document", "buyer_actor", "source"])?;
     match state {
         "exportable" => {
             validate_string_field(
@@ -173,9 +171,6 @@ fn validate_exportability(
                 "must be exportable or identity_unresolved",
             ));
         }
-    }
-    if buyer_actor_source == BUYER_ORDER_REQUEST_ACTOR_SOURCE_RESOLVED_ACCOUNT {
-        validate_buyer_pubkey(payload)?;
     }
     Ok(())
 }
@@ -483,8 +478,13 @@ mod tests {
 
         assert_eq!(
             validate_support_status(&payload).expect("support status"),
-            BuyerOrderRequestSupportState::Supported
+            (
+                BuyerOrderRequestSupportState::Supported,
+                Vec::<String>::new()
+            )
         );
+        validate_supported_buyer_order_request_local_work_payload(&payload)
+            .expect("supported payload");
         validate_exportability(&payload, BuyerOrderRequestSupportState::Supported)
             .expect("exportability");
         validate_order_identity(&payload, BuyerOrderRequestSupportState::Supported)
@@ -595,6 +595,17 @@ mod tests {
         bad_currency["document"]["order"]["economics"]["currency"] = json!("usd");
         assert_invalid(bad_currency, "currency");
 
+        let mut bad_currency_length = supported_payload();
+        bad_currency_length["document"]["order"]["economics"]["currency"] = json!("US");
+        assert_invalid(bad_currency_length, "currency");
+
+        let mut missing_economics = supported_payload();
+        missing_economics["document"]["order"]
+            .as_object_mut()
+            .expect("order object")
+            .remove("economics");
+        assert_invalid(missing_economics, "economics");
+
         let mut economics_items_missing = supported_payload();
         economics_items_missing["document"]["order"]["economics"]["items"] = Value::Null;
         assert_invalid(economics_items_missing, "items");
@@ -602,6 +613,27 @@ mod tests {
         let mut economics_items_short = supported_payload();
         economics_items_short["document"]["order"]["economics"]["items"] = json!([]);
         assert_invalid(economics_items_short, "economics.items");
+
+        let mut economics_items_long = supported_payload();
+        economics_items_long["document"]["order"]["economics"]["items"] = json!([
+            {
+                "bin_id": "dozen-eggs",
+                "bin_count": 2,
+                "quantity_amount": "1",
+                "quantity_unit": "dozen",
+                "unit_price_amount": "8.00",
+                "unit_price_currency": "USD",
+                "line_subtotal": {
+                    "amount": "16.00",
+                    "currency": "USD"
+                }
+            },
+            {
+                "bin_id": "half-dozen-eggs",
+                "bin_count": 1
+            }
+        ]);
+        assert_invalid(economics_items_long, "economics.items");
 
         let mut economics_bin_missing = supported_payload();
         economics_bin_missing["document"]["order"]["economics"]["items"][0]["bin_id"] = Value::Null;
@@ -635,6 +667,13 @@ mod tests {
             Value::Null;
         assert_invalid(line_subtotal_missing, "amount");
 
+        let mut missing_line_subtotal = supported_payload();
+        missing_line_subtotal["document"]["order"]["economics"]["items"][0]
+            .as_object_mut()
+            .expect("economics item")
+            .remove("line_subtotal");
+        assert_invalid(missing_line_subtotal, "line_subtotal");
+
         let mut line_subtotal_currency = supported_payload();
         line_subtotal_currency["document"]["order"]["economics"]["items"][0]["line_subtotal"]["currency"] =
             json!("CAD");
@@ -647,6 +686,10 @@ mod tests {
         let mut order_item_missing = supported_payload();
         order_item_missing["document"]["order"]["items"] = Value::Null;
         assert_invalid(order_item_missing, "document.order.items");
+
+        let mut missing_order_bin = supported_payload();
+        missing_order_bin["document"]["order"]["items"][0]["bin_id"] = Value::Null;
+        assert_error_contains(validate_order_items(&missing_order_bin), "items[0].bin_id");
     }
 
     fn supported_payload() -> Value {

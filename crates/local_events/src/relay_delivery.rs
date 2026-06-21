@@ -411,6 +411,22 @@ mod tests {
 
         assert_error_contains(
             RelayDeliveryEvidence {
+                state: RelayDeliveryState::Pending,
+                target_relays: vec!["ws://relay.test".to_owned()],
+                connected_relays: Vec::new(),
+                acknowledged_relays: Vec::new(),
+                observed_relays: Vec::new(),
+                failed_relays: vec![RelayDeliveryFailure {
+                    relay_url: "ws://relay.test".to_owned(),
+                    error: "timeout".to_owned(),
+                }],
+            }
+            .validate(),
+            "pending delivery evidence",
+        );
+
+        assert_error_contains(
+            RelayDeliveryEvidence {
                 state: RelayDeliveryState::Acknowledged,
                 target_relays: vec!["ws://relay.test".to_owned()],
                 connected_relays: Vec::new(),
@@ -443,6 +459,22 @@ mod tests {
                 acknowledged_relays: Vec::new(),
                 observed_relays: Vec::new(),
                 failed_relays: Vec::new(),
+            }
+            .validate(),
+            "failed delivery evidence",
+        );
+
+        assert_error_contains(
+            RelayDeliveryEvidence {
+                state: RelayDeliveryState::Failed,
+                target_relays: vec!["ws://relay.test".to_owned()],
+                connected_relays: Vec::new(),
+                acknowledged_relays: Vec::new(),
+                observed_relays: vec!["ws://relay.test".to_owned()],
+                failed_relays: vec![RelayDeliveryFailure {
+                    relay_url: "ws://relay.test".to_owned(),
+                    error: "timeout".to_owned(),
+                }],
             }
             .validate(),
             "failed delivery evidence",
@@ -530,6 +562,25 @@ mod tests {
                 "acknowledged_relays": [],
                 "failed_relays": []
             })),
+            "target_relays",
+        );
+
+        let relay_vec = vec!["ws://relay-a.test".to_owned()];
+        let relay_slice = relay_vec.as_slice();
+        RelayDeliveryEvidence::acknowledged(
+            relay_vec.clone(),
+            relay_slice,
+            relay_vec.clone(),
+            Vec::new(),
+        )
+        .expect("acknowledged from vecs and slices");
+        assert_error_contains(
+            RelayDeliveryEvidence::observed(
+                ["http://relay.test"],
+                Vec::<String>::new(),
+                Vec::<String>::new(),
+                Vec::new(),
+            ),
             "target_relays",
         );
     }

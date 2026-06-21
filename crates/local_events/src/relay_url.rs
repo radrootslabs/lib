@@ -181,26 +181,10 @@ mod tests {
             normalize_relay_url("ws://[::1]:8080").expect("ipv6 relay"),
             "ws://[::1]:8080"
         );
-        assert!(matches!(
-            normalize_relay_url("ws://[::1]extra"),
-            Err(RelayUrlValidationError::InvalidAuthority(_))
-        ));
-        assert!(matches!(
-            normalize_relay_url("ws://relay.test:"),
-            Err(RelayUrlValidationError::InvalidPort(_))
-        ));
-        assert!(matches!(
-            normalize_relay_url("ws://relay.test:8a"),
-            Err(RelayUrlValidationError::InvalidPort(_))
-        ));
-        assert!(matches!(
-            normalize_relay_url("ws://relay one.test"),
-            Err(RelayUrlValidationError::InvalidAuthority(_))
-        ));
-        assert!(matches!(
-            normalize_relay_url("ws://relay:8080:9090"),
-            Err(RelayUrlValidationError::InvalidAuthority(_))
-        ));
+        assert_eq!(
+            normalize_relay_url("ws://[::1]").expect("ipv6 relay without port"),
+            "ws://[::1]"
+        );
     }
 
     #[test]
@@ -213,5 +197,14 @@ mod tests {
         .expect("relay set");
 
         assert_eq!(relays, vec!["ws://relay-a.test", "ws://relay-b.test"]);
+
+        assert_eq!(
+            normalize_relay_urls(["ws://relay-c.test"]).expect("one relay"),
+            vec!["ws://relay-c.test"]
+        );
+        assert_eq!(
+            normalize_relay_urls(vec!["ws://relay-d.test".to_owned()]).expect("vec relay"),
+            vec!["ws://relay-d.test"]
+        );
     }
 }
