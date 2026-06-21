@@ -551,6 +551,14 @@ fn post_media_structured_fields_encode_and_decode_imeta() {
 
 #[test]
 fn post_decode_rejects_more_invalid_imeta_shapes() {
+    for tags in [
+        vec![TAG_IMETA.to_string()],
+        vec![TAG_IMETA.to_string(), " ".to_string()],
+    ] {
+        let err = post_from_event(KIND_POST, &[tags], "hello").unwrap_err();
+        assert!(matches!(err, EventParseError::InvalidTag(TAG_IMETA)));
+    }
+
     for entry in ["url ", "size not-a-number", "dim bad", "dim 0x10"] {
         let err = post_from_event(
             KIND_POST,
@@ -562,6 +570,35 @@ fn post_decode_rejects_more_invalid_imeta_shapes() {
             err,
             EventParseError::InvalidTag(TAG_IMETA) | EventParseError::InvalidNumber(TAG_IMETA, _)
         ));
+    }
+}
+
+#[test]
+fn post_decode_handles_non_farm_address_refs_without_relays() {
+    let article = format!("30023:article_author:{ARTICLE_D_TAG}");
+    let decoded = post_from_event(
+        KIND_POST,
+        &[vec![TAG_A.to_string(), article.clone()]],
+        "address only",
+    )
+    .unwrap();
+
+    assert!(decoded.farm.is_none());
+    let refs = decoded.address_refs.expect("address refs");
+    assert_eq!(refs.len(), 1);
+    match &refs[0] {
+        RadrootsSocialTarget::Address {
+            address,
+            author,
+            event_kind,
+            relays,
+        } => {
+            assert_eq!(address, &article);
+            assert_eq!(author.as_deref(), Some("article_author"));
+            assert_eq!(*event_kind, Some(30023));
+            assert_eq!(relays, &None);
+        }
+        _ => panic!("expected address target"),
     }
 }
 
