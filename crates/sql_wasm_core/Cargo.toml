@@ -30,3 +30,8 @@ radroots_sql_wasm_bridge = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 serde-wasm-bindgen = { workspace = true, optional = true }
 wasm-bindgen = { workspace = true, optional = true }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = [
+  'cfg(coverage_nightly)',
+] }
