@@ -4629,6 +4629,61 @@ pub enum RadrootsCoreUnitDimension {
     }
 
     #[test]
+    fn coverage_required_workspace_crates_excludes_simplex_packages() {
+        let root = temp_root("coverage_required_workspace_simplex");
+        write_file(
+            &root.join("Cargo.toml"),
+            r#"[workspace]
+members = ["crates/a", "crates/radroots_simplex_probe", "crates/simplex_probe"]
+resolver = "2"
+"#,
+        );
+        write_file(
+            &root.join("crates").join("a").join("Cargo.toml"),
+            r#"[package]
+name = "radroots_a"
+version = "0.1.0"
+edition = "2024"
+"#,
+        );
+        write_file(
+            &root
+                .join("crates")
+                .join("radroots_simplex_probe")
+                .join("Cargo.toml"),
+            r#"[package]
+name = "radroots_simplex_probe"
+version = "0.1.0"
+edition = "2024"
+"#,
+        );
+        write_file(
+            &root.join("crates").join("simplex_probe").join("Cargo.toml"),
+            r#"[package]
+name = "simplex_probe"
+version = "0.1.0"
+edition = "2024"
+"#,
+        );
+
+        let required =
+            coverage_required_workspace_crates(&root).expect("workspace coverage crates");
+        assert_eq!(
+            required,
+            ["radroots_a".to_string()]
+                .into_iter()
+                .collect::<BTreeSet<_>>()
+        );
+        assert!(coverage_policy_excludes_workspace_crate(
+            "radroots_simplex_probe"
+        ));
+        assert!(coverage_policy_excludes_workspace_crate("simplex_probe"));
+        assert!(!coverage_policy_excludes_workspace_crate("radroots_a"));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn coverage_required_crates_match_policy_required_status() {
         let root = workspace_root();
         let contract_root = root.join("spec");
