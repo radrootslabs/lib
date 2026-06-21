@@ -160,11 +160,7 @@ impl RadrootsRelayPublishAdapter for RadrootsMockRelayPublishAdapter {
         Box::pin(async move {
             self.captured_raw_events
                 .lock()
-                .map_err(|_| {
-                    RadrootsRelayTransportError::Transport(
-                        "captured raw event lock poisoned".to_owned(),
-                    )
-                })?
+                .map_err(|_| captured_raw_event_lock_error())?
                 .push(request.signed_event.raw_json.clone());
             Ok(request
                 .targets
@@ -183,6 +179,11 @@ impl RadrootsRelayPublishAdapter for RadrootsMockRelayPublishAdapter {
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
+fn captured_raw_event_lock_error() -> RadrootsRelayTransportError {
+    RadrootsRelayTransportError::Transport("captured raw event lock poisoned".to_owned())
+}
+
 #[cfg(feature = "client")]
 #[derive(Clone)]
 pub struct RadrootsNostrClientPublishAdapter {
@@ -191,6 +192,7 @@ pub struct RadrootsNostrClientPublishAdapter {
 
 #[cfg(feature = "client")]
 impl RadrootsNostrClientPublishAdapter {
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub fn new(client: RadrootsNostrClient) -> Self {
         Self { client }
     }
@@ -198,6 +200,7 @@ impl RadrootsNostrClientPublishAdapter {
 
 #[cfg(feature = "client")]
 impl RadrootsRelayPublishAdapter for RadrootsNostrClientPublishAdapter {
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn publish<'a>(
         &'a self,
         request: RadrootsRelayPublishRequest,

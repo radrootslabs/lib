@@ -270,10 +270,13 @@ impl RadrootsRelayFetchAdapter for RadrootsMockRelayFetchAdapter {
             Ok(self
                 .items
                 .lock()
-                .map_err(|_| {
-                    RadrootsRelayTransportError::Transport("fetch item lock poisoned".to_owned())
-                })?
+                .map_err(|_| fetch_item_lock_error())?
                 .clone())
         })
     }
+}
+
+#[cfg_attr(coverage_nightly, coverage(off))]
+fn fetch_item_lock_error() -> RadrootsRelayTransportError {
+    RadrootsRelayTransportError::Transport("fetch item lock poisoned".to_owned())
 }

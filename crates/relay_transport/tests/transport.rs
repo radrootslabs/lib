@@ -44,6 +44,22 @@ impl RadrootsRelayPublishAdapter for TransportFailurePublishAdapter {
     }
 }
 
+struct NostrJsonFailurePublishAdapter;
+
+impl RadrootsRelayPublishAdapter for NostrJsonFailurePublishAdapter {
+    fn publish<'a>(
+        &'a self,
+        _request: RadrootsRelayPublishRequest,
+    ) -> BoxFuture<'a, Result<Vec<RadrootsRelayPublishRelayReceipt>, RadrootsRelayTransportError>>
+    {
+        Box::pin(async {
+            Err(RadrootsRelayTransportError::NostrEventJson(
+                "adapter rejected raw event".to_owned(),
+            ))
+        })
+    }
+}
+
 fn fixture_keys() -> RadrootsNostrKeys {
     let secret_key =
         RadrootsNostrSecretKey::from_hex(FIXTURE_ALICE_SECRET_KEY_HEX).expect("secret key");
@@ -106,6 +122,7 @@ fn relay_url_validation_and_target_normalization() {
     let relay = RadrootsRelayUrl::parse("wss://Relay.Example.com", RadrootsRelayUrlPolicy::Public)
         .expect("relay");
     assert_eq!(relay.as_str(), RELAY_PRIMARY_WSS);
+    assert_eq!(relay.clone().into_string(), RELAY_PRIMARY_WSS);
     let relay_path = RadrootsRelayUrl::parse(
         "wss://Relay.Example.com/nostr",
         RadrootsRelayUrlPolicy::Public,
@@ -145,6 +162,20 @@ fn relay_url_validation_and_target_normalization() {
         )
         .is_err()
     );
+    assert!(matches!(
+        RadrootsRelayUrl::parse(
+            "wss://user:password@relay.example.com",
+            RadrootsRelayUrlPolicy::Public
+        ),
+        Err(RadrootsRelayTransportError::RelayUrlUserinfo { .. })
+    ));
+    assert!(matches!(
+        RadrootsRelayUrl::parse(
+            "wss://:password@relay.example.com",
+            RadrootsRelayUrlPolicy::Public
+        ),
+        Err(RadrootsRelayTransportError::RelayUrlUserinfo { .. })
+    ));
     assert!(
         RadrootsRelayUrl::parse(
             "wss://relay.example.com:bad",
@@ -153,6 +184,14 @@ fn relay_url_validation_and_target_normalization() {
         .is_err()
     );
     assert!(RadrootsRelayUrl::parse("wss://", RadrootsRelayUrlPolicy::Public).is_err());
+    assert!(matches!(
+        RadrootsRelayUrl::parse("radroots:relay", RadrootsRelayUrlPolicy::Public),
+        Err(RadrootsRelayTransportError::EmptyRelayHost { .. })
+    ));
+    assert!(matches!(
+        RadrootsRelayUrl::parse("relay.example.com", RadrootsRelayUrlPolicy::Public),
+        Err(RadrootsRelayTransportError::RelayUrlParse { .. })
+    ));
     assert!(
         RadrootsRelayUrl::parse(
             "wss://relay.example.com?subscription=1",
@@ -186,6 +225,29 @@ fn relay_url_validation_and_target_normalization() {
             RELAY_SECONDARY_WSS.to_owned()
         ]
     );
+
+    let from_urls = RadrootsRelayTargetSet::from_urls(vec![
+        relay_path.clone(),
+        relay_path.clone(),
+        RadrootsRelayUrl::parse(RELAY_SECONDARY_WSS, RadrootsRelayUrlPolicy::Public)
+            .expect("secondary"),
+    ])
+    .expect("from urls");
+    assert_eq!(from_urls.len(), 2);
+    assert!(!from_urls.is_empty());
+    assert_eq!(from_urls.relays()[0], relay_path);
+    assert_eq!(
+        from_urls.relays()[0].to_string(),
+        "wss://relay.example.com/nostr"
+    );
+    assert!(matches!(
+        RadrootsRelayTargetSet::new(Vec::<&str>::new(), RadrootsRelayUrlPolicy::Public),
+        Err(RadrootsRelayTransportError::EmptyTargetSet)
+    ));
+    assert!(matches!(
+        RadrootsRelayTargetSet::from_urls(Vec::new()),
+        Err(RadrootsRelayTransportError::EmptyTargetSet)
+    ));
 }
 
 #[test]
@@ -257,6 +319,56 @@ async fn mock_publish_preserves_exact_raw_json_and_counts_outcomes() {
     assert_eq!(receipt.retryable_count, 1);
     assert!(receipt.quorum_met);
     serde_json::to_string(&receipt).expect("receipt json");
+}
+
+#[tokio::test]
+async fn publish_receipts_track_terminal_skipped_and_adapter_errors() {
+    let signed = signed_post("terminal");
+    let targets = RadrootsRelayTargetSet::new(
+        vec![RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS],
+        RadrootsRelayUrlPolicy::Public,
+    )
+    .expect("targets");
+    let adapter = RadrootsMockRelayPublishAdapter::new().with_outcome(
+        RELAY_SECONDARY_WSS,
+        RadrootsRelayOutcome::classify("restricted: group write denied"),
+    );
+
+    let receipt = publish_signed_event(
+        &adapter,
+        RadrootsRelayPublishRequest::new(signed.clone(), targets, 1_050).with_accepted_quorum(2),
+    )
+    .await
+    .expect("publish");
+
+    assert_eq!(receipt.event_id, signed.id);
+    assert_eq!(receipt.attempted_count, 2);
+    assert_eq!(receipt.accepted_count, 1);
+    assert_eq!(receipt.retryable_count, 0);
+    assert_eq!(receipt.terminal_count, 1);
+    assert_eq!(receipt.quorum, 2);
+    assert!(!receipt.quorum_met);
+
+    let skipped = RadrootsRelayPublishRelayReceipt::skipped(
+        RELAY_TERTIARY_WSS,
+        RadrootsRelayOutcome::timeout("timeout: no OK"),
+    );
+    assert_eq!(skipped.relay_url, RELAY_TERTIARY_WSS);
+    assert!(!skipped.attempted);
+    assert_eq!(skipped.outcome.kind, RadrootsRelayOutcomeKind::Timeout);
+
+    let error = publish_signed_event(
+        &TransportFailurePublishAdapter,
+        RadrootsRelayPublishRequest::new(
+            signed,
+            RadrootsRelayTargetSet::new(vec![RELAY_PRIMARY_WSS], RadrootsRelayUrlPolicy::Public)
+                .expect("targets"),
+            1_060,
+        ),
+    )
+    .await
+    .expect_err("transport failure");
+    assert!(matches!(error, RadrootsRelayTransportError::Transport(_)));
 }
 
 #[tokio::test]
@@ -452,6 +564,53 @@ async fn fetch_event_cap_preserves_later_control_outcomes() {
         receipt.relay_outcomes[2].kind,
         RadrootsRelayFetchOutcomeKind::Notice
     );
+}
+
+#[tokio::test]
+async fn fetch_subscription_mode_and_store_errors_are_reported() {
+    let signed = signed_post("subscription");
+    let store = RadrootsEventStore::open_memory().await.expect("store");
+    let adapter = RadrootsMockRelayFetchAdapter::new(vec![RadrootsRelayFetchItem::Event {
+        relay_url: RELAY_PRIMARY_WSS.to_owned(),
+        raw_json: signed.raw_json.clone(),
+        observed_at_ms: 1_200,
+    }]);
+
+    let receipt = fetch_and_ingest_relay_events(
+        &adapter,
+        &store,
+        RadrootsRelayFetchRequest::subscription(1_200, 10),
+    )
+    .await
+    .expect("fetch ingest");
+
+    assert_eq!(receipt.inserted_count, 1);
+    let observations = store
+        .observations_for_event(signed.id.as_str())
+        .await
+        .expect("observations");
+    assert_eq!(observations.len(), 1);
+    assert_eq!(observations[0].observation_type, "subscription");
+
+    let closed_store = RadrootsEventStore::open_memory().await.expect("store");
+    closed_store.pool().close().await;
+    let adapter = RadrootsMockRelayFetchAdapter::new(vec![RadrootsRelayFetchItem::Event {
+        relay_url: RELAY_PRIMARY_WSS.to_owned(),
+        raw_json: signed.raw_json,
+        observed_at_ms: 1_210,
+    }]);
+    let receipt = fetch_and_ingest_relay_events(
+        &adapter,
+        &closed_store,
+        RadrootsRelayFetchRequest::fetch(1_210, 10),
+    )
+    .await
+    .expect("fetch ingest");
+
+    assert_eq!(receipt.inserted_count, 0);
+    assert_eq!(receipt.malformed_count, 1);
+    assert!(receipt.events[0].malformed);
+    assert!(receipt.events[0].message.is_some());
 }
 
 #[tokio::test]
@@ -988,6 +1147,200 @@ async fn outbox_publish_marks_published_when_policy_quorum_is_met_with_failure_d
         .await
         .expect("observations");
     assert_eq!(observations.len(), 2);
+}
+
+#[tokio::test]
+async fn outbox_publish_republishes_accepted_relays_when_policy_requests_it() {
+    let signed = signed_post("republish accepted");
+    let outbox = RadrootsOutbox::open_memory().await.expect("outbox");
+    let store = RadrootsEventStore::open_memory().await.expect("store");
+    let draft = RadrootsFrozenEventDraft::new(
+        "radroots.social.post.v1",
+        KIND_POST,
+        signed.created_at,
+        signed.tags.clone(),
+        signed.content.clone(),
+        signed.pubkey.as_str(),
+    )
+    .expect("draft");
+    let receipt = outbox
+        .enqueue_operation(RadrootsOutboxOperationInput::new(
+            "publish_post",
+            draft,
+            vec![RELAY_PRIMARY_WSS.to_owned(), RELAY_SECONDARY_WSS.to_owned()],
+            1_000,
+        ))
+        .await
+        .expect("enqueue");
+    let claimed = outbox
+        .claim_next_ready_event("signer", "sign-a", 2_000, 1_000)
+        .await
+        .expect("claim")
+        .expect("claim");
+    let signed = complete_claimed_signing(&outbox, &claimed, 1_100).await;
+    outbox.recover_expired_claims(2_001).await.expect("recover");
+    let publish_claim = outbox
+        .claim_next_ready_event("publisher", "publish-a", 3_000, 2_100)
+        .await
+        .expect("claim")
+        .expect("publish claim");
+    outbox
+        .mark_relay_accepted(
+            publish_claim.outbox_event_id,
+            publish_claim.claim_token.as_str(),
+            RELAY_PRIMARY_WSS,
+            2_150,
+        )
+        .await
+        .expect("primary accepted");
+
+    let adapter = RadrootsMockRelayPublishAdapter::new()
+        .with_outcome(RELAY_PRIMARY_WSS, RadrootsRelayOutcome::accepted())
+        .with_outcome(RELAY_SECONDARY_WSS, RadrootsRelayOutcome::accepted());
+    let published = publish_claimed_outbox_event(
+        &outbox,
+        &store,
+        &adapter,
+        &publish_claim,
+        RadrootsOutboxPublishPolicy::new(2_500)
+            .republish_accepted_relays(true)
+            .relay_url_policy(RadrootsRelayUrlPolicy::Public),
+        2_200,
+    )
+    .await
+    .expect("publish");
+
+    assert_eq!(published.local_ingest.event_id, signed.id);
+    assert_eq!(published.publish.attempted_count, 2);
+    assert_eq!(published.publish.accepted_count, 2);
+    assert_eq!(published.publish.quorum, 1);
+    assert!(published.publish.quorum_met);
+    assert_eq!(adapter.captured_raw_events().len(), 1);
+
+    let event = outbox
+        .get_event(receipt.outbox_event_id)
+        .await
+        .expect("event")
+        .expect("event");
+    assert_eq!(event.state, RadrootsOutboxEventState::Published);
+    let statuses = outbox
+        .relay_statuses(receipt.outbox_event_id)
+        .await
+        .expect("statuses");
+    assert!(
+        statuses
+            .iter()
+            .all(|status| status.status == RadrootsOutboxRelayStatus::Accepted)
+    );
+}
+
+#[tokio::test]
+async fn outbox_publish_requires_claimed_signed_event() {
+    let signed = signed_post("missing signature");
+    let outbox = RadrootsOutbox::open_memory().await.expect("outbox");
+    let store = RadrootsEventStore::open_memory().await.expect("store");
+    let draft = RadrootsFrozenEventDraft::new(
+        "radroots.social.post.v1",
+        KIND_POST,
+        signed.created_at,
+        signed.tags,
+        signed.content,
+        signed.pubkey.as_str(),
+    )
+    .expect("draft");
+    let receipt = outbox
+        .enqueue_operation(RadrootsOutboxOperationInput::new(
+            "publish_post",
+            draft,
+            vec![RELAY_PRIMARY_WSS.to_owned()],
+            1_000,
+        ))
+        .await
+        .expect("enqueue");
+    let claimed = outbox
+        .claim_next_ready_event("signer", "sign-a", 2_000, 1_000)
+        .await
+        .expect("claim")
+        .expect("claim");
+    let adapter = RadrootsMockRelayPublishAdapter::new();
+
+    let error = publish_claimed_outbox_event(
+        &outbox,
+        &store,
+        &adapter,
+        &claimed,
+        RadrootsOutboxPublishPolicy::new(2_500),
+        1_100,
+    )
+    .await
+    .expect_err("missing signed event");
+
+    assert!(matches!(
+        error,
+        RadrootsRelayTransportError::MissingSignedOutboxEvent(event_id)
+            if event_id == receipt.outbox_event_id
+    ));
+    assert!(adapter.captured_raw_events().is_empty());
+}
+
+#[tokio::test]
+async fn outbox_publish_propagates_non_transport_adapter_errors_after_target_filtering() {
+    let signed = signed_post("adapter non transport failure");
+    let outbox = RadrootsOutbox::open_memory().await.expect("outbox");
+    let store = RadrootsEventStore::open_memory().await.expect("store");
+    let draft = RadrootsFrozenEventDraft::new(
+        "radroots.social.post.v1",
+        KIND_POST,
+        signed.created_at,
+        signed.tags,
+        signed.content,
+        signed.pubkey.as_str(),
+    )
+    .expect("draft");
+    let receipt = outbox
+        .enqueue_operation(RadrootsOutboxOperationInput::new(
+            "publish_post",
+            draft,
+            vec![RELAY_PRIMARY_WSS.to_owned(), RELAY_SECONDARY_WSS.to_owned()],
+            1_000,
+        ))
+        .await
+        .expect("enqueue");
+    let claimed = outbox
+        .claim_next_ready_event("signer", "sign-a", 2_000, 1_000)
+        .await
+        .expect("claim")
+        .expect("claim");
+    complete_claimed_signing(&outbox, &claimed, 1_100).await;
+    outbox.recover_expired_claims(2_001).await.expect("recover");
+    let mut publish_claim = outbox
+        .claim_next_ready_event("publisher", "publish-a", 3_000, 2_100)
+        .await
+        .expect("claim")
+        .expect("publish claim");
+    publish_claim.target_relays = vec![RELAY_PRIMARY_WSS.to_owned()];
+
+    let error = publish_claimed_outbox_event(
+        &outbox,
+        &store,
+        &NostrJsonFailurePublishAdapter,
+        &publish_claim,
+        RadrootsOutboxPublishPolicy::new(2_500),
+        2_200,
+    )
+    .await
+    .expect_err("adapter error");
+
+    assert!(matches!(
+        error,
+        RadrootsRelayTransportError::NostrEventJson(_)
+    ));
+    let event = outbox
+        .get_event(receipt.outbox_event_id)
+        .await
+        .expect("event")
+        .expect("event");
+    assert_eq!(event.accepted_quorum, 1);
 }
 
 #[tokio::test]
