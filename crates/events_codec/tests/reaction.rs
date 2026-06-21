@@ -283,6 +283,91 @@ fn reaction_from_tags_rejects_missing_legacy_and_mismatched_targets() {
 }
 
 #[test]
+fn reaction_from_tags_covers_optional_decode_branches() {
+    let event = reaction_from_tags(
+        KIND_REACTION,
+        &[vec!["e".to_string(), EVENT_ID.to_string()]],
+        "+",
+    )
+    .unwrap();
+    assert_eq!(event.content, "+");
+    match event.target {
+        RadrootsSocialTarget::Event {
+            id,
+            author,
+            event_kind,
+            relays,
+        } => {
+            assert_eq!(id, EVENT_ID);
+            assert_eq!(author, None);
+            assert_eq!(event_kind, None);
+            assert_eq!(relays, None);
+        }
+        _ => panic!("expected event target"),
+    }
+
+    let address = format!("{}:{AUTHOR}:{D_TAG}", KIND_ARTICLE);
+    let reaction = reaction_from_tags(
+        KIND_REACTION,
+        &[vec!["a".to_string(), address.clone()]],
+        "-",
+    )
+    .unwrap();
+    assert_eq!(reaction.content, "-");
+    match reaction.target {
+        RadrootsSocialTarget::Address {
+            address: parsed,
+            author,
+            event_kind,
+            relays,
+        } => {
+            assert_eq!(parsed, address);
+            assert_eq!(author.as_deref(), Some(AUTHOR));
+            assert_eq!(event_kind, Some(KIND_ARTICLE));
+            assert_eq!(relays, None);
+        }
+        _ => panic!("expected address target"),
+    }
+
+    assert!(matches!(
+        reaction_from_tags(
+            KIND_REACTION,
+            &[
+                vec!["e".to_string(), EVENT_ID.to_string()],
+                vec!["p".to_string(), " ".to_string()]
+            ],
+            "+"
+        ),
+        Err(EventParseError::InvalidTag("p"))
+    ));
+    assert!(matches!(
+        reaction_from_tags(
+            KIND_REACTION,
+            &[
+                vec![
+                    "a".to_string(),
+                    format!("{}:{AUTHOR}:{D_TAG}", KIND_ARTICLE)
+                ],
+                vec!["k".to_string(), KIND_COMMENT.to_string()]
+            ],
+            "+"
+        ),
+        Err(EventParseError::InvalidTag("k"))
+    ));
+    assert!(matches!(
+        reaction_from_tags(
+            KIND_REACTION,
+            &[
+                vec!["e".to_string(), EVENT_ID.to_string()],
+                vec!["k".to_string(), "not-a-kind".to_string()]
+            ],
+            "+"
+        ),
+        Err(EventParseError::InvalidNumber("k", _))
+    ));
+}
+
+#[test]
 fn reaction_from_tags_rejects_invalid_kind() {
     let tags = reaction_build_tags(&RadrootsReaction {
         target: event_target(),

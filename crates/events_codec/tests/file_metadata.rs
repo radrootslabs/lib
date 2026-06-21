@@ -251,6 +251,13 @@ fn file_metadata_codec_requires_kind_required_tags_and_hash_shape() {
         to_wire_parts_with_kind(&sample_metadata(), KIND_POST),
         Err(EventEncodeError::InvalidKind(KIND_POST))
     ));
+    assert!(matches!(
+        file_metadata_from_event(KIND_POST, &[], ""),
+        Err(EventParseError::InvalidKind {
+            expected: "1063",
+            got: KIND_POST
+        })
+    ));
 
     let mut tags = file_metadata_build_tags(&sample_metadata()).unwrap();
     tags.retain(|tag| tag.first().map(|value| value.as_str()) != Some(TAG_URL));
@@ -283,6 +290,30 @@ fn file_metadata_codec_requires_kind_required_tags_and_hash_shape() {
         file_metadata_from_event(KIND_PUBLIC_FILE_METADATA, &tags, ""),
         Err(EventParseError::InvalidTag(TAG_SHA256))
     ));
+}
+
+#[test]
+fn file_metadata_decode_handles_minimal_public_tags() {
+    let tags = vec![
+        vec![
+            TAG_URL.to_string(),
+            "https://media.example.test/min.jpg".to_string(),
+        ],
+        vec![TAG_MIME.to_string(), "image/jpeg".to_string()],
+        vec![TAG_SHA256.to_string(), VALID_HASH.to_string()],
+    ];
+    let decoded = file_metadata_from_event(KIND_PUBLIC_FILE_METADATA, &tags, "").unwrap();
+
+    assert_eq!(decoded.url, "https://media.example.test/min.jpg");
+    assert_eq!(decoded.mime_type, "image/jpeg");
+    assert_eq!(decoded.sha256, VALID_HASH);
+    assert_eq!(decoded.original_sha256, None);
+    assert_eq!(decoded.size, None);
+    assert_eq!(decoded.dimensions, None);
+    assert_eq!(decoded.thumbnails, None);
+    assert_eq!(decoded.content_hashes, None);
+    assert_eq!(decoded.services, None);
+    assert_eq!(decoded.content, None);
 }
 
 #[test]
