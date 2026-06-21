@@ -1,3 +1,4 @@
+#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 #![forbid(unsafe_code)]
 
 use serde::{Deserialize, Serialize};
@@ -247,10 +248,10 @@ pub fn reduce_order_acceptance_public_values(
         .unwrap_or_else(empty_state_root);
     validate_hash32(&previous_state_root, "previous_state_root")?;
 
-    let event_set_root = event_evidence_set_root(&witness.event_evidence)?;
-    let inventory_delta_root = hash_json("radroots:inventory-delta:v1", &request_counts)?;
-    let inventory_prev_root = hash_json("radroots:inventory-prev:v1", &inventory_bins)?;
-    let inventory_new_root = hash_json("radroots:inventory-new:v1", &next_inventory)?;
+    let event_set_root = event_evidence_set_root(&witness.event_evidence);
+    let inventory_delta_root = hash_json("radroots:inventory-delta:v1", &request_counts);
+    let inventory_prev_root = hash_json("radroots:inventory-prev:v1", &inventory_bins);
+    let inventory_new_root = hash_json("radroots:inventory-new:v1", &next_inventory);
     let changed_records_root = hash_json(
         "radroots:changed-records:v1",
         &ChangedRecordsMaterial {
@@ -259,7 +260,7 @@ pub fn reduce_order_acceptance_public_values(
             target_event_id: &witness.decision_event_id,
             inventory_new_root: &inventory_new_root,
         },
-    )?;
+    );
     let new_state_root = hash_json(
         "radroots:state-root:v1",
         &StateRootMaterial {
@@ -268,7 +269,7 @@ pub fn reduce_order_acceptance_public_values(
             changed_records_root: &changed_records_root,
             inventory_new_root: &inventory_new_root,
         },
-    )?;
+    );
 
     let public_values = RadrootsSp1TradeProofPublicValues {
         schema_version: RADROOTS_SP1_TRADE_PUBLIC_VALUES_SCHEMA_VERSION,
@@ -415,10 +416,7 @@ fn validate_event_evidence(
         }
     }
 
-    let listing = required_evidence(
-        &evidence_by_position,
-        RadrootsSp1TradeEventWorkflowPosition::Listing,
-    )?;
+    let listing = evidence_by_position[&RadrootsSp1TradeEventWorkflowPosition::Listing];
     validate_evidence_binding(
         listing,
         &witness.listing_event_id,
@@ -431,10 +429,7 @@ fn validate_event_evidence(
         "listing",
     )?;
 
-    let request = required_evidence(
-        &evidence_by_position,
-        RadrootsSp1TradeEventWorkflowPosition::OrderRequest,
-    )?;
+    let request = evidence_by_position[&RadrootsSp1TradeEventWorkflowPosition::OrderRequest];
     validate_evidence_binding(
         request,
         &witness.request_event_id,
@@ -444,10 +439,7 @@ fn validate_event_evidence(
         "order_request",
     )?;
 
-    let decision = required_evidence(
-        &evidence_by_position,
-        RadrootsSp1TradeEventWorkflowPosition::OrderDecision,
-    )?;
+    let decision = evidence_by_position[&RadrootsSp1TradeEventWorkflowPosition::OrderDecision];
     validate_evidence_binding(
         decision,
         &witness.decision_event_id,
@@ -458,19 +450,6 @@ fn validate_event_evidence(
     )?;
 
     Ok(())
-}
-
-fn required_evidence<'a>(
-    evidence_by_position: &'a BTreeMap<
-        RadrootsSp1TradeEventWorkflowPosition,
-        &'a RadrootsSp1TradeCanonicalEventEvidence,
-    >,
-    position: RadrootsSp1TradeEventWorkflowPosition,
-) -> Result<&'a RadrootsSp1TradeCanonicalEventEvidence, RadrootsSp1TradeGuestError> {
-    evidence_by_position
-        .get(&position)
-        .copied()
-        .ok_or_else(|| RadrootsSp1TradeGuestError::MissingEventEvidence(position.as_str()))
 }
 
 fn validate_evidence_binding(
@@ -716,25 +695,27 @@ fn validate_public_values(
     Ok(())
 }
 
-fn event_evidence_set_root(
-    evidence: &[RadrootsSp1TradeCanonicalEventEvidence],
-) -> Result<String, RadrootsSp1TradeGuestError> {
+fn event_evidence_set_root(evidence: &[RadrootsSp1TradeCanonicalEventEvidence]) -> String {
     let mut sorted = evidence.to_vec();
-    sorted.sort_by(|left, right| {
-        left.ordering_key
-            .cmp(&right.ordering_key)
-            .then_with(|| left.event_id.cmp(&right.event_id))
-    });
+    sorted.sort_by(compare_event_evidence_order);
     hash_json("radroots:event-evidence-set:v1", &sorted)
 }
 
-fn hash_json<T: Serialize>(
-    domain: &'static str,
-    value: &T,
-) -> Result<String, RadrootsSp1TradeGuestError> {
-    let bytes =
-        serde_json::to_vec(value).map_err(|_| RadrootsSp1TradeGuestError::PublicValuesEncoding)?;
-    Ok(hash_bytes(domain, &bytes))
+fn compare_event_evidence_order(
+    left: &RadrootsSp1TradeCanonicalEventEvidence,
+    right: &RadrootsSp1TradeCanonicalEventEvidence,
+) -> std::cmp::Ordering {
+    let ordering = left.ordering_key.cmp(&right.ordering_key);
+    if ordering == std::cmp::Ordering::Equal {
+        left.event_id.cmp(&right.event_id)
+    } else {
+        ordering
+    }
+}
+
+fn hash_json<T: Serialize>(domain: &'static str, value: &T) -> String {
+    let bytes = serde_json::to_vec(value).expect("hash material serialization");
+    hash_bytes(domain, &bytes)
 }
 
 fn hash_bytes(domain: &'static str, bytes: &[u8]) -> String {
@@ -822,20 +803,21 @@ struct StateRootMaterial<'a> {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::{
-        RADROOTS_SP1_TRADE_KIND_LISTING, RADROOTS_SP1_TRADE_KIND_ORDER_DECISION,
-        RADROOTS_SP1_TRADE_KIND_ORDER_REQUEST, RADROOTS_SP1_TRADE_ORDER_ACCEPTANCE_PROOF_TARGET,
-        RADROOTS_SP1_TRADE_PROTOCOL_VERSION, RADROOTS_SP1_TRADE_REDUCER_PROGRAM_HASH,
-        RADROOTS_SP1_TRADE_WITNESS_VERSION, RadrootsSp1TradeCanonicalEventEvidence,
-        RadrootsSp1TradeEventEvidenceRole, RadrootsSp1TradeEventWorkflowPosition,
-        RadrootsSp1TradeGuestError, RadrootsSp1TradeInventoryBinWitness,
-        RadrootsSp1TradeInventoryCommitmentWitness, RadrootsSp1TradeOrderAcceptanceWitness,
-        RadrootsSp1TradeOrderDecisionEventWitness, RadrootsSp1TradeOrderDecisionWitness,
-        RadrootsSp1TradeOrderItemWitness, RadrootsSp1TradeOrderRequestWitness,
-        RadrootsSp1TradeProofResult, RadrootsSp1TradeProofTransitionKind,
-        canonical_public_values_bytes, reduce_order_acceptance_canonical_public_values,
-        reduce_order_acceptance_public_values,
+        RADROOTS_SP1_TRADE_KIND_LISTING, RADROOTS_SP1_TRADE_KIND_LISTING_DRAFT,
+        RADROOTS_SP1_TRADE_KIND_ORDER_DECISION, RADROOTS_SP1_TRADE_KIND_ORDER_REQUEST,
+        RADROOTS_SP1_TRADE_ORDER_ACCEPTANCE_PROOF_TARGET, RADROOTS_SP1_TRADE_PROTOCOL_VERSION,
+        RADROOTS_SP1_TRADE_REDUCER_PROGRAM_HASH, RADROOTS_SP1_TRADE_WITNESS_VERSION,
+        RadrootsSp1TradeCanonicalEventEvidence, RadrootsSp1TradeEventEvidenceRole,
+        RadrootsSp1TradeEventWorkflowPosition, RadrootsSp1TradeGuestError,
+        RadrootsSp1TradeInventoryBinWitness, RadrootsSp1TradeInventoryCommitmentWitness,
+        RadrootsSp1TradeOrderAcceptanceWitness, RadrootsSp1TradeOrderDecisionEventWitness,
+        RadrootsSp1TradeOrderDecisionWitness, RadrootsSp1TradeOrderItemWitness,
+        RadrootsSp1TradeOrderRequestWitness, RadrootsSp1TradeProofResult,
+        RadrootsSp1TradeProofTransitionKind, canonical_public_values_bytes, public_values_hash_hex,
+        reduce_order_acceptance_canonical_public_values, reduce_order_acceptance_public_values,
     };
 
     fn witness() -> RadrootsSp1TradeOrderAcceptanceWitness {
@@ -999,6 +981,10 @@ mod tests {
             serde_json::from_slice(&execution.canonical_public_values).expect("decode");
         let encoded = canonical_public_values_bytes(&decoded).expect("reencode");
         assert_eq!(execution.canonical_public_values, encoded);
+        assert_eq!(
+            public_values_hash_hex(&decoded).expect("hash"),
+            execution.public_values_hash
+        );
     }
 
     #[test]
@@ -1102,5 +1088,570 @@ mod tests {
             right.public_values.event_set_root
         );
         assert_ne!(left.public_values_hash, right.public_values_hash);
+
+        let mut input = witness();
+        input.event_evidence.reverse();
+        let reordered = reduce_order_acceptance_public_values(&input).expect("reordered");
+        assert_eq!(
+            left.public_values.event_set_root,
+            reordered.public_values.event_set_root
+        );
+        assert_eq!(left.public_values_hash, reordered.public_values_hash);
+
+        let mut input = witness();
+        input.event_evidence[0].ordering_key = "same".to_string();
+        input.event_evidence[1].ordering_key = "same".to_string();
+        reduce_order_acceptance_public_values(&input).expect("same ordering key");
+    }
+
+    #[test]
+    fn event_evidence_binding_labels_are_position_specific() {
+        let mut input = witness();
+        input.event_evidence[1].event_id =
+            "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd".to_string();
+        assert_eq!(
+            reduce_order_acceptance_public_values(&input).expect_err("order request binding"),
+            RadrootsSp1TradeGuestError::EventEvidenceBindingMismatch("order_request")
+        );
+
+        let mut input = witness();
+        input.event_evidence[2].event_id =
+            "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd".to_string();
+        assert_eq!(
+            reduce_order_acceptance_public_values(&input).expect_err("order decision binding"),
+            RadrootsSp1TradeGuestError::EventEvidenceBindingMismatch("order_decision")
+        );
+    }
+
+    #[test]
+    fn witness_header_validation_rejects_noncanonical_fields() {
+        let mut input = witness();
+        input.witness_version = RADROOTS_SP1_TRADE_WITNESS_VERSION + 1;
+        assert_eq!(
+            reduce_order_acceptance_public_values(&input).expect_err("witness version"),
+            RadrootsSp1TradeGuestError::UnsupportedWitnessVersion
+        );
+
+        let mut input = witness();
+        input.proof_target = "trade.order_legacy.v1".to_string();
+        assert_eq!(
+            reduce_order_acceptance_public_values(&input).expect_err("proof target"),
+            RadrootsSp1TradeGuestError::UnsupportedProofTarget
+        );
+
+        let mut input = witness();
+        input.proof_target = " ".to_string();
+        assert_eq!(
+            reduce_order_acceptance_public_values(&input).expect_err("empty proof target"),
+            RadrootsSp1TradeGuestError::EmptyField("proof_target")
+        );
+
+        let mut input = witness();
+        input.listing_event_id = "not-an-event-id".to_string();
+        assert_eq!(
+            reduce_order_acceptance_public_values(&input).expect_err("listing event id"),
+            RadrootsSp1TradeGuestError::InvalidEventId("listing_event_id")
+        );
+
+        let mut input = witness();
+        input.reducer_program_hash = "not-a-hash".to_string();
+        assert_eq!(
+            reduce_order_acceptance_public_values(&input).expect_err("reducer hash"),
+            RadrootsSp1TradeGuestError::InvalidHash("reducer_program_hash")
+        );
+
+        let mut input = witness();
+        input.radroots_protocol_version = String::new();
+        assert_eq!(
+            reduce_order_acceptance_public_values(&input).expect_err("empty protocol"),
+            RadrootsSp1TradeGuestError::EmptyField("radroots_protocol_version")
+        );
+
+        let mut input = witness();
+        input.sp1_program_hash = Some("not-a-hash".to_string());
+        assert_eq!(
+            reduce_order_acceptance_public_values(&input).expect_err("sp1 program hash"),
+            RadrootsSp1TradeGuestError::InvalidHash("sp1_program_hash")
+        );
+
+        let mut input = witness();
+        input.sp1_verifying_key_hash = Some("not-a-hash".to_string());
+        assert_eq!(
+            reduce_order_acceptance_public_values(&input).expect_err("sp1 verifying key hash"),
+            RadrootsSp1TradeGuestError::InvalidHash("sp1_verifying_key_hash")
+        );
+
+        let mut input = witness();
+        input.sp1_program_hash = None;
+        input.sp1_verifying_key_hash = None;
+        reduce_order_acceptance_public_values(&input).expect("optional sp1 hashes");
+    }
+
+    #[test]
+    fn event_evidence_validation_rejects_shape_and_binding_errors() {
+        let mut input = witness();
+        input.event_evidence.pop();
+        assert_eq!(
+            reduce_order_acceptance_public_values(&input).expect_err("evidence len"),
+            RadrootsSp1TradeGuestError::InvalidEventEvidence("event_evidence.len")
+        );
+
+        let mut input = witness();
+        input.event_evidence[2].workflow_position =
+            RadrootsSp1TradeEventWorkflowPosition::OrderRequest;
+        assert_eq!(
+            reduce_order_acceptance_public_values(&input).expect_err("duplicate evidence"),
+            RadrootsSp1TradeGuestError::DuplicateEventEvidence("order_request")
+        );
+
+        let mut input = witness();
+        input.event_evidence[0].event_id = "not-an-event-id".to_string();
+        assert_eq!(
+            reduce_order_acceptance_public_values(&input).expect_err("evidence event id"),
+            RadrootsSp1TradeGuestError::InvalidEventId("event_evidence.event_id")
+        );
+
+        let mut input = witness();
+        input.event_evidence[0].signer_pubkey = "not-a-pubkey".to_string();
+        assert_eq!(
+            reduce_order_acceptance_public_values(&input).expect_err("evidence signer"),
+            RadrootsSp1TradeGuestError::InvalidEventEvidence("event_evidence.signer_pubkey")
+        );
+
+        let mut input = witness();
+        input.event_evidence[0].canonical_event_hash = "not-a-hash".to_string();
+        assert_eq!(
+            reduce_order_acceptance_public_values(&input).expect_err("canonical hash"),
+            RadrootsSp1TradeGuestError::InvalidHash("event_evidence.canonical_event_hash")
+        );
+
+        let mut input = witness();
+        input.event_evidence[0].signature_hash = "not-a-hash".to_string();
+        assert_eq!(
+            reduce_order_acceptance_public_values(&input).expect_err("signature hash"),
+            RadrootsSp1TradeGuestError::InvalidHash("event_evidence.signature_hash")
+        );
+
+        let mut input = witness();
+        input.event_evidence[0].content_hash = "not-a-hash".to_string();
+        assert_eq!(
+            reduce_order_acceptance_public_values(&input).expect_err("content hash"),
+            RadrootsSp1TradeGuestError::InvalidHash("event_evidence.content_hash")
+        );
+
+        let mut input = witness();
+        input.event_evidence[0].tags_hash = "not-a-hash".to_string();
+        assert_eq!(
+            reduce_order_acceptance_public_values(&input).expect_err("tags hash"),
+            RadrootsSp1TradeGuestError::InvalidHash("event_evidence.tags_hash")
+        );
+
+        let mut input = witness();
+        input.event_evidence[0].ordering_key = " ".to_string();
+        assert_eq!(
+            reduce_order_acceptance_public_values(&input).expect_err("ordering key"),
+            RadrootsSp1TradeGuestError::EmptyField("event_evidence.ordering_key")
+        );
+
+        let mut input = witness();
+        input.event_evidence[0].event_id =
+            "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd".to_string();
+        assert_eq!(
+            reduce_order_acceptance_public_values(&input).expect_err("listing binding"),
+            RadrootsSp1TradeGuestError::EventEvidenceBindingMismatch("listing")
+        );
+
+        let mut input = witness();
+        input.event_evidence[0].role = RadrootsSp1TradeEventEvidenceRole::Buyer;
+        assert_eq!(
+            reduce_order_acceptance_public_values(&input).expect_err("role binding"),
+            RadrootsSp1TradeGuestError::EventEvidenceBindingMismatch("role")
+        );
+
+        let mut input = witness();
+        input.event_evidence[0].kind = RADROOTS_SP1_TRADE_KIND_LISTING_DRAFT;
+        reduce_order_acceptance_public_values(&input).expect("listing draft evidence");
+    }
+
+    #[test]
+    fn order_shape_and_binding_validation_rejects_edge_cases() {
+        let mut request_case = request(1);
+        request_case.items.clear();
+        assert_eq!(
+            super::validate_order_request_shape(&request_case).expect_err("empty request"),
+            RadrootsSp1TradeGuestError::InvalidOrderRequest
+        );
+
+        let mut request_case = request(1);
+        request_case.items[0].bin_id = " ".to_string();
+        assert_eq!(
+            super::validate_order_request_shape(&request_case).expect_err("empty request bin"),
+            RadrootsSp1TradeGuestError::EmptyField("request.items.bin_id")
+        );
+
+        let mut request_case = request(0);
+        assert_eq!(
+            super::validate_order_request_shape(&request_case).expect_err("zero request bin count"),
+            RadrootsSp1TradeGuestError::InvalidOrderRequest
+        );
+        request_case.items[0].bin_count = 1;
+        super::validate_order_request_shape(&request_case).expect("request shape");
+
+        let mut decision_case = decision(1);
+        let RadrootsSp1TradeOrderDecisionWitness::Accepted {
+            inventory_commitments,
+        } = &mut decision_case.decision
+        else {
+            unreachable!();
+        };
+        inventory_commitments.clear();
+        assert_eq!(
+            super::validate_order_decision_shape(&decision_case).expect_err("empty commitments"),
+            RadrootsSp1TradeGuestError::InvalidOrderDecision
+        );
+
+        let mut decision_case = decision(1);
+        let RadrootsSp1TradeOrderDecisionWitness::Accepted {
+            inventory_commitments,
+        } = &mut decision_case.decision
+        else {
+            unreachable!();
+        };
+        inventory_commitments[0].bin_id = " ".to_string();
+        assert_eq!(
+            super::validate_order_decision_shape(&decision_case).expect_err("empty commitment bin"),
+            RadrootsSp1TradeGuestError::EmptyField("decision.inventory_commitments.bin_id")
+        );
+
+        let mut decision_case = decision(0);
+        assert_eq!(
+            super::validate_order_decision_shape(&decision_case).expect_err("zero commitment"),
+            RadrootsSp1TradeGuestError::InvalidOrderDecision
+        );
+        decision_case.decision = RadrootsSp1TradeOrderDecisionWitness::Declined {
+            reason: " ".to_string(),
+        };
+        assert_eq!(
+            super::validate_order_decision_shape(&decision_case).expect_err("empty decline reason"),
+            RadrootsSp1TradeGuestError::EmptyField("decision.reason")
+        );
+        decision_case.decision = RadrootsSp1TradeOrderDecisionWitness::Declined {
+            reason: "sold out".to_string(),
+        };
+        super::validate_order_decision_shape(&decision_case).expect("decline shape");
+        assert_eq!(
+            super::aggregate_accepted_counts(&decision_case).expect_err("declined aggregate"),
+            RadrootsSp1TradeGuestError::DecisionNotAccepted
+        );
+
+        let mut input = witness();
+        input.decision.decision = RadrootsSp1TradeOrderDecisionWitness::Declined {
+            reason: "sold out".to_string(),
+        };
+        assert_eq!(
+            reduce_order_acceptance_public_values(&input).expect_err("declined order"),
+            RadrootsSp1TradeGuestError::DecisionNotAccepted
+        );
+
+        let binding_cases: [(&str, fn(&mut RadrootsSp1TradeOrderAcceptanceWitness)); 4] = [
+            (
+                "order_id",
+                |input: &mut RadrootsSp1TradeOrderAcceptanceWitness| {
+                    input.decision.order_id = "other-order".to_string();
+                },
+            ),
+            (
+                "listing_addr",
+                |input: &mut RadrootsSp1TradeOrderAcceptanceWitness| {
+                    input.decision.listing_addr = "other-listing".to_string();
+                },
+            ),
+            (
+                "buyer_pubkey",
+                |input: &mut RadrootsSp1TradeOrderAcceptanceWitness| {
+                    input.decision.buyer_pubkey =
+                        "3333333333333333333333333333333333333333333333333333333333333333"
+                            .to_string();
+                },
+            ),
+            (
+                "seller_pubkey",
+                |input: &mut RadrootsSp1TradeOrderAcceptanceWitness| {
+                    input.decision.seller_pubkey =
+                        "3333333333333333333333333333333333333333333333333333333333333333"
+                            .to_string();
+                },
+            ),
+        ];
+        for (field, apply) in binding_cases {
+            let mut input = witness();
+            apply(&mut input);
+            assert_eq!(
+                reduce_order_acceptance_public_values(&input).expect_err("binding mismatch"),
+                RadrootsSp1TradeGuestError::OrderBindingMismatch(field)
+            );
+        }
+    }
+
+    #[test]
+    fn inventory_validation_rejects_duplicate_missing_and_overflow() {
+        let mut input = witness();
+        input.inventory_bins.push(input.inventory_bins[0].clone());
+        assert_eq!(
+            reduce_order_acceptance_public_values(&input).expect_err("duplicate bin"),
+            RadrootsSp1TradeGuestError::DuplicateInventoryBin("bin-1".to_string())
+        );
+
+        let mut input = witness();
+        input.inventory_bins.clear();
+        assert_eq!(
+            reduce_order_acceptance_public_values(&input).expect_err("missing bin"),
+            RadrootsSp1TradeGuestError::MissingInventoryBin("bin-1".to_string())
+        );
+
+        let mut input = witness();
+        input.inventory_bins[0].listing_capacity = u64::MAX;
+        input.inventory_bins[0].previous_reserved = u64::MAX;
+        assert_eq!(
+            reduce_order_acceptance_public_values(&input).expect_err("inventory overflow"),
+            RadrootsSp1TradeGuestError::InventoryOverflow
+        );
+    }
+
+    #[test]
+    fn public_values_validation_rejects_noncanonical_fields() {
+        let execution = reduce_order_acceptance_public_values(&witness()).expect("execution");
+
+        let mut optional = execution.public_values.clone();
+        optional.sp1_program_hash = None;
+        optional.sp1_verifying_key_hash = None;
+        optional.listing_addr_hash = None;
+        optional.listing_event_id = None;
+        optional.order_id_hash = None;
+        optional.root_event_id = None;
+        optional.target_event_id = None;
+        optional.inventory_delta_root = None;
+        optional.inventory_sequence = None;
+        optional.inventory_prev_root = None;
+        optional.inventory_new_root = None;
+        canonical_public_values_bytes(&optional).expect("optional public values");
+
+        let mut public_values = execution.public_values.clone();
+        public_values.schema_version += 1;
+        assert_eq!(
+            canonical_public_values_bytes(&public_values).expect_err("schema version"),
+            RadrootsSp1TradeGuestError::InvalidHash("schema_version")
+        );
+
+        let mut public_values = execution.public_values.clone();
+        public_values.witness_version += 1;
+        assert_eq!(
+            canonical_public_values_bytes(&public_values).expect_err("witness version"),
+            RadrootsSp1TradeGuestError::UnsupportedWitnessVersion
+        );
+
+        let mut public_values = execution.public_values.clone();
+        public_values.proof_target = "legacy".to_string();
+        assert_eq!(
+            canonical_public_values_bytes(&public_values).expect_err("proof target"),
+            RadrootsSp1TradeGuestError::UnsupportedProofTarget
+        );
+
+        let mut public_values = execution.public_values.clone();
+        public_values.radroots_protocol_version = String::new();
+        assert_eq!(
+            canonical_public_values_bytes(&public_values).expect_err("protocol"),
+            RadrootsSp1TradeGuestError::EmptyField("radroots_protocol_version")
+        );
+
+        let mut public_values = execution.public_values.clone();
+        public_values.radroots_protocol_version = "radroots.trade.legacy".to_string();
+        assert_eq!(
+            canonical_public_values_bytes(&public_values).expect_err("unsupported protocol"),
+            RadrootsSp1TradeGuestError::UnsupportedProtocolVersion
+        );
+
+        let hash_fields: [(&str, fn(&mut super::RadrootsSp1TradeProofPublicValues)); 12] = [
+            (
+                "reducer_program_hash",
+                |public_values: &mut super::RadrootsSp1TradeProofPublicValues| {
+                    public_values.reducer_program_hash = "not-a-hash".to_string();
+                },
+            ),
+            (
+                "sp1_program_hash",
+                |public_values: &mut super::RadrootsSp1TradeProofPublicValues| {
+                    public_values.sp1_program_hash = Some("not-a-hash".to_string());
+                },
+            ),
+            (
+                "sp1_verifying_key_hash",
+                |public_values: &mut super::RadrootsSp1TradeProofPublicValues| {
+                    public_values.sp1_verifying_key_hash = Some("not-a-hash".to_string());
+                },
+            ),
+            (
+                "event_set_root",
+                |public_values: &mut super::RadrootsSp1TradeProofPublicValues| {
+                    public_values.event_set_root = "not-a-hash".to_string();
+                },
+            ),
+            (
+                "listing_addr_hash",
+                |public_values: &mut super::RadrootsSp1TradeProofPublicValues| {
+                    public_values.listing_addr_hash = Some("not-a-hash".to_string());
+                },
+            ),
+            (
+                "order_id_hash",
+                |public_values: &mut super::RadrootsSp1TradeProofPublicValues| {
+                    public_values.order_id_hash = Some("not-a-hash".to_string());
+                },
+            ),
+            (
+                "previous_state_root",
+                |public_values: &mut super::RadrootsSp1TradeProofPublicValues| {
+                    public_values.previous_state_root = "not-a-hash".to_string();
+                },
+            ),
+            (
+                "new_state_root",
+                |public_values: &mut super::RadrootsSp1TradeProofPublicValues| {
+                    public_values.new_state_root = "not-a-hash".to_string();
+                },
+            ),
+            (
+                "changed_records_root",
+                |public_values: &mut super::RadrootsSp1TradeProofPublicValues| {
+                    public_values.changed_records_root = "not-a-hash".to_string();
+                },
+            ),
+            (
+                "inventory_delta_root",
+                |public_values: &mut super::RadrootsSp1TradeProofPublicValues| {
+                    public_values.inventory_delta_root = Some("not-a-hash".to_string());
+                },
+            ),
+            (
+                "inventory_prev_root",
+                |public_values: &mut super::RadrootsSp1TradeProofPublicValues| {
+                    public_values.inventory_prev_root = Some("not-a-hash".to_string());
+                },
+            ),
+            (
+                "inventory_new_root",
+                |public_values: &mut super::RadrootsSp1TradeProofPublicValues| {
+                    public_values.inventory_new_root = Some("not-a-hash".to_string());
+                },
+            ),
+        ];
+        for (field, apply) in hash_fields {
+            let mut public_values = execution.public_values.clone();
+            apply(&mut public_values);
+            assert_eq!(
+                canonical_public_values_bytes(&public_values).expect_err("hash field"),
+                RadrootsSp1TradeGuestError::InvalidHash(field)
+            );
+        }
+
+        let event_id_fields: [(&str, fn(&mut super::RadrootsSp1TradeProofPublicValues)); 3] = [
+            (
+                "listing_event_id",
+                |public_values: &mut super::RadrootsSp1TradeProofPublicValues| {
+                    public_values.listing_event_id = Some("not-an-event-id".to_string());
+                },
+            ),
+            (
+                "root_event_id",
+                |public_values: &mut super::RadrootsSp1TradeProofPublicValues| {
+                    public_values.root_event_id = Some("not-an-event-id".to_string());
+                },
+            ),
+            (
+                "target_event_id",
+                |public_values: &mut super::RadrootsSp1TradeProofPublicValues| {
+                    public_values.target_event_id = Some("not-an-event-id".to_string());
+                },
+            ),
+        ];
+        for (field, apply) in event_id_fields {
+            let mut public_values = execution.public_values.clone();
+            apply(&mut public_values);
+            assert_eq!(
+                canonical_public_values_bytes(&public_values).expect_err("event id field"),
+                RadrootsSp1TradeGuestError::InvalidEventId(field)
+            );
+        }
+
+        let mut public_values = execution.public_values.clone();
+        public_values.error_bitmap = "0x1".to_string();
+        assert_eq!(
+            canonical_public_values_bytes(&public_values).expect_err("error bitmap"),
+            RadrootsSp1TradeGuestError::InvalidHash("error_bitmap")
+        );
+
+        let mut public_values = execution.public_values;
+        public_values.reducer_program_hash =
+            "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd".to_string();
+        assert_eq!(
+            canonical_public_values_bytes(&public_values).expect_err("unsupported reducer"),
+            RadrootsSp1TradeGuestError::UnsupportedReducerProgramHash
+        );
+    }
+
+    #[test]
+    fn scalar_validators_cover_hex_and_workflow_edges() {
+        assert_eq!(
+            super::validate_hash32(
+                "0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                "upper_hash"
+            )
+            .expect_err("upper hash"),
+            RadrootsSp1TradeGuestError::InvalidHash("upper_hash")
+        );
+        assert_eq!(
+            super::validate_hash32(
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "missing_prefix"
+            )
+            .expect_err("missing prefix"),
+            RadrootsSp1TradeGuestError::InvalidHash("missing_prefix")
+        );
+        assert_eq!(
+            super::validate_hash32(
+                "zzaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "bad_prefix"
+            )
+            .expect_err("bad prefix"),
+            RadrootsSp1TradeGuestError::InvalidHash("bad_prefix")
+        );
+        assert_eq!(
+            super::validate_event_id(
+                "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                "upper_event"
+            )
+            .expect_err("upper event id"),
+            RadrootsSp1TradeGuestError::InvalidEventId("upper_event")
+        );
+        assert_eq!(
+            super::validate_hex64(
+                "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                "upper_hex64"
+            )
+            .expect_err("upper hex64"),
+            RadrootsSp1TradeGuestError::InvalidEventEvidence("upper_hex64")
+        );
+        assert_eq!(
+            RadrootsSp1TradeEventWorkflowPosition::Listing.as_str(),
+            "listing"
+        );
+        assert_eq!(
+            RadrootsSp1TradeEventWorkflowPosition::OrderRequest.as_str(),
+            "order_request"
+        );
+        assert_eq!(
+            RadrootsSp1TradeEventWorkflowPosition::OrderDecision.as_str(),
+            "order_decision"
+        );
     }
 }
