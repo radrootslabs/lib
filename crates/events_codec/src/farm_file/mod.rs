@@ -171,6 +171,24 @@ mod tests {
         assert_eq!(data.kind, KIND_FARM_FILE_METADATA);
         assert_eq!(data.data, metadata);
 
+        let err = parsed_from_event(
+            "event-id".to_string(),
+            "author-pubkey".to_string(),
+            42,
+            KIND_POST,
+            parts.content.clone(),
+            parts.tags.clone(),
+            "sig".to_string(),
+        )
+        .unwrap_err();
+        assert!(matches!(
+            err,
+            EventParseError::InvalidKind {
+                expected: "1063",
+                got: KIND_POST
+            }
+        ));
+
         let parsed = parsed_from_event(
             "event-id".to_string(),
             "author-pubkey".to_string(),
@@ -254,6 +272,7 @@ mod tests {
             ("size", "not-a-number", "size"),
             ("dim", "bad", "dim"),
             ("dim", "0x12", "dim"),
+            ("dim", "12x0", "dim"),
             ("thumb", "", "thumb"),
             ("thumb", " ", "thumb"),
         ] {
@@ -290,6 +309,41 @@ mod tests {
             let err = farm_file_metadata_from_event(parts.kind, &tags, &parts.content).unwrap_err();
             assert!(matches!(err, EventParseError::InvalidTag("thumb")));
         }
+
+        let tags = replace_tag(
+            &parts.tags,
+            "thumb",
+            vec![
+                "thumb".to_string(),
+                "https://media.example.invalid/thumb/sha256".to_string(),
+                "320x240".to_string(),
+            ],
+        );
+        let decoded =
+            farm_file_metadata_from_event(parts.kind, &tags, &parts.content).expect("metadata");
+        assert_eq!(
+            decoded
+                .thumb
+                .as_ref()
+                .and_then(|source| source.mime_type.as_deref()),
+            None
+        );
+        assert_eq!(
+            decoded.thumb.and_then(|source| source.dimensions),
+            Some(RadrootsFarmFileDimensions { w: 320, h: 240 })
+        );
+
+        let tags = replace_tag(
+            &parts.tags,
+            "thumb",
+            vec![
+                "thumb".to_string(),
+                "https://media.example.invalid/thumb/sha256".to_string(),
+            ],
+        );
+        let decoded =
+            farm_file_metadata_from_event(parts.kind, &tags, &parts.content).expect("metadata");
+        assert_eq!(decoded.thumb.and_then(|source| source.dimensions), None);
 
         let err = farm_file_metadata_from_event(parts.kind, &parts.tags, " ").unwrap_err();
         assert!(matches!(err, EventParseError::InvalidTag("caption")));

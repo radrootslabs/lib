@@ -289,3 +289,24 @@ fn encode_error_to_parse_error(error: crate::error::EventEncodeError) -> EventPa
         crate::error::EventEncodeError::Json => EventParseError::InvalidTag("content"),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::error::EventEncodeError;
+
+    #[test]
+    fn encode_error_mapper_covers_unreachable_decode_edges() {
+        let err = encode_error_to_parse_error(EventEncodeError::InvalidKind(99));
+        assert!(matches!(
+            err,
+            EventParseError::InvalidKind {
+                expected: "1063",
+                got: 99
+            }
+        ));
+
+        let err = encode_error_to_parse_error(EventEncodeError::Json);
+        assert!(matches!(err, EventParseError::InvalidTag("content")));
+    }
+}
