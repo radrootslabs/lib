@@ -672,6 +672,24 @@ fn calendar_wrappers_preserve_event_metadata() {
     assert_eq!(date_data.kind, KIND_CALENDAR_DATE_EVENT);
     assert_eq!(date_data.data.title, "CSA pickup");
 
+    let err = date_parsed_from_event(
+        "date_id".to_string(),
+        "author".to_string(),
+        7,
+        KIND_POST,
+        date_parts.content.clone(),
+        date_parts.tags.clone(),
+        "sig".to_string(),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        EventParseError::InvalidKind {
+            expected: "31922",
+            got: KIND_POST
+        }
+    ));
+
     let date_parsed = date_parsed_from_event(
         "date_id".to_string(),
         "author".to_string(),
@@ -697,6 +715,24 @@ fn calendar_wrappers_preserve_event_metadata() {
     .unwrap();
     assert_eq!(time_data.kind, KIND_CALENDAR_TIME_EVENT);
     assert_eq!(time_data.data.title, "Wash pack shift");
+
+    let err = time_parsed_from_event(
+        "time_id".to_string(),
+        "author".to_string(),
+        8,
+        KIND_POST,
+        time_parts.content.clone(),
+        time_parts.tags.clone(),
+        "sig".to_string(),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        EventParseError::InvalidKind {
+            expected: "31923",
+            got: KIND_POST
+        }
+    ));
 
     let time_parsed = time_parsed_from_event(
         "time_id".to_string(),
@@ -724,6 +760,24 @@ fn calendar_wrappers_preserve_event_metadata() {
     assert_eq!(calendar_data.kind, KIND_CALENDAR);
     assert_eq!(calendar_data.data.title, "Farm calendar");
 
+    let err = calendar_parsed_from_event(
+        "calendar_id".to_string(),
+        "author".to_string(),
+        9,
+        KIND_POST,
+        calendar_parts.content.clone(),
+        calendar_parts.tags.clone(),
+        "sig".to_string(),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        EventParseError::InvalidKind {
+            expected: "31924",
+            got: KIND_POST
+        }
+    ));
+
     let calendar_parsed = calendar_parsed_from_event(
         "calendar_id".to_string(),
         "author".to_string(),
@@ -749,6 +803,24 @@ fn calendar_wrappers_preserve_event_metadata() {
     .unwrap();
     assert_eq!(rsvp_data.kind, KIND_CALENDAR_EVENT_RSVP);
     assert_eq!(rsvp_data.data.event_id.as_deref(), Some(EVENT_ID));
+
+    let err = rsvp_parsed_from_event(
+        "rsvp_id".to_string(),
+        "author".to_string(),
+        10,
+        KIND_POST,
+        rsvp_parts.content.clone(),
+        rsvp_parts.tags.clone(),
+        "sig".to_string(),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        EventParseError::InvalidKind {
+            expected: "31925",
+            got: KIND_POST
+        }
+    ));
 
     let rsvp_parsed = rsvp_parsed_from_event(
         "rsvp_id".to_string(),
