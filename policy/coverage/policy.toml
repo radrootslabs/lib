@@ -15,6 +15,11 @@ require_branches = false
 temporary = true
 reason = "branch coverage is not applicable while the crate has no measured branch records"
 
+[overrides.radroots_net]
+require_branches = false
+temporary = true
+reason = "branch coverage is not applicable while the crate has no measured branch records"
+
 [overrides.radroots_replica_db_schema]
 require_branches = false
 temporary = true
