@@ -17,11 +17,12 @@ mod tests {
 
     use crate::error::{EventEncodeError, EventParseError};
     use crate::farm_crdt::decode::{
-        farm_crdt_change_from_event, farm_crdt_change_from_event_with_author,
+        data_from_event, farm_crdt_change_from_event, farm_crdt_change_from_event_with_author,
+        parsed_from_event,
     };
     use crate::farm_crdt::encode::{
-        farm_crdt_change_build_tags, to_wire_parts, to_wire_parts_with_author,
-        to_wire_parts_with_kind,
+        farm_crdt_change_build_tags, farm_crdt_change_build_tags_with_author, to_wire_parts,
+        to_wire_parts_with_author, to_wire_parts_with_kind, to_wire_parts_with_kind_and_author,
     };
 
     const WORKSPACE_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAA";
@@ -250,6 +251,285 @@ mod tests {
         assert!(matches!(schema_err, EventParseError::InvalidJson("schema")));
     }
 
+    #[test]
+    fn farm_crdt_change_wrappers_preserve_event_metadata() {
+        let change = sample_change();
+        let parts = to_wire_parts_with_author(&change, AUTHOR).expect("crdt wire parts");
+
+        let data = data_from_event(
+            "event-id".to_string(),
+            AUTHOR.to_string(),
+            99,
+            parts.kind,
+            parts.content.clone(),
+            parts.tags.clone(),
+        )
+        .expect("parsed data");
+        assert_eq!(data.id, "event-id");
+        assert_eq!(data.author, AUTHOR);
+        assert_eq!(data.published_at, 99);
+        assert_eq!(data.kind, KIND_FARM_CRDT_CHANGE);
+        assert_eq!(data.data, change);
+
+        let parsed = parsed_from_event(
+            "event-id".to_string(),
+            AUTHOR.to_string(),
+            99,
+            parts.kind,
+            parts.content,
+            parts.tags,
+            "sig".to_string(),
+        )
+        .expect("parsed event");
+        assert_eq!(parsed.event.sig, "sig");
+        assert_eq!(parsed.data.data, change);
+
+        let no_author_parts = to_wire_parts(&change).expect("crdt wire parts");
+        let decoded = farm_crdt_change_from_event_with_author(
+            no_author_parts.kind,
+            &no_author_parts.tags,
+            &no_author_parts.content,
+            AUTHOR,
+        )
+        .expect("author context without p tag remains valid");
+        assert_eq!(decoded, change);
+
+        let empty_author = farm_crdt_change_from_event_with_author(
+            no_author_parts.kind,
+            &no_author_parts.tags,
+            &no_author_parts.content,
+            " ",
+        )
+        .unwrap_err();
+        assert!(matches!(empty_author, EventParseError::InvalidTag("p")));
+    }
+
+    #[test]
+    fn farm_crdt_change_rejects_decode_tag_and_content_edges() {
+        let parts = to_wire_parts_with_author(&sample_change(), AUTHOR).expect("crdt wire parts");
+
+        let empty_content = farm_crdt_change_from_event(parts.kind, &parts.tags, " ").unwrap_err();
+        assert!(matches!(
+            empty_content,
+            EventParseError::InvalidJson("content")
+        ));
+
+        let bad_json = farm_crdt_change_from_event(parts.kind, &parts.tags, "{").unwrap_err();
+        assert!(matches!(bad_json, EventParseError::InvalidJson("content")));
+
+        let mut empty_author_tag = parts.tags.clone();
+        replace_first_tag(&mut empty_author_tag, "p", tag("p", " "));
+        let err = farm_crdt_change_from_event_with_author(
+            parts.kind,
+            &empty_author_tag,
+            &parts.content,
+            AUTHOR,
+        )
+        .unwrap_err();
+        assert!(matches!(err, EventParseError::InvalidTag("p")));
+
+        let mut bad_document_tag = parts.tags.clone();
+        replace_first_tag(&mut bad_document_tag, "d", tag("d", "bad"));
+        let err =
+            farm_crdt_change_from_event(parts.kind, &bad_document_tag, &parts.content).unwrap_err();
+        assert!(matches!(err, EventParseError::InvalidTag("d")));
+
+        for replacement in [
+            tag("a", "30023:workspace_pubkey:AAAAAAAAAAAAAAAAAAAAAA"),
+            tag("a", "30078::AAAAAAAAAAAAAAAAAAAAAA"),
+            tag("a", "30078:workspace_pubkey:bad d"),
+            tag("a", "30078:workspace_pubkey:AAAAAAAAAAAAAAAAAAAAAA:extra"),
+        ] {
+            let mut tags = parts.tags.clone();
+            replace_first_tag(&mut tags, "a", replacement);
+            let err = farm_crdt_change_from_event(parts.kind, &tags, &parts.content).unwrap_err();
+            assert!(matches!(err, EventParseError::InvalidTag("a")));
+        }
+
+        let mut wrong_marker = parts.tags.clone();
+        remove_tags(&mut wrong_marker, "t");
+        wrong_marker.push(tag("t", "radroots:farm:other"));
+        let err =
+            farm_crdt_change_from_event(parts.kind, &wrong_marker, &parts.content).unwrap_err();
+        assert!(matches!(err, EventParseError::MissingTag("t")));
+
+        let mut group_mismatch = parts.tags.clone();
+        replace_first_tag(&mut group_mismatch, "h", tag("h", "other-group"));
+        let err =
+            farm_crdt_change_from_event(parts.kind, &group_mismatch, &parts.content).unwrap_err();
+        assert!(matches!(err, EventParseError::InvalidTag("h")));
+    }
+
+    #[test]
+    fn farm_crdt_change_rejects_content_validation_edges() {
+        let parts = to_wire_parts(&sample_change()).expect("crdt wire parts");
+
+        for (change, expected) in [
+            {
+                let mut change = sample_change();
+                change.farm_group_id.clear();
+                (change, EventParseError::InvalidTag("h"))
+            },
+            {
+                let mut change = sample_change();
+                change.document_id = "bad".to_string();
+                (change, EventParseError::InvalidTag("d"))
+            },
+            {
+                let mut change = sample_change();
+                change.workspace.pubkey.clear();
+                (change, EventParseError::InvalidTag("a"))
+            },
+            {
+                let mut change = sample_change();
+                change.workspace.d_tag = "bad".to_string();
+                (change, EventParseError::InvalidTag("a"))
+            },
+            {
+                let mut change = sample_change();
+                change.encoded_change = "abc/def".to_string();
+                (change, EventParseError::InvalidJson("encoded_change"))
+            },
+            {
+                let mut change = sample_change();
+                change.change_hash.clear();
+                (change, EventParseError::InvalidJson("change_hash"))
+            },
+            {
+                let mut change = sample_change();
+                change.business_time_ms = 0;
+                (change, EventParseError::InvalidJson("business_time_ms"))
+            },
+            {
+                let mut change = sample_change();
+                change.actor_id.clear();
+                (change, EventParseError::InvalidJson("actor_id"))
+            },
+            {
+                let mut change = sample_change();
+                change.dependencies.push(String::new());
+                (change, EventParseError::InvalidJson("dependencies"))
+            },
+            {
+                let mut change = sample_change();
+                change.crdt_backend_version = Some(" ".to_string());
+                (change, EventParseError::InvalidJson("crdt_backend_version"))
+            },
+            {
+                let mut change = sample_change();
+                change.author_member_id = Some(" ".to_string());
+                (change, EventParseError::InvalidJson("author_member_id"))
+            },
+            {
+                let mut change = sample_change();
+                change.app_version = Some(" ".to_string());
+                (change, EventParseError::InvalidJson("app_version"))
+            },
+        ] {
+            let content = serde_json::to_string(&change).expect("crdt content");
+            let err = farm_crdt_change_from_event(parts.kind, &parts.tags, &content).unwrap_err();
+            assert_same_parse_error(err, expected);
+        }
+    }
+
+    #[test]
+    fn farm_crdt_change_rejects_encoder_validation_edges() {
+        for (change, expected) in [
+            {
+                let mut change = sample_change();
+                change.schema = "radroots.farm.crdt.invalid".to_string();
+                (change, EventEncodeError::InvalidField("schema"))
+            },
+            {
+                let mut change = sample_change();
+                change.farm_group_id.clear();
+                (
+                    change,
+                    EventEncodeError::EmptyRequiredField("farm_group_id"),
+                )
+            },
+            {
+                let mut change = sample_change();
+                change.document_id = "bad".to_string();
+                (change, EventEncodeError::InvalidField("document_id"))
+            },
+            {
+                let mut change = sample_change();
+                change.workspace.pubkey.clear();
+                (
+                    change,
+                    EventEncodeError::EmptyRequiredField("workspace.pubkey"),
+                )
+            },
+            {
+                let mut change = sample_change();
+                change.workspace.d_tag = "bad".to_string();
+                (change, EventEncodeError::InvalidField("workspace.d_tag"))
+            },
+            {
+                let mut change = sample_change();
+                change.actor_id.clear();
+                (change, EventEncodeError::EmptyRequiredField("actor_id"))
+            },
+            {
+                let mut change = sample_change();
+                change.change_hash.clear();
+                (change, EventEncodeError::EmptyRequiredField("change_hash"))
+            },
+            {
+                let mut change = sample_change();
+                change.dependencies.push(String::new());
+                (change, EventEncodeError::EmptyRequiredField("dependencies"))
+            },
+            {
+                let mut change = sample_change();
+                change.encoded_change = "abc/def".to_string();
+                (change, EventEncodeError::InvalidField("encoded_change"))
+            },
+            {
+                let mut change = sample_change();
+                change.business_time_ms = 0;
+                (change, EventEncodeError::InvalidField("business_time_ms"))
+            },
+            {
+                let mut change = sample_change();
+                change.crdt_backend_version = Some(" ".to_string());
+                (
+                    change,
+                    EventEncodeError::EmptyRequiredField("crdt_backend_version"),
+                )
+            },
+            {
+                let mut change = sample_change();
+                change.author_member_id = Some(" ".to_string());
+                (
+                    change,
+                    EventEncodeError::EmptyRequiredField("author_member_id"),
+                )
+            },
+            {
+                let mut change = sample_change();
+                change.app_version = Some(" ".to_string());
+                (change, EventEncodeError::EmptyRequiredField("app_version"))
+            },
+        ] {
+            let err = farm_crdt_change_build_tags(&change).unwrap_err();
+            assert_same_encode_error(err, expected);
+        }
+
+        let author_err =
+            farm_crdt_change_build_tags_with_author(&sample_change(), Some(" ")).unwrap_err();
+        assert_same_encode_error(
+            author_err,
+            EventEncodeError::EmptyRequiredField("author_pubkey"),
+        );
+
+        let wrong_kind =
+            to_wire_parts_with_kind_and_author(&sample_change(), KIND_POST, Some(AUTHOR))
+                .unwrap_err();
+        assert_same_encode_error(wrong_kind, EventEncodeError::InvalidKind(KIND_POST));
+    }
+
     fn sample_change() -> RadrootsFarmCrdtChange {
         sample_change_with(
             DOCUMENT_ID,
@@ -291,5 +571,65 @@ mod tests {
 
     fn tag(key: &str, value: &str) -> Vec<String> {
         vec![key.to_string(), value.to_string()]
+    }
+
+    fn remove_tags(tags: &mut Vec<Vec<String>>, name: &str) {
+        tags.retain(|tag| tag.first().map(String::as_str) != Some(name));
+    }
+
+    fn replace_first_tag(tags: &mut [Vec<String>], name: &str, replacement: Vec<String>) {
+        let tag = tags
+            .iter_mut()
+            .find(|tag| tag.first().map(String::as_str) == Some(name))
+            .expect("tag");
+        *tag = replacement;
+    }
+
+    fn assert_same_parse_error(actual: EventParseError, expected: EventParseError) {
+        match (actual, expected) {
+            (EventParseError::MissingTag(actual), EventParseError::MissingTag(expected))
+            | (EventParseError::InvalidTag(actual), EventParseError::InvalidTag(expected))
+            | (EventParseError::InvalidJson(actual), EventParseError::InvalidJson(expected)) => {
+                assert_eq!(actual, expected);
+            }
+            (
+                EventParseError::InvalidKind {
+                    expected: actual_expected,
+                    got: actual_got,
+                },
+                EventParseError::InvalidKind { expected, got },
+            ) => {
+                assert_eq!(actual_expected, expected);
+                assert_eq!(actual_got, got);
+            }
+            (
+                EventParseError::InvalidNumber(actual, _),
+                EventParseError::InvalidNumber(expected, _),
+            ) => {
+                assert_eq!(actual, expected);
+            }
+            (actual, expected) => {
+                panic!("unexpected parse error {actual:?}, expected {expected:?}")
+            }
+        }
+    }
+
+    fn assert_same_encode_error(actual: EventEncodeError, expected: EventEncodeError) {
+        match (actual, expected) {
+            (
+                EventEncodeError::EmptyRequiredField(actual),
+                EventEncodeError::EmptyRequiredField(expected),
+            )
+            | (EventEncodeError::InvalidField(actual), EventEncodeError::InvalidField(expected)) => {
+                assert_eq!(actual, expected);
+            }
+            (EventEncodeError::InvalidKind(actual), EventEncodeError::InvalidKind(expected)) => {
+                assert_eq!(actual, expected);
+            }
+            (EventEncodeError::Json, EventEncodeError::Json) => {}
+            (actual, expected) => {
+                panic!("unexpected encode error {actual:?}, expected {expected:?}")
+            }
+        }
     }
 }
