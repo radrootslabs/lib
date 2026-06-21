@@ -413,11 +413,14 @@ mod tests {
         order_event_context_from_tags, order_request_from_event,
         order_revision_decision_from_event, order_revision_proposal_from_event,
     };
-    use crate::order::encode::{
-        order_cancellation_event_build, order_decision_event_build, order_request_event_build,
-        order_revision_decision_event_build, order_revision_proposal_event_build,
-    };
     use crate::order::tags::TAG_LISTING_EVENT;
+    use crate::{
+        error::EventEncodeError,
+        order::encode::{
+            order_cancellation_event_build, order_decision_event_build, order_request_event_build,
+            order_revision_decision_event_build, order_revision_proposal_event_build,
+        },
+    };
     use radroots_core::{
         RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreUnit,
     };
@@ -806,6 +809,46 @@ mod tests {
                 .iter()
                 .any(|tag| tag == &vec![TAG_E_PREV.to_string(), event_id_wire('3')])
         );
+    }
+
+    #[test]
+    fn order_revision_builders_reject_mismatched_chain_context() {
+        let proposal = order_revision_proposal();
+        let wrong_root = event_id('9');
+        let wrong_prev = event_id('8');
+
+        let err =
+            order_revision_proposal_event_build(&wrong_root, &proposal.prev_event_id, &proposal)
+                .unwrap_err();
+        assert!(matches!(
+            err,
+            EventEncodeError::InvalidField("root_event_id")
+        ));
+
+        let err =
+            order_revision_proposal_event_build(&proposal.root_event_id, &wrong_prev, &proposal)
+                .unwrap_err();
+        assert!(matches!(
+            err,
+            EventEncodeError::InvalidField("prev_event_id")
+        ));
+
+        let decision = order_revision_decision(RadrootsOrderRevisionOutcome::Accepted);
+        let err =
+            order_revision_decision_event_build(&wrong_root, &decision.prev_event_id, &decision)
+                .unwrap_err();
+        assert!(matches!(
+            err,
+            EventEncodeError::InvalidField("root_event_id")
+        ));
+
+        let err =
+            order_revision_decision_event_build(&decision.root_event_id, &wrong_prev, &decision)
+                .unwrap_err();
+        assert!(matches!(
+            err,
+            EventEncodeError::InvalidField("prev_event_id")
+        ));
     }
 
     #[test]

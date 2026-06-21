@@ -239,6 +239,7 @@ mod tests {
     };
     use crate::error::EventEncodeError;
     use radroots_events::{
+        RadrootsNostrEventPtr,
         ids::RadrootsEventId,
         order::{RadrootsOrderEnvelopeError, RadrootsOrderEventType, RadrootsOrderPayloadError},
     };
@@ -398,6 +399,22 @@ mod tests {
         })
         .unwrap_err();
         assert_empty_required(missing_prev, "prev_event_id");
+
+        let invalid_listing_event = order_envelope_event_build(OrderEnvelopeEventBuildParts {
+            recipient_pubkey: "recipient",
+            message_type: RadrootsOrderEventType::OrderRequested,
+            listing_addr: "listing-address",
+            order_id: "order-1",
+            listing_event: Some(&RadrootsNostrEventPtr {
+                id: String::new(),
+                relays: None,
+            }),
+            root_event_id: None,
+            prev_event_id: None,
+            payload: &payload,
+        })
+        .unwrap_err();
+        assert_empty_required(invalid_listing_event, "listing_event.id");
     }
 
     fn assert_empty_required(error: EventEncodeError, field: &'static str) {
