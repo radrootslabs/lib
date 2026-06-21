@@ -14,7 +14,9 @@ mod tests {
     };
 
     use crate::error::{EventEncodeError, EventParseError};
-    use crate::farm_file::decode::farm_file_metadata_from_event;
+    use crate::farm_file::decode::{
+        data_from_event, farm_file_metadata_from_event, parsed_from_event,
+    };
     use crate::farm_file::encode::{
         farm_file_metadata_build_tags, to_wire_parts, to_wire_parts_with_kind,
     };
@@ -118,6 +120,72 @@ mod tests {
     }
 
     #[test]
+    fn farm_file_metadata_wrappers_roundtrip_minimal_optional_shape() {
+        let mut metadata = sample_metadata();
+        metadata.caption = None;
+        metadata.original_sha256 = None;
+        metadata.size_bytes = None;
+        metadata.dimensions = None;
+        metadata.blurhash = None;
+        metadata.thumb = None;
+        metadata.image = Some(RadrootsFarmFileSource {
+            url: "https://media.example.invalid/image/sha256".to_string(),
+            mime_type: None,
+            dimensions: Some(RadrootsFarmFileDimensions { w: 640, h: 480 }),
+        });
+        metadata.alt = None;
+        metadata.fallbacks.clear();
+        let parts = to_wire_parts(&metadata).expect("file metadata wire parts");
+
+        assert!(
+            !parts
+                .tags
+                .iter()
+                .any(|tag| tag.first().map(String::as_str) == Some("size"))
+        );
+        assert!(
+            !parts
+                .tags
+                .iter()
+                .any(|tag| tag.first().map(String::as_str) == Some("dim"))
+        );
+        assert!(parts.tags.iter().any(|tag| tag
+            == &vec![
+                "image".to_string(),
+                "https://media.example.invalid/image/sha256".to_string(),
+                "640x480".to_string()
+            ]));
+
+        let data = data_from_event(
+            "event-id".to_string(),
+            "author-pubkey".to_string(),
+            42,
+            parts.kind,
+            parts.content.clone(),
+            parts.tags.clone(),
+        )
+        .expect("parsed data");
+        assert_eq!(data.id, "event-id");
+        assert_eq!(data.author, "author-pubkey");
+        assert_eq!(data.published_at, 42);
+        assert_eq!(data.kind, KIND_FARM_FILE_METADATA);
+        assert_eq!(data.data, metadata);
+
+        let parsed = parsed_from_event(
+            "event-id".to_string(),
+            "author-pubkey".to_string(),
+            42,
+            parts.kind,
+            parts.content,
+            parts.tags,
+            "sig".to_string(),
+        )
+        .expect("parsed event");
+        assert_eq!(parsed.event.sig, "sig");
+        assert_eq!(parsed.data.data, metadata);
+    }
+
+    #[test]
     fn farm_file_metadata_preserves_expanded_owner_document_kinds() {
         for kind in [
             RadrootsFarmCrdtDocumentKind::FarmMembership,
@@ -140,6 +208,156 @@ mod tests {
                 .expect("file metadata decode");
 
             assert_eq!(decoded.owner_document_kind, metadata.owner_document_kind);
+        }
+    }
+
+    #[test]
+    fn farm_file_metadata_rejects_malformed_decode_tags() {
+        let parts = to_wire_parts(&sample_metadata()).expect("file metadata wire parts");
+
+        let mut missing_owner = parts.tags.clone();
+        missing_owner
+            .retain(|tag| tag.first().map(String::as_str) != Some("radroots:owner_document"));
+        let err =
+            farm_file_metadata_from_event(parts.kind, &missing_owner, &parts.content).unwrap_err();
+        assert!(matches!(
+            err,
+            EventParseError::MissingTag("radroots:owner_document")
+        ));
+
+        for replacement in [
+            vec![
+                "radroots:owner_document".to_string(),
+                OWNER_DOCUMENT_ID.to_string(),
+            ],
+            vec![
+                "radroots:owner_document".to_string(),
+                OWNER_DOCUMENT_ID.to_string(),
+                " ".to_string(),
+            ],
+            vec![
+                "radroots:owner_document".to_string(),
+                "bad d tag".to_string(),
+                "FarmTask".to_string(),
+            ],
+        ] {
+            let mut tags = replace_tag(&parts.tags, "radroots:owner_document", replacement);
+            let err = farm_file_metadata_from_event(parts.kind, &tags, &parts.content).unwrap_err();
+            assert!(matches!(
+                err,
+                EventParseError::InvalidTag("radroots:owner_document")
+            ));
+            tags.clear();
+        }
+
+        for (key, value, expected) in [
+            ("size", "not-a-number", "size"),
+            ("dim", "bad", "dim"),
+            ("dim", "0x12", "dim"),
+            ("thumb", "", "thumb"),
+            ("thumb", " ", "thumb"),
+        ] {
+            let tags = replace_tag(&parts.tags, key, tag(key, value));
+            let err = farm_file_metadata_from_event(parts.kind, &tags, &parts.content).unwrap_err();
+            assert!(
+                matches!(
+                    err,
+                    EventParseError::InvalidTag(found) if found == expected
+                ) || matches!(
+                    err,
+                    EventParseError::InvalidNumber(found, _) if found == expected
+                )
+            );
+        }
+
+        for replacement in [
+            vec!["thumb".to_string()],
+            vec![
+                "thumb".to_string(),
+                "https://media.example.invalid/thumb/sha256".to_string(),
+                "image/jpeg".to_string(),
+                "320x240".to_string(),
+                "extra".to_string(),
+            ],
+            vec![
+                "thumb".to_string(),
+                "https://media.example.invalid/thumb/sha256".to_string(),
+                "image/jpeg".to_string(),
+                " ".to_string(),
+            ],
+        ] {
+            let tags = replace_tag(&parts.tags, "thumb", replacement);
+            let err = farm_file_metadata_from_event(parts.kind, &tags, &parts.content).unwrap_err();
+            assert!(matches!(err, EventParseError::InvalidTag("thumb")));
+        }
+
+        let err = farm_file_metadata_from_event(parts.kind, &parts.tags, " ").unwrap_err();
+        assert!(matches!(err, EventParseError::InvalidTag("caption")));
+    }
+
+    #[test]
+    fn farm_file_metadata_rejects_encoder_validation_edges() {
+        for (metadata, expected) in [
+            {
+                let mut metadata = sample_metadata();
+                metadata.workspace.d_tag = "bad d tag".to_string();
+                (metadata, EventEncodeError::InvalidField("workspace.d_tag"))
+            },
+            {
+                let mut metadata = sample_metadata();
+                metadata.caption = Some("".to_string());
+                (metadata, EventEncodeError::EmptyRequiredField("caption"))
+            },
+            {
+                let mut metadata = sample_metadata();
+                metadata.dimensions = Some(RadrootsFarmFileDimensions { w: 0, h: 1200 });
+                (metadata, EventEncodeError::InvalidField("dimensions"))
+            },
+            {
+                let mut metadata = sample_metadata();
+                metadata.blurhash = Some("".to_string());
+                (metadata, EventEncodeError::EmptyRequiredField("blurhash"))
+            },
+            {
+                let mut metadata = sample_metadata();
+                metadata.thumb = Some(RadrootsFarmFileSource {
+                    url: "".to_string(),
+                    mime_type: None,
+                    dimensions: None,
+                });
+                (metadata, EventEncodeError::EmptyRequiredField("thumb"))
+            },
+            {
+                let mut metadata = sample_metadata();
+                metadata.thumb = Some(RadrootsFarmFileSource {
+                    url: "https://media.example.invalid/thumb/sha256".to_string(),
+                    mime_type: Some("".to_string()),
+                    dimensions: None,
+                });
+                (metadata, EventEncodeError::EmptyRequiredField("thumb"))
+            },
+            {
+                let mut metadata = sample_metadata();
+                metadata.thumb = Some(RadrootsFarmFileSource {
+                    url: "https://media.example.invalid/thumb/sha256".to_string(),
+                    mime_type: None,
+                    dimensions: Some(RadrootsFarmFileDimensions { w: 320, h: 0 }),
+                });
+                (metadata, EventEncodeError::InvalidField("thumb"))
+            },
+            {
+                let mut metadata = sample_metadata();
+                metadata.alt = Some("".to_string());
+                (metadata, EventEncodeError::EmptyRequiredField("alt"))
+            },
+            {
+                let mut metadata = sample_metadata();
+                metadata.fallbacks = vec!["".to_string()];
+                (metadata, EventEncodeError::EmptyRequiredField("fallbacks"))
+            },
+        ] {
+            let err = farm_file_metadata_build_tags(&metadata).unwrap_err();
+            assert_same_encode_error(err, expected);
         }
     }
 
@@ -176,5 +394,34 @@ mod tests {
 
     fn tag(key: &str, value: &str) -> Vec<String> {
         vec![key.to_string(), value.to_string()]
+    }
+
+    fn replace_tag(tags: &[Vec<String>], key: &str, replacement: Vec<String>) -> Vec<Vec<String>> {
+        tags.iter()
+            .map(|tag| {
+                if tag.first().map(String::as_str) == Some(key) {
+                    replacement.clone()
+                } else {
+                    tag.clone()
+                }
+            })
+            .collect()
+    }
+
+    fn assert_same_encode_error(actual: EventEncodeError, expected: EventEncodeError) {
+        match (actual, expected) {
+            (
+                EventEncodeError::EmptyRequiredField(actual),
+                EventEncodeError::EmptyRequiredField(expected),
+            )
+            | (EventEncodeError::InvalidField(actual), EventEncodeError::InvalidField(expected)) => {
+                assert_eq!(actual, expected);
+            }
+            (EventEncodeError::InvalidKind(actual), EventEncodeError::InvalidKind(expected)) => {
+                assert_eq!(actual, expected);
+            }
+            (EventEncodeError::Json, EventEncodeError::Json) => {}
+            (actual, expected) => panic!("unexpected error {actual:?}, expected {expected:?}"),
+        }
     }
 }
