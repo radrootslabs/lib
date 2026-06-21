@@ -133,6 +133,57 @@ fn article_codec_requires_kind_required_fields_and_valid_d_tag() {
 }
 
 #[test]
+fn article_decode_handles_minimal_and_invalid_optional_tags() {
+    let tags = vec![
+        vec![TAG_D.to_string(), VALID_D_TAG.to_string()],
+        vec![TAG_TITLE.to_string(), "Minimal article".to_string()],
+    ];
+    let decoded = article_from_event(KIND_ARTICLE, &tags, "Body").unwrap();
+    assert_eq!(decoded.d_tag, VALID_D_TAG);
+    assert_eq!(decoded.title, "Minimal article");
+    assert!(decoded.farm.is_none());
+    assert_eq!(decoded.topics, None);
+    assert_eq!(decoded.published_at, None);
+
+    let mut tags = tags.clone();
+    tags.push(vec![TAG_PUBLISHED_AT.to_string(), "not-a-time".to_string()]);
+    assert!(matches!(
+        article_from_event(KIND_ARTICLE, &tags, "Body"),
+        Err(EventParseError::InvalidNumber(TAG_PUBLISHED_AT, _))
+    ));
+
+    assert!(matches!(
+        article_from_event(KIND_ARTICLE, &tags, " "),
+        Err(EventParseError::InvalidTag("content"))
+    ));
+}
+
+#[test]
+fn article_build_tags_handles_absent_optional_metadata() {
+    let article = RadrootsArticle {
+        d_tag: VALID_D_TAG.to_string(),
+        title: "Minimal article".to_string(),
+        content: "Body".to_string(),
+        summary: None,
+        image: None,
+        published_at: None,
+        farm: None,
+        location: None,
+        topics: None,
+    };
+
+    let tags = article_build_tags(&article).unwrap();
+    assert!(has_tag(&tags, TAG_D, VALID_D_TAG));
+    assert!(has_tag(&tags, TAG_TITLE, "Minimal article"));
+    assert!(!tags.iter().any(|tag| {
+        matches!(
+            tag.first().map(String::as_str),
+            Some(TAG_PUBLISHED_AT | TAG_A | TAG_LOCATION | TAG_G | TAG_T)
+        )
+    }));
+}
+
+#[test]
 fn article_wrappers_preserve_event_metadata() {
     let article = sample_article();
     let parts = to_wire_parts(&article).unwrap();

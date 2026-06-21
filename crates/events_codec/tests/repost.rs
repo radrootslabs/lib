@@ -262,6 +262,36 @@ fn generic_repost_codecs_cover_event_targets_and_error_edges() {
         }
     ));
 
+    let no_author_event = RadrootsGenericRepost {
+        target: RadrootsSocialTarget::Event {
+            id: EVENT_ID.to_string(),
+            author: None,
+            event_kind: Some(KIND_REACTION),
+            relays: None,
+        },
+        target_kind: KIND_REACTION,
+        content: None,
+    };
+    let parts = generic_repost_to_wire_parts(&no_author_event).unwrap();
+    assert!(has_tag(&parts.tags, TAG_E, EVENT_ID));
+    assert!(!parts.tags.iter().any(|tag| {
+        tag.first().map(String::as_str) == Some(TAG_P)
+            || tag.get(2).map(|value| !value.is_empty()).unwrap_or(false)
+    }));
+
+    let mut generic = generic_article_repost();
+    if let RadrootsSocialTarget::Address { author, relays, .. } = &mut generic.target {
+        *author = None;
+        *relays = None;
+    }
+    let parts = generic_repost_to_wire_parts(&generic).unwrap();
+    let address = parts
+        .tags
+        .iter()
+        .find(|tag| tag.first().map(String::as_str) == Some(TAG_A))
+        .expect("address tag");
+    assert_eq!(address.len(), 2);
+
     let wrong_kind = generic_repost_from_event(KIND_REPOST, &parts.tags, "").unwrap_err();
     assert!(matches!(
         wrong_kind,
@@ -302,7 +332,7 @@ fn generic_repost_codecs_cover_event_targets_and_error_edges() {
         Err(EventParseError::InvalidTag(TAG_A))
     ));
 
-    let mut tags = generic_repost_build_tags(&generic).unwrap();
+    let mut tags = generic_repost_build_tags(&no_author_event).unwrap();
     let event_tag = tags
         .iter_mut()
         .find(|tag| tag.first().map(String::as_str) == Some(TAG_E))
@@ -313,7 +343,7 @@ fn generic_repost_codecs_cover_event_targets_and_error_edges() {
         Err(EventParseError::InvalidTag(TAG_E))
     ));
 
-    let mut tags = generic_repost_build_tags(&generic).unwrap();
+    let mut tags = generic_repost_build_tags(&no_author_event).unwrap();
     replace_tag_value(&mut tags, TAG_E, "not-a-lowercase-hex-id");
     assert!(matches!(
         generic_repost_from_event(KIND_GENERIC_REPOST, &tags, ""),

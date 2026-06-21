@@ -373,6 +373,38 @@ fn report_codec_covers_report_type_and_file_variants() {
         Some("magnet:?xt=urn:btih:example")
     );
 
+    let mut report = event_report();
+    if let Some(RadrootsSocialTarget::Event { relays, .. }) = &mut report.event {
+        *relays = None;
+    }
+    let parts = to_wire_parts(&report).unwrap();
+    let event = parts
+        .tags
+        .iter()
+        .find(|tag| tag.first().map(String::as_str) == Some(TAG_E))
+        .expect("event tag");
+    assert_eq!(event.len(), 3);
+
+    let mut report = address_report();
+    if let Some(RadrootsSocialTarget::Address { relays, .. }) = &mut report.event {
+        *relays = Some(vec![
+            " ".to_string(),
+            "wss://relay.example.test".to_string(),
+        ]);
+    }
+    let parts = to_wire_parts(&report).unwrap();
+    let address = parts
+        .tags
+        .iter()
+        .find(|tag| tag.first().map(String::as_str) == Some(TAG_A))
+        .expect("address tag");
+    assert!(
+        address
+            .iter()
+            .any(|value| value == "wss://relay.example.test")
+    );
+    assert!(!address.iter().any(|value| value == " "));
+
     let mut tags = report_build_tags(&file_report()).unwrap();
     let sha = tags
         .iter_mut()

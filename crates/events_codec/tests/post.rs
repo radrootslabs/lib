@@ -271,6 +271,69 @@ fn post_build_tags_covers_optional_social_encode_branches() {
         tag.first().map(|value| value.as_str()) == Some(TAG_IMETA)
             && tag.iter().any(|value| value == "dim 120x80")
     }));
+
+    let mut no_relay_post = content_post();
+    no_relay_post.farm = Some(RadrootsSocialFarmAnchor {
+        farm: RadrootsFarmRef {
+            pubkey: "farm_pubkey".to_string(),
+            d_tag: FARM_D_TAG.to_string(),
+        },
+        relays: None,
+    });
+    no_relay_post.address_refs = Some(vec![RadrootsSocialTarget::Address {
+        address: format!("30023:article_author:{ARTICLE_D_TAG}"),
+        author: None,
+        event_kind: None,
+        relays: None,
+    }]);
+    no_relay_post.quote_refs = Some(vec![RadrootsSocialTarget::Event {
+        id: QUOTE_ID.to_string(),
+        author: None,
+        event_kind: None,
+        relays: None,
+    }]);
+    no_relay_post.media = Some(vec![RadrootsSocialMediaMetadata {
+        thumbnails: Some(vec![RadrootsSocialMediaThumbnail {
+            url: "https://media.example.test/thumb-no-dim.jpg".to_string(),
+            dimensions: None,
+        }]),
+        ..RadrootsSocialMediaMetadata::default()
+    }]);
+
+    let tags = post_build_tags(&no_relay_post).unwrap();
+    let farm_tag = tags
+        .iter()
+        .find(|tag| {
+            tag.first().map(String::as_str) == Some(TAG_A)
+                && tag.get(1).map(String::as_str)
+                    == Some("30340:farm_pubkey:AAAAAAAAAAAAAAAAAAAAAA")
+        })
+        .expect("farm tag");
+    assert_eq!(farm_tag.len(), 2);
+    let address_tag = tags
+        .iter()
+        .find(|tag| {
+            tag.first().map(String::as_str) == Some(TAG_A)
+                && tag.get(1).map(String::as_str)
+                    == Some("30023:article_author:BBBBBBBBBBBBBBBBBBBBBA")
+        })
+        .expect("address tag");
+    assert_eq!(address_tag.len(), 2);
+    let quote_tag = tags
+        .iter()
+        .find(|tag| tag.first().map(String::as_str) == Some(TAG_Q))
+        .expect("quote tag");
+    assert_eq!(quote_tag.len(), 2);
+    let imeta = tags
+        .iter()
+        .find(|tag| tag.first().map(String::as_str) == Some(TAG_IMETA))
+        .expect("imeta tag");
+    assert!(
+        imeta
+            .iter()
+            .any(|value| value == "thumb https://media.example.test/thumb-no-dim.jpg")
+    );
+    assert!(!imeta.iter().any(|value| value.starts_with("dim ")));
 }
 
 #[test]
