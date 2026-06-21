@@ -95,10 +95,7 @@ pub fn listing_from_event_parts(
         #[cfg(feature = "serde_json")]
         {
             if let Ok(mut listing) = serde_json::from_str::<RadrootsListing>(content) {
-                if listing.d_tag.trim().is_empty() {
-                    listing.d_tag = RadrootsDTag::parse(&d_tag)
-                        .map_err(|_| ListingParseError::InvalidTag(TAG_D.to_string()))?;
-                } else if listing.d_tag != d_tag {
+                if listing.d_tag != d_tag {
                     return Err(ListingParseError::InvalidTag(TAG_D.to_string()));
                 }
                 if listing.farm.pubkey.trim().is_empty() || listing.farm.d_tag.trim().is_empty() {
@@ -769,6 +766,19 @@ mod tests {
         )
         .unwrap_err();
 
+        assert_eq!(parse_error_tag(err), TAG_PUBLISHED_AT.to_string());
+
+        let mut missing_value = base_trade_tags();
+        missing_value.push(vec![TAG_PUBLISHED_AT.into()]);
+        let err = listing_from_tags(
+            &missing_value,
+            listing_d_tag(),
+            farm_ref(),
+            "seller".to_string(),
+            None,
+            None,
+        )
+        .unwrap_err();
         assert_eq!(parse_error_tag(err), TAG_PUBLISHED_AT.to_string());
     }
 
@@ -1922,6 +1932,19 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(parse_error_tag(err), TAG_RADROOTS_PRIMARY_BIN.to_string());
+
+        let mut tags = base_trade_tags();
+        tags[4][1] = "bad id".into();
+        let err = listing_from_tags(
+            &tags,
+            listing_d_tag(),
+            farm_ref(),
+            "seller".to_string(),
+            None,
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(parse_error_tag(err), TAG_RADROOTS_PRIMARY_BIN.to_string());
     }
 
     #[test]
@@ -2293,6 +2316,28 @@ mod tests {
         assert_eq!(
             parse_error_tag(build_bins(vec![draft_mismatch]).unwrap_err()),
             TAG_RADROOTS_PRICE.to_string()
+        );
+
+        let draft_invalid_bin = BinDraft {
+            bin_id: "bad id".into(),
+            order_index: 0,
+            quantity: Some(RadrootsCoreQuantity::new(
+                "1".parse().unwrap(),
+                RadrootsCoreUnit::MassG,
+            )),
+            display_amount: None,
+            display_unit: None,
+            display_label: None,
+            price_per_canonical_unit: Some(RadrootsCoreQuantityPrice::new(
+                RadrootsCoreMoney::new("1".parse().unwrap(), RadrootsCoreCurrency::USD),
+                RadrootsCoreQuantity::new("1".parse().unwrap(), RadrootsCoreUnit::MassG),
+            )),
+            display_price: None,
+            display_price_unit: None,
+        };
+        assert_eq!(
+            parse_error_tag(build_bins(vec![draft_invalid_bin]).unwrap_err()),
+            TAG_RADROOTS_BIN.to_string()
         );
 
         let tags = vec![

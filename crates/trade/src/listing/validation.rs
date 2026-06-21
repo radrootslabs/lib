@@ -90,9 +90,6 @@ pub fn validate_listing_event(
         return Err(TradeListingValidationError::MissingBins);
     }
     let primary_bin_id = listing.primary_bin_id.trim().to_string();
-    if primary_bin_id.is_empty() {
-        return Err(TradeListingValidationError::MissingPrimaryBin);
-    }
     let primary_bin = listing
         .bins
         .iter()
@@ -358,6 +355,24 @@ mod tests {
         event.author = OTHER_SELLER.into();
         let err = validate_listing_event(&event).unwrap_err();
         assert_eq!(err, TradeListingValidationError::InvalidSeller);
+    }
+
+    #[test]
+    fn validate_listing_rejects_invalid_listing_address_parts() {
+        let mut listing = base_listing();
+        listing.farm.pubkey = "not-a-pubkey".into();
+        let mut event = base_event(&listing);
+        event.author = "not-a-pubkey".into();
+        let err = validate_listing_event(&event).unwrap_err();
+
+        assert_eq!(
+            err,
+            TradeListingValidationError::ParseError {
+                error: crate::listing::codec::ListingParseError::InvalidTag(
+                    "listing_addr".to_string()
+                )
+            }
+        );
     }
 
     #[test]

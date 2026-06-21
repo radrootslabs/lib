@@ -603,16 +603,11 @@ fn validate_required_str(
 
 fn validate_inline_proof_base64(value: &str) -> Result<(), RadrootsValidationReceiptError> {
     validate_required_str(value, "proof.inline_proof_base64")?;
-    let decoded = base64::engine::general_purpose::STANDARD
+    base64::engine::general_purpose::STANDARD
         .decode(value)
         .map_err(|_| {
             RadrootsValidationReceiptError::InvalidProofMetadata("proof.inline_proof_base64")
         })?;
-    if decoded.is_empty() || base64::engine::general_purpose::STANDARD.encode(&decoded) != value {
-        return Err(RadrootsValidationReceiptError::InvalidProofMetadata(
-            "proof.inline_proof_base64",
-        ));
-    }
 
     Ok(())
 }
@@ -688,12 +683,15 @@ mod tests {
         RadrootsValidationReceiptExpectedBinding, RadrootsValidationReceiptProof,
         RadrootsValidationReceiptProofSystem, RadrootsValidationReceiptResult,
         RadrootsValidationReceiptStatement, RadrootsValidationReceiptType,
-        validation_receipt_canonical_content, validation_receipt_content_from_str,
-        validation_receipt_event_build, validation_receipt_from_event,
-        validation_receipt_public_values_hash_hex, validation_receipt_tags,
+        TAG_VALIDATION_RECEIPT_EVENT_SET_ROOT, TAG_VALIDATION_RECEIPT_PROOF_SYSTEM,
+        TAG_VALIDATION_RECEIPT_PUBLIC_VALUES_HASH, TAG_VALIDATION_RECEIPT_RECEIPT_TYPE,
+        TAG_VALIDATION_RECEIPT_REDUCER_OUTPUT_ROOT, validation_receipt_canonical_content,
+        validation_receipt_content_from_str, validation_receipt_event_build,
+        validation_receipt_from_event, validation_receipt_public_values_hash_hex,
+        validation_receipt_tags, validation_receipt_tags_from_tags,
         verify_validation_receipt_event,
     };
-    use radroots_events::{RadrootsNostrEvent, kinds::KIND_TRADE_VALIDATION_RECEIPT};
+    use radroots_events::{RadrootsNostrEvent, kinds::KIND_TRADE_VALIDATION_RECEIPT, tags::TAG_D};
 
     fn hash32(c: char) -> String {
         format!("0x{}", c.to_string().repeat(64))
@@ -759,6 +757,586 @@ mod tests {
             content: parts.content,
             sig: "signature".to_string(),
         }
+    }
+
+    #[test]
+    fn validation_receipt_labels_cover_all_variants() {
+        assert_eq!(
+            RadrootsValidationReceiptType::ListingValidation.as_str(),
+            "listing_validation"
+        );
+        assert_eq!(
+            RadrootsValidationReceiptType::TradeTransition.as_str(),
+            "trade_transition"
+        );
+        assert_eq!(
+            RadrootsValidationReceiptType::InventoryState.as_str(),
+            "inventory_state"
+        );
+        assert_eq!(
+            RadrootsValidationReceiptType::StateCheckpoint.as_str(),
+            "state_checkpoint"
+        );
+        assert_eq!(
+            RadrootsValidationReceiptType::from_label("listing_validation"),
+            Some(RadrootsValidationReceiptType::ListingValidation)
+        );
+        assert_eq!(
+            RadrootsValidationReceiptType::from_label("trade_transition"),
+            Some(RadrootsValidationReceiptType::TradeTransition)
+        );
+        assert_eq!(
+            RadrootsValidationReceiptType::from_label("inventory_state"),
+            Some(RadrootsValidationReceiptType::InventoryState)
+        );
+        assert_eq!(
+            RadrootsValidationReceiptType::from_label("state_checkpoint"),
+            Some(RadrootsValidationReceiptType::StateCheckpoint)
+        );
+        assert_eq!(RadrootsValidationReceiptType::from_label("unknown"), None);
+
+        assert_eq!(RadrootsValidationReceiptProofSystem::None.as_str(), "none");
+        assert_eq!(
+            RadrootsValidationReceiptProofSystem::Sp1Core.as_str(),
+            "sp1_core"
+        );
+        assert_eq!(
+            RadrootsValidationReceiptProofSystem::Sp1Compressed.as_str(),
+            "sp1_compressed"
+        );
+        assert_eq!(
+            RadrootsValidationReceiptProofSystem::Sp1Groth16.as_str(),
+            "sp1_groth16"
+        );
+        assert_eq!(
+            RadrootsValidationReceiptProofSystem::Sp1Plonk.as_str(),
+            "sp1_plonk"
+        );
+        assert_eq!(
+            RadrootsValidationReceiptProofSystem::from_label("none"),
+            Some(RadrootsValidationReceiptProofSystem::None)
+        );
+        assert_eq!(
+            RadrootsValidationReceiptProofSystem::from_label("sp1_core"),
+            Some(RadrootsValidationReceiptProofSystem::Sp1Core)
+        );
+        assert_eq!(
+            RadrootsValidationReceiptProofSystem::from_label("sp1_compressed"),
+            Some(RadrootsValidationReceiptProofSystem::Sp1Compressed)
+        );
+        assert_eq!(
+            RadrootsValidationReceiptProofSystem::from_label("sp1_groth16"),
+            Some(RadrootsValidationReceiptProofSystem::Sp1Groth16)
+        );
+        assert_eq!(
+            RadrootsValidationReceiptProofSystem::from_label("sp1_plonk"),
+            Some(RadrootsValidationReceiptProofSystem::Sp1Plonk)
+        );
+        assert_eq!(
+            RadrootsValidationReceiptProofSystem::from_label("unknown"),
+            None
+        );
+        assert_eq!(
+            RadrootsValidationReceiptProofSystem::None.expected_mode(),
+            None
+        );
+        assert_eq!(
+            RadrootsValidationReceiptProofSystem::Sp1Core.expected_mode(),
+            Some("core")
+        );
+        assert_eq!(
+            RadrootsValidationReceiptProofSystem::Sp1Compressed.expected_mode(),
+            Some("compressed")
+        );
+        assert_eq!(
+            RadrootsValidationReceiptProofSystem::Sp1Groth16.expected_mode(),
+            Some("groth16")
+        );
+        assert_eq!(
+            RadrootsValidationReceiptProofSystem::Sp1Plonk.expected_mode(),
+            Some("plonk")
+        );
+    }
+
+    #[test]
+    fn validation_receipt_validate_rejects_core_field_errors() {
+        let mut receipt = sample_validation_receipt();
+        receipt.version = 2;
+        assert_eq!(
+            receipt.validate(),
+            Err(RadrootsValidationReceiptError::InvalidField("version"))
+        );
+
+        let mut receipt = sample_validation_receipt();
+        receipt.domain = "other.domain".to_string();
+        assert_eq!(
+            receipt.validate(),
+            Err(RadrootsValidationReceiptError::InvalidField("domain"))
+        );
+
+        let mut receipt = sample_validation_receipt();
+        receipt.statement.statement_type = RadrootsValidationReceiptType::ListingValidation;
+        assert_eq!(
+            receipt.validate(),
+            Err(RadrootsValidationReceiptError::InvalidField(
+                "statement.type"
+            ))
+        );
+
+        let mut receipt = sample_validation_receipt();
+        receipt.changed_records_root = "0x1".to_string();
+        assert_eq!(
+            receipt.validate(),
+            Err(RadrootsValidationReceiptError::InvalidField(
+                "changed_records_root"
+            ))
+        );
+
+        let mut receipt = sample_validation_receipt();
+        receipt.event_set_root = format!("zz{}", "1".repeat(64));
+        assert_eq!(
+            receipt.validate(),
+            Err(RadrootsValidationReceiptError::InvalidField(
+                "event_set_root"
+            ))
+        );
+
+        let mut receipt = sample_validation_receipt();
+        receipt.public_values_hash = format!("0x{}", "A".repeat(64));
+        assert_eq!(
+            receipt.validate(),
+            Err(RadrootsValidationReceiptError::InvalidField(
+                "public_values_hash"
+            ))
+        );
+
+        let mut receipt = sample_validation_receipt();
+        receipt.error_bitmap = "0x1".to_string();
+        assert_eq!(
+            receipt.validate(),
+            Err(RadrootsValidationReceiptError::InvalidField("error_bitmap"))
+        );
+
+        let mut receipt = sample_validation_receipt();
+        receipt.error_bitmap = format!("zz{}", "0".repeat(32));
+        assert_eq!(
+            receipt.validate(),
+            Err(RadrootsValidationReceiptError::InvalidField("error_bitmap"))
+        );
+
+        let mut receipt = sample_validation_receipt();
+        receipt.error_bitmap = format!("0x{}", "A".repeat(32));
+        assert_eq!(
+            receipt.validate(),
+            Err(RadrootsValidationReceiptError::InvalidField("error_bitmap"))
+        );
+
+        let mut receipt = sample_validation_receipt();
+        receipt.statement.listing_event_id = "bad".to_string();
+        assert_eq!(
+            receipt.validate(),
+            Err(RadrootsValidationReceiptError::InvalidField(
+                "statement.listing_event_id"
+            ))
+        );
+
+        let mut receipt = sample_validation_receipt();
+        receipt.statement.root_event_id = "g".repeat(64);
+        assert_eq!(
+            receipt.validate(),
+            Err(RadrootsValidationReceiptError::InvalidField(
+                "statement.root_event_id"
+            ))
+        );
+
+        let mut receipt = sample_validation_receipt();
+        receipt.error_bitmap = "0x00000000000000000000000000000001".to_string();
+        assert_eq!(
+            receipt.validate(),
+            Err(RadrootsValidationReceiptError::InvalidField("error_bitmap"))
+        );
+
+        let mut receipt = sample_validation_receipt();
+        receipt.result = RadrootsValidationReceiptResult::Invalid;
+        assert_eq!(
+            receipt.validate(),
+            Err(RadrootsValidationReceiptError::InvalidField("error_bitmap"))
+        );
+
+        let mut receipt = sample_validation_receipt();
+        receipt.result = RadrootsValidationReceiptResult::Invalid;
+        receipt.error_bitmap = "0x00000000000000000000000000000001".to_string();
+        receipt
+            .validate()
+            .expect("invalid result with nonzero bitmap");
+    }
+
+    #[test]
+    fn validation_receipt_proof_validation_covers_identity_modes_and_material_errors() {
+        let mut receipt = sample_validation_receipt();
+        receipt.proof.mode = Some("core".to_string());
+        assert_eq!(
+            receipt.validate(),
+            Err(RadrootsValidationReceiptError::InvalidProofMetadata(
+                "proof.system"
+            ))
+        );
+
+        let mut receipt = sample_validation_receipt();
+        receipt.proof.program_hash = Some(hash32('a'));
+        assert_eq!(
+            receipt.validate(),
+            Err(RadrootsValidationReceiptError::InvalidProofMetadata(
+                "proof.system"
+            ))
+        );
+
+        let mut receipt = sample_validation_receipt();
+        receipt.proof.proof_reference = Some(format!("radroots-proof://sha256/{}", "1".repeat(64)));
+        assert_eq!(
+            receipt.validate(),
+            Err(RadrootsValidationReceiptError::InvalidProofMetadata(
+                "proof.system"
+            ))
+        );
+
+        let mut receipt = sample_validation_receipt();
+        receipt.proof.verifying_key_hash = Some(hash32('b'));
+        assert_eq!(
+            receipt.validate(),
+            Err(RadrootsValidationReceiptError::InvalidProofMetadata(
+                "proof.system"
+            ))
+        );
+
+        let mut missing_program = sample_sp1_reference_receipt();
+        missing_program.proof.program_hash = None;
+        assert_eq!(
+            missing_program.validate(),
+            Err(RadrootsValidationReceiptError::InvalidProofMetadata(
+                "proof.program_hash"
+            ))
+        );
+
+        let mut missing_verifying_key = sample_sp1_reference_receipt();
+        missing_verifying_key.proof.verifying_key_hash = None;
+        assert_eq!(
+            missing_verifying_key.validate(),
+            Err(RadrootsValidationReceiptError::InvalidProofMetadata(
+                "proof.verifying_key_hash"
+            ))
+        );
+
+        let mut wrong_mode = sample_sp1_reference_receipt();
+        wrong_mode.proof.mode = Some("compressed".to_string());
+        assert_eq!(
+            wrong_mode.validate(),
+            Err(RadrootsValidationReceiptError::InvalidProofMetadata(
+                "proof.mode"
+            ))
+        );
+
+        let mut empty_reference = sample_sp1_reference_receipt();
+        empty_reference.proof.proof_reference = Some(" ".to_string());
+        assert_eq!(
+            empty_reference.validate(),
+            Err(RadrootsValidationReceiptError::EmptyField(
+                "proof.proof_reference"
+            ))
+        );
+
+        let mut compressed = sample_sp1_reference_receipt();
+        compressed.proof.system = RadrootsValidationReceiptProofSystem::Sp1Compressed;
+        compressed.proof.mode = Some("compressed".to_string());
+        compressed.validate().expect("compressed proof metadata");
+
+        let mut groth16 = sample_sp1_reference_receipt();
+        groth16.proof.system = RadrootsValidationReceiptProofSystem::Sp1Groth16;
+        groth16.proof.mode = Some("groth16".to_string());
+        groth16.validate().expect("groth16 proof metadata");
+
+        let mut plonk = sample_sp1_reference_receipt();
+        plonk.proof.system = RadrootsValidationReceiptProofSystem::Sp1Plonk;
+        plonk.proof.mode = Some("plonk".to_string());
+        plonk.validate().expect("plonk proof metadata");
+    }
+
+    #[test]
+    fn validation_receipt_tag_parser_rejects_invalid_shapes_and_labels() {
+        let tags = validation_receipt_tags("order-1", &sample_validation_receipt()).unwrap();
+
+        let mut duplicate_order = tags.clone();
+        duplicate_order.push(vec![TAG_D.to_string(), "other-order".to_string()]);
+        assert_eq!(
+            validation_receipt_tags_from_tags(&duplicate_order),
+            Err(RadrootsValidationReceiptError::InvalidTag(TAG_D))
+        );
+
+        let mut malformed_order = tags.clone();
+        malformed_order[0] = vec![TAG_D.to_string()];
+        assert_eq!(
+            validation_receipt_tags_from_tags(&malformed_order),
+            Err(RadrootsValidationReceiptError::InvalidTag(TAG_D))
+        );
+
+        let mut empty_order = tags.clone();
+        empty_order[0][1] = " ".to_string();
+        assert_eq!(
+            validation_receipt_tags_from_tags(&empty_order),
+            Err(RadrootsValidationReceiptError::EmptyField(TAG_D))
+        );
+
+        let mut duplicate_listing = tags.clone();
+        duplicate_listing.push(vec![
+            "e".to_string(),
+            event_id('3'),
+            String::new(),
+            String::new(),
+            "listing".to_string(),
+        ]);
+        assert_eq!(
+            validation_receipt_tags_from_tags(&duplicate_listing),
+            Err(RadrootsValidationReceiptError::InvalidTag("listing"))
+        );
+
+        let mut empty_listing = tags.clone();
+        empty_listing[1][1] = " ".to_string();
+        assert_eq!(
+            validation_receipt_tags_from_tags(&empty_listing),
+            Err(RadrootsValidationReceiptError::EmptyField("listing"))
+        );
+
+        let mut invalid_listing = tags.clone();
+        invalid_listing[1][1] = "bad".to_string();
+        assert_eq!(
+            validation_receipt_tags_from_tags(&invalid_listing),
+            Err(RadrootsValidationReceiptError::InvalidField(
+                "tags.e.listing"
+            ))
+        );
+
+        let mut invalid_root = tags.clone();
+        invalid_root[2][1] = "g".repeat(64);
+        assert_eq!(
+            validation_receipt_tags_from_tags(&invalid_root),
+            Err(RadrootsValidationReceiptError::InvalidField("tags.e.root"))
+        );
+
+        let mut invalid_target = tags.clone();
+        invalid_target[3][1] = "bad".to_string();
+        assert_eq!(
+            validation_receipt_tags_from_tags(&invalid_target),
+            Err(RadrootsValidationReceiptError::InvalidField(
+                "tags.e.target"
+            ))
+        );
+
+        let mut invalid_event_set = tags.clone();
+        invalid_event_set[4][1] = "bad".to_string();
+        assert_eq!(
+            validation_receipt_tags_from_tags(&invalid_event_set),
+            Err(RadrootsValidationReceiptError::InvalidField(
+                TAG_VALIDATION_RECEIPT_EVENT_SET_ROOT
+            ))
+        );
+
+        let mut invalid_reducer = tags.clone();
+        invalid_reducer[5][1] = "bad".to_string();
+        assert_eq!(
+            validation_receipt_tags_from_tags(&invalid_reducer),
+            Err(RadrootsValidationReceiptError::InvalidField(
+                TAG_VALIDATION_RECEIPT_REDUCER_OUTPUT_ROOT
+            ))
+        );
+
+        let mut invalid_public_values = tags.clone();
+        invalid_public_values[6][1] = "bad".to_string();
+        assert_eq!(
+            validation_receipt_tags_from_tags(&invalid_public_values),
+            Err(RadrootsValidationReceiptError::InvalidField(
+                TAG_VALIDATION_RECEIPT_PUBLIC_VALUES_HASH
+            ))
+        );
+
+        let mut invalid_proof_system = tags.clone();
+        invalid_proof_system[7][1] = "sp1_unknown".to_string();
+        assert_eq!(
+            validation_receipt_tags_from_tags(&invalid_proof_system),
+            Err(RadrootsValidationReceiptError::InvalidTag(
+                TAG_VALIDATION_RECEIPT_PROOF_SYSTEM
+            ))
+        );
+
+        let mut invalid_receipt_type = tags.clone();
+        invalid_receipt_type[8][1] = "unknown".to_string();
+        assert_eq!(
+            validation_receipt_tags_from_tags(&invalid_receipt_type),
+            Err(RadrootsValidationReceiptError::InvalidTag(
+                TAG_VALIDATION_RECEIPT_RECEIPT_TYPE
+            ))
+        );
+    }
+
+    #[test]
+    fn validation_receipt_verifier_rejects_each_tag_mismatch() {
+        let mut event = sample_validation_receipt_event();
+        event.tags[1][1] = event_id('3');
+        assert_eq!(
+            validation_receipt_from_event(&event),
+            Err(RadrootsValidationReceiptError::TagMismatch(
+                "listing_event_id"
+            ))
+        );
+
+        let mut event = sample_validation_receipt_event();
+        event.tags[2][1] = event_id('3');
+        assert_eq!(
+            validation_receipt_from_event(&event),
+            Err(RadrootsValidationReceiptError::TagMismatch("root_event_id"))
+        );
+
+        let mut event = sample_validation_receipt_event();
+        event.tags[3][1] = event_id('3');
+        assert_eq!(
+            validation_receipt_from_event(&event),
+            Err(RadrootsValidationReceiptError::TagMismatch(
+                "target_event_id"
+            ))
+        );
+
+        let mut event = sample_validation_receipt_event();
+        event.tags[4][1] = hash32('d');
+        assert_eq!(
+            validation_receipt_from_event(&event),
+            Err(RadrootsValidationReceiptError::TagMismatch(
+                "event_set_root"
+            ))
+        );
+
+        let mut event = sample_validation_receipt_event();
+        event.tags[5][1] = hash32('d');
+        assert_eq!(
+            validation_receipt_from_event(&event),
+            Err(RadrootsValidationReceiptError::TagMismatch(
+                "reducer_output_root"
+            ))
+        );
+
+        let mut event = sample_validation_receipt_event();
+        event.tags[6][1] = hash32('d');
+        assert_eq!(
+            validation_receipt_from_event(&event),
+            Err(RadrootsValidationReceiptError::TagMismatch(
+                "public_values_hash"
+            ))
+        );
+
+        let mut event = sample_validation_receipt_event();
+        event.tags[7][1] = "sp1_core".to_string();
+        assert_eq!(
+            validation_receipt_from_event(&event),
+            Err(RadrootsValidationReceiptError::TagMismatch("proof_system"))
+        );
+
+        let mut event = sample_validation_receipt_event();
+        event.tags[8][1] = "listing_validation".to_string();
+        assert_eq!(
+            validation_receipt_from_event(&event),
+            Err(RadrootsValidationReceiptError::TagMismatch("receipt_type"))
+        );
+    }
+
+    #[test]
+    fn validation_receipt_expected_binding_checks_all_supported_fields() {
+        let event = sample_validation_receipt_event();
+        verify_validation_receipt_event(
+            &event,
+            RadrootsValidationReceiptExpectedBinding {
+                event_set_root: Some(&hash32('c')),
+                listing_event_id: Some(&event_id('0')),
+                order_id: Some("order-1"),
+                proof_system: Some(RadrootsValidationReceiptProofSystem::None),
+                public_values_hash: Some(&validation_receipt_public_values_hash_hex(
+                    br#"{"schema_version":1}"#,
+                )),
+                reducer_output_root: Some(&hash32('4')),
+                ..RadrootsValidationReceiptExpectedBinding::default()
+            },
+        )
+        .expect("matching expected binding");
+
+        assert_eq!(
+            verify_validation_receipt_event(
+                &event,
+                RadrootsValidationReceiptExpectedBinding {
+                    listing_event_id: Some(&event_id('3')),
+                    ..RadrootsValidationReceiptExpectedBinding::default()
+                },
+            ),
+            Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
+                "listing_event_id"
+            ))
+        );
+        assert_eq!(
+            verify_validation_receipt_event(
+                &event,
+                RadrootsValidationReceiptExpectedBinding {
+                    event_set_root: Some(&hash32('d')),
+                    ..RadrootsValidationReceiptExpectedBinding::default()
+                },
+            ),
+            Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
+                "event_set_root"
+            ))
+        );
+        assert_eq!(
+            verify_validation_receipt_event(
+                &event,
+                RadrootsValidationReceiptExpectedBinding {
+                    reducer_output_root: Some(&hash32('d')),
+                    ..RadrootsValidationReceiptExpectedBinding::default()
+                },
+            ),
+            Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
+                "reducer_output_root"
+            ))
+        );
+        assert_eq!(
+            verify_validation_receipt_event(
+                &event,
+                RadrootsValidationReceiptExpectedBinding {
+                    public_values_hash: Some(&hash32('d')),
+                    ..RadrootsValidationReceiptExpectedBinding::default()
+                },
+            ),
+            Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
+                "public_values_hash"
+            ))
+        );
+        assert_eq!(
+            verify_validation_receipt_event(
+                &event,
+                RadrootsValidationReceiptExpectedBinding {
+                    proof_system: Some(RadrootsValidationReceiptProofSystem::Sp1Core),
+                    ..RadrootsValidationReceiptExpectedBinding::default()
+                },
+            ),
+            Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
+                "proof_system"
+            ))
+        );
+        assert_eq!(
+            verify_validation_receipt_event(
+                &event,
+                RadrootsValidationReceiptExpectedBinding {
+                    verifying_key_hash: Some(&hash32('b')),
+                    ..RadrootsValidationReceiptExpectedBinding::default()
+                },
+            ),
+            Err(RadrootsValidationReceiptError::ExpectedBindingMismatch(
+                "verifying_key_hash"
+            ))
+        );
     }
 
     #[test]

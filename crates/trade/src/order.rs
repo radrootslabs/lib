@@ -15,11 +15,6 @@ use radroots_events::ids::{
     RadrootsOrderId, RadrootsPublicKey,
 };
 #[cfg(feature = "serde_json")]
-use radroots_events::kinds::{
-    KIND_ORDER_CANCELLATION, KIND_ORDER_DECISION, KIND_ORDER_REQUEST, KIND_ORDER_REVISION_DECISION,
-    KIND_ORDER_REVISION_PROPOSAL,
-};
-#[cfg(feature = "serde_json")]
 use radroots_events::order::RadrootsOrderEventType;
 use radroots_events::order::{
     RadrootsOrderCancellation, RadrootsOrderDecision, RadrootsOrderDecisionOutcome,
@@ -180,8 +175,8 @@ pub fn order_event_record_from_event(
     let author_pubkey = RadrootsPublicKey::parse(&event.author)
         .map_err(RadrootsOrderEventDecodeError::InvalidAuthor)?;
 
-    match event.kind {
-        KIND_ORDER_REQUEST => {
+    match message_type {
+        RadrootsOrderEventType::OrderRequested => {
             let envelope = order_request_from_event(event)?;
             Ok(RadrootsOrderEventRecord::Request(
                 RadrootsOrderRequestRecord {
@@ -191,7 +186,7 @@ pub fn order_event_record_from_event(
                 },
             ))
         }
-        KIND_ORDER_DECISION => {
+        RadrootsOrderEventType::OrderDecision => {
             let envelope = order_decision_from_event(event)?;
             Ok(RadrootsOrderEventRecord::Decision(
                 RadrootsOrderDecisionRecord {
@@ -204,7 +199,7 @@ pub fn order_event_record_from_event(
                 },
             ))
         }
-        KIND_ORDER_REVISION_PROPOSAL => {
+        RadrootsOrderEventType::OrderRevisionProposed => {
             let envelope = order_revision_proposal_from_event(event)?;
             Ok(RadrootsOrderEventRecord::RevisionProposal(
                 RadrootsOrderRevisionProposalRecord {
@@ -217,7 +212,7 @@ pub fn order_event_record_from_event(
                 },
             ))
         }
-        KIND_ORDER_REVISION_DECISION => {
+        RadrootsOrderEventType::OrderRevisionDecision => {
             let envelope = order_revision_decision_from_event(event)?;
             Ok(RadrootsOrderEventRecord::RevisionDecision(
                 RadrootsOrderRevisionDecisionRecord {
@@ -230,7 +225,7 @@ pub fn order_event_record_from_event(
                 },
             ))
         }
-        KIND_ORDER_CANCELLATION => {
+        RadrootsOrderEventType::OrderCancelled => {
             let envelope = order_cancellation_from_event(event)?;
             Ok(RadrootsOrderEventRecord::Cancellation(
                 RadrootsOrderCancellationRecord {
@@ -243,7 +238,6 @@ pub fn order_event_record_from_event(
                 },
             ))
         }
-        _ => Err(RadrootsOrderEventDecodeError::UnsupportedKind { kind: event.kind }),
     }
 }
 
@@ -2167,24 +2161,28 @@ fn order_issue_rank(issue: &RadrootsOrderIssue) -> u8 {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::{
-        RadrootsListingInventoryAccountingInputs, RadrootsListingInventoryBinAvailability,
-        RadrootsOrderCancellationRecord, RadrootsOrderDecisionRecord, RadrootsOrderEventRecord,
+        RadrootsListingInventoryAccountingInputs, RadrootsListingInventoryAccountingIssue,
+        RadrootsListingInventoryBinAvailability, RadrootsOrderCancellationRecord,
+        RadrootsOrderDecisionRecord, RadrootsOrderEventRecord, RadrootsOrderIssue,
         RadrootsOrderReductionInputs, RadrootsOrderRequestRecord,
         RadrootsOrderRevisionDecisionRecord, RadrootsOrderRevisionProposalRecord,
         RadrootsOrderStatus, reduce_listing_inventory_accounting, reduce_order_event_records,
         reduce_order_events,
     };
+    use core::mem::discriminant;
     use radroots_core::{
         RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreUnit,
     };
     use radroots_events::{
+        RadrootsNostrEvent, RadrootsNostrEventPtr,
         ids::{
             RadrootsEventId, RadrootsInventoryBinId, RadrootsListingAddress, RadrootsOrderId,
             RadrootsOrderQuoteId, RadrootsOrderRevisionId, RadrootsPublicKey,
         },
-        kinds::KIND_LISTING,
+        kinds::{KIND_LISTING, KIND_LISTING_DRAFT},
         order::{
             RadrootsOrderCancellation, RadrootsOrderDecision, RadrootsOrderDecisionOutcome,
             RadrootsOrderEconomicItem, RadrootsOrderEconomics, RadrootsOrderInventoryCommitment,
@@ -2193,9 +2191,18 @@ mod tests {
             RadrootsOrderRevisionProposal,
         },
     };
+    #[cfg(feature = "serde_json")]
+    use radroots_events_codec::{
+        order::{
+            order_cancellation_event_build, order_decision_event_build, order_request_event_build,
+            order_revision_decision_event_build, order_revision_proposal_event_build,
+        },
+        wire::WireEventParts,
+    };
 
     const BUYER: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
     const SELLER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const OTHER: &str = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
 
     fn event_id(raw: u8) -> RadrootsEventId {
         RadrootsEventId::parse(format!("{raw:064x}")).expect("event id")
@@ -2224,6 +2231,39 @@ mod tests {
     fn listing_addr() -> RadrootsListingAddress {
         RadrootsListingAddress::parse(format!("{KIND_LISTING}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg"))
             .expect("listing address")
+    }
+
+    fn draft_listing_addr() -> RadrootsListingAddress {
+        RadrootsListingAddress::parse(format!(
+            "{KIND_LISTING_DRAFT}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg"
+        ))
+        .expect("draft listing address")
+    }
+
+    fn other_seller_listing_addr() -> RadrootsListingAddress {
+        RadrootsListingAddress::parse(format!("{KIND_LISTING}:{OTHER}:AAAAAAAAAAAAAAAAAAAAAg"))
+            .expect("other seller listing address")
+    }
+
+    #[cfg(feature = "serde_json")]
+    fn listing_event_ptr() -> RadrootsNostrEventPtr {
+        RadrootsNostrEventPtr {
+            id: event_id(80).into_string(),
+            relays: Some("wss://relay.example.test".into()),
+        }
+    }
+
+    #[cfg(feature = "serde_json")]
+    fn event_from_parts(raw_id: u8, author: &str, parts: WireEventParts) -> RadrootsNostrEvent {
+        RadrootsNostrEvent {
+            id: event_id(raw_id).into_string(),
+            author: author.into(),
+            created_at: 1,
+            kind: parts.kind,
+            tags: parts.tags,
+            content: parts.content,
+            sig: "sig".into(),
+        }
     }
 
     fn economics(bin_count: u32) -> RadrootsOrderEconomics {
@@ -2382,6 +2422,108 @@ mod tests {
         }
     }
 
+    fn assert_order_issue_kind(issues: &[RadrootsOrderIssue], expected: RadrootsOrderIssue) {
+        let expected_kind = discriminant(&expected);
+        assert!(
+            issues
+                .iter()
+                .any(|issue| discriminant(issue) == expected_kind),
+            "missing issue kind {expected:?} in {issues:?}"
+        );
+    }
+
+    fn assert_inventory_issue_kind(
+        issues: &[RadrootsListingInventoryAccountingIssue],
+        expected: RadrootsListingInventoryAccountingIssue,
+    ) {
+        let expected_kind = discriminant(&expected);
+        assert!(
+            issues
+                .iter()
+                .any(|issue| discriminant(issue) == expected_kind),
+            "missing inventory issue kind {expected:?} in {issues:?}"
+        );
+    }
+
+    fn assert_request_issue(
+        mutate: impl FnOnce(&mut RadrootsOrderRequestRecord),
+        expected: RadrootsOrderIssue,
+    ) {
+        let mut request = request_record();
+        mutate(&mut request);
+        let mut issues = Vec::new();
+        assert!(!super::validate_order_request_record(
+            &order_id("order-1"),
+            &request,
+            &mut issues
+        ));
+        assert_order_issue_kind(&issues, expected);
+    }
+
+    fn assert_decision_issue(
+        mutate: impl FnOnce(&mut RadrootsOrderDecisionRecord),
+        expected: RadrootsOrderIssue,
+    ) {
+        let request = request_record();
+        let mut decision = accepted_decision();
+        mutate(&mut decision);
+        let mut issues = Vec::new();
+        assert!(!super::validate_order_decision_record(
+            &request,
+            &decision,
+            &mut issues
+        ));
+        assert_order_issue_kind(&issues, expected);
+    }
+
+    fn assert_revision_proposal_issue(
+        mutate: impl FnOnce(&mut RadrootsOrderRevisionProposalRecord),
+        expected: RadrootsOrderIssue,
+    ) {
+        let request = request_record();
+        let mut proposal = revision_proposal();
+        mutate(&mut proposal);
+        let mut issues = Vec::new();
+        assert!(!super::validate_order_revision_proposal_record(
+            &request,
+            &proposal,
+            &mut issues
+        ));
+        assert_order_issue_kind(&issues, expected);
+    }
+
+    fn assert_revision_decision_issue(
+        mutate: impl FnOnce(&mut RadrootsOrderRevisionDecisionRecord),
+        expected: RadrootsOrderIssue,
+    ) {
+        let request = request_record();
+        let mut decision = accepted_revision_decision();
+        mutate(&mut decision);
+        let mut issues = Vec::new();
+        assert!(!super::validate_order_revision_decision_record(
+            &request,
+            &decision,
+            &mut issues
+        ));
+        assert_order_issue_kind(&issues, expected);
+    }
+
+    fn assert_cancellation_issue(
+        mutate: impl FnOnce(&mut RadrootsOrderCancellationRecord),
+        expected: RadrootsOrderIssue,
+    ) {
+        let request = request_record();
+        let mut cancellation = cancellation(event_id(1));
+        mutate(&mut cancellation);
+        let mut issues = Vec::new();
+        assert!(!super::validate_order_cancellation_record(
+            &request,
+            &cancellation,
+            &mut issues
+        ));
+        assert_order_issue_kind(&issues, expected);
+    }
+
     fn reduce(
         decisions: Vec<RadrootsOrderDecisionRecord>,
         revision_proposals: Vec<RadrootsOrderRevisionProposalRecord>,
@@ -2398,6 +2540,1729 @@ mod tests {
                 cancellations,
             },
         )
+    }
+
+    #[test]
+    fn order_event_record_accessors_cover_all_variants() {
+        let records = vec![
+            RadrootsOrderEventRecord::Request(request_record()),
+            RadrootsOrderEventRecord::Decision(accepted_decision()),
+            RadrootsOrderEventRecord::RevisionProposal(revision_proposal()),
+            RadrootsOrderEventRecord::RevisionDecision(accepted_revision_decision()),
+            RadrootsOrderEventRecord::Cancellation(cancellation(event_id(1))),
+        ];
+
+        let event_ids = records
+            .iter()
+            .map(RadrootsOrderEventRecord::event_id)
+            .cloned()
+            .collect::<Vec<_>>();
+        let order_ids = records
+            .iter()
+            .map(RadrootsOrderEventRecord::order_id)
+            .cloned()
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            event_ids,
+            vec![
+                event_id(1),
+                event_id(2),
+                event_id(3),
+                event_id(4),
+                event_id(5)
+            ]
+        );
+        assert_eq!(order_ids, vec![order_id("order-1"); 5]);
+    }
+
+    #[cfg(feature = "serde_json")]
+    #[test]
+    fn order_event_records_decode_wire_events_and_decode_errors() {
+        let request = request_record();
+        let request_parts =
+            order_request_event_build(&listing_event_ptr(), &request.payload).unwrap();
+        let request_record =
+            super::order_event_record_from_event(&event_from_parts(11, BUYER, request_parts))
+                .unwrap();
+        assert!(matches!(
+            request_record,
+            RadrootsOrderEventRecord::Request(record)
+                if record.event_id == event_id(11)
+                    && record.author_pubkey == public_key(BUYER)
+                    && record.payload.order_id == order_id("order-1")
+        ));
+
+        let decision = accepted_decision();
+        let decision_parts = order_decision_event_build(
+            &decision.root_event_id,
+            &decision.prev_event_id,
+            &decision.payload,
+        )
+        .unwrap();
+        let decision_record =
+            super::order_event_record_from_event(&event_from_parts(12, SELLER, decision_parts))
+                .unwrap();
+        assert!(matches!(
+            decision_record,
+            RadrootsOrderEventRecord::Decision(record)
+                if record.event_id == event_id(12)
+                    && record.counterparty_pubkey == public_key(BUYER)
+                    && record.root_event_id == event_id(1)
+                    && record.prev_event_id == event_id(1)
+        ));
+
+        let proposal = revision_proposal();
+        let proposal_parts = order_revision_proposal_event_build(
+            &proposal.root_event_id,
+            &proposal.prev_event_id,
+            &proposal.payload,
+        )
+        .unwrap();
+        let proposal_record =
+            super::order_event_record_from_event(&event_from_parts(13, SELLER, proposal_parts))
+                .unwrap();
+        assert!(matches!(
+            proposal_record,
+            RadrootsOrderEventRecord::RevisionProposal(record)
+                if record.event_id == event_id(13)
+                    && record.counterparty_pubkey == public_key(BUYER)
+                    && record.payload.revision_id == revision_id("revision-1")
+        ));
+
+        let revision_decision = accepted_revision_decision();
+        let revision_decision_parts = order_revision_decision_event_build(
+            &revision_decision.root_event_id,
+            &revision_decision.prev_event_id,
+            &revision_decision.payload,
+        )
+        .unwrap();
+        let revision_decision_record = super::order_event_record_from_event(&event_from_parts(
+            14,
+            BUYER,
+            revision_decision_parts,
+        ))
+        .unwrap();
+        assert!(matches!(
+            revision_decision_record,
+            RadrootsOrderEventRecord::RevisionDecision(record)
+                if record.event_id == event_id(14)
+                    && record.counterparty_pubkey == public_key(SELLER)
+                    && record.payload.revision_id == revision_id("revision-1")
+        ));
+
+        let cancellation = cancellation(event_id(1));
+        let cancellation_parts = order_cancellation_event_build(
+            &cancellation.root_event_id,
+            &cancellation.prev_event_id,
+            &cancellation.payload,
+        )
+        .unwrap();
+        let cancellation_record =
+            super::order_event_record_from_event(&event_from_parts(15, BUYER, cancellation_parts))
+                .unwrap();
+        assert!(matches!(
+            cancellation_record,
+            RadrootsOrderEventRecord::Cancellation(record)
+                if record.event_id == event_id(15)
+                    && record.counterparty_pubkey == public_key(SELLER)
+                    && record.payload.reason == "changed plans"
+        ));
+
+        let unsupported = RadrootsNostrEvent {
+            id: event_id(16).into_string(),
+            author: BUYER.into(),
+            created_at: 1,
+            kind: 1,
+            tags: Vec::new(),
+            content: "{}".into(),
+            sig: "sig".into(),
+        };
+        assert!(matches!(
+            super::order_event_record_from_event(&unsupported),
+            Err(super::RadrootsOrderEventDecodeError::UnsupportedKind { kind: 1 })
+        ));
+
+        let request_parts =
+            order_request_event_build(&listing_event_ptr(), &request.payload).unwrap();
+        let mut invalid_id_event = event_from_parts(17, BUYER, request_parts);
+        invalid_id_event.id = "not-an-event-id".into();
+        assert!(matches!(
+            super::order_event_record_from_event(&invalid_id_event),
+            Err(super::RadrootsOrderEventDecodeError::InvalidEventId(_))
+        ));
+
+        let request_parts =
+            order_request_event_build(&listing_event_ptr(), &request.payload).unwrap();
+        let mut invalid_author_event = event_from_parts(18, BUYER, request_parts);
+        invalid_author_event.author = "not-a-pubkey".into();
+        assert!(matches!(
+            super::order_event_record_from_event(&invalid_author_event),
+            Err(super::RadrootsOrderEventDecodeError::InvalidAuthor(_))
+        ));
+    }
+
+    #[cfg(feature = "serde_json")]
+    #[test]
+    fn order_event_context_requirements_report_missing_chain_ids() {
+        let context = radroots_events_codec::order::RadrootsOrderEventContext {
+            counterparty_pubkey: public_key(BUYER),
+            listing_event: None,
+            root_event_id: None,
+            prev_event_id: None,
+        };
+
+        assert!(matches!(
+            super::require_context_root_event_id(&context),
+            Err(super::RadrootsOrderEventDecodeError::MissingRootEventId)
+        ));
+        assert!(matches!(
+            super::require_context_prev_event_id(&context),
+            Err(super::RadrootsOrderEventDecodeError::MissingPreviousEventId)
+        ));
+    }
+
+    #[test]
+    fn reducer_groups_all_record_variants_and_skips_duplicate_event_ids() {
+        let mut duplicate_decision = declined_decision();
+        duplicate_decision.event_id = event_id(2);
+        let projection = reduce_order_event_records(
+            &order_id("order-1"),
+            vec![
+                RadrootsOrderEventRecord::Cancellation(cancellation(event_id(1))),
+                RadrootsOrderEventRecord::RevisionDecision(accepted_revision_decision()),
+                RadrootsOrderEventRecord::RevisionProposal(revision_proposal()),
+                RadrootsOrderEventRecord::Decision(accepted_decision()),
+                RadrootsOrderEventRecord::Decision(duplicate_decision),
+                RadrootsOrderEventRecord::Request(request_record()),
+            ],
+        );
+
+        assert_eq!(projection.status, RadrootsOrderStatus::Invalid);
+        assert_order_issue_kind(
+            &projection.issues,
+            RadrootsOrderIssue::ForkedLifecycle {
+                event_ids: Vec::new(),
+            },
+        );
+        assert_eq!(
+            super::projection_issue_event_ids(&projection.issues),
+            vec![event_id(2), event_id(4), event_id(5)]
+        );
+    }
+
+    #[test]
+    fn canonicalize_order_request_reports_signer_listing_and_item_errors() {
+        let canonical =
+            super::canonicalize_order_request_for_signer(request_record().payload, BUYER).unwrap();
+        assert_eq!(canonical.buyer_pubkey, public_key(BUYER));
+        assert_eq!(canonical.seller_pubkey, public_key(SELLER));
+
+        let mut unsorted_items = request_record().payload;
+        unsorted_items.items.push(RadrootsOrderItem {
+            bin_id: bin_id("bin-0"),
+            bin_count: 1,
+        });
+        let canonical =
+            super::canonicalize_order_request_for_signer(unsorted_items, BUYER).unwrap();
+        assert_eq!(canonical.items[0].bin_id, bin_id("bin-0"));
+        assert_eq!(canonical.items[1].bin_id, bin_id("bin-1"));
+
+        assert!(matches!(
+            super::parse_public_listing_addr("not-an-address"),
+            Err(super::RadrootsOrderCanonicalizationError::InvalidListingAddress(_))
+        ));
+        assert!(matches!(
+            super::parse_public_listing_addr(format!(
+                "{KIND_LISTING_DRAFT}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg"
+            )),
+            Err(super::RadrootsOrderCanonicalizationError::InvalidListingKind)
+        ));
+
+        assert!(matches!(
+            super::canonicalize_order_request_for_signer(request_record().payload, SELLER),
+            Err(super::RadrootsOrderCanonicalizationError::InvalidBuyerSigner)
+        ));
+
+        let mut seller_mismatch = request_record().payload;
+        seller_mismatch.seller_pubkey = public_key(OTHER);
+        assert!(matches!(
+            super::canonicalize_order_request_for_signer(seller_mismatch, BUYER),
+            Err(super::RadrootsOrderCanonicalizationError::InvalidSellerListing)
+        ));
+
+        let mut invalid_kind = request_record().payload;
+        invalid_kind.listing_addr = draft_listing_addr();
+        assert!(matches!(
+            super::canonicalize_order_request_for_signer(invalid_kind, BUYER),
+            Err(super::RadrootsOrderCanonicalizationError::InvalidListingKind)
+        ));
+
+        let mut missing_items = request_record().payload;
+        missing_items.items.clear();
+        assert!(matches!(
+            super::canonicalize_order_request_for_signer(missing_items, BUYER),
+            Err(super::RadrootsOrderCanonicalizationError::MissingItems)
+        ));
+
+        let mut zero_count = request_record().payload;
+        zero_count.items[0].bin_count = 0;
+        assert!(matches!(
+            super::canonicalize_order_request_for_signer(zero_count, BUYER),
+            Err(super::RadrootsOrderCanonicalizationError::InvalidBinCount { index: 0 })
+        ));
+    }
+
+    #[test]
+    fn canonicalize_order_decision_reports_signer_and_decision_errors() {
+        let canonical =
+            super::canonicalize_order_decision_for_signer(accepted_decision().payload, SELLER)
+                .unwrap();
+        assert_eq!(canonical.seller_pubkey, public_key(SELLER));
+
+        let mut unsorted_commitments = accepted_decision().payload;
+        if let RadrootsOrderDecisionOutcome::Accepted {
+            inventory_commitments,
+        } = &mut unsorted_commitments.decision
+        {
+            inventory_commitments.push(RadrootsOrderInventoryCommitment {
+                bin_id: bin_id("bin-0"),
+                bin_count: 1,
+            });
+        }
+        let canonical =
+            super::canonicalize_order_decision_for_signer(unsorted_commitments, SELLER).unwrap();
+        if let RadrootsOrderDecisionOutcome::Accepted {
+            inventory_commitments,
+        } = canonical.decision
+        {
+            assert_eq!(inventory_commitments[0].bin_id, bin_id("bin-0"));
+            assert_eq!(inventory_commitments[1].bin_id, bin_id("bin-1"));
+        }
+
+        let mut listing_seller_mismatch = accepted_decision().payload;
+        listing_seller_mismatch.listing_addr = other_seller_listing_addr();
+        assert!(matches!(
+            super::canonicalize_order_decision_for_signer(listing_seller_mismatch, SELLER),
+            Err(super::RadrootsOrderCanonicalizationError::InvalidSellerListing)
+        ));
+
+        assert!(matches!(
+            super::canonicalize_order_decision_for_signer(accepted_decision().payload, BUYER),
+            Err(super::RadrootsOrderCanonicalizationError::InvalidSellerListing)
+        ));
+
+        let mut missing_commitments = accepted_decision().payload;
+        missing_commitments.decision = RadrootsOrderDecisionOutcome::Accepted {
+            inventory_commitments: Vec::new(),
+        };
+        assert!(matches!(
+            super::canonicalize_order_decision_for_signer(missing_commitments, SELLER),
+            Err(super::RadrootsOrderCanonicalizationError::MissingInventoryCommitments)
+        ));
+
+        let mut zero_commitment = accepted_decision().payload;
+        if let RadrootsOrderDecisionOutcome::Accepted {
+            inventory_commitments,
+        } = &mut zero_commitment.decision
+        {
+            inventory_commitments[0].bin_count = 0;
+        }
+        assert!(matches!(
+            super::canonicalize_order_decision_for_signer(zero_commitment, SELLER),
+            Err(
+                super::RadrootsOrderCanonicalizationError::InvalidInventoryCommitmentCount {
+                    index: 0
+                }
+            )
+        ));
+
+        let mut declined = declined_decision().payload;
+        declined.decision = RadrootsOrderDecisionOutcome::Declined {
+            reason: "  already sold  ".into(),
+        };
+        let declined = super::canonicalize_order_decision_for_signer(declined, SELLER).unwrap();
+        assert_eq!(
+            declined.decision,
+            RadrootsOrderDecisionOutcome::Declined {
+                reason: "already sold".into()
+            }
+        );
+
+        let mut blank_reason = declined_decision().payload;
+        blank_reason.decision = RadrootsOrderDecisionOutcome::Declined { reason: " ".into() };
+        assert!(matches!(
+            super::canonicalize_order_decision_for_signer(blank_reason, SELLER),
+            Err(super::RadrootsOrderCanonicalizationError::EmptyField(
+                "reason"
+            ))
+        ));
+    }
+
+    #[cfg(feature = "serde_json")]
+    #[test]
+    fn order_economics_digest_is_stable_sha256_hex() {
+        let digest = super::radroots_order_economics_digest(&economics(2)).unwrap();
+        assert_eq!(
+            digest,
+            super::radroots_order_economics_digest(&economics(2)).unwrap()
+        );
+        assert!(digest.starts_with("sha256:"));
+        assert_eq!(digest.len(), "sha256:".len() + 64);
+    }
+
+    #[test]
+    fn order_helper_sorting_and_matching_paths_are_deterministic() {
+        let request_items = vec![
+            RadrootsOrderItem {
+                bin_id: bin_id("bin-2"),
+                bin_count: 1,
+            },
+            RadrootsOrderItem {
+                bin_id: bin_id("bin-1"),
+                bin_count: 2,
+            },
+        ];
+        let matching_commitments = vec![
+            RadrootsOrderInventoryCommitment {
+                bin_id: bin_id("bin-1"),
+                bin_count: 2,
+            },
+            RadrootsOrderInventoryCommitment {
+                bin_id: bin_id("bin-2"),
+                bin_count: 1,
+            },
+        ];
+        assert!(super::inventory_commitments_match_request(
+            &request_items,
+            &matching_commitments
+        ));
+        assert!(!super::inventory_commitments_match_request(
+            &request_items,
+            &matching_commitments[..1]
+        ));
+        let mut count_mismatch = matching_commitments.clone();
+        count_mismatch[0].bin_count = 1;
+        assert!(!super::inventory_commitments_match_request(
+            &request_items,
+            &count_mismatch
+        ));
+        let mut bin_mismatch = matching_commitments.clone();
+        bin_mismatch[0].bin_id = bin_id("bin-3");
+        assert!(!super::inventory_commitments_match_request(
+            &request_items,
+            &bin_mismatch
+        ));
+
+        let mut order_issues = vec![
+            RadrootsOrderIssue::ForkedLifecycle {
+                event_ids: vec![event_id(9), event_id(3)],
+            },
+            RadrootsOrderIssue::CancellationWithoutCancellableOrder {
+                event_id: event_id(5),
+            },
+            RadrootsOrderIssue::DecisionPayloadInvalid {
+                event_id: event_id(2),
+            },
+            RadrootsOrderIssue::MissingRequest,
+        ];
+        assert_eq!(
+            super::projection_issue_event_ids(&order_issues),
+            vec![event_id(2), event_id(3), event_id(5), event_id(9)]
+        );
+        order_issues.sort_by(super::order_issue_sort_key);
+        assert!(matches!(
+            order_issues[0],
+            RadrootsOrderIssue::MissingRequest
+        ));
+        assert!(matches!(
+            order_issues[1],
+            RadrootsOrderIssue::DecisionPayloadInvalid { .. }
+        ));
+        assert!(matches!(
+            order_issues[2],
+            RadrootsOrderIssue::CancellationWithoutCancellableOrder { .. }
+        ));
+        assert!(matches!(
+            order_issues[3],
+            RadrootsOrderIssue::ForkedLifecycle { .. }
+        ));
+
+        let mut tied_order_issues = vec![
+            RadrootsOrderIssue::DecisionPayloadInvalid {
+                event_id: event_id(8),
+            },
+            RadrootsOrderIssue::DecisionPayloadInvalid {
+                event_id: event_id(7),
+            },
+        ];
+        tied_order_issues.sort_by(super::order_issue_sort_key);
+        let RadrootsOrderIssue::DecisionPayloadInvalid {
+            event_id: issue_event_id,
+        } = &tied_order_issues[0]
+        else {
+            panic!("expected decision issue");
+        };
+        assert_eq!(issue_event_id, &event_id(7));
+
+        let mut inventory_issues = vec![
+            RadrootsListingInventoryAccountingIssue::OverReserved {
+                bin_id: bin_id("bin-2"),
+                available_count: 1,
+                reserved_count: 2,
+                event_ids: vec![event_id(8)],
+            },
+            RadrootsListingInventoryAccountingIssue::UnknownInventoryBin {
+                bin_id: bin_id("bin-1"),
+                event_ids: vec![event_id(7)],
+            },
+            RadrootsListingInventoryAccountingIssue::ArithmeticOverflow {
+                bin_id: bin_id("bin-3"),
+                event_ids: vec![event_id(6)],
+            },
+            RadrootsListingInventoryAccountingIssue::InvalidOrder {
+                order_id: order_id("order-1"),
+                event_ids: vec![event_id(5)],
+            },
+        ];
+        inventory_issues.sort_by(super::inventory_issue_sort_key);
+        assert!(matches!(
+            inventory_issues[0],
+            RadrootsListingInventoryAccountingIssue::InvalidOrder { .. }
+        ));
+        assert!(matches!(
+            inventory_issues[1],
+            RadrootsListingInventoryAccountingIssue::ArithmeticOverflow { .. }
+        ));
+        assert!(matches!(
+            inventory_issues[2],
+            RadrootsListingInventoryAccountingIssue::UnknownInventoryBin { .. }
+        ));
+        assert!(matches!(
+            inventory_issues[3],
+            RadrootsListingInventoryAccountingIssue::OverReserved { .. }
+        ));
+
+        let mut tied_inventory_issues = vec![
+            RadrootsListingInventoryAccountingIssue::UnknownInventoryBin {
+                bin_id: bin_id("bin-2"),
+                event_ids: vec![event_id(9)],
+            },
+            RadrootsListingInventoryAccountingIssue::UnknownInventoryBin {
+                bin_id: bin_id("bin-1"),
+                event_ids: vec![event_id(8)],
+            },
+            RadrootsListingInventoryAccountingIssue::UnknownInventoryBin {
+                bin_id: bin_id("bin-1"),
+                event_ids: vec![event_id(7)],
+            },
+        ];
+        tied_inventory_issues.sort_by(super::inventory_issue_sort_key);
+        assert_eq!(
+            super::inventory_issue_id(&tied_inventory_issues[0]),
+            "bin-1"
+        );
+        assert_eq!(
+            super::inventory_issue_event_ids(&tied_inventory_issues[0]),
+            &[event_id(7)]
+        );
+
+        let invalid = super::invalid_projection(
+            &order_id("order-1"),
+            Some(&request_record()),
+            vec![RadrootsOrderIssue::MissingRequest],
+        );
+        assert_eq!(invalid.last_event_id, Some(event_id(1)));
+    }
+
+    #[test]
+    fn order_issue_rank_and_event_id_helpers_cover_every_issue_variant() {
+        let id = event_id(42);
+        let event_ids = vec![id.clone()];
+        let issues = vec![
+            RadrootsOrderIssue::MissingRequest,
+            RadrootsOrderIssue::MultipleRequests {
+                event_ids: event_ids.clone(),
+            },
+            RadrootsOrderIssue::RequestPayloadInvalid {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::RequestOrderIdMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::RequestAuthorMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::RequestListingAddressInvalid {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::RequestSellerListingMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::DecisionPayloadInvalid {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::DecisionOrderIdMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::DecisionAuthorMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::DecisionCounterpartyMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::DecisionBuyerMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::DecisionSellerMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::DecisionListingAddressInvalid {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::DecisionListingMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::DecisionRootMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::DecisionPreviousMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::DecisionMissingInventoryCommitments {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::DecisionInventoryCommitmentMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::DecisionMissingReason {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::ConflictingDecisions {
+                event_ids: event_ids.clone(),
+            },
+            RadrootsOrderIssue::RevisionProposalPayloadInvalid {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::RevisionProposalOrderIdMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::RevisionProposalAuthorMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::RevisionProposalCounterpartyMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::RevisionProposalBuyerMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::RevisionProposalSellerMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::RevisionProposalListingAddressInvalid {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::RevisionProposalListingMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::RevisionProposalRootMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::RevisionProposalPreviousMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::RevisionDecisionWithoutProposal {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::RevisionDecisionPayloadInvalid {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::RevisionDecisionOrderIdMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::RevisionDecisionAuthorMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::RevisionDecisionCounterpartyMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::RevisionDecisionBuyerMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::RevisionDecisionSellerMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::RevisionDecisionListingAddressInvalid {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::RevisionDecisionListingMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::RevisionDecisionRootMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::RevisionDecisionPreviousMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::RevisionDecisionRevisionIdMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::CancellationWithoutCancellableOrder {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::CancellationPayloadInvalid {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::CancellationOrderIdMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::CancellationAuthorMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::CancellationCounterpartyMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::CancellationBuyerMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::CancellationSellerMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::CancellationListingAddressInvalid {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::CancellationListingMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::CancellationRootMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::CancellationPreviousMismatch {
+                event_id: id.clone(),
+            },
+            RadrootsOrderIssue::ForkedLifecycle { event_ids },
+        ];
+
+        for (rank, issue) in issues.iter().enumerate() {
+            assert_eq!(super::order_issue_rank(issue), rank as u8);
+        }
+        assert_eq!(super::projection_issue_event_ids(&issues), vec![id]);
+    }
+
+    #[test]
+    fn inventory_issue_helpers_cover_all_issue_variants() {
+        let id = event_id(9);
+        let issues = vec![
+            RadrootsListingInventoryAccountingIssue::InvalidOrder {
+                order_id: order_id("order-1"),
+                event_ids: vec![id.clone()],
+            },
+            RadrootsListingInventoryAccountingIssue::ArithmeticOverflow {
+                bin_id: bin_id("bin-1"),
+                event_ids: vec![id.clone()],
+            },
+            RadrootsListingInventoryAccountingIssue::UnknownInventoryBin {
+                bin_id: bin_id("bin-2"),
+                event_ids: vec![id.clone()],
+            },
+            RadrootsListingInventoryAccountingIssue::OverReserved {
+                bin_id: bin_id("bin-3"),
+                available_count: 1,
+                reserved_count: 2,
+                event_ids: vec![id.clone()],
+            },
+        ];
+
+        assert_eq!(super::inventory_issue_rank(&issues[0]), 0);
+        assert_eq!(super::inventory_issue_rank(&issues[1]), 1);
+        assert_eq!(super::inventory_issue_rank(&issues[2]), 2);
+        assert_eq!(super::inventory_issue_rank(&issues[3]), 3);
+        assert_eq!(super::inventory_issue_id(&issues[0]), "order-1");
+        assert_eq!(super::inventory_issue_id(&issues[1]), "bin-1");
+        assert_eq!(super::inventory_issue_id(&issues[2]), "bin-2");
+        assert_eq!(super::inventory_issue_id(&issues[3]), "bin-3");
+        for issue in &issues {
+            assert_eq!(super::inventory_issue_event_ids(issue), &[id.clone()]);
+        }
+    }
+
+    #[test]
+    fn reducer_reports_missing_request_for_each_non_request_input_family() {
+        let decision_only = reduce_order_events(
+            &order_id("order-1"),
+            RadrootsOrderReductionInputs {
+                requests: Vec::<RadrootsOrderRequestRecord>::new(),
+                decisions: vec![accepted_decision()],
+                revision_proposals: Vec::<RadrootsOrderRevisionProposalRecord>::new(),
+                revision_decisions: Vec::<RadrootsOrderRevisionDecisionRecord>::new(),
+                cancellations: Vec::<RadrootsOrderCancellationRecord>::new(),
+            },
+        );
+        assert_order_issue_kind(&decision_only.issues, RadrootsOrderIssue::MissingRequest);
+
+        let proposal_only = reduce_order_events(
+            &order_id("order-1"),
+            RadrootsOrderReductionInputs {
+                requests: Vec::<RadrootsOrderRequestRecord>::new(),
+                decisions: Vec::<RadrootsOrderDecisionRecord>::new(),
+                revision_proposals: vec![revision_proposal()],
+                revision_decisions: Vec::<RadrootsOrderRevisionDecisionRecord>::new(),
+                cancellations: Vec::<RadrootsOrderCancellationRecord>::new(),
+            },
+        );
+        assert_order_issue_kind(&proposal_only.issues, RadrootsOrderIssue::MissingRequest);
+
+        let revision_decision_only = reduce_order_events(
+            &order_id("order-1"),
+            RadrootsOrderReductionInputs {
+                requests: Vec::<RadrootsOrderRequestRecord>::new(),
+                decisions: Vec::<RadrootsOrderDecisionRecord>::new(),
+                revision_proposals: Vec::<RadrootsOrderRevisionProposalRecord>::new(),
+                revision_decisions: vec![accepted_revision_decision()],
+                cancellations: Vec::<RadrootsOrderCancellationRecord>::new(),
+            },
+        );
+        assert_order_issue_kind(
+            &revision_decision_only.issues,
+            RadrootsOrderIssue::MissingRequest,
+        );
+
+        let cancellation_only = reduce_order_events(
+            &order_id("order-1"),
+            RadrootsOrderReductionInputs {
+                requests: Vec::<RadrootsOrderRequestRecord>::new(),
+                decisions: Vec::<RadrootsOrderDecisionRecord>::new(),
+                revision_proposals: Vec::<RadrootsOrderRevisionProposalRecord>::new(),
+                revision_decisions: Vec::<RadrootsOrderRevisionDecisionRecord>::new(),
+                cancellations: vec![cancellation(event_id(1))],
+            },
+        );
+        assert_order_issue_kind(
+            &cancellation_only.issues,
+            RadrootsOrderIssue::MissingRequest,
+        );
+    }
+
+    #[test]
+    fn reducer_reports_multiple_valid_cancellations_as_forked_lifecycle() {
+        let mut second_cancellation = cancellation(event_id(1));
+        second_cancellation.event_id = event_id(6);
+        let projection = reduce(
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            vec![cancellation(event_id(1)), second_cancellation],
+        );
+
+        assert_order_issue_kind(
+            &projection.issues,
+            RadrootsOrderIssue::ForkedLifecycle {
+                event_ids: Vec::new(),
+            },
+        );
+        assert_eq!(projection.last_event_id, Some(event_id(6)));
+    }
+
+    #[test]
+    fn inventory_accounting_private_helpers_cover_merge_sort_and_overflow_paths() {
+        let (bins, issues) = super::normalized_listing_inventory_bins(vec![
+            RadrootsListingInventoryBinAvailability {
+                bin_id: bin_id("bin-1"),
+                available_count: 1,
+            },
+            RadrootsListingInventoryBinAvailability {
+                bin_id: bin_id("bin-1"),
+                available_count: 2,
+            },
+        ]);
+        assert_eq!(issues, Vec::new());
+        assert_eq!(bins[0].available_count, 3);
+        assert_eq!(bins[0].remaining_count, 3);
+
+        let mut overflow_bin = super::RadrootsListingInventoryBinAccounting {
+            bin_id: bin_id("bin-overflow"),
+            available_count: u64::MAX,
+            accepted_reserved_count: u64::MAX,
+            remaining_count: u64::MAX,
+            over_reserved: false,
+            accepted_orders: Vec::new(),
+        };
+        let mut overflow_issues = Vec::new();
+        super::add_inventory_reservation_event(
+            &mut overflow_bin,
+            &order_id("order-overflow"),
+            &event_id(90),
+            1,
+            &mut overflow_issues,
+        );
+        assert_inventory_issue_kind(
+            &overflow_issues,
+            RadrootsListingInventoryAccountingIssue::ArithmeticOverflow {
+                bin_id: bin_id("bin-overflow"),
+                event_ids: Vec::new(),
+            },
+        );
+
+        let mut sorting_bin = super::RadrootsListingInventoryBinAccounting {
+            bin_id: bin_id("bin-sort"),
+            available_count: 1,
+            accepted_reserved_count: 2,
+            remaining_count: 1,
+            over_reserved: false,
+            accepted_orders: vec![
+                super::RadrootsListingInventoryOrderReservation {
+                    order_id: order_id("order-2"),
+                    agreement_event_id: event_id(92),
+                    bin_count: 1,
+                },
+                super::RadrootsListingInventoryOrderReservation {
+                    order_id: order_id("order-1"),
+                    agreement_event_id: event_id(91),
+                    bin_count: 1,
+                },
+                super::RadrootsListingInventoryOrderReservation {
+                    order_id: order_id("order-1"),
+                    agreement_event_id: event_id(90),
+                    bin_count: 1,
+                },
+            ],
+        };
+        let mut finish_issues = Vec::new();
+        super::finish_inventory_accounting_bins(
+            core::slice::from_mut(&mut sorting_bin),
+            &mut finish_issues,
+        );
+        assert_eq!(sorting_bin.remaining_count, 0);
+        assert!(sorting_bin.over_reserved);
+        assert_eq!(sorting_bin.accepted_orders[0].order_id, order_id("order-1"));
+        assert_eq!(
+            sorting_bin.accepted_orders[0].agreement_event_id,
+            event_id(90)
+        );
+        assert_inventory_issue_kind(
+            &finish_issues,
+            RadrootsListingInventoryAccountingIssue::OverReserved {
+                bin_id: bin_id("bin-sort"),
+                available_count: 1,
+                reserved_count: 2,
+                event_ids: Vec::new(),
+            },
+        );
+    }
+
+    #[test]
+    fn reducer_reports_missing_duplicate_and_forked_lifecycles() {
+        let missing = reduce_order_events(
+            &order_id("order-1"),
+            RadrootsOrderReductionInputs {
+                requests: Vec::<RadrootsOrderRequestRecord>::new(),
+                decisions: Vec::<RadrootsOrderDecisionRecord>::new(),
+                revision_proposals: Vec::<RadrootsOrderRevisionProposalRecord>::new(),
+                revision_decisions: Vec::<RadrootsOrderRevisionDecisionRecord>::new(),
+                cancellations: Vec::<RadrootsOrderCancellationRecord>::new(),
+            },
+        );
+        assert_eq!(missing.status, RadrootsOrderStatus::Missing);
+
+        let missing_request = reduce_order_events(
+            &order_id("order-1"),
+            RadrootsOrderReductionInputs {
+                requests: Vec::<RadrootsOrderRequestRecord>::new(),
+                decisions: vec![accepted_decision()],
+                revision_proposals: Vec::<RadrootsOrderRevisionProposalRecord>::new(),
+                revision_decisions: Vec::<RadrootsOrderRevisionDecisionRecord>::new(),
+                cancellations: Vec::<RadrootsOrderCancellationRecord>::new(),
+            },
+        );
+        assert_order_issue_kind(&missing_request.issues, RadrootsOrderIssue::MissingRequest);
+
+        let mut duplicate_request = request_record();
+        duplicate_request.event_id = event_id(6);
+        let duplicate = reduce_order_events(
+            &order_id("order-1"),
+            RadrootsOrderReductionInputs {
+                requests: vec![request_record(), duplicate_request],
+                decisions: Vec::<RadrootsOrderDecisionRecord>::new(),
+                revision_proposals: Vec::<RadrootsOrderRevisionProposalRecord>::new(),
+                revision_decisions: Vec::<RadrootsOrderRevisionDecisionRecord>::new(),
+                cancellations: Vec::<RadrootsOrderCancellationRecord>::new(),
+            },
+        );
+        assert_order_issue_kind(
+            &duplicate.issues,
+            RadrootsOrderIssue::MultipleRequests {
+                event_ids: Vec::new(),
+            },
+        );
+
+        let mut second_decision = declined_decision();
+        second_decision.event_id = event_id(6);
+        let conflicting = reduce(
+            vec![accepted_decision(), second_decision],
+            vec![],
+            vec![],
+            vec![],
+        );
+        assert_order_issue_kind(
+            &conflicting.issues,
+            RadrootsOrderIssue::ConflictingDecisions {
+                event_ids: Vec::new(),
+            },
+        );
+
+        let without_proposal = reduce(
+            Vec::new(),
+            Vec::new(),
+            vec![accepted_revision_decision()],
+            Vec::new(),
+        );
+        assert_order_issue_kind(
+            &without_proposal.issues,
+            RadrootsOrderIssue::RevisionDecisionWithoutProposal {
+                event_id: event_id(4),
+            },
+        );
+
+        let mut second_proposal = revision_proposal();
+        second_proposal.event_id = event_id(6);
+        let multiple_proposals = reduce(
+            Vec::new(),
+            vec![revision_proposal(), second_proposal],
+            vec![],
+            vec![],
+        );
+        assert_order_issue_kind(
+            &multiple_proposals.issues,
+            RadrootsOrderIssue::ForkedLifecycle {
+                event_ids: Vec::new(),
+            },
+        );
+
+        let mut second_revision_decision = accepted_revision_decision();
+        second_revision_decision.event_id = event_id(7);
+        let multiple_revision_decisions = reduce(
+            Vec::new(),
+            vec![revision_proposal()],
+            vec![accepted_revision_decision(), second_revision_decision],
+            Vec::new(),
+        );
+        assert_order_issue_kind(
+            &multiple_revision_decisions.issues,
+            RadrootsOrderIssue::ForkedLifecycle {
+                event_ids: Vec::new(),
+            },
+        );
+
+        let decided_then_revised = reduce(
+            vec![accepted_decision()],
+            vec![revision_proposal()],
+            Vec::new(),
+            Vec::new(),
+        );
+        assert_order_issue_kind(
+            &decided_then_revised.issues,
+            RadrootsOrderIssue::ForkedLifecycle {
+                event_ids: Vec::new(),
+            },
+        );
+
+        let decided_then_revision_decision = reduce(
+            vec![accepted_decision()],
+            Vec::new(),
+            vec![accepted_revision_decision()],
+            Vec::new(),
+        );
+        assert_order_issue_kind(
+            &decided_then_revision_decision.issues,
+            RadrootsOrderIssue::ForkedLifecycle {
+                event_ids: Vec::new(),
+            },
+        );
+    }
+
+    #[test]
+    fn reducer_covers_revision_and_cancellation_edge_paths() {
+        let pending_revision = reduce(
+            Vec::new(),
+            vec![revision_proposal()],
+            Vec::new(),
+            Vec::new(),
+        );
+        assert_eq!(pending_revision.status, RadrootsOrderStatus::Requested);
+        assert_eq!(
+            pending_revision.pending_revision_event_id,
+            Some(event_id(3))
+        );
+        assert_eq!(
+            pending_revision.economics.expect("pending economics").items[0].bin_count,
+            1
+        );
+
+        let mut bad_proposal_previous = revision_proposal();
+        bad_proposal_previous.prev_event_id = event_id(8);
+        bad_proposal_previous.payload.prev_event_id = event_id(8);
+        let bad_proposal = reduce(
+            Vec::new(),
+            vec![bad_proposal_previous],
+            Vec::new(),
+            Vec::new(),
+        );
+        assert_order_issue_kind(
+            &bad_proposal.issues,
+            RadrootsOrderIssue::RevisionProposalPreviousMismatch {
+                event_id: event_id(3),
+            },
+        );
+
+        let mut bad_decision_previous = accepted_revision_decision();
+        bad_decision_previous.prev_event_id = event_id(8);
+        bad_decision_previous.payload.prev_event_id = event_id(8);
+        let bad_decision = reduce(
+            Vec::new(),
+            vec![revision_proposal()],
+            vec![bad_decision_previous],
+            Vec::new(),
+        );
+        assert_order_issue_kind(
+            &bad_decision.issues,
+            RadrootsOrderIssue::RevisionDecisionPreviousMismatch {
+                event_id: event_id(4),
+            },
+        );
+
+        let mut bad_revision_id = accepted_revision_decision();
+        bad_revision_id.payload.revision_id = revision_id("revision-2");
+        let bad_revision = reduce(
+            Vec::new(),
+            vec![revision_proposal()],
+            vec![bad_revision_id],
+            Vec::new(),
+        );
+        assert_order_issue_kind(
+            &bad_revision.issues,
+            RadrootsOrderIssue::RevisionDecisionRevisionIdMismatch {
+                event_id: event_id(4),
+            },
+        );
+
+        let mut declined_revision = accepted_revision_decision();
+        declined_revision.payload.decision = RadrootsOrderRevisionOutcome::Declined {
+            reason: "too late".into(),
+        };
+        let declined = reduce(
+            Vec::new(),
+            vec![revision_proposal()],
+            vec![declined_revision],
+            Vec::new(),
+        );
+        assert_eq!(declined.status, RadrootsOrderStatus::Declined);
+        assert_eq!(declined.pending_revision_event_id, Some(event_id(3)));
+
+        let cancellation_after_decision = reduce(
+            vec![declined_decision()],
+            Vec::new(),
+            Vec::new(),
+            vec![cancellation(event_id(2))],
+        );
+        assert_order_issue_kind(
+            &cancellation_after_decision.issues,
+            RadrootsOrderIssue::ForkedLifecycle {
+                event_ids: Vec::new(),
+            },
+        );
+
+        let cancellation_after_revision_decision = reduce(
+            Vec::new(),
+            vec![revision_proposal()],
+            vec![accepted_revision_decision()],
+            vec![cancellation(event_id(4))],
+        );
+        assert_order_issue_kind(
+            &cancellation_after_revision_decision.issues,
+            RadrootsOrderIssue::ForkedLifecycle {
+                event_ids: Vec::new(),
+            },
+        );
+
+        let mut second_proposal = revision_proposal();
+        second_proposal.event_id = event_id(6);
+        let cancellation_after_multiple_proposals = reduce(
+            Vec::new(),
+            vec![revision_proposal(), second_proposal],
+            Vec::new(),
+            vec![cancellation(event_id(3))],
+        );
+        assert_order_issue_kind(
+            &cancellation_after_multiple_proposals.issues,
+            RadrootsOrderIssue::ForkedLifecycle {
+                event_ids: Vec::new(),
+            },
+        );
+
+        let cancellation_previous_mismatch = reduce(
+            Vec::new(),
+            vec![revision_proposal()],
+            Vec::new(),
+            vec![cancellation(event_id(1))],
+        );
+        assert_order_issue_kind(
+            &cancellation_previous_mismatch.issues,
+            RadrootsOrderIssue::CancellationPreviousMismatch {
+                event_id: event_id(5),
+            },
+        );
+    }
+
+    #[test]
+    fn reducer_validators_report_request_and_decision_issue_kinds() {
+        assert_request_issue(
+            |request| request.payload.items.clear(),
+            RadrootsOrderIssue::RequestPayloadInvalid {
+                event_id: event_id(1),
+            },
+        );
+        assert_request_issue(
+            |request| request.payload.order_id = order_id("order-2"),
+            RadrootsOrderIssue::RequestOrderIdMismatch {
+                event_id: event_id(1),
+            },
+        );
+        assert_request_issue(
+            |request| request.author_pubkey = public_key(SELLER),
+            RadrootsOrderIssue::RequestAuthorMismatch {
+                event_id: event_id(1),
+            },
+        );
+        assert_request_issue(
+            |request| request.payload.listing_addr = draft_listing_addr(),
+            RadrootsOrderIssue::RequestListingAddressInvalid {
+                event_id: event_id(1),
+            },
+        );
+        assert_request_issue(
+            |request| request.payload.seller_pubkey = public_key(OTHER),
+            RadrootsOrderIssue::RequestSellerListingMismatch {
+                event_id: event_id(1),
+            },
+        );
+
+        assert_decision_issue(
+            |decision| {
+                decision.payload.decision = RadrootsOrderDecisionOutcome::Accepted {
+                    inventory_commitments: Vec::new(),
+                };
+            },
+            RadrootsOrderIssue::DecisionMissingInventoryCommitments {
+                event_id: event_id(2),
+            },
+        );
+        assert_decision_issue(
+            |decision| {
+                decision.payload.decision =
+                    RadrootsOrderDecisionOutcome::Declined { reason: " ".into() };
+            },
+            RadrootsOrderIssue::DecisionMissingReason {
+                event_id: event_id(2),
+            },
+        );
+        assert_decision_issue(
+            |decision| decision.payload.order_id = order_id("order-2"),
+            RadrootsOrderIssue::DecisionOrderIdMismatch {
+                event_id: event_id(2),
+            },
+        );
+        assert_decision_issue(
+            |decision| decision.author_pubkey = public_key(BUYER),
+            RadrootsOrderIssue::DecisionAuthorMismatch {
+                event_id: event_id(2),
+            },
+        );
+        assert_decision_issue(
+            |decision| decision.counterparty_pubkey = public_key(SELLER),
+            RadrootsOrderIssue::DecisionCounterpartyMismatch {
+                event_id: event_id(2),
+            },
+        );
+        assert_decision_issue(
+            |decision| decision.payload.buyer_pubkey = public_key(SELLER),
+            RadrootsOrderIssue::DecisionBuyerMismatch {
+                event_id: event_id(2),
+            },
+        );
+        assert_decision_issue(
+            |decision| decision.payload.seller_pubkey = public_key(BUYER),
+            RadrootsOrderIssue::DecisionSellerMismatch {
+                event_id: event_id(2),
+            },
+        );
+        assert_decision_issue(
+            |decision| decision.payload.listing_addr = draft_listing_addr(),
+            RadrootsOrderIssue::DecisionListingAddressInvalid {
+                event_id: event_id(2),
+            },
+        );
+        assert_decision_issue(
+            |decision| decision.payload.listing_addr = other_seller_listing_addr(),
+            RadrootsOrderIssue::DecisionListingMismatch {
+                event_id: event_id(2),
+            },
+        );
+        assert_decision_issue(
+            |decision| decision.root_event_id = event_id(8),
+            RadrootsOrderIssue::DecisionRootMismatch {
+                event_id: event_id(2),
+            },
+        );
+        assert_decision_issue(
+            |decision| decision.prev_event_id = event_id(8),
+            RadrootsOrderIssue::DecisionPreviousMismatch {
+                event_id: event_id(2),
+            },
+        );
+        assert_decision_issue(
+            |decision| {
+                if let RadrootsOrderDecisionOutcome::Accepted {
+                    inventory_commitments,
+                } = &mut decision.payload.decision
+                {
+                    inventory_commitments[0].bin_count = 1;
+                }
+            },
+            RadrootsOrderIssue::DecisionInventoryCommitmentMismatch {
+                event_id: event_id(2),
+            },
+        );
+    }
+
+    #[test]
+    fn reducer_validators_report_revision_and_cancellation_issue_kinds() {
+        assert_revision_proposal_issue(
+            |proposal| proposal.payload.items.clear(),
+            RadrootsOrderIssue::RevisionProposalPayloadInvalid {
+                event_id: event_id(3),
+            },
+        );
+        assert_revision_proposal_issue(
+            |proposal| proposal.payload.order_id = order_id("order-2"),
+            RadrootsOrderIssue::RevisionProposalOrderIdMismatch {
+                event_id: event_id(3),
+            },
+        );
+        assert_revision_proposal_issue(
+            |proposal| proposal.author_pubkey = public_key(BUYER),
+            RadrootsOrderIssue::RevisionProposalAuthorMismatch {
+                event_id: event_id(3),
+            },
+        );
+        assert_revision_proposal_issue(
+            |proposal| proposal.counterparty_pubkey = public_key(SELLER),
+            RadrootsOrderIssue::RevisionProposalCounterpartyMismatch {
+                event_id: event_id(3),
+            },
+        );
+        assert_revision_proposal_issue(
+            |proposal| proposal.payload.buyer_pubkey = public_key(SELLER),
+            RadrootsOrderIssue::RevisionProposalBuyerMismatch {
+                event_id: event_id(3),
+            },
+        );
+        assert_revision_proposal_issue(
+            |proposal| proposal.payload.seller_pubkey = public_key(BUYER),
+            RadrootsOrderIssue::RevisionProposalSellerMismatch {
+                event_id: event_id(3),
+            },
+        );
+        assert_revision_proposal_issue(
+            |proposal| proposal.payload.listing_addr = draft_listing_addr(),
+            RadrootsOrderIssue::RevisionProposalListingAddressInvalid {
+                event_id: event_id(3),
+            },
+        );
+        assert_revision_proposal_issue(
+            |proposal| proposal.payload.listing_addr = other_seller_listing_addr(),
+            RadrootsOrderIssue::RevisionProposalListingMismatch {
+                event_id: event_id(3),
+            },
+        );
+        assert_revision_proposal_issue(
+            |proposal| proposal.root_event_id = event_id(8),
+            RadrootsOrderIssue::RevisionProposalRootMismatch {
+                event_id: event_id(3),
+            },
+        );
+        assert_revision_proposal_issue(
+            |proposal| proposal.payload.root_event_id = event_id(8),
+            RadrootsOrderIssue::RevisionProposalRootMismatch {
+                event_id: event_id(3),
+            },
+        );
+        assert_revision_proposal_issue(
+            |proposal| proposal.prev_event_id = event_id(8),
+            RadrootsOrderIssue::RevisionProposalPreviousMismatch {
+                event_id: event_id(3),
+            },
+        );
+        assert_revision_proposal_issue(
+            |proposal| proposal.prev_event_id = event_id(3),
+            RadrootsOrderIssue::RevisionProposalPreviousMismatch {
+                event_id: event_id(3),
+            },
+        );
+        assert_revision_proposal_issue(
+            |proposal| proposal.payload.prev_event_id = event_id(8),
+            RadrootsOrderIssue::RevisionProposalPreviousMismatch {
+                event_id: event_id(3),
+            },
+        );
+
+        assert_revision_decision_issue(
+            |decision| {
+                decision.payload.decision =
+                    RadrootsOrderRevisionOutcome::Declined { reason: " ".into() };
+            },
+            RadrootsOrderIssue::RevisionDecisionPayloadInvalid {
+                event_id: event_id(4),
+            },
+        );
+        assert_revision_decision_issue(
+            |decision| decision.payload.order_id = order_id("order-2"),
+            RadrootsOrderIssue::RevisionDecisionOrderIdMismatch {
+                event_id: event_id(4),
+            },
+        );
+        assert_revision_decision_issue(
+            |decision| decision.author_pubkey = public_key(SELLER),
+            RadrootsOrderIssue::RevisionDecisionAuthorMismatch {
+                event_id: event_id(4),
+            },
+        );
+        assert_revision_decision_issue(
+            |decision| decision.counterparty_pubkey = public_key(BUYER),
+            RadrootsOrderIssue::RevisionDecisionCounterpartyMismatch {
+                event_id: event_id(4),
+            },
+        );
+        assert_revision_decision_issue(
+            |decision| decision.payload.buyer_pubkey = public_key(SELLER),
+            RadrootsOrderIssue::RevisionDecisionBuyerMismatch {
+                event_id: event_id(4),
+            },
+        );
+        assert_revision_decision_issue(
+            |decision| decision.payload.seller_pubkey = public_key(BUYER),
+            RadrootsOrderIssue::RevisionDecisionSellerMismatch {
+                event_id: event_id(4),
+            },
+        );
+        assert_revision_decision_issue(
+            |decision| decision.payload.listing_addr = draft_listing_addr(),
+            RadrootsOrderIssue::RevisionDecisionListingAddressInvalid {
+                event_id: event_id(4),
+            },
+        );
+        assert_revision_decision_issue(
+            |decision| decision.payload.listing_addr = other_seller_listing_addr(),
+            RadrootsOrderIssue::RevisionDecisionListingMismatch {
+                event_id: event_id(4),
+            },
+        );
+        assert_revision_decision_issue(
+            |decision| decision.root_event_id = event_id(8),
+            RadrootsOrderIssue::RevisionDecisionRootMismatch {
+                event_id: event_id(4),
+            },
+        );
+        assert_revision_decision_issue(
+            |decision| decision.payload.root_event_id = event_id(8),
+            RadrootsOrderIssue::RevisionDecisionRootMismatch {
+                event_id: event_id(4),
+            },
+        );
+        assert_revision_decision_issue(
+            |decision| decision.prev_event_id = event_id(8),
+            RadrootsOrderIssue::RevisionDecisionPreviousMismatch {
+                event_id: event_id(4),
+            },
+        );
+        assert_revision_decision_issue(
+            |decision| decision.prev_event_id = event_id(4),
+            RadrootsOrderIssue::RevisionDecisionPreviousMismatch {
+                event_id: event_id(4),
+            },
+        );
+        assert_revision_decision_issue(
+            |decision| decision.payload.prev_event_id = event_id(8),
+            RadrootsOrderIssue::RevisionDecisionPreviousMismatch {
+                event_id: event_id(4),
+            },
+        );
+
+        assert_cancellation_issue(
+            |cancellation| cancellation.payload.reason = " ".into(),
+            RadrootsOrderIssue::CancellationPayloadInvalid {
+                event_id: event_id(5),
+            },
+        );
+        assert_cancellation_issue(
+            |cancellation| cancellation.payload.order_id = order_id("order-2"),
+            RadrootsOrderIssue::CancellationOrderIdMismatch {
+                event_id: event_id(5),
+            },
+        );
+        assert_cancellation_issue(
+            |cancellation| cancellation.author_pubkey = public_key(SELLER),
+            RadrootsOrderIssue::CancellationAuthorMismatch {
+                event_id: event_id(5),
+            },
+        );
+        assert_cancellation_issue(
+            |cancellation| cancellation.counterparty_pubkey = public_key(BUYER),
+            RadrootsOrderIssue::CancellationCounterpartyMismatch {
+                event_id: event_id(5),
+            },
+        );
+        assert_cancellation_issue(
+            |cancellation| cancellation.payload.buyer_pubkey = public_key(SELLER),
+            RadrootsOrderIssue::CancellationBuyerMismatch {
+                event_id: event_id(5),
+            },
+        );
+        assert_cancellation_issue(
+            |cancellation| cancellation.payload.seller_pubkey = public_key(BUYER),
+            RadrootsOrderIssue::CancellationSellerMismatch {
+                event_id: event_id(5),
+            },
+        );
+        assert_cancellation_issue(
+            |cancellation| cancellation.payload.listing_addr = draft_listing_addr(),
+            RadrootsOrderIssue::CancellationListingAddressInvalid {
+                event_id: event_id(5),
+            },
+        );
+        assert_cancellation_issue(
+            |cancellation| cancellation.payload.listing_addr = other_seller_listing_addr(),
+            RadrootsOrderIssue::CancellationListingMismatch {
+                event_id: event_id(5),
+            },
+        );
+        assert_cancellation_issue(
+            |cancellation| cancellation.root_event_id = event_id(8),
+            RadrootsOrderIssue::CancellationRootMismatch {
+                event_id: event_id(5),
+            },
+        );
+        assert_cancellation_issue(
+            |cancellation| cancellation.prev_event_id = event_id(5),
+            RadrootsOrderIssue::CancellationPreviousMismatch {
+                event_id: event_id(5),
+            },
+        );
+    }
+
+    #[test]
+    fn reducer_reports_invalid_records_from_all_non_request_families() {
+        let mut bad_request = request_record();
+        bad_request.payload.order_id = order_id("order-2");
+        let invalid_request = reduce_order_events(
+            &order_id("order-1"),
+            RadrootsOrderReductionInputs {
+                requests: vec![bad_request],
+                decisions: Vec::<RadrootsOrderDecisionRecord>::new(),
+                revision_proposals: Vec::<RadrootsOrderRevisionProposalRecord>::new(),
+                revision_decisions: Vec::<RadrootsOrderRevisionDecisionRecord>::new(),
+                cancellations: Vec::<RadrootsOrderCancellationRecord>::new(),
+            },
+        );
+        assert_order_issue_kind(
+            &invalid_request.issues,
+            RadrootsOrderIssue::RequestOrderIdMismatch {
+                event_id: event_id(1),
+            },
+        );
+
+        let mut bad_decision = accepted_decision();
+        bad_decision.payload.order_id = order_id("order-2");
+        let mut bad_proposal = revision_proposal();
+        bad_proposal.payload.order_id = order_id("order-2");
+        let mut bad_revision_decision = accepted_revision_decision();
+        bad_revision_decision.payload.order_id = order_id("order-2");
+        let mut bad_cancellation = cancellation(event_id(1));
+        bad_cancellation.payload.order_id = order_id("order-2");
+        let invalid_non_requests = reduce_order_events(
+            &order_id("order-1"),
+            RadrootsOrderReductionInputs {
+                requests: vec![request_record()],
+                decisions: vec![bad_decision],
+                revision_proposals: vec![bad_proposal],
+                revision_decisions: vec![bad_revision_decision],
+                cancellations: vec![bad_cancellation],
+            },
+        );
+
+        assert_order_issue_kind(
+            &invalid_non_requests.issues,
+            RadrootsOrderIssue::DecisionOrderIdMismatch {
+                event_id: event_id(2),
+            },
+        );
+        assert_order_issue_kind(
+            &invalid_non_requests.issues,
+            RadrootsOrderIssue::RevisionProposalOrderIdMismatch {
+                event_id: event_id(3),
+            },
+        );
+        assert_order_issue_kind(
+            &invalid_non_requests.issues,
+            RadrootsOrderIssue::RevisionDecisionOrderIdMismatch {
+                event_id: event_id(4),
+            },
+        );
+        assert_order_issue_kind(
+            &invalid_non_requests.issues,
+            RadrootsOrderIssue::CancellationOrderIdMismatch {
+                event_id: event_id(5),
+            },
+        );
+    }
+
+    #[test]
+    fn inventory_accounting_reports_invalid_unknown_overreserved_and_terminal_orders() {
+        let mut unknown_bin_request = request_record();
+        unknown_bin_request.event_id = event_id(40);
+        unknown_bin_request.payload.order_id = order_id("order-4");
+        unknown_bin_request.payload.items[0].bin_id = bin_id("bin-missing");
+        unknown_bin_request.payload.economics.items[0].bin_id = bin_id("bin-missing");
+
+        let mut unknown_bin_decision = accepted_decision();
+        unknown_bin_decision.event_id = event_id(41);
+        unknown_bin_decision.root_event_id = event_id(40);
+        unknown_bin_decision.prev_event_id = event_id(40);
+        unknown_bin_decision.payload.order_id = order_id("order-4");
+        if let RadrootsOrderDecisionOutcome::Accepted {
+            inventory_commitments,
+        } = &mut unknown_bin_decision.payload.decision
+        {
+            inventory_commitments[0].bin_id = bin_id("bin-missing");
+        }
+
+        let mut declined_request = request_record();
+        declined_request.event_id = event_id(20);
+        declined_request.payload.order_id = order_id("order-2");
+        let mut terminal_decline = declined_decision();
+        terminal_decline.event_id = event_id(21);
+        terminal_decline.root_event_id = event_id(20);
+        terminal_decline.prev_event_id = event_id(20);
+        terminal_decline.payload.order_id = order_id("order-2");
+
+        let mut cancelled_request = request_record();
+        cancelled_request.event_id = event_id(30);
+        cancelled_request.payload.order_id = order_id("order-3");
+        let mut terminal_cancellation = cancellation(event_id(30));
+        terminal_cancellation.event_id = event_id(31);
+        terminal_cancellation.root_event_id = event_id(30);
+        terminal_cancellation.payload.order_id = order_id("order-3");
+
+        let projection = reduce_listing_inventory_accounting(
+            &listing_addr(),
+            &event_id(9),
+            RadrootsListingInventoryAccountingInputs {
+                bins: vec![
+                    RadrootsListingInventoryBinAvailability {
+                        bin_id: bin_id("bin-1"),
+                        available_count: 1,
+                    },
+                    RadrootsListingInventoryBinAvailability {
+                        bin_id: bin_id("bin-overflow"),
+                        available_count: u64::MAX,
+                    },
+                    RadrootsListingInventoryBinAvailability {
+                        bin_id: bin_id("bin-overflow"),
+                        available_count: 1,
+                    },
+                ],
+                requests: vec![
+                    request_record(),
+                    unknown_bin_request,
+                    declined_request,
+                    cancelled_request,
+                ],
+                decisions: vec![accepted_decision(), unknown_bin_decision, terminal_decline],
+                revision_proposals: Vec::<RadrootsOrderRevisionProposalRecord>::new(),
+                revision_decisions: Vec::<RadrootsOrderRevisionDecisionRecord>::new(),
+                cancellations: vec![terminal_cancellation],
+            },
+        );
+
+        assert_eq!(projection.declined_order_ids, vec![order_id("order-2")]);
+        assert_eq!(projection.cancelled_order_ids, vec![order_id("order-3")]);
+        assert_inventory_issue_kind(
+            &projection.issues,
+            RadrootsListingInventoryAccountingIssue::ArithmeticOverflow {
+                bin_id: bin_id("bin-overflow"),
+                event_ids: Vec::new(),
+            },
+        );
+        assert_inventory_issue_kind(
+            &projection.issues,
+            RadrootsListingInventoryAccountingIssue::UnknownInventoryBin {
+                bin_id: bin_id("bin-missing"),
+                event_ids: Vec::new(),
+            },
+        );
+        assert_inventory_issue_kind(
+            &projection.issues,
+            RadrootsListingInventoryAccountingIssue::OverReserved {
+                bin_id: bin_id("bin-1"),
+                available_count: 0,
+                reserved_count: 0,
+                event_ids: Vec::new(),
+            },
+        );
+
+        let invalid_without_request = reduce_listing_inventory_accounting(
+            &listing_addr(),
+            &event_id(9),
+            RadrootsListingInventoryAccountingInputs {
+                bins: Vec::<RadrootsListingInventoryBinAvailability>::new(),
+                requests: Vec::<RadrootsOrderRequestRecord>::new(),
+                decisions: vec![accepted_decision()],
+                revision_proposals: Vec::<RadrootsOrderRevisionProposalRecord>::new(),
+                revision_decisions: Vec::<RadrootsOrderRevisionDecisionRecord>::new(),
+                cancellations: Vec::<RadrootsOrderCancellationRecord>::new(),
+            },
+        );
+        assert_eq!(invalid_without_request.invalid_event_ids, vec![event_id(2)]);
+        assert_inventory_issue_kind(
+            &invalid_without_request.issues,
+            RadrootsListingInventoryAccountingIssue::InvalidOrder {
+                order_id: order_id("order-1"),
+                event_ids: Vec::new(),
+            },
+        );
+
+        let invalid_revision_streams = reduce_listing_inventory_accounting(
+            &listing_addr(),
+            &event_id(9),
+            RadrootsListingInventoryAccountingInputs {
+                bins: Vec::<RadrootsListingInventoryBinAvailability>::new(),
+                requests: Vec::<RadrootsOrderRequestRecord>::new(),
+                decisions: vec![accepted_decision()],
+                revision_proposals: vec![revision_proposal()],
+                revision_decisions: vec![accepted_revision_decision()],
+                cancellations: vec![cancellation(event_id(3))],
+            },
+        );
+        assert_eq!(
+            invalid_revision_streams.invalid_event_ids,
+            vec![event_id(2), event_id(3), event_id(4), event_id(5)]
+        );
+        assert_inventory_issue_kind(
+            &invalid_revision_streams.issues,
+            RadrootsListingInventoryAccountingIssue::InvalidOrder {
+                order_id: order_id("order-1"),
+                event_ids: Vec::new(),
+            },
+        );
     }
 
     #[test]
