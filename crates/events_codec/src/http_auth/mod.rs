@@ -6,7 +6,7 @@ mod tests {
     use radroots_events::{http_auth::RadrootsHttpAuth, kinds::KIND_POST};
 
     use crate::error::{EventEncodeError, EventParseError};
-    use crate::http_auth::decode::http_auth_from_event;
+    use crate::http_auth::decode::{data_from_event, http_auth_from_event, parsed_from_event};
     use crate::http_auth::encode::{http_auth_build_tags, to_wire_parts, to_wire_parts_with_kind};
 
     const PAYLOAD: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
@@ -82,6 +82,35 @@ mod tests {
             EventEncodeError::InvalidField("payload_sha256")
         ));
 
+        let mut empty_url = auth.clone();
+        empty_url.url.clear();
+        let url_err = http_auth_build_tags(&empty_url).unwrap_err();
+        assert!(matches!(
+            url_err,
+            EventEncodeError::EmptyRequiredField("url")
+        ));
+
+        let mut empty_method = auth.clone();
+        empty_method.method.clear();
+        let method_err = http_auth_build_tags(&empty_method).unwrap_err();
+        assert!(matches!(
+            method_err,
+            EventEncodeError::EmptyRequiredField("method")
+        ));
+
+        let mut bad_payload_tag = parts.tags.clone();
+        replace_tag_value(&mut bad_payload_tag, "payload", "ABC");
+        let payload_tag_err = http_auth_from_event(parts.kind, &bad_payload_tag, "").unwrap_err();
+        assert!(matches!(
+            payload_tag_err,
+            EventParseError::InvalidTag("payload")
+        ));
+
+        let mut invalid_url = parts.tags.clone();
+        replace_tag_value(&mut invalid_url, "u", " ");
+        let url_tag_err = http_auth_from_event(parts.kind, &invalid_url, "").unwrap_err();
+        assert!(matches!(url_tag_err, EventParseError::InvalidTag("u")));
+
         let content_err = http_auth_from_event(parts.kind, &parts.tags, "not empty").unwrap_err();
         assert!(matches!(
             content_err,
@@ -101,9 +130,64 @@ mod tests {
             wrong_kind,
             EventEncodeError::InvalidKind(KIND_POST)
         ));
+
+        let parts = to_wire_parts(&auth).expect("http auth wire parts");
+        let decode_wrong_kind = http_auth_from_event(KIND_POST, &parts.tags, "").unwrap_err();
+        assert!(matches!(
+            decode_wrong_kind,
+            EventParseError::InvalidKind {
+                expected: "27235",
+                got: KIND_POST
+            }
+        ));
+    }
+
+    #[test]
+    fn http_auth_wrappers_preserve_event_metadata() {
+        let auth = RadrootsHttpAuth {
+            url: "https://media.example.invalid/upload".to_string(),
+            method: "POST".to_string(),
+            payload_sha256: Some(PAYLOAD.to_string()),
+        };
+        let parts = to_wire_parts(&auth).expect("http auth wire parts");
+
+        let data = data_from_event(
+            "event-id".to_string(),
+            "author-pubkey".to_string(),
+            99,
+            parts.kind,
+            parts.content.clone(),
+            parts.tags.clone(),
+        )
+        .expect("parsed data");
+        assert_eq!(data.id, "event-id");
+        assert_eq!(data.author, "author-pubkey");
+        assert_eq!(data.published_at, 99);
+        assert_eq!(data.data, auth);
+
+        let parsed = parsed_from_event(
+            "event-id".to_string(),
+            "author-pubkey".to_string(),
+            99,
+            parts.kind,
+            parts.content,
+            parts.tags,
+            "sig".to_string(),
+        )
+        .expect("parsed event");
+        assert_eq!(parsed.event.sig, "sig");
+        assert_eq!(parsed.data.data, auth);
     }
 
     fn tag(key: &str, value: &str) -> Vec<String> {
         vec![key.to_string(), value.to_string()]
+    }
+
+    fn replace_tag_value(tags: &mut [Vec<String>], key: &str, value: &str) {
+        let tag = tags
+            .iter_mut()
+            .find(|tag| tag.first().map(String::as_str) == Some(key))
+            .expect("tag");
+        tag[1] = value.to_string();
     }
 }
