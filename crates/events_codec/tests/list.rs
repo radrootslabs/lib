@@ -202,23 +202,74 @@ fn relay_list_kind_roundtrips_nip65_r_tags() {
                 tag: TAG_R.to_string(),
                 values: vec!["wss://both.example.test".to_string()],
             },
+            RadrootsListEntry {
+                tag: TAG_R.to_string(),
+                values: vec!["ws://local-relay.example.test".to_string()],
+            },
         ],
     };
 
     let parts = to_wire_parts_with_kind(&list, KIND_LIST_READ_WRITE_RELAYS).unwrap();
     assert_eq!(parts.kind, KIND_LIST_READ_WRITE_RELAYS);
     assert!(parts.content.is_empty());
-    assert_eq!(parts.tags.len(), 3);
+    assert_eq!(parts.tags.len(), 4);
 
     let decoded = list_from_tags(parts.kind, parts.content, &parts.tags).unwrap();
-    assert_eq!(decoded.entries.len(), 3);
+    assert_eq!(decoded.entries.len(), 4);
     assert_eq!(decoded.entries[0].values[1], "read");
     assert_eq!(decoded.entries[1].values[1], "write");
     assert_eq!(decoded.entries[2].values.len(), 1);
+    assert_eq!(
+        decoded.entries[3].values[0],
+        "ws://local-relay.example.test"
+    );
 }
 
 #[test]
 fn relay_list_kind_validates_url_shape_and_markers() {
+    let invalid_tag = RadrootsList {
+        content: String::new(),
+        entries: vec![RadrootsListEntry {
+            tag: "p".to_string(),
+            values: vec!["wss://relay.example.test".to_string()],
+        }],
+    };
+    assert!(matches!(
+        to_wire_parts_with_kind(&invalid_tag, KIND_LIST_READ_WRITE_RELAYS),
+        Err(EventEncodeError::InvalidField("relay.tag"))
+    ));
+    assert!(matches!(
+        list_from_tags(
+            KIND_LIST_READ_WRITE_RELAYS,
+            String::new(),
+            &[vec![
+                "p".to_string(),
+                "wss://relay.example.test".to_string()
+            ]]
+        ),
+        Err(EventParseError::InvalidTag(TAG_R))
+    ));
+
+    let missing_url = RadrootsList {
+        content: String::new(),
+        entries: vec![RadrootsListEntry {
+            tag: TAG_R.to_string(),
+            values: Vec::new(),
+        }],
+    };
+    assert!(matches!(
+        to_wire_parts_with_kind(&missing_url, KIND_LIST_READ_WRITE_RELAYS),
+        Err(EventEncodeError::EmptyRequiredField("relay.url"))
+    ));
+    assert!(matches!(
+        list_from_tags(
+            KIND_LIST_READ_WRITE_RELAYS,
+            String::new(),
+            &[vec![TAG_R.to_string()]]
+        ),
+        Err(EventParseError::InvalidTag(TAG_R))
+    ));
+
     let invalid_url = RadrootsList {
         content: String::new(),
         entries: vec![RadrootsListEntry {
@@ -261,6 +312,35 @@ fn relay_list_kind_validates_url_shape_and_markers() {
                 TAG_R.to_string(),
                 "wss://relay.example.test".to_string(),
                 "both".to_string()
+            ]]
+        ),
+        Err(EventParseError::InvalidTag(TAG_R))
+    ));
+
+    let extra_marker = RadrootsList {
+        content: String::new(),
+        entries: vec![RadrootsListEntry {
+            tag: TAG_R.to_string(),
+            values: vec![
+                "wss://relay.example.test".to_string(),
+                "read".to_string(),
+                "write".to_string(),
+            ],
+        }],
+    };
+    assert!(matches!(
+        to_wire_parts_with_kind(&extra_marker, KIND_LIST_READ_WRITE_RELAYS),
+        Err(EventEncodeError::InvalidField("relay.marker"))
+    ));
+    assert!(matches!(
+        list_from_tags(
+            KIND_LIST_READ_WRITE_RELAYS,
+            String::new(),
+            &[vec![
+                TAG_R.to_string(),
+                "wss://relay.example.test".to_string(),
+                "read".to_string(),
+                "write".to_string()
             ]]
         ),
         Err(EventParseError::InvalidTag(TAG_R))
