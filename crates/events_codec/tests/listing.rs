@@ -300,6 +300,10 @@ fn listing_from_event_covers_reference_tag_error_paths() {
     assert_invalid_tag(tags, "a");
 
     let mut tags = sample_listing_tags();
+    replace_first_tag(&mut tags, "a", vec!["a", "30340:farm_pubkey:"]);
+    assert_invalid_tag(tags, "a");
+
+    let mut tags = sample_listing_tags();
     replace_first_tag(&mut tags, "a", vec!["a", "30340:farm_pubkey:bad d"]);
     assert_invalid_tag(tags, "a");
 
@@ -370,6 +374,13 @@ fn listing_from_event_covers_resource_and_plot_reference_paths() {
     let mut tags = sample_listing_tags();
     tags.push(vec![
         "radroots:resource_area".to_string(),
+        format!("{KIND_RESOURCE_AREA}:resource_pubkey:"),
+    ]);
+    assert_invalid_tag(tags, "radroots:resource_area");
+
+    let mut tags = sample_listing_tags();
+    tags.push(vec![
+        "radroots:resource_area".to_string(),
         format!("{KIND_RESOURCE_AREA}:resource_pubkey:bad d"),
     ]);
     assert_invalid_tag(tags, "radroots:resource_area");
@@ -382,6 +393,13 @@ fn listing_from_event_covers_resource_and_plot_reference_paths() {
     tags.push(vec![
         "radroots:plot".to_string(),
         format!("{KIND_RESOURCE_AREA}:plot_pubkey:plot-1"),
+    ]);
+    assert_invalid_tag(tags, "radroots:plot");
+
+    let mut tags = sample_listing_tags();
+    tags.push(vec![
+        "radroots:plot".to_string(),
+        format!("{KIND_PLOT}:plot_pubkey:"),
     ]);
     assert_invalid_tag(tags, "radroots:plot");
 
@@ -443,6 +461,37 @@ fn listing_from_event_covers_bin_and_price_error_paths() {
     assert_invalid_tag(tags, "radroots:bin");
 
     let mut tags = sample_listing_tags();
+    replace_first_tag(
+        &mut tags,
+        "radroots:bin",
+        vec![
+            "radroots:bin",
+            "bin-1",
+            "1",
+            "each",
+            "1",
+            "each",
+            "label",
+            "extra",
+        ],
+    );
+    assert_invalid_tag(tags, "radroots:bin");
+
+    let mut tags = sample_listing_tags();
+    replace_first_tag(
+        &mut tags,
+        "radroots:bin",
+        vec!["radroots:bin", "bin-1", "1", "each", "1", "each"],
+    );
+    let decoded = listing_from_event(KIND_LISTING, &tags, "# Widget").unwrap();
+    assert_eq!(
+        decoded.bins[0].display_amount,
+        Some(RadrootsCoreDecimal::from(1u32))
+    );
+    assert_eq!(decoded.bins[0].display_unit, Some(RadrootsCoreUnit::Each));
+    assert_eq!(decoded.bins[0].display_label, None);
+
+    let mut tags = sample_listing_tags();
     tags.push(vec![
         "radroots:bin".to_string(),
         "bin-1".to_string(),
@@ -468,6 +517,24 @@ fn listing_from_event_covers_bin_and_price_error_paths() {
         &mut tags,
         "radroots:price",
         vec!["radroots:price", "bin-1", "10", "USD", "1", "each", "10"],
+    );
+    assert_invalid_tag(tags, "radroots:price");
+
+    let mut tags = sample_listing_tags();
+    replace_first_tag(
+        &mut tags,
+        "radroots:price",
+        vec![
+            "radroots:price",
+            "bin-1",
+            "10",
+            "USD",
+            "1",
+            "each",
+            "10",
+            "each",
+            "extra",
+        ],
     );
     assert_invalid_tag(tags, "radroots:price");
 
@@ -552,6 +619,7 @@ fn listing_from_event_covers_trade_location_delivery_and_image_paths() {
     tags.push(vec!["expires_at".to_string(), "1740".to_string()]);
     tags.push(vec!["delivery".to_string(), "pickup".to_string()]);
     tags.push(vec!["image".to_string(), " ".to_string()]);
+    tags.push(vec!["g".to_string(), " ".to_string()]);
     tags.push(vec![
         "image".to_string(),
         "https://example.test/a.jpg".to_string(),
@@ -665,6 +733,35 @@ fn listing_from_event_covers_remaining_edge_paths() {
     assert_invalid_tag(tags, "radroots:primary_bin");
 
     let mut tags = sample_listing_tags();
+    let primary_position = tags
+        .iter()
+        .position(|tag| tag.first().map(String::as_str) == Some("radroots:primary_bin"))
+        .expect("primary bin tag");
+    tags.insert(
+        primary_position + 1,
+        vec!["radroots:primary_bin".to_string(), "bin-2".to_string()],
+    );
+    assert_invalid_tag(tags, "radroots:primary_bin");
+
+    let mut tags = sample_listing_tags();
+    tags.insert(0, vec!["key".to_string(), " ".to_string()]);
+    tags.push(vec!["key".to_string(), "ignored".to_string()]);
+    tags.insert(0, vec!["summary".to_string(), " ".to_string()]);
+    tags.push(vec!["summary".to_string(), "first summary".to_string()]);
+    tags.push(vec!["summary".to_string(), "ignored summary".to_string()]);
+    tags.push(vec!["process".to_string(), "null".to_string()]);
+    tags.push(vec!["lot".to_string(), " null ".to_string()]);
+    tags.push(vec!["profile".to_string(), "null".to_string()]);
+    tags.push(vec!["year".to_string(), "null".to_string()]);
+    let decoded = listing_from_event(KIND_LISTING, &tags, "# Widget").unwrap();
+    assert_eq!(decoded.product.key, "sku");
+    assert_eq!(decoded.product.summary.as_deref(), Some("first summary"));
+    assert_eq!(decoded.product.process, None);
+    assert_eq!(decoded.product.lot, None);
+    assert_eq!(decoded.product.profile, None);
+    assert_eq!(decoded.product.year, None);
+
+    let mut tags = sample_listing_tags();
     tags.push(vec!["radroots:availability_start".to_string()]);
     assert_invalid_tag(tags, "radroots:availability_start");
 
@@ -725,6 +822,24 @@ fn listing_parsed_wrappers_preserve_event_metadata() {
     let parsed = parsed_from_nostr_event(&event).unwrap();
     assert_eq!(parsed.event.sig, "sig");
     assert_eq!(parsed.data.data.d_tag, listing.d_tag);
+
+    let err = parsed_from_event(
+        "event-id".to_string(),
+        "author-pubkey".to_string(),
+        7,
+        KIND_POST,
+        event.content,
+        event.tags,
+        "sig".to_string(),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        EventParseError::InvalidKind {
+            expected: "30402 or 30403",
+            got: KIND_POST
+        }
+    ));
 }
 
 #[test]
