@@ -1,88 +1,62 @@
 [gate]
-fail_under_exec_lines = 90.0
-fail_under_functions = 90.0
-fail_under_regions = 90.0
-fail_under_branches = 90.0
+fail_under_exec_lines = 98.0
+fail_under_functions = 98.0
+fail_under_regions = 98.0
+fail_under_branches = 98.0
 require_branches = true
 
-# Heavy-development baseline: required crates must generally hold at least 90%
+# Heavy-development baseline: required crates must hold at least 98%
 # coverage across executable lines, functions, regions, and branches. This is
-# not a 100% coverage target. Temporary overrides below 90% are allowed only for
-# explicit release-preflight gaps.
-
-[overrides.radroots_secret_vault]
-fail_under_exec_lines = 90.0
-fail_under_functions = 90.0
-fail_under_regions = 90.0
-fail_under_branches = 86.363
-temporary = true
-reason = "heavy-development branch coverage gap for publish 0.1.0-alpha.2"
-
-[overrides.radroots_trade]
-fail_under_exec_lines = 90.0
-fail_under_functions = 90.0
-fail_under_regions = 90.0
-fail_under_branches = 70.0
-temporary = true
-reason = "heavy-development order reducer branch coverage gap after first-pass order refactor"
-
-[overrides.radroots_events_codec]
-fail_under_exec_lines = 90.0
-fail_under_functions = 90.0
-fail_under_regions = 90.0
-fail_under_branches = 81.264
-temporary = true
-reason = "heavy-development branch coverage gap for publish 0.1.0-alpha.2"
+# not a 100% coverage target. Temporary threshold overrides below 98% are not
+# part of the active gate.
 
 [overrides.radroots_log]
-fail_under_exec_lines = 90.0
-fail_under_functions = 90.0
-fail_under_regions = 90.0
-fail_under_branches = 90.0
 require_branches = false
 temporary = true
 reason = "branch coverage is not applicable while the crate has no measured branch records"
 
-[overrides.radroots_nostr_signer]
-fail_under_exec_lines = 89.185
-fail_under_functions = 90.0
-fail_under_regions = 90.0
-fail_under_branches = 90.0
-temporary = true
-reason = "heavy-development executable-line coverage gap for publish 0.1.0-alpha.2"
-
 [overrides.radroots_replica_db_schema]
-fail_under_exec_lines = 90.0
-fail_under_functions = 90.0
-fail_under_regions = 90.0
-fail_under_branches = 90.0
 require_branches = false
 temporary = true
 reason = "branch coverage is not applicable while the crate has no measured branch records"
 
 [required]
 crates = [
+  "radroots_authority",
   "radroots_core",
+  "radroots_event_store",
   "radroots_events",
-  "radroots_log",
-  "radroots_protected_store",
-  "radroots_runtime",
-  "radroots_runtime_paths",
-  "radroots_runtime_distribution",
-  "radroots_runtime_manager",
-  "radroots_identity",
-  "radroots_secret_vault",
-  "radroots_trade",
   "radroots_events_codec",
   "radroots_events_indexed",
   "radroots_geocoder",
+  "radroots_identity",
+  "radroots_local_events",
+  "radroots_log",
+  "radroots_net",
   "radroots_nostr",
   "radroots_nostr_accounts",
   "radroots_nostr_connect",
+  "radroots_nostr_ndb",
+  "radroots_nostr_runtime",
   "radroots_nostr_signer",
-  "radroots_sql_core",
-  "radroots_local_events",
-  "radroots_replica_db_schema",
+  "radroots_outbox",
+  "radroots_protected_store",
+  "radroots_relay_transport",
   "radroots_replica_db",
+  "radroots_replica_db_schema",
   "radroots_replica_sync",
+  "radroots_runtime",
+  "radroots_runtime_distribution",
+  "radroots_runtime_manager",
+  "radroots_runtime_paths",
+  "radroots_secret_vault",
+  "radroots_sp1_guest_trade",
+  "radroots_sp1_host_trade",
+  "radroots_sql_core",
+  "radroots_sql_wasm_bridge",
+  "radroots_sql_wasm_core",
+  "radroots_test_fixtures",
+  "radroots_trade",
+  "radroots_types",
+  "xtask",
 ]
