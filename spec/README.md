@@ -183,12 +183,14 @@ Coverage governance is defined under `policy/coverage/`:
 - human policy notes: `policy/coverage/POLICY.md`
 - per-crate profiles: `policy/coverage/profiles.toml`
 
-Required Rust crates are gated at `90/90/90/90` (exec lines, functions,
-branches, regions), with branch records required unless a crate-specific policy
-override marks branch coverage as not applicable because no branch records are
-measured. This is not a 100% coverage target. Temporary crate-specific
-overrides below 90% or branch-record presence overrides must remain explicit in
-the machine-readable policy.
+Every non-SimpleX workspace crate is gated at `98/98/98/98` (exec lines,
+functions, regions, branches), with branch records required unless a
+crate-specific policy override marks branch coverage as not applicable and the
+measured report confirms that no branch records exist. Crates are not expected
+to reach 100% coverage during heavy development. Temporary crate-specific
+threshold overrides below `98/98/98/98` are not part of the active gate, and
+branch-record presence overrides must remain explicit in the machine-readable
+policy.
 
 ## Release Policy
 

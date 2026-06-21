@@ -7,8 +7,8 @@ require_branches = true
 
 # Heavy-development baseline: required crates must hold at least 98%
 # coverage across executable lines, functions, regions, and branches. This is
-# not a 100% coverage target. Temporary threshold overrides below 98% are not
-# part of the active gate.
+# not a requirement to reach 100% coverage. Temporary threshold overrides below
+# 98% are not part of the active gate.
 
 [overrides.radroots_log]
 require_branches = false
