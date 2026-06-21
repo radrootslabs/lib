@@ -214,9 +214,42 @@ mod tests {
     fn validates_dates_and_ordered_time_ranges() {
         assert!(is_date("2026-06-20"));
         assert!(!is_date("2026-6-20"));
+        for invalid in [
+            "x026-06-20",
+            "2x26-06-20",
+            "20x6-06-20",
+            "202x-06-20",
+            "2026/06-20",
+            "2026-x6-20",
+            "2026-0x-20",
+            "2026-06/20",
+            "2026-06-x0",
+            "2026-06-2x",
+        ] {
+            assert!(!is_date(invalid));
+        }
+        assert!(validate_http_url("https://example.test/file", "url").is_ok());
+        assert!(validate_http_url("http://example.test/file", "url").is_ok());
+        assert!(matches!(
+            validate_http_url("ftp://example.test/file", "url"),
+            Err(EventEncodeError::InvalidField("url"))
+        ));
+        assert!(validate_date("2026-06-20", "date").is_ok());
+        assert!(matches!(
+            validate_date("bad", "date"),
+            Err(EventEncodeError::InvalidField("date"))
+        ));
+        assert!(validate_date_tag("2026-06-20", "start").is_ok());
         assert!(validate_end_after_start(10, Some(10), "end").is_ok());
+        assert!(validate_end_after_start(10, None, "end").is_ok());
         assert!(matches!(
             validate_end_after_start(10, Some(9), "end"),
+            Err(EventEncodeError::InvalidField("end"))
+        ));
+        assert!(validate_date_end_after_start("2026-06-20", None, "end").is_ok());
+        assert!(validate_date_end_after_start("2026-06-20", Some("2026-06-20"), "end").is_ok());
+        assert!(matches!(
+            validate_date_end_after_start("2026-06-20", Some("2026-06-19"), "end"),
             Err(EventEncodeError::InvalidField("end"))
         ));
         assert!(matches!(
@@ -251,11 +284,157 @@ mod tests {
         assert_eq!(participants[0].pubkey, "crew_pubkey");
         assert_eq!(participants[0].role.as_deref(), Some("participant"));
 
+        let mut empty_tags = Vec::new();
+        push_location_tags(
+            &mut empty_tags,
+            &RadrootsSocialLocation {
+                name: Some(" ".to_string()),
+                geohash: Some(" ".to_string()),
+            },
+        );
+        assert!(empty_tags.is_empty());
+        assert_eq!(location_from_tags(&empty_tags), None);
+        assert_eq!(
+            first_tag_value(&[vec!["location".to_string()]], "location"),
+            None
+        );
+        assert_eq!(
+            first_tag_value(&[vec!["location".to_string(), " ".to_string()]], "location"),
+            None
+        );
+
+        let mut anchor_tags = Vec::new();
+        push_farm_anchor(
+            &mut anchor_tags,
+            &RadrootsSocialFarmAnchor {
+                farm: radroots_events::farm::RadrootsFarmRef {
+                    pubkey: " ".to_string(),
+                    d_tag: "farm-d-tag".to_string(),
+                },
+                relays: None,
+            },
+        );
+        push_farm_anchor(
+            &mut anchor_tags,
+            &RadrootsSocialFarmAnchor {
+                farm: radroots_events::farm::RadrootsFarmRef {
+                    pubkey: "farm_pubkey".to_string(),
+                    d_tag: "farm-d-tag".to_string(),
+                },
+                relays: None,
+            },
+        );
+        assert_eq!(
+            anchor_tags,
+            vec![vec![
+                "a".to_string(),
+                "30340:farm_pubkey:farm-d-tag".to_string()
+            ]]
+        );
+
+        assert_eq!(participants_from_tags(&[]), None);
+        let participants = participants_from_tags(&[
+            vec!["p".to_string()],
+            vec!["p".to_string(), " ".to_string()],
+            vec![
+                "p".to_string(),
+                "crew_pubkey".to_string(),
+                "wss://relay.example.test".to_string(),
+                "host".to_string(),
+            ],
+        ])
+        .expect("participants");
+        assert_eq!(participants.len(), 1);
+        assert_eq!(
+            participants[0].relay.as_deref(),
+            Some("wss://relay.example.test")
+        );
+        assert_eq!(participants[0].role.as_deref(), Some("host"));
+
+        let mut participant_tags = Vec::new();
+        push_participants(&mut participant_tags, None);
+        push_participants(
+            &mut participant_tags,
+            Some(&vec![
+                RadrootsCalendarParticipant {
+                    pubkey: " ".to_string(),
+                    relay: None,
+                    role: None,
+                },
+                RadrootsCalendarParticipant {
+                    pubkey: "crew_pubkey".to_string(),
+                    relay: Some("wss://relay.example.test".to_string()),
+                    role: Some("host".to_string()),
+                },
+            ]),
+        );
+        assert_eq!(
+            participant_tags,
+            vec![vec![
+                "p".to_string(),
+                "crew_pubkey".to_string(),
+                "wss://relay.example.test".to_string(),
+                "host".to_string()
+            ]]
+        );
+
         let dimensions = parse_dimensions_tag("1200x800", "dim").unwrap();
         assert_eq!(dimensions_tag(&dimensions), "1200x800");
         assert!(matches!(
             parse_dimensions_tag("0x800", "dim"),
             Err(EventParseError::InvalidTag("dim"))
         ));
+        assert!(matches!(
+            parse_dimensions_tag("1200x0", "dim"),
+            Err(EventParseError::InvalidTag("dim"))
+        ));
+        assert!(matches!(
+            parse_dimensions_tag("badx800", "dim"),
+            Err(EventParseError::InvalidNumber("dim", _))
+        ));
+        assert!(matches!(
+            parse_dimensions_tag("1200xbad", "dim"),
+            Err(EventParseError::InvalidNumber("dim", _))
+        ));
+
+        let mut thumbnail_tags = Vec::new();
+        push_thumbnail(
+            &mut thumbnail_tags,
+            &RadrootsSocialMediaThumbnail {
+                url: " ".to_string(),
+                dimensions: None,
+            },
+        );
+        push_thumbnail(
+            &mut thumbnail_tags,
+            &RadrootsSocialMediaThumbnail {
+                url: "https://media.example.test/thumb.jpg".to_string(),
+                dimensions: None,
+            },
+        );
+        push_thumbnail(
+            &mut thumbnail_tags,
+            &RadrootsSocialMediaThumbnail {
+                url: "https://media.example.test/thumb-large.jpg".to_string(),
+                dimensions: Some(RadrootsSocialMediaDimensions {
+                    width: 320,
+                    height: 240,
+                }),
+            },
+        );
+        assert_eq!(
+            thumbnail_tags,
+            vec![
+                vec![
+                    "thumb".to_string(),
+                    "https://media.example.test/thumb.jpg".to_string()
+                ],
+                vec![
+                    "thumb".to_string(),
+                    "https://media.example.test/thumb-large.jpg".to_string(),
+                    "320x240".to_string()
+                ],
+            ]
+        );
     }
 }
