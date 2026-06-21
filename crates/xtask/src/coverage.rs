@@ -1428,6 +1428,7 @@ fn report_gate_with_root(args: &[String], root: &Path) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn normalize_summary_for_gate(
     scope: &str,
     summary_path: &Path,
@@ -1911,6 +1912,118 @@ mod tests {
     }
 
     #[test]
+    fn coverage_details_path_uses_summary_parent() {
+        let summary_path = Path::new("target/coverage/radroots_a/coverage-summary.json");
+        assert_eq!(
+            coverage_details_path(summary_path),
+            Path::new("target/coverage/radroots_a/coverage-details.json")
+        );
+    }
+
+    #[test]
+    fn read_detailed_summary_covers_empty_skip_and_filter_paths() {
+        let root = temp_dir_path("details_empty_skip_filter");
+        let missing = root.join("missing-details.json");
+        let err = read_detailed_summary(&missing, None).expect_err("missing details");
+        assert!(err.contains("failed to read coverage details"));
+
+        let empty = root.join("empty-details.json");
+        write_file(&empty, r#"{"data":[]}"#);
+        let err = read_detailed_summary(&empty, None).expect_err("empty details");
+        assert!(err.contains("coverage details data is empty"));
+
+        let skipped = root.join("skipped-details.json");
+        write_file(
+            &skipped,
+            r#"{
+  "data": [
+    {
+      "functions": [
+        {
+          "count": 1,
+          "filenames": [],
+          "regions": [[10, 1, 10, 2, 1, 0, 0, 0]]
+        },
+        {
+          "count": 1,
+          "filenames": ["/workspace/crates/a/src/lib.rs"],
+          "regions": []
+        }
+      ]
+    }
+  ]
+}"#,
+        );
+        let err = read_detailed_summary(&skipped, None).expect_err("skipped details");
+        assert!(err.contains("coverage details functions are empty"));
+
+        let filtered = root.join("filtered-details.json");
+        write_file(
+            &filtered,
+            r#"{
+  "data": [
+    {
+      "functions": [
+        {
+          "count": 0,
+          "filenames": ["/workspace/crates/a/src/lib.rs"],
+          "regions": [[10, 1, 10, 2, 0, 0, 0, 0]]
+        },
+        {
+          "count": 1,
+          "filenames": ["/workspace/crates/b/src/lib.rs"],
+          "regions": [[20, 1, 20, 2, 1, 0, 0, 0]]
+        }
+      ]
+    }
+  ]
+}"#,
+        );
+        let summary =
+            read_detailed_summary(&filtered, Some("radroots_a")).expect("filtered summary");
+        assert_eq!(summary.functions_percent, 100.0);
+        assert_eq!(summary.regions_percent, 100.0);
+
+        fs::remove_dir_all(root).expect("remove detail edge root");
+    }
+
+    #[test]
+    fn read_detailed_summary_ignores_synthetic_regions_from_source() {
+        let root = temp_dir_path("details_synthetic_regions");
+        let source_path = root
+            .join("crates")
+            .join("radroots_a")
+            .join("src")
+            .join("lib.rs");
+        write_file(&source_path, "pub fn load() { let _value = call()?; }\n");
+        let details_path = root.join("coverage-details.json");
+        let raw = serde_json::json!({
+            "data": [
+                {
+                    "functions": [
+                        {
+                            "count": 1,
+                            "filenames": [source_path.display().to_string()],
+                            "regions": [
+                                [1, 1, 1, 37, 1, 0, 0, 0],
+                                [1, 34, 1, 35, 0, 0, 0, 0]
+                            ]
+                        }
+                    ]
+                }
+            ]
+        });
+        write_file(&details_path, &raw.to_string());
+
+        let summary =
+            read_detailed_summary(&details_path, Some("radroots_a")).expect("synthetic summary");
+        assert_eq!(summary.functions_percent, 100.0);
+        assert_eq!(summary.regions_percent, 100.0);
+
+        fs::remove_dir_all(root).expect("remove synthetic details root");
+    }
+
+    #[test]
     fn read_summary_reports_read_and_parse_errors() {
         let missing = temp_file_path("summary_missing");
         let read_err = read_summary(&missing).expect_err("missing summary should fail");
@@ -1985,6 +2098,21 @@ mod tests {
             &mut cache,
         ));
 
+        let single_char_not_question_mark = RegionCoverageKey {
+            line_start: 2,
+            column_start: 1,
+            line_end: 2,
+            column_end: 2,
+            file_id: 0,
+            expanded_file_id: 0,
+            kind: 0,
+        };
+        assert!(!is_ignorable_synthetic_region(
+            path.to_str().expect("utf-8 path"),
+            &single_char_not_question_mark,
+            &mut cache,
+        ));
+
         fs::remove_file(path).expect("remove question mark source");
     }
 
@@ -2036,6 +2164,75 @@ mod tests {
         assert!(!is_ignorable_synthetic_region(
             non_test_path.to_str().expect("utf-8 path"),
             &other_region,
+            &mut cache,
+        ));
+
+        let multiline = RegionCoverageKey {
+            line_start: 1,
+            column_start: 1,
+            line_end: 2,
+            column_end: 1,
+            file_id: 0,
+            expanded_file_id: 0,
+            kind: 0,
+        };
+        assert!(!is_ignorable_synthetic_region(
+            path.to_str().expect("utf-8 path"),
+            &multiline,
+            &mut cache,
+        ));
+
+        let missing_file = root.join("missing.rs");
+        assert!(!is_ignorable_synthetic_region(
+            missing_file.to_str().expect("utf-8 path"),
+            &other_region,
+            &mut cache,
+        ));
+
+        let out_of_range = RegionCoverageKey {
+            line_start: 99,
+            column_start: 1,
+            line_end: 99,
+            column_end: 2,
+            file_id: 0,
+            expanded_file_id: 0,
+            kind: 0,
+        };
+        assert!(!is_ignorable_synthetic_region(
+            path.to_str().expect("utf-8 path"),
+            &out_of_range,
+            &mut cache,
+        ));
+
+        let non_panic_test_path = root.join("non_panic_tests.rs");
+        write_file(&non_panic_test_path, "        other => Ok(()),\n");
+        let non_panic_other_region = RegionCoverageKey {
+            line_start: 1,
+            column_start: 9,
+            line_end: 1,
+            column_end: 14,
+            file_id: 0,
+            expanded_file_id: 0,
+            kind: 0,
+        };
+        assert!(!is_ignorable_synthetic_region(
+            non_panic_test_path.to_str().expect("utf-8 path"),
+            &non_panic_other_region,
+            &mut cache,
+        ));
+
+        let non_fallback_region = RegionCoverageKey {
+            line_start: 3,
+            column_start: 39,
+            line_end: 3,
+            column_end: 44,
+            file_id: 0,
+            expanded_file_id: 0,
+            kind: 0,
+        };
+        assert!(!is_ignorable_synthetic_region(
+            path.to_str().expect("utf-8 path"),
+            &non_fallback_region,
             &mut cache,
         ));
 
@@ -2131,6 +2328,67 @@ mod tests {
             read_coverage_policy(&stricter).expect_err("stricter override should fail");
         assert!(stricter_err.contains("must be within 0..=100"));
         fs::remove_file(stricter).expect("remove stricter override policy");
+
+        let above_global = temp_file_path("coverage_policy_override_above_global");
+        write_file(
+            &above_global,
+            "[gate]\nfail_under_exec_lines = 98.0\nfail_under_functions = 98.0\nfail_under_regions = 98.0\nfail_under_branches = 98.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n\n[overrides.radroots_a]\nfail_under_exec_lines = 99.0\ntemporary = true\nreason = \"temporary publish unblocker\"\n",
+        );
+        let above_global_err =
+            read_coverage_policy(&above_global).expect_err("above-global override should fail");
+        assert!(above_global_err.contains("must not exceed the global gate"));
+        fs::remove_file(above_global).expect("remove above-global override policy");
+
+        let above_global_functions = temp_file_path("coverage_policy_override_above_global_fn");
+        write_file(
+            &above_global_functions,
+            "[gate]\nfail_under_exec_lines = 98.0\nfail_under_functions = 98.0\nfail_under_regions = 98.0\nfail_under_branches = 98.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n\n[overrides.radroots_a]\nfail_under_functions = 99.0\ntemporary = true\nreason = \"temporary publish unblocker\"\n",
+        );
+        let above_global_functions_err = read_coverage_policy(&above_global_functions)
+            .expect_err("above-global function override should fail");
+        assert!(above_global_functions_err.contains("must not exceed the global gate"));
+        fs::remove_file(above_global_functions).expect("remove above-global function policy");
+
+        let above_global_regions = temp_file_path("coverage_policy_override_above_global_regions");
+        write_file(
+            &above_global_regions,
+            "[gate]\nfail_under_exec_lines = 98.0\nfail_under_functions = 98.0\nfail_under_regions = 98.0\nfail_under_branches = 98.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n\n[overrides.radroots_a]\nfail_under_regions = 99.0\ntemporary = true\nreason = \"temporary publish unblocker\"\n",
+        );
+        let above_global_regions_err = read_coverage_policy(&above_global_regions)
+            .expect_err("above-global region override should fail");
+        assert!(above_global_regions_err.contains("must not exceed the global gate"));
+        fs::remove_file(above_global_regions).expect("remove above-global region policy");
+
+        let above_global_branches =
+            temp_file_path("coverage_policy_override_above_global_branches");
+        write_file(
+            &above_global_branches,
+            "[gate]\nfail_under_exec_lines = 98.0\nfail_under_functions = 98.0\nfail_under_regions = 98.0\nfail_under_branches = 98.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n\n[overrides.radroots_a]\nfail_under_branches = 99.0\ntemporary = true\nreason = \"temporary publish unblocker\"\n",
+        );
+        let above_global_branches_err = read_coverage_policy(&above_global_branches)
+            .expect_err("above-global branch override should fail");
+        assert!(above_global_branches_err.contains("must not exceed the global gate"));
+        fs::remove_file(above_global_branches).expect("remove above-global branch policy");
+
+        let non_finite_override = temp_file_path("coverage_policy_override_non_finite");
+        write_file(
+            &non_finite_override,
+            "[gate]\nfail_under_exec_lines = 98.0\nfail_under_functions = 98.0\nfail_under_regions = 98.0\nfail_under_branches = 98.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n\n[overrides.radroots_a]\nfail_under_exec_lines = inf\ntemporary = true\nreason = \"temporary publish unblocker\"\n",
+        );
+        let non_finite_override_err = read_coverage_policy(&non_finite_override)
+            .expect_err("non-finite override should fail");
+        assert!(non_finite_override_err.contains("must be finite"));
+        fs::remove_file(non_finite_override).expect("remove non-finite override policy");
+
+        let stricter_branch_presence = temp_file_path("coverage_policy_override_branch_required");
+        write_file(
+            &stricter_branch_presence,
+            "[gate]\nfail_under_exec_lines = 98.0\nfail_under_functions = 98.0\nfail_under_regions = 98.0\nfail_under_branches = 98.0\nrequire_branches = false\n\n[required]\ncrates = [\"radroots_a\"]\n\n[overrides.radroots_a]\nrequire_branches = true\ntemporary = true\nreason = \"temporary publish unblocker\"\n",
+        );
+        let branch_presence_err = read_coverage_policy(&stricter_branch_presence)
+            .expect_err("stricter branch presence should fail");
+        assert!(branch_presence_err.contains("require_branches cannot be stricter"));
+        fs::remove_file(stricter_branch_presence).expect("remove branch presence policy");
     }
 
     #[test]

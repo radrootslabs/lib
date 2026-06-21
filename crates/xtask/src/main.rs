@@ -1,7 +1,10 @@
+#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 #![forbid(unsafe_code)]
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod contract;
 mod coverage;
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod phase1_1;
 
 use std::env;
@@ -52,6 +55,7 @@ fn validate_contract() -> Result<(), String> {
         .and_then(|_| contract::validate_canonical_event_boundary(&root))
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn release_preflight() -> Result<(), String> {
     contract::validate_release_preflight(&workspace_root())
 }
@@ -95,6 +99,7 @@ fn main_with_args(args: Vec<String>) -> ExitCode {
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn main() -> ExitCode {
     main_with_args(env::args().skip(1).collect())
 }

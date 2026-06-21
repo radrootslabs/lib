@@ -1468,6 +1468,7 @@ fn resolve_missing_event_boundary_matrix_path(_workspace_root: &Path) -> Result<
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn resolve_missing_event_boundary_matrix_path(workspace_root: &Path) -> Result<PathBuf, String> {
     if !should_synthesize_owner_contracts_for_tests(workspace_root) {
         return Err(missing_event_boundary_matrix_error());
@@ -1482,6 +1483,7 @@ fn resolve_missing_event_boundary_matrix_path(workspace_root: &Path) -> Result<P
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn synthetic_event_boundary_matrix() -> String {
     let mut raw = String::from(
         "# Event boundary matrix\n\n## Coverage matrix\n\n| Domain | Kind | Radroots Type | RPC Methods | Notes |\n| --- | --- | --- | --- | --- |\n",
@@ -2068,6 +2070,7 @@ fn validate_missing_conformance_vectors(
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn validate_missing_conformance_vectors(
     _workspace_root: &Path,
     _vectors_dir: &Path,
@@ -2235,6 +2238,7 @@ fn load_missing_release_contract(_workspace_root: &Path) -> Result<ReleaseContra
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn load_missing_release_contract(workspace_root: &Path) -> Result<ReleaseContractFile, String> {
     if should_synthesize_owner_contracts_for_tests(workspace_root) {
         let raw = synthetic_release_policy_for_workspace(workspace_root)?;
@@ -2245,6 +2249,7 @@ fn load_missing_release_contract(workspace_root: &Path) -> Result<ReleaseContrac
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn should_synthesize_owner_contracts_for_tests(workspace_root: &Path) -> bool {
     workspace_root
         .join("crates")
@@ -3963,6 +3968,7 @@ fn validate_release_publish_policy_with_override(
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 pub fn synthetic_release_policy_for_workspace(workspace_root: &Path) -> Result<String, String> {
     let bundle = load_contract_bundle(workspace_root)?;
     let publish_configs = workspace_package_publish_configs(workspace_root)?;
@@ -4033,6 +4039,7 @@ pub fn synthetic_release_policy_for_workspace(workspace_root: &Path) -> Result<S
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn toml_inline_array(values: &[String]) -> String {
     let joined = values
         .iter()
