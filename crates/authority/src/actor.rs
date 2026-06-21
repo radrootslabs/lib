@@ -327,6 +327,11 @@ mod tests {
         .expect("actor");
 
         assert_eq!(actor.source(), RadrootsActorSource::LocalAccount);
+        assert_eq!(actor.pubkey().as_str(), hex_64('a'));
+        assert_eq!(
+            actor.roles().iter().copied().collect::<Vec<_>>(),
+            vec![RadrootsActorRole::Farmer]
+        );
         let account_id = actor.account_id().expect("account id");
         assert_eq!(account_id.as_str(), "acct-field-01");
         assert_eq!(account_id.to_string(), "acct-field-01");
@@ -406,11 +411,14 @@ mod tests {
         let from_str = "acct-field-01"
             .parse::<RadrootsActorAccountId>()
             .expect("from str");
+        let from_borrowed =
+            RadrootsActorAccountId::try_from("acct-field-01").expect("from borrowed");
         let from_owned =
             RadrootsActorAccountId::try_from("acct-field-01".to_owned()).expect("from owned");
 
         assert_eq!(parsed, "acct-field-01");
         assert_eq!(from_str.as_ref(), "acct-field-01");
+        assert_eq!(from_borrowed.as_str(), "acct-field-01");
         assert_eq!(from_owned.into_string(), "acct-field-01");
     }
 
@@ -423,20 +431,22 @@ mod tests {
             Some("radroots.listing.published.v1".to_owned()),
         );
 
-        assert!(matches!(
+        assert_eq!(
             request.selector(),
-            RadrootsActorSelector::AccountId(account_id) if account_id.as_str() == "acct-field-01"
-        ));
+            &RadrootsActorSelector::account_id("acct-field-01").expect("selector")
+        );
         assert_eq!(request.required_role(), RadrootsActorRole::Seller);
         assert_eq!(request.contract_id(), Some("radroots.listing.published.v1"));
     }
 
     #[test]
     fn selector_supports_account_and_draft_resolution() {
-        assert!(matches!(
+        assert_eq!(
             RadrootsActorSelector::account_id("acct-field-01").expect("selector"),
-            RadrootsActorSelector::AccountId(ref account_id) if account_id.as_str() == "acct-field-01"
-        ));
+            RadrootsActorSelector::AccountId(
+                RadrootsActorAccountId::parse("acct-field-01").expect("account id")
+            )
+        );
         assert!(matches!(
             RadrootsActorSelector::SelectedAccount,
             RadrootsActorSelector::SelectedAccount

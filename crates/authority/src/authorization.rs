@@ -497,6 +497,40 @@ mod tests {
     }
 
     #[test]
+    fn signed_event_pubkey_mismatch_fails() {
+        let pubkey = hex_64('a');
+        let draft = listing_draft(pubkey.as_str());
+        let signed = RadrootsSignedNostrEvent::new(RadrootsSignedNostrEventParts {
+            id: draft.expected_event_id.clone(),
+            pubkey: hex_64('b'),
+            created_at: draft.created_at,
+            kind: draft.kind,
+            tags: draft.tags.clone(),
+            content: draft.content.clone(),
+            sig: hex_128('f'),
+            raw_json: "{}".to_owned(),
+        })
+        .expect("signed event");
+
+        assert!(matches!(
+            validate_signed_event_matches_draft(&signed, &draft),
+            Err(RadrootsAuthorityError::SignedEventPubkeyMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn draft_validation_fallback_errors_map_to_computed_id_invalid() {
+        let error = authority_error_from_draft_validation(RadrootsDraftError::UnknownContract(
+            "radroots.unknown.v1".to_owned(),
+        ));
+
+        assert!(matches!(
+            error,
+            RadrootsAuthorityError::SignedEventComputedIdInvalid { .. }
+        ));
+    }
+
+    #[test]
     fn signed_event_computed_id_mismatch_fails() {
         let pubkey = hex_64('a');
         let inconsistent_draft = RadrootsFrozenEventDraft {
@@ -536,6 +570,19 @@ mod tests {
         assert!(matches!(
             sign_authorized_draft(&actor, &signer, &inconsistent_draft),
             Err(RadrootsAuthorityError::SignedEventComputedIdMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn static_signer_maps_invalid_signed_event_parts() {
+        let pubkey = hex_64('a');
+        let mut draft = listing_draft(pubkey.as_str());
+        draft.expected_event_id = "bad-id".to_owned();
+        let signer = StaticSigner::new(pubkey.as_str());
+
+        assert!(matches!(
+            signer.sign_frozen_draft(&draft),
+            Err(RadrootsSignerError::SigningFailed { .. })
         ));
     }
 

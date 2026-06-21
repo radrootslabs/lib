@@ -244,43 +244,145 @@ impl std::error::Error for RadrootsSignerError {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use radroots_events::contract::RadrootsActorRole;
     use std::error::Error as _;
 
     #[test]
     fn authority_error_display_uses_contract_messages() {
-        assert_eq!(
-            RadrootsAuthorityError::InvalidActorPubkey.to_string(),
-            "invalid actor public key"
-        );
-        assert_eq!(
-            RadrootsAuthorityError::DraftKindMismatch {
-                contract_id: "radroots.social.post.v1".to_owned(),
-                expected_kind: 1,
-                actual_kind: 2,
-            }
-            .to_string(),
-            "event contract `radroots.social.post.v1` expects kind 1, got 2"
-        );
-        assert_eq!(
-            RadrootsAuthorityError::SignedEventTagsMismatch {
-                expected_len: 2,
-                actual_len: 1,
-            }
-            .to_string(),
-            "signed event tags mismatch: expected 2 tags, got 1 tags"
-        );
-        assert_eq!(
-            RadrootsAuthorityError::SignedEventContentMismatch {
-                expected_len: 17,
-                actual_len: 2,
-            }
-            .to_string(),
-            "signed event content mismatch: expected 17 bytes, got 2 bytes"
-        );
+        let cases = [
+            (
+                RadrootsAuthorityError::InvalidActorPubkey,
+                "invalid actor public key",
+            ),
+            (
+                RadrootsAuthorityError::InvalidActorAccountIdEmpty,
+                "invalid actor account id: empty",
+            ),
+            (
+                RadrootsAuthorityError::InvalidActorAccountIdUntrimmed,
+                "invalid actor account id: contains leading or trailing whitespace",
+            ),
+            (
+                RadrootsAuthorityError::InvalidActorAccountIdControlCharacter,
+                "invalid actor account id: contains a control character",
+            ),
+            (
+                RadrootsAuthorityError::InvalidActorAccountIdTooLong { max_len: 128 },
+                "invalid actor account id: longer than 128 characters",
+            ),
+            (
+                RadrootsAuthorityError::InvalidSignerPubkey,
+                "invalid signer public key",
+            ),
+            (
+                RadrootsAuthorityError::UnknownContract {
+                    contract_id: "radroots.unknown.v1".to_owned(),
+                },
+                "unknown event contract `radroots.unknown.v1`",
+            ),
+            (
+                RadrootsAuthorityError::DraftKindMismatch {
+                    contract_id: "radroots.social.post.v1".to_owned(),
+                    expected_kind: 1,
+                    actual_kind: 2,
+                },
+                "event contract `radroots.social.post.v1` expects kind 1, got 2",
+            ),
+            (
+                RadrootsAuthorityError::ActorRoleUnsatisfied {
+                    contract_id: "radroots.listing.published.v1".to_owned(),
+                    required_role: RadrootsActorRole::Seller,
+                },
+                "actor does not satisfy role Seller for contract `radroots.listing.published.v1`",
+            ),
+            (
+                RadrootsAuthorityError::ActorPubkeyMismatch {
+                    expected_pubkey: "expected".to_owned(),
+                    actor_pubkey: "actor".to_owned(),
+                },
+                "actor pubkey mismatch: expected expected, got actor",
+            ),
+            (
+                RadrootsAuthorityError::SignerPubkeyMismatch {
+                    expected_pubkey: "expected".to_owned(),
+                    signer_pubkey: "signer".to_owned(),
+                },
+                "signer pubkey mismatch: expected expected, got signer",
+            ),
+            (
+                RadrootsAuthorityError::SignedEventPubkeyMismatch {
+                    expected_pubkey: "expected".to_owned(),
+                    actual_pubkey: "actual".to_owned(),
+                },
+                "signed event pubkey mismatch: expected expected, got actual",
+            ),
+            (
+                RadrootsAuthorityError::SignedEventIdMismatch {
+                    expected_event_id: "expected".to_owned(),
+                    actual_event_id: "actual".to_owned(),
+                },
+                "signed event id mismatch: expected expected, got actual",
+            ),
+            (
+                RadrootsAuthorityError::SignedEventCreatedAtMismatch {
+                    expected_created_at: 1,
+                    actual_created_at: 2,
+                },
+                "signed event created_at mismatch: expected 1, got 2",
+            ),
+            (
+                RadrootsAuthorityError::SignedEventKindMismatch {
+                    expected_kind: 1,
+                    actual_kind: 2,
+                },
+                "signed event kind mismatch: expected 1, got 2",
+            ),
+            (
+                RadrootsAuthorityError::SignedEventTagsMismatch {
+                    expected_len: 2,
+                    actual_len: 1,
+                },
+                "signed event tags mismatch: expected 2 tags, got 1 tags",
+            ),
+            (
+                RadrootsAuthorityError::SignedEventContentMismatch {
+                    expected_len: 17,
+                    actual_len: 2,
+                },
+                "signed event content mismatch: expected 17 bytes, got 2 bytes",
+            ),
+            (
+                RadrootsAuthorityError::SignedEventComputedIdInvalid {
+                    message: "invalid event id".to_owned(),
+                },
+                "signed event computed id could not be derived: invalid event id",
+            ),
+            (
+                RadrootsAuthorityError::SignedEventComputedIdMismatch {
+                    expected_event_id: "expected".to_owned(),
+                    computed_event_id: "computed".to_owned(),
+                },
+                "signed event computed id mismatch: expected expected, computed computed",
+            ),
+        ];
+
+        for (error, expected) in cases {
+            assert_eq!(error.to_string(), expected);
+            assert!(error.source().is_none());
+        }
     }
 
     #[test]
     fn signer_error_display_and_source_are_stable() {
+        assert_eq!(
+            RadrootsSignerError::Unavailable.to_string(),
+            "signer unavailable"
+        );
+        assert_eq!(
+            RadrootsSignerError::Rejected.to_string(),
+            "signer rejected draft"
+        );
+
         let signer_error = RadrootsSignerError::SigningFailed {
             message: "deterministic failure".to_owned(),
         };

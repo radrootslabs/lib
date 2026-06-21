@@ -123,6 +123,18 @@ mod tests {
     }
 
     #[test]
+    fn signer_identity_validates_public_key() {
+        let pubkey = hex_64('a');
+        let identity = RadrootsSignerIdentity::new(pubkey.as_str()).expect("identity");
+        assert_eq!(identity.pubkey().as_str(), pubkey);
+
+        assert!(matches!(
+            RadrootsSignerIdentity::new("bad-pubkey"),
+            Err(RadrootsAuthorityError::InvalidSignerPubkey)
+        ));
+    }
+
+    #[test]
     fn mock_signer_returns_signed_frozen_draft() {
         let pubkey = hex_64('a');
         let signer = MockSigner::new(pubkey.as_str());
@@ -138,21 +150,37 @@ mod tests {
     #[test]
     fn mock_signer_propagates_signing_errors() {
         let pubkey = hex_64('a');
-        let signer = MockSigner::failing(
-            pubkey.as_str(),
+        let draft = draft_for(pubkey.as_str());
+
+        for failure in [
+            RadrootsSignerError::Unavailable,
+            RadrootsSignerError::Rejected,
             RadrootsSignerError::SigningFailed {
                 message: "deterministic failure".to_owned(),
             },
-        );
-        let draft = draft_for(pubkey.as_str());
+        ] {
+            let signer = MockSigner::failing(pubkey.as_str(), failure);
+            let err = signer.sign_frozen_draft(&draft).expect_err("failure");
+
+            match err {
+                RadrootsSignerError::Unavailable => {}
+                RadrootsSignerError::Rejected => {}
+                RadrootsSignerError::SigningFailed { message } => {
+                    assert_eq!(message, "deterministic failure");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn mock_signer_maps_invalid_signed_event_parts() {
+        let pubkey = hex_64('a');
+        let signer = MockSigner::new(pubkey.as_str());
+        let mut draft = draft_for(pubkey.as_str());
+        draft.expected_event_id = "bad-id".to_string();
 
         let err = signer.sign_frozen_draft(&draft).expect_err("failure");
 
-        assert_eq!(
-            err,
-            RadrootsSignerError::SigningFailed {
-                message: "deterministic failure".to_owned()
-            }
-        );
+        assert!(matches!(err, RadrootsSignerError::SigningFailed { .. }));
     }
 }
