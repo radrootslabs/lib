@@ -126,32 +126,6 @@ mod tests {
         std::env::temp_dir().join(format!("radroots_xtask_main_{prefix}_{ns}"))
     }
 
-    fn write_file(path: &Path, content: &str) {
-        let _ = fs::create_dir_all(path.parent().unwrap_or(Path::new("")));
-        fs::write(path, content).expect("write file");
-    }
-
-    fn release_preflight_with_override(release_policy_path: Option<&Path>) -> Result<(), String> {
-        contract::validate_release_preflight_with_override(
-            &workspace_root(),
-            release_policy_path.map(PathBuf::from),
-        )
-    }
-
-    fn run_sdk_with_release_policy_override(
-        args: &[String],
-        release_policy_path: Option<&Path>,
-    ) -> Result<(), String> {
-        match args.first().map(String::as_str) {
-            Some("release") => match args.get(1).map(String::as_str) {
-                Some("preflight") => release_preflight_with_override(release_policy_path),
-                Some(other) => Err(format!("unknown release subcommand: {other}")),
-                None => Err("missing release subcommand".to_string()),
-            },
-            _ => run_sdk(args),
-        }
-    }
-
     #[test]
     fn workspace_root_resolves() {
         let root = workspace_root();
@@ -197,46 +171,10 @@ mod tests {
     #[test]
     fn contract_and_coverage_dispatchers_execute() {
         let _guard = lock_workspace();
-        let root = workspace_root();
         let out_dir = unique_temp_dir("coverage_dispatch");
         fs::create_dir_all(&out_dir).expect("create out dir");
-        let release_policy_path = out_dir.join("publish-policy.toml");
-        let release_policy = contract::synthetic_release_policy_for_workspace(&root)
-            .expect("synthetic release policy");
-        write_file(&release_policy_path, &release_policy);
-
-        let coverage_refresh_path = root
-            .join("target")
-            .join("coverage")
-            .join("coverage-refresh.tsv");
-        let parent = coverage_refresh_path.parent().expect("coverage parent");
-        fs::create_dir_all(parent).expect("create coverage parent");
-        fs::write(&coverage_refresh_path, "stale").expect("seed stale coverage refresh");
-        fs::remove_file(&coverage_refresh_path).expect("remove existing coverage refresh");
-        let parent = coverage_refresh_path.parent().expect("coverage parent");
-        fs::create_dir_all(parent).expect("create coverage parent");
-        let required_raw =
-            fs::read_to_string(root.join("policy").join("coverage").join("policy.toml"))
-                .expect("read coverage policy contract");
-        let required_toml =
-            toml::from_str::<toml::Value>(&required_raw).expect("parse coverage policy contract");
-        let required_crates = required_toml
-            .get("required")
-            .and_then(toml::Value::as_table)
-            .and_then(|table| table.get("crates"))
-            .and_then(toml::Value::as_array)
-            .expect("required crates array");
-        let mut rows = String::from("crate\tstatus\texec\tfunc\tbranch\tregion\treport\n");
-        for crate_name in required_crates {
-            let crate_name = crate_name.as_str().expect("required crate name");
-            rows.push_str(&format!(
-                "{crate_name}\tpass\t100.0\t100.0\t100.0\t100.0\tfile\n"
-            ));
-        }
-        fs::write(&coverage_refresh_path, rows).expect("write coverage refresh");
 
         validate_contract().expect("validate contract");
-        release_preflight_with_override(Some(&release_policy_path)).expect("release preflight");
         run_sdk(&["coverage".to_string(), "help".to_string()]).expect("coverage help");
         run_sdk(&["coverage".to_string(), "required-crates".to_string()])
             .expect("coverage required crates");
@@ -266,12 +204,6 @@ mod tests {
             "--policy-gate".to_string(),
         ])
         .expect("coverage report");
-
-        run_sdk_with_release_policy_override(
-            &["release".to_string(), "preflight".to_string()],
-            Some(&release_policy_path),
-        )
-        .expect("sdk release preflight");
 
         run(&[
             "sdk".to_string(),

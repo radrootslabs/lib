@@ -16,6 +16,7 @@ const RELEASE_POLICY_ENV: &str = "RADROOTS_MOUNTED_RUST_CRATE_PUBLISH_POLICY";
 const EVENT_BOUNDARY_MATRIX_ENV: &str = "RADROOTS_EVENT_BOUNDARY_MATRIX";
 const COVERAGE_REQUIRED_THRESHOLD: f64 = 98.0;
 const COVERAGE_REQUIRED_THRESHOLD_LABEL: &str = "98/98/98/98";
+const COVERAGE_REPORT_EPSILON: f64 = 0.000_001;
 const EVENT_BOUNDARY_MATRIX_RELATIVES: [&str; 1] = [
     "docs/platform/canonical/open_source/radroots_v1_spec/02_public_contract_and_runtime/08_event_boundary_matrix.md",
 ];
@@ -3094,7 +3095,70 @@ fn branch_coverage_display(branch: Option<f64>) -> String {
         .unwrap_or_else(|| "unavailable".to_string())
 }
 
-type CoverageRefreshRows = BTreeMap<String, (String, f64, f64, Option<f64>, f64)>;
+#[derive(Debug)]
+struct CoverageRefreshRow {
+    status: String,
+    exec: f64,
+    func: f64,
+    branch: Option<f64>,
+    region: f64,
+    report_path: PathBuf,
+}
+
+#[derive(Debug, Deserialize)]
+struct CoverageGateReportForValidation {
+    scope: String,
+    thresholds: CoverageGateReportThresholdsForValidation,
+    measured: CoverageGateReportMeasuredForValidation,
+    result: CoverageGateReportResultForValidation,
+}
+
+#[derive(Debug, Deserialize)]
+struct CoverageGateReportThresholdsForValidation {
+    executable_lines: f64,
+    functions: f64,
+    regions: f64,
+    branches: f64,
+    branches_required: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct CoverageGateReportMeasuredForValidation {
+    executable_lines_percent: f64,
+    functions_percent: f64,
+    branches_percent: Option<f64>,
+    branches_available: bool,
+    summary_regions_percent: f64,
+}
+
+#[derive(Debug, Deserialize)]
+struct CoverageGateReportResultForValidation {
+    pass: bool,
+}
+
+type CoverageRefreshRows = BTreeMap<String, CoverageRefreshRow>;
+
+fn coverage_refresh_report_path(
+    workspace_root: &Path,
+    report_path: &Path,
+    raw_report_path: &str,
+    crate_name: &str,
+) -> Result<PathBuf, String> {
+    let trimmed = raw_report_path.trim();
+    if trimmed.is_empty() {
+        return Err(format!(
+            "coverage row for crate {} in {} must include a report path",
+            crate_name,
+            report_path.display()
+        ));
+    }
+    let path = Path::new(trimmed);
+    if path.is_absolute() {
+        Ok(path.to_path_buf())
+    } else {
+        Ok(workspace_root.join(path))
+    }
+}
 
 fn load_coverage_refresh_rows(workspace_root: &Path) -> Result<CoverageRefreshRows, String> {
     let report_path = workspace_root
@@ -3112,9 +3176,9 @@ fn load_coverage_refresh_rows(workspace_root: &Path) -> Result<CoverageRefreshRo
             continue;
         }
         let parts = trimmed.split('\t').collect::<Vec<_>>();
-        if parts.len() < 6 {
+        if parts.len() < 7 {
             return Err(format!(
-                "coverage row must have at least 6 columns in {}: {}",
+                "coverage row must have at least 7 columns in {}: {}",
                 report_path.display(),
                 trimmed
             ));
@@ -3125,8 +3189,20 @@ fn load_coverage_refresh_rows(workspace_root: &Path) -> Result<CoverageRefreshRo
         let func = parse_coverage_percent(parts[3], "func", &crate_name)?;
         let branch = parse_branch_coverage_percent(parts[4], &crate_name)?;
         let region = parse_coverage_percent(parts[5], "region", &crate_name)?;
+        let row_report_path =
+            coverage_refresh_report_path(workspace_root, &report_path, parts[6], &crate_name)?;
         if rows
-            .insert(crate_name.clone(), (status, exec, func, branch, region))
+            .insert(
+                crate_name.clone(),
+                CoverageRefreshRow {
+                    status,
+                    exec,
+                    func,
+                    branch,
+                    region,
+                    report_path: row_report_path,
+                },
+            )
             .is_some()
         {
             return Err(format!(
@@ -3147,22 +3223,22 @@ fn validate_required_coverage_summary(
 ) -> Result<(), String> {
     let rows = load_coverage_refresh_rows(workspace_root)?;
     for crate_name in required_crates {
-        let (status, exec, func, branch, region) = rows.get(crate_name).ok_or_else(|| {
+        let row = rows.get(crate_name).ok_or_else(|| {
             format!(
                 "required coverage crate {} missing from coverage-refresh.tsv",
                 crate_name
             )
         })?;
-        if status != "pass" {
+        if row.status != "pass" {
             return Err(format!(
                 "required coverage crate {} has non-pass status {}",
-                crate_name, status
+                crate_name, row.status
             ));
         }
-        if *exec < thresholds.fail_under_exec_lines
-            || *func < thresholds.fail_under_functions
-            || branch_coverage_fails(*branch, thresholds)
-            || *region < thresholds.fail_under_regions
+        if row.exec < thresholds.fail_under_exec_lines
+            || row.func < thresholds.fail_under_functions
+            || branch_coverage_fails(row.branch, thresholds)
+            || row.region < thresholds.fail_under_regions
         {
             return Err(format!(
                 "required coverage crate {} must satisfy coverage policy {},{},{},{}, found {}/{}/{}/{}",
@@ -3171,12 +3247,107 @@ fn validate_required_coverage_summary(
                 thresholds.fail_under_functions,
                 thresholds.fail_under_branches,
                 thresholds.fail_under_regions,
-                exec,
-                func,
-                branch_coverage_display(*branch),
-                region
+                row.exec,
+                row.func,
+                branch_coverage_display(row.branch),
+                row.region
             ));
         }
+    }
+    Ok(())
+}
+
+fn read_coverage_gate_report(
+    path: &Path,
+    crate_name: &str,
+) -> Result<CoverageGateReportForValidation, String> {
+    let raw = match fs::read_to_string(path) {
+        Ok(raw) => raw,
+        Err(e) => {
+            return Err(format!(
+                "read coverage gate report for {} at {}: {e}",
+                crate_name,
+                path.display()
+            ));
+        }
+    };
+    serde_json::from_str::<CoverageGateReportForValidation>(&raw).map_err(|e| {
+        format!(
+            "parse coverage gate report for {} at {}: {e}",
+            crate_name,
+            path.display()
+        )
+    })
+}
+
+fn coverage_percent_matches(left: f64, right: f64) -> bool {
+    (left - right).abs() <= COVERAGE_REPORT_EPSILON
+}
+
+fn coverage_branch_percent_matches(left: Option<f64>, right: Option<f64>) -> bool {
+    match (left, right) {
+        (Some(left), Some(right)) => coverage_percent_matches(left, right),
+        (None, None) => true,
+        _ => false,
+    }
+}
+
+fn coverage_gate_report_thresholds_match(
+    report: &CoverageGateReportThresholdsForValidation,
+    thresholds: CoverageThresholds,
+) -> bool {
+    coverage_percent_matches(report.executable_lines, thresholds.fail_under_exec_lines)
+        && coverage_percent_matches(report.functions, thresholds.fail_under_functions)
+        && coverage_percent_matches(report.regions, thresholds.fail_under_regions)
+        && coverage_percent_matches(report.branches, thresholds.fail_under_branches)
+        && report.branches_required == thresholds.require_branches
+}
+
+fn validate_coverage_gate_report_for_row(
+    crate_name: &str,
+    row: &CoverageRefreshRow,
+    thresholds: CoverageThresholds,
+) -> Result<(), String> {
+    let report = read_coverage_gate_report(&row.report_path, crate_name)?;
+    if report.scope != crate_name {
+        return Err(format!(
+            "coverage gate report {} has scope {}, expected {}",
+            row.report_path.display(),
+            report.scope,
+            crate_name
+        ));
+    }
+    if !coverage_gate_report_thresholds_match(&report.thresholds, thresholds) {
+        return Err(format!(
+            "coverage gate report {} for {} thresholds do not match policy",
+            row.report_path.display(),
+            crate_name
+        ));
+    }
+    if !report.result.pass {
+        return Err(format!(
+            "coverage gate report {} for {} has non-pass result",
+            row.report_path.display(),
+            crate_name
+        ));
+    }
+    if report.measured.branches_available != report.measured.branches_percent.is_some() {
+        return Err(format!(
+            "coverage gate report {} for {} has inconsistent branch measurement",
+            row.report_path.display(),
+            crate_name
+        ));
+    }
+    if !coverage_percent_matches(row.exec, report.measured.executable_lines_percent)
+        || !coverage_percent_matches(row.func, report.measured.functions_percent)
+        || !coverage_branch_percent_matches(row.branch, report.measured.branches_percent)
+        || !coverage_percent_matches(row.region, report.measured.summary_regions_percent)
+    {
+        return Err(format!(
+            "coverage row for {} does not match coverage gate report {}",
+            crate_name,
+            row.report_path.display()
+        ));
     }
     Ok(())
 }
@@ -3188,23 +3359,24 @@ fn validate_required_coverage_summary_with_policy(
 ) -> Result<(), String> {
     let rows = load_coverage_refresh_rows(workspace_root)?;
     for crate_name in required_crates {
-        let (status, exec, func, branch, region) = rows.get(crate_name).ok_or_else(|| {
+        let row = rows.get(crate_name).ok_or_else(|| {
             format!(
                 "required coverage crate {} missing from coverage-refresh.tsv",
                 crate_name
             )
         })?;
-        if status != "pass" {
+        if row.status != "pass" {
             return Err(format!(
                 "required coverage crate {} has non-pass status {}",
-                crate_name, status
+                crate_name, row.status
             ));
         }
         let thresholds = policy.thresholds_for_scope(crate_name);
-        if *exec < thresholds.fail_under_exec_lines
-            || *func < thresholds.fail_under_functions
-            || branch_coverage_fails(*branch, thresholds)
-            || *region < thresholds.fail_under_regions
+        validate_coverage_gate_report_for_row(crate_name, row, thresholds)?;
+        if row.exec < thresholds.fail_under_exec_lines
+            || row.func < thresholds.fail_under_functions
+            || branch_coverage_fails(row.branch, thresholds)
+            || row.region < thresholds.fail_under_regions
         {
             return Err(format!(
                 "required coverage crate {} must satisfy coverage policy {},{},{},{}, found {}/{}/{}/{}",
@@ -3213,10 +3385,10 @@ fn validate_required_coverage_summary_with_policy(
                 thresholds.fail_under_functions,
                 thresholds.fail_under_branches,
                 thresholds.fail_under_regions,
-                exec,
-                func,
-                branch_coverage_display(*branch),
-                region
+                row.exec,
+                row.func,
+                branch_coverage_display(row.branch),
+                row.region
             ));
         }
     }
@@ -4039,6 +4211,117 @@ mod tests {
         }
     }
 
+    fn coverage_thresholds(value: f64, require_branches: bool) -> CoverageThresholds {
+        CoverageThresholds {
+            fail_under_exec_lines: value,
+            fail_under_functions: value,
+            fail_under_regions: value,
+            fail_under_branches: value,
+            require_branches,
+        }
+    }
+
+    struct TestCoverageRefreshRow<'a> {
+        crate_name: &'a str,
+        status: &'a str,
+        thresholds: CoverageThresholds,
+        exec: f64,
+        func: f64,
+        branch: Option<f64>,
+        region: f64,
+        report_pass: bool,
+    }
+
+    fn passing_coverage_row(crate_name: &str) -> TestCoverageRefreshRow<'_> {
+        TestCoverageRefreshRow {
+            crate_name,
+            status: "pass",
+            thresholds: coverage_thresholds(98.0, true),
+            exec: 100.0,
+            func: 100.0,
+            branch: Some(100.0),
+            region: 100.0,
+            report_pass: true,
+        }
+    }
+
+    fn coverage_refresh_branch_value(branch: Option<f64>) -> String {
+        branch
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "unavailable".to_string())
+    }
+
+    fn write_test_coverage_gate_report(root: &Path, row: &TestCoverageRefreshRow<'_>) -> String {
+        let report_relative = format!("target/coverage/{}/gate-report.json", row.crate_name);
+        let report_path = root.join(&report_relative);
+        let fail_reasons = if row.report_pass {
+            Vec::<&str>::new()
+        } else {
+            vec!["policy gate failed"]
+        };
+        let report = serde_json::json!({
+            "scope": row.crate_name,
+            "thresholds": {
+                "executable_lines": row.thresholds.fail_under_exec_lines,
+                "functions": row.thresholds.fail_under_functions,
+                "regions": row.thresholds.fail_under_regions,
+                "branches": row.thresholds.fail_under_branches,
+                "branches_required": row.thresholds.require_branches
+            },
+            "measured": {
+                "executable_lines_percent": row.exec,
+                "executable_lines_source": "da",
+                "functions_percent": row.func,
+                "branches_percent": row.branch,
+                "branches_available": row.branch.is_some(),
+                "summary_lines_percent": row.exec,
+                "summary_regions_percent": row.region
+            },
+            "counts": {
+                "executable_lines": {
+                    "covered": 1,
+                    "total": 1
+                },
+                "branches": {
+                    "covered": if row.branch.is_some() { 1 } else { 0 },
+                    "total": if row.branch.is_some() { 1 } else { 0 }
+                }
+            },
+            "result": {
+                "pass": row.report_pass,
+                "fail_reasons": fail_reasons
+            }
+        });
+        let json =
+            serde_json::to_string_pretty(&report).expect("serialize test coverage gate report");
+        write_file(&report_path, &format!("{json}\n"));
+        report_relative
+    }
+
+    fn write_test_coverage_refresh(root: &Path, rows: &[TestCoverageRefreshRow<'_>]) {
+        let mut refresh_rows = String::from("crate\tstatus\texec\tfunc\tbranch\tregion\treport\n");
+        for row in rows {
+            let report_relative = write_test_coverage_gate_report(root, row);
+            refresh_rows.push_str(&format!(
+                "{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
+                row.crate_name,
+                row.status,
+                row.exec,
+                row.func,
+                coverage_refresh_branch_value(row.branch),
+                row.region,
+                report_relative
+            ));
+        }
+        write_file(
+            &root
+                .join("target")
+                .join("coverage")
+                .join("coverage-refresh.tsv"),
+            &refresh_rows,
+        );
+    }
+
     fn create_synthetic_workspace(prefix: &str) -> PathBuf {
         let root = temp_root(prefix);
         write_file(
@@ -4198,12 +4481,12 @@ crates = ["radroots_b"]
 crates = ["radroots_a"]
 "#,
         );
-        write_file(
-            &root
-                .join("target")
-                .join("coverage")
-                .join("coverage-refresh.tsv"),
-            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots_a\tpass\t100.0\t100.0\t100.0\t100.0\tfile\nradroots_b\tpass\t100.0\t100.0\t100.0\t100.0\tfile\n",
+        write_test_coverage_refresh(
+            &root,
+            &[
+                passing_coverage_row("radroots_a"),
+                passing_coverage_row("radroots_b"),
+            ],
         );
         root
     }
@@ -4441,12 +4724,15 @@ require_branches = true
 crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
 "#,
         );
-        write_file(
-            &root
-                .join("target")
-                .join("coverage")
-                .join("coverage-refresh.tsv"),
-            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots_a\tpass\t100.0\t100.0\t100.0\t100.0\tfile\nradroots_b\tpass\t100.0\t100.0\t100.0\t100.0\tfile\nradroots_c\tpass\t100.0\t100.0\t100.0\t100.0\tfile\nradroots_d\tpass\t100.0\t100.0\t100.0\t100.0\tfile\nradroots_e\tpass\t100.0\t100.0\t100.0\t100.0\tfile\n",
+        write_test_coverage_refresh(
+            root,
+            &[
+                passing_coverage_row("radroots_a"),
+                passing_coverage_row("radroots_b"),
+                passing_coverage_row("radroots_c"),
+                passing_coverage_row("radroots_d"),
+                passing_coverage_row("radroots_e"),
+            ],
         );
         let _ = fs::remove_file(root_release_policy_path(&root));
     }
@@ -4795,13 +5081,37 @@ edition = "2024"
     #[test]
     fn validate_required_coverage_summary_with_policy_honors_scope_override() {
         let root = temp_root("coverage_summary_override");
-        let coverage_dir = root.join("target").join("coverage");
-        fs::create_dir_all(&coverage_dir).expect("create coverage dir");
-        fs::write(
-            coverage_dir.join("coverage-refresh.tsv"),
-            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots_events_codec\tpass\t100.0\t100.0\t100.0\t99.946385\tfile\nradroots_log\tpass\t100.0\t100.0\tunavailable\t100.0\tfile\n",
-        )
-        .expect("write coverage file");
+        write_test_coverage_refresh(
+            &root,
+            &[
+                TestCoverageRefreshRow {
+                    crate_name: "radroots_events_codec",
+                    status: "pass",
+                    thresholds: CoverageThresholds {
+                        fail_under_exec_lines: 100.0,
+                        fail_under_functions: 100.0,
+                        fail_under_regions: 99.946,
+                        fail_under_branches: 100.0,
+                        require_branches: true,
+                    },
+                    exec: 100.0,
+                    func: 100.0,
+                    branch: Some(100.0),
+                    region: 99.946385,
+                    report_pass: true,
+                },
+                TestCoverageRefreshRow {
+                    crate_name: "radroots_log",
+                    status: "pass",
+                    thresholds: coverage_thresholds(100.0, false),
+                    exec: 100.0,
+                    func: 100.0,
+                    branch: None,
+                    region: 100.0,
+                    report_pass: true,
+                },
+            ],
+        );
         let policy_dir = root.join("policy").join("coverage");
         fs::create_dir_all(&policy_dir).expect("create policy dir");
         fs::write(
@@ -4819,6 +5129,101 @@ edition = "2024"
             .expect("parse override coverage policy");
         validate_required_coverage_summary_with_policy(&root, &required, &policy)
             .expect("coverage summary should honor override");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn validate_required_coverage_summary_with_policy_rejects_synthetic_report_path() {
+        let root = temp_root("coverage_summary_synthetic_report_path");
+        write_file(
+            &root
+                .join("target")
+                .join("coverage")
+                .join("coverage-refresh.tsv"),
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots_a\tpass\t100.0\t100.0\t100.0\t100.0\tfile\n",
+        );
+        let required = ["radroots_a".to_string()]
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+        let policy_dir = root.join("policy").join("coverage");
+        write_file(
+            &policy_dir.join("policy.toml"),
+            "[gate]\nfail_under_exec_lines = 98.0\nfail_under_functions = 98.0\nfail_under_regions = 98.0\nfail_under_branches = 98.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n",
+        );
+        let policy =
+            read_coverage_policy(&policy_dir.join("policy.toml")).expect("parse coverage policy");
+        let err = validate_required_coverage_summary_with_policy(&root, &required, &policy)
+            .expect_err("synthetic report path should fail");
+        assert!(err.contains("coverage gate report"));
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn validate_required_coverage_summary_with_policy_rejects_stale_gate_report_thresholds() {
+        let root = temp_root("coverage_summary_stale_gate_report_thresholds");
+        let row = TestCoverageRefreshRow {
+            crate_name: "radroots_a",
+            status: "pass",
+            thresholds: coverage_thresholds(90.0, true),
+            exec: 100.0,
+            func: 100.0,
+            branch: Some(100.0),
+            region: 100.0,
+            report_pass: true,
+        };
+        write_test_coverage_refresh(&root, &[row]);
+        let required = ["radroots_a".to_string()]
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+        let policy_dir = root.join("policy").join("coverage");
+        write_file(
+            &policy_dir.join("policy.toml"),
+            "[gate]\nfail_under_exec_lines = 98.0\nfail_under_functions = 98.0\nfail_under_regions = 98.0\nfail_under_branches = 98.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n",
+        );
+        let policy =
+            read_coverage_policy(&policy_dir.join("policy.toml")).expect("parse coverage policy");
+        let err = validate_required_coverage_summary_with_policy(&root, &required, &policy)
+            .expect_err("stale threshold report should fail");
+        assert!(err.contains("thresholds do not match policy"));
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn validate_required_coverage_summary_with_policy_rejects_row_report_mismatch() {
+        let root = temp_root("coverage_summary_row_report_mismatch");
+        let row = TestCoverageRefreshRow {
+            crate_name: "radroots_a",
+            status: "pass",
+            thresholds: coverage_thresholds(98.0, true),
+            exec: 99.0,
+            func: 100.0,
+            branch: Some(100.0),
+            region: 100.0,
+            report_pass: true,
+        };
+        let report_relative = write_test_coverage_gate_report(&root, &row);
+        write_file(
+            &root
+                .join("target")
+                .join("coverage")
+                .join("coverage-refresh.tsv"),
+            &format!(
+                "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots_a\tpass\t100.0\t100.0\t100.0\t100.0\t{report_relative}\n"
+            ),
+        );
+        let required = ["radroots_a".to_string()]
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+        let policy_dir = root.join("policy").join("coverage");
+        write_file(
+            &policy_dir.join("policy.toml"),
+            "[gate]\nfail_under_exec_lines = 98.0\nfail_under_functions = 98.0\nfail_under_regions = 98.0\nfail_under_branches = 98.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n",
+        );
+        let policy =
+            read_coverage_policy(&policy_dir.join("policy.toml")).expect("parse coverage policy");
+        let err = validate_required_coverage_summary_with_policy(&root, &required, &policy)
+            .expect_err("row and report mismatch should fail");
+        assert!(err.contains("does not match coverage gate report"));
         let _ = fs::remove_dir_all(&root);
     }
 
@@ -5083,7 +5488,7 @@ members = ["crates/a", "crates/b"]
             "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nbad-row\n",
         );
         let bad_row = load_coverage_refresh_rows(&root).expect_err("invalid coverage row");
-        assert!(bad_row.contains("at least 6 columns"));
+        assert!(bad_row.contains("at least 7 columns"));
 
         write_file(
             &coverage_dir.join("coverage-refresh.tsv"),
