@@ -606,6 +606,95 @@ fn document_decode_handles_subject_and_address_paths() {
     let empty_a =
         document_from_event(KIND_DOCUMENT, &tags, &empty_a_content).expect_err("empty address");
     assert!(matches!(empty_a, EventParseError::InvalidTag("a")));
+
+    let invalid_kind = document_from_event(KIND_FARM, &tags, &content).expect_err("invalid kind");
+    assert!(matches!(
+        invalid_kind,
+        EventParseError::InvalidKind {
+            expected: "30361",
+            got: KIND_FARM
+        }
+    ));
+
+    let blank_content = document_from_event(KIND_DOCUMENT, &tags, " ").expect_err("blank content");
+    assert!(matches!(
+        blank_content,
+        EventParseError::InvalidJson("content")
+    ));
+
+    let empty_d_tag = document_from_event(
+        KIND_DOCUMENT,
+        &[
+            vec![TAG_D.to_string(), " ".to_string()],
+            vec!["p".to_string(), TEST_PUBKEY_HEX.to_string()],
+            vec!["a".to_string(), tag_address.clone()],
+        ],
+        &content,
+    )
+    .expect_err("empty d");
+    assert!(matches!(empty_d_tag, EventParseError::InvalidTag("d")));
+
+    let empty_p_tag = document_from_event(
+        KIND_DOCUMENT,
+        &[
+            vec![TAG_D.to_string(), d_tag.to_string()],
+            vec!["p".to_string(), " ".to_string()],
+            vec!["a".to_string(), tag_address.clone()],
+        ],
+        &content,
+    )
+    .expect_err("empty p");
+    assert!(matches!(empty_p_tag, EventParseError::InvalidTag("p")));
+
+    let empty_a_tag = document_from_event(
+        KIND_DOCUMENT,
+        &[
+            vec![TAG_D.to_string(), d_tag.to_string()],
+            vec!["p".to_string(), TEST_PUBKEY_HEX.to_string()],
+            vec!["a".to_string(), " ".to_string()],
+        ],
+        &content,
+    )
+    .expect_err("empty a tag");
+    assert!(matches!(empty_a_tag, EventParseError::InvalidTag("a")));
+
+    let mismatched_d_content = serde_json::to_string(&sample_document(
+        "FAAAAAAAAAAAAAAAAAAAAA",
+        TEST_PUBKEY_HEX,
+        None,
+    ))
+    .expect("mismatched d content");
+    let mismatched_d =
+        document_from_event(KIND_DOCUMENT, &tags, &mismatched_d_content).expect_err("mismatched d");
+    assert!(matches!(mismatched_d, EventParseError::InvalidTag("d")));
+
+    let mismatched_a_content = serde_json::to_string(&sample_document(
+        d_tag,
+        TEST_PUBKEY_HEX,
+        Some("30360:author:other"),
+    ))
+    .expect("mismatched address content");
+    let mismatched_a =
+        document_from_event(KIND_DOCUMENT, &tags, &mismatched_a_content).expect_err("mismatched a");
+    assert!(matches!(mismatched_a, EventParseError::InvalidTag("a")));
+
+    let parsed_err = document_index_from_event(
+        "id".to_string(),
+        TEST_PUBKEY_HEX.to_string(),
+        58,
+        KIND_FARM,
+        content,
+        tags,
+        "sig".to_string(),
+    )
+    .expect_err("parsed error");
+    assert!(matches!(
+        parsed_err,
+        EventParseError::InvalidKind {
+            expected: "30361",
+            got: KIND_FARM
+        }
+    ));
 }
 
 #[test]
