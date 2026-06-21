@@ -385,6 +385,32 @@ mod tests {
         core::iter::repeat_n(character, 64).collect()
     }
 
+    fn signed_event_for_draft(draft: &RadrootsFrozenEventDraft) -> RadrootsSignedNostrEvent {
+        RadrootsSignedNostrEvent::new(RadrootsSignedNostrEventParts {
+            id: draft.expected_event_id.clone(),
+            pubkey: draft.expected_pubkey.clone(),
+            created_at: draft.created_at,
+            kind: draft.kind,
+            tags: draft.tags.clone(),
+            content: draft.content.clone(),
+            sig: "b".repeat(128),
+            raw_json: "{}".to_owned(),
+        })
+        .expect("signed event")
+    }
+
+    fn post_draft() -> RadrootsFrozenEventDraft {
+        RadrootsFrozenEventDraft::new(
+            "radroots.social.post.v1",
+            KIND_POST,
+            1_700_000_000,
+            vec![vec!["t".to_owned(), "soil".to_owned()]],
+            "hello",
+            "a".repeat(64),
+        )
+        .expect("draft")
+    }
+
     #[test]
     fn frozen_draft_computes_expected_event_id() {
         let draft = RadrootsFrozenEventDraft::new(
@@ -477,6 +503,17 @@ mod tests {
             mismatch,
             RadrootsDraftError::ContractKindMismatch { .. }
         ));
+
+        let invalid_pubkey = RadrootsFrozenEventDraft::new(
+            "radroots.social.post.v1",
+            KIND_POST,
+            1,
+            Vec::new(),
+            "",
+            "not-hex",
+        )
+        .expect_err("invalid pubkey");
+        assert!(matches!(invalid_pubkey, RadrootsDraftError::IdParse(_)));
     }
 
     #[test]
@@ -500,33 +537,198 @@ mod tests {
     }
 
     #[test]
-    fn signed_event_validation_rejects_draft_mismatches() {
-        let draft = RadrootsFrozenEventDraft::new(
-            "radroots.social.post.v1",
-            KIND_POST,
-            1_700_000_000,
-            vec![vec!["t".to_owned(), "soil".to_owned()]],
-            "hello",
-            "a".repeat(64),
-        )
-        .expect("draft");
-        let signed = RadrootsSignedNostrEvent::new(RadrootsSignedNostrEventParts {
-            id: draft.expected_event_id.clone(),
-            pubkey: draft.expected_pubkey.clone(),
-            created_at: draft.created_at,
-            kind: draft.kind,
-            tags: draft.tags.clone(),
-            content: "changed".to_owned(),
-            sig: "b".repeat(128),
+    fn signed_event_from_nostr_event_validates_parts() {
+        let event = RadrootsNostrEvent {
+            id: hex_64('1'),
+            author: hex_64('2'),
+            created_at: 42,
+            kind: KIND_POST,
+            tags: vec![vec!["t".to_owned(), "soil".to_owned()]],
+            content: "hello".to_owned(),
+            sig: "3".repeat(128),
+        };
+        let signed = RadrootsSignedNostrEvent::from_event(event, "{\"id\":\"fixture\"}")
+            .expect("signed event");
+
+        assert_eq!(signed.id, hex_64('1'));
+        assert_eq!(signed.pubkey, hex_64('2'));
+        assert_eq!(signed.sig, "3".repeat(128));
+        assert_eq!(signed.raw_json, "{\"id\":\"fixture\"}");
+
+        let invalid = RadrootsSignedNostrEvent::new(RadrootsSignedNostrEventParts {
+            id: "not-hex".to_owned(),
+            pubkey: hex_64('e'),
+            created_at: 10,
+            kind: KIND_POST,
+            tags: Vec::new(),
+            content: String::new(),
+            sig: "f".repeat(128),
             raw_json: "{}".to_owned(),
         })
-        .expect("signed");
+        .expect_err("invalid id");
+        assert!(matches!(invalid, RadrootsDraftError::IdParse(_)));
 
+        let invalid = RadrootsSignedNostrEvent::new(RadrootsSignedNostrEventParts {
+            id: hex_64('d'),
+            pubkey: "not-hex".to_owned(),
+            created_at: 10,
+            kind: KIND_POST,
+            tags: Vec::new(),
+            content: String::new(),
+            sig: "f".repeat(128),
+            raw_json: "{}".to_owned(),
+        })
+        .expect_err("invalid pubkey");
+        assert!(matches!(invalid, RadrootsDraftError::IdParse(_)));
+
+        let invalid = RadrootsSignedNostrEvent::new(RadrootsSignedNostrEventParts {
+            id: hex_64('d'),
+            pubkey: hex_64('e'),
+            created_at: 10,
+            kind: KIND_POST,
+            tags: Vec::new(),
+            content: String::new(),
+            sig: "not-hex".to_owned(),
+            raw_json: "{}".to_owned(),
+        })
+        .expect_err("invalid sig");
+        assert!(matches!(invalid, RadrootsDraftError::IdParse(_)));
+    }
+
+    #[test]
+    fn signed_event_validation_accepts_exact_draft_match() {
+        let draft = post_draft();
+        let signed = signed_event_for_draft(&draft);
+
+        validate_signed_nostr_event_matches_draft(&signed, &draft).expect("valid signed event");
+    }
+
+    #[test]
+    fn signed_event_validation_rejects_draft_mismatches() {
+        let draft = post_draft();
+
+        let mut signed = signed_event_for_draft(&draft);
+        signed.pubkey = hex_64('c');
+        let error =
+            validate_signed_nostr_event_matches_draft(&signed, &draft).expect_err("mismatch");
+        assert!(matches!(
+            error,
+            RadrootsDraftError::SignedEventPubkeyMismatch { .. }
+        ));
+
+        let mut signed = signed_event_for_draft(&draft);
+        signed.id = hex_64('d');
+        let error =
+            validate_signed_nostr_event_matches_draft(&signed, &draft).expect_err("mismatch");
+        assert!(matches!(
+            error,
+            RadrootsDraftError::SignedEventIdMismatch { .. }
+        ));
+
+        let mut signed = signed_event_for_draft(&draft);
+        signed.created_at += 1;
+        let error =
+            validate_signed_nostr_event_matches_draft(&signed, &draft).expect_err("mismatch");
+        assert!(matches!(
+            error,
+            RadrootsDraftError::SignedEventCreatedAtMismatch { .. }
+        ));
+
+        let mut signed = signed_event_for_draft(&draft);
+        signed.kind = KIND_PROFILE;
+        let error =
+            validate_signed_nostr_event_matches_draft(&signed, &draft).expect_err("mismatch");
+        assert!(matches!(
+            error,
+            RadrootsDraftError::SignedEventKindMismatch { .. }
+        ));
+
+        let mut signed = signed_event_for_draft(&draft);
+        signed.tags.push(vec!["p".to_owned(), hex_64('e')]);
+        let error =
+            validate_signed_nostr_event_matches_draft(&signed, &draft).expect_err("mismatch");
+        assert!(matches!(
+            error,
+            RadrootsDraftError::SignedEventTagsMismatch { .. }
+        ));
+
+        let mut signed = signed_event_for_draft(&draft);
+        signed.content = "changed".to_owned();
         let error =
             validate_signed_nostr_event_matches_draft(&signed, &draft).expect_err("mismatch");
         assert!(matches!(
             error,
             RadrootsDraftError::SignedEventContentMismatch { .. }
         ));
+
+        let mut draft = post_draft();
+        draft.expected_event_id = hex_64('f');
+        let signed = signed_event_for_draft(&draft);
+        let error =
+            validate_signed_nostr_event_matches_draft(&signed, &draft).expect_err("mismatch");
+        assert!(matches!(
+            error,
+            RadrootsDraftError::SignedEventComputedIdMismatch { .. }
+        ));
+    }
+
+    #[test]
+    fn draft_errors_format_all_variants() {
+        let errors = [
+            RadrootsDraftError::UnknownContract("missing".to_owned()),
+            RadrootsDraftError::ContractKindMismatch {
+                contract_id: "radroots.social.post.v1".to_owned(),
+                expected_kind: KIND_POST,
+                actual_kind: KIND_PROFILE,
+            },
+            RadrootsDraftError::SignedEventPubkeyMismatch {
+                expected_pubkey: hex_64('a'),
+                actual_pubkey: hex_64('b'),
+            },
+            RadrootsDraftError::SignedEventIdMismatch {
+                expected_event_id: hex_64('c'),
+                actual_event_id: hex_64('d'),
+            },
+            RadrootsDraftError::SignedEventCreatedAtMismatch {
+                expected_created_at: 1,
+                actual_created_at: 2,
+            },
+            RadrootsDraftError::SignedEventKindMismatch {
+                expected_kind: KIND_POST,
+                actual_kind: KIND_PROFILE,
+            },
+            RadrootsDraftError::SignedEventTagsMismatch {
+                expected_len: 1,
+                actual_len: 2,
+            },
+            RadrootsDraftError::SignedEventContentMismatch {
+                expected_len: 5,
+                actual_len: 7,
+            },
+            RadrootsDraftError::SignedEventComputedIdMismatch {
+                expected_event_id: hex_64('e'),
+                computed_event_id: hex_64('f'),
+            },
+            RadrootsDraftError::from(RadrootsIdParseError::Empty),
+        ];
+
+        for error in errors {
+            assert!(!error.to_string().is_empty());
+        }
+
+        let json_error = serde_json::from_str::<String>("{").expect_err("json error");
+        let error = RadrootsDraftError::from(json_error);
+        assert!(
+            error
+                .to_string()
+                .contains("json string serialization failed")
+        );
+    }
+
+    #[test]
+    fn event_id_computation_rejects_invalid_pubkeys() {
+        let error =
+            compute_nip01_event_id("not-hex", 1, KIND_POST, &[], "").expect_err("invalid pubkey");
+        assert!(matches!(error, RadrootsDraftError::IdParse(_)));
     }
 }

@@ -324,6 +324,49 @@ fn validate_visible_token(value: &str, max_len: usize) -> Result<String, Radroot
 mod tests {
     use super::*;
 
+    macro_rules! assert_identifier_impls {
+        ($ty:ty, $value:expr) => {{
+            let value = $value.to_owned();
+            let value = value.as_str();
+            let id = <$ty>::parse(value).expect("parse");
+
+            assert_eq!(id.as_str(), value);
+            assert_eq!(id.as_ref(), value);
+            assert_eq!(&*id, value);
+            assert_eq!(<$ty as core::borrow::Borrow<str>>::borrow(&id), value);
+            assert_eq!(id.to_string(), value);
+            assert_eq!(
+                <$ty as core::str::FromStr>::from_str(value).expect("from str"),
+                id
+            );
+            assert_eq!(
+                <$ty as TryFrom<&str>>::try_from(value).expect("try from str"),
+                id
+            );
+            assert_eq!(
+                <$ty as TryFrom<String>>::try_from(value.to_owned()).expect("try from string"),
+                id
+            );
+            assert_eq!(id, value);
+            assert_eq!(value, id);
+            assert_eq!(id, value.to_owned());
+            assert_eq!(value.to_owned(), id);
+
+            let id = <$ty>::parse(value).expect("parse");
+            let converted: String = String::from(id.clone());
+            assert_eq!(converted, value);
+            assert_eq!(id.into_string(), value.to_owned());
+
+            #[cfg(feature = "serde")]
+            {
+                let id = <$ty>::parse(value).expect("parse");
+                let encoded = serde_json::to_string(&id).expect("serialize");
+                let decoded: $ty = serde_json::from_str(&encoded).expect("deserialize");
+                assert_eq!(decoded.as_str(), value);
+            }
+        }};
+    }
+
     fn hex_64(character: char) -> String {
         core::iter::repeat_n(character, 64).collect()
     }
@@ -351,6 +394,27 @@ mod tests {
                 actual: 63
             }
         );
+    }
+
+    #[test]
+    fn id_parse_errors_have_stable_display_messages() {
+        let errors = [
+            RadrootsIdParseError::Empty,
+            RadrootsIdParseError::InvalidFormat,
+            RadrootsIdParseError::InvalidLength {
+                expected: 64,
+                actual: 7,
+            },
+            RadrootsIdParseError::InvalidCharacter,
+            RadrootsIdParseError::TooLong {
+                max: 128,
+                actual: 129,
+            },
+        ];
+
+        for error in errors {
+            assert!(!error.to_string().is_empty());
+        }
     }
 
     #[test]
@@ -404,6 +468,20 @@ mod tests {
                 actual: 7
             }
         );
+        assert_eq!(
+            RadrootsAddressableCoordinate::parse("30402").unwrap_err(),
+            RadrootsIdParseError::InvalidFormat
+        );
+        assert_eq!(
+            RadrootsAddressableCoordinate::parse(format!("bad:{}:listing-1", hex_64('a')))
+                .unwrap_err(),
+            RadrootsIdParseError::InvalidFormat
+        );
+        assert_eq!(
+            RadrootsAddressableCoordinate::parse(format!("30402:{}:bad d", hex_64('0')))
+                .unwrap_err(),
+            RadrootsIdParseError::InvalidCharacter
+        );
     }
 
     #[test]
@@ -451,6 +529,13 @@ mod tests {
                 .as_str(),
             "digest-1"
         );
+        assert_eq!(
+            RadrootsEconomicsDigest::parse("sha256:not-hex").unwrap_err(),
+            RadrootsIdParseError::InvalidLength {
+                expected: 64,
+                actual: 7
+            }
+        );
     }
 
     #[test]
@@ -459,6 +544,59 @@ mod tests {
         assert_eq!(id.as_ref(), "quote-1");
         let parsed: RadrootsEventPointer = hex_64('d').parse().expect("event pointer");
         assert_eq!(parsed.as_str(), hex_64('d'));
+    }
+
+    #[test]
+    fn validated_identifier_wrappers_expose_consistent_traits() {
+        let addressable = format!("30402:{}:listing-1", hex_64('0'));
+
+        assert_identifier_impls!(RadrootsPublicKey, hex_64('a').as_str());
+        assert_identifier_impls!(RadrootsEventId, hex_64('b').as_str());
+        assert_identifier_impls!(RadrootsEventSignature, hex_128('c').as_str());
+        assert_identifier_impls!(RadrootsDTag, "listing-1");
+        assert_identifier_impls!(RadrootsAddressableCoordinate, addressable.as_str());
+        assert_identifier_impls!(RadrootsListingAddress, addressable.as_str());
+        assert_identifier_impls!(RadrootsOrderId, "order-1");
+        assert_identifier_impls!(RadrootsOrderRevisionId, "revision-1");
+        assert_identifier_impls!(RadrootsOrderQuoteId, "quote-1");
+        assert_identifier_impls!(RadrootsInventoryBinId, "bin-1");
+        assert_identifier_impls!(RadrootsEconomicsDigest, "digest-1");
+        assert_identifier_impls!(RadrootsEventPointer, hex_64('d').as_str());
+    }
+
+    #[test]
+    fn nostr_event_pointers_validate_relay_values() {
+        let event_id = RadrootsEventId::parse(hex_64('e')).expect("event id");
+        let pointer = RadrootsNostrEventPointer::new(
+            event_id.clone(),
+            ["wss://relay.one.example", "wss://relay.two.example"],
+        )
+        .expect("pointer");
+
+        assert_eq!(pointer.event_id, event_id);
+        assert_eq!(
+            pointer.relays,
+            vec![
+                "wss://relay.one.example".to_owned(),
+                "wss://relay.two.example".to_owned()
+            ]
+        );
+
+        for relay in [
+            "",
+            " wss://relay.example",
+            "wss://relay.example\n",
+            "wss://relay.example/\u{7}",
+        ] {
+            assert_eq!(
+                RadrootsNostrEventPointer::new(
+                    RadrootsEventId::parse(hex_64('e')).expect("event id"),
+                    [relay],
+                )
+                .unwrap_err(),
+                RadrootsIdParseError::InvalidCharacter
+            );
+        }
     }
 
     #[cfg(feature = "serde")]

@@ -223,10 +223,14 @@ mod tests {
     }
 
     fn candidate(id: char, created_at: u32) -> RadrootsEventHeadCandidate {
-        match event_head_candidate_for_class(
+        expect_candidate(event_head_candidate_for_class(
             &event(10002, &hex_64(id), &hex_64('a'), created_at, Vec::new()),
             RadrootsEventClass::Replaceable,
-        ) {
+        ))
+    }
+
+    fn expect_candidate(result: RadrootsEventHeadCandidateResult) -> RadrootsEventHeadCandidate {
+        match result {
             RadrootsEventHeadCandidateResult::Candidate(candidate) => candidate,
             other => panic!("expected candidate: {other:?}"),
         }
@@ -248,11 +252,10 @@ mod tests {
     #[test]
     fn replaceable_events_use_kind_and_pubkey_coordinates() {
         let event = event(10002, &hex_64('1'), &hex_64('a'), 5, Vec::new());
-        let RadrootsEventHeadCandidateResult::Candidate(candidate) =
-            event_head_candidate_for_class(&event, RadrootsEventClass::Replaceable)
-        else {
-            panic!("expected candidate")
-        };
+        let candidate = expect_candidate(event_head_candidate_for_class(
+            &event,
+            RadrootsEventClass::Replaceable,
+        ));
         assert_eq!(
             candidate.coordinate,
             RadrootsEventHeadCoordinate::Replaceable {
@@ -272,11 +275,10 @@ mod tests {
             7,
             vec![vec![TAG_D.to_string(), "article-1".to_string()]],
         );
-        let RadrootsEventHeadCandidateResult::Candidate(candidate) =
-            event_head_candidate_for_class(&event, RadrootsEventClass::Addressable)
-        else {
-            panic!("expected candidate")
-        };
+        let candidate = expect_candidate(event_head_candidate_for_class(
+            &event,
+            RadrootsEventClass::Addressable,
+        ));
         assert_eq!(
             candidate.coordinate,
             RadrootsEventHeadCoordinate::Addressable {
@@ -332,6 +334,10 @@ mod tests {
         let current: RadrootsCurrentEventHead = candidate('3', 10).into();
 
         assert!(matches!(
+            select_event_head(candidate('1', 1), None),
+            RadrootsEventHeadDecision::Applied(_)
+        ));
+        assert!(matches!(
             select_event_head(candidate('4', 11), Some(&current)),
             RadrootsEventHeadDecision::Applied(_)
         ));
@@ -366,9 +372,7 @@ mod tests {
             ),
             RadrootsEventClass::Addressable,
         );
-        let RadrootsEventHeadCandidateResult::Candidate(other) = other else {
-            panic!("expected candidate")
-        };
+        let other = expect_candidate(other);
         assert_eq!(
             select_event_head(other, Some(&current)),
             RadrootsEventHeadDecision::CoordinateMismatch
@@ -378,11 +382,7 @@ mod tests {
     #[test]
     fn contract_bridge_uses_replaceable_event_classes() {
         let event = event(KIND_FOLLOW, &hex_64('1'), &hex_64('a'), 1, Vec::new());
-        let RadrootsEventHeadCandidateResult::Candidate(candidate) =
-            event_head_candidate_for_event(&event).expect("contract")
-        else {
-            panic!("expected candidate")
-        };
+        let candidate = expect_candidate(event_head_candidate_for_event(&event).expect("contract"));
         assert_eq!(
             candidate.coordinate,
             RadrootsEventHeadCoordinate::Replaceable {
@@ -401,11 +401,7 @@ mod tests {
             1,
             vec![vec![TAG_D.to_string(), "member_of.farms".to_string()]],
         );
-        let RadrootsEventHeadCandidateResult::Candidate(candidate) =
-            event_head_candidate_for_event(&event).expect("contract")
-        else {
-            panic!("expected candidate")
-        };
+        let candidate = expect_candidate(event_head_candidate_for_event(&event).expect("contract"));
         assert_eq!(
             candidate.coordinate,
             RadrootsEventHeadCoordinate::Addressable {
@@ -426,11 +422,8 @@ mod tests {
             Vec::new(),
             r#"{"name":"Alice"}"#,
         );
-        let RadrootsEventHeadCandidateResult::Candidate(candidate) =
-            event_head_candidate_for_event(&profile).expect("profile contract")
-        else {
-            panic!("expected candidate")
-        };
+        let candidate =
+            expect_candidate(event_head_candidate_for_event(&profile).expect("profile contract"));
         assert_eq!(
             candidate.coordinate,
             RadrootsEventHeadCoordinate::Replaceable {

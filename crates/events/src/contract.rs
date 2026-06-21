@@ -2655,6 +2655,7 @@ mod tests {
             event_contract("radroots.list_set.member_of.farms.v1").map(|contract| contract.kind),
             Some(KIND_LIST_SET_GENERIC)
         );
+        assert!(event_contracts_for_kind(999_999).is_empty());
     }
 
     #[test]
@@ -2715,6 +2716,40 @@ mod tests {
             &[],
             r#"{"domain": "radroots.order", "type": "order_request"}"#
         ));
+    }
+
+    #[test]
+    fn tag_helpers_cover_missing_names_and_cardinality_mismatches() {
+        let tags = vec![
+            vec!["p".to_owned(), "counterparty".to_owned()],
+            vec!["d".to_owned()],
+        ];
+
+        assert_eq!(tag_value(&tags, "d"), None);
+        assert_eq!(tag_value(&tags, "p"), Some("counterparty"));
+
+        let malformed = [
+            tag(
+                "d",
+                RadrootsTagCardinality::OptionalOne,
+                RadrootsTagSemantic::Identifier,
+                RadrootsTagValueType::DTag,
+                true,
+            ),
+            tag(
+                "p",
+                RadrootsTagCardinality::RequiredOne,
+                RadrootsTagSemantic::Counterparty,
+                RadrootsTagValueType::PublicKey,
+                true,
+            ),
+        ];
+
+        assert!(
+            !malformed.iter().any(
+                |tag| tag.name == "d" && tag.cardinality == RadrootsTagCardinality::RequiredOne
+            )
+        );
     }
 
     #[test]
