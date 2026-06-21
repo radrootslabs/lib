@@ -286,3 +286,77 @@ pub struct RadrootsOutboxStatusSummary {
     pub last_attempt_at_ms: Option<i64>,
     pub last_error: Option<String>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn operation_event_and_relay_status_values_round_trip() {
+        for (status, expected) in [
+            (RadrootsOutboxOperationStatus::Queued, "queued"),
+            (RadrootsOutboxOperationStatus::Complete, "complete"),
+            (
+                RadrootsOutboxOperationStatus::FailedTerminal,
+                "failed_terminal",
+            ),
+            (RadrootsOutboxOperationStatus::Cancelled, "cancelled"),
+        ] {
+            assert_eq!(status.as_str(), expected);
+            assert_eq!(
+                RadrootsOutboxOperationStatus::parse(expected).expect("status"),
+                status
+            );
+        }
+        assert!(RadrootsOutboxOperationStatus::parse("bad").is_err());
+
+        for (state, expected, terminal) in [
+            (RadrootsOutboxEventState::DraftQueued, "draft_queued", false),
+            (RadrootsOutboxEventState::Signing, "signing", false),
+            (RadrootsOutboxEventState::Signed, "signed", false),
+            (RadrootsOutboxEventState::Publishing, "publishing", false),
+            (RadrootsOutboxEventState::Published, "published", true),
+            (
+                RadrootsOutboxEventState::SignRetryable,
+                "sign_retryable",
+                false,
+            ),
+            (
+                RadrootsOutboxEventState::PublishRetryable,
+                "publish_retryable",
+                false,
+            ),
+            (
+                RadrootsOutboxEventState::FailedTerminal,
+                "failed_terminal",
+                true,
+            ),
+            (RadrootsOutboxEventState::Cancelled, "cancelled", true),
+        ] {
+            assert_eq!(state.as_str(), expected);
+            assert_eq!(
+                RadrootsOutboxEventState::parse(expected).expect("state"),
+                state
+            );
+            assert_eq!(state.is_terminal(), terminal);
+        }
+        assert!(RadrootsOutboxEventState::parse("bad").is_err());
+
+        for (status, expected) in [
+            (RadrootsOutboxRelayStatus::Pending, "pending"),
+            (RadrootsOutboxRelayStatus::Accepted, "accepted"),
+            (
+                RadrootsOutboxRelayStatus::FailedRetryable,
+                "failed_retryable",
+            ),
+            (RadrootsOutboxRelayStatus::FailedTerminal, "failed_terminal"),
+        ] {
+            assert_eq!(status.as_str(), expected);
+            assert_eq!(
+                RadrootsOutboxRelayStatus::parse(expected).expect("relay status"),
+                status
+            );
+        }
+        assert!(RadrootsOutboxRelayStatus::parse("bad").is_err());
+    }
+}

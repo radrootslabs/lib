@@ -39,3 +39,6 @@ radroots_nostr = { workspace = true, default-features = false, features = [
 ] }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt"] }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage_nightly)'] }
