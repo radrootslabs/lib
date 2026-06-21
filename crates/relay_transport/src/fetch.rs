@@ -9,7 +9,7 @@ use radroots_event_store::{
 };
 use radroots_nostr::prelude::{RadrootsNostrEvent, radroots_event_from_nostr};
 use serde::{Deserialize, Serialize};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, PoisonError};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RadrootsRelayFetchMode {
@@ -266,17 +266,11 @@ impl RadrootsRelayFetchAdapter for RadrootsMockRelayFetchAdapter {
         &'a self,
         _request: RadrootsRelayFetchRequest,
     ) -> BoxFuture<'a, Result<Vec<RadrootsRelayFetchItem>, RadrootsRelayTransportError>> {
-        Box::pin(async move {
-            Ok(self
-                .items
-                .lock()
-                .map_err(|_| fetch_item_lock_error())?
-                .clone())
-        })
+        Box::pin(async move { Ok(self.items.lock().map_err(fetch_item_lock_error)?.clone()) })
     }
 }
 
 #[cfg_attr(coverage_nightly, coverage(off))]
-fn fetch_item_lock_error() -> RadrootsRelayTransportError {
+fn fetch_item_lock_error<T>(_error: PoisonError<T>) -> RadrootsRelayTransportError {
     RadrootsRelayTransportError::Transport("fetch item lock poisoned".to_owned())
 }

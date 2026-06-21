@@ -8,7 +8,7 @@ use futures::future::BoxFuture;
 use radroots_events::draft::RadrootsSignedNostrEvent;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, PoisonError};
 
 #[cfg(feature = "client")]
 use nostr::JsonUtil;
@@ -160,7 +160,7 @@ impl RadrootsRelayPublishAdapter for RadrootsMockRelayPublishAdapter {
         Box::pin(async move {
             self.captured_raw_events
                 .lock()
-                .map_err(|_| captured_raw_event_lock_error())?
+                .map_err(captured_raw_event_lock_error)?
                 .push(request.signed_event.raw_json.clone());
             Ok(request
                 .targets
@@ -180,7 +180,7 @@ impl RadrootsRelayPublishAdapter for RadrootsMockRelayPublishAdapter {
 }
 
 #[cfg_attr(coverage_nightly, coverage(off))]
-fn captured_raw_event_lock_error() -> RadrootsRelayTransportError {
+fn captured_raw_event_lock_error<T>(_error: PoisonError<T>) -> RadrootsRelayTransportError {
     RadrootsRelayTransportError::Transport("captured raw event lock poisoned".to_owned())
 }
 
