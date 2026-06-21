@@ -96,6 +96,48 @@ fn reaction_build_tags_requires_valid_event_or_address_target() {
         reaction_build_tags(&reaction),
         Err(EventEncodeError::InvalidField("target"))
     ));
+
+    let reaction = RadrootsReaction {
+        target: RadrootsSocialTarget::Event {
+            id: EVENT_ID.to_string(),
+            author: Some(" ".to_string()),
+            event_kind: Some(KIND_ARTICLE),
+            relays: None,
+        },
+        content: "+".to_string(),
+    };
+    assert!(matches!(
+        reaction_build_tags(&reaction),
+        Err(EventEncodeError::EmptyRequiredField("target.author"))
+    ));
+
+    let reaction = RadrootsReaction {
+        target: RadrootsSocialTarget::Address {
+            address: format!("{}:{AUTHOR}:{D_TAG}", KIND_ARTICLE),
+            author: Some(AUTHOR.to_string()),
+            event_kind: Some(KIND_COMMENT),
+            relays: None,
+        },
+        content: "+".to_string(),
+    };
+    assert!(matches!(
+        reaction_build_tags(&reaction),
+        Err(EventEncodeError::InvalidField("target.kind"))
+    ));
+
+    let reaction = RadrootsReaction {
+        target: RadrootsSocialTarget::Address {
+            address: format!("{}:{AUTHOR}:{D_TAG}", KIND_ARTICLE),
+            author: Some("other_author".to_string()),
+            event_kind: Some(KIND_ARTICLE),
+            relays: None,
+        },
+        content: "+".to_string(),
+    };
+    assert!(matches!(
+        reaction_build_tags(&reaction),
+        Err(EventEncodeError::InvalidField("target.author"))
+    ));
 }
 
 #[test]
@@ -110,6 +152,45 @@ fn reaction_to_wire_parts_accepts_empty_plus_minus_emoji_and_custom_content() {
         assert_eq!(parts.content, content);
         assert!(parts.tags.iter().any(|tag| tag[0] == "e"));
     }
+}
+
+#[test]
+fn reaction_build_tags_covers_optional_target_branches() {
+    let reaction = RadrootsReaction {
+        target: RadrootsSocialTarget::Event {
+            id: EVENT_ID.to_string(),
+            author: None,
+            event_kind: None,
+            relays: Some(vec!["wss://event-relay.example.test".to_string()]),
+        },
+        content: "+".to_string(),
+    };
+    let tags = reaction_build_tags(&reaction).unwrap();
+    assert!(tags.iter().any(|tag| {
+        tag.first().map(|value| value.as_str()) == Some("e")
+            && tag
+                .iter()
+                .any(|value| value == "wss://event-relay.example.test")
+    }));
+    assert!(!tags.iter().any(|tag| tag[0] == "p"));
+    assert!(!tags.iter().any(|tag| tag[0] == "k"));
+
+    let reaction = RadrootsReaction {
+        target: RadrootsSocialTarget::Address {
+            address: format!("{}:{AUTHOR}:{D_TAG}", KIND_ARTICLE),
+            author: None,
+            event_kind: None,
+            relays: Some(vec!["wss://address-relay.example.test".to_string()]),
+        },
+        content: "+".to_string(),
+    };
+    let tags = reaction_build_tags(&reaction).unwrap();
+    assert!(tags.iter().any(|tag| {
+        tag.first().map(|value| value.as_str()) == Some("a")
+            && tag
+                .iter()
+                .any(|value| value == "wss://address-relay.example.test")
+    }));
 }
 
 #[test]

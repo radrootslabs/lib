@@ -120,6 +120,65 @@ fn comment_build_tags_requires_strict_nip22_target_fields() {
         comment_build_tags(&comment),
         Err(EventEncodeError::EmptyRequiredField("root"))
     ));
+
+    let comment = RadrootsComment {
+        root: RadrootsSocialTarget::Event {
+            id: ROOT_ID.to_string(),
+            author: Some(AUTHOR.to_string()),
+            event_kind: None,
+            relays: None,
+        },
+        parent: event_target(PARENT_ID, PARENT_AUTHOR, KIND_ARTICLE),
+        content: "hello".to_string(),
+    };
+    assert!(matches!(
+        comment_build_tags(&comment),
+        Err(EventEncodeError::EmptyRequiredField("root"))
+    ));
+
+    let comment = RadrootsComment {
+        root: RadrootsSocialTarget::Address {
+            address: format!("{KIND_ARTICLE}:{AUTHOR}:{D_TAG}"),
+            author: Some(AUTHOR.to_string()),
+            event_kind: Some(KIND_COMMENT),
+            relays: None,
+        },
+        parent: event_target(PARENT_ID, PARENT_AUTHOR, KIND_ARTICLE),
+        content: "hello".to_string(),
+    };
+    assert!(matches!(
+        comment_build_tags(&comment),
+        Err(EventEncodeError::InvalidField("root"))
+    ));
+
+    let comment = RadrootsComment {
+        root: RadrootsSocialTarget::Address {
+            address: format!("{KIND_ARTICLE}:{AUTHOR}:{D_TAG}"),
+            author: Some("other_author".to_string()),
+            event_kind: Some(KIND_ARTICLE),
+            relays: None,
+        },
+        parent: event_target(PARENT_ID, PARENT_AUTHOR, KIND_ARTICLE),
+        content: "hello".to_string(),
+    };
+    assert!(matches!(
+        comment_build_tags(&comment),
+        Err(EventEncodeError::InvalidField("root"))
+    ));
+
+    let comment = RadrootsComment {
+        root: RadrootsSocialTarget::External {
+            id: "external-root".to_string(),
+            external_kind: "1".to_string(),
+            hint: None,
+        },
+        parent: event_target(PARENT_ID, PARENT_AUTHOR, KIND_ARTICLE),
+        content: "hello".to_string(),
+    };
+    assert!(matches!(
+        comment_build_tags(&comment),
+        Err(EventEncodeError::InvalidField("root"))
+    ));
 }
 
 #[test]
@@ -242,6 +301,35 @@ fn comment_roundtrips_external_targets() {
         }
         _ => panic!("expected external parent"),
     }
+}
+
+#[test]
+fn comment_build_tags_covers_optional_target_branches() {
+    let comment = RadrootsComment {
+        root: RadrootsSocialTarget::Address {
+            address: format!("{KIND_ARTICLE}:{AUTHOR}:{D_TAG}"),
+            author: None,
+            event_kind: None,
+            relays: Some(vec!["wss://root-relay.example.test".to_string()]),
+        },
+        parent: RadrootsSocialTarget::External {
+            id: "https://example.test/parent".to_string(),
+            external_kind: "web".to_string(),
+            hint: None,
+        },
+        content: "hello".to_string(),
+    };
+    let tags = comment_build_tags(&comment).unwrap();
+    assert!(tags.iter().any(|tag| {
+        tag.first().map(|value| value.as_str()) == Some("A")
+            && tag
+                .iter()
+                .any(|value| value == "wss://root-relay.example.test")
+    }));
+    assert!(
+        tags.iter()
+            .any(|tag| { tag.first().map(|value| value.as_str()) == Some("i") && tag.len() == 2 })
+    );
 }
 
 #[test]

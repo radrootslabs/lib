@@ -202,6 +202,78 @@ fn post_to_wire_parts_roundtrips_optional_social_tags() {
 }
 
 #[test]
+fn post_build_tags_covers_optional_social_encode_branches() {
+    let mut post = content_post();
+    post.farm = Some(RadrootsSocialFarmAnchor {
+        farm: RadrootsFarmRef {
+            pubkey: "farm_pubkey".to_string(),
+            d_tag: FARM_D_TAG.to_string(),
+        },
+        relays: Some(vec!["wss://farm-relay.example.test".to_string()]),
+    });
+    post.address_refs = Some(vec![RadrootsSocialTarget::Address {
+        address: format!("30023:article_author:{ARTICLE_D_TAG}"),
+        author: None,
+        event_kind: None,
+        relays: Some(vec!["wss://article-relay.example.test".to_string()]),
+    }]);
+    post.quote_refs = Some(vec![
+        RadrootsSocialTarget::Event {
+            id: QUOTE_ID.to_string(),
+            author: None,
+            event_kind: None,
+            relays: Some(vec!["wss://quote-relay.example.test".to_string()]),
+        },
+        RadrootsSocialTarget::Address {
+            address: format!("30023:quote_author:{ARTICLE_D_TAG}"),
+            author: None,
+            event_kind: None,
+            relays: Some(vec!["wss://quote-address-relay.example.test".to_string()]),
+        },
+    ]);
+    post.media = Some(vec![RadrootsSocialMediaMetadata {
+        thumbnails: Some(vec![RadrootsSocialMediaThumbnail {
+            url: "https://media.example.test/thumb.jpg".to_string(),
+            dimensions: Some(RadrootsSocialMediaDimensions {
+                width: 120,
+                height: 80,
+            }),
+        }]),
+        ..RadrootsSocialMediaMetadata::default()
+    }]);
+
+    let tags = post_build_tags(&post).unwrap();
+    assert!(tags.iter().any(|tag| {
+        tag.first().map(|value| value.as_str()) == Some(TAG_A)
+            && tag
+                .iter()
+                .any(|value| value == "wss://farm-relay.example.test")
+    }));
+    assert!(tags.iter().any(|tag| {
+        tag.first().map(|value| value.as_str()) == Some(TAG_A)
+            && tag
+                .iter()
+                .any(|value| value == "wss://article-relay.example.test")
+    }));
+    assert!(tags.iter().any(|tag| {
+        tag.first().map(|value| value.as_str()) == Some(TAG_Q)
+            && tag
+                .iter()
+                .any(|value| value == "wss://quote-relay.example.test")
+    }));
+    assert!(tags.iter().any(|tag| {
+        tag.first().map(|value| value.as_str()) == Some(TAG_Q)
+            && tag
+                .iter()
+                .any(|value| value == "wss://quote-address-relay.example.test")
+    }));
+    assert!(tags.iter().any(|tag| {
+        tag.first().map(|value| value.as_str()) == Some(TAG_IMETA)
+            && tag.iter().any(|value| value == "dim 120x80")
+    }));
+}
+
+#[test]
 fn post_social_tags_reject_malformed_supported_structures() {
     let mut post = content_post();
     post.address_refs = Some(vec![RadrootsSocialTarget::Event {
