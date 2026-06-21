@@ -393,6 +393,126 @@ fn plot_decode_handles_success_fill_and_tag_error_paths() {
     )
     .expect_err("missing a");
     assert!(matches!(missing_a, EventParseError::MissingTag("a")));
+
+    let invalid_kind = plot_from_event(KIND_FARM, &tags, &content).expect_err("invalid kind");
+    assert!(matches!(
+        invalid_kind,
+        EventParseError::InvalidKind {
+            expected: "30350",
+            got: KIND_FARM
+        }
+    ));
+
+    let blank_content = plot_from_event(KIND_PLOT, &tags, " ").expect_err("blank content");
+    assert!(matches!(
+        blank_content,
+        EventParseError::InvalidJson("content")
+    ));
+
+    let empty_d = plot_from_event(
+        KIND_PLOT,
+        &[
+            vec![TAG_D.to_string(), " ".to_string()],
+            vec![
+                "a".to_string(),
+                format!("30340:{TEST_PUBKEY_HEX}:{farm_d_tag}"),
+            ],
+            vec!["p".to_string(), TEST_PUBKEY_HEX.to_string()],
+        ],
+        &content,
+    )
+    .expect_err("empty d");
+    assert!(matches!(empty_d, EventParseError::InvalidTag("d")));
+
+    let empty_a_pubkey = plot_from_event(
+        KIND_PLOT,
+        &[
+            vec![TAG_D.to_string(), d_tag.to_string()],
+            vec!["a".to_string(), format!("30340::{farm_d_tag}")],
+            vec!["p".to_string(), TEST_PUBKEY_HEX.to_string()],
+        ],
+        &content,
+    )
+    .expect_err("empty a pubkey");
+    assert!(matches!(empty_a_pubkey, EventParseError::InvalidTag("a")));
+
+    let empty_a_d_tag = plot_from_event(
+        KIND_PLOT,
+        &[
+            vec![TAG_D.to_string(), d_tag.to_string()],
+            vec!["a".to_string(), format!("30340:{TEST_PUBKEY_HEX}:")],
+            vec!["p".to_string(), TEST_PUBKEY_HEX.to_string()],
+        ],
+        &content,
+    )
+    .expect_err("empty a d_tag");
+    assert!(matches!(empty_a_d_tag, EventParseError::InvalidTag("a")));
+
+    let empty_p = plot_from_event(
+        KIND_PLOT,
+        &[
+            vec![TAG_D.to_string(), d_tag.to_string()],
+            vec![
+                "a".to_string(),
+                format!("30340:{TEST_PUBKEY_HEX}:{farm_d_tag}"),
+            ],
+            vec!["p".to_string(), " ".to_string()],
+        ],
+        &content,
+    )
+    .expect_err("empty p");
+    assert!(matches!(empty_p, EventParseError::InvalidTag("p")));
+
+    let mismatched_d_content = serde_json::to_string(&sample_plot(
+        "BAAAAAAAAAAAAAAAAAAAAA",
+        TEST_PUBKEY_HEX,
+        farm_d_tag,
+    ))
+    .expect("mismatched d content");
+    let mismatched_d =
+        plot_from_event(KIND_PLOT, &tags, &mismatched_d_content).expect_err("mismatched d");
+    assert!(matches!(mismatched_d, EventParseError::InvalidTag("d")));
+
+    let mismatched_farm_pubkey_content =
+        serde_json::to_string(&sample_plot(d_tag, TEST_NPUB, farm_d_tag))
+            .expect("mismatched farm pubkey content");
+    let mismatched_farm_pubkey = plot_from_event(KIND_PLOT, &tags, &mismatched_farm_pubkey_content)
+        .expect_err("mismatched farm pubkey");
+    assert!(matches!(
+        mismatched_farm_pubkey,
+        EventParseError::InvalidTag("a")
+    ));
+
+    let mismatched_farm_d_tag_content = serde_json::to_string(&sample_plot(
+        d_tag,
+        TEST_PUBKEY_HEX,
+        "BAAAAAAAAAAAAAAAAAAAAA",
+    ))
+    .expect("mismatched farm d_tag content");
+    let mismatched_farm_d_tag = plot_from_event(KIND_PLOT, &tags, &mismatched_farm_d_tag_content)
+        .expect_err("mismatched farm d_tag");
+    assert!(matches!(
+        mismatched_farm_d_tag,
+        EventParseError::InvalidTag("a")
+    ));
+
+    let parsed_err = plot_index_from_event(
+        "id".to_string(),
+        TEST_PUBKEY_HEX.to_string(),
+        57,
+        KIND_FARM,
+        content,
+        tags,
+        "sig".to_string(),
+    )
+    .expect_err("parsed error");
+    assert!(matches!(
+        parsed_err,
+        EventParseError::InvalidKind {
+            expected: "30350",
+            got: KIND_FARM
+        }
+    ));
 }
 
 #[test]
