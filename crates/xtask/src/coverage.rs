@@ -157,8 +157,6 @@ struct RegionCoverageKey {
     column_start: u64,
     line_end: u64,
     column_end: u64,
-    file_id: u64,
-    expanded_file_id: u64,
     kind: u64,
 }
 
@@ -335,8 +333,6 @@ fn read_detailed_summary(
                     column_start: region[1],
                     line_end: region[2],
                     column_end: region[3],
-                    file_id: region[5],
-                    expanded_file_id: region[6],
                     kind: region[7],
                 })
                 .collect(),
@@ -358,9 +354,6 @@ fn read_detailed_summary(
     let mut source_cache: BTreeMap<String, Option<String>> = BTreeMap::new();
     let scope_filter = scope.map(scope_path_fragment);
     for variants in functions_by_key.values() {
-        if !variants.iter().any(|function| function.count > 0) {
-            continue;
-        }
         if let Some(scope_filter) = scope_filter.as_deref()
             && !variants.iter().any(|function| {
                 function
@@ -372,7 +365,9 @@ fn read_detailed_summary(
             continue;
         }
         functions_total = functions_total.saturating_add(1);
-        functions_covered = functions_covered.saturating_add(1);
+        if variants.iter().any(|function| function.count > 0) {
+            functions_covered = functions_covered.saturating_add(1);
+        }
         let mut group_regions: BTreeMap<RegionCoverageKey, bool> = BTreeMap::new();
         for function in variants {
             for region in &function.regions {
@@ -381,8 +376,6 @@ fn read_detailed_summary(
                     column_start: region[1],
                     line_end: region[2],
                     column_end: region[3],
-                    file_id: region[5],
-                    expanded_file_id: region[6],
                     kind: region[7],
                 };
                 let covered = region[4] > 0;
@@ -419,7 +412,7 @@ fn read_detailed_summary(
 
 fn scope_path_fragment(scope: &str) -> String {
     let crate_dir = scope.strip_prefix("radroots_").unwrap_or(scope);
-    format!("/crates/{crate_dir}/")
+    format!("/crates/{crate_dir}/src/")
 }
 
 fn percentage(covered: u64, total: u64) -> f64 {
@@ -1157,6 +1150,10 @@ fn coverage_ignore_filename_regex(
         let absolute_member = workspace_root.join(member_path);
         if package_name == crate_name {
             found_target = true;
+            patterns.push(format!(
+                "^{}/",
+                escape_regex_literal(&absolute_member.join("tests").display().to_string())
+            ));
             continue;
         }
         patterns.push(format!(
@@ -1432,29 +1429,17 @@ fn report_gate_with_root(args: &[String], root: &Path) -> Result<(), String> {
 fn normalize_summary_for_gate(
     scope: &str,
     summary_path: &Path,
-    lcov: &LcovCoverage,
+    _lcov: &LcovCoverage,
     summary: &mut CoverageSummary,
 ) -> Result<(), String> {
-    if (lcov.executable_percent - 100.0).abs() >= f64::EPSILON {
-        return Ok(());
-    }
-    let Some(branch_percent) = lcov.branch_percent else {
-        return Ok(());
-    };
-    if (branch_percent - 100.0).abs() >= f64::EPSILON {
-        return Ok(());
-    }
-
     let details_path = coverage_details_path(summary_path);
     if !details_path.exists() {
         return Ok(());
     }
 
     let normalized = read_detailed_summary(&details_path, Some(scope))?;
-    if (normalized.functions_percent - 100.0).abs() < f64::EPSILON {
-        summary.functions_percent = normalized.functions_percent;
-        summary.summary_regions_percent = normalized.regions_percent;
-    }
+    summary.functions_percent = normalized.functions_percent;
+    summary.summary_regions_percent = normalized.regions_percent;
     Ok(())
 }
 
@@ -1792,13 +1777,6 @@ mod tests {
             [10, 1, 12, 2, 0, 0, 0, 0],
             [13, 1, 13, 8, 0, 0, 0, 0]
           ]
-        },
-        {
-          "count": 0,
-          "filenames": ["/tmp/lib.rs"],
-          "regions": [
-            [20, 1, 20, 6, 0, 0, 0, 0]
-          ]
         }
       ]
     }
@@ -1981,8 +1959,8 @@ mod tests {
         );
         let summary =
             read_detailed_summary(&filtered, Some("radroots_a")).expect("filtered summary");
-        assert_eq!(summary.functions_percent, 100.0);
-        assert_eq!(summary.regions_percent, 100.0);
+        assert_eq!(summary.functions_percent, 0.0);
+        assert_eq!(summary.regions_percent, 0.0);
 
         fs::remove_dir_all(root).expect("remove detail edge root");
     }
@@ -2073,8 +2051,6 @@ mod tests {
             column_start: 19,
             line_end: 1,
             column_end: 20,
-            file_id: 0,
-            expanded_file_id: 0,
             kind: 0,
         };
         assert!(is_ignorable_synthetic_region(
@@ -2088,8 +2064,6 @@ mod tests {
             column_start: 8,
             line_end: 2,
             column_end: 15,
-            file_id: 0,
-            expanded_file_id: 0,
             kind: 0,
         };
         assert!(!is_ignorable_synthetic_region(
@@ -2103,8 +2077,6 @@ mod tests {
             column_start: 1,
             line_end: 2,
             column_end: 2,
-            file_id: 0,
-            expanded_file_id: 0,
             kind: 0,
         };
         assert!(!is_ignorable_synthetic_region(
@@ -2131,8 +2103,6 @@ mod tests {
             column_start: 9,
             line_end: 3,
             column_end: 14,
-            file_id: 0,
-            expanded_file_id: 0,
             kind: 0,
         };
         assert!(is_ignorable_synthetic_region(
@@ -2146,8 +2116,6 @@ mod tests {
             column_start: 18,
             line_end: 3,
             column_end: 24,
-            file_id: 0,
-            expanded_file_id: 0,
             kind: 0,
         };
         assert!(is_ignorable_synthetic_region(
@@ -2172,8 +2140,6 @@ mod tests {
             column_start: 1,
             line_end: 2,
             column_end: 1,
-            file_id: 0,
-            expanded_file_id: 0,
             kind: 0,
         };
         assert!(!is_ignorable_synthetic_region(
@@ -2194,8 +2160,6 @@ mod tests {
             column_start: 1,
             line_end: 99,
             column_end: 2,
-            file_id: 0,
-            expanded_file_id: 0,
             kind: 0,
         };
         assert!(!is_ignorable_synthetic_region(
@@ -2211,8 +2175,6 @@ mod tests {
             column_start: 9,
             line_end: 1,
             column_end: 14,
-            file_id: 0,
-            expanded_file_id: 0,
             kind: 0,
         };
         assert!(!is_ignorable_synthetic_region(
@@ -2226,8 +2188,6 @@ mod tests {
             column_start: 39,
             line_end: 3,
             column_end: 44,
-            file_id: 0,
-            expanded_file_id: 0,
             kind: 0,
         };
         assert!(!is_ignorable_synthetic_region(
@@ -3758,7 +3718,8 @@ test_threads = 0
             coverage_ignore_filename_regex(&root, "radroots_core").expect("build ignore regex");
         assert!(ignore_regex.contains(COVERAGE_EXTERNAL_IGNORE_FILENAME_REGEX));
         assert!(ignore_regex.contains("crates/identity"));
-        assert!(!ignore_regex.contains("crates/core/"));
+        assert!(ignore_regex.contains("crates/core/tests"));
+        assert!(!ignore_regex.contains("crates/core/src"));
     }
 
     #[test]
@@ -4213,7 +4174,7 @@ test_threads = 0
     }
 
     #[test]
-    fn report_gate_normalizes_duplicate_generic_records_after_perfect_lcov() {
+    fn report_gate_normalizes_duplicate_generic_records_from_details() {
         let root = temp_dir_path("report_gate_normalized_generics");
         let summary_path = root.join("summary.json");
         let lcov_path = root.join("coverage.info");
@@ -4253,20 +4214,16 @@ test_threads = 0
             [10, 1, 12, 2, 0, 0, 0, 0],
             [13, 1, 13, 8, 0, 0, 0, 0]
           ]
-        },
-        {
-          "count": 0,
-          "filenames": ["/tmp/crates/runtime_manager/src/lib.rs"],
-          "regions": [
-            [20, 1, 20, 6, 0, 0, 0, 0]
-          ]
         }
       ]
     }
   ]
 }"#,
         );
-        write_file(&lcov_path, "DA:1,1\nLF:1\nLH:1\nBRDA:1,0,0,1\n");
+        write_file(
+            &lcov_path,
+            "DA:1,1\nDA:2,0\nLF:2\nLH:1\nBRDA:1,0,0,1\nBRDA:2,0,0,0\n",
+        );
 
         let args = vec![
             "--scope".to_string(),
@@ -4278,13 +4235,13 @@ test_threads = 0
             "--out".to_string(),
             out_path.display().to_string(),
             "--fail-under-exec-lines".to_string(),
-            "100.0".to_string(),
+            "50.0".to_string(),
             "--fail-under-functions".to_string(),
             "100.0".to_string(),
             "--fail-under-regions".to_string(),
             "100.0".to_string(),
             "--fail-under-branches".to_string(),
-            "100.0".to_string(),
+            "50.0".to_string(),
         ];
         report_gate(&args).expect("normalized report gate success");
 

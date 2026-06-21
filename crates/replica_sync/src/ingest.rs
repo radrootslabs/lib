@@ -1507,6 +1507,10 @@ mod tests {
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
+    use radroots_core::{
+        RadrootsCoreCurrency, RadrootsCoreMoney, RadrootsCoreQuantity, RadrootsCoreQuantityPrice,
+        RadrootsCoreUnit,
+    };
     use radroots_events::farm::{
         RadrootsFarm, RadrootsFarmLocation, RadrootsFarmRef, RadrootsGcsLocation,
         RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon,
@@ -1514,6 +1518,7 @@ mod tests {
     use radroots_events::kinds::{KIND_LIST_SET_FOLLOW, KIND_LIST_SET_GENERIC};
     use radroots_events::list::RadrootsListEntry;
     use radroots_events::list_set::RadrootsListSet;
+    use radroots_events::listing::RadrootsListingProduct;
     use radroots_events::plot::{RadrootsPlot, RadrootsPlotLocation};
     use radroots_events::profile::{
         RADROOTS_PROFILE_TYPE_TAG_KEY, RadrootsProfile, RadrootsProfileType,
@@ -1890,6 +1895,113 @@ mod tests {
             content: format!("# {title}"),
             sig: "f".repeat(128),
         }
+    }
+
+    fn listing_decimal(raw: &str) -> RadrootsCoreDecimal {
+        raw.parse().expect("decimal")
+    }
+
+    fn listing_currency() -> RadrootsCoreCurrency {
+        "USD".parse().expect("currency")
+    }
+
+    fn listing_model() -> RadrootsListing {
+        RadrootsListing {
+            d_tag: "AAAAAAAAAAAAAAAAAAAAAA".parse().expect("d tag"),
+            published_at: Some(1),
+            farm: RadrootsFarmRef {
+                pubkey: "c".repeat(64),
+                d_tag: "AAAAAAAAAAAAAAAAAAAAAZ".to_string(),
+            },
+            product: RadrootsListingProduct {
+                key: "pasture-eggs".to_string(),
+                title: "Pasture Eggs".to_string(),
+                category: "eggs".to_string(),
+                summary: Some("Pasture-raised eggs".to_string()),
+                process: None,
+                lot: None,
+                location: None,
+                profile: None,
+                year: Some("2026".to_string()),
+            },
+            primary_bin_id: "bin-a".parse().expect("primary bin id"),
+            bins: vec![RadrootsListingBin {
+                bin_id: "bin-a".parse().expect("bin id"),
+                quantity: RadrootsCoreQuantity::new(listing_decimal("12"), RadrootsCoreUnit::Each)
+                    .with_label("unit label"),
+                price_per_canonical_unit: RadrootsCoreQuantityPrice::new(
+                    RadrootsCoreMoney::new(listing_decimal("6"), listing_currency()),
+                    RadrootsCoreQuantity::new(listing_decimal("1"), RadrootsCoreUnit::Each),
+                ),
+                display_amount: None,
+                display_unit: None,
+                display_label: None,
+                display_price: None,
+                display_price_unit: None,
+            }],
+            resource_area: None,
+            plot: None,
+            discounts: Some(Vec::new()),
+            inventory_available: Some(listing_decimal("5")),
+            availability: Some(RadrootsListingAvailability::Status {
+                status: RadrootsListingStatus::Active,
+            }),
+            delivery_method: None,
+            location: None,
+            images: None,
+        }
+    }
+
+    #[test]
+    fn listing_field_helpers_cover_optional_label_and_error_paths() {
+        let listing = listing_model();
+        let fields =
+            trade_product_fields_from_listing(&listing, "30402:pubkey:listing").expect("fields");
+        assert_eq!(fields.qty_label.as_deref(), Some("unit label"));
+        assert_eq!(fields.notes, None);
+
+        let mut missing_bin = listing.clone();
+        missing_bin.primary_bin_id = "bin-missing".parse().expect("missing bin id");
+        let err = match trade_product_fields_from_listing(&missing_bin, "30402:pubkey:listing") {
+            Ok(_) => panic!("missing primary bin should fail"),
+            Err(err) => err,
+        };
+        assert!(err.to_string().contains("primary bin missing"));
+
+        let mut fractional_inventory = listing;
+        fractional_inventory.inventory_available = Some(listing_decimal("1.5"));
+        let err = match trade_product_fields_from_listing(
+            &fractional_inventory,
+            "30402:pubkey:listing",
+        ) {
+            Ok(_) => panic!("fractional inventory should fail"),
+            Err(err) => err,
+        };
+        assert!(err.to_string().contains("whole number"));
+    }
+
+    #[test]
+    fn current_event_head_reports_invalid_stored_event_id() {
+        let row = NostrEventHead {
+            id: "head-1".to_string(),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            updated_at: "2026-01-01T00:00:00Z".to_string(),
+            key: "profile".to_string(),
+            kind: KIND_PROFILE,
+            pubkey: "a".repeat(64),
+            d_tag: String::new(),
+            last_event_id: "not-an-event-id".to_string(),
+            last_created_at: 1,
+            content_hash: "hash".to_string(),
+        };
+        let coordinate = RadrootsEventHeadCoordinate::Replaceable {
+            kind: KIND_PROFILE,
+            pubkey: "a".repeat(64).parse().expect("pubkey"),
+        };
+
+        let err = current_event_head_from_row(&row, &coordinate)
+            .expect_err("invalid stored event id should fail");
+        assert!(err.to_string().contains("last_event_id invalid"));
     }
 
     fn seed_rows(exec: &SqliteExecutor) -> (String, String, String, String) {
