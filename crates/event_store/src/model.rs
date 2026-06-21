@@ -340,3 +340,211 @@ pub fn tag_value_type_name(value: RadrootsTagValueType) -> &'static str {
         RadrootsTagValueType::Url => "url",
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use radroots_events::event_head::{
+        RadrootsCurrentEventHead, RadrootsEventHeadCoordinate, RadrootsEventHeadDecision,
+    };
+    use radroots_events::ids::{RadrootsDTag, RadrootsEventId, RadrootsPublicKey};
+
+    #[test]
+    fn contract_status_event_class_and_observation_values_roundtrip() {
+        assert_eq!(
+            RadrootsEventContractStatus::from_match_error(
+                RadrootsContractMatchError::UnsupportedKind(7)
+            ),
+            RadrootsEventContractStatus::UnsupportedKind(7)
+        );
+        assert_eq!(
+            RadrootsEventContractStatus::from_match_error(
+                RadrootsContractMatchError::UnsupportedShape(8)
+            ),
+            RadrootsEventContractStatus::UnsupportedShape(8)
+        );
+        assert_eq!(
+            RadrootsEventContractStatus::from_match_error(
+                RadrootsContractMatchError::AmbiguousShape(9)
+            ),
+            RadrootsEventContractStatus::AmbiguousShape(9)
+        );
+
+        for (status, expected) in [
+            (RadrootsEventContractStatus::Supported, "supported"),
+            (
+                RadrootsEventContractStatus::UnsupportedKind(1),
+                "unsupported_kind",
+            ),
+            (
+                RadrootsEventContractStatus::UnsupportedShape(2),
+                "unsupported_shape",
+            ),
+            (
+                RadrootsEventContractStatus::AmbiguousShape(3),
+                "ambiguous_shape",
+            ),
+        ] {
+            assert_eq!(status.as_str(), expected);
+            assert_eq!(
+                RadrootsEventContractStatus::parse(expected, 99).expect("status"),
+                match status {
+                    RadrootsEventContractStatus::Supported =>
+                        RadrootsEventContractStatus::Supported,
+                    RadrootsEventContractStatus::UnsupportedKind(_) => {
+                        RadrootsEventContractStatus::UnsupportedKind(99)
+                    }
+                    RadrootsEventContractStatus::UnsupportedShape(_) => {
+                        RadrootsEventContractStatus::UnsupportedShape(99)
+                    }
+                    RadrootsEventContractStatus::AmbiguousShape(_) => {
+                        RadrootsEventContractStatus::AmbiguousShape(99)
+                    }
+                }
+            );
+        }
+        assert!(RadrootsEventContractStatus::parse("bad", 1).is_err());
+
+        for class in [
+            StoredEventClass::Regular,
+            StoredEventClass::Replaceable,
+            StoredEventClass::Addressable,
+            StoredEventClass::Ephemeral,
+        ] {
+            assert_eq!(
+                StoredEventClass::parse(class.as_str()).expect("class"),
+                class
+            );
+        }
+        assert_eq!(
+            StoredEventClass::from_event_class(RadrootsEventClass::Regular),
+            StoredEventClass::Regular
+        );
+        assert_eq!(
+            StoredEventClass::from_event_class(RadrootsEventClass::Replaceable),
+            StoredEventClass::Replaceable
+        );
+        assert_eq!(
+            StoredEventClass::from_event_class(RadrootsEventClass::Addressable),
+            StoredEventClass::Addressable
+        );
+        assert_eq!(
+            StoredEventClass::from_event_class(RadrootsEventClass::Ephemeral),
+            StoredEventClass::Ephemeral
+        );
+        assert!(StoredEventClass::parse("bad").is_err());
+
+        for observation_type in [
+            RadrootsRelayObservationType::Fetch,
+            RadrootsRelayObservationType::Subscription,
+            RadrootsRelayObservationType::PublishAck,
+            RadrootsRelayObservationType::Import,
+        ] {
+            assert!(!observation_type.as_str().is_empty());
+        }
+        let observation = RadrootsRelayObservation::new(
+            "wss://relay.example.test",
+            RadrootsRelayObservationType::Fetch,
+            1,
+        )
+        .with_message("seen");
+        assert_eq!(observation.message.as_deref(), Some("seen"));
+    }
+
+    #[test]
+    fn head_decisions_and_tag_metadata_names_cover_all_variants() {
+        let coordinate = RadrootsEventHeadCoordinate::Addressable {
+            kind: 30_023,
+            pubkey: RadrootsPublicKey::parse(
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            )
+            .expect("pubkey"),
+            d_tag: RadrootsDTag::parse("AAAAAAAAAAAAAAAAAAAAAA").expect("d tag"),
+        };
+        let current = RadrootsCurrentEventHead {
+            coordinate,
+            event_id: RadrootsEventId::parse(
+                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            )
+            .expect("event id"),
+            created_at: 10,
+        };
+
+        assert_eq!(
+            RadrootsEventHeadStoreDecision::from_protocol(&RadrootsEventHeadDecision::Applied(
+                current
+            )),
+            RadrootsEventHeadStoreDecision::Applied
+        );
+        assert_eq!(
+            RadrootsEventHeadStoreDecision::from_protocol(
+                &RadrootsEventHeadDecision::SkippedDuplicate
+            ),
+            RadrootsEventHeadStoreDecision::SkippedDuplicate
+        );
+        assert_eq!(
+            RadrootsEventHeadStoreDecision::from_protocol(&RadrootsEventHeadDecision::SkippedOlder),
+            RadrootsEventHeadStoreDecision::SkippedOlder
+        );
+        assert_eq!(
+            RadrootsEventHeadStoreDecision::from_protocol(
+                &RadrootsEventHeadDecision::SkippedSameTimestampHigherEventId
+            ),
+            RadrootsEventHeadStoreDecision::SkippedSameTimestampHigherEventId
+        );
+        assert_eq!(
+            RadrootsEventHeadStoreDecision::from_protocol(
+                &RadrootsEventHeadDecision::CoordinateMismatch
+            ),
+            RadrootsEventHeadStoreDecision::Malformed
+        );
+
+        for (semantic, expected) in [
+            (
+                RadrootsTagSemantic::AddressableCoordinate,
+                "addressable_coordinate",
+            ),
+            (RadrootsTagSemantic::Category, "category"),
+            (RadrootsTagSemantic::Counterparty, "counterparty"),
+            (RadrootsTagSemantic::EventPointer, "event_pointer"),
+            (RadrootsTagSemantic::GroupId, "group_id"),
+            (RadrootsTagSemantic::Identifier, "identifier"),
+            (RadrootsTagSemantic::Image, "image"),
+            (RadrootsTagSemantic::Kind, "kind"),
+            (RadrootsTagSemantic::ListingAddress, "listing_address"),
+            (RadrootsTagSemantic::ListingSnapshot, "listing_snapshot"),
+            (RadrootsTagSemantic::Location, "location"),
+            (RadrootsTagSemantic::PreviousEvent, "previous_event"),
+            (RadrootsTagSemantic::Price, "price"),
+            (RadrootsTagSemantic::PublishedAt, "published_at"),
+            (RadrootsTagSemantic::Relay, "relay"),
+            (RadrootsTagSemantic::RootEvent, "root_event"),
+            (RadrootsTagSemantic::ServiceInput, "service_input"),
+            (RadrootsTagSemantic::ServiceOutput, "service_output"),
+            (RadrootsTagSemantic::Status, "status"),
+            (RadrootsTagSemantic::Summary, "summary"),
+            (RadrootsTagSemantic::Title, "title"),
+            (RadrootsTagSemantic::Url, "url"),
+        ] {
+            assert_eq!(tag_semantic_name(semantic), expected);
+        }
+
+        for (value_type, expected) in [
+            (
+                RadrootsTagValueType::AddressableCoordinate,
+                "addressable_coordinate",
+            ),
+            (RadrootsTagValueType::DTag, "d_tag"),
+            (RadrootsTagValueType::EventId, "event_id"),
+            (RadrootsTagValueType::EventPointer, "event_pointer"),
+            (RadrootsTagValueType::Kind, "kind"),
+            (RadrootsTagValueType::PublicKey, "public_key"),
+            (RadrootsTagValueType::RelayUrl, "relay_url"),
+            (RadrootsTagValueType::Text, "text"),
+            (RadrootsTagValueType::UnixTimestamp, "unix_timestamp"),
+            (RadrootsTagValueType::Url, "url"),
+        ] {
+            assert_eq!(tag_value_type_name(value_type), expected);
+        }
+    }
+}
