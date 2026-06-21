@@ -9,12 +9,16 @@ use radroots_events::tags::{TAG_D, TAG_PUBLISHED_AT};
 use radroots_events::{
     farm::RadrootsFarmRef,
     ids::{RadrootsDTag, RadrootsInventoryBinId},
-    kinds::{KIND_LISTING, KIND_LISTING_DRAFT, KIND_POST},
+    kinds::{
+        KIND_FARM, KIND_LISTING, KIND_LISTING_DRAFT, KIND_PLOT, KIND_POST, KIND_RESOURCE_AREA,
+    },
     listing::{
         RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
         RadrootsListingDeliveryMethod, RadrootsListingImage, RadrootsListingImageSize,
         RadrootsListingLocation, RadrootsListingProduct, RadrootsListingStatus,
     },
+    plot::RadrootsPlotRef,
+    resource_area::RadrootsResourceAreaRef,
 };
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
 use radroots_events_codec::listing::decode::listing_from_event;
@@ -32,6 +36,36 @@ fn listing_d_tag(raw: &str) -> RadrootsDTag {
 
 fn bin_id(raw: &str) -> RadrootsInventoryBinId {
     raw.parse().unwrap()
+}
+
+fn sample_listing_tags() -> Vec<Vec<String>> {
+    listing_build_tags(&sample_listing("AAAAAAAAAAAAAAAAAAAAAg")).unwrap()
+}
+
+fn remove_tags(tags: &mut Vec<Vec<String>>, name: &str) {
+    tags.retain(|tag| tag.first().map(|value| value.as_str()) != Some(name));
+}
+
+fn replace_first_tag(tags: &mut [Vec<String>], name: &str, replacement: Vec<&str>) {
+    let tag = tags
+        .iter_mut()
+        .find(|tag| tag.first().map(|value| value.as_str()) == Some(name))
+        .expect("tag");
+    *tag = replacement.into_iter().map(str::to_string).collect();
+}
+
+fn assert_missing_tag(tags: Vec<Vec<String>>, expected: &'static str) {
+    match listing_from_event(KIND_LISTING, &tags, "# Widget") {
+        Err(EventParseError::MissingTag(tag)) => assert_eq!(tag, expected),
+        other => panic!("expected missing tag {expected}: {other:?}"),
+    }
+}
+
+fn assert_invalid_tag(tags: Vec<Vec<String>>, expected: &'static str) {
+    match listing_from_event(KIND_LISTING, &tags, "# Widget") {
+        Err(EventParseError::InvalidTag(tag)) => assert_eq!(tag, expected),
+        other => panic!("expected invalid tag {expected}: {other:?}"),
+    }
 }
 
 fn sample_listing(d_tag: &str) -> RadrootsListing {
@@ -225,6 +259,383 @@ fn listing_from_event_rejects_wrong_kind() {
             got: KIND_POST
         }
     ));
+}
+
+#[test]
+fn listing_from_event_covers_reference_tag_error_paths() {
+    let mut tags = sample_listing_tags();
+    remove_tags(&mut tags, TAG_D);
+    assert_missing_tag(tags, TAG_D);
+
+    let mut tags = sample_listing_tags();
+    replace_first_tag(&mut tags, TAG_D, vec![TAG_D]);
+    assert_invalid_tag(tags, TAG_D);
+
+    let mut tags = sample_listing_tags();
+    replace_first_tag(&mut tags, TAG_D, vec![TAG_D, " "]);
+    assert_invalid_tag(tags, TAG_D);
+
+    let mut tags = sample_listing_tags();
+    remove_tags(&mut tags, "a");
+    assert_missing_tag(tags, "a");
+
+    let mut tags = sample_listing_tags();
+    replace_first_tag(&mut tags, "a", vec!["a"]);
+    assert_invalid_tag(tags, "a");
+
+    let mut tags = sample_listing_tags();
+    replace_first_tag(&mut tags, "a", vec!["a", "bad:farm_pubkey:farm"]);
+    assert_invalid_tag(tags, "a");
+
+    let mut tags = sample_listing_tags();
+    replace_first_tag(&mut tags, "a", vec!["a", "30340"]);
+    assert_invalid_tag(tags, "a");
+
+    let mut tags = sample_listing_tags();
+    replace_first_tag(&mut tags, "a", vec!["a", "30340::farm"]);
+    assert_invalid_tag(tags, "a");
+
+    let mut tags = sample_listing_tags();
+    replace_first_tag(&mut tags, "a", vec!["a", "30340:farm_pubkey:bad d"]);
+    assert_invalid_tag(tags, "a");
+
+    let mut tags = sample_listing_tags();
+    replace_first_tag(&mut tags, "a", vec!["a", "30023:other:article"]);
+    assert_missing_tag(tags, "a");
+
+    let mut tags = sample_listing_tags();
+    remove_tags(&mut tags, "p");
+    assert_missing_tag(tags, "p");
+
+    let mut tags = sample_listing_tags();
+    replace_first_tag(&mut tags, "p", vec!["p"]);
+    assert_invalid_tag(tags, "p");
+
+    let mut tags = sample_listing_tags();
+    replace_first_tag(&mut tags, "p", vec!["p", " "]);
+    assert_invalid_tag(tags, "p");
+
+    let mut tags = sample_listing_tags();
+    replace_first_tag(&mut tags, "p", vec!["p", "other_pubkey"]);
+    assert_invalid_tag(tags, "p");
+}
+
+#[test]
+fn listing_from_event_covers_resource_and_plot_reference_paths() {
+    let mut listing = sample_listing("AAAAAAAAAAAAAAAAAAAAAw");
+    listing.resource_area = Some(RadrootsResourceAreaRef {
+        pubkey: "resource_pubkey".to_string(),
+        d_tag: "AAAAAAAAAAAAAAAAAAAABQ".to_string(),
+    });
+    listing.plot = Some(RadrootsPlotRef {
+        pubkey: "plot_pubkey".to_string(),
+        d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
+    });
+    let tags = listing_build_tags(&listing).unwrap();
+    let decoded = listing_from_event(KIND_LISTING, &tags, "# Widget").unwrap();
+    assert_eq!(
+        decoded
+            .resource_area
+            .as_ref()
+            .map(|area| area.d_tag.as_str()),
+        Some("AAAAAAAAAAAAAAAAAAAABQ")
+    );
+    assert_eq!(
+        decoded.plot.as_ref().map(|plot| plot.d_tag.as_str()),
+        Some("AAAAAAAAAAAAAAAAAAAAAw")
+    );
+
+    let mut tags = sample_listing_tags();
+    tags.push(vec!["radroots:resource_area".to_string()]);
+    assert_invalid_tag(tags, "radroots:resource_area");
+
+    let mut tags = sample_listing_tags();
+    tags.push(vec![
+        "radroots:resource_area".to_string(),
+        format!("{KIND_FARM}:resource_pubkey:resource-area-1"),
+    ]);
+    assert_invalid_tag(tags, "radroots:resource_area");
+
+    let mut tags = sample_listing_tags();
+    tags.push(vec![
+        "radroots:resource_area".to_string(),
+        format!("{KIND_RESOURCE_AREA}::resource-area-1"),
+    ]);
+    assert_invalid_tag(tags, "radroots:resource_area");
+
+    let mut tags = sample_listing_tags();
+    tags.push(vec![
+        "radroots:resource_area".to_string(),
+        format!("{KIND_RESOURCE_AREA}:resource_pubkey:bad d"),
+    ]);
+    assert_invalid_tag(tags, "radroots:resource_area");
+
+    let mut tags = sample_listing_tags();
+    tags.push(vec!["radroots:plot".to_string()]);
+    assert_invalid_tag(tags, "radroots:plot");
+
+    let mut tags = sample_listing_tags();
+    tags.push(vec![
+        "radroots:plot".to_string(),
+        format!("{KIND_RESOURCE_AREA}:plot_pubkey:plot-1"),
+    ]);
+    assert_invalid_tag(tags, "radroots:plot");
+
+    let mut tags = sample_listing_tags();
+    tags.push(vec![
+        "radroots:plot".to_string(),
+        format!("{KIND_PLOT}:plot_pubkey:bad d"),
+    ]);
+    assert_invalid_tag(tags, "radroots:plot");
+}
+
+#[test]
+fn listing_from_event_covers_bin_and_price_error_paths() {
+    let mut tags = sample_listing_tags();
+    remove_tags(&mut tags, "radroots:primary_bin");
+    assert_missing_tag(tags, "radroots:primary_bin");
+
+    let mut tags = sample_listing_tags();
+    tags.push(vec![
+        "radroots:primary_bin".to_string(),
+        "bin-2".to_string(),
+    ]);
+    assert_invalid_tag(tags, "radroots:primary_bin");
+
+    let mut tags = sample_listing_tags();
+    replace_first_tag(
+        &mut tags,
+        "radroots:primary_bin",
+        vec!["radroots:primary_bin", "bin-2"],
+    );
+    assert_invalid_tag(tags, "radroots:primary_bin");
+
+    let mut tags = sample_listing_tags();
+    remove_tags(&mut tags, "radroots:bin");
+    assert_missing_tag(tags, "radroots:bin");
+
+    let mut tags = sample_listing_tags();
+    remove_tags(&mut tags, "radroots:price");
+    assert_missing_tag(tags, "radroots:price");
+
+    let mut tags = sample_listing_tags();
+    replace_first_tag(&mut tags, "radroots:bin", vec!["radroots:bin"]);
+    assert_invalid_tag(tags, "radroots:bin");
+
+    let mut tags = sample_listing_tags();
+    replace_first_tag(
+        &mut tags,
+        "radroots:bin",
+        vec!["radroots:bin", "bin-1", "1", "kg"],
+    );
+    assert_invalid_tag(tags, "radroots:bin");
+
+    let mut tags = sample_listing_tags();
+    replace_first_tag(
+        &mut tags,
+        "radroots:bin",
+        vec!["radroots:bin", "bin-1", "1", "each", "1"],
+    );
+    assert_invalid_tag(tags, "radroots:bin");
+
+    let mut tags = sample_listing_tags();
+    tags.push(vec![
+        "radroots:bin".to_string(),
+        "bin-1".to_string(),
+        "1".to_string(),
+        "each".to_string(),
+    ]);
+    assert_invalid_tag(tags, "radroots:bin");
+
+    let mut tags = sample_listing_tags();
+    replace_first_tag(&mut tags, "radroots:price", vec!["radroots:price"]);
+    assert_invalid_tag(tags, "radroots:price");
+
+    let mut tags = sample_listing_tags();
+    replace_first_tag(
+        &mut tags,
+        "radroots:price",
+        vec!["radroots:price", "bin-1", "10", "USD", "1", "kg"],
+    );
+    assert_invalid_tag(tags, "radroots:price");
+
+    let mut tags = sample_listing_tags();
+    replace_first_tag(
+        &mut tags,
+        "radroots:price",
+        vec!["radroots:price", "bin-1", "10", "USD", "1", "each", "10"],
+    );
+    assert_invalid_tag(tags, "radroots:price");
+
+    let mut tags = sample_listing_tags();
+    tags.push(vec![
+        "radroots:price".to_string(),
+        "bin-1".to_string(),
+        "10".to_string(),
+        "USD".to_string(),
+        "1".to_string(),
+        "each".to_string(),
+    ]);
+    assert_invalid_tag(tags, "radroots:price");
+
+    let mut tags = sample_listing_tags();
+    replace_first_tag(
+        &mut tags,
+        "radroots:price",
+        vec!["radroots:price", "bin-1", "10", "USD", "1", "g"],
+    );
+    assert_invalid_tag(tags, "radroots:price");
+}
+
+#[test]
+fn listing_from_event_covers_trade_location_delivery_and_image_paths() {
+    let mut tags = sample_listing_tags();
+    tags.push(vec!["location".to_string(), "Farm shelf".to_string()]);
+    let decoded = listing_from_event(KIND_LISTING, &tags, "# Widget").unwrap();
+    assert_eq!(
+        decoded
+            .location
+            .as_ref()
+            .map(|location| location.primary.as_str()),
+        Some("Farm shelf")
+    );
+
+    let mut tags = sample_listing_tags();
+    tags.push(vec!["location".to_string(), "Farm shelf".to_string()]);
+    tags.push(vec![
+        "location".to_string(),
+        "Peru".to_string(),
+        "Moyobamba".to_string(),
+        "San Martin".to_string(),
+        "PE".to_string(),
+    ]);
+    tags.push(vec!["g".to_string(), "6gkzwgjzn".to_string()]);
+    let decoded = listing_from_event(KIND_LISTING, &tags, "# Widget").unwrap();
+    assert_eq!(decoded.product.location.as_deref(), Some("Farm shelf"));
+    assert_eq!(
+        decoded.location.as_ref().map(|location| {
+            (
+                location.primary.as_str(),
+                location.city.as_deref(),
+                location.geohash.as_deref(),
+            )
+        }),
+        Some(("Peru", Some("Moyobamba"), Some("6gkzwgjzn")))
+    );
+
+    let mut tags = sample_listing_tags();
+    tags.push(vec![
+        "location".to_string(),
+        " ".to_string(),
+        "Moyobamba".to_string(),
+    ]);
+    assert_invalid_tag(tags, "location");
+
+    let mut tags = sample_listing_tags();
+    tags.push(vec!["inventory".to_string()]);
+    assert_invalid_tag(tags, "inventory");
+
+    let mut tags = sample_listing_tags();
+    tags.push(vec!["inventory".to_string(), "bad".to_string()]);
+    assert_invalid_tag(tags, "inventory");
+
+    let mut tags = sample_listing_tags();
+    tags.push(vec!["inventory".to_string(), "12.5".to_string()]);
+    tags.push(vec![
+        "radroots:availability_start".to_string(),
+        "1730".to_string(),
+    ]);
+    tags.push(vec!["expires_at".to_string(), "1740".to_string()]);
+    tags.push(vec!["delivery".to_string(), "pickup".to_string()]);
+    tags.push(vec!["image".to_string(), " ".to_string()]);
+    tags.push(vec![
+        "image".to_string(),
+        "https://example.test/a.jpg".to_string(),
+    ]);
+    tags.push(vec![
+        "image".to_string(),
+        "https://example.test/b.jpg".to_string(),
+        "bad-size".to_string(),
+    ]);
+    let decoded = listing_from_event(KIND_LISTING, &tags, "# Widget").unwrap();
+    let Some(RadrootsListingAvailability::Window { start, end }) = decoded.availability else {
+        panic!("expected availability window");
+    };
+    assert_eq!(start, Some(1730));
+    assert_eq!(end, Some(1740));
+    assert!(matches!(
+        decoded.delivery_method,
+        Some(RadrootsListingDeliveryMethod::Pickup)
+    ));
+    assert_eq!(decoded.images.as_ref().map(Vec::len), Some(2));
+    assert!(decoded.images.as_ref().unwrap()[1].size.is_none());
+
+    let mut tags = sample_listing_tags();
+    tags.push(vec!["delivery".to_string(), "local_delivery".to_string()]);
+    let decoded = listing_from_event(KIND_LISTING, &tags, "# Widget").unwrap();
+    assert!(matches!(
+        decoded.delivery_method,
+        Some(RadrootsListingDeliveryMethod::LocalDelivery)
+    ));
+
+    let mut tags = sample_listing_tags();
+    tags.push(vec!["delivery".to_string(), "shipping".to_string()]);
+    let decoded = listing_from_event(KIND_LISTING, &tags, "# Widget").unwrap();
+    assert!(matches!(
+        decoded.delivery_method,
+        Some(RadrootsListingDeliveryMethod::Shipping)
+    ));
+
+    let mut tags = sample_listing_tags();
+    tags.push(vec![
+        "delivery".to_string(),
+        "other".to_string(),
+        "bike courier".to_string(),
+    ]);
+    let decoded = listing_from_event(KIND_LISTING, &tags, "# Widget").unwrap();
+    let Some(RadrootsListingDeliveryMethod::Other { method }) = decoded.delivery_method else {
+        panic!("expected other delivery method");
+    };
+    assert_eq!(method, "bike courier");
+
+    let mut tags = sample_listing_tags();
+    tags.push(vec!["delivery".to_string(), "drone".to_string()]);
+    let decoded = listing_from_event(KIND_LISTING, &tags, "# Widget").unwrap();
+    let Some(RadrootsListingDeliveryMethod::Other { method }) = decoded.delivery_method else {
+        panic!("expected fallback delivery method");
+    };
+    assert_eq!(method, "drone");
+
+    let mut tags = sample_listing_tags();
+    tags.push(vec!["status".to_string(), "active".to_string()]);
+    let decoded = listing_from_event(KIND_LISTING, &tags, "# Widget").unwrap();
+    assert!(matches!(
+        decoded.availability,
+        Some(RadrootsListingAvailability::Status {
+            status: RadrootsListingStatus::Active
+        })
+    ));
+
+    let mut tags = sample_listing_tags();
+    tags.push(vec!["status".to_string(), "sold".to_string()]);
+    let decoded = listing_from_event(KIND_LISTING, &tags, "# Widget").unwrap();
+    assert!(matches!(
+        decoded.availability,
+        Some(RadrootsListingAvailability::Status {
+            status: RadrootsListingStatus::Sold
+        })
+    ));
+
+    let mut tags = sample_listing_tags();
+    tags.push(vec!["status".to_string(), "paused".to_string()]);
+    let decoded = listing_from_event(KIND_LISTING, &tags, "# Widget").unwrap();
+    let Some(RadrootsListingAvailability::Status {
+        status: RadrootsListingStatus::Other { value },
+    }) = decoded.availability
+    else {
+        panic!("expected other availability status");
+    };
+    assert_eq!(value, "paused");
 }
 
 #[test]
