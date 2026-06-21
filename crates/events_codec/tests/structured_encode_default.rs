@@ -12,6 +12,9 @@ use radroots_events::farm::{
     RadrootsGeoJsonPolygon,
 };
 use radroots_events::ids::{RadrootsDTag, RadrootsInventoryBinId};
+use radroots_events::kinds::{
+    KIND_COOP, KIND_DOCUMENT, KIND_FARM, KIND_PLOT, KIND_RESOURCE_AREA, KIND_RESOURCE_HARVEST_CAP,
+};
 use radroots_events::list_set::RadrootsListSet;
 use radroots_events::listing::{RadrootsListing, RadrootsListingBin, RadrootsListingProduct};
 use radroots_events::plot::{RadrootsPlot, RadrootsPlotLocation, RadrootsPlotRef};
@@ -19,28 +22,44 @@ use radroots_events::resource_area::{
     RadrootsResourceArea, RadrootsResourceAreaLocation, RadrootsResourceAreaRef,
 };
 use radroots_events::resource_cap::{RadrootsResourceHarvestCap, RadrootsResourceHarvestProduct};
-use radroots_events_codec::coop::encode::{coop_build_tags, coop_ref_tags};
+use radroots_events_codec::coop::encode::{
+    coop_build_tags, coop_ref_tags, to_wire_parts as coop_to_wire_parts,
+    to_wire_parts_with_kind as coop_to_wire_parts_with_kind,
+};
 use radroots_events_codec::coop::list_sets::{
     coop_admins_list_set, coop_items_list_set, coop_members_farms_list_set, coop_members_list_set,
     coop_owners_list_set, member_of_coops_list_set,
 };
-use radroots_events_codec::document::encode::document_build_tags;
+use radroots_events_codec::document::encode::{
+    document_build_tags, to_wire_parts as document_to_wire_parts,
+    to_wire_parts_with_kind as document_to_wire_parts_with_kind,
+};
 use radroots_events_codec::error::EventEncodeError;
-use radroots_events_codec::farm::encode::{farm_build_tags, farm_ref_tags};
+use radroots_events_codec::farm::encode::{
+    farm_build_tags, farm_ref_tags, to_wire_parts as farm_to_wire_parts,
+    to_wire_parts_with_kind as farm_to_wire_parts_with_kind,
+};
 use radroots_events_codec::farm::list_sets::{
     farm_listings_list_set, farm_listings_list_set_from_listings, farm_members_list_set,
     farm_owners_list_set, farm_plots_list_set, farm_plots_list_set_from_plots,
     farm_workers_list_set, member_of_farms_list_set,
 };
-use radroots_events_codec::plot::encode::{plot_address, plot_build_tags};
+use radroots_events_codec::plot::encode::{
+    plot_address, plot_build_tags, to_wire_parts as plot_to_wire_parts,
+    to_wire_parts_with_kind as plot_to_wire_parts_with_kind,
+};
 use radroots_events_codec::resource_area::encode::{
-    resource_area_build_tags, resource_area_ref_tags,
+    resource_area_build_tags, resource_area_ref_tags, to_wire_parts as resource_area_to_wire_parts,
+    to_wire_parts_with_kind as resource_area_to_wire_parts_with_kind,
 };
 use radroots_events_codec::resource_area::list_sets::{
     resource_area_members_farms_list_set, resource_area_members_plots_list_set,
     resource_area_stewards_list_set,
 };
-use radroots_events_codec::resource_cap::encode::resource_harvest_cap_build_tags;
+use radroots_events_codec::resource_cap::encode::{
+    resource_harvest_cap_build_tags, to_wire_parts as resource_cap_to_wire_parts,
+    to_wire_parts_with_kind as resource_cap_to_wire_parts_with_kind,
+};
 use test_fixtures::FIXTURE_ALICE_PUBLIC_KEY_HEX;
 
 const TEST_PUBKEY_HEX: &str = FIXTURE_ALICE_PUBLIC_KEY_HEX;
@@ -133,6 +152,220 @@ fn sample_listing(d_tag: &str) -> RadrootsListing {
         location: None,
         images: None,
     }
+}
+
+fn sample_farm() -> RadrootsFarm {
+    RadrootsFarm {
+        d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
+        name: "Farm".to_string(),
+        about: None,
+        website: None,
+        picture: None,
+        banner: None,
+        location: Some(RadrootsFarmLocation {
+            primary: Some("farm".to_string()),
+            city: None,
+            region: None,
+            country: None,
+            gcs: Some(sample_gcs()),
+        }),
+        tags: Some(vec!["organic".to_string(), " ".to_string()]),
+    }
+}
+
+fn sample_coop() -> RadrootsCoop {
+    RadrootsCoop {
+        d_tag: "AAAAAAAAAAAAAAAAAAAAAQ".to_string(),
+        name: "Coop".to_string(),
+        about: None,
+        website: None,
+        picture: None,
+        banner: None,
+        location: Some(RadrootsCoopLocation {
+            primary: Some("coop".to_string()),
+            city: None,
+            region: None,
+            country: None,
+            gcs: sample_gcs(),
+        }),
+        tags: Some(vec!["co-op".to_string(), " ".to_string()]),
+    }
+}
+
+fn sample_document() -> RadrootsDocument {
+    RadrootsDocument {
+        d_tag: "AAAAAAAAAAAAAAAAAAAAAg".to_string(),
+        doc_type: "charter".to_string(),
+        title: "Charter".to_string(),
+        version: "1.0.0".to_string(),
+        summary: None,
+        effective_at: None,
+        body_markdown: None,
+        subject: RadrootsDocumentSubject {
+            pubkey: TEST_PUBKEY_HEX.to_string(),
+            address: Some(format!("30340:{TEST_PUBKEY_HEX}:AAAAAAAAAAAAAAAAAAAAAA")),
+        },
+        tags: Some(vec!["policy".to_string(), " ".to_string()]),
+    }
+}
+
+fn sample_plot() -> RadrootsPlot {
+    RadrootsPlot {
+        d_tag: "AAAAAAAAAAAAAAAAAAAABQ".to_string(),
+        farm: RadrootsFarmRef {
+            pubkey: TEST_PUBKEY_HEX.to_string(),
+            d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
+        },
+        name: "Plot".to_string(),
+        about: None,
+        location: Some(RadrootsPlotLocation {
+            primary: Some("plot".to_string()),
+            city: None,
+            region: None,
+            country: None,
+            gcs: sample_gcs(),
+        }),
+        tags: Some(vec!["shade-grown".to_string(), " ".to_string()]),
+    }
+}
+
+fn sample_resource_area() -> RadrootsResourceArea {
+    RadrootsResourceArea {
+        d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
+        name: "Area".to_string(),
+        about: None,
+        location: RadrootsResourceAreaLocation {
+            primary: None,
+            city: None,
+            region: None,
+            country: None,
+            gcs: sample_gcs(),
+        },
+        tags: Some(vec!["orchard".to_string(), " ".to_string()]),
+    }
+}
+
+fn sample_resource_cap() -> RadrootsResourceHarvestCap {
+    RadrootsResourceHarvestCap {
+        d_tag: "AAAAAAAAAAAAAAAAAAAABA".to_string(),
+        resource_area: RadrootsResourceAreaRef {
+            pubkey: TEST_PUBKEY_HEX.to_string(),
+            d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
+        },
+        product: RadrootsResourceHarvestProduct {
+            key: "nutmeg".to_string(),
+            category: Some("spice".to_string()),
+        },
+        start: 1,
+        end: 2,
+        cap_quantity: RadrootsCoreQuantity::new(
+            RadrootsCoreDecimal::from(1000u32),
+            RadrootsCoreUnit::MassG,
+        ),
+        display_amount: None,
+        display_unit: None,
+        display_label: None,
+        tags: Some(vec!["seasonal".to_string(), " ".to_string()]),
+    }
+}
+
+#[test]
+fn structured_wire_parts_cover_default_kind_and_error_paths() {
+    let farm = sample_farm();
+    let wire = farm_to_wire_parts(&farm).unwrap();
+    assert_eq!(wire.kind, KIND_FARM);
+    assert!(wire.tags.iter().any(|tag| tag[0] == "d"));
+    assert!(wire.content.contains("\"Farm\""));
+    assert!(matches!(
+        farm_to_wire_parts_with_kind(&farm, KIND_COOP).unwrap_err(),
+        EventEncodeError::InvalidKind(KIND_COOP)
+    ));
+    let mut invalid_farm = farm.clone();
+    invalid_farm.d_tag = " ".to_string();
+    assert!(matches!(
+        farm_to_wire_parts(&invalid_farm).unwrap_err(),
+        EventEncodeError::EmptyRequiredField("d_tag")
+    ));
+
+    let coop = sample_coop();
+    let wire = coop_to_wire_parts(&coop).unwrap();
+    assert_eq!(wire.kind, KIND_COOP);
+    assert!(wire.tags.iter().any(|tag| tag[0] == "g"));
+    assert!(wire.content.contains("\"Coop\""));
+    assert!(matches!(
+        coop_to_wire_parts_with_kind(&coop, KIND_FARM).unwrap_err(),
+        EventEncodeError::InvalidKind(KIND_FARM)
+    ));
+    let mut invalid_coop = coop.clone();
+    invalid_coop.name = " ".to_string();
+    assert!(matches!(
+        coop_to_wire_parts(&invalid_coop).unwrap_err(),
+        EventEncodeError::EmptyRequiredField("name")
+    ));
+
+    let document = sample_document();
+    let wire = document_to_wire_parts(&document).unwrap();
+    assert_eq!(wire.kind, KIND_DOCUMENT);
+    assert!(wire.tags.iter().any(|tag| tag[0] == "a"));
+    assert!(wire.content.contains("\"Charter\""));
+    assert!(matches!(
+        document_to_wire_parts_with_kind(&document, KIND_FARM).unwrap_err(),
+        EventEncodeError::InvalidKind(KIND_FARM)
+    ));
+    let mut invalid_document = document.clone();
+    invalid_document.subject.pubkey = " ".to_string();
+    assert!(matches!(
+        document_to_wire_parts(&invalid_document).unwrap_err(),
+        EventEncodeError::EmptyRequiredField("subject.pubkey")
+    ));
+
+    let plot = sample_plot();
+    let wire = plot_to_wire_parts(&plot).unwrap();
+    assert_eq!(wire.kind, KIND_PLOT);
+    assert!(wire.tags.iter().any(|tag| tag[0] == "p"));
+    assert!(wire.content.contains("\"Plot\""));
+    assert!(matches!(
+        plot_to_wire_parts_with_kind(&plot, KIND_FARM).unwrap_err(),
+        EventEncodeError::InvalidKind(KIND_FARM)
+    ));
+    let mut invalid_plot = plot.clone();
+    invalid_plot.farm.pubkey = " ".to_string();
+    assert!(matches!(
+        plot_to_wire_parts(&invalid_plot).unwrap_err(),
+        EventEncodeError::EmptyRequiredField("farm.pubkey")
+    ));
+
+    let area = sample_resource_area();
+    let wire = resource_area_to_wire_parts(&area).unwrap();
+    assert_eq!(wire.kind, KIND_RESOURCE_AREA);
+    assert!(wire.tags.iter().any(|tag| tag[0] == "g"));
+    assert!(wire.content.contains("\"Area\""));
+    assert!(matches!(
+        resource_area_to_wire_parts_with_kind(&area, KIND_FARM).unwrap_err(),
+        EventEncodeError::InvalidKind(KIND_FARM)
+    ));
+    let mut invalid_area = area.clone();
+    invalid_area.location.gcs.geohash = " ".to_string();
+    assert!(matches!(
+        resource_area_to_wire_parts(&invalid_area).unwrap_err(),
+        EventEncodeError::EmptyRequiredField("location.gcs.geohash")
+    ));
+
+    let cap = sample_resource_cap();
+    let wire = resource_cap_to_wire_parts(&cap).unwrap();
+    assert_eq!(wire.kind, KIND_RESOURCE_HARVEST_CAP);
+    assert!(wire.tags.iter().any(|tag| tag[0] == "category"));
+    assert!(wire.content.contains("\"nutmeg\""));
+    assert!(matches!(
+        resource_cap_to_wire_parts_with_kind(&cap, KIND_FARM).unwrap_err(),
+        EventEncodeError::InvalidKind(KIND_FARM)
+    ));
+    let mut invalid_cap = cap.clone();
+    invalid_cap.resource_area.d_tag = " ".to_string();
+    assert!(matches!(
+        resource_cap_to_wire_parts(&invalid_cap).unwrap_err(),
+        EventEncodeError::EmptyRequiredField("resource_area.d_tag")
+    ));
 }
 
 #[test]
