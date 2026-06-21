@@ -3,8 +3,8 @@ use radroots_events::{
     kinds::{KIND_ARTICLE, KIND_COMMENT, KIND_POST},
     post::RadrootsPost,
     social::{
-        RadrootsSocialFarmAnchor, RadrootsSocialLocation, RadrootsSocialMediaMetadata,
-        RadrootsSocialTarget,
+        RadrootsSocialFarmAnchor, RadrootsSocialLocation, RadrootsSocialMediaDimensions,
+        RadrootsSocialMediaMetadata, RadrootsSocialMediaThumbnail, RadrootsSocialTarget,
     },
     tags::{TAG_A, TAG_G, TAG_IMETA, TAG_LOCATION, TAG_Q, TAG_T},
 };
@@ -19,6 +19,18 @@ use radroots_events_codec::post::encode::{
 const QUOTE_ID: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 const FARM_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAA";
 const ARTICLE_D_TAG: &str = "BBBBBBBBBBBBBBBBBBBBBA";
+
+fn content_post() -> RadrootsPost {
+    RadrootsPost {
+        content: "field update".to_string(),
+        farm: None,
+        address_refs: None,
+        location: None,
+        topics: None,
+        quote_refs: None,
+        media: None,
+    }
+}
 
 #[test]
 fn post_to_wire_parts_requires_content() {
@@ -191,26 +203,100 @@ fn post_to_wire_parts_roundtrips_optional_social_tags() {
 
 #[test]
 fn post_social_tags_reject_malformed_supported_structures() {
-    let mut post = RadrootsPost {
-        content: "field update".to_string(),
-        farm: None,
-        address_refs: Some(vec![RadrootsSocialTarget::Event {
-            id: QUOTE_ID.to_string(),
-            author: None,
-            event_kind: None,
-            relays: None,
-        }]),
-        location: None,
-        topics: None,
-        quote_refs: None,
-        media: None,
-    };
+    let mut post = content_post();
+    post.address_refs = Some(vec![RadrootsSocialTarget::Event {
+        id: QUOTE_ID.to_string(),
+        author: None,
+        event_kind: None,
+        relays: None,
+    }]);
+    assert!(matches!(
+        post_build_tags(&post),
+        Err(EventEncodeError::InvalidField("address_refs"))
+    ));
+
+    post.address_refs = Some(vec![RadrootsSocialTarget::Address {
+        address: "not-an-address".to_string(),
+        author: None,
+        event_kind: None,
+        relays: None,
+    }]);
+    assert!(matches!(
+        post_build_tags(&post),
+        Err(EventEncodeError::InvalidField("address_refs"))
+    ));
+
+    post.address_refs = Some(vec![RadrootsSocialTarget::Address {
+        address: format!("30340:farm_pubkey:{FARM_D_TAG}"),
+        author: Some("farm_pubkey".to_string()),
+        event_kind: Some(30340),
+        relays: None,
+    }]);
+    assert!(matches!(
+        post_build_tags(&post),
+        Err(EventEncodeError::InvalidField("address_refs"))
+    ));
+
+    post.address_refs = Some(vec![RadrootsSocialTarget::Address {
+        address: format!("30023:article_author:{ARTICLE_D_TAG}"),
+        author: Some("other_author".to_string()),
+        event_kind: Some(30023),
+        relays: None,
+    }]);
+    assert!(matches!(
+        post_build_tags(&post),
+        Err(EventEncodeError::InvalidField("address_refs"))
+    ));
+
+    post.address_refs = Some(vec![RadrootsSocialTarget::Address {
+        address: format!("30023:article_author:{ARTICLE_D_TAG}"),
+        author: Some("article_author".to_string()),
+        event_kind: Some(30024),
+        relays: None,
+    }]);
     assert!(matches!(
         post_build_tags(&post),
         Err(EventEncodeError::InvalidField("address_refs"))
     ));
 
     post.address_refs = None;
+    post.farm = Some(RadrootsSocialFarmAnchor {
+        farm: RadrootsFarmRef {
+            pubkey: String::new(),
+            d_tag: FARM_D_TAG.to_string(),
+        },
+        relays: None,
+    });
+    assert!(matches!(
+        post_build_tags(&post),
+        Err(EventEncodeError::EmptyRequiredField("farm.pubkey"))
+    ));
+
+    post.farm = Some(RadrootsSocialFarmAnchor {
+        farm: RadrootsFarmRef {
+            pubkey: "farm_pubkey".to_string(),
+            d_tag: String::new(),
+        },
+        relays: None,
+    });
+    assert!(matches!(
+        post_build_tags(&post),
+        Err(EventEncodeError::EmptyRequiredField("farm.d_tag"))
+    ));
+
+    post.farm = Some(RadrootsSocialFarmAnchor {
+        farm: RadrootsFarmRef {
+            pubkey: "farm_pubkey".to_string(),
+            d_tag: "bad d".to_string(),
+        },
+        relays: None,
+    });
+    assert!(matches!(
+        post_build_tags(&post),
+        Err(EventEncodeError::InvalidField("farm"))
+    ));
+
+    post.farm = None;
     post.quote_refs = Some(vec![RadrootsSocialTarget::Event {
         id: "not-hex".to_string(),
         author: None,
@@ -222,6 +308,69 @@ fn post_social_tags_reject_malformed_supported_structures() {
         Err(EventEncodeError::InvalidField("quote_refs"))
     ));
 
+    post.quote_refs = Some(vec![RadrootsSocialTarget::Address {
+        address: "not-an-address".to_string(),
+        author: None,
+        event_kind: None,
+        relays: None,
+    }]);
+    assert!(matches!(
+        post_build_tags(&post),
+        Err(EventEncodeError::InvalidField("quote_refs"))
+    ));
+
+    post.quote_refs = Some(vec![RadrootsSocialTarget::Address {
+        address: format!("30023:quote_author:{ARTICLE_D_TAG}"),
+        author: None,
+        event_kind: Some(30024),
+        relays: None,
+    }]);
+    assert!(matches!(
+        post_build_tags(&post),
+        Err(EventEncodeError::InvalidField("quote_refs"))
+    ));
+
+    post.quote_refs = Some(vec![RadrootsSocialTarget::External {
+        id: "https://example.test/object".to_string(),
+        external_kind: "web".to_string(),
+        hint: None,
+    }]);
+    assert!(matches!(
+        post_build_tags(&post),
+        Err(EventEncodeError::InvalidField("quote_refs"))
+    ));
+
+    post.quote_refs = None;
+    post.media = Some(vec![RadrootsSocialMediaMetadata {
+        imeta: Some(vec![Vec::new()]),
+        ..RadrootsSocialMediaMetadata::default()
+    }]);
+    assert!(matches!(
+        post_build_tags(&post),
+        Err(EventEncodeError::InvalidField("imeta"))
+    ));
+
+    post.media = Some(vec![RadrootsSocialMediaMetadata {
+        imeta: Some(vec![vec![" ".to_string()]]),
+        ..RadrootsSocialMediaMetadata::default()
+    }]);
+    assert!(matches!(
+        post_build_tags(&post),
+        Err(EventEncodeError::InvalidField("imeta"))
+    ));
+
+    post.media = Some(vec![RadrootsSocialMediaMetadata {
+        thumbnails: Some(vec![RadrootsSocialMediaThumbnail {
+            url: " ".to_string(),
+            dimensions: None,
+        }]),
+        ..RadrootsSocialMediaMetadata::default()
+    }]);
+    assert!(matches!(
+        post_build_tags(&post),
+        Err(EventEncodeError::InvalidField("imeta"))
+    ));
+
     let err = post_from_event(
         KIND_POST,
         &[vec![TAG_IMETA.to_string(), "bad-imeta-entry".to_string()]],
@@ -229,6 +378,119 @@ fn post_social_tags_reject_malformed_supported_structures() {
     )
     .unwrap_err();
     assert!(matches!(err, EventParseError::InvalidTag(TAG_IMETA)));
+}
+
+#[test]
+fn post_media_structured_fields_encode_and_decode_imeta() {
+    let mut post = content_post();
+    post.topics = Some(vec![
+        "soil".to_string(),
+        " ".to_string(),
+        "market".to_string(),
+    ]);
+    post.media = Some(vec![
+        RadrootsSocialMediaMetadata::default(),
+        RadrootsSocialMediaMetadata {
+            url: Some("https://media.example.test/field.jpg".to_string()),
+            mime_type: Some("image/jpeg".to_string()),
+            sha256: Some(QUOTE_ID.to_string()),
+            original_sha256: Some(QUOTE_ID.to_string()),
+            size: Some(42),
+            dimensions: Some(RadrootsSocialMediaDimensions {
+                width: 1200,
+                height: 800,
+            }),
+            blurhash: Some("LEHV6nWB2yk8pyo0adR*.7kCMdnj".to_string()),
+            thumbnails: Some(vec![RadrootsSocialMediaThumbnail {
+                url: "https://media.example.test/thumb.jpg".to_string(),
+                dimensions: Some(RadrootsSocialMediaDimensions {
+                    width: 120,
+                    height: 80,
+                }),
+            }]),
+            image: Some("https://media.example.test/poster.jpg".to_string()),
+            summary: Some("Field row image".to_string()),
+            alt: Some("rows in field".to_string()),
+            fallback: Some("https://media.example.test/fallback.jpg".to_string()),
+            magnet: Some("magnet:?xt=urn:btih:fixture".to_string()),
+            content_hashes: Some(vec!["hash-a".to_string(), "hash-b".to_string()]),
+            services: Some(vec!["https://media.example.test".to_string()]),
+            imeta: None,
+        },
+    ]);
+
+    let parts = to_wire_parts(&post).unwrap();
+    let topic_tags = parts
+        .tags
+        .iter()
+        .filter(|tag| tag.first().map(|value| value.as_str()) == Some(TAG_T))
+        .count();
+    assert_eq!(topic_tags, 2);
+
+    let imeta = parts
+        .tags
+        .iter()
+        .find(|tag| tag.first().map(|value| value.as_str()) == Some(TAG_IMETA))
+        .expect("imeta tag");
+    for expected in [
+        "url https://media.example.test/field.jpg",
+        "m image/jpeg",
+        "size 42",
+        "dim 1200x800",
+        "blurhash LEHV6nWB2yk8pyo0adR*.7kCMdnj",
+        "thumb https://media.example.test/thumb.jpg",
+        "dim 120x80",
+        "image https://media.example.test/poster.jpg",
+        "summary Field row image",
+        "alt rows in field",
+        "fallback https://media.example.test/fallback.jpg",
+        "magnet magnet:?xt=urn:btih:fixture",
+        "i hash-a",
+        "i hash-b",
+        "service https://media.example.test",
+    ] {
+        assert!(imeta.iter().any(|value| value == expected), "{expected}");
+    }
+
+    let decoded = post_from_event(parts.kind, &parts.tags, &parts.content).unwrap();
+    let media = decoded.media.expect("media");
+    assert_eq!(media.len(), 1);
+    assert_eq!(media[0].original_sha256.as_deref(), Some(QUOTE_ID));
+    assert_eq!(media[0].size, Some(42));
+    assert_eq!(
+        media[0].blurhash.as_deref(),
+        Some("LEHV6nWB2yk8pyo0adR*.7kCMdnj")
+    );
+    assert_eq!(
+        media[0].image.as_deref(),
+        Some("https://media.example.test/poster.jpg")
+    );
+    assert_eq!(media[0].summary.as_deref(), Some("Field row image"));
+    assert_eq!(
+        media[0].fallback.as_deref(),
+        Some("https://media.example.test/fallback.jpg")
+    );
+    assert_eq!(
+        media[0].magnet.as_deref(),
+        Some("magnet:?xt=urn:btih:fixture")
+    );
+    assert_eq!(media[0].content_hashes.as_ref().map(Vec::len), Some(2));
+}
+
+#[test]
+fn post_decode_rejects_more_invalid_imeta_shapes() {
+    for entry in ["url ", "size not-a-number", "dim bad", "dim 0x10"] {
+        let err = post_from_event(
+            KIND_POST,
+            &[vec![TAG_IMETA.to_string(), entry.to_string()]],
+            "hello",
+        )
+        .unwrap_err();
+        assert!(matches!(
+            err,
+            EventParseError::InvalidTag(TAG_IMETA) | EventParseError::InvalidNumber(TAG_IMETA, _)
+        ));
+    }
 }
 
 #[test]
