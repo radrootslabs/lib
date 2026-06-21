@@ -5,8 +5,8 @@ use radroots_core::{
     RadrootsCoreDiscountThreshold, RadrootsCoreDiscountValue, RadrootsCoreMoney,
     RadrootsCoreQuantity, RadrootsCoreQuantityPrice, RadrootsCoreUnit,
 };
-use radroots_events::tags::{TAG_D, TAG_PUBLISHED_AT};
 use radroots_events::{
+    RadrootsNostrEvent,
     farm::RadrootsFarmRef,
     ids::{RadrootsDTag, RadrootsInventoryBinId},
     kinds::{
@@ -19,9 +19,13 @@ use radroots_events::{
     },
     plot::RadrootsPlotRef,
     resource_area::RadrootsResourceAreaRef,
+    tags::{TAG_D, TAG_PUBLISHED_AT},
 };
 use radroots_events_codec::error::{EventEncodeError, EventParseError};
-use radroots_events_codec::listing::decode::listing_from_event;
+use radroots_events_codec::listing::decode::{
+    data_from_event, data_from_nostr_event, listing_from_event, parsed_from_event,
+    parsed_from_nostr_event,
+};
 use radroots_events_codec::listing::encode::{
     listing_build_tags, to_wire_parts, to_wire_parts_with_kind,
 };
@@ -636,6 +640,91 @@ fn listing_from_event_covers_trade_location_delivery_and_image_paths() {
         panic!("expected other availability status");
     };
     assert_eq!(value, "paused");
+}
+
+#[test]
+fn listing_from_event_covers_remaining_edge_paths() {
+    let mut tags = sample_listing_tags();
+    tags.insert(0, Vec::new());
+    tags.push(vec!["location".to_string()]);
+    let decoded = listing_from_event(KIND_LISTING, &tags, "# Widget").unwrap();
+    assert_eq!(decoded.product.location, None);
+
+    let mut tags = sample_listing_tags();
+    tags.push(vec![
+        "radroots:plot".to_string(),
+        format!("{KIND_PLOT}::AAAAAAAAAAAAAAAAAAAAAw"),
+    ]);
+    assert_invalid_tag(tags, "radroots:plot");
+
+    let mut tags = sample_listing_tags();
+    tags.push(vec![
+        "radroots:primary_bin".to_string(),
+        "bin-2".to_string(),
+    ]);
+    assert_invalid_tag(tags, "radroots:primary_bin");
+
+    let mut tags = sample_listing_tags();
+    tags.push(vec!["radroots:availability_start".to_string()]);
+    assert_invalid_tag(tags, "radroots:availability_start");
+
+    let mut tags = sample_listing_tags();
+    tags.push(vec![
+        "radroots:availability_start".to_string(),
+        "bad".to_string(),
+    ]);
+    assert_invalid_tag(tags, "radroots:availability_start");
+}
+
+#[test]
+fn listing_parsed_wrappers_preserve_event_metadata() {
+    let listing = sample_listing("AAAAAAAAAAAAAAAAAAAAAQ");
+    let parts = to_wire_parts(&listing).unwrap();
+    let data = data_from_event(
+        "event-id".to_string(),
+        "author-pubkey".to_string(),
+        7,
+        parts.kind,
+        parts.content.clone(),
+        parts.tags.clone(),
+    )
+    .unwrap();
+    assert_eq!(data.id, "event-id");
+    assert_eq!(data.author, "author-pubkey");
+    assert_eq!(data.published_at, 7);
+    assert_eq!(data.kind, KIND_LISTING);
+    assert_eq!(data.data.d_tag, listing.d_tag);
+
+    let parsed = parsed_from_event(
+        "event-id".to_string(),
+        "author-pubkey".to_string(),
+        7,
+        parts.kind,
+        parts.content.clone(),
+        parts.tags.clone(),
+        "sig".to_string(),
+    )
+    .unwrap();
+    assert_eq!(parsed.event.id, "event-id");
+    assert_eq!(parsed.event.author, "author-pubkey");
+    assert_eq!(parsed.event.created_at, 7);
+    assert_eq!(parsed.event.sig, "sig");
+    assert_eq!(parsed.data.data.d_tag, listing.d_tag);
+
+    let event = RadrootsNostrEvent {
+        id: "event-id".to_string(),
+        author: "author-pubkey".to_string(),
+        created_at: 7,
+        kind: parts.kind,
+        tags: parts.tags,
+        content: parts.content,
+        sig: "sig".to_string(),
+    };
+    let data = data_from_nostr_event(&event).unwrap();
+    assert_eq!(data.data.d_tag, listing.d_tag);
+    let parsed = parsed_from_nostr_event(&event).unwrap();
+    assert_eq!(parsed.event.sig, "sig");
+    assert_eq!(parsed.data.data.d_tag, listing.d_tag);
 }
 
 #[test]
