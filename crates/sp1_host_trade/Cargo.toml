@@ -38,3 +38,8 @@ sp1-build = { workspace = true, optional = true }
 [dev-dependencies]
 radroots_events = { workspace = true, features = ["serde"] }
 tokio = { workspace = true, features = ["rt-multi-thread"] }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = [
+  'cfg(coverage_nightly)',
+] }

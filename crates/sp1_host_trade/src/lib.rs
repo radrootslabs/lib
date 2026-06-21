@@ -1,3 +1,4 @@
+#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 #![forbid(unsafe_code)]
 
 use base64::Engine;
@@ -1739,13 +1740,13 @@ struct ProofEnvelopeDigestMaterial<'a> {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::{
         RadrootsSp1TradeHostError, RadrootsSp1TradeProofMode, generate_order_acceptance_proof,
         validation_receipt_for_order_acceptance_proof,
         verify_order_acceptance_proof_artifact_structure,
     };
-    #[cfg(all(feature = "sp1_proving", radroots_sp1_guest_elf))]
     use base64::Engine;
     use radroots_events::{RadrootsNostrEvent, kinds::KIND_TRADE_VALIDATION_RECEIPT};
     use radroots_sp1_guest_trade::{
@@ -1763,7 +1764,8 @@ mod tests {
     use radroots_trade::validation_receipt::{
         RadrootsValidationReceiptExpectedBinding, RadrootsValidationReceiptProof,
         RadrootsValidationReceiptProofSystem, RadrootsValidationReceiptResult,
-        validation_receipt_event_build, verify_validation_receipt_event,
+        RadrootsValidationReceiptType, validation_receipt_event_build,
+        verify_validation_receipt_event,
     };
     #[cfg(feature = "sp1_verify")]
     use serde::Deserialize;
@@ -1902,6 +1904,552 @@ mod tests {
                     bin_count,
                 }],
             },
+        }
+    }
+
+    fn inline_sp1_artifact_fixture() -> (
+        super::RadrootsSp1TradeProofBundle,
+        super::RadrootsSp1TradeProofEnvelope,
+    ) {
+        let bundle = generate_order_acceptance_proof(&witness(), RadrootsSp1TradeProofMode::None)
+            .expect("proof bundle");
+        let execution = &bundle.execution;
+        let proof_bytes = b"deterministic proof bytes";
+        let verifying_key_bytes = b"deterministic verifying key bytes";
+        let public_values_hash = execution.public_values_hash.clone();
+        let canonical_public_values = execution.canonical_public_values.clone();
+        let result = execution.public_values.result;
+        let program_hash = execution
+            .public_values
+            .sp1_program_hash
+            .clone()
+            .expect("program hash");
+        let verifying_key_hash = execution
+            .public_values
+            .sp1_verifying_key_hash
+            .clone()
+            .expect("verifying key hash");
+        let listing_event_id = execution
+            .public_values
+            .listing_event_id
+            .clone()
+            .expect("listing event id");
+        let root_event_id = execution
+            .public_values
+            .root_event_id
+            .clone()
+            .expect("root event id");
+        let target_event_id = execution
+            .public_values
+            .target_event_id
+            .clone()
+            .expect("target event id");
+        let event_set_root = execution.public_values.event_set_root.clone();
+        let previous_state_root = execution.public_values.previous_state_root.clone();
+        let new_state_root = execution.public_values.new_state_root.clone();
+        let changed_records_root = execution.public_values.changed_records_root.clone();
+        let error_bitmap = execution.public_values.error_bitmap.clone();
+        let mut envelope = super::RadrootsSp1TradeProofEnvelope {
+            schema_version: super::RADROOTS_SP1_TRADE_PROOF_ARTIFACT_SCHEMA_VERSION,
+            sp1_version_line: super::RADROOTS_SP1_TRADE_SP1_VERSION_LINE.to_string(),
+            proof_system: RadrootsValidationReceiptProofSystem::Sp1Core
+                .as_str()
+                .to_string(),
+            proof_mode: "core".to_string(),
+            proof_codec: super::RADROOTS_SP1_TRADE_PROOF_CODEC.to_string(),
+            proof_content_hash: super::hash_bytes("radroots:sp1-proof-content:v1", proof_bytes),
+            proof_digest: String::new(),
+            public_values_hash: public_values_hash.clone(),
+            canonical_public_values_hash: super::hash_bytes(
+                "radroots:sp1-canonical-public-values:v1",
+                &canonical_public_values,
+            ),
+            sp1_program_hash: program_hash.clone(),
+            sp1_verifying_key_hash: verifying_key_hash.clone(),
+            sp1_verifying_key_codec: super::RADROOTS_SP1_TRADE_VERIFYING_KEY_CODEC.to_string(),
+            sp1_verifying_key_base64: base64::engine::general_purpose::STANDARD
+                .encode(verifying_key_bytes),
+            receipt_type: RadrootsValidationReceiptType::TradeTransition
+                .as_str()
+                .to_string(),
+            receipt_result: super::validation_receipt_result_label(
+                super::validation_receipt_result_from_public_values(result),
+            )
+            .to_string(),
+            listing_event_id,
+            root_event_id,
+            target_event_id,
+            event_set_root,
+            previous_state_root,
+            new_state_root,
+            changed_records_root,
+            error_bitmap,
+            proof_content_base64: base64::engine::general_purpose::STANDARD.encode(proof_bytes),
+        };
+        envelope.proof_digest = super::proof_digest_for_envelope(&envelope).expect("digest");
+        let envelope_json = serde_json::to_vec(&envelope).expect("envelope json");
+        let envelope_base64 = base64::engine::general_purpose::STANDARD.encode(envelope_json);
+        let mut bundle = bundle;
+        bundle.proof = super::RadrootsSp1TradeProofArtifact {
+            inline_proof_base64: Some(envelope_base64),
+            mode: Some("core".to_string()),
+            program_hash: Some(program_hash),
+            proof_digest: envelope.proof_digest.clone(),
+            proof_reference: None,
+            public_values_hash,
+            system: RadrootsValidationReceiptProofSystem::Sp1Core,
+            verifying_key_hash: Some(verifying_key_hash),
+        };
+        (bundle, envelope)
+    }
+
+    fn refresh_proof_envelope_digest(envelope: &mut super::RadrootsSp1TradeProofEnvelope) {
+        envelope.proof_digest = super::proof_digest_for_envelope(envelope).expect("digest");
+    }
+
+    fn assert_missing_none_proof_material(
+        execution: &RadrootsSp1TradePublicValuesExecution,
+        mut artifact: super::RadrootsSp1TradeProofArtifact,
+    ) {
+        artifact.proof_digest =
+            super::proof_digest_for_execution(execution, &artifact).expect("digest");
+        assert_eq!(
+            verify_order_acceptance_proof_artifact_structure(execution, &artifact)
+                .expect_err("none material"),
+            RadrootsSp1TradeHostError::MissingProofMaterial
+        );
+    }
+
+    #[test]
+    fn enum_labels_and_display_surfaces_are_complete() {
+        let modes = [
+            (
+                RadrootsSp1TradeProofMode::None,
+                None,
+                RadrootsValidationReceiptProofSystem::None,
+            ),
+            (
+                RadrootsSp1TradeProofMode::Core,
+                Some("core"),
+                RadrootsValidationReceiptProofSystem::Sp1Core,
+            ),
+            (
+                RadrootsSp1TradeProofMode::Compressed,
+                Some("compressed"),
+                RadrootsValidationReceiptProofSystem::Sp1Compressed,
+            ),
+            (
+                RadrootsSp1TradeProofMode::Groth16,
+                Some("groth16"),
+                RadrootsValidationReceiptProofSystem::Sp1Groth16,
+            ),
+            (
+                RadrootsSp1TradeProofMode::Plonk,
+                Some("plonk"),
+                RadrootsValidationReceiptProofSystem::Sp1Plonk,
+            ),
+        ];
+        for (mode, label, system) in modes {
+            assert_eq!(mode.proof_system(), system);
+            assert_eq!(mode.mode_label(), label);
+            if let Some(label) = label {
+                assert_eq!(RadrootsSp1TradeProofMode::from_label(label), Some(mode));
+            }
+        }
+        assert_eq!(RadrootsSp1TradeProofMode::from_label("legacy"), None);
+
+        for backend in [
+            super::RadrootsSp1TradeProverBackend::Disabled,
+            super::RadrootsSp1TradeProverBackend::DeterministicNone,
+            super::RadrootsSp1TradeProverBackend::LocalExecute,
+            super::RadrootsSp1TradeProverBackend::LocalCpuProve,
+            super::RadrootsSp1TradeProverBackend::LocalCudaProve,
+            super::RadrootsSp1TradeProverBackend::RemoteHttpProve,
+        ] {
+            assert_eq!(
+                super::RadrootsSp1TradeProverBackend::from_label(backend.as_str()),
+                Some(backend)
+            );
+            assert_eq!(backend.to_string(), backend.as_str());
+        }
+        assert_eq!(
+            super::RadrootsSp1TradeProverBackend::from_label("legacy"),
+            None
+        );
+
+        for engine in [
+            super::RadrootsSp1TradeProofEngine::Cpu,
+            super::RadrootsSp1TradeProofEngine::Cuda,
+        ] {
+            assert_eq!(
+                super::RadrootsSp1TradeProofEngine::from_label(engine.as_str()),
+                Some(engine)
+            );
+            assert_eq!(engine.to_string(), engine.as_str());
+        }
+        assert_eq!(super::RadrootsSp1TradeProofEngine::from_label("tpu"), None);
+        assert_eq!(
+            super::RadrootsSp1TradeWorkerResultStatus::Succeeded.to_string(),
+            "succeeded"
+        );
+        assert_eq!(
+            super::RadrootsSp1TradeWorkerRole::NonAuthoritativeProver.to_string(),
+            "non_authoritative_prover"
+        );
+        let artifact = generate_order_acceptance_proof(&witness(), RadrootsSp1TradeProofMode::None)
+            .expect("proof bundle")
+            .proof;
+        assert_eq!(
+            super::RadrootsSp1TradeResolvedProofArtifact::inline(artifact.clone()).artifact,
+            artifact
+        );
+        assert_eq!(
+            RadrootsSp1TradeHostError::from(
+                radroots_sp1_guest_trade::RadrootsSp1TradeGuestError::UnsupportedProofTarget
+            ),
+            RadrootsSp1TradeHostError::Guest
+        );
+    }
+
+    #[test]
+    fn inline_proof_envelope_helpers_validate_digest_and_references() {
+        let (bundle, envelope) = inline_sp1_artifact_fixture();
+        verify_order_acceptance_proof_artifact_structure(&bundle.execution, &bundle.proof)
+            .expect("inline artifact structure");
+        let envelope_base64 = bundle
+            .proof
+            .inline_proof_base64
+            .as_deref()
+            .expect("inline envelope");
+        let decoded = super::decode_proof_envelope_base64(envelope_base64).expect("decode");
+        assert_eq!(decoded, envelope);
+        assert_eq!(
+            super::proof_content_bytes_from_envelope(&decoded).expect("content"),
+            b"deterministic proof bytes"
+        );
+        let reference =
+            super::proof_reference_for_proof_envelope_base64(envelope_base64).expect("reference");
+        assert_eq!(
+            super::proof_reference_digest(reference.as_str())
+                .expect("digest")
+                .len(),
+            64
+        );
+        assert!(matches!(
+            super::proof_reference_for_proof_envelope_base64("not-base64"),
+            Err(RadrootsSp1TradeHostError::Sp1ProofMaterialDecode(_))
+        ));
+        assert!(matches!(
+            super::decode_proof_envelope_base64(
+                base64::engine::general_purpose::STANDARD
+                    .encode(b"not json")
+                    .as_str()
+            ),
+            Err(RadrootsSp1TradeHostError::Sp1ProofMaterialDecode(_))
+        ));
+        assert_eq!(
+            super::proof_reference_digest("legacy-reference").expect_err("prefix"),
+            RadrootsSp1TradeHostError::InvalidSp1ProofReference
+        );
+    }
+
+    #[test]
+    fn proof_envelope_metadata_mismatches_are_reported_by_field_family() {
+        let (bundle, envelope) = inline_sp1_artifact_fixture();
+        let execution = &bundle.execution;
+        let artifact = &bundle.proof;
+
+        let mut bad = envelope.clone();
+        bad.schema_version += 1;
+        assert!(matches!(
+            super::verify_proof_envelope(execution, artifact, &bad),
+            Err(RadrootsSp1TradeHostError::Sp1ProofMaterialDecode(_))
+        ));
+
+        let metadata_cases: [fn(&mut super::RadrootsSp1TradeProofEnvelope); 9] = [
+            |envelope: &mut super::RadrootsSp1TradeProofEnvelope| {
+                envelope.sp1_version_line = "legacy".to_string();
+            },
+            |envelope: &mut super::RadrootsSp1TradeProofEnvelope| {
+                envelope.proof_codec = "legacy".to_string();
+            },
+            |envelope: &mut super::RadrootsSp1TradeProofEnvelope| {
+                envelope.proof_system = "legacy".to_string();
+            },
+            |envelope: &mut super::RadrootsSp1TradeProofEnvelope| {
+                envelope.proof_mode = "compressed".to_string();
+            },
+            |envelope: &mut super::RadrootsSp1TradeProofEnvelope| {
+                envelope.public_values_hash =
+                    "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+                        .to_string();
+            },
+            |envelope: &mut super::RadrootsSp1TradeProofEnvelope| {
+                envelope.sp1_program_hash =
+                    "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+                        .to_string();
+            },
+            |envelope: &mut super::RadrootsSp1TradeProofEnvelope| {
+                envelope.sp1_verifying_key_hash =
+                    "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+                        .to_string();
+            },
+            |envelope: &mut super::RadrootsSp1TradeProofEnvelope| {
+                envelope.sp1_verifying_key_codec = "legacy".to_string();
+            },
+            |envelope: &mut super::RadrootsSp1TradeProofEnvelope| {
+                envelope.sp1_verifying_key_base64.clear();
+            },
+        ];
+        for apply in metadata_cases {
+            let mut bad = envelope.clone();
+            apply(&mut bad);
+            assert!(matches!(
+                super::verify_proof_envelope(execution, artifact, &bad),
+                Err(RadrootsSp1TradeHostError::Sp1ProofMaterialDecode(_))
+            ));
+        }
+
+        let mut bad = envelope.clone();
+        bad.proof_digest =
+            "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string();
+        assert_eq!(
+            super::verify_proof_envelope(execution, artifact, &bad).expect_err("digest"),
+            RadrootsSp1TradeHostError::ProofDigestMismatch
+        );
+
+        let mut bad = envelope.clone();
+        bad.proof_content_hash =
+            "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string();
+        refresh_proof_envelope_digest(&mut bad);
+        assert!(matches!(
+            super::verify_proof_envelope(execution, artifact, &bad),
+            Err(RadrootsSp1TradeHostError::Sp1ProofMaterialDecode(_))
+        ));
+
+        let mut bad = envelope.clone();
+        bad.proof_content_base64 = "not-base64".to_string();
+        refresh_proof_envelope_digest(&mut bad);
+        assert!(matches!(
+            super::verify_proof_envelope(execution, artifact, &bad),
+            Err(RadrootsSp1TradeHostError::Sp1ProofMaterialDecode(_))
+        ));
+
+        let mut bad = envelope.clone();
+        bad.canonical_public_values_hash =
+            "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string();
+        refresh_proof_envelope_digest(&mut bad);
+        assert_eq!(
+            super::verify_proof_envelope(execution, artifact, &bad).expect_err("public values"),
+            RadrootsSp1TradeHostError::PublicValuesHashMismatch
+        );
+
+        let envelope_cases: [(&str, fn(&mut super::RadrootsSp1TradeProofEnvelope)); 10] = [
+            (
+                "receipt_type",
+                |envelope: &mut super::RadrootsSp1TradeProofEnvelope| {
+                    envelope.receipt_type = "legacy".to_string();
+                },
+            ),
+            (
+                "result",
+                |envelope: &mut super::RadrootsSp1TradeProofEnvelope| {
+                    envelope.receipt_result = "invalid".to_string();
+                },
+            ),
+            (
+                "listing_event_id",
+                |envelope: &mut super::RadrootsSp1TradeProofEnvelope| {
+                    envelope.listing_event_id =
+                        "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+                            .to_string();
+                },
+            ),
+            (
+                "root_event_id",
+                |envelope: &mut super::RadrootsSp1TradeProofEnvelope| {
+                    envelope.root_event_id =
+                        "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+                            .to_string();
+                },
+            ),
+            (
+                "target_event_id",
+                |envelope: &mut super::RadrootsSp1TradeProofEnvelope| {
+                    envelope.target_event_id =
+                        "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+                            .to_string();
+                },
+            ),
+            (
+                "state_roots",
+                |envelope: &mut super::RadrootsSp1TradeProofEnvelope| {
+                    envelope.event_set_root =
+                        "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                            .to_string();
+                },
+            ),
+            (
+                "state_roots",
+                |envelope: &mut super::RadrootsSp1TradeProofEnvelope| {
+                    envelope.previous_state_root =
+                        "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                            .to_string();
+                },
+            ),
+            (
+                "state_roots",
+                |envelope: &mut super::RadrootsSp1TradeProofEnvelope| {
+                    envelope.new_state_root =
+                        "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                            .to_string();
+                },
+            ),
+            (
+                "state_roots",
+                |envelope: &mut super::RadrootsSp1TradeProofEnvelope| {
+                    envelope.changed_records_root =
+                        "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                            .to_string();
+                },
+            ),
+            (
+                "state_roots",
+                |envelope: &mut super::RadrootsSp1TradeProofEnvelope| {
+                    envelope.error_bitmap =
+                        "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                            .to_string();
+                },
+            ),
+        ];
+        for (field, apply) in envelope_cases {
+            let mut bad = envelope.clone();
+            apply(&mut bad);
+            refresh_proof_envelope_digest(&mut bad);
+            assert_eq!(
+                super::verify_proof_envelope(execution, artifact, &bad)
+                    .expect_err("binding mismatch"),
+                RadrootsSp1TradeHostError::ValidationReceiptBindingMismatch(field)
+            );
+        }
+    }
+
+    #[test]
+    fn proof_artifact_structure_rejects_material_edge_cases() {
+        let (bundle, _) = inline_sp1_artifact_fixture();
+        let execution = &bundle.execution;
+        let inline_proof_base64 = bundle
+            .proof
+            .inline_proof_base64
+            .clone()
+            .expect("inline envelope");
+
+        let base_none_artifact =
+            generate_order_acceptance_proof(&witness(), RadrootsSp1TradeProofMode::None)
+                .expect("proof bundle")
+                .proof;
+
+        let mut artifact = base_none_artifact.clone();
+        artifact.proof_digest =
+            "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string();
+        assert_eq!(
+            verify_order_acceptance_proof_artifact_structure(execution, &artifact)
+                .expect_err("proof digest"),
+            RadrootsSp1TradeHostError::ProofDigestMismatch
+        );
+
+        let mut artifact = base_none_artifact.clone();
+        artifact.inline_proof_base64 = Some(inline_proof_base64);
+        assert_missing_none_proof_material(execution, artifact);
+
+        let mut artifact = base_none_artifact.clone();
+        artifact.mode = Some("core".to_string());
+        assert_missing_none_proof_material(execution, artifact);
+
+        let mut artifact = base_none_artifact.clone();
+        artifact.program_hash =
+            Some("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string());
+        assert_missing_none_proof_material(execution, artifact);
+
+        let mut artifact = base_none_artifact.clone();
+        artifact.proof_reference = Some(format!("radroots-proof://sha256/{}", "1".repeat(64)));
+        assert_missing_none_proof_material(execution, artifact);
+
+        let mut artifact = base_none_artifact;
+        artifact.verifying_key_hash =
+            Some("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string());
+        assert_missing_none_proof_material(execution, artifact);
+
+        let mut artifact = bundle.proof.clone();
+        artifact.inline_proof_base64 = None;
+        artifact.proof_reference = None;
+        artifact.proof_digest =
+            super::proof_digest_for_execution(execution, &artifact).expect("digest");
+        assert_eq!(
+            verify_order_acceptance_proof_artifact_structure(execution, &artifact)
+                .expect_err("missing sp1 material"),
+            RadrootsSp1TradeHostError::MissingProofMaterial
+        );
+
+        let mut artifact = bundle.proof.clone();
+        artifact.proof_reference = Some(format!("radroots-proof://sha256/{}", "1".repeat(64)));
+        artifact.proof_digest =
+            super::proof_digest_for_execution(execution, &artifact).expect("digest");
+        assert_eq!(
+            verify_order_acceptance_proof_artifact_structure(execution, &artifact)
+                .expect_err("conflict"),
+            RadrootsSp1TradeHostError::ProofMaterialConflict
+        );
+
+        let mut artifact = bundle.proof.clone();
+        artifact.verifying_key_hash =
+            Some("0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd".to_string());
+        artifact.proof_digest =
+            super::proof_digest_for_execution(execution, &artifact).expect("digest");
+        assert_eq!(
+            verify_order_acceptance_proof_artifact_structure(execution, &artifact)
+                .expect_err("verifying key mismatch"),
+            RadrootsSp1TradeHostError::Sp1VerifyingKeyHashMismatch
+        );
+
+        let invalid_reference = format!("radroots-proof://sha256/{}", "A".repeat(64));
+        assert_eq!(
+            super::proof_reference_digest(invalid_reference.as_str())
+                .expect_err("uppercase digest"),
+            RadrootsSp1TradeHostError::InvalidSp1ProofReference
+        );
+        let err = super::referenced_order_acceptance_proof_artifact_for_execution(
+            execution,
+            RadrootsSp1TradeProofMode::None,
+            format!("radroots-proof://sha256/{}", "1".repeat(64)),
+        )
+        .expect_err("none reference");
+        assert_eq!(err, RadrootsSp1TradeHostError::Sp1ProofModeRequired);
+    }
+
+    #[test]
+    fn validation_receipt_requires_event_bindings() {
+        let bundle = generate_order_acceptance_proof(&witness(), RadrootsSp1TradeProofMode::None)
+            .expect("proof bundle");
+        let cases: [(&str, fn(&mut RadrootsSp1TradePublicValuesExecution)); 3] = [
+            ("listing_event_id", |execution| {
+                execution.public_values.listing_event_id = None;
+            }),
+            ("root_event_id", |execution| {
+                execution.public_values.root_event_id = None;
+            }),
+            ("target_event_id", |execution| {
+                execution.public_values.target_event_id = None;
+            }),
+        ];
+        for (field, clear) in cases {
+            let mut bundle = bundle.clone();
+            clear(&mut bundle.execution);
+            assert_eq!(
+                validation_receipt_for_order_acceptance_proof(&bundle)
+                    .expect_err("missing binding"),
+                RadrootsSp1TradeHostError::MissingReceiptBinding(field)
+            );
         }
     }
 
