@@ -234,6 +234,25 @@ fn farm_decode_handles_success_fill_and_error_paths() {
         invalid_json,
         EventParseError::InvalidJson("content")
     ));
+
+    let private_field_content = serde_json::json!({
+        "d_tag": d_tag,
+        "name": "Farm",
+        "workspace": {"pubkey": TEST_PUBKEY_HEX}
+    })
+    .to_string();
+    let private_field =
+        farm_from_event(KIND_FARM, &tags, &private_field_content).expect_err("private field");
+    assert!(matches!(
+        private_field,
+        EventParseError::InvalidJson("content")
+    ));
+
+    let non_object = farm_from_event(KIND_FARM, &tags, "[]").expect_err("non object");
+    assert!(matches!(
+        non_object,
+        EventParseError::InvalidJson("content")
+    ));
 }
 
 #[test]
@@ -763,6 +782,25 @@ fn resource_area_decode_handles_success_fill_and_errors() {
             got: KIND_FARM
         }
     ));
+
+    let blank_content =
+        resource_area_from_event(KIND_RESOURCE_AREA, &tags, " ").expect_err("blank content");
+    assert!(matches!(
+        blank_content,
+        EventParseError::InvalidJson("content")
+    ));
+
+    let missing_d =
+        resource_area_from_event(KIND_RESOURCE_AREA, &[], &content).expect_err("missing d");
+    assert!(matches!(missing_d, EventParseError::MissingTag("d")));
+
+    let invalid_d = resource_area_from_event(
+        KIND_RESOURCE_AREA,
+        &[vec![TAG_D.to_string(), " ".to_string()]],
+        &content,
+    )
+    .expect_err("invalid d");
+    assert!(matches!(invalid_d, EventParseError::InvalidTag("d")));
 }
 
 #[test]
@@ -816,6 +854,35 @@ fn resource_cap_decode_handles_success_fill_and_errors() {
         resource_harvest_cap_from_event(KIND_RESOURCE_HARVEST_CAP, &tags, &mismatch_content)
             .expect_err("cap mismatch");
     assert!(matches!(mismatch, EventParseError::InvalidTag("d")));
+
+    let wrong_kind =
+        resource_harvest_cap_from_event(KIND_FARM, &tags, &content).expect_err("wrong kind");
+    assert!(matches!(
+        wrong_kind,
+        EventParseError::InvalidKind {
+            expected: "30371",
+            got: KIND_FARM
+        }
+    ));
+
+    let blank_content = resource_harvest_cap_from_event(KIND_RESOURCE_HARVEST_CAP, &tags, " ")
+        .expect_err("blank content");
+    assert!(matches!(
+        blank_content,
+        EventParseError::InvalidJson("content")
+    ));
+
+    let missing_d = resource_harvest_cap_from_event(KIND_RESOURCE_HARVEST_CAP, &[], &content)
+        .expect_err("missing d");
+    assert!(matches!(missing_d, EventParseError::MissingTag("d")));
+
+    let invalid_d = resource_harvest_cap_from_event(
+        KIND_RESOURCE_HARVEST_CAP,
+        &[vec![TAG_D.to_string(), " ".to_string()]],
+        &content,
+    )
+    .expect_err("invalid d");
+    assert!(matches!(invalid_d, EventParseError::InvalidTag("d")));
 }
 
 #[test]
