@@ -25,6 +25,11 @@ require_branches = false
 temporary = true
 reason = "branch coverage is not applicable while the crate has no measured branch records"
 
+[overrides.radroots_sql_wasm_bridge]
+require_branches = false
+temporary = true
+reason = "branch coverage is not applicable while the crate has no measured branch records"
+
 [required]
 crates = [
   "radroots_authority",
