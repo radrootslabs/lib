@@ -136,6 +136,14 @@ fn has_tag(tags: &[Vec<String>], key: &str, value: &str) -> bool {
     })
 }
 
+fn replace_tag_value(tags: &mut [Vec<String>], key: &str, value: &str) {
+    let tag = tags
+        .iter_mut()
+        .find(|tag| tag.first().map(|entry| entry.as_str()) == Some(key))
+        .expect("tag");
+    tag[1] = value.to_string();
+}
+
 #[test]
 fn calendar_date_event_to_wire_parts_roundtrips_tags() {
     let event = sample_date_event();
@@ -385,6 +393,266 @@ fn calendar_collection_and_rsvp_reject_missing_or_invalid_required_tags() {
     assert!(matches!(
         rsvp_from_event(KIND_CALENDAR_EVENT_RSVP, &tags, ""),
         Err(EventParseError::InvalidTag(TAG_FREE_BUSY))
+    ));
+}
+
+#[test]
+fn calendar_date_codecs_cover_optional_and_error_edges() {
+    let date_tags = calendar_date_event_build_tags(&sample_date_event()).unwrap();
+    let wrong_kind = calendar_date_event_from_event(KIND_POST, &date_tags, "").unwrap_err();
+    assert!(matches!(
+        wrong_kind,
+        EventParseError::InvalidKind {
+            expected: "31922",
+            got: KIND_POST
+        }
+    ));
+
+    let mut minimal = sample_date_event();
+    minimal.description = None;
+    minimal.end = None;
+    minimal.days = None;
+    minimal.location = None;
+    minimal.summary = None;
+    minimal.image = None;
+    minimal.participants = None;
+    let parts = date_to_wire_parts(&minimal).unwrap();
+    assert_eq!(parts.content, "");
+    assert!(
+        !parts
+            .tags
+            .iter()
+            .any(|tag| tag.first().map(String::as_str) == Some(TAG_D_DAY))
+    );
+    let decoded = calendar_date_event_from_event(parts.kind, &parts.tags, &parts.content).unwrap();
+    assert!(decoded.description.is_none());
+    assert!(decoded.end.is_none());
+    assert!(decoded.days.is_none());
+
+    let mut tags = calendar_date_event_build_tags(&sample_date_event()).unwrap();
+    replace_tag_value(&mut tags, TAG_END, "2026-06-19");
+    assert!(matches!(
+        calendar_date_event_from_event(KIND_CALENDAR_DATE_EVENT, &tags, ""),
+        Err(EventParseError::InvalidTag(TAG_END))
+    ));
+
+    let mut tags = calendar_date_event_build_tags(&sample_date_event()).unwrap();
+    replace_tag_value(&mut tags, TAG_D_DAY, "2026-6-20");
+    assert!(matches!(
+        calendar_date_event_from_event(KIND_CALENDAR_DATE_EVENT, &tags, ""),
+        Err(EventParseError::InvalidTag(TAG_D_DAY))
+    ));
+
+    let mut event = sample_date_event();
+    event.title.clear();
+    assert!(matches!(
+        calendar_date_event_build_tags(&event),
+        Err(EventEncodeError::EmptyRequiredField("title"))
+    ));
+
+    let mut event = sample_date_event();
+    event.end = Some("2026-6-21".to_string());
+    assert!(matches!(
+        calendar_date_event_build_tags(&event),
+        Err(EventEncodeError::InvalidField("end"))
+    ));
+
+    let mut event = sample_date_event();
+    event.end = Some("2026-06-19".to_string());
+    assert!(matches!(
+        calendar_date_event_build_tags(&event),
+        Err(EventEncodeError::InvalidField("end"))
+    ));
+}
+
+#[test]
+fn calendar_time_codecs_cover_numeric_and_validation_edges() {
+    let mut tags = calendar_time_event_build_tags(&sample_time_event()).unwrap();
+    replace_tag_value(&mut tags, TAG_START, "not-a-number");
+    assert!(matches!(
+        calendar_time_event_from_event(KIND_CALENDAR_TIME_EVENT, &tags, ""),
+        Err(EventParseError::InvalidNumber(TAG_START, _))
+    ));
+
+    let mut tags = calendar_time_event_build_tags(&sample_time_event()).unwrap();
+    replace_tag_value(&mut tags, TAG_END, "not-a-number");
+    assert!(matches!(
+        calendar_time_event_from_event(KIND_CALENDAR_TIME_EVENT, &tags, ""),
+        Err(EventParseError::InvalidNumber(TAG_END, _))
+    ));
+
+    let mut tags = calendar_time_event_build_tags(&sample_time_event()).unwrap();
+    replace_tag_value(&mut tags, TAG_D_DAY, "2026-6-20");
+    assert!(matches!(
+        calendar_time_event_from_event(KIND_CALENDAR_TIME_EVENT, &tags, ""),
+        Err(EventParseError::InvalidTag(TAG_D_DAY))
+    ));
+
+    let mut event = sample_time_event();
+    event.d_tag = "bad".to_string();
+    assert!(matches!(
+        calendar_time_event_build_tags(&event),
+        Err(EventEncodeError::InvalidField("d_tag"))
+    ));
+
+    let mut event = sample_time_event();
+    event.title.clear();
+    assert!(matches!(
+        calendar_time_event_build_tags(&event),
+        Err(EventEncodeError::EmptyRequiredField("title"))
+    ));
+
+    let mut event = sample_time_event();
+    event.dates[0].value = "2026-6-20".to_string();
+    assert!(matches!(
+        calendar_time_event_build_tags(&event),
+        Err(EventEncodeError::InvalidField("dates"))
+    ));
+}
+
+#[test]
+fn calendar_collection_codecs_cover_address_edges() {
+    let tags = calendar_collection_build_tags(&sample_calendar_collection()).unwrap();
+    let wrong_kind = calendar_from_event(KIND_POST, &tags, "").unwrap_err();
+    assert!(matches!(
+        wrong_kind,
+        EventParseError::InvalidKind {
+            expected: "31924",
+            got: KIND_POST
+        }
+    ));
+
+    let mut calendar = sample_calendar_collection();
+    calendar.summary = None;
+    calendar.image = None;
+    calendar.description = None;
+    if let RadrootsSocialTarget::Address { relays, .. } = &mut calendar.events[0] {
+        *relays = None;
+    }
+    let parts = calendar_to_wire_parts(&calendar).unwrap();
+    assert_eq!(parts.content, "");
+    let decoded = calendar_from_event(parts.kind, &parts.tags, &parts.content).unwrap();
+    assert!(decoded.description.is_none());
+    assert!(matches!(
+        &decoded.events[0],
+        RadrootsSocialTarget::Address { relays: None, .. }
+    ));
+
+    let mut tags = calendar_collection_build_tags(&sample_calendar_collection()).unwrap();
+    let address = tags
+        .iter_mut()
+        .find(|tag| tag.first().map(String::as_str) == Some(TAG_A))
+        .expect("address tag");
+    address.truncate(1);
+    assert!(matches!(
+        calendar_from_event(KIND_CALENDAR, &tags, ""),
+        Err(EventParseError::InvalidTag(TAG_A))
+    ));
+
+    let mut tags = calendar_collection_build_tags(&sample_calendar_collection()).unwrap();
+    replace_tag_value(
+        &mut tags,
+        TAG_A,
+        format!("{KIND_ARTICLE}:{EVENT_AUTHOR}:{EVENT_D_TAG}").as_str(),
+    );
+    assert!(matches!(
+        calendar_from_event(KIND_CALENDAR, &tags, ""),
+        Err(EventParseError::InvalidTag(TAG_A))
+    ));
+
+    let mut calendar = sample_calendar_collection();
+    calendar.title.clear();
+    assert!(matches!(
+        calendar_collection_build_tags(&calendar),
+        Err(EventEncodeError::EmptyRequiredField("title"))
+    ));
+
+    let mut calendar = sample_calendar_collection();
+    calendar.events[0] = RadrootsSocialTarget::Event {
+        id: EVENT_ID.to_string(),
+        author: Some(EVENT_AUTHOR.to_string()),
+        event_kind: Some(KIND_CALENDAR_TIME_EVENT),
+        relays: None,
+    };
+    assert!(matches!(
+        calendar_collection_build_tags(&calendar),
+        Err(EventEncodeError::InvalidField("events"))
+    ));
+
+    let mut calendar = sample_calendar_collection();
+    if let RadrootsSocialTarget::Address { address, .. } = &mut calendar.events[0] {
+        *address = "not-an-address".to_string();
+    }
+    assert!(matches!(
+        calendar_collection_build_tags(&calendar),
+        Err(EventEncodeError::InvalidField("events"))
+    ));
+
+    let mut calendar = sample_calendar_collection();
+    if let RadrootsSocialTarget::Address {
+        address,
+        event_kind,
+        ..
+    } = &mut calendar.events[0]
+    {
+        *address = format!("{KIND_ARTICLE}:{EVENT_AUTHOR}:{EVENT_D_TAG}");
+        *event_kind = Some(KIND_ARTICLE);
+    }
+    assert!(matches!(
+        calendar_collection_build_tags(&calendar),
+        Err(EventEncodeError::InvalidField("events"))
+    ));
+}
+
+#[test]
+fn calendar_rsvp_codecs_cover_status_and_target_edges() {
+    let tags = rsvp_build_tags(&sample_rsvp()).unwrap();
+    let wrong_kind = rsvp_from_event(KIND_POST, &tags, "").unwrap_err();
+    assert!(matches!(
+        wrong_kind,
+        EventParseError::InvalidKind {
+            expected: "31925",
+            got: KIND_POST
+        }
+    ));
+
+    let mut rsvp = sample_rsvp();
+    rsvp.status = RadrootsCalendarEventRsvpStatus::Declined;
+    rsvp.free_busy = Some(RadrootsCalendarEventFreeBusy::Free);
+    rsvp.event_id = None;
+    rsvp.note = None;
+    rsvp.participants = None;
+    if let RadrootsSocialTarget::Address { relays, .. } = &mut rsvp.event {
+        *relays = None;
+    }
+    let parts = rsvp_to_wire_parts(&rsvp).unwrap();
+    assert_eq!(parts.content, "");
+    assert!(!parts.tags.iter().any(|tag| {
+        tag.first().map(String::as_str) == Some(TAG_E)
+            || tag.first().map(String::as_str) == Some(TAG_P)
+    }));
+    let decoded = rsvp_from_event(parts.kind, &parts.tags, &parts.content).unwrap();
+    assert_eq!(decoded.status, RadrootsCalendarEventRsvpStatus::Declined);
+    assert_eq!(decoded.free_busy, Some(RadrootsCalendarEventFreeBusy::Free));
+    assert!(decoded.note.is_none());
+
+    let mut rsvp = sample_rsvp();
+    rsvp.status = RadrootsCalendarEventRsvpStatus::Tentative;
+    let parts = rsvp_to_wire_parts(&rsvp).unwrap();
+    assert!(has_tag(&parts.tags, TAG_STATUS, "tentative"));
+
+    let mut rsvp = sample_rsvp();
+    rsvp.event_id = Some("not-a-lowercase-hex-id".to_string());
+    assert!(matches!(
+        rsvp_build_tags(&rsvp),
+        Err(EventEncodeError::InvalidField("event_id"))
+    ));
+
+    let mut tags = rsvp_build_tags(&sample_rsvp()).unwrap();
+    replace_tag_value(&mut tags, TAG_E, "not-a-lowercase-hex-id");
+    assert!(matches!(
+        rsvp_from_event(KIND_CALENDAR_EVENT_RSVP, &tags, ""),
+        Err(EventParseError::InvalidTag(TAG_E))
     ));
 }
 
