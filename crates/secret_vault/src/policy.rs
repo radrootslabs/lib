@@ -172,6 +172,10 @@ mod tests {
                 requirement: RadrootsHostVaultRequirement::UserPresence,
             })
         );
+        assert_eq!(
+            RadrootsHostVaultCapabilities::secure_device().validate(user_presence_policy),
+            Ok(())
+        );
 
         let hardware_policy = RadrootsHostVaultPolicy {
             residency: RadrootsHostVaultResidency::UserProfile,
@@ -183,6 +187,10 @@ mod tests {
             Err(RadrootsSecretVaultError::HostVaultPolicyUnsupported {
                 requirement: RadrootsHostVaultRequirement::HardwareBacked,
             })
+        );
+        assert_eq!(
+            RadrootsHostVaultCapabilities::secure_device().validate(hardware_policy),
+            Ok(())
         );
     }
 }

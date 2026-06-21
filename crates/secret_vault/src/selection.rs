@@ -278,6 +278,22 @@ mod tests {
                 used_fallback: false,
             }
         );
+
+        let err = selection
+            .resolve(RadrootsSecretBackendAvailability {
+                host_vault: RadrootsHostVaultCapabilities::unavailable(),
+                encrypted_file: false,
+                external_command: false,
+                memory: false,
+            })
+            .expect_err("unavailable memory backend must fail");
+
+        assert_eq!(
+            err,
+            RadrootsSecretVaultError::BackendUnavailable {
+                backend: RadrootsSecretBackendKind::Memory,
+            }
+        );
     }
 
     #[test]
