@@ -272,14 +272,14 @@ let
             fi
 
             cargo run -q -p xtask -- sdk coverage report-missing \
-              --scope "''${crate}-blocking" \
+              --scope "''${crate}" \
               --out "''${crate_dir}/coverage-gate-blocking.json" \
               --reason "''${fail_reason}"
             continue
           fi
 
           cargo run -q -p xtask -- sdk coverage report \
-            --scope "''${crate}-blocking" \
+            --scope "''${crate}" \
             --summary "''${crate_dir}/coverage-summary.json" \
             --lcov "''${crate_dir}/coverage-lcov.info" \
             --out "''${crate_dir}/coverage-gate-blocking.json" \
