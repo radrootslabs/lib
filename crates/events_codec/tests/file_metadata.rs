@@ -154,6 +154,63 @@ fn file_metadata_to_wire_parts_roundtrips_nip94_tags() {
 }
 
 #[test]
+fn file_metadata_encode_handles_minimal_optional_shape_and_invalid_dimensions() {
+    let mut metadata = sample_metadata();
+    metadata.original_sha256 = None;
+    metadata.size = None;
+    metadata.dimensions = None;
+    metadata.thumbnails = None;
+    metadata.summary = None;
+    metadata.alt = None;
+    metadata.fallback = None;
+    metadata.magnet = None;
+    metadata.content_hashes = None;
+    metadata.services = None;
+    metadata.content = None;
+
+    let parts = to_wire_parts(&metadata).unwrap();
+    assert_eq!(parts.content, "");
+    assert!(
+        !parts
+            .tags
+            .iter()
+            .any(|tag| tag.first().map(|value| value.as_str()) == Some(TAG_SIZE))
+    );
+    assert!(
+        !parts
+            .tags
+            .iter()
+            .any(|tag| tag.first().map(|value| value.as_str()) == Some(TAG_DIMENSIONS))
+    );
+    assert!(
+        !parts
+            .tags
+            .iter()
+            .any(|tag| { tag.first().map(|value| value.as_str()) == Some(TAG_ORIGINAL_SHA256) })
+    );
+
+    let mut metadata = sample_metadata();
+    metadata.dimensions = Some(RadrootsSocialMediaDimensions {
+        width: 0,
+        height: 800,
+    });
+    assert!(matches!(
+        file_metadata_build_tags(&metadata),
+        Err(EventEncodeError::InvalidField("dimensions"))
+    ));
+
+    let mut metadata = sample_metadata();
+    metadata.dimensions = Some(RadrootsSocialMediaDimensions {
+        width: 1200,
+        height: 0,
+    });
+    assert!(matches!(
+        file_metadata_build_tags(&metadata),
+        Err(EventEncodeError::InvalidField("dimensions"))
+    ));
+}
+
+#[test]
 fn file_metadata_public_and_private_kind1063_contracts_do_not_cross_decode() {
     let public = to_wire_parts(&sample_metadata()).unwrap();
     let decoded_public =

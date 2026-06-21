@@ -276,6 +276,48 @@ fn calendar_rsvp_to_wire_parts_roundtrips_status_event_id_and_participants() {
 }
 
 #[test]
+fn calendar_encode_omits_absent_optional_fields() {
+    let mut time = sample_time_event();
+    time.end = None;
+    time.location = None;
+    let tags = calendar_time_event_build_tags(&time).unwrap();
+    assert!(!tags.iter().any(|tag| tag[0] == TAG_END));
+    assert!(!tags.iter().any(|tag| tag[0] == TAG_LOCATION));
+
+    let mut collection = sample_calendar_collection();
+    collection.events[0] = RadrootsSocialTarget::Address {
+        address: format!("{KIND_CALENDAR_TIME_EVENT}:{EVENT_AUTHOR}:{EVENT_D_TAG}"),
+        author: Some(EVENT_AUTHOR.to_string()),
+        event_kind: None,
+        relays: None,
+    };
+    let tags = calendar_collection_build_tags(&collection).unwrap();
+    assert_eq!(
+        tags.iter()
+            .find(|tag| tag.first().map(|value| value.as_str()) == Some(TAG_A))
+            .map(Vec::len),
+        Some(2)
+    );
+
+    let mut rsvp = sample_rsvp();
+    rsvp.event = RadrootsSocialTarget::Address {
+        address: format!("{KIND_CALENDAR_TIME_EVENT}:{EVENT_AUTHOR}:{EVENT_D_TAG}"),
+        author: Some(EVENT_AUTHOR.to_string()),
+        event_kind: None,
+        relays: None,
+    };
+    rsvp.free_busy = None;
+    let tags = rsvp_build_tags(&rsvp).unwrap();
+    assert_eq!(
+        tags.iter()
+            .find(|tag| tag.first().map(|value| value.as_str()) == Some(TAG_E))
+            .map(Vec::len),
+        Some(2)
+    );
+    assert!(!tags.iter().any(|tag| tag[0] == TAG_FREE_BUSY));
+}
+
+#[test]
 fn calendar_codecs_reject_wrong_kind_invalid_dates_and_missing_time_dates() {
     assert!(matches!(
         date_to_wire_parts_with_kind(&sample_date_event(), KIND_POST),
