@@ -8,9 +8,19 @@
 let
   stablePath = "export PATH=${toolchains.stable}/bin:$PATH";
   coveragePath = "export PATH=${toolchains.stable}/bin:${toolchains.coverage}/bin:$PATH";
-  coverageShellExec = command: ''
-    exec nix develop .#coverage --accept-flake-config -c sh -lc ${lib.escapeShellArg command} sh "$@"
-  '';
+  coverageShellExec =
+    name: command:
+    let
+      scriptName = "${name}-coverage-shell";
+      script = pkgs.writeShellApplication {
+        name = scriptName;
+        runtimeInputs = common.runtimeInputs.coverage;
+        text = command;
+      };
+    in
+    ''
+      exec nix develop .#coverage --accept-flake-config -c ${script}/bin/${scriptName} "$@"
+    '';
   mkRepoApp =
     {
       name,
@@ -94,7 +104,7 @@ in
     runtimeInputs = [
       pkgs.nix
     ];
-    command = coverageShellExec common.releasePreflightCommand;
+    command = coverageShellExec "release-preflight" common.releasePreflightCommand;
     env = common.exportCoverageEnv;
     pathPrefix = coveragePath;
   };
