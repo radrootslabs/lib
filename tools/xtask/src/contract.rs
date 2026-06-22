@@ -14,8 +14,8 @@ const CONFORMANCE_ROOT_RELATIVE: &str = "contracts/conformance";
 const CONFORMANCE_SCHEMA_RELATIVE: &str = "contracts/conformance/schema/vector.schema.json";
 const RELEASE_POLICY_ENV: &str = "RADROOTS_MOUNTED_RUST_CRATE_PUBLISH_POLICY";
 const EVENT_BOUNDARY_MATRIX_ENV: &str = "RADROOTS_EVENT_BOUNDARY_MATRIX";
-const COVERAGE_REQUIRED_THRESHOLD: f64 = 98.0;
-const COVERAGE_REQUIRED_THRESHOLD_LABEL: &str = "98/98/98/98";
+const COVERAGE_REQUIRED_THRESHOLD: f64 = 99.0;
+const COVERAGE_REQUIRED_THRESHOLD_LABEL: &str = "99/99/99/99";
 const COVERAGE_REPORT_EPSILON: f64 = 0.000_001;
 const EVENT_BOUNDARY_MATRIX_RELATIVES: [&str; 1] = [
     "docs/platform/canonical/open_source/radroots_v1_spec/02_public_contract_and_runtime/08_event_boundary_matrix.md",
@@ -3777,7 +3777,7 @@ mod tests {
         TestCoverageRefreshRow {
             crate_name,
             status: "pass",
-            thresholds: coverage_thresholds(98.0, true),
+            thresholds: coverage_thresholds(99.0, true),
             exec: 100.0,
             func: 100.0,
             branch: Some(100.0),
@@ -3942,10 +3942,10 @@ requires_release_notes = true
         write_file(
             &root.join("contracts").join("coverage.toml"),
             r#"[gate]
-fail_under_exec_lines = 98.0
-fail_under_functions = 98.0
-fail_under_regions = 98.0
-fail_under_branches = 98.0
+fail_under_exec_lines = 99.0
+fail_under_functions = 99.0
+fail_under_regions = 99.0
+fail_under_branches = 99.0
 require_branches = true
 
 [required]
@@ -4164,10 +4164,10 @@ publish = false
         write_file(
             &root.join("contracts").join("coverage.toml"),
             r#"[gate]
-fail_under_exec_lines = 98.0
-fail_under_functions = 98.0
-fail_under_regions = 98.0
-fail_under_branches = 98.0
+fail_under_exec_lines = 99.0
+fail_under_functions = 99.0
+fail_under_regions = 99.0
+fail_under_branches = 99.0
 require_branches = true
 
 [required]
@@ -4516,7 +4516,7 @@ edition = "2024"
         let policy_dir = root.join("contracts");
         write_file(
             &policy_dir.join("coverage.toml"),
-            "[gate]\nfail_under_exec_lines = 98.0\nfail_under_functions = 98.0\nfail_under_regions = 98.0\nfail_under_branches = 98.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n",
+            "[gate]\nfail_under_exec_lines = 99.0\nfail_under_functions = 99.0\nfail_under_regions = 99.0\nfail_under_branches = 99.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n",
         );
         let policy =
             read_coverage_policy(&policy_dir.join("coverage.toml")).expect("parse coverage policy");
@@ -4546,7 +4546,7 @@ edition = "2024"
         let policy_dir = root.join("contracts");
         write_file(
             &policy_dir.join("coverage.toml"),
-            "[gate]\nfail_under_exec_lines = 98.0\nfail_under_functions = 98.0\nfail_under_regions = 98.0\nfail_under_branches = 98.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n",
+            "[gate]\nfail_under_exec_lines = 99.0\nfail_under_functions = 99.0\nfail_under_regions = 99.0\nfail_under_branches = 99.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n",
         );
         let policy =
             read_coverage_policy(&policy_dir.join("coverage.toml")).expect("parse coverage policy");
@@ -4562,7 +4562,7 @@ edition = "2024"
         let row = TestCoverageRefreshRow {
             crate_name: "radroots_a",
             status: "pass",
-            thresholds: coverage_thresholds(98.0, true),
+            thresholds: coverage_thresholds(99.0, true),
             exec: 99.0,
             func: 100.0,
             branch: Some(100.0),
@@ -4585,7 +4585,7 @@ edition = "2024"
         let policy_dir = root.join("contracts");
         write_file(
             &policy_dir.join("coverage.toml"),
-            "[gate]\nfail_under_exec_lines = 98.0\nfail_under_functions = 98.0\nfail_under_regions = 98.0\nfail_under_branches = 98.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n",
+            "[gate]\nfail_under_exec_lines = 99.0\nfail_under_functions = 99.0\nfail_under_regions = 99.0\nfail_under_branches = 99.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n",
         );
         let policy =
             read_coverage_policy(&policy_dir.join("coverage.toml")).expect("parse coverage policy");
@@ -4955,10 +4955,10 @@ members = ["crates/a", "crates/b"]
         write_file(
             &coverage_root.join("coverage.toml"),
             r#"[gate]
-fail_under_exec_lines = 98.0
-fail_under_functions = 98.0
-fail_under_regions = 98.0
-fail_under_branches = 98.0
+fail_under_exec_lines = 99.0
+fail_under_functions = 99.0
+fail_under_regions = 99.0
+fail_under_branches = 99.0
 require_branches = true
 
 [required]
@@ -4973,9 +4973,9 @@ crates = []
             &coverage_root.join("coverage.toml"),
             r#"[gate]
 fail_under_exec_lines = 97.0
-fail_under_functions = 98.0
-fail_under_regions = 98.0
-fail_under_branches = 98.0
+fail_under_functions = 99.0
+fail_under_regions = 99.0
+fail_under_branches = 99.0
 require_branches = true
 
 [required]
@@ -4984,15 +4984,15 @@ crates = ["radroots_a", "radroots_b"]
         );
         let invalid_gate = validate_coverage_policy_parity(&root, &contract_root)
             .expect_err("invalid policy thresholds");
-        assert!(invalid_gate.contains("98/98/98/98"));
+        assert!(invalid_gate.contains("99/99/99/99"));
 
         write_file(
             &coverage_root.join("coverage.toml"),
             r#"[gate]
-fail_under_exec_lines = 98.0
+fail_under_exec_lines = 99.0
 fail_under_functions = 97.0
-fail_under_regions = 98.0
-fail_under_branches = 98.0
+fail_under_regions = 99.0
+fail_under_branches = 99.0
 require_branches = true
 
 [required]
@@ -5001,15 +5001,15 @@ crates = ["radroots_a", "radroots_b"]
         );
         let invalid_functions = validate_coverage_policy_parity(&root, &contract_root)
             .expect_err("invalid function threshold");
-        assert!(invalid_functions.contains("98/98/98/98"));
+        assert!(invalid_functions.contains("99/99/99/99"));
 
         write_file(
             &coverage_root.join("coverage.toml"),
             r#"[gate]
-fail_under_exec_lines = 98.0
-fail_under_functions = 98.0
+fail_under_exec_lines = 99.0
+fail_under_functions = 99.0
 fail_under_regions = 97.0
-fail_under_branches = 98.0
+fail_under_branches = 99.0
 require_branches = true
 
 [required]
@@ -5018,14 +5018,14 @@ crates = ["radroots_a", "radroots_b"]
         );
         let invalid_regions = validate_coverage_policy_parity(&root, &contract_root)
             .expect_err("invalid region threshold");
-        assert!(invalid_regions.contains("98/98/98/98"));
+        assert!(invalid_regions.contains("99/99/99/99"));
 
         write_file(
             &coverage_root.join("coverage.toml"),
             r#"[gate]
-fail_under_exec_lines = 98.0
-fail_under_functions = 98.0
-fail_under_regions = 98.0
+fail_under_exec_lines = 99.0
+fail_under_functions = 99.0
+fail_under_regions = 99.0
 fail_under_branches = 97.0
 require_branches = true
 
@@ -5035,15 +5035,15 @@ crates = ["radroots_a", "radroots_b"]
         );
         let invalid_branches = validate_coverage_policy_parity(&root, &contract_root)
             .expect_err("invalid branch threshold");
-        assert!(invalid_branches.contains("98/98/98/98"));
+        assert!(invalid_branches.contains("99/99/99/99"));
 
         write_file(
             &coverage_root.join("coverage.toml"),
             r#"[gate]
-fail_under_exec_lines = 98.0
-fail_under_functions = 98.0
-fail_under_regions = 98.0
-fail_under_branches = 98.0
+fail_under_exec_lines = 99.0
+fail_under_functions = 99.0
+fail_under_regions = 99.0
+fail_under_branches = 99.0
 require_branches = true
 
 [required]
@@ -5057,10 +5057,10 @@ crates = ["radroots_a", "radroots_a"]
         write_file(
             &coverage_root.join("coverage.toml"),
             r#"[gate]
-fail_under_exec_lines = 98.0
-fail_under_functions = 98.0
-fail_under_regions = 98.0
-fail_under_branches = 98.0
+fail_under_exec_lines = 99.0
+fail_under_functions = 99.0
+fail_under_regions = 99.0
+fail_under_branches = 99.0
 require_branches = false
 
 [required]
@@ -5074,10 +5074,10 @@ crates = ["radroots_a", "radroots_b"]
         write_file(
             &coverage_root.join("coverage.toml"),
             r#"[gate]
-fail_under_exec_lines = 98.0
-fail_under_functions = 98.0
-fail_under_regions = 98.0
-fail_under_branches = 98.0
+fail_under_exec_lines = 99.0
+fail_under_functions = 99.0
+fail_under_regions = 99.0
+fail_under_branches = 99.0
 require_branches = true
 
 [required]
@@ -5091,10 +5091,10 @@ crates = ["radroots_b"]
         write_file(
             &coverage_root.join("coverage.toml"),
             r#"[gate]
-fail_under_exec_lines = 98.0
-fail_under_functions = 98.0
-fail_under_regions = 98.0
-fail_under_branches = 98.0
+fail_under_exec_lines = 99.0
+fail_under_functions = 99.0
+fail_under_regions = 99.0
+fail_under_branches = 99.0
 require_branches = true
 
 [required]
@@ -5829,10 +5829,10 @@ publish = false
         write_file(
             &coverage_root.join("coverage.toml"),
             r#"[gate]
-fail_under_exec_lines = 98.0
-fail_under_functions = 98.0
-fail_under_regions = 98.0
-fail_under_branches = 98.0
+fail_under_exec_lines = 99.0
+fail_under_functions = 99.0
+fail_under_regions = 99.0
+fail_under_branches = 99.0
 require_branches = true
 
 [required]
@@ -6138,7 +6138,7 @@ crates = ["radroots_a"]
         let duplicate_required = create_synthetic_workspace("preflight_duplicate_required");
         write_file(
             &duplicate_required.join("contracts").join("coverage.toml"),
-            "[gate]\nfail_under_exec_lines = 98.0\nfail_under_functions = 98.0\nfail_under_regions = 98.0\nfail_under_branches = 98.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\", \"radroots_a\"]\n",
+            "[gate]\nfail_under_exec_lines = 99.0\nfail_under_functions = 99.0\nfail_under_regions = 99.0\nfail_under_branches = 99.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\", \"radroots_a\"]\n",
         );
         let duplicate_required_err =
             validate_release_preflight(&duplicate_required).expect_err("duplicate required crates");
@@ -6223,10 +6223,10 @@ Volume,
         write_file(
             &root.join("contracts").join("coverage.toml"),
             r#"[gate]
-fail_under_exec_lines = 98.0
-fail_under_functions = 98.0
-fail_under_regions = 98.0
-fail_under_branches = 98.0
+fail_under_exec_lines = 99.0
+fail_under_functions = 99.0
+fail_under_regions = 99.0
+fail_under_branches = 99.0
 require_branches = false
 
 [required]
@@ -6234,7 +6234,7 @@ crates = ["radroots_a", "radroots_b"]
 "#,
         );
         let policy_err = validate_contract_bundle(&bundle).expect_err("coverage policy validation");
-        assert!(policy_err.contains("98/98/98/98"));
+        assert!(policy_err.contains("99/99/99/99"));
 
         let _ = fs::remove_dir_all(&root);
     }
@@ -6386,10 +6386,10 @@ Volume,
         write_file(
             &coverage_root.join("coverage.toml"),
             r#"[gate]
-fail_under_exec_lines = 98.0
-fail_under_functions = 98.0
-fail_under_regions = 98.0
-fail_under_branches = 98.0
+fail_under_exec_lines = 99.0
+fail_under_functions = 99.0
+fail_under_regions = 99.0
+fail_under_branches = 99.0
 require_branches = true
 
 [required]
@@ -6403,10 +6403,10 @@ crates = ["radroots_a", "radroots_b", "radroots_extra"]
         write_file(
             &coverage_root.join("coverage.toml"),
             r#"[gate]
-fail_under_exec_lines = 98.0
-fail_under_functions = 98.0
-fail_under_regions = 98.0
-fail_under_branches = 98.0
+fail_under_exec_lines = 99.0
+fail_under_functions = 99.0
+fail_under_regions = 99.0
+fail_under_branches = 99.0
 require_branches = true
 
 [required]

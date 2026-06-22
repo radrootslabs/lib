@@ -96,30 +96,18 @@ fn validate_relay_authority(original: &str, rest: &str) -> Result<(), RelayUrlVa
         return Ok(());
     }
 
-    let colon_count = authority.bytes().filter(|byte| *byte == b':').count();
-    match colon_count {
-        0 => {
-            if authority.is_empty() {
-                Err(RelayUrlValidationError::MissingHost(original.to_owned()))
-            } else {
-                Ok(())
-            }
-        }
-        1 => {
-            let Some((host, port)) = authority.split_once(':') else {
-                return Err(RelayUrlValidationError::InvalidAuthority(
-                    original.to_owned(),
-                ));
-            };
-            if host.is_empty() {
-                return Err(RelayUrlValidationError::MissingHost(original.to_owned()));
-            }
-            validate_port(original, port)
-        }
-        _ => Err(RelayUrlValidationError::InvalidAuthority(
+    if authority.bytes().filter(|byte| *byte == b':').count() > 1 {
+        return Err(RelayUrlValidationError::InvalidAuthority(
             original.to_owned(),
-        )),
+        ));
     }
+    let Some((host, port)) = authority.split_once(':') else {
+        return Ok(());
+    };
+    if host.is_empty() {
+        return Err(RelayUrlValidationError::MissingHost(original.to_owned()));
+    }
+    validate_port(original, port)
 }
 
 fn validate_optional_port(original: &str, after_host: &str) -> Result<(), RelayUrlValidationError> {
@@ -185,6 +173,18 @@ mod tests {
             normalize_relay_url("ws://[::1]").expect("ipv6 relay without port"),
             "ws://[::1]"
         );
+        assert!(matches!(
+            normalize_relay_url("ws://"),
+            Err(RelayUrlValidationError::MissingHost(_))
+        ));
+        assert!(matches!(
+            normalize_relay_url("ws://:8080"),
+            Err(RelayUrlValidationError::MissingHost(_))
+        ));
+        assert!(matches!(
+            normalize_relay_url("ws://relay.test:8080:9090"),
+            Err(RelayUrlValidationError::InvalidAuthority(_))
+        ));
     }
 
     #[test]

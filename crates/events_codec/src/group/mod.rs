@@ -594,10 +594,10 @@ mod tests {
             Ok(_) => panic!("expected empty required field error"),
             Err(err) => err,
         };
-        assert!(matches!(
-            err,
-            EventEncodeError::EmptyRequiredField(found) if found == field
-        ));
+        match err {
+            EventEncodeError::EmptyRequiredField(found) => assert_eq!(found, field),
+            other => panic!("unexpected error: {other:?}"),
+        }
     }
 
     fn sample_metadata() -> RadrootsGroupEditableMetadata {

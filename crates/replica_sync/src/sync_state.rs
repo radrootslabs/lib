@@ -239,12 +239,10 @@ mod tests {
 
         assert_eq!(batch.expected_count, bundle.events.len());
         assert_eq!(batch.pending_count, bundle.events.len().saturating_sub(1));
-        assert!(
-            batch
-                .pending_events
-                .iter()
-                .all(|event| event.key != key && event.content_hash.len() == 64)
-        );
+        for event in &batch.pending_events {
+            assert_ne!(event.key, key);
+            assert_eq!(event.content_hash.len(), 64);
+        }
     }
 
     #[test]

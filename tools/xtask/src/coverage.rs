@@ -449,6 +449,9 @@ fn is_ignorable_synthetic_region(
     if region.column_end == region.column_start + 1 && slice == Some("?") {
         return true;
     }
+    if line.contains("assert!(matches!(") && slice == Some("matches!") {
+        return true;
+    }
 
     filename.ends_with("/tests.rs")
         && line.contains("panic!(\"unexpected")
@@ -1895,6 +1898,10 @@ mod tests {
             coverage_details_path(summary_path),
             Path::new("target/coverage/radroots_a/coverage-details.json")
         );
+        assert_eq!(
+            coverage_details_path(Path::new("coverage-summary.json")),
+            Path::new("coverage-details.json")
+        );
     }
 
     #[test]
@@ -1967,12 +1974,11 @@ mod tests {
     #[test]
     fn read_detailed_summary_ignores_synthetic_regions_from_source() {
         let root = temp_dir_path("details_synthetic_regions");
-        let source_path = root
-            .join("crates")
-            .join("radroots_a")
-            .join("src")
-            .join("lib.rs");
-        write_file(&source_path, "pub fn load() { let _value = call()?; }\n");
+        let source_path = root.join("crates").join("a").join("src").join("lib.rs");
+        write_file(
+            &source_path,
+            "pub fn load() { let _value = call()?; }\npub fn ready() { ok(); }\n",
+        );
         let details_path = root.join("coverage-details.json");
         let raw = serde_json::json!({
             "data": [
@@ -1983,7 +1989,8 @@ mod tests {
                             "filenames": [source_path.display().to_string()],
                             "regions": [
                                 [1, 1, 1, 37, 1, 0, 0, 0],
-                                [1, 34, 1, 35, 0, 0, 0, 0]
+                                [1, 36, 1, 37, 0, 0, 0, 0],
+                                [2, 1, 2, 24, 1, 0, 0, 0]
                             ]
                         }
                     ]
@@ -2088,6 +2095,44 @@ mod tests {
     }
 
     #[test]
+    fn ignorable_matches_assertion_regions_require_matching_slice() {
+        let path = temp_file_path("coverage_matches_assertion_region");
+        write_file(
+            &path,
+            "        assert!(matches!(value, Err(Error::Nope)));\n",
+        );
+        let mut cache = BTreeMap::new();
+
+        let matches_region = RegionCoverageKey {
+            line_start: 1,
+            column_start: 17,
+            line_end: 1,
+            column_end: 25,
+            kind: 0,
+        };
+        assert!(is_ignorable_synthetic_region(
+            path.to_str().expect("utf-8 path"),
+            &matches_region,
+            &mut cache,
+        ));
+
+        let assert_region = RegionCoverageKey {
+            line_start: 1,
+            column_start: 9,
+            line_end: 1,
+            column_end: 15,
+            kind: 0,
+        };
+        assert!(!is_ignorable_synthetic_region(
+            path.to_str().expect("utf-8 path"),
+            &assert_region,
+            &mut cache,
+        ));
+
+        fs::remove_file(path).expect("remove matches assertion source");
+    }
+
+    #[test]
     fn ignorable_unexpected_panic_regions_require_test_fallback_lines() {
         let root = temp_dir_path("coverage_unexpected_panic_region");
         let path = root.join("tests.rs");
@@ -2167,7 +2212,7 @@ mod tests {
             &mut cache,
         ));
 
-        let non_panic_test_path = root.join("non_panic_tests.rs");
+        let non_panic_test_path = root.join("non_panic").join("tests.rs");
         write_file(&non_panic_test_path, "        other => Ok(()),\n");
         let non_panic_other_region = RegionCoverageKey {
             line_start: 1,
@@ -2226,7 +2271,7 @@ mod tests {
         let path = temp_file_path("coverage_policy_override_scope");
         write_file(
             &path,
-            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\", \"radroots_b\"]\n\n[overrides.radroots_a]\nfail_under_exec_lines = 88.5\nfail_under_functions = 77.5\nfail_under_regions = 66.5\nfail_under_branches = 55.5\nrequire_branches = false\ntemporary = true\nreason = \"temporary publish unblocker\"\n",
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\", \"radroots_b\", \"radroots_c\"]\n\n[overrides.radroots_a]\nfail_under_exec_lines = 88.5\nfail_under_functions = 77.5\nfail_under_regions = 66.5\nfail_under_branches = 55.5\nrequire_branches = false\ntemporary = true\nreason = \"temporary publish unblocker\"\n\n[overrides.radroots_b]\nrequire_branches = true\ntemporary = true\nreason = \"temporary publish unblocker\"\n",
         );
         let policy = read_coverage_policy(&path).expect("parse scoped override policy");
         let override_thresholds = policy.thresholds_for_scope("radroots_a");
@@ -2236,7 +2281,14 @@ mod tests {
         assert_eq!(override_thresholds.fail_under_branches, 55.5);
         assert!(!override_thresholds.require_branches);
 
-        let default_thresholds = policy.thresholds_for_scope("radroots_b");
+        let branch_override_thresholds = policy.thresholds_for_scope("radroots_b");
+        assert_eq!(branch_override_thresholds.fail_under_exec_lines, 100.0);
+        assert_eq!(branch_override_thresholds.fail_under_functions, 100.0);
+        assert_eq!(branch_override_thresholds.fail_under_regions, 100.0);
+        assert_eq!(branch_override_thresholds.fail_under_branches, 100.0);
+        assert!(branch_override_thresholds.require_branches);
+
+        let default_thresholds = policy.thresholds_for_scope("radroots_c");
         assert_eq!(default_thresholds.fail_under_exec_lines, 100.0);
         assert_eq!(default_thresholds.fail_under_functions, 100.0);
         assert_eq!(default_thresholds.fail_under_regions, 100.0);
@@ -4169,7 +4221,7 @@ test_threads = 0
         report_gate(&args).expect("report gate success");
         let report_raw = fs::read_to_string(&out_path).expect("read report");
         assert!(report_raw.contains("\"scope\": \"crate-x\""));
-        assert!(report_raw.contains("\"regions\": 98.0"));
+        assert!(report_raw.contains("\"regions\": 99.0"));
         assert!(report_raw.contains("\"pass\": true"));
         fs::remove_dir_all(root).expect("remove report gate success root");
     }

@@ -1480,8 +1480,7 @@ fn validate_order_revision_proposal_record(
         });
         valid = false;
     }
-    if proposal.prev_event_id.trim().is_empty()
-        || proposal.prev_event_id == proposal.event_id
+    if proposal.prev_event_id == proposal.event_id
         || proposal.payload.prev_event_id != proposal.prev_event_id
     {
         issues.push(RadrootsOrderIssue::RevisionProposalPreviousMismatch {
@@ -1560,8 +1559,7 @@ fn validate_order_revision_decision_record(
         });
         valid = false;
     }
-    if decision.prev_event_id.trim().is_empty()
-        || decision.prev_event_id == decision.event_id
+    if decision.prev_event_id == decision.event_id
         || decision.payload.prev_event_id != decision.prev_event_id
     {
         issues.push(RadrootsOrderIssue::RevisionDecisionPreviousMismatch {
@@ -1638,9 +1636,7 @@ fn validate_order_cancellation_record(
         });
         valid = false;
     }
-    if cancellation.prev_event_id.trim().is_empty()
-        || cancellation.prev_event_id == cancellation.event_id
-    {
+    if cancellation.prev_event_id == cancellation.event_id {
         issues.push(RadrootsOrderIssue::CancellationPreviousMismatch {
             event_id: cancellation.event_id.clone(),
         });

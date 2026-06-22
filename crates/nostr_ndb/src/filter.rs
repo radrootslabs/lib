@@ -218,6 +218,11 @@ mod tests {
             .with_limit(10)
             .to_ndb_filter()
             .expect("range filter");
+
+        let _ = RadrootsNostrNdbFilterSpec::new()
+            .with_search("coffee")
+            .to_ndb_filter()
+            .expect("search filter");
     }
 
     #[test]

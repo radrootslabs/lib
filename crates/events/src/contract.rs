@@ -2719,6 +2719,28 @@ mod tests {
     }
 
     #[test]
+    fn supports_tag_equals_discriminators() {
+        let tags = vec![vec!["status".to_owned(), "accepted".to_owned()]];
+
+        assert!(discriminator_matches(
+            &RadrootsEventDiscriminator::TagEquals {
+                name: "status",
+                value: "accepted",
+            },
+            &tags,
+            "{}"
+        ));
+        assert!(!discriminator_matches(
+            &RadrootsEventDiscriminator::TagEquals {
+                name: "status",
+                value: "declined",
+            },
+            &tags,
+            "{}"
+        ));
+    }
+
+    #[test]
     fn tag_helpers_cover_missing_names_and_cardinality_mismatches() {
         let tags = vec![
             vec!["p".to_owned(), "counterparty".to_owned()],
@@ -2773,9 +2795,14 @@ mod tests {
             .chain(LIST_SET_GENERIC_EVENT_CONTRACTS.iter())
         {
             if contract.class == RadrootsEventClass::Addressable {
-                assert!(
-                    contract.tags.iter().any(|tag| tag.name == "d"
-                        && tag.cardinality == RadrootsTagCardinality::RequiredOne),
+                let d_tag_cardinality = contract
+                    .tags
+                    .iter()
+                    .find(|tag| tag.name == "d")
+                    .map(|tag| tag.cardinality);
+                assert_eq!(
+                    d_tag_cardinality,
+                    Some(RadrootsTagCardinality::RequiredOne),
                     "{}",
                     contract.id
                 );

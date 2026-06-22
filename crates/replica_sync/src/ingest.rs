@@ -566,9 +566,11 @@ fn trade_product_fields_from_listing(
         .display_price
         .as_ref()
         .unwrap_or(&bin.price_per_canonical_unit.amount);
-    let price_amt = price_source.amount.to_f64_lossy().ok_or_else(|| {
-        RadrootsReplicaEventsError::InvalidData("listing price amount out of range".to_string())
-    })?;
+    let Some(price_amt) = price_source.amount.to_f64_lossy() else {
+        return Err(RadrootsReplicaEventsError::InvalidData(
+            "listing price amount out of range".to_string(),
+        ));
+    };
     let price_amt_exact = price_source.amount.to_string();
     let price_currency = price_source.currency.as_str().to_string();
     let price_qty_amt = if bin.display_price.is_some() {
@@ -634,13 +636,12 @@ fn trade_product_notes_from_listing(
     else {
         return Ok(None);
     };
-    serde_json::to_string(&json!({ "listing_discounts": discounts }))
-        .map(Some)
-        .map_err(|error| {
-            RadrootsReplicaEventsError::InvalidData(format!(
-                "listing discounts could not be serialized: {error}"
-            ))
-        })
+    match serde_json::to_string(&json!({ "listing_discounts": discounts })) {
+        Ok(notes) => Ok(Some(notes)),
+        Err(error) => Err(RadrootsReplicaEventsError::InvalidData(format!(
+            "listing discounts could not be serialized: {error}"
+        ))),
+    }
 }
 
 fn primary_listing_bin(
@@ -662,26 +663,36 @@ fn decimal_to_i64(
     field: &str,
 ) -> Result<i64, RadrootsReplicaEventsError> {
     let value = decimal_to_u64(value, field)?;
-    i64::try_from(value)
-        .map_err(|_| RadrootsReplicaEventsError::InvalidData(format!("{field} exceeds i64 range")))
+    match i64::try_from(value) {
+        Ok(value) => Ok(value),
+        Err(_) => Err(RadrootsReplicaEventsError::InvalidData(format!(
+            "{field} exceeds i64 range"
+        ))),
+    }
 }
 
 fn decimal_to_f64(
     value: &RadrootsCoreDecimal,
     field: &str,
 ) -> Result<f64, RadrootsReplicaEventsError> {
-    value.to_f64_lossy().ok_or_else(|| {
-        RadrootsReplicaEventsError::InvalidData(format!("{field} exceeds f64 range"))
-    })
+    match value.to_f64_lossy() {
+        Some(value) => Ok(value),
+        None => Err(RadrootsReplicaEventsError::InvalidData(format!(
+            "{field} exceeds f64 range"
+        ))),
+    }
 }
 
 fn decimal_to_u64(
     value: &RadrootsCoreDecimal,
     field: &str,
 ) -> Result<u64, RadrootsReplicaEventsError> {
-    value.to_u64_exact().ok_or_else(|| {
-        RadrootsReplicaEventsError::InvalidData(format!("{field} must be a whole number"))
-    })
+    match value.to_u64_exact() {
+        Some(value) => Ok(value),
+        None => Err(RadrootsReplicaEventsError::InvalidData(format!(
+            "{field} must be a whole number"
+        ))),
+    }
 }
 
 fn trade_product_listing_addr_filter(listing_addr: &str) -> ITradeProductFieldsFilter {
@@ -871,9 +882,15 @@ fn event_head_decision(
     exec: &dyn SqlExecutor,
     event: &RadrootsNostrEvent,
 ) -> Result<EventHeadDecision, RadrootsReplicaEventsError> {
-    let candidate = match event_head_candidate_for_event(event).map_err(|err| {
-        RadrootsReplicaEventsError::InvalidData(format!("event head contract mismatch: {err:?}"))
-    })? {
+    let candidate_result = match event_head_candidate_for_event(event) {
+        Ok(candidate) => candidate,
+        Err(err) => {
+            return Err(RadrootsReplicaEventsError::InvalidData(format!(
+                "event head contract mismatch: {err:?}"
+            )));
+        }
+    };
+    let candidate = match candidate_result {
         RadrootsEventHeadCandidateResult::Candidate(candidate) => candidate,
         RadrootsEventHeadCandidateResult::NotHeadSelected => {
             return Err(RadrootsReplicaEventsError::InvalidData(
@@ -1962,22 +1979,22 @@ mod tests {
 
         let mut missing_bin = listing.clone();
         missing_bin.primary_bin_id = "bin-missing".parse().expect("missing bin id");
-        let err = match trade_product_fields_from_listing(&missing_bin, "30402:pubkey:listing") {
-            Ok(_) => panic!("missing primary bin should fail"),
-            Err(err) => err,
-        };
+        let err = trade_product_fields_from_listing(&missing_bin, "30402:pubkey:listing")
+            .err()
+            .expect("missing primary bin should fail");
         assert!(err.to_string().contains("primary bin missing"));
 
         let mut fractional_inventory = listing;
         fractional_inventory.inventory_available = Some(listing_decimal("1.5"));
-        let err = match trade_product_fields_from_listing(
-            &fractional_inventory,
-            "30402:pubkey:listing",
-        ) {
-            Ok(_) => panic!("fractional inventory should fail"),
-            Err(err) => err,
-        };
+        let err = trade_product_fields_from_listing(&fractional_inventory, "30402:pubkey:listing")
+            .err()
+            .expect("fractional inventory should fail");
         assert!(err.to_string().contains("whole number"));
+
+        let err = decimal_to_i64(&listing_decimal("9223372036854775808"), "listing inventory")
+            .err()
+            .expect("i64 overflow should fail");
+        assert!(err.to_string().contains("exceeds i64 range"));
     }
 
     #[test]

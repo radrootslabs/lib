@@ -278,15 +278,12 @@ mod tests {
         ] {
             let tags = replace_tag(&parts.tags, key, tag(key, value));
             let err = farm_file_metadata_from_event(parts.kind, &tags, &parts.content).unwrap_err();
-            assert!(
-                matches!(
-                    err,
-                    EventParseError::InvalidTag(found) if found == expected
-                ) || matches!(
-                    err,
-                    EventParseError::InvalidNumber(found, _) if found == expected
-                )
-            );
+            match err {
+                EventParseError::InvalidTag(found) | EventParseError::InvalidNumber(found, _) => {
+                    assert_eq!(found, expected);
+                }
+                other => panic!("unexpected error: {other:?}"),
+            }
         }
 
         for replacement in [

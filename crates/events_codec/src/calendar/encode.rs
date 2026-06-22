@@ -104,9 +104,7 @@ pub fn rsvp_build_tags(
     push_calendar_event_address(&mut tags, &rsvp.event, "event")?;
     if let Some(event_id) = rsvp.event_id.as_deref() {
         let mut tag = vec![TAG_E.to_string(), event_id.to_string()];
-        if let RadrootsSocialTarget::Address { relays, .. } = &rsvp.event
-            && let Some(relays) = relays.as_ref()
-        {
+        if let Some(relays) = calendar_event_relays(&rsvp.event) {
             tag.extend(
                 relays
                     .iter()
@@ -293,6 +291,16 @@ fn validate_calendar_event_address(
 ) -> Result<(), EventEncodeError> {
     let mut tags = Vec::new();
     push_calendar_event_address(&mut tags, target, field)
+}
+
+fn calendar_event_relays(target: &RadrootsSocialTarget) -> Option<&Vec<String>> {
+    match target {
+        RadrootsSocialTarget::Address {
+            relays: Some(relays),
+            ..
+        } => Some(relays),
+        _ => None,
+    }
 }
 
 fn is_calendar_event_kind(kind: u32) -> bool {

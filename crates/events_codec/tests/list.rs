@@ -293,6 +293,28 @@ fn relay_list_kind_validates_url_shape_and_markers() {
         Err(EventParseError::InvalidTag(TAG_R))
     ));
 
+    for invalid_empty_relay in ["wss://", "ws://"] {
+        let invalid_empty_url = RadrootsList {
+            content: String::new(),
+            entries: vec![RadrootsListEntry {
+                tag: TAG_R.to_string(),
+                values: vec![invalid_empty_relay.to_string()],
+            }],
+        };
+        assert!(matches!(
+            to_wire_parts_with_kind(&invalid_empty_url, KIND_LIST_READ_WRITE_RELAYS),
+            Err(EventEncodeError::InvalidField("relay.url"))
+        ));
+        assert!(matches!(
+            list_from_tags(
+                KIND_LIST_READ_WRITE_RELAYS,
+                String::new(),
+                &[vec![TAG_R.to_string(), invalid_empty_relay.to_string()]]
+            ),
+            Err(EventParseError::InvalidTag(TAG_R))
+        ));
+    }
+
     let invalid_marker = RadrootsList {
         content: String::new(),
         entries: vec![RadrootsListEntry {

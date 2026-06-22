@@ -950,5 +950,27 @@ mod tests {
                 "expected error to contain {expected}, got {error}"
             );
         }
+
+        let store = LocalEventsStore::new(ScriptedExecutor::new(
+            vec![Ok(ExecOutcome {
+                changes: 1,
+                last_insert_id: 0,
+            })],
+            vec![
+                Ok(r#"[{"change_seq":1}]"#.to_owned()),
+                Ok(record_row_with("status", json!("published"))),
+            ],
+        ));
+        let updated = store
+            .update_outbox(&LocalEventRecordUpdate {
+                record_id: "record-a".to_owned(),
+                status: LocalRecordStatus::Published,
+                outbox_status: PublishOutboxStatus::Acknowledged,
+                relay_set_fingerprint: None,
+                relay_delivery_json: None,
+                updated_at_ms: 4000,
+            })
+            .expect("scripted update");
+        assert_eq!(updated.status, LocalRecordStatus::Published);
     }
 }

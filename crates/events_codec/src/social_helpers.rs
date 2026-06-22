@@ -280,6 +280,16 @@ mod tests {
         let location = location_from_tags(&tags).expect("location");
         assert_eq!(location.name.as_deref(), Some("Pack shed"));
         assert_eq!(location.geohash.as_deref(), Some("c23nb62w20st"));
+        let named_location =
+            location_from_tags(&[vec!["location".to_string(), "Farm gate".to_string()]])
+                .expect("named location");
+        assert_eq!(named_location.name.as_deref(), Some("Farm gate"));
+        assert_eq!(named_location.geohash, None);
+        let geohash_location =
+            location_from_tags(&[vec!["g".to_string(), "c23nb62w20st".to_string()]])
+                .expect("geohash location");
+        assert_eq!(geohash_location.name, None);
+        assert_eq!(geohash_location.geohash.as_deref(), Some("c23nb62w20st"));
         let participants = participants_from_tags(&tags).expect("participants");
         assert_eq!(participants[0].pubkey, "crew_pubkey");
         assert_eq!(participants[0].role.as_deref(), Some("participant"));
@@ -310,6 +320,16 @@ mod tests {
                 farm: radroots_events::farm::RadrootsFarmRef {
                     pubkey: " ".to_string(),
                     d_tag: "farm-d-tag".to_string(),
+                },
+                relays: None,
+            },
+        );
+        push_farm_anchor(
+            &mut anchor_tags,
+            &RadrootsSocialFarmAnchor {
+                farm: radroots_events::farm::RadrootsFarmRef {
+                    pubkey: "farm_pubkey".to_string(),
+                    d_tag: " ".to_string(),
                 },
                 relays: None,
             },
@@ -366,16 +386,28 @@ mod tests {
                     relay: Some("wss://relay.example.test".to_string()),
                     role: Some("host".to_string()),
                 },
+                RadrootsCalendarParticipant {
+                    pubkey: "relay_only_pubkey".to_string(),
+                    relay: Some("wss://relay.example.test".to_string()),
+                    role: None,
+                },
             ]),
         );
         assert_eq!(
             participant_tags,
-            vec![vec![
-                "p".to_string(),
-                "crew_pubkey".to_string(),
-                "wss://relay.example.test".to_string(),
-                "host".to_string()
-            ]]
+            vec![
+                vec![
+                    "p".to_string(),
+                    "crew_pubkey".to_string(),
+                    "wss://relay.example.test".to_string(),
+                    "host".to_string()
+                ],
+                vec![
+                    "p".to_string(),
+                    "relay_only_pubkey".to_string(),
+                    "wss://relay.example.test".to_string()
+                ]
+            ]
         );
 
         let dimensions = parse_dimensions_tag("1200x800", "dim").unwrap();

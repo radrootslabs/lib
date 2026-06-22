@@ -65,6 +65,18 @@ impl From<nostr::event::Error> for RadrootsNostrSignerError {
     }
 }
 
+impl From<radroots_nostr::prelude::RadrootsNostrError> for RadrootsNostrSignerError {
+    fn from(value: radroots_nostr::prelude::RadrootsNostrError) -> Self {
+        Self::InvalidState(value.to_string())
+    }
+}
+
+impl From<radroots_nostr_connect::prelude::RadrootsNostrConnectError> for RadrootsNostrSignerError {
+    fn from(value: radroots_nostr_connect::prelude::RadrootsNostrConnectError) -> Self {
+        Self::InvalidState(value.to_string())
+    }
+}
+
 #[cfg(feature = "native")]
 impl From<radroots_sql_core::SqlError> for RadrootsNostrSignerError {
     fn from(value: radroots_sql_core::SqlError) -> Self {
@@ -98,6 +110,24 @@ mod tests {
     fn converts_nostr_event_error() {
         let converted: RadrootsNostrSignerError = nostr::event::Error::InvalidId.into();
         assert!(converted.to_string().starts_with("sign error:"));
+    }
+
+    #[test]
+    fn converts_nostr_filter_error() {
+        let converted: RadrootsNostrSignerError =
+            radroots_nostr::prelude::RadrootsNostrError::FilterTagError("bad tag".to_string())
+                .into();
+        assert!(converted.to_string().starts_with("invalid signer state:"));
+    }
+
+    #[test]
+    fn converts_nostr_connect_error() {
+        let converted: RadrootsNostrSignerError =
+            radroots_nostr_connect::prelude::RadrootsNostrConnectError::InvalidMethod(
+                "bad".to_string(),
+            )
+            .into();
+        assert!(converted.to_string().starts_with("invalid signer state:"));
     }
 
     #[cfg(feature = "native")]

@@ -418,16 +418,16 @@ mod tests {
     }
 
     fn assert_empty_required(error: EventEncodeError, field: &'static str) {
-        assert!(matches!(
-            error,
-            EventEncodeError::EmptyRequiredField(found) if found == field
-        ));
+        match error {
+            EventEncodeError::EmptyRequiredField(found) => assert_eq!(found, field),
+            other => panic!("unexpected error: {other:?}"),
+        }
     }
 
     fn assert_invalid_field(error: EventEncodeError, field: &'static str) {
-        assert!(matches!(
-            error,
-            EventEncodeError::InvalidField(found) if found == field
-        ));
+        match error {
+            EventEncodeError::InvalidField(found) => assert_eq!(found, field),
+            other => panic!("unexpected error: {other:?}"),
+        }
     }
 }

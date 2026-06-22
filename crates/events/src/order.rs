@@ -669,7 +669,7 @@ fn normalized_order_item_counts(
     let mut counts: Vec<NormalizedOrderItemCount> = Vec::new();
     for item in items {
         let bin_id = item.bin_id.trim();
-        if bin_id.is_empty() || item.bin_count == 0 {
+        if item.bin_count == 0 {
             return None;
         }
         if let Some(existing) = counts.iter_mut().find(|count| count.bin_id == bin_id) {
