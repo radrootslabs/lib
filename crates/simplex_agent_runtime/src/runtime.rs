@@ -24,7 +24,7 @@ use radroots_simplex_smp_crypto::prelude::{
     RADROOTS_SIMPLEX_SMP_NONCE_LENGTH, RadrootsSimplexSmpCommandAuthorization,
     RadrootsSimplexSmpRatchetState, RadrootsSimplexSmpX25519Keypair, decode_x25519_public_key_x509,
     decrypt_padded, derive_shared_secret, encode_ed25519_public_key_x509,
-    encode_x25519_public_key_x509, encrypt_padded, random_nonce,
+    encode_x25519_public_key_x509, encrypt_padded, official_x448_keypair_from_seed, random_nonce,
 };
 use radroots_simplex_smp_proto::prelude::{
     RADROOTS_SIMPLEX_SMP_CURRENT_CLIENT_VERSION, RADROOTS_SIMPLEX_SMP_CURRENT_TRANSPORT_VERSION,
@@ -166,14 +166,15 @@ impl RadrootsSimplexAgentRuntime {
             invitation_queue.server.server_identity.as_bytes(),
             &now.to_be_bytes(),
         );
-        let local_dh_public_key = derive_material(
+        let local_dh_public_key = official_x448_keypair_from_seed(&derive_material(
             b"connection-create-local-dh",
             &[
                 invitation_queue.to_string().as_bytes(),
                 &e2e_keypair.public_key,
                 &now.to_be_bytes(),
             ],
-        );
+        ))
+        .public_key;
         let ratchet_state = RadrootsSimplexSmpRatchetState::initiator(
             local_dh_public_key,
             invitation_queue.recipient_dh_public_key.as_bytes().to_vec(),
@@ -252,14 +253,15 @@ impl RadrootsSimplexAgentRuntime {
             encode_queue_public_key(&local_e2e_keypair.public_key);
         reply_queue.sender_id =
             placeholder_sender_id(invitation.connection_id.as_slice(), &now.to_be_bytes());
-        let local_dh_public_key = derive_material(
+        let local_dh_public_key = official_x448_keypair_from_seed(&derive_material(
             b"connection-join-local-dh",
             &[
                 invitation.connection_id.as_slice(),
                 reply_queue.to_string().as_bytes(),
                 &now.to_be_bytes(),
             ],
-        );
+        ))
+        .public_key;
         let ratchet_state = RadrootsSimplexSmpRatchetState::responder(
             local_dh_public_key,
             invitation

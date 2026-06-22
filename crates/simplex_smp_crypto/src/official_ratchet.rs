@@ -29,6 +29,9 @@ pub const RADROOTS_SIMPLEX_OFFICIAL_X3DH_INFO: &[u8] = b"SimpleXX3DH";
 const RADROOTS_SIMPLEX_OFFICIAL_HKDF3_OUTPUT_LENGTH: usize =
     RADROOTS_SIMPLEX_OFFICIAL_AES_KEY_LENGTH * 3;
 const RADROOTS_SIMPLEX_OFFICIAL_PADDING_LENGTH_BYTES: usize = 2;
+const RADROOTS_SIMPLEX_OFFICIAL_X448_DER_PUBLIC_KEY_PREFIX: [u8; 12] = [
+    0x30, 0x42, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x6f, 0x03, 0x39, 0x00,
+];
 type RadrootsSimplexOfficialAes256Gcm = AesGcm<Aes256, U16>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -62,6 +65,16 @@ pub struct RadrootsSimplexOfficialEncryptedMessage {
     pub encrypted_header: Vec<u8>,
     pub auth_tag: Vec<u8>,
     pub body: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RadrootsSimplexOfficialMsgHeader {
+    pub max_version: u16,
+    pub dh_public_key: Vec<u8>,
+    pub pq_public_key: Option<Vec<u8>>,
+    pub pq_ciphertext: Option<Vec<u8>>,
+    pub previous_sending_chain_length: u32,
+    pub message_number: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -155,6 +168,37 @@ pub fn derive_official_x448_shared_secret(
     )?;
     let private = x448::StaticSecret::from(private_key);
     Ok(private.diffie_hellman(&public_key).as_bytes().to_vec())
+}
+
+pub fn encode_official_x448_public_key_der(
+    public_key: &[u8],
+) -> Result<Vec<u8>, RadrootsSimplexSmpCryptoError> {
+    if public_key.len() != RADROOTS_SIMPLEX_OFFICIAL_X448_KEY_LENGTH {
+        return Err(RadrootsSimplexSmpCryptoError::InvalidPublicKeyLength(
+            public_key.len(),
+        ));
+    }
+    let mut encoded = Vec::with_capacity(
+        RADROOTS_SIMPLEX_OFFICIAL_X448_DER_PUBLIC_KEY_PREFIX.len() + public_key.len(),
+    );
+    encoded.extend_from_slice(&RADROOTS_SIMPLEX_OFFICIAL_X448_DER_PUBLIC_KEY_PREFIX);
+    encoded.extend_from_slice(public_key);
+    Ok(encoded)
+}
+
+pub fn decode_official_x448_public_key_der(
+    encoded: &[u8],
+) -> Result<Vec<u8>, RadrootsSimplexSmpCryptoError> {
+    let expected_len = RADROOTS_SIMPLEX_OFFICIAL_X448_DER_PUBLIC_KEY_PREFIX.len()
+        + RADROOTS_SIMPLEX_OFFICIAL_X448_KEY_LENGTH;
+    if encoded.len() != expected_len
+        || !encoded.starts_with(&RADROOTS_SIMPLEX_OFFICIAL_X448_DER_PUBLIC_KEY_PREFIX)
+    {
+        return Err(RadrootsSimplexSmpCryptoError::InvalidPublicKeyLength(
+            encoded.len(),
+        ));
+    }
+    Ok(encoded[RADROOTS_SIMPLEX_OFFICIAL_X448_DER_PUBLIC_KEY_PREFIX.len()..].to_vec())
 }
 
 pub fn official_sntrup761_keypair_from_seed(
@@ -271,6 +315,60 @@ pub fn official_aes_gcm_encrypt_padded(
         )
         .map_err(|_| RadrootsSimplexSmpCryptoError::AesGcmAuthenticationFailed)?;
     split_official_aes_gcm_payload(&encrypted)
+}
+
+pub fn encode_official_msg_header(
+    version: u16,
+    header: &RadrootsSimplexOfficialMsgHeader,
+) -> Result<Vec<u8>, RadrootsSimplexSmpCryptoError> {
+    validate_official_version(version)?;
+    validate_official_version(header.max_version)?;
+    if header.pq_public_key.is_some() || header.pq_ciphertext.is_some() {
+        return Err(RadrootsSimplexSmpCryptoError::IncompletePqHeader);
+    }
+    let public_key = encode_official_x448_public_key_der(&header.dh_public_key)?;
+    let mut buffer = Vec::with_capacity(2 + 1 + public_key.len() + 1 + 4 + 4);
+    buffer.extend_from_slice(&header.max_version.to_be_bytes());
+    push_official_short_bytes(&mut buffer, &public_key)?;
+    if version >= RADROOTS_SIMPLEX_OFFICIAL_E2E_PQ_VERSION {
+        buffer.push(b'0');
+    }
+    buffer.extend_from_slice(&header.previous_sending_chain_length.to_be_bytes());
+    buffer.extend_from_slice(&header.message_number.to_be_bytes());
+    Ok(buffer)
+}
+
+pub fn decode_official_msg_header(
+    version: u16,
+    bytes: &[u8],
+) -> Result<RadrootsSimplexOfficialMsgHeader, RadrootsSimplexSmpCryptoError> {
+    validate_official_version(version)?;
+    let mut cursor = OfficialCursor::new(bytes);
+    let max_version = cursor.read_u16()?;
+    validate_official_version(max_version)?;
+    let dh_public_key = decode_official_x448_public_key_der(cursor.read_short_bytes()?)?;
+    if version >= RADROOTS_SIMPLEX_OFFICIAL_E2E_PQ_VERSION {
+        match cursor.read_byte()? {
+            b'0' => {}
+            b'1' => return Err(RadrootsSimplexSmpCryptoError::IncompletePqHeader),
+            value => {
+                return Err(RadrootsSimplexSmpCryptoError::InvalidCiphertextLength(
+                    value as usize,
+                ));
+            }
+        }
+    }
+    let previous_sending_chain_length = cursor.read_u32()?;
+    let message_number = cursor.read_u32()?;
+    cursor.finish()?;
+    Ok(RadrootsSimplexOfficialMsgHeader {
+        max_version,
+        dh_public_key,
+        pq_public_key: None,
+        pq_ciphertext: None,
+        previous_sending_chain_length,
+        message_number,
+    })
 }
 
 pub fn encode_official_encrypted_header(
@@ -529,6 +627,20 @@ fn push_official_large_by_version(
     Ok(())
 }
 
+fn push_official_short_bytes(
+    buffer: &mut Vec<u8>,
+    value: &[u8],
+) -> Result<(), RadrootsSimplexSmpCryptoError> {
+    if value.len() > u8::MAX as usize {
+        return Err(RadrootsSimplexSmpCryptoError::InvalidShortFieldLength(
+            value.len(),
+        ));
+    }
+    buffer.push(value.len() as u8);
+    buffer.extend_from_slice(value);
+    Ok(())
+}
+
 struct OfficialCursor<'a> {
     bytes: &'a [u8],
     position: usize,
@@ -552,6 +664,24 @@ impl<'a> OfficialCursor<'a> {
     fn read_u16(&mut self) -> Result<u16, RadrootsSimplexSmpCryptoError> {
         let bytes = self.read_slice(2)?;
         Ok(u16::from_be_bytes([bytes[0], bytes[1]]))
+    }
+
+    fn read_u32(&mut self) -> Result<u32, RadrootsSimplexSmpCryptoError> {
+        let bytes = self.read_slice(4)?;
+        Ok(u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+    }
+
+    fn read_byte(&mut self) -> Result<u8, RadrootsSimplexSmpCryptoError> {
+        let Some(value) = self.bytes.get(self.position) else {
+            return Err(RadrootsSimplexSmpCryptoError::InvalidCiphertextLength(0));
+        };
+        self.position += 1;
+        Ok(*value)
+    }
+
+    fn read_short_bytes(&mut self) -> Result<&'a [u8], RadrootsSimplexSmpCryptoError> {
+        let length = self.read_byte()? as usize;
+        self.read_slice(length)
     }
 
     fn read_array<const N: usize>(&mut self) -> Result<[u8; N], RadrootsSimplexSmpCryptoError> {
@@ -651,6 +781,39 @@ mod tests {
             RADROOTS_SIMPLEX_OFFICIAL_X448_SHARED_SECRET_LENGTH
         );
         assert_eq!(alice_secret, bob_secret);
+    }
+
+    #[test]
+    fn official_x448_der_public_key_roundtrips() {
+        let keypair = official_x448_keypair_from_seed(b"rr-synth-official-der-x448");
+        let encoded = encode_official_x448_public_key_der(&keypair.public_key).unwrap();
+        assert_eq!(encoded.len(), 68);
+        assert_eq!(
+            decode_official_x448_public_key_der(&encoded).unwrap(),
+            keypair.public_key
+        );
+    }
+
+    #[test]
+    fn official_no_pq_msg_header_roundtrips() {
+        let keypair = official_x448_keypair_from_seed(b"rr-synth-official-header-x448");
+        let header = RadrootsSimplexOfficialMsgHeader {
+            max_version: RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION,
+            dh_public_key: keypair.public_key,
+            pq_public_key: None,
+            pq_ciphertext: None,
+            previous_sending_chain_length: 5,
+            message_number: 8,
+        };
+        let encoded =
+            encode_official_msg_header(RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION, &header)
+                .unwrap();
+        assert_eq!(encoded.len(), 80);
+        assert_eq!(
+            decode_official_msg_header(RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION, &encoded)
+                .unwrap(),
+            header
+        );
     }
 
     #[test]

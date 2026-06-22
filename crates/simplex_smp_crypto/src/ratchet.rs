@@ -7,10 +7,11 @@ use crate::official_ratchet::{
     RADROOTS_SIMPLEX_OFFICIAL_AES_KEY_LENGTH, RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION,
     RadrootsSimplexOfficialAesGcmPayload, RadrootsSimplexOfficialChainKdfOutput,
     RadrootsSimplexOfficialEncryptedHeader, RadrootsSimplexOfficialEncryptedMessage,
-    decode_official_encrypted_header, decode_official_encrypted_message,
+    RadrootsSimplexOfficialMsgHeader, decode_official_encrypted_header,
+    decode_official_encrypted_message, decode_official_msg_header,
     encode_official_encrypted_header, encode_official_encrypted_message,
-    official_aes_gcm_decrypt_padded, official_aes_gcm_encrypt_padded, official_chain_kdf,
-    official_ratchet_header_len,
+    encode_official_msg_header, official_aes_gcm_decrypt_padded, official_aes_gcm_encrypt_padded,
+    official_chain_kdf, official_ratchet_header_len,
 };
 use alloc::vec::Vec;
 use hkdf::Hkdf;
@@ -256,7 +257,10 @@ impl RadrootsSimplexSmpRatchetState {
     ) -> Result<Vec<u8>, RadrootsSimplexSmpCryptoError> {
         let message_number = self.sending_chain_length;
         let header = self.next_outbound_header()?;
-        let header_plaintext = ratchet_header_associated_data(&header)?;
+        let header_plaintext = encode_official_msg_header(
+            RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION,
+            &official_msg_header_from_ratchet_header(&header),
+        )?;
         let official = derive_official_payload_keys(
             shared_secret,
             self.current_pq_shared_secret.as_deref(),
@@ -320,7 +324,10 @@ impl RadrootsSimplexSmpRatchetState {
             },
             &ratchet_ad,
         )?;
-        let ratchet_header = decode_ratchet_header_associated_data(&header_plaintext)?;
+        let ratchet_header = ratchet_header_from_official_msg_header(decode_official_msg_header(
+            header.version,
+            &header_plaintext,
+        )?);
         if ratchet_header.message_number < self.receiving_chain_length {
             return Err(RadrootsSimplexSmpCryptoError::RatchetMessageRegression {
                 received: ratchet_header.message_number,
@@ -442,6 +449,31 @@ fn official_message_associated_data(ratchet_ad: &[u8], encrypted_header: &[u8]) 
     associated_data
 }
 
+fn official_msg_header_from_ratchet_header(
+    header: &RadrootsSimplexSmpRatchetHeader,
+) -> RadrootsSimplexOfficialMsgHeader {
+    RadrootsSimplexOfficialMsgHeader {
+        max_version: RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION,
+        dh_public_key: header.dh_public_key.clone(),
+        pq_public_key: header.pq_public_key.clone(),
+        pq_ciphertext: header.pq_ciphertext.clone(),
+        previous_sending_chain_length: header.previous_sending_chain_length,
+        message_number: header.message_number,
+    }
+}
+
+fn ratchet_header_from_official_msg_header(
+    header: RadrootsSimplexOfficialMsgHeader,
+) -> RadrootsSimplexSmpRatchetHeader {
+    RadrootsSimplexSmpRatchetHeader {
+        previous_sending_chain_length: header.previous_sending_chain_length,
+        message_number: header.message_number,
+        dh_public_key: header.dh_public_key,
+        pq_public_key: header.pq_public_key,
+        pq_ciphertext: header.pq_ciphertext,
+    }
+}
+
 fn ratchet_header_associated_data(
     header: &RadrootsSimplexSmpRatchetHeader,
 ) -> Result<Vec<u8>, RadrootsSimplexSmpCryptoError> {
@@ -452,22 +484,6 @@ fn ratchet_header_associated_data(
     push_maybe_large_bytes(&mut buffer, header.pq_public_key.as_deref())?;
     push_maybe_large_bytes(&mut buffer, header.pq_ciphertext.as_deref())?;
     Ok(buffer)
-}
-
-fn decode_ratchet_header_associated_data(
-    bytes: &[u8],
-) -> Result<RadrootsSimplexSmpRatchetHeader, RadrootsSimplexSmpCryptoError> {
-    let mut cursor = RatchetHeaderCursor::new(bytes);
-    let header = RadrootsSimplexSmpRatchetHeader {
-        previous_sending_chain_length: cursor.read_u32()?,
-        message_number: cursor.read_u32()?,
-        dh_public_key: cursor.read_large_bytes()?,
-        pq_public_key: cursor.read_maybe_large_bytes()?,
-        pq_ciphertext: cursor.read_maybe_large_bytes()?,
-    };
-    cursor.finish()?;
-    header.validate()?;
-    Ok(header)
 }
 
 fn push_maybe_large_bytes(
@@ -499,66 +515,6 @@ fn push_large_bytes(
     buffer.extend_from_slice(&(value.len() as u16).to_be_bytes());
     buffer.extend_from_slice(value);
     Ok(())
-}
-
-struct RatchetHeaderCursor<'a> {
-    bytes: &'a [u8],
-    position: usize,
-}
-
-impl<'a> RatchetHeaderCursor<'a> {
-    const fn new(bytes: &'a [u8]) -> Self {
-        Self { bytes, position: 0 }
-    }
-
-    fn finish(&self) -> Result<(), RadrootsSimplexSmpCryptoError> {
-        if self.position == self.bytes.len() {
-            Ok(())
-        } else {
-            Err(RadrootsSimplexSmpCryptoError::InvalidCiphertextLength(
-                self.bytes.len() - self.position,
-            ))
-        }
-    }
-
-    fn read_u32(&mut self) -> Result<u32, RadrootsSimplexSmpCryptoError> {
-        let bytes = self.read_slice(4)?;
-        Ok(u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
-    }
-
-    fn read_byte(&mut self) -> Result<u8, RadrootsSimplexSmpCryptoError> {
-        let Some(value) = self.bytes.get(self.position) else {
-            return Err(RadrootsSimplexSmpCryptoError::InvalidCiphertextLength(0));
-        };
-        self.position += 1;
-        Ok(*value)
-    }
-
-    fn read_large_bytes(&mut self) -> Result<Vec<u8>, RadrootsSimplexSmpCryptoError> {
-        let bytes = self.read_slice(2)?;
-        let length = u16::from_be_bytes([bytes[0], bytes[1]]) as usize;
-        Ok(self.read_slice(length)?.to_vec())
-    }
-
-    fn read_maybe_large_bytes(&mut self) -> Result<Option<Vec<u8>>, RadrootsSimplexSmpCryptoError> {
-        match self.read_byte()? {
-            0 => Ok(None),
-            1 => self.read_large_bytes().map(Some),
-            value => Err(RadrootsSimplexSmpCryptoError::InvalidCiphertextLength(
-                value as usize,
-            )),
-        }
-    }
-
-    fn read_slice(&mut self, len: usize) -> Result<&'a [u8], RadrootsSimplexSmpCryptoError> {
-        let Some(bytes) = self.bytes.get(self.position..self.position + len) else {
-            return Err(RadrootsSimplexSmpCryptoError::InvalidCiphertextLength(
-                self.bytes.len().saturating_sub(self.position),
-            ));
-        };
-        self.position += len;
-        Ok(bytes)
-    }
 }
 
 #[cfg(test)]
@@ -647,18 +603,12 @@ mod tests {
 
     #[test]
     fn encrypts_payload_and_advances_receive_state() {
-        let mut sender = RadrootsSimplexSmpRatchetState::initiator(
-            b"alice-dh".to_vec(),
-            b"bob-dh".to_vec(),
-            None,
-        )
-        .unwrap();
-        let mut receiver = RadrootsSimplexSmpRatchetState::responder(
-            b"bob-dh".to_vec(),
-            b"alice-dh".to_vec(),
-            None,
-        )
-        .unwrap();
+        let mut sender =
+            RadrootsSimplexSmpRatchetState::initiator(vec![1_u8; 56], vec![2_u8; 56], None)
+                .unwrap();
+        let mut receiver =
+            RadrootsSimplexSmpRatchetState::responder(vec![2_u8; 56], vec![1_u8; 56], None)
+                .unwrap();
         let shared_secret = [7_u8; RADROOTS_SIMPLEX_SMP_SHARED_SECRET_LENGTH];
 
         let (header, ciphertext) = sender
@@ -675,18 +625,12 @@ mod tests {
 
     #[test]
     fn rejects_tampered_ratchet_header() {
-        let mut sender = RadrootsSimplexSmpRatchetState::initiator(
-            b"alice-dh".to_vec(),
-            b"bob-dh".to_vec(),
-            None,
-        )
-        .unwrap();
-        let mut receiver = RadrootsSimplexSmpRatchetState::responder(
-            b"bob-dh".to_vec(),
-            b"alice-dh".to_vec(),
-            None,
-        )
-        .unwrap();
+        let mut sender =
+            RadrootsSimplexSmpRatchetState::initiator(vec![1_u8; 56], vec![2_u8; 56], None)
+                .unwrap();
+        let mut receiver =
+            RadrootsSimplexSmpRatchetState::responder(vec![2_u8; 56], vec![1_u8; 56], None)
+                .unwrap();
         let shared_secret = [9_u8; RADROOTS_SIMPLEX_SMP_SHARED_SECRET_LENGTH];
         let (mut header, ciphertext) = sender
             .encrypt_payload(&shared_secret, b"agent body", 64)
@@ -722,18 +666,12 @@ mod tests {
 
     #[test]
     fn encrypts_official_payload_as_opaque_message() {
-        let mut sender = RadrootsSimplexSmpRatchetState::initiator(
-            b"alice-dh".to_vec(),
-            b"bob-dh".to_vec(),
-            None,
-        )
-        .unwrap();
-        let mut receiver = RadrootsSimplexSmpRatchetState::responder(
-            b"bob-dh".to_vec(),
-            b"alice-dh".to_vec(),
-            None,
-        )
-        .unwrap();
+        let mut sender =
+            RadrootsSimplexSmpRatchetState::initiator(vec![1_u8; 56], vec![2_u8; 56], None)
+                .unwrap();
+        let mut receiver =
+            RadrootsSimplexSmpRatchetState::responder(vec![2_u8; 56], vec![1_u8; 56], None)
+                .unwrap();
         let shared_secret = [11_u8; RADROOTS_SIMPLEX_SMP_SHARED_SECRET_LENGTH];
 
         let encrypted = sender
@@ -751,18 +689,12 @@ mod tests {
 
     #[test]
     fn rejects_tampered_official_payload_body() {
-        let mut sender = RadrootsSimplexSmpRatchetState::initiator(
-            b"alice-dh".to_vec(),
-            b"bob-dh".to_vec(),
-            None,
-        )
-        .unwrap();
-        let mut receiver = RadrootsSimplexSmpRatchetState::responder(
-            b"bob-dh".to_vec(),
-            b"alice-dh".to_vec(),
-            None,
-        )
-        .unwrap();
+        let mut sender =
+            RadrootsSimplexSmpRatchetState::initiator(vec![1_u8; 56], vec![2_u8; 56], None)
+                .unwrap();
+        let mut receiver =
+            RadrootsSimplexSmpRatchetState::responder(vec![2_u8; 56], vec![1_u8; 56], None)
+                .unwrap();
         let shared_secret = [12_u8; RADROOTS_SIMPLEX_SMP_SHARED_SECRET_LENGTH];
         let mut encrypted = sender
             .encrypt_official_payload(&shared_secret, b"official agent body", 96)
