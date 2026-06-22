@@ -50,6 +50,21 @@ pub struct RadrootsSimplexOfficialAesGcmPayload {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RadrootsSimplexOfficialEncryptedHeader {
+    pub version: u16,
+    pub iv: [u8; RADROOTS_SIMPLEX_OFFICIAL_AES_IV_LENGTH],
+    pub auth_tag: Vec<u8>,
+    pub body: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RadrootsSimplexOfficialEncryptedMessage {
+    pub encrypted_header: Vec<u8>,
+    pub auth_tag: Vec<u8>,
+    pub body: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RadrootsSimplexOfficialRootKdfOutput {
     pub root_key: Vec<u8>,
     pub chain_key: Vec<u8>,
@@ -90,6 +105,27 @@ pub fn official_full_header_len(
         + official_ratchet_header_len(version, pq_enabled)?
         + RADROOTS_SIMPLEX_OFFICIAL_AES_AUTH_TAG_LENGTH
         + RADROOTS_SIMPLEX_OFFICIAL_AES_IV_LENGTH)
+}
+
+pub fn official_encoded_encrypted_header_len(
+    version: u16,
+    pq_enabled: bool,
+) -> Result<usize, RadrootsSimplexSmpCryptoError> {
+    Ok(2 + RADROOTS_SIMPLEX_OFFICIAL_AES_IV_LENGTH
+        + RADROOTS_SIMPLEX_OFFICIAL_AES_AUTH_TAG_LENGTH
+        + official_large_prefix_len(version)?
+        + official_ratchet_header_len(version, pq_enabled)?)
+}
+
+pub fn official_encoded_encrypted_message_len(
+    version: u16,
+    pq_enabled: bool,
+    padded_body_len: usize,
+) -> Result<usize, RadrootsSimplexSmpCryptoError> {
+    Ok(official_large_prefix_len(version)?
+        + official_encoded_encrypted_header_len(version, pq_enabled)?
+        + RADROOTS_SIMPLEX_OFFICIAL_AES_AUTH_TAG_LENGTH
+        + padded_body_len)
 }
 
 pub fn official_x448_keypair_from_seed(seed: &[u8]) -> RadrootsSimplexOfficialX448Keypair {
@@ -237,6 +273,86 @@ pub fn official_aes_gcm_encrypt_padded(
     split_official_aes_gcm_payload(&encrypted)
 }
 
+pub fn encode_official_encrypted_header(
+    header: &RadrootsSimplexOfficialEncryptedHeader,
+) -> Result<Vec<u8>, RadrootsSimplexSmpCryptoError> {
+    validate_official_version(header.version)?;
+    if header.auth_tag.len() != RADROOTS_SIMPLEX_OFFICIAL_AES_AUTH_TAG_LENGTH {
+        return Err(RadrootsSimplexSmpCryptoError::InvalidSignatureLength(
+            header.auth_tag.len(),
+        ));
+    }
+    let mut buffer = Vec::with_capacity(
+        2 + RADROOTS_SIMPLEX_OFFICIAL_AES_IV_LENGTH
+            + RADROOTS_SIMPLEX_OFFICIAL_AES_AUTH_TAG_LENGTH
+            + official_large_prefix_len(header.version)?
+            + header.body.len(),
+    );
+    buffer.extend_from_slice(&header.version.to_be_bytes());
+    buffer.extend_from_slice(&header.iv);
+    buffer.extend_from_slice(&header.auth_tag);
+    push_official_large_by_version(&mut buffer, header.version, &header.body)?;
+    Ok(buffer)
+}
+
+pub fn decode_official_encrypted_header(
+    bytes: &[u8],
+) -> Result<RadrootsSimplexOfficialEncryptedHeader, RadrootsSimplexSmpCryptoError> {
+    let mut cursor = OfficialCursor::new(bytes);
+    let version = cursor.read_u16()?;
+    validate_official_version(version)?;
+    let iv = cursor.read_array::<RADROOTS_SIMPLEX_OFFICIAL_AES_IV_LENGTH>()?;
+    let auth_tag = cursor
+        .read_slice(RADROOTS_SIMPLEX_OFFICIAL_AES_AUTH_TAG_LENGTH)?
+        .to_vec();
+    let body = cursor.read_official_large()?.to_vec();
+    cursor.finish()?;
+    Ok(RadrootsSimplexOfficialEncryptedHeader {
+        version,
+        iv,
+        auth_tag,
+        body,
+    })
+}
+
+pub fn encode_official_encrypted_message(
+    version: u16,
+    message: &RadrootsSimplexOfficialEncryptedMessage,
+) -> Result<Vec<u8>, RadrootsSimplexSmpCryptoError> {
+    validate_official_version(version)?;
+    if message.auth_tag.len() != RADROOTS_SIMPLEX_OFFICIAL_AES_AUTH_TAG_LENGTH {
+        return Err(RadrootsSimplexSmpCryptoError::InvalidSignatureLength(
+            message.auth_tag.len(),
+        ));
+    }
+    let mut buffer = Vec::with_capacity(
+        official_large_prefix_len(version)?
+            + message.encrypted_header.len()
+            + RADROOTS_SIMPLEX_OFFICIAL_AES_AUTH_TAG_LENGTH
+            + message.body.len(),
+    );
+    push_official_large_by_version(&mut buffer, version, &message.encrypted_header)?;
+    buffer.extend_from_slice(&message.auth_tag);
+    buffer.extend_from_slice(&message.body);
+    Ok(buffer)
+}
+
+pub fn decode_official_encrypted_message(
+    bytes: &[u8],
+) -> Result<RadrootsSimplexOfficialEncryptedMessage, RadrootsSimplexSmpCryptoError> {
+    let mut cursor = OfficialCursor::new(bytes);
+    let encrypted_header = cursor.read_official_large()?.to_vec();
+    let auth_tag = cursor
+        .read_slice(RADROOTS_SIMPLEX_OFFICIAL_AES_AUTH_TAG_LENGTH)?
+        .to_vec();
+    let body = cursor.read_remaining().to_vec();
+    Ok(RadrootsSimplexOfficialEncryptedMessage {
+        encrypted_header,
+        auth_tag,
+        body,
+    })
+}
+
 pub fn official_aes_gcm_decrypt_padded(
     key: &[u8],
     iv: &[u8],
@@ -369,6 +485,113 @@ fn official_hkdf3(
     ))
 }
 
+fn validate_official_version(version: u16) -> Result<(), RadrootsSimplexSmpCryptoError> {
+    if version < RADROOTS_SIMPLEX_OFFICIAL_E2E_KDF_VERSION
+        || version > RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION
+    {
+        return Err(RadrootsSimplexSmpCryptoError::InvalidOfficialRatchetVersion(version));
+    }
+    Ok(())
+}
+
+fn official_large_prefix_len(version: u16) -> Result<usize, RadrootsSimplexSmpCryptoError> {
+    validate_official_version(version)?;
+    Ok(if version >= RADROOTS_SIMPLEX_OFFICIAL_E2E_PQ_VERSION {
+        2
+    } else {
+        1
+    })
+}
+
+fn push_official_large_by_version(
+    buffer: &mut Vec<u8>,
+    version: u16,
+    value: &[u8],
+) -> Result<(), RadrootsSimplexSmpCryptoError> {
+    if version >= RADROOTS_SIMPLEX_OFFICIAL_E2E_PQ_VERSION {
+        if value.len() > u16::MAX as usize {
+            return Err(RadrootsSimplexSmpCryptoError::InvalidMessageLength {
+                actual: value.len(),
+                padded: u16::MAX as usize,
+            });
+        }
+        buffer.extend_from_slice(&(value.len() as u16).to_be_bytes());
+    } else {
+        if value.len() > u8::MAX as usize {
+            return Err(RadrootsSimplexSmpCryptoError::InvalidMessageLength {
+                actual: value.len(),
+                padded: u8::MAX as usize,
+            });
+        }
+        buffer.push(value.len() as u8);
+    }
+    buffer.extend_from_slice(value);
+    Ok(())
+}
+
+struct OfficialCursor<'a> {
+    bytes: &'a [u8],
+    position: usize,
+}
+
+impl<'a> OfficialCursor<'a> {
+    const fn new(bytes: &'a [u8]) -> Self {
+        Self { bytes, position: 0 }
+    }
+
+    fn finish(&self) -> Result<(), RadrootsSimplexSmpCryptoError> {
+        if self.position == self.bytes.len() {
+            Ok(())
+        } else {
+            Err(RadrootsSimplexSmpCryptoError::InvalidCiphertextLength(
+                self.bytes.len() - self.position,
+            ))
+        }
+    }
+
+    fn read_u16(&mut self) -> Result<u16, RadrootsSimplexSmpCryptoError> {
+        let bytes = self.read_slice(2)?;
+        Ok(u16::from_be_bytes([bytes[0], bytes[1]]))
+    }
+
+    fn read_array<const N: usize>(&mut self) -> Result<[u8; N], RadrootsSimplexSmpCryptoError> {
+        let bytes = self.read_slice(N)?;
+        let mut value = [0_u8; N];
+        value.copy_from_slice(bytes);
+        Ok(value)
+    }
+
+    fn read_slice(&mut self, len: usize) -> Result<&'a [u8], RadrootsSimplexSmpCryptoError> {
+        let Some(bytes) = self.bytes.get(self.position..self.position + len) else {
+            return Err(RadrootsSimplexSmpCryptoError::InvalidCiphertextLength(
+                self.bytes.len().saturating_sub(self.position),
+            ));
+        };
+        self.position += len;
+        Ok(bytes)
+    }
+
+    fn read_official_large(&mut self) -> Result<&'a [u8], RadrootsSimplexSmpCryptoError> {
+        let first = *self
+            .bytes
+            .get(self.position)
+            .ok_or(RadrootsSimplexSmpCryptoError::InvalidCiphertextLength(0))?;
+        let len = if first < 32 {
+            self.read_u16()? as usize
+        } else {
+            self.position += 1;
+            first as usize
+        };
+        self.read_slice(len)
+    }
+
+    fn read_remaining(&mut self) -> &'a [u8] {
+        let bytes = &self.bytes[self.position..];
+        self.position = self.bytes.len();
+        bytes
+    }
+}
+
 fn pq_seed(seed: &[u8]) -> [u8; RADROOTS_SIMPLEX_OFFICIAL_AES_KEY_LENGTH] {
     let digest = Sha256::digest(seed);
     let mut value = [0_u8; RADROOTS_SIMPLEX_OFFICIAL_AES_KEY_LENGTH];
@@ -387,6 +610,22 @@ mod tests {
         assert_eq!(official_ratchet_header_len(3, true).unwrap(), 2_310);
         assert_eq!(official_full_header_len(3, false).unwrap(), 123);
         assert_eq!(official_full_header_len(3, true).unwrap(), 2_345);
+        assert_eq!(
+            official_encoded_encrypted_header_len(2, false).unwrap(),
+            123
+        );
+        assert_eq!(
+            official_encoded_encrypted_header_len(3, false).unwrap(),
+            124
+        );
+        assert_eq!(
+            official_encoded_encrypted_header_len(3, true).unwrap(),
+            2_346
+        );
+        assert_eq!(
+            official_encoded_encrypted_message_len(3, false, 15_840).unwrap(),
+            15_982
+        );
     }
 
     #[test]
@@ -469,6 +708,64 @@ mod tests {
         assert!(matches!(
             official_aes_gcm_decrypt_padded(&key, &iv, &payload, b"wrong-ad").unwrap_err(),
             RadrootsSimplexSmpCryptoError::AesGcmAuthenticationFailed
+        ));
+    }
+
+    #[test]
+    fn official_encrypted_header_and_message_wire_roundtrip() {
+        let header = RadrootsSimplexOfficialEncryptedHeader {
+            version: RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION,
+            iv: [21_u8; RADROOTS_SIMPLEX_OFFICIAL_AES_IV_LENGTH],
+            auth_tag: vec![22_u8; RADROOTS_SIMPLEX_OFFICIAL_AES_AUTH_TAG_LENGTH],
+            body: vec![23_u8; RADROOTS_SIMPLEX_OFFICIAL_RATCHET_HEADER_LENGTH],
+        };
+        let encoded_header = encode_official_encrypted_header(&header).unwrap();
+        assert_eq!(encoded_header.len(), 124);
+        assert_eq!(
+            decode_official_encrypted_header(&encoded_header).unwrap(),
+            header
+        );
+
+        let message = RadrootsSimplexOfficialEncryptedMessage {
+            encrypted_header: encoded_header,
+            auth_tag: vec![24_u8; RADROOTS_SIMPLEX_OFFICIAL_AES_AUTH_TAG_LENGTH],
+            body: vec![25_u8; 96],
+        };
+        let encoded = encode_official_encrypted_message(
+            RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION,
+            &message,
+        )
+        .unwrap();
+        assert_eq!(encoded.len(), 2 + 124 + 16 + 96);
+        assert_eq!(
+            decode_official_encrypted_message(&encoded).unwrap(),
+            message
+        );
+    }
+
+    #[test]
+    fn official_encrypted_message_rejects_malformed_wire_lengths() {
+        let header = RadrootsSimplexOfficialEncryptedHeader {
+            version: 3,
+            iv: [31_u8; RADROOTS_SIMPLEX_OFFICIAL_AES_IV_LENGTH],
+            auth_tag: vec![32_u8; RADROOTS_SIMPLEX_OFFICIAL_AES_AUTH_TAG_LENGTH],
+            body: vec![33_u8; RADROOTS_SIMPLEX_OFFICIAL_RATCHET_HEADER_LENGTH],
+        };
+        let mut encoded_header = encode_official_encrypted_header(&header).unwrap();
+        encoded_header.truncate(encoded_header.len() - 1);
+        assert!(matches!(
+            decode_official_encrypted_header(&encoded_header).unwrap_err(),
+            RadrootsSimplexSmpCryptoError::InvalidCiphertextLength(_)
+        ));
+
+        let message = RadrootsSimplexOfficialEncryptedMessage {
+            encrypted_header: encode_official_encrypted_header(&header).unwrap(),
+            auth_tag: vec![34_u8; RADROOTS_SIMPLEX_OFFICIAL_AES_AUTH_TAG_LENGTH - 1],
+            body: vec![35_u8; 32],
+        };
+        assert!(matches!(
+            encode_official_encrypted_message(3, &message).unwrap_err(),
+            RadrootsSimplexSmpCryptoError::InvalidSignatureLength(_)
         ));
     }
 
