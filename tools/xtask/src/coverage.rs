@@ -1627,8 +1627,8 @@ fn run_with_root(args: &[String], root: &Path) -> Result<(), String> {
             let mut stdout = std::io::stdout().lock();
             list_workspace_crates_with_root(root, &mut stdout)
         }
-        Some(_) => Err("unknown sdk coverage subcommand".to_string()),
-        None => Err("missing sdk coverage subcommand".to_string()),
+        Some(_) => Err("unknown coverage subcommand".to_string()),
+        None => Err("missing coverage subcommand".to_string()),
     }
 }
 
@@ -4743,9 +4743,9 @@ test_threads = 0
         let run_crate_err = run(&["run-crate".to_string()]).expect_err("run crate missing args");
         assert!(run_crate_err.contains("missing --crate"));
         let unknown_err = run(&["unknown".to_string()]).expect_err("unknown subcommand");
-        assert!(unknown_err.contains("unknown sdk coverage subcommand"));
+        assert!(unknown_err.contains("unknown coverage subcommand"));
         let missing_err = run(&[]).expect_err("missing subcommand");
-        assert!(missing_err.contains("missing sdk coverage subcommand"));
+        assert!(missing_err.contains("missing coverage subcommand"));
     }
 
     #[test]

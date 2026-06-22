@@ -53,14 +53,14 @@ in
 
   contract = mkRepoApp {
     name = "contract";
-    description = "Run the sdk contract lane";
+    description = "Run the core-library contract lane";
     runtimeInputs = common.runtimeInputs.stable;
     command = common.contractCommand;
   };
 
   coverage-report = mkRepoApp {
     name = "coverage-report";
-    description = "Generate sdk coverage reports and blocking gate artifacts";
+    description = "Generate coverage reports and blocking gate artifacts";
     runtimeInputs = common.runtimeInputs.coverage;
     command = common.coverageReportCommand;
     env = common.exportCoverageEnv;
@@ -69,10 +69,10 @@ in
 
   guards = mkRepoApp {
     name = "guards";
-    description = "Run repository guard scripts";
+    description = "Run repository hygiene guards";
     runtimeInputs = common.runtimeInputs.stable;
     command = ''
-      ./scripts/ci/guard_no_legacy_identifiers.sh
+      cargo run -q -p xtask -- hygiene forbidden-identifiers
     '';
   };
 

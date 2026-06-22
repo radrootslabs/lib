@@ -14,7 +14,7 @@ This file exists for compatibility with tools that look for AGENTS.md.
 ## 2. Repository operating model
 
 - This is a public open-source library workspace; optimize for durable library design, portability, determinism, and explicit contracts.
-- Keep release and validation automation forge-agnostic; repo-owned scripts, Nix apps, tags, and contract metadata are canonical, while committed provider-specific workflow automation is not.
+- Keep release and validation automation forge-agnostic; repo-owned xtask commands, Nix apps, tags, and contract metadata are canonical, while committed provider-specific workflow automation is not.
 - Prefer clean target-state changes over compatibility scaffolding unless compatibility is explicitly required.
 - Stay within the requested scope and the smallest coherent file set.
 - Do not fold unrelated cleanup, speculative refactors, or roadmap work into the same change.
@@ -26,8 +26,7 @@ This file exists for compatibility with tools that look for AGENTS.md.
 Before editing code:
 
 - Read this file, `AGENT_INSTRUCTIONS.md`, and `README`.
-- When touching Nix behavior, read `flake.nix` and the active Nix implementation files under
-  `nix/` until the approved `build/nix/` migration lands.
+- When touching Nix behavior, read `flake.nix` and the active Nix implementation files under `build/nix/`.
 - Enter the canonical environment with `nix develop` or `direnv allow` before targeted cargo work.
 - Discover commands from checked-in repo surfaces; do not invent ad hoc workflows.
 - Read the current implementation and nearby tests before designing a change.
@@ -40,7 +39,7 @@ Before editing code:
 - `nix run .#contract`
 - `nix run .#release-preflight`
 - targeted `cargo check -p <crate>` and `cargo test -p <crate>` only inside the Nix shell
-- targeted `cargo run -q -p xtask -- ...` only when narrowing a repo-owned contract or export workflow
+- targeted `cargo xtask contract ...`, `cargo xtask coverage ...`, `cargo xtask release ...`, or `cargo xtask hygiene ...` only when narrowing a repo-owned workflow
 - if Beads is active, read `.beads/PRIME.md`
 
 ## 5. Rust engineering rules
@@ -59,7 +58,7 @@ Before editing code:
 
 ## 6. Contract and release discipline
 
-- `contracts/` and `crates/xtask` are authoritative for core-library contracts, conformance, coverage, and release-candidate governance.
+- `contracts/` and `tools/xtask` are authoritative for core-library contracts, conformance, coverage, hygiene, and release-candidate governance.
 - Behavior changes that affect public surfaces must update the relevant contract metadata, conformance vectors, export rules, or validation flows in the same change.
 - Keep pure flake checks and repo-aware command apps aligned with the documented Nix command map.
 

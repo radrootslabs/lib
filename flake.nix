@@ -38,8 +38,8 @@
             inherit system;
             overlays = [ inputs.rust-overlay.overlays.default ];
           };
-          toolchains = import ./nix/toolchains.nix { inherit pkgs; };
-          common = import ./nix/common.nix {
+          toolchains = import ./build/nix/toolchains.nix { inherit pkgs; };
+          common = import ./build/nix/common.nix {
             crane = inputs.crane;
             inherit lib pkgs toolchains;
           };
@@ -47,7 +47,7 @@
         {
           treefmt = import ./treefmt.nix;
 
-          apps = import ./nix/apps.nix {
+          apps = import ./build/nix/apps.nix {
             inherit
               common
               config
@@ -58,12 +58,12 @@
           };
 
           checks = lib.filterAttrs (_: value: value != null) (
-            import ./nix/checks.nix {
+            import ./build/nix/checks.nix {
               inherit common pkgs;
             }
           );
 
-          devShells = import ./nix/devshells.nix {
+          devShells = import ./build/nix/devshells.nix {
             inherit common pkgs toolchains;
           };
 

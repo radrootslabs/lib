@@ -42,7 +42,7 @@ members = [
   "crates/trade",
   "crates/types",
   "crates/protected_store",
-  "crates/xtask",
+  "tools/xtask",
 ]
 resolver = "2"
 

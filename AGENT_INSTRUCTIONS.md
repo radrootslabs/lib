@@ -32,7 +32,7 @@ Stay disciplined:
 - do not leave dead paths, temporary adapters, or silent fallback behavior behind
 
 This repo is a library workspace, not an app monolith. The right default is small, durable changes that preserve clean crate boundaries.
-Release automation should stay forge-agnostic. Keep release truth in repo-owned scripts, Nix apps, tags, and contract metadata rather than committed provider-specific workflow files.
+Release automation should stay forge-agnostic. Keep release truth in repo-owned xtask commands, Nix apps, tags, and contract metadata rather than committed provider-specific workflow files.
 
 ## 3. Preflight workflow
 
@@ -41,8 +41,7 @@ Before editing code:
 - Read `AGENTS.md`.
 - Read this file.
 - Read `README` when the change touches workflow or public surfaces.
-- When touching Nix behavior, read `flake.nix` and the active Nix implementation files under
-  `nix/` until the approved `build/nix/` migration lands.
+- When touching Nix behavior, read `flake.nix` and the active Nix implementation files under `build/nix/`.
 - Read the relevant crate manifest, implementation files, and nearby tests before proposing a new structure.
 - Check `git status --short`.
 
@@ -71,12 +70,12 @@ Use this mental model:
   - cross-language and cross-surface vector expectations
 - `docs/`
   - durable workflow and environment documentation
-- `nix/`, `flake.nix`, `treefmt.nix`
+- `build/nix/`, `flake.nix`, `treefmt.nix`
   - canonical environment and CI contract
-- `scripts/`
-  - repo-owned automation used by canonical lanes
+- `tools/xtask/`
+  - typed repo-owned automation used by canonical lanes
 
-Do not duplicate contract knowledge between crates when `contracts/`, `contracts/conformance/`, or `xtask` already owns it.
+Do not duplicate contract knowledge between crates when `contracts/`, `contracts/conformance/`, or `tools/xtask` already owns it.
 
 ## 5. Rust engineering standards
 
@@ -136,7 +135,7 @@ Do not duplicate contract knowledge between crates when `contracts/`, `contracts
 
 ## 6. Contract, conformance, and release workflow
 
-`contracts/`, `contracts/conformance/`, and `crates/xtask` are first-class parts of the product surface, not secondary metadata.
+`contracts/`, `contracts/conformance/`, and `tools/xtask` are first-class parts of the product surface, not secondary metadata.
 
 When a change affects exported models, transforms, identifiers, or public runtime expectations:
 
@@ -161,8 +160,9 @@ Targeted iteration inside the Nix shell:
 
 - `cargo check -p <crate>`
 - `cargo test -p <crate>`
-- `cargo run -q -p xtask -- sdk validate`
-- `cargo run -q -p xtask -- sdk release preflight`
+- `cargo xtask contract validate`
+- `cargo xtask release preflight`
+- `cargo xtask hygiene forbidden-identifiers`
 
 Validation rules:
 

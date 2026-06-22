@@ -3,18 +3,19 @@ use std::path::{Path, PathBuf};
 
 pub fn run(args: &[String], root: &Path) -> Result<(), String> {
     match args.first().map(String::as_str) {
-        Some("invariants") => validate_invariants(root),
-        _ => Err("unknown phase1-1 subcommand".to_string()),
+        Some("forbidden-identifiers") => validate_forbidden_identifiers(root),
+        _ => Err("unknown hygiene subcommand".to_string()),
     }
 }
 
-pub fn validate_invariants(root: &Path) -> Result<(), String> {
+pub fn validate_forbidden_identifiers(root: &Path) -> Result<(), String> {
     let mut failures = Vec::new();
     reject_substrings(
         root,
         &[PathBuf::from("crates/relay_transport/src")],
         &["RadrootsEventIngest::verified"],
         "relay fetch must not bypass event-store verification",
+        &[],
         &mut failures,
     );
     reject_substrings(
@@ -22,6 +23,7 @@ pub fn validate_invariants(root: &Path) -> Result<(), String> {
         &[PathBuf::from("crates/event_store/src")],
         &["last_created_at", "last_event_id"],
         "event-store projection cursors must use last_event_seq",
+        &[],
         &mut failures,
     );
     reject_raw_protocol_strings(root, &mut failures);
@@ -44,6 +46,7 @@ pub fn validate_invariants(root: &Path) -> Result<(), String> {
             "RadrootsActiveTrade",
             "RadrootsTradeListingParseError",
             "RadrootsTradeDomain",
+            "radroots_sdk::trade::",
             "TradeListingParseError",
             "TradeListingEnvelope",
             "TradeListingMessage",
@@ -68,15 +71,45 @@ pub fn validate_invariants(root: &Path) -> Result<(), String> {
             "RADROOTS_TRADE_ENVELOPE_VERSION",
         ],
         "legacy trade identifiers must not reappear",
+        &[],
+        &mut failures,
+    );
+    reject_substrings(
+        root,
+        &[PathBuf::from("crates"), PathBuf::from("contracts")],
+        &[
+            "KIND_TRADE_LISTING_ORDER",
+            "KIND_TRADE_LISTING_QUESTION",
+            "KIND_TRADE_LISTING_ANSWER",
+            "KIND_TRADE_LISTING_DISCOUNT",
+            "KIND_TRADE_LISTING_CANCEL",
+            "KIND_TRADE_LISTING_FULFILLMENT",
+            "KIND_TRADE_LISTING_RECEIPT",
+        ],
+        "legacy trade listing kind constants must not reappear",
+        &[],
+        &mut failures,
+    );
+    reject_substrings(
+        root,
+        &[
+            PathBuf::from("crates"),
+            PathBuf::from("contracts"),
+            PathBuf::from("tools"),
+            PathBuf::from("build"),
+        ],
+        &["tangle"],
+        "legacy identifier 'tangle' must not reappear",
+        &["tools/xtask/src/hygiene.rs"],
         &mut failures,
     );
 
     if failures.is_empty() {
-        println!("phase1-1 invariants passed");
+        println!("forbidden identifier hygiene passed");
         Ok(())
     } else {
         Err(format!(
-            "phase1-1 invariant violations:\n{}",
+            "forbidden identifier hygiene violations:\n{}",
             failures.join("\n")
         ))
     }
@@ -87,9 +120,14 @@ fn reject_substrings(
     rel_roots: &[PathBuf],
     patterns: &[&str],
     label: &str,
+    ignored_rel_paths: &[&str],
     failures: &mut Vec<String>,
 ) {
     for file in files_under(root, rel_roots) {
+        let rel = display_path(root, &file);
+        if ignored_rel_paths.contains(&rel.as_str()) {
+            continue;
+        }
         let Ok(content) = fs::read_to_string(&file) else {
             continue;
         };
@@ -98,7 +136,7 @@ fn reject_substrings(
                 if line.contains(pattern) {
                     failures.push(format!(
                         "{label}: {}:{}: {}",
-                        display_path(root, &file),
+                        rel,
                         line_index + 1,
                         line.trim()
                     ));
@@ -184,7 +222,7 @@ fn collect_files(path: PathBuf, files: &mut Vec<PathBuf>) {
     if metadata.is_file() {
         if matches!(
             path.extension().and_then(|ext| ext.to_str()),
-            Some("rs" | "sql" | "sh")
+            Some("json" | "md" | "nix" | "rs" | "sh" | "sql" | "toml")
         ) {
             files.push(path);
         }
@@ -215,7 +253,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("system time")
             .as_nanos();
-        std::env::temp_dir().join(format!("radroots_xtask_phase1_1_{prefix}_{ns}"))
+        std::env::temp_dir().join(format!("radroots_xtask_hygiene_{prefix}_{ns}"))
     }
 
     fn write_file(root: &Path, rel: &str, content: &str) {
@@ -225,7 +263,7 @@ mod tests {
     }
 
     #[test]
-    fn invariants_accept_clean_synthetic_tree() {
+    fn forbidden_identifiers_accept_clean_synthetic_tree() {
         let root = unique_temp_dir("clean");
         write_file(
             &root,
@@ -242,12 +280,12 @@ mod tests {
             "crates/trade/src/order.rs",
             "pub struct RadrootsOrderProjection { pub order_id: RadrootsOrderId, }\n",
         );
-        validate_invariants(&root).expect("clean tree");
+        validate_forbidden_identifiers(&root).expect("clean tree");
         let _ = fs::remove_dir_all(root);
     }
 
     #[test]
-    fn invariants_reject_phase1_regressions() {
+    fn forbidden_identifiers_reject_regressions() {
         let root = unique_temp_dir("dirty");
         write_file(
             &root,
@@ -264,10 +302,32 @@ mod tests {
             "crates/trade/src/order.rs",
             "pub struct BadOrder {\n    pub order_id: String,\n}\n",
         );
-        let err = validate_invariants(&root).expect_err("dirty tree");
+        write_file(&root, "contracts/events/social-events.md", "tangle\n");
+        write_file(
+            &root,
+            "crates/events/src/kinds.rs",
+            "pub const KIND_TRADE_LISTING_ORDER: u64 = 1;\n",
+        );
+        let err = validate_forbidden_identifiers(&root).expect_err("dirty tree");
         assert!(err.contains("relay fetch must not bypass event-store verification"));
         assert!(err.contains("event-store projection cursors must use last_event_seq"));
         assert!(err.contains("raw commercial protocol identifier String fields are forbidden"));
+        assert!(err.contains("legacy identifier 'tangle' must not reappear"));
+        assert!(err.contains("legacy trade listing kind constants must not reappear"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn run_dispatches_forbidden_identifiers() {
+        let root = unique_temp_dir("run");
+        write_file(
+            &root,
+            "crates/relay_transport/src/fetch.rs",
+            "fn fetch() { let _ = RadrootsEventIngest::new; }\n",
+        );
+        run(&["forbidden-identifiers".to_string()], &root).expect("hygiene run");
+        let unknown = run(&["unknown".to_string()], &root).expect_err("unknown hygiene command");
+        assert!(unknown.contains("unknown hygiene subcommand"));
         let _ = fs::remove_dir_all(root);
     }
 }

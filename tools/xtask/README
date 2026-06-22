@@ -7,9 +7,9 @@ tasks for the `radroots` core libraries.
 
  * an internal `cargo xtask` runner for workspace-oriented development and
    release workflows;
- * `sdk` subcommands that export TypeScript bundles, crate models, and related
-   artifacts;
- * command-dispatch code used for manifest, contract, and artifact generation
+ * `contract`, `coverage`, `release`, and `hygiene` command families for
+   core-library governance;
+ * command-dispatch code used for contract, coverage, hygiene, and release
    paths inside the workspace;
  * a non-published binary crate used as tooling rather than as a library
    dependency.

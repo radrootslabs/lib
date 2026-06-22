@@ -5,8 +5,8 @@
   toolchains,
 }:
 let
-  root = ../.;
-  cargoToml = builtins.fromTOML (builtins.readFile ../Cargo.toml);
+  root = ../..;
+  cargoToml = builtins.fromTOML (builtins.readFile ../../Cargo.toml);
   version = cargoToml.workspace.package.version;
   darwinBuildInputs = lib.optionals pkgs.stdenv.isDarwin [
     pkgs.libiconv
@@ -16,14 +16,13 @@ let
     root = root;
     fileset = lib.fileset.intersection (lib.fileset.fromSource repoSource) (
       lib.fileset.unions [
-        ../Cargo.toml
-        ../Cargo.lock
-        ../README
-        ../rust-toolchain.toml
-        ../spec
-        ../policy
-        ../crates
-        ../scripts
+        ../../Cargo.toml
+        ../../Cargo.lock
+        ../../README
+        ../../rust-toolchain.toml
+        ../../contracts
+        ../../crates
+        ../../tools
       ]
     );
   };
@@ -85,7 +84,7 @@ let
     cargoLlvmCov
   ];
   releaseRuntimeInputs = coverageRuntimeInputs;
-  sdkContractCrates = [
+  coreContractCrates = [
     "xtask"
     "radroots_core"
     "radroots_types"
@@ -97,7 +96,7 @@ let
     "radroots_nostr_connect"
     "radroots_nostr_signer"
   ];
-  sdkContractCargoArgs = lib.concatStringsSep " " (map (crate: "-p ${crate}") sdkContractCrates);
+  coreContractCargoArgs = lib.concatStringsSep " " (map (crate: "-p ${crate}") coreContractCrates);
   craneLib = (crane.mkLib pkgs).overrideToolchain toolchains.stable;
   commonCraneArgs = {
     inherit version;
@@ -174,36 +173,68 @@ let
     cargo check --workspace
   '';
   contractCommand = ''
-    ./scripts/ci/guard_no_legacy_identifiers.sh
-    cargo check -q ${sdkContractCargoArgs}
-    cargo test -q ${sdkContractCargoArgs}
-    cargo run -q -p xtask -- sdk validate
+    cargo run -q -p xtask -- hygiene forbidden-identifiers
+    cargo check -q ${coreContractCargoArgs}
+    cargo test -q ${coreContractCargoArgs}
+    cargo run -q -p xtask -- contract validate
   '';
   releasePreflightCommand = ''
-    ./scripts/ci/release_preflight.sh
+    cargo check -q
+    env -u RADROOTS_MOUNTED_RUST_CRATE_PUBLISH_POLICY cargo test -q -p xtask
+    cargo run -q -p xtask -- contract validate
+
+    required_file="$(mktemp)"
+    trap 'rm -f "$required_file"' EXIT
+    cargo run -q -p xtask -- coverage required-crates > "$required_file"
+
+    rm -rf target/coverage
+    mkdir -p target/coverage
+
+    while IFS= read -r crate; do
+      [ -n "$crate" ] || continue
+      safe_crate="''${crate//-/_}"
+      out_dir="target/coverage/''${safe_crate}"
+      mkdir -p "$out_dir"
+
+      cargo run -q -p xtask -- coverage run-crate --crate "$crate" --out "$out_dir"
+      cargo run -q -p xtask -- coverage report \
+        --scope "$crate" \
+        --summary "$out_dir/coverage-summary.json" \
+        --lcov "$out_dir/coverage-lcov.info" \
+        --out "$out_dir/gate-report.json" \
+        --policy-gate
+    done < "$required_file"
+
+    cargo run -q -p xtask -- coverage refresh-summary \
+      --reports-root target/coverage \
+      --out target/coverage/coverage-refresh.tsv \
+      --status-out target/coverage/coverage-refresh-status.tsv
+
+    cargo run -q -p xtask -- release preflight
+    echo "release preflight complete"
   '';
   coverageReportCommand = ''
-        rm -rf target/sdk-coverage
-        mkdir -p target/sdk-coverage
-        : > target/sdk-coverage/coverage-report-status.txt
+        rm -rf target/coverage-report
+        mkdir -p target/coverage-report
+        : > target/coverage-report/coverage-report-status.txt
 
         workspace_crates_file="$(mktemp)"
         required_crates_file="$(mktemp)"
         trap 'rm -f "$workspace_crates_file" "$required_crates_file"' EXIT
 
-        cargo run -q -p xtask -- sdk coverage workspace-crates > "$workspace_crates_file"
+        cargo run -q -p xtask -- coverage workspace-crates > "$workspace_crates_file"
         while IFS= read -r crate; do
           [ -n "''${crate}" ] || continue
           safe_crate="''${crate//-/_}"
-          run_dir="target/sdk-coverage/''${safe_crate}"
+          run_dir="target/coverage-report/''${safe_crate}"
           mkdir -p "''${run_dir}"
           status="ok"
 
-          if ! cargo run -q -p xtask -- sdk coverage run-crate --crate "''${crate}" --out "''${run_dir}"; then
+          if ! cargo run -q -p xtask -- coverage run-crate --crate "''${crate}" --out "''${run_dir}"; then
             status="run-failed"
           fi
 
-          if [ "''${status}" = "ok" ] && ! cargo run -q -p xtask -- sdk coverage report \
+          if [ "''${status}" = "ok" ] && ! cargo run -q -p xtask -- coverage report \
             --scope "''${crate}" \
             --summary "''${run_dir}/coverage-summary.json" \
             --lcov "''${run_dir}/coverage-lcov.info" \
@@ -255,15 +286,15 @@ let
     EOF
           fi
 
-          echo "''${crate}:''${status}" >> target/sdk-coverage/coverage-report-status.txt
+          echo "''${crate}:''${status}" >> target/coverage-report/coverage-report-status.txt
         done < "$workspace_crates_file"
 
-        cargo run -q -p xtask -- sdk coverage required-crates > "$required_crates_file"
+        cargo run -q -p xtask -- coverage required-crates > "$required_crates_file"
         while IFS= read -r crate; do
           [ -n "''${crate}" ] || continue
           safe_crate="''${crate//-/_}"
-          crate_dir="target/sdk-coverage/''${safe_crate}"
-          crate_status="$(awk -F: -v crate="''${crate}" '$1 == crate { status = $2 } END { print status }' target/sdk-coverage/coverage-report-status.txt)"
+          crate_dir="target/coverage-report/''${safe_crate}"
+          crate_status="$(awk -F: -v crate="''${crate}" '$1 == crate { status = $2 } END { print status }' target/coverage-report/coverage-report-status.txt)"
 
           if [ ! -f "''${crate_dir}/coverage-summary.json" ] || [ ! -f "''${crate_dir}/coverage-lcov.info" ]; then
             fail_reason="missing-coverage-artifacts"
@@ -271,14 +302,14 @@ let
               fail_reason="''${crate_status}"
             fi
 
-            cargo run -q -p xtask -- sdk coverage report-missing \
+            cargo run -q -p xtask -- coverage report-missing \
               --scope "''${crate}" \
               --out "''${crate_dir}/coverage-gate-blocking.json" \
               --reason "''${fail_reason}"
             continue
           fi
 
-          cargo run -q -p xtask -- sdk coverage report \
+          cargo run -q -p xtask -- coverage report \
             --scope "''${crate}" \
             --summary "''${crate_dir}/coverage-summary.json" \
             --lcov "''${crate_dir}/coverage-lcov.info" \
@@ -300,7 +331,7 @@ in
     ensureRepoRoot
     mkRepoCheck
     releasePreflightCommand
-    sdkContractCargoArgs
+    coreContractCargoArgs
     sharedEnv
     version
     xtaskPackage

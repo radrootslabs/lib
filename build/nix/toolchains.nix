@@ -1,6 +1,6 @@
 { pkgs }:
 let
-  toolchain = builtins.fromTOML (builtins.readFile ../rust-toolchain.toml);
+  toolchain = builtins.fromTOML (builtins.readFile ../../rust-toolchain.toml);
   stableVersion = toolchain.toolchain.channel;
   stableTargets = toolchain.toolchain.targets or [ ];
   stableExtensions = [
@@ -16,5 +16,5 @@ in
     targets = stableTargets;
   };
 
-  coverage = pkgs.rust-bin.fromRustupToolchainFile ../rust-toolchain-coverage.toml;
+  coverage = pkgs.rust-bin.fromRustupToolchainFile ../../rust-toolchain-coverage.toml;
 }

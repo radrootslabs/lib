@@ -5,7 +5,7 @@
 mod contract;
 mod coverage;
 #[cfg_attr(coverage_nightly, coverage(off))]
-mod phase1_1;
+mod hygiene;
 
 use std::env;
 use std::path::{Path, PathBuf};
@@ -13,21 +13,21 @@ use std::process::ExitCode;
 
 fn usage() {
     eprintln!("usage:");
-    eprintln!("  cargo xtask sdk validate");
-    eprintln!("  cargo xtask sdk release preflight");
-    eprintln!("  cargo xtask sdk coverage run-crate --crate <crate> [--out <dir>]");
-    eprintln!("  cargo xtask sdk coverage required-crates");
-    eprintln!("  cargo xtask sdk coverage workspace-crates");
+    eprintln!("  cargo xtask contract validate");
+    eprintln!("  cargo xtask release preflight");
+    eprintln!("  cargo xtask coverage run-crate --crate <crate> [--out <dir>]");
+    eprintln!("  cargo xtask coverage required-crates");
+    eprintln!("  cargo xtask coverage workspace-crates");
     eprintln!(
-        "  cargo xtask sdk coverage report --scope <scope> --summary <file> --lcov <file> --out <file> [--policy-gate | (--fail-under-exec-lines <pct> --fail-under-functions <pct> --fail-under-regions <pct> --fail-under-branches <pct> [--require-branches])]"
+        "  cargo xtask coverage report --scope <scope> --summary <file> --lcov <file> --out <file> [--policy-gate | (--fail-under-exec-lines <pct> --fail-under-functions <pct> --fail-under-regions <pct> --fail-under-branches <pct> [--require-branches])]"
     );
     eprintln!(
-        "  cargo xtask sdk coverage report-missing --scope <scope> --out <file> --reason <reason>"
+        "  cargo xtask coverage report-missing --scope <scope> --out <file> --reason <reason>"
     );
     eprintln!(
-        "  cargo xtask sdk coverage refresh-summary [--reports-root <dir>] [--out <file>] [--status-out <file>]"
+        "  cargo xtask coverage refresh-summary [--reports-root <dir>] [--out <file>] [--status-out <file>]"
     );
-    eprintln!("  cargo xtask phase1-1 invariants");
+    eprintln!("  cargo xtask hygiene forbidden-identifiers");
 }
 
 fn workspace_root_with_override(override_root: Option<&str>) -> PathBuf {
@@ -67,19 +67,19 @@ fn run_release(args: &[String]) -> Result<(), String> {
     }
 }
 
-fn run_sdk(args: &[String]) -> Result<(), String> {
+fn run_contract(args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
         Some("validate") => validate_contract(),
-        Some("release") => run_release(&args[1..]),
-        Some("coverage") => coverage::run(&args[1..]),
-        _ => Err("unknown sdk subcommand".to_string()),
+        _ => Err("unknown contract subcommand".to_string()),
     }
 }
 
 fn run(args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
-        Some("sdk") => run_sdk(&args[1..]),
-        Some("phase1-1") => phase1_1::run(&args[1..], &workspace_root()),
+        Some("contract") => run_contract(&args[1..]),
+        Some("coverage") => coverage::run(&args[1..]),
+        Some("hygiene") => hygiene::run(&args[1..], &workspace_root()),
+        Some("release") => run_release(&args[1..]),
         _ => Err("unknown command".to_string()),
     }
 }
@@ -155,11 +155,16 @@ mod tests {
             run_release(&["unknown".to_string()]).expect_err("unknown release subcommand");
         assert!(unknown_release.contains("unknown release subcommand"));
 
-        let unknown_sdk = run_sdk(&["unknown".to_string()]).expect_err("unknown sdk subcommand");
-        assert!(unknown_sdk.contains("unknown sdk subcommand"));
+        let unknown_contract =
+            run_contract(&["unknown".to_string()]).expect_err("unknown contract subcommand");
+        assert!(unknown_contract.contains("unknown contract subcommand"));
 
         let unknown_root = run(&["unknown".to_string()]).expect_err("unknown command");
         assert!(unknown_root.contains("unknown command"));
+
+        let removed_sdk = run(&["sdk".to_string(), "validate".to_string()])
+            .expect_err("removed sdk command namespace");
+        assert!(removed_sdk.contains("unknown command"));
     }
 
     #[test]
@@ -179,12 +184,10 @@ mod tests {
         let out_dir = unique_temp_dir("coverage_dispatch");
         fs::create_dir_all(&out_dir).expect("create out dir");
 
-        validate_contract().expect("validate contract");
-        run_sdk(&["coverage".to_string(), "help".to_string()]).expect("coverage help");
-        run_sdk(&["coverage".to_string(), "required-crates".to_string()])
-            .expect("coverage required crates");
-        run_sdk(&["coverage".to_string(), "workspace-crates".to_string()])
-            .expect("coverage workspace crates");
+        run_contract(&["validate".to_string()]).expect("validate contract");
+        coverage::run(&["help".to_string()]).expect("coverage help");
+        coverage::run(&["required-crates".to_string()]).expect("coverage required crates");
+        coverage::run(&["workspace-crates".to_string()]).expect("coverage workspace crates");
 
         let summary_path = out_dir.join("summary.json");
         let lcov_path = out_dir.join("coverage.info");
@@ -195,8 +198,7 @@ mod tests {
         )
         .expect("write summary");
         fs::write(&lcov_path, "DA:1,1\nBRDA:1,0,0,1\n").expect("write lcov");
-        run_sdk(&[
-            "coverage".to_string(),
+        coverage::run(&[
             "report".to_string(),
             "--scope".to_string(),
             "main-test".to_string(),
@@ -210,13 +212,9 @@ mod tests {
         ])
         .expect("coverage report");
 
-        run(&[
-            "sdk".to_string(),
-            "coverage".to_string(),
-            "help".to_string(),
-        ])
-        .expect("root run sdk coverage");
-        run(&["phase1-1".to_string(), "invariants".to_string()]).expect("phase1-1 invariants");
+        run(&["coverage".to_string(), "help".to_string()]).expect("root run coverage");
+        run(&["hygiene".to_string(), "forbidden-identifiers".to_string()])
+            .expect("hygiene forbidden identifiers");
 
         let _ = fs::remove_dir_all(out_dir);
     }
@@ -226,11 +224,7 @@ mod tests {
         usage();
         let empty_code = main_with_args(Vec::new());
         assert_eq!(empty_code, ExitCode::from(2));
-        let success_code = main_with_args(vec![
-            "sdk".to_string(),
-            "coverage".to_string(),
-            "help".to_string(),
-        ]);
+        let success_code = main_with_args(vec!["coverage".to_string(), "help".to_string()]);
         assert_eq!(success_code, ExitCode::SUCCESS);
         let failure_code = main_with_args(vec!["unknown".to_string()]);
         assert_eq!(failure_code, ExitCode::from(2));
@@ -238,8 +232,8 @@ mod tests {
     }
 
     #[test]
-    fn run_sdk_dispatches_validate_command() {
+    fn run_contract_dispatches_validate_command() {
         let _guard = lock_workspace();
-        run_sdk(&["validate".to_string()]).expect("sdk validate");
+        run_contract(&["validate".to_string()]).expect("contract validate");
     }
 }

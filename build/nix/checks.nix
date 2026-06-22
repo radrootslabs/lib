@@ -8,7 +8,7 @@ let
       pname = "radroots-cargo-check";
       doCheck = false;
       buildPhaseCargoCommand = ''
-        cargo check ${common.sdkContractCargoArgs}
+        cargo check ${common.coreContractCargoArgs}
       '';
       installPhaseCommand = "mkdir -p $out";
     }
@@ -20,7 +20,7 @@ let
       pname = "radroots-cargo-test";
       doCheck = false;
       buildPhaseCargoCommand = ''
-        cargo test ${common.sdkContractCargoArgs}
+        cargo test ${common.coreContractCargoArgs}
       '';
       installPhaseCommand = "mkdir -p $out";
     }
@@ -34,6 +34,7 @@ in
   guards = common.mkRepoCheck {
     name = "repo-guards";
     runtimeInputs = [
+      common.xtaskPackage
       pkgs.coreutils
       pkgs.gitMinimal
       pkgs.gnugrep
@@ -41,7 +42,7 @@ in
     ];
     initGit = true;
     command = ''
-      ./scripts/ci/guard_no_legacy_identifiers.sh
+      xtask hygiene forbidden-identifiers
     '';
   };
 }

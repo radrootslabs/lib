@@ -15,7 +15,7 @@ let
 in
 {
   default = pkgs.mkShell {
-    packages = common.runtimeInputs.wasm ++ [
+    packages = common.runtimeInputs.stable ++ [
       common.cargoLlvmCov
     ];
     shellHook = defaultHook;
