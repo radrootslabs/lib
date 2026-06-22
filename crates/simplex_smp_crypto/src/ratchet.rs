@@ -3,9 +3,18 @@ use crate::message::{
     RADROOTS_SIMPLEX_SMP_NONCE_LENGTH, RADROOTS_SIMPLEX_SMP_SHARED_SECRET_LENGTH, decrypt_padded,
     encrypt_padded,
 };
+use crate::official_ratchet::{
+    RADROOTS_SIMPLEX_OFFICIAL_AES_KEY_LENGTH, RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION,
+    RadrootsSimplexOfficialAesGcmPayload, RadrootsSimplexOfficialChainKdfOutput,
+    RadrootsSimplexOfficialEncryptedHeader, RadrootsSimplexOfficialEncryptedMessage,
+    decode_official_encrypted_header, decode_official_encrypted_message,
+    encode_official_encrypted_header, encode_official_encrypted_message,
+    official_aes_gcm_decrypt_padded, official_aes_gcm_encrypt_padded, official_chain_kdf,
+    official_ratchet_header_len,
+};
 use alloc::vec::Vec;
 use hkdf::Hkdf;
-use sha2::Sha512;
+use sha2::{Digest, Sha256, Sha512};
 
 const RADROOTS_SIMPLEX_AGENT_RATCHET_INFO: &[u8] = b"SimpleXAgentRatchetMessage";
 const RADROOTS_SIMPLEX_AGENT_RATCHET_OUTPUT_LENGTH: usize =
@@ -238,6 +247,105 @@ impl RadrootsSimplexSmpRatchetState {
         self.apply_inbound_header(header, None)?;
         Ok(plaintext)
     }
+
+    pub fn encrypt_official_payload(
+        &mut self,
+        shared_secret: &[u8],
+        plaintext: &[u8],
+        padded_len: usize,
+    ) -> Result<Vec<u8>, RadrootsSimplexSmpCryptoError> {
+        let message_number = self.sending_chain_length;
+        let header = self.next_outbound_header()?;
+        let header_plaintext = ratchet_header_associated_data(&header)?;
+        let official = derive_official_payload_keys(
+            shared_secret,
+            self.current_pq_shared_secret.as_deref(),
+            self.root_epoch,
+            message_number,
+        )?;
+        let ratchet_ad = official_ratchet_associated_data(shared_secret, self.root_epoch);
+        let header_payload = official_aes_gcm_encrypt_padded(
+            &official.header_key,
+            &official.chain.header_iv,
+            &header_plaintext,
+            official_ratchet_header_len(
+                RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION,
+                self.pq_enabled(),
+            )?,
+            &ratchet_ad,
+        )?;
+        let encrypted_header = encode_official_encrypted_header(&official_encrypted_header(
+            official.chain.header_iv,
+            header_payload,
+        )?)?;
+        let message_ad = official_message_associated_data(&ratchet_ad, &encrypted_header);
+        let message_payload = official_aes_gcm_encrypt_padded(
+            &official.chain.message_key,
+            &official.chain.message_iv,
+            plaintext,
+            padded_len,
+            &message_ad,
+        )?;
+        encode_official_encrypted_message(
+            RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION,
+            &RadrootsSimplexOfficialEncryptedMessage {
+                encrypted_header,
+                auth_tag: message_payload.auth_tag,
+                body: message_payload.ciphertext,
+            },
+        )
+    }
+
+    pub fn decrypt_official_payload(
+        &mut self,
+        shared_secret: &[u8],
+        encrypted_message: &[u8],
+    ) -> Result<Vec<u8>, RadrootsSimplexSmpCryptoError> {
+        let message_number = self.receiving_chain_length;
+        let official = derive_official_payload_keys(
+            shared_secret,
+            self.current_pq_shared_secret.as_deref(),
+            self.root_epoch,
+            message_number,
+        )?;
+        let message = decode_official_encrypted_message(encrypted_message)?;
+        let header = decode_official_encrypted_header(&message.encrypted_header)?;
+        let ratchet_ad = official_ratchet_associated_data(shared_secret, self.root_epoch);
+        let header_plaintext = official_aes_gcm_decrypt_padded(
+            &official.header_key,
+            &header.iv,
+            &RadrootsSimplexOfficialAesGcmPayload {
+                auth_tag: header.auth_tag,
+                ciphertext: header.body,
+            },
+            &ratchet_ad,
+        )?;
+        let ratchet_header = decode_ratchet_header_associated_data(&header_plaintext)?;
+        if ratchet_header.message_number < self.receiving_chain_length {
+            return Err(RadrootsSimplexSmpCryptoError::RatchetMessageRegression {
+                received: ratchet_header.message_number,
+                current: self.receiving_chain_length,
+            });
+        }
+        let message_ad = official_message_associated_data(&ratchet_ad, &message.encrypted_header);
+        let plaintext = official_aes_gcm_decrypt_padded(
+            &official.chain.message_key,
+            &official.chain.message_iv,
+            &RadrootsSimplexOfficialAesGcmPayload {
+                auth_tag: message.auth_tag,
+                ciphertext: message.body,
+            },
+            &message_ad,
+        )?;
+        self.apply_inbound_header(&ratchet_header, None)?;
+        Ok(plaintext)
+    }
+
+    fn pq_enabled(&self) -> bool {
+        self.current_pq_public_key.is_some()
+            || self.remote_pq_public_key.is_some()
+            || self.current_pq_shared_secret.is_some()
+    }
 }
 
 fn validate_public_key(value: &[u8]) -> Result<(), RadrootsSimplexSmpCryptoError> {
@@ -277,6 +385,63 @@ fn derive_ratchet_message_key(
     ))
 }
 
+struct OfficialPayloadKeys {
+    header_key: Vec<u8>,
+    chain: RadrootsSimplexOfficialChainKdfOutput,
+}
+
+fn derive_official_payload_keys(
+    shared_secret: &[u8],
+    pq_shared_secret: Option<&[u8]>,
+    root_epoch: u64,
+    message_number: u32,
+) -> Result<OfficialPayloadKeys, RadrootsSimplexSmpCryptoError> {
+    let mut seed_input =
+        Vec::with_capacity(shared_secret.len() + pq_shared_secret.map_or(0, <[u8]>::len) + 12);
+    seed_input.extend_from_slice(shared_secret);
+    if let Some(secret) = pq_shared_secret {
+        seed_input.extend_from_slice(secret);
+    }
+    seed_input.extend_from_slice(&root_epoch.to_be_bytes());
+    seed_input.extend_from_slice(&message_number.to_be_bytes());
+    let chain_seed = Sha256::digest(&seed_input);
+    let chain = official_chain_kdf(&chain_seed)?;
+    let mut header_input = Vec::with_capacity(chain.chain_key.len() + shared_secret.len() + 12);
+    header_input.extend_from_slice(&chain.chain_key);
+    header_input.extend_from_slice(shared_secret);
+    header_input.extend_from_slice(&root_epoch.to_be_bytes());
+    header_input.extend_from_slice(&message_number.to_be_bytes());
+    let header_key =
+        Sha256::digest(&header_input)[..RADROOTS_SIMPLEX_OFFICIAL_AES_KEY_LENGTH].to_vec();
+    Ok(OfficialPayloadKeys { header_key, chain })
+}
+
+fn official_encrypted_header(
+    iv: [u8; crate::official_ratchet::RADROOTS_SIMPLEX_OFFICIAL_AES_IV_LENGTH],
+    payload: RadrootsSimplexOfficialAesGcmPayload,
+) -> Result<RadrootsSimplexOfficialEncryptedHeader, RadrootsSimplexSmpCryptoError> {
+    Ok(RadrootsSimplexOfficialEncryptedHeader {
+        version: RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION,
+        iv,
+        auth_tag: payload.auth_tag,
+        body: payload.ciphertext,
+    })
+}
+
+fn official_ratchet_associated_data(shared_secret: &[u8], root_epoch: u64) -> Vec<u8> {
+    let mut associated_data = Vec::with_capacity(shared_secret.len() + 8);
+    associated_data.extend_from_slice(shared_secret);
+    associated_data.extend_from_slice(&root_epoch.to_be_bytes());
+    associated_data
+}
+
+fn official_message_associated_data(ratchet_ad: &[u8], encrypted_header: &[u8]) -> Vec<u8> {
+    let mut associated_data = Vec::with_capacity(ratchet_ad.len() + encrypted_header.len());
+    associated_data.extend_from_slice(ratchet_ad);
+    associated_data.extend_from_slice(encrypted_header);
+    associated_data
+}
+
 fn ratchet_header_associated_data(
     header: &RadrootsSimplexSmpRatchetHeader,
 ) -> Result<Vec<u8>, RadrootsSimplexSmpCryptoError> {
@@ -287,6 +452,22 @@ fn ratchet_header_associated_data(
     push_maybe_large_bytes(&mut buffer, header.pq_public_key.as_deref())?;
     push_maybe_large_bytes(&mut buffer, header.pq_ciphertext.as_deref())?;
     Ok(buffer)
+}
+
+fn decode_ratchet_header_associated_data(
+    bytes: &[u8],
+) -> Result<RadrootsSimplexSmpRatchetHeader, RadrootsSimplexSmpCryptoError> {
+    let mut cursor = RatchetHeaderCursor::new(bytes);
+    let header = RadrootsSimplexSmpRatchetHeader {
+        previous_sending_chain_length: cursor.read_u32()?,
+        message_number: cursor.read_u32()?,
+        dh_public_key: cursor.read_large_bytes()?,
+        pq_public_key: cursor.read_maybe_large_bytes()?,
+        pq_ciphertext: cursor.read_maybe_large_bytes()?,
+    };
+    cursor.finish()?;
+    header.validate()?;
+    Ok(header)
 }
 
 fn push_maybe_large_bytes(
@@ -318,6 +499,66 @@ fn push_large_bytes(
     buffer.extend_from_slice(&(value.len() as u16).to_be_bytes());
     buffer.extend_from_slice(value);
     Ok(())
+}
+
+struct RatchetHeaderCursor<'a> {
+    bytes: &'a [u8],
+    position: usize,
+}
+
+impl<'a> RatchetHeaderCursor<'a> {
+    const fn new(bytes: &'a [u8]) -> Self {
+        Self { bytes, position: 0 }
+    }
+
+    fn finish(&self) -> Result<(), RadrootsSimplexSmpCryptoError> {
+        if self.position == self.bytes.len() {
+            Ok(())
+        } else {
+            Err(RadrootsSimplexSmpCryptoError::InvalidCiphertextLength(
+                self.bytes.len() - self.position,
+            ))
+        }
+    }
+
+    fn read_u32(&mut self) -> Result<u32, RadrootsSimplexSmpCryptoError> {
+        let bytes = self.read_slice(4)?;
+        Ok(u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+    }
+
+    fn read_byte(&mut self) -> Result<u8, RadrootsSimplexSmpCryptoError> {
+        let Some(value) = self.bytes.get(self.position) else {
+            return Err(RadrootsSimplexSmpCryptoError::InvalidCiphertextLength(0));
+        };
+        self.position += 1;
+        Ok(*value)
+    }
+
+    fn read_large_bytes(&mut self) -> Result<Vec<u8>, RadrootsSimplexSmpCryptoError> {
+        let bytes = self.read_slice(2)?;
+        let length = u16::from_be_bytes([bytes[0], bytes[1]]) as usize;
+        Ok(self.read_slice(length)?.to_vec())
+    }
+
+    fn read_maybe_large_bytes(&mut self) -> Result<Option<Vec<u8>>, RadrootsSimplexSmpCryptoError> {
+        match self.read_byte()? {
+            0 => Ok(None),
+            1 => self.read_large_bytes().map(Some),
+            value => Err(RadrootsSimplexSmpCryptoError::InvalidCiphertextLength(
+                value as usize,
+            )),
+        }
+    }
+
+    fn read_slice(&mut self, len: usize) -> Result<&'a [u8], RadrootsSimplexSmpCryptoError> {
+        let Some(bytes) = self.bytes.get(self.position..self.position + len) else {
+            return Err(RadrootsSimplexSmpCryptoError::InvalidCiphertextLength(
+                self.bytes.len().saturating_sub(self.position),
+            ));
+        };
+        self.position += len;
+        Ok(bytes)
+    }
 }
 
 #[cfg(test)]
@@ -477,5 +718,64 @@ mod tests {
         assert_eq!(header.pq_public_key.as_ref().unwrap().len(), 1158);
         assert_eq!(header.pq_ciphertext.as_ref().unwrap().len(), 1039);
         assert!(ratchet_header_associated_data(&header).unwrap().len() > 2200);
+    }
+
+    #[test]
+    fn encrypts_official_payload_as_opaque_message() {
+        let mut sender = RadrootsSimplexSmpRatchetState::initiator(
+            b"alice-dh".to_vec(),
+            b"bob-dh".to_vec(),
+            None,
+        )
+        .unwrap();
+        let mut receiver = RadrootsSimplexSmpRatchetState::responder(
+            b"bob-dh".to_vec(),
+            b"alice-dh".to_vec(),
+            None,
+        )
+        .unwrap();
+        let shared_secret = [11_u8; RADROOTS_SIMPLEX_SMP_SHARED_SECRET_LENGTH];
+
+        let encrypted = sender
+            .encrypt_official_payload(&shared_secret, b"official agent body", 96)
+            .unwrap();
+        assert_ne!(encrypted, b"official agent body");
+        assert_eq!(encrypted.len(), 2 + 124 + 16 + 96);
+
+        let plaintext = receiver
+            .decrypt_official_payload(&shared_secret, &encrypted)
+            .unwrap();
+        assert_eq!(plaintext, b"official agent body");
+        assert_eq!(receiver.receiving_chain_length, 1);
+    }
+
+    #[test]
+    fn rejects_tampered_official_payload_body() {
+        let mut sender = RadrootsSimplexSmpRatchetState::initiator(
+            b"alice-dh".to_vec(),
+            b"bob-dh".to_vec(),
+            None,
+        )
+        .unwrap();
+        let mut receiver = RadrootsSimplexSmpRatchetState::responder(
+            b"bob-dh".to_vec(),
+            b"alice-dh".to_vec(),
+            None,
+        )
+        .unwrap();
+        let shared_secret = [12_u8; RADROOTS_SIMPLEX_SMP_SHARED_SECRET_LENGTH];
+        let mut encrypted = sender
+            .encrypt_official_payload(&shared_secret, b"official agent body", 96)
+            .unwrap();
+        let last = encrypted.len() - 1;
+        encrypted[last] ^= 1;
+
+        let error = receiver
+            .decrypt_official_payload(&shared_secret, &encrypted)
+            .unwrap_err();
+        assert_eq!(
+            error,
+            RadrootsSimplexSmpCryptoError::AesGcmAuthenticationFailed
+        );
     }
 }

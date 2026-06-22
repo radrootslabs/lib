@@ -1561,7 +1561,7 @@ impl RadrootsSimplexAgentRuntime {
                 ))
             })?;
         let padded_len = self.agent_payload_padded_len(connection_id, payload_kind)?;
-        let (ratchet_header, ciphertext) = self
+        let official_message = self
             .store
             .connection_mut(connection_id)?
             .ratchet_state
@@ -1571,12 +1571,12 @@ impl RadrootsSimplexAgentRuntime {
                     "SimpleX connection `{connection_id}` has no ratchet state"
                 ))
             })?
-            .encrypt_payload(&shared_secret, &plaintext, padded_len)
+            .encrypt_official_payload(&shared_secret, &plaintext, padded_len)
             .map_err(|error| RadrootsSimplexAgentRuntimeError::Runtime(error.to_string()))?;
         Ok(RadrootsSimplexAgentEncryptedPayload {
-            ratchet_header: Some(ratchet_header),
-            official_message: None,
-            ciphertext,
+            ratchet_header: None,
+            official_message: Some(official_message),
+            ciphertext: Vec::new(),
         })
     }
 
@@ -1603,11 +1603,6 @@ impl RadrootsSimplexAgentRuntime {
         connection_id: &str,
         encrypted: &RadrootsSimplexAgentEncryptedPayload,
     ) -> Result<Vec<u8>, RadrootsSimplexAgentRuntimeError> {
-        if encrypted.official_message.is_some() {
-            return Err(RadrootsSimplexAgentRuntimeError::Runtime(format!(
-                "SimpleX connection `{connection_id}` received official encrypted payload before official ratchet runtime wiring is enabled"
-            )));
-        }
         let shared_secret = self
             .store
             .connection(connection_id)?
@@ -1618,6 +1613,20 @@ impl RadrootsSimplexAgentRuntime {
                     "SimpleX connection `{connection_id}` has no shared secret"
                 ))
             })?;
+        if let Some(official_message) = encrypted.official_message.as_ref() {
+            return self
+                .store
+                .connection_mut(connection_id)?
+                .ratchet_state
+                .as_mut()
+                .ok_or_else(|| {
+                    RadrootsSimplexAgentRuntimeError::Runtime(format!(
+                        "SimpleX connection `{connection_id}` has no ratchet state"
+                    ))
+                })?
+                .decrypt_official_payload(&shared_secret, official_message)
+                .map_err(|error| RadrootsSimplexAgentRuntimeError::Runtime(error.to_string()));
+        }
         let header = encrypted.ratchet_header.as_ref().ok_or_else(|| {
             RadrootsSimplexAgentRuntimeError::Runtime(format!(
                 "SimpleX connection `{connection_id}` received agent payload without ratchet header"
@@ -2433,11 +2442,13 @@ mod tests {
         )
         .unwrap();
 
-        assert!(encrypted.ratchet_header.is_some());
-        assert_ne!(encrypted.ciphertext, expected_plaintext);
+        assert!(encrypted.ratchet_header.is_none());
+        assert!(encrypted.ciphertext.is_empty());
+        let official_message = encrypted.official_message.as_ref().unwrap();
+        assert_ne!(official_message, &expected_plaintext);
         assert_eq!(
-            encrypted.ciphertext.len(),
-            SIMPLEX_AGENT_E2E_MESSAGE_LENGTH + 16
+            official_message.len(),
+            2 + 124 + 16 + SIMPLEX_AGENT_E2E_MESSAGE_LENGTH
         );
     }
 
