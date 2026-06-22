@@ -26,7 +26,7 @@ The current repository expresses SDK surface primarily in terms of Rust crates:
 - `surface.model_crates`
 - `surface.algorithm_crates`
 - `surface.wasm_crates`
-- language export manifests keyed by Rust crate name
+- downstream package metadata keyed by Rust crate name
 - `xtask` validation and export logic that assume crate-to-package mapping
 
 That framing is not aligned with the needs of third-party integrators. Integrators do not want a mirror of the Rust workspace. They want a small, stable, idiomatic SDK that helps them publish and read Radroots-compliant Nostr events.
@@ -748,7 +748,7 @@ This facade should:
 
 - parses a crate-keyed surface
 - validates crate-keyed export coverage
-- retains TypeScript export metadata as part of the spec surface
+- retains TypeScript package metadata as part of the spec surface
 - no longer owns downstream SDK packaging or repo-sync orchestration
 
 ### Required Changes
@@ -760,7 +760,7 @@ This facade should:
 - unique operation ids
 - known shared type references
 - conformance vector presence for each public operation
-- language export manifests mapping approved operations
+- SDK package manifests mapping approved operations
 4. replace crate-coverage assertions with operation-coverage assertions
 5. keep current crate provenance checks only as implementation validation
 

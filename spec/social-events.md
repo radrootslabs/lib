@@ -83,7 +83,7 @@ description content. Optional `description` data is encoded as event content and
 decodes to no description. Calendar date events use lowercase `d` for the replaceable identifier and
 optional uppercase `D` tags for covered all-day dates. Calendar time events require at least one
 uppercase `D` tag so timestamped events retain a deterministic calendar-date anchor across codecs and
-language exports.
+SDK package surfaces.
 
 Product routing uses surface-specific kind classifiers rather than a broad public-social set. Home,
 Events, Market, Map, and Profile public-content candidates are explicit. Active listing kind `30402`

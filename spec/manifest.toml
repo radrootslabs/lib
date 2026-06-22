@@ -62,9 +62,6 @@ external_storage_wasm_binding_crate = "radroots_replica_db_wasm"
 sync = "radroots_replica_sync"
 external_sync_wasm_binding_crate = "radroots_replica_sync_wasm"
 
-[export.ts]
-packages = ["@radroots/sdk"]
-
 [policy]
 exclude_internal_workspace_crates = true
 require_reproducible_exports = true

@@ -27,7 +27,6 @@ pub struct ContractManifest {
     pub contract: ManifestContract,
     pub surface: Surface,
     pub policy: Policy,
-    pub export: Option<ManifestExports>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -70,16 +69,6 @@ pub struct Policy {
     pub exclude_internal_workspace_crates: bool,
     pub require_reproducible_exports: bool,
     pub require_conformance_vectors: bool,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct ManifestExports {
-    pub ts: Option<ManifestLanguagePackages>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct ManifestLanguagePackages {
-    pub packages: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -169,68 +158,12 @@ pub struct CompatibilityRules {
     pub requires_release_notes: bool,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct ExportMapping {
-    pub language: ExportLanguage,
-    pub packages: BTreeMap<String, String>,
-    pub artifacts: Option<ExportArtifacts>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct ExportLanguage {
-    pub id: String,
-    pub repository: String,
-}
-
-#[derive(Debug, Deserialize, Default)]
-pub struct ExportArtifacts {
-    pub models_dir: Option<String>,
-    pub constants_dir: Option<String>,
-    pub wasm_dist_dir: Option<String>,
-    pub manifest_file: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct SdkExportMapping {
-    pub language: ExportLanguage,
-    pub sdk: SdkExportSdk,
-    pub rollout: SdkExportRollout,
-    pub operations: BTreeMap<String, String>,
-    pub shared_types: BTreeMap<String, String>,
-    pub artifacts: Option<SdkExportArtifacts>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct SdkExportSdk {
-    pub package: String,
-    pub module_format: Option<String>,
-    pub deterministic_codec: String,
-    pub signing: String,
-    pub networking: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct SdkExportRollout {
-    pub stage: String,
-    pub order: u32,
-}
-
-#[derive(Debug, Deserialize, Default)]
-pub struct SdkExportArtifacts {
-    pub models_dir: Option<String>,
-    pub runtime_dir: Option<String>,
-    pub wasm_dist_dir: Option<String>,
-    pub manifest_file: Option<String>,
-}
-
 #[derive(Debug)]
 pub struct ContractBundle {
     pub root: PathBuf,
     pub manifest: ContractManifest,
     pub version: VersionPolicy,
-    pub exports: Vec<ExportMapping>,
     pub operations_manifest: Option<OperationsContractManifest>,
-    pub sdk_exports: Vec<SdkExportMapping>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -2375,59 +2308,6 @@ fn collect_non_empty_set(items: &[String], field: &str) -> Result<BTreeSet<Strin
     Ok(set)
 }
 
-fn ts_curated_package_set(bundle: &ContractBundle) -> Result<Option<BTreeSet<String>>, String> {
-    let Some(export_targets) = bundle.manifest.export.as_ref() else {
-        return Ok(None);
-    };
-    let Some(ts_export) = export_targets.ts.as_ref() else {
-        return Ok(None);
-    };
-    let packages = collect_non_empty_set(&ts_export.packages, "manifest export.ts.packages")?;
-    if packages.is_empty() {
-        return Err("manifest export.ts.packages must not be empty".to_string());
-    }
-    Ok(Some(packages))
-}
-
-fn sdk_packages_by_language(bundle: &ContractBundle) -> Result<BTreeMap<String, String>, String> {
-    let mut packages = BTreeMap::new();
-    for mapping in &bundle.sdk_exports {
-        if packages
-            .insert(mapping.language.id.clone(), mapping.sdk.package.clone())
-            .is_some()
-        {
-            return Err(format!(
-                "sdk-exports has duplicate language {}",
-                mapping.language.id
-            ));
-        }
-    }
-    Ok(packages)
-}
-
-fn validate_sdk_rollout(mapping: &SdkExportMapping) -> Result<(), String> {
-    let stage = mapping.rollout.stage.trim();
-    if stage.is_empty() {
-        return Err(format!(
-            "sdk rollout.stage is required for {}",
-            mapping.language.id
-        ));
-    }
-    if !matches!(stage, "active" | "next" | "deferred") {
-        return Err(format!(
-            "sdk rollout.stage {} is invalid for {}",
-            mapping.rollout.stage, mapping.language.id
-        ));
-    }
-    if mapping.rollout.order == 0 {
-        return Err(format!(
-            "sdk rollout.order must be greater than zero for {}",
-            mapping.language.id
-        ));
-    }
-    Ok(())
-}
-
 fn validate_crate_identifier(value: &str, field: &str) -> Result<(), String> {
     let trimmed = value.trim();
     if trimmed.is_empty() {
@@ -2685,174 +2565,6 @@ fn validate_operations_contract(
         validate_conformance_vector_file(&vector_path, &operations_manifest.contract.version)?;
     }
 
-    if bundle.sdk_exports.is_empty() {
-        return Err(
-            "sdk-exports must define at least one operation-based language mapping".to_string(),
-        );
-    }
-
-    let ts_packages = ts_curated_package_set(bundle)?;
-    let sdk_packages = sdk_packages_by_language(bundle)?;
-    let export_languages = bundle
-        .exports
-        .iter()
-        .map(|mapping| mapping.language.id.clone())
-        .collect::<BTreeSet<_>>();
-    let mut has_ts_mapping = false;
-    for mapping in &bundle.sdk_exports {
-        if mapping.language.id.trim().is_empty() {
-            return Err("sdk export language.id is required".to_string());
-        }
-        if mapping.language.repository.trim().is_empty() {
-            return Err(format!(
-                "sdk export language.repository is required for {}",
-                mapping.language.id
-            ));
-        }
-        if mapping.language.id == "ts" {
-            has_ts_mapping = true;
-        }
-        validate_sdk_rollout(mapping)?;
-        if mapping.sdk.package.trim().is_empty() {
-            return Err(format!(
-                "sdk export package is required for {}",
-                mapping.language.id
-            ));
-        }
-        if mapping.sdk.deterministic_codec.trim().is_empty()
-            || mapping.sdk.signing.trim().is_empty()
-            || mapping.sdk.networking.trim().is_empty()
-        {
-            return Err(format!(
-                "sdk runtime fields must be non-empty for {}",
-                mapping.language.id
-            ));
-        }
-        if let Some(module_format) = mapping.sdk.module_format.as_deref()
-            && module_format.trim().is_empty()
-        {
-            return Err(format!(
-                "sdk module_format must be non-empty for {}",
-                mapping.language.id
-            ));
-        }
-        if mapping.operations.is_empty() {
-            return Err(format!(
-                "sdk export operations map is required for {}",
-                mapping.language.id
-            ));
-        }
-        for (operation_id, symbol) in &mapping.operations {
-            if !operation_ids.contains(operation_id) {
-                return Err(format!(
-                    "sdk export {} references unknown operation {}",
-                    mapping.language.id, operation_id
-                ));
-            }
-            if symbol.trim().is_empty() {
-                return Err(format!(
-                    "sdk export {} must map operation {} to a non-empty symbol",
-                    mapping.language.id, operation_id
-                ));
-            }
-        }
-        if mapping.shared_types.is_empty() {
-            return Err(format!(
-                "sdk export shared_types map is required for {}",
-                mapping.language.id
-            ));
-        }
-        for (shared_type, symbol) in &mapping.shared_types {
-            if !shared_types.contains(shared_type) {
-                return Err(format!(
-                    "sdk export {} references unknown shared type {}",
-                    mapping.language.id, shared_type
-                ));
-            }
-            if symbol.trim().is_empty() {
-                return Err(format!(
-                    "sdk export {} must map shared type {} to a non-empty symbol",
-                    mapping.language.id, shared_type
-                ));
-            }
-        }
-        if !export_languages.contains(&mapping.language.id) {
-            return Err(format!(
-                "sdk export {} is missing a matching export mapping",
-                mapping.language.id
-            ));
-        }
-        if mapping.language.id == "ts" {
-            if operation_ids != mapping.operations.keys().cloned().collect::<BTreeSet<_>>() {
-                return Err(
-                    "sdk export ts must cover every public operation in operations.toml"
-                        .to_string(),
-                );
-            }
-            if let Some(expected_packages) = ts_packages.as_ref() {
-                if expected_packages.len() != 1 {
-                    return Err(
-                        "manifest export.ts.packages must define exactly one curated ts package"
-                            .to_string(),
-                    );
-                }
-                let expected_package = expected_packages
-                    .iter()
-                    .next()
-                    .expect("single-package ts export set");
-                if mapping.sdk.package != *expected_package {
-                    return Err(format!(
-                        "sdk export ts package {} must match manifest export.ts.packages {}",
-                        mapping.sdk.package, expected_package
-                    ));
-                }
-            }
-            let artifacts = mapping
-                .artifacts
-                .as_ref()
-                .ok_or_else(|| "sdk export artifacts map is required for ts".to_string())?;
-            for (field, value) in [
-                ("models_dir", artifacts.models_dir.as_ref()),
-                ("runtime_dir", artifacts.runtime_dir.as_ref()),
-                ("wasm_dist_dir", artifacts.wasm_dist_dir.as_ref()),
-                ("manifest_file", artifacts.manifest_file.as_ref()),
-            ] {
-                if value.is_none_or(|raw| raw.trim().is_empty()) {
-                    return Err(format!(
-                        "sdk export artifacts.{field} must be non-empty for ts"
-                    ));
-                }
-            }
-        }
-        let expected_export_package = sdk_packages
-            .get(&mapping.language.id)
-            .expect("sdk language package map must include current language");
-        let matching_export = bundle
-            .exports
-            .iter()
-            .find(|export| export.language.id == mapping.language.id)
-            .expect("export language set must include validated sdk export language");
-        let export_packages = matching_export
-            .packages
-            .values()
-            .cloned()
-            .collect::<BTreeSet<_>>();
-        let expected_packages = [expected_export_package.clone()]
-            .into_iter()
-            .collect::<BTreeSet<_>>();
-        if export_packages != expected_packages {
-            return Err(format!(
-                "export {} packages {} must resolve to curated sdk package {}",
-                mapping.language.id,
-                join_set(&export_packages),
-                expected_export_package
-            ));
-        }
-    }
-    if !has_ts_mapping {
-        return Err("sdk-exports must include a ts mapping".to_string());
-    }
-
     Ok(())
 }
 
@@ -2868,163 +2580,6 @@ fn package_field_configured(table: &toml::value::Table, field: &str) -> bool {
             .is_some_and(|configured| configured),
         _ => false,
     }
-}
-
-fn validate_export_mappings(bundle: &ContractBundle) -> Result<(), String> {
-    if bundle.exports.is_empty() {
-        return Err("at least one language export mapping is required".to_string());
-    }
-    if bundle.sdk_exports.is_empty() {
-        return Err("sdk-exports must define at least one curated language mapping".to_string());
-    }
-    let ts_packages = ts_curated_package_set(bundle)?;
-    let sdk_packages = sdk_packages_by_language(bundle)?;
-    let export_languages = bundle
-        .exports
-        .iter()
-        .map(|mapping| mapping.language.id.clone())
-        .collect::<BTreeSet<_>>();
-    for mapping in &bundle.exports {
-        if mapping.language.id.trim().is_empty() {
-            return Err("language.id is required".to_string());
-        }
-        if mapping.language.repository.trim().is_empty() {
-            return Err(format!(
-                "language.repository is required for {}",
-                mapping.language.id
-            ));
-        }
-        if mapping.packages.is_empty() {
-            return Err(format!(
-                "packages map is required for {}",
-                mapping.language.id
-            ));
-        }
-        let expected_sdk_package = sdk_packages.get(&mapping.language.id).ok_or_else(|| {
-            format!(
-                "export {} is missing a matching sdk export mapping",
-                mapping.language.id
-            )
-        })?;
-        let mapped_packages = mapping.packages.values().cloned().collect::<BTreeSet<_>>();
-        let expected_packages = [expected_sdk_package.clone()]
-            .into_iter()
-            .collect::<BTreeSet<_>>();
-        if mapped_packages != expected_packages {
-            return Err(format!(
-                "export {} packages {} must resolve to curated sdk package {}",
-                mapping.language.id,
-                join_set(&mapped_packages),
-                expected_sdk_package
-            ));
-        }
-        if mapping.language.id == "ts" {
-            let artifacts = match mapping.artifacts.as_ref() {
-                Some(artifacts) => artifacts,
-                None => return Err("artifacts map is required for ts".to_string()),
-            };
-            if artifacts
-                .models_dir
-                .as_deref()
-                .is_none_or(|value| value.trim().is_empty())
-                || artifacts
-                    .constants_dir
-                    .as_deref()
-                    .is_none_or(|value| value.trim().is_empty())
-                || artifacts
-                    .wasm_dist_dir
-                    .as_deref()
-                    .is_none_or(|value| value.trim().is_empty())
-                || artifacts
-                    .manifest_file
-                    .as_deref()
-                    .is_none_or(|value| value.trim().is_empty())
-            {
-                return Err("artifacts fields must be non-empty for ts".to_string());
-            }
-            if let Some(expected_packages) = ts_packages.as_ref()
-                && mapped_packages != *expected_packages
-            {
-                return Err(format!(
-                    "ts export packages {} must match manifest export.ts.packages {}",
-                    join_set(&mapped_packages),
-                    join_set(expected_packages)
-                ));
-            }
-        }
-    }
-    for mapping in &bundle.sdk_exports {
-        if !export_languages.contains(&mapping.language.id) {
-            return Err(format!(
-                "sdk export {} is missing a matching export mapping",
-                mapping.language.id
-            ));
-        }
-        if mapping.language.id.trim().is_empty() {
-            return Err("sdk export language.id is required".to_string());
-        }
-        if mapping.language.repository.trim().is_empty() {
-            return Err(format!(
-                "sdk export language.repository is required for {}",
-                mapping.language.id
-            ));
-        }
-        validate_sdk_rollout(mapping)?;
-        if mapping.sdk.package.trim().is_empty() {
-            return Err(format!(
-                "sdk export package is required for {}",
-                mapping.language.id
-            ));
-        }
-        if mapping.sdk.deterministic_codec.trim().is_empty()
-            || mapping.sdk.signing.trim().is_empty()
-            || mapping.sdk.networking.trim().is_empty()
-        {
-            return Err(format!(
-                "sdk runtime fields must be non-empty for {}",
-                mapping.language.id
-            ));
-        }
-        if let Some(module_format) = mapping.sdk.module_format.as_deref()
-            && module_format.trim().is_empty()
-        {
-            return Err(format!(
-                "sdk module_format must be non-empty for {}",
-                mapping.language.id
-            ));
-        }
-        if mapping.operations.is_empty() {
-            return Err(format!(
-                "sdk export operations map is required for {}",
-                mapping.language.id
-            ));
-        }
-        if mapping.shared_types.is_empty() {
-            return Err(format!(
-                "sdk export shared_types map is required for {}",
-                mapping.language.id
-            ));
-        }
-        if mapping.language.id == "ts" {
-            let artifacts = mapping
-                .artifacts
-                .as_ref()
-                .ok_or_else(|| "sdk export artifacts map is required for ts".to_string())?;
-            for (field, value) in [
-                ("models_dir", artifacts.models_dir.as_ref()),
-                ("runtime_dir", artifacts.runtime_dir.as_ref()),
-                ("wasm_dist_dir", artifacts.wasm_dist_dir.as_ref()),
-                ("manifest_file", artifacts.manifest_file.as_ref()),
-            ] {
-                if value.is_none_or(|raw| raw.trim().is_empty()) {
-                    return Err(format!(
-                        "sdk export artifacts.{field} must be non-empty for ts"
-                    ));
-                }
-            }
-        }
-    }
-    Ok(())
 }
 
 fn validate_publish_package_metadata(
@@ -3755,7 +3310,6 @@ fn validate_contract_bundle_with_release_policy_override(
         return Err("contract surface.algorithm_crates must not be empty".to_string());
     }
     validate_surface_metadata(&bundle.manifest.surface)?;
-    validate_export_mappings(bundle)?;
     if bundle.version.contract.version.trim().is_empty() {
         return Err("version.contract.version is required".to_string());
     }
@@ -4061,52 +3615,12 @@ pub fn load_contract_bundle(workspace_root: &Path) -> Result<ContractBundle, Str
     } else {
         None
     };
-    let exports_dir = root.join("exports");
-    let mut exports = Vec::new();
-    let read_dir = match fs::read_dir(&exports_dir) {
-        Ok(read_dir) => read_dir,
-        Err(e) => return Err(format!("read dir {}: {e}", exports_dir.display())),
-    };
-    let mut entries = read_dir.filter_map(Result::ok).collect::<Vec<_>>();
-    entries.sort_by_key(|entry| entry.file_name());
-    for entry in entries {
-        let path = entry.path();
-        if path.extension().and_then(|ext| ext.to_str()) != Some("toml") {
-            continue;
-        }
-        exports.push(parse_toml::<ExportMapping>(&path)?);
-    }
-    let sdk_exports = load_sdk_exports(&root)?;
     Ok(ContractBundle {
         root,
         manifest,
         version,
-        exports,
         operations_manifest,
-        sdk_exports,
     })
-}
-
-fn load_sdk_exports(contract_root: &Path) -> Result<Vec<SdkExportMapping>, String> {
-    let exports_dir = contract_root.join("sdk-exports");
-    if !exports_dir.exists() {
-        return Ok(Vec::new());
-    }
-    let read_dir = match fs::read_dir(&exports_dir) {
-        Ok(read_dir) => read_dir,
-        Err(e) => return Err(format!("read dir {}: {e}", exports_dir.display())),
-    };
-    let mut entries = read_dir.filter_map(Result::ok).collect::<Vec<_>>();
-    entries.sort_by_key(|entry| entry.file_name());
-    let mut mappings = Vec::new();
-    for entry in entries {
-        let path = entry.path();
-        if path.extension().and_then(|ext| ext.to_str()) != Some("toml") {
-            continue;
-        }
-        mappings.push(parse_toml::<SdkExportMapping>(&path)?);
-    }
-    Ok(mappings)
 }
 
 pub fn validate_contract_bundle(bundle: &ContractBundle) -> Result<(), String> {
@@ -4126,7 +3640,6 @@ pub fn validate_contract_bundle(bundle: &ContractBundle) -> Result<(), String> {
         return Err("contract surface.algorithm_crates must not be empty".to_string());
     }
     validate_surface_metadata(&bundle.manifest.surface)?;
-    validate_export_mappings(bundle)?;
     if bundle.version.contract.version.trim().is_empty() {
         return Err("version.contract.version is required".to_string());
     }
@@ -4180,7 +3693,7 @@ pub fn validate_contract_bundle(bundle: &ContractBundle) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::{BTreeMap, BTreeSet};
+    use std::collections::BTreeSet;
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -4383,9 +3896,6 @@ model_crates = ["radroots_a"]
 algorithm_crates = ["radroots_b"]
 wasm_crates = ["radroots_a_wasm"]
 
-[export.ts]
-packages = ["@radroots/sdk"]
-
 [policy]
 exclude_internal_workspace_crates = true
 require_reproducible_exports = true
@@ -4407,57 +3917,6 @@ patch_on = ["fix"]
 requires_conformance_pass = true
 requires_export_manifest_diff = true
 requires_release_notes = true
-"#,
-        );
-        write_file(
-            &root.join("spec").join("exports").join("ts.toml"),
-            r#"[language]
-id = "ts"
-repository = "sdk-typescript"
-
-[packages]
-"radroots_a" = "@radroots/sdk"
-
-[artifacts]
-models_dir = "src/generated"
-constants_dir = "src/generated"
-wasm_dist_dir = "dist"
-manifest_file = "export-manifest.json"
-"#,
-        );
-        write_file(
-            &root.join("spec").join("sdk-exports").join("ts.toml"),
-            r#"[language]
-id = "ts"
-repository = "sdk-typescript"
-
-[sdk]
-package = "@radroots/sdk"
-module_format = "esm"
-deterministic_codec = "wasm"
-signing = "native"
-networking = "native"
-
-[rollout]
-stage = "active"
-order = 1
-
-[operations]
-"profile.build_draft" = "profile.buildDraft"
-"listing.build_draft" = "listing.buildDraft"
-
-[shared_types]
-"WireEventParts" = "WireEventParts"
-"RadrootsFrozenEventDraft" = "RadrootsFrozenEventDraft"
-"RadrootsSignedNostrEvent" = "RadrootsSignedNostrEvent"
-"RadrootsNostrEvent" = "RadrootsNostrEvent"
-"RadrootsListing" = "RadrootsListing"
-
-[artifacts]
-models_dir = "src/generated"
-runtime_dir = "src/runtime"
-wasm_dist_dir = "dist"
-manifest_file = "export-manifest.json"
 "#,
         );
         write_file(
@@ -4566,41 +4025,6 @@ rust_types = ["radroots_events::listing::RadrootsListing"]
 
 [operations.listing_build_draft.conformance]
 vector = "spec/conformance/vectors/listing/build_draft.v1.json"
-"#,
-        );
-        write_file(
-            &root.join("spec").join("sdk-exports").join("ts.toml"),
-            r#"[language]
-id = "ts"
-repository = "sdk-typescript"
-
-[sdk]
-package = "@radroots/sdk"
-module_format = "esm"
-deterministic_codec = "wasm"
-signing = "native"
-networking = "native"
-
-[rollout]
-stage = "active"
-order = 1
-
-[operations]
-"profile.build_draft" = "profile.buildDraft"
-"listing.build_draft" = "listing.buildDraft"
-
-[shared_types]
-"WireEventParts" = "WireEventParts"
-"RadrootsFrozenEventDraft" = "RadrootsFrozenEventDraft"
-"RadrootsSignedNostrEvent" = "RadrootsSignedNostrEvent"
-"RadrootsNostrEvent" = "RadrootsNostrEvent"
-"RadrootsListing" = "RadrootsListing"
-
-[artifacts]
-models_dir = "src/generated"
-runtime_dir = "src/runtime"
-wasm_dist_dir = "dist"
-manifest_file = "export-manifest.json"
 "#,
         );
         write_file(
@@ -4786,88 +4210,6 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
         let bundle = load_contract_bundle(&root).expect("load contract");
         validate_contract_bundle(&bundle).expect("validate contract");
         let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn ts_export_mapping_covers_model_and_wasm_surface() {
-        let root = workspace_root();
-        let bundle = load_contract_bundle(&root).expect("load contract");
-        let ts = bundle
-            .exports
-            .iter()
-            .find(|mapping| mapping.language.id == "ts")
-            .expect("ts export mapping");
-        let expected = bundle
-            .manifest
-            .surface
-            .model_crates
-            .iter()
-            .chain(bundle.manifest.surface.wasm_crates.iter())
-            .cloned()
-            .collect::<BTreeSet<_>>();
-        let mapped = ts.packages.keys().cloned().collect::<BTreeSet<_>>();
-        assert_eq!(mapped, expected);
-    }
-
-    #[test]
-    fn exports_follow_package_scope_rules() {
-        let root = workspace_root();
-        let bundle = load_contract_bundle(&root).expect("load contract");
-        let sdk_packages = sdk_packages_by_language(&bundle).expect("sdk packages by language");
-        for mapping in &bundle.exports {
-            let packages = mapping.packages.values().cloned().collect::<BTreeSet<_>>();
-            let expected_package = sdk_packages
-                .get(&mapping.language.id)
-                .expect("export has matching sdk package");
-            let expected = [expected_package.clone()]
-                .into_iter()
-                .collect::<BTreeSet<_>>();
-            assert_eq!(packages, expected);
-        }
-    }
-
-    #[test]
-    fn sdk_exports_follow_staged_rollout_order() {
-        let root = workspace_root();
-        let bundle = load_contract_bundle(&root).expect("load contract");
-        let rollout = bundle
-            .sdk_exports
-            .iter()
-            .map(|mapping| {
-                (
-                    mapping.language.id.clone(),
-                    (mapping.rollout.stage.clone(), mapping.rollout.order),
-                )
-            })
-            .collect::<BTreeMap<_, _>>();
-        let expected = BTreeMap::from([
-            ("go".to_string(), ("deferred".to_string(), 3)),
-            ("kotlin".to_string(), ("next".to_string(), 2)),
-            ("py".to_string(), ("deferred".to_string(), 3)),
-            ("swift".to_string(), ("next".to_string(), 2)),
-            ("ts".to_string(), ("active".to_string(), 1)),
-        ]);
-        assert_eq!(rollout, expected);
-    }
-
-    #[test]
-    fn non_ts_exports_only_include_model_surface() {
-        let root = workspace_root();
-        let bundle = load_contract_bundle(&root).expect("load contract");
-        let expected = bundle
-            .manifest
-            .surface
-            .model_crates
-            .iter()
-            .cloned()
-            .collect::<BTreeSet<_>>();
-        for mapping in &bundle.exports {
-            if mapping.language.id == "ts" {
-                continue;
-            }
-            let mapped = mapping.packages.keys().cloned().collect::<BTreeSet<_>>();
-            assert_eq!(mapped, expected);
-        }
     }
 
     #[test]
@@ -6041,61 +5383,6 @@ edition = "2024"
                 });
             },
         );
-        assert_bundle_error(
-            "at least one language export mapping is required",
-            |bundle| {
-                bundle.exports.clear();
-            },
-        );
-        assert_bundle_error(
-            "sdk-exports must define at least one curated language mapping",
-            |bundle| {
-                bundle.sdk_exports.clear();
-            },
-        );
-        assert_bundle_error("language.id is required", |bundle| {
-            bundle.exports[0].language.id.clear();
-        });
-        assert_bundle_error("language.repository is required", |bundle| {
-            bundle.exports[0].language.repository.clear();
-        });
-        assert_bundle_error("packages map is required", |bundle| {
-            bundle.exports[0].packages.clear();
-        });
-        assert_bundle_error("artifacts fields must be non-empty for ts", |bundle| {
-            bundle.exports[0]
-                .artifacts
-                .as_mut()
-                .expect("ts artifacts")
-                .models_dir = Some(String::new());
-        });
-        assert_bundle_error("artifacts fields must be non-empty for ts", |bundle| {
-            bundle.exports[0]
-                .artifacts
-                .as_mut()
-                .expect("ts artifacts")
-                .constants_dir = Some(String::new());
-        });
-        assert_bundle_error("artifacts fields must be non-empty for ts", |bundle| {
-            bundle.exports[0]
-                .artifacts
-                .as_mut()
-                .expect("ts artifacts")
-                .wasm_dist_dir = Some(String::new());
-        });
-        assert_bundle_error("artifacts fields must be non-empty for ts", |bundle| {
-            bundle.exports[0]
-                .artifacts
-                .as_mut()
-                .expect("ts artifacts")
-                .manifest_file = Some(String::new());
-        });
-        assert_bundle_error("sdk rollout.stage is required", |bundle| {
-            bundle.sdk_exports[0].rollout.stage.clear();
-        });
-        assert_bundle_error("sdk rollout.order must be greater than zero", |bundle| {
-            bundle.sdk_exports[0].rollout.order = 0;
-        });
         assert_bundle_error("version.contract.version is required", |bundle| {
             bundle.version.contract.version.clear();
         });
@@ -6199,21 +5486,6 @@ rust_package = "radroots_sdk"
                 .domains
                 .clear();
         });
-        assert_bundle_error(
-            "sdk-exports must define at least one curated language mapping",
-            |bundle| {
-                bundle.sdk_exports.clear();
-            },
-        );
-        assert_bundle_error(
-            "sdk export ts must cover every public operation",
-            |bundle| {
-                bundle.sdk_exports[0]
-                    .operations
-                    .remove("listing.build_draft");
-            },
-        );
-
         let _ = fs::remove_dir_all(root);
     }
 
@@ -6333,18 +5605,20 @@ rust_package = "radroots_sdk"
         assert!(release_parse_err.contains("parse"));
         let _ = fs::remove_dir_all(&release_invalid);
 
-        let export_missing = temp_root("parse_export_mapping_missing");
-        let export_read_err = parse_toml::<ExportMapping>(&export_missing.join("model.toml"))
-            .expect_err("missing export mapping");
-        assert!(export_read_err.contains("read"));
-        let _ = fs::remove_dir_all(&export_missing);
+        let operations_missing = temp_root("parse_operations_manifest_missing");
+        let operations_read_err =
+            parse_toml::<OperationsContractManifest>(&operations_missing.join("operations.toml"))
+                .expect_err("missing operations manifest");
+        assert!(operations_read_err.contains("read"));
+        let _ = fs::remove_dir_all(&operations_missing);
 
-        let export_invalid = temp_root("parse_export_mapping_invalid");
-        write_file(&export_invalid.join("model.toml"), "[export");
-        let export_parse_err = parse_toml::<ExportMapping>(&export_invalid.join("model.toml"))
-            .expect_err("invalid export mapping");
-        assert!(export_parse_err.contains("parse"));
-        let _ = fs::remove_dir_all(&export_invalid);
+        let operations_invalid = temp_root("parse_operations_manifest_invalid");
+        write_file(&operations_invalid.join("operations.toml"), "[operations");
+        let operations_parse_err =
+            parse_toml::<OperationsContractManifest>(&operations_invalid.join("operations.toml"))
+                .expect_err("invalid operations manifest");
+        assert!(operations_parse_err.contains("parse"));
+        let _ = fs::remove_dir_all(&operations_invalid);
 
         let dup = temp_root("publish_flags_duplicate");
         write_file(
@@ -6773,9 +6047,6 @@ model_crates = ["radroots_a"]
 algorithm_crates = ["radroots_b"]
 wasm_crates = ["radroots_a_wasm"]
 
-[export.ts]
-packages = ["@radroots/sdk"]
-
 [policy]
 exclude_internal_workspace_crates = false
 require_reproducible_exports = true
@@ -6870,8 +6141,8 @@ edition = "2024"
     }
 
     #[test]
-    fn load_contract_bundle_and_validation_report_version_export_and_coverage_errors() {
-        let root = create_synthetic_workspace("bundle_version_export_and_coverage_errors");
+    fn load_contract_bundle_and_validation_report_version_core_and_coverage_errors() {
+        let root = create_synthetic_workspace("bundle_version_core_and_coverage_errors");
         write_file(&root.join("spec").join("version.toml"), "[contract");
         let version_parse_err = load_contract_bundle(&root).expect_err("invalid version file");
         assert!(version_parse_err.contains("version.toml"));
@@ -6891,29 +6162,6 @@ patch_on = ["fix"]
 requires_conformance_pass = true
 requires_export_manifest_diff = true
 requires_release_notes = true
-"#,
-        );
-        write_file(
-            &root.join("spec").join("exports").join("ts.toml"),
-            "[language",
-        );
-        let export_parse_err = load_contract_bundle(&root).expect_err("invalid export mapping");
-        assert!(export_parse_err.contains("ts.toml"));
-
-        write_file(
-            &root.join("spec").join("exports").join("ts.toml"),
-            r#"[language]
-id = "ts"
-repository = "sdk-typescript"
-
-[packages]
-"radroots_a" = "@radroots/sdk"
-
-[artifacts]
-models_dir = "src/generated"
-constants_dir = "src/generated"
-wasm_dist_dir = "dist"
-manifest_file = "export-manifest.json"
 "#,
         );
         let bundle = load_contract_bundle(&root).expect("load bundle");
@@ -7177,74 +6425,7 @@ crates = ["radroots_a", "radroots_b"]
     }
 
     #[test]
-    fn load_contract_bundle_reports_exports_dir_errors_and_skips_non_toml() {
-        let root = create_synthetic_workspace("bundle_exports_dir_errors");
-        let exports_dir = root.join("spec").join("exports");
-        let _ = fs::remove_dir_all(&exports_dir);
-        write_file(&exports_dir, "not-a-dir");
-
-        let dir_err = load_contract_bundle(&root).expect_err("exports path must be a directory");
-        assert!(dir_err.contains("read dir"));
-
-        let _ = fs::remove_file(&exports_dir);
-        fs::create_dir_all(&exports_dir).expect("recreate exports dir");
-        write_file(
-            &exports_dir.join("typescript.toml"),
-            r#"[language]
-id = "ts"
-repository = "sdk-typescript"
-
-[packages]
-radroots_a = "@radroots/sdk"
-radroots_b = "@radroots/sdk"
-
-[artifacts]
-models_dir = "src/generated"
-constants_dir = "src/generated"
-wasm_dist_dir = "dist"
-manifest_file = "export-manifest.json"
-"#,
-        );
-        write_file(&exports_dir.join("README.txt"), "ignore");
-        let bundle = load_contract_bundle(&root).expect("load bundle");
-        assert_eq!(bundle.exports.len(), 1);
-        let _ = fs::remove_dir_all(&root);
-    }
-
-    #[test]
-    fn validate_contract_bundle_reports_ts_artifacts_and_release_policy_errors() {
-        let missing_artifacts = create_synthetic_workspace("bundle_missing_ts_artifacts");
-        let mut no_artifacts_bundle =
-            load_contract_bundle(&missing_artifacts).expect("load missing artifacts bundle");
-        no_artifacts_bundle.exports[0].artifacts = None;
-        let artifacts_err =
-            validate_contract_bundle(&no_artifacts_bundle).expect_err("missing ts artifacts");
-        assert!(artifacts_err.contains("artifacts map is required for ts"));
-        let _ = fs::remove_dir_all(&missing_artifacts);
-
-        let curated_package_mismatch = create_synthetic_workspace("bundle_ts_package_mismatch");
-        let mut mismatch_bundle =
-            load_contract_bundle(&curated_package_mismatch).expect("load mismatch bundle");
-        mismatch_bundle.exports[0]
-            .packages
-            .insert("radroots_a".to_string(), "@radroots/other".to_string());
-        assert_eq!(
-            ts_curated_package_set(&mismatch_bundle).expect("ts package set"),
-            Some(["@radroots/sdk".to_string()].into_iter().collect())
-        );
-        assert_eq!(
-            mismatch_bundle.exports[0]
-                .packages
-                .values()
-                .cloned()
-                .collect::<BTreeSet<_>>(),
-            ["@radroots/other".to_string()].into_iter().collect()
-        );
-        let package_err =
-            validate_contract_bundle(&mismatch_bundle).expect_err("ts package mismatch");
-        assert!(package_err.contains("must resolve to curated sdk package"));
-        let _ = fs::remove_dir_all(&curated_package_mismatch);
-
+    fn validate_contract_bundle_reports_release_policy_errors() {
         let release_error_root = create_synthetic_workspace("bundle_release_policy_error");
         write_file(
             &root_release_policy_path(&release_error_root),
