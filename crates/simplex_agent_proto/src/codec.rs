@@ -418,12 +418,15 @@ fn decode_queue_address(
 fn encode_ratchet_header(
     header: &RadrootsSimplexSmpRatchetHeader,
 ) -> Result<Vec<u8>, RadrootsSimplexAgentProtoError> {
+    header
+        .validate()
+        .map_err(|error| RadrootsSimplexAgentProtoError::InvalidRatchetHeader(error.to_string()))?;
     let mut buffer = Vec::new();
     buffer.extend_from_slice(&header.previous_sending_chain_length.to_be_bytes());
     buffer.extend_from_slice(&header.message_number.to_be_bytes());
     push_short_bytes(&mut buffer, &header.dh_public_key)?;
-    push_maybe_short_bytes(&mut buffer, header.pq_public_key.as_deref())?;
-    push_maybe_short_bytes(&mut buffer, header.pq_ciphertext.as_deref())?;
+    push_maybe_large_bytes(&mut buffer, header.pq_public_key.as_deref())?;
+    push_maybe_large_bytes(&mut buffer, header.pq_ciphertext.as_deref())?;
     Ok(buffer)
 }
 
@@ -435,15 +438,22 @@ fn decode_ratchet_header(
         previous_sending_chain_length: cursor.read_u32()?,
         message_number: cursor.read_u32()?,
         dh_public_key: cursor.read_short_bytes()?,
-        pq_public_key: cursor.read_maybe(decode_short_bytes)?,
-        pq_ciphertext: cursor.read_maybe(decode_short_bytes)?,
+        pq_public_key: cursor.read_maybe(decode_large_bytes)?,
+        pq_ciphertext: cursor.read_maybe(decode_large_bytes)?,
     };
     cursor.finish()?;
+    header
+        .validate()
+        .map_err(|error| RadrootsSimplexAgentProtoError::InvalidRatchetHeader(error.to_string()))?;
     Ok(header)
 }
 
 fn decode_short_bytes(cursor: &mut Cursor<'_>) -> Result<Vec<u8>, RadrootsSimplexAgentProtoError> {
     cursor.read_short_bytes()
+}
+
+fn decode_large_bytes(cursor: &mut Cursor<'_>) -> Result<Vec<u8>, RadrootsSimplexAgentProtoError> {
+    cursor.read_large_bytes()
 }
 
 fn push_short_bytes(
@@ -482,6 +492,22 @@ fn push_maybe_short_bytes(
         Some(value) => {
             buffer.push(1);
             push_short_bytes(buffer, value)
+        }
+        None => {
+            buffer.push(0);
+            Ok(())
+        }
+    }
+}
+
+fn push_maybe_large_bytes(
+    buffer: &mut Vec<u8>,
+    value: Option<&[u8]>,
+) -> Result<(), RadrootsSimplexAgentProtoError> {
+    match value {
+        Some(value) => {
+            buffer.push(1);
+            push_large_bytes(buffer, value)
         }
         None => {
             buffer.push(0);
@@ -642,8 +668,10 @@ impl<'a> Cursor<'a> {
         Ok(values)
     }
 
-    fn read_remaining(&self) -> &'a [u8] {
-        &self.bytes[self.position..]
+    fn read_remaining(&mut self) -> &'a [u8] {
+        let remaining = &self.bytes[self.position..];
+        self.position = self.bytes.len();
+        remaining
     }
 }
 
@@ -718,5 +746,45 @@ mod tests {
             descriptor.queue_uri.queue_mode,
             Some(RadrootsSimplexSmpQueueMode::Messaging)
         );
+    }
+
+    #[test]
+    fn roundtrips_official_sized_pq_ratchet_header() {
+        let envelope =
+            RadrootsSimplexAgentEnvelope::Message(RadrootsSimplexAgentEncryptedPayload {
+                ratchet_header: Some(RadrootsSimplexSmpRatchetHeader {
+                    previous_sending_chain_length: 4,
+                    message_number: 9,
+                    dh_public_key: vec![7_u8; 56],
+                    pq_public_key: Some(vec![8_u8; 1158]),
+                    pq_ciphertext: Some(vec![9_u8; 1039]),
+                }),
+                ciphertext: b"opaque".to_vec(),
+            });
+
+        let encoded = encode_envelope(&envelope).unwrap();
+        let decoded = decode_envelope(&encoded).unwrap();
+        assert_eq!(decoded, envelope);
+    }
+
+    #[test]
+    fn rejects_incomplete_pq_ratchet_header() {
+        let envelope =
+            RadrootsSimplexAgentEnvelope::Message(RadrootsSimplexAgentEncryptedPayload {
+                ratchet_header: Some(RadrootsSimplexSmpRatchetHeader {
+                    previous_sending_chain_length: 0,
+                    message_number: 0,
+                    dh_public_key: vec![1_u8; 56],
+                    pq_public_key: Some(vec![2_u8; 1158]),
+                    pq_ciphertext: None,
+                }),
+                ciphertext: b"opaque".to_vec(),
+            });
+
+        let error = encode_envelope(&envelope).unwrap_err();
+        assert!(matches!(
+            error,
+            RadrootsSimplexAgentProtoError::InvalidRatchetHeader(_)
+        ));
     }
 }

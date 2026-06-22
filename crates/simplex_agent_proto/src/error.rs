@@ -11,6 +11,7 @@ pub enum RadrootsSimplexAgentProtoError {
     InvalidShortFieldLength(usize),
     InvalidLargeFieldLength(usize),
     InvalidBoolEncoding(u8),
+    InvalidRatchetHeader(String),
     TrailingBytes,
 }
 
@@ -35,6 +36,9 @@ impl fmt::Display for RadrootsSimplexAgentProtoError {
             }
             Self::InvalidBoolEncoding(value) => {
                 write!(f, "invalid SimpleX agent bool encoding `{value}`")
+            }
+            Self::InvalidRatchetHeader(error) => {
+                write!(f, "invalid SimpleX agent ratchet header: {error}")
             }
             Self::TrailingBytes => write!(f, "trailing bytes after SimpleX agent decode"),
         }

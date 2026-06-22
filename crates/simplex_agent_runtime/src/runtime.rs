@@ -45,12 +45,22 @@ use std::path::{Path, PathBuf};
 
 const SIMPLEX_E2E_CONFIRMATION_LENGTH: usize = 15_904;
 const SIMPLEX_E2E_MESSAGE_LENGTH: usize = 16_000;
+const SIMPLEX_AGENT_E2E_CONN_INFO_LENGTH: usize = 14_832;
+const SIMPLEX_AGENT_E2E_CONN_INFO_PQ_LENGTH: usize = 11_106;
+const SIMPLEX_AGENT_E2E_MESSAGE_LENGTH: usize = 15_840;
+const SIMPLEX_AGENT_E2E_MESSAGE_PQ_LENGTH: usize = 13_618;
 
 #[derive(Debug, Clone)]
 struct SimplexClientMessageEnvelope {
     sender_public_key: Option<Vec<u8>>,
     nonce: [u8; RADROOTS_SIMPLEX_SMP_NONCE_LENGTH],
     ciphertext: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum SimplexAgentPayloadKind {
+    ConnectionInfo,
+    Message,
 }
 
 #[derive(Debug, Clone)]
@@ -354,7 +364,7 @@ impl RadrootsSimplexAgentRuntime {
             encode_decrypted_message(&RadrootsSimplexAgentDecryptedMessage::ConnectionInfo(
                 local_info,
             ))?,
-            None,
+            SimplexAgentPayloadKind::ConnectionInfo,
         )?;
         self.store.enqueue_command(
             connection_id,
@@ -456,7 +466,11 @@ impl RadrootsSimplexAgentRuntime {
         let prepared = self
             .store
             .prepare_outbound_message(connection_id, message_hash.clone())?;
-        let encrypted = self.next_encrypted_payload(connection_id, ciphertext, None)?;
+        let encrypted = self.next_encrypted_payload(
+            connection_id,
+            ciphertext,
+            SimplexAgentPayloadKind::Message,
+        )?;
         self.store.enqueue_command(
             connection_id,
             RadrootsSimplexAgentPendingCommandKind::SendEnvelope {
@@ -1228,7 +1242,11 @@ impl RadrootsSimplexAgentRuntime {
         let prepared = self
             .store
             .prepare_outbound_message(connection_id, message_hash)?;
-        let encrypted = self.next_encrypted_payload(connection_id, ciphertext, None)?;
+        let encrypted = self.next_encrypted_payload(
+            connection_id,
+            ciphertext,
+            SimplexAgentPayloadKind::Message,
+        )?;
         self.store.enqueue_command(
             connection_id,
             RadrootsSimplexAgentPendingCommandKind::SendEnvelope {
@@ -1261,10 +1279,19 @@ impl RadrootsSimplexAgentRuntime {
                 ))
             })?;
         let sender_public_key = match envelope {
-            RadrootsSimplexAgentEnvelope::Confirmation { encrypted, .. } => encrypted
-                .ratchet_header
-                .as_ref()
-                .map(|header| header.dh_public_key.clone()),
+            RadrootsSimplexAgentEnvelope::Confirmation {
+                reply_queue: true, ..
+            } => Some(
+                self.store
+                    .connection(connection_id)?
+                    .local_e2e_public_key
+                    .clone()
+                    .ok_or_else(|| {
+                        RadrootsSimplexAgentRuntimeError::Runtime(format!(
+                            "SimpleX connection `{connection_id}` is missing local E2E public key"
+                        ))
+                    })?,
+            ),
             _ => None,
         };
         let mut body = Vec::with_capacity(1 + 512);
@@ -1368,7 +1395,7 @@ impl RadrootsSimplexAgentRuntime {
                     invitation,
                 });
         }
-        if let Some((reply_descriptor, sender_public_key)) = join_confirmation {
+        if let Some((reply_descriptor, _sender_public_key)) = join_confirmation {
             let send_queue = self.store.primary_send_queue(&command.connection_id)?;
             let confirmation_payload = self.next_encrypted_payload(
                 &command.connection_id,
@@ -1378,7 +1405,7 @@ impl RadrootsSimplexAgentRuntime {
                         info: Vec::new(),
                     },
                 )?,
-                Some(sender_public_key),
+                SimplexAgentPayloadKind::ConnectionInfo,
             )?;
             self.store.enqueue_command(
                 &command.connection_id,
@@ -1416,7 +1443,7 @@ impl RadrootsSimplexAgentRuntime {
         if let Some(shared_secret) = derived_secret {
             self.store.connection_mut(connection_id)?.shared_secret = Some(shared_secret);
         }
-        let decrypted = extract_decrypted_message(&envelope)?;
+        let decrypted = self.extract_decrypted_message(connection_id, &envelope)?;
         {
             let connection = self.store.connection_mut(connection_id)?;
             connection.last_received_queue = Some(queue.clone());
@@ -1520,39 +1547,114 @@ impl RadrootsSimplexAgentRuntime {
     fn next_encrypted_payload(
         &mut self,
         connection_id: &str,
-        ciphertext: Vec<u8>,
-        sender_public_key: Option<Vec<u8>>,
+        plaintext: Vec<u8>,
+        payload_kind: SimplexAgentPayloadKind,
     ) -> Result<RadrootsSimplexAgentEncryptedPayload, RadrootsSimplexAgentRuntimeError> {
-        let ratchet_header = self
+        let shared_secret = self
+            .store
+            .connection(connection_id)?
+            .shared_secret
+            .clone()
+            .ok_or_else(|| {
+                RadrootsSimplexAgentRuntimeError::Runtime(format!(
+                    "SimpleX connection `{connection_id}` has no shared secret"
+                ))
+            })?;
+        let padded_len = self.agent_payload_padded_len(connection_id, payload_kind)?;
+        let (ratchet_header, ciphertext) = self
             .store
             .connection_mut(connection_id)?
             .ratchet_state
             .as_mut()
-            .map(|state| {
-                state
-                    .next_outbound_header()
-                    .map_err(|error| RadrootsSimplexAgentRuntimeError::Runtime(error.to_string()))
-            })
-            .transpose()?;
-        let ratchet_header = match (ratchet_header, sender_public_key) {
-            (Some(mut header), Some(public_key)) => {
-                header.dh_public_key = public_key;
-                Some(header)
-            }
-            (None, Some(public_key)) => Some(
-                radroots_simplex_smp_crypto::prelude::RadrootsSimplexSmpRatchetHeader {
-                    previous_sending_chain_length: 0,
-                    message_number: 0,
-                    dh_public_key: public_key,
-                    pq_public_key: None,
-                    pq_ciphertext: None,
-                },
-            ),
-            (header, None) => header,
-        };
+            .ok_or_else(|| {
+                RadrootsSimplexAgentRuntimeError::Runtime(format!(
+                    "SimpleX connection `{connection_id}` has no ratchet state"
+                ))
+            })?
+            .encrypt_payload(&shared_secret, &plaintext, padded_len)
+            .map_err(|error| RadrootsSimplexAgentRuntimeError::Runtime(error.to_string()))?;
         Ok(RadrootsSimplexAgentEncryptedPayload {
-            ratchet_header,
+            ratchet_header: Some(ratchet_header),
             ciphertext,
+        })
+    }
+
+    fn extract_decrypted_message(
+        &mut self,
+        connection_id: &str,
+        envelope: &RadrootsSimplexAgentEnvelope,
+    ) -> Result<RadrootsSimplexAgentDecryptedMessage, RadrootsSimplexAgentRuntimeError> {
+        match envelope {
+            RadrootsSimplexAgentEnvelope::Confirmation { encrypted, .. }
+            | RadrootsSimplexAgentEnvelope::Message(encrypted)
+            | RadrootsSimplexAgentEnvelope::RatchetKey { encrypted, .. } => {
+                let plaintext = self.decrypt_agent_payload(connection_id, encrypted)?;
+                decode_decrypted_message(&plaintext).map_err(Into::into)
+            }
+            RadrootsSimplexAgentEnvelope::Invitation {
+                connection_info, ..
+            } => decode_decrypted_message(connection_info).map_err(Into::into),
+        }
+    }
+
+    fn decrypt_agent_payload(
+        &mut self,
+        connection_id: &str,
+        encrypted: &RadrootsSimplexAgentEncryptedPayload,
+    ) -> Result<Vec<u8>, RadrootsSimplexAgentRuntimeError> {
+        let shared_secret = self
+            .store
+            .connection(connection_id)?
+            .shared_secret
+            .clone()
+            .ok_or_else(|| {
+                RadrootsSimplexAgentRuntimeError::Runtime(format!(
+                    "SimpleX connection `{connection_id}` has no shared secret"
+                ))
+            })?;
+        let header = encrypted.ratchet_header.as_ref().ok_or_else(|| {
+            RadrootsSimplexAgentRuntimeError::Runtime(format!(
+                "SimpleX connection `{connection_id}` received agent payload without ratchet header"
+            ))
+        })?;
+        self.store
+            .connection_mut(connection_id)?
+            .ratchet_state
+            .as_mut()
+            .ok_or_else(|| {
+                RadrootsSimplexAgentRuntimeError::Runtime(format!(
+                    "SimpleX connection `{connection_id}` has no ratchet state"
+                ))
+            })?
+            .decrypt_payload(&shared_secret, header, &encrypted.ciphertext)
+            .map_err(|error| RadrootsSimplexAgentRuntimeError::Runtime(error.to_string()))
+    }
+
+    fn agent_payload_padded_len(
+        &self,
+        connection_id: &str,
+        payload_kind: SimplexAgentPayloadKind,
+    ) -> Result<usize, RadrootsSimplexAgentRuntimeError> {
+        let ratchet = self
+            .store
+            .connection(connection_id)?
+            .ratchet_state
+            .as_ref()
+            .ok_or_else(|| {
+                RadrootsSimplexAgentRuntimeError::Runtime(format!(
+                    "SimpleX connection `{connection_id}` has no ratchet state"
+                ))
+            })?;
+        let pq_enabled = ratchet.current_pq_public_key.is_some()
+            || ratchet.remote_pq_public_key.is_some()
+            || ratchet.current_pq_shared_secret.is_some();
+        Ok(match (payload_kind, pq_enabled) {
+            (SimplexAgentPayloadKind::ConnectionInfo, true) => {
+                SIMPLEX_AGENT_E2E_CONN_INFO_PQ_LENGTH
+            }
+            (SimplexAgentPayloadKind::ConnectionInfo, false) => SIMPLEX_AGENT_E2E_CONN_INFO_LENGTH,
+            (SimplexAgentPayloadKind::Message, true) => SIMPLEX_AGENT_E2E_MESSAGE_PQ_LENGTH,
+            (SimplexAgentPayloadKind::Message, false) => SIMPLEX_AGENT_E2E_MESSAGE_LENGTH,
         })
     }
 
@@ -1767,21 +1869,6 @@ fn decode_received_body(
         flags,
         sent_body: bytes[flags_offset + 1..].to_vec(),
     })
-}
-
-fn extract_decrypted_message(
-    envelope: &RadrootsSimplexAgentEnvelope,
-) -> Result<RadrootsSimplexAgentDecryptedMessage, RadrootsSimplexAgentRuntimeError> {
-    match envelope {
-        RadrootsSimplexAgentEnvelope::Confirmation { encrypted, .. }
-        | RadrootsSimplexAgentEnvelope::Message(encrypted)
-        | RadrootsSimplexAgentEnvelope::RatchetKey { encrypted, .. } => {
-            decode_decrypted_message(&encrypted.ciphertext).map_err(Into::into)
-        }
-        RadrootsSimplexAgentEnvelope::Invitation {
-            connection_info, ..
-        } => decode_decrypted_message(connection_info).map_err(Into::into),
-    }
 }
 
 #[cfg(test)]
@@ -2284,6 +2371,67 @@ mod tests {
                 .unwrap()
                 .staged_outbound_message,
             None
+        );
+    }
+
+    #[test]
+    fn send_message_stores_opaque_encrypted_agent_payload() {
+        let mut runtime = RadrootsSimplexAgentRuntimeBuilder::new().build().unwrap();
+        let created = runtime
+            .create_connection(invitation_queue(), b"e2e".to_vec(), false, 10)
+            .unwrap();
+        let invitation = runtime
+            .store
+            .connection(&created)
+            .unwrap()
+            .invitation
+            .clone()
+            .unwrap();
+        let joined = runtime
+            .join_connection(invitation, reply_queue(), 20)
+            .unwrap();
+
+        let mut setup_transport = ScriptedTransport::with_responses(vec![
+            ids_response(b"recipient", b"sender", b"server-dh"),
+            RadrootsSimplexSmpBrokerMessage::Ok,
+            ids_response(b"recipient-2", b"sender-2", b"server-dh-2"),
+            RadrootsSimplexSmpBrokerMessage::Ok,
+            RadrootsSimplexSmpBrokerMessage::Ok,
+            RadrootsSimplexSmpBrokerMessage::Ok,
+        ]);
+        runtime
+            .execute_ready_commands(&mut setup_transport, 30, 16)
+            .unwrap();
+        mark_connected(&mut runtime, &joined);
+
+        runtime
+            .send_message(&joined, b"hello simplex".to_vec(), 40)
+            .unwrap();
+        let command = runtime.retry_pending(40, 16).remove(0);
+        let RadrootsSimplexAgentPendingCommandKind::SendEnvelope { envelope, .. } = command.kind
+        else {
+            panic!("expected send envelope command");
+        };
+        let RadrootsSimplexAgentEnvelope::Message(encrypted) = envelope else {
+            panic!("expected encrypted message envelope");
+        };
+        let expected_plaintext = encode_decrypted_message(
+            &RadrootsSimplexAgentDecryptedMessage::Message(RadrootsSimplexAgentMessageFrame {
+                header: RadrootsSimplexAgentMessageHeader {
+                    message_id: 1,
+                    previous_message_hash: Vec::new(),
+                },
+                message: RadrootsSimplexAgentMessage::UserMessage(b"hello simplex".to_vec()),
+                padding: Vec::new(),
+            }),
+        )
+        .unwrap();
+
+        assert!(encrypted.ratchet_header.is_some());
+        assert_ne!(encrypted.ciphertext, expected_plaintext);
+        assert_eq!(
+            encrypted.ciphertext.len(),
+            SIMPLEX_AGENT_E2E_MESSAGE_LENGTH + 16
         );
     }
 

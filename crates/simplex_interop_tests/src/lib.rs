@@ -252,24 +252,15 @@ mod tests {
         let envelope =
             RadrootsSimplexAgentEnvelope::Message(RadrootsSimplexAgentEncryptedPayload {
                 ratchet_header: None,
-                ciphertext: encoded_decrypted.clone(),
+                ciphertext: b"opaque-agent-ciphertext".to_vec(),
             });
         let decoded_envelope = decode_envelope(&encode_envelope(&envelope).unwrap()).unwrap();
         let RadrootsSimplexAgentEnvelope::Message(payload) = decoded_envelope else {
             panic!("expected message envelope");
         };
-        let decoded_decrypted = decode_decrypted_message(&payload.ciphertext).unwrap();
-        let RadrootsSimplexAgentDecryptedMessage::Message(decoded_frame_from_envelope) =
-            decoded_decrypted
-        else {
-            panic!("expected message frame");
-        };
-        let RadrootsSimplexAgentMessage::UserMessage(encoded_chat_again) =
-            decoded_frame_from_envelope.message
-        else {
-            panic!("expected user message");
-        };
-        assert_eq!(decode_messages(&encoded_chat_again).unwrap(), chat_messages);
+        assert_eq!(payload.ciphertext, b"opaque-agent-ciphertext".to_vec());
+        let decoded_decrypted = decode_decrypted_message(&encoded_decrypted).unwrap();
+        assert_eq!(decoded_decrypted, decrypted);
     }
 
     #[test]
