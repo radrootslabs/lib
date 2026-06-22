@@ -40,7 +40,9 @@ Before editing code:
 
 - Read `AGENTS.md`.
 - Read this file.
-- Read `README`, `docs/nix.md`, and `spec/README.md` when the change touches workflow, exports, or public surfaces.
+- Read `README` and `spec/README.md` when the change touches workflow, exports, or public surfaces.
+- When touching Nix behavior, read `flake.nix` and the active Nix implementation files under
+  `nix/` until the approved `build/nix/` migration lands.
 - Read the relevant crate manifest, implementation files, and nearby tests before proposing a new structure.
 - Check `git status --short`.
 

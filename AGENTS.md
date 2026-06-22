@@ -25,7 +25,9 @@ This file exists for compatibility with tools that look for AGENTS.md.
 
 Before editing code:
 
-- Read this file, `AGENT_INSTRUCTIONS.md`, `README`, `docs/nix.md`, and `spec/README.md`.
+- Read this file, `AGENT_INSTRUCTIONS.md`, `README`, and `spec/README.md`.
+- When touching Nix behavior, read `flake.nix` and the active Nix implementation files under
+  `nix/` until the approved `build/nix/` migration lands.
 - Enter the canonical environment with `nix develop` or `direnv allow` before targeted cargo work.
 - Discover commands from checked-in repo surfaces; do not invent ad hoc workflows.
 - Read the current implementation and nearby tests before designing a change.
