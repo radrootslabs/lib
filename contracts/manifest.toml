@@ -11,7 +11,6 @@ model_crates = [
   "radroots_identity",
 ]
 algorithm_crates = ["radroots_events_codec"]
-wasm_crates = []
 
 [surface.rust_crate_tiers]
 advanced_substrate = [
@@ -58,9 +57,7 @@ deferred_publication = [
 [surface.internal_replica_crates]
 schema = "radroots_replica_db_schema"
 storage = "radroots_replica_db"
-external_storage_wasm_binding_crate = "radroots_replica_db_wasm"
 sync = "radroots_replica_sync"
-external_sync_wasm_binding_crate = "radroots_replica_sync_wasm"
 
 [policy]
 exclude_internal_workspace_crates = true

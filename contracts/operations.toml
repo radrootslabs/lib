@@ -53,7 +53,6 @@ model_crates = [
   "radroots_identity",
 ]
 algorithm_crates = ["radroots_events_codec"]
-wasm_crates = []
 
 [operations.profile_build_draft]
 domain = "profile"
@@ -71,7 +70,7 @@ rust_modules = ["crates/events_codec/src/profile/encode.rs"]
 rust_types = ["radroots_events::profile::RadrootsProfile"]
 
 [operations.profile_build_draft.conformance]
-vector = "spec/conformance/vectors/profile/build_draft.v1.json"
+vector = "contracts/conformance/vectors/profile/build_draft.v1.json"
 
 [operations.farm_build_draft]
 domain = "farm"
@@ -89,7 +88,7 @@ rust_modules = ["crates/events_codec/src/farm/encode.rs"]
 rust_types = ["radroots_events::farm::RadrootsFarm"]
 
 [operations.farm_build_draft.conformance]
-vector = "spec/conformance/vectors/farm/build_draft.v1.json"
+vector = "contracts/conformance/vectors/farm/build_draft.v1.json"
 
 [operations.listing_build_tags]
 domain = "listing"
@@ -110,7 +109,7 @@ rust_modules = [
 rust_types = ["radroots_events::listing::RadrootsListing"]
 
 [operations.listing_build_tags.conformance]
-vector = "spec/conformance/vectors/listing/build_tags.v1.json"
+vector = "contracts/conformance/vectors/listing/build_tags.v1.json"
 
 [operations.listing_build_draft]
 domain = "listing"
@@ -131,7 +130,7 @@ rust_modules = [
 rust_types = ["radroots_events::listing::RadrootsListing"]
 
 [operations.listing_build_draft.conformance]
-vector = "spec/conformance/vectors/listing/build_draft.v1.json"
+vector = "contracts/conformance/vectors/listing/build_draft.v1.json"
 
 [operations.listing_parse_event]
 domain = "listing"
@@ -152,7 +151,7 @@ rust_types = [
 ]
 
 [operations.listing_parse_event.conformance]
-vector = "spec/conformance/vectors/listing/parse_event.v1.json"
+vector = "contracts/conformance/vectors/listing/parse_event.v1.json"
 
 [operations.social_post_build_tags]
 domain = "social"
@@ -170,7 +169,7 @@ rust_modules = ["crates/events_codec/src/post/encode.rs"]
 rust_types = ["radroots_events::post::RadrootsPost"]
 
 [operations.social_post_build_tags.conformance]
-vector = "spec/conformance/vectors/social/mvp.v1.json"
+vector = "contracts/conformance/vectors/social/mvp.v1.json"
 
 [operations.social_comment_build_tags]
 domain = "social"
@@ -188,7 +187,7 @@ rust_modules = ["crates/events_codec/src/comment/encode.rs"]
 rust_types = ["radroots_events::comment::RadrootsComment"]
 
 [operations.social_comment_build_tags.conformance]
-vector = "spec/conformance/vectors/social/mvp.v1.json"
+vector = "contracts/conformance/vectors/social/mvp.v1.json"
 
 [operations.social_reaction_build_tags]
 domain = "social"
@@ -206,7 +205,7 @@ rust_modules = ["crates/events_codec/src/reaction/encode.rs"]
 rust_types = ["radroots_events::reaction::RadrootsReaction"]
 
 [operations.social_reaction_build_tags.conformance]
-vector = "spec/conformance/vectors/social/mvp.v1.json"
+vector = "contracts/conformance/vectors/social/mvp.v1.json"
 
 [operations.social_article_build_tags]
 domain = "social"
@@ -224,7 +223,7 @@ rust_modules = ["crates/events_codec/src/article/encode.rs"]
 rust_types = ["radroots_events::article::RadrootsArticle"]
 
 [operations.social_article_build_tags.conformance]
-vector = "spec/conformance/vectors/social/mvp.v1.json"
+vector = "contracts/conformance/vectors/social/mvp.v1.json"
 
 [operations.social_file_metadata_build_tags]
 domain = "social"
@@ -242,7 +241,7 @@ rust_modules = ["crates/events_codec/src/file_metadata/encode.rs"]
 rust_types = ["radroots_events::file_metadata::RadrootsFileMetadata"]
 
 [operations.social_file_metadata_build_tags.conformance]
-vector = "spec/conformance/vectors/social/mvp.v1.json"
+vector = "contracts/conformance/vectors/social/mvp.v1.json"
 
 [operations.social_calendar_date_event_build_tags]
 domain = "social"
@@ -260,7 +259,7 @@ rust_modules = ["crates/events_codec/src/calendar/encode.rs"]
 rust_types = ["radroots_events::calendar::RadrootsCalendarDateEvent"]
 
 [operations.social_calendar_date_event_build_tags.conformance]
-vector = "spec/conformance/vectors/social/mvp.v1.json"
+vector = "contracts/conformance/vectors/social/mvp.v1.json"
 
 [operations.social_calendar_time_event_build_tags]
 domain = "social"
@@ -278,7 +277,7 @@ rust_modules = ["crates/events_codec/src/calendar/encode.rs"]
 rust_types = ["radroots_events::calendar::RadrootsCalendarTimeEvent"]
 
 [operations.social_calendar_time_event_build_tags.conformance]
-vector = "spec/conformance/vectors/social/mvp.v1.json"
+vector = "contracts/conformance/vectors/social/mvp.v1.json"
 
 [operations.order_build_order_request_draft]
 domain = "order"
@@ -299,7 +298,7 @@ rust_types = [
 ]
 
 [operations.order_build_order_request_draft.conformance]
-vector = "spec/conformance/vectors/order/build_order_request_draft.v1.json"
+vector = "contracts/conformance/vectors/order/build_order_request_draft.v1.json"
 
 [operations.order_build_order_decision_draft]
 domain = "order"
@@ -317,7 +316,7 @@ rust_modules = ["crates/events_codec/src/order/encode.rs"]
 rust_types = ["radroots_events::order::RadrootsOrderDecision"]
 
 [operations.order_build_order_decision_draft.conformance]
-vector = "spec/conformance/vectors/order/build_order_decision_draft.v1.json"
+vector = "contracts/conformance/vectors/order/build_order_decision_draft.v1.json"
 
 [operations.order_parse_order_request]
 domain = "order"
@@ -339,7 +338,7 @@ rust_types = [
 ]
 
 [operations.order_parse_order_request.conformance]
-vector = "spec/conformance/vectors/order/parse_order_request.v1.json"
+vector = "contracts/conformance/vectors/order/parse_order_request.v1.json"
 
 [operations.order_parse_order_decision]
 domain = "order"
@@ -361,7 +360,7 @@ rust_types = [
 ]
 
 [operations.order_parse_order_decision.conformance]
-vector = "spec/conformance/vectors/order/parse_order_decision.v1.json"
+vector = "contracts/conformance/vectors/order/parse_order_decision.v1.json"
 
 [operations.order_parse_listing_address]
 domain = "order"
@@ -379,7 +378,7 @@ rust_modules = ["crates/events/src/ids.rs"]
 rust_types = ["radroots_events::ids::RadrootsListingAddress"]
 
 [operations.order_parse_listing_address.conformance]
-vector = "spec/conformance/vectors/order/parse_listing_address.v1.json"
+vector = "contracts/conformance/vectors/order/parse_listing_address.v1.json"
 
 [operations.trade_validation_validate_listing_event]
 domain = "trade_validation"
@@ -400,4 +399,4 @@ rust_types = [
 ]
 
 [operations.trade_validation_validate_listing_event.conformance]
-vector = "spec/conformance/vectors/trade_validation/validate_listing_event.v1.json"
+vector = "contracts/conformance/vectors/trade_validation/validate_listing_event.v1.json"

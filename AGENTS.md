@@ -25,7 +25,7 @@ This file exists for compatibility with tools that look for AGENTS.md.
 
 Before editing code:
 
-- Read this file, `AGENT_INSTRUCTIONS.md`, `README`, and `spec/README.md`.
+- Read this file, `AGENT_INSTRUCTIONS.md`, and `README`.
 - When touching Nix behavior, read `flake.nix` and the active Nix implementation files under
   `nix/` until the approved `build/nix/` migration lands.
 - Enter the canonical environment with `nix develop` or `direnv allow` before targeted cargo work.
@@ -59,7 +59,7 @@ Before editing code:
 
 ## 6. Contract and release discipline
 
-- `spec/` (including `spec/conformance/`) and `crates/xtask` are authoritative for public SDK contract, export, and release governance.
+- `contracts/` and `crates/xtask` are authoritative for core-library contracts, conformance, coverage, and release-candidate governance.
 - Behavior changes that affect public surfaces must update the relevant contract metadata, conformance vectors, export rules, or validation flows in the same change.
 - Keep pure flake checks and repo-aware command apps aligned with the documented Nix command map.
 

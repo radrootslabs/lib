@@ -10,8 +10,8 @@ use std::path::{Path, PathBuf};
 
 const ROOT_RELEASE_POLICY_RELATIVE: &str =
     "foundation/contracts/release_runtime/mounted_rust_crates/publish-policy.toml";
-const CONFORMANCE_ROOT_RELATIVE: &str = "spec/conformance";
-const CONFORMANCE_SCHEMA_RELATIVE: &str = "spec/conformance/schema/vector.schema.json";
+const CONFORMANCE_ROOT_RELATIVE: &str = "contracts/conformance";
+const CONFORMANCE_SCHEMA_RELATIVE: &str = "contracts/conformance/schema/vector.schema.json";
 const RELEASE_POLICY_ENV: &str = "RADROOTS_MOUNTED_RUST_CRATE_PUBLISH_POLICY";
 const EVENT_BOUNDARY_MATRIX_ENV: &str = "RADROOTS_EVENT_BOUNDARY_MATRIX";
 const COVERAGE_REQUIRED_THRESHOLD: f64 = 98.0;
@@ -30,6 +30,7 @@ pub struct ContractManifest {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ManifestContract {
     pub name: String,
     pub version: String,
@@ -41,7 +42,6 @@ pub struct ManifestContract {
 pub struct Surface {
     pub model_crates: Vec<String>,
     pub algorithm_crates: Vec<String>,
-    pub wasm_crates: Vec<String>,
     pub rust_crate_tiers: Option<RustCrateTiers>,
     pub internal_replica_crates: Option<InternalReplicaCrates>,
 }
@@ -59,16 +59,24 @@ pub struct RustCrateTiers {
 pub struct InternalReplicaCrates {
     pub schema: String,
     pub storage: String,
-    pub external_storage_wasm_binding_crate: String,
     pub sync: String,
-    pub external_sync_wasm_binding_crate: String,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Policy {
     pub exclude_internal_workspace_crates: bool,
     pub require_reproducible_exports: bool,
     pub require_conformance_vectors: bool,
+    pub replica: Option<ReplicaPolicy>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReplicaPolicy {
+    pub forbid_legacy_alias_identifiers: bool,
+    pub require_transport_agnostic_sync_contract: bool,
+    pub require_deterministic_emit_ingest: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -83,28 +91,32 @@ pub struct OperationsContractManifest {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PublicContract {
     pub domains: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SharedTypesContract {
     pub public: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ErrorClassesContract {
     pub classes: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ImplementationProvenance {
     pub model_crates: Vec<String>,
     pub algorithm_crates: Vec<String>,
-    pub wasm_crates: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PublicOperationContract {
     pub domain: String,
     pub id: String,
@@ -121,17 +133,20 @@ pub struct PublicOperationContract {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PublicOperationImplementation {
     pub rust_modules: Vec<String>,
     pub rust_types: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PublicOperationConformance {
     pub vector: String,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct VersionPolicy {
     pub contract: VersionContract,
     pub semver: SemverRules,
@@ -139,12 +154,14 @@ pub struct VersionPolicy {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct VersionContract {
     pub version: String,
     pub stability: String,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SemverRules {
     pub major_on: Vec<String>,
     pub minor_on: Vec<String>,
@@ -152,9 +169,10 @@ pub struct SemverRules {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CompatibilityRules {
     pub requires_conformance_pass: bool,
-    pub requires_export_manifest_diff: bool,
+    pub requires_contract_manifest_diff: bool,
     pub requires_release_notes: bool,
 }
 
@@ -1614,7 +1632,7 @@ pub fn validate_canonical_event_boundary(workspace_root: &Path) -> Result<(), St
 }
 
 fn contract_root(workspace_root: &Path) -> PathBuf {
-    workspace_root.join("spec")
+    workspace_root.join("contracts")
 }
 
 fn conformance_root(workspace_root: &Path) -> PathBuf {
@@ -2089,15 +2107,11 @@ fn workspace_package_manifests(workspace_root: &Path) -> Result<BTreeMap<String,
 fn load_coverage_policy(
     contract_root: &Path,
 ) -> Result<crate::coverage::CoveragePolicyFile, String> {
-    read_coverage_policy(&coverage_root(contract_root).join("policy.toml"))
+    read_coverage_policy(&coverage_root(contract_root).join("coverage.toml"))
 }
 
 fn coverage_root(contract_root: &Path) -> PathBuf {
-    contract_root
-        .parent()
-        .unwrap_or(contract_root)
-        .join("policy")
-        .join("coverage")
+    contract_root.to_path_buf()
 }
 
 #[cfg_attr(not(test), allow(dead_code))]
@@ -2199,11 +2213,13 @@ fn should_synthesize_owner_contracts_for_tests(workspace_root: &Path) -> bool {
             .join("trade")
             .join("Cargo.toml")
             .is_file()
-        && workspace_root.join("spec").join("manifest.toml").is_file()
         && workspace_root
-            .join("policy")
-            .join("coverage")
-            .join("policy.toml")
+            .join("contracts")
+            .join("manifest.toml")
+            .is_file()
+        && workspace_root
+            .join("contracts")
+            .join("coverage.toml")
             .is_file()
 }
 
@@ -2359,16 +2375,26 @@ fn validate_surface_metadata(surface: &Surface) -> Result<(), String> {
         validate_crate_identifier(&replica.schema, "surface.internal_replica_crates.schema")?;
         validate_crate_identifier(&replica.storage, "surface.internal_replica_crates.storage")?;
         validate_crate_identifier(&replica.sync, "surface.internal_replica_crates.sync")?;
-        validate_crate_identifier(
-            &replica.external_storage_wasm_binding_crate,
-            "surface.internal_replica_crates.external_storage_wasm_binding_crate",
-        )?;
-        validate_crate_identifier(
-            &replica.external_sync_wasm_binding_crate,
-            "surface.internal_replica_crates.external_sync_wasm_binding_crate",
-        )?;
     }
 
+    Ok(())
+}
+
+fn validate_policy_metadata(policy: &Policy) -> Result<(), String> {
+    if !policy.exclude_internal_workspace_crates
+        || !policy.require_reproducible_exports
+        || !policy.require_conformance_vectors
+    {
+        return Err("contract policy flags must all be true".to_string());
+    }
+    if let Some(replica) = &policy.replica {
+        if !replica.forbid_legacy_alias_identifiers
+            || !replica.require_transport_agnostic_sync_contract
+            || !replica.require_deterministic_emit_ingest
+        {
+            return Err("contract replica policy flags must all be true".to_string());
+        }
+    }
     Ok(())
 }
 
@@ -2427,8 +2453,6 @@ fn validate_operations_contract(
             &bundle.manifest.surface.algorithm_crates,
             "surface.algorithm_crates",
         )?;
-        let manifest_wasm =
-            collect_unique_set(&bundle.manifest.surface.wasm_crates, "surface.wasm_crates")?;
         let provenance_models = collect_unique_set(
             &provenance.model_crates,
             "implementation_provenance.model_crates",
@@ -2437,14 +2461,7 @@ fn validate_operations_contract(
             &provenance.algorithm_crates,
             "implementation_provenance.algorithm_crates",
         )?;
-        let provenance_wasm = collect_unique_set(
-            &provenance.wasm_crates,
-            "implementation_provenance.wasm_crates",
-        )?;
-        if provenance_models != manifest_models
-            || provenance_algorithms != manifest_algorithms
-            || provenance_wasm != manifest_wasm
-        {
+        if provenance_models != manifest_models || provenance_algorithms != manifest_algorithms {
             return Err(
                 "operations implementation_provenance must match manifest surface crates"
                     .to_string(),
@@ -2547,10 +2564,10 @@ fn validate_operations_contract(
         if !operation
             .conformance
             .vector
-            .starts_with("spec/conformance/")
+            .starts_with("contracts/conformance/")
         {
             return Err(format!(
-                "operation {} conformance.vector must live under spec/conformance/",
+                "operation {} conformance.vector must live under contracts/conformance/",
                 operation.id
             ));
         }
@@ -3325,18 +3342,13 @@ fn validate_contract_bundle_with_release_policy_override(
     if !bundle.version.compatibility.requires_conformance_pass {
         return Err("compatibility.requires_conformance_pass must be true".to_string());
     }
-    if !bundle.version.compatibility.requires_export_manifest_diff {
-        return Err("compatibility.requires_export_manifest_diff must be true".to_string());
+    if !bundle.version.compatibility.requires_contract_manifest_diff {
+        return Err("compatibility.requires_contract_manifest_diff must be true".to_string());
     }
     if !bundle.version.compatibility.requires_release_notes {
         return Err("compatibility.requires_release_notes must be true".to_string());
     }
-    if !bundle.manifest.policy.exclude_internal_workspace_crates
-        || !bundle.manifest.policy.require_reproducible_exports
-        || !bundle.manifest.policy.require_conformance_vectors
-    {
-        return Err("contract policy flags must all be true".to_string());
-    }
+    validate_policy_metadata(&bundle.manifest.policy)?;
     let workspace_root = bundle
         .root
         .parent()
@@ -3604,6 +3616,7 @@ fn toml_inline_array(values: &[String]) -> String {
 }
 
 pub fn load_contract_bundle(workspace_root: &Path) -> Result<ContractBundle, String> {
+    reject_legacy_contract_roots(workspace_root)?;
     let root = contract_root(workspace_root);
     let manifest = parse_toml::<ContractManifest>(&root.join("manifest.toml"))?;
     let version = parse_toml::<VersionPolicy>(&root.join("version.toml"))?;
@@ -3621,6 +3634,19 @@ pub fn load_contract_bundle(workspace_root: &Path) -> Result<ContractBundle, Str
         version,
         operations_manifest,
     })
+}
+
+fn reject_legacy_contract_roots(workspace_root: &Path) -> Result<(), String> {
+    for relative in ["spec", "policy"] {
+        let legacy_root = workspace_root.join(relative);
+        if legacy_root.exists() {
+            return Err(format!(
+                "legacy contract root {} is forbidden; use contracts/",
+                legacy_root.display()
+            ));
+        }
+    }
+    Ok(())
 }
 
 pub fn validate_contract_bundle(bundle: &ContractBundle) -> Result<(), String> {
@@ -3655,18 +3681,13 @@ pub fn validate_contract_bundle(bundle: &ContractBundle) -> Result<(), String> {
     if !bundle.version.compatibility.requires_conformance_pass {
         return Err("compatibility.requires_conformance_pass must be true".to_string());
     }
-    if !bundle.version.compatibility.requires_export_manifest_diff {
-        return Err("compatibility.requires_export_manifest_diff must be true".to_string());
+    if !bundle.version.compatibility.requires_contract_manifest_diff {
+        return Err("compatibility.requires_contract_manifest_diff must be true".to_string());
     }
     if !bundle.version.compatibility.requires_release_notes {
         return Err("compatibility.requires_release_notes must be true".to_string());
     }
-    if !bundle.manifest.policy.exclude_internal_workspace_crates
-        || !bundle.manifest.policy.require_reproducible_exports
-        || !bundle.manifest.policy.require_conformance_vectors
-    {
-        return Err("contract policy flags must all be true".to_string());
-    }
+    validate_policy_metadata(&bundle.manifest.policy)?;
     let workspace_root = bundle
         .root
         .parent()
@@ -3885,7 +3906,7 @@ publish = false
         );
 
         write_file(
-            &root.join("spec").join("manifest.toml"),
+            &root.join("contracts").join("manifest.toml"),
             r#"[contract]
 name = "radroots_contract"
 version = "1.0.0"
@@ -3894,7 +3915,6 @@ source = "synthetic"
 [surface]
 model_crates = ["radroots_a"]
 algorithm_crates = ["radroots_b"]
-wasm_crates = ["radroots_a_wasm"]
 
 [policy]
 exclude_internal_workspace_crates = true
@@ -3903,7 +3923,7 @@ require_conformance_vectors = true
 "#,
         );
         write_file(
-            &root.join("spec").join("version.toml"),
+            &root.join("contracts").join("version.toml"),
             r#"[contract]
 version = "1.0.0"
 stability = "alpha"
@@ -3915,12 +3935,12 @@ patch_on = ["fix"]
 
 [compatibility]
 requires_conformance_pass = true
-requires_export_manifest_diff = true
+requires_contract_manifest_diff = true
 requires_release_notes = true
 "#,
         );
         write_file(
-            &root.join("policy").join("coverage").join("policy.toml"),
+            &root.join("contracts").join("coverage.toml"),
             r#"[gate]
 fail_under_exec_lines = 98.0
 fail_under_functions = 98.0
@@ -3959,7 +3979,7 @@ crates = ["radroots_a"]
 
     fn add_operation_contract_files(root: &Path) {
         write_file(
-            &root.join("spec").join("operations.toml"),
+            &root.join("contracts").join("operations.toml"),
             r#"[contract]
 name = "radroots_contract"
 version = "1.0.0"
@@ -3988,7 +4008,6 @@ classes = ["encode_error", "parse_error", "validation_error", "address_error"]
 [implementation_provenance]
 model_crates = ["radroots_a"]
 algorithm_crates = ["radroots_b"]
-wasm_crates = ["radroots_a_wasm"]
 
 [operations.profile_build_draft]
 domain = "profile"
@@ -4006,7 +4025,7 @@ rust_modules = ["crates/core/src/unit.rs"]
 rust_types = ["radroots_events::profile::RadrootsProfile"]
 
 [operations.profile_build_draft.conformance]
-vector = "spec/conformance/vectors/profile/build_draft.v1.json"
+vector = "contracts/conformance/vectors/profile/build_draft.v1.json"
 
 [operations.listing_build_draft]
 domain = "listing"
@@ -4024,19 +4043,19 @@ rust_modules = ["crates/core/src/unit.rs"]
 rust_types = ["radroots_events::listing::RadrootsListing"]
 
 [operations.listing_build_draft.conformance]
-vector = "spec/conformance/vectors/listing/build_draft.v1.json"
+vector = "contracts/conformance/vectors/listing/build_draft.v1.json"
 "#,
         );
         write_file(
             &root
-                .join("spec")
+                .join("contracts")
                 .join("conformance")
                 .join("schema")
                 .join("vector.schema.json"),
             r#"{
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://radroots.org/sdk/conformance/vector.schema.json",
-  "title": "radroots sdk conformance vector",
+  "$id": "https://radroots.org/core/conformance/vector.schema.json",
+  "title": "radroots core conformance vector",
   "type": "object",
   "required": ["suite", "contract_version", "vectors"],
   "properties": {
@@ -4075,7 +4094,7 @@ vector = "spec/conformance/vectors/listing/build_draft.v1.json"
         );
         write_file(
             &root
-                .join("spec")
+                .join("contracts")
                 .join("conformance")
                 .join("vectors")
                 .join("profile")
@@ -4096,7 +4115,7 @@ vector = "spec/conformance/vectors/listing/build_draft.v1.json"
         );
         write_file(
             &root
-                .join("spec")
+                .join("contracts")
                 .join("conformance")
                 .join("vectors")
                 .join("listing")
@@ -4143,7 +4162,7 @@ publish = false
             );
         }
         write_file(
-            &root.join("policy").join("coverage").join("policy.toml"),
+            &root.join("contracts").join("coverage.toml"),
             r#"[gate]
 fail_under_exec_lines = 98.0
 fail_under_functions = 98.0
@@ -4249,7 +4268,7 @@ pub enum RadrootsCoreUnitDimension {
         let root = workspace_root();
         let expected_names =
             coverage_required_workspace_crates(&root).expect("workspace coverage crates");
-        let policy = load_coverage_policy(&root.join("spec")).expect("coverage policy");
+        let policy = load_coverage_policy(&root.join("contracts")).expect("coverage policy");
         let required_names = policy
             .required_crates()
             .expect("required crates")
@@ -4321,7 +4340,7 @@ edition = "2024"
     #[test]
     fn coverage_required_crates_match_policy_required_status() {
         let root = workspace_root();
-        let contract_root = root.join("spec");
+        let contract_root = root.join("contracts");
         let policy = load_coverage_policy(&contract_root).expect("coverage policy");
         let required = CoverageRequiredFile {
             required: CoverageRequiredSection {
@@ -4346,15 +4365,15 @@ edition = "2024"
         let missing_root = temp_root("load_coverage_required_missing_policy");
         let missing_err =
             load_coverage_policy(&missing_root).expect_err("missing policy should fail");
-        assert!(missing_err.contains("policy.toml"));
+        assert!(missing_err.contains("coverage.toml"));
         let _ = fs::remove_dir_all(&missing_root);
 
         let duplicate_root =
             create_synthetic_workspace("load_coverage_required_duplicate_required");
-        let contract_root = duplicate_root.join("spec");
+        let contract_root = duplicate_root.join("contracts");
         let coverage_root = coverage_root(&contract_root);
         write_file(
-            &coverage_root.join("policy.toml"),
+            &coverage_root.join("coverage.toml"),
             "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\", \"radroots_a\"]\n",
         );
         let duplicate_err =
@@ -4461,10 +4480,10 @@ edition = "2024"
                 },
             ],
         );
-        let policy_dir = root.join("policy").join("coverage");
+        let policy_dir = root.join("contracts");
         fs::create_dir_all(&policy_dir).expect("create policy dir");
         fs::write(
-            policy_dir.join("policy.toml"),
+            policy_dir.join("coverage.toml"),
             "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[overrides.radroots_events_codec]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 99.946\nfail_under_branches = 100.0\ntemporary = true\nreason = \"publish 0.1.0-alpha.2 temporary coverage override\"\n\n[overrides.radroots_log]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = false\ntemporary = true\nreason = \"branch coverage is not applicable while the crate has no measured branch records\"\n\n[required]\ncrates = [\"radroots_events_codec\", \"radroots_log\"]\n",
         )
         .expect("write coverage policy");
@@ -4474,7 +4493,7 @@ edition = "2024"
         ]
         .into_iter()
         .collect::<BTreeSet<_>>();
-        let policy = read_coverage_policy(&policy_dir.join("policy.toml"))
+        let policy = read_coverage_policy(&policy_dir.join("coverage.toml"))
             .expect("parse override coverage policy");
         validate_required_coverage_summary_with_policy(&root, &required, &policy)
             .expect("coverage summary should honor override");
@@ -4494,13 +4513,13 @@ edition = "2024"
         let required = ["radroots_a".to_string()]
             .into_iter()
             .collect::<BTreeSet<_>>();
-        let policy_dir = root.join("policy").join("coverage");
+        let policy_dir = root.join("contracts");
         write_file(
-            &policy_dir.join("policy.toml"),
+            &policy_dir.join("coverage.toml"),
             "[gate]\nfail_under_exec_lines = 98.0\nfail_under_functions = 98.0\nfail_under_regions = 98.0\nfail_under_branches = 98.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n",
         );
         let policy =
-            read_coverage_policy(&policy_dir.join("policy.toml")).expect("parse coverage policy");
+            read_coverage_policy(&policy_dir.join("coverage.toml")).expect("parse coverage policy");
         let err = validate_required_coverage_summary_with_policy(&root, &required, &policy)
             .expect_err("synthetic report path should fail");
         assert!(err.contains("coverage gate report"));
@@ -4524,13 +4543,13 @@ edition = "2024"
         let required = ["radroots_a".to_string()]
             .into_iter()
             .collect::<BTreeSet<_>>();
-        let policy_dir = root.join("policy").join("coverage");
+        let policy_dir = root.join("contracts");
         write_file(
-            &policy_dir.join("policy.toml"),
+            &policy_dir.join("coverage.toml"),
             "[gate]\nfail_under_exec_lines = 98.0\nfail_under_functions = 98.0\nfail_under_regions = 98.0\nfail_under_branches = 98.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n",
         );
         let policy =
-            read_coverage_policy(&policy_dir.join("policy.toml")).expect("parse coverage policy");
+            read_coverage_policy(&policy_dir.join("coverage.toml")).expect("parse coverage policy");
         let err = validate_required_coverage_summary_with_policy(&root, &required, &policy)
             .expect_err("stale threshold report should fail");
         assert!(err.contains("thresholds do not match policy"));
@@ -4563,13 +4582,13 @@ edition = "2024"
         let required = ["radroots_a".to_string()]
             .into_iter()
             .collect::<BTreeSet<_>>();
-        let policy_dir = root.join("policy").join("coverage");
+        let policy_dir = root.join("contracts");
         write_file(
-            &policy_dir.join("policy.toml"),
+            &policy_dir.join("coverage.toml"),
             "[gate]\nfail_under_exec_lines = 98.0\nfail_under_functions = 98.0\nfail_under_regions = 98.0\nfail_under_branches = 98.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n",
         );
         let policy =
-            read_coverage_policy(&policy_dir.join("policy.toml")).expect("parse coverage policy");
+            read_coverage_policy(&policy_dir.join("coverage.toml")).expect("parse coverage policy");
         let err = validate_required_coverage_summary_with_policy(&root, &required, &policy)
             .expect_err("row and report mismatch should fail");
         assert!(err.contains("does not match coverage gate report"));
@@ -4930,11 +4949,11 @@ members = ["crates/a", "crates/b"]
     #[test]
     fn coverage_policy_parity_reports_contract_errors() {
         let root = create_synthetic_workspace("coverage_policy_errors");
-        let contract_root = root.join("spec");
+        let contract_root = root.join("contracts");
         let coverage_root = coverage_root(&contract_root);
 
         write_file(
-            &coverage_root.join("policy.toml"),
+            &coverage_root.join("coverage.toml"),
             r#"[gate]
 fail_under_exec_lines = 98.0
 fail_under_functions = 98.0
@@ -4951,7 +4970,7 @@ crates = []
         assert!(empty_required.contains("required crates list must not be empty"));
 
         write_file(
-            &coverage_root.join("policy.toml"),
+            &coverage_root.join("coverage.toml"),
             r#"[gate]
 fail_under_exec_lines = 97.0
 fail_under_functions = 98.0
@@ -4968,7 +4987,7 @@ crates = ["radroots_a", "radroots_b"]
         assert!(invalid_gate.contains("98/98/98/98"));
 
         write_file(
-            &coverage_root.join("policy.toml"),
+            &coverage_root.join("coverage.toml"),
             r#"[gate]
 fail_under_exec_lines = 98.0
 fail_under_functions = 97.0
@@ -4985,7 +5004,7 @@ crates = ["radroots_a", "radroots_b"]
         assert!(invalid_functions.contains("98/98/98/98"));
 
         write_file(
-            &coverage_root.join("policy.toml"),
+            &coverage_root.join("coverage.toml"),
             r#"[gate]
 fail_under_exec_lines = 98.0
 fail_under_functions = 98.0
@@ -5002,7 +5021,7 @@ crates = ["radroots_a", "radroots_b"]
         assert!(invalid_regions.contains("98/98/98/98"));
 
         write_file(
-            &coverage_root.join("policy.toml"),
+            &coverage_root.join("coverage.toml"),
             r#"[gate]
 fail_under_exec_lines = 98.0
 fail_under_functions = 98.0
@@ -5019,7 +5038,7 @@ crates = ["radroots_a", "radroots_b"]
         assert!(invalid_branches.contains("98/98/98/98"));
 
         write_file(
-            &coverage_root.join("policy.toml"),
+            &coverage_root.join("coverage.toml"),
             r#"[gate]
 fail_under_exec_lines = 98.0
 fail_under_functions = 98.0
@@ -5036,7 +5055,7 @@ crates = ["radroots_a", "radroots_a"]
         assert!(duplicate_required.contains("duplicate crate"));
 
         write_file(
-            &coverage_root.join("policy.toml"),
+            &coverage_root.join("coverage.toml"),
             r#"[gate]
 fail_under_exec_lines = 98.0
 fail_under_functions = 98.0
@@ -5053,7 +5072,7 @@ crates = ["radroots_a", "radroots_b"]
         assert!(branches_optional.contains("required branches"));
 
         write_file(
-            &coverage_root.join("policy.toml"),
+            &coverage_root.join("coverage.toml"),
             r#"[gate]
 fail_under_exec_lines = 98.0
 fail_under_functions = 98.0
@@ -5070,7 +5089,7 @@ crates = ["radroots_b"]
         assert!(missing_workspace.contains("missing workspace crates"));
 
         write_file(
-            &coverage_root.join("policy.toml"),
+            &coverage_root.join("coverage.toml"),
             r#"[gate]
 fail_under_exec_lines = 98.0
 fail_under_functions = 98.0
@@ -5092,7 +5111,7 @@ crates = ["unknown"]
     #[test]
     fn release_publish_policy_reports_contract_errors() {
         let root = create_synthetic_workspace("release_policy_errors");
-        let contract_root = root.join("spec");
+        let contract_root = root.join("contracts");
         let release_policy_path = root_release_policy_path(&root);
 
         write_file(
@@ -5372,14 +5391,12 @@ edition = "2024"
             bundle.manifest.surface.algorithm_crates.clear();
         });
         assert_bundle_error(
-            "surface.internal_replica_crates.external_storage_wasm_binding_crate must be a crate identifier",
+            "surface.internal_replica_crates.storage must be a crate identifier",
             |bundle| {
                 bundle.manifest.surface.internal_replica_crates = Some(InternalReplicaCrates {
                     schema: "radroots_replica_db_schema".to_string(),
-                    storage: "radroots_replica_db".to_string(),
-                    external_storage_wasm_binding_crate: "crates/replica_db_wasm".to_string(),
+                    storage: "crates/replica_db".to_string(),
                     sync: "radroots_replica_sync".to_string(),
-                    external_sync_wasm_binding_crate: "radroots_replica_sync_wasm".to_string(),
                 });
             },
         );
@@ -5405,9 +5422,9 @@ edition = "2024"
             },
         );
         assert_bundle_error(
-            "compatibility.requires_export_manifest_diff must be true",
+            "compatibility.requires_contract_manifest_diff must be true",
             |bundle| {
-                bundle.version.compatibility.requires_export_manifest_diff = false;
+                bundle.version.compatibility.requires_contract_manifest_diff = false;
             },
         );
         assert_bundle_error(
@@ -5425,6 +5442,13 @@ edition = "2024"
         assert_bundle_error("contract policy flags must all be true", |bundle| {
             bundle.manifest.policy.require_conformance_vectors = false;
         });
+        assert_bundle_error("contract replica policy flags must all be true", |bundle| {
+            bundle.manifest.policy.replica = Some(ReplicaPolicy {
+                forbid_legacy_alias_identifiers: false,
+                require_transport_agnostic_sync_contract: true,
+                require_deterministic_emit_ingest: true,
+            });
+        });
 
         let _ = fs::remove_dir_all(root);
     }
@@ -5432,7 +5456,7 @@ edition = "2024"
     #[test]
     fn load_contract_bundle_rejects_stale_consumer_sdk_tables() {
         let stale_manifest_root = create_synthetic_workspace("stale_manifest_consumer_sdk");
-        let manifest_path = stale_manifest_root.join("spec").join("manifest.toml");
+        let manifest_path = stale_manifest_root.join("contracts").join("manifest.toml");
         let mut manifest = fs::read_to_string(&manifest_path).expect("manifest");
         manifest.push_str(
             r#"
@@ -5449,7 +5473,9 @@ rust_package = "radroots_sdk"
 
         let stale_operations_root = create_synthetic_workspace("stale_operations_consumer_sdk");
         add_operation_contract_files(&stale_operations_root);
-        let operations_path = stale_operations_root.join("spec").join("operations.toml");
+        let operations_path = stale_operations_root
+            .join("contracts")
+            .join("operations.toml");
         let mut operations = fs::read_to_string(&operations_path).expect("operations");
         operations.push_str(
             r#"
@@ -5463,6 +5489,23 @@ rust_package = "radroots_sdk"
         assert!(operations_err.contains("operations.toml"));
         assert!(operations_err.contains("consumer_sdk"));
         let _ = fs::remove_dir_all(stale_operations_root);
+    }
+
+    #[test]
+    fn load_contract_bundle_rejects_legacy_contract_roots() {
+        let stale_spec_root = create_synthetic_workspace("stale_spec_root");
+        fs::create_dir_all(stale_spec_root.join("spec")).expect("create spec root");
+        let spec_err = load_contract_bundle(&stale_spec_root).expect_err("stale spec root");
+        assert!(spec_err.contains("legacy contract root"));
+        assert!(spec_err.contains("spec"));
+        let _ = fs::remove_dir_all(stale_spec_root);
+
+        let stale_policy_root = create_synthetic_workspace("stale_policy_root");
+        fs::create_dir_all(stale_policy_root.join("policy")).expect("create policy root");
+        let policy_err = load_contract_bundle(&stale_policy_root).expect_err("stale policy root");
+        assert!(policy_err.contains("legacy contract root"));
+        assert!(policy_err.contains("policy"));
+        let _ = fs::remove_dir_all(stale_policy_root);
     }
 
     #[test]
@@ -5503,7 +5546,7 @@ rust_package = "radroots_sdk"
         add_operation_contract_files(&invalid_vector_root);
         write_file(
             &invalid_vector_root
-                .join("spec")
+                .join("contracts")
                 .join("conformance")
                 .join("vectors")
                 .join("profile")
@@ -5540,7 +5583,7 @@ rust_package = "radroots_sdk"
             .conformance
             .vector = "conformance/vectors/profile/build_draft.v1.json".to_string();
         let err = validate_contract_bundle(&bundle).expect_err("legacy path should fail");
-        assert!(err.contains("must live under spec/conformance/"));
+        assert!(err.contains("must live under contracts/conformance/"));
         let _ = fs::remove_dir_all(root);
     }
 
@@ -5768,7 +5811,7 @@ publish = false
     #[test]
     fn coverage_release_and_bundle_loaders_report_parse_and_read_errors() {
         let root = create_synthetic_workspace("coverage_release_loader_errors");
-        let contract_root = root.join("spec");
+        let contract_root = root.join("contracts");
         let coverage_root = coverage_root(&contract_root);
         let release_policy_path = root_release_policy_path(&root);
 
@@ -5779,12 +5822,12 @@ publish = false
         assert!(policy_workspace_err.contains("Cargo.toml"));
         let _ = fs::remove_dir_all(&missing_workspace);
 
-        let _ = fs::remove_file(coverage_root.join("policy.toml"));
+        let _ = fs::remove_file(coverage_root.join("coverage.toml"));
         let policy_load_err = validate_coverage_policy_parity(&root, &contract_root)
             .expect_err("coverage policy read error");
-        assert!(policy_load_err.contains("policy.toml"));
+        assert!(policy_load_err.contains("coverage.toml"));
         write_file(
-            &coverage_root.join("policy.toml"),
+            &coverage_root.join("coverage.toml"),
             r#"[gate]
 fail_under_exec_lines = 98.0
 fail_under_functions = 98.0
@@ -5910,7 +5953,7 @@ crates = ["radroots_a"]
     #[test]
     fn load_release_contract_with_override_reports_override_and_missing_policy_errors() {
         let root = create_synthetic_workspace("release_contract_loader_errors");
-        let contract_root = root.join("spec");
+        let contract_root = root.join("contracts");
 
         let missing_override = root.join("missing-release-policy.toml");
         let override_err = load_release_contract_with_override(
@@ -6018,7 +6061,7 @@ crates = ["radroots_a"]
             configure_root_release_policy_workspace(&root);
             write_root_release_policy(&root, policy_body);
 
-            let err = validate_release_publish_policy(&root, &root.join("spec"), "1.0.0")
+            let err = validate_release_publish_policy(&root, &root.join("contracts"), "1.0.0")
                 .expect_err("invalid non-public classification should fail");
             assert!(err.contains(expected), "{label} err: {err}");
 
@@ -6036,7 +6079,7 @@ crates = ["radroots_a"]
 
         let invalid_bundle = create_synthetic_workspace("preflight_invalid_bundle");
         write_file(
-            &invalid_bundle.join("spec").join("manifest.toml"),
+            &invalid_bundle.join("contracts").join("manifest.toml"),
             r#"[contract]
 name = "radroots_contract"
 version = "1.0.0"
@@ -6045,7 +6088,6 @@ source = "synthetic"
 [surface]
 model_crates = ["radroots_a"]
 algorithm_crates = ["radroots_b"]
-wasm_crates = ["radroots_a_wasm"]
 
 [policy]
 exclude_internal_workspace_crates = false
@@ -6066,15 +6108,10 @@ require_conformance_vectors = true
         let _ = fs::remove_dir_all(&missing_release);
 
         let missing_required = create_synthetic_workspace("preflight_missing_required");
-        let _ = fs::remove_file(
-            missing_required
-                .join("policy")
-                .join("coverage")
-                .join("policy.toml"),
-        );
+        let _ = fs::remove_file(missing_required.join("contracts").join("coverage.toml"));
         let missing_required_err =
             validate_release_preflight(&missing_required).expect_err("missing required list");
-        assert!(missing_required_err.contains("policy.toml"));
+        assert!(missing_required_err.contains("coverage.toml"));
         let _ = fs::remove_dir_all(&missing_required);
 
         let duplicate_publish = create_synthetic_workspace("preflight_duplicate_publish");
@@ -6100,10 +6137,7 @@ crates = ["radroots_a"]
 
         let duplicate_required = create_synthetic_workspace("preflight_duplicate_required");
         write_file(
-            &duplicate_required
-                .join("policy")
-                .join("coverage")
-                .join("policy.toml"),
+            &duplicate_required.join("contracts").join("coverage.toml"),
             "[gate]\nfail_under_exec_lines = 98.0\nfail_under_functions = 98.0\nfail_under_regions = 98.0\nfail_under_branches = 98.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\", \"radroots_a\"]\n",
         );
         let duplicate_required_err =
@@ -6143,12 +6177,12 @@ edition = "2024"
     #[test]
     fn load_contract_bundle_and_validation_report_version_core_and_coverage_errors() {
         let root = create_synthetic_workspace("bundle_version_core_and_coverage_errors");
-        write_file(&root.join("spec").join("version.toml"), "[contract");
+        write_file(&root.join("contracts").join("version.toml"), "[contract");
         let version_parse_err = load_contract_bundle(&root).expect_err("invalid version file");
         assert!(version_parse_err.contains("version.toml"));
 
         write_file(
-            &root.join("spec").join("version.toml"),
+            &root.join("contracts").join("version.toml"),
             r#"[contract]
 version = "1.0.0"
 stability = "alpha"
@@ -6160,7 +6194,7 @@ patch_on = ["fix"]
 
 [compatibility]
 requires_conformance_pass = true
-requires_export_manifest_diff = true
+requires_contract_manifest_diff = true
 requires_release_notes = true
 "#,
         );
@@ -6187,7 +6221,7 @@ Volume,
 "#,
         );
         write_file(
-            &root.join("policy").join("coverage").join("policy.toml"),
+            &root.join("contracts").join("coverage.toml"),
             r#"[gate]
 fail_under_exec_lines = 98.0
 fail_under_functions = 98.0
@@ -6345,12 +6379,12 @@ Volume,
     #[test]
     fn coverage_and_release_additional_error_branches_are_reported() {
         let root = create_synthetic_workspace("coverage_release_extra_errors");
-        let contract_root = root.join("spec");
+        let contract_root = root.join("contracts");
         let coverage_root = coverage_root(&contract_root);
         let release_policy_path = root_release_policy_path(&root);
 
         write_file(
-            &coverage_root.join("policy.toml"),
+            &coverage_root.join("coverage.toml"),
             r#"[gate]
 fail_under_exec_lines = 98.0
 fail_under_functions = 98.0
@@ -6367,7 +6401,7 @@ crates = ["radroots_a", "radroots_b", "radroots_extra"]
         assert!(coverage_extra.contains("includes excluded or unknown crates"));
 
         write_file(
-            &coverage_root.join("policy.toml"),
+            &coverage_root.join("coverage.toml"),
             r#"[gate]
 fail_under_exec_lines = 98.0
 fail_under_functions = 98.0

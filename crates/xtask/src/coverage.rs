@@ -596,7 +596,7 @@ fn validate_override_threshold(
 }
 
 pub(crate) fn coverage_policy_path(root: &Path) -> PathBuf {
-    root.join("policy").join("coverage").join("policy.toml")
+    root.join("contracts").join("coverage.toml")
 }
 
 pub(crate) fn read_coverage_policy(path: &Path) -> Result<CoveragePolicyFile, String> {
@@ -702,9 +702,8 @@ fn read_coverage_profile(
     crate_name: &str,
 ) -> Result<CoverageProfile, String> {
     let path = workspace_root
-        .join("policy")
-        .join("coverage")
-        .join("profiles.toml");
+        .join("contracts")
+        .join("coverage-profiles.toml");
     if !path.exists() {
         return Ok(CoverageProfile {
             no_default_features: false,
@@ -2354,10 +2353,10 @@ mod tests {
     #[test]
     fn report_missing_gate_uses_policy_thresholds() {
         let root = temp_dir_path("report_missing_gate_root");
-        let coverage_dir = root.join("policy").join("coverage");
+        let coverage_dir = root.join("contracts");
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         write_file(
-            &coverage_dir.join("policy.toml"),
+            &coverage_dir.join("coverage.toml"),
             "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n",
         );
         let out_path = root.join("gate-report.json");
@@ -2398,10 +2397,10 @@ mod tests {
     #[test]
     fn report_missing_gate_uses_scope_specific_override_thresholds() {
         let root = temp_dir_path("report_missing_gate_override_root");
-        let coverage_dir = root.join("policy").join("coverage");
+        let coverage_dir = root.join("contracts");
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         write_file(
-            &coverage_dir.join("policy.toml"),
+            &coverage_dir.join("coverage.toml"),
             "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n\n[overrides.radroots_a]\nfail_under_exec_lines = 88.5\nfail_under_functions = 77.5\nfail_under_regions = 66.5\nfail_under_branches = 55.5\nrequire_branches = false\ntemporary = true\nreason = \"temporary publish unblocker\"\n",
         );
         let out_path = root.join("gate-report.json");
@@ -2491,10 +2490,10 @@ mod tests {
         .expect_err("missing policy should fail");
         assert!(policy_err.contains("failed to read coverage policy"));
 
-        let coverage_dir = root.join("policy").join("coverage");
+        let coverage_dir = root.join("contracts");
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         write_file(
-            &coverage_dir.join("policy.toml"),
+            &coverage_dir.join("coverage.toml"),
             "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n",
         );
         let out_path = root.join("gate-report.json");
@@ -2519,10 +2518,10 @@ mod tests {
     #[test]
     fn refresh_summary_uses_measured_gate_report_values() {
         let root = temp_dir_path("refresh_summary_root");
-        let coverage_dir = root.join("policy").join("coverage");
+        let coverage_dir = root.join("contracts");
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         write_file(
-            &coverage_dir.join("policy.toml"),
+            &coverage_dir.join("coverage.toml"),
             "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\", \"radroots_b\"]\n",
         );
 
@@ -2638,10 +2637,10 @@ mod tests {
         fs::remove_dir_all(root).expect("remove root");
 
         let defaults_root = temp_dir_path("refresh_summary_defaults_root");
-        let defaults_coverage_dir = defaults_root.join("policy").join("coverage");
+        let defaults_coverage_dir = defaults_root.join("contracts");
         fs::create_dir_all(&defaults_coverage_dir).expect("create defaults coverage dir");
         write_file(
-            &defaults_coverage_dir.join("policy.toml"),
+            &defaults_coverage_dir.join("coverage.toml"),
             "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n",
         );
         write_file(
@@ -2703,10 +2702,10 @@ mod tests {
         );
 
         let dispatch_root = temp_dir_path("refresh_summary_parentless_root");
-        let dispatch_coverage_dir = dispatch_root.join("policy").join("coverage");
+        let dispatch_coverage_dir = dispatch_root.join("contracts");
         fs::create_dir_all(&dispatch_coverage_dir).expect("create dispatch coverage dir");
         write_file(
-            &dispatch_coverage_dir.join("policy.toml"),
+            &dispatch_coverage_dir.join("coverage.toml"),
             "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n",
         );
         write_file(
@@ -2791,10 +2790,10 @@ mod tests {
     #[test]
     fn refresh_summary_rejects_empty_output_paths() {
         let root = temp_dir_path("refresh_summary_empty_paths_root");
-        let coverage_dir = root.join("policy").join("coverage");
+        let coverage_dir = root.join("contracts");
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         write_file(
-            &coverage_dir.join("policy.toml"),
+            &coverage_dir.join("coverage.toml"),
             "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n",
         );
         write_file(
@@ -2876,10 +2875,10 @@ mod tests {
     #[test]
     fn refresh_summary_reports_output_parent_creation_failure() {
         let root = temp_dir_path("refresh_summary_out_parent_fail");
-        let coverage_dir = root.join("policy").join("coverage");
+        let coverage_dir = root.join("contracts");
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         write_file(
-            &coverage_dir.join("policy.toml"),
+            &coverage_dir.join("coverage.toml"),
             "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n",
         );
         write_file(
@@ -2947,10 +2946,10 @@ mod tests {
     #[test]
     fn refresh_summary_reports_status_output_parent_creation_failure() {
         let root = temp_dir_path("refresh_summary_status_parent_fail");
-        let coverage_dir = root.join("policy").join("coverage");
+        let coverage_dir = root.join("contracts");
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         write_file(
-            &coverage_dir.join("policy.toml"),
+            &coverage_dir.join("coverage.toml"),
             "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n",
         );
         write_file(
@@ -3035,10 +3034,10 @@ mod tests {
         .expect_err("missing policy should fail");
         assert!(policy_err.contains("failed to read coverage policy"));
 
-        let coverage_dir = root.join("policy").join("coverage");
+        let coverage_dir = root.join("contracts");
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         write_file(
-            &coverage_dir.join("policy.toml"),
+            &coverage_dir.join("coverage.toml"),
             "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n",
         );
         let gate_err = run_with_root(
@@ -3205,10 +3204,10 @@ mod tests {
     #[test]
     fn coverage_profiles_merge_defaults_and_crate_overrides() {
         let root = temp_dir_path("profile_merge");
-        let coverage_dir = root.join("policy").join("coverage");
+        let coverage_dir = root.join("contracts");
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         fs::write(
-            coverage_dir.join("profiles.toml"),
+            coverage_dir.join("coverage-profiles.toml"),
             r#"[profiles.default]
 no_default_features = false
 features = ["std"]
@@ -3237,10 +3236,10 @@ features = ["rt"]
     #[test]
     fn coverage_profiles_accept_positive_test_threads() {
         let root = temp_dir_path("profile_positive_threads");
-        let coverage_dir = root.join("policy").join("coverage");
+        let coverage_dir = root.join("contracts");
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         fs::write(
-            coverage_dir.join("profiles.toml"),
+            coverage_dir.join("coverage-profiles.toml"),
             r#"[profiles.crates."radroots_log"]
 test_threads = 4
 "#,
@@ -3255,10 +3254,10 @@ test_threads = 4
     #[test]
     fn coverage_profiles_reject_invalid_feature_and_thread_values() {
         let root = temp_dir_path("profile_invalid");
-        let coverage_dir = root.join("policy").join("coverage");
+        let coverage_dir = root.join("contracts");
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         fs::write(
-            coverage_dir.join("profiles.toml"),
+            coverage_dir.join("coverage-profiles.toml"),
             r#"[profiles.crates."radroots_log"]
 features = [""]
 test_threads = 0
@@ -3278,10 +3277,13 @@ test_threads = 0
     #[test]
     fn coverage_profiles_reject_invalid_toml() {
         let root = temp_dir_path("profile_invalid_toml");
-        let coverage_dir = root.join("policy").join("coverage");
+        let coverage_dir = root.join("contracts");
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
-        fs::write(coverage_dir.join("profiles.toml"), "[profiles.default\n")
-            .expect("write invalid profiles");
+        fs::write(
+            coverage_dir.join("coverage-profiles.toml"),
+            "[profiles.default\n",
+        )
+        .expect("write invalid profiles");
         let err = read_coverage_profile(&root, "radroots_log").expect_err("invalid toml");
         assert!(err.contains("failed to parse"));
         fs::remove_dir_all(root).expect("remove root");
@@ -3290,10 +3292,10 @@ test_threads = 0
     #[test]
     fn coverage_profiles_reject_zero_test_threads_without_feature_error() {
         let root = temp_dir_path("profile_invalid_threads");
-        let coverage_dir = root.join("policy").join("coverage");
+        let coverage_dir = root.join("contracts");
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         fs::write(
-            coverage_dir.join("profiles.toml"),
+            coverage_dir.join("coverage-profiles.toml"),
             r#"[profiles.crates."radroots_log"]
 test_threads = 0
 "#,
@@ -4084,9 +4086,8 @@ test_threads = 0
         write_minimal_workspace(&profile_root);
         write_file(
             &profile_root
-                .join("policy")
-                .join("coverage")
-                .join("profiles.toml"),
+                .join("contracts")
+                .join("coverage-profiles.toml"),
             "[profiles.default]\nfeatures = [\"\"]\n",
         );
         let profile_args = vec![
@@ -4256,10 +4257,10 @@ test_threads = 0
     #[test]
     fn report_gate_with_root_uses_scope_specific_override_thresholds() {
         let root = temp_dir_path("report_gate_override_success");
-        let coverage_dir = root.join("policy").join("coverage");
+        let coverage_dir = root.join("contracts");
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         write_file(
-            &coverage_dir.join("policy.toml"),
+            &coverage_dir.join("coverage.toml"),
             "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[required]\ncrates = [\"radroots_a\"]\n\n[overrides.radroots_a]\nfail_under_exec_lines = 88.5\nfail_under_functions = 77.5\nfail_under_regions = 66.5\nfail_under_branches = 55.5\nrequire_branches = false\ntemporary = true\nreason = \"temporary publish unblocker\"\n",
         );
 

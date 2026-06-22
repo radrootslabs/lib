@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://radroots.org/sdk/conformance/vector.schema.json",
-  "title": "radroots sdk conformance vector",
+  "$id": "https://radroots.org/core/conformance/vector.schema.json",
+  "title": "radroots core conformance vector",
   "type": "object",
   "required": [
     "suite",

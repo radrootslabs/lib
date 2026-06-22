@@ -2,8 +2,8 @@
 
 Status: active implementation contract
 
-Scope: public Radroots social Nostr event models, codecs, SDK-owned wasm builders, and deterministic
-conformance vectors in this repository.
+Scope: public Radroots social Nostr event models, codecs, and deterministic conformance vectors in
+this repository.
 
 ## Purpose
 
@@ -12,9 +12,8 @@ and trade workflows while keeping relay runtime behavior, application projection
 services, and private Field business documents outside this repository's event-contract boundary.
 
 The target implementation is standards-first and Radroots-named. Event models live in
-`radroots_events`, canonical encode/decode behavior lives in `radroots_events_codec`, optional JSON
-to tags helpers are provided by SDK-owned wasm bindings, and deterministic fixtures live under
-`spec/conformance`.
+`radroots_events`, canonical encode/decode behavior lives in `radroots_events_codec`, and
+deterministic fixtures live under `contracts/conformance`.
 
 ## Implementation Inventory
 
@@ -82,8 +81,7 @@ summary, alt text, fallback, `magnet`, `i`, and `service`.
 description content. Optional `description` data is encoded as event content and empty content
 decodes to no description. Calendar date events use lowercase `d` for the replaceable identifier and
 optional uppercase `D` tags for covered all-day dates. Calendar time events require at least one
-uppercase `D` tag so timestamped events retain a deterministic calendar-date anchor across codecs and
-SDK package surfaces.
+uppercase `D` tag so timestamped events retain a deterministic calendar-date anchor across codecs.
 
 Product routing uses surface-specific kind classifiers rather than a broad public-social set. Home,
 Events, Market, Map, and Profile public-content candidates are explicit. Active listing kind `30402`
@@ -108,21 +106,12 @@ Task records, work sessions, harvest records, approvals, and similar Field busin
 CRDT document semantics carried inside the CRDT change envelope unless a later contract explicitly
 promotes them.
 
-## SDK Boundary
+## Consumer Boundary
 
-The public social surface is event and codec substrate first. Curated SDK operation metadata
-promotes the MVP social tag-builder surface after the corresponding Rust models, codecs, wasm
-helpers, and conformance vectors exist. Production-v1 repost, report, calendar collection, and RSVP
-behavior remains substrate-visible by default unless a consumer proves that it should be promoted
-into the curated operation surface.
-
-The SDK-owned events codec wasm binding exposes the canonical JSON-to-tags helper names `post_tags`,
-`comment_tags`, `reaction_tags`, `article_tags`, `file_metadata_tags`,
-`calendar_date_event_tags`, `calendar_time_event_tags`, `calendar_tags`,
-`calendar_event_rsvp_tags`, `repost_tags`, `generic_repost_tags`, and `report_tags` for the public
-social substrate. The same SDK-owned wasm binding exposes `farm_workspace_manifest_tags`,
-`farm_crdt_change_tags`, `farm_file_metadata_tags`, `relay_auth_tags`, and `http_auth_tags` for the
-field event substrate.
+The public social surface is event and codec substrate first. Consumer packages may wrap these
+models and codecs, but this repository owns only the core Rust contracts and deterministic
+conformance evidence. Package-specific operation maps, bindings, and generated artifacts are outside
+this contract boundary.
 
 ## Conformance Boundary
 

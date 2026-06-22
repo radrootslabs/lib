@@ -8,12 +8,7 @@ schema = "radroots_replica_db_schema"
 storage = "radroots_replica_db"
 sync = "radroots_replica_sync"
 
-[external_sdk_wasm_bindings]
-storage = "radroots_replica_db_wasm"
-sync = "radroots_replica_sync_wasm"
-
 [policy]
 transport_agnostic_sync_core = true
 deterministic_emit_and_ingest = true
-wasm_exports_prefix = "replica_"
 forbid_legacy_alias_identifiers = true
