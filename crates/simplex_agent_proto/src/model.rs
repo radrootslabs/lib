@@ -1,5 +1,7 @@
 use alloc::vec::Vec;
-use radroots_simplex_smp_crypto::prelude::RadrootsSimplexSmpRatchetHeader;
+use radroots_simplex_smp_crypto::prelude::{
+    RadrootsSimplexOfficialX3dhParams, RadrootsSimplexSmpRatchetHeader,
+};
 use radroots_simplex_smp_proto::prelude::{
     RadrootsSimplexSmpQueueUri, RadrootsSimplexSmpServerAddress, RadrootsSimplexSmpVersionRange,
 };
@@ -30,7 +32,7 @@ pub enum RadrootsSimplexAgentConnectionStatus {
 pub struct RadrootsSimplexAgentConnectionLink {
     pub invitation_queue: RadrootsSimplexSmpQueueUri,
     pub connection_id: Vec<u8>,
-    pub e2e_public_key: Vec<u8>,
+    pub e2e_ratchet_params: RadrootsSimplexOfficialX3dhParams,
     pub contact_address: bool,
 }
 

@@ -2,8 +2,13 @@ use crate::error::RadrootsSimplexSmpCryptoError;
 use aes_gcm::aead::consts::U16;
 use aes_gcm::aead::{Aead, KeyInit, Payload};
 use aes_gcm::{AesGcm, Nonce, aes::Aes256};
+use alloc::format;
+use alloc::string::String;
 use alloc::vec::Vec;
+use base64::Engine as _;
+use base64::engine::general_purpose::{URL_SAFE, URL_SAFE_NO_PAD};
 use hkdf::Hkdf;
+use radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpVersionRange;
 use sha2::{Digest, Sha256, Sha512};
 
 pub const RADROOTS_SIMPLEX_OFFICIAL_E2E_KDF_VERSION: u16 = 2;
@@ -65,6 +70,15 @@ pub struct RadrootsSimplexOfficialEncryptedMessage {
     pub encrypted_header: Vec<u8>,
     pub auth_tag: Vec<u8>,
     pub body: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RadrootsSimplexOfficialX3dhParams {
+    pub version_range: RadrootsSimplexSmpVersionRange,
+    pub key_1: Vec<u8>,
+    pub key_2: Vec<u8>,
+    pub pq_public_key: Option<Vec<u8>>,
+    pub pq_ciphertext: Option<Vec<u8>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -199,6 +213,113 @@ pub fn decode_official_x448_public_key_der(
         ));
     }
     Ok(encoded[RADROOTS_SIMPLEX_OFFICIAL_X448_DER_PUBLIC_KEY_PREFIX.len()..].to_vec())
+}
+
+pub fn encode_official_x3dh_params_uri(
+    params: &RadrootsSimplexOfficialX3dhParams,
+) -> Result<String, RadrootsSimplexSmpCryptoError> {
+    validate_official_x3dh_params(params)?;
+    let key_1 = encode_official_urlsafe_bytes(&encode_official_x448_public_key_der(&params.key_1)?);
+    let key_2 = encode_official_urlsafe_bytes(&encode_official_x448_public_key_der(&params.key_2)?);
+    let mut encoded = format!("v={}&x3dh={key_1},{key_2}", params.version_range);
+    if let Some(pq_public_key) = params.pq_public_key.as_deref() {
+        encoded.push_str("&kem_key=");
+        encoded.push_str(&encode_official_urlsafe_bytes(pq_public_key));
+    }
+    if let Some(pq_ciphertext) = params.pq_ciphertext.as_deref() {
+        encoded.push_str("&kem_ct=");
+        encoded.push_str(&encode_official_urlsafe_bytes(pq_ciphertext));
+    }
+    Ok(encoded)
+}
+
+pub fn decode_official_x3dh_params_uri(
+    encoded: &str,
+) -> Result<RadrootsSimplexOfficialX3dhParams, RadrootsSimplexSmpCryptoError> {
+    let mut version_range = None;
+    let mut x3dh = None;
+    let mut pq_public_key = None;
+    let mut pq_ciphertext = None;
+    for pair in encoded.split('&') {
+        if pair.is_empty() {
+            continue;
+        }
+        let (key, value) = pair.split_once('=').ok_or_else(|| {
+            RadrootsSimplexSmpCryptoError::InvalidOfficialX3dhParameters(
+                "field is missing `=`".to_owned(),
+            )
+        })?;
+        match key {
+            "v" => {
+                if version_range.replace(value.parse()?).is_some() {
+                    return Err(
+                        RadrootsSimplexSmpCryptoError::InvalidOfficialX3dhParameters(
+                            "duplicate `v` field".to_owned(),
+                        ),
+                    );
+                }
+            }
+            "x3dh" => {
+                if x3dh.replace(value.to_owned()).is_some() {
+                    return Err(
+                        RadrootsSimplexSmpCryptoError::InvalidOfficialX3dhParameters(
+                            "duplicate `x3dh` field".to_owned(),
+                        ),
+                    );
+                }
+            }
+            "kem_key" => {
+                if pq_public_key
+                    .replace(decode_official_urlsafe_bytes(value)?)
+                    .is_some()
+                {
+                    return Err(
+                        RadrootsSimplexSmpCryptoError::InvalidOfficialX3dhParameters(
+                            "duplicate `kem_key` field".to_owned(),
+                        ),
+                    );
+                }
+            }
+            "kem_ct" => {
+                if pq_ciphertext
+                    .replace(decode_official_urlsafe_bytes(value)?)
+                    .is_some()
+                {
+                    return Err(
+                        RadrootsSimplexSmpCryptoError::InvalidOfficialX3dhParameters(
+                            "duplicate `kem_ct` field".to_owned(),
+                        ),
+                    );
+                }
+            }
+            _ => {
+                return Err(
+                    RadrootsSimplexSmpCryptoError::InvalidOfficialX3dhParameters(
+                        "unknown field".to_owned(),
+                    ),
+                );
+            }
+        }
+    }
+    let x3dh = x3dh.ok_or_else(|| {
+        RadrootsSimplexSmpCryptoError::InvalidOfficialX3dhParameters(
+            "missing `x3dh` field".to_owned(),
+        )
+    })?;
+    let keys = split_official_x3dh_keys(&x3dh)?;
+    let params = RadrootsSimplexOfficialX3dhParams {
+        version_range: version_range.ok_or_else(|| {
+            RadrootsSimplexSmpCryptoError::InvalidOfficialX3dhParameters(
+                "missing `v` field".to_owned(),
+            )
+        })?,
+        key_1: decode_official_x448_public_key_der(&decode_official_urlsafe_bytes(keys.0)?)?,
+        key_2: decode_official_x448_public_key_der(&decode_official_urlsafe_bytes(keys.1)?)?,
+        pq_public_key,
+        pq_ciphertext,
+    };
+    validate_official_x3dh_params(&params)?;
+    Ok(params)
 }
 
 pub fn official_sntrup761_keypair_from_seed(
@@ -592,6 +713,85 @@ fn validate_official_version(version: u16) -> Result<(), RadrootsSimplexSmpCrypt
     Ok(())
 }
 
+fn validate_official_version_range(
+    range: RadrootsSimplexSmpVersionRange,
+) -> Result<(), RadrootsSimplexSmpCryptoError> {
+    validate_official_version(range.min)?;
+    validate_official_version(range.max)
+}
+
+fn validate_official_x3dh_params(
+    params: &RadrootsSimplexOfficialX3dhParams,
+) -> Result<(), RadrootsSimplexSmpCryptoError> {
+    validate_official_version_range(params.version_range)?;
+    if params.key_1.len() != RADROOTS_SIMPLEX_OFFICIAL_X448_KEY_LENGTH {
+        return Err(RadrootsSimplexSmpCryptoError::InvalidPublicKeyLength(
+            params.key_1.len(),
+        ));
+    }
+    if params.key_2.len() != RADROOTS_SIMPLEX_OFFICIAL_X448_KEY_LENGTH {
+        return Err(RadrootsSimplexSmpCryptoError::InvalidPublicKeyLength(
+            params.key_2.len(),
+        ));
+    }
+    if params.pq_ciphertext.is_some() && params.pq_public_key.is_none() {
+        return Err(RadrootsSimplexSmpCryptoError::IncompletePqHeader);
+    }
+    if let Some(pq_public_key) = params.pq_public_key.as_deref() {
+        if params.version_range.max < RADROOTS_SIMPLEX_OFFICIAL_E2E_PQ_VERSION {
+            return Err(
+                RadrootsSimplexSmpCryptoError::InvalidOfficialX3dhParameters(
+                    "PQ key requires E2E version 3".to_owned(),
+                ),
+            );
+        }
+        if pq_public_key.len() != RADROOTS_SIMPLEX_OFFICIAL_SNTRUP761_PUBLIC_KEY_LENGTH {
+            return Err(RadrootsSimplexSmpCryptoError::InvalidPqKeyLength(
+                pq_public_key.len(),
+            ));
+        }
+    }
+    if let Some(pq_ciphertext) = params.pq_ciphertext.as_deref() {
+        if pq_ciphertext.len() != RADROOTS_SIMPLEX_OFFICIAL_SNTRUP761_CIPHERTEXT_LENGTH {
+            return Err(RadrootsSimplexSmpCryptoError::InvalidPqCiphertextLength(
+                pq_ciphertext.len(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn encode_official_urlsafe_bytes(bytes: &[u8]) -> String {
+    URL_SAFE.encode(bytes)
+}
+
+fn decode_official_urlsafe_bytes(value: &str) -> Result<Vec<u8>, RadrootsSimplexSmpCryptoError> {
+    URL_SAFE
+        .decode(value.as_bytes())
+        .or_else(|_| URL_SAFE_NO_PAD.decode(value.as_bytes()))
+        .map_err(|_| {
+            RadrootsSimplexSmpCryptoError::InvalidOfficialX3dhParameters(
+                "invalid base64url field".to_owned(),
+            )
+        })
+}
+
+fn split_official_x3dh_keys(value: &str) -> Result<(&str, &str), RadrootsSimplexSmpCryptoError> {
+    let (key_1, rest) = value.split_once(',').ok_or_else(|| {
+        RadrootsSimplexSmpCryptoError::InvalidOfficialX3dhParameters(
+            "`x3dh` field must contain two keys".to_owned(),
+        )
+    })?;
+    if rest.contains(',') {
+        return Err(
+            RadrootsSimplexSmpCryptoError::InvalidOfficialX3dhParameters(
+                "`x3dh` field must contain two keys".to_owned(),
+            ),
+        );
+    }
+    Ok((key_1, rest))
+}
+
 fn official_large_prefix_len(version: u16) -> Result<usize, RadrootsSimplexSmpCryptoError> {
     validate_official_version(version)?;
     Ok(if version >= RADROOTS_SIMPLEX_OFFICIAL_E2E_PQ_VERSION {
@@ -813,6 +1013,49 @@ mod tests {
             decode_official_msg_header(RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION, &encoded)
                 .unwrap(),
             header
+        );
+    }
+
+    #[test]
+    fn official_x3dh_params_uri_roundtrips() {
+        let keypair_1 = official_x448_keypair_from_seed(b"rr-synth-official-x3dh-1");
+        let keypair_2 = official_x448_keypair_from_seed(b"rr-synth-official-x3dh-2");
+        let params = RadrootsSimplexOfficialX3dhParams {
+            version_range: RadrootsSimplexSmpVersionRange::new(
+                RADROOTS_SIMPLEX_OFFICIAL_E2E_KDF_VERSION,
+                RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION,
+            )
+            .unwrap(),
+            key_1: keypair_1.public_key,
+            key_2: keypair_2.public_key,
+            pq_public_key: None,
+            pq_ciphertext: None,
+        };
+        let encoded = encode_official_x3dh_params_uri(&params).unwrap();
+        assert!(encoded.starts_with("v=2-3&x3dh=MEIwBQYDK2VvAzkA"));
+        assert!(encoded.contains(','));
+        assert_eq!(decode_official_x3dh_params_uri(&encoded).unwrap(), params);
+    }
+
+    #[test]
+    fn official_x3dh_params_rejects_incomplete_pq_fields() {
+        let keypair_1 = official_x448_keypair_from_seed(b"rr-synth-official-x3dh-pq-1");
+        let keypair_2 = official_x448_keypair_from_seed(b"rr-synth-official-x3dh-pq-2");
+        let params = RadrootsSimplexOfficialX3dhParams {
+            version_range: RadrootsSimplexSmpVersionRange::single(
+                RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION,
+            ),
+            key_1: keypair_1.public_key,
+            key_2: keypair_2.public_key,
+            pq_public_key: None,
+            pq_ciphertext: Some(vec![
+                0_u8;
+                RADROOTS_SIMPLEX_OFFICIAL_SNTRUP761_CIPHERTEXT_LENGTH
+            ]),
+        };
+        assert_eq!(
+            encode_official_x3dh_params_uri(&params).unwrap_err(),
+            RadrootsSimplexSmpCryptoError::IncompletePqHeader
         );
     }
 

@@ -24,6 +24,7 @@ pub enum RadrootsSimplexSmpCryptoError {
     AesGcmAuthenticationFailed,
     InvalidOfficialRatchetVersion(u16),
     InvalidOfficialRatchetPadding,
+    InvalidOfficialX3dhParameters(String),
     InvalidPqKeyLength(usize),
     InvalidPqCiphertextLength(usize),
 }
@@ -101,6 +102,9 @@ impl fmt::Display for RadrootsSimplexSmpCryptoError {
             }
             Self::InvalidOfficialRatchetPadding => {
                 write!(f, "invalid official SMP ratchet padding")
+            }
+            Self::InvalidOfficialX3dhParameters(error) => {
+                write!(f, "invalid official SMP X3DH parameters: {error}")
             }
             Self::InvalidPqKeyLength(length) => {
                 write!(f, "invalid SMP PQ key length {length}")

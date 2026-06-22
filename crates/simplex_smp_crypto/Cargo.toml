@@ -27,6 +27,7 @@ aes-gcm = { workspace = true, default-features = false, features = [
   "aes",
   "alloc",
 ] }
+base64 = { version = "0.22", default-features = false, features = ["alloc"] }
 ed25519-dalek = { workspace = true, default-features = false, features = [
   "alloc",
 ] }

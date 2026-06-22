@@ -5,7 +5,7 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 use base64::Engine as _;
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::engine::general_purpose::{URL_SAFE, URL_SAFE_NO_PAD};
 use radroots_simplex_agent_proto::prelude::{
     RadrootsSimplexAgentConnectionLink, RadrootsSimplexAgentConnectionMode,
     RadrootsSimplexAgentConnectionStatus, RadrootsSimplexAgentDecryptedMessage,
@@ -21,7 +21,9 @@ use radroots_simplex_agent_store::prelude::{
     RadrootsSimplexAgentStore,
 };
 use radroots_simplex_smp_crypto::prelude::{
-    RADROOTS_SIMPLEX_SMP_NONCE_LENGTH, RadrootsSimplexSmpCommandAuthorization,
+    RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION, RADROOTS_SIMPLEX_OFFICIAL_E2E_KDF_VERSION,
+    RADROOTS_SIMPLEX_SMP_NONCE_LENGTH, RadrootsSimplexOfficialX3dhParams,
+    RadrootsSimplexSmpCommandAuthorization, RadrootsSimplexSmpCryptoError,
     RadrootsSimplexSmpRatchetState, RadrootsSimplexSmpX25519Keypair, decode_x25519_public_key_x509,
     decrypt_padded, derive_shared_secret, encode_ed25519_public_key_x509,
     encode_x25519_public_key_x509, encrypt_padded, official_x448_keypair_from_seed, random_nonce,
@@ -32,7 +34,7 @@ use radroots_simplex_smp_proto::prelude::{
     RadrootsSimplexSmpMessageFlags, RadrootsSimplexSmpNewQueueRequest,
     RadrootsSimplexSmpQueueIdsResponse, RadrootsSimplexSmpQueueMode,
     RadrootsSimplexSmpQueueRequestData, RadrootsSimplexSmpQueueUri, RadrootsSimplexSmpSendCommand,
-    RadrootsSimplexSmpSubscriptionMode,
+    RadrootsSimplexSmpSubscriptionMode, RadrootsSimplexSmpVersionRange,
 };
 use radroots_simplex_smp_transport::prelude::{
     RadrootsSimplexSmpCommandTransport, RadrootsSimplexSmpSubscriptionReceiveRequest,
@@ -161,23 +163,42 @@ impl RadrootsSimplexAgentRuntime {
         now: u64,
     ) -> Result<String, RadrootsSimplexAgentRuntimeError> {
         let e2e_keypair = RadrootsSimplexSmpX25519Keypair::from_seed(&e2e_seed);
-        invitation_queue.recipient_dh_public_key = encode_queue_public_key(&e2e_keypair.public_key);
+        invitation_queue.recipient_dh_public_key = encode_queue_public_key(&e2e_keypair.public_key)
+            .map_err(|error| RadrootsSimplexAgentRuntimeError::Runtime(error.to_string()))?;
         invitation_queue.sender_id = placeholder_sender_id(
             invitation_queue.server.server_identity.as_bytes(),
             &now.to_be_bytes(),
         );
-        let local_dh_public_key = official_x448_keypair_from_seed(&derive_material(
-            b"connection-create-local-dh",
+        let x3dh_key_1 = official_x448_keypair_from_seed(&derive_material(
+            b"connection-create-x3dh-1",
             &[
                 invitation_queue.to_string().as_bytes(),
                 &e2e_keypair.public_key,
                 &now.to_be_bytes(),
             ],
-        ))
-        .public_key;
+        ));
+        let x3dh_key_2 = official_x448_keypair_from_seed(&derive_material(
+            b"connection-create-x3dh-2",
+            &[
+                invitation_queue.to_string().as_bytes(),
+                &e2e_keypair.public_key,
+                &now.to_be_bytes(),
+            ],
+        ));
+        let e2e_ratchet_params = RadrootsSimplexOfficialX3dhParams {
+            version_range: RadrootsSimplexSmpVersionRange::new(
+                RADROOTS_SIMPLEX_OFFICIAL_E2E_KDF_VERSION,
+                RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION,
+            )
+            .map_err(|error| RadrootsSimplexAgentRuntimeError::Runtime(error.to_string()))?,
+            key_1: x3dh_key_1.public_key.clone(),
+            key_2: x3dh_key_2.public_key.clone(),
+            pq_public_key: None,
+            pq_ciphertext: None,
+        };
         let ratchet_state = RadrootsSimplexSmpRatchetState::initiator(
-            local_dh_public_key,
-            invitation_queue.recipient_dh_public_key.as_bytes().to_vec(),
+            x3dh_key_2.public_key,
+            x3dh_key_1.public_key,
             None,
         )
         .ok();
@@ -194,7 +215,7 @@ impl RadrootsSimplexAgentRuntime {
         let invitation = RadrootsSimplexAgentConnectionLink {
             invitation_queue: invitation_queue.clone(),
             connection_id: connection.id.as_bytes().to_vec(),
-            e2e_public_key: e2e_keypair.public_key.clone(),
+            e2e_ratchet_params,
             contact_address,
         };
         self.store.connection_mut(&connection.id)?.invitation = Some(invitation);
@@ -246,11 +267,14 @@ impl RadrootsSimplexAgentRuntime {
     ) -> Result<String, RadrootsSimplexAgentRuntimeError> {
         let local_e2e_keypair = RadrootsSimplexSmpX25519Keypair::generate()
             .map_err(|error| RadrootsSimplexAgentRuntimeError::Runtime(error.to_string()))?;
+        let invitation_e2e_public_key =
+            decode_queue_public_key(&invitation.invitation_queue.recipient_dh_public_key)?;
         let shared_secret =
-            derive_shared_secret(&local_e2e_keypair.private_key, &invitation.e2e_public_key)
+            derive_shared_secret(&local_e2e_keypair.private_key, &invitation_e2e_public_key)
                 .map_err(|error| RadrootsSimplexAgentRuntimeError::Runtime(error.to_string()))?;
         reply_queue.recipient_dh_public_key =
-            encode_queue_public_key(&local_e2e_keypair.public_key);
+            encode_queue_public_key(&local_e2e_keypair.public_key)
+                .map_err(|error| RadrootsSimplexAgentRuntimeError::Runtime(error.to_string()))?;
         reply_queue.sender_id =
             placeholder_sender_id(invitation.connection_id.as_slice(), &now.to_be_bytes());
         let local_dh_public_key = official_x448_keypair_from_seed(&derive_material(
@@ -264,11 +288,7 @@ impl RadrootsSimplexAgentRuntime {
         .public_key;
         let ratchet_state = RadrootsSimplexSmpRatchetState::responder(
             local_dh_public_key,
-            invitation
-                .invitation_queue
-                .recipient_dh_public_key
-                .as_bytes()
-                .to_vec(),
+            invitation.e2e_ratchet_params.key_2.clone(),
             None,
         )
         .ok();
@@ -1703,8 +1723,21 @@ fn correlation_id_for_command(command_id: u64) -> RadrootsSimplexSmpCorrelationI
     RadrootsSimplexSmpCorrelationId::new(correlation)
 }
 
-fn encode_queue_public_key(public_key: &[u8]) -> String {
-    URL_SAFE_NO_PAD.encode(public_key)
+fn encode_queue_public_key(public_key: &[u8]) -> Result<String, RadrootsSimplexSmpCryptoError> {
+    Ok(URL_SAFE.encode(encode_x25519_public_key_x509(public_key)?))
+}
+
+fn decode_queue_public_key(encoded: &str) -> Result<Vec<u8>, RadrootsSimplexAgentRuntimeError> {
+    let bytes = URL_SAFE
+        .decode(encoded.as_bytes())
+        .or_else(|_| URL_SAFE_NO_PAD.decode(encoded.as_bytes()))
+        .map_err(|error| {
+            RadrootsSimplexAgentRuntimeError::Runtime(format!(
+                "failed to decode SimpleX queue E2E public key: {error}"
+            ))
+        })?;
+    decode_x25519_public_key_x509(&bytes)
+        .map_err(|error| RadrootsSimplexAgentRuntimeError::Runtime(error.to_string()))
 }
 
 fn placeholder_sender_id(seed_a: &[u8], seed_b: &[u8]) -> String {

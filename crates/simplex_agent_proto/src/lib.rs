@@ -25,6 +25,8 @@ pub mod prelude {
         RadrootsSimplexAgentQueueUseDecision,
     };
     pub use radroots_simplex_smp_crypto::prelude::{
-        RadrootsSimplexSmpRatchetHeader, RadrootsSimplexSmpRatchetState,
+        RadrootsSimplexOfficialX3dhParams, RadrootsSimplexSmpRatchetHeader,
+        RadrootsSimplexSmpRatchetState, decode_official_x3dh_params_uri,
+        encode_official_x3dh_params_uri, official_x448_keypair_from_seed,
     };
 }

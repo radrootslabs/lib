@@ -10,6 +10,9 @@ use crate::model::{
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use radroots_simplex_smp_crypto::prelude::RadrootsSimplexSmpRatchetHeader;
+use radroots_simplex_smp_crypto::prelude::{
+    decode_official_x3dh_params_uri, encode_official_x3dh_params_uri,
+};
 use radroots_simplex_smp_proto::prelude::{
     RadrootsSimplexSmpQueueUri, RadrootsSimplexSmpServerAddress,
 };
@@ -20,7 +23,9 @@ pub fn encode_connection_link(
     let mut buffer = Vec::new();
     push_short_bytes(&mut buffer, link.invitation_queue.to_string().as_bytes())?;
     push_short_bytes(&mut buffer, &link.connection_id)?;
-    push_short_bytes(&mut buffer, &link.e2e_public_key)?;
+    let e2e_ratchet_params = encode_official_x3dh_params_uri(&link.e2e_ratchet_params)
+        .map_err(|error| RadrootsSimplexAgentProtoError::InvalidE2eParameters(error.to_string()))?;
+    push_short_bytes(&mut buffer, e2e_ratchet_params.as_bytes())?;
     buffer.push(encode_bool(link.contact_address));
     Ok(buffer)
 }
@@ -34,7 +39,11 @@ pub fn decode_connection_link(
     let link = RadrootsSimplexAgentConnectionLink {
         invitation_queue: RadrootsSimplexSmpQueueUri::parse(&invitation_queue)?,
         connection_id: cursor.read_short_bytes()?,
-        e2e_public_key: cursor.read_short_bytes()?,
+        e2e_ratchet_params: decode_official_x3dh_params_uri(
+            &String::from_utf8(cursor.read_short_bytes()?)
+                .map_err(|error| RadrootsSimplexAgentProtoError::InvalidUtf8(error.to_string()))?,
+        )
+        .map_err(|error| RadrootsSimplexAgentProtoError::InvalidE2eParameters(error.to_string()))?,
         contact_address: decode_bool(cursor.read_byte()?)?,
     };
     cursor.finish()?;
@@ -696,6 +705,10 @@ impl<'a> Cursor<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use radroots_simplex_smp_crypto::prelude::{
+        RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION, RADROOTS_SIMPLEX_OFFICIAL_E2E_KDF_VERSION,
+        RadrootsSimplexOfficialX3dhParams, official_x448_keypair_from_seed,
+    };
     use radroots_simplex_smp_proto::prelude::{
         RadrootsSimplexSmpQueueMode, RadrootsSimplexSmpQueueUri, RadrootsSimplexSmpVersionRange,
     };
@@ -707,12 +720,26 @@ mod tests {
         .unwrap()
     }
 
+    fn sample_x3dh_params() -> RadrootsSimplexOfficialX3dhParams {
+        RadrootsSimplexOfficialX3dhParams {
+            version_range: RadrootsSimplexSmpVersionRange::new(
+                RADROOTS_SIMPLEX_OFFICIAL_E2E_KDF_VERSION,
+                RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION,
+            )
+            .unwrap(),
+            key_1: official_x448_keypair_from_seed(b"rr-synth-agent-link-x3dh-1").public_key,
+            key_2: official_x448_keypair_from_seed(b"rr-synth-agent-link-x3dh-2").public_key,
+            pq_public_key: None,
+            pq_ciphertext: None,
+        }
+    }
+
     #[test]
     fn roundtrips_connection_link() {
         let link = RadrootsSimplexAgentConnectionLink {
             invitation_queue: sample_queue_uri(),
             connection_id: b"conn-1".to_vec(),
-            e2e_public_key: b"e2e".to_vec(),
+            e2e_ratchet_params: sample_x3dh_params(),
             contact_address: true,
         };
         let encoded = encode_connection_link(&link).unwrap();
