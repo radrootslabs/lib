@@ -21,6 +21,11 @@ pub enum RadrootsSimplexSmpCryptoError {
     InvalidSessionIdentifier(String),
     InvalidKeyDerivationLength(usize),
     InvalidSecretBoxChainKeyLength(usize),
+    AesGcmAuthenticationFailed,
+    InvalidOfficialRatchetVersion(u16),
+    InvalidOfficialRatchetPadding,
+    InvalidPqKeyLength(usize),
+    InvalidPqCiphertextLength(usize),
 }
 
 impl From<RadrootsSimplexSmpProtoError> for RadrootsSimplexSmpCryptoError {
@@ -87,6 +92,21 @@ impl fmt::Display for RadrootsSimplexSmpCryptoError {
             }
             Self::InvalidSecretBoxChainKeyLength(length) => {
                 write!(f, "invalid SMP secretbox chain key length {length}")
+            }
+            Self::AesGcmAuthenticationFailed => {
+                write!(f, "failed to authenticate SMP AES-GCM payload")
+            }
+            Self::InvalidOfficialRatchetVersion(version) => {
+                write!(f, "invalid official SMP ratchet version {version}")
+            }
+            Self::InvalidOfficialRatchetPadding => {
+                write!(f, "invalid official SMP ratchet padding")
+            }
+            Self::InvalidPqKeyLength(length) => {
+                write!(f, "invalid SMP PQ key length {length}")
+            }
+            Self::InvalidPqCiphertextLength(length) => {
+                write!(f, "invalid SMP PQ ciphertext length {length}")
             }
         }
     }

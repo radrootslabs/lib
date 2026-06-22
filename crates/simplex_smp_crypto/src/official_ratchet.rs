@@ -1,0 +1,507 @@
+use crate::error::RadrootsSimplexSmpCryptoError;
+use aes_gcm::aead::consts::U16;
+use aes_gcm::aead::{Aead, KeyInit, Payload};
+use aes_gcm::{AesGcm, Nonce, aes::Aes256};
+use alloc::vec::Vec;
+use hkdf::Hkdf;
+use sha2::{Digest, Sha256, Sha512};
+
+pub const RADROOTS_SIMPLEX_OFFICIAL_E2E_KDF_VERSION: u16 = 2;
+pub const RADROOTS_SIMPLEX_OFFICIAL_E2E_PQ_VERSION: u16 = 3;
+pub const RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION: u16 = 3;
+pub const RADROOTS_SIMPLEX_OFFICIAL_X448_KEY_LENGTH: usize = 56;
+pub const RADROOTS_SIMPLEX_OFFICIAL_X448_SHARED_SECRET_LENGTH: usize = 56;
+pub const RADROOTS_SIMPLEX_OFFICIAL_AES_KEY_LENGTH: usize = 32;
+pub const RADROOTS_SIMPLEX_OFFICIAL_AES_IV_LENGTH: usize = 16;
+pub const RADROOTS_SIMPLEX_OFFICIAL_AES_AUTH_TAG_LENGTH: usize = 16;
+pub const RADROOTS_SIMPLEX_OFFICIAL_SNTRUP761_PUBLIC_KEY_LENGTH: usize = sntrup761::PUBLIC_KEY_SIZE;
+pub const RADROOTS_SIMPLEX_OFFICIAL_SNTRUP761_PRIVATE_KEY_LENGTH: usize =
+    sntrup761::SECRET_KEY_SIZE;
+pub const RADROOTS_SIMPLEX_OFFICIAL_SNTRUP761_CIPHERTEXT_LENGTH: usize = sntrup761::CIPHERTEXT_SIZE;
+pub const RADROOTS_SIMPLEX_OFFICIAL_SNTRUP761_SHARED_SECRET_LENGTH: usize =
+    sntrup761::SHARED_SECRET_SIZE;
+pub const RADROOTS_SIMPLEX_OFFICIAL_RATCHET_HEADER_LENGTH: usize = 88;
+pub const RADROOTS_SIMPLEX_OFFICIAL_PQ_RATCHET_HEADER_LENGTH: usize = 2_310;
+pub const RADROOTS_SIMPLEX_OFFICIAL_ROOT_RATCHET_INFO: &[u8] = b"SimpleXRootRatchet";
+pub const RADROOTS_SIMPLEX_OFFICIAL_CHAIN_RATCHET_INFO: &[u8] = b"SimpleXChainRatchet";
+pub const RADROOTS_SIMPLEX_OFFICIAL_X3DH_INFO: &[u8] = b"SimpleXX3DH";
+
+const RADROOTS_SIMPLEX_OFFICIAL_HKDF3_OUTPUT_LENGTH: usize =
+    RADROOTS_SIMPLEX_OFFICIAL_AES_KEY_LENGTH * 3;
+const RADROOTS_SIMPLEX_OFFICIAL_PADDING_LENGTH_BYTES: usize = 2;
+type RadrootsSimplexOfficialAes256Gcm = AesGcm<Aes256, U16>;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RadrootsSimplexOfficialX448Keypair {
+    pub public_key: Vec<u8>,
+    pub private_key: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RadrootsSimplexOfficialSntrup761Keypair {
+    pub public_key: Vec<u8>,
+    pub private_key: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RadrootsSimplexOfficialAesGcmPayload {
+    pub auth_tag: Vec<u8>,
+    pub ciphertext: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RadrootsSimplexOfficialRootKdfOutput {
+    pub root_key: Vec<u8>,
+    pub chain_key: Vec<u8>,
+    pub next_header_key: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RadrootsSimplexOfficialChainKdfOutput {
+    pub chain_key: Vec<u8>,
+    pub message_key: Vec<u8>,
+    pub message_iv: [u8; RADROOTS_SIMPLEX_OFFICIAL_AES_IV_LENGTH],
+    pub header_iv: [u8; RADROOTS_SIMPLEX_OFFICIAL_AES_IV_LENGTH],
+}
+
+pub fn official_ratchet_header_len(
+    version: u16,
+    pq_enabled: bool,
+) -> Result<usize, RadrootsSimplexSmpCryptoError> {
+    if version < RADROOTS_SIMPLEX_OFFICIAL_E2E_KDF_VERSION
+        || version > RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION
+    {
+        return Err(RadrootsSimplexSmpCryptoError::InvalidOfficialRatchetVersion(version));
+    }
+    Ok(
+        if pq_enabled && version >= RADROOTS_SIMPLEX_OFFICIAL_E2E_PQ_VERSION {
+            RADROOTS_SIMPLEX_OFFICIAL_PQ_RATCHET_HEADER_LENGTH
+        } else {
+            RADROOTS_SIMPLEX_OFFICIAL_RATCHET_HEADER_LENGTH
+        },
+    )
+}
+
+pub fn official_full_header_len(
+    version: u16,
+    pq_enabled: bool,
+) -> Result<usize, RadrootsSimplexSmpCryptoError> {
+    Ok(2 + 1
+        + official_ratchet_header_len(version, pq_enabled)?
+        + RADROOTS_SIMPLEX_OFFICIAL_AES_AUTH_TAG_LENGTH
+        + RADROOTS_SIMPLEX_OFFICIAL_AES_IV_LENGTH)
+}
+
+pub fn official_x448_keypair_from_seed(seed: &[u8]) -> RadrootsSimplexOfficialX448Keypair {
+    let digest = Sha512::digest(seed);
+    let mut private_key = [0_u8; RADROOTS_SIMPLEX_OFFICIAL_X448_KEY_LENGTH];
+    private_key.copy_from_slice(&digest[..RADROOTS_SIMPLEX_OFFICIAL_X448_KEY_LENGTH]);
+    official_x448_keypair_from_private(private_key)
+}
+
+pub fn generate_official_x448_keypair()
+-> Result<RadrootsSimplexOfficialX448Keypair, RadrootsSimplexSmpCryptoError> {
+    let mut private_key = [0_u8; RADROOTS_SIMPLEX_OFFICIAL_X448_KEY_LENGTH];
+    getrandom::getrandom(&mut private_key)
+        .map_err(|_| RadrootsSimplexSmpCryptoError::EntropyUnavailable)?;
+    Ok(official_x448_keypair_from_private(private_key))
+}
+
+pub fn derive_official_x448_shared_secret(
+    private_key: &[u8],
+    public_key: &[u8],
+) -> Result<Vec<u8>, RadrootsSimplexSmpCryptoError> {
+    let private_key: [u8; RADROOTS_SIMPLEX_OFFICIAL_X448_KEY_LENGTH] = private_key
+        .try_into()
+        .map_err(|_| RadrootsSimplexSmpCryptoError::InvalidPrivateKeyLength(private_key.len()))?;
+    let public_key = x448::PublicKey::from_bytes(public_key).ok_or(
+        RadrootsSimplexSmpCryptoError::InvalidPublicKeyLength(public_key.len()),
+    )?;
+    let private = x448::StaticSecret::from(private_key);
+    Ok(private.diffie_hellman(&public_key).as_bytes().to_vec())
+}
+
+pub fn official_sntrup761_keypair_from_seed(
+    seed: &[u8],
+) -> RadrootsSimplexOfficialSntrup761Keypair {
+    let seed = pq_seed(seed);
+    let (public_key, private_key) = sntrup761::generate_key_from_seed(seed);
+    RadrootsSimplexOfficialSntrup761Keypair {
+        public_key: public_key.as_ref().to_vec(),
+        private_key: private_key.as_ref().to_vec(),
+    }
+}
+
+pub fn generate_official_sntrup761_keypair()
+-> Result<RadrootsSimplexOfficialSntrup761Keypair, RadrootsSimplexSmpCryptoError> {
+    let mut seed = [0_u8; RADROOTS_SIMPLEX_OFFICIAL_AES_KEY_LENGTH];
+    getrandom::getrandom(&mut seed)
+        .map_err(|_| RadrootsSimplexSmpCryptoError::EntropyUnavailable)?;
+    Ok(official_sntrup761_keypair_from_seed(&seed))
+}
+
+pub fn encapsulate_official_sntrup761(
+    public_key: &[u8],
+    seed: &[u8],
+) -> Result<(Vec<u8>, Vec<u8>), RadrootsSimplexSmpCryptoError> {
+    let public_key = sntrup761::EncapsulationKey::try_from(public_key)
+        .map_err(|_| RadrootsSimplexSmpCryptoError::InvalidPqKeyLength(public_key.len()))?;
+    let (ciphertext, shared_secret) = public_key.encapsulate_deterministic(pq_seed(seed));
+    Ok((
+        ciphertext.as_ref().to_vec(),
+        shared_secret.as_ref().to_vec(),
+    ))
+}
+
+pub fn decapsulate_official_sntrup761(
+    private_key: &[u8],
+    ciphertext: &[u8],
+) -> Result<Vec<u8>, RadrootsSimplexSmpCryptoError> {
+    let private_key = sntrup761::DecapsulationKey::try_from(private_key)
+        .map_err(|_| RadrootsSimplexSmpCryptoError::InvalidPrivateKeyLength(private_key.len()))?;
+    let ciphertext = sntrup761::Ciphertext::try_from(ciphertext)
+        .map_err(|_| RadrootsSimplexSmpCryptoError::InvalidPqCiphertextLength(ciphertext.len()))?;
+    Ok(private_key.decapsulate(&ciphertext).as_ref().to_vec())
+}
+
+pub fn official_root_kdf(
+    root_key: &[u8],
+    dh_shared_secret: &[u8],
+    pq_shared_secret: Option<&[u8]>,
+) -> Result<RadrootsSimplexOfficialRootKdfOutput, RadrootsSimplexSmpCryptoError> {
+    if root_key.len() != RADROOTS_SIMPLEX_OFFICIAL_AES_KEY_LENGTH {
+        return Err(RadrootsSimplexSmpCryptoError::InvalidSharedSecretLength(
+            root_key.len(),
+        ));
+    }
+    let mut input =
+        Vec::with_capacity(dh_shared_secret.len() + pq_shared_secret.map_or(0, <[u8]>::len));
+    input.extend_from_slice(dh_shared_secret);
+    if let Some(shared_secret) = pq_shared_secret {
+        input.extend_from_slice(shared_secret);
+    }
+    let (root_key, chain_key, next_header_key) = official_hkdf3(
+        root_key,
+        &input,
+        RADROOTS_SIMPLEX_OFFICIAL_ROOT_RATCHET_INFO,
+    )?;
+    Ok(RadrootsSimplexOfficialRootKdfOutput {
+        root_key,
+        chain_key,
+        next_header_key,
+    })
+}
+
+pub fn official_chain_kdf(
+    chain_key: &[u8],
+) -> Result<RadrootsSimplexOfficialChainKdfOutput, RadrootsSimplexSmpCryptoError> {
+    if chain_key.len() != RADROOTS_SIMPLEX_OFFICIAL_AES_KEY_LENGTH {
+        return Err(RadrootsSimplexSmpCryptoError::InvalidSharedSecretLength(
+            chain_key.len(),
+        ));
+    }
+    let (chain_key, message_key, iv_material) =
+        official_hkdf3(b"", chain_key, RADROOTS_SIMPLEX_OFFICIAL_CHAIN_RATCHET_INFO)?;
+    let mut message_iv = [0_u8; RADROOTS_SIMPLEX_OFFICIAL_AES_IV_LENGTH];
+    let mut header_iv = [0_u8; RADROOTS_SIMPLEX_OFFICIAL_AES_IV_LENGTH];
+    message_iv.copy_from_slice(&iv_material[..RADROOTS_SIMPLEX_OFFICIAL_AES_IV_LENGTH]);
+    header_iv.copy_from_slice(
+        &iv_material
+            [RADROOTS_SIMPLEX_OFFICIAL_AES_IV_LENGTH..RADROOTS_SIMPLEX_OFFICIAL_AES_IV_LENGTH * 2],
+    );
+    Ok(RadrootsSimplexOfficialChainKdfOutput {
+        chain_key,
+        message_key,
+        message_iv,
+        header_iv,
+    })
+}
+
+pub fn official_aes_gcm_encrypt_padded(
+    key: &[u8],
+    iv: &[u8],
+    plaintext: &[u8],
+    padded_len: usize,
+    associated_data: &[u8],
+) -> Result<RadrootsSimplexOfficialAesGcmPayload, RadrootsSimplexSmpCryptoError> {
+    let padded = official_pad(plaintext, padded_len)?;
+    let encrypted = official_aes_gcm_cipher(key)?
+        .encrypt(
+            official_aes_gcm_nonce(iv)?,
+            Payload {
+                msg: &padded,
+                aad: associated_data,
+            },
+        )
+        .map_err(|_| RadrootsSimplexSmpCryptoError::AesGcmAuthenticationFailed)?;
+    split_official_aes_gcm_payload(&encrypted)
+}
+
+pub fn official_aes_gcm_decrypt_padded(
+    key: &[u8],
+    iv: &[u8],
+    payload: &RadrootsSimplexOfficialAesGcmPayload,
+    associated_data: &[u8],
+) -> Result<Vec<u8>, RadrootsSimplexSmpCryptoError> {
+    if payload.auth_tag.len() != RADROOTS_SIMPLEX_OFFICIAL_AES_AUTH_TAG_LENGTH {
+        return Err(RadrootsSimplexSmpCryptoError::InvalidSignatureLength(
+            payload.auth_tag.len(),
+        ));
+    }
+    let mut encrypted = Vec::with_capacity(payload.ciphertext.len() + payload.auth_tag.len());
+    encrypted.extend_from_slice(&payload.ciphertext);
+    encrypted.extend_from_slice(&payload.auth_tag);
+    let padded = official_aes_gcm_cipher(key)?
+        .decrypt(
+            official_aes_gcm_nonce(iv)?,
+            Payload {
+                msg: &encrypted,
+                aad: associated_data,
+            },
+        )
+        .map_err(|_| RadrootsSimplexSmpCryptoError::AesGcmAuthenticationFailed)?;
+    official_unpad(&padded)
+}
+
+fn official_x448_keypair_from_private(
+    private_key: [u8; RADROOTS_SIMPLEX_OFFICIAL_X448_KEY_LENGTH],
+) -> RadrootsSimplexOfficialX448Keypair {
+    let private = x448::StaticSecret::from(private_key);
+    let public = x448::PublicKey::from(&private);
+    RadrootsSimplexOfficialX448Keypair {
+        public_key: public.as_bytes().to_vec(),
+        private_key: private.as_bytes().to_vec(),
+    }
+}
+
+fn official_aes_gcm_cipher(
+    key: &[u8],
+) -> Result<RadrootsSimplexOfficialAes256Gcm, RadrootsSimplexSmpCryptoError> {
+    if key.len() != RADROOTS_SIMPLEX_OFFICIAL_AES_KEY_LENGTH {
+        return Err(RadrootsSimplexSmpCryptoError::InvalidSharedSecretLength(
+            key.len(),
+        ));
+    }
+    RadrootsSimplexOfficialAes256Gcm::new_from_slice(key)
+        .map_err(|_| RadrootsSimplexSmpCryptoError::InvalidSharedSecretLength(key.len()))
+}
+
+fn official_aes_gcm_nonce(iv: &[u8]) -> Result<&Nonce<U16>, RadrootsSimplexSmpCryptoError> {
+    if iv.len() != RADROOTS_SIMPLEX_OFFICIAL_AES_IV_LENGTH {
+        return Err(RadrootsSimplexSmpCryptoError::InvalidNonceLength(iv.len()));
+    }
+    Ok(Nonce::<U16>::from_slice(iv))
+}
+
+fn split_official_aes_gcm_payload(
+    encrypted: &[u8],
+) -> Result<RadrootsSimplexOfficialAesGcmPayload, RadrootsSimplexSmpCryptoError> {
+    if encrypted.len() < RADROOTS_SIMPLEX_OFFICIAL_AES_AUTH_TAG_LENGTH {
+        return Err(RadrootsSimplexSmpCryptoError::InvalidCiphertextLength(
+            encrypted.len(),
+        ));
+    }
+    let tag_offset = encrypted.len() - RADROOTS_SIMPLEX_OFFICIAL_AES_AUTH_TAG_LENGTH;
+    let (ciphertext, auth_tag) = encrypted.split_at(tag_offset);
+    Ok(RadrootsSimplexOfficialAesGcmPayload {
+        auth_tag: auth_tag.to_vec(),
+        ciphertext: ciphertext.to_vec(),
+    })
+}
+
+fn official_pad(
+    plaintext: &[u8],
+    padded_len: usize,
+) -> Result<Vec<u8>, RadrootsSimplexSmpCryptoError> {
+    if plaintext.len() > u16::MAX as usize
+        || plaintext
+            .len()
+            .saturating_add(RADROOTS_SIMPLEX_OFFICIAL_PADDING_LENGTH_BYTES)
+            > padded_len
+    {
+        return Err(RadrootsSimplexSmpCryptoError::InvalidMessageLength {
+            actual: plaintext.len(),
+            padded: padded_len,
+        });
+    }
+    let mut padded = Vec::with_capacity(padded_len);
+    padded.extend_from_slice(&(plaintext.len() as u16).to_be_bytes());
+    padded.extend_from_slice(plaintext);
+    padded.resize(padded_len, b'#');
+    Ok(padded)
+}
+
+fn official_unpad(padded: &[u8]) -> Result<Vec<u8>, RadrootsSimplexSmpCryptoError> {
+    if padded.len() < RADROOTS_SIMPLEX_OFFICIAL_PADDING_LENGTH_BYTES {
+        return Err(RadrootsSimplexSmpCryptoError::InvalidOfficialRatchetPadding);
+    }
+    let length = u16::from_be_bytes([padded[0], padded[1]]) as usize;
+    if length
+        > padded
+            .len()
+            .saturating_sub(RADROOTS_SIMPLEX_OFFICIAL_PADDING_LENGTH_BYTES)
+    {
+        return Err(RadrootsSimplexSmpCryptoError::InvalidOfficialRatchetPadding);
+    }
+    Ok(padded[RADROOTS_SIMPLEX_OFFICIAL_PADDING_LENGTH_BYTES
+        ..RADROOTS_SIMPLEX_OFFICIAL_PADDING_LENGTH_BYTES + length]
+        .to_vec())
+}
+
+fn official_hkdf3(
+    salt: &[u8],
+    ikm: &[u8],
+    info: &[u8],
+) -> Result<(Vec<u8>, Vec<u8>, Vec<u8>), RadrootsSimplexSmpCryptoError> {
+    let hkdf = Hkdf::<Sha512>::new(Some(salt), ikm);
+    let mut output = [0_u8; RADROOTS_SIMPLEX_OFFICIAL_HKDF3_OUTPUT_LENGTH];
+    hkdf.expand(info, &mut output).map_err(|_| {
+        RadrootsSimplexSmpCryptoError::InvalidKeyDerivationLength(
+            RADROOTS_SIMPLEX_OFFICIAL_HKDF3_OUTPUT_LENGTH,
+        )
+    })?;
+    Ok((
+        output[..RADROOTS_SIMPLEX_OFFICIAL_AES_KEY_LENGTH].to_vec(),
+        output[RADROOTS_SIMPLEX_OFFICIAL_AES_KEY_LENGTH
+            ..RADROOTS_SIMPLEX_OFFICIAL_AES_KEY_LENGTH * 2]
+            .to_vec(),
+        output[RADROOTS_SIMPLEX_OFFICIAL_AES_KEY_LENGTH * 2..].to_vec(),
+    ))
+}
+
+fn pq_seed(seed: &[u8]) -> [u8; RADROOTS_SIMPLEX_OFFICIAL_AES_KEY_LENGTH] {
+    let digest = Sha256::digest(seed);
+    let mut value = [0_u8; RADROOTS_SIMPLEX_OFFICIAL_AES_KEY_LENGTH];
+    value.copy_from_slice(&digest);
+    value
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn official_header_lengths_match_upstream_constants() {
+        assert_eq!(official_ratchet_header_len(2, false).unwrap(), 88);
+        assert_eq!(official_ratchet_header_len(3, false).unwrap(), 88);
+        assert_eq!(official_ratchet_header_len(3, true).unwrap(), 2_310);
+        assert_eq!(official_full_header_len(3, false).unwrap(), 123);
+        assert_eq!(official_full_header_len(3, true).unwrap(), 2_345);
+    }
+
+    #[test]
+    fn x448_key_agreement_roundtrips() {
+        let alice = official_x448_keypair_from_seed(b"rr-synth-official-alice-x448");
+        let bob = official_x448_keypair_from_seed(b"rr-synth-official-bob-x448");
+
+        let alice_secret =
+            derive_official_x448_shared_secret(&alice.private_key, &bob.public_key).unwrap();
+        let bob_secret =
+            derive_official_x448_shared_secret(&bob.private_key, &alice.public_key).unwrap();
+
+        assert_eq!(
+            alice.public_key.len(),
+            RADROOTS_SIMPLEX_OFFICIAL_X448_KEY_LENGTH
+        );
+        assert_eq!(
+            alice.private_key.len(),
+            RADROOTS_SIMPLEX_OFFICIAL_X448_KEY_LENGTH
+        );
+        assert_eq!(
+            alice_secret.len(),
+            RADROOTS_SIMPLEX_OFFICIAL_X448_SHARED_SECRET_LENGTH
+        );
+        assert_eq!(alice_secret, bob_secret);
+    }
+
+    #[test]
+    fn sntrup761_encapsulation_roundtrips() {
+        let recipient = official_sntrup761_keypair_from_seed(b"rr-synth-official-pq-recipient");
+        let (ciphertext, sender_secret) =
+            encapsulate_official_sntrup761(&recipient.public_key, b"rr-synth-official-pq-send")
+                .unwrap();
+        let receiver_secret =
+            decapsulate_official_sntrup761(&recipient.private_key, &ciphertext).unwrap();
+
+        assert_eq!(
+            recipient.public_key.len(),
+            RADROOTS_SIMPLEX_OFFICIAL_SNTRUP761_PUBLIC_KEY_LENGTH
+        );
+        assert_eq!(
+            recipient.private_key.len(),
+            RADROOTS_SIMPLEX_OFFICIAL_SNTRUP761_PRIVATE_KEY_LENGTH
+        );
+        assert_eq!(
+            ciphertext.len(),
+            RADROOTS_SIMPLEX_OFFICIAL_SNTRUP761_CIPHERTEXT_LENGTH
+        );
+        assert_eq!(
+            sender_secret.len(),
+            RADROOTS_SIMPLEX_OFFICIAL_SNTRUP761_SHARED_SECRET_LENGTH
+        );
+        assert_eq!(sender_secret, receiver_secret);
+    }
+
+    #[test]
+    fn official_aes_gcm_padding_authenticates_associated_data() {
+        let key = [11_u8; RADROOTS_SIMPLEX_OFFICIAL_AES_KEY_LENGTH];
+        let iv = [12_u8; RADROOTS_SIMPLEX_OFFICIAL_AES_IV_LENGTH];
+        let associated_data = b"rr-synth-official-associated-data";
+        let payload = official_aes_gcm_encrypt_padded(
+            &key,
+            &iv,
+            b"hello official simplex",
+            96,
+            associated_data,
+        )
+        .unwrap();
+
+        assert_eq!(
+            payload.auth_tag.len(),
+            RADROOTS_SIMPLEX_OFFICIAL_AES_AUTH_TAG_LENGTH
+        );
+        assert_eq!(payload.ciphertext.len(), 96);
+        assert_ne!(payload.ciphertext, b"hello official simplex");
+        assert_eq!(
+            official_aes_gcm_decrypt_padded(&key, &iv, &payload, associated_data).unwrap(),
+            b"hello official simplex"
+        );
+        assert!(matches!(
+            official_aes_gcm_decrypt_padded(&key, &iv, &payload, b"wrong-ad").unwrap_err(),
+            RadrootsSimplexSmpCryptoError::AesGcmAuthenticationFailed
+        ));
+    }
+
+    #[test]
+    fn official_kdfs_split_root_and_chain_material() {
+        let root = official_root_kdf(
+            &[1_u8; RADROOTS_SIMPLEX_OFFICIAL_AES_KEY_LENGTH],
+            &[2_u8; RADROOTS_SIMPLEX_OFFICIAL_X448_SHARED_SECRET_LENGTH],
+            Some(&[3_u8; RADROOTS_SIMPLEX_OFFICIAL_SNTRUP761_SHARED_SECRET_LENGTH]),
+        )
+        .unwrap();
+        let chain = official_chain_kdf(&root.chain_key).unwrap();
+
+        assert_eq!(
+            root.root_key.len(),
+            RADROOTS_SIMPLEX_OFFICIAL_AES_KEY_LENGTH
+        );
+        assert_eq!(
+            root.chain_key.len(),
+            RADROOTS_SIMPLEX_OFFICIAL_AES_KEY_LENGTH
+        );
+        assert_eq!(
+            root.next_header_key.len(),
+            RADROOTS_SIMPLEX_OFFICIAL_AES_KEY_LENGTH
+        );
+        assert_eq!(
+            chain.chain_key.len(),
+            RADROOTS_SIMPLEX_OFFICIAL_AES_KEY_LENGTH
+        );
+        assert_eq!(
+            chain.message_key.len(),
+            RADROOTS_SIMPLEX_OFFICIAL_AES_KEY_LENGTH
+        );
+        assert_ne!(chain.message_iv, chain.header_iv);
+    }
+}

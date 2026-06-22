@@ -14,6 +14,7 @@ readme = "README"
 [features]
 default = ["std"]
 std = [
+  "aes-gcm/std",
   "ed25519-dalek/std",
   "getrandom/std",
   "radroots_simplex_smp_proto/std",
@@ -22,6 +23,10 @@ std = [
 ]
 
 [dependencies]
+aes-gcm = { workspace = true, default-features = false, features = [
+  "aes",
+  "alloc",
+] }
 ed25519-dalek = { workspace = true, default-features = false, features = [
   "alloc",
 ] }
@@ -29,7 +34,15 @@ getrandom = { workspace = true, default-features = false }
 hkdf = { workspace = true, default-features = false }
 radroots_simplex_smp_proto = { workspace = true, default-features = false }
 sha2 = { workspace = true, default-features = false }
+sntrup761 = { workspace = true, default-features = false, features = [
+  "dcap",
+  "ecap",
+  "kgen",
+] }
 xsalsa20poly1305 = { workspace = true, default-features = false }
 x25519-dalek = { workspace = true, default-features = false, features = [
+  "static_secrets",
+] }
+x448 = { workspace = true, default-features = false, features = [
   "static_secrets",
 ] }

@@ -6,6 +6,7 @@ extern crate alloc;
 pub mod auth;
 pub mod error;
 pub mod message;
+pub mod official_ratchet;
 pub mod ratchet;
 
 pub mod prelude {
@@ -21,6 +22,29 @@ pub mod prelude {
         RadrootsSimplexSmpSecretBoxChainKey, RadrootsSimplexSmpX25519Keypair,
         advance_secretbox_chain, decrypt_no_pad, decrypt_padded, derive_shared_secret,
         encrypt_no_pad, encrypt_padded, init_secretbox_chain, random_nonce,
+    };
+    pub use crate::official_ratchet::{
+        RADROOTS_SIMPLEX_OFFICIAL_AES_AUTH_TAG_LENGTH, RADROOTS_SIMPLEX_OFFICIAL_AES_IV_LENGTH,
+        RADROOTS_SIMPLEX_OFFICIAL_AES_KEY_LENGTH, RADROOTS_SIMPLEX_OFFICIAL_CHAIN_RATCHET_INFO,
+        RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION, RADROOTS_SIMPLEX_OFFICIAL_E2E_KDF_VERSION,
+        RADROOTS_SIMPLEX_OFFICIAL_E2E_PQ_VERSION,
+        RADROOTS_SIMPLEX_OFFICIAL_PQ_RATCHET_HEADER_LENGTH,
+        RADROOTS_SIMPLEX_OFFICIAL_RATCHET_HEADER_LENGTH,
+        RADROOTS_SIMPLEX_OFFICIAL_ROOT_RATCHET_INFO,
+        RADROOTS_SIMPLEX_OFFICIAL_SNTRUP761_CIPHERTEXT_LENGTH,
+        RADROOTS_SIMPLEX_OFFICIAL_SNTRUP761_PRIVATE_KEY_LENGTH,
+        RADROOTS_SIMPLEX_OFFICIAL_SNTRUP761_PUBLIC_KEY_LENGTH,
+        RADROOTS_SIMPLEX_OFFICIAL_SNTRUP761_SHARED_SECRET_LENGTH,
+        RADROOTS_SIMPLEX_OFFICIAL_X3DH_INFO, RADROOTS_SIMPLEX_OFFICIAL_X448_KEY_LENGTH,
+        RADROOTS_SIMPLEX_OFFICIAL_X448_SHARED_SECRET_LENGTH, RadrootsSimplexOfficialAesGcmPayload,
+        RadrootsSimplexOfficialChainKdfOutput, RadrootsSimplexOfficialRootKdfOutput,
+        RadrootsSimplexOfficialSntrup761Keypair, RadrootsSimplexOfficialX448Keypair,
+        decapsulate_official_sntrup761, derive_official_x448_shared_secret,
+        encapsulate_official_sntrup761, generate_official_sntrup761_keypair,
+        generate_official_x448_keypair, official_aes_gcm_decrypt_padded,
+        official_aes_gcm_encrypt_padded, official_chain_kdf, official_full_header_len,
+        official_ratchet_header_len, official_root_kdf, official_sntrup761_keypair_from_seed,
+        official_x448_keypair_from_seed,
     };
     pub use crate::ratchet::{
         RadrootsSimplexSmpRatchetHeader, RadrootsSimplexSmpRatchetRole,
