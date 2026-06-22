@@ -1,6 +1,18 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+const BINDING_DEPENDENCIES: &[&str] = &[
+    "serde-wasm-bindgen",
+    "ts-rs",
+    "typeshare",
+    "uniffi",
+    "uniffi-build",
+    "uniffi_build",
+    "wasm-bindgen",
+    "wasm-bindgen-futures",
+    "wasm-bindgen-test",
+];
+
 pub fn run(args: &[String], root: &Path) -> Result<(), String> {
     match args.first().map(String::as_str) {
         Some("forbidden-identifiers") => validate_forbidden_identifiers(root),
@@ -103,6 +115,38 @@ pub fn validate_forbidden_identifiers(root: &Path) -> Result<(), String> {
         &["tools/xtask/src/hygiene.rs"],
         &mut failures,
     );
+    reject_binding_dependencies(root, &mut failures);
+    reject_forbidden_crate_paths(root, &mut failures);
+    reject_existing_paths(
+        root,
+        &[
+            "spec",
+            "policy",
+            "nix",
+            "scripts",
+            "bindings",
+            "dist",
+            "ffi",
+            "generated",
+            "packages",
+            "pkg",
+            "contracts/exports",
+            "contracts/language-exports",
+            "contracts/language-exports.toml",
+            "contracts/language_exports",
+            "contracts/language_exports.toml",
+            "contracts/package-matrix",
+            "contracts/package-matrix.toml",
+            "contracts/package_matrix",
+            "contracts/package_matrix.toml",
+            "contracts/sdk-exports",
+            "contracts/sdk_exports",
+            "spec/exports",
+            "spec/sdk-exports",
+        ],
+        "SDK, binding, generated-package, and retired layout paths must stay outside rr-rs",
+        &mut failures,
+    );
 
     if failures.is_empty() {
         println!("forbidden identifier hygiene passed");
@@ -112,6 +156,99 @@ pub fn validate_forbidden_identifiers(root: &Path) -> Result<(), String> {
             "forbidden identifier hygiene violations:\n{}",
             failures.join("\n")
         ))
+    }
+}
+
+fn reject_binding_dependencies(root: &Path, failures: &mut Vec<String>) {
+    for file in manifest_files(root) {
+        let rel = display_path(root, &file);
+        let Ok(content) = fs::read_to_string(&file) else {
+            continue;
+        };
+        let Ok(manifest) = content.parse::<toml::Value>() else {
+            failures.push(format!("Cargo manifest must parse as TOML: {rel}"));
+            continue;
+        };
+        reject_binding_dependencies_in_value(&manifest, &mut Vec::new(), &rel, failures);
+    }
+}
+
+fn reject_binding_dependencies_in_value(
+    value: &toml::Value,
+    path: &mut Vec<String>,
+    manifest_rel: &str,
+    failures: &mut Vec<String>,
+) {
+    let Some(table) = value.as_table() else {
+        return;
+    };
+    if path
+        .last()
+        .is_some_and(|segment| is_dependency_table_name(segment))
+    {
+        for dependency in BINDING_DEPENDENCIES {
+            if table.contains_key(*dependency) {
+                failures.push(format!(
+                    "SDK, FFI, binding, and generated-package dependencies are forbidden in rr-rs: {manifest_rel}: {dependency} in [{}]",
+                    path.join(".")
+                ));
+            }
+        }
+    }
+    for (key, child) in table {
+        path.push(key.clone());
+        reject_binding_dependencies_in_value(child, path, manifest_rel, failures);
+        path.pop();
+    }
+}
+
+fn is_dependency_table_name(segment: &str) -> bool {
+    matches!(
+        segment,
+        "dependencies" | "dev-dependencies" | "build-dependencies"
+    )
+}
+
+fn manifest_files(root: &Path) -> Vec<PathBuf> {
+    let mut files = vec![root.join("Cargo.toml")];
+    files.extend(files_under(
+        root,
+        &[PathBuf::from("crates"), PathBuf::from("tools")],
+    ));
+    files.retain(|path| path.file_name().and_then(|name| name.to_str()) == Some("Cargo.toml"));
+    files.sort();
+    files.dedup();
+    files
+}
+
+fn reject_forbidden_crate_paths(root: &Path, failures: &mut Vec<String>) {
+    let Ok(entries) = fs::read_dir(root.join("crates")) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = entry.file_name().to_string_lossy().to_string();
+        if is_forbidden_crate_dir_name(&name) {
+            failures.push(format!(
+                "SDK, FFI, binding, and generated-package crate paths are forbidden in rr-rs: crates/{name}"
+            ));
+        }
+    }
+}
+
+fn is_forbidden_crate_dir_name(name: &str) -> bool {
+    let lowercase = name.to_ascii_lowercase();
+    lowercase.contains("ffi") || lowercase.contains("binding") || lowercase.contains("_wasm")
+}
+
+fn reject_existing_paths(root: &Path, rel_paths: &[&str], label: &str, failures: &mut Vec<String>) {
+    for rel_path in rel_paths {
+        if root.join(rel_path).exists() {
+            failures.push(format!("{label}: {rel_path}"));
+        }
     }
 }
 
@@ -308,12 +445,25 @@ mod tests {
             "crates/events/src/kinds.rs",
             "pub const KIND_TRADE_LISTING_ORDER: u64 = 1;\n",
         );
+        write_file(
+            &root,
+            "Cargo.toml",
+            "[workspace]\n[workspace.dependencies]\nwasm-bindgen = \"0.2\"\nuniffi = \"0.29\"\n",
+        );
+        fs::create_dir_all(root.join("crates/sql_wasm_bridge")).expect("create wasm crate dir");
+        fs::create_dir_all(root.join("scripts")).expect("create scripts dir");
+        fs::create_dir_all(root.join("contracts/sdk-exports")).expect("create sdk exports dir");
         let err = validate_forbidden_identifiers(&root).expect_err("dirty tree");
         assert!(err.contains("relay fetch must not bypass event-store verification"));
         assert!(err.contains("event-store projection cursors must use last_event_seq"));
         assert!(err.contains("raw commercial protocol identifier String fields are forbidden"));
         assert!(err.contains("legacy identifier 'tangle' must not reappear"));
         assert!(err.contains("legacy trade listing kind constants must not reappear"));
+        assert!(err.contains("wasm-bindgen"));
+        assert!(err.contains("uniffi"));
+        assert!(err.contains("crates/sql_wasm_bridge"));
+        assert!(err.contains("scripts"));
+        assert!(err.contains("contracts/sdk-exports"));
         let _ = fs::remove_dir_all(root);
     }
 
