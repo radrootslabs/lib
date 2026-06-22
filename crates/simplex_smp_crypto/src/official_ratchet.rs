@@ -82,6 +82,14 @@ pub struct RadrootsSimplexOfficialX3dhParams {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RadrootsSimplexOfficialX3dhInit {
+    pub associated_data: Vec<u8>,
+    pub ratchet_key: Vec<u8>,
+    pub sending_header_key: Vec<u8>,
+    pub receiving_next_header_key: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RadrootsSimplexOfficialMsgHeader {
     pub max_version: u16,
     pub dh_public_key: Vec<u8>,
@@ -320,6 +328,50 @@ pub fn decode_official_x3dh_params_uri(
     };
     validate_official_x3dh_params(&params)?;
     Ok(params)
+}
+
+pub fn official_x3dh_sender_init(
+    local_key_1: &RadrootsSimplexOfficialX448Keypair,
+    local_key_2: &RadrootsSimplexOfficialX448Keypair,
+    remote_params: &RadrootsSimplexOfficialX3dhParams,
+) -> Result<RadrootsSimplexOfficialX3dhInit, RadrootsSimplexSmpCryptoError> {
+    validate_official_x3dh_keypair(local_key_1)?;
+    validate_official_x3dh_keypair(local_key_2)?;
+    validate_official_x3dh_params(remote_params)?;
+    if remote_params.pq_public_key.is_some() || remote_params.pq_ciphertext.is_some() {
+        return Err(RadrootsSimplexSmpCryptoError::IncompletePqHeader);
+    }
+    official_x3dh_init(
+        &local_key_1.public_key,
+        &remote_params.key_1,
+        &[
+            derive_official_x448_shared_secret(&local_key_2.private_key, &remote_params.key_1)?,
+            derive_official_x448_shared_secret(&local_key_1.private_key, &remote_params.key_2)?,
+            derive_official_x448_shared_secret(&local_key_2.private_key, &remote_params.key_2)?,
+        ],
+    )
+}
+
+pub fn official_x3dh_receiver_init(
+    local_key_1: &RadrootsSimplexOfficialX448Keypair,
+    local_key_2: &RadrootsSimplexOfficialX448Keypair,
+    remote_params: &RadrootsSimplexOfficialX3dhParams,
+) -> Result<RadrootsSimplexOfficialX3dhInit, RadrootsSimplexSmpCryptoError> {
+    validate_official_x3dh_keypair(local_key_1)?;
+    validate_official_x3dh_keypair(local_key_2)?;
+    validate_official_x3dh_params(remote_params)?;
+    if remote_params.pq_public_key.is_some() || remote_params.pq_ciphertext.is_some() {
+        return Err(RadrootsSimplexSmpCryptoError::IncompletePqHeader);
+    }
+    official_x3dh_init(
+        &remote_params.key_1,
+        &local_key_1.public_key,
+        &[
+            derive_official_x448_shared_secret(&local_key_1.private_key, &remote_params.key_2)?,
+            derive_official_x448_shared_secret(&local_key_2.private_key, &remote_params.key_1)?,
+            derive_official_x448_shared_secret(&local_key_2.private_key, &remote_params.key_2)?,
+        ],
+    )
 }
 
 pub fn official_sntrup761_keypair_from_seed(
@@ -761,6 +813,52 @@ fn validate_official_x3dh_params(
     Ok(())
 }
 
+fn validate_official_x3dh_keypair(
+    keypair: &RadrootsSimplexOfficialX448Keypair,
+) -> Result<(), RadrootsSimplexSmpCryptoError> {
+    if keypair.public_key.len() != RADROOTS_SIMPLEX_OFFICIAL_X448_KEY_LENGTH {
+        return Err(RadrootsSimplexSmpCryptoError::InvalidPublicKeyLength(
+            keypair.public_key.len(),
+        ));
+    }
+    if keypair.private_key.len() != RADROOTS_SIMPLEX_OFFICIAL_X448_KEY_LENGTH {
+        return Err(RadrootsSimplexSmpCryptoError::InvalidPrivateKeyLength(
+            keypair.private_key.len(),
+        ));
+    }
+    Ok(())
+}
+
+fn official_x3dh_init(
+    sender_key_1: &[u8],
+    receiver_key_1: &[u8],
+    shared_secrets: &[Vec<u8>; 3],
+) -> Result<RadrootsSimplexOfficialX3dhInit, RadrootsSimplexSmpCryptoError> {
+    let mut associated_data = Vec::with_capacity(sender_key_1.len() + receiver_key_1.len());
+    associated_data.extend_from_slice(sender_key_1);
+    associated_data.extend_from_slice(receiver_key_1);
+    let mut input = Vec::with_capacity(
+        RADROOTS_SIMPLEX_OFFICIAL_X448_SHARED_SECRET_LENGTH * shared_secrets.len(),
+    );
+    for shared_secret in shared_secrets {
+        if shared_secret.len() != RADROOTS_SIMPLEX_OFFICIAL_X448_SHARED_SECRET_LENGTH {
+            return Err(RadrootsSimplexSmpCryptoError::InvalidSharedSecretLength(
+                shared_secret.len(),
+            ));
+        }
+        input.extend_from_slice(shared_secret);
+    }
+    let zero_salt = [0_u8; 64];
+    let (sending_header_key, receiving_next_header_key, ratchet_key) =
+        official_hkdf3(&zero_salt, &input, RADROOTS_SIMPLEX_OFFICIAL_X3DH_INFO)?;
+    Ok(RadrootsSimplexOfficialX3dhInit {
+        associated_data,
+        ratchet_key,
+        sending_header_key,
+        receiving_next_header_key,
+    })
+}
+
 fn encode_official_urlsafe_bytes(bytes: &[u8]) -> String {
     URL_SAFE.encode(bytes)
 }
@@ -1056,6 +1154,55 @@ mod tests {
         assert_eq!(
             encode_official_x3dh_params_uri(&params).unwrap_err(),
             RadrootsSimplexSmpCryptoError::IncompletePqHeader
+        );
+    }
+
+    #[test]
+    fn official_x3dh_no_pq_init_matches_on_both_sides() {
+        let receiver_key_1 = official_x448_keypair_from_seed(b"rr-synth-x3dh-rcv-1");
+        let receiver_key_2 = official_x448_keypair_from_seed(b"rr-synth-x3dh-rcv-2");
+        let sender_key_1 = official_x448_keypair_from_seed(b"rr-synth-x3dh-snd-1");
+        let sender_key_2 = official_x448_keypair_from_seed(b"rr-synth-x3dh-snd-2");
+        let receiver_params = RadrootsSimplexOfficialX3dhParams {
+            version_range: RadrootsSimplexSmpVersionRange::new(
+                RADROOTS_SIMPLEX_OFFICIAL_E2E_KDF_VERSION,
+                RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION,
+            )
+            .unwrap(),
+            key_1: receiver_key_1.public_key.clone(),
+            key_2: receiver_key_2.public_key.clone(),
+            pq_public_key: None,
+            pq_ciphertext: None,
+        };
+        let sender_params = RadrootsSimplexOfficialX3dhParams {
+            version_range: receiver_params.version_range,
+            key_1: sender_key_1.public_key.clone(),
+            key_2: sender_key_2.public_key.clone(),
+            pq_public_key: None,
+            pq_ciphertext: None,
+        };
+
+        let sender_init =
+            official_x3dh_sender_init(&sender_key_1, &sender_key_2, &receiver_params).unwrap();
+        let receiver_init =
+            official_x3dh_receiver_init(&receiver_key_1, &receiver_key_2, &sender_params).unwrap();
+
+        assert_eq!(sender_init, receiver_init);
+        assert_eq!(
+            sender_init.associated_data,
+            [sender_key_1.public_key, receiver_key_1.public_key].concat()
+        );
+        assert_eq!(
+            sender_init.ratchet_key.len(),
+            RADROOTS_SIMPLEX_OFFICIAL_AES_KEY_LENGTH
+        );
+        assert_eq!(
+            sender_init.sending_header_key.len(),
+            RADROOTS_SIMPLEX_OFFICIAL_AES_KEY_LENGTH
+        );
+        assert_eq!(
+            sender_init.receiving_next_header_key.len(),
+            RADROOTS_SIMPLEX_OFFICIAL_AES_KEY_LENGTH
         );
     }
 
