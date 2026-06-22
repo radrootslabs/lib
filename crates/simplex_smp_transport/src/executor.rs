@@ -23,6 +23,11 @@ pub struct RadrootsSimplexSmpTransportResponse {
     pub transport_hash: Vec<u8>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RadrootsSimplexSmpSubscriptionReceiveRequest {
+    pub server: RadrootsSimplexSmpServerAddress,
+}
+
 pub trait RadrootsSimplexSmpCommandTransport {
     type Error: core::fmt::Display;
 
@@ -30,4 +35,11 @@ pub trait RadrootsSimplexSmpCommandTransport {
         &mut self,
         request: RadrootsSimplexSmpTransportRequest,
     ) -> Result<RadrootsSimplexSmpTransportResponse, Self::Error>;
+}
+
+pub trait RadrootsSimplexSmpSubscriptionTransport: RadrootsSimplexSmpCommandTransport {
+    fn receive_subscription(
+        &mut self,
+        request: RadrootsSimplexSmpSubscriptionReceiveRequest,
+    ) -> Result<Option<RadrootsSimplexSmpTransportResponse>, Self::Error>;
 }

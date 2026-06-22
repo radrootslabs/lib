@@ -95,6 +95,9 @@ pub enum RadrootsSimplexAgentPendingCommandKind {
     SubscribeQueue {
         queue: RadrootsSimplexAgentQueueAddress,
     },
+    GetQueueMessage {
+        queue: RadrootsSimplexAgentQueueAddress,
+    },
     AckInboxMessage {
         queue: RadrootsSimplexAgentQueueAddress,
         broker_message_id: Vec<u8>,
@@ -241,6 +244,9 @@ enum RadrootsSimplexAgentPendingCommandKindSnapshot {
         delivery: Option<RadrootsSimplexAgentOutboundMessage>,
     },
     SubscribeQueue {
+        queue: RadrootsSimplexAgentQueueAddressSnapshot,
+    },
+    GetQueueMessage {
         queue: RadrootsSimplexAgentQueueAddressSnapshot,
     },
     AckInboxMessage {
@@ -532,6 +538,39 @@ impl RadrootsSimplexAgentStore {
             .filter(|queue| queue.role == RadrootsSimplexAgentQueueRole::Receive)
             .cloned()
             .collect())
+    }
+
+    pub fn subscribed_receive_servers(&self) -> Vec<RadrootsSimplexSmpServerAddress> {
+        let mut servers = Vec::new();
+        for connection in self.connections.values() {
+            for queue in &connection.queues {
+                if queue.role == RadrootsSimplexAgentQueueRole::Receive
+                    && queue.subscribed
+                    && !servers.contains(&queue.descriptor.queue_uri.server)
+                {
+                    servers.push(queue.descriptor.queue_uri.server.clone());
+                }
+            }
+        }
+        servers
+    }
+
+    pub fn receive_queue_by_entity_id(
+        &self,
+        server: &RadrootsSimplexSmpServerAddress,
+        entity_id: &[u8],
+    ) -> Option<(String, RadrootsSimplexAgentQueueAddress)> {
+        for connection in self.connections.values() {
+            for queue in &connection.queues {
+                if queue.role == RadrootsSimplexAgentQueueRole::Receive
+                    && queue.descriptor.queue_uri.server == *server
+                    && queue.entity_id == entity_id
+                {
+                    return Some((connection.id.clone(), queue.descriptor.queue_address()));
+                }
+            }
+        }
+        None
     }
 
     pub fn queue_auth_state(
@@ -1075,6 +1114,11 @@ fn command_kind_to_snapshot(
                 queue: queue_address_to_snapshot(queue),
             }
         }
+        RadrootsSimplexAgentPendingCommandKind::GetQueueMessage { queue } => {
+            RadrootsSimplexAgentPendingCommandKindSnapshot::GetQueueMessage {
+                queue: queue_address_to_snapshot(queue),
+            }
+        }
         RadrootsSimplexAgentPendingCommandKind::AckInboxMessage {
             queue,
             broker_message_id,
@@ -1135,6 +1179,11 @@ fn command_kind_from_snapshot(
         },
         RadrootsSimplexAgentPendingCommandKindSnapshot::SubscribeQueue { queue } => {
             RadrootsSimplexAgentPendingCommandKind::SubscribeQueue {
+                queue: queue_address_from_snapshot(queue)?,
+            }
+        }
+        RadrootsSimplexAgentPendingCommandKindSnapshot::GetQueueMessage { queue } => {
+            RadrootsSimplexAgentPendingCommandKind::GetQueueMessage {
                 queue: queue_address_from_snapshot(queue)?,
             }
         }
@@ -1373,11 +1422,12 @@ mod tests {
         let prepared = store
             .prepare_outbound_message(&connection.id, b"persisted".to_vec())
             .unwrap();
+        let queue = sample_descriptor(true).queue_address();
         store
             .enqueue_command(
                 &connection.id,
                 RadrootsSimplexAgentPendingCommandKind::SendEnvelope {
-                    queue: sample_descriptor(true).queue_address(),
+                    queue: queue.clone(),
                     envelope: RadrootsSimplexAgentEnvelope::Invitation {
                         request: b"req".to_vec(),
                         connection_info: b"info".to_vec(),
@@ -1388,6 +1438,15 @@ mod tests {
                     }),
                 },
                 10,
+            )
+            .unwrap();
+        store
+            .enqueue_command(
+                &connection.id,
+                RadrootsSimplexAgentPendingCommandKind::GetQueueMessage {
+                    queue: queue.clone(),
+                },
+                11,
             )
             .unwrap();
         store.flush().unwrap();
@@ -1401,7 +1460,12 @@ mod tests {
                 message_hash: b"persisted".to_vec(),
             })
         );
-        assert_eq!(loaded.pending_commands.len(), 1);
+        assert_eq!(loaded.pending_commands.len(), 2);
+        assert!(loaded.pending_commands.values().any(|command| matches!(
+            &command.kind,
+            RadrootsSimplexAgentPendingCommandKind::GetQueueMessage { queue: persisted_queue }
+                if persisted_queue == &queue
+        )));
         assert!(
             loaded
                 .primary_send_queue(&connection.id)

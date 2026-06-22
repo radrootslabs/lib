@@ -40,19 +40,25 @@ mod tests {
     };
     use radroots_simplex_chat_proto::prelude::{decode_messages, encode_compressed_batch};
     use radroots_simplex_smp_crypto::prelude::{
-        RadrootsSimplexSmpCommandAuthorization, RadrootsSimplexSmpQueueAuthorizationMaterial,
-        RadrootsSimplexSmpQueueAuthorizationScope, RadrootsSimplexSmpX25519Keypair,
+        RadrootsSimplexSmpCommandAuthorization, RadrootsSimplexSmpEd25519Keypair,
+        RadrootsSimplexSmpQueueAuthorizationMaterial, RadrootsSimplexSmpQueueAuthorizationScope,
+        RadrootsSimplexSmpX25519Keypair, encode_ed25519_public_key_x509,
+        encode_x25519_public_key_x509,
     };
     use radroots_simplex_smp_proto::prelude::{
         RADROOTS_SIMPLEX_SMP_CURRENT_TRANSPORT_VERSION, RadrootsSimplexSmpBrokerMessage,
         RadrootsSimplexSmpBrokerTransmission, RadrootsSimplexSmpCommand,
         RadrootsSimplexSmpCommandTransmission, RadrootsSimplexSmpCorrelationId,
-        RadrootsSimplexSmpMessageFlags, RadrootsSimplexSmpQueueIdsResponse,
-        RadrootsSimplexSmpQueueMode, RadrootsSimplexSmpSendCommand,
+        RadrootsSimplexSmpMessageFlags, RadrootsSimplexSmpNewQueueRequest,
+        RadrootsSimplexSmpQueueIdsResponse, RadrootsSimplexSmpQueueMode,
+        RadrootsSimplexSmpQueueRequestData, RadrootsSimplexSmpSendCommand,
+        RadrootsSimplexSmpServerAddress, RadrootsSimplexSmpSubscriptionMode,
     };
     use radroots_simplex_smp_transport::prelude::{
-        RadrootsSimplexSmpCommandTransport, RadrootsSimplexSmpTransportBlock,
-        RadrootsSimplexSmpTransportRequest, RadrootsSimplexSmpTransportResponse,
+        RadrootsSimplexSmpCommandTransport, RadrootsSimplexSmpSubscriptionReceiveRequest,
+        RadrootsSimplexSmpSubscriptionTransport, RadrootsSimplexSmpTlsCommandTransport,
+        RadrootsSimplexSmpTransportBlock, RadrootsSimplexSmpTransportRequest,
+        RadrootsSimplexSmpTransportResponse,
     };
 
     fn ids_response(
@@ -69,6 +75,27 @@ mod tests {
             service_id: None,
             server_notification_credentials: None,
         })
+    }
+
+    fn correlation_id(byte: u8) -> RadrootsSimplexSmpCorrelationId {
+        RadrootsSimplexSmpCorrelationId::new([byte; RadrootsSimplexSmpCorrelationId::LENGTH])
+    }
+
+    fn live_transport_request(
+        server: RadrootsSimplexSmpServerAddress,
+        correlation_id: RadrootsSimplexSmpCorrelationId,
+        entity_id: Vec<u8>,
+        command: RadrootsSimplexSmpCommand,
+        authorization: RadrootsSimplexSmpCommandAuthorization,
+    ) -> RadrootsSimplexSmpTransportRequest {
+        RadrootsSimplexSmpTransportRequest {
+            server,
+            transport_version: RADROOTS_SIMPLEX_SMP_CURRENT_TRANSPORT_VERSION,
+            correlation_id: Some(correlation_id),
+            entity_id,
+            command,
+            authorization,
+        }
     }
 
     #[derive(Default)]
@@ -308,5 +335,89 @@ mod tests {
             return;
         };
         target.assert_reachable().unwrap();
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn local_upstream_subscribe_receives_sent_message_when_identity_is_configured() {
+        let Some(target) = RadrootsSimplexInteropLocalUpstream::from_env() else {
+            return;
+        };
+        let Some(server) = target.server_address() else {
+            return;
+        };
+
+        let recipient_auth = RadrootsSimplexSmpEd25519Keypair::generate().unwrap();
+        let recipient_dh = RadrootsSimplexSmpX25519Keypair::generate().unwrap();
+        let mut recipient_transport = RadrootsSimplexSmpTlsCommandTransport::new();
+        let create_response = recipient_transport
+            .execute(live_transport_request(
+                server.clone(),
+                correlation_id(1),
+                Vec::new(),
+                RadrootsSimplexSmpCommand::New(RadrootsSimplexSmpNewQueueRequest {
+                    recipient_auth_public_key: encode_ed25519_public_key_x509(
+                        &recipient_auth.public_key,
+                    )
+                    .unwrap(),
+                    recipient_dh_public_key: encode_x25519_public_key_x509(
+                        &recipient_dh.public_key,
+                    )
+                    .unwrap(),
+                    basic_auth: None,
+                    subscription_mode: RadrootsSimplexSmpSubscriptionMode::OnlyCreate,
+                    queue_request_data: Some(RadrootsSimplexSmpQueueRequestData::Messaging(None)),
+                    notifier_credentials: None,
+                }),
+                RadrootsSimplexSmpCommandAuthorization::Ed25519(recipient_auth.clone()),
+            ))
+            .unwrap();
+        let RadrootsSimplexSmpBrokerMessage::Ids(ids) = create_response.transmission.message else {
+            panic!("expected IDS response from live SMP queue creation");
+        };
+
+        let subscribe_response = recipient_transport
+            .execute(live_transport_request(
+                server.clone(),
+                correlation_id(2),
+                ids.recipient_id.clone(),
+                RadrootsSimplexSmpCommand::Sub,
+                RadrootsSimplexSmpCommandAuthorization::Ed25519(recipient_auth),
+            ))
+            .unwrap();
+        assert!(matches!(
+            subscribe_response.transmission.message,
+            RadrootsSimplexSmpBrokerMessage::Ok | RadrootsSimplexSmpBrokerMessage::Msg(_)
+        ));
+
+        let mut sender_transport = RadrootsSimplexSmpTlsCommandTransport::new();
+        let send_response = sender_transport
+            .execute(live_transport_request(
+                server.clone(),
+                correlation_id(3),
+                ids.sender_id,
+                RadrootsSimplexSmpCommand::Send(RadrootsSimplexSmpSendCommand {
+                    flags: RadrootsSimplexSmpMessageFlags::notifications_enabled(),
+                    message_body: b"rr-synth-live-subscribe-message".to_vec(),
+                }),
+                RadrootsSimplexSmpCommandAuthorization::None,
+            ))
+            .unwrap();
+        assert!(matches!(
+            send_response.transmission.message,
+            RadrootsSimplexSmpBrokerMessage::Ok
+        ));
+
+        let subscription_response = recipient_transport
+            .receive_subscription(RadrootsSimplexSmpSubscriptionReceiveRequest { server })
+            .unwrap()
+            .expect("expected live SMP subscription message");
+        let RadrootsSimplexSmpBrokerMessage::Msg(message) =
+            subscription_response.transmission.message
+        else {
+            panic!("expected MSG response from live SMP subscription");
+        };
+        assert!(!message.message_id.is_empty());
+        assert!(!message.encrypted_body.is_empty());
     }
 }

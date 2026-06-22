@@ -35,7 +35,8 @@ use radroots_simplex_smp_proto::prelude::{
     RadrootsSimplexSmpSubscriptionMode,
 };
 use radroots_simplex_smp_transport::prelude::{
-    RadrootsSimplexSmpCommandTransport, RadrootsSimplexSmpTransportRequest,
+    RadrootsSimplexSmpCommandTransport, RadrootsSimplexSmpSubscriptionReceiveRequest,
+    RadrootsSimplexSmpSubscriptionTransport, RadrootsSimplexSmpTransportRequest,
     RadrootsSimplexSmpTransportResponse,
 };
 use sha2::{Digest, Sha256};
@@ -386,6 +387,24 @@ impl RadrootsSimplexAgentRuntime {
         Ok(())
     }
 
+    pub fn get_connection_message(
+        &mut self,
+        connection_id: &str,
+        now: u64,
+    ) -> Result<(), RadrootsSimplexAgentRuntimeError> {
+        for queue in self.store.receive_queues(connection_id)? {
+            self.store.enqueue_command(
+                connection_id,
+                RadrootsSimplexAgentPendingCommandKind::GetQueueMessage {
+                    queue: queue.descriptor.queue_address(),
+                },
+                now,
+            )?;
+        }
+        self.flush_store()?;
+        Ok(())
+    }
+
     pub fn send_message(
         &mut self,
         connection_id: &str,
@@ -706,6 +725,43 @@ impl RadrootsSimplexAgentRuntime {
         Ok(())
     }
 
+    pub fn receive_subscription_messages<T: RadrootsSimplexSmpSubscriptionTransport>(
+        &mut self,
+        transport: &mut T,
+        limit: usize,
+    ) -> Result<(), RadrootsSimplexAgentRuntimeError> {
+        let mut remaining = limit;
+        for server in self.store.subscribed_receive_servers() {
+            while remaining > 0 {
+                match transport.receive_subscription(RadrootsSimplexSmpSubscriptionReceiveRequest {
+                    server: server.clone(),
+                }) {
+                    Ok(Some(response)) => {
+                        self.apply_subscription_response(response)?;
+                        remaining = remaining.saturating_sub(1);
+                    }
+                    Ok(None) => break,
+                    Err(error) => {
+                        self.events
+                            .push_back(RadrootsSimplexAgentRuntimeEvent::Error {
+                                connection_id: None,
+                                message: format!(
+                                    "SimpleX subscription receive failed for server `{}`: {error}",
+                                    server.server_identity
+                                ),
+                            });
+                        break;
+                    }
+                }
+            }
+            if remaining == 0 {
+                break;
+            }
+        }
+        self.flush_store()?;
+        Ok(())
+    }
+
     pub fn retry_pending(
         &mut self,
         now: u64,
@@ -869,7 +925,7 @@ impl RadrootsSimplexAgentRuntime {
                             RadrootsSimplexAgentRuntimeError::Runtime(error.to_string())
                         })?,
                         basic_auth: None,
-                        subscription_mode: RadrootsSimplexSmpSubscriptionMode::Subscribe,
+                        subscription_mode: RadrootsSimplexSmpSubscriptionMode::OnlyCreate,
                         queue_request_data: Some(
                             match descriptor
                                 .queue_uri
@@ -910,7 +966,16 @@ impl RadrootsSimplexAgentRuntime {
             )),
             RadrootsSimplexAgentPendingCommandKind::SubscribeQueue { queue } => Ok((
                 queue.clone(),
-                queue.sender_id.clone(),
+                self.store
+                    .queue_record(&command.connection_id, queue)?
+                    .entity_id,
+                RadrootsSimplexSmpCommand::Sub,
+            )),
+            RadrootsSimplexAgentPendingCommandKind::GetQueueMessage { queue } => Ok((
+                queue.clone(),
+                self.store
+                    .queue_record(&command.connection_id, queue)?
+                    .entity_id,
                 RadrootsSimplexSmpCommand::Get,
             )),
             RadrootsSimplexAgentPendingCommandKind::AckInboxMessage {
@@ -919,7 +984,9 @@ impl RadrootsSimplexAgentRuntime {
                 ..
             } => Ok((
                 queue.clone(),
-                queue.sender_id.clone(),
+                self.store
+                    .queue_record(&command.connection_id, queue)?
+                    .entity_id,
                 RadrootsSimplexSmpCommand::Ack(broker_message_id.clone()),
             )),
             RadrootsSimplexAgentPendingCommandKind::RotateQueues { descriptors } => {
@@ -988,6 +1055,45 @@ impl RadrootsSimplexAgentRuntime {
             }
             _ => self
                 .record_command_outcome(command.id, RadrootsSimplexAgentCommandOutcome::Delivered),
+        }
+    }
+
+    fn apply_subscription_response(
+        &mut self,
+        response: RadrootsSimplexSmpTransportResponse,
+    ) -> Result<(), RadrootsSimplexAgentRuntimeError> {
+        let entity_id = response.transmission.entity_id.clone();
+        let (connection_id, queue) = self
+            .store
+            .receive_queue_by_entity_id(&response.server, &entity_id)
+            .ok_or_else(|| {
+                RadrootsSimplexAgentRuntimeError::Runtime(format!(
+                    "SimpleX subscription response for server `{}` used unknown queue entity `{}`",
+                    response.server.server_identity,
+                    URL_SAFE_NO_PAD.encode(&entity_id)
+                ))
+            })?;
+        match response.transmission.message {
+            RadrootsSimplexSmpBrokerMessage::Msg(message) => self
+                .process_received_message_response(
+                    &connection_id,
+                    &queue,
+                    message,
+                    response.transport_hash,
+                ),
+            RadrootsSimplexSmpBrokerMessage::Err(error) => {
+                self.events
+                    .push_back(RadrootsSimplexAgentRuntimeEvent::Error {
+                        connection_id: Some(connection_id),
+                        message: format!(
+                            "SimpleX subscription broker error for queue entity `{}`: {:?}",
+                            URL_SAFE_NO_PAD.encode(&entity_id),
+                            error
+                        ),
+                    });
+                Ok(())
+            }
+            _ => Ok(()),
         }
     }
 
@@ -1393,6 +1499,7 @@ fn queue_for_command(
         RadrootsSimplexAgentPendingCommandKind::SecureQueue { queue, .. }
         | RadrootsSimplexAgentPendingCommandKind::SendEnvelope { queue, .. }
         | RadrootsSimplexAgentPendingCommandKind::SubscribeQueue { queue }
+        | RadrootsSimplexAgentPendingCommandKind::GetQueueMessage { queue }
         | RadrootsSimplexAgentPendingCommandKind::AckInboxMessage { queue, .. } => {
             Some(queue.clone())
         }
@@ -1582,7 +1689,8 @@ mod tests {
         RadrootsSimplexSmpX25519Keypair,
     };
     use radroots_simplex_smp_proto::prelude::{
-        RadrootsSimplexSmpBrokerTransmission, RadrootsSimplexSmpQueueIdsResponse,
+        RadrootsSimplexSmpBrokerTransmission, RadrootsSimplexSmpError,
+        RadrootsSimplexSmpQueueIdsResponse,
     };
     use radroots_simplex_smp_transport::prelude::RadrootsSimplexSmpTransportBlock;
 
@@ -1619,14 +1727,29 @@ mod tests {
     #[derive(Default)]
     struct ScriptedTransport {
         responses: VecDeque<RadrootsSimplexSmpBrokerMessage>,
+        subscription_responses: VecDeque<RadrootsSimplexSmpBrokerTransmission>,
         requests: Vec<RadrootsSimplexSmpTransportRequest>,
+        subscription_requests: Vec<RadrootsSimplexSmpSubscriptionReceiveRequest>,
     }
 
     impl ScriptedTransport {
         fn with_responses(responses: Vec<RadrootsSimplexSmpBrokerMessage>) -> Self {
             Self {
                 responses: responses.into(),
+                subscription_responses: VecDeque::new(),
                 requests: Vec::new(),
+                subscription_requests: Vec::new(),
+            }
+        }
+
+        fn with_subscription_responses(
+            responses: Vec<RadrootsSimplexSmpBrokerTransmission>,
+        ) -> Self {
+            Self {
+                responses: VecDeque::new(),
+                subscription_responses: responses.into(),
+                requests: Vec::new(),
+                subscription_requests: Vec::new(),
             }
         }
     }
@@ -1700,6 +1823,30 @@ mod tests {
         }
     }
 
+    impl RadrootsSimplexSmpSubscriptionTransport for ScriptedTransport {
+        fn receive_subscription(
+            &mut self,
+            request: RadrootsSimplexSmpSubscriptionReceiveRequest,
+        ) -> Result<Option<RadrootsSimplexSmpTransportResponse>, Self::Error> {
+            self.subscription_requests.push(request.clone());
+            let Some(response_transmission) = self.subscription_responses.pop_front() else {
+                return Ok(None);
+            };
+            let response_block = RadrootsSimplexSmpTransportBlock::from_broker_transmissions(
+                &[response_transmission.clone()],
+                RADROOTS_SIMPLEX_SMP_CURRENT_TRANSPORT_VERSION,
+            )
+            .map_err(|error| error.to_string())?;
+            let response_encoded = response_block.encode().map_err(|error| error.to_string())?;
+            Ok(Some(RadrootsSimplexSmpTransportResponse {
+                server: request.server,
+                transport_version: RADROOTS_SIMPLEX_SMP_CURRENT_TRANSPORT_VERSION,
+                transmission: response_transmission,
+                transport_hash: Sha256::digest(&response_encoded).to_vec(),
+            }))
+        }
+    }
+
     #[test]
     fn create_and_join_commands_execute_through_transport() {
         let mut runtime = RadrootsSimplexAgentRuntimeBuilder::new().build().unwrap();
@@ -1733,6 +1880,22 @@ mod tests {
         assert!(created_queue[0].subscribed);
         assert_eq!(transport.requests.len(), 6);
         assert!(matches!(
+            transport.requests[3].command,
+            RadrootsSimplexSmpCommand::Sub
+        ));
+        assert_eq!(transport.requests[3].entity_id, b"recipient".to_vec());
+        assert!(matches!(
+            transport.requests[4].command,
+            RadrootsSimplexSmpCommand::Sub
+        ));
+        assert_eq!(transport.requests[4].entity_id, b"recipient-2".to_vec());
+        assert!(
+            !transport
+                .requests
+                .iter()
+                .any(|request| matches!(request.command, RadrootsSimplexSmpCommand::Get))
+        );
+        assert!(matches!(
             runtime.drain_events(16).first(),
             Some(RadrootsSimplexAgentRuntimeEvent::InvitationReady { .. })
         ));
@@ -1740,6 +1903,86 @@ mod tests {
             runtime.store.connection(&joined).unwrap().status,
             RadrootsSimplexAgentConnectionStatus::JoinPending
         );
+    }
+
+    #[test]
+    fn explicit_get_connection_message_executes_smp_get() {
+        let mut runtime = RadrootsSimplexAgentRuntimeBuilder::new().build().unwrap();
+        let created = runtime
+            .create_connection(invitation_queue(), b"e2e".to_vec(), false, 10)
+            .unwrap();
+
+        let mut setup_transport = ScriptedTransport::with_responses(vec![
+            ids_response(b"recipient", b"sender", b"server-dh"),
+            RadrootsSimplexSmpBrokerMessage::Ok,
+        ]);
+        runtime
+            .execute_ready_commands(&mut setup_transport, 30, 16)
+            .unwrap();
+        assert!(matches!(
+            setup_transport.requests[1].command,
+            RadrootsSimplexSmpCommand::Sub
+        ));
+        assert_eq!(setup_transport.requests[1].entity_id, b"recipient".to_vec());
+        assert!(runtime.store.receive_queues(&created).unwrap()[0].subscribed);
+
+        runtime.get_connection_message(&created, 40).unwrap();
+        let mut get_transport =
+            ScriptedTransport::with_responses(vec![RadrootsSimplexSmpBrokerMessage::Ok]);
+        runtime
+            .execute_ready_commands(&mut get_transport, 50, 16)
+            .unwrap();
+
+        assert_eq!(get_transport.requests.len(), 1);
+        assert!(matches!(
+            get_transport.requests[0].command,
+            RadrootsSimplexSmpCommand::Get
+        ));
+        assert_eq!(get_transport.requests[0].entity_id, b"recipient".to_vec());
+        assert!(runtime.store.receive_queues(&created).unwrap()[0].subscribed);
+    }
+
+    #[test]
+    fn subscription_receive_routes_broker_transmission_by_entity_id() {
+        let mut runtime = RadrootsSimplexAgentRuntimeBuilder::new().build().unwrap();
+        let created = runtime
+            .create_connection(invitation_queue(), b"e2e".to_vec(), false, 10)
+            .unwrap();
+
+        let mut setup_transport = ScriptedTransport::with_responses(vec![
+            ids_response(b"recipient", b"sender", b"server-dh"),
+            RadrootsSimplexSmpBrokerMessage::Ok,
+        ]);
+        runtime
+            .execute_ready_commands(&mut setup_transport, 30, 16)
+            .unwrap();
+        let receive_queue = runtime.store.receive_queues(&created).unwrap()[0].clone();
+        let _ = runtime.drain_events(16);
+
+        let mut subscription_transport = ScriptedTransport::with_subscription_responses(vec![
+            RadrootsSimplexSmpBrokerTransmission {
+                authorization: Vec::new(),
+                correlation_id: None,
+                entity_id: receive_queue.entity_id,
+                message: RadrootsSimplexSmpBrokerMessage::Err(RadrootsSimplexSmpError::NoMsg),
+            },
+        ]);
+        runtime
+            .receive_subscription_messages(&mut subscription_transport, 4)
+            .unwrap();
+
+        assert_eq!(subscription_transport.subscription_requests.len(), 2);
+        assert_eq!(
+            subscription_transport.subscription_requests[0].server,
+            receive_queue.descriptor.queue_uri.server
+        );
+        assert!(matches!(
+            runtime.drain_events(16).first(),
+            Some(RadrootsSimplexAgentRuntimeEvent::Error {
+                connection_id: Some(connection_id),
+                message,
+            }) if connection_id == &created && message.contains("NoMsg")
+        ));
     }
 
     #[test]

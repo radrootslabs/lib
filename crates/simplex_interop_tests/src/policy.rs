@@ -1,4 +1,6 @@
 use alloc::string::{String, ToString};
+#[cfg(feature = "std")]
+use alloc::vec;
 use core::fmt;
 use radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpQueueUri;
 
@@ -46,6 +48,7 @@ impl RadrootsSimplexInteropFixturePolicy {
 pub struct RadrootsSimplexInteropLocalUpstream {
     pub host: String,
     pub port: u16,
+    pub server_identity: Option<String>,
 }
 
 #[cfg(feature = "std")]
@@ -56,7 +59,24 @@ impl RadrootsSimplexInteropLocalUpstream {
             .ok()?
             .parse::<u16>()
             .ok()?;
-        Some(Self { host, port })
+        let server_identity = std::env::var("RADROOTS_SIMPLEX_INTEROP_SMP_IDENTITY").ok();
+        Some(Self {
+            host,
+            port,
+            server_identity,
+        })
+    }
+
+    pub fn server_address(
+        &self,
+    ) -> Option<radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpServerAddress> {
+        Some(
+            radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpServerAddress {
+                server_identity: self.server_identity.clone()?,
+                hosts: vec![self.host.clone()],
+                port: Some(self.port),
+            },
+        )
     }
 
     pub fn assert_reachable(&self) -> Result<(), RadrootsSimplexInteropPolicyError> {

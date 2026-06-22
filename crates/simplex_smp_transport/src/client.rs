@@ -2,7 +2,8 @@
 
 use crate::error::RadrootsSimplexSmpTransportError;
 use crate::executor::{
-    RadrootsSimplexSmpCommandTransport, RadrootsSimplexSmpTransportRequest,
+    RadrootsSimplexSmpCommandTransport, RadrootsSimplexSmpSubscriptionReceiveRequest,
+    RadrootsSimplexSmpSubscriptionTransport, RadrootsSimplexSmpTransportRequest,
     RadrootsSimplexSmpTransportResponse,
 };
 use crate::frame::{RADROOTS_SIMPLEX_SMP_TRANSPORT_BLOCK_SIZE, RadrootsSimplexSmpTransportBlock};
@@ -22,7 +23,7 @@ use radroots_simplex_smp_crypto::prelude::{
 use radroots_simplex_smp_proto::prelude::{
     RADROOTS_SIMPLEX_SMP_AUTH_COMMANDS_TRANSPORT_VERSION,
     RADROOTS_SIMPLEX_SMP_ENCRYPTED_BLOCK_TRANSPORT_VERSION, RadrootsSimplexSmpCommandTransmission,
-    RadrootsSimplexSmpServerAddress,
+    RadrootsSimplexSmpCorrelationId, RadrootsSimplexSmpServerAddress,
 };
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
@@ -32,7 +33,7 @@ use rustls::{
 };
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
-use std::io::{Read, Write};
+use std::io::{ErrorKind, Read, Write};
 use std::net::{IpAddr, TcpStream, ToSocketAddrs};
 use std::sync::Arc;
 use std::time::Duration;
@@ -57,20 +58,23 @@ impl RadrootsSimplexSmpTlsCommandTransport {
         Self::default()
     }
 
-    fn session_key(server: &RadrootsSimplexSmpServerAddress) -> String {
+    fn session_key(server: &RadrootsSimplexSmpServerAddress, kind: &str) -> String {
         let mut key = server.server_identity.clone();
         key.push('@');
         key.push_str(&server.hosts.join(","));
         key.push(':');
         key.push_str(&server.port.unwrap_or(5223).to_string());
+        key.push('#');
+        key.push_str(kind);
         key
     }
 
     fn session_for(
         &mut self,
         server: &RadrootsSimplexSmpServerAddress,
+        kind: &str,
     ) -> Result<&mut RadrootsSimplexSmpLiveSession, RadrootsSimplexSmpTransportError> {
-        let key = Self::session_key(server);
+        let key = Self::session_key(server, kind);
         if !self.sessions.contains_key(&key) {
             let session = connect_live_session(server)?;
             self.sessions.insert(key.clone(), session);
@@ -91,12 +95,16 @@ impl RadrootsSimplexSmpCommandTransport for RadrootsSimplexSmpTlsCommandTranspor
         &mut self,
         request: RadrootsSimplexSmpTransportRequest,
     ) -> Result<RadrootsSimplexSmpTransportResponse, Self::Error> {
-        let key = Self::session_key(&request.server);
-        match execute_live_request(self.session_for(&request.server)?, &request) {
+        let session_kind = session_kind_for_command(&request.command);
+        let key = Self::session_key(&request.server, session_kind);
+        match execute_live_request(self.session_for(&request.server, session_kind)?, &request) {
             Ok(response) => Ok(response),
             Err(RadrootsSimplexSmpTransportError::LiveTransportIo(error)) => {
                 self.sessions.remove(&key);
-                let response = execute_live_request(self.session_for(&request.server)?, &request);
+                let response = execute_live_request(
+                    self.session_for(&request.server, session_kind)?,
+                    &request,
+                );
                 match response {
                     Ok(response) => Ok(response),
                     Err(RadrootsSimplexSmpTransportError::LiveTransportIo(_)) => {
@@ -107,6 +115,42 @@ impl RadrootsSimplexSmpCommandTransport for RadrootsSimplexSmpTlsCommandTranspor
             }
             Err(error) => Err(error),
         }
+    }
+}
+
+impl RadrootsSimplexSmpSubscriptionTransport for RadrootsSimplexSmpTlsCommandTransport {
+    fn receive_subscription(
+        &mut self,
+        request: RadrootsSimplexSmpSubscriptionReceiveRequest,
+    ) -> Result<Option<RadrootsSimplexSmpTransportResponse>, Self::Error> {
+        let key = Self::session_key(&request.server, "subscription");
+        match read_live_response(
+            self.session_for(&request.server, "subscription")?,
+            &request.server,
+            None,
+            true,
+        ) {
+            Ok(response) => Ok(response),
+            Err(RadrootsSimplexSmpTransportError::LiveTransportIo(error)) => {
+                self.sessions.remove(&key);
+                Err(RadrootsSimplexSmpTransportError::LiveTransportIo(error))
+            }
+            Err(error) => Err(error),
+        }
+    }
+}
+
+fn session_kind_for_command(
+    command: &radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpCommand,
+) -> &'static str {
+    match command {
+        radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpCommand::Sub
+        | radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpCommand::Subs
+        | radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpCommand::NSub
+        | radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpCommand::NSubs => "subscription",
+        radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpCommand::Get
+        | radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpCommand::LGet => "poll",
+        _ => "command",
     }
 }
 
@@ -148,11 +192,28 @@ fn execute_live_request(
         .flush()
         .map_err(|error| RadrootsSimplexSmpTransportError::LiveTransportIo(error.to_string()))?;
 
+    read_live_response(session, &request.server, Some(correlation_id), false)?.ok_or_else(|| {
+        RadrootsSimplexSmpTransportError::LiveTransportIo(
+            "SMP command response was not available before the read timeout".into(),
+        )
+    })
+}
+
+fn read_live_response(
+    session: &mut RadrootsSimplexSmpLiveSession,
+    server: &RadrootsSimplexSmpServerAddress,
+    expected_correlation_id: Option<RadrootsSimplexSmpCorrelationId>,
+    timeout_is_empty: bool,
+) -> Result<Option<RadrootsSimplexSmpTransportResponse>, RadrootsSimplexSmpTransportError> {
     let mut response_block = vec![0_u8; RADROOTS_SIMPLEX_SMP_TRANSPORT_BLOCK_SIZE];
-    session
-        .stream
-        .read_exact(&mut response_block)
-        .map_err(|error| RadrootsSimplexSmpTransportError::LiveTransportIo(error.to_string()))?;
+    if let Err(error) = session.stream.read_exact(&mut response_block) {
+        if timeout_is_empty && matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) {
+            return Ok(None);
+        }
+        return Err(RadrootsSimplexSmpTransportError::LiveTransportIo(
+            error.to_string(),
+        ));
+    }
     let response_hash = Sha256::digest(&response_block).to_vec();
     let decoded = decode_live_transport_block(session, &response_block)?;
     let transmissions = decoded.decode_broker_transmissions(session.transport_version)?;
@@ -164,15 +225,17 @@ fn execute_live_request(
         );
     }
     let transmission = transmissions.into_iter().next().expect("checked len");
-    if transmission.correlation_id != Some(correlation_id) {
+    if let Some(expected_correlation_id) = expected_correlation_id
+        && transmission.correlation_id != Some(expected_correlation_id)
+    {
         return Err(RadrootsSimplexSmpTransportError::CorrelationIdMismatch);
     }
-    Ok(RadrootsSimplexSmpTransportResponse {
-        server: request.server.clone(),
+    Ok(Some(RadrootsSimplexSmpTransportResponse {
+        server: server.clone(),
         transport_version: session.transport_version,
         transmission,
         transport_hash: response_hash,
-    })
+    }))
 }
 
 fn transport_debug_enabled() -> bool {

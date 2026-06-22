@@ -15,7 +15,8 @@ pub mod prelude {
     pub use crate::client::RadrootsSimplexSmpTlsCommandTransport;
     pub use crate::error::RadrootsSimplexSmpTransportError;
     pub use crate::executor::{
-        RadrootsSimplexSmpCommandTransport, RadrootsSimplexSmpTransportRequest,
+        RadrootsSimplexSmpCommandTransport, RadrootsSimplexSmpSubscriptionReceiveRequest,
+        RadrootsSimplexSmpSubscriptionTransport, RadrootsSimplexSmpTransportRequest,
         RadrootsSimplexSmpTransportResponse,
     };
     pub use crate::frame::{
