@@ -19,10 +19,7 @@ base64 = { workspace = true }
 radroots_events = { workspace = true, default-features = false, features = [
   "serde",
 ] }
-radroots_sql_core = { workspace = true, features = ["bridge"] }
-radroots_sql_wasm_core = { workspace = true, default-features = false, features = [
-  "bridge",
-] }
+radroots_sdk_sql_wasm_runtime = { workspace = true }
 radroots_replica_sync = { workspace = true, features = ["std"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }

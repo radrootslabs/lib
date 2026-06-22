@@ -1,0 +1,24 @@
+[package]
+name = "radroots_sdk_sql_wasm_runtime"
+publish = false
+version = "0.1.0-alpha.2"
+edition.workspace = true
+authors = ["Tyson Lupul <tyson@radroots.org>"]
+rust-version.workspace = true
+license.workspace = true
+description = "SQL WASM runtime for Radroots SDK data surfaces"
+repository.workspace = true
+homepage.workspace = true
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+radroots_sql_core = { workspace = true, features = ["web"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde-wasm-bindgen = { workspace = true }
+wasm-bindgen = { workspace = true }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage_nightly)'] }

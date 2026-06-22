@@ -13,7 +13,7 @@ use radroots_replica_sync::{
     radroots_replica_ingest_event_with_factory, radroots_replica_sync_all,
 };
 #[cfg(target_arch = "wasm32")]
-use radroots_sql_core::WasmSqlExecutor;
+use radroots_sdk_sql_wasm_runtime::WasmSqlExecutor;
 #[cfg(target_arch = "wasm32")]
 use serde::Deserialize;
 #[cfg(target_arch = "wasm32")]
