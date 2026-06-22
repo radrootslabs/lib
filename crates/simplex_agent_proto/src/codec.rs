@@ -294,6 +294,16 @@ fn encode_encrypted_payload(
     buffer: &mut Vec<u8>,
     encrypted: &RadrootsSimplexAgentEncryptedPayload,
 ) -> Result<(), RadrootsSimplexAgentProtoError> {
+    if let Some(official_message) = encrypted.official_message.as_ref() {
+        if encrypted.ratchet_header.is_some() || !encrypted.ciphertext.is_empty() {
+            return Err(RadrootsSimplexAgentProtoError::InvalidRatchetHeader(
+                "official encrypted payload cannot include legacy ratchet fields".into(),
+            ));
+        }
+        buffer.push(2);
+        push_large_bytes(buffer, official_message)?;
+        return Ok(());
+    }
     match &encrypted.ratchet_header {
         Some(header) => {
             buffer.push(1);
@@ -308,16 +318,24 @@ fn encode_encrypted_payload(
 fn decode_encrypted_payload(
     cursor: &mut Cursor<'_>,
 ) -> Result<RadrootsSimplexAgentEncryptedPayload, RadrootsSimplexAgentProtoError> {
-    let has_header = decode_bool(cursor.read_byte()?)?;
-    let ratchet_header = if has_header {
-        Some(decode_ratchet_header(&cursor.read_large_bytes()?)?)
-    } else {
-        None
-    };
-    Ok(RadrootsSimplexAgentEncryptedPayload {
-        ratchet_header,
-        ciphertext: cursor.read_large_bytes()?,
-    })
+    match cursor.read_byte()? {
+        0 => Ok(RadrootsSimplexAgentEncryptedPayload {
+            ratchet_header: None,
+            official_message: None,
+            ciphertext: cursor.read_large_bytes()?,
+        }),
+        1 => Ok(RadrootsSimplexAgentEncryptedPayload {
+            ratchet_header: Some(decode_ratchet_header(&cursor.read_large_bytes()?)?),
+            official_message: None,
+            ciphertext: cursor.read_large_bytes()?,
+        }),
+        2 => Ok(RadrootsSimplexAgentEncryptedPayload {
+            ratchet_header: None,
+            official_message: Some(cursor.read_large_bytes()?),
+            ciphertext: Vec::new(),
+        }),
+        other => Err(RadrootsSimplexAgentProtoError::InvalidBoolEncoding(other)),
+    }
 }
 
 fn encode_queue_descriptor(
@@ -732,6 +750,7 @@ mod tests {
                     pq_public_key: Some(b"pq".to_vec()),
                     pq_ciphertext: Some(b"ct".to_vec()),
                 }),
+                official_message: None,
                 ciphertext: encoded_decrypted,
             });
         let encoded_envelope = encode_envelope(&envelope).unwrap();
@@ -759,6 +778,7 @@ mod tests {
                     pq_public_key: Some(vec![8_u8; 1158]),
                     pq_ciphertext: Some(vec![9_u8; 1039]),
                 }),
+                official_message: None,
                 ciphertext: b"opaque".to_vec(),
             });
 
@@ -778,6 +798,7 @@ mod tests {
                     pq_public_key: Some(vec![2_u8; 1158]),
                     pq_ciphertext: None,
                 }),
+                official_message: None,
                 ciphertext: b"opaque".to_vec(),
             });
 
@@ -786,5 +807,19 @@ mod tests {
             error,
             RadrootsSimplexAgentProtoError::InvalidRatchetHeader(_)
         ));
+    }
+
+    #[test]
+    fn roundtrips_official_opaque_encrypted_payload() {
+        let envelope =
+            RadrootsSimplexAgentEnvelope::Message(RadrootsSimplexAgentEncryptedPayload {
+                ratchet_header: None,
+                official_message: Some(b"official-encrypted-ratchet-message".to_vec()),
+                ciphertext: Vec::new(),
+            });
+
+        let encoded = encode_envelope(&envelope).unwrap();
+        let decoded = decode_envelope(&encoded).unwrap();
+        assert_eq!(decoded, envelope);
     }
 }

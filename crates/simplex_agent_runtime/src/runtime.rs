@@ -1575,6 +1575,7 @@ impl RadrootsSimplexAgentRuntime {
             .map_err(|error| RadrootsSimplexAgentRuntimeError::Runtime(error.to_string()))?;
         Ok(RadrootsSimplexAgentEncryptedPayload {
             ratchet_header: Some(ratchet_header),
+            official_message: None,
             ciphertext,
         })
     }
@@ -1602,6 +1603,11 @@ impl RadrootsSimplexAgentRuntime {
         connection_id: &str,
         encrypted: &RadrootsSimplexAgentEncryptedPayload,
     ) -> Result<Vec<u8>, RadrootsSimplexAgentRuntimeError> {
+        if encrypted.official_message.is_some() {
+            return Err(RadrootsSimplexAgentRuntimeError::Runtime(format!(
+                "SimpleX connection `{connection_id}` received official encrypted payload before official ratchet runtime wiring is enabled"
+            )));
+        }
         let shared_secret = self
             .store
             .connection(connection_id)?

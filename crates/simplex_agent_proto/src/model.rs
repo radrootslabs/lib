@@ -116,6 +116,7 @@ pub enum RadrootsSimplexAgentDecryptedMessage {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RadrootsSimplexAgentEncryptedPayload {
     pub ratchet_header: Option<RadrootsSimplexSmpRatchetHeader>,
+    pub official_message: Option<Vec<u8>>,
     pub ciphertext: Vec<u8>,
 }
 

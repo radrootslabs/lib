@@ -252,6 +252,7 @@ mod tests {
         let envelope =
             RadrootsSimplexAgentEnvelope::Message(RadrootsSimplexAgentEncryptedPayload {
                 ratchet_header: None,
+                official_message: None,
                 ciphertext: b"opaque-agent-ciphertext".to_vec(),
             });
         let decoded_envelope = decode_envelope(&encode_envelope(&envelope).unwrap()).unwrap();
