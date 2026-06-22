@@ -137,6 +137,8 @@ pub struct RadrootsSimplexAgentConnectionRecord {
     pub last_received_broker_message_id: Option<Vec<u8>>,
     pub recent_messages: Vec<RadrootsSimplexAgentRecentMessageRecord>,
     pub staged_outbound_message: Option<RadrootsSimplexAgentOutboundMessage>,
+    pub hello_sent: bool,
+    pub hello_received: bool,
 }
 
 #[cfg(feature = "std")]
@@ -165,6 +167,8 @@ struct RadrootsSimplexAgentConnectionSnapshot {
     last_received_broker_message_id: Option<Vec<u8>>,
     recent_messages: Vec<RadrootsSimplexAgentRecentMessageRecord>,
     staged_outbound_message: Option<RadrootsSimplexAgentOutboundMessage>,
+    hello_sent: bool,
+    hello_received: bool,
 }
 
 #[cfg(feature = "std")]
@@ -378,6 +382,8 @@ impl RadrootsSimplexAgentStore {
             last_received_broker_message_id: None,
             recent_messages: Vec::new(),
             staged_outbound_message: None,
+            hello_sent: false,
+            hello_received: false,
         };
         self.connections.insert(id, record.clone());
         record
@@ -846,6 +852,8 @@ fn connection_to_snapshot(
         last_received_broker_message_id: record.last_received_broker_message_id,
         recent_messages: record.recent_messages,
         staged_outbound_message: record.staged_outbound_message,
+        hello_sent: record.hello_sent,
+        hello_received: record.hello_received,
     })
 }
 
@@ -888,6 +896,8 @@ fn connection_from_snapshot(
         last_received_broker_message_id: snapshot.last_received_broker_message_id,
         recent_messages: snapshot.recent_messages,
         staged_outbound_message: snapshot.staged_outbound_message,
+        hello_sent: snapshot.hello_sent,
+        hello_received: snapshot.hello_received,
     })
 }
 
@@ -1449,6 +1459,11 @@ mod tests {
                 11,
             )
             .unwrap();
+        {
+            let connection = store.connection_mut(&connection.id).unwrap();
+            connection.hello_sent = true;
+            connection.hello_received = true;
+        }
         store.flush().unwrap();
 
         let loaded = RadrootsSimplexAgentStore::open(&path).unwrap();
@@ -1460,6 +1475,8 @@ mod tests {
                 message_hash: b"persisted".to_vec(),
             })
         );
+        assert!(loaded_connection.hello_sent);
+        assert!(loaded_connection.hello_received);
         assert_eq!(loaded.pending_commands.len(), 2);
         assert!(loaded.pending_commands.values().any(|command| matches!(
             &command.kind,

@@ -317,12 +317,28 @@ mod tests {
             .execute_ready_commands(&mut join_transport, 40, 16)
             .unwrap();
         runtime
-            .allow_connection(&joined, b"rr-synth-info".to_vec(), 50)
+            .handle_inbound_decrypted_message(
+                &joined,
+                RadrootsSimplexAgentDecryptedMessage::Message(RadrootsSimplexAgentMessageFrame {
+                    header: RadrootsSimplexAgentMessageHeader {
+                        message_id: 1,
+                        previous_message_hash: Vec::new(),
+                    },
+                    message: RadrootsSimplexAgentMessage::Hello,
+                    padding: Vec::new(),
+                }),
+                b"rr-synth-hello".to_vec(),
+            )
+            .unwrap();
+        let mut hello_transport =
+            ScriptedTransport::with_responses(vec![RadrootsSimplexSmpBrokerMessage::Ok]);
+        runtime
+            .execute_ready_commands(&mut hello_transport, 50, 16)
             .unwrap();
         let message_id = runtime
             .send_message(&joined, b"rr-synth-chat".to_vec(), 60)
             .unwrap();
-        assert_eq!(message_id, 1);
+        assert_eq!(message_id, 2);
         runtime.reconnect_connection(&joined, 70).unwrap();
         assert!(!runtime.retry_pending(70 + 5_000, 64).is_empty());
         assert!(created.starts_with("conn-"));

@@ -339,6 +339,13 @@ impl RadrootsSimplexAgentRuntime {
         local_info: Vec<u8>,
         now: u64,
     ) -> Result<(), RadrootsSimplexAgentRuntimeError> {
+        if self.store.connection(connection_id)?.status
+            != RadrootsSimplexAgentConnectionStatus::AwaitingApproval
+        {
+            return Err(RadrootsSimplexAgentRuntimeError::Runtime(format!(
+                "SimpleX connection `{connection_id}` is not awaiting approval"
+            )));
+        }
         self.store
             .set_status(connection_id, RadrootsSimplexAgentConnectionStatus::Allowed)?;
         let send_queue = self.store.primary_send_queue(connection_id)?;
@@ -413,6 +420,11 @@ impl RadrootsSimplexAgentRuntime {
     ) -> Result<u64, RadrootsSimplexAgentRuntimeError> {
         let send_queue = self.store.primary_send_queue(connection_id)?;
         let connection = self.store.connection(connection_id)?;
+        if connection.status != RadrootsSimplexAgentConnectionStatus::Connected {
+            return Err(RadrootsSimplexAgentRuntimeError::Runtime(format!(
+                "SimpleX connection `{connection_id}` is not connected"
+            )));
+        }
         if connection.staged_outbound_message.is_some() {
             return Err(RadrootsSimplexAgentRuntimeError::Store(
                 radroots_simplex_agent_store::prelude::RadrootsSimplexAgentStoreError::PendingOutboundMessage(
@@ -464,6 +476,16 @@ impl RadrootsSimplexAgentRuntime {
             });
         self.flush_store()?;
         Ok(message_id)
+    }
+
+    pub fn send_hello(
+        &mut self,
+        connection_id: &str,
+        now: u64,
+    ) -> Result<(), RadrootsSimplexAgentRuntimeError> {
+        self.enqueue_hello(connection_id, now)?;
+        self.flush_store()?;
+        Ok(())
     }
 
     pub fn ack_message(
@@ -583,6 +605,13 @@ impl RadrootsSimplexAgentRuntime {
     ) -> Result<(), RadrootsSimplexAgentRuntimeError> {
         match message {
             RadrootsSimplexAgentDecryptedMessage::ConnectionInfo(info) => {
+                if self.store.connection(connection_id)?.status
+                    != RadrootsSimplexAgentConnectionStatus::Connected
+                {
+                    self.store
+                        .set_status(connection_id, RadrootsSimplexAgentConnectionStatus::Allowed)?;
+                }
+                self.enqueue_hello(connection_id, 0)?;
                 self.events
                     .push_back(RadrootsSimplexAgentRuntimeEvent::ConnectionInfo {
                         connection_id: connection_id.into(),
@@ -590,10 +619,13 @@ impl RadrootsSimplexAgentRuntime {
                     });
             }
             RadrootsSimplexAgentDecryptedMessage::ConnectionInfoReply { reply_queues, info } => {
+                let mut secure_queues = Vec::new();
                 for descriptor in reply_queues {
                     let auth_state = self.store.generate_queue_auth_state()?;
                     let mut descriptor = descriptor;
                     descriptor.sender_key = Some(auth_state.public_key.clone());
+                    let secure_queue = descriptor.queue_address();
+                    let sender_key = descriptor.sender_key.clone();
                     self.store.add_queue(
                         connection_id,
                         descriptor,
@@ -601,11 +633,19 @@ impl RadrootsSimplexAgentRuntime {
                         true,
                         auth_state,
                     )?;
+                    secure_queues.push((secure_queue, sender_key));
                 }
                 self.store.set_status(
                     connection_id,
                     RadrootsSimplexAgentConnectionStatus::AwaitingApproval,
                 )?;
+                for (queue, sender_key) in secure_queues {
+                    self.store.enqueue_command(
+                        connection_id,
+                        RadrootsSimplexAgentPendingCommandKind::SecureQueue { queue, sender_key },
+                        0,
+                    )?;
+                }
                 self.events
                     .push_back(RadrootsSimplexAgentRuntimeEvent::ConfirmationRequired {
                         connection_id: connection_id.into(),
@@ -627,15 +667,28 @@ impl RadrootsSimplexAgentRuntime {
                 let _ = transport_hash;
                 match frame.message {
                     RadrootsSimplexAgentMessage::Hello => {
-                        self.store.set_status(
-                            connection_id,
-                            RadrootsSimplexAgentConnectionStatus::Connected,
-                        )?;
-                        self.events.push_back(
-                            RadrootsSimplexAgentRuntimeEvent::ConnectionEstablished {
-                                connection_id: connection_id.into(),
-                            },
-                        );
+                        let connection = self.store.connection(connection_id)?;
+                        let was_connected =
+                            connection.status == RadrootsSimplexAgentConnectionStatus::Connected;
+                        let should_send_hello = !connection.hello_sent;
+                        {
+                            let connection = self.store.connection_mut(connection_id)?;
+                            connection.hello_received = true;
+                        }
+                        if should_send_hello {
+                            self.enqueue_hello(connection_id, 0)?;
+                        }
+                        if !was_connected {
+                            self.store.set_status(
+                                connection_id,
+                                RadrootsSimplexAgentConnectionStatus::Connected,
+                            )?;
+                            self.events.push_back(
+                                RadrootsSimplexAgentRuntimeEvent::ConnectionEstablished {
+                                    connection_id: connection_id.into(),
+                                },
+                            );
+                        }
                     }
                     RadrootsSimplexAgentMessage::Receipt(receipt) => {
                         self.events.push_back(
@@ -1138,6 +1191,57 @@ impl RadrootsSimplexAgentRuntime {
                 .store
                 .clear_staged_outbound_message(&command.connection_id, delivery.message_id)?;
         }
+        Ok(())
+    }
+
+    fn enqueue_hello(
+        &mut self,
+        connection_id: &str,
+        now: u64,
+    ) -> Result<(), RadrootsSimplexAgentRuntimeError> {
+        if self.store.connection(connection_id)?.hello_sent {
+            return Ok(());
+        }
+        let send_queue = self.store.primary_send_queue(connection_id)?;
+        let connection = self.store.connection(connection_id)?;
+        let previous_hash = connection
+            .delivery_cursor
+            .last_sent_message_hash
+            .clone()
+            .unwrap_or_default();
+        let message_id = connection
+            .delivery_cursor
+            .last_sent_message_id
+            .unwrap_or(0)
+            .saturating_add(1);
+        let frame = RadrootsSimplexAgentMessageFrame {
+            header: RadrootsSimplexAgentMessageHeader {
+                message_id,
+                previous_message_hash: previous_hash,
+            },
+            message: RadrootsSimplexAgentMessage::Hello,
+            padding: Vec::new(),
+        };
+        let ciphertext =
+            encode_decrypted_message(&RadrootsSimplexAgentDecryptedMessage::Message(frame))?;
+        let message_hash = Sha256::digest(&ciphertext).to_vec();
+        let prepared = self
+            .store
+            .prepare_outbound_message(connection_id, message_hash)?;
+        let encrypted = self.next_encrypted_payload(connection_id, ciphertext, None)?;
+        self.store.enqueue_command(
+            connection_id,
+            RadrootsSimplexAgentPendingCommandKind::SendEnvelope {
+                queue: send_queue.descriptor.queue_address(),
+                envelope: RadrootsSimplexAgentEnvelope::Message(encrypted),
+                delivery: Some(RadrootsSimplexAgentOutboundMessage {
+                    message_id: prepared.message_id,
+                    message_hash: prepared.message_hash,
+                }),
+            },
+            now,
+        )?;
+        self.store.connection_mut(connection_id)?.hello_sent = true;
         Ok(())
     }
 
@@ -1708,6 +1812,36 @@ mod tests {
         .unwrap()
     }
 
+    fn reply_descriptor() -> RadrootsSimplexAgentQueueDescriptor {
+        RadrootsSimplexAgentQueueDescriptor {
+            queue_uri: reply_queue(),
+            replaced_queue: None,
+            primary: true,
+            sender_key: None,
+        }
+    }
+
+    fn hello_message(message_id: u64) -> RadrootsSimplexAgentDecryptedMessage {
+        RadrootsSimplexAgentDecryptedMessage::Message(RadrootsSimplexAgentMessageFrame {
+            header: RadrootsSimplexAgentMessageHeader {
+                message_id,
+                previous_message_hash: Vec::new(),
+            },
+            message: RadrootsSimplexAgentMessage::Hello,
+            padding: Vec::new(),
+        })
+    }
+
+    fn mark_connected(runtime: &mut RadrootsSimplexAgentRuntime, connection_id: &str) {
+        runtime
+            .store
+            .set_status(
+                connection_id,
+                RadrootsSimplexAgentConnectionStatus::Connected,
+            )
+            .unwrap();
+    }
+
     fn ids_response(
         recipient_id: &[u8],
         sender_id: &[u8],
@@ -1986,6 +2120,111 @@ mod tests {
     }
 
     #[test]
+    fn send_message_requires_connected_state() {
+        let mut runtime = RadrootsSimplexAgentRuntimeBuilder::new().build().unwrap();
+        let created = runtime
+            .create_connection(invitation_queue(), b"e2e".to_vec(), false, 10)
+            .unwrap();
+        let invitation = runtime
+            .store
+            .connection(&created)
+            .unwrap()
+            .invitation
+            .clone()
+            .unwrap();
+        let joined = runtime
+            .join_connection(invitation, reply_queue(), 20)
+            .unwrap();
+
+        let error = runtime
+            .send_message(&joined, b"blocked before connected".to_vec(), 30)
+            .unwrap_err();
+        assert!(error.to_string().contains("is not connected"));
+    }
+
+    #[test]
+    fn allow_and_hello_lifecycle_reaches_connected() {
+        let mut runtime = RadrootsSimplexAgentRuntimeBuilder::new().build().unwrap();
+        let created = runtime
+            .create_connection(invitation_queue(), b"e2e".to_vec(), false, 10)
+            .unwrap();
+        let mut setup_transport = ScriptedTransport::with_responses(vec![
+            ids_response(b"recipient", b"sender", b"server-dh"),
+            RadrootsSimplexSmpBrokerMessage::Ok,
+        ]);
+        runtime
+            .execute_ready_commands(&mut setup_transport, 30, 16)
+            .unwrap();
+        runtime
+            .store
+            .connection_mut(&created)
+            .unwrap()
+            .shared_secret = Some(vec![3_u8; 32]);
+
+        runtime
+            .handle_inbound_decrypted_message(
+                &created,
+                RadrootsSimplexAgentDecryptedMessage::ConnectionInfoReply {
+                    reply_queues: vec![reply_descriptor()],
+                    info: b"peer-info".to_vec(),
+                },
+                b"reply-confirmation".to_vec(),
+            )
+            .unwrap();
+        assert_eq!(
+            runtime.store.connection(&created).unwrap().status,
+            RadrootsSimplexAgentConnectionStatus::AwaitingApproval
+        );
+
+        runtime
+            .allow_connection(&created, b"local-info".to_vec(), 40)
+            .unwrap();
+        let mut allow_transport = ScriptedTransport::with_responses(vec![
+            RadrootsSimplexSmpBrokerMessage::Ok,
+            RadrootsSimplexSmpBrokerMessage::Ok,
+        ]);
+        runtime
+            .execute_ready_commands(&mut allow_transport, 50, 16)
+            .unwrap();
+        assert!(matches!(
+            allow_transport.requests[0].command,
+            RadrootsSimplexSmpCommand::SKey(_)
+        ));
+        assert!(matches!(
+            allow_transport.requests[1].command,
+            RadrootsSimplexSmpCommand::Send(_)
+        ));
+        assert!(!runtime.store.connection(&created).unwrap().hello_sent);
+
+        runtime
+            .handle_inbound_decrypted_message(&created, hello_message(1), b"hello-in".to_vec())
+            .unwrap();
+        let connection = runtime.store.connection(&created).unwrap();
+        assert_eq!(
+            connection.status,
+            RadrootsSimplexAgentConnectionStatus::Connected
+        );
+        assert!(connection.hello_sent);
+        assert!(connection.hello_received);
+        assert!(runtime.drain_events(16).into_iter().any(|event| matches!(
+            event,
+            RadrootsSimplexAgentRuntimeEvent::ConnectionEstablished { connection_id }
+                if connection_id == created
+        )));
+
+        let mut hello_transport =
+            ScriptedTransport::with_responses(vec![RadrootsSimplexSmpBrokerMessage::Ok]);
+        runtime
+            .execute_ready_commands(&mut hello_transport, 60, 16)
+            .unwrap();
+        assert_eq!(hello_transport.requests.len(), 1);
+        assert!(matches!(
+            hello_transport.requests[0].command,
+            RadrootsSimplexSmpCommand::Send(_)
+        ));
+    }
+
+    #[test]
     fn delivered_send_confirms_cursor_only_after_transport_success() {
         let mut runtime = RadrootsSimplexAgentRuntimeBuilder::new().build().unwrap();
         let created = runtime
@@ -2013,6 +2252,7 @@ mod tests {
         runtime
             .execute_ready_commands(&mut setup_transport, 30, 16)
             .unwrap();
+        mark_connected(&mut runtime, &joined);
 
         let message_id = runtime
             .send_message(&joined, b"hello simplex".to_vec(), 40)
@@ -2075,6 +2315,7 @@ mod tests {
         runtime
             .execute_ready_commands(&mut setup_transport, 30, 16)
             .unwrap();
+        mark_connected(&mut runtime, &joined);
 
         runtime
             .send_message(&joined, b"hello simplex".to_vec(), 40)
@@ -2161,6 +2402,7 @@ mod tests {
         runtime
             .execute_ready_commands(&mut setup_transport, 30, 16)
             .unwrap();
+        mark_connected(&mut runtime, &joined);
 
         runtime
             .send_message(&joined, b"hello simplex".to_vec(), 40)
