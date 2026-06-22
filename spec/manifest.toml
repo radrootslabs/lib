@@ -49,8 +49,6 @@ deferred_publication = [
   "radroots_net",
   "radroots_nostr_runtime",
   "radroots_nostr_ndb",
-  "radroots_sql_wasm_bridge",
-  "radroots_sql_wasm_core",
   "radroots_simplex_chat_proto",
   "radroots_simplex_smp_proto",
   "radroots_sp1_guest_trade",

@@ -17,8 +17,3 @@ test_threads = 1
 no_default_features = true
 features = ["std"]
 test_threads = 1
-
-[profiles.crates."radroots_sql_wasm_core"]
-no_default_features = true
-features = ["bridge"]
-test_threads = 1

@@ -18,21 +18,11 @@ crate-type = ["rlib"]
 default = ["std"]
 std = ["dep:chrono", "dep:uuid", "serde/std", "serde_json/std"]
 web = ["std", "uuid/js"]
-bridge = [
-  "std",
-  "web",
-  "dep:radroots_sql_wasm_bridge",
-  "dep:serde-wasm-bindgen",
-  "dep:wasm-bindgen",
-]
 native = ["std", "dep:rusqlite"]
 embedded = []
 
 [dependencies]
 serde_json = { workspace = true }
-radroots_sql_wasm_bridge = { workspace = true, optional = true }
-wasm-bindgen = { workspace = true, optional = true }
-serde-wasm-bindgen = { workspace = true, optional = true }
 rusqlite = { workspace = true, features = ["bundled"], optional = true }
 chrono = { workspace = true, optional = true }
 serde = { workspace = true }

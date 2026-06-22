@@ -25,16 +25,6 @@ require_branches = false
 temporary = true
 reason = "branch coverage is not applicable while the crate has no measured branch records"
 
-[overrides.radroots_sql_wasm_bridge]
-require_branches = false
-temporary = true
-reason = "branch coverage is not applicable while the crate has no measured branch records"
-
-[overrides.radroots_sql_wasm_core]
-require_branches = false
-temporary = true
-reason = "branch coverage is not applicable while the crate has no measured branch records"
-
 [overrides.radroots_test_fixtures]
 require_branches = false
 temporary = true
@@ -73,8 +63,6 @@ crates = [
   "radroots_sp1_guest_trade",
   "radroots_sp1_host_trade",
   "radroots_sql_core",
-  "radroots_sql_wasm_bridge",
-  "radroots_sql_wasm_core",
   "radroots_test_fixtures",
   "radroots_trade",
   "radroots_types",
