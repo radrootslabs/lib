@@ -4610,7 +4610,10 @@ dependencies = [
 name = "radroots_simplex_agent_store"
 version = "0.1.0-alpha.2"
 dependencies = [
+ "chacha20poly1305",
+ "getrandom 0.2.17",
  "radroots_protected_store",
+ "radroots_secret_vault",
  "radroots_simplex_agent_proto",
  "radroots_simplex_smp_crypto",
  "radroots_simplex_smp_proto",
@@ -4618,6 +4621,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "tempfile",
+ "zeroize",
 ]
 
 [[package]]

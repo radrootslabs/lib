@@ -4,14 +4,29 @@ use alloc::format;
 use alloc::string::String;
 #[cfg(feature = "std")]
 use alloc::string::ToString;
+#[cfg(feature = "std")]
+use alloc::sync::Arc;
 use alloc::vec::Vec;
+#[cfg(feature = "std")]
+use chacha20poly1305::aead::{Aead, KeyInit, Payload};
+#[cfg(feature = "std")]
+use chacha20poly1305::{Key, XChaCha20Poly1305, XNonce};
+#[cfg(feature = "std")]
+use getrandom::getrandom;
 #[cfg(feature = "std")]
 use radroots_protected_store::file::{
     RADROOTS_PROTECTED_FILE_SECRET_SUFFIX, RADROOTS_PROTECTED_FILE_WRAPPING_KEY_FILE,
 };
 #[cfg(feature = "std")]
 use radroots_protected_store::{
+    RADROOTS_PROTECTED_STORE_KEY_LENGTH, RADROOTS_PROTECTED_STORE_NONCE_LENGTH,
     RadrootsProtectedFileKeySource, RadrootsProtectedStoreEnvelope, sidecar_path,
+};
+#[cfg(all(feature = "std", feature = "os-keyring"))]
+use radroots_secret_vault::RadrootsSecretVaultOsKeyring;
+#[cfg(feature = "std")]
+use radroots_secret_vault::{
+    RadrootsSecretKeyWrapping, RadrootsSecretVault, RadrootsSecretVaultAccessError,
 };
 use radroots_simplex_agent_proto::prelude::{
     RadrootsSimplexAgentConnectionLink, RadrootsSimplexAgentConnectionMode,
@@ -47,12 +62,24 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 #[cfg(feature = "std")]
 use std::time::{SystemTime, UNIX_EPOCH};
+#[cfg(feature = "std")]
+use zeroize::Zeroize;
 
 #[cfg(feature = "std")]
 const RADROOTS_SIMPLEX_AGENT_STORE_PROTECTED_SECRETS_VERSION: u8 = 1;
 #[cfg(feature = "std")]
 const RADROOTS_SIMPLEX_AGENT_STORE_PROTECTED_SECRETS_KEY_SLOT: &str =
     "radroots_simplex_agent_store_secrets";
+#[cfg(feature = "std")]
+const RADROOTS_SIMPLEX_AGENT_STORE_PROTECTED_SNAPSHOT_KEY_SLOT: &str =
+    "radroots_simplex_agent_store_snapshot";
+#[cfg(feature = "std")]
+const RADROOTS_SIMPLEX_AGENT_STORE_VAULT_MASTER_KEY_BYTES: usize =
+    RADROOTS_PROTECTED_STORE_KEY_LENGTH;
+#[cfg(feature = "std")]
+const RADROOTS_SIMPLEX_AGENT_STORE_WRAPPED_KEY_VERSION: u8 = 1;
+#[cfg(all(feature = "std", feature = "os-keyring"))]
+const RADROOTS_SIMPLEX_AGENT_STORE_KEYCHAIN_SERVICE: &str = "org.radroots.simplex.agent-store";
 
 #[cfg(feature = "std")]
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -526,6 +553,51 @@ struct RadrootsSimplexAgentPendingCommandSecretsSnapshot {
     short_invitation_link_key: Option<Vec<u8>>,
 }
 
+#[cfg(feature = "std")]
+#[derive(Clone)]
+enum RadrootsSimplexAgentStorePersistence {
+    PublicSnapshot {
+        path: PathBuf,
+    },
+    ProtectedSnapshot {
+        path: PathBuf,
+        key_source: RadrootsSimplexAgentStoreVaultKeySource,
+    },
+}
+
+#[cfg(feature = "std")]
+impl core::fmt::Debug for RadrootsSimplexAgentStorePersistence {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::PublicSnapshot { path } => f
+                .debug_struct("PublicSnapshot")
+                .field("path", path)
+                .finish(),
+            Self::ProtectedSnapshot { path, key_source } => f
+                .debug_struct("ProtectedSnapshot")
+                .field("path", path)
+                .field("key_source", key_source)
+                .finish(),
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+#[derive(Clone)]
+struct RadrootsSimplexAgentStoreVaultKeySource {
+    vault: Arc<dyn RadrootsSecretVault>,
+    master_key_slot: String,
+}
+
+#[cfg(feature = "std")]
+impl core::fmt::Debug for RadrootsSimplexAgentStoreVaultKeySource {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("RadrootsSimplexAgentStoreVaultKeySource")
+            .field("master_key_slot", &self.master_key_slot)
+            .finish_non_exhaustive()
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct RadrootsSimplexAgentStore {
     next_connection_sequence: u64,
@@ -533,7 +605,7 @@ pub struct RadrootsSimplexAgentStore {
     connections: BTreeMap<String, RadrootsSimplexAgentConnectionRecord>,
     pending_commands: BTreeMap<u64, RadrootsSimplexAgentPendingCommand>,
     #[cfg(feature = "std")]
-    persistence_path: Option<PathBuf>,
+    persistence: Option<RadrootsSimplexAgentStorePersistence>,
 }
 
 impl RadrootsSimplexAgentStore {
@@ -546,7 +618,7 @@ impl RadrootsSimplexAgentStore {
         let path = path.as_ref().to_path_buf();
         if !path.exists() {
             return Ok(Self {
-                persistence_path: Some(path),
+                persistence: Some(RadrootsSimplexAgentStorePersistence::PublicSnapshot { path }),
                 ..Default::default()
             });
         }
@@ -573,41 +645,103 @@ impl RadrootsSimplexAgentStore {
         }
 
         let mut store = Self::from_snapshot(snapshot)?;
-        store.persistence_path = Some(path);
+        store.persistence = Some(RadrootsSimplexAgentStorePersistence::PublicSnapshot { path });
+        Ok(store)
+    }
+
+    #[cfg(all(feature = "std", feature = "os-keyring"))]
+    pub fn open_keychain_protected(
+        path: impl AsRef<Path>,
+    ) -> Result<Self, RadrootsSimplexAgentStoreError> {
+        let path = path.as_ref();
+        Self::open_protected_with_vault(
+            path,
+            Arc::new(RadrootsSecretVaultOsKeyring::new(
+                RADROOTS_SIMPLEX_AGENT_STORE_KEYCHAIN_SERVICE,
+            )),
+            protected_snapshot_master_key_slot(path),
+        )
+    }
+
+    #[cfg(feature = "std")]
+    pub fn open_protected_with_vault(
+        path: impl AsRef<Path>,
+        vault: Arc<dyn RadrootsSecretVault>,
+        master_key_slot: impl Into<String>,
+    ) -> Result<Self, RadrootsSimplexAgentStoreError> {
+        let path = path.as_ref().to_path_buf();
+        let key_source = RadrootsSimplexAgentStoreVaultKeySource {
+            vault,
+            master_key_slot: master_key_slot.into(),
+        };
+        if !path.exists() {
+            return Ok(Self {
+                persistence: Some(RadrootsSimplexAgentStorePersistence::ProtectedSnapshot {
+                    path,
+                    key_source,
+                }),
+                ..Default::default()
+            });
+        }
+
+        let snapshot = read_protected_snapshot(&path, &key_source)?;
+        let mut store = Self::from_snapshot(snapshot)?;
+        store.persistence =
+            Some(RadrootsSimplexAgentStorePersistence::ProtectedSnapshot { path, key_source });
         Ok(store)
     }
 
     #[cfg(feature = "std")]
     pub fn set_persistence_path(&mut self, path: impl AsRef<Path>) {
-        self.persistence_path = Some(path.as_ref().to_path_buf());
+        self.persistence = Some(RadrootsSimplexAgentStorePersistence::PublicSnapshot {
+            path: path.as_ref().to_path_buf(),
+        });
+    }
+
+    #[cfg(feature = "std")]
+    pub fn set_protected_persistence(
+        &mut self,
+        path: impl AsRef<Path>,
+        vault: Arc<dyn RadrootsSecretVault>,
+        master_key_slot: impl Into<String>,
+    ) {
+        self.persistence = Some(RadrootsSimplexAgentStorePersistence::ProtectedSnapshot {
+            path: path.as_ref().to_path_buf(),
+            key_source: RadrootsSimplexAgentStoreVaultKeySource {
+                vault,
+                master_key_slot: master_key_slot.into(),
+            },
+        });
     }
 
     #[cfg(feature = "std")]
     pub fn flush(&self) -> Result<(), RadrootsSimplexAgentStoreError> {
-        let Some(path) = self.persistence_path.as_ref() else {
+        let Some(persistence) = self.persistence.as_ref() else {
             return Ok(());
         };
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).map_err(|error| {
-                RadrootsSimplexAgentStoreError::Persistence(format!(
-                    "failed to create SimpleX agent store directory `{}`: {error}",
-                    parent.display()
-                ))
-            })?;
-        }
-        let mut snapshot = self.snapshot()?;
-        let mut secrets = redact_snapshot_secrets(&mut snapshot)?;
-        if secrets.has_secret_material() {
-            let generation = compute_protected_generation(&snapshot, &secrets)?;
-            secrets.generation = generation.clone();
-            snapshot.protected_secrets = Some(write_protected_secrets_snapshot(
-                path, &secrets, generation,
-            )?);
-            atomic_write_public_snapshot(path, &snapshot)
-        } else {
-            snapshot.protected_secrets = None;
-            atomic_write_public_snapshot(path, &snapshot)?;
-            remove_protected_secrets_files(path)
+        match persistence {
+            RadrootsSimplexAgentStorePersistence::PublicSnapshot { path } => {
+                ensure_parent_dir(path)?;
+                let mut snapshot = self.snapshot()?;
+                let mut secrets = redact_snapshot_secrets(&mut snapshot)?;
+                if secrets.has_secret_material() {
+                    let generation = compute_protected_generation(&snapshot, &secrets)?;
+                    secrets.generation = generation.clone();
+                    snapshot.protected_secrets = Some(write_protected_secrets_snapshot(
+                        path, &secrets, generation,
+                    )?);
+                    atomic_write_public_snapshot(path, &snapshot)
+                } else {
+                    snapshot.protected_secrets = None;
+                    atomic_write_public_snapshot(path, &snapshot)?;
+                    remove_protected_secrets_files(path)
+                }
+            }
+            RadrootsSimplexAgentStorePersistence::ProtectedSnapshot { path, key_source } => {
+                ensure_parent_dir(path)?;
+                write_protected_snapshot(path, key_source, &self.snapshot()?)?;
+                remove_protected_secrets_files(path)
+            }
         }
     }
 
@@ -1096,7 +1230,7 @@ impl RadrootsSimplexAgentStore {
             next_command_sequence: snapshot.next_command_sequence,
             connections,
             pending_commands,
-            persistence_path: None,
+            persistence: None,
         })
     }
 }
@@ -1112,6 +1246,172 @@ impl RadrootsSimplexAgentStoreSecretsSnapshot {
                 .iter()
                 .any(RadrootsSimplexAgentPendingCommandSecretsSnapshot::has_secret_material)
     }
+}
+
+#[cfg(feature = "std")]
+impl RadrootsSecretKeyWrapping for RadrootsSimplexAgentStoreVaultKeySource {
+    type Error = RadrootsSimplexAgentStoreError;
+
+    fn wrap_data_key(&self, key_slot: &str, plaintext_key: &[u8]) -> Result<Vec<u8>, Self::Error> {
+        let mut master_key = load_or_create_vault_master_key(self)?;
+        let mut nonce = [0_u8; RADROOTS_PROTECTED_STORE_NONCE_LENGTH];
+        getrandom(&mut nonce).map_err(|_| {
+            RadrootsSimplexAgentStoreError::Persistence(
+                "entropy unavailable for SimpleX agent protected snapshot key wrapping".into(),
+            )
+        })?;
+        let cipher = XChaCha20Poly1305::new(Key::from_slice(&master_key));
+        let ciphertext = cipher
+            .encrypt(
+                XNonce::from_slice(&nonce),
+                Payload {
+                    msg: plaintext_key,
+                    aad: key_slot.as_bytes(),
+                },
+            )
+            .map_err(|_| {
+                RadrootsSimplexAgentStoreError::Persistence(
+                    "failed to wrap SimpleX agent protected snapshot data key".into(),
+                )
+            })?;
+        master_key.zeroize();
+        let mut encoded = Vec::with_capacity(1 + nonce.len() + ciphertext.len());
+        encoded.push(RADROOTS_SIMPLEX_AGENT_STORE_WRAPPED_KEY_VERSION);
+        encoded.extend_from_slice(&nonce);
+        encoded.extend_from_slice(ciphertext.as_slice());
+        Ok(encoded)
+    }
+
+    fn unwrap_data_key(&self, key_slot: &str, wrapped_key: &[u8]) -> Result<Vec<u8>, Self::Error> {
+        if wrapped_key.len() <= 1 + RADROOTS_PROTECTED_STORE_NONCE_LENGTH {
+            return Err(RadrootsSimplexAgentStoreError::Persistence(
+                "SimpleX agent protected snapshot wrapped key is truncated".into(),
+            ));
+        }
+        if wrapped_key[0] != RADROOTS_SIMPLEX_AGENT_STORE_WRAPPED_KEY_VERSION {
+            return Err(RadrootsSimplexAgentStoreError::Persistence(format!(
+                "unsupported SimpleX agent protected snapshot wrapped key version `{}`",
+                wrapped_key[0]
+            )));
+        }
+
+        let mut master_key = load_vault_master_key(self)?;
+        let nonce_offset = 1;
+        let ciphertext_offset = nonce_offset + RADROOTS_PROTECTED_STORE_NONCE_LENGTH;
+        let cipher = XChaCha20Poly1305::new(Key::from_slice(&master_key));
+        let plaintext = cipher
+            .decrypt(
+                XNonce::from_slice(&wrapped_key[nonce_offset..ciphertext_offset]),
+                Payload {
+                    msg: &wrapped_key[ciphertext_offset..],
+                    aad: key_slot.as_bytes(),
+                },
+            )
+            .map_err(|_| {
+                RadrootsSimplexAgentStoreError::Persistence(
+                    "failed to unwrap SimpleX agent protected snapshot data key".into(),
+                )
+            })?;
+        master_key.zeroize();
+        Ok(plaintext)
+    }
+}
+
+#[cfg(all(feature = "std", feature = "os-keyring"))]
+fn protected_snapshot_master_key_slot(path: &Path) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(path.as_os_str().as_encoded_bytes());
+    format!(
+        "radroots_simplex_agent_store_snapshot_{}",
+        encode_digest_hex(hasher.finalize().as_slice())
+    )
+}
+
+#[cfg(feature = "std")]
+fn load_or_create_vault_master_key(
+    source: &RadrootsSimplexAgentStoreVaultKeySource,
+) -> Result<[u8; RADROOTS_SIMPLEX_AGENT_STORE_VAULT_MASTER_KEY_BYTES], RadrootsSimplexAgentStoreError>
+{
+    if let Some(encoded) = source
+        .vault
+        .load_secret(&source.master_key_slot)
+        .map_err(|error| vault_access_error("load", error))?
+    {
+        return decode_vault_master_key(&encoded);
+    }
+
+    let mut key = [0_u8; RADROOTS_SIMPLEX_AGENT_STORE_VAULT_MASTER_KEY_BYTES];
+    getrandom(&mut key).map_err(|_| {
+        RadrootsSimplexAgentStoreError::Persistence(
+            "entropy unavailable for SimpleX agent protected snapshot master key".into(),
+        )
+    })?;
+    let encoded = encode_digest_hex(key.as_slice());
+    let store_result = source
+        .vault
+        .store_secret(&source.master_key_slot, &encoded)
+        .map_err(|error| vault_access_error("store", error));
+    if let Err(error) = store_result {
+        key.zeroize();
+        return Err(error);
+    }
+    Ok(key)
+}
+
+#[cfg(feature = "std")]
+fn load_vault_master_key(
+    source: &RadrootsSimplexAgentStoreVaultKeySource,
+) -> Result<[u8; RADROOTS_SIMPLEX_AGENT_STORE_VAULT_MASTER_KEY_BYTES], RadrootsSimplexAgentStoreError>
+{
+    let encoded = source
+        .vault
+        .load_secret(&source.master_key_slot)
+        .map_err(|error| vault_access_error("load", error))?
+        .ok_or_else(|| {
+            RadrootsSimplexAgentStoreError::Persistence(
+                "SimpleX agent protected snapshot master key is missing".into(),
+            )
+        })?;
+    decode_vault_master_key(&encoded)
+}
+
+#[cfg(feature = "std")]
+fn decode_vault_master_key(
+    encoded: &str,
+) -> Result<[u8; RADROOTS_SIMPLEX_AGENT_STORE_VAULT_MASTER_KEY_BYTES], RadrootsSimplexAgentStoreError>
+{
+    if encoded.len() != RADROOTS_SIMPLEX_AGENT_STORE_VAULT_MASTER_KEY_BYTES * 2 {
+        return Err(RadrootsSimplexAgentStoreError::Persistence(
+            "SimpleX agent protected snapshot master key has invalid length".into(),
+        ));
+    }
+    let mut key = [0_u8; RADROOTS_SIMPLEX_AGENT_STORE_VAULT_MASTER_KEY_BYTES];
+    for (index, chunk) in encoded.as_bytes().chunks_exact(2).enumerate() {
+        key[index] = (decode_ascii_hex_nibble(chunk[0])? << 4) | decode_ascii_hex_nibble(chunk[1])?;
+    }
+    Ok(key)
+}
+
+#[cfg(feature = "std")]
+fn decode_ascii_hex_nibble(value: u8) -> Result<u8, RadrootsSimplexAgentStoreError> {
+    match value {
+        b'0'..=b'9' => Ok(value - b'0'),
+        b'a'..=b'f' => Ok(value - b'a' + 10),
+        b'A'..=b'F' => Ok(value - b'A' + 10),
+        _ => Err(RadrootsSimplexAgentStoreError::Persistence(
+            "SimpleX agent protected snapshot master key is not hex encoded".into(),
+        )),
+    }
+}
+
+#[cfg(feature = "std")]
+fn vault_access_error(
+    action: &str,
+    source: RadrootsSecretVaultAccessError,
+) -> RadrootsSimplexAgentStoreError {
+    RadrootsSimplexAgentStoreError::Persistence(format!(
+        "failed to {action} SimpleX agent protected snapshot key: {source}"
+    ))
 }
 
 #[cfg(feature = "std")]
@@ -1434,6 +1734,102 @@ fn atomic_write_public_snapshot(
     })?;
     encoded.push(b'\n');
     atomic_write_bytes(path, encoded.as_slice(), false)
+}
+
+#[cfg(feature = "std")]
+fn write_protected_snapshot(
+    path: &Path,
+    key_source: &RadrootsSimplexAgentStoreVaultKeySource,
+    snapshot: &RadrootsSimplexAgentStoreSnapshot,
+) -> Result<(), RadrootsSimplexAgentStoreError> {
+    let mut protected_snapshot = snapshot.clone();
+    protected_snapshot.protected_secrets = None;
+    let plaintext = serde_json::to_vec(&protected_snapshot).map_err(|error| {
+        RadrootsSimplexAgentStoreError::Persistence(format!(
+            "failed to serialize SimpleX agent protected snapshot `{}`: {error}",
+            path.display()
+        ))
+    })?;
+    let envelope = RadrootsProtectedStoreEnvelope::seal_with_wrapped_key(
+        key_source,
+        RADROOTS_SIMPLEX_AGENT_STORE_PROTECTED_SNAPSHOT_KEY_SLOT,
+        &plaintext,
+    )
+    .map_err(|error| {
+        RadrootsSimplexAgentStoreError::Persistence(format!(
+            "failed to seal SimpleX agent protected snapshot `{}`: {error}",
+            path.display()
+        ))
+    })?;
+    let encoded = envelope.encode_json().map_err(|error| {
+        RadrootsSimplexAgentStoreError::Persistence(format!(
+            "failed to encode SimpleX agent protected snapshot `{}`: {error}",
+            path.display()
+        ))
+    })?;
+    atomic_write_bytes(path, encoded.as_slice(), true)
+}
+
+#[cfg(feature = "std")]
+fn read_protected_snapshot(
+    path: &Path,
+    key_source: &RadrootsSimplexAgentStoreVaultKeySource,
+) -> Result<RadrootsSimplexAgentStoreSnapshot, RadrootsSimplexAgentStoreError> {
+    let encoded = fs::read(path).map_err(|error| {
+        RadrootsSimplexAgentStoreError::Persistence(format!(
+            "failed to read SimpleX agent protected snapshot `{}`: {error}",
+            path.display()
+        ))
+    })?;
+    let envelope = RadrootsProtectedStoreEnvelope::decode_json(&encoded).map_err(|error| {
+        RadrootsSimplexAgentStoreError::Persistence(format!(
+            "failed to decode SimpleX agent protected snapshot `{}`: {error}",
+            path.display()
+        ))
+    })?;
+    if envelope.header.key_slot != RADROOTS_SIMPLEX_AGENT_STORE_PROTECTED_SNAPSHOT_KEY_SLOT {
+        return Err(RadrootsSimplexAgentStoreError::Persistence(format!(
+            "SimpleX agent protected snapshot `{}` uses key slot `{}`",
+            path.display(),
+            envelope.header.key_slot
+        )));
+    }
+    let plaintext = envelope
+        .open_with_wrapped_key(key_source)
+        .map_err(|error| {
+            RadrootsSimplexAgentStoreError::Persistence(format!(
+                "failed to open SimpleX agent protected snapshot `{}`: {error}",
+                path.display()
+            ))
+        })?;
+    let snapshot: RadrootsSimplexAgentStoreSnapshot =
+        serde_json::from_slice(&plaintext).map_err(|error| {
+            RadrootsSimplexAgentStoreError::Persistence(format!(
+                "failed to parse SimpleX agent protected snapshot `{}`: {error}",
+                path.display()
+            ))
+        })?;
+    if snapshot.protected_secrets.is_some() {
+        return Err(RadrootsSimplexAgentStoreError::Persistence(
+            "SimpleX agent protected snapshot must not reference protected sidecar secrets".into(),
+        ));
+    }
+    Ok(snapshot)
+}
+
+#[cfg(feature = "std")]
+fn ensure_parent_dir(path: &Path) -> Result<(), RadrootsSimplexAgentStoreError> {
+    if let Some(parent) = path.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        fs::create_dir_all(parent).map_err(|error| {
+            RadrootsSimplexAgentStoreError::Persistence(format!(
+                "failed to create SimpleX agent store directory `{}`: {error}",
+                parent.display()
+            ))
+        })?;
+    }
+    Ok(())
 }
 
 #[cfg(feature = "std")]
@@ -2919,9 +3315,61 @@ fn decode_short_link_scheme(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "std")]
+    use radroots_secret_vault::{RadrootsSecretVault, RadrootsSecretVaultAccessError};
     use radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpQueueUri;
     #[cfg(feature = "std")]
+    use std::collections::HashMap;
+    #[cfg(feature = "std")]
     use std::path::Path;
+    #[cfg(feature = "std")]
+    use std::sync::{Arc, RwLock};
+
+    #[cfg(feature = "std")]
+    #[derive(Clone, Default)]
+    struct TestSecretVault {
+        entries: Arc<RwLock<HashMap<String, String>>>,
+    }
+
+    #[cfg(feature = "std")]
+    impl TestSecretVault {
+        fn new() -> Self {
+            Self::default()
+        }
+    }
+
+    #[cfg(feature = "std")]
+    impl RadrootsSecretVault for TestSecretVault {
+        fn store_secret(
+            &self,
+            slot: &str,
+            secret: &str,
+        ) -> Result<(), RadrootsSecretVaultAccessError> {
+            let mut entries = self.entries.write().map_err(|_| {
+                RadrootsSecretVaultAccessError::Backend("test vault poisoned".into())
+            })?;
+            entries.insert(slot.to_owned(), secret.to_owned());
+            Ok(())
+        }
+
+        fn load_secret(
+            &self,
+            slot: &str,
+        ) -> Result<Option<String>, RadrootsSecretVaultAccessError> {
+            let entries = self.entries.read().map_err(|_| {
+                RadrootsSecretVaultAccessError::Backend("test vault poisoned".into())
+            })?;
+            Ok(entries.get(slot).cloned())
+        }
+
+        fn remove_secret(&self, slot: &str) -> Result<(), RadrootsSecretVaultAccessError> {
+            let mut entries = self.entries.write().map_err(|_| {
+                RadrootsSecretVaultAccessError::Backend("test vault poisoned".into())
+            })?;
+            entries.remove(slot);
+            Ok(())
+        }
+    }
 
     fn sample_descriptor(primary: bool) -> RadrootsSimplexAgentQueueDescriptor {
         sample_descriptor_with_uri(
@@ -3493,6 +3941,113 @@ mod tests {
                 .auth_state
                 .is_some()
         );
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn protected_snapshot_persists_full_agent_state_without_plaintext_json() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path().join("agent-store.protected.json");
+        let vault = Arc::new(TestSecretVault::new());
+        let mut store = RadrootsSimplexAgentStore::open_protected_with_vault(
+            &path,
+            vault.clone(),
+            "test-agent-master",
+        )
+        .unwrap();
+        let connection = store.create_connection(
+            RadrootsSimplexAgentConnectionMode::Direct,
+            RadrootsSimplexAgentConnectionStatus::Connected,
+            None,
+            None,
+        );
+        store
+            .add_queue(
+                &connection.id,
+                sample_descriptor(true),
+                RadrootsSimplexAgentQueueRole::Send,
+                true,
+                sample_auth_state(),
+            )
+            .unwrap();
+        store.connection_mut(&connection.id).unwrap().shared_secret =
+            Some(b"connection-shared-secret".to_vec());
+        store.flush().unwrap();
+
+        let raw = fs::read_to_string(&path).unwrap();
+        assert!(!raw.contains("connections"));
+        assert!(!raw.contains("relay.example"));
+        assert!(!raw.contains("connection-shared-secret"));
+        assert!(serde_json::from_str::<RadrootsSimplexAgentStoreSnapshot>(&raw).is_err());
+        assert!(!RadrootsSimplexAgentStore::protected_secrets_path(&path).exists());
+        assert!(!RadrootsSimplexAgentStore::protected_secrets_wrapping_key_path(&path).exists());
+
+        let loaded = RadrootsSimplexAgentStore::open_protected_with_vault(
+            &path,
+            vault.clone(),
+            "test-agent-master",
+        )
+        .unwrap();
+        let loaded_connection = loaded.connection(&connection.id).unwrap();
+        assert_eq!(
+            loaded_connection.shared_secret.as_deref(),
+            Some(&b"connection-shared-secret"[..])
+        );
+        assert!(
+            loaded
+                .primary_send_queue(&connection.id)
+                .unwrap()
+                .auth_state
+                .is_some()
+        );
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn protected_snapshot_wrong_vault_fails_open() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path().join("agent-store.protected.json");
+        let vault = Arc::new(TestSecretVault::new());
+        let mut store = RadrootsSimplexAgentStore::open_protected_with_vault(
+            &path,
+            vault.clone(),
+            "test-agent-master",
+        )
+        .unwrap();
+        store.create_connection(
+            RadrootsSimplexAgentConnectionMode::Direct,
+            RadrootsSimplexAgentConnectionStatus::Connected,
+            None,
+            None,
+        );
+        store.flush().unwrap();
+
+        let error = RadrootsSimplexAgentStore::open_protected_with_vault(
+            &path,
+            Arc::new(TestSecretVault::new()),
+            "test-agent-master",
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("failed to open"));
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn corrupt_protected_snapshot_fails_open() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path().join("agent-store.protected.json");
+        let vault = Arc::new(TestSecretVault::new());
+        fs::write(&path, b"not-json").unwrap();
+
+        let error = RadrootsSimplexAgentStore::open_protected_with_vault(
+            &path,
+            vault.clone(),
+            "test-agent-master",
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("failed to decode"));
     }
 
     #[cfg(feature = "std")]

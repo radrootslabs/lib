@@ -13,9 +13,16 @@ readme = "README"
 
 [features]
 default = ["std"]
+memory-vault = ["std", "radroots_secret_vault/memory-vault"]
+os-keyring = ["std", "radroots_secret_vault/os-keyring"]
 std = [
+  "dep:chacha20poly1305",
+  "dep:getrandom",
   "dep:radroots_protected_store",
+  "dep:radroots_secret_vault",
+  "dep:zeroize",
   "radroots_protected_store/std",
+  "radroots_secret_vault/std",
   "radroots_simplex_agent_proto/std",
   "radroots_simplex_smp_crypto/std",
   "radroots_simplex_smp_proto/std",
@@ -25,13 +32,17 @@ std = [
 ]
 
 [dependencies]
+chacha20poly1305 = { workspace = true, optional = true }
+getrandom = { workspace = true, optional = true }
 radroots_protected_store = { workspace = true, optional = true, default-features = false }
+radroots_secret_vault = { workspace = true, optional = true, default-features = false }
 radroots_simplex_agent_proto = { workspace = true, default-features = false }
 radroots_simplex_smp_crypto = { workspace = true, default-features = false }
 radroots_simplex_smp_proto = { workspace = true, default-features = false }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true, default-features = false }
+zeroize = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
