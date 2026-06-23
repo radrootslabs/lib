@@ -87,6 +87,7 @@ pub struct RadrootsSimplexOfficialX3dhInit {
     pub ratchet_key: Vec<u8>,
     pub sending_header_key: Vec<u8>,
     pub receiving_next_header_key: Vec<u8>,
+    pub accepted_pq_shared_secret: Option<Vec<u8>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -112,6 +113,20 @@ pub struct RadrootsSimplexOfficialChainKdfOutput {
     pub message_key: Vec<u8>,
     pub message_iv: [u8; RADROOTS_SIMPLEX_OFFICIAL_AES_IV_LENGTH],
     pub header_iv: [u8; RADROOTS_SIMPLEX_OFFICIAL_AES_IV_LENGTH],
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RadrootsSimplexOfficialX3dhSenderPqInit {
+    pub init: RadrootsSimplexOfficialX3dhInit,
+    pub sender_params: RadrootsSimplexOfficialX3dhParams,
+    pub local_pq_keypair: RadrootsSimplexOfficialSntrup761Keypair,
+    pub pq_shared_secret: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RadrootsSimplexOfficialX3dhReceiverPqInit {
+    pub init: RadrootsSimplexOfficialX3dhInit,
+    pub pq_shared_secret: Vec<u8>,
 }
 
 pub fn official_ratchet_header_len(
@@ -349,6 +364,7 @@ pub fn official_x3dh_sender_init(
             derive_official_x448_shared_secret(&local_key_1.private_key, &remote_params.key_2)?,
             derive_official_x448_shared_secret(&local_key_2.private_key, &remote_params.key_2)?,
         ],
+        None,
     )
 }
 
@@ -371,7 +387,95 @@ pub fn official_x3dh_receiver_init(
             derive_official_x448_shared_secret(&local_key_2.private_key, &remote_params.key_1)?,
             derive_official_x448_shared_secret(&local_key_2.private_key, &remote_params.key_2)?,
         ],
+        None,
     )
+}
+
+pub fn official_x3dh_sender_init_accepting_pq(
+    local_key_1: &RadrootsSimplexOfficialX448Keypair,
+    local_key_2: &RadrootsSimplexOfficialX448Keypair,
+    local_pq_keypair: RadrootsSimplexOfficialSntrup761Keypair,
+    remote_params: &RadrootsSimplexOfficialX3dhParams,
+    encapsulation_seed: &[u8],
+) -> Result<RadrootsSimplexOfficialX3dhSenderPqInit, RadrootsSimplexSmpCryptoError> {
+    validate_official_x3dh_keypair(local_key_1)?;
+    validate_official_x3dh_keypair(local_key_2)?;
+    validate_official_sntrup761_keypair(&local_pq_keypair)?;
+    validate_official_x3dh_params(remote_params)?;
+    let remote_pq_public_key = remote_params.pq_public_key.as_deref().ok_or(
+        RadrootsSimplexSmpCryptoError::InvalidOfficialX3dhParameters(
+            "PQ sender init requires remote proposed KEM key".to_owned(),
+        ),
+    )?;
+    if remote_params.pq_ciphertext.is_some() {
+        return Err(
+            RadrootsSimplexSmpCryptoError::InvalidOfficialX3dhParameters(
+                "PQ sender init requires proposed KEM key without ciphertext".to_owned(),
+            ),
+        );
+    }
+    let (pq_ciphertext, pq_shared_secret) =
+        encapsulate_official_sntrup761(remote_pq_public_key, encapsulation_seed)?;
+    let init = official_x3dh_init(
+        &local_key_1.public_key,
+        &remote_params.key_1,
+        &[
+            derive_official_x448_shared_secret(&local_key_2.private_key, &remote_params.key_1)?,
+            derive_official_x448_shared_secret(&local_key_1.private_key, &remote_params.key_2)?,
+            derive_official_x448_shared_secret(&local_key_2.private_key, &remote_params.key_2)?,
+        ],
+        Some(&pq_shared_secret),
+    )?;
+    let sender_params = RadrootsSimplexOfficialX3dhParams {
+        version_range: remote_params.version_range,
+        key_1: local_key_1.public_key.clone(),
+        key_2: local_key_2.public_key.clone(),
+        pq_public_key: Some(local_pq_keypair.public_key.clone()),
+        pq_ciphertext: Some(pq_ciphertext),
+    };
+    validate_official_x3dh_params(&sender_params)?;
+    Ok(RadrootsSimplexOfficialX3dhSenderPqInit {
+        init,
+        sender_params,
+        local_pq_keypair,
+        pq_shared_secret,
+    })
+}
+
+pub fn official_x3dh_receiver_init_accepting_pq(
+    local_key_1: &RadrootsSimplexOfficialX448Keypair,
+    local_key_2: &RadrootsSimplexOfficialX448Keypair,
+    local_pq_keypair: &RadrootsSimplexOfficialSntrup761Keypair,
+    remote_params: &RadrootsSimplexOfficialX3dhParams,
+) -> Result<RadrootsSimplexOfficialX3dhReceiverPqInit, RadrootsSimplexSmpCryptoError> {
+    validate_official_x3dh_keypair(local_key_1)?;
+    validate_official_x3dh_keypair(local_key_2)?;
+    validate_official_sntrup761_keypair(local_pq_keypair)?;
+    validate_official_x3dh_params(remote_params)?;
+    let pq_ciphertext = remote_params.pq_ciphertext.as_deref().ok_or(
+        RadrootsSimplexSmpCryptoError::InvalidOfficialX3dhParameters(
+            "PQ receiver init requires accepted KEM ciphertext".to_owned(),
+        ),
+    )?;
+    if remote_params.pq_public_key.is_none() {
+        return Err(RadrootsSimplexSmpCryptoError::IncompletePqHeader);
+    }
+    let pq_shared_secret =
+        decapsulate_official_sntrup761(&local_pq_keypair.private_key, pq_ciphertext)?;
+    let init = official_x3dh_init(
+        &remote_params.key_1,
+        &local_key_1.public_key,
+        &[
+            derive_official_x448_shared_secret(&local_key_1.private_key, &remote_params.key_2)?,
+            derive_official_x448_shared_secret(&local_key_2.private_key, &remote_params.key_1)?,
+            derive_official_x448_shared_secret(&local_key_2.private_key, &remote_params.key_2)?,
+        ],
+        Some(&pq_shared_secret),
+    )?;
+    Ok(RadrootsSimplexOfficialX3dhReceiverPqInit {
+        init,
+        pq_shared_secret,
+    })
 }
 
 pub fn official_sntrup761_keypair_from_seed(
@@ -496,15 +600,18 @@ pub fn encode_official_msg_header(
 ) -> Result<Vec<u8>, RadrootsSimplexSmpCryptoError> {
     validate_official_version(version)?;
     validate_official_version(header.max_version)?;
-    if header.pq_public_key.is_some() || header.pq_ciphertext.is_some() {
-        return Err(RadrootsSimplexSmpCryptoError::IncompletePqHeader);
-    }
     let public_key = encode_official_x448_public_key_der(&header.dh_public_key)?;
     let mut buffer = Vec::with_capacity(2 + 1 + public_key.len() + 1 + 4 + 4);
     buffer.extend_from_slice(&header.max_version.to_be_bytes());
     push_official_short_bytes(&mut buffer, &public_key)?;
     if version >= RADROOTS_SIMPLEX_OFFICIAL_E2E_PQ_VERSION {
-        buffer.push(b'0');
+        push_official_msg_header_pq(&mut buffer, header)?;
+    } else if header.pq_public_key.is_some() || header.pq_ciphertext.is_some() {
+        return Err(
+            RadrootsSimplexSmpCryptoError::InvalidOfficialX3dhParameters(
+                "PQ header params require E2E version 3".to_owned(),
+            ),
+        );
     }
     buffer.extend_from_slice(&header.previous_sending_chain_length.to_be_bytes());
     buffer.extend_from_slice(&header.message_number.to_be_bytes());
@@ -520,25 +627,19 @@ pub fn decode_official_msg_header(
     let max_version = cursor.read_u16()?;
     validate_official_version(max_version)?;
     let dh_public_key = decode_official_x448_public_key_der(cursor.read_short_bytes()?)?;
-    if version >= RADROOTS_SIMPLEX_OFFICIAL_E2E_PQ_VERSION {
-        match cursor.read_byte()? {
-            b'0' => {}
-            b'1' => return Err(RadrootsSimplexSmpCryptoError::IncompletePqHeader),
-            value => {
-                return Err(RadrootsSimplexSmpCryptoError::InvalidCiphertextLength(
-                    value as usize,
-                ));
-            }
-        }
-    }
+    let (pq_public_key, pq_ciphertext) = if version >= RADROOTS_SIMPLEX_OFFICIAL_E2E_PQ_VERSION {
+        read_official_msg_header_pq(&mut cursor)?
+    } else {
+        (None, None)
+    };
     let previous_sending_chain_length = cursor.read_u32()?;
     let message_number = cursor.read_u32()?;
     cursor.finish()?;
     Ok(RadrootsSimplexOfficialMsgHeader {
         max_version,
         dh_public_key,
-        pq_public_key: None,
-        pq_ciphertext: None,
+        pq_public_key,
+        pq_ciphertext,
         previous_sending_chain_length,
         message_number,
     })
@@ -829,10 +930,27 @@ fn validate_official_x3dh_keypair(
     Ok(())
 }
 
+fn validate_official_sntrup761_keypair(
+    keypair: &RadrootsSimplexOfficialSntrup761Keypair,
+) -> Result<(), RadrootsSimplexSmpCryptoError> {
+    if keypair.public_key.len() != RADROOTS_SIMPLEX_OFFICIAL_SNTRUP761_PUBLIC_KEY_LENGTH {
+        return Err(RadrootsSimplexSmpCryptoError::InvalidPqKeyLength(
+            keypair.public_key.len(),
+        ));
+    }
+    if keypair.private_key.len() != RADROOTS_SIMPLEX_OFFICIAL_SNTRUP761_PRIVATE_KEY_LENGTH {
+        return Err(RadrootsSimplexSmpCryptoError::InvalidPrivateKeyLength(
+            keypair.private_key.len(),
+        ));
+    }
+    Ok(())
+}
+
 fn official_x3dh_init(
     sender_key_1: &[u8],
     receiver_key_1: &[u8],
     shared_secrets: &[Vec<u8>; 3],
+    pq_shared_secret: Option<&[u8]>,
 ) -> Result<RadrootsSimplexOfficialX3dhInit, RadrootsSimplexSmpCryptoError> {
     let mut associated_data = Vec::with_capacity(sender_key_1.len() + receiver_key_1.len());
     associated_data.extend_from_slice(sender_key_1);
@@ -848,6 +966,14 @@ fn official_x3dh_init(
         }
         input.extend_from_slice(shared_secret);
     }
+    if let Some(pq_shared_secret) = pq_shared_secret {
+        if pq_shared_secret.len() != RADROOTS_SIMPLEX_OFFICIAL_SNTRUP761_SHARED_SECRET_LENGTH {
+            return Err(RadrootsSimplexSmpCryptoError::InvalidSharedSecretLength(
+                pq_shared_secret.len(),
+            ));
+        }
+        input.extend_from_slice(pq_shared_secret);
+    }
     let zero_salt = [0_u8; 64];
     let (sending_header_key, receiving_next_header_key, ratchet_key) =
         official_hkdf3(&zero_salt, &input, RADROOTS_SIMPLEX_OFFICIAL_X3DH_INFO)?;
@@ -856,7 +982,94 @@ fn official_x3dh_init(
         ratchet_key,
         sending_header_key,
         receiving_next_header_key,
+        accepted_pq_shared_secret: pq_shared_secret.map(<[u8]>::to_vec),
     })
+}
+
+fn push_official_msg_header_pq(
+    buffer: &mut Vec<u8>,
+    header: &RadrootsSimplexOfficialMsgHeader,
+) -> Result<(), RadrootsSimplexSmpCryptoError> {
+    match (
+        header.pq_public_key.as_deref(),
+        header.pq_ciphertext.as_deref(),
+    ) {
+        (None, None) => buffer.push(b'0'),
+        (Some(pq_public_key), None) => {
+            validate_official_pq_public_key(pq_public_key)?;
+            buffer.push(b'1');
+            buffer.push(b'P');
+            push_official_large_by_version(
+                buffer,
+                RADROOTS_SIMPLEX_OFFICIAL_E2E_PQ_VERSION,
+                pq_public_key,
+            )?;
+        }
+        (Some(pq_public_key), Some(pq_ciphertext)) => {
+            validate_official_pq_public_key(pq_public_key)?;
+            validate_official_pq_ciphertext(pq_ciphertext)?;
+            buffer.push(b'1');
+            buffer.push(b'A');
+            push_official_large_by_version(
+                buffer,
+                RADROOTS_SIMPLEX_OFFICIAL_E2E_PQ_VERSION,
+                pq_ciphertext,
+            )?;
+            push_official_large_by_version(
+                buffer,
+                RADROOTS_SIMPLEX_OFFICIAL_E2E_PQ_VERSION,
+                pq_public_key,
+            )?;
+        }
+        (None, Some(_)) => return Err(RadrootsSimplexSmpCryptoError::IncompletePqHeader),
+    }
+    Ok(())
+}
+
+fn read_official_msg_header_pq(
+    cursor: &mut OfficialCursor<'_>,
+) -> Result<(Option<Vec<u8>>, Option<Vec<u8>>), RadrootsSimplexSmpCryptoError> {
+    match cursor.read_byte()? {
+        b'0' => Ok((None, None)),
+        b'1' => match cursor.read_byte()? {
+            b'P' => {
+                let pq_public_key = cursor.read_official_large()?.to_vec();
+                validate_official_pq_public_key(&pq_public_key)?;
+                Ok((Some(pq_public_key), None))
+            }
+            b'A' => {
+                let pq_ciphertext = cursor.read_official_large()?.to_vec();
+                let pq_public_key = cursor.read_official_large()?.to_vec();
+                validate_official_pq_ciphertext(&pq_ciphertext)?;
+                validate_official_pq_public_key(&pq_public_key)?;
+                Ok((Some(pq_public_key), Some(pq_ciphertext)))
+            }
+            value => Err(RadrootsSimplexSmpCryptoError::InvalidCiphertextLength(
+                value as usize,
+            )),
+        },
+        value => Err(RadrootsSimplexSmpCryptoError::InvalidCiphertextLength(
+            value as usize,
+        )),
+    }
+}
+
+fn validate_official_pq_public_key(value: &[u8]) -> Result<(), RadrootsSimplexSmpCryptoError> {
+    if value.len() != RADROOTS_SIMPLEX_OFFICIAL_SNTRUP761_PUBLIC_KEY_LENGTH {
+        return Err(RadrootsSimplexSmpCryptoError::InvalidPqKeyLength(
+            value.len(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_official_pq_ciphertext(value: &[u8]) -> Result<(), RadrootsSimplexSmpCryptoError> {
+    if value.len() != RADROOTS_SIMPLEX_OFFICIAL_SNTRUP761_CIPHERTEXT_LENGTH {
+        return Err(RadrootsSimplexSmpCryptoError::InvalidPqCiphertextLength(
+            value.len(),
+        ));
+    }
+    Ok(())
 }
 
 fn encode_official_urlsafe_bytes(bytes: &[u8]) -> String {
@@ -1115,6 +1328,56 @@ mod tests {
     }
 
     #[test]
+    fn official_pq_msg_headers_roundtrip_proposed_and_accepted_kem() {
+        let keypair = official_x448_keypair_from_seed(b"rr-synth-official-header-pq-x448");
+        let pq_keypair = official_sntrup761_keypair_from_seed(b"rr-synth-official-header-pq-kem");
+        let (pq_ciphertext, _) =
+            encapsulate_official_sntrup761(&pq_keypair.public_key, b"rr-synth-header-pq-ct")
+                .unwrap();
+        let proposed = RadrootsSimplexOfficialMsgHeader {
+            max_version: RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION,
+            dh_public_key: keypair.public_key.clone(),
+            pq_public_key: Some(pq_keypair.public_key.clone()),
+            pq_ciphertext: None,
+            previous_sending_chain_length: 5,
+            message_number: 8,
+        };
+        let encoded_proposed =
+            encode_official_msg_header(RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION, &proposed)
+                .unwrap();
+        assert_eq!(encoded_proposed.len(), 1_241);
+        assert_eq!(
+            decode_official_msg_header(
+                RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION,
+                &encoded_proposed
+            )
+            .unwrap(),
+            proposed
+        );
+
+        let accepted = RadrootsSimplexOfficialMsgHeader {
+            max_version: RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION,
+            dh_public_key: keypair.public_key,
+            pq_public_key: Some(pq_keypair.public_key),
+            pq_ciphertext: Some(pq_ciphertext),
+            previous_sending_chain_length: 9,
+            message_number: 10,
+        };
+        let encoded_accepted =
+            encode_official_msg_header(RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION, &accepted)
+                .unwrap();
+        assert_eq!(encoded_accepted.len(), 2_282);
+        assert_eq!(
+            decode_official_msg_header(
+                RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION,
+                &encoded_accepted
+            )
+            .unwrap(),
+            accepted
+        );
+    }
+
+    #[test]
     fn official_x3dh_params_uri_roundtrips() {
         let keypair_1 = official_x448_keypair_from_seed(b"rr-synth-official-x3dh-1");
         let keypair_2 = official_x448_keypair_from_seed(b"rr-synth-official-x3dh-2");
@@ -1204,6 +1467,56 @@ mod tests {
             sender_init.receiving_next_header_key.len(),
             RADROOTS_SIMPLEX_OFFICIAL_AES_KEY_LENGTH
         );
+        assert!(sender_init.accepted_pq_shared_secret.is_none());
+    }
+
+    #[test]
+    fn official_x3dh_pq_init_matches_on_both_sides() {
+        let receiver_key_1 = official_x448_keypair_from_seed(b"rr-synth-x3dh-pq-rcv-1");
+        let receiver_key_2 = official_x448_keypair_from_seed(b"rr-synth-x3dh-pq-rcv-2");
+        let sender_key_1 = official_x448_keypair_from_seed(b"rr-synth-x3dh-pq-snd-1");
+        let sender_key_2 = official_x448_keypair_from_seed(b"rr-synth-x3dh-pq-snd-2");
+        let receiver_pq = official_sntrup761_keypair_from_seed(b"rr-synth-x3dh-pq-rcv-kem");
+        let sender_pq = official_sntrup761_keypair_from_seed(b"rr-synth-x3dh-pq-snd-kem");
+        let receiver_params = RadrootsSimplexOfficialX3dhParams {
+            version_range: RadrootsSimplexSmpVersionRange::new(
+                RADROOTS_SIMPLEX_OFFICIAL_E2E_KDF_VERSION,
+                RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION,
+            )
+            .unwrap(),
+            key_1: receiver_key_1.public_key.clone(),
+            key_2: receiver_key_2.public_key.clone(),
+            pq_public_key: Some(receiver_pq.public_key.clone()),
+            pq_ciphertext: None,
+        };
+
+        let sender_init = official_x3dh_sender_init_accepting_pq(
+            &sender_key_1,
+            &sender_key_2,
+            sender_pq.clone(),
+            &receiver_params,
+            b"rr-synth-x3dh-pq-encap",
+        )
+        .unwrap();
+        let receiver_init = official_x3dh_receiver_init_accepting_pq(
+            &receiver_key_1,
+            &receiver_key_2,
+            &receiver_pq,
+            &sender_init.sender_params,
+        )
+        .unwrap();
+
+        assert_eq!(sender_init.init, receiver_init.init);
+        assert_eq!(sender_init.pq_shared_secret, receiver_init.pq_shared_secret);
+        assert_eq!(
+            sender_init.init.accepted_pq_shared_secret.as_deref(),
+            Some(sender_init.pq_shared_secret.as_slice())
+        );
+        assert_eq!(
+            sender_init.sender_params.pq_public_key,
+            Some(sender_pq.public_key)
+        );
+        assert!(sender_init.sender_params.pq_ciphertext.is_some());
     }
 
     #[test]

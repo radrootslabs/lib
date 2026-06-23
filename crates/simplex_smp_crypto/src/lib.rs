@@ -41,6 +41,7 @@ pub mod prelude {
         RadrootsSimplexOfficialEncryptedMessage, RadrootsSimplexOfficialMsgHeader,
         RadrootsSimplexOfficialRootKdfOutput, RadrootsSimplexOfficialSntrup761Keypair,
         RadrootsSimplexOfficialX3dhInit, RadrootsSimplexOfficialX3dhParams,
+        RadrootsSimplexOfficialX3dhReceiverPqInit, RadrootsSimplexOfficialX3dhSenderPqInit,
         RadrootsSimplexOfficialX448Keypair, decapsulate_official_sntrup761,
         decode_official_encrypted_header, decode_official_encrypted_message,
         decode_official_msg_header, decode_official_x3dh_params_uri,
@@ -53,7 +54,8 @@ pub mod prelude {
         official_encoded_encrypted_header_len, official_encoded_encrypted_message_len,
         official_full_header_len, official_ratchet_header_len, official_root_kdf,
         official_sntrup761_keypair_from_seed, official_x3dh_receiver_init,
-        official_x3dh_sender_init, official_x448_keypair_from_seed,
+        official_x3dh_receiver_init_accepting_pq, official_x3dh_sender_init,
+        official_x3dh_sender_init_accepting_pq, official_x448_keypair_from_seed,
     };
     pub use crate::ratchet::{
         RadrootsSimplexSmpRatchetHeader, RadrootsSimplexSmpRatchetRole,

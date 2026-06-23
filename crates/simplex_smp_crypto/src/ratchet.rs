@@ -46,7 +46,7 @@ impl RadrootsSimplexSmpRatchetHeader {
                 "dh_public_key",
             ));
         }
-        if self.pq_public_key.is_some() != self.pq_ciphertext.is_some() {
+        if self.pq_ciphertext.is_some() && self.pq_public_key.is_none() {
             return Err(RadrootsSimplexSmpCryptoError::IncompletePqHeader);
         }
         Ok(())
@@ -170,12 +170,17 @@ impl RadrootsSimplexSmpRatchetState {
         validate_official_private_key(&local_dh_private_key)?;
         let root_dh =
             derive_official_x448_shared_secret(&local_dh_private_key, &self.remote_dh_public_key)?;
-        let root = official_root_kdf(&init.ratchet_key, &root_dh, None)?;
+        let root = official_root_kdf(
+            &init.ratchet_key,
+            &root_dh,
+            init.accepted_pq_shared_secret.as_deref(),
+        )?;
         self.local_dh_private_key = Some(local_dh_private_key);
         self.official_associated_data = Some(init.associated_data);
         self.official_root_key = Some(root.root_key);
         self.official_sending_chain_key = Some(root.chain_key);
         self.official_receiving_chain_key = None;
+        self.current_pq_shared_secret = init.accepted_pq_shared_secret;
         self.official_sending_header_key = Some(init.sending_header_key);
         self.official_receiving_header_key = None;
         self.official_next_sending_header_key = Some(root.next_header_key);
@@ -196,6 +201,7 @@ impl RadrootsSimplexSmpRatchetState {
         self.local_dh_private_key = Some(local_dh_private_key);
         self.official_associated_data = Some(init.associated_data);
         self.official_root_key = Some(init.ratchet_key);
+        self.current_pq_shared_secret = init.accepted_pq_shared_secret;
         self.official_sending_chain_key = None;
         self.official_receiving_chain_key = None;
         self.official_sending_header_key = None;
@@ -890,8 +896,8 @@ mod tests {
             previous_sending_chain_length: 0,
             message_number: 0,
             dh_public_key: b"dh".to_vec(),
-            pq_public_key: Some(b"pq".to_vec()),
-            pq_ciphertext: None,
+            pq_public_key: None,
+            pq_ciphertext: Some(b"ciphertext".to_vec()),
         };
 
         let error = header.validate().unwrap_err();
