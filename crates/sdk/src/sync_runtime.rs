@@ -527,6 +527,7 @@ async fn push_proxy_claimed_outbox_event(
         delivery_policy: proxy_delivery_policy(claimed.target_relays.len()),
         idempotency_key: Some(proxy_outbox_idempotency_key(
             claimed.outbox_event_id,
+            claimed.attempt_count,
             signed_event.id.as_str(),
         )),
         timeout_ms: adapter.config().request_timeout_ms,
@@ -562,8 +563,12 @@ fn proxy_delivery_policy(target_count: usize) -> PublishDeliveryPolicy {
 }
 
 #[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
-fn proxy_outbox_idempotency_key(outbox_event_id: i64, event_id: &str) -> String {
-    format!("radroots-sdk-outbox-{outbox_event_id}-{event_id}")
+fn proxy_outbox_idempotency_key(
+    outbox_event_id: i64,
+    attempt_count: i64,
+    event_id: &str,
+) -> String {
+    format!("radroots-sdk-outbox-{outbox_event_id}-{attempt_count}-{event_id}")
 }
 
 #[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
