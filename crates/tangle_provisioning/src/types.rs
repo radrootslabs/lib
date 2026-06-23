@@ -456,7 +456,10 @@ impl CommunityProvisioningAdapterOutput {
         }))
     }
 
-    pub fn validate_against_schema(&self, schema: &Value) -> Result<(), CommunityProvisioningError> {
+    pub fn validate_against_schema(
+        &self,
+        schema: &Value,
+    ) -> Result<(), CommunityProvisioningError> {
         validate_contract_schema(schema, &serde_json::to_value(self)?)?;
         self.validate()
     }
@@ -717,12 +720,10 @@ mod tests {
                 tenant_schema: "vancouver_local_food_association".to_owned(),
                 canonical_host: "vancouver-local-food-association.tangle.local".to_owned(),
                 relay_url: "ws://vancouver-local-food-association.tangle.local".to_owned(),
-                owner_pubkey:
-                    "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
-                        .to_owned(),
+                owner_pubkey: "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+                    .to_owned(),
                 admin_pubkeys: vec![
-                    "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5"
-                        .to_owned(),
+                    "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5".to_owned(),
                 ],
             },
             groups: ProvisioningGroupInput {
@@ -745,12 +746,10 @@ mod tests {
                 secret_ref: "tangle/community/vancouver_local_food_association/relay_self"
                     .to_owned(),
                 fixture_secret_hex:
-                    "9999999999999999999999999999999999999999999999999999999999999999"
-                        .to_owned(),
+                    "9999999999999999999999999999999999999999999999999999999999999999".to_owned(),
             },
             custom_domain: None,
             unsupported_fields_policy: UnsupportedFieldsPolicy::Reject,
         }
     }
-
 }
