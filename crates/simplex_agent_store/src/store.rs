@@ -153,6 +153,7 @@ pub struct RadrootsSimplexAgentShortLinkCredentials {
     pub link_public_signature_key: Vec<u8>,
     pub link_private_signature_key: Vec<u8>,
     pub encrypted_fixed_data: Option<Vec<u8>>,
+    pub encrypted_user_data: Option<Vec<u8>>,
 }
 
 impl RadrootsSimplexAgentShortLinkCredentials {
@@ -348,6 +349,7 @@ struct RadrootsSimplexAgentShortLinkCredentialsSnapshot {
     link_public_signature_key: Vec<u8>,
     link_private_signature_key: Vec<u8>,
     encrypted_fixed_data: Option<Vec<u8>>,
+    encrypted_user_data: Option<Vec<u8>>,
 }
 
 #[cfg(feature = "std")]
@@ -2296,6 +2298,7 @@ fn short_link_to_snapshot(
         link_public_signature_key: credentials.link_public_signature_key,
         link_private_signature_key: credentials.link_private_signature_key,
         encrypted_fixed_data: credentials.encrypted_fixed_data,
+        encrypted_user_data: credentials.encrypted_user_data,
     }
 }
 
@@ -2313,6 +2316,7 @@ fn short_link_from_snapshot(
         link_public_signature_key: snapshot.link_public_signature_key,
         link_private_signature_key: snapshot.link_private_signature_key,
         encrypted_fixed_data: snapshot.encrypted_fixed_data,
+        encrypted_user_data: snapshot.encrypted_user_data,
     })
 }
 
@@ -2816,6 +2820,7 @@ mod tests {
             link_public_signature_key: vec![7_u8; 32],
             link_private_signature_key: b"short-link-private-signature-key".to_vec(),
             encrypted_fixed_data: Some(b"encrypted-fixed-link-data".to_vec()),
+            encrypted_user_data: Some(b"encrypted-user-link-data".to_vec()),
         }
     }
 

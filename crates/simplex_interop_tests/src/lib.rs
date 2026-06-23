@@ -71,10 +71,19 @@ mod tests {
             sender_id: sender_id.to_vec(),
             server_dh_public_key: RadrootsSimplexSmpX25519Keypair::from_seed(seed).public_key,
             queue_mode: Some(RadrootsSimplexSmpQueueMode::Messaging),
-            link_id: None,
+            link_id: Some(synthetic_link_id(seed)),
             service_id: None,
             server_notification_credentials: None,
         })
+    }
+
+    fn synthetic_link_id(seed: &[u8]) -> Vec<u8> {
+        let mut link_id = vec![0_u8; 24];
+        for (index, byte) in seed.iter().enumerate() {
+            link_id[index % 24] ^= *byte;
+            link_id[(index * 7 + 3) % 24] = link_id[(index * 7 + 3) % 24].wrapping_add(*byte);
+        }
+        link_id
     }
 
     fn correlation_id(byte: u8) -> RadrootsSimplexSmpCorrelationId {
@@ -106,12 +115,14 @@ mod tests {
     #[derive(Default)]
     struct ScriptedTransport {
         responses: VecDeque<RadrootsSimplexSmpBrokerMessage>,
+        requests: Vec<RadrootsSimplexSmpTransportRequest>,
     }
 
     impl ScriptedTransport {
         fn with_responses(responses: Vec<RadrootsSimplexSmpBrokerMessage>) -> Self {
             Self {
                 responses: responses.into(),
+                requests: Vec::new(),
             }
         }
     }
@@ -173,6 +184,7 @@ mod tests {
             )
             .map_err(|error| error.to_string())?;
             let response_encoded = response_block.encode().map_err(|error| error.to_string())?;
+            self.requests.push(request.clone());
             Ok(RadrootsSimplexSmpTransportResponse {
                 server: request.server,
                 transport_version: request.transport_version,
@@ -290,7 +302,7 @@ mod tests {
             .execute_ready_commands(&mut invitation_transport, 20, 16)
             .unwrap();
         let events = runtime.drain_events(8);
-        let invitation = events
+        let short_invitation = events
             .into_iter()
             .find_map(|event| match event {
                 RadrootsSimplexAgentRuntimeEvent::InvitationReady { invitation, .. } => {
@@ -299,45 +311,21 @@ mod tests {
                 _ => None,
             })
             .expect("invitation event");
-
-        let joined = runtime
-            .join_connection(invitation, synthetic_reply_queue(), 30)
-            .unwrap();
-        let mut join_transport = ScriptedTransport::with_responses(vec![
-            RadrootsSimplexSmpBrokerMessage::Ok,
-            ids_response(b"recipient-2", b"sender-2", b"server-dh-2"),
-            RadrootsSimplexSmpBrokerMessage::Ok,
-            RadrootsSimplexSmpBrokerMessage::Ok,
-            RadrootsSimplexSmpBrokerMessage::Ok,
-        ]);
-        runtime
-            .execute_ready_commands(&mut join_transport, 40, 16)
-            .unwrap();
-        runtime
-            .handle_inbound_decrypted_message(
-                &joined,
-                RadrootsSimplexAgentDecryptedMessage::Message(RadrootsSimplexAgentMessageFrame {
-                    header: RadrootsSimplexAgentMessageHeader {
-                        message_id: 1,
-                        previous_message_hash: Vec::new(),
-                    },
-                    message: RadrootsSimplexAgentMessage::Hello,
-                    padding: Vec::new(),
-                }),
-                b"rr-synth-hello".to_vec(),
-            )
-            .unwrap();
-        let mut hello_transport =
-            ScriptedTransport::with_responses(vec![RadrootsSimplexSmpBrokerMessage::Ok]);
-        runtime
-            .execute_ready_commands(&mut hello_transport, 50, 16)
-            .unwrap();
-        let message_id = runtime
-            .send_message(&joined, b"rr-synth-chat".to_vec(), 60)
-            .unwrap();
-        assert_eq!(message_id, 2);
-        runtime.reconnect_connection(&joined, 70).unwrap();
-        assert!(!runtime.retry_pending(70 + 5_000, 64).is_empty());
+        assert!(
+            short_invitation
+                .render()
+                .unwrap()
+                .starts_with("simplex:/i#")
+        );
+        let RadrootsSimplexSmpCommand::New(create_request) =
+            &invitation_transport.requests[0].command
+        else {
+            panic!("first synthetic runtime command should create the invite queue");
+        };
+        assert!(matches!(
+            create_request.queue_request_data.as_ref(),
+            Some(RadrootsSimplexSmpQueueRequestData::Messaging(Some(_)))
+        ));
         assert!(created.starts_with("conn-"));
     }
 

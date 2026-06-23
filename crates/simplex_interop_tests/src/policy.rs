@@ -1,4 +1,6 @@
-use alloc::string::{String, ToString};
+use alloc::string::String;
+#[cfg(feature = "std")]
+use alloc::string::ToString;
 #[cfg(feature = "std")]
 use alloc::vec;
 use core::fmt;

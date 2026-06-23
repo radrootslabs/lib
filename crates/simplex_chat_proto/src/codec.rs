@@ -14,6 +14,7 @@ use crate::model::{
     RadrootsSimplexChatQuotedMessage, RadrootsSimplexChatScope,
 };
 use crate::version::RadrootsSimplexChatVersionRange;
+use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use alloc::string::{String, ToString};
 use alloc::vec;

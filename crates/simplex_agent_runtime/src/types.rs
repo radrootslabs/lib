@@ -1,12 +1,12 @@
 use alloc::string::String;
 use alloc::vec::Vec;
-use radroots_simplex_agent_proto::prelude::RadrootsSimplexAgentConnectionLink;
+use radroots_simplex_agent_proto::prelude::RadrootsSimplexAgentShortInvitationLink;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RadrootsSimplexAgentRuntimeEvent {
     InvitationReady {
         connection_id: String,
-        invitation: RadrootsSimplexAgentConnectionLink,
+        invitation: RadrootsSimplexAgentShortInvitationLink,
     },
     ConfirmationRequired {
         connection_id: String,

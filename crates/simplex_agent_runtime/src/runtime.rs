@@ -2,7 +2,8 @@ use crate::error::RadrootsSimplexAgentRuntimeError;
 use crate::types::{RadrootsSimplexAgentCommandOutcome, RadrootsSimplexAgentRuntimeEvent};
 use alloc::collections::VecDeque;
 use alloc::format;
-use alloc::string::String;
+use alloc::string::{String, ToString};
+use alloc::vec;
 use alloc::vec::Vec;
 use base64::Engine as _;
 use base64::engine::general_purpose::{URL_SAFE, URL_SAFE_NO_PAD};
@@ -13,32 +14,38 @@ use radroots_simplex_agent_proto::prelude::{
     RadrootsSimplexAgentMessage, RadrootsSimplexAgentMessageFrame,
     RadrootsSimplexAgentMessageHeader, RadrootsSimplexAgentMessageReceipt,
     RadrootsSimplexAgentQueueAddress, RadrootsSimplexAgentQueueDescriptor,
-    decode_decrypted_message, decode_envelope, encode_decrypted_message, encode_envelope,
+    RadrootsSimplexAgentShortLinkScheme, decode_decrypted_message, decode_envelope,
+    encode_connection_link, encode_decrypted_message, encode_envelope,
 };
 use radroots_simplex_agent_store::prelude::{
     RadrootsSimplexAgentOutboundMessage, RadrootsSimplexAgentPendingCommand,
     RadrootsSimplexAgentPendingCommandKind, RadrootsSimplexAgentPqKeypair,
-    RadrootsSimplexAgentQueueRole, RadrootsSimplexAgentStore, RadrootsSimplexAgentX3dhKeypair,
+    RadrootsSimplexAgentQueueRole, RadrootsSimplexAgentShortLinkCredentials,
+    RadrootsSimplexAgentStore, RadrootsSimplexAgentX3dhKeypair,
 };
 use radroots_simplex_smp_crypto::prelude::{
     RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION, RADROOTS_SIMPLEX_OFFICIAL_E2E_KDF_VERSION,
     RADROOTS_SIMPLEX_SMP_NONCE_LENGTH, RadrootsSimplexOfficialSntrup761Keypair,
     RadrootsSimplexOfficialX3dhParams, RadrootsSimplexOfficialX448Keypair,
     RadrootsSimplexSmpCommandAuthorization, RadrootsSimplexSmpCryptoError,
-    RadrootsSimplexSmpRatchetState, RadrootsSimplexSmpX25519Keypair, decode_x25519_public_key_x509,
-    decrypt_padded, derive_shared_secret, encode_ed25519_public_key_x509,
-    encode_x25519_public_key_x509, encrypt_padded, official_sntrup761_keypair_from_seed,
-    official_x3dh_receiver_init, official_x3dh_receiver_init_accepting_pq,
-    official_x3dh_sender_init, official_x3dh_sender_init_accepting_pq,
-    official_x448_keypair_from_seed, random_nonce,
+    RadrootsSimplexSmpEd25519Keypair, RadrootsSimplexSmpRatchetState,
+    RadrootsSimplexSmpX25519Keypair, decode_x25519_public_key_x509, decrypt_padded,
+    derive_invitation_short_link_data_key, derive_shared_secret, encode_ed25519_public_key_x509,
+    encode_x25519_public_key_x509, encrypt_padded, encrypt_short_link_data,
+    official_sntrup761_keypair_from_seed, official_x3dh_receiver_init,
+    official_x3dh_receiver_init_accepting_pq, official_x3dh_sender_init,
+    official_x3dh_sender_init_accepting_pq, official_x448_keypair_from_seed, random_nonce,
+    sign_short_link_data,
 };
 use radroots_simplex_smp_proto::prelude::{
     RADROOTS_SIMPLEX_SMP_CURRENT_CLIENT_VERSION, RADROOTS_SIMPLEX_SMP_CURRENT_TRANSPORT_VERSION,
     RadrootsSimplexSmpBrokerMessage, RadrootsSimplexSmpCommand, RadrootsSimplexSmpCorrelationId,
-    RadrootsSimplexSmpMessageFlags, RadrootsSimplexSmpNewQueueRequest,
-    RadrootsSimplexSmpQueueIdsResponse, RadrootsSimplexSmpQueueMode,
+    RadrootsSimplexSmpMessageFlags, RadrootsSimplexSmpMessagingQueueRequest,
+    RadrootsSimplexSmpNewQueueRequest, RadrootsSimplexSmpQueueIdsResponse,
+    RadrootsSimplexSmpQueueLinkData, RadrootsSimplexSmpQueueMode,
     RadrootsSimplexSmpQueueRequestData, RadrootsSimplexSmpQueueUri, RadrootsSimplexSmpSendCommand,
-    RadrootsSimplexSmpSubscriptionMode, RadrootsSimplexSmpVersionRange,
+    RadrootsSimplexSmpServerAddress, RadrootsSimplexSmpSubscriptionMode,
+    RadrootsSimplexSmpVersionRange,
 };
 use radroots_simplex_smp_transport::prelude::{
     RadrootsSimplexSmpCommandTransport, RadrootsSimplexSmpSubscriptionReceiveRequest,
@@ -74,6 +81,13 @@ struct SimplexReceivedBody {
     timestamp: u64,
     flags: RadrootsSimplexSmpMessageFlags,
     sent_body: Vec<u8>,
+}
+
+struct SimplexPreparedShortInvitationLinkData {
+    link_key: Vec<u8>,
+    link_public_signature_key: Vec<u8>,
+    link_private_signature_key: Vec<u8>,
+    encrypted_link_data: RadrootsSimplexSmpQueueLinkData,
 }
 
 pub struct RadrootsSimplexAgentRuntimeBuilder {
@@ -234,6 +248,11 @@ impl RadrootsSimplexAgentRuntime {
             e2e_ratchet_params,
             contact_address,
         };
+        let prepared_short_link = if contact_address {
+            None
+        } else {
+            Some(prepare_short_invitation_link_data(&invitation)?)
+        };
         self.store.connection_mut(&connection.id)?.invitation = Some(invitation);
         let receive_auth_state = self.store.generate_queue_auth_state()?;
         let delivery_keypair = RadrootsSimplexSmpX25519Keypair::generate()
@@ -258,6 +277,19 @@ impl RadrootsSimplexAgentRuntime {
             connection.local_x3dh_key_1 = Some(agent_x3dh_keypair(x3dh_key_1));
             connection.local_x3dh_key_2 = Some(agent_x3dh_keypair(x3dh_key_2));
             connection.local_pq_keypair = Some(agent_pq_keypair(pq_keypair));
+            connection.short_link =
+                prepared_short_link.map(|prepared| RadrootsSimplexAgentShortLinkCredentials {
+                    scheme: RadrootsSimplexAgentShortLinkScheme::Simplex,
+                    hosts: descriptor.queue_uri.server.hosts.clone(),
+                    port: descriptor.queue_uri.server.port,
+                    server_key_hash: None,
+                    link_id: Vec::new(),
+                    link_key: prepared.link_key,
+                    link_public_signature_key: prepared.link_public_signature_key,
+                    link_private_signature_key: prepared.link_private_signature_key,
+                    encrypted_fixed_data: Some(prepared.encrypted_link_data.fixed_data),
+                    encrypted_user_data: Some(prepared.encrypted_link_data.user_data),
+                });
             let queue = connection
                 .queues
                 .iter_mut()
@@ -1011,6 +1043,29 @@ impl RadrootsSimplexAgentRuntime {
         &self,
         command: &RadrootsSimplexAgentPendingCommand,
     ) -> Result<RadrootsSimplexSmpTransportRequest, RadrootsSimplexAgentRuntimeError> {
+        match &command.kind {
+            RadrootsSimplexAgentPendingCommandKind::SecureGetQueueLinkData {
+                server,
+                link_id,
+                link_key,
+            } => {
+                return Ok(self.server_transport_request(
+                    command.id,
+                    server,
+                    link_id.clone(),
+                    RadrootsSimplexSmpCommand::LKey(link_key.clone()),
+                ));
+            }
+            RadrootsSimplexAgentPendingCommandKind::GetQueueLinkData { server, link_id } => {
+                return Ok(self.server_transport_request(
+                    command.id,
+                    server,
+                    link_id.clone(),
+                    RadrootsSimplexSmpCommand::LGet,
+                ));
+            }
+            _ => {}
+        }
         let (queue_address, entity_id, smp_command) = self.command_transport_parts(command)?;
         let queue = self
             .store
@@ -1048,6 +1103,23 @@ impl RadrootsSimplexAgentRuntime {
             command: smp_command,
             authorization,
         })
+    }
+
+    fn server_transport_request(
+        &self,
+        command_id: u64,
+        server: &RadrootsSimplexSmpServerAddress,
+        entity_id: Vec<u8>,
+        command: RadrootsSimplexSmpCommand,
+    ) -> RadrootsSimplexSmpTransportRequest {
+        RadrootsSimplexSmpTransportRequest {
+            server: server.clone(),
+            transport_version: RADROOTS_SIMPLEX_SMP_CURRENT_TRANSPORT_VERSION,
+            correlation_id: Some(correlation_id_for_command(command_id)),
+            entity_id,
+            command,
+            authorization: RadrootsSimplexSmpCommandAuthorization::None,
+        }
     }
 
     fn command_transport_parts(
@@ -1105,7 +1177,12 @@ impl RadrootsSimplexAgentRuntime {
                                 .unwrap_or(RadrootsSimplexSmpQueueMode::Messaging)
                             {
                                 RadrootsSimplexSmpQueueMode::Messaging => {
-                                    RadrootsSimplexSmpQueueRequestData::Messaging(None)
+                                    RadrootsSimplexSmpQueueRequestData::Messaging(
+                                        self.short_link_messaging_queue_request(
+                                            &command.connection_id,
+                                            descriptor,
+                                        )?,
+                                    )
                                 }
                                 RadrootsSimplexSmpQueueMode::Contact => {
                                     RadrootsSimplexSmpQueueRequestData::Contact(None)
@@ -1182,7 +1259,60 @@ impl RadrootsSimplexAgentRuntime {
                 let entity_id = address.sender_id.clone();
                 Ok((address, entity_id, RadrootsSimplexSmpCommand::Ping))
             }
+            RadrootsSimplexAgentPendingCommandKind::SetQueueLinkData {
+                queue,
+                link_id,
+                link_data,
+            } => Ok((
+                queue.clone(),
+                self.store
+                    .queue_record(&command.connection_id, queue)?
+                    .entity_id,
+                RadrootsSimplexSmpCommand::LSet {
+                    link_id: link_id.clone(),
+                    link_data: link_data.clone(),
+                },
+            )),
+            RadrootsSimplexAgentPendingCommandKind::SecureGetQueueLinkData { .. }
+            | RadrootsSimplexAgentPendingCommandKind::GetQueueLinkData { .. } => {
+                Err(RadrootsSimplexAgentRuntimeError::Runtime(
+                    "SimpleX short-link retrieval commands require server transport dispatch"
+                        .into(),
+                ))
+            }
         }
+    }
+
+    fn short_link_messaging_queue_request(
+        &self,
+        connection_id: &str,
+        descriptor: &RadrootsSimplexAgentQueueDescriptor,
+    ) -> Result<Option<RadrootsSimplexSmpMessagingQueueRequest>, RadrootsSimplexAgentRuntimeError>
+    {
+        let connection = self.store.connection(connection_id)?;
+        if connection.status != RadrootsSimplexAgentConnectionStatus::CreatePending {
+            return Ok(None);
+        }
+        let Some(short_link) = connection.short_link.as_ref() else {
+            return Ok(None);
+        };
+        let fixed_data = short_link.encrypted_fixed_data.clone().ok_or_else(|| {
+            RadrootsSimplexAgentRuntimeError::Runtime(format!(
+                "SimpleX connection `{connection_id}` is missing encrypted short-link fixed data"
+            ))
+        })?;
+        let user_data = short_link.encrypted_user_data.clone().ok_or_else(|| {
+            RadrootsSimplexAgentRuntimeError::Runtime(format!(
+                "SimpleX connection `{connection_id}` is missing encrypted short-link user data"
+            ))
+        })?;
+        Ok(Some(RadrootsSimplexSmpMessagingQueueRequest {
+            sender_id: descriptor.queue_address().sender_id,
+            link_data: RadrootsSimplexSmpQueueLinkData {
+                fixed_data,
+                user_data,
+            },
+        }))
     }
 
     fn apply_transport_response(
@@ -1471,7 +1601,17 @@ impl RadrootsSimplexAgentRuntime {
                 connection.status = RadrootsSimplexAgentConnectionStatus::InvitationReady;
                 if let Some(invitation) = connection.invitation.as_mut() {
                     invitation.invitation_queue = queue.descriptor.queue_uri.clone();
-                    invitation_event = Some(invitation.clone());
+                }
+                if let Some(short_link) = connection.short_link.as_mut() {
+                    short_link.link_id = ids.link_id.clone().ok_or_else(|| {
+                        RadrootsSimplexAgentRuntimeError::Runtime(format!(
+                            "SimpleX broker IDS response for `{}` did not include a short-link id",
+                            command.connection_id
+                        ))
+                    })?;
+                    short_link.hosts = queue.descriptor.queue_uri.server.hosts.clone();
+                    short_link.port = queue.descriptor.queue_uri.server.port;
+                    invitation_event = Some(short_link.invitation_link());
                 }
             } else if connection.status == RadrootsSimplexAgentConnectionStatus::JoinPending {
                 let local_x3dh_key_1 = connection.local_x3dh_key_1.as_ref().ok_or_else(|| {
@@ -1934,6 +2074,27 @@ fn official_x3dh_params_from_parts(
     })
 }
 
+fn prepare_short_invitation_link_data(
+    invitation: &RadrootsSimplexAgentConnectionLink,
+) -> Result<SimplexPreparedShortInvitationLinkData, RadrootsSimplexAgentRuntimeError> {
+    let root_keypair = RadrootsSimplexSmpEd25519Keypair::generate()
+        .map_err(|error| RadrootsSimplexAgentRuntimeError::Runtime(error.to_string()))?;
+    let fixed_data = encode_connection_link(invitation)?;
+    let user_data = invitation.connection_id.clone();
+    let (link_key, signed_link_data) = sign_short_link_data(&root_keypair, &fixed_data, &user_data)
+        .map_err(|error| RadrootsSimplexAgentRuntimeError::Runtime(error.to_string()))?;
+    let link_data_key = derive_invitation_short_link_data_key(&link_key)
+        .map_err(|error| RadrootsSimplexAgentRuntimeError::Runtime(error.to_string()))?;
+    let encrypted_link_data = encrypt_short_link_data(&link_data_key, &signed_link_data)
+        .map_err(|error| RadrootsSimplexAgentRuntimeError::Runtime(error.to_string()))?;
+    Ok(SimplexPreparedShortInvitationLinkData {
+        link_key,
+        link_public_signature_key: root_keypair.public_key,
+        link_private_signature_key: root_keypair.private_key,
+        encrypted_link_data,
+    })
+}
+
 fn correlation_id_for_command(command_id: u64) -> RadrootsSimplexSmpCorrelationId {
     let digest = derive_material(b"simplex-command-correlation", &[&command_id.to_be_bytes()]);
     let mut correlation = [0_u8; RadrootsSimplexSmpCorrelationId::LENGTH];
@@ -1974,13 +2135,16 @@ fn queue_for_command(
         | RadrootsSimplexAgentPendingCommandKind::SendEnvelope { queue, .. }
         | RadrootsSimplexAgentPendingCommandKind::SubscribeQueue { queue }
         | RadrootsSimplexAgentPendingCommandKind::GetQueueMessage { queue }
-        | RadrootsSimplexAgentPendingCommandKind::AckInboxMessage { queue, .. } => {
+        | RadrootsSimplexAgentPendingCommandKind::AckInboxMessage { queue, .. }
+        | RadrootsSimplexAgentPendingCommandKind::SetQueueLinkData { queue, .. } => {
             Some(queue.clone())
         }
         RadrootsSimplexAgentPendingCommandKind::RotateQueues { descriptors } => descriptors
             .first()
             .map(RadrootsSimplexAgentQueueDescriptor::queue_address),
         RadrootsSimplexAgentPendingCommandKind::TestQueues { queues } => queues.first().cloned(),
+        RadrootsSimplexAgentPendingCommandKind::SecureGetQueueLinkData { .. }
+        | RadrootsSimplexAgentPendingCommandKind::GetQueueLinkData { .. } => None,
     }
 }
 
@@ -2244,10 +2408,18 @@ mod tests {
             sender_id: sender_id.to_vec(),
             server_dh_public_key: RadrootsSimplexSmpX25519Keypair::from_seed(seed).public_key,
             queue_mode: Some(RadrootsSimplexSmpQueueMode::Messaging),
-            link_id: None,
+            link_id: Some(synthetic_link_id(seed)),
             service_id: None,
             server_notification_credentials: None,
         })
+    }
+
+    fn synthetic_link_id(seed: &[u8]) -> Vec<u8> {
+        let mut hasher = Sha256::new();
+        hasher.update(b"rr-synth-runtime-link-id");
+        hasher.update(seed);
+        let digest = hasher.finalize();
+        digest[..24].to_vec()
     }
 
     #[derive(Default)]
@@ -2405,6 +2577,17 @@ mod tests {
         let created_queue = runtime.store.receive_queues(&created).unwrap();
         assert!(created_queue[0].subscribed);
         assert_eq!(transport.requests.len(), 6);
+        let RadrootsSimplexSmpCommand::New(create_request) = &transport.requests[0].command else {
+            panic!("first request should create the invitation queue");
+        };
+        let Some(RadrootsSimplexSmpQueueRequestData::Messaging(Some(link_request))) =
+            create_request.queue_request_data.as_ref()
+        else {
+            panic!("invitation NEW should carry short-link messaging data");
+        };
+        assert!(!link_request.sender_id.is_empty());
+        assert!(!link_request.link_data.fixed_data.is_empty());
+        assert!(!link_request.link_data.user_data.is_empty());
         assert!(matches!(
             transport.requests[3].command,
             RadrootsSimplexSmpCommand::Sub
@@ -2421,10 +2604,42 @@ mod tests {
                 .iter()
                 .any(|request| matches!(request.command, RadrootsSimplexSmpCommand::Get))
         );
-        assert!(matches!(
-            runtime.drain_events(16).first(),
-            Some(RadrootsSimplexAgentRuntimeEvent::InvitationReady { .. })
-        ));
+        let events = runtime.drain_events(16);
+        let Some(RadrootsSimplexAgentRuntimeEvent::InvitationReady { invitation, .. }) =
+            events.first()
+        else {
+            panic!("runtime should emit a short invitation event");
+        };
+        let rendered = invitation.render().unwrap();
+        assert!(rendered.starts_with("simplex:/i#"));
+        assert_eq!(
+            radroots_simplex_agent_proto::prelude::parse_short_invitation_link(&rendered).unwrap(),
+            invitation.clone()
+        );
+        let short_link = runtime
+            .store
+            .connection(&created)
+            .unwrap()
+            .short_link
+            .as_ref()
+            .unwrap();
+        assert_eq!(short_link.link_id, synthetic_link_id(b"server-dh"));
+        let link_data_key = derive_invitation_short_link_data_key(&short_link.link_key).unwrap();
+        let verified = radroots_simplex_smp_crypto::prelude::decrypt_verify_short_link_data(
+            &short_link.link_key,
+            &link_data_key,
+            &short_link.link_public_signature_key,
+            &RadrootsSimplexSmpQueueLinkData {
+                fixed_data: short_link.encrypted_fixed_data.clone().unwrap(),
+                user_data: short_link.encrypted_user_data.clone().unwrap(),
+            },
+        )
+        .unwrap();
+        let decoded =
+            radroots_simplex_agent_proto::prelude::decode_connection_link(&verified.fixed_data)
+                .unwrap();
+        assert_eq!(decoded.connection_id, created.as_bytes().to_vec());
+        assert_eq!(verified.user_data, created.as_bytes().to_vec());
         assert_eq!(
             runtime.store.connection(&joined).unwrap().status,
             RadrootsSimplexAgentConnectionStatus::JoinPending
