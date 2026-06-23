@@ -677,6 +677,17 @@ impl RadrootsSimplexAppStore {
         collect_rows(statement.query_map([], outbox_message_from_row)?)
     }
 
+    pub fn list_outbox_messages(
+        &self,
+    ) -> Result<Vec<RadrootsSimplexAppOutboxMessage>, RadrootsSimplexAppStoreError> {
+        let mut statement = self.connection.prepare(
+            "SELECT outbox_id, chat_item_id, connection_id, conversation_id, chat_msg_id, body, status, runtime_message_id, retry_after_unix, created_at_unix
+             FROM outbox_messages
+             ORDER BY created_at_unix, outbox_id",
+        )?;
+        collect_rows(statement.query_map([], outbox_message_from_row)?)
+    }
+
     pub fn mark_outbox_message_queued(
         &self,
         outbox_id: &str,
@@ -821,6 +832,21 @@ impl RadrootsSimplexAppStore {
              FROM unsupported_protocol_events ORDER BY received_at_unix, event_id",
         )?;
         collect_rows(statement.query_map([], unsupported_event_from_row)?)
+    }
+
+    pub fn reset_disposable_runtime_state(&self) -> Result<(), RadrootsSimplexAppStoreError> {
+        let transaction = self.connection.unchecked_transaction()?;
+        transaction.execute("DELETE FROM unsupported_protocol_events", [])?;
+        transaction.execute("DELETE FROM inbound_child_events", [])?;
+        transaction.execute("DELETE FROM inbound_message_log", [])?;
+        transaction.execute("DELETE FROM outbox_messages", [])?;
+        transaction.execute("DELETE FROM chat_items", [])?;
+        transaction.execute("DELETE FROM queue_endpoints", [])?;
+        transaction.execute("DELETE FROM conversations", [])?;
+        transaction.execute("DELETE FROM connections", [])?;
+        transaction.execute("DELETE FROM contacts", [])?;
+        transaction.commit()?;
+        Ok(())
     }
 }
 
@@ -2484,7 +2510,86 @@ mod tests {
         let page = store.chat_page("conversation-1", 10).expect("page");
         assert_eq!(page, vec![draft.chat_item]);
         let pending = store.pending_outbox_messages().expect("pending");
-        assert_eq!(pending, vec![draft.outbox_message]);
+        assert_eq!(pending, vec![draft.outbox_message.clone()]);
+        assert_eq!(
+            store.list_outbox_messages().expect("outbox"),
+            vec![draft.outbox_message]
+        );
+    }
+
+    #[test]
+    fn reset_disposable_runtime_state_preserves_profiles_and_clears_messages() {
+        let temp = tempfile::tempdir().expect("temp");
+        let path = temp.path().join("simplex.sqlite");
+        let vault = Arc::new(RadrootsSecretVaultMemory::new());
+        let store = memory_store(&path, vault).expect("store");
+        seed_store(&store);
+
+        let draft = store
+            .create_outbound_text_with_test_msg_id(&outbound_request(), "AQIDBAUGBwgJCgsM")
+            .expect("draft");
+        let commit = store
+            .commit_inbound_text(&RadrootsSimplexAppInboundTextRequest {
+                chat_msg_id: Some("AgIDBAUGBwgJCgsM".into()),
+                broker_message_id_hash: b"reset-broker-hash".to_vec(),
+                message_hash: b"reset-message-hash".to_vec(),
+                runtime_ack_handle: "ack-handle-reset".into(),
+                ..inbound_text_request()
+            })
+            .expect("inbound");
+        store
+            .record_unsupported_protocol_event(&RadrootsSimplexAppUnsupportedProtocolEvent {
+                event_id: "unsupported-1".into(),
+                connection_id: Some("connection-1".into()),
+                event_kind: "x.future".into(),
+                payload_json: "{}".into(),
+                status: "stored".into(),
+                received_at_unix: 11,
+            })
+            .expect("unsupported");
+
+        assert_eq!(store.pending_outbox_messages().expect("outbox").len(), 1);
+        assert_eq!(
+            store.pending_ack_messages().expect("acks"),
+            vec![commit.inbound]
+        );
+        assert_eq!(
+            store
+                .list_unsupported_protocol_events()
+                .expect("unsupported")
+                .len(),
+            1
+        );
+
+        store
+            .reset_disposable_runtime_state()
+            .expect("reset disposable state");
+
+        assert_eq!(
+            store.get_profile("profile-1").expect("profile"),
+            Some(profile())
+        );
+        assert!(store.pending_outbox_messages().expect("outbox").is_empty());
+        assert!(store.list_outbox_messages().expect("outbox").is_empty());
+        assert!(store.pending_ack_messages().expect("acks").is_empty());
+        assert!(
+            store
+                .chat_page("conversation-1", 10)
+                .expect("chat")
+                .is_empty()
+        );
+        assert!(
+            store
+                .list_unsupported_protocol_events()
+                .expect("unsupported")
+                .is_empty()
+        );
+        assert!(
+            store
+                .mark_outbox_message_sent(&draft.outbox_message.outbox_id)
+                .expect("missing")
+                .is_none()
+        );
     }
 
     #[test]
