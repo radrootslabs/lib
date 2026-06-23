@@ -4753,15 +4753,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "radroots_tangle_provisioning"
-version = "0.1.0-alpha.2"
-dependencies = [
- "serde",
- "serde_json",
- "thiserror 1.0.69",
-]
-
-[[package]]
 name = "radroots_test_fixtures"
 version = "0.1.0-alpha.2"
 
