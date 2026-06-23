@@ -641,6 +641,69 @@ impl RadrootsSimplexAppStore {
         collect_rows(statement.query_map([], outbox_message_from_row)?)
     }
 
+    pub fn mark_outbox_message_sent(
+        &self,
+        outbox_id: &str,
+    ) -> Result<Option<RadrootsSimplexAppOutboundTextDraft>, RadrootsSimplexAppStoreError> {
+        self.mark_outbox_message_delivery_status(outbox_id, "sent", false)
+    }
+
+    pub fn mark_outbox_message_acknowledged(
+        &self,
+        outbox_id: &str,
+    ) -> Result<Option<RadrootsSimplexAppOutboundTextDraft>, RadrootsSimplexAppStoreError> {
+        self.mark_outbox_message_delivery_status(outbox_id, "acknowledged", true)
+    }
+
+    fn mark_outbox_message_delivery_status(
+        &self,
+        outbox_id: &str,
+        status: &str,
+        terminal: bool,
+    ) -> Result<Option<RadrootsSimplexAppOutboundTextDraft>, RadrootsSimplexAppStoreError> {
+        if outbox_id.is_empty() {
+            return Err(RadrootsSimplexAppStoreError::MessageLifecycle(
+                "outbox id must not be empty".into(),
+            ));
+        }
+        let transaction = self.connection.unchecked_transaction()?;
+        if terminal {
+            transaction.execute(
+                "UPDATE outbox_messages SET status = ?2 WHERE outbox_id = ?1",
+                params![outbox_id, status],
+            )?;
+            transaction.execute(
+                "UPDATE chat_items
+                 SET delivery_status = ?2
+                 WHERE chat_item_id = (
+                    SELECT chat_item_id FROM outbox_messages WHERE outbox_id = ?1
+                 )",
+                params![outbox_id, status],
+            )?;
+        } else {
+            transaction.execute(
+                "UPDATE outbox_messages
+                 SET status = CASE WHEN status = 'acknowledged' THEN status ELSE ?2 END
+                 WHERE outbox_id = ?1",
+                params![outbox_id, status],
+            )?;
+            transaction.execute(
+                "UPDATE chat_items
+                 SET delivery_status = CASE
+                    WHEN delivery_status = 'acknowledged' THEN delivery_status
+                    ELSE ?2
+                 END
+                 WHERE chat_item_id = (
+                    SELECT chat_item_id FROM outbox_messages WHERE outbox_id = ?1
+                 )",
+                params![outbox_id, status],
+            )?;
+        }
+        let updated = outbound_text_by_outbox_id(&transaction, outbox_id)?;
+        transaction.commit()?;
+        Ok(updated)
+    }
+
     pub fn record_unsupported_protocol_event(
         &self,
         event: &RadrootsSimplexAppUnsupportedProtocolEvent,
@@ -1252,6 +1315,40 @@ fn outbound_text_by_msg_id(
              JOIN chat_items c ON c.chat_item_id = o.chat_item_id
              WHERE o.connection_id = ?1 AND o.chat_msg_id = ?2",
             params![connection_id, chat_msg_id],
+            outbound_text_draft_from_row,
+        )
+        .optional()
+        .map_err(Into::into)
+}
+
+fn outbound_text_by_outbox_id(
+    transaction: &Transaction<'_>,
+    outbox_id: &str,
+) -> Result<Option<RadrootsSimplexAppOutboundTextDraft>, RadrootsSimplexAppStoreError> {
+    transaction
+        .query_row(
+            "SELECT
+                c.chat_item_id,
+                c.conversation_id,
+                c.logical_order,
+                c.direction,
+                c.chat_msg_id,
+                c.body,
+                c.delivery_status,
+                c.created_at_unix,
+                o.outbox_id,
+                o.chat_item_id,
+                o.connection_id,
+                o.conversation_id,
+                o.chat_msg_id,
+                o.body,
+                o.status,
+                o.retry_after_unix,
+                o.created_at_unix
+             FROM outbox_messages o
+             JOIN chat_items c ON c.chat_item_id = o.chat_item_id
+             WHERE o.outbox_id = ?1",
+            params![outbox_id],
             outbound_text_draft_from_row,
         )
         .optional()
@@ -2061,6 +2158,58 @@ mod tests {
             1
         );
         assert_eq!(store.pending_outbox_messages().expect("pending").len(), 1);
+    }
+
+    #[test]
+    fn outbound_delivery_state_updates_are_idempotent() {
+        let temp = tempfile::tempdir().expect("temp");
+        let path = temp.path().join("simplex.sqlite");
+        let vault = Arc::new(RadrootsSecretVaultMemory::new());
+        let store = memory_store(&path, vault).expect("store");
+        seed_store(&store);
+
+        let draft = store
+            .create_outbound_text_with_test_msg_id(&outbound_request(), "AQIDBAUGBwgJCgsM")
+            .expect("draft");
+        let sent = store
+            .mark_outbox_message_sent(&draft.outbox_message.outbox_id)
+            .expect("sent")
+            .expect("sent row");
+
+        assert_eq!(sent.outbox_message.status, "sent");
+        assert_eq!(sent.chat_item.delivery_status, "sent");
+        assert!(store.pending_outbox_messages().expect("pending").is_empty());
+        assert_eq!(
+            store
+                .mark_outbox_message_sent(&draft.outbox_message.outbox_id)
+                .expect("sent again")
+                .expect("sent row")
+                .outbox_message
+                .status,
+            "sent"
+        );
+
+        let acknowledged = store
+            .mark_outbox_message_acknowledged(&draft.outbox_message.outbox_id)
+            .expect("acknowledged")
+            .expect("acknowledged row");
+        assert_eq!(acknowledged.outbox_message.status, "acknowledged");
+        assert_eq!(acknowledged.chat_item.delivery_status, "acknowledged");
+        assert_eq!(
+            store
+                .mark_outbox_message_sent(&draft.outbox_message.outbox_id)
+                .expect("sent after acknowledged")
+                .expect("row")
+                .outbox_message
+                .status,
+            "acknowledged"
+        );
+        assert!(
+            store
+                .mark_outbox_message_acknowledged("missing-outbox")
+                .expect("missing")
+                .is_none()
+        );
     }
 
     #[test]

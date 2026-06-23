@@ -1535,9 +1535,15 @@ impl RadrootsSimplexAgentRuntime {
                 delivery: Some(delivery),
                 ..
             } => {
-                let _ = self
+                let delivered = self
                     .store
                     .confirm_outbound_message(&command.connection_id, delivery.message_id)?;
+                self.events
+                    .push_back(RadrootsSimplexAgentRuntimeEvent::OutboundMessageDelivered {
+                        connection_id: command.connection_id.clone(),
+                        message_id: delivered.message_id,
+                        message_hash: delivered.message_hash,
+                    });
             }
             RadrootsSimplexAgentPendingCommandKind::SubscribeQueue { queue } => {
                 self.store
@@ -3305,6 +3311,14 @@ mod tests {
                 .staged_outbound_message,
             None
         );
+        assert!(runtime.drain_events(64).into_iter().any(|event| matches!(
+            event,
+            RadrootsSimplexAgentRuntimeEvent::OutboundMessageDelivered {
+                connection_id,
+                message_id: 1,
+                message_hash,
+            } if connection_id == joined && !message_hash.is_empty()
+        )));
     }
 
     #[test]
