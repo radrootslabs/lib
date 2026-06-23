@@ -2,6 +2,7 @@ use crate::error::RadrootsSimplexSmpCryptoError;
 use aes_gcm::aead::consts::U16;
 use aes_gcm::aead::{Aead, KeyInit, Payload};
 use aes_gcm::{AesGcm, Nonce, aes::Aes256};
+use alloc::borrow::ToOwned;
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;

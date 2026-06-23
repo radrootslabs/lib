@@ -8,6 +8,8 @@ pub mod store;
 
 pub mod prelude {
     pub use crate::error::RadrootsSimplexAgentStoreError;
+    #[cfg(feature = "std")]
+    pub use crate::store::RadrootsSimplexAgentStoreProtectedSecretsDiagnostics;
     pub use crate::store::{
         RadrootsSimplexAgentConnectionRecord, RadrootsSimplexAgentDeliveryCursor,
         RadrootsSimplexAgentOutboundMessage, RadrootsSimplexAgentPendingCommand,

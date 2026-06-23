@@ -1,28 +1,62 @@
 use crate::error::RadrootsSimplexAgentStoreError;
 use alloc::collections::BTreeMap;
-use alloc::string::{String, ToString};
+use alloc::format;
+use alloc::string::String;
+#[cfg(feature = "std")]
+use alloc::string::ToString;
 use alloc::vec::Vec;
+#[cfg(feature = "std")]
+use radroots_protected_store::file::{
+    RADROOTS_PROTECTED_FILE_SECRET_SUFFIX, RADROOTS_PROTECTED_FILE_WRAPPING_KEY_FILE,
+};
+#[cfg(feature = "std")]
+use radroots_protected_store::{
+    RadrootsProtectedFileKeySource, RadrootsProtectedStoreEnvelope, sidecar_path,
+};
 use radroots_simplex_agent_proto::prelude::{
     RadrootsSimplexAgentConnectionLink, RadrootsSimplexAgentConnectionMode,
     RadrootsSimplexAgentConnectionStatus, RadrootsSimplexAgentEnvelope,
     RadrootsSimplexAgentMessageId, RadrootsSimplexAgentMessageReceipt,
     RadrootsSimplexAgentQueueAddress, RadrootsSimplexAgentQueueDescriptor,
-    RadrootsSimplexSmpRatchetState, decode_connection_link, decode_envelope,
-    encode_connection_link, encode_envelope,
+    RadrootsSimplexSmpRatchetState,
 };
+#[cfg(feature = "std")]
+use radroots_simplex_agent_proto::prelude::{
+    decode_connection_link, decode_envelope, encode_connection_link, encode_envelope,
+};
+use radroots_simplex_smp_crypto::prelude::RadrootsSimplexSmpEd25519Keypair;
+#[cfg(feature = "std")]
 use radroots_simplex_smp_crypto::prelude::{
-    RADROOTS_SIMPLEX_OFFICIAL_AES_IV_LENGTH, RadrootsSimplexSmpEd25519Keypair,
-    RadrootsSimplexSmpSkippedMessageKey,
+    RADROOTS_SIMPLEX_OFFICIAL_AES_IV_LENGTH, RadrootsSimplexSmpSkippedMessageKey,
 };
-use radroots_simplex_smp_proto::prelude::{
-    RadrootsSimplexSmpQueueUri, RadrootsSimplexSmpServerAddress,
-};
+#[cfg(feature = "std")]
+use radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpQueueUri;
+use radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpServerAddress;
 #[cfg(feature = "std")]
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "std")]
 use std::fs;
 #[cfg(feature = "std")]
 use std::path::{Path, PathBuf};
+
+#[cfg(feature = "std")]
+const RADROOTS_SIMPLEX_AGENT_STORE_PROTECTED_SECRETS_VERSION: u8 = 1;
+#[cfg(feature = "std")]
+const RADROOTS_SIMPLEX_AGENT_STORE_PROTECTED_SECRETS_KEY_SLOT: &str =
+    "radroots_simplex_agent_store_secrets";
+
+#[cfg(feature = "std")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RadrootsSimplexAgentStoreProtectedSecretsDiagnostics {
+    pub store_path: PathBuf,
+    pub protected_secrets_path: PathBuf,
+    pub wrapping_key_path: PathBuf,
+    pub public_snapshot_exists: bool,
+    pub protected_secrets_configured: bool,
+    pub protected_secrets_exists: bool,
+    pub wrapping_key_exists: bool,
+    pub protected_connection_count: usize,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
@@ -166,8 +200,20 @@ pub struct RadrootsSimplexAgentConnectionRecord {
 struct RadrootsSimplexAgentStoreSnapshot {
     next_connection_sequence: u64,
     next_command_sequence: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    protected_secrets: Option<RadrootsSimplexAgentStoreProtectedSecretsRef>,
     connections: Vec<RadrootsSimplexAgentConnectionSnapshot>,
     pending_commands: Vec<RadrootsSimplexAgentPendingCommandSnapshot>,
+}
+
+#[cfg(feature = "std")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct RadrootsSimplexAgentStoreProtectedSecretsRef {
+    version: u8,
+    envelope_suffix: String,
+    wrapping_key_suffix: String,
+    key_slot: String,
+    connection_count: usize,
 }
 
 #[cfg(feature = "std")]
@@ -317,6 +363,52 @@ struct RadrootsSimplexAgentMessageReceiptSnapshot {
     receipt_info: Vec<u8>,
 }
 
+#[cfg(feature = "std")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct RadrootsSimplexAgentStoreSecretsSnapshot {
+    version: u8,
+    connections: Vec<RadrootsSimplexAgentConnectionSecretsSnapshot>,
+}
+
+#[cfg(feature = "std")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct RadrootsSimplexAgentConnectionSecretsSnapshot {
+    id: String,
+    queues: Vec<RadrootsSimplexAgentQueueSecretsSnapshot>,
+    ratchet_state: Option<RadrootsSimplexAgentRatchetSecretsSnapshot>,
+    local_e2e_private_key: Option<Vec<u8>>,
+    local_x3dh_key_1_private_key: Option<Vec<u8>>,
+    local_x3dh_key_2_private_key: Option<Vec<u8>>,
+    local_pq_private_key: Option<Vec<u8>>,
+    shared_secret: Option<Vec<u8>>,
+}
+
+#[cfg(feature = "std")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct RadrootsSimplexAgentQueueSecretsSnapshot {
+    entity_id: Vec<u8>,
+    role: String,
+    auth_private_key: Option<Vec<u8>>,
+    delivery_private_key: Option<Vec<u8>>,
+    delivery_shared_secret: Option<Vec<u8>>,
+}
+
+#[cfg(feature = "std")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct RadrootsSimplexAgentRatchetSecretsSnapshot {
+    current_pq_shared_secret: Option<Vec<u8>>,
+    local_pq_private_key: Option<Vec<u8>>,
+    local_dh_private_key: Option<Vec<u8>>,
+    official_root_key: Option<Vec<u8>>,
+    official_sending_chain_key: Option<Vec<u8>>,
+    official_receiving_chain_key: Option<Vec<u8>>,
+    official_sending_header_key: Option<Vec<u8>>,
+    official_receiving_header_key: Option<Vec<u8>>,
+    official_next_sending_header_key: Option<Vec<u8>>,
+    official_next_receiving_header_key: Option<Vec<u8>>,
+    official_skipped_message_keys: Vec<RadrootsSimplexAgentSkippedMessageKeySnapshot>,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct RadrootsSimplexAgentStore {
     next_connection_sequence: u64,
@@ -349,13 +441,17 @@ impl RadrootsSimplexAgentStore {
             ))
         })?;
 
-        let snapshot: RadrootsSimplexAgentStoreSnapshot =
-            serde_json::from_slice(&raw).map_err(|error| {
+        let mut snapshot: RadrootsSimplexAgentStoreSnapshot = serde_json::from_slice(&raw)
+            .map_err(|error| {
                 RadrootsSimplexAgentStoreError::Persistence(format!(
                     "failed to parse SimpleX agent store snapshot `{}`: {error}",
                     path.display()
                 ))
             })?;
+        if snapshot.protected_secrets.is_some() {
+            let protected = read_protected_secrets_snapshot(&path, &snapshot)?;
+            merge_protected_secrets(&mut snapshot, protected)?;
+        }
 
         let mut store = Self::from_snapshot(snapshot)?;
         store.persistence_path = Some(path);
@@ -380,7 +476,14 @@ impl RadrootsSimplexAgentStore {
                 ))
             })?;
         }
-        let snapshot = self.snapshot()?;
+        let mut snapshot = self.snapshot()?;
+        let secrets = redact_snapshot_secrets(&mut snapshot);
+        if secrets.has_secret_material() {
+            snapshot.protected_secrets = Some(write_protected_secrets_snapshot(path, &secrets)?);
+        } else {
+            snapshot.protected_secrets = None;
+            remove_protected_secrets_files(path)?;
+        }
         let mut encoded = serde_json::to_vec_pretty(&snapshot).map_err(|error| {
             RadrootsSimplexAgentStoreError::Persistence(format!(
                 "failed to serialize SimpleX agent store snapshot `{}`: {error}",
@@ -394,6 +497,24 @@ impl RadrootsSimplexAgentStore {
                 path.display()
             ))
         })
+    }
+
+    #[cfg(feature = "std")]
+    pub fn protected_secrets_path(path: impl AsRef<Path>) -> PathBuf {
+        protected_secrets_path(path.as_ref())
+    }
+
+    #[cfg(feature = "std")]
+    pub fn protected_secrets_wrapping_key_path(path: impl AsRef<Path>) -> PathBuf {
+        protected_secrets_wrapping_key_path(path.as_ref())
+    }
+
+    #[cfg(feature = "std")]
+    pub fn protected_secrets_diagnostics(
+        path: impl AsRef<Path>,
+    ) -> Result<RadrootsSimplexAgentStoreProtectedSecretsDiagnostics, RadrootsSimplexAgentStoreError>
+    {
+        protected_secrets_diagnostics(path.as_ref())
     }
 
     pub fn create_connection(
@@ -837,6 +958,7 @@ impl RadrootsSimplexAgentStore {
         Ok(RadrootsSimplexAgentStoreSnapshot {
             next_connection_sequence: self.next_connection_sequence,
             next_command_sequence: self.next_command_sequence,
+            protected_secrets: None,
             connections,
             pending_commands,
         })
@@ -864,6 +986,521 @@ impl RadrootsSimplexAgentStore {
             persistence_path: None,
         })
     }
+}
+
+#[cfg(feature = "std")]
+impl RadrootsSimplexAgentStoreSecretsSnapshot {
+    fn has_secret_material(&self) -> bool {
+        self.connections
+            .iter()
+            .any(RadrootsSimplexAgentConnectionSecretsSnapshot::has_secret_material)
+    }
+}
+
+#[cfg(feature = "std")]
+impl RadrootsSimplexAgentConnectionSecretsSnapshot {
+    fn has_secret_material(&self) -> bool {
+        self.local_e2e_private_key.is_some()
+            || self.local_x3dh_key_1_private_key.is_some()
+            || self.local_x3dh_key_2_private_key.is_some()
+            || self.local_pq_private_key.is_some()
+            || self.shared_secret.is_some()
+            || self
+                .queues
+                .iter()
+                .any(RadrootsSimplexAgentQueueSecretsSnapshot::has_secret_material)
+            || self
+                .ratchet_state
+                .as_ref()
+                .is_some_and(RadrootsSimplexAgentRatchetSecretsSnapshot::has_secret_material)
+    }
+}
+
+#[cfg(feature = "std")]
+impl RadrootsSimplexAgentQueueSecretsSnapshot {
+    fn has_secret_material(&self) -> bool {
+        self.auth_private_key.is_some()
+            || self.delivery_private_key.is_some()
+            || self.delivery_shared_secret.is_some()
+    }
+}
+
+#[cfg(feature = "std")]
+impl RadrootsSimplexAgentRatchetSecretsSnapshot {
+    fn has_secret_material(&self) -> bool {
+        self.current_pq_shared_secret.is_some()
+            || self.local_pq_private_key.is_some()
+            || self.local_dh_private_key.is_some()
+            || self.official_root_key.is_some()
+            || self.official_sending_chain_key.is_some()
+            || self.official_receiving_chain_key.is_some()
+            || self.official_sending_header_key.is_some()
+            || self.official_receiving_header_key.is_some()
+            || self.official_next_sending_header_key.is_some()
+            || self.official_next_receiving_header_key.is_some()
+            || !self.official_skipped_message_keys.is_empty()
+    }
+}
+
+#[cfg(feature = "std")]
+fn protected_secrets_path(path: &Path) -> PathBuf {
+    sidecar_path(path, RADROOTS_PROTECTED_FILE_SECRET_SUFFIX)
+}
+
+#[cfg(feature = "std")]
+fn protected_secrets_wrapping_key_path(path: &Path) -> PathBuf {
+    sidecar_path(path, RADROOTS_PROTECTED_FILE_WRAPPING_KEY_FILE)
+}
+
+#[cfg(feature = "std")]
+fn protected_secrets_diagnostics(
+    path: &Path,
+) -> Result<RadrootsSimplexAgentStoreProtectedSecretsDiagnostics, RadrootsSimplexAgentStoreError> {
+    let store_path = path.to_path_buf();
+    let protected_secrets_path = protected_secrets_path(path);
+    let wrapping_key_path = protected_secrets_wrapping_key_path(path);
+    let public_snapshot_exists = path.exists();
+    let mut protected_secrets_configured = false;
+    let mut protected_connection_count = 0;
+
+    if public_snapshot_exists {
+        let raw = fs::read(path).map_err(|error| {
+            RadrootsSimplexAgentStoreError::Persistence(format!(
+                "failed to read SimpleX agent store snapshot `{}`: {error}",
+                path.display()
+            ))
+        })?;
+        let snapshot: RadrootsSimplexAgentStoreSnapshot =
+            serde_json::from_slice(&raw).map_err(|error| {
+                RadrootsSimplexAgentStoreError::Persistence(format!(
+                    "failed to parse SimpleX agent store snapshot `{}`: {error}",
+                    path.display()
+                ))
+            })?;
+        if let Some(protected) = snapshot.protected_secrets {
+            protected_secrets_configured = true;
+            protected_connection_count = protected.connection_count;
+        }
+    }
+
+    Ok(RadrootsSimplexAgentStoreProtectedSecretsDiagnostics {
+        store_path,
+        protected_secrets_path: protected_secrets_path.clone(),
+        wrapping_key_path: wrapping_key_path.clone(),
+        public_snapshot_exists,
+        protected_secrets_configured,
+        protected_secrets_exists: protected_secrets_path.exists(),
+        wrapping_key_exists: wrapping_key_path.exists(),
+        protected_connection_count,
+    })
+}
+
+#[cfg(feature = "std")]
+fn redact_snapshot_secrets(
+    snapshot: &mut RadrootsSimplexAgentStoreSnapshot,
+) -> RadrootsSimplexAgentStoreSecretsSnapshot {
+    let connections = snapshot
+        .connections
+        .iter_mut()
+        .map(redact_connection_secrets)
+        .collect();
+    RadrootsSimplexAgentStoreSecretsSnapshot {
+        version: RADROOTS_SIMPLEX_AGENT_STORE_PROTECTED_SECRETS_VERSION,
+        connections,
+    }
+}
+
+#[cfg(feature = "std")]
+fn redact_connection_secrets(
+    connection: &mut RadrootsSimplexAgentConnectionSnapshot,
+) -> RadrootsSimplexAgentConnectionSecretsSnapshot {
+    RadrootsSimplexAgentConnectionSecretsSnapshot {
+        id: connection.id.clone(),
+        queues: connection
+            .queues
+            .iter_mut()
+            .map(redact_queue_secrets)
+            .collect(),
+        ratchet_state: connection
+            .ratchet_state
+            .as_mut()
+            .map(redact_ratchet_secrets),
+        local_e2e_private_key: connection.local_e2e_private_key.take(),
+        local_x3dh_key_1_private_key: redact_x3dh_keypair_private(&mut connection.local_x3dh_key_1),
+        local_x3dh_key_2_private_key: redact_x3dh_keypair_private(&mut connection.local_x3dh_key_2),
+        local_pq_private_key: redact_pq_keypair_private(&mut connection.local_pq_keypair),
+        shared_secret: connection.shared_secret.take(),
+    }
+}
+
+#[cfg(feature = "std")]
+fn redact_queue_secrets(
+    queue: &mut RadrootsSimplexAgentQueueRecordSnapshot,
+) -> RadrootsSimplexAgentQueueSecretsSnapshot {
+    RadrootsSimplexAgentQueueSecretsSnapshot {
+        entity_id: queue.entity_id.clone(),
+        role: queue.role.clone(),
+        auth_private_key: queue
+            .auth_state
+            .as_mut()
+            .and_then(|auth| take_non_empty_vec(&mut auth.private_key)),
+        delivery_private_key: queue.delivery_private_key.take(),
+        delivery_shared_secret: queue.delivery_shared_secret.take(),
+    }
+}
+
+#[cfg(feature = "std")]
+fn redact_ratchet_secrets(
+    ratchet: &mut RadrootsSimplexAgentRatchetStateSnapshot,
+) -> RadrootsSimplexAgentRatchetSecretsSnapshot {
+    RadrootsSimplexAgentRatchetSecretsSnapshot {
+        current_pq_shared_secret: ratchet.current_pq_shared_secret.take(),
+        local_pq_private_key: ratchet.local_pq_private_key.take(),
+        local_dh_private_key: ratchet.local_dh_private_key.take(),
+        official_root_key: ratchet.official_root_key.take(),
+        official_sending_chain_key: ratchet.official_sending_chain_key.take(),
+        official_receiving_chain_key: ratchet.official_receiving_chain_key.take(),
+        official_sending_header_key: ratchet.official_sending_header_key.take(),
+        official_receiving_header_key: ratchet.official_receiving_header_key.take(),
+        official_next_sending_header_key: ratchet.official_next_sending_header_key.take(),
+        official_next_receiving_header_key: ratchet.official_next_receiving_header_key.take(),
+        official_skipped_message_keys: core::mem::take(&mut ratchet.official_skipped_message_keys),
+    }
+}
+
+#[cfg(feature = "std")]
+fn redact_x3dh_keypair_private(
+    keypair: &mut Option<RadrootsSimplexAgentX3dhKeypair>,
+) -> Option<Vec<u8>> {
+    keypair
+        .as_mut()
+        .and_then(|keypair| take_non_empty_vec(&mut keypair.private_key))
+}
+
+#[cfg(feature = "std")]
+fn redact_pq_keypair_private(
+    keypair: &mut Option<RadrootsSimplexAgentPqKeypair>,
+) -> Option<Vec<u8>> {
+    keypair
+        .as_mut()
+        .and_then(|keypair| take_non_empty_vec(&mut keypair.private_key))
+}
+
+#[cfg(feature = "std")]
+fn take_non_empty_vec(value: &mut Vec<u8>) -> Option<Vec<u8>> {
+    if value.is_empty() {
+        None
+    } else {
+        Some(core::mem::take(value))
+    }
+}
+
+#[cfg(feature = "std")]
+fn write_protected_secrets_snapshot(
+    path: &Path,
+    secrets: &RadrootsSimplexAgentStoreSecretsSnapshot,
+) -> Result<RadrootsSimplexAgentStoreProtectedSecretsRef, RadrootsSimplexAgentStoreError> {
+    let protected_path = protected_secrets_path(path);
+    if let Some(parent) = protected_path.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        fs::create_dir_all(parent).map_err(|error| {
+            RadrootsSimplexAgentStoreError::Persistence(format!(
+                "failed to create SimpleX agent protected store directory `{}`: {error}",
+                parent.display()
+            ))
+        })?;
+    }
+
+    let payload = serde_json::to_vec(secrets).map_err(|error| {
+        RadrootsSimplexAgentStoreError::Persistence(format!(
+            "failed to serialize SimpleX agent protected secrets snapshot `{}`: {error}",
+            protected_path.display()
+        ))
+    })?;
+    let key_source = RadrootsProtectedFileKeySource::new(protected_secrets_wrapping_key_path(path));
+    let envelope = RadrootsProtectedStoreEnvelope::seal_with_wrapped_key(
+        &key_source,
+        RADROOTS_SIMPLEX_AGENT_STORE_PROTECTED_SECRETS_KEY_SLOT,
+        &payload,
+    )
+    .map_err(|error| {
+        RadrootsSimplexAgentStoreError::Persistence(format!(
+            "failed to seal SimpleX agent protected secrets snapshot `{}`: {error}",
+            protected_path.display()
+        ))
+    })?;
+    let encoded = envelope.encode_json().map_err(|error| {
+        RadrootsSimplexAgentStoreError::Persistence(format!(
+            "failed to encode SimpleX agent protected secrets snapshot `{}`: {error}",
+            protected_path.display()
+        ))
+    })?;
+    fs::write(&protected_path, encoded).map_err(|error| {
+        RadrootsSimplexAgentStoreError::Persistence(format!(
+            "failed to write SimpleX agent protected secrets snapshot `{}`: {error}",
+            protected_path.display()
+        ))
+    })?;
+    set_secret_permissions(&protected_path)?;
+
+    Ok(RadrootsSimplexAgentStoreProtectedSecretsRef {
+        version: RADROOTS_SIMPLEX_AGENT_STORE_PROTECTED_SECRETS_VERSION,
+        envelope_suffix: RADROOTS_PROTECTED_FILE_SECRET_SUFFIX.into(),
+        wrapping_key_suffix: RADROOTS_PROTECTED_FILE_WRAPPING_KEY_FILE.into(),
+        key_slot: RADROOTS_SIMPLEX_AGENT_STORE_PROTECTED_SECRETS_KEY_SLOT.into(),
+        connection_count: secrets.connections.len(),
+    })
+}
+
+#[cfg(feature = "std")]
+fn read_protected_secrets_snapshot(
+    path: &Path,
+    snapshot: &RadrootsSimplexAgentStoreSnapshot,
+) -> Result<RadrootsSimplexAgentStoreSecretsSnapshot, RadrootsSimplexAgentStoreError> {
+    let protected_ref = snapshot.protected_secrets.as_ref().ok_or_else(|| {
+        RadrootsSimplexAgentStoreError::Persistence(
+            "SimpleX agent store snapshot does not reference protected secrets".into(),
+        )
+    })?;
+    validate_protected_secrets_ref(protected_ref)?;
+
+    let protected_path = protected_secrets_path(path);
+    let encoded = fs::read(&protected_path).map_err(|error| {
+        RadrootsSimplexAgentStoreError::Persistence(format!(
+            "failed to read SimpleX agent protected secrets snapshot `{}`: {error}",
+            protected_path.display()
+        ))
+    })?;
+    let envelope = RadrootsProtectedStoreEnvelope::decode_json(&encoded).map_err(|error| {
+        RadrootsSimplexAgentStoreError::Persistence(format!(
+            "failed to decode SimpleX agent protected secrets snapshot `{}`: {error}",
+            protected_path.display()
+        ))
+    })?;
+    if envelope.header.key_slot != RADROOTS_SIMPLEX_AGENT_STORE_PROTECTED_SECRETS_KEY_SLOT {
+        return Err(RadrootsSimplexAgentStoreError::Persistence(format!(
+            "SimpleX agent protected secrets snapshot `{}` uses key slot `{}`",
+            protected_path.display(),
+            envelope.header.key_slot
+        )));
+    }
+
+    let key_source = RadrootsProtectedFileKeySource::new(protected_secrets_wrapping_key_path(path));
+    let plaintext = envelope
+        .open_with_wrapped_key(&key_source)
+        .map_err(|error| {
+            RadrootsSimplexAgentStoreError::Persistence(format!(
+                "failed to open SimpleX agent protected secrets snapshot `{}`: {error}",
+                protected_path.display()
+            ))
+        })?;
+    let secrets: RadrootsSimplexAgentStoreSecretsSnapshot = serde_json::from_slice(&plaintext)
+        .map_err(|error| {
+            RadrootsSimplexAgentStoreError::Persistence(format!(
+                "failed to parse SimpleX agent protected secrets snapshot `{}`: {error}",
+                protected_path.display()
+            ))
+        })?;
+    if secrets.version != RADROOTS_SIMPLEX_AGENT_STORE_PROTECTED_SECRETS_VERSION {
+        return Err(RadrootsSimplexAgentStoreError::Persistence(format!(
+            "unsupported SimpleX agent protected secrets version `{}`",
+            secrets.version
+        )));
+    }
+    Ok(secrets)
+}
+
+#[cfg(feature = "std")]
+fn validate_protected_secrets_ref(
+    protected_ref: &RadrootsSimplexAgentStoreProtectedSecretsRef,
+) -> Result<(), RadrootsSimplexAgentStoreError> {
+    if protected_ref.version != RADROOTS_SIMPLEX_AGENT_STORE_PROTECTED_SECRETS_VERSION {
+        return Err(RadrootsSimplexAgentStoreError::Persistence(format!(
+            "unsupported SimpleX agent protected secrets reference version `{}`",
+            protected_ref.version
+        )));
+    }
+    if protected_ref.envelope_suffix != RADROOTS_PROTECTED_FILE_SECRET_SUFFIX {
+        return Err(RadrootsSimplexAgentStoreError::Persistence(format!(
+            "unsupported SimpleX agent protected secrets envelope suffix `{}`",
+            protected_ref.envelope_suffix
+        )));
+    }
+    if protected_ref.wrapping_key_suffix != RADROOTS_PROTECTED_FILE_WRAPPING_KEY_FILE {
+        return Err(RadrootsSimplexAgentStoreError::Persistence(format!(
+            "unsupported SimpleX agent protected secrets wrapping key suffix `{}`",
+            protected_ref.wrapping_key_suffix
+        )));
+    }
+    if protected_ref.key_slot != RADROOTS_SIMPLEX_AGENT_STORE_PROTECTED_SECRETS_KEY_SLOT {
+        return Err(RadrootsSimplexAgentStoreError::Persistence(format!(
+            "unsupported SimpleX agent protected secrets key slot `{}`",
+            protected_ref.key_slot
+        )));
+    }
+    Ok(())
+}
+
+#[cfg(feature = "std")]
+fn merge_protected_secrets(
+    snapshot: &mut RadrootsSimplexAgentStoreSnapshot,
+    secrets: RadrootsSimplexAgentStoreSecretsSnapshot,
+) -> Result<(), RadrootsSimplexAgentStoreError> {
+    for secret_connection in secrets.connections {
+        let connection = snapshot
+            .connections
+            .iter_mut()
+            .find(|connection| connection.id == secret_connection.id)
+            .ok_or_else(|| {
+                RadrootsSimplexAgentStoreError::Persistence(format!(
+                    "SimpleX agent protected secrets reference unknown connection `{}`",
+                    secret_connection.id
+                ))
+            })?;
+        merge_connection_secrets(connection, secret_connection)?;
+    }
+    Ok(())
+}
+
+#[cfg(feature = "std")]
+fn merge_connection_secrets(
+    connection: &mut RadrootsSimplexAgentConnectionSnapshot,
+    secrets: RadrootsSimplexAgentConnectionSecretsSnapshot,
+) -> Result<(), RadrootsSimplexAgentStoreError> {
+    for queue_secrets in secrets.queues {
+        let queue = connection
+            .queues
+            .iter_mut()
+            .find(|queue| {
+                queue.entity_id == queue_secrets.entity_id && queue.role == queue_secrets.role
+            })
+            .ok_or_else(|| {
+                RadrootsSimplexAgentStoreError::Persistence(format!(
+                    "SimpleX agent protected secrets reference unknown queue on `{}`",
+                    connection.id
+                ))
+            })?;
+        merge_queue_secrets(queue, queue_secrets, &connection.id)?;
+    }
+
+    if let Some(ratchet_secrets) = secrets.ratchet_state {
+        let ratchet = connection.ratchet_state.as_mut().ok_or_else(|| {
+            RadrootsSimplexAgentStoreError::Persistence(format!(
+                "SimpleX agent protected secrets reference missing ratchet state on `{}`",
+                connection.id
+            ))
+        })?;
+        merge_ratchet_secrets(ratchet, ratchet_secrets);
+    }
+
+    connection.local_e2e_private_key = secrets.local_e2e_private_key;
+    if let Some(private_key) = secrets.local_x3dh_key_1_private_key {
+        let keypair = connection.local_x3dh_key_1.as_mut().ok_or_else(|| {
+            RadrootsSimplexAgentStoreError::Persistence(format!(
+                "SimpleX agent protected secrets reference missing first X3DH keypair on `{}`",
+                connection.id
+            ))
+        })?;
+        keypair.private_key = private_key;
+    }
+    if let Some(private_key) = secrets.local_x3dh_key_2_private_key {
+        let keypair = connection.local_x3dh_key_2.as_mut().ok_or_else(|| {
+            RadrootsSimplexAgentStoreError::Persistence(format!(
+                "SimpleX agent protected secrets reference missing second X3DH keypair on `{}`",
+                connection.id
+            ))
+        })?;
+        keypair.private_key = private_key;
+    }
+    if let Some(private_key) = secrets.local_pq_private_key {
+        let keypair = connection.local_pq_keypair.as_mut().ok_or_else(|| {
+            RadrootsSimplexAgentStoreError::Persistence(format!(
+                "SimpleX agent protected secrets reference missing PQ keypair on `{}`",
+                connection.id
+            ))
+        })?;
+        keypair.private_key = private_key;
+    }
+    connection.shared_secret = secrets.shared_secret;
+    Ok(())
+}
+
+#[cfg(feature = "std")]
+fn merge_queue_secrets(
+    queue: &mut RadrootsSimplexAgentQueueRecordSnapshot,
+    secrets: RadrootsSimplexAgentQueueSecretsSnapshot,
+    connection_id: &str,
+) -> Result<(), RadrootsSimplexAgentStoreError> {
+    if let Some(private_key) = secrets.auth_private_key {
+        let auth = queue.auth_state.as_mut().ok_or_else(|| {
+            RadrootsSimplexAgentStoreError::Persistence(format!(
+                "SimpleX agent protected secrets reference missing queue auth state on `{connection_id}`"
+            ))
+        })?;
+        auth.private_key = private_key;
+    }
+    queue.delivery_private_key = secrets.delivery_private_key;
+    queue.delivery_shared_secret = secrets.delivery_shared_secret;
+    Ok(())
+}
+
+#[cfg(feature = "std")]
+fn merge_ratchet_secrets(
+    ratchet: &mut RadrootsSimplexAgentRatchetStateSnapshot,
+    secrets: RadrootsSimplexAgentRatchetSecretsSnapshot,
+) {
+    ratchet.current_pq_shared_secret = secrets.current_pq_shared_secret;
+    ratchet.local_pq_private_key = secrets.local_pq_private_key;
+    ratchet.local_dh_private_key = secrets.local_dh_private_key;
+    ratchet.official_root_key = secrets.official_root_key;
+    ratchet.official_sending_chain_key = secrets.official_sending_chain_key;
+    ratchet.official_receiving_chain_key = secrets.official_receiving_chain_key;
+    ratchet.official_sending_header_key = secrets.official_sending_header_key;
+    ratchet.official_receiving_header_key = secrets.official_receiving_header_key;
+    ratchet.official_next_sending_header_key = secrets.official_next_sending_header_key;
+    ratchet.official_next_receiving_header_key = secrets.official_next_receiving_header_key;
+    ratchet.official_skipped_message_keys = secrets.official_skipped_message_keys;
+}
+
+#[cfg(feature = "std")]
+fn remove_protected_secrets_files(path: &Path) -> Result<(), RadrootsSimplexAgentStoreError> {
+    remove_file_if_exists(&protected_secrets_path(path))?;
+    remove_file_if_exists(&protected_secrets_wrapping_key_path(path))
+}
+
+#[cfg(feature = "std")]
+fn remove_file_if_exists(path: &Path) -> Result<(), RadrootsSimplexAgentStoreError> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(RadrootsSimplexAgentStoreError::Persistence(format!(
+            "failed to remove SimpleX agent protected store file `{}`: {error}",
+            path.display()
+        ))),
+    }
+}
+
+#[cfg(feature = "std")]
+fn set_secret_permissions(path: &Path) -> Result<(), RadrootsSimplexAgentStoreError> {
+    set_secret_permissions_inner(path).map_err(|error| {
+        RadrootsSimplexAgentStoreError::Persistence(format!(
+            "failed to set SimpleX agent protected store permissions `{}`: {error}",
+            path.display()
+        ))
+    })
+}
+
+#[cfg(all(feature = "std", unix))]
+fn set_secret_permissions_inner(path: &Path) -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    fs::set_permissions(path, fs::Permissions::from_mode(0o600))
+}
+
+#[cfg(all(feature = "std", not(unix)))]
+fn set_secret_permissions_inner(_path: &Path) -> std::io::Result<()> {
+    Ok(())
 }
 
 #[cfg(feature = "std")]
@@ -1578,6 +2215,13 @@ mod tests {
             let connection = store.connection_mut(&connection.id).unwrap();
             connection.hello_sent = true;
             connection.hello_received = true;
+            connection.local_e2e_public_key = Some(b"e2e-public".to_vec());
+            connection.local_e2e_private_key = Some(b"e2e-private".to_vec());
+            connection.shared_secret = Some(b"connection-shared-secret".to_vec());
+            let queue = connection.queues.first_mut().unwrap();
+            queue.auth_state.as_mut().unwrap().private_key = b"queue-auth-private".to_vec();
+            queue.delivery_private_key = Some(b"queue-delivery-private".to_vec());
+            queue.delivery_shared_secret = Some(b"queue-delivery-shared-secret".to_vec());
             let mut ratchet =
                 RadrootsSimplexSmpRatchetState::initiator(vec![1_u8; 56], vec![2_u8; 56], None)
                     .unwrap();
@@ -1616,6 +2260,93 @@ mod tests {
             });
         }
         store.flush().unwrap();
+        let raw_public = fs::read_to_string(&path).unwrap();
+        let public_json: serde_json::Value = serde_json::from_str(&raw_public).unwrap();
+        let public_connection = &public_json["connections"][0];
+        assert!(public_connection["local_e2e_public_key"].is_array());
+        assert!(public_connection["local_e2e_private_key"].is_null());
+        assert!(public_connection["shared_secret"].is_null());
+        assert!(public_connection["local_x3dh_key_1"]["public_key"].is_array());
+        assert_eq!(
+            public_connection["local_x3dh_key_1"]["private_key"]
+                .as_array()
+                .unwrap()
+                .len(),
+            0
+        );
+        assert_eq!(
+            public_connection["local_x3dh_key_2"]["private_key"]
+                .as_array()
+                .unwrap()
+                .len(),
+            0
+        );
+        assert!(public_connection["local_pq_keypair"]["public_key"].is_array());
+        assert_eq!(
+            public_connection["local_pq_keypair"]["private_key"]
+                .as_array()
+                .unwrap()
+                .len(),
+            0
+        );
+        let public_queue = &public_connection["queues"][0];
+        assert_eq!(
+            public_queue["auth_state"]["private_key"]
+                .as_array()
+                .unwrap()
+                .len(),
+            0
+        );
+        assert!(public_queue["delivery_private_key"].is_null());
+        assert!(public_queue["delivery_shared_secret"].is_null());
+        let public_ratchet = &public_connection["ratchet_state"];
+        for field in [
+            "current_pq_shared_secret",
+            "local_pq_private_key",
+            "local_dh_private_key",
+            "official_root_key",
+            "official_sending_chain_key",
+            "official_receiving_chain_key",
+            "official_sending_header_key",
+            "official_receiving_header_key",
+            "official_next_sending_header_key",
+            "official_next_receiving_header_key",
+        ] {
+            assert!(
+                public_ratchet[field].is_null(),
+                "public ratchet leaked {field}"
+            );
+        }
+        assert_eq!(
+            public_ratchet["official_skipped_message_keys"]
+                .as_array()
+                .unwrap()
+                .len(),
+            0
+        );
+        assert!(raw_public.contains("protected_secrets"));
+        let protected_path = RadrootsSimplexAgentStore::protected_secrets_path(&path);
+        let protected_raw = fs::read_to_string(&protected_path).unwrap();
+        for secret in [
+            "e2e-private",
+            "queue-auth-private",
+            "connection-shared-secret",
+            "official-root",
+            "x3dh-private-1",
+            "pq-private",
+        ] {
+            assert!(
+                !protected_raw.contains(secret),
+                "protected envelope leaked {secret}"
+            );
+        }
+        assert!(RadrootsSimplexAgentStore::protected_secrets_wrapping_key_path(&path).is_file());
+        let diagnostics = RadrootsSimplexAgentStore::protected_secrets_diagnostics(&path).unwrap();
+        assert!(diagnostics.public_snapshot_exists);
+        assert!(diagnostics.protected_secrets_configured);
+        assert!(diagnostics.protected_secrets_exists);
+        assert!(diagnostics.wrapping_key_exists);
+        assert_eq!(diagnostics.protected_connection_count, 1);
 
         let loaded = RadrootsSimplexAgentStore::open(&path).unwrap();
         let loaded_connection = loaded.connection(&connection.id).unwrap();
@@ -1628,6 +2359,30 @@ mod tests {
         );
         assert!(loaded_connection.hello_sent);
         assert!(loaded_connection.hello_received);
+        assert_eq!(
+            loaded_connection.local_e2e_private_key.as_deref(),
+            Some(&b"e2e-private"[..])
+        );
+        assert_eq!(
+            loaded_connection.shared_secret.as_deref(),
+            Some(&b"connection-shared-secret"[..])
+        );
+        let loaded_queue = loaded.primary_send_queue(&connection.id).unwrap();
+        assert_eq!(
+            loaded_queue
+                .auth_state
+                .as_ref()
+                .map(|auth| auth.private_key.as_slice()),
+            Some(&b"queue-auth-private"[..])
+        );
+        assert_eq!(
+            loaded_queue.delivery_private_key.as_deref(),
+            Some(&b"queue-delivery-private"[..])
+        );
+        assert_eq!(
+            loaded_queue.delivery_shared_secret.as_deref(),
+            Some(&b"queue-delivery-shared-secret"[..])
+        );
         let loaded_ratchet = loaded_connection.ratchet_state.as_ref().unwrap();
         assert_eq!(
             loaded_ratchet.official_associated_data.as_deref(),
@@ -1688,5 +2443,36 @@ mod tests {
                 .auth_state
                 .is_some()
         );
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn flush_without_secrets_removes_stale_protected_sidecars() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path().join("agent-store.json");
+        fs::write(
+            RadrootsSimplexAgentStore::protected_secrets_path(&path),
+            b"stale",
+        )
+        .unwrap();
+        fs::write(
+            RadrootsSimplexAgentStore::protected_secrets_wrapping_key_path(&path),
+            b"stale",
+        )
+        .unwrap();
+
+        let mut store = RadrootsSimplexAgentStore::open(&path).unwrap();
+        store.create_connection(
+            RadrootsSimplexAgentConnectionMode::Direct,
+            RadrootsSimplexAgentConnectionStatus::Connected,
+            None,
+            None,
+        );
+        store.flush().unwrap();
+
+        let raw_public = fs::read_to_string(&path).unwrap();
+        assert!(!raw_public.contains("protected_secrets"));
+        assert!(!RadrootsSimplexAgentStore::protected_secrets_path(&path).exists());
+        assert!(!RadrootsSimplexAgentStore::protected_secrets_wrapping_key_path(&path).exists());
     }
 }

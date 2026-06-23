@@ -1,4 +1,5 @@
 use crate::error::RadrootsSimplexSmpCryptoError;
+use alloc::vec;
 use alloc::vec::Vec;
 use getrandom::getrandom;
 use hkdf::Hkdf;

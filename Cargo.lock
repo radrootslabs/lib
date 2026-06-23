@@ -4599,6 +4599,7 @@ dependencies = [
 name = "radroots_simplex_agent_store"
 version = "0.1.0-alpha.2"
 dependencies = [
+ "radroots_protected_store",
  "radroots_simplex_agent_proto",
  "radroots_simplex_smp_crypto",
  "radroots_simplex_smp_proto",

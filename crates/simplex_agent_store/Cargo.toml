@@ -14,6 +14,8 @@ readme = "README"
 [features]
 default = ["std"]
 std = [
+  "dep:radroots_protected_store",
+  "radroots_protected_store/std",
   "radroots_simplex_agent_proto/std",
   "radroots_simplex_smp_crypto/std",
   "radroots_simplex_smp_proto/std",
@@ -23,6 +25,7 @@ std = [
 ]
 
 [dependencies]
+radroots_protected_store = { workspace = true, optional = true, default-features = false }
 radroots_simplex_agent_proto = { workspace = true, default-features = false }
 radroots_simplex_smp_crypto = { workspace = true, default-features = false }
 radroots_simplex_smp_proto = { workspace = true, default-features = false }
