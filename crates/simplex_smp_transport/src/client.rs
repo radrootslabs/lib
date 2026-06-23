@@ -22,8 +22,9 @@ use radroots_simplex_smp_crypto::prelude::{
 };
 use radroots_simplex_smp_proto::prelude::{
     RADROOTS_SIMPLEX_SMP_AUTH_COMMANDS_TRANSPORT_VERSION,
-    RADROOTS_SIMPLEX_SMP_ENCRYPTED_BLOCK_TRANSPORT_VERSION, RadrootsSimplexSmpCommandTransmission,
-    RadrootsSimplexSmpCorrelationId, RadrootsSimplexSmpServerAddress,
+    RADROOTS_SIMPLEX_SMP_ENCRYPTED_BLOCK_TRANSPORT_VERSION, RadrootsSimplexSmpBrokerMessage,
+    RadrootsSimplexSmpCommandTransmission, RadrootsSimplexSmpCorrelationId,
+    RadrootsSimplexSmpServerAddress,
 };
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
@@ -32,7 +33,7 @@ use rustls::{
     StreamOwned,
 };
 use sha2::{Digest, Sha256};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::io::{ErrorKind, Read, Write};
 use std::net::{IpAddr, TcpStream, ToSocketAddrs};
 use std::sync::Arc;
@@ -44,6 +45,9 @@ pub struct RadrootsSimplexSmpTlsCommandTransport {
     sessions: BTreeMap<String, RadrootsSimplexSmpLiveSession>,
 }
 
+const LIVE_SESSION_TIMEOUT: Duration = Duration::from_secs(5);
+const LIVE_EMPTY_SUBSCRIPTION_TIMEOUT: Duration = Duration::from_millis(150);
+
 struct RadrootsSimplexSmpLiveSession {
     stream: StreamOwned<ClientConnection, TcpStream>,
     transport_version: u16,
@@ -51,6 +55,7 @@ struct RadrootsSimplexSmpLiveSession {
     send_chain_key: Option<RadrootsSimplexSmpSecretBoxChainKey>,
     receive_chain_key: Option<RadrootsSimplexSmpSecretBoxChainKey>,
     debug_shared_secret: Option<Vec<u8>>,
+    pending_broker_responses: VecDeque<RadrootsSimplexSmpTransportResponse>,
 }
 
 impl RadrootsSimplexSmpTlsCommandTransport {
@@ -97,13 +102,20 @@ impl RadrootsSimplexSmpCommandTransport for RadrootsSimplexSmpTlsCommandTranspor
     ) -> Result<RadrootsSimplexSmpTransportResponse, Self::Error> {
         let session_kind = session_kind_for_command(&request.command);
         let key = Self::session_key(&request.server, session_kind);
-        match execute_live_request(self.session_for(&request.server, session_kind)?, &request) {
+        let accepts_uncorrelated_subscription_response =
+            accepts_uncorrelated_subscription_response(&request.command);
+        match execute_live_request(
+            self.session_for(&request.server, session_kind)?,
+            &request,
+            accepts_uncorrelated_subscription_response,
+        ) {
             Ok(response) => Ok(response),
             Err(RadrootsSimplexSmpTransportError::LiveTransportIo(error)) => {
                 self.sessions.remove(&key);
                 let response = execute_live_request(
                     self.session_for(&request.server, session_kind)?,
                     &request,
+                    accepts_uncorrelated_subscription_response,
                 );
                 match response {
                     Ok(response) => Ok(response),
@@ -129,6 +141,7 @@ impl RadrootsSimplexSmpSubscriptionTransport for RadrootsSimplexSmpTlsCommandTra
             &request.server,
             None,
             true,
+            None,
         ) {
             Ok(response) => Ok(response),
             Err(RadrootsSimplexSmpTransportError::LiveTransportIo(error)) => {
@@ -155,9 +168,23 @@ fn session_kind_for_command(
     }
 }
 
+fn accepts_uncorrelated_subscription_response(
+    command: &radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpCommand,
+) -> bool {
+    matches!(
+        command,
+        radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpCommand::Sub
+            | radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpCommand::Subs
+            | radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpCommand::NSub
+            | radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpCommand::NSubs
+            | radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpCommand::Ack(_)
+    )
+}
+
 fn execute_live_request(
     session: &mut RadrootsSimplexSmpLiveSession,
     request: &RadrootsSimplexSmpTransportRequest,
+    accept_uncorrelated_subscription_response: bool,
 ) -> Result<RadrootsSimplexSmpTransportResponse, RadrootsSimplexSmpTransportError> {
     let correlation_id = request
         .correlation_id
@@ -193,7 +220,16 @@ fn execute_live_request(
         .flush()
         .map_err(|error| RadrootsSimplexSmpTransportError::LiveTransportIo(error.to_string()))?;
 
-    read_live_response(session, &request.server, Some(correlation_id), false)?.ok_or_else(|| {
+    let accepted_entity_id =
+        accept_uncorrelated_subscription_response.then_some(request.entity_id.as_slice());
+    read_live_response(
+        session,
+        &request.server,
+        Some(correlation_id),
+        false,
+        accepted_entity_id,
+    )?
+    .ok_or_else(|| {
         RadrootsSimplexSmpTransportError::LiveTransportIo(
             "SMP command response was not available before the read timeout".into(),
         )
@@ -205,9 +241,30 @@ fn read_live_response(
     server: &RadrootsSimplexSmpServerAddress,
     expected_correlation_id: Option<RadrootsSimplexSmpCorrelationId>,
     timeout_is_empty: bool,
+    accepted_subscription_entity_id: Option<&[u8]>,
 ) -> Result<Option<RadrootsSimplexSmpTransportResponse>, RadrootsSimplexSmpTransportError> {
+    if expected_correlation_id.is_none()
+        && let Some(response) = session.pending_broker_responses.pop_front()
+    {
+        return Ok(Some(response));
+    }
+    if let Some(entity_id) = accepted_subscription_entity_id
+        && let Some(position) = session
+            .pending_broker_responses
+            .iter()
+            .position(|response| is_subscription_response_for_entity(response, entity_id))
+    {
+        return Ok(session.pending_broker_responses.remove(position));
+    }
     let mut response_block = vec![0_u8; RADROOTS_SIMPLEX_SMP_TRANSPORT_BLOCK_SIZE];
-    if let Err(error) = session.stream.read_exact(&mut response_block) {
+    if timeout_is_empty {
+        set_live_read_timeout(session, LIVE_EMPTY_SUBSCRIPTION_TIMEOUT)?;
+    }
+    let read_result = session.stream.read_exact(&mut response_block);
+    if timeout_is_empty {
+        set_live_read_timeout(session, LIVE_SESSION_TIMEOUT)?;
+    }
+    if let Err(error) = read_result {
         if timeout_is_empty && matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) {
             return Ok(None);
         }
@@ -218,25 +275,78 @@ fn read_live_response(
     let response_hash = Sha256::digest(&response_block).to_vec();
     let decoded = decode_live_transport_block(session, &response_block)?;
     let transmissions = decoded.decode_broker_transmissions(session.transport_version)?;
-    if transmissions.len() != 1 {
-        return Err(
-            RadrootsSimplexSmpTransportError::UnexpectedBrokerTransmissionCount(
-                transmissions.len(),
-            ),
-        );
-    }
-    let transmission = transmissions.into_iter().next().expect("checked len");
-    if let Some(expected_correlation_id) = expected_correlation_id
-        && transmission.correlation_id != Some(expected_correlation_id)
-    {
+    let responses = transmissions
+        .into_iter()
+        .map(|transmission| RadrootsSimplexSmpTransportResponse {
+            server: server.clone(),
+            transport_version: session.transport_version,
+            transmission,
+            transport_hash: response_hash.clone(),
+        })
+        .collect::<Vec<_>>();
+    select_live_response(
+        &mut session.pending_broker_responses,
+        responses,
+        expected_correlation_id,
+        accepted_subscription_entity_id,
+    )
+}
+
+fn select_live_response(
+    pending_broker_responses: &mut VecDeque<RadrootsSimplexSmpTransportResponse>,
+    mut responses: Vec<RadrootsSimplexSmpTransportResponse>,
+    expected_correlation_id: Option<RadrootsSimplexSmpCorrelationId>,
+    accepted_subscription_entity_id: Option<&[u8]>,
+) -> Result<Option<RadrootsSimplexSmpTransportResponse>, RadrootsSimplexSmpTransportError> {
+    if let Some(expected_correlation_id) = expected_correlation_id {
+        if let Some(position) = responses.iter().position(|response| {
+            response.transmission.correlation_id == Some(expected_correlation_id)
+        }) {
+            let matched_response = responses.remove(position);
+            pending_broker_responses.extend(responses);
+            return Ok(Some(matched_response));
+        }
+        if let Some(entity_id) = accepted_subscription_entity_id
+            && let Some(position) = responses
+                .iter()
+                .position(|response| is_subscription_response_for_entity(response, entity_id))
+        {
+            let matched_response = responses.remove(position);
+            pending_broker_responses.extend(responses);
+            return Ok(Some(matched_response));
+        }
+        pending_broker_responses.extend(responses);
         return Err(RadrootsSimplexSmpTransportError::CorrelationIdMismatch);
     }
-    Ok(Some(RadrootsSimplexSmpTransportResponse {
-        server: server.clone(),
-        transport_version: session.transport_version,
-        transmission,
-        transport_hash: response_hash,
-    }))
+    pending_broker_responses.extend(responses);
+    Ok(pending_broker_responses.pop_front())
+}
+
+fn is_subscription_response_for_entity(
+    response: &RadrootsSimplexSmpTransportResponse,
+    entity_id: &[u8],
+) -> bool {
+    response.transmission.entity_id == entity_id
+        && matches!(
+            response.transmission.message,
+            RadrootsSimplexSmpBrokerMessage::Msg(_)
+                | RadrootsSimplexSmpBrokerMessage::NMsg { .. }
+                | RadrootsSimplexSmpBrokerMessage::Sok(_)
+                | RadrootsSimplexSmpBrokerMessage::Soks(_)
+                | RadrootsSimplexSmpBrokerMessage::Ok
+                | RadrootsSimplexSmpBrokerMessage::Err(_)
+        )
+}
+
+fn set_live_read_timeout(
+    session: &mut RadrootsSimplexSmpLiveSession,
+    timeout: Duration,
+) -> Result<(), RadrootsSimplexSmpTransportError> {
+    session
+        .stream
+        .sock
+        .set_read_timeout(Some(timeout))
+        .map_err(|error| RadrootsSimplexSmpTransportError::LiveTransportIo(error.to_string()))
 }
 
 fn transport_debug_enabled() -> bool {
@@ -401,17 +511,16 @@ fn connect_live_session_host(
             "failed to resolve SMP server host `{host}:{port}`"
         ))
     })?;
-    let tcp =
-        TcpStream::connect_timeout(&socket_addr, Duration::from_secs(5)).map_err(|error| {
-            RadrootsSimplexSmpTransportError::LiveTransportIo(format!(
-                "failed to connect to SMP server `{host}:{port}`: {error}"
-            ))
-        })?;
+    let tcp = TcpStream::connect_timeout(&socket_addr, LIVE_SESSION_TIMEOUT).map_err(|error| {
+        RadrootsSimplexSmpTransportError::LiveTransportIo(format!(
+            "failed to connect to SMP server `{host}:{port}`: {error}"
+        ))
+    })?;
     tcp.set_nodelay(true)
         .map_err(|error| RadrootsSimplexSmpTransportError::LiveTransportIo(error.to_string()))?;
-    tcp.set_read_timeout(Some(Duration::from_secs(5)))
+    tcp.set_read_timeout(Some(LIVE_SESSION_TIMEOUT))
         .map_err(|error| RadrootsSimplexSmpTransportError::LiveTransportIo(error.to_string()))?;
-    tcp.set_write_timeout(Some(Duration::from_secs(5)))
+    tcp.set_write_timeout(Some(LIVE_SESSION_TIMEOUT))
         .map_err(|error| RadrootsSimplexSmpTransportError::LiveTransportIo(error.to_string()))?;
 
     let server_name = match host.parse::<IpAddr>() {
@@ -530,6 +639,7 @@ fn connect_live_session_host(
         send_chain_key,
         receive_chain_key,
         debug_shared_secret,
+        pending_broker_responses: VecDeque::new(),
     })
 }
 
@@ -843,9 +953,10 @@ mod tests {
     use super::{
         canonical_server_identity, decode_encrypted_transport_block,
         decode_server_transport_public_key, encode_encrypted_transport_payload,
+        select_live_response,
     };
     use crate::handshake::RadrootsSimplexSmpTransportServerProof;
-    use crate::prelude::RadrootsSimplexSmpTransportBlock;
+    use crate::prelude::{RadrootsSimplexSmpTransportBlock, RadrootsSimplexSmpTransportResponse};
     use radroots_simplex_smp_crypto::prelude::{
         RadrootsSimplexSmpX25519Keypair, encode_x25519_public_key_x509, init_secretbox_chain,
     };
@@ -853,7 +964,9 @@ mod tests {
         RADROOTS_SIMPLEX_SMP_CURRENT_TRANSPORT_VERSION, RadrootsSimplexSmpBrokerMessage,
         RadrootsSimplexSmpBrokerTransmission, RadrootsSimplexSmpCommand,
         RadrootsSimplexSmpCommandTransmission, RadrootsSimplexSmpCorrelationId,
+        RadrootsSimplexSmpReceivedMessage, RadrootsSimplexSmpServerAddress,
     };
+    use std::collections::VecDeque;
 
     #[test]
     fn canonicalizes_padded_and_unpadded_server_identity() {
@@ -966,6 +1079,93 @@ mod tests {
             super::session_kind_for_command(&RadrootsSimplexSmpCommand::Ack(b"message".to_vec())),
             "subscription"
         );
+        assert!(super::accepts_uncorrelated_subscription_response(
+            &RadrootsSimplexSmpCommand::Ack(b"message".to_vec())
+        ));
+        assert!(super::accepts_uncorrelated_subscription_response(
+            &RadrootsSimplexSmpCommand::Sub
+        ));
+    }
+
+    #[test]
+    fn strict_command_selection_buffers_unmatched_response_and_errors() {
+        let mut pending = VecDeque::new();
+        let expected = RadrootsSimplexSmpCorrelationId::new([1_u8; 24]);
+        let unmatched = response(
+            Some(RadrootsSimplexSmpCorrelationId::new([2_u8; 24])),
+            b"rr-synth-entity",
+            RadrootsSimplexSmpBrokerMessage::Ok,
+        );
+
+        assert_eq!(
+            select_live_response(&mut pending, vec![unmatched.clone()], Some(expected), None)
+                .unwrap_err(),
+            crate::prelude::RadrootsSimplexSmpTransportError::CorrelationIdMismatch
+        );
+        assert_eq!(pending.into_iter().collect::<Vec<_>>(), vec![unmatched]);
+    }
+
+    #[test]
+    fn matched_response_wins_and_buffers_subscription_message() {
+        let mut pending = VecDeque::new();
+        let expected = RadrootsSimplexSmpCorrelationId::new([1_u8; 24]);
+        let message = response(
+            None,
+            b"rr-synth-entity",
+            RadrootsSimplexSmpBrokerMessage::Msg(RadrootsSimplexSmpReceivedMessage {
+                message_id: b"message-1".to_vec(),
+                encrypted_body: b"body".to_vec(),
+            }),
+        );
+        let matched = response(
+            Some(expected),
+            b"rr-synth-entity",
+            RadrootsSimplexSmpBrokerMessage::Sok(None),
+        );
+
+        let selected = select_live_response(
+            &mut pending,
+            vec![message.clone(), matched.clone()],
+            Some(expected),
+            Some(b"rr-synth-entity"),
+        )
+        .unwrap();
+
+        assert_eq!(selected, Some(matched));
+        assert_eq!(pending.into_iter().collect::<Vec<_>>(), vec![message]);
+    }
+
+    #[test]
+    fn subscription_selection_accepts_uncorrelated_message_for_entity() {
+        let mut pending = VecDeque::new();
+        let expected = RadrootsSimplexSmpCorrelationId::new([1_u8; 24]);
+        let message = response(
+            None,
+            b"rr-synth-entity",
+            RadrootsSimplexSmpBrokerMessage::Msg(RadrootsSimplexSmpReceivedMessage {
+                message_id: b"message-1".to_vec(),
+                encrypted_body: b"body".to_vec(),
+            }),
+        );
+        let other = response(
+            None,
+            b"rr-other-entity",
+            RadrootsSimplexSmpBrokerMessage::Msg(RadrootsSimplexSmpReceivedMessage {
+                message_id: b"message-2".to_vec(),
+                encrypted_body: b"other".to_vec(),
+            }),
+        );
+
+        let selected = select_live_response(
+            &mut pending,
+            vec![other.clone(), message.clone()],
+            Some(expected),
+            Some(b"rr-synth-entity"),
+        )
+        .unwrap();
+
+        assert_eq!(selected, Some(message));
+        assert_eq!(pending.into_iter().collect::<Vec<_>>(), vec![other]);
     }
 
     fn der_sequence<'a, I>(elements: I) -> Vec<u8>
@@ -1000,5 +1200,27 @@ mod tests {
         bytes.reverse();
         buffer.push(0x80 | (bytes.len() as u8));
         buffer.extend_from_slice(&bytes);
+    }
+
+    fn response(
+        correlation_id: Option<RadrootsSimplexSmpCorrelationId>,
+        entity_id: &[u8],
+        message: RadrootsSimplexSmpBrokerMessage,
+    ) -> RadrootsSimplexSmpTransportResponse {
+        RadrootsSimplexSmpTransportResponse {
+            server: RadrootsSimplexSmpServerAddress {
+                server_identity: "cnItc3ludGgtc2VydmVy".to_owned(),
+                hosts: vec!["127.0.0.1".to_owned()],
+                port: Some(5223),
+            },
+            transport_version: RADROOTS_SIMPLEX_SMP_CURRENT_TRANSPORT_VERSION,
+            transmission: RadrootsSimplexSmpBrokerTransmission {
+                authorization: Vec::new(),
+                correlation_id,
+                entity_id: entity_id.to_vec(),
+                message,
+            },
+            transport_hash: vec![9_u8; 32],
+        }
     }
 }

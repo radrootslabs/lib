@@ -2,11 +2,13 @@ use alloc::string::String;
 use core::fmt;
 use radroots_simplex_agent_proto::prelude::RadrootsSimplexAgentProtoError;
 use radroots_simplex_agent_store::prelude::RadrootsSimplexAgentStoreError;
+use radroots_simplex_smp_crypto::prelude::RadrootsSimplexSmpCryptoError;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RadrootsSimplexAgentRuntimeError {
     Proto(RadrootsSimplexAgentProtoError),
     Store(RadrootsSimplexAgentStoreError),
+    Crypto(RadrootsSimplexSmpCryptoError),
     MissingConfig(&'static str),
     InvalidConfig(&'static str),
     Runtime(String),
@@ -24,11 +26,18 @@ impl From<RadrootsSimplexAgentStoreError> for RadrootsSimplexAgentRuntimeError {
     }
 }
 
+impl From<RadrootsSimplexSmpCryptoError> for RadrootsSimplexAgentRuntimeError {
+    fn from(value: RadrootsSimplexSmpCryptoError) -> Self {
+        Self::Crypto(value)
+    }
+}
+
 impl fmt::Display for RadrootsSimplexAgentRuntimeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Proto(error) => write!(f, "{error}"),
             Self::Store(error) => write!(f, "{error}"),
+            Self::Crypto(error) => write!(f, "{error}"),
             Self::MissingConfig(field) => {
                 write!(f, "missing SimpleX agent runtime config `{field}`")
             }

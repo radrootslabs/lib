@@ -260,7 +260,7 @@ pub enum RadrootsSimplexAgentPendingCommandKind {
     AckInboxMessage {
         queue: RadrootsSimplexAgentQueueAddress,
         broker_message_id: Vec<u8>,
-        receipt: RadrootsSimplexAgentMessageReceipt,
+        receipt: Option<RadrootsSimplexAgentMessageReceipt>,
     },
     RotateQueues {
         descriptors: Vec<RadrootsSimplexAgentQueueDescriptor>,
@@ -276,6 +276,7 @@ pub enum RadrootsSimplexAgentPendingCommandKind {
     SecureGetQueueLinkData {
         invitation: RadrootsSimplexAgentShortInvitationLink,
         reply_queue: RadrootsSimplexSmpQueueUri,
+        sender_auth_state: RadrootsSimplexAgentQueueAuthState,
     },
     GetQueueLinkData {
         invitation: RadrootsSimplexAgentShortInvitationLink,
@@ -503,7 +504,7 @@ enum RadrootsSimplexAgentPendingCommandKindSnapshot {
     AckInboxMessage {
         queue: RadrootsSimplexAgentQueueAddressSnapshot,
         broker_message_id: Vec<u8>,
-        receipt: RadrootsSimplexAgentMessageReceiptSnapshot,
+        receipt: Option<RadrootsSimplexAgentMessageReceiptSnapshot>,
     },
     RotateQueues {
         descriptors: Vec<RadrootsSimplexAgentQueueDescriptorSnapshot>,
@@ -519,6 +520,8 @@ enum RadrootsSimplexAgentPendingCommandKindSnapshot {
     SecureGetQueueLinkData {
         invitation: RadrootsSimplexAgentShortInvitationLinkSnapshot,
         reply_queue: String,
+        sender_auth_public_key: Vec<u8>,
+        sender_auth_private_key: Vec<u8>,
     },
     GetQueueLinkData {
         invitation: RadrootsSimplexAgentShortInvitationLinkSnapshot,
@@ -592,6 +595,7 @@ struct RadrootsSimplexAgentPendingCommandSecretsSnapshot {
     id: u64,
     connection_id: String,
     short_invitation_link_key: Option<Vec<u8>>,
+    short_invitation_sender_auth_private_key: Option<Vec<u8>>,
 }
 
 #[cfg(feature = "std")]
@@ -1199,8 +1203,30 @@ impl RadrootsSimplexAgentStore {
             command.connection_id == connection_id
                 && matches!(
                     &command.kind,
-                    RadrootsSimplexAgentPendingCommandKind::AckInboxMessage { receipt, .. }
+                    RadrootsSimplexAgentPendingCommandKind::AckInboxMessage {
+                        receipt: Some(receipt),
+                        ..
+                    }
                     if receipt.message_id == message_id && receipt.message_hash == message_hash
+                )
+        })
+    }
+
+    pub fn has_pending_broker_ack(
+        &self,
+        connection_id: &str,
+        queue_address: &RadrootsSimplexAgentQueueAddress,
+        broker_message_id: &[u8],
+    ) -> bool {
+        self.pending_commands.values().any(|command| {
+            command.connection_id == connection_id
+                && matches!(
+                    &command.kind,
+                    RadrootsSimplexAgentPendingCommandKind::AckInboxMessage {
+                        queue,
+                        broker_message_id: pending_broker_message_id,
+                        ..
+                    } if queue == queue_address && pending_broker_message_id == broker_message_id
                 )
         })
     }
@@ -1769,6 +1795,8 @@ fn redact_pending_command_secrets(
         short_invitation_link_key: redact_pending_command_short_invitation_link_key(
             &mut command.kind,
         ),
+        short_invitation_sender_auth_private_key:
+            redact_pending_command_short_invitation_sender_auth_private_key(&mut command.kind),
     }
 }
 
@@ -1784,6 +1812,19 @@ fn redact_pending_command_short_invitation_link_key(
         | RadrootsSimplexAgentPendingCommandKindSnapshot::GetQueueLinkData { invitation, .. } => {
             take_non_empty_vec(&mut invitation.link_key)
         }
+        _ => None,
+    }
+}
+
+#[cfg(feature = "std")]
+fn redact_pending_command_short_invitation_sender_auth_private_key(
+    kind: &mut RadrootsSimplexAgentPendingCommandKindSnapshot,
+) -> Option<Vec<u8>> {
+    match kind {
+        RadrootsSimplexAgentPendingCommandKindSnapshot::SecureGetQueueLinkData {
+            sender_auth_private_key,
+            ..
+        } => take_non_empty_vec(sender_auth_private_key),
         _ => None,
     }
 }
@@ -2382,9 +2423,23 @@ fn validate_public_pending_command_secret_posture(
     match &command.kind {
         RadrootsSimplexAgentPendingCommandKindSnapshot::SecureGetQueueLinkData {
             invitation,
+            sender_auth_private_key,
             ..
+        } => {
+            reject_public_secret_vec(
+                invitation.link_key.as_slice(),
+                protected_secrets_configured,
+                "pending short-link invitation link key",
+                &command.connection_id,
+            )?;
+            reject_public_secret_vec(
+                sender_auth_private_key.as_slice(),
+                protected_secrets_configured,
+                "pending short-link sender auth private key",
+                &command.connection_id,
+            )
         }
-        | RadrootsSimplexAgentPendingCommandKindSnapshot::GetQueueLinkData { invitation, .. } => {
+        RadrootsSimplexAgentPendingCommandKindSnapshot::GetQueueLinkData { invitation, .. } => {
             reject_public_secret_vec(
                 invitation.link_key.as_slice(),
                 protected_secrets_configured,
@@ -2667,17 +2722,29 @@ fn merge_pending_command_secrets(
             ))
         })?;
 
-    let Some(link_key) = secrets.short_invitation_link_key else {
-        return Ok(());
-    };
-
     match &mut command.kind {
         RadrootsSimplexAgentPendingCommandKindSnapshot::SecureGetQueueLinkData {
             invitation,
+            sender_auth_private_key,
             ..
+        } => {
+            if let Some(link_key) = secrets.short_invitation_link_key {
+                invitation.link_key = link_key;
+            }
+            if let Some(private_key) = secrets.short_invitation_sender_auth_private_key {
+                *sender_auth_private_key = private_key;
+            }
+            Ok(())
         }
-        | RadrootsSimplexAgentPendingCommandKindSnapshot::GetQueueLinkData { invitation, .. } => {
-            invitation.link_key = link_key;
+        RadrootsSimplexAgentPendingCommandKindSnapshot::GetQueueLinkData { invitation, .. } => {
+            if let Some(link_key) = secrets.short_invitation_link_key {
+                invitation.link_key = link_key;
+            }
+            Ok(())
+        }
+        _ if secrets.short_invitation_link_key.is_none()
+            && secrets.short_invitation_sender_auth_private_key.is_none() =>
+        {
             Ok(())
         }
         _ => Err(RadrootsSimplexAgentStoreError::Persistence(format!(
@@ -3206,11 +3273,11 @@ fn command_kind_to_snapshot(
         } => RadrootsSimplexAgentPendingCommandKindSnapshot::AckInboxMessage {
             queue: queue_address_to_snapshot(queue),
             broker_message_id,
-            receipt: RadrootsSimplexAgentMessageReceiptSnapshot {
+            receipt: receipt.map(|receipt| RadrootsSimplexAgentMessageReceiptSnapshot {
                 message_id: receipt.message_id,
                 message_hash: receipt.message_hash,
                 receipt_info: receipt.receipt_info,
-            },
+            }),
         },
         RadrootsSimplexAgentPendingCommandKind::RotateQueues { descriptors } => {
             RadrootsSimplexAgentPendingCommandKindSnapshot::RotateQueues {
@@ -3237,9 +3304,12 @@ fn command_kind_to_snapshot(
         RadrootsSimplexAgentPendingCommandKind::SecureGetQueueLinkData {
             invitation,
             reply_queue,
+            sender_auth_state,
         } => RadrootsSimplexAgentPendingCommandKindSnapshot::SecureGetQueueLinkData {
             invitation: short_invitation_to_snapshot(invitation),
             reply_queue: reply_queue.to_string(),
+            sender_auth_public_key: sender_auth_state.public_key,
+            sender_auth_private_key: sender_auth_state.private_key,
         },
         RadrootsSimplexAgentPendingCommandKind::GetQueueLinkData {
             invitation,
@@ -3297,11 +3367,11 @@ fn command_kind_from_snapshot(
         } => RadrootsSimplexAgentPendingCommandKind::AckInboxMessage {
             queue: queue_address_from_snapshot(queue)?,
             broker_message_id,
-            receipt: RadrootsSimplexAgentMessageReceipt {
+            receipt: receipt.map(|receipt| RadrootsSimplexAgentMessageReceipt {
                 message_id: receipt.message_id,
                 message_hash: receipt.message_hash,
                 receipt_info: receipt.receipt_info,
-            },
+            }),
         },
         RadrootsSimplexAgentPendingCommandKindSnapshot::RotateQueues { descriptors } => {
             RadrootsSimplexAgentPendingCommandKind::RotateQueues {
@@ -3331,9 +3401,15 @@ fn command_kind_from_snapshot(
         RadrootsSimplexAgentPendingCommandKindSnapshot::SecureGetQueueLinkData {
             invitation,
             reply_queue,
+            sender_auth_public_key,
+            sender_auth_private_key,
         } => RadrootsSimplexAgentPendingCommandKind::SecureGetQueueLinkData {
             invitation: short_invitation_from_snapshot(invitation)?,
             reply_queue: queue_uri_from_string(&reply_queue)?,
+            sender_auth_state: RadrootsSimplexAgentQueueAuthState {
+                public_key: sender_auth_public_key,
+                private_key: sender_auth_private_key,
+            },
         },
         RadrootsSimplexAgentPendingCommandKindSnapshot::GetQueueLinkData {
             invitation,
@@ -3814,6 +3890,7 @@ mod tests {
                 RadrootsSimplexAgentPendingCommandKind::SecureGetQueueLinkData {
                     invitation: secure_short_invitation.clone(),
                     reply_queue: short_reply_queue.clone(),
+                    sender_auth_state: sample_auth_state(),
                 },
                 13,
             )
@@ -4115,7 +4192,8 @@ mod tests {
             &command.kind,
             RadrootsSimplexAgentPendingCommandKind::SecureGetQueueLinkData {
                 invitation,
-                reply_queue
+                reply_queue,
+                ..
             } if invitation == &secure_short_invitation
                 && reply_queue == &short_reply_queue
         )));
@@ -4435,6 +4513,7 @@ mod tests {
                 RadrootsSimplexAgentPendingCommandKind::SecureGetQueueLinkData {
                     invitation: sample_short_invitation_link(vec![5_u8; 24]),
                     reply_queue: sample_descriptor(true).queue_uri,
+                    sender_auth_state: sample_auth_state(),
                 },
                 10,
             )

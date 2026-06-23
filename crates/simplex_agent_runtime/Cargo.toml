@@ -20,6 +20,7 @@ std = [
   "radroots_simplex_smp_proto/std",
   "radroots_simplex_smp_transport/std",
   "sha2/std",
+  "sha3/std",
 ]
 
 [dependencies]
@@ -30,6 +31,7 @@ radroots_simplex_smp_crypto = { workspace = true, default-features = false }
 radroots_simplex_smp_proto = { workspace = true, default-features = false }
 radroots_simplex_smp_transport = { workspace = true, default-features = false }
 sha2 = { workspace = true, default-features = false }
+sha3 = { workspace = true, default-features = false }
 
 [dev-dependencies]
 tempfile = { workspace = true }

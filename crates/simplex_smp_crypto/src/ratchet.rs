@@ -461,6 +461,39 @@ impl RadrootsSimplexSmpRatchetState {
         Ok(plaintext)
     }
 
+    pub fn is_official_payload_replay(
+        &self,
+        encrypted_message: &[u8],
+    ) -> Result<bool, RadrootsSimplexSmpCryptoError> {
+        let message = decode_official_encrypted_message(encrypted_message)?;
+        let header = decode_official_encrypted_header(&message.encrypted_header)?;
+        let ratchet_ad = self.official_associated_data.clone().ok_or(
+            RadrootsSimplexSmpCryptoError::MissingRatchetKey("official_associated_data"),
+        )?;
+        for skipped in &self.official_skipped_message_keys {
+            if let Ok(ratchet_header) =
+                decrypt_official_header_with_key(&header, &skipped.header_key, &ratchet_ad)
+                && ratchet_header.message_number == skipped.message_number
+            {
+                return Ok(false);
+            }
+        }
+        if let Some(receiving_header_key) = self.official_receiving_header_key.as_ref()
+            && let Ok(ratchet_header) =
+                decrypt_official_header_with_key(&header, receiving_header_key, &ratchet_ad)
+        {
+            return Ok(ratchet_header.message_number < self.receiving_chain_length);
+        }
+        if let Some(next_receiving_header_key) = self.official_next_receiving_header_key.as_ref()
+            && let Ok(ratchet_header) =
+                decrypt_official_header_with_key(&header, next_receiving_header_key, &ratchet_ad)
+        {
+            return Ok(ratchet_header.message_number < self.receiving_chain_length
+                && ratchet_header.previous_sending_chain_length < self.receiving_chain_length);
+        }
+        Ok(false)
+    }
+
     fn decrypt_official_skipped_payload(
         &mut self,
         header: &RadrootsSimplexOfficialEncryptedHeader,
@@ -1146,6 +1179,33 @@ mod tests {
             .unwrap();
         assert_eq!(plaintext, b"official agent body");
         assert_eq!(receiver.receiving_chain_length, 1);
+    }
+
+    #[test]
+    fn detects_official_payload_replay_without_consuming_skipped_messages() {
+        let (mut sender, mut receiver) = official_sender_receiver_ratchets();
+        let shared_secret = [14_u8; RADROOTS_SIMPLEX_SMP_SHARED_SECRET_LENGTH];
+        let first = sender
+            .encrypt_official_payload(&shared_secret, b"first", 96)
+            .unwrap();
+        let second = sender
+            .encrypt_official_payload(&shared_secret, b"second", 96)
+            .unwrap();
+
+        assert_eq!(
+            receiver
+                .decrypt_official_payload(&shared_secret, &second)
+                .unwrap(),
+            b"second"
+        );
+        assert!(!receiver.is_official_payload_replay(&first).unwrap());
+        assert_eq!(
+            receiver
+                .decrypt_official_payload(&shared_secret, &first)
+                .unwrap(),
+            b"first"
+        );
+        assert!(receiver.is_official_payload_replay(&first).unwrap());
     }
 
     #[test]

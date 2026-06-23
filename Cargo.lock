@@ -4611,6 +4611,7 @@ dependencies = [
  "radroots_simplex_smp_proto",
  "radroots_simplex_smp_transport",
  "sha2",
+ "sha3",
  "tempfile",
 ]
 

@@ -12,14 +12,14 @@ pub const fn synthetic_connection_id() -> &'static str {
 
 pub fn synthetic_invitation_queue() -> RadrootsSimplexSmpQueueUri {
     RadrootsSimplexSmpQueueUri::parse(
-        "smp://cnItc3ludGg@relay.synthetic.invalid/aW52aXRl#/?v=4&dh=cnItc3ludGgtZGg&q=m",
+        "smp://cnItc3ludGgtc2VydmVyLWtleS1oYXNoLTAwMDAwMDE@relay.synthetic.invalid/aW52aXRl#/?v=4&dh=cnItc3ludGgtZGg&q=m",
     )
     .unwrap()
 }
 
 pub fn synthetic_reply_queue() -> RadrootsSimplexSmpQueueUri {
     RadrootsSimplexSmpQueueUri::parse(
-        "smp://cnItc3ludGg@reply.synthetic.invalid/cmVwbHk#/?v=4&dh=cnItc3ludGgtcmVwbHk&q=m",
+        "smp://cnItc3ludGgtcmVwbHkta2V5LWhhc2gtMDAwMDAwMDE@reply.synthetic.invalid/cmVwbHk#/?v=4&dh=cnItc3ludGgtcmVwbHk&q=m",
     )
     .unwrap()
 }

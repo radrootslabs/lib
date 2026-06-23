@@ -1,4 +1,6 @@
 use alloc::vec::Vec;
+use base64::Engine as _;
+use base64::engine::general_purpose::{URL_SAFE, URL_SAFE_NO_PAD};
 use radroots_simplex_smp_crypto::prelude::{
     RadrootsSimplexOfficialX3dhParams, RadrootsSimplexSmpRatchetHeader,
 };
@@ -58,9 +60,16 @@ impl RadrootsSimplexAgentQueueDescriptor {
     pub fn queue_address(&self) -> RadrootsSimplexAgentQueueAddress {
         RadrootsSimplexAgentQueueAddress {
             server: self.queue_uri.server.clone(),
-            sender_id: self.queue_uri.sender_id.as_bytes().to_vec(),
+            sender_id: decode_queue_uri_sender_id(&self.queue_uri.sender_id),
         }
     }
+}
+
+fn decode_queue_uri_sender_id(sender_id: &str) -> Vec<u8> {
+    URL_SAFE_NO_PAD
+        .decode(sender_id.as_bytes())
+        .or_else(|_| URL_SAFE.decode(sender_id.as_bytes()))
+        .expect("validated SimpleX queue URI sender id")
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
