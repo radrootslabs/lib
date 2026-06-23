@@ -1,5 +1,6 @@
 mod check;
 mod contracts;
+mod coverage;
 mod fs;
 mod generate;
 mod manifest;
@@ -11,6 +12,7 @@ mod wasm;
 enum CommandAction<'a> {
     GenerateTs,
     GenerateWasm(&'a [String]),
+    Coverage(&'a [String]),
     Check,
 }
 
@@ -26,6 +28,7 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), String> {
     match command_action(&args)? {
         CommandAction::GenerateTs => generate::generate_ts(),
         CommandAction::GenerateWasm(rest) => wasm::generate(rest),
+        CommandAction::Coverage(rest) => coverage::run(rest),
         CommandAction::Check => check::check(),
     }
 }
@@ -38,6 +41,7 @@ fn command_action(args: &[String]) -> Result<CommandAction<'_>, String> {
         [command, target, rest @ ..] if command == "generate" && target == "wasm" => {
             Ok(CommandAction::GenerateWasm(rest))
         }
+        [command, rest @ ..] if command == "coverage" => Ok(CommandAction::Coverage(rest)),
         [command] if command == "check" => Ok(CommandAction::Check),
         [] => Err(usage()),
         _ => Err(usage()),
@@ -45,7 +49,7 @@ fn command_action(args: &[String]) -> Result<CommandAction<'_>, String> {
 }
 
 fn usage() -> String {
-    "usage: cargo xtask generate ts | cargo xtask generate wasm [--package <key>] | cargo xtask check"
+    "usage: cargo xtask generate ts | cargo xtask generate wasm [--package <key>] | cargo xtask check | cargo xtask coverage run"
         .to_owned()
 }
 
@@ -77,6 +81,15 @@ mod tests {
         assert!(matches!(
             command_action(&args).expect("action"),
             CommandAction::Check
+        ));
+    }
+
+    #[test]
+    fn accepts_coverage_run() {
+        let args = ["coverage".to_owned(), "run".to_owned()];
+        assert!(matches!(
+            command_action(&args).expect("action"),
+            CommandAction::Coverage(rest) if rest == ["run"]
         ));
     }
 
