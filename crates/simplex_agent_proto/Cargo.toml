@@ -16,5 +16,6 @@ default = ["std"]
 std = ["radroots_simplex_smp_crypto/std", "radroots_simplex_smp_proto/std"]
 
 [dependencies]
+base64 = { workspace = true }
 radroots_simplex_smp_crypto = { workspace = true, default-features = false }
 radroots_simplex_smp_proto = { workspace = true, default-features = false }

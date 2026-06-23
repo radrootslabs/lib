@@ -4577,6 +4577,7 @@ dependencies = [
 name = "radroots_simplex_agent_proto"
 version = "0.1.0-alpha.2"
 dependencies = [
+ "base64 0.22.1",
  "radroots_simplex_smp_crypto",
  "radroots_simplex_smp_proto",
 ]
