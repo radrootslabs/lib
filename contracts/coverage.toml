@@ -50,6 +50,7 @@ crates = [
   "radroots_nostr_signer",
   "radroots_outbox",
   "radroots_protected_store",
+  "radroots_publish_proxy_protocol",
   "radroots_relay_transport",
   "radroots_replica_db",
   "radroots_replica_db_schema",
