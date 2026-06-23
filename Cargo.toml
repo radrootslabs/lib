@@ -21,6 +21,7 @@ members = [
   "crates/relay_transport",
   "crates/runtime",
   "crates/secret_vault",
+  "crates/simplex_app_store",
   "crates/simplex_agent_proto",
   "crates/simplex_agent_runtime",
   "crates/simplex_agent_store",
@@ -96,6 +97,7 @@ radroots_trade = { path = "crates/trade", version = "0.1.0-alpha.2", default-fea
 radroots_types = { path = "crates/types", version = "0.1.0-alpha.2", default-features = false }
 radroots_protected_store = { path = "crates/protected_store", version = "0.1.0-alpha.2", default-features = false }
 radroots_secret_vault = { path = "crates/secret_vault", version = "0.1.0-alpha.2", default-features = false }
+radroots_simplex_app_store = { path = "crates/simplex_app_store", version = "0.1.0-alpha.2", default-features = false }
 radroots_sp1_guest_trade = { path = "crates/sp1_guest_trade", version = "0.1.0-alpha.2", default-features = false }
 radroots_sp1_host_trade = { path = "crates/sp1_host_trade", version = "0.1.0-alpha.2", default-features = false }
 

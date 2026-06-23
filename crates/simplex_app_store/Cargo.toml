@@ -1,0 +1,36 @@
+[package]
+name = "radroots_simplex_app_store"
+publish = false
+version = "0.1.0-alpha.2"
+edition.workspace = true
+authors = ["Tyson Lupul <tyson@radroots.org>"]
+rust-version.workspace = true
+license.workspace = true
+description = "SimpleX application storage model for Radroots"
+repository.workspace = true
+homepage.workspace = true
+
+[features]
+default = ["std", "sqlcipher", "os-keyring"]
+std = [
+  "radroots_secret_vault/std",
+  "serde/std",
+  "serde_json/std",
+  "zeroize/std",
+]
+sqlcipher = ["std", "dep:rusqlite"]
+os-keyring = ["std", "radroots_secret_vault/os-keyring"]
+
+[dependencies]
+getrandom = { workspace = true }
+hex = { workspace = true }
+radroots_secret_vault = { workspace = true, default-features = false }
+rusqlite = { workspace = true, optional = true, features = ["bundled-sqlcipher-vendored-openssl"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+zeroize = { workspace = true }
+
+[dev-dependencies]
+radroots_secret_vault = { workspace = true, features = ["memory-vault"] }
+tempfile = { workspace = true }

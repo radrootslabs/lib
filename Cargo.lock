@@ -2866,6 +2866,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2e99fb7a497b1e3339bc746195567ed8d3e24945ecd636e3619d20b9de9e9149"
 dependencies = [
  "cc",
+ "openssl-sys",
  "pkg-config",
  "vcpkg",
 ]
@@ -4617,6 +4618,21 @@ dependencies = [
  "serde_json",
  "sha2",
  "tempfile",
+]
+
+[[package]]
+name = "radroots_simplex_app_store"
+version = "0.1.0-alpha.2"
+dependencies = [
+ "getrandom 0.2.17",
+ "hex",
+ "radroots_secret_vault",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "zeroize",
 ]
 
 [[package]]
