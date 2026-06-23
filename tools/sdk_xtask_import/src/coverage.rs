@@ -11,13 +11,13 @@ struct CoverageContract {
     toolchain: CoverageToolchain,
     report: CoverageReport,
     generated: GeneratedCoveragePolicy,
+    scopes: BTreeMap<String, CoverageScope>,
     exclusions: BTreeMap<String, CoverageExclusion>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct CoveragePolicy {
-    threshold: f64,
     enforce: bool,
     require_regions: bool,
     require_functions: bool,
@@ -48,6 +48,13 @@ struct GeneratedCoveragePolicy {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
+struct CoverageScope {
+    paths: Vec<String>,
+    threshold: f64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct CoverageExclusion {
     paths: Vec<String>,
     reason: String,
@@ -60,7 +67,14 @@ struct LlvmCovReport {
 
 #[derive(Debug, Deserialize)]
 struct LlvmCovData {
+    files: Vec<LlvmCovFile>,
     totals: LlvmCovSummary,
+}
+
+#[derive(Debug, Deserialize)]
+struct LlvmCovFile {
+    filename: String,
+    summary: LlvmCovSummary,
 }
 
 #[derive(Debug, Deserialize)]
@@ -75,6 +89,52 @@ struct LlvmCovMetric {
     count: u64,
     covered: u64,
     percent: f64,
+}
+
+#[derive(Debug, Default)]
+struct MetricAccumulator {
+    count: u64,
+    covered: u64,
+}
+
+impl MetricAccumulator {
+    fn add(&mut self, metric: &LlvmCovMetric) {
+        self.count += metric.count;
+        self.covered += metric.covered;
+    }
+
+    fn metric(&self) -> LlvmCovMetric {
+        LlvmCovMetric {
+            count: self.count,
+            covered: self.covered,
+            percent: metric_percent(self.count, self.covered),
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+struct SummaryAccumulator {
+    lines: MetricAccumulator,
+    functions: MetricAccumulator,
+    regions: MetricAccumulator,
+    matched_files: usize,
+}
+
+impl SummaryAccumulator {
+    fn add(&mut self, summary: &LlvmCovSummary) {
+        self.lines.add(&summary.lines);
+        self.functions.add(&summary.functions);
+        self.regions.add(&summary.regions);
+        self.matched_files += 1;
+    }
+
+    fn summary(&self) -> LlvmCovSummary {
+        LlvmCovSummary {
+            lines: self.lines.metric(),
+            functions: self.functions.metric(),
+            regions: self.regions.metric(),
+        }
+    }
 }
 
 pub fn run(args: &[String]) -> Result<(), String> {
@@ -97,8 +157,9 @@ fn run_coverage() -> Result<(), String> {
     generate::generate_ts()?;
     wasm::generate(&[])?;
     check::check()?;
+    clean_report_output(&root, &contract)?;
     run_llvm_cov(&root, &contract)?;
-    evaluate_report(&root.join(&contract.report.output), &contract)
+    evaluate_report(&root, &root.join(&contract.report.output), &contract)
 }
 
 fn load_contract(root: &Path) -> Result<CoverageContract, String> {
@@ -109,14 +170,6 @@ fn load_contract(root: &Path) -> Result<CoverageContract, String> {
 }
 
 fn validate_contract(contract: &CoverageContract) -> Result<(), String> {
-    if !(0.0..=100.0).contains(&contract.policy.threshold) {
-        return Err(
-            "contracts/coverage.toml policy.threshold must be between 0 and 100".to_owned(),
-        );
-    }
-    if contract.policy.threshold != 100.0 {
-        return Err("contracts/coverage.toml policy.threshold must be 100.0".to_owned());
-    }
     validate_non_empty(&contract.toolchain.rust, "toolchain.rust")?;
     validate_non_empty(&contract.toolchain.wasm_target, "toolchain.wasm_target")?;
     validate_non_empty(&contract.report.output, "report.output")?;
@@ -130,6 +183,19 @@ fn validate_contract(contract: &CoverageContract) -> Result<(), String> {
         "generated.binding_crates",
     )?;
     validate_non_empty(&contract.generated.wasm_glue, "generated.wasm_glue")?;
+    if contract.scopes.is_empty() {
+        return Err("contracts/coverage.toml scopes must not be empty".to_owned());
+    }
+    for (name, scope) in &contract.scopes {
+        validate_non_empty(name, "scope name")?;
+        validate_threshold(scope.threshold, &format!("scopes.{name}.threshold"))?;
+        if scope.paths.is_empty() {
+            return Err(format!("scopes.{name}.paths must not be empty"));
+        }
+        for path in &scope.paths {
+            validate_non_empty(path, &format!("scopes.{name}.paths entry"))?;
+        }
+    }
     if contract.exclusions.is_empty() {
         return Err("contracts/coverage.toml exclusions must not be empty".to_owned());
     }
@@ -144,6 +210,16 @@ fn validate_contract(contract: &CoverageContract) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+fn validate_threshold(threshold: f64, field: &str) -> Result<(), String> {
+    if (0.0..=100.0).contains(&threshold) {
+        Ok(())
+    } else {
+        Err(format!(
+            "contracts/coverage.toml {field} must be between 0 and 100"
+        ))
+    }
 }
 
 fn validate_non_empty(value: &str, field: &str) -> Result<(), String> {
@@ -218,6 +294,17 @@ fn output(command: &str, args: &[&str]) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
+fn clean_report_output(root: &Path, contract: &CoverageContract) -> Result<(), String> {
+    let output_path = root.join(&contract.report.output);
+    if let Some(parent) = output_path.parent()
+        && parent.exists()
+    {
+        fs::remove_dir_all(parent)
+            .map_err(|error| format!("failed to remove {}: {error}", parent.display()))?;
+    }
+    Ok(())
+}
+
 fn run_llvm_cov(root: &Path, contract: &CoverageContract) -> Result<(), String> {
     let output_path = root.join(&contract.report.output);
     if let Some(parent) = output_path.parent() {
@@ -239,7 +326,6 @@ fn run_llvm_cov(root: &Path, contract: &CoverageContract) -> Result<(), String> 
             &contract.report.output,
             "--ignore-filename-regex",
             &contract.report.ignore_filename_regex,
-            "--no-clean",
             "--no-fail-fast",
         ])
         .status()
@@ -250,7 +336,11 @@ fn run_llvm_cov(root: &Path, contract: &CoverageContract) -> Result<(), String> 
     Ok(())
 }
 
-fn evaluate_report(report_path: &Path, contract: &CoverageContract) -> Result<(), String> {
+fn evaluate_report(
+    root: &Path,
+    report_path: &Path,
+    contract: &CoverageContract,
+) -> Result<(), String> {
     let raw = fs::read_to_string(report_path)
         .map_err(|error| format!("failed to read {}: {error}", report_path.display()))?;
     let report = serde_json::from_str::<LlvmCovReport>(&raw)
@@ -259,37 +349,122 @@ fn evaluate_report(report_path: &Path, contract: &CoverageContract) -> Result<()
         .data
         .first()
         .ok_or_else(|| format!("{} did not include coverage data", report_path.display()))?;
-    validate_metric("lines", &data.totals.lines, contract.policy.require_lines)?;
     validate_metric(
-        "functions",
+        "total lines",
+        &data.totals.lines,
+        contract.policy.require_lines,
+    )?;
+    validate_metric(
+        "total functions",
         &data.totals.functions,
         contract.policy.require_functions,
     )?;
     validate_metric(
-        "regions",
+        "total regions",
         &data.totals.regions,
         contract.policy.require_regions,
     )?;
+    let mut failures = Vec::new();
+    for (scope_name, scope) in &contract.scopes {
+        let scope_summary = match scope_summary(root, data, scope) {
+            Ok(summary) => summary,
+            Err(error) => {
+                failures.push(format!("coverage scope {scope_name}: {error}"));
+                continue;
+            }
+        };
+        collect_scope_metric_failure(
+            &mut failures,
+            scope_name,
+            "lines",
+            &scope_summary.lines,
+            scope.threshold,
+            contract.policy.require_lines,
+        );
+        collect_scope_metric_failure(
+            &mut failures,
+            scope_name,
+            "functions",
+            &scope_summary.functions,
+            scope.threshold,
+            contract.policy.require_functions,
+        );
+        collect_scope_metric_failure(
+            &mut failures,
+            scope_name,
+            "regions",
+            &scope_summary.regions,
+            scope.threshold,
+            contract.policy.require_regions,
+        );
+    }
     if !contract.policy.enforce {
         println!(
-            "coverage policy parsed and measured; enforcement pending final hardening gate at {}",
+            "coverage policy parsed and measured; enforcement disabled in {}",
             report_path.display()
         );
         return Ok(());
     }
-    enforce_metric("lines", &data.totals.lines, contract.policy.threshold)?;
-    enforce_metric(
-        "functions",
-        &data.totals.functions,
-        contract.policy.threshold,
-    )?;
-    enforce_metric("regions", &data.totals.regions, contract.policy.threshold)?;
-    println!(
-        "coverage policy passed at {:.1}% using {}",
-        contract.policy.threshold,
-        report_path.display()
-    );
+    if !failures.is_empty() {
+        return Err(failures.join("\n"));
+    }
+    println!("coverage policy passed using {}", report_path.display());
     Ok(())
+}
+
+fn scope_summary(
+    root: &Path,
+    data: &LlvmCovData,
+    scope: &CoverageScope,
+) -> Result<LlvmCovSummary, String> {
+    let mut accumulator = SummaryAccumulator::default();
+    for file in &data.files {
+        let filename = report_filename(root, &file.filename);
+        if scope
+            .paths
+            .iter()
+            .any(|pattern| path_matches(pattern, &filename))
+        {
+            accumulator.add(&file.summary);
+        }
+    }
+    if accumulator.matched_files == 0 {
+        return Err(format!(
+            "matched no report files for {}",
+            scope.paths.join(", ")
+        ));
+    }
+    Ok(accumulator.summary())
+}
+
+fn report_filename(root: &Path, filename: &str) -> String {
+    let path = Path::new(filename);
+    let relative = path.strip_prefix(root).unwrap_or(path);
+    relative.to_string_lossy().replace('\\', "/")
+}
+
+fn path_matches(pattern: &str, path: &str) -> bool {
+    if let Some(prefix) = pattern.strip_suffix("/**") {
+        path == prefix || path.starts_with(&format!("{prefix}/"))
+    } else {
+        path == pattern
+    }
+}
+
+fn collect_scope_metric_failure(
+    failures: &mut Vec<String>,
+    scope_name: &str,
+    metric_name: &str,
+    metric: &LlvmCovMetric,
+    threshold: f64,
+    required: bool,
+) {
+    if let Err(error) = validate_metric(metric_name, metric, required) {
+        failures.push(format!("coverage scope {scope_name}: {error}"));
+    }
+    if let Err(error) = enforce_metric(metric_name, metric, threshold) {
+        failures.push(format!("coverage scope {scope_name}: {error}"));
+    }
 }
 
 fn validate_metric(name: &str, metric: &LlvmCovMetric, required: bool) -> Result<(), String> {
@@ -314,16 +489,24 @@ fn enforce_metric(name: &str, metric: &LlvmCovMetric, threshold: f64) -> Result<
     Ok(())
 }
 
+fn metric_percent(count: u64, covered: u64) -> f64 {
+    if count == 0 {
+        0.0
+    } else {
+        covered as f64 * 100.0 / count as f64
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        CoverageContract, enforce_metric, evaluate_report, validate_contract, validate_metric,
+        CoverageContract, enforce_metric, evaluate_report, path_matches, validate_contract,
+        validate_metric,
     };
 
     const CONTRACT: &str = r#"
 [policy]
-threshold = 100.0
-enforce = false
+enforce = true
 require_regions = true
 require_functions = true
 require_lines = true
@@ -341,6 +524,14 @@ typescript = "excluded because generated TypeScript is owned by Rust source gene
 binding_crates = "excluded because binding crates are generated source facades"
 wasm_glue = "excluded because wasm-bindgen glue is verified through generated package checks"
 
+[scopes.radroots_sdk]
+paths = ["crates/sdk/src/**"]
+threshold = 98.0
+
+[scopes.xtask]
+paths = ["tools/xtask/src/**"]
+threshold = 100.0
+
 [exclusions.generated]
 paths = ["packages/*/src/generated/**"]
 reason = "generated package output is checked through reproducibility"
@@ -353,10 +544,23 @@ reason = "generated package output is checked through reproducibility"
     }
 
     #[test]
-    fn rejects_non_100_thresholds() {
-        let raw = CONTRACT.replace("threshold = 100.0", "threshold = 99.0");
+    fn rejects_invalid_scope_thresholds() {
+        let raw = CONTRACT.replace("threshold = 98.0", "threshold = 101.0");
         let contract = toml::from_str::<CoverageContract>(&raw).expect("contract parses");
         assert!(validate_contract(&contract).is_err());
+    }
+
+    #[test]
+    fn matches_recursive_scope_paths() {
+        assert!(path_matches(
+            "crates/sdk/src/**",
+            "crates/sdk/src/adapters/radrootsd.rs"
+        ));
+        assert!(path_matches("crates/sdk/src/**", "crates/sdk/src"));
+        assert!(!path_matches(
+            "crates/sdk/src/**",
+            "crates/sql_wasm_runtime/src/lib.rs"
+        ));
     }
 
     #[test]
@@ -391,7 +595,7 @@ reason = "generated package output is checked through reproducibility"
     }
 
     #[test]
-    fn pending_enforcement_accepts_measured_report() {
+    fn enforcement_rejects_undercovered_scope() {
         let dir = std::env::temp_dir().join(format!(
             "radroots_sdk_xtask_coverage_{}",
             std::time::SystemTime::now()
@@ -401,13 +605,60 @@ reason = "generated package output is checked through reproducibility"
         ));
         std::fs::create_dir_all(&dir).expect("dir");
         let report_path = dir.join("summary.json");
+        let filename = dir.join("crates/sdk/src/lib.rs");
         std::fs::write(
             &report_path,
-            r#"{"data":[{"totals":{"lines":{"count":1,"covered":0,"percent":0.0},"functions":{"count":1,"covered":0,"percent":0.0},"regions":{"count":1,"covered":0,"percent":0.0}}}]}"#,
+            format!(
+                r#"{{"data":[{{"files":[{{"filename":"{}","summary":{{"lines":{{"count":100,"covered":97,"percent":97.0}},"functions":{{"count":100,"covered":98,"percent":98.0}},"regions":{{"count":100,"covered":99,"percent":99.0}}}}}}],"totals":{{"lines":{{"count":100,"covered":97,"percent":97.0}},"functions":{{"count":100,"covered":98,"percent":98.0}},"regions":{{"count":100,"covered":99,"percent":99.0}}}}}}]}}"#,
+                filename.display()
+            ),
         )
         .expect("report");
-        let contract = toml::from_str::<CoverageContract>(CONTRACT).expect("contract parses");
-        evaluate_report(&report_path, &contract).expect("pending report passes");
+        let contract = toml::from_str::<CoverageContract>(&CONTRACT.replace(
+            r#"[scopes.xtask]
+paths = ["tools/xtask/src/**"]
+threshold = 100.0
+
+"#,
+            "",
+        ))
+        .expect("contract parses");
+        assert!(evaluate_report(&dir, &report_path, &contract).is_err());
+        std::fs::remove_dir_all(dir).expect("cleanup");
+    }
+
+    #[test]
+    fn disabled_enforcement_accepts_measured_scope() {
+        let dir = std::env::temp_dir().join(format!(
+            "radroots_sdk_xtask_coverage_disabled_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("time")
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).expect("dir");
+        let report_path = dir.join("summary.json");
+        let filename = dir.join("crates/sdk/src/lib.rs");
+        std::fs::write(
+            &report_path,
+            format!(
+                r#"{{"data":[{{"files":[{{"filename":"{}","summary":{{"lines":{{"count":1,"covered":0,"percent":0.0}},"functions":{{"count":1,"covered":0,"percent":0.0}},"regions":{{"count":1,"covered":0,"percent":0.0}}}}}}],"totals":{{"lines":{{"count":1,"covered":0,"percent":0.0}},"functions":{{"count":1,"covered":0,"percent":0.0}},"regions":{{"count":1,"covered":0,"percent":0.0}}}}}}]}}"#,
+                filename.display()
+            ),
+        )
+        .expect("report");
+        let raw = CONTRACT
+            .replace("enforce = true", "enforce = false")
+            .replace(
+                r#"[scopes.xtask]
+paths = ["tools/xtask/src/**"]
+threshold = 100.0
+
+"#,
+                "",
+            );
+        let contract = toml::from_str::<CoverageContract>(&raw).expect("contract parses");
+        evaluate_report(&dir, &report_path, &contract).expect("disabled report passes");
         std::fs::remove_dir_all(dir).expect("cleanup");
     }
 }
