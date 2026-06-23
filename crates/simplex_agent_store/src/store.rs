@@ -241,6 +241,7 @@ struct RadrootsSimplexAgentRatchetStateSnapshot {
     pending_outbound_pq_ciphertext: Option<Vec<u8>>,
     pending_inbound_pq_ciphertext: Option<Vec<u8>>,
     current_pq_shared_secret: Option<Vec<u8>>,
+    local_pq_private_key: Option<Vec<u8>>,
     local_dh_private_key: Option<Vec<u8>>,
     official_associated_data: Option<Vec<u8>>,
     official_root_key: Option<Vec<u8>>,
@@ -1067,6 +1068,7 @@ fn ratchet_state_to_snapshot(
         pending_outbound_pq_ciphertext: state.pending_outbound_pq_ciphertext,
         pending_inbound_pq_ciphertext: state.pending_inbound_pq_ciphertext,
         current_pq_shared_secret: state.current_pq_shared_secret,
+        local_pq_private_key: state.local_pq_private_key,
         local_dh_private_key: state.local_dh_private_key,
         official_associated_data: state.official_associated_data,
         official_root_key: state.official_root_key,
@@ -1124,6 +1126,7 @@ fn ratchet_state_from_snapshot(
     state.pending_outbound_pq_ciphertext = snapshot.pending_outbound_pq_ciphertext;
     state.pending_inbound_pq_ciphertext = snapshot.pending_inbound_pq_ciphertext;
     state.current_pq_shared_secret = snapshot.current_pq_shared_secret;
+    state.local_pq_private_key = snapshot.local_pq_private_key;
     state.local_dh_private_key = snapshot.local_dh_private_key;
     state.official_associated_data = snapshot.official_associated_data;
     state.official_root_key = snapshot.official_root_key;
@@ -1578,6 +1581,8 @@ mod tests {
             let mut ratchet =
                 RadrootsSimplexSmpRatchetState::initiator(vec![1_u8; 56], vec![2_u8; 56], None)
                     .unwrap();
+            ratchet.current_pq_public_key = Some(b"ratchet-pq-public".to_vec());
+            ratchet.local_pq_private_key = Some(b"ratchet-pq-private".to_vec());
             ratchet.local_dh_private_key = Some(b"official-private".to_vec());
             ratchet.official_associated_data = Some(b"official-ad".to_vec());
             ratchet.official_root_key = Some(b"official-root".to_vec());
@@ -1644,6 +1649,10 @@ mod tests {
                 message_key: b"official-skipped-message".to_vec(),
                 message_iv: [3_u8; RADROOTS_SIMPLEX_OFFICIAL_AES_IV_LENGTH],
             }]
+        );
+        assert_eq!(
+            loaded_ratchet.local_pq_private_key.as_deref(),
+            Some(&b"ratchet-pq-private"[..])
         );
         assert_eq!(
             loaded_connection

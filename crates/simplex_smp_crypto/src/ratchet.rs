@@ -5,13 +5,17 @@ use crate::message::{
 };
 use crate::official_ratchet::{
     RADROOTS_SIMPLEX_OFFICIAL_AES_IV_LENGTH, RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION,
+    RADROOTS_SIMPLEX_OFFICIAL_SNTRUP761_PRIVATE_KEY_LENGTH,
+    RADROOTS_SIMPLEX_OFFICIAL_SNTRUP761_PUBLIC_KEY_LENGTH,
     RADROOTS_SIMPLEX_OFFICIAL_X448_KEY_LENGTH, RadrootsSimplexOfficialAesGcmPayload,
     RadrootsSimplexOfficialEncryptedHeader, RadrootsSimplexOfficialEncryptedMessage,
-    RadrootsSimplexOfficialMsgHeader, RadrootsSimplexOfficialX3dhInit,
+    RadrootsSimplexOfficialMsgHeader, RadrootsSimplexOfficialSntrup761Keypair,
+    RadrootsSimplexOfficialX3dhInit, decapsulate_official_sntrup761,
     decode_official_encrypted_header, decode_official_encrypted_message,
-    decode_official_msg_header, derive_official_x448_shared_secret,
+    decode_official_msg_header, derive_official_x448_shared_secret, encapsulate_official_sntrup761,
     encode_official_encrypted_header, encode_official_encrypted_message,
-    encode_official_msg_header, generate_official_x448_keypair, official_aes_gcm_decrypt_padded,
+    encode_official_msg_header, generate_official_sntrup761_keypair,
+    generate_official_x448_keypair, official_aes_gcm_decrypt_padded,
     official_aes_gcm_encrypt_padded, official_chain_kdf, official_ratchet_header_len,
     official_root_kdf,
 };
@@ -75,6 +79,7 @@ pub struct RadrootsSimplexSmpRatchetState {
     pub pending_outbound_pq_ciphertext: Option<Vec<u8>>,
     pub pending_inbound_pq_ciphertext: Option<Vec<u8>>,
     pub current_pq_shared_secret: Option<Vec<u8>>,
+    pub local_pq_private_key: Option<Vec<u8>>,
     pub local_dh_private_key: Option<Vec<u8>>,
     pub official_associated_data: Option<Vec<u8>>,
     pub official_root_key: Option<Vec<u8>>,
@@ -112,6 +117,7 @@ impl RadrootsSimplexSmpRatchetState {
             pending_outbound_pq_ciphertext: None,
             pending_inbound_pq_ciphertext: None,
             current_pq_shared_secret: None,
+            local_pq_private_key: None,
             local_dh_private_key: None,
             official_associated_data: None,
             official_root_key: None,
@@ -149,6 +155,7 @@ impl RadrootsSimplexSmpRatchetState {
             pending_outbound_pq_ciphertext: None,
             pending_inbound_pq_ciphertext: None,
             current_pq_shared_secret: None,
+            local_pq_private_key: None,
             local_dh_private_key: None,
             official_associated_data: None,
             official_root_key: None,
@@ -567,6 +574,7 @@ impl RadrootsSimplexSmpRatchetState {
         &mut self,
         header: &RadrootsSimplexSmpRatchetHeader,
     ) -> Result<(), RadrootsSimplexSmpCryptoError> {
+        let pq_step = self.official_pq_receiving_step(header)?;
         let local_private_key = self.local_dh_private_key.clone().ok_or(
             RadrootsSimplexSmpCryptoError::MissingRatchetKey("local_dh_private_key"),
         )?;
@@ -575,25 +583,35 @@ impl RadrootsSimplexSmpRatchetState {
         )?;
         let receiving_dh =
             derive_official_x448_shared_secret(&local_private_key, &header.dh_public_key)?;
-        let receiving_pq_shared_secret = if header.pq_ciphertext.is_some() {
-            self.current_pq_shared_secret.as_deref()
-        } else {
-            None
-        };
-        let receiving_root =
-            official_root_kdf(&root_key, &receiving_dh, receiving_pq_shared_secret)?;
+        let receiving_root = official_root_kdf(
+            &root_key,
+            &receiving_dh,
+            pq_step.receiving_shared_secret.as_deref(),
+        )?;
         let next_local_keypair = generate_official_x448_keypair()?;
         let sending_dh = derive_official_x448_shared_secret(
             &next_local_keypair.private_key,
             &header.dh_public_key,
         )?;
-        let sending_root = official_root_kdf(&receiving_root.root_key, &sending_dh, None)?;
+        let sending_root = official_root_kdf(
+            &receiving_root.root_key,
+            &sending_dh,
+            pq_step.sending_shared_secret.as_deref(),
+        )?;
         self.previous_sending_chain_length = self.sending_chain_length;
         self.sending_chain_length = 0;
         self.receiving_chain_length = 0;
         self.remote_dh_public_key = header.dh_public_key.clone();
         self.remote_pq_public_key = header.pq_public_key.clone();
         self.pending_inbound_pq_ciphertext = header.pq_ciphertext.clone();
+        if let Some(next_pq_keypair) = pq_step.next_local_keypair {
+            self.current_pq_public_key = Some(next_pq_keypair.public_key);
+            self.local_pq_private_key = Some(next_pq_keypair.private_key);
+            self.pending_outbound_pq_ciphertext = pq_step.pending_outbound_pq_ciphertext;
+            self.current_pq_shared_secret = pq_step.sending_shared_secret;
+        } else if pq_step.receiving_shared_secret.is_some() {
+            self.current_pq_shared_secret = pq_step.receiving_shared_secret;
+        }
         self.local_dh_public_key = next_local_keypair.public_key;
         self.local_dh_private_key = Some(next_local_keypair.private_key);
         self.official_root_key = Some(sending_root.root_key);
@@ -606,11 +624,59 @@ impl RadrootsSimplexSmpRatchetState {
         Ok(())
     }
 
+    fn official_pq_receiving_step(
+        &self,
+        header: &RadrootsSimplexSmpRatchetHeader,
+    ) -> Result<OfficialPqReceivingStep, RadrootsSimplexSmpCryptoError> {
+        let Some(remote_pq_public_key) = header.pq_public_key.as_deref() else {
+            return Ok(OfficialPqReceivingStep::default());
+        };
+        validate_official_pq_public_key(remote_pq_public_key)?;
+        let receiving_shared_secret = match header.pq_ciphertext.as_deref() {
+            Some(ciphertext) => {
+                let local_pq_private_key = self.local_pq_private_key.as_deref().ok_or(
+                    RadrootsSimplexSmpCryptoError::MissingRatchetKey("local_pq_private_key"),
+                )?;
+                validate_official_pq_private_key(local_pq_private_key)?;
+                Some(decapsulate_official_sntrup761(
+                    local_pq_private_key,
+                    ciphertext,
+                )?)
+            }
+            None => None,
+        };
+        if !self.pq_enabled() {
+            return Ok(OfficialPqReceivingStep {
+                receiving_shared_secret,
+                ..OfficialPqReceivingStep::default()
+            });
+        }
+        let next_local_keypair = generate_official_sntrup761_keypair()?;
+        let seed = random_official_pq_seed()?;
+        let (pending_outbound_pq_ciphertext, sending_shared_secret) =
+            encapsulate_official_sntrup761(remote_pq_public_key, &seed)?;
+        Ok(OfficialPqReceivingStep {
+            receiving_shared_secret,
+            next_local_keypair: Some(next_local_keypair),
+            pending_outbound_pq_ciphertext: Some(pending_outbound_pq_ciphertext),
+            sending_shared_secret: Some(sending_shared_secret),
+        })
+    }
+
     fn pq_enabled(&self) -> bool {
         self.current_pq_public_key.is_some()
             || self.remote_pq_public_key.is_some()
             || self.current_pq_shared_secret.is_some()
+            || self.local_pq_private_key.is_some()
     }
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+struct OfficialPqReceivingStep {
+    receiving_shared_secret: Option<Vec<u8>>,
+    next_local_keypair: Option<RadrootsSimplexOfficialSntrup761Keypair>,
+    pending_outbound_pq_ciphertext: Option<Vec<u8>>,
+    sending_shared_secret: Option<Vec<u8>>,
 }
 
 fn validate_public_key(value: &[u8]) -> Result<(), RadrootsSimplexSmpCryptoError> {
@@ -618,6 +684,31 @@ fn validate_public_key(value: &[u8]) -> Result<(), RadrootsSimplexSmpCryptoError
         return Err(RadrootsSimplexSmpCryptoError::InvalidPublicKeyLength(0));
     }
     Ok(())
+}
+
+fn validate_official_pq_public_key(value: &[u8]) -> Result<(), RadrootsSimplexSmpCryptoError> {
+    if value.len() != RADROOTS_SIMPLEX_OFFICIAL_SNTRUP761_PUBLIC_KEY_LENGTH {
+        return Err(RadrootsSimplexSmpCryptoError::InvalidPqKeyLength(
+            value.len(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_official_pq_private_key(value: &[u8]) -> Result<(), RadrootsSimplexSmpCryptoError> {
+    if value.len() != RADROOTS_SIMPLEX_OFFICIAL_SNTRUP761_PRIVATE_KEY_LENGTH {
+        return Err(RadrootsSimplexSmpCryptoError::InvalidPrivateKeyLength(
+            value.len(),
+        ));
+    }
+    Ok(())
+}
+
+fn random_official_pq_seed() -> Result<[u8; 32], RadrootsSimplexSmpCryptoError> {
+    let mut seed = [0_u8; 32];
+    getrandom::getrandom(&mut seed)
+        .map_err(|_| RadrootsSimplexSmpCryptoError::EntropyUnavailable)?;
+    Ok(seed)
 }
 
 fn validate_official_private_key(value: &[u8]) -> Result<(), RadrootsSimplexSmpCryptoError> {
@@ -776,7 +867,9 @@ mod tests {
     use super::*;
     use crate::official_ratchet::{
         RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION, RADROOTS_SIMPLEX_OFFICIAL_E2E_KDF_VERSION,
-        RadrootsSimplexOfficialX3dhParams, official_x3dh_receiver_init, official_x3dh_sender_init,
+        RadrootsSimplexOfficialX3dhParams, official_sntrup761_keypair_from_seed,
+        official_x3dh_receiver_init, official_x3dh_receiver_init_accepting_pq,
+        official_x3dh_sender_init, official_x3dh_sender_init_accepting_pq,
         official_x448_keypair_from_seed,
     };
     use radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpVersionRange;
@@ -828,6 +921,68 @@ mod tests {
         .unwrap();
         receiver
             .initialize_official_receiver(receiver_key_2.private_key, receiver_init)
+            .unwrap();
+        (sender, receiver)
+    }
+
+    fn official_pq_sender_receiver_ratchets() -> (
+        RadrootsSimplexSmpRatchetState,
+        RadrootsSimplexSmpRatchetState,
+    ) {
+        let receiver_key_1 = official_x448_keypair_from_seed(b"rr-synth-pq-ratchet-rcv-1");
+        let receiver_key_2 = official_x448_keypair_from_seed(b"rr-synth-pq-ratchet-rcv-2");
+        let receiver_pq_keypair = official_sntrup761_keypair_from_seed(b"rr-synth-pq-rcv-kem");
+        let sender_key_1 = official_x448_keypair_from_seed(b"rr-synth-pq-ratchet-snd-1");
+        let sender_key_2 = official_x448_keypair_from_seed(b"rr-synth-pq-ratchet-snd-2");
+        let sender_pq_keypair = official_sntrup761_keypair_from_seed(b"rr-synth-pq-snd-kem");
+        let receiver_params = RadrootsSimplexOfficialX3dhParams {
+            version_range: RadrootsSimplexSmpVersionRange::new(
+                RADROOTS_SIMPLEX_OFFICIAL_E2E_KDF_VERSION,
+                RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION,
+            )
+            .unwrap(),
+            key_1: receiver_key_1.public_key.clone(),
+            key_2: receiver_key_2.public_key.clone(),
+            pq_public_key: Some(receiver_pq_keypair.public_key.clone()),
+            pq_ciphertext: None,
+        };
+        let sender_init = official_x3dh_sender_init_accepting_pq(
+            &sender_key_1,
+            &sender_key_2,
+            sender_pq_keypair,
+            &receiver_params,
+            b"rr-synth-pq-x3dh-accept",
+        )
+        .unwrap();
+        let receiver_init = official_x3dh_receiver_init_accepting_pq(
+            &receiver_key_1,
+            &receiver_key_2,
+            &receiver_pq_keypair,
+            &sender_init.sender_params,
+        )
+        .unwrap();
+        let mut sender = RadrootsSimplexSmpRatchetState::responder(
+            sender_key_2.public_key.clone(),
+            receiver_key_2.public_key.clone(),
+            sender_init.sender_params.pq_public_key.clone(),
+        )
+        .unwrap();
+        sender
+            .initialize_official_sender(sender_key_2.private_key, sender_init.init)
+            .unwrap();
+        sender.current_pq_public_key = sender_init.sender_params.pq_public_key.clone();
+        sender.pending_outbound_pq_ciphertext = sender_init.sender_params.pq_ciphertext.clone();
+        sender.local_pq_private_key = Some(sender_init.local_pq_keypair.private_key);
+        let mut receiver = RadrootsSimplexSmpRatchetState::initiator(
+            receiver_key_2.public_key.clone(),
+            receiver_key_1.public_key.clone(),
+            None,
+        )
+        .unwrap();
+        receiver.current_pq_public_key = Some(receiver_pq_keypair.public_key);
+        receiver.local_pq_private_key = Some(receiver_pq_keypair.private_key);
+        receiver
+            .initialize_official_receiver(receiver_key_2.private_key, receiver_init.init)
             .unwrap();
         (sender, receiver)
     }
@@ -991,6 +1146,32 @@ mod tests {
             .unwrap();
         assert_eq!(plaintext, b"official agent body");
         assert_eq!(receiver.receiving_chain_length, 1);
+    }
+
+    #[test]
+    fn advances_official_pq_ratchet_in_both_directions() {
+        let (mut sender, mut receiver) = official_pq_sender_receiver_ratchets();
+        let shared_secret = [21_u8; RADROOTS_SIMPLEX_SMP_SHARED_SECRET_LENGTH];
+
+        let encrypted = sender
+            .encrypt_official_payload(&shared_secret, b"pq first", 96)
+            .unwrap();
+        let plaintext = receiver
+            .decrypt_official_payload(&shared_secret, &encrypted)
+            .unwrap();
+        assert_eq!(plaintext, b"pq first");
+        assert!(receiver.pending_outbound_pq_ciphertext.is_some());
+        assert!(receiver.local_pq_private_key.is_some());
+
+        let reply = receiver
+            .encrypt_official_payload(&shared_secret, b"pq reply", 96)
+            .unwrap();
+        let reply_plaintext = sender
+            .decrypt_official_payload(&shared_secret, &reply)
+            .unwrap();
+        assert_eq!(reply_plaintext, b"pq reply");
+        assert!(sender.pending_outbound_pq_ciphertext.is_some());
+        assert!(sender.local_pq_private_key.is_some());
     }
 
     #[test]

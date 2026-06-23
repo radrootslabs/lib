@@ -216,6 +216,7 @@ impl RadrootsSimplexAgentRuntime {
         .ok();
         if let Some(ratchet_state) = ratchet_state.as_mut() {
             ratchet_state.current_pq_public_key = Some(pq_keypair.public_key.clone());
+            ratchet_state.local_pq_private_key = Some(pq_keypair.private_key.clone());
         }
         let connection = self.store.create_connection(
             if contact_address {
@@ -355,6 +356,8 @@ impl RadrootsSimplexAgentRuntime {
             ratchet_state.current_pq_public_key = sender_init.sender_params.pq_public_key.clone();
             ratchet_state.pending_outbound_pq_ciphertext =
                 sender_init.sender_params.pq_ciphertext.clone();
+            ratchet_state.local_pq_private_key =
+                Some(sender_init.local_pq_keypair.private_key.clone());
             Some(sender_init.local_pq_keypair)
         } else {
             let sender_init = official_x3dh_sender_init(
@@ -1693,7 +1696,7 @@ impl RadrootsSimplexAgentRuntime {
         let local_key_1 = official_x3dh_keypair_from_agent(local_key_1);
         let local_key_2 = official_x3dh_keypair_from_agent(local_key_2);
         let receiver_init = if params.pq_public_key.is_some() || params.pq_ciphertext.is_some() {
-            let local_pq_keypair = local_pq_keypair.ok_or_else(|| {
+            let local_pq_keypair = local_pq_keypair.as_ref().ok_or_else(|| {
                 RadrootsSimplexAgentRuntimeError::Runtime(format!(
                     "SimpleX connection `{connection_id}` missing local PQ keypair"
                 ))
@@ -1701,7 +1704,7 @@ impl RadrootsSimplexAgentRuntime {
             official_x3dh_receiver_init_accepting_pq(
                 &local_key_1,
                 &local_key_2,
-                &official_pq_keypair_from_agent(local_pq_keypair),
+                &official_pq_keypair_from_agent(local_pq_keypair.clone()),
                 params,
             )
             .map(|init| init.init)
@@ -1710,15 +1713,17 @@ impl RadrootsSimplexAgentRuntime {
             official_x3dh_receiver_init(&local_key_1, &local_key_2, params)
                 .map_err(|error| RadrootsSimplexAgentRuntimeError::Runtime(error.to_string()))?
         };
-        self.store
-            .connection_mut(connection_id)?
-            .ratchet_state
-            .as_mut()
-            .ok_or_else(|| {
-                RadrootsSimplexAgentRuntimeError::Runtime(format!(
-                    "SimpleX connection `{connection_id}` has no ratchet state"
-                ))
-            })?
+        let connection = self.store.connection_mut(connection_id)?;
+        let ratchet_state = connection.ratchet_state.as_mut().ok_or_else(|| {
+            RadrootsSimplexAgentRuntimeError::Runtime(format!(
+                "SimpleX connection `{connection_id}` has no ratchet state"
+            ))
+        })?;
+        if let Some(local_pq_keypair) = local_pq_keypair {
+            ratchet_state.current_pq_public_key = Some(local_pq_keypair.public_key);
+            ratchet_state.local_pq_private_key = Some(local_pq_keypair.private_key);
+        }
+        ratchet_state
             .initialize_official_receiver(local_key_2.private_key, receiver_init)
             .map_err(|error| RadrootsSimplexAgentRuntimeError::Runtime(error.to_string()))
     }
@@ -1841,7 +1846,8 @@ impl RadrootsSimplexAgentRuntime {
             })?;
         let pq_enabled = ratchet.current_pq_public_key.is_some()
             || ratchet.remote_pq_public_key.is_some()
-            || ratchet.current_pq_shared_secret.is_some();
+            || ratchet.current_pq_shared_secret.is_some()
+            || ratchet.local_pq_private_key.is_some();
         Ok(match (payload_kind, pq_enabled) {
             (SimplexAgentPayloadKind::ConnectionInfo, true) => {
                 SIMPLEX_AGENT_E2E_CONN_INFO_PQ_LENGTH
