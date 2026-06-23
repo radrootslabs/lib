@@ -16,7 +16,7 @@ pub mod prelude {
         RadrootsSimplexAgentPendingCommandKind, RadrootsSimplexAgentPqKeypair,
         RadrootsSimplexAgentPreparedOutboundMessage, RadrootsSimplexAgentQueueAuthState,
         RadrootsSimplexAgentQueueRecord, RadrootsSimplexAgentQueueRole,
-        RadrootsSimplexAgentRecentMessageRecord, RadrootsSimplexAgentStore,
-        RadrootsSimplexAgentX3dhKeypair,
+        RadrootsSimplexAgentRecentMessageRecord, RadrootsSimplexAgentShortLinkCredentials,
+        RadrootsSimplexAgentStore, RadrootsSimplexAgentX3dhKeypair,
     };
 }

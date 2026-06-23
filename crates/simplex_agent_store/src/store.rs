@@ -18,6 +18,7 @@ use radroots_simplex_agent_proto::prelude::{
     RadrootsSimplexAgentConnectionStatus, RadrootsSimplexAgentEnvelope,
     RadrootsSimplexAgentMessageId, RadrootsSimplexAgentMessageReceipt,
     RadrootsSimplexAgentQueueAddress, RadrootsSimplexAgentQueueDescriptor,
+    RadrootsSimplexAgentShortInvitationLink, RadrootsSimplexAgentShortLinkScheme,
     RadrootsSimplexSmpRatchetState,
 };
 #[cfg(feature = "std")]
@@ -29,6 +30,7 @@ use radroots_simplex_smp_crypto::prelude::RadrootsSimplexSmpEd25519Keypair;
 use radroots_simplex_smp_crypto::prelude::{
     RADROOTS_SIMPLEX_OFFICIAL_AES_IV_LENGTH, RadrootsSimplexSmpSkippedMessageKey,
 };
+use radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpQueueLinkData;
 #[cfg(feature = "std")]
 use radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpQueueUri;
 use radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpServerAddress;
@@ -141,6 +143,32 @@ pub struct RadrootsSimplexAgentPqKeypair {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RadrootsSimplexAgentShortLinkCredentials {
+    pub scheme: RadrootsSimplexAgentShortLinkScheme,
+    pub hosts: Vec<String>,
+    pub port: Option<u16>,
+    pub server_key_hash: Option<Vec<u8>>,
+    pub link_id: Vec<u8>,
+    pub link_key: Vec<u8>,
+    pub link_public_signature_key: Vec<u8>,
+    pub link_private_signature_key: Vec<u8>,
+    pub encrypted_fixed_data: Option<Vec<u8>>,
+}
+
+impl RadrootsSimplexAgentShortLinkCredentials {
+    pub fn invitation_link(&self) -> RadrootsSimplexAgentShortInvitationLink {
+        RadrootsSimplexAgentShortInvitationLink {
+            scheme: self.scheme,
+            hosts: self.hosts.clone(),
+            port: self.port,
+            server_key_hash: self.server_key_hash.clone(),
+            link_id: self.link_id.clone(),
+            link_key: self.link_key.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RadrootsSimplexAgentPendingCommandKind {
     CreateQueue {
         descriptor: RadrootsSimplexAgentQueueDescriptor,
@@ -171,6 +199,20 @@ pub enum RadrootsSimplexAgentPendingCommandKind {
     TestQueues {
         queues: Vec<RadrootsSimplexAgentQueueAddress>,
     },
+    SetQueueLinkData {
+        queue: RadrootsSimplexAgentQueueAddress,
+        link_id: Vec<u8>,
+        link_data: RadrootsSimplexSmpQueueLinkData,
+    },
+    SecureGetQueueLinkData {
+        server: RadrootsSimplexSmpServerAddress,
+        link_id: Vec<u8>,
+        link_key: Vec<u8>,
+    },
+    GetQueueLinkData {
+        server: RadrootsSimplexSmpServerAddress,
+        link_id: Vec<u8>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -189,6 +231,7 @@ pub struct RadrootsSimplexAgentConnectionRecord {
     pub mode: RadrootsSimplexAgentConnectionMode,
     pub status: RadrootsSimplexAgentConnectionStatus,
     pub invitation: Option<RadrootsSimplexAgentConnectionLink>,
+    pub short_link: Option<RadrootsSimplexAgentShortLinkCredentials>,
     pub queues: Vec<RadrootsSimplexAgentQueueRecord>,
     pub ratchet_state: Option<RadrootsSimplexSmpRatchetState>,
     pub local_e2e_public_key: Option<Vec<u8>>,
@@ -235,6 +278,7 @@ struct RadrootsSimplexAgentConnectionSnapshot {
     mode: String,
     status: String,
     invitation: Option<Vec<u8>>,
+    short_link: Option<RadrootsSimplexAgentShortLinkCredentialsSnapshot>,
     queues: Vec<RadrootsSimplexAgentQueueRecordSnapshot>,
     ratchet_state: Option<RadrootsSimplexAgentRatchetStateSnapshot>,
     local_e2e_public_key: Option<Vec<u8>>,
@@ -282,6 +326,35 @@ struct RadrootsSimplexAgentQueueAddressSnapshot {
     hosts: Vec<String>,
     port: Option<u16>,
     sender_id: Vec<u8>,
+}
+
+#[cfg(feature = "std")]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct RadrootsSimplexAgentServerAddressSnapshot {
+    server_identity: String,
+    hosts: Vec<String>,
+    port: Option<u16>,
+}
+
+#[cfg(feature = "std")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct RadrootsSimplexAgentShortLinkCredentialsSnapshot {
+    scheme: String,
+    hosts: Vec<String>,
+    port: Option<u16>,
+    server_key_hash: Option<Vec<u8>>,
+    link_id: Vec<u8>,
+    link_key: Vec<u8>,
+    link_public_signature_key: Vec<u8>,
+    link_private_signature_key: Vec<u8>,
+    encrypted_fixed_data: Option<Vec<u8>>,
+}
+
+#[cfg(feature = "std")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct RadrootsSimplexAgentQueueLinkDataSnapshot {
+    fixed_data: Vec<u8>,
+    user_data: Vec<u8>,
 }
 
 #[cfg(feature = "std")]
@@ -365,6 +438,20 @@ enum RadrootsSimplexAgentPendingCommandKindSnapshot {
     TestQueues {
         queues: Vec<RadrootsSimplexAgentQueueAddressSnapshot>,
     },
+    SetQueueLinkData {
+        queue: RadrootsSimplexAgentQueueAddressSnapshot,
+        link_id: Vec<u8>,
+        link_data: RadrootsSimplexAgentQueueLinkDataSnapshot,
+    },
+    SecureGetQueueLinkData {
+        server: RadrootsSimplexAgentServerAddressSnapshot,
+        link_id: Vec<u8>,
+        link_key: Vec<u8>,
+    },
+    GetQueueLinkData {
+        server: RadrootsSimplexAgentServerAddressSnapshot,
+        link_id: Vec<u8>,
+    },
 }
 
 #[cfg(feature = "std")]
@@ -387,6 +474,8 @@ struct RadrootsSimplexAgentStoreSecretsSnapshot {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct RadrootsSimplexAgentConnectionSecretsSnapshot {
     id: String,
+    short_link_link_key: Option<Vec<u8>>,
+    short_link_private_signature_key: Option<Vec<u8>>,
     queues: Vec<RadrootsSimplexAgentQueueSecretsSnapshot>,
     ratchet_state: Option<RadrootsSimplexAgentRatchetSecretsSnapshot>,
     local_e2e_private_key: Option<Vec<u8>>,
@@ -541,6 +630,7 @@ impl RadrootsSimplexAgentStore {
             mode,
             status,
             invitation,
+            short_link: None,
             queues: Vec::new(),
             ratchet_state,
             local_e2e_public_key: None,
@@ -1010,7 +1100,9 @@ impl RadrootsSimplexAgentStoreSecretsSnapshot {
 #[cfg(feature = "std")]
 impl RadrootsSimplexAgentConnectionSecretsSnapshot {
     fn has_secret_material(&self) -> bool {
-        self.local_e2e_private_key.is_some()
+        self.short_link_link_key.is_some()
+            || self.short_link_private_signature_key.is_some()
+            || self.local_e2e_private_key.is_some()
             || self.local_x3dh_key_1_private_key.is_some()
             || self.local_x3dh_key_2_private_key.is_some()
             || self.local_pq_private_key.is_some()
@@ -1144,6 +1236,14 @@ fn redact_connection_secrets(
         .collect::<Result<Vec<_>, _>>()?;
     Ok(RadrootsSimplexAgentConnectionSecretsSnapshot {
         id: connection.id.clone(),
+        short_link_link_key: connection
+            .short_link
+            .as_mut()
+            .and_then(|short_link| take_non_empty_vec(&mut short_link.link_key)),
+        short_link_private_signature_key: connection
+            .short_link
+            .as_mut()
+            .and_then(|short_link| take_non_empty_vec(&mut short_link.link_private_signature_key)),
         queues,
         ratchet_state: connection
             .ratchet_state
@@ -1561,6 +1661,20 @@ fn validate_public_connection_secret_posture(
         "connection shared secret",
         &connection.id,
     )?;
+    if let Some(short_link) = connection.short_link.as_ref() {
+        reject_public_secret_vec(
+            short_link.link_key.as_slice(),
+            protected_secrets_configured,
+            "short-link link key",
+            &connection.id,
+        )?;
+        reject_public_secret_vec(
+            short_link.link_private_signature_key.as_slice(),
+            protected_secrets_configured,
+            "short-link private signature key",
+            &connection.id,
+        )?;
+    }
     for queue in &connection.queues {
         reject_public_queue_secret_posture(queue, protected_secrets_configured, &connection.id)?;
     }
@@ -1817,6 +1931,20 @@ fn merge_connection_secrets(
         keypair.private_key = private_key;
     }
     connection.shared_secret = secrets.shared_secret;
+    if secrets.short_link_link_key.is_some() || secrets.short_link_private_signature_key.is_some() {
+        let short_link = connection.short_link.as_mut().ok_or_else(|| {
+            RadrootsSimplexAgentStoreError::Persistence(format!(
+                "SimpleX agent protected secrets reference missing short-link credentials on `{}`",
+                connection.id
+            ))
+        })?;
+        if let Some(link_key) = secrets.short_link_link_key {
+            short_link.link_key = link_key;
+        }
+        if let Some(private_key) = secrets.short_link_private_signature_key {
+            short_link.link_private_signature_key = private_key;
+        }
+    }
     Ok(())
 }
 
@@ -1955,6 +2083,7 @@ fn connection_to_snapshot(
                     "failed to encode SimpleX connection invitation: {error}"
                 ))
             })?,
+        short_link: record.short_link.map(short_link_to_snapshot),
         queues: record
             .queues
             .into_iter()
@@ -1995,6 +2124,10 @@ fn connection_from_snapshot(
                     ))
                 })
             })
+            .transpose()?,
+        short_link: snapshot
+            .short_link
+            .map(short_link_from_snapshot)
             .transpose()?,
         queues: snapshot
             .queues
@@ -2120,6 +2253,87 @@ fn queue_address_from_snapshot(
         },
         sender_id: snapshot.sender_id,
     })
+}
+
+#[cfg(feature = "std")]
+fn server_address_to_snapshot(
+    server: RadrootsSimplexSmpServerAddress,
+) -> RadrootsSimplexAgentServerAddressSnapshot {
+    RadrootsSimplexAgentServerAddressSnapshot {
+        server_identity: server.server_identity,
+        hosts: server.hosts,
+        port: server.port,
+    }
+}
+
+#[cfg(feature = "std")]
+fn server_address_from_snapshot(
+    snapshot: RadrootsSimplexAgentServerAddressSnapshot,
+) -> Result<RadrootsSimplexSmpServerAddress, RadrootsSimplexAgentStoreError> {
+    if snapshot.server_identity.is_empty() || snapshot.hosts.is_empty() {
+        return Err(RadrootsSimplexAgentStoreError::Persistence(
+            "invalid SimpleX server address snapshot".into(),
+        ));
+    }
+    Ok(RadrootsSimplexSmpServerAddress {
+        server_identity: snapshot.server_identity,
+        hosts: snapshot.hosts,
+        port: snapshot.port,
+    })
+}
+
+#[cfg(feature = "std")]
+fn short_link_to_snapshot(
+    credentials: RadrootsSimplexAgentShortLinkCredentials,
+) -> RadrootsSimplexAgentShortLinkCredentialsSnapshot {
+    RadrootsSimplexAgentShortLinkCredentialsSnapshot {
+        scheme: encode_short_link_scheme(credentials.scheme).into(),
+        hosts: credentials.hosts,
+        port: credentials.port,
+        server_key_hash: credentials.server_key_hash,
+        link_id: credentials.link_id,
+        link_key: credentials.link_key,
+        link_public_signature_key: credentials.link_public_signature_key,
+        link_private_signature_key: credentials.link_private_signature_key,
+        encrypted_fixed_data: credentials.encrypted_fixed_data,
+    }
+}
+
+#[cfg(feature = "std")]
+fn short_link_from_snapshot(
+    snapshot: RadrootsSimplexAgentShortLinkCredentialsSnapshot,
+) -> Result<RadrootsSimplexAgentShortLinkCredentials, RadrootsSimplexAgentStoreError> {
+    Ok(RadrootsSimplexAgentShortLinkCredentials {
+        scheme: decode_short_link_scheme(&snapshot.scheme)?,
+        hosts: snapshot.hosts,
+        port: snapshot.port,
+        server_key_hash: snapshot.server_key_hash,
+        link_id: snapshot.link_id,
+        link_key: snapshot.link_key,
+        link_public_signature_key: snapshot.link_public_signature_key,
+        link_private_signature_key: snapshot.link_private_signature_key,
+        encrypted_fixed_data: snapshot.encrypted_fixed_data,
+    })
+}
+
+#[cfg(feature = "std")]
+fn queue_link_data_to_snapshot(
+    link_data: RadrootsSimplexSmpQueueLinkData,
+) -> RadrootsSimplexAgentQueueLinkDataSnapshot {
+    RadrootsSimplexAgentQueueLinkDataSnapshot {
+        fixed_data: link_data.fixed_data,
+        user_data: link_data.user_data,
+    }
+}
+
+#[cfg(feature = "std")]
+fn queue_link_data_from_snapshot(
+    snapshot: RadrootsSimplexAgentQueueLinkDataSnapshot,
+) -> RadrootsSimplexSmpQueueLinkData {
+    RadrootsSimplexSmpQueueLinkData {
+        fixed_data: snapshot.fixed_data,
+        user_data: snapshot.user_data,
+    }
 }
 
 #[cfg(feature = "std")]
@@ -2341,6 +2555,30 @@ fn command_kind_to_snapshot(
                 queues: queues.into_iter().map(queue_address_to_snapshot).collect(),
             }
         }
+        RadrootsSimplexAgentPendingCommandKind::SetQueueLinkData {
+            queue,
+            link_id,
+            link_data,
+        } => RadrootsSimplexAgentPendingCommandKindSnapshot::SetQueueLinkData {
+            queue: queue_address_to_snapshot(queue),
+            link_id,
+            link_data: queue_link_data_to_snapshot(link_data),
+        },
+        RadrootsSimplexAgentPendingCommandKind::SecureGetQueueLinkData {
+            server,
+            link_id,
+            link_key,
+        } => RadrootsSimplexAgentPendingCommandKindSnapshot::SecureGetQueueLinkData {
+            server: server_address_to_snapshot(server),
+            link_id,
+            link_key,
+        },
+        RadrootsSimplexAgentPendingCommandKind::GetQueueLinkData { server, link_id } => {
+            RadrootsSimplexAgentPendingCommandKindSnapshot::GetQueueLinkData {
+                server: server_address_to_snapshot(server),
+                link_id,
+            }
+        }
     })
 }
 
@@ -2410,6 +2648,30 @@ fn command_kind_from_snapshot(
                     .into_iter()
                     .map(queue_address_from_snapshot)
                     .collect::<Result<Vec<_>, _>>()?,
+            }
+        }
+        RadrootsSimplexAgentPendingCommandKindSnapshot::SetQueueLinkData {
+            queue,
+            link_id,
+            link_data,
+        } => RadrootsSimplexAgentPendingCommandKind::SetQueueLinkData {
+            queue: queue_address_from_snapshot(queue)?,
+            link_id,
+            link_data: queue_link_data_from_snapshot(link_data),
+        },
+        RadrootsSimplexAgentPendingCommandKindSnapshot::SecureGetQueueLinkData {
+            server,
+            link_id,
+            link_key,
+        } => RadrootsSimplexAgentPendingCommandKind::SecureGetQueueLinkData {
+            server: server_address_from_snapshot(server)?,
+            link_id,
+            link_key,
+        },
+        RadrootsSimplexAgentPendingCommandKindSnapshot::GetQueueLinkData { server, link_id } => {
+            RadrootsSimplexAgentPendingCommandKind::GetQueueLinkData {
+                server: server_address_from_snapshot(server)?,
+                link_id,
             }
         }
     })
@@ -2492,6 +2754,27 @@ fn decode_queue_role(
     }
 }
 
+#[cfg(feature = "std")]
+fn encode_short_link_scheme(scheme: RadrootsSimplexAgentShortLinkScheme) -> &'static str {
+    match scheme {
+        RadrootsSimplexAgentShortLinkScheme::Simplex => "simplex",
+        RadrootsSimplexAgentShortLinkScheme::Https => "https",
+    }
+}
+
+#[cfg(feature = "std")]
+fn decode_short_link_scheme(
+    value: &str,
+) -> Result<RadrootsSimplexAgentShortLinkScheme, RadrootsSimplexAgentStoreError> {
+    match value {
+        "simplex" => Ok(RadrootsSimplexAgentShortLinkScheme::Simplex),
+        "https" => Ok(RadrootsSimplexAgentShortLinkScheme::Https),
+        other => Err(RadrootsSimplexAgentStoreError::Persistence(format!(
+            "invalid SimpleX short-link scheme `{other}`"
+        ))),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2519,6 +2802,20 @@ mod tests {
         RadrootsSimplexAgentQueueAuthState {
             public_key: vec![7_u8; 32],
             private_key: vec![9_u8; 32],
+        }
+    }
+
+    fn sample_short_link_credentials() -> RadrootsSimplexAgentShortLinkCredentials {
+        RadrootsSimplexAgentShortLinkCredentials {
+            scheme: RadrootsSimplexAgentShortLinkScheme::Simplex,
+            hosts: vec!["relay-a.example".to_owned(), "relay-b.example".to_owned()],
+            port: Some(5223),
+            server_key_hash: Some(vec![5_u8; 32]),
+            link_id: vec![6_u8; 24],
+            link_key: b"short-link-key-must-be-secret!!".to_vec(),
+            link_public_signature_key: vec![7_u8; 32],
+            link_private_signature_key: b"short-link-private-signature-key".to_vec(),
+            encrypted_fixed_data: Some(b"encrypted-fixed-link-data".to_vec()),
         }
     }
 
@@ -2696,10 +2993,46 @@ mod tests {
                 11,
             )
             .unwrap();
+        store
+            .enqueue_command(
+                &connection.id,
+                RadrootsSimplexAgentPendingCommandKind::SetQueueLinkData {
+                    queue: queue.clone(),
+                    link_id: vec![1_u8; 24],
+                    link_data: RadrootsSimplexSmpQueueLinkData {
+                        fixed_data: b"fixed-link-data".to_vec(),
+                        user_data: b"user-link-data".to_vec(),
+                    },
+                },
+                12,
+            )
+            .unwrap();
+        store
+            .enqueue_command(
+                &connection.id,
+                RadrootsSimplexAgentPendingCommandKind::SecureGetQueueLinkData {
+                    server: queue.server.clone(),
+                    link_id: vec![2_u8; 24],
+                    link_key: b"retrieval-short-link-key-secret".to_vec(),
+                },
+                13,
+            )
+            .unwrap();
+        store
+            .enqueue_command(
+                &connection.id,
+                RadrootsSimplexAgentPendingCommandKind::GetQueueLinkData {
+                    server: queue.server.clone(),
+                    link_id: vec![3_u8; 24],
+                },
+                14,
+            )
+            .unwrap();
         {
             let connection = store.connection_mut(&connection.id).unwrap();
             connection.hello_sent = true;
             connection.hello_received = true;
+            connection.short_link = Some(sample_short_link_credentials());
             connection.local_e2e_public_key = Some(b"e2e-public".to_vec());
             connection.local_e2e_private_key = Some(b"e2e-private".to_vec());
             connection.shared_secret = Some(b"connection-shared-secret".to_vec());
@@ -2751,6 +3084,17 @@ mod tests {
         assert!(public_connection["local_e2e_public_key"].is_array());
         assert!(public_connection["local_e2e_private_key"].is_null());
         assert!(public_connection["shared_secret"].is_null());
+        let public_short_link = &public_connection["short_link"];
+        assert!(public_short_link["link_id"].is_array());
+        assert_eq!(public_short_link["link_key"].as_array().unwrap().len(), 0);
+        assert!(public_short_link["link_public_signature_key"].is_array());
+        assert_eq!(
+            public_short_link["link_private_signature_key"]
+                .as_array()
+                .unwrap()
+                .len(),
+            0
+        );
         assert!(public_connection["local_x3dh_key_1"]["public_key"].is_array());
         assert_eq!(
             public_connection["local_x3dh_key_1"]["private_key"]
@@ -2816,6 +3160,8 @@ mod tests {
             "e2e-private",
             "queue-auth-private",
             "connection-shared-secret",
+            "short-link-key-must-be-secret",
+            "short-link-private-signature-key",
             "official-root",
             "x3dh-private-1",
             "pq-private",
@@ -2844,6 +3190,17 @@ mod tests {
         );
         assert!(loaded_connection.hello_sent);
         assert!(loaded_connection.hello_received);
+        assert_eq!(
+            loaded_connection.short_link.as_ref(),
+            Some(&sample_short_link_credentials())
+        );
+        assert_eq!(
+            loaded_connection
+                .short_link
+                .as_ref()
+                .map(|short_link| short_link.invitation_link().link_key),
+            Some(b"short-link-key-must-be-secret!!".to_vec())
+        );
         assert_eq!(
             loaded_connection.local_e2e_private_key.as_deref(),
             Some(&b"e2e-private"[..])
@@ -2915,11 +3272,37 @@ mod tests {
                 .map(|key| (key.public_key.as_slice(), key.private_key.as_slice())),
             Some((&b"pq-public"[..], &b"pq-private"[..]))
         );
-        assert_eq!(loaded.pending_commands.len(), 2);
+        assert_eq!(loaded.pending_commands.len(), 5);
         assert!(loaded.pending_commands.values().any(|command| matches!(
             &command.kind,
             RadrootsSimplexAgentPendingCommandKind::GetQueueMessage { queue: persisted_queue }
                 if persisted_queue == &queue
+        )));
+        assert!(loaded.pending_commands.values().any(|command| matches!(
+            &command.kind,
+            RadrootsSimplexAgentPendingCommandKind::SetQueueLinkData {
+                queue: persisted_queue,
+                link_id,
+                link_data
+            } if persisted_queue == &queue
+                && link_id.as_slice() == &[1_u8; 24]
+                && link_data.fixed_data.as_slice() == b"fixed-link-data"
+                && link_data.user_data.as_slice() == b"user-link-data"
+        )));
+        assert!(loaded.pending_commands.values().any(|command| matches!(
+            &command.kind,
+            RadrootsSimplexAgentPendingCommandKind::SecureGetQueueLinkData {
+                server,
+                link_id,
+                link_key
+            } if server == &queue.server
+                && link_id.as_slice() == &[2_u8; 24]
+                && link_key.as_slice() == b"retrieval-short-link-key-secret"
+        )));
+        assert!(loaded.pending_commands.values().any(|command| matches!(
+            &command.kind,
+            RadrootsSimplexAgentPendingCommandKind::GetQueueLinkData { server, link_id }
+                if server == &queue.server && link_id.as_slice() == &[3_u8; 24]
         )));
         assert!(
             loaded
@@ -3128,6 +3511,8 @@ mod tests {
         let entity_id = snapshot.queues[0].entity_id.clone();
         let secrets = RadrootsSimplexAgentConnectionSecretsSnapshot {
             id: connection.id,
+            short_link_link_key: None,
+            short_link_private_signature_key: None,
             queues: vec![RadrootsSimplexAgentQueueSecretsSnapshot {
                 entity_id,
                 role: "send".to_owned(),
