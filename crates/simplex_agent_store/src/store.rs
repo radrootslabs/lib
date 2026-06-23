@@ -229,6 +229,15 @@ struct RadrootsSimplexAgentRatchetStateSnapshot {
     pending_outbound_pq_ciphertext: Option<Vec<u8>>,
     pending_inbound_pq_ciphertext: Option<Vec<u8>>,
     current_pq_shared_secret: Option<Vec<u8>>,
+    local_dh_private_key: Option<Vec<u8>>,
+    official_associated_data: Option<Vec<u8>>,
+    official_root_key: Option<Vec<u8>>,
+    official_sending_chain_key: Option<Vec<u8>>,
+    official_receiving_chain_key: Option<Vec<u8>>,
+    official_sending_header_key: Option<Vec<u8>>,
+    official_receiving_header_key: Option<Vec<u8>>,
+    official_next_sending_header_key: Option<Vec<u8>>,
+    official_next_receiving_header_key: Option<Vec<u8>>,
 }
 
 #[cfg(feature = "std")]
@@ -1033,6 +1042,15 @@ fn ratchet_state_to_snapshot(
         pending_outbound_pq_ciphertext: state.pending_outbound_pq_ciphertext,
         pending_inbound_pq_ciphertext: state.pending_inbound_pq_ciphertext,
         current_pq_shared_secret: state.current_pq_shared_secret,
+        local_dh_private_key: state.local_dh_private_key,
+        official_associated_data: state.official_associated_data,
+        official_root_key: state.official_root_key,
+        official_sending_chain_key: state.official_sending_chain_key,
+        official_receiving_chain_key: state.official_receiving_chain_key,
+        official_sending_header_key: state.official_sending_header_key,
+        official_receiving_header_key: state.official_receiving_header_key,
+        official_next_sending_header_key: state.official_next_sending_header_key,
+        official_next_receiving_header_key: state.official_next_receiving_header_key,
     }
 }
 
@@ -1076,6 +1094,15 @@ fn ratchet_state_from_snapshot(
     state.pending_outbound_pq_ciphertext = snapshot.pending_outbound_pq_ciphertext;
     state.pending_inbound_pq_ciphertext = snapshot.pending_inbound_pq_ciphertext;
     state.current_pq_shared_secret = snapshot.current_pq_shared_secret;
+    state.local_dh_private_key = snapshot.local_dh_private_key;
+    state.official_associated_data = snapshot.official_associated_data;
+    state.official_root_key = snapshot.official_root_key;
+    state.official_sending_chain_key = snapshot.official_sending_chain_key;
+    state.official_receiving_chain_key = snapshot.official_receiving_chain_key;
+    state.official_sending_header_key = snapshot.official_sending_header_key;
+    state.official_receiving_header_key = snapshot.official_receiving_header_key;
+    state.official_next_sending_header_key = snapshot.official_next_sending_header_key;
+    state.official_next_receiving_header_key = snapshot.official_next_receiving_header_key;
     Ok(state)
 }
 
@@ -1480,6 +1507,20 @@ mod tests {
             let connection = store.connection_mut(&connection.id).unwrap();
             connection.hello_sent = true;
             connection.hello_received = true;
+            let mut ratchet =
+                RadrootsSimplexSmpRatchetState::initiator(vec![1_u8; 56], vec![2_u8; 56], None)
+                    .unwrap();
+            ratchet.local_dh_private_key = Some(b"official-private".to_vec());
+            ratchet.official_associated_data = Some(b"official-ad".to_vec());
+            ratchet.official_root_key = Some(b"official-root".to_vec());
+            ratchet.official_sending_chain_key = Some(b"official-send-chain".to_vec());
+            ratchet.official_receiving_chain_key = Some(b"official-recv-chain".to_vec());
+            ratchet.official_sending_header_key = Some(b"official-send-header".to_vec());
+            ratchet.official_receiving_header_key = Some(b"official-recv-header".to_vec());
+            ratchet.official_next_sending_header_key = Some(b"official-next-send-header".to_vec());
+            ratchet.official_next_receiving_header_key =
+                Some(b"official-next-recv-header".to_vec());
+            connection.ratchet_state = Some(ratchet);
             connection.local_x3dh_key_1 = Some(RadrootsSimplexAgentX3dhKeypair {
                 public_key: b"x3dh-public-1".to_vec(),
                 private_key: b"x3dh-private-1".to_vec(),
@@ -1502,6 +1543,19 @@ mod tests {
         );
         assert!(loaded_connection.hello_sent);
         assert!(loaded_connection.hello_received);
+        let loaded_ratchet = loaded_connection.ratchet_state.as_ref().unwrap();
+        assert_eq!(
+            loaded_ratchet.official_associated_data.as_deref(),
+            Some(&b"official-ad"[..])
+        );
+        assert_eq!(
+            loaded_ratchet.official_sending_chain_key.as_deref(),
+            Some(&b"official-send-chain"[..])
+        );
+        assert_eq!(
+            loaded_ratchet.official_next_receiving_header_key.as_deref(),
+            Some(&b"official-next-recv-header"[..])
+        );
         assert_eq!(
             loaded_connection
                 .local_x3dh_key_1
