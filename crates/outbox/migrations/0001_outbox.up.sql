@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS outbox_event (
   signed_event_json TEXT,
   raw_event_json TEXT,
   state TEXT NOT NULL CHECK (state IN ('draft_queued', 'signing', 'signed', 'publishing', 'published', 'sign_retryable', 'publish_retryable', 'failed_terminal', 'cancelled')),
-  accepted_quorum INTEGER NOT NULL CHECK (accepted_quorum > 0),
+  accepted_quorum INTEGER NOT NULL CHECK (accepted_quorum >= 0),
   attempt_count INTEGER NOT NULL,
   claim_token TEXT,
   claim_owner TEXT,

@@ -118,7 +118,7 @@ impl RadrootsOutbox {
         input: RadrootsOutboxOperationInput,
     ) -> Result<RadrootsOutboxEnqueueReceipt, RadrootsOutboxError> {
         let target_relays = ordered_unique_relays(input.target_relays);
-        if target_relays.is_empty() {
+        if target_relays.is_empty() && !input.allow_empty_target_relays {
             return Err(RadrootsOutboxError::EmptyTargetRelays);
         }
         let digest_relays = digest_relays(target_relays.as_slice());
@@ -216,7 +216,7 @@ impl RadrootsOutbox {
     ) -> Result<RadrootsOutboxEnqueueReceipt, RadrootsOutboxError> {
         validate_signed_nostr_event_matches_draft(&input.signed_event, &input.draft)?;
         let target_relays = ordered_unique_relays(input.target_relays);
-        if target_relays.is_empty() {
+        if target_relays.is_empty() && !input.allow_empty_target_relays {
             return Err(RadrootsOutboxError::EmptyTargetRelays);
         }
         let digest_relays = digest_relays(target_relays.as_slice());
@@ -1635,6 +1635,88 @@ mod tests {
         assert_eq!(table_count(&outbox, "outbox_operation").await, 0);
         assert_eq!(table_count(&outbox, "outbox_event").await, 0);
         assert_eq!(table_count(&outbox, "outbox_event_relay_status").await, 0);
+    }
+
+    #[tokio::test]
+    async fn enqueue_allows_explicitly_delegated_empty_target_relays() {
+        let outbox = RadrootsOutbox::open_memory().await.expect("open");
+        let draft = post_draft(hex_64('a').as_str(), "delegated empty");
+
+        let receipt = outbox
+            .enqueue_operation(
+                RadrootsOutboxOperationInput::new("publish_post", draft, Vec::new(), 1_000)
+                    .allow_empty_target_relays(),
+            )
+            .await
+            .expect("delegated empty relays");
+
+        let event = outbox
+            .get_event(receipt.outbox_event_id)
+            .await
+            .expect("event")
+            .expect("event");
+        assert_eq!(event.accepted_quorum, 0);
+        assert_eq!(
+            outbox
+                .relay_statuses(receipt.outbox_event_id)
+                .await
+                .expect("relay statuses"),
+            Vec::new()
+        );
+
+        let claimed = outbox
+            .claim_next_ready_event("worker-a", "claim-a", 2_000, 1_000)
+            .await
+            .expect("claim")
+            .expect("claim");
+        assert_eq!(claimed.target_relays, Vec::<String>::new());
+    }
+
+    #[tokio::test]
+    async fn enqueue_signed_allows_explicitly_delegated_empty_target_relays() {
+        let outbox = RadrootsOutbox::open_memory().await.expect("open");
+        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "signed delegated empty");
+        let signed_event =
+            radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed event");
+
+        let receipt = outbox
+            .enqueue_signed_operation(
+                RadrootsOutboxSignedOperationInput::new(
+                    "publish_post",
+                    draft,
+                    signed_event.clone(),
+                    Vec::new(),
+                    false,
+                    1_007,
+                    1_000,
+                )
+                .allow_empty_target_relays(),
+            )
+            .await
+            .expect("delegated signed empty relays");
+
+        let event = outbox
+            .get_event(receipt.outbox_event_id)
+            .await
+            .expect("event")
+            .expect("event");
+        assert_eq!(event.accepted_quorum, 0);
+        assert_eq!(event.signed_event, Some(signed_event.clone()));
+        assert_eq!(
+            outbox
+                .relay_statuses(receipt.outbox_event_id)
+                .await
+                .expect("relay statuses"),
+            Vec::new()
+        );
+
+        let claimed = outbox
+            .claim_next_ready_signed_event("publisher-a", "claim-a", 2_000, 1_000)
+            .await
+            .expect("claim")
+            .expect("claim");
+        assert_eq!(claimed.signed_event, Some(signed_event));
+        assert_eq!(claimed.target_relays, Vec::<String>::new());
     }
 
     #[tokio::test]

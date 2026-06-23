@@ -127,6 +127,7 @@ pub struct RadrootsOutboxOperationInput {
     pub draft: RadrootsFrozenEventDraft,
     pub target_relays: Vec<String>,
     pub idempotency_key: Option<String>,
+    pub allow_empty_target_relays: bool,
     pub created_at_ms: i64,
 }
 
@@ -142,12 +143,18 @@ impl RadrootsOutboxOperationInput {
             draft,
             target_relays,
             idempotency_key: None,
+            allow_empty_target_relays: false,
             created_at_ms,
         }
     }
 
     pub fn with_idempotency_key(mut self, idempotency_key: impl Into<String>) -> Self {
         self.idempotency_key = Some(idempotency_key.into());
+        self
+    }
+
+    pub fn allow_empty_target_relays(mut self) -> Self {
+        self.allow_empty_target_relays = true;
         self
     }
 }
@@ -159,6 +166,7 @@ pub struct RadrootsOutboxSignedOperationInput {
     pub signed_event: RadrootsSignedNostrEvent,
     pub target_relays: Vec<String>,
     pub idempotency_key: Option<String>,
+    pub allow_empty_target_relays: bool,
     pub event_store_inserted: bool,
     pub event_store_ingested_at_ms: i64,
     pub created_at_ms: i64,
@@ -180,6 +188,7 @@ impl RadrootsOutboxSignedOperationInput {
             signed_event,
             target_relays,
             idempotency_key: None,
+            allow_empty_target_relays: false,
             event_store_inserted,
             event_store_ingested_at_ms,
             created_at_ms,
@@ -188,6 +197,11 @@ impl RadrootsOutboxSignedOperationInput {
 
     pub fn with_idempotency_key(mut self, idempotency_key: impl Into<String>) -> Self {
         self.idempotency_key = Some(idempotency_key.into());
+        self
+    }
+
+    pub fn allow_empty_target_relays(mut self) -> Self {
+        self.allow_empty_target_relays = true;
         self
     }
 }
