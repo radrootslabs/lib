@@ -94,6 +94,8 @@ pub struct RadrootsSimplexAppInboundMessageLogEntry {
     pub inbound_sequence: Option<i64>,
     pub message_hash: Vec<u8>,
     pub ack_status: String,
+    pub app_record_kind: String,
+    pub app_record_id: String,
     pub received_at_unix: i64,
 }
 
@@ -122,6 +124,37 @@ pub struct RadrootsSimplexAppOutboundTextRequest {
 pub struct RadrootsSimplexAppOutboundTextDraft {
     pub chat_item: RadrootsSimplexAppChatItem,
     pub outbox_message: RadrootsSimplexAppOutboxMessage,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RadrootsSimplexAppInboundTextRequest {
+    pub connection_id: String,
+    pub conversation_id: String,
+    pub broker_message_id_hash: Vec<u8>,
+    pub inbound_sequence: Option<i64>,
+    pub message_hash: Vec<u8>,
+    pub chat_msg_id: Option<String>,
+    pub body: String,
+    pub received_at_unix: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RadrootsSimplexAppInboundUnsupportedEventRequest {
+    pub connection_id: String,
+    pub broker_message_id_hash: Vec<u8>,
+    pub inbound_sequence: Option<i64>,
+    pub message_hash: Vec<u8>,
+    pub event_kind: String,
+    pub payload_json: String,
+    pub received_at_unix: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RadrootsSimplexAppInboundCommit {
+    pub inbound: RadrootsSimplexAppInboundMessageLogEntry,
+    pub chat_item: Option<RadrootsSimplexAppChatItem>,
+    pub unsupported_event: Option<RadrootsSimplexAppUnsupportedProtocolEvent>,
+    pub duplicate: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

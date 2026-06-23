@@ -15,10 +15,11 @@ pub mod prelude {
     pub use crate::model::{
         RadrootsSimplexAppChatDirection, RadrootsSimplexAppChatItem, RadrootsSimplexAppConnection,
         RadrootsSimplexAppContact, RadrootsSimplexAppConversation, RadrootsSimplexAppDiagnostics,
-        RadrootsSimplexAppInboundMessageLogEntry, RadrootsSimplexAppOutboundTextDraft,
-        RadrootsSimplexAppOutboundTextRequest, RadrootsSimplexAppOutboxMessage,
-        RadrootsSimplexAppProfile, RadrootsSimplexAppQueueEndpoint,
-        RadrootsSimplexAppUnsupportedProtocolEvent,
+        RadrootsSimplexAppInboundCommit, RadrootsSimplexAppInboundMessageLogEntry,
+        RadrootsSimplexAppInboundTextRequest, RadrootsSimplexAppInboundUnsupportedEventRequest,
+        RadrootsSimplexAppOutboundTextDraft, RadrootsSimplexAppOutboundTextRequest,
+        RadrootsSimplexAppOutboxMessage, RadrootsSimplexAppProfile,
+        RadrootsSimplexAppQueueEndpoint, RadrootsSimplexAppUnsupportedProtocolEvent,
     };
     #[cfg(all(feature = "std", feature = "sqlcipher"))]
     pub use crate::store::RadrootsSimplexAppStore;
@@ -28,9 +29,10 @@ pub use error::RadrootsSimplexAppStoreError;
 pub use model::{
     RadrootsSimplexAppChatDirection, RadrootsSimplexAppChatItem, RadrootsSimplexAppConnection,
     RadrootsSimplexAppContact, RadrootsSimplexAppConversation, RadrootsSimplexAppDiagnostics,
-    RadrootsSimplexAppInboundMessageLogEntry, RadrootsSimplexAppOutboundTextDraft,
-    RadrootsSimplexAppOutboundTextRequest, RadrootsSimplexAppOutboxMessage,
-    RadrootsSimplexAppProfile, RadrootsSimplexAppQueueEndpoint,
+    RadrootsSimplexAppInboundCommit, RadrootsSimplexAppInboundMessageLogEntry,
+    RadrootsSimplexAppInboundTextRequest, RadrootsSimplexAppInboundUnsupportedEventRequest,
+    RadrootsSimplexAppOutboundTextDraft, RadrootsSimplexAppOutboundTextRequest,
+    RadrootsSimplexAppOutboxMessage, RadrootsSimplexAppProfile, RadrootsSimplexAppQueueEndpoint,
     RadrootsSimplexAppUnsupportedProtocolEvent,
 };
 #[cfg(all(feature = "std", feature = "sqlcipher"))]
