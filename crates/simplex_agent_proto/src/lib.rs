@@ -31,7 +31,8 @@ pub mod prelude {
         RADROOTS_SIMPLEX_AGENT_SHORT_LINK_ID_LENGTH, RADROOTS_SIMPLEX_AGENT_SHORT_LINK_KEY_LENGTH,
         RADROOTS_SIMPLEX_AGENT_SHORT_LINK_SERVER_KEY_HASH_LENGTH,
         RadrootsSimplexAgentShortInvitationFixedData, RadrootsSimplexAgentShortInvitationLink,
-        RadrootsSimplexAgentShortLinkScheme, decode_short_invitation_fixed_data,
+        RadrootsSimplexAgentShortInvitationUserData, RadrootsSimplexAgentShortLinkScheme,
+        decode_short_invitation_fixed_data, decode_short_invitation_user_data,
         encode_short_invitation_fixed_data, encode_short_invitation_user_data,
         parse_short_invitation_link,
     };

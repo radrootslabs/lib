@@ -16,8 +16,8 @@ use radroots_simplex_agent_proto::prelude::{
     RadrootsSimplexAgentQueueAddress, RadrootsSimplexAgentQueueDescriptor,
     RadrootsSimplexAgentShortInvitationLink, RadrootsSimplexAgentShortLinkScheme,
     decode_decrypted_message, decode_envelope, decode_short_invitation_fixed_data,
-    encode_decrypted_message, encode_envelope, encode_short_invitation_fixed_data,
-    encode_short_invitation_user_data,
+    decode_short_invitation_user_data, encode_decrypted_message, encode_envelope,
+    encode_short_invitation_fixed_data, encode_short_invitation_user_data,
 };
 use radroots_simplex_agent_store::prelude::{
     RadrootsSimplexAgentOutboundMessage, RadrootsSimplexAgentPendingCommand,
@@ -110,18 +110,22 @@ pub fn decrypt_short_invitation_link_data(
     }
     let fixed_payload =
         &signed_link_data.fixed_data[RADROOTS_SIMPLEX_SMP_SHORT_LINK_SIGNATURE_LENGTH..];
-    let fixed_data = decode_short_invitation_fixed_data(fixed_payload)?;
+    let mut fixed_data = decode_short_invitation_fixed_data(fixed_payload)?;
     let verified = verify_signed_short_link_data(
         &invitation.link_key,
         &fixed_data.root_public_signature_key,
         &signed_link_data,
     )
     .map_err(|error| RadrootsSimplexAgentRuntimeError::Runtime(error.to_string()))?;
-    if verified.user_data != encode_short_invitation_user_data(&fixed_data.invitation) {
+    let user_data = decode_short_invitation_user_data(&verified.user_data)?;
+    if !fixed_data.invitation.connection_id.is_empty()
+        && fixed_data.invitation.connection_id != user_data.user_data
+    {
         return Err(RadrootsSimplexAgentRuntimeError::Runtime(
             "SimpleX short invitation user data does not match the fixed connection link".into(),
         ));
     }
+    fixed_data.invitation.connection_id = user_data.user_data;
     Ok(fixed_data.invitation)
 }
 
@@ -2565,7 +2569,7 @@ fn prepare_short_invitation_link_data(
     let root_keypair = RadrootsSimplexSmpEd25519Keypair::generate()
         .map_err(|error| RadrootsSimplexAgentRuntimeError::Runtime(error.to_string()))?;
     let fixed_data = encode_short_invitation_fixed_data(&root_keypair.public_key, invitation)?;
-    let user_data = encode_short_invitation_user_data(invitation);
+    let user_data = encode_short_invitation_user_data(invitation)?;
     let (link_key, signed_link_data) = sign_short_link_data(&root_keypair, &fixed_data, &user_data)
         .map_err(|error| RadrootsSimplexAgentRuntimeError::Runtime(error.to_string()))?;
     let link_data_key = derive_invitation_short_link_data_key(&link_key)
@@ -3265,11 +3269,13 @@ mod tests {
             decoded.root_public_signature_key,
             short_link.link_public_signature_key
         );
-        assert_eq!(
-            decoded.invitation.connection_id,
-            created.as_bytes().to_vec()
-        );
-        assert_eq!(verified.user_data, created.as_bytes().to_vec());
+        assert!(decoded.invitation.connection_id.is_empty());
+        let decoded_user_data =
+            radroots_simplex_agent_proto::prelude::decode_short_invitation_user_data(
+                &verified.user_data,
+            )
+            .unwrap();
+        assert_eq!(decoded_user_data.user_data, created.as_bytes().to_vec());
         let decrypted_invitation =
             decrypt_short_invitation_link_data(invitation, &stored_link_data).unwrap();
         assert_eq!(

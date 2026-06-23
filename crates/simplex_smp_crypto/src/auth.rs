@@ -171,6 +171,18 @@ pub fn encode_ed25519_public_key_x509(
     Ok(encoded)
 }
 
+pub fn decode_ed25519_public_key_x509(
+    encoded: &[u8],
+) -> Result<Vec<u8>, RadrootsSimplexSmpCryptoError> {
+    let raw = encoded.strip_prefix(ED25519_SPKI_DER_PREFIX).ok_or(
+        RadrootsSimplexSmpCryptoError::InvalidPublicKeyLength(encoded.len()),
+    )?;
+    let key: [u8; 32] = raw
+        .try_into()
+        .map_err(|_| RadrootsSimplexSmpCryptoError::InvalidPublicKeyLength(encoded.len()))?;
+    Ok(key.to_vec())
+}
+
 pub fn encode_x25519_public_key_x509(
     public_key: &[u8],
 ) -> Result<Vec<u8>, RadrootsSimplexSmpCryptoError> {

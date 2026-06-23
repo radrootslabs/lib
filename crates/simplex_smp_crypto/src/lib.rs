@@ -14,8 +14,8 @@ pub mod prelude {
     pub use crate::auth::{
         RadrootsSimplexSmpCommandAuthorization, RadrootsSimplexSmpEd25519Keypair,
         RadrootsSimplexSmpQueueAuthorizationMaterial, RadrootsSimplexSmpQueueAuthorizationScope,
-        decode_x25519_public_key_x509, encode_ed25519_public_key_x509,
-        encode_x25519_public_key_x509, verify_signature,
+        decode_ed25519_public_key_x509, decode_x25519_public_key_x509,
+        encode_ed25519_public_key_x509, encode_x25519_public_key_x509, verify_signature,
     };
     pub use crate::error::RadrootsSimplexSmpCryptoError;
     pub use crate::message::{

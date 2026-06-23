@@ -1,4 +1,3 @@
-use crate::codec::{decode_connection_link, encode_connection_link};
 use crate::error::{RadrootsSimplexAgentProtoError, RadrootsSimplexAgentUnsupportedLinkKind};
 use crate::model::RadrootsSimplexAgentConnectionLink;
 use alloc::format;
@@ -8,11 +7,32 @@ use base64::Engine as _;
 use base64::engine::general_purpose::{URL_SAFE, URL_SAFE_NO_PAD};
 use core::fmt;
 use core::str::FromStr;
+use radroots_simplex_smp_crypto::prelude::{
+    RadrootsSimplexOfficialX3dhParams, decode_ed25519_public_key_x509,
+    decode_official_x448_public_key_der, decode_x25519_public_key_x509,
+    encode_ed25519_public_key_x509, encode_official_x448_public_key_der,
+    encode_x25519_public_key_x509,
+};
+use radroots_simplex_smp_proto::prelude::{
+    RadrootsSimplexSmpQueueMode, RadrootsSimplexSmpQueueUri, RadrootsSimplexSmpServerAddress,
+    RadrootsSimplexSmpVersionRange,
+};
 
 pub const RADROOTS_SIMPLEX_AGENT_SHORT_LINK_ID_LENGTH: usize = 24;
 pub const RADROOTS_SIMPLEX_AGENT_SHORT_LINK_KEY_LENGTH: usize = 32;
 pub const RADROOTS_SIMPLEX_AGENT_SHORT_LINK_SERVER_KEY_HASH_LENGTH: usize = 32;
-const RADROOTS_SIMPLEX_AGENT_SHORT_INVITATION_FIXED_DATA_TAG: &[u8] = b"RRSIF1";
+const SIMPLEX_AGENT_SHORT_LINK_MIN_VERSION: u16 = 2;
+const SIMPLEX_AGENT_SHORT_LINK_CURRENT_VERSION: u16 = 7;
+const SIMPLEX_CONNECTION_MODE_INVITATION: u8 = b'I';
+const SIMPLEX_QUEUE_MODE_MESSAGING: u8 = b'M';
+const SIMPLEX_QUEUE_MODE_CONTACT: u8 = b'C';
+const SIMPLEX_MAYBE_NOTHING: u8 = b'0';
+const SIMPLEX_MAYBE_JUST: u8 = b'1';
+const SIMPLEX_RATCHET_KEM_PROPOSED: u8 = b'P';
+const SIMPLEX_RATCHET_KEM_ACCEPTED: u8 = b'A';
+const SIMPLEX_USER_LINK_DATA_LARGE_TAG: u8 = u8::MAX;
+
+type ShortLinkResult<T> = Result<T, RadrootsSimplexAgentProtoError>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RadrootsSimplexAgentShortLinkScheme {
@@ -32,8 +52,16 @@ pub struct RadrootsSimplexAgentShortInvitationLink {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RadrootsSimplexAgentShortInvitationFixedData {
+    pub agent_version_range: RadrootsSimplexSmpVersionRange,
     pub root_public_signature_key: Vec<u8>,
     pub invitation: RadrootsSimplexAgentConnectionLink,
+    pub link_entity_id: Option<Vec<u8>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RadrootsSimplexAgentShortInvitationUserData {
+    pub agent_version_range: RadrootsSimplexSmpVersionRange,
+    pub user_data: Vec<u8>,
 }
 
 impl RadrootsSimplexAgentShortInvitationLink {
@@ -100,11 +128,13 @@ pub fn encode_short_invitation_fixed_data(
     root_public_signature_key: &[u8],
     invitation: &RadrootsSimplexAgentConnectionLink,
 ) -> Result<Vec<u8>, RadrootsSimplexAgentProtoError> {
-    let encoded_invitation = encode_connection_link(invitation)?;
+    let agent_version_range = official_agent_version_range()?;
+    let encoded_root_public_key = encode_ed25519_public_key_x509(root_public_signature_key)
+        .map_err(|error| RadrootsSimplexAgentProtoError::InvalidLink(error.to_string()))?;
     let mut buffer = Vec::new();
-    buffer.extend_from_slice(RADROOTS_SIMPLEX_AGENT_SHORT_INVITATION_FIXED_DATA_TAG);
-    push_short_bytes(&mut buffer, root_public_signature_key)?;
-    push_large_bytes(&mut buffer, &encoded_invitation)?;
+    push_version_range(&mut buffer, agent_version_range);
+    push_short_bytes(&mut buffer, &encoded_root_public_key)?;
+    encode_official_invitation_connection_request(&mut buffer, agent_version_range, invitation)?;
     Ok(buffer)
 }
 
@@ -112,20 +142,48 @@ pub fn decode_short_invitation_fixed_data(
     bytes: &[u8],
 ) -> Result<RadrootsSimplexAgentShortInvitationFixedData, RadrootsSimplexAgentProtoError> {
     let mut cursor = ShortLinkDataCursor::new(bytes);
-    cursor.expect_tag(RADROOTS_SIMPLEX_AGENT_SHORT_INVITATION_FIXED_DATA_TAG)?;
-    let root_public_signature_key = cursor.read_short_bytes()?;
-    let invitation = decode_connection_link(&cursor.read_large_bytes()?)?;
-    cursor.finish()?;
+    let agent_version_range = cursor.read_version_range()?;
+    let root_public_signature_key = decode_ed25519_public_key_x509(&cursor.read_short_bytes()?)
+        .map_err(|error| RadrootsSimplexAgentProtoError::InvalidLink(error.to_string()))?;
+    let mut invitation = decode_official_invitation_connection_request(&mut cursor)?;
+    let link_entity_id = if cursor.remaining().is_empty() {
+        None
+    } else {
+        Some(cursor.read_short_bytes()?)
+    };
+    if let Some(link_entity_id) = link_entity_id.as_ref() {
+        invitation.connection_id = link_entity_id.clone();
+    }
     Ok(RadrootsSimplexAgentShortInvitationFixedData {
+        agent_version_range,
         root_public_signature_key,
         invitation,
+        link_entity_id,
     })
 }
 
 pub fn encode_short_invitation_user_data(
     invitation: &RadrootsSimplexAgentConnectionLink,
-) -> Vec<u8> {
-    invitation.connection_id.clone()
+) -> Result<Vec<u8>, RadrootsSimplexAgentProtoError> {
+    let agent_version_range = official_agent_version_range()?;
+    let mut buffer = Vec::new();
+    buffer.push(SIMPLEX_CONNECTION_MODE_INVITATION);
+    push_version_range(&mut buffer, agent_version_range);
+    push_user_link_data(&mut buffer, &invitation.connection_id)?;
+    Ok(buffer)
+}
+
+pub fn decode_short_invitation_user_data(
+    bytes: &[u8],
+) -> Result<RadrootsSimplexAgentShortInvitationUserData, RadrootsSimplexAgentProtoError> {
+    let mut cursor = ShortLinkDataCursor::new(bytes);
+    cursor.expect_byte(SIMPLEX_CONNECTION_MODE_INVITATION)?;
+    let agent_version_range = cursor.read_version_range()?;
+    let user_data = cursor.read_user_link_data()?;
+    Ok(RadrootsSimplexAgentShortInvitationUserData {
+        agent_version_range,
+        user_data,
+    })
 }
 
 impl fmt::Display for RadrootsSimplexAgentShortInvitationLink {
@@ -379,6 +437,151 @@ fn duplicate_param(key: &str) -> RadrootsSimplexAgentProtoError {
     }
 }
 
+fn official_agent_version_range() -> ShortLinkResult<RadrootsSimplexSmpVersionRange> {
+    Ok(RadrootsSimplexSmpVersionRange::new(
+        SIMPLEX_AGENT_SHORT_LINK_MIN_VERSION,
+        SIMPLEX_AGENT_SHORT_LINK_CURRENT_VERSION,
+    )?)
+}
+
+fn encode_official_invitation_connection_request(
+    buffer: &mut Vec<u8>,
+    agent_version_range: RadrootsSimplexSmpVersionRange,
+    invitation: &RadrootsSimplexAgentConnectionLink,
+) -> Result<(), RadrootsSimplexAgentProtoError> {
+    buffer.push(SIMPLEX_CONNECTION_MODE_INVITATION);
+    push_version_range(buffer, agent_version_range);
+    push_queue_list(buffer, core::slice::from_ref(&invitation.invitation_queue))?;
+    push_maybe_large_bytes(buffer, None)?;
+    encode_official_x3dh_params(buffer, &invitation.e2e_ratchet_params)
+}
+
+fn decode_official_invitation_connection_request(
+    cursor: &mut ShortLinkDataCursor<'_>,
+) -> Result<RadrootsSimplexAgentConnectionLink, RadrootsSimplexAgentProtoError> {
+    cursor.expect_byte(SIMPLEX_CONNECTION_MODE_INVITATION)?;
+    let _agent_version_range = cursor.read_version_range()?;
+    let invitation_queues = cursor.read_queue_list()?;
+    let _client_data = cursor.read_maybe_large_bytes()?;
+    let e2e_ratchet_params = cursor.read_x3dh_params()?;
+    let invitation_queue = invitation_queues.into_iter().next().ok_or_else(|| {
+        RadrootsSimplexAgentProtoError::InvalidLink(
+            "short invitation connection request has no SMP queues".to_string(),
+        )
+    })?;
+    Ok(RadrootsSimplexAgentConnectionLink {
+        invitation_queue,
+        connection_id: Vec::new(),
+        e2e_ratchet_params,
+        contact_address: false,
+    })
+}
+
+fn push_version_range(buffer: &mut Vec<u8>, version_range: RadrootsSimplexSmpVersionRange) {
+    buffer.extend_from_slice(&version_range.min.to_be_bytes());
+    buffer.extend_from_slice(&version_range.max.to_be_bytes());
+}
+
+fn push_queue_list(
+    buffer: &mut Vec<u8>,
+    queues: &[RadrootsSimplexSmpQueueUri],
+) -> Result<(), RadrootsSimplexAgentProtoError> {
+    if queues.is_empty() || queues.len() > u8::MAX as usize {
+        return Err(RadrootsSimplexAgentProtoError::InvalidShortFieldLength(
+            queues.len(),
+        ));
+    }
+    buffer.push(queues.len() as u8);
+    for queue in queues {
+        encode_official_queue_uri(buffer, queue)?;
+    }
+    Ok(())
+}
+
+fn encode_official_queue_uri(
+    buffer: &mut Vec<u8>,
+    queue: &RadrootsSimplexSmpQueueUri,
+) -> Result<(), RadrootsSimplexAgentProtoError> {
+    push_version_range(buffer, queue.version_range);
+    encode_official_server_address(buffer, &queue.server)?;
+    push_short_bytes(buffer, &decode_base64url("sender_id", &queue.sender_id)?)?;
+    let queue_public_key =
+        decode_base64url("recipient_dh_public_key", &queue.recipient_dh_public_key)?;
+    let queue_public_key = encode_x25519_public_key_x509(
+        &decode_x25519_public_key_x509(&queue_public_key)
+            .map_err(|error| RadrootsSimplexAgentProtoError::InvalidLink(error.to_string()))?,
+    )
+    .map_err(|error| RadrootsSimplexAgentProtoError::InvalidLink(error.to_string()))?;
+    push_short_bytes(buffer, &queue_public_key)?;
+    if queue.version_range.min >= 4 {
+        if let Some(queue_mode) = queue.queue_mode {
+            buffer.push(match queue_mode {
+                RadrootsSimplexSmpQueueMode::Messaging => SIMPLEX_QUEUE_MODE_MESSAGING,
+                RadrootsSimplexSmpQueueMode::Contact => SIMPLEX_QUEUE_MODE_CONTACT,
+            });
+        }
+    } else if queue.sender_can_secure() {
+        buffer.push(b'T');
+    }
+    Ok(())
+}
+
+fn encode_official_server_address(
+    buffer: &mut Vec<u8>,
+    server: &RadrootsSimplexSmpServerAddress,
+) -> Result<(), RadrootsSimplexAgentProtoError> {
+    push_string_list(buffer, &server.hosts)?;
+    let port = server
+        .port
+        .map_or_else(String::new, |port| port.to_string());
+    push_string(buffer, &port)?;
+    push_short_bytes(
+        buffer,
+        &decode_base64url("server_identity", &server.server_identity)?,
+    )
+}
+
+fn encode_official_x3dh_params(
+    buffer: &mut Vec<u8>,
+    params: &RadrootsSimplexOfficialX3dhParams,
+) -> Result<(), RadrootsSimplexAgentProtoError> {
+    push_version_range(buffer, params.version_range);
+    push_short_bytes(
+        buffer,
+        &encode_official_x448_public_key_der(&params.key_1).map_err(|error| {
+            RadrootsSimplexAgentProtoError::InvalidE2eParameters(error.to_string())
+        })?,
+    )?;
+    push_short_bytes(
+        buffer,
+        &encode_official_x448_public_key_der(&params.key_2).map_err(|error| {
+            RadrootsSimplexAgentProtoError::InvalidE2eParameters(error.to_string())
+        })?,
+    )?;
+    buffer.push(SIMPLEX_MAYBE_NOTHING);
+    Ok(())
+}
+
+fn push_string_list(
+    buffer: &mut Vec<u8>,
+    values: &[String],
+) -> Result<(), RadrootsSimplexAgentProtoError> {
+    if values.is_empty() || values.len() > u8::MAX as usize {
+        return Err(RadrootsSimplexAgentProtoError::InvalidShortFieldLength(
+            values.len(),
+        ));
+    }
+    buffer.push(values.len() as u8);
+    for value in values {
+        push_string(buffer, value)?;
+    }
+    Ok(())
+}
+
+fn push_string(buffer: &mut Vec<u8>, value: &str) -> Result<(), RadrootsSimplexAgentProtoError> {
+    push_short_bytes(buffer, value.as_bytes())
+}
+
 fn push_short_bytes(
     buffer: &mut Vec<u8>,
     value: &[u8],
@@ -391,6 +594,18 @@ fn push_short_bytes(
     buffer.push(value.len() as u8);
     buffer.extend_from_slice(value);
     Ok(())
+}
+
+fn push_user_link_data(
+    buffer: &mut Vec<u8>,
+    value: &[u8],
+) -> Result<(), RadrootsSimplexAgentProtoError> {
+    if value.len() < SIMPLEX_USER_LINK_DATA_LARGE_TAG as usize {
+        push_short_bytes(buffer, value)
+    } else {
+        buffer.push(SIMPLEX_USER_LINK_DATA_LARGE_TAG);
+        push_large_bytes(buffer, value)
+    }
 }
 
 fn push_large_bytes(
@@ -407,6 +622,22 @@ fn push_large_bytes(
     Ok(())
 }
 
+fn push_maybe_large_bytes(
+    buffer: &mut Vec<u8>,
+    value: Option<&[u8]>,
+) -> Result<(), RadrootsSimplexAgentProtoError> {
+    match value {
+        Some(value) => {
+            buffer.push(SIMPLEX_MAYBE_JUST);
+            push_large_bytes(buffer, value)
+        }
+        None => {
+            buffer.push(SIMPLEX_MAYBE_NOTHING);
+            Ok(())
+        }
+    }
+}
+
 struct ShortLinkDataCursor<'a> {
     bytes: &'a [u8],
     offset: usize,
@@ -417,18 +648,183 @@ impl<'a> ShortLinkDataCursor<'a> {
         Self { bytes, offset: 0 }
     }
 
-    fn expect_tag(&mut self, tag: &[u8]) -> Result<(), RadrootsSimplexAgentProtoError> {
-        if self.remaining().len() < tag.len() {
-            return Err(RadrootsSimplexAgentProtoError::UnexpectedEof);
-        }
-        let next = &self.remaining()[..tag.len()];
-        if next != tag {
+    fn expect_byte(&mut self, expected: u8) -> Result<(), RadrootsSimplexAgentProtoError> {
+        let actual = self.read_byte()?;
+        if actual != expected {
             return Err(RadrootsSimplexAgentProtoError::InvalidTag(
-                String::from_utf8_lossy(next).into_owned(),
+                String::from_utf8_lossy(&[actual]).into_owned(),
             ));
         }
-        self.offset += tag.len();
         Ok(())
+    }
+
+    fn read_version_range(
+        &mut self,
+    ) -> Result<RadrootsSimplexSmpVersionRange, RadrootsSimplexAgentProtoError> {
+        if self.remaining().len() < 4 {
+            return Err(RadrootsSimplexAgentProtoError::UnexpectedEof);
+        }
+        let min = u16::from_be_bytes([self.bytes[self.offset], self.bytes[self.offset + 1]]);
+        let max = u16::from_be_bytes([self.bytes[self.offset + 2], self.bytes[self.offset + 3]]);
+        self.offset += 4;
+        Ok(RadrootsSimplexSmpVersionRange::new(min, max)?)
+    }
+
+    fn read_queue_list(
+        &mut self,
+    ) -> Result<Vec<RadrootsSimplexSmpQueueUri>, RadrootsSimplexAgentProtoError> {
+        let len = self.read_byte()? as usize;
+        if len == 0 {
+            return Err(RadrootsSimplexAgentProtoError::InvalidShortFieldLength(0));
+        }
+        let mut queues = Vec::with_capacity(len);
+        for _ in 0..len {
+            queues.push(self.read_queue_uri()?);
+        }
+        Ok(queues)
+    }
+
+    fn read_queue_uri(
+        &mut self,
+    ) -> Result<RadrootsSimplexSmpQueueUri, RadrootsSimplexAgentProtoError> {
+        let version_range = self.read_version_range()?;
+        let server = self.read_server_address()?;
+        let sender_id = URL_SAFE.encode(self.read_short_bytes()?);
+        let recipient_dh_public_key = self.read_short_bytes()?;
+        let recipient_dh_public_key = encode_x25519_public_key_x509(
+            &decode_x25519_public_key_x509(&recipient_dh_public_key)
+                .map_err(|error| RadrootsSimplexAgentProtoError::InvalidLink(error.to_string()))?,
+        )
+        .map_err(|error| RadrootsSimplexAgentProtoError::InvalidLink(error.to_string()))?;
+        let recipient_dh_public_key = URL_SAFE.encode(recipient_dh_public_key);
+        let queue_mode = match self.peek_byte() {
+            Some(SIMPLEX_QUEUE_MODE_MESSAGING) => {
+                self.read_byte()?;
+                Some(RadrootsSimplexSmpQueueMode::Messaging)
+            }
+            Some(SIMPLEX_QUEUE_MODE_CONTACT) => {
+                self.read_byte()?;
+                Some(RadrootsSimplexSmpQueueMode::Contact)
+            }
+            Some(b'T') if version_range.min < 4 => {
+                self.read_byte()?;
+                Some(RadrootsSimplexSmpQueueMode::Messaging)
+            }
+            Some(b'F') if version_range.min < 4 => {
+                self.read_byte()?;
+                Some(RadrootsSimplexSmpQueueMode::Contact)
+            }
+            _ => None,
+        };
+        Ok(RadrootsSimplexSmpQueueUri {
+            server,
+            sender_id,
+            version_range,
+            recipient_dh_public_key,
+            queue_mode,
+        })
+    }
+
+    fn read_server_address(
+        &mut self,
+    ) -> Result<RadrootsSimplexSmpServerAddress, RadrootsSimplexAgentProtoError> {
+        let hosts = self.read_string_list()?;
+        let port = match self.read_string()?.as_str() {
+            "" => None,
+            value => Some(
+                value
+                    .parse::<u16>()
+                    .map_err(|_| RadrootsSimplexAgentProtoError::InvalidPort(value.to_string()))?,
+            ),
+        };
+        let server_identity = URL_SAFE.encode(self.read_short_bytes()?);
+        Ok(RadrootsSimplexSmpServerAddress {
+            server_identity,
+            hosts,
+            port,
+        })
+    }
+
+    fn read_string_list(&mut self) -> Result<Vec<String>, RadrootsSimplexAgentProtoError> {
+        let len = self.read_byte()? as usize;
+        if len == 0 {
+            return Err(RadrootsSimplexAgentProtoError::InvalidShortFieldLength(0));
+        }
+        let mut values = Vec::with_capacity(len);
+        for _ in 0..len {
+            values.push(self.read_string()?);
+        }
+        Ok(values)
+    }
+
+    fn read_string(&mut self) -> Result<String, RadrootsSimplexAgentProtoError> {
+        String::from_utf8(self.read_short_bytes()?)
+            .map_err(|error| RadrootsSimplexAgentProtoError::InvalidUtf8(error.to_string()))
+    }
+
+    fn read_x3dh_params(
+        &mut self,
+    ) -> Result<RadrootsSimplexOfficialX3dhParams, RadrootsSimplexAgentProtoError> {
+        let version_range = self.read_version_range()?;
+        let key_1 =
+            decode_official_x448_public_key_der(&self.read_short_bytes()?).map_err(|error| {
+                RadrootsSimplexAgentProtoError::InvalidE2eParameters(error.to_string())
+            })?;
+        let key_2 =
+            decode_official_x448_public_key_der(&self.read_short_bytes()?).map_err(|error| {
+                RadrootsSimplexAgentProtoError::InvalidE2eParameters(error.to_string())
+            })?;
+        let (pq_public_key, pq_ciphertext) = self.read_optional_kem_params()?;
+        Ok(RadrootsSimplexOfficialX3dhParams {
+            version_range,
+            key_1,
+            key_2,
+            pq_public_key,
+            pq_ciphertext,
+        })
+    }
+
+    fn read_optional_kem_params(
+        &mut self,
+    ) -> Result<(Option<Vec<u8>>, Option<Vec<u8>>), RadrootsSimplexAgentProtoError> {
+        match self.read_byte()? {
+            SIMPLEX_MAYBE_NOTHING => Ok((None, None)),
+            SIMPLEX_MAYBE_JUST => match self.read_byte()? {
+                SIMPLEX_RATCHET_KEM_PROPOSED => Ok((Some(self.read_large_bytes()?), None)),
+                SIMPLEX_RATCHET_KEM_ACCEPTED => {
+                    let ciphertext = self.read_large_bytes()?;
+                    let public_key = self.read_large_bytes()?;
+                    Ok((Some(public_key), Some(ciphertext)))
+                }
+                tag => Err(RadrootsSimplexAgentProtoError::InvalidTag(
+                    String::from_utf8_lossy(&[tag]).into_owned(),
+                )),
+            },
+            tag => Err(RadrootsSimplexAgentProtoError::InvalidTag(
+                String::from_utf8_lossy(&[tag]).into_owned(),
+            )),
+        }
+    }
+
+    fn read_maybe_large_bytes(
+        &mut self,
+    ) -> Result<Option<Vec<u8>>, RadrootsSimplexAgentProtoError> {
+        match self.read_byte()? {
+            SIMPLEX_MAYBE_NOTHING => Ok(None),
+            SIMPLEX_MAYBE_JUST => Ok(Some(self.read_large_bytes()?)),
+            tag => Err(RadrootsSimplexAgentProtoError::InvalidTag(
+                String::from_utf8_lossy(&[tag]).into_owned(),
+            )),
+        }
+    }
+
+    fn read_user_link_data(&mut self) -> Result<Vec<u8>, RadrootsSimplexAgentProtoError> {
+        let len = self.read_byte()?;
+        if len == SIMPLEX_USER_LINK_DATA_LARGE_TAG {
+            self.read_large_bytes()
+        } else {
+            self.read_exact(len as usize)
+        }
     }
 
     fn read_short_bytes(&mut self) -> Result<Vec<u8>, RadrootsSimplexAgentProtoError> {
@@ -455,6 +851,10 @@ impl<'a> ShortLinkDataCursor<'a> {
         Ok(value)
     }
 
+    fn peek_byte(&self) -> Option<u8> {
+        self.bytes.get(self.offset).copied()
+    }
+
     fn read_exact(&mut self, len: usize) -> Result<Vec<u8>, RadrootsSimplexAgentProtoError> {
         if self.remaining().len() < len {
             return Err(RadrootsSimplexAgentProtoError::UnexpectedEof);
@@ -466,14 +866,6 @@ impl<'a> ShortLinkDataCursor<'a> {
 
     fn remaining(&self) -> &'a [u8] {
         &self.bytes[self.offset..]
-    }
-
-    fn finish(&self) -> Result<(), RadrootsSimplexAgentProtoError> {
-        if self.offset == self.bytes.len() {
-            Ok(())
-        } else {
-            Err(RadrootsSimplexAgentProtoError::TrailingBytes)
-        }
     }
 }
 
@@ -493,6 +885,18 @@ mod tests {
     }
 
     fn sample_connection_link() -> RadrootsSimplexAgentConnectionLink {
+        let queue_key =
+            radroots_simplex_smp_crypto::prelude::RadrootsSimplexSmpX25519Keypair::from_seed(
+                b"rr-synth-short-link-queue-dh",
+            );
+        let server_id = URL_SAFE.encode([7_u8; 32]);
+        let sender_id = URL_SAFE.encode([9_u8; RADROOTS_SIMPLEX_AGENT_SHORT_LINK_ID_LENGTH]);
+        let queue_dh = URL_SAFE.encode(
+            radroots_simplex_smp_crypto::prelude::encode_x25519_public_key_x509(
+                &queue_key.public_key,
+            )
+            .expect("queue key"),
+        );
         let key_1 = radroots_simplex_smp_crypto::prelude::official_x448_keypair_from_seed(
             b"rr-synth-short-link-x3dh-1",
         );
@@ -501,9 +905,9 @@ mod tests {
         );
         RadrootsSimplexAgentConnectionLink {
             invitation_queue:
-                radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpQueueUri::parse(
-                    "smp://c2VydmVyLWlk@relay.example/c2VuZGVy#/?v=4&dh=cmVjZWl2ZXI&q=m",
-                )
+                radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpQueueUri::parse(&format!(
+                    "smp://{server_id}@relay.example/{sender_id}#/?v=4&dh={queue_dh}&q=m"
+                ))
                 .expect("queue"),
             connection_id: b"conn-synth-short-link".to_vec(),
             e2e_ratchet_params:
@@ -650,25 +1054,39 @@ mod tests {
         let encoded =
             encode_short_invitation_fixed_data(&root_public_key, &invitation).expect("encoded");
         let decoded = decode_short_invitation_fixed_data(&encoded).expect("decoded");
+        let encoded_user_data = encode_short_invitation_user_data(&invitation).expect("user data");
+        let decoded_user_data =
+            decode_short_invitation_user_data(&encoded_user_data).expect("decoded user data");
 
+        assert_ne!(&encoded[..6], b"RRSIF1");
+        assert_eq!(decoded.agent_version_range.min, 2);
+        assert_eq!(decoded.agent_version_range.max, 7);
         assert_eq!(decoded.root_public_signature_key, root_public_key);
-        assert_eq!(decoded.invitation, invitation);
+        assert_eq!(decoded.link_entity_id, None);
+        assert!(decoded.invitation.connection_id.is_empty());
         assert_eq!(
-            encode_short_invitation_user_data(&decoded.invitation),
+            decoded.invitation.invitation_queue,
+            invitation.invitation_queue
+        );
+        assert_eq!(
+            decoded.invitation.e2e_ratchet_params,
+            invitation.e2e_ratchet_params
+        );
+        assert_eq!(decoded_user_data.agent_version_range.min, 2);
+        assert_eq!(decoded_user_data.agent_version_range.max, 7);
+        assert_eq!(
+            decoded_user_data.user_data,
             b"conn-synth-short-link".to_vec()
         );
     }
 
     #[test]
-    fn rejects_short_invitation_fixed_data_with_trailing_bytes() {
-        let mut encoded =
-            encode_short_invitation_fixed_data(&[42_u8; 32], &sample_connection_link())
-                .expect("encoded");
-        encoded.push(0);
+    fn rejects_legacy_radroots_short_invitation_fixed_data() {
+        let mut legacy = b"RRSIF1".to_vec();
+        legacy.push(32);
+        legacy.extend_from_slice(&[42_u8; 32]);
+        legacy.extend_from_slice(&0_u16.to_be_bytes());
 
-        assert!(matches!(
-            decode_short_invitation_fixed_data(&encoded),
-            Err(RadrootsSimplexAgentProtoError::TrailingBytes)
-        ));
+        assert!(decode_short_invitation_fixed_data(&legacy).is_err());
     }
 }
