@@ -11,10 +11,9 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use radroots_simplex_smp_crypto::prelude::{
     RadrootsSimplexOfficialX3dhParams, RadrootsSimplexSmpRatchetHeader,
-    decode_official_x3dh_params_uri, encode_official_x3dh_params_uri,
 };
 use radroots_simplex_smp_proto::prelude::{
-    RadrootsSimplexSmpQueueUri, RadrootsSimplexSmpServerAddress,
+    RadrootsSimplexSmpQueueUri, RadrootsSimplexSmpServerAddress, RadrootsSimplexSmpVersionRange,
 };
 
 pub fn encode_connection_link(
@@ -23,9 +22,8 @@ pub fn encode_connection_link(
     let mut buffer = Vec::new();
     push_short_bytes(&mut buffer, link.invitation_queue.to_string().as_bytes())?;
     push_short_bytes(&mut buffer, &link.connection_id)?;
-    let e2e_ratchet_params = encode_official_x3dh_params_uri(&link.e2e_ratchet_params)
-        .map_err(|error| RadrootsSimplexAgentProtoError::InvalidE2eParameters(error.to_string()))?;
-    push_short_bytes(&mut buffer, e2e_ratchet_params.as_bytes())?;
+    let e2e_ratchet_params = encode_x3dh_params_binary(&link.e2e_ratchet_params)?;
+    push_large_bytes(&mut buffer, &e2e_ratchet_params)?;
     buffer.push(encode_bool(link.contact_address));
     Ok(buffer)
 }
@@ -39,11 +37,7 @@ pub fn decode_connection_link(
     let link = RadrootsSimplexAgentConnectionLink {
         invitation_queue: RadrootsSimplexSmpQueueUri::parse(&invitation_queue)?,
         connection_id: cursor.read_short_bytes()?,
-        e2e_ratchet_params: decode_official_x3dh_params_uri(
-            &String::from_utf8(cursor.read_short_bytes()?)
-                .map_err(|error| RadrootsSimplexAgentProtoError::InvalidUtf8(error.to_string()))?,
-        )
-        .map_err(|error| RadrootsSimplexAgentProtoError::InvalidE2eParameters(error.to_string()))?,
+        e2e_ratchet_params: decode_x3dh_params_binary(&cursor.read_large_bytes()?)?,
         contact_address: decode_bool(cursor.read_byte()?)?,
     };
     cursor.finish()?;
@@ -358,10 +352,8 @@ fn encode_optional_x3dh_params(
     match params {
         Some(params) => {
             buffer.push(b'1');
-            let encoded = encode_official_x3dh_params_uri(params).map_err(|error| {
-                RadrootsSimplexAgentProtoError::InvalidE2eParameters(error.to_string())
-            })?;
-            push_short_bytes(buffer, encoded.as_bytes())
+            let encoded = encode_x3dh_params_binary(params)?;
+            push_large_bytes(buffer, &encoded)
         }
         None => {
             buffer.push(b'0');
@@ -370,19 +362,44 @@ fn encode_optional_x3dh_params(
     }
 }
 
+fn encode_x3dh_params_binary(
+    params: &RadrootsSimplexOfficialX3dhParams,
+) -> Result<Vec<u8>, RadrootsSimplexAgentProtoError> {
+    let mut buffer = Vec::new();
+    buffer.extend_from_slice(&params.version_range.min.to_be_bytes());
+    buffer.extend_from_slice(&params.version_range.max.to_be_bytes());
+    push_short_bytes(&mut buffer, &params.key_1)?;
+    push_short_bytes(&mut buffer, &params.key_2)?;
+    push_maybe_large_bytes(&mut buffer, params.pq_public_key.as_deref())?;
+    push_maybe_large_bytes(&mut buffer, params.pq_ciphertext.as_deref())?;
+    Ok(buffer)
+}
+
+fn decode_x3dh_params_binary(
+    bytes: &[u8],
+) -> Result<RadrootsSimplexOfficialX3dhParams, RadrootsSimplexAgentProtoError> {
+    let mut cursor = Cursor::new(bytes);
+    let version_range = RadrootsSimplexSmpVersionRange::new(cursor.read_u16()?, cursor.read_u16()?)
+        .map_err(|error| RadrootsSimplexAgentProtoError::InvalidE2eParameters(error.to_string()))?;
+    let params = RadrootsSimplexOfficialX3dhParams {
+        version_range,
+        key_1: cursor.read_short_bytes()?,
+        key_2: cursor.read_short_bytes()?,
+        pq_public_key: cursor.read_maybe(decode_large_bytes)?,
+        pq_ciphertext: cursor.read_maybe(decode_large_bytes)?,
+    };
+    cursor.finish()?;
+    Ok(params)
+}
+
 fn decode_optional_x3dh_params(
     cursor: &mut Cursor<'_>,
 ) -> Result<Option<RadrootsSimplexOfficialX3dhParams>, RadrootsSimplexAgentProtoError> {
     match cursor.read_byte()? {
         b'0' => Ok(None),
         b'1' => {
-            let encoded = String::from_utf8(cursor.read_short_bytes()?)
-                .map_err(|error| RadrootsSimplexAgentProtoError::InvalidUtf8(error.to_string()))?;
-            decode_official_x3dh_params_uri(&encoded)
-                .map(Some)
-                .map_err(|error| {
-                    RadrootsSimplexAgentProtoError::InvalidE2eParameters(error.to_string())
-                })
+            let encoded = cursor.read_large_bytes()?;
+            decode_x3dh_params_binary(&encoded).map(Some)
         }
         tag => Err(RadrootsSimplexAgentProtoError::InvalidTag(
             String::from_utf8_lossy(&[tag]).into_owned(),

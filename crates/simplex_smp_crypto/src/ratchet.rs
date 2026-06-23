@@ -575,7 +575,13 @@ impl RadrootsSimplexSmpRatchetState {
         )?;
         let receiving_dh =
             derive_official_x448_shared_secret(&local_private_key, &header.dh_public_key)?;
-        let receiving_root = official_root_kdf(&root_key, &receiving_dh, None)?;
+        let receiving_pq_shared_secret = if header.pq_ciphertext.is_some() {
+            self.current_pq_shared_secret.as_deref()
+        } else {
+            None
+        };
+        let receiving_root =
+            official_root_kdf(&root_key, &receiving_dh, receiving_pq_shared_secret)?;
         let next_local_keypair = generate_official_x448_keypair()?;
         let sending_dh = derive_official_x448_shared_secret(
             &next_local_keypair.private_key,
@@ -586,6 +592,8 @@ impl RadrootsSimplexSmpRatchetState {
         self.sending_chain_length = 0;
         self.receiving_chain_length = 0;
         self.remote_dh_public_key = header.dh_public_key.clone();
+        self.remote_pq_public_key = header.pq_public_key.clone();
+        self.pending_inbound_pq_ciphertext = header.pq_ciphertext.clone();
         self.local_dh_public_key = next_local_keypair.public_key;
         self.local_dh_private_key = Some(next_local_keypair.private_key);
         self.official_root_key = Some(sending_root.root_key);

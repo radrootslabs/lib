@@ -11,9 +11,10 @@ pub mod prelude {
     pub use crate::store::{
         RadrootsSimplexAgentConnectionRecord, RadrootsSimplexAgentDeliveryCursor,
         RadrootsSimplexAgentOutboundMessage, RadrootsSimplexAgentPendingCommand,
-        RadrootsSimplexAgentPendingCommandKind, RadrootsSimplexAgentPreparedOutboundMessage,
-        RadrootsSimplexAgentQueueAuthState, RadrootsSimplexAgentQueueRecord,
-        RadrootsSimplexAgentQueueRole, RadrootsSimplexAgentRecentMessageRecord,
-        RadrootsSimplexAgentStore, RadrootsSimplexAgentX3dhKeypair,
+        RadrootsSimplexAgentPendingCommandKind, RadrootsSimplexAgentPqKeypair,
+        RadrootsSimplexAgentPreparedOutboundMessage, RadrootsSimplexAgentQueueAuthState,
+        RadrootsSimplexAgentQueueRecord, RadrootsSimplexAgentQueueRole,
+        RadrootsSimplexAgentRecentMessageRecord, RadrootsSimplexAgentStore,
+        RadrootsSimplexAgentX3dhKeypair,
     };
 }
