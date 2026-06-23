@@ -1016,6 +1016,18 @@ impl RadrootsSimplexAgentStore {
         servers
     }
 
+    pub fn subscribed_receive_queues(&self) -> Vec<(String, RadrootsSimplexAgentQueueAddress)> {
+        let mut queues = Vec::new();
+        for connection in self.connections.values() {
+            for queue in &connection.queues {
+                if queue.role == RadrootsSimplexAgentQueueRole::Receive && queue.subscribed {
+                    queues.push((connection.id.clone(), queue.descriptor.queue_address()));
+                }
+            }
+        }
+        queues
+    }
+
     pub fn receive_queue_by_entity_id(
         &self,
         server: &RadrootsSimplexSmpServerAddress,
@@ -1189,6 +1201,21 @@ impl RadrootsSimplexAgentStore {
                     &command.kind,
                     RadrootsSimplexAgentPendingCommandKind::AckInboxMessage { receipt, .. }
                     if receipt.message_id == message_id && receipt.message_hash == message_hash
+                )
+        })
+    }
+
+    pub fn has_pending_subscribe_queue(
+        &self,
+        connection_id: &str,
+        queue_address: &RadrootsSimplexAgentQueueAddress,
+    ) -> bool {
+        self.pending_commands.values().any(|command| {
+            command.connection_id == connection_id
+                && matches!(
+                    &command.kind,
+                    RadrootsSimplexAgentPendingCommandKind::SubscribeQueue { queue }
+                    if queue == queue_address
                 )
         })
     }

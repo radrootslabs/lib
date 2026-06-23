@@ -618,6 +618,39 @@ impl RadrootsSimplexAgentRuntime {
         Ok(())
     }
 
+    pub fn resume_subscriptions(
+        &mut self,
+        now: u64,
+    ) -> Result<usize, RadrootsSimplexAgentRuntimeError> {
+        let mut queued = 0_usize;
+        let mut event_connections = Vec::new();
+        for (connection_id, queue) in self.store.subscribed_receive_queues() {
+            if self
+                .store
+                .has_pending_subscribe_queue(&connection_id, &queue)
+            {
+                continue;
+            }
+            self.store.enqueue_command(
+                &connection_id,
+                RadrootsSimplexAgentPendingCommandKind::SubscribeQueue { queue },
+                now,
+            )?;
+            queued = queued.saturating_add(1);
+            if !event_connections.contains(&connection_id) {
+                event_connections.push(connection_id);
+            }
+        }
+        for connection_id in event_connections {
+            self.events
+                .push_back(RadrootsSimplexAgentRuntimeEvent::SubscriptionQueued { connection_id });
+        }
+        if queued > 0 {
+            self.flush_store()?;
+        }
+        Ok(queued)
+    }
+
     pub fn get_connection_message(
         &mut self,
         connection_id: &str,
@@ -3805,6 +3838,56 @@ mod tests {
             .create_connection(invitation_queue(), b"e2e".to_vec(), false, 10)
             .unwrap();
         assert!(path.exists());
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn resume_subscriptions_requeues_persisted_receive_queues_after_restart() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path().join("runtime-store.json");
+        {
+            let mut runtime = RadrootsSimplexAgentRuntimeBuilder::new()
+                .persistent_store_path(&path)
+                .build()
+                .unwrap();
+            let created = runtime
+                .create_connection(invitation_queue(), b"e2e".to_vec(), false, 10)
+                .unwrap();
+            let mut setup_transport = ScriptedTransport::with_responses(vec![
+                ids_response(b"recipient", b"sender", b"server-dh"),
+                RadrootsSimplexSmpBrokerMessage::Ok,
+            ]);
+            runtime
+                .execute_ready_commands(&mut setup_transport, 30, 16)
+                .unwrap();
+            assert!(runtime.store.receive_queues(&created).unwrap()[0].subscribed);
+        }
+
+        let mut runtime = RadrootsSimplexAgentRuntimeBuilder::new()
+            .persistent_store_path(&path)
+            .build()
+            .unwrap();
+        assert_eq!(runtime.resume_subscriptions(40).unwrap(), 1);
+        assert_eq!(runtime.resume_subscriptions(41).unwrap(), 0);
+        let mut subscription_transport =
+            ScriptedTransport::with_responses(vec![RadrootsSimplexSmpBrokerMessage::Ok]);
+        runtime
+            .execute_ready_commands(&mut subscription_transport, 50, 16)
+            .unwrap();
+
+        assert_eq!(subscription_transport.requests.len(), 1);
+        assert!(matches!(
+            subscription_transport.requests[0].command,
+            RadrootsSimplexSmpCommand::Sub
+        ));
+        assert_eq!(
+            subscription_transport.requests[0].entity_id,
+            b"recipient".to_vec()
+        );
+        assert!(runtime.drain_events(16).into_iter().any(|event| matches!(
+            event,
+            RadrootsSimplexAgentRuntimeEvent::SubscriptionQueued { .. }
+        )));
     }
 
     #[test]
