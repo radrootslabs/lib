@@ -507,10 +507,7 @@ impl RadrootsSimplexSmpRatchetState {
                 continue;
             };
             if ratchet_header.message_number != skipped.message_number {
-                return Err(RadrootsSimplexSmpCryptoError::RatchetMessageRegression {
-                    received: ratchet_header.message_number,
-                    current: self.receiving_chain_length,
-                });
+                continue;
             }
             let position = self
                 .official_skipped_message_keys
@@ -1191,6 +1188,9 @@ mod tests {
         let second = sender
             .encrypt_official_payload(&shared_secret, b"second", 96)
             .unwrap();
+        let third = sender
+            .encrypt_official_payload(&shared_secret, b"third", 96)
+            .unwrap();
 
         assert_eq!(
             receiver
@@ -1199,6 +1199,12 @@ mod tests {
             b"second"
         );
         assert!(!receiver.is_official_payload_replay(&first).unwrap());
+        assert_eq!(
+            receiver
+                .decrypt_official_payload(&shared_secret, &third)
+                .unwrap(),
+            b"third"
+        );
         assert_eq!(
             receiver
                 .decrypt_official_payload(&shared_secret, &first)
