@@ -65,6 +65,7 @@ pub struct RadrootsSimplexAgentStoreProtectedSecretsDiagnostics {
     pub protected_secrets_exists: bool,
     pub wrapping_key_exists: bool,
     pub protected_connection_count: usize,
+    pub protected_pending_command_count: usize,
     pub protected_generation: Option<String>,
     pub protected_envelope_suffix: Option<String>,
     pub protected_wrapping_key_suffix: Option<String>,
@@ -268,6 +269,7 @@ struct RadrootsSimplexAgentStoreProtectedSecretsRef {
     wrapping_key_suffix: String,
     key_slot: String,
     connection_count: usize,
+    pending_command_count: usize,
 }
 
 #[cfg(feature = "std")]
@@ -470,6 +472,7 @@ struct RadrootsSimplexAgentStoreSecretsSnapshot {
     version: u8,
     generation: String,
     connections: Vec<RadrootsSimplexAgentConnectionSecretsSnapshot>,
+    pending_commands: Vec<RadrootsSimplexAgentPendingCommandSecretsSnapshot>,
 }
 
 #[cfg(feature = "std")]
@@ -513,6 +516,14 @@ struct RadrootsSimplexAgentRatchetSecretsSnapshot {
     official_next_sending_header_key: Option<Vec<u8>>,
     official_next_receiving_header_key: Option<Vec<u8>>,
     official_skipped_message_keys: Vec<RadrootsSimplexAgentSkippedMessageKeySnapshot>,
+}
+
+#[cfg(feature = "std")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct RadrootsSimplexAgentPendingCommandSecretsSnapshot {
+    id: u64,
+    connection_id: String,
+    short_invitation_link_key: Option<Vec<u8>>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -1096,6 +1107,10 @@ impl RadrootsSimplexAgentStoreSecretsSnapshot {
         self.connections
             .iter()
             .any(RadrootsSimplexAgentConnectionSecretsSnapshot::has_secret_material)
+            || self
+                .pending_commands
+                .iter()
+                .any(RadrootsSimplexAgentPendingCommandSecretsSnapshot::has_secret_material)
     }
 }
 
@@ -1147,6 +1162,13 @@ impl RadrootsSimplexAgentRatchetSecretsSnapshot {
 }
 
 #[cfg(feature = "std")]
+impl RadrootsSimplexAgentPendingCommandSecretsSnapshot {
+    fn has_secret_material(&self) -> bool {
+        self.short_invitation_link_key.is_some()
+    }
+}
+
+#[cfg(feature = "std")]
 fn protected_secrets_path(path: &Path) -> PathBuf {
     sidecar_path(path, RADROOTS_PROTECTED_FILE_SECRET_SUFFIX)
 }
@@ -1166,6 +1188,7 @@ fn protected_secrets_diagnostics(
     let public_snapshot_exists = path.exists();
     let mut protected_secrets_configured = false;
     let mut protected_connection_count = 0;
+    let mut protected_pending_command_count = 0;
     let mut protected_generation = None;
     let mut protected_envelope_suffix = None;
     let mut protected_wrapping_key_suffix = None;
@@ -1190,6 +1213,7 @@ fn protected_secrets_diagnostics(
             protected_secrets_configured = true;
             let secrets = read_protected_secrets_snapshot(path, &snapshot)?;
             protected_connection_count = secrets.connections.len();
+            protected_pending_command_count = secrets.pending_commands.len();
             protected_generation = Some(protected.generation.clone());
             protected_envelope_suffix = Some(protected.envelope_suffix.clone());
             protected_wrapping_key_suffix = Some(protected.wrapping_key_suffix.clone());
@@ -1205,6 +1229,7 @@ fn protected_secrets_diagnostics(
         protected_secrets_exists: protected_secrets_path.exists(),
         wrapping_key_exists: wrapping_key_path.exists(),
         protected_connection_count,
+        protected_pending_command_count,
         protected_generation,
         protected_envelope_suffix,
         protected_wrapping_key_suffix,
@@ -1220,10 +1245,17 @@ fn redact_snapshot_secrets(
         .iter_mut()
         .map(redact_connection_secrets)
         .collect::<Result<Vec<_>, _>>()?;
+    let pending_commands = snapshot
+        .pending_commands
+        .iter_mut()
+        .map(redact_pending_command_secrets)
+        .filter(RadrootsSimplexAgentPendingCommandSecretsSnapshot::has_secret_material)
+        .collect::<Vec<_>>();
     Ok(RadrootsSimplexAgentStoreSecretsSnapshot {
         version: RADROOTS_SIMPLEX_AGENT_STORE_PROTECTED_SECRETS_VERSION,
         generation: String::new(),
         connections,
+        pending_commands,
     })
 }
 
@@ -1293,6 +1325,35 @@ fn redact_ratchet_secrets(
         official_next_sending_header_key: ratchet.official_next_sending_header_key.take(),
         official_next_receiving_header_key: ratchet.official_next_receiving_header_key.take(),
         official_skipped_message_keys: core::mem::take(&mut ratchet.official_skipped_message_keys),
+    }
+}
+
+#[cfg(feature = "std")]
+fn redact_pending_command_secrets(
+    command: &mut RadrootsSimplexAgentPendingCommandSnapshot,
+) -> RadrootsSimplexAgentPendingCommandSecretsSnapshot {
+    RadrootsSimplexAgentPendingCommandSecretsSnapshot {
+        id: command.id,
+        connection_id: command.connection_id.clone(),
+        short_invitation_link_key: redact_pending_command_short_invitation_link_key(
+            &mut command.kind,
+        ),
+    }
+}
+
+#[cfg(feature = "std")]
+fn redact_pending_command_short_invitation_link_key(
+    kind: &mut RadrootsSimplexAgentPendingCommandKindSnapshot,
+) -> Option<Vec<u8>> {
+    match kind {
+        RadrootsSimplexAgentPendingCommandKindSnapshot::SecureGetQueueLinkData {
+            invitation,
+            ..
+        }
+        | RadrootsSimplexAgentPendingCommandKindSnapshot::GetQueueLinkData { invitation, .. } => {
+            take_non_empty_vec(&mut invitation.link_key)
+        }
+        _ => None,
     }
 }
 
@@ -1494,6 +1555,7 @@ fn write_protected_secrets_snapshot(
         wrapping_key_suffix: RADROOTS_PROTECTED_FILE_WRAPPING_KEY_FILE.into(),
         key_slot: RADROOTS_SIMPLEX_AGENT_STORE_PROTECTED_SECRETS_KEY_SLOT.into(),
         connection_count: secrets.connections.len(),
+        pending_command_count: secrets.pending_commands.len(),
     })
 }
 
@@ -1565,6 +1627,13 @@ fn read_protected_secrets_snapshot(
             protected_ref.connection_count
         )));
     }
+    if secrets.pending_commands.len() != protected_ref.pending_command_count {
+        return Err(RadrootsSimplexAgentStoreError::Persistence(format!(
+            "SimpleX agent protected secrets pending command count `{}` does not match public snapshot count `{}`",
+            secrets.pending_commands.len(),
+            protected_ref.pending_command_count
+        )));
+    }
     let expected_generation = compute_protected_generation(snapshot, &secrets)?;
     if expected_generation != protected_ref.generation {
         return Err(RadrootsSimplexAgentStoreError::Persistence(format!(
@@ -1624,6 +1693,9 @@ fn validate_public_snapshot_secret_posture(
 ) -> Result<(), RadrootsSimplexAgentStoreError> {
     for connection in &snapshot.connections {
         validate_public_connection_secret_posture(connection, protected_secrets_configured)?;
+    }
+    for command in &snapshot.pending_commands {
+        validate_public_pending_command_secret_posture(command, protected_secrets_configured)?;
     }
     Ok(())
 }
@@ -1776,6 +1848,28 @@ fn reject_public_ratchet_secret_posture(
 }
 
 #[cfg(feature = "std")]
+fn validate_public_pending_command_secret_posture(
+    command: &RadrootsSimplexAgentPendingCommandSnapshot,
+    protected_secrets_configured: bool,
+) -> Result<(), RadrootsSimplexAgentStoreError> {
+    match &command.kind {
+        RadrootsSimplexAgentPendingCommandKindSnapshot::SecureGetQueueLinkData {
+            invitation,
+            ..
+        }
+        | RadrootsSimplexAgentPendingCommandKindSnapshot::GetQueueLinkData { invitation, .. } => {
+            reject_public_secret_vec(
+                invitation.link_key.as_slice(),
+                protected_secrets_configured,
+                "pending short-link invitation link key",
+                &command.connection_id,
+            )
+        }
+        _ => Ok(()),
+    }
+}
+
+#[cfg(feature = "std")]
 fn reject_public_keypair_private(
     keypair: Option<&RadrootsSimplexAgentX3dhKeypair>,
     protected_secrets_configured: bool,
@@ -1879,6 +1973,9 @@ fn merge_protected_secrets(
                 ))
             })?;
         merge_connection_secrets(connection, secret_connection)?;
+    }
+    for command_secrets in secrets.pending_commands {
+        merge_pending_command_secrets(snapshot, command_secrets)?;
     }
     Ok(())
 }
@@ -2025,6 +2122,42 @@ fn merge_ratchet_secrets(
     ratchet.official_next_sending_header_key = secrets.official_next_sending_header_key;
     ratchet.official_next_receiving_header_key = secrets.official_next_receiving_header_key;
     ratchet.official_skipped_message_keys = secrets.official_skipped_message_keys;
+}
+
+#[cfg(feature = "std")]
+fn merge_pending_command_secrets(
+    snapshot: &mut RadrootsSimplexAgentStoreSnapshot,
+    secrets: RadrootsSimplexAgentPendingCommandSecretsSnapshot,
+) -> Result<(), RadrootsSimplexAgentStoreError> {
+    let command = snapshot
+        .pending_commands
+        .iter_mut()
+        .find(|command| command.id == secrets.id && command.connection_id == secrets.connection_id)
+        .ok_or_else(|| {
+            RadrootsSimplexAgentStoreError::Persistence(format!(
+                "SimpleX agent protected secrets reference unknown pending command `{}`",
+                secrets.id
+            ))
+        })?;
+
+    let Some(link_key) = secrets.short_invitation_link_key else {
+        return Ok(());
+    };
+
+    match &mut command.kind {
+        RadrootsSimplexAgentPendingCommandKindSnapshot::SecureGetQueueLinkData {
+            invitation,
+            ..
+        }
+        | RadrootsSimplexAgentPendingCommandKindSnapshot::GetQueueLinkData { invitation, .. } => {
+            invitation.link_key = link_key;
+            Ok(())
+        }
+        _ => Err(RadrootsSimplexAgentStoreError::Persistence(format!(
+            "SimpleX agent protected secrets reference pending command `{}` without short invitation link data",
+            secrets.id
+        ))),
+    }
 }
 
 #[cfg(feature = "std")]
@@ -3180,6 +3313,26 @@ mod tests {
             0
         );
         assert!(raw_public.contains("protected_secrets"));
+        let public_pending_commands = public_json["pending_commands"].as_array().unwrap();
+        let redacted_pending_short_links = public_pending_commands
+            .iter()
+            .filter(|command| {
+                matches!(
+                    command["kind"]["kind"].as_str(),
+                    Some("secure_get_queue_link_data") | Some("get_queue_link_data")
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(redacted_pending_short_links.len(), 2);
+        for command in redacted_pending_short_links {
+            assert_eq!(
+                command["kind"]["invitation"]["link_key"]
+                    .as_array()
+                    .unwrap()
+                    .len(),
+                0
+            );
+        }
         let protected_path = RadrootsSimplexAgentStore::protected_secrets_path(&path);
         let protected_raw = fs::read_to_string(&protected_path).unwrap();
         for secret in [
@@ -3188,6 +3341,7 @@ mod tests {
             "connection-shared-secret",
             "short-link-key-must-be-secret",
             "short-link-private-signature-key",
+            "short-link-key-must-be-secret!!",
             "official-root",
             "x3dh-private-1",
             "pq-private",
@@ -3204,6 +3358,7 @@ mod tests {
         assert!(diagnostics.protected_secrets_exists);
         assert!(diagnostics.wrapping_key_exists);
         assert_eq!(diagnostics.protected_connection_count, 1);
+        assert_eq!(diagnostics.protected_pending_command_count, 2);
 
         let loaded = RadrootsSimplexAgentStore::open(&path).unwrap();
         let loaded_connection = loaded.connection(&connection.id).unwrap();
@@ -3479,6 +3634,71 @@ mod tests {
 
         let error = RadrootsSimplexAgentStore::open(&path).unwrap_err();
         assert!(error.to_string().contains("without protected metadata"));
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn pending_short_invitation_link_key_without_protected_metadata_is_rejected() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path().join("agent-store.json");
+        let mut store = RadrootsSimplexAgentStore::new();
+        let connection = store.create_connection(
+            RadrootsSimplexAgentConnectionMode::Direct,
+            RadrootsSimplexAgentConnectionStatus::JoinPending,
+            None,
+            None,
+        );
+        store
+            .enqueue_command(
+                &connection.id,
+                RadrootsSimplexAgentPendingCommandKind::GetQueueLinkData {
+                    invitation: sample_short_invitation_link(vec![4_u8; 24]),
+                    reply_queue: sample_descriptor(true).queue_uri,
+                },
+                10,
+            )
+            .unwrap();
+        let snapshot = store.snapshot().unwrap();
+        fs::write(
+            &path,
+            format!("{}\n", serde_json::to_string_pretty(&snapshot).unwrap()),
+        )
+        .unwrap();
+
+        let error = RadrootsSimplexAgentStore::open(&path).unwrap_err();
+        assert!(error.to_string().contains("without protected metadata"));
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn pending_short_invitation_plaintext_link_key_with_protected_metadata_is_rejected() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path().join("agent-store.json");
+        let mut store = RadrootsSimplexAgentStore::open(&path).unwrap();
+        let connection = store.create_connection(
+            RadrootsSimplexAgentConnectionMode::Direct,
+            RadrootsSimplexAgentConnectionStatus::JoinPending,
+            None,
+            None,
+        );
+        store
+            .enqueue_command(
+                &connection.id,
+                RadrootsSimplexAgentPendingCommandKind::SecureGetQueueLinkData {
+                    invitation: sample_short_invitation_link(vec![5_u8; 24]),
+                    reply_queue: sample_descriptor(true).queue_uri,
+                },
+                10,
+            )
+            .unwrap();
+        store.flush().unwrap();
+        let mut public_json = read_public_snapshot(&path);
+        public_json["pending_commands"][0]["kind"]["invitation"]["link_key"] =
+            serde_json::Value::Array(vec![serde_json::Value::from(7)]);
+        write_public_snapshot(&path, &public_json);
+
+        let error = RadrootsSimplexAgentStore::open(&path).unwrap_err();
+        assert!(error.to_string().contains("plaintext secret material"));
     }
 
     #[cfg(feature = "std")]
