@@ -15,11 +15,12 @@ pub mod prelude {
     pub use crate::model::{
         RadrootsSimplexAppChatDirection, RadrootsSimplexAppChatItem, RadrootsSimplexAppConnection,
         RadrootsSimplexAppContact, RadrootsSimplexAppConversation, RadrootsSimplexAppDiagnostics,
-        RadrootsSimplexAppInboundCommit, RadrootsSimplexAppInboundMessageLogEntry,
-        RadrootsSimplexAppInboundTextRequest, RadrootsSimplexAppInboundUnsupportedEventRequest,
-        RadrootsSimplexAppOutboundTextDraft, RadrootsSimplexAppOutboundTextRequest,
-        RadrootsSimplexAppOutboxMessage, RadrootsSimplexAppProfile,
-        RadrootsSimplexAppQueueEndpoint, RadrootsSimplexAppUnsupportedProtocolEvent,
+        RadrootsSimplexAppInboundChildEvent, RadrootsSimplexAppInboundCommit,
+        RadrootsSimplexAppInboundMessageLogEntry, RadrootsSimplexAppInboundTextRequest,
+        RadrootsSimplexAppInboundUnsupportedEventRequest, RadrootsSimplexAppOutboundTextDraft,
+        RadrootsSimplexAppOutboundTextRequest, RadrootsSimplexAppOutboxMessage,
+        RadrootsSimplexAppProfile, RadrootsSimplexAppQueueEndpoint,
+        RadrootsSimplexAppUnsupportedProtocolEvent,
     };
     #[cfg(all(feature = "std", feature = "sqlcipher"))]
     pub use crate::store::RadrootsSimplexAppStore;
@@ -29,10 +30,11 @@ pub use error::RadrootsSimplexAppStoreError;
 pub use model::{
     RadrootsSimplexAppChatDirection, RadrootsSimplexAppChatItem, RadrootsSimplexAppConnection,
     RadrootsSimplexAppContact, RadrootsSimplexAppConversation, RadrootsSimplexAppDiagnostics,
-    RadrootsSimplexAppInboundCommit, RadrootsSimplexAppInboundMessageLogEntry,
-    RadrootsSimplexAppInboundTextRequest, RadrootsSimplexAppInboundUnsupportedEventRequest,
-    RadrootsSimplexAppOutboundTextDraft, RadrootsSimplexAppOutboundTextRequest,
-    RadrootsSimplexAppOutboxMessage, RadrootsSimplexAppProfile, RadrootsSimplexAppQueueEndpoint,
+    RadrootsSimplexAppInboundChildEvent, RadrootsSimplexAppInboundCommit,
+    RadrootsSimplexAppInboundMessageLogEntry, RadrootsSimplexAppInboundTextRequest,
+    RadrootsSimplexAppInboundUnsupportedEventRequest, RadrootsSimplexAppOutboundTextDraft,
+    RadrootsSimplexAppOutboundTextRequest, RadrootsSimplexAppOutboxMessage,
+    RadrootsSimplexAppProfile, RadrootsSimplexAppQueueEndpoint,
     RadrootsSimplexAppUnsupportedProtocolEvent,
 };
 #[cfg(all(feature = "std", feature = "sqlcipher"))]

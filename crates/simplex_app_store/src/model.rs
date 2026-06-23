@@ -93,9 +93,22 @@ pub struct RadrootsSimplexAppInboundMessageLogEntry {
     pub broker_message_id_hash: Vec<u8>,
     pub inbound_sequence: Option<i64>,
     pub message_hash: Vec<u8>,
+    pub runtime_ack_handle: String,
     pub ack_status: String,
     pub app_record_kind: String,
     pub app_record_id: String,
+    pub received_at_unix: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RadrootsSimplexAppInboundChildEvent {
+    pub child_event_id: String,
+    pub inbound_id: String,
+    pub child_ordinal: u32,
+    pub app_record_kind: String,
+    pub app_record_id: String,
+    pub event_kind: String,
+    pub chat_msg_id: Option<String>,
     pub received_at_unix: i64,
 }
 
@@ -108,6 +121,7 @@ pub struct RadrootsSimplexAppOutboxMessage {
     pub chat_msg_id: String,
     pub body: String,
     pub status: String,
+    pub runtime_message_id: Option<i64>,
     pub retry_after_unix: Option<i64>,
     pub created_at_unix: i64,
 }
@@ -133,6 +147,8 @@ pub struct RadrootsSimplexAppInboundTextRequest {
     pub broker_message_id_hash: Vec<u8>,
     pub inbound_sequence: Option<i64>,
     pub message_hash: Vec<u8>,
+    pub runtime_ack_handle: String,
+    pub child_ordinal: u32,
     pub chat_msg_id: Option<String>,
     pub body: String,
     pub received_at_unix: i64,
@@ -144,6 +160,8 @@ pub struct RadrootsSimplexAppInboundUnsupportedEventRequest {
     pub broker_message_id_hash: Vec<u8>,
     pub inbound_sequence: Option<i64>,
     pub message_hash: Vec<u8>,
+    pub runtime_ack_handle: String,
+    pub child_ordinal: u32,
     pub event_kind: String,
     pub payload_json: String,
     pub received_at_unix: i64,
@@ -152,6 +170,7 @@ pub struct RadrootsSimplexAppInboundUnsupportedEventRequest {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RadrootsSimplexAppInboundCommit {
     pub inbound: RadrootsSimplexAppInboundMessageLogEntry,
+    pub child_event: RadrootsSimplexAppInboundChildEvent,
     pub chat_item: Option<RadrootsSimplexAppChatItem>,
     pub unsupported_event: Option<RadrootsSimplexAppUnsupportedProtocolEvent>,
     pub duplicate: bool,

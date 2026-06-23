@@ -730,24 +730,12 @@ impl RadrootsSimplexAgentRuntime {
         {
             return Ok(());
         }
-        let receive_queue = self
+        let (receive_queue, broker_message_id) = self
             .store
-            .connection(connection_id)?
-            .last_received_queue
-            .clone()
+            .inbound_ack_target(connection_id, message_id, &message_hash)?
             .ok_or_else(|| {
                 RadrootsSimplexAgentRuntimeError::Runtime(format!(
-                    "SimpleX connection `{connection_id}` has no received queue to acknowledge"
-                ))
-            })?;
-        let broker_message_id = self
-            .store
-            .connection(connection_id)?
-            .last_received_broker_message_id
-            .clone()
-            .ok_or_else(|| {
-                RadrootsSimplexAgentRuntimeError::Runtime(format!(
-                    "SimpleX connection `{connection_id}` has no broker message id to acknowledge"
+                    "SimpleX connection `{connection_id}` has no frame-specific ACK target for message `{message_id}`"
                 ))
             })?;
         self.store.enqueue_command(

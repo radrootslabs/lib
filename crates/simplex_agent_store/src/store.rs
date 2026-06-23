@@ -139,6 +139,47 @@ pub struct RadrootsSimplexAgentDeliveryCursor {
 pub struct RadrootsSimplexAgentRecentMessageRecord {
     pub message_id: RadrootsSimplexAgentMessageId,
     pub message_hash: Vec<u8>,
+    #[cfg_attr(
+        feature = "std",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub inbound_queue: Option<RadrootsSimplexAgentRecentQueueAddress>,
+    #[cfg_attr(
+        feature = "std",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub inbound_broker_message_id: Option<Vec<u8>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+pub struct RadrootsSimplexAgentRecentQueueAddress {
+    pub server_identity: String,
+    pub hosts: Vec<String>,
+    pub port: Option<u16>,
+    pub sender_id: Vec<u8>,
+}
+
+impl RadrootsSimplexAgentRecentQueueAddress {
+    fn from_queue_address(queue: &RadrootsSimplexAgentQueueAddress) -> Self {
+        Self {
+            server_identity: queue.server.server_identity.clone(),
+            hosts: queue.server.hosts.clone(),
+            port: queue.server.port,
+            sender_id: queue.sender_id.clone(),
+        }
+    }
+
+    fn into_queue_address(self) -> RadrootsSimplexAgentQueueAddress {
+        RadrootsSimplexAgentQueueAddress {
+            server: RadrootsSimplexSmpServerAddress {
+                server_identity: self.server_identity,
+                hosts: self.hosts,
+                port: self.port,
+            },
+            sender_id: self.sender_id,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1062,6 +1103,8 @@ impl RadrootsSimplexAgentStore {
             .push(RadrootsSimplexAgentRecentMessageRecord {
                 message_id: staged.message_id,
                 message_hash: staged.message_hash.clone(),
+                inbound_queue: None,
+                inbound_broker_message_id: None,
             });
         Ok(staged)
     }
@@ -1099,13 +1142,17 @@ impl RadrootsSimplexAgentStore {
         let connection = self.connection_mut(connection_id)?;
         connection.delivery_cursor.last_received_message_id = Some(message_id);
         connection.delivery_cursor.last_received_message_hash = Some(message_hash.clone());
-        connection.last_received_queue = Some(queue_address);
-        connection.last_received_broker_message_id = Some(broker_message_id);
+        connection.last_received_queue = Some(queue_address.clone());
+        connection.last_received_broker_message_id = Some(broker_message_id.clone());
         connection
             .recent_messages
             .push(RadrootsSimplexAgentRecentMessageRecord {
                 message_id,
                 message_hash,
+                inbound_queue: Some(RadrootsSimplexAgentRecentQueueAddress::from_queue_address(
+                    &queue_address,
+                )),
+                inbound_broker_message_id: Some(broker_message_id),
             });
         Ok(())
     }
@@ -1144,6 +1191,29 @@ impl RadrootsSimplexAgentStore {
                     if receipt.message_id == message_id && receipt.message_hash == message_hash
                 )
         })
+    }
+
+    pub fn inbound_ack_target(
+        &self,
+        connection_id: &str,
+        message_id: RadrootsSimplexAgentMessageId,
+        message_hash: &[u8],
+    ) -> Result<Option<(RadrootsSimplexAgentQueueAddress, Vec<u8>)>, RadrootsSimplexAgentStoreError>
+    {
+        let connection = self.connection(connection_id)?;
+        Ok(connection
+            .recent_messages
+            .iter()
+            .rev()
+            .find(|message| {
+                message.message_id == message_id && message.message_hash == message_hash
+            })
+            .and_then(|message| {
+                Some((
+                    message.inbound_queue.clone()?.into_queue_address(),
+                    message.inbound_broker_message_id.clone()?,
+                ))
+            }))
     }
 
     pub fn take_ready_commands(
@@ -3556,6 +3626,62 @@ mod tests {
         let cursor = &store.connection(&connection.id).unwrap().delivery_cursor;
         assert_eq!(cursor.last_sent_message_id, Some(1));
         assert_eq!(cursor.last_sent_message_hash, Some(b"ciphertext".to_vec()));
+    }
+
+    #[test]
+    fn inbound_ack_target_uses_frame_specific_queue_after_cursor_moves() {
+        let mut store = RadrootsSimplexAgentStore::new();
+        let connection = store.create_connection(
+            RadrootsSimplexAgentConnectionMode::Direct,
+            RadrootsSimplexAgentConnectionStatus::Connected,
+            None,
+            None,
+        );
+        let first_queue = sample_descriptor(true).queue_address();
+        let second_queue = sample_descriptor_with_uri(
+            "smp://aGVsbG8@relay.example/c2Vjb25k#/?v=4&dh=Zm9vYmFy&q=m",
+            true,
+        )
+        .queue_address();
+
+        store
+            .record_inbound_message(
+                &connection.id,
+                first_queue.clone(),
+                b"first-broker-message".to_vec(),
+                7,
+                b"first-message-hash".to_vec(),
+            )
+            .unwrap();
+        store
+            .record_inbound_message(
+                &connection.id,
+                second_queue.clone(),
+                b"second-broker-message".to_vec(),
+                8,
+                b"second-message-hash".to_vec(),
+            )
+            .unwrap();
+
+        assert_eq!(
+            store
+                .connection(&connection.id)
+                .unwrap()
+                .last_received_queue,
+            Some(second_queue.clone())
+        );
+        assert_eq!(
+            store
+                .inbound_ack_target(&connection.id, 7, b"first-message-hash")
+                .unwrap(),
+            Some((first_queue, b"first-broker-message".to_vec()))
+        );
+        assert_eq!(
+            store
+                .inbound_ack_target(&connection.id, 8, b"second-message-hash")
+                .unwrap(),
+            Some((second_queue, b"second-broker-message".to_vec()))
+        );
     }
 
     #[cfg(feature = "std")]
