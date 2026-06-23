@@ -18,15 +18,16 @@ use radroots_simplex_agent_proto::prelude::{
 use radroots_simplex_agent_store::prelude::{
     RadrootsSimplexAgentOutboundMessage, RadrootsSimplexAgentPendingCommand,
     RadrootsSimplexAgentPendingCommandKind, RadrootsSimplexAgentQueueRole,
-    RadrootsSimplexAgentStore,
+    RadrootsSimplexAgentStore, RadrootsSimplexAgentX3dhKeypair,
 };
 use radroots_simplex_smp_crypto::prelude::{
     RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION, RADROOTS_SIMPLEX_OFFICIAL_E2E_KDF_VERSION,
     RADROOTS_SIMPLEX_SMP_NONCE_LENGTH, RadrootsSimplexOfficialX3dhParams,
-    RadrootsSimplexSmpCommandAuthorization, RadrootsSimplexSmpCryptoError,
-    RadrootsSimplexSmpRatchetState, RadrootsSimplexSmpX25519Keypair, decode_x25519_public_key_x509,
-    decrypt_padded, derive_shared_secret, encode_ed25519_public_key_x509,
-    encode_x25519_public_key_x509, encrypt_padded, official_x448_keypair_from_seed, random_nonce,
+    RadrootsSimplexOfficialX448Keypair, RadrootsSimplexSmpCommandAuthorization,
+    RadrootsSimplexSmpCryptoError, RadrootsSimplexSmpRatchetState, RadrootsSimplexSmpX25519Keypair,
+    decode_x25519_public_key_x509, decrypt_padded, derive_shared_secret,
+    encode_ed25519_public_key_x509, encode_x25519_public_key_x509, encrypt_padded,
+    official_x448_keypair_from_seed, random_nonce,
 };
 use radroots_simplex_smp_proto::prelude::{
     RADROOTS_SIMPLEX_SMP_CURRENT_CLIENT_VERSION, RADROOTS_SIMPLEX_SMP_CURRENT_TRANSPORT_VERSION,
@@ -197,8 +198,8 @@ impl RadrootsSimplexAgentRuntime {
             pq_ciphertext: None,
         };
         let ratchet_state = RadrootsSimplexSmpRatchetState::initiator(
-            x3dh_key_2.public_key,
-            x3dh_key_1.public_key,
+            x3dh_key_2.public_key.clone(),
+            x3dh_key_1.public_key.clone(),
             None,
         )
         .ok();
@@ -239,6 +240,8 @@ impl RadrootsSimplexAgentRuntime {
             let connection = self.store.connection_mut(&connection.id)?;
             connection.local_e2e_public_key = Some(e2e_keypair.public_key);
             connection.local_e2e_private_key = Some(e2e_keypair.private_key);
+            connection.local_x3dh_key_1 = Some(agent_x3dh_keypair(x3dh_key_1));
+            connection.local_x3dh_key_2 = Some(agent_x3dh_keypair(x3dh_key_2));
             let queue = connection
                 .queues
                 .iter_mut()
@@ -277,17 +280,24 @@ impl RadrootsSimplexAgentRuntime {
                 .map_err(|error| RadrootsSimplexAgentRuntimeError::Runtime(error.to_string()))?;
         reply_queue.sender_id =
             placeholder_sender_id(invitation.connection_id.as_slice(), &now.to_be_bytes());
-        let local_dh_public_key = official_x448_keypair_from_seed(&derive_material(
-            b"connection-join-local-dh",
+        let local_x3dh_key_1 = official_x448_keypair_from_seed(&derive_material(
+            b"connection-join-x3dh-1",
             &[
                 invitation.connection_id.as_slice(),
                 reply_queue.to_string().as_bytes(),
                 &now.to_be_bytes(),
             ],
-        ))
-        .public_key;
+        ));
+        let local_x3dh_key_2 = official_x448_keypair_from_seed(&derive_material(
+            b"connection-join-x3dh-2",
+            &[
+                invitation.connection_id.as_slice(),
+                reply_queue.to_string().as_bytes(),
+                &now.to_be_bytes(),
+            ],
+        ));
         let ratchet_state = RadrootsSimplexSmpRatchetState::responder(
-            local_dh_public_key,
+            local_x3dh_key_2.public_key.clone(),
             invitation.e2e_ratchet_params.key_2.clone(),
             None,
         )
@@ -332,6 +342,8 @@ impl RadrootsSimplexAgentRuntime {
             let connection = self.store.connection_mut(&connection.id)?;
             connection.local_e2e_public_key = Some(local_e2e_keypair.public_key.clone());
             connection.local_e2e_private_key = Some(local_e2e_keypair.private_key);
+            connection.local_x3dh_key_1 = Some(agent_x3dh_keypair(local_x3dh_key_1));
+            connection.local_x3dh_key_2 = Some(agent_x3dh_keypair(local_x3dh_key_2));
             connection.shared_secret = Some(shared_secret);
             let queue = connection
                 .queues
@@ -394,6 +406,7 @@ impl RadrootsSimplexAgentRuntime {
                 queue: send_queue.descriptor.queue_address(),
                 envelope: RadrootsSimplexAgentEnvelope::Confirmation {
                     reply_queue: false,
+                    e2e_ratchet_params: None,
                     encrypted,
                 },
                 delivery: None,
@@ -1391,14 +1404,24 @@ impl RadrootsSimplexAgentRuntime {
                     invitation_event = Some(invitation.clone());
                 }
             } else if connection.status == RadrootsSimplexAgentConnectionStatus::JoinPending {
+                let local_x3dh_key_1 = connection.local_x3dh_key_1.as_ref().ok_or_else(|| {
+                    RadrootsSimplexAgentRuntimeError::Runtime(format!(
+                        "SimpleX connection `{}` missing local X3DH key 1",
+                        command.connection_id
+                    ))
+                })?;
+                let local_x3dh_key_2 = connection.local_x3dh_key_2.as_ref().ok_or_else(|| {
+                    RadrootsSimplexAgentRuntimeError::Runtime(format!(
+                        "SimpleX connection `{}` missing local X3DH key 2",
+                        command.connection_id
+                    ))
+                })?;
                 join_confirmation = Some((
                     queue.descriptor.clone(),
-                    connection.local_e2e_public_key.clone().ok_or_else(|| {
-                        RadrootsSimplexAgentRuntimeError::Runtime(format!(
-                            "SimpleX connection `{}` missing local E2E public key",
-                            command.connection_id
-                        ))
-                    })?,
+                    official_x3dh_params_from_keys(
+                        &local_x3dh_key_1.public_key,
+                        &local_x3dh_key_2.public_key,
+                    )?,
                 ));
             }
         }
@@ -1417,7 +1440,7 @@ impl RadrootsSimplexAgentRuntime {
                     invitation,
                 });
         }
-        if let Some((reply_descriptor, _sender_public_key)) = join_confirmation {
+        if let Some((reply_descriptor, e2e_ratchet_params)) = join_confirmation {
             let send_queue = self.store.primary_send_queue(&command.connection_id)?;
             let confirmation_payload = self.next_encrypted_payload(
                 &command.connection_id,
@@ -1435,6 +1458,7 @@ impl RadrootsSimplexAgentRuntime {
                     queue: send_queue.descriptor.queue_address(),
                     envelope: RadrootsSimplexAgentEnvelope::Confirmation {
                         reply_queue: true,
+                        e2e_ratchet_params: Some(e2e_ratchet_params),
                         encrypted: confirmation_payload,
                     },
                     delivery: None,
@@ -1714,6 +1738,32 @@ fn derive_material(label: &[u8], parts: &[&[u8]]) -> Vec<u8> {
         hasher.update(*part);
     }
     hasher.finalize().to_vec()
+}
+
+fn agent_x3dh_keypair(
+    keypair: RadrootsSimplexOfficialX448Keypair,
+) -> RadrootsSimplexAgentX3dhKeypair {
+    RadrootsSimplexAgentX3dhKeypair {
+        public_key: keypair.public_key,
+        private_key: keypair.private_key,
+    }
+}
+
+fn official_x3dh_params_from_keys(
+    key_1: &[u8],
+    key_2: &[u8],
+) -> Result<RadrootsSimplexOfficialX3dhParams, RadrootsSimplexAgentRuntimeError> {
+    Ok(RadrootsSimplexOfficialX3dhParams {
+        version_range: RadrootsSimplexSmpVersionRange::new(
+            RADROOTS_SIMPLEX_OFFICIAL_E2E_KDF_VERSION,
+            RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION,
+        )
+        .map_err(|error| RadrootsSimplexAgentRuntimeError::Runtime(error.to_string()))?,
+        key_1: key_1.to_vec(),
+        key_2: key_2.to_vec(),
+        pq_public_key: None,
+        pq_ciphertext: None,
+    })
 }
 
 fn correlation_id_for_command(command_id: u64) -> RadrootsSimplexSmpCorrelationId {
@@ -2174,6 +2224,68 @@ mod tests {
             runtime.store.connection(&joined).unwrap().status,
             RadrootsSimplexAgentConnectionStatus::JoinPending
         );
+    }
+
+    #[test]
+    fn join_confirmation_carries_sender_x3dh_params() {
+        let mut runtime = RadrootsSimplexAgentRuntimeBuilder::new().build().unwrap();
+        let created = runtime
+            .create_connection(invitation_queue(), b"e2e".to_vec(), false, 10)
+            .unwrap();
+        let invitation = runtime
+            .store
+            .connection(&created)
+            .unwrap()
+            .invitation
+            .clone()
+            .unwrap();
+        let joined = runtime
+            .join_connection(invitation, reply_queue(), 20)
+            .unwrap();
+
+        let mut transport = ScriptedTransport::with_responses(vec![
+            ids_response(b"recipient", b"sender", b"server-dh"),
+            RadrootsSimplexSmpBrokerMessage::Ok,
+            ids_response(b"recipient-2", b"sender-2", b"server-dh-2"),
+        ]);
+        runtime
+            .execute_ready_commands(&mut transport, 30, 3)
+            .unwrap();
+        let local_key_1 = runtime
+            .store
+            .connection(&joined)
+            .unwrap()
+            .local_x3dh_key_1
+            .clone()
+            .unwrap();
+        let local_key_2 = runtime
+            .store
+            .connection(&joined)
+            .unwrap()
+            .local_x3dh_key_2
+            .clone()
+            .unwrap();
+        let ready = runtime.retry_pending(30, 16);
+        let confirmation_params = ready
+            .into_iter()
+            .find_map(|command| match command.kind {
+                RadrootsSimplexAgentPendingCommandKind::SendEnvelope {
+                    envelope:
+                        RadrootsSimplexAgentEnvelope::Confirmation {
+                            reply_queue: true,
+                            e2e_ratchet_params: Some(params),
+                            ..
+                        },
+                    ..
+                } => Some(params),
+                _ => None,
+            })
+            .unwrap();
+
+        assert_eq!(confirmation_params.key_1, local_key_1.public_key);
+        assert_eq!(confirmation_params.key_2, local_key_2.public_key);
+        assert!(confirmation_params.pq_public_key.is_none());
+        assert!(confirmation_params.pq_ciphertext.is_none());
     }
 
     #[test]

@@ -9,8 +9,8 @@ use crate::model::{
 };
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-use radroots_simplex_smp_crypto::prelude::RadrootsSimplexSmpRatchetHeader;
 use radroots_simplex_smp_crypto::prelude::{
+    RadrootsSimplexOfficialX3dhParams, RadrootsSimplexSmpRatchetHeader,
     decode_official_x3dh_params_uri, encode_official_x3dh_params_uri,
 };
 use radroots_simplex_smp_proto::prelude::{
@@ -141,10 +141,12 @@ pub fn encode_envelope(
     match envelope {
         RadrootsSimplexAgentEnvelope::Confirmation {
             reply_queue,
+            e2e_ratchet_params,
             encrypted,
         } => {
             buffer.push(b'C');
             buffer.push(encode_bool(*reply_queue));
+            encode_optional_x3dh_params(&mut buffer, e2e_ratchet_params)?;
             encode_encrypted_payload(&mut buffer, encrypted)?;
         }
         RadrootsSimplexAgentEnvelope::Message(encrypted) => {
@@ -176,10 +178,12 @@ pub fn decode_envelope(
     match cursor.read_byte()? {
         b'C' => {
             let reply_queue = decode_bool(cursor.read_byte()?)?;
+            let e2e_ratchet_params = decode_optional_x3dh_params(&mut cursor)?;
             let encrypted = decode_encrypted_payload(&mut cursor)?;
             cursor.finish()?;
             Ok(RadrootsSimplexAgentEnvelope::Confirmation {
                 reply_queue,
+                e2e_ratchet_params,
                 encrypted,
             })
         }
@@ -344,6 +348,45 @@ fn decode_encrypted_payload(
             ciphertext: Vec::new(),
         }),
         other => Err(RadrootsSimplexAgentProtoError::InvalidBoolEncoding(other)),
+    }
+}
+
+fn encode_optional_x3dh_params(
+    buffer: &mut Vec<u8>,
+    params: &Option<RadrootsSimplexOfficialX3dhParams>,
+) -> Result<(), RadrootsSimplexAgentProtoError> {
+    match params {
+        Some(params) => {
+            buffer.push(b'1');
+            let encoded = encode_official_x3dh_params_uri(params).map_err(|error| {
+                RadrootsSimplexAgentProtoError::InvalidE2eParameters(error.to_string())
+            })?;
+            push_short_bytes(buffer, encoded.as_bytes())
+        }
+        None => {
+            buffer.push(b'0');
+            Ok(())
+        }
+    }
+}
+
+fn decode_optional_x3dh_params(
+    cursor: &mut Cursor<'_>,
+) -> Result<Option<RadrootsSimplexOfficialX3dhParams>, RadrootsSimplexAgentProtoError> {
+    match cursor.read_byte()? {
+        b'0' => Ok(None),
+        b'1' => {
+            let encoded = String::from_utf8(cursor.read_short_bytes()?)
+                .map_err(|error| RadrootsSimplexAgentProtoError::InvalidUtf8(error.to_string()))?;
+            decode_official_x3dh_params_uri(&encoded)
+                .map(Some)
+                .map_err(|error| {
+                    RadrootsSimplexAgentProtoError::InvalidE2eParameters(error.to_string())
+                })
+        }
+        tag => Err(RadrootsSimplexAgentProtoError::InvalidTag(
+            String::from_utf8_lossy(&[tag]).into_owned(),
+        )),
     }
 }
 
@@ -745,6 +788,23 @@ mod tests {
         let encoded = encode_connection_link(&link).unwrap();
         let decoded = decode_connection_link(&encoded).unwrap();
         assert_eq!(decoded, link);
+    }
+
+    #[test]
+    fn roundtrips_confirmation_x3dh_params() {
+        let envelope = RadrootsSimplexAgentEnvelope::Confirmation {
+            reply_queue: true,
+            e2e_ratchet_params: Some(sample_x3dh_params()),
+            encrypted: RadrootsSimplexAgentEncryptedPayload {
+                ratchet_header: None,
+                official_message: Some(b"official".to_vec()),
+                ciphertext: Vec::new(),
+            },
+        };
+
+        let encoded = encode_envelope(&envelope).unwrap();
+        let decoded = decode_envelope(&encoded).unwrap();
+        assert_eq!(decoded, envelope);
     }
 
     #[test]

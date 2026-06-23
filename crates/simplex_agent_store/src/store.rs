@@ -79,6 +79,13 @@ pub struct RadrootsSimplexAgentPreparedOutboundMessage {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+pub struct RadrootsSimplexAgentX3dhKeypair {
+    pub public_key: Vec<u8>,
+    pub private_key: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RadrootsSimplexAgentPendingCommandKind {
     CreateQueue {
         descriptor: RadrootsSimplexAgentQueueDescriptor,
@@ -131,6 +138,8 @@ pub struct RadrootsSimplexAgentConnectionRecord {
     pub ratchet_state: Option<RadrootsSimplexSmpRatchetState>,
     pub local_e2e_public_key: Option<Vec<u8>>,
     pub local_e2e_private_key: Option<Vec<u8>>,
+    pub local_x3dh_key_1: Option<RadrootsSimplexAgentX3dhKeypair>,
+    pub local_x3dh_key_2: Option<RadrootsSimplexAgentX3dhKeypair>,
     pub shared_secret: Option<Vec<u8>>,
     pub delivery_cursor: RadrootsSimplexAgentDeliveryCursor,
     pub last_received_queue: Option<RadrootsSimplexAgentQueueAddress>,
@@ -161,6 +170,8 @@ struct RadrootsSimplexAgentConnectionSnapshot {
     ratchet_state: Option<RadrootsSimplexAgentRatchetStateSnapshot>,
     local_e2e_public_key: Option<Vec<u8>>,
     local_e2e_private_key: Option<Vec<u8>>,
+    local_x3dh_key_1: Option<RadrootsSimplexAgentX3dhKeypair>,
+    local_x3dh_key_2: Option<RadrootsSimplexAgentX3dhKeypair>,
     shared_secret: Option<Vec<u8>>,
     delivery_cursor: RadrootsSimplexAgentDeliveryCursor,
     last_received_queue: Option<RadrootsSimplexAgentQueueAddressSnapshot>,
@@ -371,6 +382,8 @@ impl RadrootsSimplexAgentStore {
             ratchet_state,
             local_e2e_public_key: None,
             local_e2e_private_key: None,
+            local_x3dh_key_1: None,
+            local_x3dh_key_2: None,
             shared_secret: None,
             delivery_cursor: RadrootsSimplexAgentDeliveryCursor {
                 last_sent_message_id: None,
@@ -846,6 +859,8 @@ fn connection_to_snapshot(
         ratchet_state: record.ratchet_state.map(ratchet_state_to_snapshot),
         local_e2e_public_key: record.local_e2e_public_key,
         local_e2e_private_key: record.local_e2e_private_key,
+        local_x3dh_key_1: record.local_x3dh_key_1,
+        local_x3dh_key_2: record.local_x3dh_key_2,
         shared_secret: record.shared_secret,
         delivery_cursor: record.delivery_cursor,
         last_received_queue: record.last_received_queue.map(queue_address_to_snapshot),
@@ -887,6 +902,8 @@ fn connection_from_snapshot(
             .transpose()?,
         local_e2e_public_key: snapshot.local_e2e_public_key,
         local_e2e_private_key: snapshot.local_e2e_private_key,
+        local_x3dh_key_1: snapshot.local_x3dh_key_1,
+        local_x3dh_key_2: snapshot.local_x3dh_key_2,
         shared_secret: snapshot.shared_secret,
         delivery_cursor: snapshot.delivery_cursor,
         last_received_queue: snapshot
@@ -1463,6 +1480,14 @@ mod tests {
             let connection = store.connection_mut(&connection.id).unwrap();
             connection.hello_sent = true;
             connection.hello_received = true;
+            connection.local_x3dh_key_1 = Some(RadrootsSimplexAgentX3dhKeypair {
+                public_key: b"x3dh-public-1".to_vec(),
+                private_key: b"x3dh-private-1".to_vec(),
+            });
+            connection.local_x3dh_key_2 = Some(RadrootsSimplexAgentX3dhKeypair {
+                public_key: b"x3dh-public-2".to_vec(),
+                private_key: b"x3dh-private-2".to_vec(),
+            });
         }
         store.flush().unwrap();
 
@@ -1477,6 +1502,20 @@ mod tests {
         );
         assert!(loaded_connection.hello_sent);
         assert!(loaded_connection.hello_received);
+        assert_eq!(
+            loaded_connection
+                .local_x3dh_key_1
+                .as_ref()
+                .map(|key| (key.public_key.as_slice(), key.private_key.as_slice())),
+            Some((&b"x3dh-public-1"[..], &b"x3dh-private-1"[..]))
+        );
+        assert_eq!(
+            loaded_connection
+                .local_x3dh_key_2
+                .as_ref()
+                .map(|key| (key.public_key.as_slice(), key.private_key.as_slice())),
+            Some((&b"x3dh-public-2"[..], &b"x3dh-private-2"[..]))
+        );
         assert_eq!(loaded.pending_commands.len(), 2);
         assert!(loaded.pending_commands.values().any(|command| matches!(
             &command.kind,

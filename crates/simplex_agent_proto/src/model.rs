@@ -126,6 +126,7 @@ pub struct RadrootsSimplexAgentEncryptedPayload {
 pub enum RadrootsSimplexAgentEnvelope {
     Confirmation {
         reply_queue: bool,
+        e2e_ratchet_params: Option<RadrootsSimplexOfficialX3dhParams>,
         encrypted: RadrootsSimplexAgentEncryptedPayload,
     },
     Message(RadrootsSimplexAgentEncryptedPayload),
