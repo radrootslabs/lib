@@ -273,6 +273,7 @@ pub struct RadrootsOutboxClaimedEvent {
     pub outbox_event_id: i64,
     pub operation_id: i64,
     pub expected_event_id: String,
+    pub attempt_count: i64,
     pub state: RadrootsOutboxEventState,
     pub claim_token: String,
     pub draft: RadrootsFrozenEventDraft,

@@ -398,6 +398,7 @@ impl RadrootsOutbox {
             outbox_event_id: record.outbox_event_id,
             operation_id: record.operation_id,
             expected_event_id: record.event_id,
+            attempt_count: record.attempt_count,
             state: claimed_state,
             claim_token: claim_token.as_ref().to_owned(),
             draft: record.draft,
@@ -449,6 +450,7 @@ impl RadrootsOutbox {
             outbox_event_id: record.outbox_event_id,
             operation_id: record.operation_id,
             expected_event_id: record.event_id,
+            attempt_count: record.attempt_count,
             state: RadrootsOutboxEventState::Publishing,
             claim_token: claim_token.as_ref().to_owned(),
             draft: record.draft,
@@ -2046,6 +2048,7 @@ mod tests {
             .expect("claim")
             .expect("claimed event");
         assert_eq!(claimed.state, RadrootsOutboxEventState::Signing);
+        assert_eq!(claimed.attempt_count, 1);
         assert_eq!(
             claimed.target_relays,
             vec![RELAY_PRIMARY_WSS.to_owned(), RELAY_SECONDARY_WSS.to_owned()]
@@ -2090,6 +2093,7 @@ mod tests {
             .expect("claim")
             .expect("reclaimed");
         assert_eq!(reclaimed.state, RadrootsOutboxEventState::Signing);
+        assert_eq!(reclaimed.attempt_count, 2);
     }
 
     #[tokio::test]
