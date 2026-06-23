@@ -208,7 +208,7 @@ async fn farm_enqueue_publish_stores_event_and_queues_signed_outbox_without_prof
         .expect("prepared");
     let receipt = sdk
         .farms()
-        .enqueue_publish(request, &FixtureSigner::new(FARMER))
+        .enqueue_publish_with_explicit_signer(request, &FixtureSigner::new(FARMER))
         .await
         .expect("enqueue");
 
@@ -265,7 +265,7 @@ async fn farm_enqueue_publish_returns_sanitized_signer_errors_before_mutation() 
     );
     let error = sdk
         .farms()
-        .enqueue_publish(request, &FixtureSigner::new(OTHER))
+        .enqueue_publish_with_explicit_signer(request, &FixtureSigner::new(OTHER))
         .await
         .expect_err("signer error");
     let message = error.to_string();
@@ -322,12 +322,12 @@ async fn farm_enqueue_publish_derives_order_independent_idempotency_key() {
 
     let first_receipt = sdk
         .farms()
-        .enqueue_publish(first, &FixtureSigner::new(FARMER))
+        .enqueue_publish_with_explicit_signer(first, &FixtureSigner::new(FARMER))
         .await
         .expect("first enqueue");
     let second_receipt = sdk
         .farms()
-        .enqueue_publish(second, &FixtureSigner::new(FARMER))
+        .enqueue_publish_with_explicit_signer(second, &FixtureSigner::new(FARMER))
         .await
         .expect("second enqueue");
 
@@ -367,7 +367,7 @@ async fn farm_enqueue_publish_pushes_queued_event_with_mock_relay_sync() {
     .expect("target relays");
     let enqueue_receipt = sdk
         .farms()
-        .enqueue_publish(enqueue_request, &FixtureSigner::new(FARMER))
+        .enqueue_publish_with_explicit_signer(enqueue_request, &FixtureSigner::new(FARMER))
         .await
         .expect("enqueue");
     let adapter = RadrootsMockRelayPublishAdapter::new();
@@ -423,7 +423,7 @@ async fn farm_enqueue_publish_reports_partial_local_mutation_after_outbox_confli
     .try_with_idempotency_key("farm-idem-e")
     .expect("idempotency key");
     sdk.farms()
-        .enqueue_publish(first, &FixtureSigner::new(FARMER))
+        .enqueue_publish_with_explicit_signer(first, &FixtureSigner::new(FARMER))
         .await
         .expect("first enqueue");
 
@@ -436,7 +436,7 @@ async fn farm_enqueue_publish_reports_partial_local_mutation_after_outbox_confli
     .expect("idempotency key");
     let error = sdk
         .farms()
-        .enqueue_publish(second, &FixtureSigner::new(FARMER))
+        .enqueue_publish_with_explicit_signer(second, &FixtureSigner::new(FARMER))
         .await
         .expect_err("partial");
 
@@ -549,7 +549,7 @@ async fn farm_runtime_dtos_serialize_deterministically() {
 
     let receipt = sdk
         .farms()
-        .enqueue_publish(enqueue_request, &FixtureSigner::new(FARMER))
+        .enqueue_publish_with_explicit_signer(enqueue_request, &FixtureSigner::new(FARMER))
         .await
         .expect("enqueue");
     let receipt_json = serde_json::to_value(&receipt).expect("receipt json");

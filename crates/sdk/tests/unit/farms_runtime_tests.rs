@@ -1,4 +1,6 @@
 use super::*;
+use crate::{RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider};
+use radroots_nostr::prelude::RadrootsNostrKeys;
 
 #[path = "../support/fixture_signer.rs"]
 mod fixture_signer;
@@ -198,7 +200,7 @@ async fn farm_enqueue_publish_reports_prepare_errors_before_signing() {
         .expect("sdk");
     let error = sdk
         .farms()
-        .enqueue_publish(
+        .enqueue_publish_with_explicit_signer(
             FarmEnqueuePublishRequest::new(
                 farmer_actor(),
                 farm("AAAAAAAAAAAAAAAAAAAAA!", "Invalid Enqueue Farm"),
@@ -223,7 +225,7 @@ async fn farm_client_enqueue_methods_cover_source_attached_workflow_paths() {
     let actor = farmer_actor();
     let receipt = sdk
         .farms()
-        .enqueue_publish(
+        .enqueue_publish_with_explicit_signer(
             FarmEnqueuePublishRequest::new(
                 actor.clone(),
                 farm(FARM_A_D_TAG, "Enqueued Farm"),
@@ -248,7 +250,7 @@ async fn farm_client_enqueue_methods_cover_source_attached_workflow_paths() {
         .expect("prepared farm");
     let prepared = sdk
         .farms()
-        .enqueue_prepared_publish(
+        .enqueue_prepared_publish_with_explicit_signer(
             &actor,
             plan,
             SdkRelayTargetPolicy::try_explicit([RELAY_B], SdkRelayUrlPolicy::Public)
@@ -260,4 +262,38 @@ async fn farm_client_enqueue_methods_cover_source_attached_workflow_paths() {
         .expect("enqueue prepared farm");
     assert_eq!(prepared.signed_event_id, prepared.expected_event_id);
     assert_eq!(prepared.local_event_seq, 2);
+}
+
+#[tokio::test]
+async fn farm_configured_local_signer_enqueues_publish_without_explicit_signer() {
+    let keys = RadrootsNostrKeys::generate();
+    let farmer = keys.public_key().to_hex();
+    let sdk = crate::RadrootsSdk::builder()
+        .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_500))
+        .signer_provider(RadrootsSdkSignerProvider::LocalKey(
+            RadrootsSdkLocalKeySigner::new(keys).expect("signer"),
+        ))
+        .build()
+        .await
+        .expect("sdk");
+    let actor =
+        RadrootsActorContext::test(farmer.as_str(), [RadrootsActorRole::Farmer]).expect("actor");
+
+    let receipt = sdk
+        .farms()
+        .enqueue_publish(
+            FarmEnqueuePublishRequest::new(
+                actor,
+                farm(FARM_C_D_TAG, "Configured Farm"),
+                SdkRelayTargetPolicy::try_explicit([RELAY_A], SdkRelayUrlPolicy::Public)
+                    .expect("target relays"),
+            )
+            .try_with_idempotency_key("farm-configured-local")
+            .expect("idempotency"),
+        )
+        .await
+        .expect("enqueue farm");
+
+    assert_eq!(receipt.signed_event_id, receipt.expected_event_id);
+    assert_eq!(receipt.state, SdkMutationState::StoredAndQueued);
 }

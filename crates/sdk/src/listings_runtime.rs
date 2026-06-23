@@ -1,3 +1,5 @@
+#[cfg(feature = "signer-adapters")]
+use crate::workflow_runtime::enqueue_configured_signed_workflow;
 #[cfg(feature = "runtime")]
 use crate::{
     ListingsClient, RadrootsSdkError, RadrootsSdkTimestamp, SdkIdempotencyKey,
@@ -184,7 +186,29 @@ impl<'sdk> ListingsClient<'sdk> {
         listing_publish_plan(&request.actor, request.document, created_at)
     }
 
+    #[cfg(feature = "signer-adapters")]
     pub async fn enqueue_publish(
+        &self,
+        request: ListingEnqueuePublishRequest,
+    ) -> Result<ListingEnqueueReceipt, RadrootsSdkError> {
+        let ListingEnqueuePublishRequest {
+            actor,
+            document,
+            target_relays,
+            idempotency_key,
+            created_at,
+        } = request;
+        let prepare_request = ListingPreparePublishRequest {
+            actor: actor.clone(),
+            document,
+            created_at,
+        };
+        let plan = self.prepare_publish(prepare_request)?;
+        self.enqueue_prepared_publish(&actor, plan, target_relays, idempotency_key)
+            .await
+    }
+
+    pub async fn enqueue_publish_with_explicit_signer(
         &self,
         request: ListingEnqueuePublishRequest,
         signer: &dyn RadrootsEventSigner,
@@ -202,11 +226,39 @@ impl<'sdk> ListingsClient<'sdk> {
             created_at,
         };
         let plan = self.prepare_publish(prepare_request)?;
-        self.enqueue_prepared_publish(&actor, plan, target_relays, idempotency_key, signer)
-            .await
+        self.enqueue_prepared_publish_with_explicit_signer(
+            &actor,
+            plan,
+            target_relays,
+            idempotency_key,
+            signer,
+        )
+        .await
     }
 
+    #[cfg(feature = "signer-adapters")]
     pub async fn enqueue_prepared_publish(
+        &self,
+        actor: &RadrootsActorContext,
+        plan: ListingPublishPlan,
+        target_relays: SdkRelayTargetPolicy,
+        idempotency_key: Option<SdkIdempotencyKey>,
+    ) -> Result<ListingEnqueueReceipt, RadrootsSdkError> {
+        let enqueue = enqueue_configured_signed_workflow(
+            self.sdk,
+            SdkWorkflowEnqueueRequest {
+                operation_kind: LISTING_PUBLISH_OPERATION_KIND,
+                actor,
+                frozen_draft: &plan.frozen_draft,
+                target_relays,
+                idempotency_key,
+            },
+        )
+        .await?;
+        Ok(listing_enqueue_receipt(plan, enqueue))
+    }
+
+    pub async fn enqueue_prepared_publish_with_explicit_signer(
         &self,
         actor: &RadrootsActorContext,
         plan: ListingPublishPlan,
@@ -226,17 +278,7 @@ impl<'sdk> ListingsClient<'sdk> {
             signer,
         )
         .await?;
-        Ok(ListingEnqueueReceipt {
-            public_listing_addr: plan.public_listing_addr,
-            draft_listing_addr: plan.draft_listing_addr,
-            expected_event_id: plan.expected_event_id,
-            signed_event_id: enqueue.signed_event_id,
-            local_event_seq: enqueue.local_event_seq,
-            outbox_operation_id: enqueue.outbox_operation_id,
-            outbox_event_id: enqueue.outbox_event_id,
-            state: enqueue.state.into(),
-            idempotency_digest_prefix: Some(enqueue.idempotency_digest_prefix),
-        })
+        Ok(listing_enqueue_receipt(plan, enqueue))
     }
 
     fn resolved_created_at(
@@ -247,6 +289,24 @@ impl<'sdk> ListingsClient<'sdk> {
             Some(created_at) => Ok(created_at),
             None => self.sdk.now(),
         }
+    }
+}
+
+#[cfg(feature = "runtime")]
+fn listing_enqueue_receipt(
+    plan: ListingPublishPlan,
+    enqueue: crate::workflow_runtime::SdkWorkflowEnqueueReceipt,
+) -> ListingEnqueueReceipt {
+    ListingEnqueueReceipt {
+        public_listing_addr: plan.public_listing_addr,
+        draft_listing_addr: plan.draft_listing_addr,
+        expected_event_id: plan.expected_event_id,
+        signed_event_id: enqueue.signed_event_id,
+        local_event_seq: enqueue.local_event_seq,
+        outbox_operation_id: enqueue.outbox_operation_id,
+        outbox_event_id: enqueue.outbox_event_id,
+        state: enqueue.state.into(),
+        idempotency_digest_prefix: Some(enqueue.idempotency_digest_prefix),
     }
 }
 

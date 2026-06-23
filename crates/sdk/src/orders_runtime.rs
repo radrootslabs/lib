@@ -1,3 +1,5 @@
+#[cfg(feature = "signer-adapters")]
+use crate::workflow_runtime::enqueue_configured_signed_workflow;
 #[cfg(feature = "runtime")]
 use crate::{
     OrdersClient, RadrootsSdkError, RadrootsSdkRecoveryAction, RadrootsSdkTimestamp,
@@ -1159,7 +1161,31 @@ impl<'sdk> OrdersClient<'sdk> {
         )
     }
 
+    #[cfg(feature = "signer-adapters")]
     pub async fn enqueue_submit(
+        &self,
+        request: OrderSubmitEnqueueRequest,
+    ) -> Result<OrderSubmitReceipt, RadrootsSdkError> {
+        let OrderSubmitEnqueueRequest {
+            actor,
+            listing_event,
+            order,
+            target_relays,
+            idempotency_key,
+            created_at,
+        } = request;
+        let prepare_request = OrderSubmitPrepareRequest {
+            actor: actor.clone(),
+            listing_event,
+            order,
+            created_at,
+        };
+        let plan = self.prepare_submit(prepare_request)?;
+        self.enqueue_prepared_submit(&actor, plan, target_relays, idempotency_key)
+            .await
+    }
+
+    pub async fn enqueue_submit_with_explicit_signer(
         &self,
         request: OrderSubmitEnqueueRequest,
         signer: &dyn RadrootsEventSigner,
@@ -1179,11 +1205,39 @@ impl<'sdk> OrdersClient<'sdk> {
             created_at,
         };
         let plan = self.prepare_submit(prepare_request)?;
-        self.enqueue_prepared_submit(&actor, plan, target_relays, idempotency_key, signer)
-            .await
+        self.enqueue_prepared_submit_with_explicit_signer(
+            &actor,
+            plan,
+            target_relays,
+            idempotency_key,
+            signer,
+        )
+        .await
     }
 
+    #[cfg(feature = "signer-adapters")]
     pub async fn enqueue_prepared_submit(
+        &self,
+        actor: &RadrootsActorContext,
+        plan: OrderSubmitPlan,
+        target_relays: SdkRelayTargetPolicy,
+        idempotency_key: Option<SdkIdempotencyKey>,
+    ) -> Result<OrderSubmitReceipt, RadrootsSdkError> {
+        let enqueue = enqueue_configured_signed_workflow(
+            self.sdk,
+            SdkWorkflowEnqueueRequest {
+                operation_kind: OrderWorkflowKind::Submit.operation_kind(),
+                actor,
+                frozen_draft: &plan.frozen_draft,
+                target_relays,
+                idempotency_key,
+            },
+        )
+        .await?;
+        Ok(order_submit_receipt(plan, enqueue))
+    }
+
+    pub async fn enqueue_prepared_submit_with_explicit_signer(
         &self,
         actor: &RadrootsActorContext,
         plan: OrderSubmitPlan,
@@ -1203,23 +1257,7 @@ impl<'sdk> OrdersClient<'sdk> {
             signer,
         )
         .await?;
-        Ok(OrderSubmitReceipt {
-            workflow: order_workflow_enqueue_receipt(
-                OrderWorkflowKind::Submit,
-                plan.expected_event_id.clone(),
-                &enqueue,
-            ),
-            order_id: plan.order_id,
-            listing_addr: plan.listing_addr,
-            listing_event_id: plan.listing_event_id,
-            expected_event_id: plan.expected_event_id,
-            signed_event_id: enqueue.signed_event_id,
-            local_event_seq: enqueue.local_event_seq,
-            outbox_operation_id: enqueue.outbox_operation_id,
-            outbox_event_id: enqueue.outbox_event_id,
-            state: enqueue.state.into(),
-            idempotency_digest_prefix: Some(enqueue.idempotency_digest_prefix),
-        })
+        Ok(order_submit_receipt(plan, enqueue))
     }
 
     pub fn prepare_decision(
@@ -1235,7 +1273,31 @@ impl<'sdk> OrdersClient<'sdk> {
         )
     }
 
+    #[cfg(feature = "signer-adapters")]
     pub async fn enqueue_decision(
+        &self,
+        request: OrderDecisionEnqueueRequest,
+    ) -> Result<OrderDecisionReceipt, RadrootsSdkError> {
+        let OrderDecisionEnqueueRequest {
+            actor,
+            request_event,
+            decision,
+            target_relays,
+            idempotency_key,
+            created_at,
+        } = request;
+        let prepare_request = OrderDecisionPrepareRequest {
+            actor: actor.clone(),
+            request_event,
+            decision,
+            created_at,
+        };
+        let plan = self.prepare_decision(prepare_request)?;
+        self.enqueue_prepared_decision(&actor, plan, target_relays, idempotency_key)
+            .await
+    }
+
+    pub async fn enqueue_decision_with_explicit_signer(
         &self,
         request: OrderDecisionEnqueueRequest,
         signer: &dyn RadrootsEventSigner,
@@ -1255,11 +1317,45 @@ impl<'sdk> OrdersClient<'sdk> {
             created_at,
         };
         let plan = self.prepare_decision(prepare_request)?;
-        self.enqueue_prepared_decision(&actor, plan, target_relays, idempotency_key, signer)
-            .await
+        self.enqueue_prepared_decision_with_explicit_signer(
+            &actor,
+            plan,
+            target_relays,
+            idempotency_key,
+            signer,
+        )
+        .await
     }
 
+    #[cfg(feature = "signer-adapters")]
     pub async fn enqueue_prepared_decision(
+        &self,
+        actor: &RadrootsActorContext,
+        plan: OrderDecisionPlan,
+        target_relays: SdkRelayTargetPolicy,
+        idempotency_key: Option<SdkIdempotencyKey>,
+    ) -> Result<OrderDecisionReceipt, RadrootsSdkError> {
+        if !self
+            .prepared_order_event_exists(&plan.expected_event_id)
+            .await?
+        {
+            self.require_decision_preflight(&plan).await?;
+        }
+        let enqueue = enqueue_configured_signed_workflow(
+            self.sdk,
+            SdkWorkflowEnqueueRequest {
+                operation_kind: OrderWorkflowKind::Decision.operation_kind(),
+                actor,
+                frozen_draft: &plan.frozen_draft,
+                target_relays,
+                idempotency_key,
+            },
+        )
+        .await?;
+        Ok(order_decision_receipt(plan, enqueue))
+    }
+
+    pub async fn enqueue_prepared_decision_with_explicit_signer(
         &self,
         actor: &RadrootsActorContext,
         plan: OrderDecisionPlan,
@@ -1285,25 +1381,7 @@ impl<'sdk> OrdersClient<'sdk> {
             signer,
         )
         .await?;
-        Ok(OrderDecisionReceipt {
-            workflow: order_workflow_enqueue_receipt(
-                OrderWorkflowKind::Decision,
-                plan.expected_event_id.clone(),
-                &enqueue,
-            ),
-            order_id: plan.order_id,
-            listing_addr: plan.listing_addr,
-            buyer_pubkey: plan.buyer_pubkey,
-            seller_pubkey: plan.seller_pubkey,
-            request_event_id: plan.request_event_id,
-            expected_event_id: plan.expected_event_id,
-            signed_event_id: enqueue.signed_event_id,
-            local_event_seq: enqueue.local_event_seq,
-            outbox_operation_id: enqueue.outbox_operation_id,
-            outbox_event_id: enqueue.outbox_event_id,
-            state: enqueue.state.into(),
-            idempotency_digest_prefix: Some(enqueue.idempotency_digest_prefix),
-        })
+        Ok(order_decision_receipt(plan, enqueue))
     }
 
     pub fn prepare_revision_proposal(
@@ -1320,7 +1398,33 @@ impl<'sdk> OrdersClient<'sdk> {
         )
     }
 
+    #[cfg(feature = "signer-adapters")]
     pub async fn enqueue_revision_proposal(
+        &self,
+        request: OrderRevisionProposalEnqueueRequest,
+    ) -> Result<OrderRevisionProposalReceipt, RadrootsSdkError> {
+        let OrderRevisionProposalEnqueueRequest {
+            actor,
+            root_event,
+            previous_event,
+            proposal,
+            target_relays,
+            idempotency_key,
+            created_at,
+        } = request;
+        let prepare_request = OrderRevisionProposalPrepareRequest {
+            actor: actor.clone(),
+            root_event,
+            previous_event,
+            proposal,
+            created_at,
+        };
+        let plan = self.prepare_revision_proposal(prepare_request)?;
+        self.enqueue_prepared_revision_proposal(&actor, plan, target_relays, idempotency_key)
+            .await
+    }
+
+    pub async fn enqueue_revision_proposal_with_explicit_signer(
         &self,
         request: OrderRevisionProposalEnqueueRequest,
         signer: &dyn RadrootsEventSigner,
@@ -1342,7 +1446,7 @@ impl<'sdk> OrdersClient<'sdk> {
             created_at,
         };
         let plan = self.prepare_revision_proposal(prepare_request)?;
-        self.enqueue_prepared_revision_proposal(
+        self.enqueue_prepared_revision_proposal_with_explicit_signer(
             &actor,
             plan,
             target_relays,
@@ -1352,7 +1456,35 @@ impl<'sdk> OrdersClient<'sdk> {
         .await
     }
 
+    #[cfg(feature = "signer-adapters")]
     pub async fn enqueue_prepared_revision_proposal(
+        &self,
+        actor: &RadrootsActorContext,
+        plan: OrderRevisionProposalPlan,
+        target_relays: SdkRelayTargetPolicy,
+        idempotency_key: Option<SdkIdempotencyKey>,
+    ) -> Result<OrderRevisionProposalReceipt, RadrootsSdkError> {
+        if !self
+            .prepared_order_event_exists(&plan.expected_event_id)
+            .await?
+        {
+            self.require_revision_proposal_preflight(&plan).await?;
+        }
+        let enqueue = enqueue_configured_signed_workflow(
+            self.sdk,
+            SdkWorkflowEnqueueRequest {
+                operation_kind: OrderWorkflowKind::RevisionProposal.operation_kind(),
+                actor,
+                frozen_draft: &plan.frozen_draft,
+                target_relays,
+                idempotency_key,
+            },
+        )
+        .await?;
+        Ok(order_revision_proposal_receipt(plan, enqueue))
+    }
+
+    pub async fn enqueue_prepared_revision_proposal_with_explicit_signer(
         &self,
         actor: &RadrootsActorContext,
         plan: OrderRevisionProposalPlan,
@@ -1378,26 +1510,7 @@ impl<'sdk> OrdersClient<'sdk> {
             signer,
         )
         .await?;
-        Ok(OrderRevisionProposalReceipt {
-            workflow: order_workflow_enqueue_receipt(
-                OrderWorkflowKind::RevisionProposal,
-                plan.expected_event_id.clone(),
-                &enqueue,
-            ),
-            order_id: plan.order_id,
-            listing_addr: plan.listing_addr,
-            buyer_pubkey: plan.buyer_pubkey,
-            seller_pubkey: plan.seller_pubkey,
-            root_event_id: plan.root_event_id,
-            previous_event_id: plan.previous_event_id,
-            expected_event_id: plan.expected_event_id,
-            signed_event_id: enqueue.signed_event_id,
-            local_event_seq: enqueue.local_event_seq,
-            outbox_operation_id: enqueue.outbox_operation_id,
-            outbox_event_id: enqueue.outbox_event_id,
-            state: enqueue.state.into(),
-            idempotency_digest_prefix: Some(enqueue.idempotency_digest_prefix),
-        })
+        Ok(order_revision_proposal_receipt(plan, enqueue))
     }
 
     pub fn prepare_revision_decision(
@@ -1414,7 +1527,33 @@ impl<'sdk> OrdersClient<'sdk> {
         )
     }
 
+    #[cfg(feature = "signer-adapters")]
     pub async fn enqueue_revision_decision(
+        &self,
+        request: OrderRevisionDecisionEnqueueRequest,
+    ) -> Result<OrderRevisionDecisionReceipt, RadrootsSdkError> {
+        let OrderRevisionDecisionEnqueueRequest {
+            actor,
+            root_event,
+            previous_event,
+            decision,
+            target_relays,
+            idempotency_key,
+            created_at,
+        } = request;
+        let prepare_request = OrderRevisionDecisionPrepareRequest {
+            actor: actor.clone(),
+            root_event,
+            previous_event,
+            decision,
+            created_at,
+        };
+        let plan = self.prepare_revision_decision(prepare_request)?;
+        self.enqueue_prepared_revision_decision(&actor, plan, target_relays, idempotency_key)
+            .await
+    }
+
+    pub async fn enqueue_revision_decision_with_explicit_signer(
         &self,
         request: OrderRevisionDecisionEnqueueRequest,
         signer: &dyn RadrootsEventSigner,
@@ -1436,7 +1575,7 @@ impl<'sdk> OrdersClient<'sdk> {
             created_at,
         };
         let plan = self.prepare_revision_decision(prepare_request)?;
-        self.enqueue_prepared_revision_decision(
+        self.enqueue_prepared_revision_decision_with_explicit_signer(
             &actor,
             plan,
             target_relays,
@@ -1446,7 +1585,35 @@ impl<'sdk> OrdersClient<'sdk> {
         .await
     }
 
+    #[cfg(feature = "signer-adapters")]
     pub async fn enqueue_prepared_revision_decision(
+        &self,
+        actor: &RadrootsActorContext,
+        plan: OrderRevisionDecisionPlan,
+        target_relays: SdkRelayTargetPolicy,
+        idempotency_key: Option<SdkIdempotencyKey>,
+    ) -> Result<OrderRevisionDecisionReceipt, RadrootsSdkError> {
+        if !self
+            .prepared_order_event_exists(&plan.expected_event_id)
+            .await?
+        {
+            self.require_revision_decision_preflight(&plan).await?;
+        }
+        let enqueue = enqueue_configured_signed_workflow(
+            self.sdk,
+            SdkWorkflowEnqueueRequest {
+                operation_kind: OrderWorkflowKind::RevisionDecision.operation_kind(),
+                actor,
+                frozen_draft: &plan.frozen_draft,
+                target_relays,
+                idempotency_key,
+            },
+        )
+        .await?;
+        Ok(order_revision_decision_receipt(plan, enqueue))
+    }
+
+    pub async fn enqueue_prepared_revision_decision_with_explicit_signer(
         &self,
         actor: &RadrootsActorContext,
         plan: OrderRevisionDecisionPlan,
@@ -1472,26 +1639,7 @@ impl<'sdk> OrdersClient<'sdk> {
             signer,
         )
         .await?;
-        Ok(OrderRevisionDecisionReceipt {
-            workflow: order_workflow_enqueue_receipt(
-                OrderWorkflowKind::RevisionDecision,
-                plan.expected_event_id.clone(),
-                &enqueue,
-            ),
-            order_id: plan.order_id,
-            listing_addr: plan.listing_addr,
-            buyer_pubkey: plan.buyer_pubkey,
-            seller_pubkey: plan.seller_pubkey,
-            root_event_id: plan.root_event_id,
-            previous_event_id: plan.previous_event_id,
-            expected_event_id: plan.expected_event_id,
-            signed_event_id: enqueue.signed_event_id,
-            local_event_seq: enqueue.local_event_seq,
-            outbox_operation_id: enqueue.outbox_operation_id,
-            outbox_event_id: enqueue.outbox_event_id,
-            state: enqueue.state.into(),
-            idempotency_digest_prefix: Some(enqueue.idempotency_digest_prefix),
-        })
+        Ok(order_revision_decision_receipt(plan, enqueue))
     }
 
     pub fn prepare_cancellation(
@@ -1508,7 +1656,33 @@ impl<'sdk> OrdersClient<'sdk> {
         )
     }
 
+    #[cfg(feature = "signer-adapters")]
     pub async fn enqueue_cancellation(
+        &self,
+        request: OrderCancellationEnqueueRequest,
+    ) -> Result<OrderCancellationReceipt, RadrootsSdkError> {
+        let OrderCancellationEnqueueRequest {
+            actor,
+            root_event,
+            previous_event,
+            cancellation,
+            target_relays,
+            idempotency_key,
+            created_at,
+        } = request;
+        let prepare_request = OrderCancellationPrepareRequest {
+            actor: actor.clone(),
+            root_event,
+            previous_event,
+            cancellation,
+            created_at,
+        };
+        let plan = self.prepare_cancellation(prepare_request)?;
+        self.enqueue_prepared_cancellation(&actor, plan, target_relays, idempotency_key)
+            .await
+    }
+
+    pub async fn enqueue_cancellation_with_explicit_signer(
         &self,
         request: OrderCancellationEnqueueRequest,
         signer: &dyn RadrootsEventSigner,
@@ -1530,11 +1704,45 @@ impl<'sdk> OrdersClient<'sdk> {
             created_at,
         };
         let plan = self.prepare_cancellation(prepare_request)?;
-        self.enqueue_prepared_cancellation(&actor, plan, target_relays, idempotency_key, signer)
-            .await
+        self.enqueue_prepared_cancellation_with_explicit_signer(
+            &actor,
+            plan,
+            target_relays,
+            idempotency_key,
+            signer,
+        )
+        .await
     }
 
+    #[cfg(feature = "signer-adapters")]
     pub async fn enqueue_prepared_cancellation(
+        &self,
+        actor: &RadrootsActorContext,
+        plan: OrderCancellationPlan,
+        target_relays: SdkRelayTargetPolicy,
+        idempotency_key: Option<SdkIdempotencyKey>,
+    ) -> Result<OrderCancellationReceipt, RadrootsSdkError> {
+        if !self
+            .prepared_order_event_exists(&plan.expected_event_id)
+            .await?
+        {
+            self.require_cancellation_preflight(&plan).await?;
+        }
+        let enqueue = enqueue_configured_signed_workflow(
+            self.sdk,
+            SdkWorkflowEnqueueRequest {
+                operation_kind: OrderWorkflowKind::Cancellation.operation_kind(),
+                actor,
+                frozen_draft: &plan.frozen_draft,
+                target_relays,
+                idempotency_key,
+            },
+        )
+        .await?;
+        Ok(order_cancellation_receipt(plan, enqueue))
+    }
+
+    pub async fn enqueue_prepared_cancellation_with_explicit_signer(
         &self,
         actor: &RadrootsActorContext,
         plan: OrderCancellationPlan,
@@ -1560,26 +1768,7 @@ impl<'sdk> OrdersClient<'sdk> {
             signer,
         )
         .await?;
-        Ok(OrderCancellationReceipt {
-            workflow: order_workflow_enqueue_receipt(
-                OrderWorkflowKind::Cancellation,
-                plan.expected_event_id.clone(),
-                &enqueue,
-            ),
-            order_id: plan.order_id,
-            listing_addr: plan.listing_addr,
-            buyer_pubkey: plan.buyer_pubkey,
-            seller_pubkey: plan.seller_pubkey,
-            root_event_id: plan.root_event_id,
-            previous_event_id: plan.previous_event_id,
-            expected_event_id: plan.expected_event_id,
-            signed_event_id: enqueue.signed_event_id,
-            local_event_seq: enqueue.local_event_seq,
-            outbox_operation_id: enqueue.outbox_operation_id,
-            outbox_event_id: enqueue.outbox_event_id,
-            state: enqueue.state.into(),
-            idempotency_digest_prefix: Some(enqueue.idempotency_digest_prefix),
-        })
+        Ok(order_cancellation_receipt(plan, enqueue))
     }
 
     pub async fn status(
@@ -2120,6 +2309,137 @@ fn order_workflow_plan(
         contract_id: kind.contract_id(),
         expected_event_id,
         created_at,
+    }
+}
+
+#[cfg(feature = "runtime")]
+fn order_submit_receipt(
+    plan: OrderSubmitPlan,
+    enqueue: crate::workflow_runtime::SdkWorkflowEnqueueReceipt,
+) -> OrderSubmitReceipt {
+    OrderSubmitReceipt {
+        workflow: order_workflow_enqueue_receipt(
+            OrderWorkflowKind::Submit,
+            plan.expected_event_id.clone(),
+            &enqueue,
+        ),
+        order_id: plan.order_id,
+        listing_addr: plan.listing_addr,
+        listing_event_id: plan.listing_event_id,
+        expected_event_id: plan.expected_event_id,
+        signed_event_id: enqueue.signed_event_id,
+        local_event_seq: enqueue.local_event_seq,
+        outbox_operation_id: enqueue.outbox_operation_id,
+        outbox_event_id: enqueue.outbox_event_id,
+        state: enqueue.state.into(),
+        idempotency_digest_prefix: Some(enqueue.idempotency_digest_prefix),
+    }
+}
+
+#[cfg(feature = "runtime")]
+fn order_decision_receipt(
+    plan: OrderDecisionPlan,
+    enqueue: crate::workflow_runtime::SdkWorkflowEnqueueReceipt,
+) -> OrderDecisionReceipt {
+    OrderDecisionReceipt {
+        workflow: order_workflow_enqueue_receipt(
+            OrderWorkflowKind::Decision,
+            plan.expected_event_id.clone(),
+            &enqueue,
+        ),
+        order_id: plan.order_id,
+        listing_addr: plan.listing_addr,
+        buyer_pubkey: plan.buyer_pubkey,
+        seller_pubkey: plan.seller_pubkey,
+        request_event_id: plan.request_event_id,
+        expected_event_id: plan.expected_event_id,
+        signed_event_id: enqueue.signed_event_id,
+        local_event_seq: enqueue.local_event_seq,
+        outbox_operation_id: enqueue.outbox_operation_id,
+        outbox_event_id: enqueue.outbox_event_id,
+        state: enqueue.state.into(),
+        idempotency_digest_prefix: Some(enqueue.idempotency_digest_prefix),
+    }
+}
+
+#[cfg(feature = "runtime")]
+fn order_revision_proposal_receipt(
+    plan: OrderRevisionProposalPlan,
+    enqueue: crate::workflow_runtime::SdkWorkflowEnqueueReceipt,
+) -> OrderRevisionProposalReceipt {
+    OrderRevisionProposalReceipt {
+        workflow: order_workflow_enqueue_receipt(
+            OrderWorkflowKind::RevisionProposal,
+            plan.expected_event_id.clone(),
+            &enqueue,
+        ),
+        order_id: plan.order_id,
+        listing_addr: plan.listing_addr,
+        buyer_pubkey: plan.buyer_pubkey,
+        seller_pubkey: plan.seller_pubkey,
+        root_event_id: plan.root_event_id,
+        previous_event_id: plan.previous_event_id,
+        expected_event_id: plan.expected_event_id,
+        signed_event_id: enqueue.signed_event_id,
+        local_event_seq: enqueue.local_event_seq,
+        outbox_operation_id: enqueue.outbox_operation_id,
+        outbox_event_id: enqueue.outbox_event_id,
+        state: enqueue.state.into(),
+        idempotency_digest_prefix: Some(enqueue.idempotency_digest_prefix),
+    }
+}
+
+#[cfg(feature = "runtime")]
+fn order_revision_decision_receipt(
+    plan: OrderRevisionDecisionPlan,
+    enqueue: crate::workflow_runtime::SdkWorkflowEnqueueReceipt,
+) -> OrderRevisionDecisionReceipt {
+    OrderRevisionDecisionReceipt {
+        workflow: order_workflow_enqueue_receipt(
+            OrderWorkflowKind::RevisionDecision,
+            plan.expected_event_id.clone(),
+            &enqueue,
+        ),
+        order_id: plan.order_id,
+        listing_addr: plan.listing_addr,
+        buyer_pubkey: plan.buyer_pubkey,
+        seller_pubkey: plan.seller_pubkey,
+        root_event_id: plan.root_event_id,
+        previous_event_id: plan.previous_event_id,
+        expected_event_id: plan.expected_event_id,
+        signed_event_id: enqueue.signed_event_id,
+        local_event_seq: enqueue.local_event_seq,
+        outbox_operation_id: enqueue.outbox_operation_id,
+        outbox_event_id: enqueue.outbox_event_id,
+        state: enqueue.state.into(),
+        idempotency_digest_prefix: Some(enqueue.idempotency_digest_prefix),
+    }
+}
+
+#[cfg(feature = "runtime")]
+fn order_cancellation_receipt(
+    plan: OrderCancellationPlan,
+    enqueue: crate::workflow_runtime::SdkWorkflowEnqueueReceipt,
+) -> OrderCancellationReceipt {
+    OrderCancellationReceipt {
+        workflow: order_workflow_enqueue_receipt(
+            OrderWorkflowKind::Cancellation,
+            plan.expected_event_id.clone(),
+            &enqueue,
+        ),
+        order_id: plan.order_id,
+        listing_addr: plan.listing_addr,
+        buyer_pubkey: plan.buyer_pubkey,
+        seller_pubkey: plan.seller_pubkey,
+        root_event_id: plan.root_event_id,
+        previous_event_id: plan.previous_event_id,
+        expected_event_id: plan.expected_event_id,
+        signed_event_id: enqueue.signed_event_id,
+        local_event_seq: enqueue.local_event_seq,
+        outbox_operation_id: enqueue.outbox_operation_id,
+        outbox_event_id: enqueue.outbox_event_id,
+        state: enqueue.state.into(),
+        idempotency_digest_prefix: Some(enqueue.idempotency_digest_prefix),
     }
 }
 

@@ -1,3 +1,5 @@
+#[cfg(feature = "signer-adapters")]
+use crate::workflow_runtime::enqueue_configured_signed_workflow;
 #[cfg(feature = "runtime")]
 use crate::{
     FarmsClient, RadrootsSdkError, RadrootsSdkTimestamp, SdkIdempotencyKey, SdkMutationState,
@@ -140,7 +142,29 @@ impl<'sdk> FarmsClient<'sdk> {
         farm_publish_plan(&request.actor, request.farm, created_at)
     }
 
+    #[cfg(feature = "signer-adapters")]
     pub async fn enqueue_publish(
+        &self,
+        request: FarmEnqueuePublishRequest,
+    ) -> Result<FarmEnqueueReceipt, RadrootsSdkError> {
+        let FarmEnqueuePublishRequest {
+            actor,
+            farm,
+            target_relays,
+            idempotency_key,
+            created_at,
+        } = request;
+        let prepare_request = FarmPreparePublishRequest {
+            actor: actor.clone(),
+            farm,
+            created_at,
+        };
+        let plan = self.prepare_publish(prepare_request)?;
+        self.enqueue_prepared_publish(&actor, plan, target_relays, idempotency_key)
+            .await
+    }
+
+    pub async fn enqueue_publish_with_explicit_signer(
         &self,
         request: FarmEnqueuePublishRequest,
         signer: &dyn RadrootsEventSigner,
@@ -158,11 +182,39 @@ impl<'sdk> FarmsClient<'sdk> {
             created_at,
         };
         let plan = self.prepare_publish(prepare_request)?;
-        self.enqueue_prepared_publish(&actor, plan, target_relays, idempotency_key, signer)
-            .await
+        self.enqueue_prepared_publish_with_explicit_signer(
+            &actor,
+            plan,
+            target_relays,
+            idempotency_key,
+            signer,
+        )
+        .await
     }
 
+    #[cfg(feature = "signer-adapters")]
     pub async fn enqueue_prepared_publish(
+        &self,
+        actor: &RadrootsActorContext,
+        plan: FarmPublishPlan,
+        target_relays: SdkRelayTargetPolicy,
+        idempotency_key: Option<SdkIdempotencyKey>,
+    ) -> Result<FarmEnqueueReceipt, RadrootsSdkError> {
+        let enqueue = enqueue_configured_signed_workflow(
+            self.sdk,
+            SdkWorkflowEnqueueRequest {
+                operation_kind: FARM_PUBLISH_OPERATION_KIND,
+                actor,
+                frozen_draft: &plan.frozen_draft,
+                target_relays,
+                idempotency_key,
+            },
+        )
+        .await?;
+        Ok(farm_enqueue_receipt(plan, enqueue))
+    }
+
+    pub async fn enqueue_prepared_publish_with_explicit_signer(
         &self,
         actor: &RadrootsActorContext,
         plan: FarmPublishPlan,
@@ -182,16 +234,7 @@ impl<'sdk> FarmsClient<'sdk> {
             signer,
         )
         .await?;
-        Ok(FarmEnqueueReceipt {
-            farm_addr: plan.farm_addr,
-            expected_event_id: plan.expected_event_id,
-            signed_event_id: enqueue.signed_event_id,
-            local_event_seq: enqueue.local_event_seq,
-            outbox_operation_id: enqueue.outbox_operation_id,
-            outbox_event_id: enqueue.outbox_event_id,
-            state: enqueue.state.into(),
-            idempotency_digest_prefix: Some(enqueue.idempotency_digest_prefix),
-        })
+        Ok(farm_enqueue_receipt(plan, enqueue))
     }
 
     fn resolved_created_at(
@@ -202,6 +245,23 @@ impl<'sdk> FarmsClient<'sdk> {
             Some(created_at) => Ok(created_at),
             None => self.sdk.now(),
         }
+    }
+}
+
+#[cfg(feature = "runtime")]
+fn farm_enqueue_receipt(
+    plan: FarmPublishPlan,
+    enqueue: crate::workflow_runtime::SdkWorkflowEnqueueReceipt,
+) -> FarmEnqueueReceipt {
+    FarmEnqueueReceipt {
+        farm_addr: plan.farm_addr,
+        expected_event_id: plan.expected_event_id,
+        signed_event_id: enqueue.signed_event_id,
+        local_event_seq: enqueue.local_event_seq,
+        outbox_operation_id: enqueue.outbox_operation_id,
+        outbox_event_id: enqueue.outbox_event_id,
+        state: enqueue.state.into(),
+        idempotency_digest_prefix: Some(enqueue.idempotency_digest_prefix),
     }
 }
 

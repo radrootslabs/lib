@@ -7,11 +7,16 @@ use radroots_authority::{
 };
 use radroots_events::draft::{RadrootsFrozenEventDraft, RadrootsSignedNostrEvent};
 use radroots_events::ids::RadrootsPublicKey;
+use radroots_events::kinds::{
+    KIND_FARM, KIND_LISTING, KIND_ORDER_CANCELLATION, KIND_ORDER_DECISION, KIND_ORDER_REQUEST,
+    KIND_ORDER_REVISION_DECISION, KIND_ORDER_REVISION_PROPOSAL,
+};
 use radroots_nostr::prelude::{RadrootsNostrEvent, RadrootsNostrKeys, radroots_event_from_nostr};
 use radroots_nostr_connect::prelude::{
     RadrootsNostrConnectClientRequest, RadrootsNostrConnectClientTarget,
     RadrootsNostrConnectClientTransport, RadrootsNostrConnectClientTransportFuture,
-    RadrootsNostrConnectError, RadrootsNostrConnectRequest, RadrootsNostrConnectResponse,
+    RadrootsNostrConnectError, RadrootsNostrConnectMethod, RadrootsNostrConnectPermission,
+    RadrootsNostrConnectPermissions, RadrootsNostrConnectRequest, RadrootsNostrConnectResponse,
     execute_request_with_transport,
 };
 use serde_json::json;
@@ -21,6 +26,16 @@ use std::sync::{
 };
 
 pub type RadrootsSdkNip46TransportFuture<'a, T> = RadrootsNostrConnectClientTransportFuture<'a, T>;
+
+pub const RADROOTS_SDK_MYC_NIP46_PRODUCT_SIGN_EVENT_KINDS: [u32; 7] = [
+    KIND_FARM,
+    KIND_LISTING,
+    KIND_ORDER_REQUEST,
+    KIND_ORDER_DECISION,
+    KIND_ORDER_REVISION_PROPOSAL,
+    KIND_ORDER_REVISION_DECISION,
+    KIND_ORDER_CANCELLATION,
+];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -64,6 +79,7 @@ pub struct RadrootsSdkSignerCapability {
     pub remote_signer_pubkey: Option<String>,
     pub relays: Vec<String>,
     pub can_sign_events: bool,
+    pub nip46_permissions: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
@@ -229,6 +245,7 @@ impl RadrootsSdkLocalKeySigner {
             remote_signer_pubkey: None,
             relays: Vec::new(),
             can_sign_events: true,
+            nip46_permissions: Vec::new(),
         }
     }
 
@@ -311,6 +328,7 @@ impl RadrootsSdkMycNip46Signer {
             remote_signer_pubkey: Some(self.target.remote_signer_public_key.to_hex()),
             relays: self.target.relays.iter().map(ToString::to_string).collect(),
             can_sign_events: true,
+            nip46_permissions: radroots_sdk_myc_nip46_product_permission_strings(),
         }
     }
 
@@ -386,6 +404,27 @@ impl RadrootsSdkMycNip46Signer {
         let next = self.next_request_id.fetch_add(1, Ordering::Relaxed);
         format!("radroots-sdk-myc-nip46-sign-{next}")
     }
+}
+
+pub fn radroots_sdk_myc_nip46_product_permissions() -> RadrootsNostrConnectPermissions {
+    RADROOTS_SDK_MYC_NIP46_PRODUCT_SIGN_EVENT_KINDS
+        .iter()
+        .map(|kind| {
+            RadrootsNostrConnectPermission::with_parameter(
+                RadrootsNostrConnectMethod::SignEvent,
+                kind.to_string(),
+            )
+        })
+        .collect::<Vec<_>>()
+        .into()
+}
+
+pub fn radroots_sdk_myc_nip46_product_permission_strings() -> Vec<String> {
+    radroots_sdk_myc_nip46_product_permissions()
+        .as_slice()
+        .iter()
+        .map(ToString::to_string)
+        .collect()
 }
 
 struct RadrootsSdkSignerIdentityOnly {

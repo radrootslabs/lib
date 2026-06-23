@@ -108,6 +108,19 @@ const REQUIRED_ORDERS_CLIENT_METHODS: &[&str] = &[
     "pub async fn status(",
 ];
 
+const REQUIRED_ORDERS_CLIENT_ADVANCED_SIGNER_METHODS: &[&str] = &[
+    "pub async fn enqueue_submit_with_explicit_signer(",
+    "pub async fn enqueue_prepared_submit_with_explicit_signer(",
+    "pub async fn enqueue_decision_with_explicit_signer(",
+    "pub async fn enqueue_prepared_decision_with_explicit_signer(",
+    "pub async fn enqueue_revision_proposal_with_explicit_signer(",
+    "pub async fn enqueue_prepared_revision_proposal_with_explicit_signer(",
+    "pub async fn enqueue_revision_decision_with_explicit_signer(",
+    "pub async fn enqueue_prepared_revision_decision_with_explicit_signer(",
+    "pub async fn enqueue_cancellation_with_explicit_signer(",
+    "pub async fn enqueue_prepared_cancellation_with_explicit_signer(",
+];
+
 const FORBIDDEN_ORDER_RUNTIME_PUBLIC_EXPORTS: &[&str] = &[
     "CheckoutClient",
     "EscrowClient",
@@ -287,6 +300,13 @@ fn orders_client_surface_is_inventory_guarded() {
         assert!(
             source.contains(method),
             "OrdersClient must expose inventory-guarded method `{method}`"
+        );
+    }
+
+    for method in REQUIRED_ORDERS_CLIENT_ADVANCED_SIGNER_METHODS {
+        assert!(
+            source.contains(method),
+            "OrdersClient must expose explicit-signer advanced method `{method}`"
         );
     }
 }

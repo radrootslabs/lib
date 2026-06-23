@@ -1,5 +1,5 @@
 use super::*;
-use crate::RadrootsSdk;
+use crate::{RadrootsSdk, RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider};
 use radroots_authority::{RadrootsSignerError, RadrootsSignerIdentity};
 use radroots_core::{
     RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreUnit,
@@ -260,14 +260,18 @@ struct OrderFixtureSigner {
 
 impl OrderFixtureSigner {
     fn new(secret_key_hex: &str) -> Self {
-        let secret_key = RadrootsNostrSecretKey::from_hex(secret_key_hex).expect("secret key");
-        let keys = RadrootsNostrKeys::new(secret_key);
+        let keys = keys_from_secret(secret_key_hex);
         let pubkey = keys.public_key().to_hex();
         Self {
             identity: RadrootsSignerIdentity::new(pubkey).expect("identity"),
             keys,
         }
     }
+}
+
+fn keys_from_secret(secret_key_hex: &str) -> RadrootsNostrKeys {
+    let secret_key = RadrootsNostrSecretKey::from_hex(secret_key_hex).expect("secret key");
+    RadrootsNostrKeys::new(secret_key)
 }
 
 impl RadrootsEventSigner for OrderFixtureSigner {
@@ -411,6 +415,32 @@ async fn prepared_order_sdk() -> RadrootsSdk {
         .expect("sdk")
 }
 
+#[tokio::test]
+async fn order_configured_local_signer_enqueues_submit_without_explicit_signer() {
+    let sdk = RadrootsSdk::builder()
+        .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
+        .signer_provider(RadrootsSdkSignerProvider::LocalKey(
+            RadrootsSdkLocalKeySigner::new(keys_from_secret(BUYER_SECRET_KEY_HEX)).expect("signer"),
+        ))
+        .build()
+        .await
+        .expect("sdk");
+
+    let receipt = sdk
+        .orders()
+        .enqueue_submit(OrderSubmitEnqueueRequest::new(
+            fixture_buyer_actor(),
+            fixture_event_ptr('a'),
+            fixture_order_request("order-configured-local-1"),
+            fixture_target_relays(),
+        ))
+        .await
+        .expect("enqueue submit");
+
+    assert_eq!(receipt.signed_event_id, receipt.expected_event_id);
+    assert_eq!(receipt.state, SdkMutationState::StoredAndQueued);
+}
+
 async fn enqueue_fixture_submit(sdk: &RadrootsSdk, raw_order_id: &str) -> OrderSubmitReceipt {
     let buyer = fixture_buyer_actor();
     let plan = sdk
@@ -422,7 +452,7 @@ async fn enqueue_fixture_submit(sdk: &RadrootsSdk, raw_order_id: &str) -> OrderS
         ))
         .expect("submit plan");
     sdk.orders()
-        .enqueue_prepared_submit(
+        .enqueue_prepared_submit_with_explicit_signer(
             &buyer,
             plan,
             fixture_target_relays(),
@@ -2069,7 +2099,7 @@ async fn prepared_submit_and_decision_enqueue_cover_source_attached_success_path
         .expect("decision plan");
     let decision = sdk
         .orders()
-        .enqueue_prepared_decision(
+        .enqueue_prepared_decision_with_explicit_signer(
             &seller,
             decision_plan,
             fixture_target_relays(),
@@ -2105,7 +2135,7 @@ async fn prepared_revision_lifecycle_enqueue_cover_source_attached_success_paths
         .expect("proposal plan");
     let proposal = sdk
         .orders()
-        .enqueue_prepared_revision_proposal(
+        .enqueue_prepared_revision_proposal_with_explicit_signer(
             &seller,
             proposal_plan,
             fixture_target_relays(),
@@ -2133,7 +2163,7 @@ async fn prepared_revision_lifecycle_enqueue_cover_source_attached_success_paths
         .expect("revision decision plan");
     let revision = sdk
         .orders()
-        .enqueue_prepared_revision_decision(
+        .enqueue_prepared_revision_decision_with_explicit_signer(
             &buyer,
             revision_decision_plan,
             fixture_target_relays(),
@@ -2165,7 +2195,7 @@ async fn prepared_cancellation_enqueue_covers_source_attached_success_path() {
         .expect("cancellation plan");
     let cancellation = sdk
         .orders()
-        .enqueue_prepared_cancellation(
+        .enqueue_prepared_cancellation_with_explicit_signer(
             &buyer,
             cancellation_plan,
             fixture_target_relays(),
@@ -2186,7 +2216,7 @@ async fn convenience_order_enqueue_methods_cover_source_attached_wrappers() {
     let sdk = prepared_order_sdk().await;
     let decision_submit = sdk
         .orders()
-        .enqueue_submit(
+        .enqueue_submit_with_explicit_signer(
             OrderSubmitEnqueueRequest::new(
                 fixture_buyer_actor(),
                 fixture_event_ptr('b'),
@@ -2199,7 +2229,7 @@ async fn convenience_order_enqueue_methods_cover_source_attached_wrappers() {
         .expect("enqueue submit");
     let decision = sdk
         .orders()
-        .enqueue_decision(
+        .enqueue_decision_with_explicit_signer(
             OrderDecisionEnqueueRequest::new(
                 fixture_seller_actor(),
                 fixture_order_event_ptr(&decision_submit.signed_event_id),
@@ -2214,7 +2244,7 @@ async fn convenience_order_enqueue_methods_cover_source_attached_wrappers() {
 
     let revision_submit = sdk
         .orders()
-        .enqueue_submit(
+        .enqueue_submit_with_explicit_signer(
             OrderSubmitEnqueueRequest::new(
                 fixture_buyer_actor(),
                 fixture_event_ptr('c'),
@@ -2232,7 +2262,7 @@ async fn convenience_order_enqueue_methods_cover_source_attached_wrappers() {
     );
     let proposal = sdk
         .orders()
-        .enqueue_revision_proposal(
+        .enqueue_revision_proposal_with_explicit_signer(
             OrderRevisionProposalEnqueueRequest::new(
                 fixture_seller_actor(),
                 fixture_order_event_ptr(&revision_submit.signed_event_id),
@@ -2246,7 +2276,7 @@ async fn convenience_order_enqueue_methods_cover_source_attached_wrappers() {
         .expect("enqueue proposal");
     let revision = sdk
         .orders()
-        .enqueue_revision_decision(
+        .enqueue_revision_decision_with_explicit_signer(
             OrderRevisionDecisionEnqueueRequest::new(
                 fixture_buyer_actor(),
                 fixture_order_event_ptr(&revision_submit.signed_event_id),
@@ -2262,7 +2292,7 @@ async fn convenience_order_enqueue_methods_cover_source_attached_wrappers() {
 
     let cancellation_submit = sdk
         .orders()
-        .enqueue_submit(
+        .enqueue_submit_with_explicit_signer(
             OrderSubmitEnqueueRequest::new(
                 fixture_buyer_actor(),
                 fixture_event_ptr('d'),
@@ -2275,7 +2305,7 @@ async fn convenience_order_enqueue_methods_cover_source_attached_wrappers() {
         .expect("enqueue cancellation submit");
     let cancellation = sdk
         .orders()
-        .enqueue_cancellation(
+        .enqueue_cancellation_with_explicit_signer(
             OrderCancellationEnqueueRequest::new(
                 fixture_buyer_actor(),
                 fixture_order_event_ptr(&cancellation_submit.signed_event_id),
@@ -2315,7 +2345,7 @@ async fn prepared_lifecycle_enqueues_report_missing_and_closed_preflight_errors(
         .expect("decision plan");
     let decision_missing = sdk
         .orders()
-        .enqueue_prepared_decision(
+        .enqueue_prepared_decision_with_explicit_signer(
             &seller,
             decision_plan,
             fixture_target_relays(),
@@ -2340,7 +2370,7 @@ async fn prepared_lifecycle_enqueues_report_missing_and_closed_preflight_errors(
         .expect("proposal plan");
     let proposal_missing = sdk
         .orders()
-        .enqueue_prepared_revision_proposal(
+        .enqueue_prepared_revision_proposal_with_explicit_signer(
             &seller,
             proposal_plan,
             fixture_target_relays(),
@@ -2365,7 +2395,7 @@ async fn prepared_lifecycle_enqueues_report_missing_and_closed_preflight_errors(
         .expect("revision decision plan");
     let revision_missing = sdk
         .orders()
-        .enqueue_prepared_revision_decision(
+        .enqueue_prepared_revision_decision_with_explicit_signer(
             &buyer,
             revision_decision_plan,
             fixture_target_relays(),
@@ -2390,7 +2420,7 @@ async fn prepared_lifecycle_enqueues_report_missing_and_closed_preflight_errors(
         .expect("cancellation plan");
     let cancellation_missing = sdk
         .orders()
-        .enqueue_prepared_cancellation(
+        .enqueue_prepared_cancellation_with_explicit_signer(
             &buyer,
             cancellation_plan,
             fixture_target_relays(),
@@ -2452,7 +2482,7 @@ async fn prepared_lifecycle_enqueues_report_missing_and_closed_preflight_errors(
     closed_sdk._event_store.pool().close().await;
     let closed_error = closed_sdk
         .orders()
-        .enqueue_prepared_decision(
+        .enqueue_prepared_decision_with_explicit_signer(
             &seller,
             closed_plan,
             fixture_target_relays(),
@@ -2464,7 +2494,7 @@ async fn prepared_lifecycle_enqueues_report_missing_and_closed_preflight_errors(
     assert!(matches!(closed_error, RadrootsSdkError::EventStore { .. }));
     let closed_proposal_error = closed_sdk
         .orders()
-        .enqueue_prepared_revision_proposal(
+        .enqueue_prepared_revision_proposal_with_explicit_signer(
             &seller,
             closed_proposal_plan,
             fixture_target_relays(),
@@ -2479,7 +2509,7 @@ async fn prepared_lifecycle_enqueues_report_missing_and_closed_preflight_errors(
     ));
     let closed_revision_error = closed_sdk
         .orders()
-        .enqueue_prepared_revision_decision(
+        .enqueue_prepared_revision_decision_with_explicit_signer(
             &buyer,
             closed_revision_plan,
             fixture_target_relays(),
@@ -2494,7 +2524,7 @@ async fn prepared_lifecycle_enqueues_report_missing_and_closed_preflight_errors(
     ));
     let closed_cancellation_error = closed_sdk
         .orders()
-        .enqueue_prepared_cancellation(
+        .enqueue_prepared_cancellation_with_explicit_signer(
             &buyer,
             closed_cancellation_plan,
             fixture_target_relays(),
@@ -2605,7 +2635,7 @@ async fn prepared_lifecycle_enqueues_report_closed_outbox_after_preflight() {
     proposal_sdk._outbox.pool().close().await;
     let proposal_error = proposal_sdk
         .orders()
-        .enqueue_prepared_revision_proposal(
+        .enqueue_prepared_revision_proposal_with_explicit_signer(
             &seller,
             proposal_plan,
             fixture_target_relays(),
@@ -2635,7 +2665,7 @@ async fn prepared_lifecycle_enqueues_report_closed_outbox_after_preflight() {
         .expect("revision proposal plan");
     let proposal = revision_sdk
         .orders()
-        .enqueue_prepared_revision_proposal(
+        .enqueue_prepared_revision_proposal_with_explicit_signer(
             &seller,
             proposal_plan,
             fixture_target_relays(),
@@ -2657,7 +2687,7 @@ async fn prepared_lifecycle_enqueues_report_closed_outbox_after_preflight() {
     revision_sdk._outbox.pool().close().await;
     let revision_error = revision_sdk
         .orders()
-        .enqueue_prepared_revision_decision(
+        .enqueue_prepared_revision_decision_with_explicit_signer(
             &buyer,
             revision_plan,
             fixture_target_relays(),
@@ -2683,7 +2713,7 @@ async fn prepared_lifecycle_enqueues_report_closed_outbox_after_preflight() {
     cancellation_sdk._outbox.pool().close().await;
     let cancellation_error = cancellation_sdk
         .orders()
-        .enqueue_prepared_cancellation(
+        .enqueue_prepared_cancellation_with_explicit_signer(
             &buyer,
             cancellation_plan,
             fixture_target_relays(),
@@ -2710,7 +2740,7 @@ async fn prepared_lifecycle_enqueues_skip_preflight_for_existing_events() {
         .expect("decision plan");
     decision_sdk
         .orders()
-        .enqueue_prepared_decision(
+        .enqueue_prepared_decision_with_explicit_signer(
             &seller,
             decision_plan.clone(),
             fixture_target_relays(),
@@ -2721,7 +2751,7 @@ async fn prepared_lifecycle_enqueues_skip_preflight_for_existing_events() {
         .expect("enqueue decision");
     let decision_repeat = decision_sdk
         .orders()
-        .enqueue_prepared_decision(
+        .enqueue_prepared_decision_with_explicit_signer(
             &seller,
             decision_plan,
             fixture_target_relays(),
@@ -2759,7 +2789,7 @@ async fn prepared_lifecycle_enqueues_skip_preflight_for_existing_events() {
         .expect("proposal plan");
     proposal_sdk
         .orders()
-        .enqueue_prepared_revision_proposal(
+        .enqueue_prepared_revision_proposal_with_explicit_signer(
             &seller,
             proposal_plan.clone(),
             fixture_target_relays(),
@@ -2770,7 +2800,7 @@ async fn prepared_lifecycle_enqueues_skip_preflight_for_existing_events() {
         .expect("enqueue proposal");
     let proposal_repeat = proposal_sdk
         .orders()
-        .enqueue_prepared_revision_proposal(
+        .enqueue_prepared_revision_proposal_with_explicit_signer(
             &seller,
             proposal_plan,
             fixture_target_relays(),
@@ -2808,7 +2838,7 @@ async fn prepared_lifecycle_enqueues_skip_preflight_for_existing_events() {
         .expect("revision proposal plan");
     let proposal = revision_sdk
         .orders()
-        .enqueue_prepared_revision_proposal(
+        .enqueue_prepared_revision_proposal_with_explicit_signer(
             &seller,
             proposal_plan,
             fixture_target_relays(),
@@ -2829,7 +2859,7 @@ async fn prepared_lifecycle_enqueues_skip_preflight_for_existing_events() {
         .expect("revision plan");
     revision_sdk
         .orders()
-        .enqueue_prepared_revision_decision(
+        .enqueue_prepared_revision_decision_with_explicit_signer(
             &buyer,
             revision_plan.clone(),
             fixture_target_relays(),
@@ -2840,7 +2870,7 @@ async fn prepared_lifecycle_enqueues_skip_preflight_for_existing_events() {
         .expect("enqueue revision");
     let revision_repeat = revision_sdk
         .orders()
-        .enqueue_prepared_revision_decision(
+        .enqueue_prepared_revision_decision_with_explicit_signer(
             &buyer,
             revision_plan,
             fixture_target_relays(),
@@ -2887,7 +2917,7 @@ async fn order_ingest_and_enqueue_wrappers_report_prepare_timestamp_errors() {
     ));
     assert!(matches!(
         sdk.orders()
-            .enqueue_submit(
+            .enqueue_submit_with_explicit_signer(
                 OrderSubmitEnqueueRequest::new(
                     buyer.clone(),
                     fixture_event_ptr('a'),
@@ -2902,7 +2932,7 @@ async fn order_ingest_and_enqueue_wrappers_report_prepare_timestamp_errors() {
     ));
     assert!(matches!(
         sdk.orders()
-            .enqueue_decision(
+            .enqueue_decision_with_explicit_signer(
                 OrderDecisionEnqueueRequest::new(
                     seller.clone(),
                     fixture_event_ptr('b'),
@@ -2925,7 +2955,7 @@ async fn order_ingest_and_enqueue_wrappers_report_prepare_timestamp_errors() {
     );
     assert!(matches!(
         sdk.orders()
-            .enqueue_revision_proposal(
+            .enqueue_revision_proposal_with_explicit_signer(
                 OrderRevisionProposalEnqueueRequest::new(
                     seller.clone(),
                     ptr(root_event_id.as_str().to_owned()),
@@ -2941,7 +2971,7 @@ async fn order_ingest_and_enqueue_wrappers_report_prepare_timestamp_errors() {
     ));
     assert!(matches!(
         sdk.orders()
-            .enqueue_revision_decision(
+            .enqueue_revision_decision_with_explicit_signer(
                 OrderRevisionDecisionEnqueueRequest::new(
                     buyer.clone(),
                     ptr(root_event_id.as_str().to_owned()),
@@ -2957,7 +2987,7 @@ async fn order_ingest_and_enqueue_wrappers_report_prepare_timestamp_errors() {
     ));
     assert!(matches!(
         sdk.orders()
-            .enqueue_cancellation(
+            .enqueue_cancellation_with_explicit_signer(
                 OrderCancellationEnqueueRequest::new(
                     buyer,
                     ptr(root_event_id.as_str().to_owned()),

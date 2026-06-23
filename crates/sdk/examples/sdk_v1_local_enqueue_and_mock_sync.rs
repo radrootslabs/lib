@@ -1,4 +1,4 @@
-use radroots_authority::{RadrootsActorContext, RadrootsLocalEventSigner};
+use radroots_authority::RadrootsActorContext;
 use radroots_core::{
     RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
     RadrootsCoreQuantityPrice, RadrootsCoreUnit,
@@ -13,8 +13,8 @@ use radroots_sdk::protocol::listing::{
 };
 use radroots_sdk::{
     ListingPreparePublishRequest, OrderStatusRequest, PushOutboxRequest, RadrootsSdk,
-    RadrootsSdkTimestamp, SdkIdempotencyKey, SdkRelayTargetPolicy, SdkRelayTargetSet,
-    SdkRelayUrlPolicy,
+    RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider, RadrootsSdkTimestamp, SdkIdempotencyKey,
+    SdkRelayTargetPolicy, SdkRelayTargetSet, SdkRelayUrlPolicy,
 };
 
 const LOCAL_RELAY: &str = "ws://localhost:7777";
@@ -23,9 +23,10 @@ const LOCAL_RELAY: &str = "ws://localhost:7777";
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let keys = RadrootsNostrKeys::generate();
     let seller = keys.public_key().to_hex();
-    let signer = RadrootsLocalEventSigner::new(keys)?;
+    let signer = RadrootsSdkLocalKeySigner::new(keys)?;
     let sdk = RadrootsSdk::builder()
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
+        .signer_provider(RadrootsSdkSignerProvider::LocalKey(signer))
         .build()
         .await?;
     let actor = RadrootsActorContext::test(seller.as_str(), [RadrootsActorRole::Seller])?;
@@ -45,7 +46,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             prepared,
             target_policy,
             Some(SdkIdempotencyKey::new("sdk-v1-local-example")?),
-            &signer,
         )
         .await?;
     let adapter = RadrootsMockRelayPublishAdapter::new();

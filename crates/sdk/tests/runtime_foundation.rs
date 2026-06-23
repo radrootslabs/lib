@@ -779,6 +779,10 @@ fn sdk_examples_stay_on_product_api_boundary() {
             "sdk_v1_local_enqueue_and_mock_sync",
             include_str!("../examples/sdk_v1_local_enqueue_and_mock_sync.rs"),
         ),
+        (
+            "sdk_v1_myc_nip46_signer_setup",
+            include_str!("../examples/sdk_v1_myc_nip46_signer_setup.rs"),
+        ),
     ];
 
     for (name, example) in examples {
@@ -800,7 +804,15 @@ fn sdk_examples_stay_on_product_api_boundary() {
     assert!(local_enqueue.contains("SdkRelayTargetPolicy"));
     assert!(local_enqueue.contains("SdkRelayTargetSet"));
     assert!(local_enqueue.contains("SdkRelayUrlPolicy::Localhost"));
+    assert!(local_enqueue.contains("RadrootsSdkLocalKeySigner"));
+    assert!(local_enqueue.contains("RadrootsSdkSignerProvider::LocalKey"));
     assert!(local_enqueue.contains("enqueue_prepared_publish"));
+    assert!(!local_enqueue.contains("enqueue_prepared_publish_with_explicit_signer"));
     assert!(local_enqueue.contains("push_outbox_with_adapter"));
     assert!(local_enqueue.contains("OrderStatusRequest"));
+
+    let myc_setup = include_str!("../examples/sdk_v1_myc_nip46_signer_setup.rs");
+    assert!(myc_setup.contains("RadrootsSdkMycNip46Signer"));
+    assert!(myc_setup.contains("RadrootsSdkSignerProvider::MycNip46"));
+    assert!(myc_setup.contains("radroots_sdk_myc_nip46_product_permission_strings"));
 }

@@ -461,7 +461,7 @@ async fn enqueue_listing_with_policy(
     url_policy: SdkRelayUrlPolicy,
 ) -> i64 {
     sdk.listings()
-        .enqueue_publish(
+        .enqueue_publish_with_explicit_signer(
             ListingEnqueuePublishRequest::new(
                 actor(),
                 listing(d_tag, title),
@@ -1372,7 +1372,7 @@ async fn product_push_outbox_uses_radrootsd_proxy_transport_with_daemon_resolved
 
     let enqueue = sdk
         .listings()
-        .enqueue_publish(
+        .enqueue_publish_with_explicit_signer(
             ListingEnqueuePublishRequest::new(
                 actor(),
                 listing(LISTING_A_D_TAG, "Proxy Coffee"),
@@ -1448,7 +1448,7 @@ async fn product_push_outbox_radrootsd_proxy_idempotency_is_attempt_scoped() {
 
     let enqueue = sdk
         .listings()
-        .enqueue_publish(
+        .enqueue_publish_with_explicit_signer(
             ListingEnqueuePublishRequest::new(
                 actor(),
                 listing(LISTING_A_D_TAG, "Retry Coffee"),

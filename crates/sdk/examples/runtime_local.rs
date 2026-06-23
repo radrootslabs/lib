@@ -1,85 +1,35 @@
-use radroots_authority::{
-    RadrootsActorContext, RadrootsEventSigner, RadrootsSignerError, RadrootsSignerIdentity,
-};
+use radroots_authority::RadrootsActorContext;
 use radroots_core::{
     RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
     RadrootsCoreQuantityPrice, RadrootsCoreUnit,
 };
 use radroots_events::contract::RadrootsActorRole;
-use radroots_events::draft::{
-    RadrootsFrozenEventDraft, RadrootsSignedNostrEvent, RadrootsSignedNostrEventParts,
-};
 use radroots_events::ids::{RadrootsDTag, RadrootsInventoryBinId};
+use radroots_nostr::prelude::RadrootsNostrKeys;
 use radroots_sdk::protocol::farm::RadrootsFarmRef;
 use radroots_sdk::protocol::listing::{
     RadrootsListing, RadrootsListingBin, RadrootsListingProduct,
 };
 use radroots_sdk::{
     ListingPreparePublishRequest, OrderStatusRequest, PushOutboxRequest, RadrootsSdk,
-    RadrootsSdkError, RadrootsSdkTimestamp, SdkIdempotencyKey, SdkRelayTargetPolicy,
-    SdkRelayUrlPolicy,
+    RadrootsSdkError, RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider, RadrootsSdkTimestamp,
+    SdkIdempotencyKey, SdkRelayTargetPolicy, SdkRelayUrlPolicy,
 };
 
-const SELLER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const RELAY: &str = "wss://relay.example.com";
-
-#[derive(Clone)]
-struct FixtureSigner {
-    identity: RadrootsSignerIdentity,
-}
-
-impl FixtureSigner {
-    fn new(pubkey: &str) -> Self {
-        Self {
-            identity: RadrootsSignerIdentity::new(pubkey).expect("identity"),
-        }
-    }
-}
-
-impl RadrootsEventSigner for FixtureSigner {
-    fn pubkey(&self) -> &radroots_events::ids::RadrootsPublicKey {
-        self.identity.pubkey()
-    }
-
-    fn sign_frozen_draft(
-        &self,
-        draft: &RadrootsFrozenEventDraft,
-    ) -> Result<RadrootsSignedNostrEvent, RadrootsSignerError> {
-        let sig = "f".repeat(128);
-        let raw_json = serde_json::json!({
-            "id": draft.expected_event_id,
-            "pubkey": self.pubkey().as_str(),
-            "created_at": draft.created_at,
-            "kind": draft.kind,
-            "tags": draft.tags,
-            "content": draft.content,
-            "sig": sig,
-        })
-        .to_string();
-        RadrootsSignedNostrEvent::new(RadrootsSignedNostrEventParts {
-            id: draft.expected_event_id.clone(),
-            pubkey: self.pubkey().as_str().to_owned(),
-            created_at: draft.created_at,
-            kind: draft.kind,
-            tags: draft.tags.clone(),
-            content: draft.content.clone(),
-            sig,
-            raw_json,
-        })
-        .map_err(|error| RadrootsSignerError::SigningFailed {
-            message: error.to_string(),
-        })
-    }
-}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let keys = RadrootsNostrKeys::generate();
+    let seller = keys.public_key().to_hex();
+    let signer = RadrootsSdkLocalKeySigner::new(keys)?;
     let sdk = RadrootsSdk::builder()
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
+        .signer_provider(RadrootsSdkSignerProvider::LocalKey(signer))
         .build()
         .await?;
-    let actor = RadrootsActorContext::test(SELLER, [RadrootsActorRole::Seller])?;
-    let listing = sample_listing();
+    let actor = RadrootsActorContext::test(seller.as_str(), [RadrootsActorRole::Seller])?;
+    let listing = sample_listing(seller.as_str());
     let prepare_request = ListingPreparePublishRequest::new(actor.clone(), listing);
     let target_relays = SdkRelayTargetPolicy::try_explicit([RELAY], SdkRelayUrlPolicy::Public)?;
     let idempotency_key = SdkIdempotencyKey::new("example-1")?;
@@ -92,7 +42,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             prepared.clone(),
             target_relays,
             Some(idempotency_key),
-            &FixtureSigner::new(SELLER),
         )
         .await?;
     let push = sdk
@@ -122,12 +71,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn sample_listing() -> RadrootsListing {
+fn sample_listing(seller: &str) -> RadrootsListing {
     RadrootsListing {
         d_tag: RadrootsDTag::parse("AAAAAAAAAAAAAAAAAAAAAQ").expect("d tag"),
         published_at: None,
         farm: RadrootsFarmRef {
-            pubkey: SELLER.to_owned(),
+            pubkey: seller.to_owned(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_owned(),
         },
         product: RadrootsListingProduct {

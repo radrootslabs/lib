@@ -160,6 +160,7 @@ async fn local_key_provider_signs_authorized_frozen_draft() {
 
     assert_eq!(provider.mode(), RadrootsSdkSignerMode::LocalKey);
     assert_eq!(provider.status(), signer.status());
+    assert!(provider.capability().nip46_permissions.is_empty());
     assert_eq!(receipt.mode, RadrootsSdkSignerMode::LocalKey);
     assert_eq!(receipt.signer_pubkey, USER_PUBLIC_KEY_HEX);
     assert_eq!(receipt.signed_event_id, draft.expected_event_id);
@@ -174,6 +175,22 @@ async fn local_key_provider_signs_authorized_frozen_draft() {
             }
         ]
     );
+}
+
+#[test]
+fn myc_nip46_product_permissions_cover_sdk_write_event_kinds() {
+    let permissions = radroots_sdk_myc_nip46_product_permissions();
+    let rendered = radroots_sdk_myc_nip46_product_permission_strings();
+
+    assert_eq!(
+        permissions.as_slice().len(),
+        RADROOTS_SDK_MYC_NIP46_PRODUCT_SIGN_EVENT_KINDS.len()
+    );
+    assert_eq!(rendered.len(), permissions.as_slice().len());
+    for kind in RADROOTS_SDK_MYC_NIP46_PRODUCT_SIGN_EVENT_KINDS {
+        assert!(rendered.contains(&format!("sign_event:{kind}")));
+    }
+    assert!(!rendered.contains(&"sign_event:1".to_owned()));
 }
 
 #[tokio::test]
@@ -200,6 +217,10 @@ async fn myc_nip46_provider_signs_and_validates_remote_event() {
         RadrootsSdkMycNip46Signer::new(client_keys, target, USER_PUBLIC_KEY_HEX, transport.clone())
             .expect("signer");
     let provider = RadrootsSdkSignerProvider::MycNip46(signer);
+    assert_eq!(
+        provider.capability().nip46_permissions,
+        radroots_sdk_myc_nip46_product_permission_strings()
+    );
     let actor = actor();
     let mut progress = Vec::new();
 

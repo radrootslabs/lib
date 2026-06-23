@@ -1,4 +1,5 @@
 use super::*;
+use crate::{RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider};
 use radroots_core::{
     RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
     RadrootsCoreQuantityPrice, RadrootsCoreUnit,
@@ -10,6 +11,7 @@ use radroots_events::{
     listing::{RadrootsListingBin, RadrootsListingProduct},
     resource_area::RadrootsResourceAreaRef,
 };
+use radroots_nostr::prelude::RadrootsNostrKeys;
 
 #[path = "../support/fixture_signer.rs"]
 mod fixture_signer;
@@ -32,11 +34,15 @@ fn actor() -> RadrootsActorContext {
 }
 
 fn listing(d_tag: &str, title: &str) -> RadrootsListing {
+    listing_for_seller(SELLER, d_tag, title)
+}
+
+fn listing_for_seller(seller: &str, d_tag: &str, title: &str) -> RadrootsListing {
     RadrootsListing {
         d_tag: RadrootsDTag::parse(d_tag).expect("d tag"),
         published_at: None,
         farm: RadrootsFarmRef {
-            pubkey: SELLER.to_owned(),
+            pubkey: seller.to_owned(),
             d_tag: FARM_D_TAG.to_owned(),
         },
         product: RadrootsListingProduct {
@@ -225,7 +231,7 @@ async fn listing_enqueue_publish_reports_prepare_errors_before_signing() {
         .expect("sdk");
     let error = sdk
         .listings()
-        .enqueue_publish(
+        .enqueue_publish_with_explicit_signer(
             ListingEnqueuePublishRequest::new(
                 actor(),
                 listing(LISTING_A_D_TAG, "Future Enqueue Greens"),
@@ -254,7 +260,7 @@ async fn listing_client_enqueue_methods_cover_source_attached_workflow_paths() {
     let actor = actor();
     let receipt = sdk
         .listings()
-        .enqueue_publish(
+        .enqueue_publish_with_explicit_signer(
             ListingEnqueuePublishRequest::new(
                 actor.clone(),
                 listing(LISTING_A_D_TAG, "Enqueued Greens"),
@@ -279,7 +285,7 @@ async fn listing_client_enqueue_methods_cover_source_attached_workflow_paths() {
         .expect("prepared listing");
     let prepared = sdk
         .listings()
-        .enqueue_prepared_publish(
+        .enqueue_prepared_publish_with_explicit_signer(
             &actor,
             plan,
             SdkRelayTargetPolicy::try_explicit([RELAY_B], SdkRelayUrlPolicy::Public)
@@ -291,4 +297,38 @@ async fn listing_client_enqueue_methods_cover_source_attached_workflow_paths() {
         .expect("enqueue prepared listing");
     assert_eq!(prepared.signed_event_id, prepared.expected_event_id);
     assert_eq!(prepared.local_event_seq, 2);
+}
+
+#[tokio::test]
+async fn listing_configured_local_signer_enqueues_publish_without_explicit_signer() {
+    let keys = RadrootsNostrKeys::generate();
+    let seller = keys.public_key().to_hex();
+    let sdk = crate::RadrootsSdk::builder()
+        .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_500))
+        .signer_provider(RadrootsSdkSignerProvider::LocalKey(
+            RadrootsSdkLocalKeySigner::new(keys).expect("signer"),
+        ))
+        .build()
+        .await
+        .expect("sdk");
+    let actor =
+        RadrootsActorContext::test(seller.as_str(), [RadrootsActorRole::Seller]).expect("actor");
+
+    let receipt = sdk
+        .listings()
+        .enqueue_publish(
+            ListingEnqueuePublishRequest::new(
+                actor,
+                listing_for_seller(seller.as_str(), LISTING_C_D_TAG, "Configured Greens"),
+                SdkRelayTargetPolicy::try_explicit([RELAY_A], SdkRelayUrlPolicy::Public)
+                    .expect("target relays"),
+            )
+            .try_with_idempotency_key("listing-configured-local")
+            .expect("idempotency"),
+        )
+        .await
+        .expect("enqueue listing");
+
+    assert_eq!(receipt.signed_event_id, receipt.expected_event_id);
+    assert_eq!(receipt.state, SdkMutationState::StoredAndQueued);
 }

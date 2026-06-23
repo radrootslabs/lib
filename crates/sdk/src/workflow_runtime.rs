@@ -1,3 +1,5 @@
+#[cfg(feature = "signer-adapters")]
+use crate::RadrootsSdkSignRequest;
 use crate::{
     RadrootsSdk, RadrootsSdkError, SdkIdempotencyKey, SdkRelayTargetPolicy, SdkRelayTargetSet,
     runtime::sdk_now_ms,
@@ -36,6 +38,32 @@ pub(crate) async fn enqueue_signed_workflow(
 ) -> Result<SdkWorkflowEnqueueReceipt, RadrootsSdkError> {
     let target_relays = resolved_target_relays(sdk, &request.target_relays)?;
     let signed_event = sign_authorized_draft(request.actor, signer, request.frozen_draft)?;
+    enqueue_signed_workflow_event(sdk, request, signed_event, target_relays).await
+}
+
+#[cfg(feature = "signer-adapters")]
+pub(crate) async fn enqueue_configured_signed_workflow(
+    sdk: &RadrootsSdk,
+    request: SdkWorkflowEnqueueRequest<'_>,
+) -> Result<SdkWorkflowEnqueueReceipt, RadrootsSdkError> {
+    let target_relays = resolved_target_relays(sdk, &request.target_relays)?;
+    let signed_event = sdk
+        .sign_with_configured_signer(RadrootsSdkSignRequest::new(
+            request.operation_kind,
+            request.actor,
+            request.frozen_draft,
+        ))
+        .await?
+        .signed_event;
+    enqueue_signed_workflow_event(sdk, request, signed_event, target_relays).await
+}
+
+async fn enqueue_signed_workflow_event(
+    sdk: &RadrootsSdk,
+    request: SdkWorkflowEnqueueRequest<'_>,
+    signed_event: RadrootsSignedNostrEvent,
+    target_relays: SdkResolvedRelayTargets,
+) -> Result<SdkWorkflowEnqueueReceipt, RadrootsSdkError> {
     let idempotency_key = match request.idempotency_key {
         Some(idempotency_key) => idempotency_key,
         None => SdkIdempotencyKey::derive(

@@ -84,9 +84,8 @@ local-runtime = [
   "serde",
   "serde_json",
   "runtime",
-  "local-signer",
+  "signer-adapters",
   "relay-runtime",
-  "signing",
   "relay-client",
 ]
 local-runtime-radrootsd-proxy = [
@@ -94,8 +93,7 @@ local-runtime-radrootsd-proxy = [
   "serde",
   "serde_json",
   "runtime",
-  "local-signer",
-  "signing",
+  "signer-adapters",
   "radrootsd-proxy",
 ]
 
@@ -140,7 +138,12 @@ required-features = ["runtime"]
 [[example]]
 name = "sdk_v1_local_enqueue_and_mock_sync"
 path = "examples/sdk_v1_local_enqueue_and_mock_sync.rs"
-required-features = ["runtime", "local-signer"]
+required-features = ["runtime", "signer-adapters"]
+
+[[example]]
+name = "sdk_v1_myc_nip46_signer_setup"
+path = "examples/sdk_v1_myc_nip46_signer_setup.rs"
+required-features = ["runtime", "signer-adapters"]
 
 [[example]]
 name = "runtime_local"

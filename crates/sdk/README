@@ -3,7 +3,7 @@
 Curated Rad Roots Rust SDK for local-first Rad Roots product workflows.
 
 The SDK v1 product runtime is centered on `RadrootsSdk::builder()`,
-`sdk.listings()`, `sdk.sync()`, and `sdk.orders()`.
+`sdk.farms()`, `sdk.listings()`, `sdk.orders()`, and `sdk.sync()`.
 
 `RadrootsSdk::builder()` defaults to memory storage, the system clock, no relay
 URLs, and no production network publishing. Directory storage is opt-in and
@@ -11,13 +11,26 @@ creates `event_store.sqlite` and `outbox.sqlite` in the selected directory.
 Configured relay URLs are also opt-in enqueue defaults used when a publish
 request chooses `SdkRelayTargetPolicy::UseConfiguredRelays`.
 
+When `signer-adapters` is enabled, `RadrootsSdk::builder()` accepts a configured
+`RadrootsSdkSignerProvider`. The production signing modes are `local_key` and
+`myc_nip46`. Product enqueue methods use that configured provider, so callers do
+not pass signing internals through every farm, listing, or order write call.
+`signer_status()`, `configured_signer()`, and
+`sign_with_configured_signer(...)` expose the typed SDK signer boundary.
+
 `sdk.listings().prepare_publish(...)` is side-effect-free and returns a typed
-`ListingPublishPlan`. `sdk.listings().enqueue_prepared_publish(...)` signs that
-prepared plan, ingests it into the local event store, queues signed outbox work,
-and returns a typed `ListingEnqueueReceipt`. `sdk.listings().enqueue_publish(...)`
-is the convenience path that prepares once and delegates to
-`enqueue_prepared_publish(...)`. The enqueue path uses typed relay target and
+`ListingPublishPlan`. With a configured signer,
+`sdk.listings().enqueue_prepared_publish(...)` signs that prepared plan, ingests
+it into the local event store, queues signed outbox work, and returns a typed
+`ListingEnqueueReceipt`. `sdk.listings().enqueue_publish(...)` is the
+convenience path that prepares once and delegates to
+`enqueue_prepared_publish(...)`. Farm and order write methods follow the same
+configured signer pattern. The enqueue path uses typed relay target and
 idempotency inputs; omitted idempotency keys are derived deterministically.
+
+Explicit signer injection remains available under `*_with_explicit_signer`
+method names for controlled adapter-level tests and advanced integration
+checks. Those methods are not the primary product API.
 
 Event `created_at` and local observation time are separate contracts. The event
 timestamp remains the authored Nostr event timestamp, while event-store and
@@ -28,19 +41,25 @@ receipts report mutation state with the product names `StoredAndQueued` and
 `sdk.sync().push_outbox(...)` is the product sync entrypoint. It publishes queued
 signed outbox work when `relay-runtime` is enabled. Push time uses the relay
 targets already stored on each queued outbox event, so already queued work does
-not require configured builder relays. `push_outbox_with_adapter(...)` remains
-available for tests and controlled adapter-level substrate checks.
-`radrootsd-proxy` adds the Radrootsd Publish Proxy transport for daemon-resolved
-publishing through `publish.event`.
+not require configured builder relays. Direct relay publishing and the
+`radrootsd-proxy` Publish Proxy transport consume signed outbox events; neither
+transport owns signing. `push_outbox_with_adapter(...)` remains available for
+tests and controlled adapter-level substrate checks. `radrootsd-proxy` adds
+daemon-resolved publishing through `publish.event`.
 
 The `local-runtime` feature is the curated feature bundle for local product
 runtime consumers. It enables `std`, `serde`, `serde_json`, `runtime`,
-`local-signer`, `relay-runtime`, `signing`, and `relay-client`. `relay-client`
-is retained in this bundle only for current direct relay publish callers that
-have not migrated to the product runtime yet; it is classified for removal once
-those callers are SDK-runtime backed. `local-runtime` does not enable
-`radrootsd-proxy`; use `local-runtime-radrootsd-proxy` when the runtime should
-publish through Radrootsd instead of a direct relay transport.
+`signer-adapters`, `relay-runtime`, and `relay-client`. `signer-adapters`
+contains the SDK `local_key` and `myc_nip46` signing surface. `relay-client` is
+retained in this bundle only for direct relay publish callers. `local-runtime`
+does not enable `radrootsd-proxy`; use `local-runtime-radrootsd-proxy` when the
+runtime should publish through Radrootsd instead of a direct relay transport.
+Both bundles use the same configured signer provider API.
+
+`radroots_sdk_myc_nip46_product_permissions()` and
+`radroots_sdk_myc_nip46_product_permission_strings()` expose the SDK product
+NIP-46 `sign_event:<kind>` permission set for Myc connection setup. The set is
+derived from the farm, listing, and order event kinds the SDK can write.
 
 Relay URL policy is explicit. Public relay URLs must use `wss://`. Local
 development `ws://` relay URLs are accepted only under `SdkRelayUrlPolicy::Localhost`
@@ -61,8 +80,6 @@ explicit modules:
 - `protocol::listing`
 - `protocol::order`
 - `protocol::identity` when `identity-models` is enabled
-- `client`
-- `config`
 - `adapters`
 
 Product runtime callers do not need `WireEventParts`. Wire helpers are exposed
@@ -74,15 +91,18 @@ Compile the SDK v1 product examples with:
 
 ```bash
 cargo check -p radroots_sdk --example sdk_v1_listing_prepare --features runtime
-cargo check -p radroots_sdk --example sdk_v1_local_enqueue_and_mock_sync --features runtime,local-signer
+cargo check -p radroots_sdk --example sdk_v1_local_enqueue_and_mock_sync --features runtime,signer-adapters
+cargo check -p radroots_sdk --example sdk_v1_myc_nip46_signer_setup --features runtime,signer-adapters
 ```
 
 `sdk_v1_listing_prepare` shows `RadrootsSdk::builder()`,
 `ListingPreparePublishRequest`, and `ListingPublishPlan`.
 `sdk_v1_local_enqueue_and_mock_sync` shows localhost relay target selection,
-prepared listing enqueue, `push_outbox_with_adapter(...)` with a mock relay
-adapter, and `OrderStatusRequest`. The examples stay on product APIs and do not
-use `WireEventParts`.
+configured local-key signing, prepared listing enqueue,
+`push_outbox_with_adapter(...)` with a mock relay adapter, and
+`OrderStatusRequest`. `sdk_v1_myc_nip46_signer_setup` shows Myc NIP-46 signer
+provider setup and product permission derivation at the SDK boundary. The
+examples stay on product APIs and do not use `WireEventParts`.
 
 SDK v1 does not claim strict NIP-99 Markdown-content interoperability. It emits
 and consumes Rad Roots v1 listing and trade event contracts.
@@ -93,7 +113,7 @@ Optional advanced substrate is explicitly feature-scoped:
 - `identity-storage`: encrypted identity-file helpers
 - `signing`: Nostr builder and local signing adapters
 - `relay-client`: relay client and publish adapters
-- `signer-adapters`: NIP-46 and signer-session primitives
+- `signer-adapters`: SDK local-key and Myc NIP-46 signer providers
 
 The crate is licensed as `MIT OR Apache-2.0`. Its manifest is configured for a
 future crates.io release, but a public release still requires the full SDK check

@@ -251,7 +251,7 @@ async fn enqueue_publish_stores_event_and_queues_signed_outbox_without_publish()
         .expect("prepared");
     let receipt = sdk
         .listings()
-        .enqueue_publish(request, &FixtureSigner::new(SELLER))
+        .enqueue_publish_with_explicit_signer(request, &FixtureSigner::new(SELLER))
         .await
         .expect("enqueue");
 
@@ -300,7 +300,7 @@ async fn enqueue_publish_use_configured_relays_rejects_empty_builder_relays() {
 
     let error = sdk
         .listings()
-        .enqueue_publish(request, &FixtureSigner::new(SELLER))
+        .enqueue_publish_with_explicit_signer(request, &FixtureSigner::new(SELLER))
         .await
         .expect_err("empty configured relays");
 
@@ -324,7 +324,7 @@ async fn prepare_then_enqueue_prepared_uses_same_event_id() {
         .expect("prepared");
     let receipt = sdk
         .listings()
-        .enqueue_prepared_publish(
+        .enqueue_prepared_publish_with_explicit_signer(
             &actor,
             prepared.clone(),
             SdkRelayTargetPolicy::UseConfiguredRelays,
@@ -372,7 +372,7 @@ async fn enqueue_receipt_debug_omits_signed_event_payload_material() {
     .expect("idempotency key");
     let receipt = sdk
         .listings()
-        .enqueue_publish(request, &FixtureSigner::new(SELLER))
+        .enqueue_publish_with_explicit_signer(request, &FixtureSigner::new(SELLER))
         .await
         .expect("enqueue");
     let debug = format!("{receipt:?}");
@@ -463,7 +463,7 @@ async fn listing_runtime_dtos_serialize_deterministically() {
 
     let receipt = sdk
         .listings()
-        .enqueue_publish(enqueue_request, &FixtureSigner::new(SELLER))
+        .enqueue_publish_with_explicit_signer(enqueue_request, &FixtureSigner::new(SELLER))
         .await
         .expect("enqueue");
     let receipt_json = serde_json::to_value(&receipt).expect("receipt json");
@@ -486,7 +486,7 @@ async fn enqueue_publish_convenience_matches_prepare_plus_enqueue_prepared() {
         .expect("prepared plan");
     let prepared_receipt = prepared_sdk
         .listings()
-        .enqueue_prepared_publish(
+        .enqueue_prepared_publish_with_explicit_signer(
             &prepared_actor,
             prepared_plan,
             SdkRelayTargetPolicy::UseConfiguredRelays,
@@ -504,7 +504,7 @@ async fn enqueue_publish_convenience_matches_prepare_plus_enqueue_prepared() {
     );
     let convenience_receipt = convenience_sdk
         .listings()
-        .enqueue_publish(convenience_request, &FixtureSigner::new(SELLER))
+        .enqueue_publish_with_explicit_signer(convenience_request, &FixtureSigner::new(SELLER))
         .await
         .expect("convenience enqueue");
 
@@ -523,7 +523,7 @@ async fn enqueue_prepared_publish_returns_structured_actor_errors() {
         .expect("prepared");
     let error = sdk
         .listings()
-        .enqueue_prepared_publish(
+        .enqueue_prepared_publish_with_explicit_signer(
             &non_seller_actor(),
             prepared,
             SdkRelayTargetPolicy::UseConfiguredRelays,
@@ -549,7 +549,7 @@ async fn enqueue_prepared_publish_returns_sanitized_signer_errors() {
         .expect("prepared");
     let error = sdk
         .listings()
-        .enqueue_prepared_publish(
+        .enqueue_prepared_publish_with_explicit_signer(
             &actor,
             prepared,
             SdkRelayTargetPolicy::UseConfiguredRelays,
@@ -582,7 +582,7 @@ async fn explicit_historical_created_at_does_not_backdate_observed_at_ms() {
 
     let receipt = sdk
         .listings()
-        .enqueue_publish(request, &FixtureSigner::new(SELLER))
+        .enqueue_publish_with_explicit_signer(request, &FixtureSigner::new(SELLER))
         .await
         .expect("enqueue");
 
@@ -626,7 +626,7 @@ async fn enqueue_publish_returns_sanitized_signer_errors() {
     );
     let error = sdk
         .listings()
-        .enqueue_publish(request, &FixtureSigner::new(OTHER))
+        .enqueue_publish_with_explicit_signer(request, &FixtureSigner::new(OTHER))
         .await
         .expect_err("signer error");
     let message = error.to_string();
@@ -650,7 +650,7 @@ async fn enqueue_publish_reports_partial_local_mutation_after_outbox_conflict() 
     .try_with_idempotency_key("idem-d")
     .expect("idempotency key");
     sdk.listings()
-        .enqueue_publish(first, &FixtureSigner::new(SELLER))
+        .enqueue_publish_with_explicit_signer(first, &FixtureSigner::new(SELLER))
         .await
         .expect("first enqueue");
 
@@ -663,7 +663,7 @@ async fn enqueue_publish_reports_partial_local_mutation_after_outbox_conflict() 
     .expect("idempotency key");
     let error = sdk
         .listings()
-        .enqueue_publish(second, &FixtureSigner::new(SELLER))
+        .enqueue_publish_with_explicit_signer(second, &FixtureSigner::new(SELLER))
         .await
         .expect_err("partial");
 
@@ -702,12 +702,12 @@ async fn enqueue_publish_derives_order_independent_idempotency_key() {
 
     let first_receipt = sdk
         .listings()
-        .enqueue_publish(first, &FixtureSigner::new(SELLER))
+        .enqueue_publish_with_explicit_signer(first, &FixtureSigner::new(SELLER))
         .await
         .expect("first enqueue");
     let second_receipt = sdk
         .listings()
-        .enqueue_publish(second, &FixtureSigner::new(SELLER))
+        .enqueue_publish_with_explicit_signer(second, &FixtureSigner::new(SELLER))
         .await
         .expect("second enqueue");
 
