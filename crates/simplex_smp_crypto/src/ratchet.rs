@@ -403,7 +403,6 @@ impl RadrootsSimplexSmpRatchetState {
         )?;
         self.official_sending_chain_key = Some(chain.chain_key);
         self.sending_chain_length = self.sending_chain_length.saturating_add(1);
-        self.pending_outbound_pq_ciphertext = None;
         encode_official_encrypted_message(
             RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION,
             &RadrootsSimplexOfficialEncryptedMessage {
@@ -867,7 +866,8 @@ mod tests {
     use super::*;
     use crate::official_ratchet::{
         RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION, RADROOTS_SIMPLEX_OFFICIAL_E2E_KDF_VERSION,
-        RadrootsSimplexOfficialX3dhParams, official_sntrup761_keypair_from_seed,
+        RadrootsSimplexOfficialX3dhParams, decode_official_encrypted_header,
+        decode_official_encrypted_message, official_sntrup761_keypair_from_seed,
         official_x3dh_receiver_init, official_x3dh_receiver_init_accepting_pq,
         official_x3dh_sender_init, official_x3dh_sender_init_accepting_pq,
         official_x448_keypair_from_seed,
@@ -1172,6 +1172,39 @@ mod tests {
         assert_eq!(reply_plaintext, b"pq reply");
         assert!(sender.pending_outbound_pq_ciphertext.is_some());
         assert!(sender.local_pq_private_key.is_some());
+    }
+
+    #[test]
+    fn retains_accepted_pq_ciphertext_across_same_sending_chain_headers() {
+        let (mut sender, _) = official_pq_sender_receiver_ratchets();
+        let shared_secret = [22_u8; RADROOTS_SIMPLEX_SMP_SHARED_SECRET_LENGTH];
+        let header_key = sender.official_sending_header_key.clone().unwrap();
+        let ratchet_ad = sender.official_associated_data.clone().unwrap();
+        let first = sender
+            .encrypt_official_payload(&shared_secret, b"pq first", 96)
+            .unwrap();
+        let second = sender
+            .encrypt_official_payload(&shared_secret, b"pq second", 96)
+            .unwrap();
+
+        let first_message = decode_official_encrypted_message(&first).unwrap();
+        let first_header = decrypt_official_header_with_key(
+            &decode_official_encrypted_header(&first_message.encrypted_header).unwrap(),
+            &header_key,
+            &ratchet_ad,
+        )
+        .unwrap();
+        let second_message = decode_official_encrypted_message(&second).unwrap();
+        let second_header = decrypt_official_header_with_key(
+            &decode_official_encrypted_header(&second_message.encrypted_header).unwrap(),
+            &header_key,
+            &ratchet_ad,
+        )
+        .unwrap();
+
+        assert!(first_header.pq_ciphertext.is_some());
+        assert_eq!(first_header.pq_ciphertext, second_header.pq_ciphertext);
+        assert_eq!(second_header.message_number, 1);
     }
 
     #[test]
