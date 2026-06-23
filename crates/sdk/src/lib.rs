@@ -36,6 +36,8 @@ pub mod protocol;
 mod relay_targets;
 #[cfg(feature = "runtime")]
 mod runtime;
+#[cfg(all(feature = "runtime", feature = "signer-adapters"))]
+mod signer_provider;
 #[cfg(feature = "runtime")]
 mod sync_runtime;
 #[cfg(feature = "runtime")]
@@ -91,6 +93,14 @@ pub use crate::runtime::{
     SdkBackupManifestKind, SdkBackupState, SdkBackupVerification, SdkEventStoreStorageStatus,
     SdkOutboxStorageStatus, SdkPublishTransport, SdkRestoreState, SdkSqliteStoreStatus,
     SdkStorageKind, StorageStatusReceipt, StorageStatusRequest,
+};
+#[cfg(all(feature = "runtime", feature = "signer-adapters"))]
+pub use crate::signer_provider::{
+    RadrootsSdkLocalKeySigner, RadrootsSdkMycNip46Signer, RadrootsSdkNip46Transport,
+    RadrootsSdkNip46TransportFuture, RadrootsSdkSignReceipt, RadrootsSdkSignRequest,
+    RadrootsSdkSignerCapability, RadrootsSdkSignerMode, RadrootsSdkSignerProgress,
+    RadrootsSdkSignerProgressSink, RadrootsSdkSignerProvider, RadrootsSdkSignerState,
+    RadrootsSdkSignerStatus,
 };
 #[cfg(feature = "runtime")]
 pub use crate::sync_runtime::{

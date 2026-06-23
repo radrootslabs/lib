@@ -10,10 +10,10 @@ use radroots_event_store::RadrootsEventStoreStatusSummary;
 use radroots_events::ids::RadrootsEventId;
 #[cfg(all(feature = "runtime", feature = "relay-runtime"))]
 use radroots_nostr::prelude::RadrootsNostrClient;
+#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
+use radroots_outbox::RadrootsOutboxClaimedEvent;
 #[cfg(feature = "runtime")]
-use radroots_outbox::{
-    RadrootsOutboxClaimedEvent, RadrootsOutboxEventState, RadrootsOutboxStatusSummary,
-};
+use radroots_outbox::{RadrootsOutboxEventState, RadrootsOutboxStatusSummary};
 #[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
 use radroots_publish_proxy_protocol::PublishDeliveryPolicy;
 #[cfg(all(feature = "runtime", feature = "relay-runtime"))]

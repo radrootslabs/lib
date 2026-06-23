@@ -3,6 +3,11 @@ use crate::{
     FarmsClient, ListingsClient, OrdersClient, RadrootsSdkError, SdkRelayTargetSet,
     SdkRelayUrlPolicy, SyncClient,
 };
+#[cfg(all(feature = "runtime", feature = "signer-adapters"))]
+use crate::{
+    RadrootsSdkSignReceipt, RadrootsSdkSignRequest, RadrootsSdkSignerProvider,
+    RadrootsSdkSignerStatus,
+};
 #[cfg(feature = "runtime")]
 use radroots_event_store::RadrootsEventStore;
 #[cfg(feature = "runtime")]
@@ -384,13 +389,15 @@ pub struct RestoreReceipt {
 }
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct RadrootsSdkBuilder {
     storage: RadrootsSdkStorageConfig,
     clock: RadrootsSdkClock,
     relay_urls: Vec<String>,
     relay_url_policy: SdkRelayUrlPolicy,
     publish_transport: SdkPublishTransport,
+    #[cfg(feature = "signer-adapters")]
+    signer_provider: Option<RadrootsSdkSignerProvider>,
 }
 
 #[cfg(feature = "runtime")]
@@ -402,6 +409,8 @@ impl Default for RadrootsSdkBuilder {
             relay_urls: Vec::new(),
             relay_url_policy: SdkRelayUrlPolicy::Public,
             publish_transport: SdkPublishTransport::DirectNostrRelay,
+            #[cfg(feature = "signer-adapters")]
+            signer_provider: None,
         }
     }
 }
@@ -443,6 +452,12 @@ impl RadrootsSdkBuilder {
         self
     }
 
+    #[cfg(feature = "signer-adapters")]
+    pub fn signer_provider(mut self, signer_provider: RadrootsSdkSignerProvider) -> Self {
+        self.signer_provider = Some(signer_provider);
+        self
+    }
+
     pub async fn build(self) -> Result<RadrootsSdk, RadrootsSdkError> {
         let storage = open_storage(&self.storage).await?;
         let relay_urls =
@@ -454,6 +469,8 @@ impl RadrootsSdkBuilder {
             clock: self.clock,
             relay_urls,
             publish_transport: self.publish_transport,
+            #[cfg(feature = "signer-adapters")]
+            signer_provider: self.signer_provider,
         })
     }
 }
@@ -467,6 +484,8 @@ pub struct RadrootsSdk {
     clock: RadrootsSdkClock,
     relay_urls: Vec<String>,
     publish_transport: SdkPublishTransport,
+    #[cfg(feature = "signer-adapters")]
+    signer_provider: Option<RadrootsSdkSignerProvider>,
 }
 
 #[cfg(feature = "runtime")]
@@ -501,6 +520,33 @@ impl RadrootsSdk {
 
     pub fn publish_transport(&self) -> &SdkPublishTransport {
         &self.publish_transport
+    }
+
+    #[cfg(feature = "signer-adapters")]
+    pub fn configured_signer(&self) -> Option<&RadrootsSdkSignerProvider> {
+        self.signer_provider.as_ref()
+    }
+
+    #[cfg(feature = "signer-adapters")]
+    pub fn signer_status(&self) -> Option<RadrootsSdkSignerStatus> {
+        self.signer_provider
+            .as_ref()
+            .map(RadrootsSdkSignerProvider::status)
+    }
+
+    #[cfg(feature = "signer-adapters")]
+    pub async fn sign_with_configured_signer(
+        &self,
+        request: RadrootsSdkSignRequest<'_>,
+    ) -> Result<RadrootsSdkSignReceipt, RadrootsSdkError> {
+        let signer =
+            self.signer_provider
+                .as_ref()
+                .ok_or_else(|| RadrootsSdkError::SignerUnavailable {
+                    mode: "configured".to_owned(),
+                    reason: "no SDK signer provider is configured".to_owned(),
+                })?;
+        signer.sign(request).await
     }
 
     pub fn storage_paths(&self) -> Option<&RadrootsSdkStoragePaths> {

@@ -131,6 +131,8 @@ async fn open_storage_and_storage_kind_cover_memory_directory_and_file_failures(
         clock: RadrootsSdkClock::Fixed(RadrootsSdkTimestamp::from_unix_seconds(1)),
         relay_urls: Vec::new(),
         publish_transport: SdkPublishTransport::DirectNostrRelay,
+        #[cfg(feature = "signer-adapters")]
+        signer_provider: None,
     };
     assert_eq!(memory_sdk.storage_kind(), SdkStorageKind::Memory);
 
@@ -149,6 +151,8 @@ async fn open_storage_and_storage_kind_cover_memory_directory_and_file_failures(
         clock: RadrootsSdkClock::Fixed(RadrootsSdkTimestamp::from_unix_seconds(1)),
         relay_urls: Vec::new(),
         publish_transport: SdkPublishTransport::DirectNostrRelay,
+        #[cfg(feature = "signer-adapters")]
+        signer_provider: None,
     };
     assert_eq!(directory_sdk.storage_kind(), SdkStorageKind::Directory);
 

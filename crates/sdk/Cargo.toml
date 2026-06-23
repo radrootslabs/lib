@@ -44,10 +44,12 @@ radrootsd-proxy = [
 ]
 signer-adapters = [
   "identity-models",
+  "local-signer",
   "signing",
   "std",
   "dep:radroots_nostr_connect",
   "dep:radroots_nostr_signer",
+  "radroots_nostr/events",
 ]
 runtime = [
   "std",

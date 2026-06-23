@@ -28,8 +28,10 @@ pub enum RadrootsSdkRecoveryAction {
     InspectLocalStores,
     RetryOperationWithSameIdempotencyKey,
     ConfigureRelayTargets,
+    ConfigureSigner,
     FixRequest,
     SelectAuthorizedActor,
+    CompleteSignerAuthentication,
     RetryAfterTransportFailure,
     EnableRequiredFeature,
 }
@@ -75,6 +77,33 @@ pub enum RadrootsSdkError {
         operation: String,
         expected_pubkey_prefix: String,
         signer_pubkey_prefix: String,
+    },
+    SignerUnavailable {
+        mode: String,
+        reason: String,
+    },
+    SignerRequestRejected {
+        mode: String,
+        reason: String,
+    },
+    SignerRequestTimedOut {
+        mode: String,
+    },
+    SignerAuthChallengePending {
+        mode: String,
+        auth_url: Option<String>,
+    },
+    SignerTransport {
+        mode: String,
+        reason: String,
+    },
+    SignerProtocol {
+        mode: String,
+        reason: String,
+    },
+    SignerReturnedEventDrift {
+        operation: String,
+        reason: String,
     },
     EmptyTargetRelays {
         operation: String,
@@ -145,6 +174,13 @@ impl RadrootsSdkError {
             Self::TimestampOutOfRange { .. } => "timestamp_out_of_range",
             Self::UnauthorizedActor { .. } => "unauthorized_actor",
             Self::SignerPubkeyMismatch { .. } => "signer_pubkey_mismatch",
+            Self::SignerUnavailable { .. } => "signer_unavailable",
+            Self::SignerRequestRejected { .. } => "signer_request_rejected",
+            Self::SignerRequestTimedOut { .. } => "signer_request_timed_out",
+            Self::SignerAuthChallengePending { .. } => "signer_auth_challenge_pending",
+            Self::SignerTransport { .. } => "signer_transport",
+            Self::SignerProtocol { .. } => "signer_protocol",
+            Self::SignerReturnedEventDrift { .. } => "signer_returned_event_drift",
             Self::EmptyTargetRelays { .. } => "empty_target_relays",
             Self::RelayTargetLimitExceeded { .. } => "relay_target_limit_exceeded",
             Self::InvalidRelayUrl { .. } => "invalid_relay_url",
@@ -176,20 +212,26 @@ impl RadrootsSdkError {
             }
             Self::UnauthorizedActor { .. }
             | Self::SignerPubkeyMismatch { .. }
+            | Self::SignerRequestRejected { .. }
+            | Self::SignerReturnedEventDrift { .. }
             | Self::Authority { .. } => RadrootsSdkErrorClass::Authorization,
+            Self::SignerUnavailable { .. } => RadrootsSdkErrorClass::Configuration,
             Self::EmptyTargetRelays { .. }
             | Self::RelayTargetLimitExceeded { .. }
             | Self::InvalidRelayUrl { .. } => RadrootsSdkErrorClass::Configuration,
             Self::IdempotencyConflict { .. }
             | Self::OrderStatusLimitInvalid { .. }
             | Self::InvalidOrderId { .. }
+            | Self::SignerProtocol { .. }
+            | Self::SignerAuthChallengePending { .. }
             | Self::InvalidRequest { .. }
             | Self::ListingDraft { .. }
             | Self::ListingMutation { .. } => RadrootsSdkErrorClass::Request,
             Self::ProductSyncUnsupported { .. } => RadrootsSdkErrorClass::Unsupported,
-            Self::ProductSyncRelaySetupFailure { .. } | Self::RelayTransport { .. } => {
-                RadrootsSdkErrorClass::Transport
-            }
+            Self::ProductSyncRelaySetupFailure { .. }
+            | Self::RelayTransport { .. }
+            | Self::SignerRequestTimedOut { .. }
+            | Self::SignerTransport { .. } => RadrootsSdkErrorClass::Transport,
             Self::PartialLocalMutation(_) => RadrootsSdkErrorClass::LocalMutation,
         }
     }
@@ -202,6 +244,8 @@ impl RadrootsSdkError {
                 | Self::EventStore { .. }
                 | Self::Outbox { .. }
                 | Self::RelayTransport { .. }
+                | Self::SignerRequestTimedOut { .. }
+                | Self::SignerTransport { .. }
                 | Self::Projection { .. }
                 | Self::PartialLocalMutation(_)
         )
@@ -215,7 +259,10 @@ impl RadrootsSdkError {
             | Self::Projection { .. } => vec![RadrootsSdkRecoveryAction::InspectLocalStores],
             Self::UnauthorizedActor { .. }
             | Self::SignerPubkeyMismatch { .. }
+            | Self::SignerRequestRejected { .. }
+            | Self::SignerReturnedEventDrift { .. }
             | Self::Authority { .. } => vec![RadrootsSdkRecoveryAction::SelectAuthorizedActor],
+            Self::SignerUnavailable { .. } => vec![RadrootsSdkRecoveryAction::ConfigureSigner],
             Self::EmptyTargetRelays { .. }
             | Self::RelayTargetLimitExceeded { .. }
             | Self::InvalidRelayUrl { .. } => {
@@ -230,11 +277,18 @@ impl RadrootsSdkError {
             Self::ProductSyncRelaySetupFailure { .. } | Self::RelayTransport { .. } => {
                 vec![RadrootsSdkRecoveryAction::RetryAfterTransportFailure]
             }
+            Self::SignerRequestTimedOut { .. } | Self::SignerTransport { .. } => {
+                vec![RadrootsSdkRecoveryAction::RetryAfterTransportFailure]
+            }
+            Self::SignerAuthChallengePending { .. } => {
+                vec![RadrootsSdkRecoveryAction::CompleteSignerAuthentication]
+            }
             Self::PartialLocalMutation(error) => vec![error.recovery],
             Self::ClockBeforeUnixEpoch
             | Self::TimestampOutOfRange { .. }
             | Self::OrderStatusLimitInvalid { .. }
             | Self::InvalidOrderId { .. }
+            | Self::SignerProtocol { .. }
             | Self::InvalidRequest { .. }
             | Self::ListingDraft { .. }
             | Self::ListingMutation { .. } => vec![RadrootsSdkRecoveryAction::FixRequest],
@@ -260,6 +314,19 @@ impl RadrootsSdkError {
                 "expected_pubkey_prefix": expected_pubkey_prefix,
                 "signer_pubkey_prefix": signer_pubkey_prefix
             }),
+            Self::SignerUnavailable { mode, reason }
+            | Self::SignerRequestRejected { mode, reason }
+            | Self::SignerTransport { mode, reason }
+            | Self::SignerProtocol { mode, reason } => {
+                json!({ "mode": mode, "reason": reason })
+            }
+            Self::SignerRequestTimedOut { mode } => json!({ "mode": mode }),
+            Self::SignerAuthChallengePending { mode, auth_url } => {
+                json!({ "mode": mode, "auth_url": auth_url })
+            }
+            Self::SignerReturnedEventDrift { operation, reason } => {
+                json!({ "operation": operation, "reason": reason })
+            }
             Self::EmptyTargetRelays { operation } => json!({ "operation": operation }),
             Self::RelayTargetLimitExceeded { max, actual } => {
                 json!({ "max": max, "actual": actual })
@@ -397,6 +464,33 @@ impl fmt::Display for RadrootsSdkError {
                 f,
                 "sdk signer pubkey mismatch for {operation}: expected_pubkey_prefix={expected_pubkey_prefix}, signer_pubkey_prefix={signer_pubkey_prefix}"
             ),
+            Self::SignerUnavailable { mode, reason } => {
+                write!(f, "sdk {mode} signer unavailable: {reason}")
+            }
+            Self::SignerRequestRejected { mode, reason } => {
+                write!(f, "sdk {mode} signer rejected request: {reason}")
+            }
+            Self::SignerRequestTimedOut { mode } => {
+                write!(f, "sdk {mode} signer request timed out")
+            }
+            Self::SignerAuthChallengePending { mode, auth_url } => match auth_url {
+                Some(auth_url) => {
+                    write!(f, "sdk {mode} signer requires authentication at {auth_url}")
+                }
+                None => write!(f, "sdk {mode} signer requires authentication"),
+            },
+            Self::SignerTransport { mode, reason } => {
+                write!(f, "sdk {mode} signer transport error: {reason}")
+            }
+            Self::SignerProtocol { mode, reason } => {
+                write!(f, "sdk {mode} signer protocol error: {reason}")
+            }
+            Self::SignerReturnedEventDrift { operation, reason } => {
+                write!(
+                    f,
+                    "sdk signer returned event drift for {operation}: {reason}"
+                )
+            }
             Self::EmptyTargetRelays { operation } => {
                 write!(f, "sdk empty target relays for {operation}")
             }
