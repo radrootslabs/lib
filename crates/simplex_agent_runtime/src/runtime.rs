@@ -14,7 +14,8 @@ use radroots_simplex_agent_proto::prelude::{
     RadrootsSimplexAgentMessage, RadrootsSimplexAgentMessageFrame,
     RadrootsSimplexAgentMessageHeader, RadrootsSimplexAgentMessageReceipt,
     RadrootsSimplexAgentQueueAddress, RadrootsSimplexAgentQueueDescriptor,
-    RadrootsSimplexAgentShortLinkScheme, decode_decrypted_message, decode_envelope,
+    RadrootsSimplexAgentShortInvitationLink, RadrootsSimplexAgentShortLinkScheme,
+    decode_decrypted_message, decode_envelope, decode_short_invitation_fixed_data,
     encode_decrypted_message, encode_envelope, encode_short_invitation_fixed_data,
     encode_short_invitation_user_data,
 };
@@ -26,17 +27,18 @@ use radroots_simplex_agent_store::prelude::{
 };
 use radroots_simplex_smp_crypto::prelude::{
     RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION, RADROOTS_SIMPLEX_OFFICIAL_E2E_KDF_VERSION,
-    RADROOTS_SIMPLEX_SMP_NONCE_LENGTH, RadrootsSimplexOfficialSntrup761Keypair,
-    RadrootsSimplexOfficialX3dhParams, RadrootsSimplexOfficialX448Keypair,
-    RadrootsSimplexSmpCommandAuthorization, RadrootsSimplexSmpCryptoError,
-    RadrootsSimplexSmpEd25519Keypair, RadrootsSimplexSmpRatchetState,
-    RadrootsSimplexSmpX25519Keypair, decode_x25519_public_key_x509, decrypt_padded,
-    derive_invitation_short_link_data_key, derive_shared_secret, encode_ed25519_public_key_x509,
-    encode_x25519_public_key_x509, encrypt_padded, encrypt_short_link_data,
-    official_sntrup761_keypair_from_seed, official_x3dh_receiver_init,
-    official_x3dh_receiver_init_accepting_pq, official_x3dh_sender_init,
-    official_x3dh_sender_init_accepting_pq, official_x448_keypair_from_seed, random_nonce,
-    sign_short_link_data,
+    RADROOTS_SIMPLEX_SMP_NONCE_LENGTH, RADROOTS_SIMPLEX_SMP_SHORT_LINK_SIGNATURE_LENGTH,
+    RadrootsSimplexOfficialSntrup761Keypair, RadrootsSimplexOfficialX3dhParams,
+    RadrootsSimplexOfficialX448Keypair, RadrootsSimplexSmpCommandAuthorization,
+    RadrootsSimplexSmpCryptoError, RadrootsSimplexSmpEd25519Keypair,
+    RadrootsSimplexSmpRatchetState, RadrootsSimplexSmpX25519Keypair, decode_x25519_public_key_x509,
+    decrypt_padded, decrypt_short_link_data, derive_invitation_short_link_data_key,
+    derive_shared_secret, encode_ed25519_public_key_x509, encode_x25519_public_key_x509,
+    encrypt_padded, encrypt_short_link_data, official_sntrup761_keypair_from_seed,
+    official_x3dh_receiver_init, official_x3dh_receiver_init_accepting_pq,
+    official_x3dh_sender_init, official_x3dh_sender_init_accepting_pq,
+    official_x448_keypair_from_seed, random_nonce, sign_short_link_data,
+    verify_signed_short_link_data,
 };
 use radroots_simplex_smp_proto::prelude::{
     RADROOTS_SIMPLEX_SMP_CURRENT_CLIENT_VERSION, RADROOTS_SIMPLEX_SMP_CURRENT_TRANSPORT_VERSION,
@@ -89,6 +91,36 @@ struct SimplexPreparedShortInvitationLinkData {
     link_public_signature_key: Vec<u8>,
     link_private_signature_key: Vec<u8>,
     encrypted_link_data: RadrootsSimplexSmpQueueLinkData,
+}
+
+pub fn decrypt_short_invitation_link_data(
+    invitation: &RadrootsSimplexAgentShortInvitationLink,
+    encrypted_link_data: &RadrootsSimplexSmpQueueLinkData,
+) -> Result<RadrootsSimplexAgentConnectionLink, RadrootsSimplexAgentRuntimeError> {
+    let link_data_key = derive_invitation_short_link_data_key(&invitation.link_key)
+        .map_err(|error| RadrootsSimplexAgentRuntimeError::Runtime(error.to_string()))?;
+    let signed_link_data = decrypt_short_link_data(&link_data_key, encrypted_link_data)
+        .map_err(|error| RadrootsSimplexAgentRuntimeError::Runtime(error.to_string()))?;
+    if signed_link_data.fixed_data.len() <= RADROOTS_SIMPLEX_SMP_SHORT_LINK_SIGNATURE_LENGTH {
+        return Err(RadrootsSimplexAgentRuntimeError::Runtime(
+            "SimpleX short invitation fixed data is missing its signed payload".into(),
+        ));
+    }
+    let fixed_payload =
+        &signed_link_data.fixed_data[RADROOTS_SIMPLEX_SMP_SHORT_LINK_SIGNATURE_LENGTH..];
+    let fixed_data = decode_short_invitation_fixed_data(fixed_payload)?;
+    let verified = verify_signed_short_link_data(
+        &invitation.link_key,
+        &fixed_data.root_public_signature_key,
+        &signed_link_data,
+    )
+    .map_err(|error| RadrootsSimplexAgentRuntimeError::Runtime(error.to_string()))?;
+    if verified.user_data != encode_short_invitation_user_data(&fixed_data.invitation) {
+        return Err(RadrootsSimplexAgentRuntimeError::Runtime(
+            "SimpleX short invitation user data does not match the fixed connection link".into(),
+        ));
+    }
+    Ok(fixed_data.invitation)
 }
 
 pub struct RadrootsSimplexAgentRuntimeBuilder {
@@ -2626,14 +2658,15 @@ mod tests {
             .unwrap();
         assert_eq!(short_link.link_id, synthetic_link_id(b"server-dh"));
         let link_data_key = derive_invitation_short_link_data_key(&short_link.link_key).unwrap();
+        let stored_link_data = RadrootsSimplexSmpQueueLinkData {
+            fixed_data: short_link.encrypted_fixed_data.clone().unwrap(),
+            user_data: short_link.encrypted_user_data.clone().unwrap(),
+        };
         let verified = radroots_simplex_smp_crypto::prelude::decrypt_verify_short_link_data(
             &short_link.link_key,
             &link_data_key,
             &short_link.link_public_signature_key,
-            &RadrootsSimplexSmpQueueLinkData {
-                fixed_data: short_link.encrypted_fixed_data.clone().unwrap(),
-                user_data: short_link.encrypted_user_data.clone().unwrap(),
-            },
+            &stored_link_data,
         )
         .unwrap();
         let decoded = radroots_simplex_agent_proto::prelude::decode_short_invitation_fixed_data(
@@ -2649,6 +2682,12 @@ mod tests {
             created.as_bytes().to_vec()
         );
         assert_eq!(verified.user_data, created.as_bytes().to_vec());
+        let decrypted_invitation =
+            decrypt_short_invitation_link_data(invitation, &stored_link_data).unwrap();
+        assert_eq!(
+            decrypted_invitation.connection_id,
+            created.as_bytes().to_vec()
+        );
         assert_eq!(
             runtime.store.connection(&joined).unwrap().status,
             RadrootsSimplexAgentConnectionStatus::JoinPending

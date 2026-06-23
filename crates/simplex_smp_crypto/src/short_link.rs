@@ -19,7 +19,7 @@ pub const RADROOTS_SIMPLEX_SMP_SHORT_LINK_FIXED_DATA_PADDED_LENGTH: usize = 2008
 pub const RADROOTS_SIMPLEX_SMP_SHORT_LINK_USER_DATA_PADDED_LENGTH: usize = 13784;
 pub const RADROOTS_SIMPLEX_SMP_SHORT_LINK_CONTACT_INFO: &[u8] = b"SimpleXContactLink";
 pub const RADROOTS_SIMPLEX_SMP_SHORT_LINK_INVITATION_INFO: &[u8] = b"SimpleXInvLink";
-const RADROOTS_SIMPLEX_SMP_SHORT_LINK_SIGNATURE_LENGTH: usize = 64;
+pub const RADROOTS_SIMPLEX_SMP_SHORT_LINK_SIGNATURE_LENGTH: usize = 64;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RadrootsSimplexSmpContactShortLinkKeyMaterial {

@@ -68,6 +68,7 @@ pub mod prelude {
         RADROOTS_SIMPLEX_SMP_SHORT_LINK_FIXED_DATA_PADDED_LENGTH,
         RADROOTS_SIMPLEX_SMP_SHORT_LINK_ID_LENGTH, RADROOTS_SIMPLEX_SMP_SHORT_LINK_INVITATION_INFO,
         RADROOTS_SIMPLEX_SMP_SHORT_LINK_KEY_LENGTH,
+        RADROOTS_SIMPLEX_SMP_SHORT_LINK_SIGNATURE_LENGTH,
         RADROOTS_SIMPLEX_SMP_SHORT_LINK_USER_DATA_PADDED_LENGTH,
         RadrootsSimplexSmpContactShortLinkKeyMaterial, RadrootsSimplexSmpVerifiedShortLinkData,
         decrypt_short_link_data, decrypt_verify_short_link_data,
