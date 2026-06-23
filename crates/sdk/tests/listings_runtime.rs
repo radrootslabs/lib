@@ -20,9 +20,10 @@ use radroots_outbox::{RadrootsOutbox, RadrootsOutboxEventState};
 use radroots_sdk::{
     LISTING_PUBLISH_OPERATION_KIND, ListingEnqueuePublishRequest, ListingPreparePublishRequest,
     RadrootsSdk, RadrootsSdkError, RadrootsSdkPartialLocalMutationFailure,
-    RadrootsSdkRecoveryAction, RadrootsSdkTimestamp, SdkMutationState, SdkRelayTargetPolicy,
-    SdkRelayTargetSet, SdkRelayUrlPolicy,
+    RadrootsSdkRecoveryAction, RadrootsSdkTimestamp, SdkIdempotencyKey, SdkMutationState,
+    SdkRelayTargetPolicy, SdkRelayTargetSet, SdkRelayUrlPolicy,
 };
+use radroots_trade::listing::RadrootsListingDraftDocumentV1;
 
 const SELLER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const OTHER: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
@@ -396,9 +397,11 @@ fn mutation_state_debug_uses_product_state_names() {
 async fn listing_runtime_dtos_serialize_deterministically() {
     let (_tempdir, sdk) = directory_sdk().await;
     let created_at = RadrootsSdkTimestamp::from_unix_seconds(1_700_000_123);
-    let prepare_request =
-        ListingPreparePublishRequest::new(actor(), listing(LISTING_A_D_TAG, "Serialized Coffee"))
-            .with_created_at(created_at);
+    let prepare_request = ListingPreparePublishRequest::from_document(
+        actor(),
+        RadrootsListingDraftDocumentV1::new(listing(LISTING_A_D_TAG, "Serialized Coffee")),
+    )
+    .with_created_at(created_at);
     let prepare_json = serde_json::to_value(&prepare_request).expect("prepare request json");
 
     assert_eq!(prepare_json["actor"]["pubkey"], SELLER);
@@ -420,8 +423,7 @@ async fn listing_runtime_dtos_serialize_deterministically() {
     )
     .try_with_target_relays([RELAY, RELAY_B], SdkRelayUrlPolicy::Public)
     .expect("relay targets")
-    .try_with_idempotency_key("serialized-idempotency")
-    .expect("idempotency")
+    .with_idempotency_key(SdkIdempotencyKey::new("serialized-idempotency").expect("idempotency"))
     .with_created_at(created_at);
     let enqueue_json = serde_json::to_value(&enqueue_request).expect("enqueue request json");
 

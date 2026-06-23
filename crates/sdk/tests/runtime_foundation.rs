@@ -195,6 +195,66 @@ async fn sdk_fixed_clock_is_used_by_runtime() {
     assert_eq!(sdk.now().expect("now"), timestamp);
 }
 
+#[tokio::test]
+async fn runtime_defaults_and_clock_overflow_paths_are_explicit() {
+    assert_eq!(
+        RadrootsSdkStorageConfig::default(),
+        RadrootsSdkStorageConfig::Memory
+    );
+    assert_eq!(RadrootsSdkClock::default(), RadrootsSdkClock::System);
+    assert!(
+        RadrootsSdkClock::default()
+            .now()
+            .expect("system clock")
+            .unix_seconds()
+            > 0
+    );
+
+    let overflow_sdk = RadrootsSdk::builder()
+        .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(u64::MAX))
+        .build()
+        .await
+        .expect("overflow sdk");
+    assert!(matches!(
+        overflow_sdk
+            .storage_status(StorageStatusRequest::new())
+            .await
+            .expect_err("checked mul overflow"),
+        RadrootsSdkError::TimestampOutOfRange { value } if value == u64::MAX
+    ));
+
+    let too_large_for_i64 = u64::try_from(i64::MAX).expect("i64 max") / 1_000 + 1;
+    let i64_overflow_sdk = RadrootsSdk::builder()
+        .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(too_large_for_i64))
+        .build()
+        .await
+        .expect("i64 overflow sdk");
+    assert!(matches!(
+        i64_overflow_sdk
+            .storage_status(StorageStatusRequest::new())
+            .await
+            .expect_err("i64 overflow"),
+        RadrootsSdkError::TimestampOutOfRange { value } if value == too_large_for_i64
+    ));
+}
+
+#[tokio::test]
+async fn runtime_directory_storage_rejects_file_path() {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let file_path = tempdir.path().join("sdk-file");
+    std::fs::write(&file_path, b"not a directory").expect("file");
+
+    let result = RadrootsSdk::builder()
+        .directory_storage(file_path.clone())
+        .build()
+        .await;
+
+    assert!(matches!(
+        result,
+        Err(RadrootsSdkError::Io { path, .. }) if path == file_path
+    ));
+}
+
 #[test]
 fn sdk_timestamp_rejects_values_outside_nostr_created_at_range() {
     let valid = RadrootsSdkTimestamp::from_unix_seconds(u64::from(u32::MAX));

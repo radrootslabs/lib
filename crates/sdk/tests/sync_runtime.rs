@@ -30,7 +30,7 @@ use radroots_sdk::{
     SdkBackupManifestKind, SdkRelayAuthPolicy, SdkRelayTargetPolicy, SdkRelayUrlPolicy,
     SdkRestoreState, StorageStatusRequest, SyncStatusRequest, SyncStatusSource,
 };
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -260,6 +260,27 @@ async fn system_clock_directory_sdk(relays: &[&str]) -> (tempfile::TempDir, Radr
 
 async fn enqueue_listing(sdk: &RadrootsSdk, d_tag: &str, title: &str, relays: &[&str]) -> i64 {
     enqueue_listing_with_policy(sdk, d_tag, title, relays, SdkRelayUrlPolicy::Public).await
+}
+
+async fn backup_source(sdk: &RadrootsSdk, root: &Path, name: &str) -> PathBuf {
+    let source = root.join(name);
+    sdk.backup(BackupRequest::new(source.clone()))
+        .await
+        .expect("backup");
+    source
+}
+
+fn rewrite_backup_manifest(source: &Path, mutate: impl FnOnce(&mut serde_json::Value)) {
+    let manifest_path = source.join("manifest.json");
+    let mut manifest: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&manifest_path).expect("manifest bytes"))
+            .expect("manifest json");
+    mutate(&mut manifest);
+    std::fs::write(
+        &manifest_path,
+        serde_json::to_vec_pretty(&manifest).expect("manifest bytes"),
+    )
+    .expect("write manifest");
 }
 
 async fn enqueue_listing_with_policy(
@@ -511,6 +532,69 @@ async fn sdk_directory_backup_creates_verified_canonical_store_copy() {
 }
 
 #[tokio::test]
+async fn runtime_backup_rejects_empty_destination_and_overwrites_file_destination() {
+    let (tempdir, sdk) = directory_sdk(&[RELAY_A]).await;
+
+    let empty_destination = sdk
+        .backup(BackupRequest::new(PathBuf::new()))
+        .await
+        .expect_err("empty backup destination");
+    assert!(matches!(
+        empty_destination,
+        RadrootsSdkError::InvalidRequest { .. }
+    ));
+
+    let destination = tempdir.path().join("backup-file");
+    std::fs::write(&destination, b"old backup placeholder").expect("destination file");
+    let duplicate_file = sdk
+        .backup(BackupRequest::new(destination.clone()))
+        .await
+        .expect_err("file destination without overwrite");
+    assert!(matches!(
+        duplicate_file,
+        RadrootsSdkError::InvalidRequest { .. }
+    ));
+
+    let receipt = sdk
+        .backup(BackupRequest::new(destination.clone()).with_overwrite(true))
+        .await
+        .expect("overwrite file backup");
+    assert!(destination.is_dir());
+    assert!(
+        receipt
+            .event_store_path
+            .as_ref()
+            .expect("event store")
+            .exists()
+    );
+    assert!(receipt.outbox_path.as_ref().expect("outbox").exists());
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn runtime_backup_rejects_invalid_utf8_destination() {
+    use std::os::unix::ffi::OsStringExt;
+
+    let (tempdir, sdk) = directory_sdk(&[RELAY_A]).await;
+    let destination = tempdir
+        .path()
+        .join(std::ffi::OsString::from_vec(vec![b'b', b'a', b'd', 0x80]));
+
+    let error = sdk
+        .backup(BackupRequest::new(destination))
+        .await
+        .expect_err("invalid utf8 destination");
+
+    assert!(matches!(
+        error,
+        RadrootsSdkError::InvalidRequest { .. } | RadrootsSdkError::Io { .. }
+    ));
+    if matches!(error, RadrootsSdkError::InvalidRequest { .. }) {
+        assert!(error.to_string().contains("valid UTF-8"));
+    }
+}
+
+#[tokio::test]
 async fn sdk_restore_archive_rejects_missing_manifest() {
     let tempdir = tempfile::tempdir().expect("tempdir");
     let source = tempdir.path().join("backup");
@@ -533,6 +617,117 @@ async fn sdk_restore_archive_rejects_malformed_manifest() {
         .await
         .expect_err("malformed manifest");
     assert!(matches!(error, RadrootsSdkError::InvalidRequest { .. }));
+}
+
+#[tokio::test]
+async fn runtime_restore_rejects_empty_missing_file_and_manifest_sources() {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+
+    let empty_source = RadrootsSdk::inspect_restore_archive(PathBuf::new())
+        .await
+        .expect_err("empty source");
+    assert!(matches!(
+        empty_source,
+        RadrootsSdkError::InvalidRequest { .. }
+    ));
+
+    let missing_source = RadrootsSdk::inspect_restore_archive(tempdir.path().join("missing"))
+        .await
+        .expect_err("missing source");
+    assert!(matches!(missing_source, RadrootsSdkError::Io { .. }));
+
+    let file_source = tempdir.path().join("backup-file");
+    std::fs::write(&file_source, b"not a directory").expect("source file");
+    let file_error = RadrootsSdk::inspect_restore_archive(file_source)
+        .await
+        .expect_err("file source");
+    assert!(matches!(
+        file_error,
+        RadrootsSdkError::InvalidRequest { .. }
+    ));
+
+    let manifest_dir_source = tempdir.path().join("manifest-dir-source");
+    std::fs::create_dir(&manifest_dir_source).expect("manifest source");
+    std::fs::create_dir(manifest_dir_source.join("manifest.json")).expect("manifest dir");
+    let manifest_dir_error = RadrootsSdk::inspect_restore_archive(manifest_dir_source)
+        .await
+        .expect_err("manifest dir");
+    assert!(matches!(
+        manifest_dir_error,
+        RadrootsSdkError::InvalidRequest { .. }
+    ));
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn runtime_restore_rejects_symlink_source_and_manifest() {
+    let (tempdir, sdk) = directory_sdk(&[RELAY_A]).await;
+    let source = backup_source(&sdk, tempdir.path(), "backup-symlink-manifest").await;
+
+    let source_link = tempdir.path().join("backup-source-link");
+    std::os::unix::fs::symlink(&source, &source_link).expect("source symlink");
+    let source_error = RadrootsSdk::inspect_restore_archive(source_link)
+        .await
+        .expect_err("source symlink");
+    assert!(matches!(
+        source_error,
+        RadrootsSdkError::InvalidRequest { .. }
+    ));
+
+    let manifest_link_source = backup_source(&sdk, tempdir.path(), "backup-manifest-link").await;
+    let manifest_path = manifest_link_source.join("manifest.json");
+    let manifest_copy = tempdir.path().join("manifest-copy.json");
+    std::fs::copy(&manifest_path, &manifest_copy).expect("manifest copy");
+    std::fs::remove_file(&manifest_path).expect("remove manifest");
+    std::os::unix::fs::symlink(&manifest_copy, &manifest_path).expect("manifest symlink");
+    let manifest_error = RadrootsSdk::inspect_restore_archive(manifest_link_source)
+        .await
+        .expect_err("manifest symlink");
+    assert!(matches!(
+        manifest_error,
+        RadrootsSdkError::InvalidRequest { .. }
+    ));
+}
+
+#[tokio::test]
+async fn runtime_restore_rejects_manifest_contract_edges() {
+    let (tempdir, sdk) = directory_sdk(&[RELAY_A]).await;
+
+    let version_source = backup_source(&sdk, tempdir.path(), "backup-version").await;
+    rewrite_backup_manifest(&version_source, |manifest| {
+        manifest["manifest_version"] = serde_json::json!(2);
+    });
+    let version_error = RadrootsSdk::inspect_restore_archive(version_source)
+        .await
+        .expect_err("unsupported manifest version");
+    assert!(matches!(
+        version_error,
+        RadrootsSdkError::InvalidRequest { .. }
+    ));
+
+    let empty_path_source = backup_source(&sdk, tempdir.path(), "backup-empty-path").await;
+    rewrite_backup_manifest(&empty_path_source, |manifest| {
+        manifest["backup_paths"]["event_store_path"] = serde_json::json!("");
+    });
+    let empty_path_error = RadrootsSdk::inspect_restore_archive(empty_path_source)
+        .await
+        .expect_err("empty archive path");
+    assert!(matches!(
+        empty_path_error,
+        RadrootsSdkError::InvalidRequest { .. }
+    ));
+
+    let mismatch_source = backup_source(&sdk, tempdir.path(), "backup-mismatch").await;
+    rewrite_backup_manifest(&mismatch_source, |manifest| {
+        manifest["backup_verification"]["event_store_events"] = serde_json::json!(999);
+    });
+    let mismatch_error = RadrootsSdk::inspect_restore_archive(mismatch_source)
+        .await
+        .expect_err("verification mismatch");
+    assert!(matches!(
+        mismatch_error,
+        RadrootsSdkError::InvalidRequest { .. }
+    ));
 }
 
 #[tokio::test]
@@ -598,6 +793,32 @@ async fn sdk_restore_archive_rejects_symlink_store_member() {
         .await
         .expect_err("symlink member");
     assert!(matches!(error, RadrootsSdkError::InvalidRequest { .. }));
+}
+
+#[tokio::test]
+async fn runtime_restore_rejects_missing_destination_and_empty_destination() {
+    let (tempdir, sdk) = directory_sdk(&[RELAY_A]).await;
+    let source = backup_source(&sdk, tempdir.path(), "backup-destination-required").await;
+
+    let missing_destination = RadrootsSdk::restore(RestoreRequest::new(source.clone()))
+        .await
+        .expect_err("missing destination");
+    assert!(matches!(
+        missing_destination,
+        RadrootsSdkError::InvalidRequest { .. }
+    ));
+
+    let empty_destination = RadrootsSdk::restore(
+        RestoreRequest::new(source)
+            .with_destination(PathBuf::new())
+            .dry_run(),
+    )
+    .await
+    .expect_err("empty destination");
+    assert!(matches!(
+        empty_destination,
+        RadrootsSdkError::InvalidRequest { .. }
+    ));
 }
 
 #[tokio::test]
@@ -756,6 +977,42 @@ async fn sdk_restore_dry_run_rejects_symlink_destination() {
 
     assert!(matches!(error, RadrootsSdkError::InvalidRequest { .. }));
     assert!(target.exists());
+}
+
+#[tokio::test]
+async fn runtime_restore_handles_existing_file_destinations_by_overwrite_policy() {
+    let (tempdir, sdk) = directory_sdk(&[RELAY_A]).await;
+    let source = backup_source(&sdk, tempdir.path(), "backup-file-destination").await;
+    let destination = tempdir.path().join("restore-file");
+    std::fs::write(&destination, b"old restore file").expect("destination file");
+
+    let without_overwrite =
+        RadrootsSdk::restore(RestoreRequest::new(source.clone()).with_destination(&destination))
+            .await
+            .expect_err("file destination without overwrite");
+    assert!(matches!(
+        without_overwrite,
+        RadrootsSdkError::InvalidRequest { .. }
+    ));
+
+    let receipt = RadrootsSdk::restore(
+        RestoreRequest::new(source)
+            .with_destination(destination.clone())
+            .with_overwrite(true),
+    )
+    .await
+    .expect("file destination overwrite");
+
+    assert_eq!(receipt.state, SdkRestoreState::Completed);
+    assert!(destination.is_dir());
+    assert!(
+        receipt
+            .restored_paths
+            .as_ref()
+            .expect("restored paths")
+            .event_store_path
+            .exists()
+    );
 }
 
 #[tokio::test]

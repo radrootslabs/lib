@@ -16,8 +16,8 @@ use radroots_sdk::{
     FARM_PUBLISH_OPERATION_KIND, FarmEnqueuePublishRequest, FarmPreparePublishRequest,
     PushOutboxEventState, PushOutboxRelayOutcomeKind, PushOutboxRequest, RadrootsSdk,
     RadrootsSdkError, RadrootsSdkPartialLocalMutationFailure, RadrootsSdkRecoveryAction,
-    RadrootsSdkTimestamp, SdkMutationState, SdkRelayTargetPolicy, SdkRelayTargetSet,
-    SdkRelayUrlPolicy,
+    RadrootsSdkTimestamp, SdkIdempotencyKey, SdkMutationState, SdkRelayTargetPolicy,
+    SdkRelayTargetSet, SdkRelayUrlPolicy,
 };
 
 const FARMER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -488,8 +488,9 @@ async fn farm_runtime_dtos_serialize_deterministically() {
     )
     .try_with_target_relays([RELAY, RELAY_B], SdkRelayUrlPolicy::Public)
     .expect("relay targets")
-    .try_with_idempotency_key("farm-serialized-idempotency")
-    .expect("idempotency")
+    .with_idempotency_key(
+        SdkIdempotencyKey::new("farm-serialized-idempotency").expect("idempotency"),
+    )
     .with_created_at(created_at);
     let enqueue_json = serde_json::to_value(&enqueue_request).expect("enqueue request json");
 
