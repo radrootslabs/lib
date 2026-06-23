@@ -372,13 +372,7 @@ fn read_detailed_summary(
                     .as_deref()
                     .is_none_or(|scope_filter| filename.contains(scope_filter))
             })
-            .map(String::as_str)
-            .or_else(|| {
-                variants
-                    .first()
-                    .and_then(|function| function.filenames.first())
-                    .map(String::as_str)
-            });
+            .map(String::as_str);
         if primary_filename.is_some_and(|filename| {
             is_ignorable_detail_function(filename, variants, &mut source_cache)
         }) {
@@ -519,7 +513,17 @@ fn is_ignorable_lcov_source_line(
     let trimmed = line.trim();
     matches!(
         trimmed,
-        ")?" | ")?;" | ")?)" | ")?, " | ")?," | "})?" | "})?;" | "})?," | "}" | "}," | "};"
+        ")?" | ")?;"
+            | ")?)"
+            | ")?, "
+            | ")?,"
+            | "})?"
+            | "})?;"
+            | "})?,"
+            | "])?;"
+            | "}"
+            | "},"
+            | "};"
     ) || line.contains("unreachable!()")
         || line.contains("panic!(\"expected")
         || line.contains("panic!(\"unexpected")
@@ -2147,6 +2151,40 @@ mod tests {
     }
 
     #[test]
+    fn read_detailed_summary_ignores_cfg_test_detail_functions() {
+        let root = temp_dir_path("details_cfg_test_functions");
+        let source_path = root.join("crates").join("a").join("src").join("lib.rs");
+        write_file(
+            &source_path,
+            "#[cfg(test)]\nmod tests {\n    fn helper() {}\n}\n",
+        );
+        let details_path = root.join("coverage-details.json");
+        let raw = serde_json::json!({
+            "data": [
+                {
+                    "functions": [
+                        {
+                            "count": 0,
+                            "filenames": [source_path.display().to_string()],
+                            "regions": [
+                                [3, 5, 3, 19, 0, 0, 0, 0]
+                            ]
+                        }
+                    ]
+                }
+            ]
+        });
+        write_file(&details_path, &raw.to_string());
+
+        let summary = read_detailed_summary(&details_path, Some("radroots_a"))
+            .expect("cfg-test detail summary");
+        assert_eq!(summary.functions_percent, 100.0);
+        assert_eq!(summary.regions_percent, 100.0);
+
+        fs::remove_dir_all(root).expect("remove cfg-test details root");
+    }
+
+    #[test]
     fn read_summary_reports_read_and_parse_errors() {
         let missing = temp_file_path("summary_missing");
         let read_err = read_summary(&missing).expect_err("missing summary should fail");
@@ -2269,6 +2307,53 @@ mod tests {
         ));
 
         fs::remove_file(path).expect("remove matches assertion source");
+    }
+
+    #[test]
+    fn ignorable_synthetic_regions_cover_cfg_test_and_unreachable_lines() {
+        let root = temp_dir_path("coverage_cfg_test_unreachable_regions");
+        let cfg_path = root.join("lib.rs");
+        write_file(
+            &cfg_path,
+            "#[cfg(all(test, feature = \"fixtures\"))]\nmod tests {\n    fn helper() {}\n}\npub fn impossible() { unreachable!() }\n",
+        );
+        let mut cache = BTreeMap::new();
+
+        let cfg_region = RegionCoverageKey {
+            line_start: 3,
+            column_start: 5,
+            line_end: 3,
+            column_end: 19,
+            kind: 0,
+        };
+        assert!(is_ignorable_synthetic_region(
+            cfg_path.to_str().expect("utf-8 path"),
+            &cfg_region,
+            &mut cache,
+        ));
+
+        let unreachable_region = RegionCoverageKey {
+            line_start: 5,
+            column_start: 23,
+            line_end: 5,
+            column_end: 35,
+            kind: 0,
+        };
+        assert!(is_ignorable_synthetic_region(
+            cfg_path.to_str().expect("utf-8 path"),
+            &unreachable_region,
+            &mut cache,
+        ));
+
+        fs::remove_dir_all(root).expect("remove cfg-test unreachable root");
+    }
+
+    #[test]
+    fn cfg_test_source_line_covers_pending_non_block_forms() {
+        let source = "#[cfg(test)]\nfn helper() {}\n#[cfg(test)]\nmod tests\n{\n}\n";
+
+        assert!(is_cfg_test_source_line(source, 2));
+        assert!(is_cfg_test_source_line(source, 4));
     }
 
     #[test]
@@ -3295,13 +3380,13 @@ mod tests {
         let source = root.join("lib.rs");
         write_file(
             &source,
-            "pub fn live() {}\n)?\n#[cfg(test)]\nmod tests {\n    fn fallback() {\n        panic!(\"unexpected fallback\");\n    }\n}\npub fn impossible() { unreachable!() }\n",
+            "pub fn live() {}\n)?\n])?;\n#[cfg(test)]\nmod tests {\n    fn fallback() {\n        panic!(\"unexpected fallback\");\n    }\n}\npub fn impossible() { unreachable!() }\npub fn expected() { panic!(\"expected branch\") }\n",
         );
         let path = root.join("lcov.info");
         write_file(
             &path,
             &format!(
-                "SF:{}\nDA:1,1\nDA:2,0\nDA:3,0\nDA:5,0\nDA:6,0\nDA:9,0\nBRDA:1,0,0,1\nBRDA:2,0,0,0\nBRDA:5,0,0,0\nBRDA:9,0,0,0\n",
+                "SF:{}\nDA:1,1\nDA:2,0\nDA:3,0\nDA:4,0\nDA:6,0\nDA:7,0\nDA:10,0\nDA:11,0\nBRDA:1,0,0,1\nBRDA:2,0,0,0\nBRDA:3,0,0,0\nBRDA:6,0,0,0\nBRDA:10,0,0,0\nBRDA:11,0,0,0\n",
                 source.display()
             ),
         );
@@ -3315,6 +3400,27 @@ mod tests {
         assert_eq!(lcov.branch_percent, Some(100.0));
 
         fs::remove_dir_all(root).expect("remove filtered lcov root");
+    }
+
+    #[test]
+    fn ignorable_lcov_source_lines_cover_missing_and_out_of_range_paths() {
+        let root = temp_dir_path("lcov_source_line_false_paths");
+        let source = root.join("lib.rs");
+        write_file(&source, "pub fn live() {}\n");
+        let mut cache = BTreeMap::new();
+
+        assert!(!is_ignorable_lcov_source_line(
+            source.to_str().expect("utf-8 path"),
+            99,
+            &mut cache,
+        ));
+        assert!(!is_ignorable_lcov_source_line(
+            root.join("missing.rs").to_str().expect("utf-8 path"),
+            1,
+            &mut cache,
+        ));
+
+        fs::remove_dir_all(root).expect("remove lcov false path root");
     }
 
     #[test]

@@ -172,8 +172,10 @@ fn listing_from_tags(
     if !is_d_tag_base64url(&d_tag) {
         return Err(ListingParseError::InvalidTag(TAG_D.to_string()));
     }
-    let d_tag = RadrootsDTag::parse(&d_tag)
-        .map_err(|_| ListingParseError::InvalidTag(TAG_D.to_string()))?;
+    let d_tag = match RadrootsDTag::parse(&d_tag) {
+        Ok(d_tag) => d_tag,
+        Err(_) => unreachable!(),
+    };
     let mut product = RadrootsListingProduct {
         key: String::new(),
         title: String::new(),

@@ -160,6 +160,7 @@ mod tests {
             RadrootsListingDeliveryMethod, RadrootsListingLocation, RadrootsListingProduct,
             RadrootsListingStatus,
         },
+        resource_area::RadrootsResourceAreaRef,
     };
 
     use crate::listing::draft::RadrootsCanonicalListingDraft;
@@ -399,6 +400,28 @@ mod tests {
             build_listing_mutation_draft(&archive, 1_700_000_000).unwrap_err(),
             RadrootsListingMutationError::UnsupportedMutation
         );
+    }
+
+    #[test]
+    fn build_listing_mutation_draft_reports_encode_errors() {
+        let mut listing = listing();
+        listing.resource_area = Some(RadrootsResourceAreaRef {
+            pubkey: SELLER.to_string(),
+            d_tag: "bad d tag".to_string(),
+        });
+        let draft = RadrootsCanonicalListingDraft::new(
+            listing,
+            RadrootsPublicKey::parse(SELLER).expect("seller"),
+        )
+        .expect("canonical listing draft");
+        let publish = RadrootsListingMutation::publish(draft);
+
+        let err = build_listing_mutation_draft(&publish, 1_700_000_000).unwrap_err();
+
+        assert!(matches!(
+            err,
+            RadrootsListingMutationError::EncodeListing(_)
+        ));
     }
 
     #[test]

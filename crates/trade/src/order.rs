@@ -863,32 +863,13 @@ fn reduce_listing_inventory_accounting_records(
             RadrootsOrderStatus::Invalid => {
                 let mut event_ids = projection_issue_event_ids(&projection.issues);
                 if event_ids.is_empty() {
-                    event_ids.extend(
-                        order_requests
-                            .iter()
-                            .map(|request| request.event_id.clone()),
+                    event_ids = fallback_order_event_ids(
+                        &order_requests,
+                        &order_decisions,
+                        &order_revision_proposals,
+                        &order_revision_decisions,
+                        &order_cancellations,
                     );
-                    event_ids.extend(
-                        order_decisions
-                            .iter()
-                            .map(|decision| decision.event_id.clone()),
-                    );
-                    event_ids.extend(
-                        order_revision_proposals
-                            .iter()
-                            .map(|proposal| proposal.event_id.clone()),
-                    );
-                    event_ids.extend(
-                        order_revision_decisions
-                            .iter()
-                            .map(|decision| decision.event_id.clone()),
-                    );
-                    event_ids.extend(
-                        order_cancellations
-                            .iter()
-                            .map(|cancellation| cancellation.event_id.clone()),
-                    );
-                    sort_and_dedup_values(&mut event_ids);
                 }
                 invalid_event_ids.extend(event_ids.iter().cloned());
                 issues.push(RadrootsListingInventoryAccountingIssue::InvalidOrder {
@@ -914,6 +895,35 @@ fn reduce_listing_inventory_accounting_records(
         invalid_event_ids,
         issues,
     }
+}
+
+fn fallback_order_event_ids(
+    requests: &[RadrootsOrderRequestRecord],
+    decisions: &[RadrootsOrderDecisionRecord],
+    revision_proposals: &[RadrootsOrderRevisionProposalRecord],
+    revision_decisions: &[RadrootsOrderRevisionDecisionRecord],
+    cancellations: &[RadrootsOrderCancellationRecord],
+) -> Vec<RadrootsEventId> {
+    let mut event_ids = Vec::new();
+    event_ids.extend(requests.iter().map(|request| request.event_id.clone()));
+    event_ids.extend(decisions.iter().map(|decision| decision.event_id.clone()));
+    event_ids.extend(
+        revision_proposals
+            .iter()
+            .map(|proposal| proposal.event_id.clone()),
+    );
+    event_ids.extend(
+        revision_decisions
+            .iter()
+            .map(|decision| decision.event_id.clone()),
+    );
+    event_ids.extend(
+        cancellations
+            .iter()
+            .map(|cancellation| cancellation.event_id.clone()),
+    );
+    sort_and_dedup_values(&mut event_ids);
+    event_ids
 }
 
 pub fn canonicalize_order_request_for_signer(
@@ -3466,6 +3476,34 @@ mod tests {
                 event_ids: Vec::new(),
             },
         );
+
+        let mut fallback_request = request_record();
+        fallback_request.event_id = event_id(95);
+        let mut fallback_decision = accepted_decision();
+        fallback_decision.event_id = event_id(93);
+        let mut fallback_proposal = revision_proposal();
+        fallback_proposal.event_id = event_id(94);
+        let mut fallback_revision_decision = accepted_revision_decision();
+        fallback_revision_decision.event_id = event_id(92);
+        let mut fallback_cancellation = cancellation(event_id(3));
+        fallback_cancellation.event_id = event_id(91);
+        let fallback_ids = super::fallback_order_event_ids(
+            &[fallback_request],
+            &[fallback_decision],
+            &[fallback_proposal],
+            &[fallback_revision_decision],
+            &[fallback_cancellation],
+        );
+        assert_eq!(
+            fallback_ids,
+            vec![
+                event_id(91),
+                event_id(92),
+                event_id(93),
+                event_id(94),
+                event_id(95)
+            ]
+        );
     }
 
     #[test]
@@ -4252,6 +4290,32 @@ mod tests {
         assert_eq!(invalid_without_request.invalid_event_ids, vec![event_id(2)]);
         assert_inventory_issue_kind(
             &invalid_without_request.issues,
+            RadrootsListingInventoryAccountingIssue::InvalidOrder {
+                order_id: order_id("order-1"),
+                event_ids: Vec::new(),
+            },
+        );
+
+        let mut duplicate_request = request_record();
+        duplicate_request.event_id = event_id(11);
+        let invalid_duplicate_requests = reduce_listing_inventory_accounting(
+            &listing_addr(),
+            &event_id(9),
+            RadrootsListingInventoryAccountingInputs {
+                bins: Vec::<RadrootsListingInventoryBinAvailability>::new(),
+                requests: vec![request_record(), duplicate_request],
+                decisions: Vec::<RadrootsOrderDecisionRecord>::new(),
+                revision_proposals: Vec::<RadrootsOrderRevisionProposalRecord>::new(),
+                revision_decisions: Vec::<RadrootsOrderRevisionDecisionRecord>::new(),
+                cancellations: Vec::<RadrootsOrderCancellationRecord>::new(),
+            },
+        );
+        assert_eq!(
+            invalid_duplicate_requests.invalid_event_ids,
+            vec![event_id(1), event_id(11)]
+        );
+        assert_inventory_issue_kind(
+            &invalid_duplicate_requests.issues,
             RadrootsListingInventoryAccountingIssue::InvalidOrder {
                 order_id: order_id("order-1"),
                 event_ids: Vec::new(),
