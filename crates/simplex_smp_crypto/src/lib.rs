@@ -57,6 +57,6 @@ pub mod prelude {
     };
     pub use crate::ratchet::{
         RadrootsSimplexSmpRatchetHeader, RadrootsSimplexSmpRatchetRole,
-        RadrootsSimplexSmpRatchetState,
+        RadrootsSimplexSmpRatchetState, RadrootsSimplexSmpSkippedMessageKey,
     };
 }

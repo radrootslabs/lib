@@ -10,6 +10,7 @@ pub enum RadrootsSimplexSmpCryptoError {
     MissingRatchetKey(&'static str),
     IncompletePqHeader,
     RatchetMessageRegression { received: u32, current: u32 },
+    RatchetTooManySkipped { skipped: u32, max: u32 },
     InvalidSharedSecretLength(usize),
     InvalidCiphertextLength(usize),
     InvalidNonceLength(usize),
@@ -56,6 +57,12 @@ impl fmt::Display for RadrootsSimplexSmpCryptoError {
                 write!(
                     f,
                     "SMP ratchet message regression: received {received}, current {current}"
+                )
+            }
+            Self::RatchetTooManySkipped { skipped, max } => {
+                write!(
+                    f,
+                    "SMP ratchet skipped {skipped} messages, exceeding maximum {max}"
                 )
             }
             Self::InvalidSharedSecretLength(length) => {

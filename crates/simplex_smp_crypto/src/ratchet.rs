@@ -4,15 +4,16 @@ use crate::message::{
     encrypt_padded,
 };
 use crate::official_ratchet::{
-    RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION, RADROOTS_SIMPLEX_OFFICIAL_X448_KEY_LENGTH,
-    RadrootsSimplexOfficialAesGcmPayload, RadrootsSimplexOfficialEncryptedHeader,
-    RadrootsSimplexOfficialEncryptedMessage, RadrootsSimplexOfficialMsgHeader,
-    RadrootsSimplexOfficialX3dhInit, decode_official_encrypted_header,
-    decode_official_encrypted_message, decode_official_msg_header,
-    derive_official_x448_shared_secret, encode_official_encrypted_header,
-    encode_official_encrypted_message, encode_official_msg_header, generate_official_x448_keypair,
-    official_aes_gcm_decrypt_padded, official_aes_gcm_encrypt_padded, official_chain_kdf,
-    official_ratchet_header_len, official_root_kdf,
+    RADROOTS_SIMPLEX_OFFICIAL_AES_IV_LENGTH, RADROOTS_SIMPLEX_OFFICIAL_E2E_CURRENT_VERSION,
+    RADROOTS_SIMPLEX_OFFICIAL_X448_KEY_LENGTH, RadrootsSimplexOfficialAesGcmPayload,
+    RadrootsSimplexOfficialEncryptedHeader, RadrootsSimplexOfficialEncryptedMessage,
+    RadrootsSimplexOfficialMsgHeader, RadrootsSimplexOfficialX3dhInit,
+    decode_official_encrypted_header, decode_official_encrypted_message,
+    decode_official_msg_header, derive_official_x448_shared_secret,
+    encode_official_encrypted_header, encode_official_encrypted_message,
+    encode_official_msg_header, generate_official_x448_keypair, official_aes_gcm_decrypt_padded,
+    official_aes_gcm_encrypt_padded, official_chain_kdf, official_ratchet_header_len,
+    official_root_kdf,
 };
 use alloc::vec::Vec;
 use hkdf::Hkdf;
@@ -21,6 +22,7 @@ use sha2::Sha512;
 const RADROOTS_SIMPLEX_AGENT_RATCHET_INFO: &[u8] = b"SimpleXAgentRatchetMessage";
 const RADROOTS_SIMPLEX_AGENT_RATCHET_OUTPUT_LENGTH: usize =
     RADROOTS_SIMPLEX_SMP_SHARED_SECRET_LENGTH + RADROOTS_SIMPLEX_SMP_NONCE_LENGTH;
+const RADROOTS_SIMPLEX_OFFICIAL_MAX_SKIPPED_MESSAGES: u32 = 512;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RadrootsSimplexSmpRatchetRole {
@@ -52,6 +54,14 @@ impl RadrootsSimplexSmpRatchetHeader {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RadrootsSimplexSmpSkippedMessageKey {
+    pub header_key: Vec<u8>,
+    pub message_number: u32,
+    pub message_key: Vec<u8>,
+    pub message_iv: [u8; RADROOTS_SIMPLEX_OFFICIAL_AES_IV_LENGTH],
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RadrootsSimplexSmpRatchetState {
     pub role: RadrootsSimplexSmpRatchetRole,
     pub root_epoch: u64,
@@ -74,6 +84,7 @@ pub struct RadrootsSimplexSmpRatchetState {
     pub official_receiving_header_key: Option<Vec<u8>>,
     pub official_next_sending_header_key: Option<Vec<u8>>,
     pub official_next_receiving_header_key: Option<Vec<u8>>,
+    pub official_skipped_message_keys: Vec<RadrootsSimplexSmpSkippedMessageKey>,
 }
 
 impl RadrootsSimplexSmpRatchetState {
@@ -110,6 +121,7 @@ impl RadrootsSimplexSmpRatchetState {
             official_receiving_header_key: None,
             official_next_sending_header_key: None,
             official_next_receiving_header_key: None,
+            official_skipped_message_keys: Vec::new(),
         })
     }
 
@@ -146,6 +158,7 @@ impl RadrootsSimplexSmpRatchetState {
             official_receiving_header_key: None,
             official_next_sending_header_key: None,
             official_next_receiving_header_key: None,
+            official_skipped_message_keys: Vec::new(),
         })
     }
 
@@ -398,6 +411,11 @@ impl RadrootsSimplexSmpRatchetState {
         let ratchet_ad = self.official_associated_data.clone().ok_or(
             RadrootsSimplexSmpCryptoError::MissingRatchetKey("official_associated_data"),
         )?;
+        if let Some(plaintext) =
+            self.decrypt_official_skipped_payload(&header, &message, &ratchet_ad)?
+        {
+            return Ok(plaintext);
+        }
         let (ratchet_step, ratchet_header) = self.decrypt_official_header(&header, &ratchet_ad)?;
         if ratchet_header.message_number < self.receiving_chain_length {
             return Err(RadrootsSimplexSmpCryptoError::RatchetMessageRegression {
@@ -406,8 +424,12 @@ impl RadrootsSimplexSmpRatchetState {
             });
         }
         if ratchet_step == OfficialRatchetStep::Advance {
+            self.skip_official_receiving_messages_until(
+                ratchet_header.previous_sending_chain_length,
+            )?;
             self.advance_official_receiving_ratchet(&ratchet_header)?;
         }
+        self.skip_official_receiving_messages_until(ratchet_header.message_number)?;
         let receiving_chain_key = self.official_receiving_chain_key.clone().ok_or(
             RadrootsSimplexSmpCryptoError::MissingRatchetKey("official_receiving_chain_key"),
         )?;
@@ -425,6 +447,94 @@ impl RadrootsSimplexSmpRatchetState {
         self.official_receiving_chain_key = Some(chain.chain_key);
         self.apply_inbound_header(&ratchet_header, None)?;
         Ok(plaintext)
+    }
+
+    fn decrypt_official_skipped_payload(
+        &mut self,
+        header: &RadrootsSimplexOfficialEncryptedHeader,
+        message: &RadrootsSimplexOfficialEncryptedMessage,
+        ratchet_ad: &[u8],
+    ) -> Result<Option<Vec<u8>>, RadrootsSimplexSmpCryptoError> {
+        for skipped in self.official_skipped_message_keys.clone() {
+            let Ok(ratchet_header) =
+                decrypt_official_header_with_key(header, &skipped.header_key, ratchet_ad)
+            else {
+                continue;
+            };
+            if ratchet_header.message_number != skipped.message_number {
+                return Err(RadrootsSimplexSmpCryptoError::RatchetMessageRegression {
+                    received: ratchet_header.message_number,
+                    current: self.receiving_chain_length,
+                });
+            }
+            let position = self
+                .official_skipped_message_keys
+                .iter()
+                .position(|entry| {
+                    entry.header_key == skipped.header_key
+                        && entry.message_number == skipped.message_number
+                })
+                .ok_or(RadrootsSimplexSmpCryptoError::RatchetMessageRegression {
+                    received: ratchet_header.message_number,
+                    current: self.receiving_chain_length,
+                })?;
+            let skipped = self.official_skipped_message_keys.remove(position);
+            let message_ad =
+                official_message_associated_data(ratchet_ad, &message.encrypted_header);
+            let plaintext = official_aes_gcm_decrypt_padded(
+                &skipped.message_key,
+                &skipped.message_iv,
+                &RadrootsSimplexOfficialAesGcmPayload {
+                    auth_tag: message.auth_tag.clone(),
+                    ciphertext: message.body.clone(),
+                },
+                &message_ad,
+            )?;
+            return Ok(Some(plaintext));
+        }
+        Ok(None)
+    }
+
+    fn skip_official_receiving_messages_until(
+        &mut self,
+        until_message_number: u32,
+    ) -> Result<(), RadrootsSimplexSmpCryptoError> {
+        if self.receiving_chain_length > until_message_number {
+            return Err(RadrootsSimplexSmpCryptoError::RatchetMessageRegression {
+                received: until_message_number,
+                current: self.receiving_chain_length,
+            });
+        }
+        let skipped = until_message_number.saturating_sub(self.receiving_chain_length);
+        if skipped > RADROOTS_SIMPLEX_OFFICIAL_MAX_SKIPPED_MESSAGES {
+            return Err(RadrootsSimplexSmpCryptoError::RatchetTooManySkipped {
+                skipped,
+                max: RADROOTS_SIMPLEX_OFFICIAL_MAX_SKIPPED_MESSAGES,
+            });
+        }
+        if skipped == 0 {
+            return Ok(());
+        }
+        let mut receiving_chain_key = self.official_receiving_chain_key.clone().ok_or(
+            RadrootsSimplexSmpCryptoError::MissingRatchetKey("official_receiving_chain_key"),
+        )?;
+        let receiving_header_key = self.official_receiving_header_key.clone().ok_or(
+            RadrootsSimplexSmpCryptoError::MissingRatchetKey("official_receiving_header_key"),
+        )?;
+        while self.receiving_chain_length < until_message_number {
+            let chain = official_chain_kdf(&receiving_chain_key)?;
+            self.official_skipped_message_keys
+                .push(RadrootsSimplexSmpSkippedMessageKey {
+                    header_key: receiving_header_key.clone(),
+                    message_number: self.receiving_chain_length,
+                    message_key: chain.message_key,
+                    message_iv: chain.message_iv,
+                });
+            receiving_chain_key = chain.chain_key;
+            self.receiving_chain_length = self.receiving_chain_length.saturating_add(1);
+        }
+        self.official_receiving_chain_key = Some(receiving_chain_key);
+        Ok(())
     }
 
     fn decrypt_official_header(
@@ -870,6 +980,81 @@ mod tests {
     }
 
     #[test]
+    fn decrypts_official_skipped_messages_once() {
+        let (mut sender, mut receiver) = official_sender_receiver_ratchets();
+        let shared_secret = [12_u8; RADROOTS_SIMPLEX_SMP_SHARED_SECRET_LENGTH];
+        let first = sender
+            .encrypt_official_payload(&shared_secret, b"first", 96)
+            .unwrap();
+        let second = sender
+            .encrypt_official_payload(&shared_secret, b"second", 96)
+            .unwrap();
+        let third = sender
+            .encrypt_official_payload(&shared_secret, b"third", 96)
+            .unwrap();
+
+        assert_eq!(
+            receiver
+                .decrypt_official_payload(&shared_secret, &third)
+                .unwrap(),
+            b"third"
+        );
+        assert_eq!(receiver.receiving_chain_length, 3);
+        assert_eq!(receiver.official_skipped_message_keys.len(), 2);
+        assert_eq!(
+            receiver
+                .decrypt_official_payload(&shared_secret, &first)
+                .unwrap(),
+            b"first"
+        );
+        assert_eq!(
+            receiver
+                .decrypt_official_payload(&shared_secret, &second)
+                .unwrap(),
+            b"second"
+        );
+        assert!(receiver.official_skipped_message_keys.is_empty());
+
+        let replay = receiver
+            .decrypt_official_payload(&shared_secret, &first)
+            .unwrap_err();
+        assert!(matches!(
+            replay,
+            RadrootsSimplexSmpCryptoError::RatchetMessageRegression {
+                received: 0,
+                current: 3
+            }
+        ));
+    }
+
+    #[test]
+    fn rejects_too_many_official_skipped_messages() {
+        let (mut sender, mut receiver) = official_sender_receiver_ratchets();
+        let shared_secret = [13_u8; RADROOTS_SIMPLEX_SMP_SHARED_SECRET_LENGTH];
+        let mut encrypted = Vec::new();
+        for index in 0..=RADROOTS_SIMPLEX_OFFICIAL_MAX_SKIPPED_MESSAGES + 1 {
+            encrypted = sender
+                .encrypt_official_payload(&shared_secret, &index.to_be_bytes(), 96)
+                .unwrap();
+        }
+
+        let error = receiver
+            .decrypt_official_payload(&shared_secret, &encrypted)
+            .unwrap_err();
+        assert_eq!(
+            error,
+            RadrootsSimplexSmpCryptoError::RatchetTooManySkipped {
+                skipped: RADROOTS_SIMPLEX_OFFICIAL_MAX_SKIPPED_MESSAGES + 1,
+                max: RADROOTS_SIMPLEX_OFFICIAL_MAX_SKIPPED_MESSAGES
+            }
+        );
+        assert_eq!(
+            error.to_string(),
+            "SMP ratchet skipped 513 messages, exceeding maximum 512"
+        );
+    }
+
+    #[test]
     fn rejects_tampered_official_payload_body() {
         let (mut sender, mut receiver) = official_sender_receiver_ratchets();
         let shared_secret = [12_u8; RADROOTS_SIMPLEX_SMP_SHARED_SECRET_LENGTH];
@@ -885,6 +1070,55 @@ mod tests {
         assert_eq!(
             error,
             RadrootsSimplexSmpCryptoError::AesGcmAuthenticationFailed
+        );
+    }
+
+    #[test]
+    fn decrypts_official_payloads_received_out_of_order() {
+        let (mut sender, mut receiver) = official_sender_receiver_ratchets();
+        let shared_secret = [13_u8; RADROOTS_SIMPLEX_SMP_SHARED_SECRET_LENGTH];
+        let encrypted_0 = sender
+            .encrypt_official_payload(&shared_secret, b"first official body", 96)
+            .unwrap();
+        let encrypted_1 = sender
+            .encrypt_official_payload(&shared_secret, b"second official body", 96)
+            .unwrap();
+
+        let plaintext_1 = receiver
+            .decrypt_official_payload(&shared_secret, &encrypted_1)
+            .unwrap();
+        assert_eq!(plaintext_1, b"second official body");
+        assert_eq!(receiver.receiving_chain_length, 2);
+        assert_eq!(receiver.official_skipped_message_keys.len(), 1);
+
+        let plaintext_0 = receiver
+            .decrypt_official_payload(&shared_secret, &encrypted_0)
+            .unwrap();
+        assert_eq!(plaintext_0, b"first official body");
+        assert!(receiver.official_skipped_message_keys.is_empty());
+        assert_eq!(receiver.receiving_chain_length, 2);
+    }
+
+    #[test]
+    fn rejects_too_many_official_skipped_payloads() {
+        let (mut sender, mut receiver) = official_sender_receiver_ratchets();
+        let shared_secret = [14_u8; RADROOTS_SIMPLEX_SMP_SHARED_SECRET_LENGTH];
+        let mut encrypted = Vec::new();
+        for index in 0..514 {
+            encrypted = sender
+                .encrypt_official_payload(&shared_secret, &[index as u8], 96)
+                .unwrap();
+        }
+
+        let error = receiver
+            .decrypt_official_payload(&shared_secret, &encrypted)
+            .unwrap_err();
+        assert_eq!(
+            error,
+            RadrootsSimplexSmpCryptoError::RatchetTooManySkipped {
+                skipped: 513,
+                max: 512
+            }
         );
     }
 }

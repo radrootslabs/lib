@@ -10,7 +10,10 @@ use radroots_simplex_agent_proto::prelude::{
     RadrootsSimplexSmpRatchetState, decode_connection_link, decode_envelope,
     encode_connection_link, encode_envelope,
 };
-use radroots_simplex_smp_crypto::prelude::RadrootsSimplexSmpEd25519Keypair;
+use radroots_simplex_smp_crypto::prelude::{
+    RADROOTS_SIMPLEX_OFFICIAL_AES_IV_LENGTH, RadrootsSimplexSmpEd25519Keypair,
+    RadrootsSimplexSmpSkippedMessageKey,
+};
 use radroots_simplex_smp_proto::prelude::{
     RadrootsSimplexSmpQueueUri, RadrootsSimplexSmpServerAddress,
 };
@@ -238,6 +241,16 @@ struct RadrootsSimplexAgentRatchetStateSnapshot {
     official_receiving_header_key: Option<Vec<u8>>,
     official_next_sending_header_key: Option<Vec<u8>>,
     official_next_receiving_header_key: Option<Vec<u8>>,
+    official_skipped_message_keys: Vec<RadrootsSimplexAgentSkippedMessageKeySnapshot>,
+}
+
+#[cfg(feature = "std")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct RadrootsSimplexAgentSkippedMessageKeySnapshot {
+    header_key: Vec<u8>,
+    message_number: u32,
+    message_key: Vec<u8>,
+    message_iv: Vec<u8>,
 }
 
 #[cfg(feature = "std")]
@@ -1051,6 +1064,11 @@ fn ratchet_state_to_snapshot(
         official_receiving_header_key: state.official_receiving_header_key,
         official_next_sending_header_key: state.official_next_sending_header_key,
         official_next_receiving_header_key: state.official_next_receiving_header_key,
+        official_skipped_message_keys: state
+            .official_skipped_message_keys
+            .into_iter()
+            .map(skipped_message_key_to_snapshot)
+            .collect(),
     }
 }
 
@@ -1103,7 +1121,45 @@ fn ratchet_state_from_snapshot(
     state.official_receiving_header_key = snapshot.official_receiving_header_key;
     state.official_next_sending_header_key = snapshot.official_next_sending_header_key;
     state.official_next_receiving_header_key = snapshot.official_next_receiving_header_key;
+    state.official_skipped_message_keys = snapshot
+        .official_skipped_message_keys
+        .into_iter()
+        .map(skipped_message_key_from_snapshot)
+        .collect::<Result<_, _>>()?;
     Ok(state)
+}
+
+#[cfg(feature = "std")]
+fn skipped_message_key_to_snapshot(
+    key: RadrootsSimplexSmpSkippedMessageKey,
+) -> RadrootsSimplexAgentSkippedMessageKeySnapshot {
+    RadrootsSimplexAgentSkippedMessageKeySnapshot {
+        header_key: key.header_key,
+        message_number: key.message_number,
+        message_key: key.message_key,
+        message_iv: key.message_iv.to_vec(),
+    }
+}
+
+#[cfg(feature = "std")]
+fn skipped_message_key_from_snapshot(
+    snapshot: RadrootsSimplexAgentSkippedMessageKeySnapshot,
+) -> Result<RadrootsSimplexSmpSkippedMessageKey, RadrootsSimplexAgentStoreError> {
+    let message_iv: [u8; RADROOTS_SIMPLEX_OFFICIAL_AES_IV_LENGTH] = snapshot
+        .message_iv
+        .try_into()
+        .map_err(|message_iv: Vec<u8>| {
+            RadrootsSimplexAgentStoreError::Persistence(format!(
+                "invalid SimpleX skipped message IV length {}",
+                message_iv.len()
+            ))
+        })?;
+    Ok(RadrootsSimplexSmpSkippedMessageKey {
+        header_key: snapshot.header_key,
+        message_number: snapshot.message_number,
+        message_key: snapshot.message_key,
+        message_iv,
+    })
 }
 
 #[cfg(feature = "std")]
@@ -1520,6 +1576,14 @@ mod tests {
             ratchet.official_next_sending_header_key = Some(b"official-next-send-header".to_vec());
             ratchet.official_next_receiving_header_key =
                 Some(b"official-next-recv-header".to_vec());
+            ratchet
+                .official_skipped_message_keys
+                .push(RadrootsSimplexSmpSkippedMessageKey {
+                    header_key: b"official-skipped-header".to_vec(),
+                    message_number: 7,
+                    message_key: b"official-skipped-message".to_vec(),
+                    message_iv: [3_u8; RADROOTS_SIMPLEX_OFFICIAL_AES_IV_LENGTH],
+                });
             connection.ratchet_state = Some(ratchet);
             connection.local_x3dh_key_1 = Some(RadrootsSimplexAgentX3dhKeypair {
                 public_key: b"x3dh-public-1".to_vec(),
@@ -1555,6 +1619,15 @@ mod tests {
         assert_eq!(
             loaded_ratchet.official_next_receiving_header_key.as_deref(),
             Some(&b"official-next-recv-header"[..])
+        );
+        assert_eq!(
+            loaded_ratchet.official_skipped_message_keys,
+            vec![RadrootsSimplexSmpSkippedMessageKey {
+                header_key: b"official-skipped-header".to_vec(),
+                message_number: 7,
+                message_key: b"official-skipped-message".to_vec(),
+                message_iv: [3_u8; RADROOTS_SIMPLEX_OFFICIAL_AES_IV_LENGTH],
+            }]
         );
         assert_eq!(
             loaded_connection
