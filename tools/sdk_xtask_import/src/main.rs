@@ -1,6 +1,7 @@
 mod check;
 mod contracts;
 mod coverage;
+mod coverage_policy;
 mod fs;
 mod generate;
 mod manifest;
