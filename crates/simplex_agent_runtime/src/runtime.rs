@@ -911,10 +911,26 @@ impl RadrootsSimplexAgentRuntime {
                     }
                 }
                 RadrootsSimplexAgentMessage::Receipt(receipt) => {
+                    let Some(stored_message_hash) = self
+                        .store
+                        .outbound_message_hash(connection_id, receipt.message_id)?
+                    else {
+                        return Err(RadrootsSimplexAgentRuntimeError::Runtime(format!(
+                            "SimpleX receipt for `{connection_id}` referenced unknown outbound message `{}`",
+                            receipt.message_id
+                        )));
+                    };
+                    if stored_message_hash != receipt.message_hash {
+                        return Err(RadrootsSimplexAgentRuntimeError::Runtime(format!(
+                            "SimpleX receipt for `{connection_id}` message `{}` did not match stored outbound message hash",
+                            receipt.message_id
+                        )));
+                    }
                     self.events
                         .push_back(RadrootsSimplexAgentRuntimeEvent::MessageAcknowledged {
                             connection_id: connection_id.into(),
                             message_id: receipt.message_id,
+                            message_hash: receipt.message_hash,
                         });
                 }
                 RadrootsSimplexAgentMessage::QueueAdd(_)
@@ -2609,6 +2625,25 @@ mod tests {
         Sha256::digest(&encoded).to_vec()
     }
 
+    fn receipt_message(
+        frame_message_id: u64,
+        message_id: u64,
+        message_hash: Vec<u8>,
+    ) -> RadrootsSimplexAgentDecryptedMessage {
+        RadrootsSimplexAgentDecryptedMessage::Message(RadrootsSimplexAgentMessageFrame {
+            header: RadrootsSimplexAgentMessageHeader {
+                message_id: frame_message_id,
+                previous_message_hash: Vec::new(),
+            },
+            message: RadrootsSimplexAgentMessage::Receipt(RadrootsSimplexAgentMessageReceipt {
+                message_id,
+                message_hash,
+                receipt_info: Vec::new(),
+            }),
+            padding: Vec::new(),
+        })
+    }
+
     fn mark_connected(runtime: &mut RadrootsSimplexAgentRuntime, connection_id: &str) {
         runtime
             .store
@@ -3550,6 +3585,75 @@ mod tests {
                 message_id: 1,
                 message_hash,
             } if connection_id == joined && !message_hash.is_empty()
+        )));
+    }
+
+    #[test]
+    fn peer_receipt_requires_stored_outbound_message_hash() {
+        let mut runtime = RadrootsSimplexAgentRuntimeBuilder::new().build().unwrap();
+        let connection_id = runtime
+            .create_connection(invitation_queue(), b"e2e".to_vec(), false, 10)
+            .unwrap();
+        let prepared = runtime
+            .store
+            .prepare_outbound_message(&connection_id, b"outbound-message-hash".to_vec())
+            .unwrap();
+        runtime
+            .store
+            .confirm_outbound_message(&connection_id, prepared.message_id)
+            .unwrap();
+
+        runtime
+            .handle_inbound_decrypted_message(
+                &connection_id,
+                receipt_message(1, prepared.message_id, b"outbound-message-hash".to_vec()),
+                b"receipt-frame".to_vec(),
+            )
+            .unwrap();
+
+        assert!(runtime.drain_events(16).into_iter().any(|event| matches!(
+            event,
+            RadrootsSimplexAgentRuntimeEvent::MessageAcknowledged {
+                connection_id: event_connection_id,
+                message_id,
+                message_hash,
+            } if event_connection_id == connection_id
+                && message_id == prepared.message_id
+                && message_hash == b"outbound-message-hash".to_vec()
+        )));
+    }
+
+    #[test]
+    fn peer_receipt_rejects_hash_mismatch() {
+        let mut runtime = RadrootsSimplexAgentRuntimeBuilder::new().build().unwrap();
+        let connection_id = runtime
+            .create_connection(invitation_queue(), b"e2e".to_vec(), false, 10)
+            .unwrap();
+        let prepared = runtime
+            .store
+            .prepare_outbound_message(&connection_id, b"outbound-message-hash".to_vec())
+            .unwrap();
+        runtime
+            .store
+            .confirm_outbound_message(&connection_id, prepared.message_id)
+            .unwrap();
+
+        let error = runtime
+            .handle_inbound_decrypted_message(
+                &connection_id,
+                receipt_message(1, prepared.message_id, b"wrong-hash".to_vec()),
+                b"receipt-frame".to_vec(),
+            )
+            .unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("did not match stored outbound message hash")
+        );
+        assert!(!runtime.drain_events(16).into_iter().any(|event| matches!(
+            event,
+            RadrootsSimplexAgentRuntimeEvent::MessageAcknowledged { .. }
         )));
     }
 

@@ -42,6 +42,7 @@ pub enum RadrootsSimplexAgentRuntimeEvent {
     MessageAcknowledged {
         connection_id: String,
         message_id: u64,
+        message_hash: Vec<u8>,
     },
     SubscriptionQueued {
         connection_id: String,

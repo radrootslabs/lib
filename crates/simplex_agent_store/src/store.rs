@@ -1216,6 +1216,24 @@ impl RadrootsSimplexAgentStore {
             }))
     }
 
+    pub fn outbound_message_hash(
+        &self,
+        connection_id: &str,
+        message_id: RadrootsSimplexAgentMessageId,
+    ) -> Result<Option<Vec<u8>>, RadrootsSimplexAgentStoreError> {
+        let connection = self.connection(connection_id)?;
+        Ok(connection
+            .recent_messages
+            .iter()
+            .rev()
+            .find(|message| {
+                message.message_id == message_id
+                    && message.inbound_queue.is_none()
+                    && message.inbound_broker_message_id.is_none()
+            })
+            .map(|message| message.message_hash.clone()))
+    }
+
     pub fn take_ready_commands(
         &mut self,
         now: u64,
@@ -3626,6 +3644,12 @@ mod tests {
         let cursor = &store.connection(&connection.id).unwrap().delivery_cursor;
         assert_eq!(cursor.last_sent_message_id, Some(1));
         assert_eq!(cursor.last_sent_message_hash, Some(b"ciphertext".to_vec()));
+        assert_eq!(
+            store
+                .outbound_message_hash(&connection.id, prepared.message_id)
+                .unwrap(),
+            Some(b"ciphertext".to_vec())
+        );
     }
 
     #[test]
