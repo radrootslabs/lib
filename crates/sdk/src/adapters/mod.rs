@@ -1,4 +1,4 @@
-#[cfg(feature = "radrootsd-client")]
+#[cfg(feature = "radrootsd-proxy")]
 pub mod radrootsd;
 #[cfg(feature = "relay-client")]
 pub mod relay;

@@ -40,6 +40,13 @@ fn use_configured_policy_serializes_as_kind_only() {
         serde_json::json!({ "kind": "use_configured_relays" })
     );
     assert_struct_serialize_error_paths(&policy, 1);
+
+    let publish_transport_policy = SdkRelayTargetPolicy::use_publish_transport();
+    assert_eq!(
+        serde_json::to_value(&publish_transport_policy).expect("json"),
+        serde_json::json!({ "kind": "use_publish_transport" })
+    );
+    assert_struct_serialize_error_paths(&publish_transport_policy, 1);
 }
 
 #[test]

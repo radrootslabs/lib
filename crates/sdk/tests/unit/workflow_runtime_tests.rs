@@ -111,6 +111,7 @@ fn workflow_digest_and_event_helpers_cover_error_and_input_paths() {
         signed_event(),
         vec!["wss://relay.example.com".to_owned()],
         idempotency_key,
+        false,
         true,
         1_700_000_000_000,
     );
@@ -210,5 +211,26 @@ async fn enqueue_signed_workflow_reports_clock_failures() {
     assert!(matches!(
         enqueue_signed_workflow(&sdk, request, &WorkflowSigner::new()).await,
         Err(RadrootsSdkError::ClockBeforeUnixEpoch)
+    ));
+}
+
+#[tokio::test]
+async fn enqueue_signed_workflow_rejects_publish_transport_targets_without_proxy_transport() {
+    let sdk = crate::RadrootsSdk::builder().build().await.expect("sdk");
+    let actor = RadrootsActorContext::test(FARMER_PUBLIC_KEY_HEX, [RadrootsActorRole::Farmer])
+        .expect("actor");
+    let draft = frozen_draft_for(FARMER_PUBLIC_KEY_HEX);
+    let request = SdkWorkflowEnqueueRequest {
+        operation_kind: "workflow.test.v1",
+        actor: &actor,
+        frozen_draft: &draft,
+        target_relays: SdkRelayTargetPolicy::UsePublishTransport,
+        idempotency_key: None,
+    };
+
+    assert!(matches!(
+        enqueue_signed_workflow(&sdk, request, &WorkflowSigner::new()).await,
+        Err(RadrootsSdkError::EmptyTargetRelays { operation })
+            if operation == "publish transport relay resolution"
     ));
 }

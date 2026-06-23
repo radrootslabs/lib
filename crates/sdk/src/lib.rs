@@ -7,7 +7,7 @@ extern crate alloc;
 #[cfg(feature = "runtime")]
 mod actor_json;
 #[cfg(any(
-    feature = "radrootsd-client",
+    feature = "radrootsd-proxy",
     feature = "signing",
     feature = "relay-client",
     feature = "signer-adapters"
@@ -89,8 +89,8 @@ pub use crate::runtime::{
     RadrootsSdkBuilder, RadrootsSdkClock, RadrootsSdkStorageConfig, RadrootsSdkStoragePaths,
     RadrootsSdkTimestamp, RestoreArchive, RestoreReceipt, RestoreRequest, SdkBackupManifest,
     SdkBackupManifestKind, SdkBackupState, SdkBackupVerification, SdkEventStoreStorageStatus,
-    SdkOutboxStorageStatus, SdkRestoreState, SdkSqliteStoreStatus, SdkStorageKind,
-    StorageStatusReceipt, StorageStatusRequest,
+    SdkOutboxStorageStatus, SdkPublishTransport, SdkRestoreState, SdkSqliteStoreStatus,
+    SdkStorageKind, StorageStatusReceipt, StorageStatusRequest,
 };
 #[cfg(feature = "runtime")]
 pub use crate::sync_runtime::{

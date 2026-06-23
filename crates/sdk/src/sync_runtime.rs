@@ -1,3 +1,7 @@
+#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
+use crate::adapters::radrootsd::{
+    RadrootsdError, RadrootsdProxyPublishAdapter, RadrootsdProxyPublishRequest,
+};
 #[cfg(feature = "runtime")]
 use crate::{RadrootsSdkError, SdkRelayUrlPolicy, SyncClient, runtime::sdk_now_ms};
 #[cfg(feature = "runtime")]
@@ -7,7 +11,11 @@ use radroots_events::ids::RadrootsEventId;
 #[cfg(all(feature = "runtime", feature = "relay-runtime"))]
 use radroots_nostr::prelude::RadrootsNostrClient;
 #[cfg(feature = "runtime")]
-use radroots_outbox::{RadrootsOutboxEventState, RadrootsOutboxStatusSummary};
+use radroots_outbox::{
+    RadrootsOutboxClaimedEvent, RadrootsOutboxEventState, RadrootsOutboxStatusSummary,
+};
+#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
+use radroots_publish_proxy_protocol::PublishDeliveryPolicy;
 #[cfg(all(feature = "runtime", feature = "relay-runtime"))]
 use radroots_relay_transport::RadrootsNostrClientPublishAdapter;
 #[cfg(feature = "runtime")]
@@ -310,9 +318,14 @@ pub enum PushOutboxRelayOutcomeKind {
     PowRequired,
     Restricted,
     AuthRequired,
+    Muted,
+    Unsupported,
+    PaymentRequired,
     Error,
     Timeout,
     ConnectionFailed,
+    RelayUrlRejected,
+    SkippedAlreadyAccepted,
     Unknown,
 }
 
@@ -328,9 +341,14 @@ impl From<RadrootsRelayOutcomeKind> for PushOutboxRelayOutcomeKind {
             RadrootsRelayOutcomeKind::PowRequired => Self::PowRequired,
             RadrootsRelayOutcomeKind::Restricted => Self::Restricted,
             RadrootsRelayOutcomeKind::AuthRequired => Self::AuthRequired,
+            RadrootsRelayOutcomeKind::Muted => Self::Muted,
+            RadrootsRelayOutcomeKind::Unsupported => Self::Unsupported,
+            RadrootsRelayOutcomeKind::PaymentRequired => Self::PaymentRequired,
             RadrootsRelayOutcomeKind::Error => Self::Error,
             RadrootsRelayOutcomeKind::Timeout => Self::Timeout,
             RadrootsRelayOutcomeKind::ConnectionFailed => Self::ConnectionFailed,
+            RadrootsRelayOutcomeKind::RelayUrlRejected => Self::RelayUrlRejected,
+            RadrootsRelayOutcomeKind::SkippedAlreadyAccepted => Self::SkippedAlreadyAccepted,
             RadrootsRelayOutcomeKind::Unknown => Self::Unknown,
         }
     }
@@ -361,20 +379,30 @@ impl<'sdk> SyncClient<'sdk> {
         &self,
         request: PushOutboxRequest,
     ) -> Result<PushOutboxReceipt, RadrootsSdkError> {
-        #[cfg(feature = "relay-runtime")]
-        {
-            let adapter =
-                RadrootsNostrClientPublishAdapter::new(RadrootsNostrClient::new_signerless());
-            self.push_outbox_with_adapter(&adapter, request).await
-        }
+        match self.sdk.publish_transport() {
+            crate::runtime::SdkPublishTransport::DirectNostrRelay => {
+                #[cfg(feature = "relay-runtime")]
+                {
+                    let adapter = RadrootsNostrClientPublishAdapter::new(
+                        RadrootsNostrClient::new_signerless(),
+                    );
+                    self.push_outbox_with_adapter(&adapter, request).await
+                }
 
-        #[cfg(not(feature = "relay-runtime"))]
-        {
-            let _ = request;
-            Err(RadrootsSdkError::ProductSyncUnsupported {
-                operation: "sync.push_outbox",
-                required_feature: "relay-runtime",
-            })
+                #[cfg(not(feature = "relay-runtime"))]
+                {
+                    let _ = request;
+                    Err(RadrootsSdkError::ProductSyncUnsupported {
+                        operation: "sync.push_outbox",
+                        required_feature: "relay-runtime",
+                    })
+                }
+            }
+            #[cfg(feature = "radrootsd-proxy")]
+            crate::runtime::SdkPublishTransport::RadrootsdProxy(config) => {
+                let adapter = RadrootsdProxyPublishAdapter::new(config.clone());
+                self.push_outbox_with_proxy_adapter(&adapter, request).await
+            }
         }
     }
 
@@ -427,6 +455,188 @@ impl<'sdk> SyncClient<'sdk> {
         }
         Ok(receipt)
     }
+
+    #[cfg(feature = "radrootsd-proxy")]
+    pub async fn push_outbox_with_proxy_adapter(
+        &self,
+        adapter: &RadrootsdProxyPublishAdapter,
+        request: PushOutboxRequest,
+    ) -> Result<PushOutboxReceipt, RadrootsSdkError> {
+        request.validate()?;
+        let mut receipt = PushOutboxReceipt::default();
+        for _ in 0..request.limit {
+            let claim_now_ms = sdk_now_ms(self.sdk)?;
+            let claim_token = push_outbox_claim_token();
+            let Some(claimed) = self
+                .sdk
+                ._outbox
+                .claim_next_ready_signed_event(
+                    CLAIM_OWNER,
+                    claim_token.as_str(),
+                    claim_now_ms.saturating_add(request.claim_ttl_ms),
+                    claim_now_ms,
+                )
+                .await?
+            else {
+                break;
+            };
+            let publish_now_ms = claim_now_ms;
+            let publish = push_proxy_claimed_outbox_event(
+                self,
+                adapter,
+                &claimed,
+                request.next_attempt_delay_ms,
+                publish_now_ms,
+            )
+            .await?;
+            receipt.push_event(push_event_receipt(
+                claimed.outbox_event_id,
+                push_event_final_state(&publish),
+                publish,
+            ));
+        }
+        Ok(receipt)
+    }
+}
+
+#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
+async fn push_proxy_claimed_outbox_event(
+    sync: &SyncClient<'_>,
+    adapter: &RadrootsdProxyPublishAdapter,
+    claimed: &RadrootsOutboxClaimedEvent,
+    next_attempt_delay_ms: i64,
+    now_ms: i64,
+) -> Result<RadrootsRelayPublishReceipt, RadrootsSdkError> {
+    let signed_event = claimed.signed_event.clone().ok_or(
+        radroots_relay_transport::RadrootsRelayTransportError::MissingSignedOutboxEvent(
+            claimed.outbox_event_id,
+        ),
+    )?;
+    sync.sdk
+        ._outbox
+        .ingest_signed_event_local(
+            &sync.sdk._event_store,
+            claimed.outbox_event_id,
+            claimed.claim_token.as_str(),
+            now_ms,
+        )
+        .await?;
+    let request = RadrootsdProxyPublishRequest {
+        signed_event: signed_event.clone(),
+        relays: claimed.target_relays.clone(),
+        delivery_policy: proxy_delivery_policy(claimed.target_relays.len()),
+        idempotency_key: Some(proxy_outbox_idempotency_key(
+            claimed.outbox_event_id,
+            signed_event.id.as_str(),
+        )),
+        timeout_ms: adapter.config().request_timeout_ms,
+    };
+    let publish = match adapter.publish_signed_event(request).await {
+        Ok(publish) => publish,
+        Err(error) => {
+            let message = proxy_error_message(&error);
+            sync.sdk
+                ._outbox
+                .mark_publish_retryable(
+                    claimed.outbox_event_id,
+                    claimed.claim_token.as_str(),
+                    message.as_str(),
+                    now_ms.saturating_add(next_attempt_delay_ms),
+                    now_ms,
+                )
+                .await?;
+            return Ok(proxy_transport_error_receipt(signed_event.id));
+        }
+    };
+    complete_proxy_publish_attempt(sync, claimed, &publish, next_attempt_delay_ms, now_ms).await?;
+    Ok(publish)
+}
+
+#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
+fn proxy_delivery_policy(target_count: usize) -> PublishDeliveryPolicy {
+    if target_count == 0 {
+        PublishDeliveryPolicy::Any
+    } else {
+        PublishDeliveryPolicy::All
+    }
+}
+
+#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
+fn proxy_outbox_idempotency_key(outbox_event_id: i64, event_id: &str) -> String {
+    format!("radroots-sdk-outbox-{outbox_event_id}-{event_id}")
+}
+
+#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
+async fn complete_proxy_publish_attempt(
+    sync: &SyncClient<'_>,
+    claimed: &RadrootsOutboxClaimedEvent,
+    publish: &RadrootsRelayPublishReceipt,
+    next_attempt_delay_ms: i64,
+    now_ms: i64,
+) -> Result<(), RadrootsSdkError> {
+    if publish.quorum_met {
+        sync.sdk
+            ._outbox
+            .set_publish_quorum(
+                claimed.outbox_event_id,
+                claimed.claim_token.as_str(),
+                0,
+                now_ms,
+            )
+            .await?;
+        sync.sdk
+            ._outbox
+            .complete_publish_attempt(
+                claimed.outbox_event_id,
+                claimed.claim_token.as_str(),
+                "radrootsd proxy publish incomplete",
+                "radrootsd proxy publish terminal",
+                now_ms.saturating_add(next_attempt_delay_ms),
+                now_ms,
+            )
+            .await?;
+    } else if publish.retryable_count > 0 {
+        sync.sdk
+            ._outbox
+            .mark_publish_retryable(
+                claimed.outbox_event_id,
+                claimed.claim_token.as_str(),
+                "radrootsd proxy publish incomplete",
+                now_ms.saturating_add(next_attempt_delay_ms),
+                now_ms,
+            )
+            .await?;
+    } else {
+        sync.sdk
+            ._outbox
+            .mark_publish_failed_terminal(
+                claimed.outbox_event_id,
+                claimed.claim_token.as_str(),
+                "radrootsd proxy publish terminal",
+                now_ms,
+            )
+            .await?;
+    }
+    Ok(())
+}
+
+#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
+fn proxy_transport_error_receipt(event_id: String) -> RadrootsRelayPublishReceipt {
+    RadrootsRelayPublishReceipt {
+        event_id,
+        attempted_count: 1,
+        accepted_count: 0,
+        retryable_count: 1,
+        terminal_count: 0,
+        quorum: 1,
+        quorum_met: false,
+        relays: Vec::new(),
+    }
+}
+
+#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
+fn proxy_error_message(error: &RadrootsdError) -> String {
+    format!("radrootsd proxy publish failed: {error}")
 }
 
 #[cfg(feature = "runtime")]

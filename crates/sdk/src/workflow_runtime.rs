@@ -42,7 +42,7 @@ pub(crate) async fn enqueue_signed_workflow(
             request.operation_kind,
             request.frozen_draft.expected_event_id.as_str(),
             request.frozen_draft.expected_pubkey.as_str(),
-            target_relays.canonical_relays(),
+            target_relays.canonical_relays.as_slice(),
         ),
     };
     let observed_at_ms = sdk_now_ms(sdk)?;
@@ -52,8 +52,8 @@ pub(crate) async fn enqueue_signed_workflow(
     let ingest = RadrootsEventIngest::new(event, observed_at_ms)
         .with_raw_json(signed_event.raw_json.clone());
     let ingest_receipt = sdk._event_store.ingest_event(ingest).await?;
-    let canonical_target_relays = target_relays.canonical_relays().to_vec();
-    let target_relay_values = target_relays.into_vec();
+    let canonical_target_relays = target_relays.canonical_relays.clone();
+    let target_relay_values = target_relays.relays;
     let partial_failure_digest_prefix = outbox_idempotency_digest_prefix(
         request.operation_kind,
         request.frozen_draft,
@@ -65,6 +65,7 @@ pub(crate) async fn enqueue_signed_workflow(
         signed_event,
         target_relay_values,
         idempotency_key,
+        target_relays.allow_empty_target_relays,
         ingest_receipt.inserted,
         observed_at_ms,
     );
@@ -101,14 +102,46 @@ pub(crate) async fn enqueue_signed_workflow(
     })
 }
 
+struct SdkResolvedRelayTargets {
+    relays: Vec<String>,
+    canonical_relays: Vec<String>,
+    allow_empty_target_relays: bool,
+}
+
 fn resolved_target_relays(
     sdk: &RadrootsSdk,
     target_relays: &SdkRelayTargetPolicy,
-) -> Result<SdkRelayTargetSet, RadrootsSdkError> {
+) -> Result<SdkResolvedRelayTargets, RadrootsSdkError> {
     match target_relays {
-        SdkRelayTargetPolicy::Explicit(target_relays) => Ok(target_relays.clone()),
+        SdkRelayTargetPolicy::Explicit(target_relays) => Ok(SdkResolvedRelayTargets {
+            relays: target_relays.relays().to_vec(),
+            canonical_relays: target_relays.canonical_relays().to_vec(),
+            allow_empty_target_relays: false,
+        }),
         SdkRelayTargetPolicy::UseConfiguredRelays => {
-            SdkRelayTargetSet::from_normalized_relays(sdk.relay_urls().to_vec())
+            let target_relays =
+                SdkRelayTargetSet::from_normalized_relays(sdk.relay_urls().to_vec())?;
+            Ok(SdkResolvedRelayTargets {
+                relays: target_relays.relays().to_vec(),
+                canonical_relays: target_relays.canonical_relays().to_vec(),
+                allow_empty_target_relays: false,
+            })
+        }
+        SdkRelayTargetPolicy::UsePublishTransport => {
+            if sdk
+                .publish_transport()
+                .supports_delegated_relay_resolution()
+            {
+                Ok(SdkResolvedRelayTargets {
+                    relays: Vec::new(),
+                    canonical_relays: Vec::new(),
+                    allow_empty_target_relays: true,
+                })
+            } else {
+                Err(RadrootsSdkError::empty_target_relays(
+                    "publish transport relay resolution",
+                ))
+            }
         }
     }
 }
@@ -153,10 +186,11 @@ fn signed_outbox_input(
     signed_event: RadrootsSignedNostrEvent,
     target_relays: Vec<String>,
     idempotency_key: SdkIdempotencyKey,
+    allow_empty_target_relays: bool,
     event_store_inserted: bool,
     observed_at_ms: i64,
 ) -> RadrootsOutboxSignedOperationInput {
-    RadrootsOutboxSignedOperationInput::new(
+    let input = RadrootsOutboxSignedOperationInput::new(
         operation_kind,
         frozen_draft.clone(),
         signed_event,
@@ -165,7 +199,12 @@ fn signed_outbox_input(
         observed_at_ms,
         observed_at_ms,
     )
-    .with_idempotency_key(idempotency_key.into_string())
+    .with_idempotency_key(idempotency_key.into_string());
+    if allow_empty_target_relays {
+        input.allow_empty_target_relays()
+    } else {
+        input
+    }
 }
 
 fn event_from_signed(signed_event: &RadrootsSignedNostrEvent) -> RadrootsNostrEvent {

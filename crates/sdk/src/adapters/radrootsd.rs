@@ -1,15 +1,22 @@
 use core::fmt;
 use core::time::Duration;
 
-use crate::farm::RadrootsFarm;
-use crate::listing;
-use crate::listing::RadrootsListing;
-use crate::profile::{RadrootsProfile, RadrootsProfileType};
-use radroots_events::RadrootsNostrEvent;
-use radroots_events::kinds::KIND_LISTING;
+use radroots_events::draft::RadrootsSignedNostrEvent;
+use radroots_publish_proxy_protocol::{
+    METHOD_EVENT, PublishDeliveryPolicy, PublishEventRequest, PublishEventResponse,
+    PublishProxyProtocolError, PublishRelayOutcomeKind, PublishRelayPolicy, SignedNostrEventWire,
+};
+use radroots_relay_transport::{
+    RadrootsRelayOutcome, RadrootsRelayOutcomeKind, RadrootsRelayPublishAdapter,
+    RadrootsRelayPublishReceipt, RadrootsRelayPublishRelayReceipt, RadrootsRelayPublishRequest,
+    RadrootsRelayTransportError,
+};
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::{Value, json};
+
+pub const SDK_RADROOTSD_PROXY_REQUEST_ID: &str = "radroots-sdk-publish-event";
+pub const SDK_RADROOTSD_PROXY_MAX_RELAYS: usize = 20;
 
 #[derive(Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum RadrootsdAuth {
@@ -27,365 +34,160 @@ impl fmt::Debug for RadrootsdAuth {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SdkRadrootsdSignerAuthority {
-    pub provider_runtime_id: String,
-    pub account_identity_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub provider_signer_session_id: Option<String>,
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsdProxyConfig {
+    pub endpoint: String,
+    pub auth: RadrootsdAuth,
+    pub relay_policy: PublishRelayPolicy,
+    pub timeout: Duration,
+    pub request_timeout_ms: Option<u64>,
 }
 
-impl fmt::Debug for SdkRadrootsdSignerAuthority {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut debug = f.debug_struct("SdkRadrootsdSignerAuthority");
-        debug.field("provider_runtime_id", &self.provider_runtime_id);
-        debug.field("account_identity_id", &self.account_identity_id);
-        debug.field(
-            "provider_signer_session_id",
-            &self
-                .provider_signer_session_id
-                .as_ref()
-                .map(|_| "<redacted>"),
-        );
-        debug.finish()
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum SdkRadrootsdSignerSessionMode {
-    #[serde(alias = "bunker")]
-    Bunker,
-    #[serde(alias = "nostrconnect")]
-    Nostrconnect,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum SdkRadrootsdSignerSessionRole {
-    InboundLocalSigner,
-    OutboundRemoteSigner,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum SdkRadrootsdBridgeDeliveryPolicy {
-    Any,
-    Quorum,
-    All,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum SdkRadrootsdBridgeJobStatus {
-    Accepted,
-    Published,
-    Failed,
-}
-
-#[derive(Clone, PartialEq, Eq, Serialize)]
-pub struct SdkRadrootsdSignerSessionConnectRequest {
-    pub url: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub client_secret_key: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub signer_authority: Option<SdkRadrootsdSignerAuthority>,
-}
-
-impl SdkRadrootsdSignerSessionConnectRequest {
-    pub fn bunker(url: impl Into<String>) -> Self {
+impl RadrootsdProxyConfig {
+    pub fn new(endpoint: impl Into<String>) -> Self {
         Self {
-            url: url.into(),
-            client_secret_key: None,
-            signer_authority: None,
+            endpoint: endpoint.into(),
+            auth: RadrootsdAuth::None,
+            relay_policy: PublishRelayPolicy::RequestThenAuthorWriteThenDaemonDefault,
+            timeout: Duration::from_secs(10),
+            request_timeout_ms: None,
         }
     }
 
-    pub fn nostrconnect(url: impl Into<String>, client_secret_key: impl Into<String>) -> Self {
-        Self {
-            url: url.into(),
-            client_secret_key: Some(client_secret_key.into()),
-            signer_authority: None,
-        }
+    pub fn with_auth(mut self, auth: RadrootsdAuth) -> Self {
+        self.auth = auth;
+        self
     }
 
-    pub fn with_signer_authority(mut self, signer_authority: SdkRadrootsdSignerAuthority) -> Self {
-        self.signer_authority = Some(signer_authority);
+    pub fn with_relay_policy(mut self, relay_policy: PublishRelayPolicy) -> Self {
+        self.relay_policy = relay_policy;
+        self
+    }
+
+    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = timeout;
+        self
+    }
+
+    pub fn with_request_timeout_ms(mut self, timeout_ms: u64) -> Self {
+        self.request_timeout_ms = Some(timeout_ms);
         self
     }
 }
 
-impl fmt::Debug for SdkRadrootsdSignerSessionConnectRequest {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut debug = f.debug_struct("SdkRadrootsdSignerSessionConnectRequest");
-        debug.field("url", &self.url);
-        debug.field(
-            "client_secret_key",
-            &self.client_secret_key.as_ref().map(|_| "<redacted>"),
-        );
-        debug.field("signer_authority", &self.signer_authority);
-        debug.finish()
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsdProxyPublishAdapter {
+    config: RadrootsdProxyConfig,
+}
+
+impl RadrootsdProxyPublishAdapter {
+    pub fn new(config: RadrootsdProxyConfig) -> Self {
+        Self { config }
+    }
+
+    pub fn config(&self) -> &RadrootsdProxyConfig {
+        &self.config
+    }
+
+    pub async fn publish_signed_event(
+        &self,
+        request: RadrootsdProxyPublishRequest,
+    ) -> Result<RadrootsRelayPublishReceipt, RadrootsdError> {
+        let request = request.into_protocol_request(self.config.relay_policy)?;
+        request
+            .validate(SDK_RADROOTSD_PROXY_MAX_RELAYS)
+            .map_err(RadrootsdError::from_protocol)?;
+        let response = publish_event(
+            self.config.endpoint.as_str(),
+            &self.config.auth,
+            &request,
+            self.config.timeout,
+        )
+        .await?;
+        proxy_receipt_from_response(response)
     }
 }
 
-#[derive(Clone, Serialize)]
-pub struct SdkRadrootsdProfilePublishRequest {
-    pub profile: RadrootsProfile,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub profile_type: Option<RadrootsProfileType>,
-    pub signer_session_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub signer_authority: Option<SdkRadrootsdSignerAuthority>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub idempotency_key: Option<String>,
-}
-
-impl fmt::Debug for SdkRadrootsdProfilePublishRequest {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut debug = f.debug_struct("SdkRadrootsdProfilePublishRequest");
-        debug.field("profile", &self.profile);
-        debug.field("profile_type", &self.profile_type);
-        debug.field("signer_session_id", &"<redacted>");
-        debug.field("signer_authority", &self.signer_authority);
-        debug.field("idempotency_key", &self.idempotency_key);
-        debug.finish()
-    }
-}
-
-#[derive(Clone, Serialize)]
-pub struct SdkRadrootsdFarmPublishRequest {
-    pub farm: RadrootsFarm,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub kind: Option<u32>,
-    pub signer_session_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub signer_authority: Option<SdkRadrootsdSignerAuthority>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub idempotency_key: Option<String>,
-}
-
-impl fmt::Debug for SdkRadrootsdFarmPublishRequest {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut debug = f.debug_struct("SdkRadrootsdFarmPublishRequest");
-        debug.field("farm", &self.farm);
-        debug.field("kind", &self.kind);
-        debug.field("signer_session_id", &"<redacted>");
-        debug.field("signer_authority", &self.signer_authority);
-        debug.field("idempotency_key", &self.idempotency_key);
-        debug.finish()
-    }
-}
-
-#[derive(Clone, Serialize)]
-pub struct SdkRadrootsdListingPublishRequest {
-    pub listing: RadrootsListing,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub kind: Option<u32>,
-    pub signer_session_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub signer_authority: Option<SdkRadrootsdSignerAuthority>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub idempotency_key: Option<String>,
-}
-
-impl fmt::Debug for SdkRadrootsdListingPublishRequest {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut debug = f.debug_struct("SdkRadrootsdListingPublishRequest");
-        debug.field("listing", &self.listing);
-        debug.field("kind", &self.kind);
-        debug.field("signer_session_id", &"<redacted>");
-        debug.field("signer_authority", &self.signer_authority);
-        debug.field("idempotency_key", &self.idempotency_key);
-        debug.finish()
-    }
-}
-
-impl SdkRadrootsdListingPublishRequest {
-    pub fn from_event(
-        event: &RadrootsNostrEvent,
-        signer_session_id: impl Into<String>,
-        signer_authority: Option<SdkRadrootsdSignerAuthority>,
-        idempotency_key: Option<String>,
-    ) -> Result<Self, listing::RadrootsListingParseError> {
-        if event.kind != KIND_LISTING {
-            return Err(listing::RadrootsListingParseError::InvalidKind(event.kind));
-        }
-        Ok(Self {
-            listing: listing::parse_event(event)?,
-            kind: Some(event.kind),
-            signer_session_id: signer_session_id.into(),
-            signer_authority,
-            idempotency_key,
+impl RadrootsRelayPublishAdapter for RadrootsdProxyPublishAdapter {
+    fn publish<'a>(
+        &'a self,
+        request: RadrootsRelayPublishRequest,
+    ) -> futures::future::BoxFuture<
+        'a,
+        Result<Vec<RadrootsRelayPublishRelayReceipt>, RadrootsRelayTransportError>,
+    > {
+        Box::pin(async move {
+            let request = RadrootsdProxyPublishRequest {
+                delivery_policy: delivery_policy_from_relay_request(
+                    request.targets.len(),
+                    request.accepted_quorum,
+                ),
+                signed_event: request.signed_event,
+                relays: request.targets.relay_strings(),
+                idempotency_key: None,
+                timeout_ms: self.config.request_timeout_ms,
+            };
+            let receipt = self
+                .publish_signed_event(request)
+                .await
+                .map_err(|error| RadrootsRelayTransportError::Transport(error.to_string()))?;
+            Ok(receipt.relays)
         })
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-pub struct SdkRadrootsdBridgePublishResponse {
-    pub deduplicated: bool,
-    pub job: SdkRadrootsdBridgeJob,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
-pub struct SdkRadrootsdBridgeStatusResponse {
-    pub enabled: bool,
-    pub ready: bool,
-    pub auth_mode: String,
-    pub signer_mode: String,
-    pub default_signer_mode: String,
-    pub supported_signer_modes: Vec<String>,
-    pub available_nip46_signer_sessions: usize,
-    pub relay_count: usize,
-    pub delivery_policy: SdkRadrootsdBridgeDeliveryPolicy,
-    #[serde(default)]
-    pub delivery_quorum: Option<usize>,
-    pub publish_max_attempts: usize,
-    pub publish_initial_backoff_millis: u64,
-    pub publish_max_backoff_millis: u64,
-    pub job_status_retention: usize,
-    pub retained_jobs: usize,
-    pub retained_idempotency_keys: usize,
-    pub accepted_jobs: usize,
-    pub published_jobs: usize,
-    pub failed_jobs: usize,
-    pub recovered_failed_jobs: usize,
-    pub methods: Vec<String>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SdkRadrootsdBridgeRelayPublishResult {
-    pub relay_url: String,
-    pub acknowledged: bool,
-    #[serde(default)]
-    pub detail: Option<String>,
-}
-
-#[derive(Clone, PartialEq, Eq, Deserialize)]
-pub struct SdkRadrootsdBridgeJob {
-    pub job_id: String,
-    pub command: String,
-    pub status: String,
-    pub terminal: bool,
-    pub recovered_after_restart: bool,
-    pub signer_mode: String,
-    #[serde(default)]
-    pub signer_session_id: Option<String>,
-    pub event_kind: u32,
-    #[serde(default)]
-    pub event_id: Option<String>,
-    #[serde(default)]
-    pub event_addr: Option<String>,
-    pub relay_count: usize,
-    pub acknowledged_relay_count: usize,
-}
-
-impl fmt::Debug for SdkRadrootsdBridgeJob {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut debug = f.debug_struct("SdkRadrootsdBridgeJob");
-        debug.field("job_id", &self.job_id);
-        debug.field("command", &self.command);
-        debug.field("status", &self.status);
-        debug.field("terminal", &self.terminal);
-        debug.field("recovered_after_restart", &self.recovered_after_restart);
-        debug.field("signer_mode", &"<redacted>");
-        debug.field(
-            "signer_session_id",
-            &self.signer_session_id.as_ref().map(|_| "<redacted>"),
-        );
-        debug.field("event_kind", &self.event_kind);
-        debug.field("event_id", &self.event_id);
-        debug.field("event_addr", &self.event_addr);
-        debug.field("relay_count", &self.relay_count);
-        debug.field("acknowledged_relay_count", &self.acknowledged_relay_count);
-        debug.finish()
-    }
-}
-
-#[derive(Clone, PartialEq, Eq, Deserialize)]
-pub struct SdkRadrootsdBridgeJobView {
-    pub job_id: String,
-    pub command: String,
-    #[serde(default)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsdProxyPublishRequest {
+    pub signed_event: RadrootsSignedNostrEvent,
+    pub relays: Vec<String>,
+    pub delivery_policy: PublishDeliveryPolicy,
     pub idempotency_key: Option<String>,
-    pub status: SdkRadrootsdBridgeJobStatus,
-    pub terminal: bool,
-    pub recovered_after_restart: bool,
-    pub requested_at_unix: u64,
-    #[serde(default)]
-    pub completed_at_unix: Option<u64>,
-    pub signer_mode: String,
-    #[serde(default)]
-    pub signer_session_id: Option<String>,
-    pub event_kind: u32,
-    #[serde(default)]
-    pub event_id: Option<String>,
-    #[serde(default)]
-    pub event_addr: Option<String>,
-    pub delivery_policy: SdkRadrootsdBridgeDeliveryPolicy,
-    #[serde(default)]
-    pub delivery_quorum: Option<usize>,
-    pub relay_count: usize,
-    pub acknowledged_relay_count: usize,
-    pub required_acknowledged_relay_count: usize,
-    pub attempt_count: usize,
-    #[serde(default)]
-    pub attempt_summaries: Vec<String>,
-    #[serde(default)]
-    pub relay_results: Vec<SdkRadrootsdBridgeRelayPublishResult>,
-    pub relay_outcome_summary: String,
+    pub timeout_ms: Option<u64>,
 }
 
-impl fmt::Debug for SdkRadrootsdBridgeJobView {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut debug = f.debug_struct("SdkRadrootsdBridgeJobView");
-        debug.field("job_id", &self.job_id);
-        debug.field("command", &self.command);
-        debug.field("idempotency_key", &self.idempotency_key);
-        debug.field("status", &self.status);
-        debug.field("terminal", &self.terminal);
-        debug.field("recovered_after_restart", &self.recovered_after_restart);
-        debug.field("requested_at_unix", &self.requested_at_unix);
-        debug.field("completed_at_unix", &self.completed_at_unix);
-        debug.field("signer_mode", &self.signer_mode.as_str());
-        debug.field(
-            "signer_session_id",
-            &self.signer_session_id.as_ref().map(|_| "<redacted>"),
-        );
-        debug.field("event_kind", &self.event_kind);
-        debug.field("event_id", &self.event_id);
-        debug.field("event_addr", &self.event_addr);
-        debug.field("delivery_policy", &self.delivery_policy);
-        debug.field("delivery_quorum", &self.delivery_quorum);
-        debug.field("relay_count", &self.relay_count);
-        debug.field("acknowledged_relay_count", &self.acknowledged_relay_count);
-        debug.field(
-            "required_acknowledged_relay_count",
-            &self.required_acknowledged_relay_count,
-        );
-        debug.field("attempt_count", &self.attempt_count);
-        debug.field("attempt_summaries", &self.attempt_summaries);
-        debug.field("relay_results", &self.relay_results);
-        debug.field("relay_outcome_summary", &self.relay_outcome_summary);
-        debug.finish()
+impl RadrootsdProxyPublishRequest {
+    fn into_protocol_request(
+        self,
+        relay_policy: PublishRelayPolicy,
+    ) -> Result<PublishEventRequest, RadrootsdError> {
+        Ok(PublishEventRequest {
+            event: signed_event_wire(&self.signed_event),
+            relays: self.relays,
+            relay_policy,
+            delivery_policy: self.delivery_policy,
+            idempotency_key: self.idempotency_key,
+            timeout_ms: self.timeout_ms,
+        })
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RadrootsdError {
     InvalidAuthHeader(String),
+    InvalidRequest(String),
     Http(String),
-    JsonRpc(String),
+    JsonRpc { code: i64, message: String },
     MalformedResponse(String),
 }
 
-impl core::fmt::Display for RadrootsdError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+impl RadrootsdError {
+    fn from_protocol(error: PublishProxyProtocolError) -> Self {
+        Self::InvalidRequest(error.to_string())
+    }
+}
+
+impl fmt::Display for RadrootsdError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidAuthHeader(value) => {
                 write!(f, "invalid radrootsd bearer token header: {value}")
             }
-            Self::Http(value) => write!(f, "{value}"),
-            Self::JsonRpc(value) => write!(f, "{value}"),
-            Self::MalformedResponse(value) => write!(f, "{value}"),
+            Self::InvalidRequest(value) | Self::Http(value) | Self::MalformedResponse(value) => {
+                f.write_str(value)
+            }
+            Self::JsonRpc { code, message } => {
+                write!(f, "radrootsd jsonrpc failed {code}: {message}")
+            }
         }
     }
 }
@@ -406,17 +208,17 @@ struct JsonRpcError {
     message: String,
 }
 
-pub async fn publish_listing(
+pub async fn publish_event(
     endpoint: &str,
     auth: &RadrootsdAuth,
-    request: &SdkRadrootsdListingPublishRequest,
+    request: &PublishEventRequest,
     timeout: Duration,
-) -> Result<SdkRadrootsdBridgePublishResponse, RadrootsdError> {
+) -> Result<PublishEventResponse, RadrootsdError> {
     jsonrpc_call(
         endpoint,
         auth,
-        "radroots-sdk-listing-publish",
-        "bridge.listing.publish",
+        SDK_RADROOTSD_PROXY_REQUEST_ID,
+        METHOD_EVENT,
         request,
         timeout,
     )
@@ -436,10 +238,8 @@ fn auth_headers(auth: &RadrootsdAuth) -> Result<HeaderMap, RadrootsdError> {
     }
 }
 
-pub fn bridge_listing_publish_request_json(
-    request: &SdkRadrootsdListingPublishRequest,
-) -> Result<Value, RadrootsdError> {
-    Ok(serde_json::to_value(request).expect("radrootsd listing publish request serializes"))
+pub fn publish_event_request_json(request: &PublishEventRequest) -> Result<Value, RadrootsdError> {
+    Ok(serde_json::to_value(request).expect("radrootsd publish.event request serializes"))
 }
 
 fn http_status_error(status: reqwest::StatusCode, body: &str) -> RadrootsdError {
@@ -479,10 +279,10 @@ where
     }
     match (envelope.result, envelope.error) {
         (Some(result), None) => Ok(result),
-        (None, Some(error)) => Err(RadrootsdError::JsonRpc(format!(
-            "radrootsd {method} failed {}: {}",
-            error.code, error.message
-        ))),
+        (None, Some(error)) => Err(RadrootsdError::JsonRpc {
+            code: error.code,
+            message: error.message,
+        }),
         (Some(_), Some(error)) => Err(RadrootsdError::MalformedResponse(format!(
             "radrootsd {method} returned result and error: {} {}",
             error.code, error.message
@@ -536,6 +336,99 @@ where
     }
 
     decode_jsonrpc_response(method, request_id, body.as_str())
+}
+
+fn signed_event_wire(event: &RadrootsSignedNostrEvent) -> SignedNostrEventWire {
+    SignedNostrEventWire {
+        id: event.id.clone(),
+        pubkey: event.pubkey.clone(),
+        created_at: event.created_at as u64,
+        kind: event.kind,
+        tags: event.tags.clone(),
+        content: event.content.clone(),
+        sig: event.sig.clone(),
+    }
+}
+
+fn delivery_policy_from_relay_request(
+    target_count: usize,
+    accepted_quorum: usize,
+) -> PublishDeliveryPolicy {
+    if accepted_quorum >= target_count {
+        PublishDeliveryPolicy::All
+    } else if accepted_quorum <= 1 {
+        PublishDeliveryPolicy::Any
+    } else {
+        PublishDeliveryPolicy::Quorum {
+            quorum: accepted_quorum,
+        }
+    }
+}
+
+fn proxy_receipt_from_response(
+    response: PublishEventResponse,
+) -> Result<RadrootsRelayPublishReceipt, RadrootsdError> {
+    response
+        .job
+        .validate()
+        .map_err(RadrootsdError::from_protocol)?;
+    let quorum = response
+        .job
+        .delivery_policy
+        .required_ack_count(response.job.relay_count);
+    let attempted_count = response
+        .job
+        .relays
+        .iter()
+        .filter(|relay| relay.attempted)
+        .count();
+    let relays = response
+        .job
+        .relays
+        .into_iter()
+        .map(|relay| RadrootsRelayPublishRelayReceipt {
+            relay_url: relay.relay_url,
+            attempted: relay.attempted,
+            outcome: RadrootsRelayOutcome {
+                kind: relay_outcome_kind(relay.outcome_kind),
+                message: relay.message,
+            },
+        })
+        .collect();
+    Ok(RadrootsRelayPublishReceipt {
+        event_id: response.job.event_id,
+        attempted_count,
+        accepted_count: response.job.acknowledged_count,
+        retryable_count: response.job.retryable_count,
+        terminal_count: response.job.terminal_count,
+        quorum,
+        quorum_met: response.job.delivery_satisfied,
+        relays,
+    })
+}
+
+fn relay_outcome_kind(kind: PublishRelayOutcomeKind) -> RadrootsRelayOutcomeKind {
+    match kind {
+        PublishRelayOutcomeKind::Accepted => RadrootsRelayOutcomeKind::Accepted,
+        PublishRelayOutcomeKind::DuplicateAccepted => RadrootsRelayOutcomeKind::DuplicateAccepted,
+        PublishRelayOutcomeKind::Blocked => RadrootsRelayOutcomeKind::Blocked,
+        PublishRelayOutcomeKind::RateLimited => RadrootsRelayOutcomeKind::RateLimited,
+        PublishRelayOutcomeKind::Invalid => RadrootsRelayOutcomeKind::Invalid,
+        PublishRelayOutcomeKind::PowRequired => RadrootsRelayOutcomeKind::PowRequired,
+        PublishRelayOutcomeKind::Restricted => RadrootsRelayOutcomeKind::Restricted,
+        PublishRelayOutcomeKind::AuthRequired => RadrootsRelayOutcomeKind::AuthRequired,
+        PublishRelayOutcomeKind::Muted => RadrootsRelayOutcomeKind::Muted,
+        PublishRelayOutcomeKind::Unsupported => RadrootsRelayOutcomeKind::Unsupported,
+        PublishRelayOutcomeKind::PaymentRequired => RadrootsRelayOutcomeKind::PaymentRequired,
+        PublishRelayOutcomeKind::Error => RadrootsRelayOutcomeKind::Error,
+        PublishRelayOutcomeKind::Timeout => RadrootsRelayOutcomeKind::Timeout,
+        PublishRelayOutcomeKind::ConnectionFailed => RadrootsRelayOutcomeKind::ConnectionFailed,
+        PublishRelayOutcomeKind::RelayUrlRejected => RadrootsRelayOutcomeKind::RelayUrlRejected,
+        PublishRelayOutcomeKind::SkippedAlreadyAccepted => {
+            RadrootsRelayOutcomeKind::SkippedAlreadyAccepted
+        }
+        PublishRelayOutcomeKind::Unknown => RadrootsRelayOutcomeKind::Unknown,
+    }
 }
 
 #[cfg(test)]

@@ -30,8 +30,16 @@ use radroots_sdk::{
     SdkBackupManifestKind, SdkRelayAuthPolicy, SdkRelayTargetPolicy, SdkRelayUrlPolicy,
     SdkRestoreState, StorageStatusRequest, SyncStatusRequest, SyncStatusSource,
 };
+#[cfg(feature = "radrootsd-proxy")]
+use radroots_sdk::{SdkPublishTransport, adapters::radrootsd::RadrootsdProxyConfig};
+#[cfg(feature = "radrootsd-proxy")]
+use std::io::{Read, Write};
+#[cfg(feature = "radrootsd-proxy")]
+use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+#[cfg(feature = "radrootsd-proxy")]
+use std::thread::JoinHandle;
 use std::time::Duration;
 
 const SELLER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -55,11 +63,106 @@ struct FixtureSigner {
 
 struct TransportFailurePublishAdapter;
 
+#[cfg(feature = "radrootsd-proxy")]
+struct RecordedProxyRequest {
+    body: String,
+}
+
 #[derive(Clone)]
 struct RecordingPublishAdapter {
     delay: Duration,
     raw_events: Arc<Mutex<Vec<String>>>,
     request_times_ms: Arc<Mutex<Vec<i64>>>,
+}
+
+#[cfg(feature = "radrootsd-proxy")]
+fn spawn_publish_proxy_server() -> (String, JoinHandle<RecordedProxyRequest>) {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind proxy server");
+    let endpoint = format!("http://{}/rpc", listener.local_addr().expect("addr"));
+    let handle = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("accept");
+        let mut request = Vec::new();
+        let mut buffer = [0u8; 1024];
+        loop {
+            let read = stream.read(&mut buffer).expect("read request");
+            if read == 0 {
+                break;
+            }
+            request.extend_from_slice(&buffer[..read]);
+            if request.windows(4).any(|window| window == b"\r\n\r\n") {
+                let headers_end = request
+                    .windows(4)
+                    .position(|window| window == b"\r\n\r\n")
+                    .expect("headers end")
+                    + 4;
+                let header_text = String::from_utf8_lossy(&request[..headers_end]);
+                let content_length = header_text
+                    .lines()
+                    .find_map(|line| {
+                        let (name, value) = line.split_once(':')?;
+                        name.eq_ignore_ascii_case("content-length")
+                            .then(|| value.trim().parse::<usize>().expect("content length"))
+                    })
+                    .unwrap_or(0);
+                while request.len() < headers_end + content_length {
+                    let read = stream.read(&mut buffer).expect("read body");
+                    if read == 0 {
+                        break;
+                    }
+                    request.extend_from_slice(&buffer[..read]);
+                }
+                break;
+            }
+        }
+        let request_text = String::from_utf8_lossy(&request);
+        let (_, body) = request_text.split_once("\r\n\r\n").expect("request body");
+        let body_json: serde_json::Value = serde_json::from_str(body).expect("body json");
+        let event = &body_json["params"]["event"];
+        let response_body = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": body_json["id"],
+            "result": {
+                "deduplicated": false,
+                "job": {
+                    "job_id": "job-1",
+                    "status": "delivery_satisfied",
+                    "terminal": true,
+                    "delivery_satisfied": true,
+                    "event_id": event["id"],
+                    "pubkey": event["pubkey"],
+                    "event_kind": event["kind"],
+                    "relay_policy": body_json["params"]["relay_policy"],
+                    "delivery_policy": body_json["params"]["delivery_policy"],
+                    "relay_count": 1,
+                    "acknowledged_count": 1,
+                    "retryable_count": 0,
+                    "terminal_count": 0,
+                    "requested_at_ms": 1700000000000i64,
+                    "completed_at_ms": 1700000000100i64,
+                    "relays": [{
+                        "relay_url": "wss://daemon-resolved.example.com",
+                        "source": "daemon_default",
+                        "attempted": true,
+                        "outcome_kind": "accepted",
+                        "message": "accepted"
+                    }]
+                }
+            }
+        })
+        .to_string();
+        let response = format!(
+            "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
+            response_body.len(),
+            response_body
+        );
+        stream
+            .write_all(response.as_bytes())
+            .expect("write response");
+        RecordedProxyRequest {
+            body: body.to_owned(),
+        }
+    });
+    (endpoint, handle)
 }
 
 impl RadrootsRelayPublishAdapter for TransportFailurePublishAdapter {
@@ -1183,6 +1286,79 @@ async fn push_outbox_empty_queue_returns_zero_counts() {
     assert_eq!(receipt.attempted_events, 0);
     assert!(receipt.events.is_empty());
     assert!(adapter.captured_raw_events().is_empty());
+}
+
+#[cfg(feature = "radrootsd-proxy")]
+#[tokio::test]
+async fn product_push_outbox_uses_radrootsd_proxy_transport_with_daemon_resolved_relays() {
+    let (endpoint, handle) = spawn_publish_proxy_server();
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let sdk = RadrootsSdk::builder()
+        .directory_storage(tempdir.path().join("sdk"))
+        .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000))
+        .publish_transport(SdkPublishTransport::RadrootsdProxy(
+            RadrootsdProxyConfig::new(endpoint),
+        ))
+        .build()
+        .await
+        .expect("sdk");
+
+    let enqueue = sdk
+        .listings()
+        .enqueue_publish(
+            ListingEnqueuePublishRequest::new(
+                actor(),
+                listing(LISTING_A_D_TAG, "Proxy Coffee"),
+                SdkRelayTargetPolicy::use_publish_transport(),
+            ),
+            &FixtureSigner::new(SELLER),
+        )
+        .await
+        .expect("enqueue");
+
+    let receipt = sdk
+        .sync()
+        .push_outbox(PushOutboxRequest::new().with_limit(1))
+        .await
+        .expect("proxy push");
+
+    assert_eq!(receipt.attempted_events, 1);
+    assert_eq!(receipt.published_events, 1);
+    assert_eq!(receipt.events[0].outbox_event_id, enqueue.outbox_event_id);
+    assert_eq!(
+        receipt.events[0].final_state,
+        PushOutboxEventState::Published
+    );
+    assert_eq!(receipt.events[0].relays.len(), 1);
+    assert_eq!(
+        receipt.events[0].relays[0].relay_url,
+        "wss://daemon-resolved.example.com"
+    );
+    assert_eq!(
+        receipt.events[0].relays[0].outcome_kind,
+        PushOutboxRelayOutcomeKind::Accepted
+    );
+
+    let recorded = handle.join().expect("proxy request");
+    let body: serde_json::Value = serde_json::from_str(recorded.body.as_str()).expect("body");
+    assert_eq!(body["method"], "publish.event");
+    assert_eq!(body["params"]["relays"], serde_json::json!([]));
+    assert_eq!(
+        body["params"]["relay_policy"],
+        "request_then_author_write_then_daemon_default"
+    );
+    assert_eq!(body["params"]["delivery_policy"]["mode"], "any");
+    assert!(body["params"]["event"]["sig"].as_str().is_some());
+    assert!(!recorded.body.contains("bridge."));
+    assert!(!recorded.body.contains("signer_session_id"));
+
+    let status = sdk
+        .sync()
+        .status(SyncStatusRequest::new())
+        .await
+        .expect("status");
+    assert_eq!(status.outbox.terminal_events, 1);
+    assert_eq!(status.outbox.ready_signed_events, 0);
 }
 
 #[test]

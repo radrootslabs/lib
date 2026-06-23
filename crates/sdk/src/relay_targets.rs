@@ -27,6 +27,7 @@ impl SdkRelayUrlPolicy {
 pub enum SdkRelayTargetPolicy {
     Explicit(SdkRelayTargetSet),
     UseConfiguredRelays,
+    UsePublishTransport,
 }
 
 impl SdkRelayTargetPolicy {
@@ -43,6 +44,10 @@ impl SdkRelayTargetPolicy {
         S: AsRef<str>,
     {
         Ok(Self::Explicit(SdkRelayTargetSet::new(relays, url_policy)?))
+    }
+
+    pub fn use_publish_transport() -> Self {
+        Self::UsePublishTransport
     }
 }
 
@@ -62,6 +67,11 @@ impl serde::Serialize for SdkRelayTargetPolicy {
             Self::UseConfiguredRelays => {
                 let mut state = serializer.serialize_struct("SdkRelayTargetPolicy", 1)?;
                 state.serialize_field("kind", "use_configured_relays")?;
+                state.end()
+            }
+            Self::UsePublishTransport => {
+                let mut state = serializer.serialize_struct("SdkRelayTargetPolicy", 1)?;
+                state.serialize_field("kind", "use_publish_transport")?;
                 state.end()
             }
         }

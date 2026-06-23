@@ -590,6 +590,18 @@ impl From<radroots_relay_transport::RadrootsRelayTransportError> for RadrootsSdk
             radroots_relay_transport::RadrootsRelayTransportError::RelayUrlQueryOrFragment {
                 url,
             } => Self::invalid_relay_url(url, "relay URL must not include query or fragment"),
+            radroots_relay_transport::RadrootsRelayTransportError::RelayUrlForbiddenDestination {
+                url,
+                reason,
+            } => Self::invalid_relay_url(url, reason),
+            radroots_relay_transport::RadrootsRelayTransportError::RelayUrlResolvedForbiddenDestination {
+                url,
+                address,
+                reason,
+            } => Self::invalid_relay_url(
+                url,
+                format!("relay URL resolved to forbidden address `{address}`: {reason}"),
+            ),
             radroots_relay_transport::RadrootsRelayTransportError::EmptyTargetSet => {
                 Self::empty_target_relays("relay publish")
             }

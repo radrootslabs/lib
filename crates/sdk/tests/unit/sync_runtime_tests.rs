@@ -87,6 +87,30 @@ fn push_event_final_state_follows_publish_quorum_and_retryability() {
 }
 
 #[test]
+fn push_relay_outcome_mapping_covers_daemon_proxy_results() {
+    assert_eq!(
+        PushOutboxRelayOutcomeKind::from(RadrootsRelayOutcomeKind::Muted),
+        PushOutboxRelayOutcomeKind::Muted
+    );
+    assert_eq!(
+        PushOutboxRelayOutcomeKind::from(RadrootsRelayOutcomeKind::Unsupported),
+        PushOutboxRelayOutcomeKind::Unsupported
+    );
+    assert_eq!(
+        PushOutboxRelayOutcomeKind::from(RadrootsRelayOutcomeKind::PaymentRequired),
+        PushOutboxRelayOutcomeKind::PaymentRequired
+    );
+    assert_eq!(
+        PushOutboxRelayOutcomeKind::from(RadrootsRelayOutcomeKind::RelayUrlRejected),
+        PushOutboxRelayOutcomeKind::RelayUrlRejected
+    );
+    assert_eq!(
+        PushOutboxRelayOutcomeKind::from(RadrootsRelayOutcomeKind::SkippedAlreadyAccepted),
+        PushOutboxRelayOutcomeKind::SkippedAlreadyAccepted
+    );
+}
+
+#[test]
 fn auth_policy_defaults_and_outbox_state_mappings_cover_all_public_states() {
     assert_eq!(
         SdkRelayAuthPolicy::default(),

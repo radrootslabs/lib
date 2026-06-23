@@ -31,7 +31,17 @@ identity-models = [
 identity-storage = ["identity-models", "std", "radroots_identity/std"]
 signing = ["dep:radroots_nostr", "nostr"]
 relay-client = ["signing", "std", "serde_json", "radroots_nostr/client"]
-radrootsd-client = ["std", "serde_json", "dep:reqwest"]
+radrootsd-proxy = [
+  "std",
+  "serde_json",
+  "dep:futures",
+  "dep:radroots_publish_proxy_protocol",
+  "dep:radroots_relay_transport",
+  "dep:reqwest",
+  "radroots_publish_proxy_protocol/serde",
+  "radroots_publish_proxy_protocol/std",
+  "radroots_relay_transport/std",
+]
 signer-adapters = [
   "identity-models",
   "signing",
@@ -77,13 +87,24 @@ local-runtime = [
   "signing",
   "relay-client",
 ]
+local-runtime-radrootsd-proxy = [
+  "std",
+  "serde",
+  "serde_json",
+  "runtime",
+  "local-signer",
+  "signing",
+  "radrootsd-proxy",
+]
 
 [dependencies]
+futures = { workspace = true, optional = true }
 radroots_authority = { workspace = true, optional = true, default-features = false }
 radroots_event_store = { workspace = true, optional = true, default-features = false }
 radroots_events = { workspace = true, default-features = false }
 radroots_events_codec = { workspace = true, default-features = false }
 radroots_outbox = { workspace = true, optional = true, default-features = false }
+radroots_publish_proxy_protocol = { workspace = true, optional = true, default-features = false }
 radroots_relay_transport = { workspace = true, optional = true, default-features = false }
 radroots_trade = { workspace = true, default-features = false }
 radroots_identity = { workspace = true, optional = true, default-features = false }

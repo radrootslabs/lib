@@ -17,6 +17,9 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+#[cfg(all(feature = "runtime", feature = "radrootsd-proxy"))]
+use crate::adapters::radrootsd::RadrootsdProxyConfig;
+
 #[cfg(feature = "runtime")]
 const SDK_STORAGE_MANIFEST_VERSION: u16 = 1;
 #[cfg(feature = "runtime")]
@@ -328,6 +331,33 @@ pub enum SdkRestoreState {
 }
 
 #[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum SdkPublishTransport {
+    DirectNostrRelay,
+    #[cfg(feature = "radrootsd-proxy")]
+    RadrootsdProxy(RadrootsdProxyConfig),
+}
+
+#[cfg(feature = "runtime")]
+impl Default for SdkPublishTransport {
+    fn default() -> Self {
+        Self::DirectNostrRelay
+    }
+}
+
+#[cfg(feature = "runtime")]
+impl SdkPublishTransport {
+    pub(crate) fn supports_delegated_relay_resolution(&self) -> bool {
+        match self {
+            Self::DirectNostrRelay => false,
+            #[cfg(feature = "radrootsd-proxy")]
+            Self::RadrootsdProxy(_) => true,
+        }
+    }
+}
+
+#[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct RestoreArchive {
     pub source: PathBuf,
@@ -360,6 +390,7 @@ pub struct RadrootsSdkBuilder {
     clock: RadrootsSdkClock,
     relay_urls: Vec<String>,
     relay_url_policy: SdkRelayUrlPolicy,
+    publish_transport: SdkPublishTransport,
 }
 
 #[cfg(feature = "runtime")]
@@ -370,6 +401,7 @@ impl Default for RadrootsSdkBuilder {
             clock: RadrootsSdkClock::System,
             relay_urls: Vec::new(),
             relay_url_policy: SdkRelayUrlPolicy::Public,
+            publish_transport: SdkPublishTransport::DirectNostrRelay,
         }
     }
 }
@@ -406,6 +438,11 @@ impl RadrootsSdkBuilder {
         self
     }
 
+    pub fn publish_transport(mut self, transport: SdkPublishTransport) -> Self {
+        self.publish_transport = transport;
+        self
+    }
+
     pub async fn build(self) -> Result<RadrootsSdk, RadrootsSdkError> {
         let storage = open_storage(&self.storage).await?;
         let relay_urls =
@@ -416,6 +453,7 @@ impl RadrootsSdkBuilder {
             storage_paths: storage.paths,
             clock: self.clock,
             relay_urls,
+            publish_transport: self.publish_transport,
         })
     }
 }
@@ -428,6 +466,7 @@ pub struct RadrootsSdk {
     storage_paths: Option<RadrootsSdkStoragePaths>,
     clock: RadrootsSdkClock,
     relay_urls: Vec<String>,
+    publish_transport: SdkPublishTransport,
 }
 
 #[cfg(feature = "runtime")]
@@ -458,6 +497,10 @@ impl RadrootsSdk {
 
     pub fn relay_urls(&self) -> &[String] {
         &self.relay_urls
+    }
+
+    pub fn publish_transport(&self) -> &SdkPublishTransport {
+        &self.publish_transport
     }
 
     pub fn storage_paths(&self) -> Option<&RadrootsSdkStoragePaths> {

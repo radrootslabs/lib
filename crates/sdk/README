@@ -30,6 +30,8 @@ signed outbox work when `relay-runtime` is enabled. Push time uses the relay
 targets already stored on each queued outbox event, so already queued work does
 not require configured builder relays. `push_outbox_with_adapter(...)` remains
 available for tests and controlled adapter-level substrate checks.
+`radrootsd-proxy` adds the Radrootsd Publish Proxy transport for daemon-resolved
+publishing through `publish.event`.
 
 The `local-runtime` feature is the curated feature bundle for local product
 runtime consumers. It enables `std`, `serde`, `serde_json`, `runtime`,
@@ -37,8 +39,8 @@ runtime consumers. It enables `std`, `serde`, `serde_json`, `runtime`,
 is retained in this bundle only for current direct relay publish callers that
 have not migrated to the product runtime yet; it is classified for removal once
 those callers are SDK-runtime backed. `local-runtime` does not enable
-`radrootsd-client`. CLI, app, and local tooling consumers should depend on this
-feature directly so they stay on the same runtime contract.
+`radrootsd-proxy`; use `local-runtime-radrootsd-proxy` when the runtime should
+publish through Radrootsd instead of a direct relay transport.
 
 Relay URL policy is explicit. Public relay URLs must use `wss://`. Local
 development `ws://` relay URLs are accepted only under `SdkRelayUrlPolicy::Localhost`

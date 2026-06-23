@@ -48,10 +48,11 @@ async fn sdk_builder_rejects_ws_relay_without_localhost_policy() {
         .build()
         .await;
 
-    assert!(matches!(
-        result,
-        Err(RadrootsSdkError::InvalidRelayUrl { .. })
-    ));
+    match result {
+        Err(RadrootsSdkError::InvalidRelayUrl { .. }) => {}
+        Err(error) => panic!("unexpected builder error: {error}"),
+        Ok(_) => panic!("builder accepted ws relay without localhost policy"),
+    }
 }
 
 #[test]
