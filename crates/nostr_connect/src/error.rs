@@ -2,6 +2,16 @@ use thiserror::Error;
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum RadrootsNostrConnectError {
+    #[error("NIP-46 request encryption failed: {reason}")]
+    Encrypt { reason: String },
+    #[error("NIP-46 response decryption failed: {reason}")]
+    Decrypt { reason: String },
+    #[error("NIP-46 event signing failed: {reason}")]
+    Sign { reason: String },
+    #[error("NIP-46 transport failed: {reason}")]
+    Transport { reason: String },
+    #[error("NIP-46 request timed out")]
+    RequestTimedOut,
     #[error("invalid NIP-46 method `{0}`")]
     InvalidMethod(String),
     #[error("invalid NIP-46 permission `{0}`")]

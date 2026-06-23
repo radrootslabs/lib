@@ -12,10 +12,11 @@ homepage.workspace = true
 readme = "README"
 
 [dependencies]
-nostr = { workspace = true }
+nostr = { workspace = true, features = ["nip44"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }
