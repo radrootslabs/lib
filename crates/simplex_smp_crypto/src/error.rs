@@ -22,6 +22,10 @@ pub enum RadrootsSimplexSmpCryptoError {
     InvalidSessionIdentifier(String),
     InvalidKeyDerivationLength(usize),
     InvalidSecretBoxChainKeyLength(usize),
+    InvalidShortLinkIdLength(usize),
+    InvalidShortLinkKeyLength(usize),
+    InvalidShortLinkDataLength { field: &'static str, length: usize },
+    ShortLinkDataHashMismatch,
     AesGcmAuthenticationFailed,
     InvalidOfficialRatchetVersion(u16),
     InvalidOfficialRatchetPadding,
@@ -100,6 +104,18 @@ impl fmt::Display for RadrootsSimplexSmpCryptoError {
             }
             Self::InvalidSecretBoxChainKeyLength(length) => {
                 write!(f, "invalid SMP secretbox chain key length {length}")
+            }
+            Self::InvalidShortLinkIdLength(length) => {
+                write!(f, "invalid SMP short-link id length {length}")
+            }
+            Self::InvalidShortLinkKeyLength(length) => {
+                write!(f, "invalid SMP short-link key length {length}")
+            }
+            Self::InvalidShortLinkDataLength { field, length } => {
+                write!(f, "invalid SMP short-link data `{field}` length {length}")
+            }
+            Self::ShortLinkDataHashMismatch => {
+                write!(f, "SMP short-link data hash mismatch")
             }
             Self::AesGcmAuthenticationFailed => {
                 write!(f, "failed to authenticate SMP AES-GCM payload")

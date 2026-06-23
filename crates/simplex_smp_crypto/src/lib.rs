@@ -8,6 +8,7 @@ pub mod error;
 pub mod message;
 pub mod official_ratchet;
 pub mod ratchet;
+pub mod short_link;
 
 pub mod prelude {
     pub use crate::auth::{
@@ -60,5 +61,18 @@ pub mod prelude {
     pub use crate::ratchet::{
         RadrootsSimplexSmpRatchetHeader, RadrootsSimplexSmpRatchetRole,
         RadrootsSimplexSmpRatchetState, RadrootsSimplexSmpSkippedMessageKey,
+    };
+    pub use crate::short_link::{
+        RADROOTS_SIMPLEX_SMP_SHORT_LINK_CONTACT_INFO,
+        RADROOTS_SIMPLEX_SMP_SHORT_LINK_CONTACT_KDF_OUTPUT_LENGTH,
+        RADROOTS_SIMPLEX_SMP_SHORT_LINK_FIXED_DATA_PADDED_LENGTH,
+        RADROOTS_SIMPLEX_SMP_SHORT_LINK_ID_LENGTH, RADROOTS_SIMPLEX_SMP_SHORT_LINK_INVITATION_INFO,
+        RADROOTS_SIMPLEX_SMP_SHORT_LINK_KEY_LENGTH,
+        RADROOTS_SIMPLEX_SMP_SHORT_LINK_USER_DATA_PADDED_LENGTH,
+        RadrootsSimplexSmpContactShortLinkKeyMaterial, RadrootsSimplexSmpVerifiedShortLinkData,
+        decrypt_short_link_data, decrypt_verify_short_link_data,
+        derive_contact_short_link_key_material, derive_invitation_short_link_data_key,
+        encrypt_short_link_data, encrypt_short_link_data_with_nonces, sign_short_link_data,
+        verify_signed_short_link_data,
     };
 }

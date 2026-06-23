@@ -36,6 +36,7 @@ poly1305 = { workspace = true, default-features = false }
 radroots_simplex_smp_proto = { workspace = true, default-features = false }
 salsa20 = { workspace = true, default-features = false }
 sha2 = { workspace = true, default-features = false }
+sha3 = { workspace = true, default-features = false }
 subtle = { workspace = true, default-features = false }
 sntrup761 = { workspace = true, default-features = false, features = [
   "dcap",
