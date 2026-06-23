@@ -36,16 +36,18 @@ use radroots_sdk::{
     ORDER_CANCELLATION_OPERATION_KIND, ORDER_DECISION_OPERATION_KIND,
     ORDER_REVISION_DECISION_OPERATION_KIND, ORDER_REVISION_PROPOSAL_OPERATION_KIND,
     ORDER_STATUS_DEFAULT_LIMIT, ORDER_STATUS_MAX_LIMIT, ORDER_SUBMIT_OPERATION_KIND,
-    OrderCancellationEnqueueRequest, OrderDecisionEnqueueRequest, OrderDecisionPrepareRequest,
-    OrderEvidenceIngestRequest, OrderRequestEvidenceIngestRequest,
-    OrderRevisionDecisionEnqueueRequest, OrderRevisionProposalEnqueueRequest, OrderStatusKind,
+    OrderCancellationEnqueueRequest, OrderCancellationPrepareRequest, OrderDecisionEnqueueRequest,
+    OrderDecisionPrepareRequest, OrderEvidenceIngestRequest, OrderRequestEvidenceIngestRequest,
+    OrderRevisionDecisionEnqueueRequest, OrderRevisionDecisionPrepareRequest,
+    OrderRevisionProposalEnqueueRequest, OrderRevisionProposalPrepareRequest, OrderStatusKind,
     OrderStatusNextActionKind, OrderStatusRequest, OrderSubmitEnqueueRequest,
     OrderSubmitPrepareRequest, OrderWorkflowKind, PushOutboxEventState, PushOutboxRelayOutcomeKind,
     PushOutboxRequest, RadrootsSdk, RadrootsSdkError, RadrootsSdkPartialLocalMutationFailure,
-    RadrootsSdkRecoveryAction, RadrootsSdkTimestamp, SdkMutationState, SdkOrderStatusIssue,
-    SdkOrderStatusIssueKind, SdkOrderStatusSource, SdkRelayTargetPolicy, SdkRelayTargetSet,
-    SdkRelayUrlPolicy,
+    RadrootsSdkRecoveryAction, RadrootsSdkTimestamp, SdkIdempotencyKey, SdkMutationState,
+    SdkOrderStatusIssue, SdkOrderStatusIssueKind, SdkOrderStatusSource, SdkRelayTargetPolicy,
+    SdkRelayTargetSet, SdkRelayUrlPolicy,
 };
+use radroots_trade::order::RadrootsOrderIssue;
 
 const BUYER_SECRET_KEY_HEX: &str =
     "10c5304d6c9ae3a1a16f7860f1cc8f5e3a76225a2663b3a989a0d775919b7df5";
@@ -1517,6 +1519,184 @@ async fn order_decision_runtime_dtos_serialize_deterministically() {
 }
 
 #[tokio::test]
+async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
+    let created_at = RadrootsSdkTimestamp::from_unix_seconds(1_700_000_654);
+    let root_event_id = deterministic_event_id("order-dto-root");
+    let previous_event_id = deterministic_event_id("order-dto-previous");
+    let root_event = order_event_ptr(&root_event_id);
+    let previous_event = order_event_ptr(&previous_event_id);
+    let proposal =
+        order_revision_proposal("order-revision-dto", &root_event_id, &previous_event_id);
+    let revision_decision = order_revision_decision(
+        &proposal,
+        &previous_event_id,
+        RadrootsOrderRevisionOutcome::Declined {
+            reason: "not available".to_owned(),
+        },
+    );
+    let cancellation = order_cancellation("order-revision-dto");
+
+    let proposal_prepare = OrderRevisionProposalPrepareRequest::new(
+        seller_actor(),
+        root_event.clone(),
+        previous_event.clone(),
+        proposal.clone(),
+    )
+    .with_created_at(created_at);
+    let proposal_prepare_json =
+        serde_json::to_value(&proposal_prepare).expect("proposal prepare json");
+    assert_eq!(
+        proposal_prepare_json["actor"]["pubkey"],
+        SELLER_PUBLIC_KEY_HEX
+    );
+    assert_eq!(
+        proposal_prepare_json["root_event"]["id"],
+        root_event_id.as_str()
+    );
+    assert_eq!(
+        proposal_prepare_json["previous_event"]["id"],
+        previous_event_id.as_str()
+    );
+    assert_eq!(
+        proposal_prepare_json["proposal"]["order_id"],
+        "order-revision-dto"
+    );
+    assert_eq!(
+        proposal_prepare_json["proposal"]["reason"],
+        "increase quantity"
+    );
+    assert_eq!(proposal_prepare_json["created_at"], 1_700_000_654);
+
+    let proposal_enqueue = OrderRevisionProposalEnqueueRequest::new(
+        seller_actor(),
+        root_event.clone(),
+        previous_event.clone(),
+        proposal.clone(),
+        SdkRelayTargetPolicy::UseConfiguredRelays,
+    )
+    .try_with_target_relays([RELAY, RELAY_B], SdkRelayUrlPolicy::Public)
+    .expect("proposal relays")
+    .with_idempotency_key(SdkIdempotencyKey::new("order-revision-proposal-dto").expect("key"))
+    .with_created_at(created_at);
+    let proposal_enqueue_json =
+        serde_json::to_value(&proposal_enqueue).expect("proposal enqueue json");
+    assert_eq!(
+        proposal_enqueue_json["target_relays"],
+        serde_json::json!({
+            "kind": "explicit",
+            "relays": [RELAY, RELAY_B],
+            "canonical_relays": [RELAY_B, RELAY]
+        })
+    );
+    assert_eq!(
+        proposal_enqueue_json["idempotency_key"],
+        serde_json::json!({ "value": "<redacted>", "len": 27 })
+    );
+    assert!(!proposal_enqueue_json.to_string().contains("proposal-dto"));
+
+    let decision_prepare = OrderRevisionDecisionPrepareRequest::new(
+        buyer_actor(),
+        root_event.clone(),
+        previous_event.clone(),
+        revision_decision.clone(),
+    )
+    .with_created_at(created_at);
+    let decision_prepare_json =
+        serde_json::to_value(&decision_prepare).expect("decision prepare json");
+    assert_eq!(
+        decision_prepare_json["actor"]["pubkey"],
+        BUYER_PUBLIC_KEY_HEX
+    );
+    assert_eq!(
+        decision_prepare_json["decision"]["revision_id"],
+        proposal.revision_id.as_str()
+    );
+    assert_eq!(
+        decision_prepare_json["decision"]["decision"],
+        serde_json::json!({
+            "decision": "declined",
+            "reason": "not available"
+        })
+    );
+    assert_eq!(decision_prepare_json["created_at"], 1_700_000_654);
+
+    let decision_enqueue = OrderRevisionDecisionEnqueueRequest::new(
+        buyer_actor(),
+        root_event.clone(),
+        previous_event.clone(),
+        revision_decision,
+        SdkRelayTargetPolicy::UseConfiguredRelays,
+    )
+    .try_with_target_relays([RELAY, RELAY_B], SdkRelayUrlPolicy::Public)
+    .expect("decision relays")
+    .try_with_idempotency_key("order-revision-decision-dto")
+    .expect("decision idempotency")
+    .with_created_at(created_at);
+    let decision_enqueue_json =
+        serde_json::to_value(&decision_enqueue).expect("decision enqueue json");
+    assert_eq!(
+        decision_enqueue_json["idempotency_key"],
+        serde_json::json!({ "value": "<redacted>", "len": 27 })
+    );
+    assert_eq!(decision_enqueue_json["created_at"], 1_700_000_654);
+    assert!(!decision_enqueue_json.to_string().contains("decision-dto"));
+
+    let cancellation_prepare = OrderCancellationPrepareRequest::new(
+        buyer_actor(),
+        root_event.clone(),
+        previous_event.clone(),
+        cancellation.clone(),
+    )
+    .with_created_at(created_at);
+    let cancellation_prepare_json =
+        serde_json::to_value(&cancellation_prepare).expect("cancellation prepare json");
+    assert_eq!(
+        cancellation_prepare_json["cancellation"]["reason"],
+        "buyer changed pickup plan"
+    );
+    assert_eq!(cancellation_prepare_json["created_at"], 1_700_000_654);
+
+    let cancellation_enqueue = OrderCancellationEnqueueRequest::new(
+        buyer_actor(),
+        root_event,
+        previous_event,
+        cancellation,
+        SdkRelayTargetPolicy::UseConfiguredRelays,
+    )
+    .try_with_target_relays([RELAY, RELAY_B], SdkRelayUrlPolicy::Public)
+    .expect("cancellation relays")
+    .try_with_idempotency_key("order-cancellation-dto")
+    .expect("cancellation idempotency")
+    .with_created_at(created_at);
+    let cancellation_enqueue_json =
+        serde_json::to_value(&cancellation_enqueue).expect("cancellation enqueue json");
+    assert_eq!(
+        cancellation_enqueue_json["idempotency_key"],
+        serde_json::json!({ "value": "<redacted>", "len": 22 })
+    );
+    assert_eq!(cancellation_enqueue_json["created_at"], 1_700_000_654);
+    assert!(
+        !cancellation_enqueue_json
+            .to_string()
+            .contains("cancellation-dto")
+    );
+
+    let event = signed_order_request_event("order-evidence-dto", 77);
+    let request_evidence =
+        OrderRequestEvidenceIngestRequest::new(event.clone()).with_observed_at(created_at);
+    let request_evidence_json =
+        serde_json::to_value(&request_evidence).expect("request evidence json");
+    assert_eq!(request_evidence_json["event"]["id"], event.id.as_str());
+    assert_eq!(request_evidence_json["observed_at"], 1_700_000_654);
+
+    let order_evidence =
+        OrderEvidenceIngestRequest::new(event.clone()).with_observed_at(created_at);
+    let order_evidence_json = serde_json::to_value(&order_evidence).expect("order evidence json");
+    assert_eq!(order_evidence_json["event"]["id"], event.id.as_str());
+    assert_eq!(order_evidence_json["observed_at"], 1_700_000_654);
+}
+
+#[tokio::test]
 async fn order_decision_enqueue_accept_stores_event_queues_outbox_and_updates_status() {
     let (_tempdir, sdk, store) = directory_sdk_and_store().await;
     let request_event = signed_order_request_event("order-decision-accept", 40);
@@ -2479,6 +2659,319 @@ async fn order_status_contract_dtos_serialize_deterministically() {
             "event_ids": [deterministic_event_id("issue-event")]
         })
     );
+}
+
+#[test]
+fn order_status_issue_mapping_preserves_kind_codes_and_event_ids() {
+    macro_rules! single_issue {
+        ($variant:ident, $kind:ident, $code:literal) => {{
+            let event_id = deterministic_event_id($code);
+            (
+                RadrootsOrderIssue::$variant {
+                    event_id: event_id.clone(),
+                },
+                SdkOrderStatusIssueKind::$kind,
+                $code,
+                vec![event_id],
+            )
+        }};
+    }
+
+    macro_rules! multi_issue {
+        ($variant:ident, $kind:ident, $code:literal) => {{
+            let event_ids = vec![
+                deterministic_event_id(concat!($code, "-a")),
+                deterministic_event_id(concat!($code, "-b")),
+            ];
+            (
+                RadrootsOrderIssue::$variant {
+                    event_ids: event_ids.clone(),
+                },
+                SdkOrderStatusIssueKind::$kind,
+                $code,
+                event_ids,
+            )
+        }};
+    }
+
+    let cases = vec![
+        (
+            RadrootsOrderIssue::MissingRequest,
+            SdkOrderStatusIssueKind::MissingRequest,
+            "missing_request",
+            Vec::new(),
+        ),
+        multi_issue!(MultipleRequests, MultipleRequests, "multiple_requests"),
+        single_issue!(
+            RequestPayloadInvalid,
+            RequestPayloadInvalid,
+            "request_payload_invalid"
+        ),
+        single_issue!(
+            RequestOrderIdMismatch,
+            RequestOrderIdMismatch,
+            "request_order_id_mismatch"
+        ),
+        single_issue!(
+            RequestAuthorMismatch,
+            RequestAuthorMismatch,
+            "request_author_mismatch"
+        ),
+        single_issue!(
+            RequestListingAddressInvalid,
+            RequestListingAddressInvalid,
+            "request_listing_address_invalid"
+        ),
+        single_issue!(
+            RequestSellerListingMismatch,
+            RequestSellerListingMismatch,
+            "request_seller_listing_mismatch"
+        ),
+        single_issue!(
+            DecisionPayloadInvalid,
+            DecisionPayloadInvalid,
+            "decision_payload_invalid"
+        ),
+        single_issue!(
+            DecisionOrderIdMismatch,
+            DecisionOrderIdMismatch,
+            "decision_order_id_mismatch"
+        ),
+        single_issue!(
+            DecisionAuthorMismatch,
+            DecisionAuthorMismatch,
+            "decision_author_mismatch"
+        ),
+        single_issue!(
+            DecisionCounterpartyMismatch,
+            DecisionCounterpartyMismatch,
+            "decision_counterparty_mismatch"
+        ),
+        single_issue!(
+            DecisionBuyerMismatch,
+            DecisionBuyerMismatch,
+            "decision_buyer_mismatch"
+        ),
+        single_issue!(
+            DecisionSellerMismatch,
+            DecisionSellerMismatch,
+            "decision_seller_mismatch"
+        ),
+        single_issue!(
+            DecisionListingAddressInvalid,
+            DecisionListingAddressInvalid,
+            "decision_listing_address_invalid"
+        ),
+        single_issue!(
+            DecisionListingMismatch,
+            DecisionListingMismatch,
+            "decision_listing_mismatch"
+        ),
+        single_issue!(
+            DecisionRootMismatch,
+            DecisionRootMismatch,
+            "decision_root_mismatch"
+        ),
+        single_issue!(
+            DecisionPreviousMismatch,
+            DecisionPreviousMismatch,
+            "decision_previous_mismatch"
+        ),
+        single_issue!(
+            DecisionMissingInventoryCommitments,
+            DecisionMissingInventoryCommitments,
+            "decision_missing_inventory_commitments"
+        ),
+        single_issue!(
+            DecisionInventoryCommitmentMismatch,
+            DecisionInventoryCommitmentMismatch,
+            "decision_inventory_commitment_mismatch"
+        ),
+        single_issue!(
+            DecisionMissingReason,
+            DecisionMissingReason,
+            "decision_missing_reason"
+        ),
+        multi_issue!(
+            ConflictingDecisions,
+            ConflictingDecisions,
+            "conflicting_decisions"
+        ),
+        single_issue!(
+            RevisionProposalPayloadInvalid,
+            RevisionProposalPayloadInvalid,
+            "revision_proposal_payload_invalid"
+        ),
+        single_issue!(
+            RevisionProposalOrderIdMismatch,
+            RevisionProposalOrderIdMismatch,
+            "revision_proposal_order_id_mismatch"
+        ),
+        single_issue!(
+            RevisionProposalAuthorMismatch,
+            RevisionProposalAuthorMismatch,
+            "revision_proposal_author_mismatch"
+        ),
+        single_issue!(
+            RevisionProposalCounterpartyMismatch,
+            RevisionProposalCounterpartyMismatch,
+            "revision_proposal_counterparty_mismatch"
+        ),
+        single_issue!(
+            RevisionProposalBuyerMismatch,
+            RevisionProposalBuyerMismatch,
+            "revision_proposal_buyer_mismatch"
+        ),
+        single_issue!(
+            RevisionProposalSellerMismatch,
+            RevisionProposalSellerMismatch,
+            "revision_proposal_seller_mismatch"
+        ),
+        single_issue!(
+            RevisionProposalListingAddressInvalid,
+            RevisionProposalListingAddressInvalid,
+            "revision_proposal_listing_address_invalid"
+        ),
+        single_issue!(
+            RevisionProposalListingMismatch,
+            RevisionProposalListingMismatch,
+            "revision_proposal_listing_mismatch"
+        ),
+        single_issue!(
+            RevisionProposalRootMismatch,
+            RevisionProposalRootMismatch,
+            "revision_proposal_root_mismatch"
+        ),
+        single_issue!(
+            RevisionProposalPreviousMismatch,
+            RevisionProposalPreviousMismatch,
+            "revision_proposal_previous_mismatch"
+        ),
+        single_issue!(
+            RevisionDecisionWithoutProposal,
+            RevisionDecisionWithoutProposal,
+            "revision_decision_without_proposal"
+        ),
+        single_issue!(
+            RevisionDecisionPayloadInvalid,
+            RevisionDecisionPayloadInvalid,
+            "revision_decision_payload_invalid"
+        ),
+        single_issue!(
+            RevisionDecisionOrderIdMismatch,
+            RevisionDecisionOrderIdMismatch,
+            "revision_decision_order_id_mismatch"
+        ),
+        single_issue!(
+            RevisionDecisionAuthorMismatch,
+            RevisionDecisionAuthorMismatch,
+            "revision_decision_author_mismatch"
+        ),
+        single_issue!(
+            RevisionDecisionCounterpartyMismatch,
+            RevisionDecisionCounterpartyMismatch,
+            "revision_decision_counterparty_mismatch"
+        ),
+        single_issue!(
+            RevisionDecisionBuyerMismatch,
+            RevisionDecisionBuyerMismatch,
+            "revision_decision_buyer_mismatch"
+        ),
+        single_issue!(
+            RevisionDecisionSellerMismatch,
+            RevisionDecisionSellerMismatch,
+            "revision_decision_seller_mismatch"
+        ),
+        single_issue!(
+            RevisionDecisionListingAddressInvalid,
+            RevisionDecisionListingAddressInvalid,
+            "revision_decision_listing_address_invalid"
+        ),
+        single_issue!(
+            RevisionDecisionListingMismatch,
+            RevisionDecisionListingMismatch,
+            "revision_decision_listing_mismatch"
+        ),
+        single_issue!(
+            RevisionDecisionRootMismatch,
+            RevisionDecisionRootMismatch,
+            "revision_decision_root_mismatch"
+        ),
+        single_issue!(
+            RevisionDecisionPreviousMismatch,
+            RevisionDecisionPreviousMismatch,
+            "revision_decision_previous_mismatch"
+        ),
+        single_issue!(
+            RevisionDecisionRevisionIdMismatch,
+            RevisionDecisionRevisionIdMismatch,
+            "revision_decision_revision_id_mismatch"
+        ),
+        single_issue!(
+            CancellationWithoutCancellableOrder,
+            CancellationWithoutCancellableOrder,
+            "cancellation_without_cancellable_order"
+        ),
+        single_issue!(
+            CancellationPayloadInvalid,
+            CancellationPayloadInvalid,
+            "cancellation_payload_invalid"
+        ),
+        single_issue!(
+            CancellationOrderIdMismatch,
+            CancellationOrderIdMismatch,
+            "cancellation_order_id_mismatch"
+        ),
+        single_issue!(
+            CancellationAuthorMismatch,
+            CancellationAuthorMismatch,
+            "cancellation_author_mismatch"
+        ),
+        single_issue!(
+            CancellationCounterpartyMismatch,
+            CancellationCounterpartyMismatch,
+            "cancellation_counterparty_mismatch"
+        ),
+        single_issue!(
+            CancellationBuyerMismatch,
+            CancellationBuyerMismatch,
+            "cancellation_buyer_mismatch"
+        ),
+        single_issue!(
+            CancellationSellerMismatch,
+            CancellationSellerMismatch,
+            "cancellation_seller_mismatch"
+        ),
+        single_issue!(
+            CancellationListingAddressInvalid,
+            CancellationListingAddressInvalid,
+            "cancellation_listing_address_invalid"
+        ),
+        single_issue!(
+            CancellationListingMismatch,
+            CancellationListingMismatch,
+            "cancellation_listing_mismatch"
+        ),
+        single_issue!(
+            CancellationRootMismatch,
+            CancellationRootMismatch,
+            "cancellation_root_mismatch"
+        ),
+        single_issue!(
+            CancellationPreviousMismatch,
+            CancellationPreviousMismatch,
+            "cancellation_previous_mismatch"
+        ),
+        multi_issue!(ForkedLifecycle, ForkedLifecycle, "forked_lifecycle"),
+    ];
+
+    for (issue, expected_kind, expected_code, expected_event_ids) in cases {
+        let sdk_issue = SdkOrderStatusIssue::from(issue);
+
+        assert_eq!(sdk_issue.kind, expected_kind);
+        assert_eq!(sdk_issue.code(), expected_code);
+        assert_eq!(sdk_issue.event_ids, expected_event_ids);
+    }
 }
 
 #[tokio::test]

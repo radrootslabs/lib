@@ -3,19 +3,25 @@ use radroots_core::{
     RadrootsCoreQuantityPrice, RadrootsCoreUnit,
 };
 use radroots_events::farm::{RadrootsFarm, RadrootsFarmRef};
-use radroots_events::ids::RadrootsPublicKey;
-use radroots_events::kinds::{KIND_FARM, KIND_LISTING, KIND_ORDER_REQUEST, KIND_PROFILE};
+use radroots_events::ids::{RadrootsEventId, RadrootsPublicKey};
+use radroots_events::kinds::{
+    KIND_FARM, KIND_LISTING, KIND_ORDER_CANCELLATION, KIND_ORDER_DECISION, KIND_ORDER_REQUEST,
+    KIND_ORDER_REVISION_DECISION, KIND_ORDER_REVISION_PROPOSAL, KIND_PROFILE,
+};
 use radroots_events::listing::{
     RadrootsListing, RadrootsListingAvailability, RadrootsListingBin,
     RadrootsListingDeliveryMethod, RadrootsListingLocation, RadrootsListingProduct,
     RadrootsListingStatus,
 };
 use radroots_events::order::{
-    RadrootsOrderEconomicItem, RadrootsOrderEconomics, RadrootsOrderItem,
-    RadrootsOrderPricingBasis, RadrootsOrderRequest,
+    RadrootsOrderCancellation, RadrootsOrderDecision, RadrootsOrderDecisionOutcome,
+    RadrootsOrderEconomicItem, RadrootsOrderEconomics, RadrootsOrderInventoryCommitment,
+    RadrootsOrderItem, RadrootsOrderPricingBasis, RadrootsOrderRequest,
+    RadrootsOrderRevisionDecision, RadrootsOrderRevisionOutcome, RadrootsOrderRevisionProposal,
 };
 use radroots_events::profile::{RadrootsProfile, RadrootsProfileType};
 use radroots_sdk::protocol::events::{RadrootsNostrEvent, RadrootsNostrEventPtr};
+use radroots_sdk::protocol::wire::WireEventParts;
 use radroots_sdk::protocol::{farm, listing, order, profile};
 
 fn sample_profile() -> RadrootsProfile {
@@ -136,6 +142,13 @@ fn public_key(character: char) -> RadrootsPublicKey {
         .expect("public key")
 }
 
+fn event_id(character: char) -> RadrootsEventId {
+    core::iter::repeat_n(character, 64)
+        .collect::<String>()
+        .parse()
+        .expect("event id")
+}
+
 fn sample_order_request() -> RadrootsOrderRequest {
     let seller_pubkey = public_key('a');
 
@@ -186,6 +199,91 @@ fn sample_order_request() -> RadrootsOrderRequest {
                 RadrootsCoreCurrency::USD,
             ),
         },
+    }
+}
+
+fn sample_order_decision() -> RadrootsOrderDecision {
+    let request = sample_order_request();
+
+    RadrootsOrderDecision {
+        order_id: request.order_id,
+        listing_addr: request.listing_addr,
+        buyer_pubkey: request.buyer_pubkey,
+        seller_pubkey: request.seller_pubkey,
+        decision: RadrootsOrderDecisionOutcome::Accepted {
+            inventory_commitments: vec![RadrootsOrderInventoryCommitment {
+                bin_id: "bin-1".parse().expect("bin id"),
+                bin_count: 2,
+            }],
+        },
+    }
+}
+
+fn sample_order_revision_proposal(
+    root_event_id: &RadrootsEventId,
+    prev_event_id: &RadrootsEventId,
+) -> RadrootsOrderRevisionProposal {
+    let request = sample_order_request();
+
+    RadrootsOrderRevisionProposal {
+        revision_id: "revision-1".parse().expect("revision id"),
+        order_id: request.order_id,
+        listing_addr: request.listing_addr,
+        buyer_pubkey: request.buyer_pubkey,
+        seller_pubkey: request.seller_pubkey,
+        root_event_id: root_event_id.clone(),
+        prev_event_id: prev_event_id.clone(),
+        items: vec![RadrootsOrderItem {
+            bin_id: "bin-1".parse().expect("bin id"),
+            bin_count: 2,
+        }],
+        economics: request.economics,
+        reason: "more quantity".into(),
+    }
+}
+
+fn sample_order_revision_decision(
+    proposal: &RadrootsOrderRevisionProposal,
+    prev_event_id: &RadrootsEventId,
+) -> RadrootsOrderRevisionDecision {
+    RadrootsOrderRevisionDecision {
+        revision_id: proposal.revision_id.clone(),
+        order_id: proposal.order_id.clone(),
+        listing_addr: proposal.listing_addr.clone(),
+        buyer_pubkey: proposal.buyer_pubkey.clone(),
+        seller_pubkey: proposal.seller_pubkey.clone(),
+        root_event_id: proposal.root_event_id.clone(),
+        prev_event_id: prev_event_id.clone(),
+        decision: RadrootsOrderRevisionOutcome::Accepted,
+    }
+}
+
+fn sample_order_cancellation() -> RadrootsOrderCancellation {
+    let request = sample_order_request();
+
+    RadrootsOrderCancellation {
+        order_id: request.order_id,
+        listing_addr: request.listing_addr,
+        buyer_pubkey: request.buyer_pubkey,
+        seller_pubkey: request.seller_pubkey,
+        reason: "buyer changed plan".into(),
+    }
+}
+
+fn order_event_from_parts(
+    id_character: char,
+    author: String,
+    created_at: u32,
+    parts: WireEventParts,
+) -> RadrootsNostrEvent {
+    RadrootsNostrEvent {
+        id: core::iter::repeat_n(id_character, 64).collect(),
+        author,
+        created_at,
+        kind: parts.kind,
+        tags: parts.tags,
+        content: parts.content,
+        sig: String::new(),
     }
 }
 
@@ -251,20 +349,152 @@ fn order_facade_wraps_build_parse_and_address_ops() {
         order::build_order_request_draft(&listing_event_ptr(), &payload).expect("order draft");
 
     assert_eq!(parts.as_wire_parts().kind, KIND_ORDER_REQUEST);
+    assert_eq!(parts.clone().into_wire_parts().kind, KIND_ORDER_REQUEST);
 
     let parsed_addr = order::parse_listing_address(&listing_addr).expect("listing address");
     assert_eq!(parsed_addr, listing_addr);
 
-    let event = RadrootsNostrEvent {
-        id: core::iter::repeat_n('b', 64).collect(),
-        author: payload.buyer_pubkey.to_string(),
-        created_at: 2,
-        kind: parts.as_wire_parts().kind,
-        tags: parts.as_wire_parts().tags.clone(),
-        content: parts.as_wire_parts().content.clone(),
-        sig: String::new(),
-    };
+    let event = order_event_from_parts(
+        'b',
+        payload.buyer_pubkey.to_string(),
+        2,
+        parts.into_wire_parts(),
+    );
     let envelope = order::parse_order_request(&event).expect("order envelope");
     assert_eq!(envelope.payload.order_id, payload.order_id);
     assert_eq!(envelope.payload.listing_addr, listing_addr);
+
+    let root_event_id = event_id('c');
+    let previous_event_id = event_id('d');
+    let decision = sample_order_decision();
+    let decision_parts =
+        order::build_order_decision_draft(&root_event_id, &root_event_id, &decision)
+            .expect("decision draft");
+    assert_eq!(decision_parts.as_wire_parts().kind, KIND_ORDER_DECISION);
+    assert_eq!(
+        decision_parts.clone().into_wire_parts().kind,
+        KIND_ORDER_DECISION
+    );
+    let decision_event = order_event_from_parts(
+        'e',
+        decision.seller_pubkey.to_string(),
+        3,
+        decision_parts.into_wire_parts(),
+    );
+    let decision_envelope =
+        order::parse_order_decision(&decision_event).expect("decision envelope");
+    assert_eq!(decision_envelope.payload.order_id, decision.order_id);
+
+    let proposal = sample_order_revision_proposal(&root_event_id, &previous_event_id);
+    let proposal_parts =
+        order::build_order_revision_proposal_draft(&root_event_id, &previous_event_id, &proposal)
+            .expect("proposal draft");
+    assert_eq!(
+        proposal_parts.as_wire_parts().kind,
+        KIND_ORDER_REVISION_PROPOSAL
+    );
+    assert_eq!(
+        proposal_parts.clone().into_wire_parts().kind,
+        KIND_ORDER_REVISION_PROPOSAL
+    );
+    let proposal_event = order_event_from_parts(
+        'f',
+        proposal.seller_pubkey.to_string(),
+        4,
+        proposal_parts.into_wire_parts(),
+    );
+    let proposal_envelope =
+        order::parse_order_revision_proposal(&proposal_event).expect("proposal envelope");
+    assert_eq!(proposal_envelope.payload.revision_id, proposal.revision_id);
+
+    let revision_decision = sample_order_revision_decision(&proposal, &previous_event_id);
+    let revision_decision_parts = order::build_order_revision_decision_draft(
+        &root_event_id,
+        &previous_event_id,
+        &revision_decision,
+    )
+    .expect("revision decision draft");
+    assert_eq!(
+        revision_decision_parts.as_wire_parts().kind,
+        KIND_ORDER_REVISION_DECISION
+    );
+    assert_eq!(
+        revision_decision_parts.clone().into_wire_parts().kind,
+        KIND_ORDER_REVISION_DECISION
+    );
+    let revision_decision_event = order_event_from_parts(
+        '0',
+        revision_decision.buyer_pubkey.to_string(),
+        5,
+        revision_decision_parts.into_wire_parts(),
+    );
+    let revision_decision_envelope = order::parse_order_revision_decision(&revision_decision_event)
+        .expect("revision decision envelope");
+    assert_eq!(
+        revision_decision_envelope.payload.revision_id,
+        revision_decision.revision_id
+    );
+
+    let cancellation = sample_order_cancellation();
+    let cancellation_parts =
+        order::build_order_cancellation_draft(&root_event_id, &previous_event_id, &cancellation)
+            .expect("cancellation draft");
+    assert_eq!(
+        cancellation_parts.as_wire_parts().kind,
+        KIND_ORDER_CANCELLATION
+    );
+    assert_eq!(
+        cancellation_parts.clone().into_wire_parts().kind,
+        KIND_ORDER_CANCELLATION
+    );
+    let cancellation_event = order_event_from_parts(
+        '1',
+        cancellation.buyer_pubkey.to_string(),
+        6,
+        cancellation_parts.into_wire_parts(),
+    );
+    let cancellation_envelope =
+        order::parse_order_cancellation(&cancellation_event).expect("cancellation envelope");
+    assert_eq!(
+        cancellation_envelope.payload.order_id,
+        cancellation.order_id
+    );
+}
+
+#[test]
+fn order_facade_surfaces_order_draft_build_errors() {
+    let root_event_id = event_id('c');
+    let previous_event_id = event_id('d');
+
+    let mut decision = sample_order_decision();
+    decision.decision = RadrootsOrderDecisionOutcome::Accepted {
+        inventory_commitments: Vec::new(),
+    };
+    assert!(order::build_order_decision_draft(&root_event_id, &root_event_id, &decision).is_err());
+
+    let mut proposal = sample_order_revision_proposal(&root_event_id, &previous_event_id);
+    proposal.reason = " ".into();
+    assert!(
+        order::build_order_revision_proposal_draft(&root_event_id, &previous_event_id, &proposal)
+            .is_err()
+    );
+
+    let proposal = sample_order_revision_proposal(&root_event_id, &previous_event_id);
+    let mut revision_decision = sample_order_revision_decision(&proposal, &previous_event_id);
+    revision_decision.decision = RadrootsOrderRevisionOutcome::Declined { reason: " ".into() };
+    assert!(
+        order::build_order_revision_decision_draft(
+            &root_event_id,
+            &previous_event_id,
+            &revision_decision
+        )
+        .is_err()
+    );
+
+    let mut cancellation = sample_order_cancellation();
+    cancellation.reason = " ".into();
+    assert!(
+        order::build_order_cancellation_draft(&root_event_id, &previous_event_id, &cancellation)
+            .is_err()
+    );
 }
