@@ -30,10 +30,9 @@ use radroots_simplex_smp_crypto::prelude::RadrootsSimplexSmpEd25519Keypair;
 use radroots_simplex_smp_crypto::prelude::{
     RADROOTS_SIMPLEX_OFFICIAL_AES_IV_LENGTH, RadrootsSimplexSmpSkippedMessageKey,
 };
-use radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpQueueLinkData;
-#[cfg(feature = "std")]
-use radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpQueueUri;
-use radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpServerAddress;
+use radroots_simplex_smp_proto::prelude::{
+    RadrootsSimplexSmpQueueLinkData, RadrootsSimplexSmpQueueUri, RadrootsSimplexSmpServerAddress,
+};
 #[cfg(feature = "std")]
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "std")]
@@ -206,13 +205,12 @@ pub enum RadrootsSimplexAgentPendingCommandKind {
         link_data: RadrootsSimplexSmpQueueLinkData,
     },
     SecureGetQueueLinkData {
-        server: RadrootsSimplexSmpServerAddress,
-        link_id: Vec<u8>,
-        link_key: Vec<u8>,
+        invitation: RadrootsSimplexAgentShortInvitationLink,
+        reply_queue: RadrootsSimplexSmpQueueUri,
     },
     GetQueueLinkData {
-        server: RadrootsSimplexSmpServerAddress,
-        link_id: Vec<u8>,
+        invitation: RadrootsSimplexAgentShortInvitationLink,
+        reply_queue: RadrootsSimplexSmpQueueUri,
     },
 }
 
@@ -330,14 +328,6 @@ struct RadrootsSimplexAgentQueueAddressSnapshot {
 }
 
 #[cfg(feature = "std")]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-struct RadrootsSimplexAgentServerAddressSnapshot {
-    server_identity: String,
-    hosts: Vec<String>,
-    port: Option<u16>,
-}
-
-#[cfg(feature = "std")]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct RadrootsSimplexAgentShortLinkCredentialsSnapshot {
     scheme: String,
@@ -350,6 +340,17 @@ struct RadrootsSimplexAgentShortLinkCredentialsSnapshot {
     link_private_signature_key: Vec<u8>,
     encrypted_fixed_data: Option<Vec<u8>>,
     encrypted_user_data: Option<Vec<u8>>,
+}
+
+#[cfg(feature = "std")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct RadrootsSimplexAgentShortInvitationLinkSnapshot {
+    scheme: String,
+    hosts: Vec<String>,
+    port: Option<u16>,
+    server_key_hash: Option<Vec<u8>>,
+    link_id: Vec<u8>,
+    link_key: Vec<u8>,
 }
 
 #[cfg(feature = "std")]
@@ -446,13 +447,12 @@ enum RadrootsSimplexAgentPendingCommandKindSnapshot {
         link_data: RadrootsSimplexAgentQueueLinkDataSnapshot,
     },
     SecureGetQueueLinkData {
-        server: RadrootsSimplexAgentServerAddressSnapshot,
-        link_id: Vec<u8>,
-        link_key: Vec<u8>,
+        invitation: RadrootsSimplexAgentShortInvitationLinkSnapshot,
+        reply_queue: String,
     },
     GetQueueLinkData {
-        server: RadrootsSimplexAgentServerAddressSnapshot,
-        link_id: Vec<u8>,
+        invitation: RadrootsSimplexAgentShortInvitationLinkSnapshot,
+        reply_queue: String,
     },
 }
 
@@ -2209,20 +2209,25 @@ fn queue_descriptor_to_snapshot(
 fn queue_descriptor_from_snapshot(
     snapshot: RadrootsSimplexAgentQueueDescriptorSnapshot,
 ) -> Result<RadrootsSimplexAgentQueueDescriptor, RadrootsSimplexAgentStoreError> {
-    let queue_uri = RadrootsSimplexSmpQueueUri::parse(&snapshot.queue_uri).map_err(|error| {
-        RadrootsSimplexAgentStoreError::Persistence(format!(
-            "failed to parse SimpleX queue uri `{}`: {error}",
-            snapshot.queue_uri
-        ))
-    })?;
     Ok(RadrootsSimplexAgentQueueDescriptor {
-        queue_uri,
+        queue_uri: queue_uri_from_string(&snapshot.queue_uri)?,
         replaced_queue: snapshot
             .replaced_queue
             .map(queue_address_from_snapshot)
             .transpose()?,
         primary: snapshot.primary,
         sender_key: snapshot.sender_key,
+    })
+}
+
+#[cfg(feature = "std")]
+fn queue_uri_from_string(
+    value: &str,
+) -> Result<RadrootsSimplexSmpQueueUri, RadrootsSimplexAgentStoreError> {
+    RadrootsSimplexSmpQueueUri::parse(value).map_err(|error| {
+        RadrootsSimplexAgentStoreError::Persistence(format!(
+            "failed to parse SimpleX queue uri `{value}`: {error}"
+        ))
     })
 }
 
@@ -2254,33 +2259,6 @@ fn queue_address_from_snapshot(
             port: snapshot.port,
         },
         sender_id: snapshot.sender_id,
-    })
-}
-
-#[cfg(feature = "std")]
-fn server_address_to_snapshot(
-    server: RadrootsSimplexSmpServerAddress,
-) -> RadrootsSimplexAgentServerAddressSnapshot {
-    RadrootsSimplexAgentServerAddressSnapshot {
-        server_identity: server.server_identity,
-        hosts: server.hosts,
-        port: server.port,
-    }
-}
-
-#[cfg(feature = "std")]
-fn server_address_from_snapshot(
-    snapshot: RadrootsSimplexAgentServerAddressSnapshot,
-) -> Result<RadrootsSimplexSmpServerAddress, RadrootsSimplexAgentStoreError> {
-    if snapshot.server_identity.is_empty() || snapshot.hosts.is_empty() {
-        return Err(RadrootsSimplexAgentStoreError::Persistence(
-            "invalid SimpleX server address snapshot".into(),
-        ));
-    }
-    Ok(RadrootsSimplexSmpServerAddress {
-        server_identity: snapshot.server_identity,
-        hosts: snapshot.hosts,
-        port: snapshot.port,
     })
 }
 
@@ -2317,6 +2295,34 @@ fn short_link_from_snapshot(
         link_private_signature_key: snapshot.link_private_signature_key,
         encrypted_fixed_data: snapshot.encrypted_fixed_data,
         encrypted_user_data: snapshot.encrypted_user_data,
+    })
+}
+
+#[cfg(feature = "std")]
+fn short_invitation_to_snapshot(
+    invitation: RadrootsSimplexAgentShortInvitationLink,
+) -> RadrootsSimplexAgentShortInvitationLinkSnapshot {
+    RadrootsSimplexAgentShortInvitationLinkSnapshot {
+        scheme: encode_short_link_scheme(invitation.scheme).into(),
+        hosts: invitation.hosts,
+        port: invitation.port,
+        server_key_hash: invitation.server_key_hash,
+        link_id: invitation.link_id,
+        link_key: invitation.link_key,
+    }
+}
+
+#[cfg(feature = "std")]
+fn short_invitation_from_snapshot(
+    snapshot: RadrootsSimplexAgentShortInvitationLinkSnapshot,
+) -> Result<RadrootsSimplexAgentShortInvitationLink, RadrootsSimplexAgentStoreError> {
+    Ok(RadrootsSimplexAgentShortInvitationLink {
+        scheme: decode_short_link_scheme(&snapshot.scheme)?,
+        hosts: snapshot.hosts,
+        port: snapshot.port,
+        server_key_hash: snapshot.server_key_hash,
+        link_id: snapshot.link_id,
+        link_key: snapshot.link_key,
     })
 }
 
@@ -2569,20 +2575,19 @@ fn command_kind_to_snapshot(
             link_data: queue_link_data_to_snapshot(link_data),
         },
         RadrootsSimplexAgentPendingCommandKind::SecureGetQueueLinkData {
-            server,
-            link_id,
-            link_key,
+            invitation,
+            reply_queue,
         } => RadrootsSimplexAgentPendingCommandKindSnapshot::SecureGetQueueLinkData {
-            server: server_address_to_snapshot(server),
-            link_id,
-            link_key,
+            invitation: short_invitation_to_snapshot(invitation),
+            reply_queue: reply_queue.to_string(),
         },
-        RadrootsSimplexAgentPendingCommandKind::GetQueueLinkData { server, link_id } => {
-            RadrootsSimplexAgentPendingCommandKindSnapshot::GetQueueLinkData {
-                server: server_address_to_snapshot(server),
-                link_id,
-            }
-        }
+        RadrootsSimplexAgentPendingCommandKind::GetQueueLinkData {
+            invitation,
+            reply_queue,
+        } => RadrootsSimplexAgentPendingCommandKindSnapshot::GetQueueLinkData {
+            invitation: short_invitation_to_snapshot(invitation),
+            reply_queue: reply_queue.to_string(),
+        },
     })
 }
 
@@ -2664,20 +2669,19 @@ fn command_kind_from_snapshot(
             link_data: queue_link_data_from_snapshot(link_data),
         },
         RadrootsSimplexAgentPendingCommandKindSnapshot::SecureGetQueueLinkData {
-            server,
-            link_id,
-            link_key,
+            invitation,
+            reply_queue,
         } => RadrootsSimplexAgentPendingCommandKind::SecureGetQueueLinkData {
-            server: server_address_from_snapshot(server)?,
-            link_id,
-            link_key,
+            invitation: short_invitation_from_snapshot(invitation)?,
+            reply_queue: queue_uri_from_string(&reply_queue)?,
         },
-        RadrootsSimplexAgentPendingCommandKindSnapshot::GetQueueLinkData { server, link_id } => {
-            RadrootsSimplexAgentPendingCommandKind::GetQueueLinkData {
-                server: server_address_from_snapshot(server)?,
-                link_id,
-            }
-        }
+        RadrootsSimplexAgentPendingCommandKindSnapshot::GetQueueLinkData {
+            invitation,
+            reply_queue,
+        } => RadrootsSimplexAgentPendingCommandKind::GetQueueLinkData {
+            invitation: short_invitation_from_snapshot(invitation)?,
+            reply_queue: queue_uri_from_string(&reply_queue)?,
+        },
     })
 }
 
@@ -2821,6 +2825,17 @@ mod tests {
             link_private_signature_key: b"short-link-private-signature-key".to_vec(),
             encrypted_fixed_data: Some(b"encrypted-fixed-link-data".to_vec()),
             encrypted_user_data: Some(b"encrypted-user-link-data".to_vec()),
+        }
+    }
+
+    fn sample_short_invitation_link(link_id: Vec<u8>) -> RadrootsSimplexAgentShortInvitationLink {
+        RadrootsSimplexAgentShortInvitationLink {
+            scheme: RadrootsSimplexAgentShortLinkScheme::Simplex,
+            hosts: vec!["relay-a.example".to_owned(), "relay-b.example".to_owned()],
+            port: Some(5223),
+            server_key_hash: Some(vec![5_u8; 32]),
+            link_id,
+            link_key: b"short-link-key-must-be-secret!!".to_vec(),
         }
     }
 
@@ -2972,6 +2987,13 @@ mod tests {
             .prepare_outbound_message(&connection.id, b"persisted".to_vec())
             .unwrap();
         let queue = sample_descriptor(true).queue_address();
+        let short_reply_queue = sample_descriptor_with_uri(
+            "smp://aGVsbG8@relay.example/cmVwbHk#/?v=4&dh=cmVwbHkta2V5&q=m",
+            true,
+        )
+        .queue_uri;
+        let secure_short_invitation = sample_short_invitation_link(vec![2_u8; 24]);
+        let get_short_invitation = sample_short_invitation_link(vec![3_u8; 24]);
         store
             .enqueue_command(
                 &connection.id,
@@ -3016,9 +3038,8 @@ mod tests {
             .enqueue_command(
                 &connection.id,
                 RadrootsSimplexAgentPendingCommandKind::SecureGetQueueLinkData {
-                    server: queue.server.clone(),
-                    link_id: vec![2_u8; 24],
-                    link_key: b"retrieval-short-link-key-secret".to_vec(),
+                    invitation: secure_short_invitation.clone(),
+                    reply_queue: short_reply_queue.clone(),
                 },
                 13,
             )
@@ -3027,8 +3048,8 @@ mod tests {
             .enqueue_command(
                 &connection.id,
                 RadrootsSimplexAgentPendingCommandKind::GetQueueLinkData {
-                    server: queue.server.clone(),
-                    link_id: vec![3_u8; 24],
+                    invitation: get_short_invitation.clone(),
+                    reply_queue: short_reply_queue.clone(),
                 },
                 14,
             )
@@ -3297,17 +3318,18 @@ mod tests {
         assert!(loaded.pending_commands.values().any(|command| matches!(
             &command.kind,
             RadrootsSimplexAgentPendingCommandKind::SecureGetQueueLinkData {
-                server,
-                link_id,
-                link_key
-            } if server == &queue.server
-                && link_id.as_slice() == &[2_u8; 24]
-                && link_key.as_slice() == b"retrieval-short-link-key-secret"
+                invitation,
+                reply_queue
+            } if invitation == &secure_short_invitation
+                && reply_queue == &short_reply_queue
         )));
         assert!(loaded.pending_commands.values().any(|command| matches!(
             &command.kind,
-            RadrootsSimplexAgentPendingCommandKind::GetQueueLinkData { server, link_id }
-                if server == &queue.server && link_id.as_slice() == &[3_u8; 24]
+            RadrootsSimplexAgentPendingCommandKind::GetQueueLinkData {
+                invitation,
+                reply_queue
+            } if invitation == &get_short_invitation
+                && reply_queue == &short_reply_queue
         )));
         assert!(
             loaded
