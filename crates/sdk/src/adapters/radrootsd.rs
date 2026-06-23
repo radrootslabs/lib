@@ -444,6 +444,37 @@ pub fn bridge_listing_publish_request_json(
     })
 }
 
+fn http_status_error(status: reqwest::StatusCode, body: &str) -> RadrootsdError {
+    RadrootsdError::Http(format!(
+        "radrootsd returned http {}: {}",
+        status.as_u16(),
+        body
+    ))
+}
+
+fn decode_jsonrpc_response<R>(method: &str, body: &str) -> Result<R, RadrootsdError>
+where
+    R: DeserializeOwned,
+{
+    let envelope: JsonRpcEnvelope<R> = serde_json::from_str(body).map_err(|err| {
+        RadrootsdError::MalformedResponse(format!("decode radrootsd {method} response: {err}"))
+    })?;
+    match (envelope.result, envelope.error) {
+        (Some(result), None) => Ok(result),
+        (None, Some(error)) => Err(RadrootsdError::JsonRpc(format!(
+            "radrootsd {method} failed {}: {}",
+            error.code, error.message
+        ))),
+        (Some(_), Some(error)) => Err(RadrootsdError::MalformedResponse(format!(
+            "radrootsd {method} returned result and error: {} {}",
+            error.code, error.message
+        ))),
+        (None, None) => Err(RadrootsdError::MalformedResponse(format!(
+            "radrootsd {method} returned neither result nor error"
+        ))),
+    }
+}
+
 async fn jsonrpc_call<P, R>(
     endpoint: &str,
     auth: &RadrootsdAuth,
@@ -483,28 +514,295 @@ where
         .map_err(|err| RadrootsdError::Http(format!("read radrootsd response body: {err}")))?;
 
     if !status.is_success() {
-        return Err(RadrootsdError::Http(format!(
-            "radrootsd returned http {}: {}",
-            status.as_u16(),
-            body
-        )));
+        return Err(http_status_error(status, body.as_str()));
     }
 
-    let envelope: JsonRpcEnvelope<R> = serde_json::from_str(body.as_str()).map_err(|err| {
-        RadrootsdError::MalformedResponse(format!("decode radrootsd {method} response: {err}"))
-    })?;
-    match (envelope.result, envelope.error) {
-        (Some(result), None) => Ok(result),
-        (None, Some(error)) => Err(RadrootsdError::JsonRpc(format!(
-            "radrootsd {method} failed {}: {}",
-            error.code, error.message
-        ))),
-        (Some(_), Some(error)) => Err(RadrootsdError::MalformedResponse(format!(
-            "radrootsd {method} returned result and error: {} {}",
-            error.code, error.message
-        ))),
-        (None, None) => Err(RadrootsdError::MalformedResponse(format!(
-            "radrootsd {method} returned neither result nor error"
-        ))),
+    decode_jsonrpc_response(method, body.as_str())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::farm::RadrootsFarmRef;
+    use crate::listing::{
+        RadrootsListingAvailability, RadrootsListingBin, RadrootsListingDeliveryMethod,
+        RadrootsListingLocation, RadrootsListingProduct, RadrootsListingStatus,
+    };
+    use radroots_core::{
+        RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
+        RadrootsCoreQuantityPrice, RadrootsCoreUnit,
+    };
+
+    fn sample_listing() -> RadrootsListing {
+        RadrootsListing {
+            d_tag: "AAAAAAAAAAAAAAAAAAAAAg".parse().expect("listing d tag"),
+            published_at: None,
+            farm: RadrootsFarmRef {
+                pubkey: "a".repeat(64),
+                d_tag: "AAAAAAAAAAAAAAAAAAAAAA".into(),
+            },
+            product: RadrootsListingProduct {
+                key: "coffee".into(),
+                title: "Coffee".into(),
+                category: "coffee".into(),
+                summary: Some("Single origin coffee".into()),
+                process: None,
+                lot: None,
+                location: None,
+                profile: None,
+                year: None,
+            },
+            primary_bin_id: "bin-1".parse().expect("primary bin id"),
+            bins: vec![RadrootsListingBin {
+                bin_id: "bin-1".parse().expect("bin id"),
+                quantity: RadrootsCoreQuantity::new(
+                    RadrootsCoreDecimal::from(1000u32),
+                    RadrootsCoreUnit::MassG,
+                ),
+                price_per_canonical_unit: RadrootsCoreQuantityPrice {
+                    amount: RadrootsCoreMoney::new(
+                        RadrootsCoreDecimal::from(20u32),
+                        RadrootsCoreCurrency::USD,
+                    ),
+                    quantity: RadrootsCoreQuantity::new(
+                        RadrootsCoreDecimal::from(1u32),
+                        RadrootsCoreUnit::MassG,
+                    ),
+                },
+                display_amount: None,
+                display_unit: None,
+                display_label: None,
+                display_price: None,
+                display_price_unit: None,
+            }],
+            resource_area: None,
+            plot: None,
+            discounts: None,
+            inventory_available: Some(RadrootsCoreDecimal::from(5u32)),
+            availability: Some(RadrootsListingAvailability::Status {
+                status: RadrootsListingStatus::Active,
+            }),
+            delivery_method: Some(RadrootsListingDeliveryMethod::Pickup),
+            location: Some(RadrootsListingLocation {
+                primary: "North Farm".into(),
+                city: None,
+                region: None,
+                country: None,
+                lat: None,
+                lng: None,
+                geohash: None,
+            }),
+            images: None,
+        }
+    }
+
+    fn sample_authority() -> SdkRadrootsdSignerAuthority {
+        SdkRadrootsdSignerAuthority {
+            provider_runtime_id: "local-runtime".into(),
+            account_identity_id: "account-1".into(),
+            provider_signer_session_id: Some("provider-session-secret".into()),
+        }
+    }
+
+    fn sample_listing_publish_request() -> SdkRadrootsdListingPublishRequest {
+        SdkRadrootsdListingPublishRequest {
+            listing: sample_listing(),
+            kind: Some(KIND_LISTING),
+            signer_session_id: "signer-session-secret".into(),
+            signer_authority: Some(sample_authority()),
+            idempotency_key: Some("idem-1".into()),
+        }
+    }
+
+    fn assert_message(error: RadrootsdError, fragment: &str) {
+        let message = error.to_string();
+        assert!(
+            message.contains(fragment),
+            "expected {message:?} to contain {fragment:?}"
+        );
+    }
+
+    #[test]
+    fn auth_headers_omit_authorization_when_auth_is_none() {
+        let headers = auth_headers(&RadrootsdAuth::None).expect("headers");
+
+        assert!(!headers.contains_key(AUTHORIZATION));
+    }
+
+    #[test]
+    fn auth_headers_build_bearer_authorization() {
+        let headers =
+            auth_headers(&RadrootsdAuth::BearerToken("sdk-token".into())).expect("headers");
+
+        assert_eq!(
+            headers
+                .get(AUTHORIZATION)
+                .expect("authorization")
+                .to_str()
+                .expect("authorization str"),
+            "Bearer sdk-token"
+        );
+    }
+
+    #[test]
+    fn auth_headers_reject_invalid_bearer_header_values() {
+        let error =
+            auth_headers(&RadrootsdAuth::BearerToken("bad\ntoken".into())).expect_err("error");
+
+        assert!(matches!(error, RadrootsdError::InvalidAuthHeader(_)));
+    }
+
+    #[test]
+    fn bridge_listing_publish_request_json_preserves_request_contract() {
+        let value =
+            bridge_listing_publish_request_json(&sample_listing_publish_request()).expect("json");
+
+        assert_eq!(value["kind"], KIND_LISTING);
+        assert_eq!(value["signer_session_id"], "signer-session-secret");
+        assert_eq!(
+            value["signer_authority"]["provider_signer_session_id"],
+            "provider-session-secret"
+        );
+        assert_eq!(value["idempotency_key"], "idem-1");
+        assert_eq!(value["listing"]["product"]["title"], "Coffee");
+    }
+
+    #[test]
+    fn debug_output_redacts_auth_and_signer_secrets() {
+        let auth = RadrootsdAuth::BearerToken("token-secret".into());
+        let connect =
+            SdkRadrootsdSignerSessionConnectRequest::nostrconnect("nostrconnect://session", "nsec")
+                .with_signer_authority(sample_authority());
+        let listing_request = sample_listing_publish_request();
+        let job = SdkRadrootsdBridgeJob {
+            job_id: "job-1".into(),
+            command: "bridge.listing.publish".into(),
+            status: "accepted".into(),
+            terminal: false,
+            recovered_after_restart: false,
+            signer_mode: "bunker".into(),
+            signer_session_id: Some("signer-session-secret".into()),
+            event_kind: KIND_LISTING,
+            event_id: Some("event-1".into()),
+            event_addr: Some("30402:pubkey:d-tag".into()),
+            relay_count: 2,
+            acknowledged_relay_count: 1,
+        };
+
+        let rendered = format!("{auth:?} {connect:?} {listing_request:?} {job:?}");
+
+        assert!(rendered.contains("<redacted>"));
+        assert!(!rendered.contains("token-secret"));
+        assert!(!rendered.contains("nsec"));
+        assert!(!rendered.contains("provider-session-secret"));
+        assert!(!rendered.contains("signer-session-secret"));
+        assert!(!rendered.contains("signer_mode: \"bunker\""));
+    }
+
+    #[test]
+    fn http_status_error_reports_status_and_body() {
+        let error = http_status_error(reqwest::StatusCode::UNAUTHORIZED, "missing token");
+
+        assert_message(error, "radrootsd returned http 401: missing token");
+    }
+
+    #[test]
+    fn decode_jsonrpc_response_returns_result() {
+        let response: SdkRadrootsdBridgePublishResponse = decode_jsonrpc_response(
+            "bridge.listing.publish",
+            r#"{
+                "jsonrpc": "2.0",
+                "id": "radroots-sdk-listing-publish",
+                "result": {
+                    "deduplicated": false,
+                    "job": {
+                        "job_id": "job-1",
+                        "command": "bridge.listing.publish",
+                        "status": "accepted",
+                        "terminal": false,
+                        "recovered_after_restart": false,
+                        "signer_mode": "bunker",
+                        "signer_session_id": "signer-session-secret",
+                        "event_kind": 30402,
+                        "event_id": "event-1",
+                        "event_addr": "30402:pubkey:d-tag",
+                        "relay_count": 2,
+                        "acknowledged_relay_count": 1
+                    }
+                }
+            }"#,
+        )
+        .expect("response");
+
+        assert!(!response.deduplicated);
+        assert_eq!(response.job.job_id, "job-1");
+        assert_eq!(
+            response.job.signer_session_id.as_deref(),
+            Some("signer-session-secret")
+        );
+    }
+
+    #[test]
+    fn decode_jsonrpc_response_returns_jsonrpc_error() {
+        let error = decode_jsonrpc_response::<SdkRadrootsdBridgePublishResponse>(
+            "bridge.listing.publish",
+            r#"{
+                "jsonrpc": "2.0",
+                "id": "radroots-sdk-listing-publish",
+                "error": { "code": -32001, "message": "signer unavailable" }
+            }"#,
+        )
+        .expect_err("error");
+
+        assert!(matches!(error, RadrootsdError::JsonRpc(_)));
+        assert_message(
+            error,
+            "radrootsd bridge.listing.publish failed -32001: signer unavailable",
+        );
+    }
+
+    #[test]
+    fn decode_jsonrpc_response_rejects_result_plus_error() {
+        let error = decode_jsonrpc_response::<serde_json::Value>(
+            "bridge.listing.publish",
+            r#"{
+                "result": { "ok": true },
+                "error": { "code": -32002, "message": "ambiguous response" }
+            }"#,
+        )
+        .expect_err("error");
+
+        assert!(matches!(error, RadrootsdError::MalformedResponse(_)));
+        assert_message(
+            error,
+            "radrootsd bridge.listing.publish returned result and error: -32002 ambiguous response",
+        );
+    }
+
+    #[test]
+    fn decode_jsonrpc_response_rejects_missing_result_and_error() {
+        let error = decode_jsonrpc_response::<serde_json::Value>(
+            "bridge.listing.publish",
+            r#"{ "jsonrpc": "2.0", "id": "radroots-sdk-listing-publish" }"#,
+        )
+        .expect_err("error");
+
+        assert!(matches!(error, RadrootsdError::MalformedResponse(_)));
+        assert_message(
+            error,
+            "radrootsd bridge.listing.publish returned neither result nor error",
+        );
+    }
+
+    #[test]
+    fn decode_jsonrpc_response_rejects_malformed_json() {
+        let error = decode_jsonrpc_response::<serde_json::Value>(
+            "bridge.listing.publish",
+            r#"{ "result": "#,
+        )
+        .expect_err("error");
+
+        assert!(matches!(error, RadrootsdError::MalformedResponse(_)));
+        assert_message(error, "decode radrootsd bridge.listing.publish response");
     }
 }
