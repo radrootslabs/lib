@@ -174,38 +174,9 @@ fn normalized_relay_url(
     policy: SdkRelayUrlPolicy,
 ) -> Result<String, RadrootsSdkError> {
     let relay = RadrootsRelayUrl::parse(value, policy.relay_transport_policy())?;
-    let normalized = relay.into_string();
-    if normalized.starts_with("ws://") && !is_local_ws_relay(normalized.as_str()) {
-        return Err(RadrootsSdkError::invalid_relay_url(
-            normalized,
-            "ws relay targets are limited to localhost, 127.0.0.1, or [::1]",
-        ));
-    }
-    Ok(normalized)
+    Ok(relay.into_string())
 }
 
-fn is_local_ws_relay(value: &str) -> bool {
-    let Some(rest) = value.strip_prefix("ws://") else {
-        return false;
-    };
-    let authority = rest
-        .split_once('/')
-        .map(|(authority, _)| authority)
-        .unwrap_or(rest);
-    let host = relay_authority_host(authority);
-    matches!(host.as_deref(), Some("localhost" | "127.0.0.1" | "[::1]"))
-}
-
-fn relay_authority_host(authority: &str) -> Option<String> {
-    if let Some(after_open) = authority.strip_prefix('[') {
-        let close_index = after_open.find(']')?;
-        return Some(format!("[{}]", &after_open[..close_index]));
-    }
-    Some(
-        authority
-            .split_once(':')
-            .map(|(host, _)| host)
-            .unwrap_or(authority)
-            .to_owned(),
-    )
-}
+#[cfg(test)]
+#[path = "../tests/unit/relay_targets_tests.rs"]
+mod tests;

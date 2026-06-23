@@ -404,7 +404,7 @@ impl<'sdk> SyncClient<'sdk> {
             else {
                 break;
             };
-            let publish_now_ms = sdk_now_ms(self.sdk)?;
+            let publish_now_ms = claim_now_ms;
             let policy = RadrootsOutboxPublishPolicy::new(
                 publish_now_ms.saturating_add(request.next_attempt_delay_ms),
             )
@@ -419,19 +419,11 @@ impl<'sdk> SyncClient<'sdk> {
                 publish_now_ms,
             )
             .await?;
-            let outbox_event = self
-                .sdk
-                ._outbox
-                .get_event(claimed.outbox_event_id)
-                .await?
-                .ok_or_else(|| RadrootsSdkError::Outbox {
-                    message: "published outbox event was not found after sync push".to_owned(),
-                })?;
             receipt.push_event(push_event_receipt(
                 claimed.outbox_event_id,
-                outbox_event.state.into(),
+                push_event_final_state(&publish.publish),
                 publish.publish,
-            )?);
+            ));
         }
         Ok(receipt)
     }
@@ -443,17 +435,25 @@ fn push_outbox_claim_token() -> String {
 }
 
 #[cfg(feature = "runtime")]
+fn push_event_final_state(publish: &RadrootsRelayPublishReceipt) -> PushOutboxEventState {
+    if publish.quorum_met {
+        PushOutboxEventState::Published
+    } else if publish.retryable_count > 0 {
+        PushOutboxEventState::PublishRetryable
+    } else {
+        PushOutboxEventState::FailedTerminal
+    }
+}
+
+#[cfg(feature = "runtime")]
 fn push_event_receipt(
     outbox_event_id: i64,
     final_state: PushOutboxEventState,
     publish: RadrootsRelayPublishReceipt,
-) -> Result<PushOutboxEventReceipt, RadrootsSdkError> {
-    let event_id = RadrootsEventId::parse(publish.event_id.as_str()).map_err(|_| {
-        RadrootsSdkError::RelayTransport {
-            message: "relay publish returned invalid event id".to_owned(),
-        }
-    })?;
-    Ok(PushOutboxEventReceipt {
+) -> PushOutboxEventReceipt {
+    let event_id = RadrootsEventId::parse(publish.event_id.as_str())
+        .expect("relay transport publish receipt uses signed event id");
+    PushOutboxEventReceipt {
         event_id,
         outbox_event_id,
         final_state,
@@ -464,7 +464,7 @@ fn push_event_receipt(
         quorum: publish.quorum,
         quorum_met: publish.quorum_met,
         relays: publish.relays.into_iter().map(push_relay_receipt).collect(),
-    })
+    }
 }
 
 #[cfg(feature = "runtime")]
@@ -478,65 +478,5 @@ fn push_relay_receipt(relay: RadrootsRelayPublishRelayReceipt) -> PushOutboxRela
 }
 
 #[cfg(all(test, feature = "runtime"))]
-mod tests {
-    use super::{PushOutboxEventState, push_event_receipt, push_outbox_claim_token};
-    use crate::RadrootsSdkError;
-    use radroots_events::ids::RadrootsEventId;
-    use radroots_relay_transport::RadrootsRelayPublishReceipt;
-    use std::collections::BTreeSet;
-
-    #[test]
-    fn push_outbox_claim_tokens_are_unique_under_immediate_generation() {
-        let mut tokens = BTreeSet::new();
-        for _ in 0..1_024 {
-            let token = push_outbox_claim_token();
-            assert!(token.starts_with("radroots-sdk-sync-"));
-            assert!(tokens.insert(token));
-        }
-    }
-
-    #[test]
-    fn push_event_receipt_parses_typed_event_id() {
-        let event_id = "a".repeat(64);
-        let receipt = push_event_receipt(
-            1,
-            PushOutboxEventState::Published,
-            relay_publish_receipt(event_id.as_str()),
-        )
-        .expect("push event receipt");
-
-        assert_eq!(
-            receipt.event_id,
-            RadrootsEventId::parse(event_id).expect("event id")
-        );
-    }
-
-    #[test]
-    fn push_event_receipt_rejects_invalid_event_id() {
-        let error = push_event_receipt(
-            1,
-            PushOutboxEventState::Published,
-            relay_publish_receipt("not-a-valid-event-id"),
-        )
-        .expect_err("invalid event id");
-
-        assert!(matches!(
-            error,
-            RadrootsSdkError::RelayTransport { message }
-                if message == "relay publish returned invalid event id"
-        ));
-    }
-
-    fn relay_publish_receipt(event_id: &str) -> RadrootsRelayPublishReceipt {
-        RadrootsRelayPublishReceipt {
-            event_id: event_id.to_owned(),
-            attempted_count: 0,
-            accepted_count: 0,
-            retryable_count: 0,
-            terminal_count: 0,
-            quorum: 0,
-            quorum_met: true,
-            relays: Vec::new(),
-        }
-    }
-}
+#[path = "../tests/unit/sync_runtime_tests.rs"]
+mod tests;

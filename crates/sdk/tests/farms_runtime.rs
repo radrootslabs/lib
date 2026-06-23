@@ -20,6 +20,11 @@ use radroots_sdk::{
     SdkRelayTargetSet, SdkRelayUrlPolicy,
 };
 
+#[path = "support/serializer_failure.rs"]
+mod serializer_failure;
+
+use serializer_failure::assert_struct_serialize_error_paths;
+
 const FARMER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const OTHER: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const FARM_A_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAA";
@@ -457,6 +462,7 @@ async fn farm_runtime_dtos_serialize_deterministically() {
         FarmPreparePublishRequest::new(farmer_actor(), farm(FARM_A_D_TAG, "Serialized Farm"))
             .with_created_at(created_at);
     let prepare_json = serde_json::to_value(&prepare_request).expect("prepare request json");
+    assert_struct_serialize_error_paths(&prepare_request, 3);
 
     assert_eq!(
         prepare_json,
@@ -493,6 +499,7 @@ async fn farm_runtime_dtos_serialize_deterministically() {
     )
     .with_created_at(created_at);
     let enqueue_json = serde_json::to_value(&enqueue_request).expect("enqueue request json");
+    assert_struct_serialize_error_paths(&enqueue_request, 5);
 
     assert_eq!(
         enqueue_json,
@@ -526,6 +533,18 @@ async fn farm_runtime_dtos_serialize_deterministically() {
         !enqueue_json
             .to_string()
             .contains("farm-serialized-idempotency")
+    );
+
+    let try_key_request = FarmEnqueuePublishRequest::new(
+        farmer_actor(),
+        farm(FARM_C_D_TAG, "Queued Farm"),
+        SdkRelayTargetPolicy::UseConfiguredRelays,
+    )
+    .try_with_idempotency_key("farm-serialized-try-key")
+    .expect("try idempotency key");
+    assert_eq!(
+        serde_json::to_value(&try_key_request).expect("try key request json")["idempotency_key"],
+        serde_json::json!({ "value": "<redacted>", "len": 23 })
     );
 
     let receipt = sdk

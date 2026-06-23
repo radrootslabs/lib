@@ -48,6 +48,8 @@ use radroots_sdk::{
     SdkRelayTargetSet, SdkRelayUrlPolicy,
 };
 use radroots_trade::order::RadrootsOrderIssue;
+use serde::Serialize;
+use serde::ser::{self, SerializeStruct};
 
 const BUYER_SECRET_KEY_HEX: &str =
     "10c5304d6c9ae3a1a16f7860f1cc8f5e3a76225a2663b3a989a0d775919b7df5";
@@ -61,6 +63,278 @@ const OTHER_PUBLIC_KEY_HEX: &str =
     "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
 const RELAY: &str = "wss://relay.radroots.test";
 const RELAY_B: &str = "wss://relay-b.radroots.test";
+
+#[derive(Clone, Copy)]
+enum FailingSerializeFailure {
+    Start,
+    Field(usize),
+    End,
+}
+
+struct FailingStructSerializer {
+    failure: FailingSerializeFailure,
+}
+
+struct FailingSerializeStruct {
+    field_index: usize,
+    failure: FailingSerializeFailure,
+}
+
+#[derive(Debug)]
+struct FailingSerializeError;
+
+impl core::fmt::Display for FailingSerializeError {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.write_str("intentional serializer failure")
+    }
+}
+
+impl std::error::Error for FailingSerializeError {}
+
+impl ser::Error for FailingSerializeError {
+    fn custom<T>(_message: T) -> Self
+    where
+        T: core::fmt::Display,
+    {
+        Self
+    }
+}
+
+impl FailingStructSerializer {
+    fn start() -> Self {
+        Self {
+            failure: FailingSerializeFailure::Start,
+        }
+    }
+
+    fn field(field_index: usize) -> Self {
+        Self {
+            failure: FailingSerializeFailure::Field(field_index),
+        }
+    }
+
+    fn end() -> Self {
+        Self {
+            failure: FailingSerializeFailure::End,
+        }
+    }
+}
+
+impl ser::Serializer for FailingStructSerializer {
+    type Ok = ();
+    type Error = FailingSerializeError;
+    type SerializeSeq = ser::Impossible<(), FailingSerializeError>;
+    type SerializeTuple = ser::Impossible<(), FailingSerializeError>;
+    type SerializeTupleStruct = ser::Impossible<(), FailingSerializeError>;
+    type SerializeTupleVariant = ser::Impossible<(), FailingSerializeError>;
+    type SerializeMap = ser::Impossible<(), FailingSerializeError>;
+    type SerializeStruct = FailingSerializeStruct;
+    type SerializeStructVariant = ser::Impossible<(), FailingSerializeError>;
+
+    fn serialize_bool(self, _value: bool) -> Result<Self::Ok, Self::Error> {
+        Err(FailingSerializeError)
+    }
+
+    fn serialize_i8(self, _value: i8) -> Result<Self::Ok, Self::Error> {
+        Err(FailingSerializeError)
+    }
+
+    fn serialize_i16(self, _value: i16) -> Result<Self::Ok, Self::Error> {
+        Err(FailingSerializeError)
+    }
+
+    fn serialize_i32(self, _value: i32) -> Result<Self::Ok, Self::Error> {
+        Err(FailingSerializeError)
+    }
+
+    fn serialize_i64(self, _value: i64) -> Result<Self::Ok, Self::Error> {
+        Err(FailingSerializeError)
+    }
+
+    fn serialize_u8(self, _value: u8) -> Result<Self::Ok, Self::Error> {
+        Err(FailingSerializeError)
+    }
+
+    fn serialize_u16(self, _value: u16) -> Result<Self::Ok, Self::Error> {
+        Err(FailingSerializeError)
+    }
+
+    fn serialize_u32(self, _value: u32) -> Result<Self::Ok, Self::Error> {
+        Err(FailingSerializeError)
+    }
+
+    fn serialize_u64(self, _value: u64) -> Result<Self::Ok, Self::Error> {
+        Err(FailingSerializeError)
+    }
+
+    fn serialize_f32(self, _value: f32) -> Result<Self::Ok, Self::Error> {
+        Err(FailingSerializeError)
+    }
+
+    fn serialize_f64(self, _value: f64) -> Result<Self::Ok, Self::Error> {
+        Err(FailingSerializeError)
+    }
+
+    fn serialize_char(self, _value: char) -> Result<Self::Ok, Self::Error> {
+        Err(FailingSerializeError)
+    }
+
+    fn serialize_str(self, _value: &str) -> Result<Self::Ok, Self::Error> {
+        Err(FailingSerializeError)
+    }
+
+    fn serialize_bytes(self, _value: &[u8]) -> Result<Self::Ok, Self::Error> {
+        Err(FailingSerializeError)
+    }
+
+    fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
+        Err(FailingSerializeError)
+    }
+
+    fn serialize_some<T>(self, _value: &T) -> Result<Self::Ok, Self::Error>
+    where
+        T: ?Sized + Serialize,
+    {
+        Err(FailingSerializeError)
+    }
+
+    fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
+        Err(FailingSerializeError)
+    }
+
+    fn serialize_unit_struct(self, _name: &'static str) -> Result<Self::Ok, Self::Error> {
+        Err(FailingSerializeError)
+    }
+
+    fn serialize_unit_variant(
+        self,
+        _name: &'static str,
+        _variant_index: u32,
+        _variant: &'static str,
+    ) -> Result<Self::Ok, Self::Error> {
+        Err(FailingSerializeError)
+    }
+
+    fn serialize_newtype_struct<T>(
+        self,
+        _name: &'static str,
+        _value: &T,
+    ) -> Result<Self::Ok, Self::Error>
+    where
+        T: ?Sized + Serialize,
+    {
+        Err(FailingSerializeError)
+    }
+
+    fn serialize_newtype_variant<T>(
+        self,
+        _name: &'static str,
+        _variant_index: u32,
+        _variant: &'static str,
+        _value: &T,
+    ) -> Result<Self::Ok, Self::Error>
+    where
+        T: ?Sized + Serialize,
+    {
+        Err(FailingSerializeError)
+    }
+
+    fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
+        Err(FailingSerializeError)
+    }
+
+    fn serialize_tuple(self, _len: usize) -> Result<Self::SerializeTuple, Self::Error> {
+        Err(FailingSerializeError)
+    }
+
+    fn serialize_tuple_struct(
+        self,
+        _name: &'static str,
+        _len: usize,
+    ) -> Result<Self::SerializeTupleStruct, Self::Error> {
+        Err(FailingSerializeError)
+    }
+
+    fn serialize_tuple_variant(
+        self,
+        _name: &'static str,
+        _variant_index: u32,
+        _variant: &'static str,
+        _len: usize,
+    ) -> Result<Self::SerializeTupleVariant, Self::Error> {
+        Err(FailingSerializeError)
+    }
+
+    fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
+        Err(FailingSerializeError)
+    }
+
+    fn serialize_struct(
+        self,
+        _name: &'static str,
+        _len: usize,
+    ) -> Result<Self::SerializeStruct, Self::Error> {
+        match self.failure {
+            FailingSerializeFailure::Start => Err(FailingSerializeError),
+            failure => Ok(FailingSerializeStruct {
+                field_index: 0,
+                failure,
+            }),
+        }
+    }
+
+    fn serialize_struct_variant(
+        self,
+        _name: &'static str,
+        _variant_index: u32,
+        _variant: &'static str,
+        _len: usize,
+    ) -> Result<Self::SerializeStructVariant, Self::Error> {
+        Err(FailingSerializeError)
+    }
+}
+
+impl SerializeStruct for FailingSerializeStruct {
+    type Ok = ();
+    type Error = FailingSerializeError;
+
+    fn serialize_field<T>(&mut self, _key: &'static str, _value: &T) -> Result<(), Self::Error>
+    where
+        T: ?Sized + Serialize,
+    {
+        self.field_index += 1;
+        match self.failure {
+            FailingSerializeFailure::Field(field) if self.field_index == field => {
+                Err(FailingSerializeError)
+            }
+            _ => Ok(()),
+        }
+    }
+
+    fn end(self) -> Result<Self::Ok, Self::Error> {
+        match self.failure {
+            FailingSerializeFailure::End => Err(FailingSerializeError),
+            _ => Ok(()),
+        }
+    }
+}
+
+fn assert_struct_serialize_error_paths<T>(value: &T, field_count: usize)
+where
+    T: Serialize,
+{
+    value
+        .serialize(FailingStructSerializer::start())
+        .expect_err("struct start failure");
+    for field_index in 1..=field_count {
+        value
+            .serialize(FailingStructSerializer::field(field_index))
+            .expect_err("struct field failure");
+    }
+    value
+        .serialize(FailingStructSerializer::end())
+        .expect_err("struct end failure");
+}
 
 #[derive(Clone)]
 struct FixtureSigner {
@@ -774,6 +1048,7 @@ async fn order_submit_runtime_dtos_serialize_deterministically() {
     )
     .with_created_at(created_at);
     let prepare_json = serde_json::to_value(&prepare_request).expect("prepare request json");
+    assert_struct_serialize_error_paths(&prepare_request, 4);
 
     assert_eq!(
         prepare_json["actor"],
@@ -813,10 +1088,12 @@ async fn order_submit_runtime_dtos_serialize_deterministically() {
     )
     .try_with_target_relays([RELAY, RELAY_B], SdkRelayUrlPolicy::Public)
     .expect("relay targets")
-    .try_with_idempotency_key("order-serialized-idempotency")
-    .expect("idempotency")
+    .with_idempotency_key(
+        SdkIdempotencyKey::new("order-serialized-idempotency").expect("idempotency"),
+    )
     .with_created_at(created_at);
     let enqueue_json = serde_json::to_value(&enqueue_request).expect("enqueue request json");
+    assert_struct_serialize_error_paths(&enqueue_request, 6);
 
     assert_eq!(
         enqueue_json["target_relays"],
@@ -835,6 +1112,19 @@ async fn order_submit_runtime_dtos_serialize_deterministically() {
         !enqueue_json
             .to_string()
             .contains("order-serialized-idempotency")
+    );
+
+    let try_key_enqueue = OrderSubmitEnqueueRequest::new(
+        buyer_actor(),
+        listing_event_ptr(),
+        order_request("order-submit-try-idempotency"),
+        SdkRelayTargetPolicy::UseConfiguredRelays,
+    )
+    .try_with_idempotency_key("order-submit-try-key")
+    .expect("try idempotency key");
+    assert_eq!(
+        serde_json::to_value(&try_key_enqueue).expect("try key request json")["idempotency_key"],
+        serde_json::json!({ "value": "<redacted>", "len": 20 })
     );
 
     let receipt = sdk
@@ -1071,17 +1361,25 @@ async fn order_request_evidence_ingest_stores_request_and_enables_decision_enque
     assert_eq!(ingest_receipt.local_event_seq, 1);
     assert!(ingest_receipt.inserted);
 
-    let request = OrderDecisionEnqueueRequest::new(
-        seller_actor(),
-        request_event_ptr(&request_event),
-        order_decision("order-decision-ingested"),
-        SdkRelayTargetPolicy::UseConfiguredRelays,
-    )
-    .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
-    .expect("target relays");
+    let actor = seller_actor();
+    let plan = sdk
+        .orders()
+        .prepare_decision(OrderDecisionPrepareRequest::new(
+            actor.clone(),
+            request_event_ptr(&request_event),
+            order_decision("order-decision-ingested"),
+        ))
+        .expect("prepare decision");
     let receipt = sdk
         .orders()
-        .enqueue_decision(request, &FixtureSigner::new(SELLER_SECRET_KEY_HEX))
+        .enqueue_prepared_decision(
+            &actor,
+            plan,
+            SdkRelayTargetPolicy::try_explicit([RELAY], SdkRelayUrlPolicy::Public)
+                .expect("target relays"),
+            None,
+            &FixtureSigner::new(SELLER_SECRET_KEY_HEX),
+        )
         .await
         .expect("enqueue decision");
 
@@ -1378,6 +1676,7 @@ async fn order_decision_runtime_dtos_serialize_deterministically() {
     )
     .with_created_at(created_at);
     let prepare_json = serde_json::to_value(&prepare_request).expect("prepare request json");
+    assert_struct_serialize_error_paths(&prepare_request, 4);
 
     assert_eq!(
         prepare_json["actor"],
@@ -1418,10 +1717,12 @@ async fn order_decision_runtime_dtos_serialize_deterministically() {
     )
     .try_with_target_relays([RELAY, RELAY_B], SdkRelayUrlPolicy::Public)
     .expect("target relays")
-    .try_with_idempotency_key("order-decision-serialized-idempotency")
-    .expect("idempotency")
+    .with_idempotency_key(
+        SdkIdempotencyKey::new("order-decision-serialized-idempotency").expect("idempotency"),
+    )
     .with_created_at(created_at);
     let enqueue_json = serde_json::to_value(&enqueue_request).expect("enqueue request json");
+    assert_struct_serialize_error_paths(&enqueue_request, 6);
 
     assert_eq!(
         enqueue_json["target_relays"],
@@ -1440,6 +1741,19 @@ async fn order_decision_runtime_dtos_serialize_deterministically() {
         !enqueue_json
             .to_string()
             .contains("order-decision-serialized-idempotency")
+    );
+
+    let try_key_enqueue = OrderDecisionEnqueueRequest::new(
+        seller_actor(),
+        request_event_ptr(&request_event),
+        order_decision("order-decision-try-idempotency"),
+        SdkRelayTargetPolicy::UseConfiguredRelays,
+    )
+    .try_with_idempotency_key("order-decision-try-key")
+    .expect("try idempotency key");
+    assert_eq!(
+        serde_json::to_value(&try_key_enqueue).expect("try key request json")["idempotency_key"],
+        serde_json::json!({ "value": "<redacted>", "len": 22 })
     );
 
     let receipt = sdk
@@ -1545,6 +1859,7 @@ async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
     .with_created_at(created_at);
     let proposal_prepare_json =
         serde_json::to_value(&proposal_prepare).expect("proposal prepare json");
+    assert_struct_serialize_error_paths(&proposal_prepare, 5);
     assert_eq!(
         proposal_prepare_json["actor"]["pubkey"],
         SELLER_PUBLIC_KEY_HEX
@@ -1580,6 +1895,7 @@ async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
     .with_created_at(created_at);
     let proposal_enqueue_json =
         serde_json::to_value(&proposal_enqueue).expect("proposal enqueue json");
+    assert_struct_serialize_error_paths(&proposal_enqueue, 7);
     assert_eq!(
         proposal_enqueue_json["target_relays"],
         serde_json::json!({
@@ -1594,6 +1910,20 @@ async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
     );
     assert!(!proposal_enqueue_json.to_string().contains("proposal-dto"));
 
+    let proposal_try_key = OrderRevisionProposalEnqueueRequest::new(
+        seller_actor(),
+        root_event.clone(),
+        previous_event.clone(),
+        proposal.clone(),
+        SdkRelayTargetPolicy::UseConfiguredRelays,
+    )
+    .try_with_idempotency_key("order-revision-proposal-try")
+    .expect("proposal try key");
+    assert_eq!(
+        serde_json::to_value(&proposal_try_key).expect("proposal try json")["idempotency_key"],
+        serde_json::json!({ "value": "<redacted>", "len": 27 })
+    );
+
     let decision_prepare = OrderRevisionDecisionPrepareRequest::new(
         buyer_actor(),
         root_event.clone(),
@@ -1603,6 +1933,7 @@ async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
     .with_created_at(created_at);
     let decision_prepare_json =
         serde_json::to_value(&decision_prepare).expect("decision prepare json");
+    assert_struct_serialize_error_paths(&decision_prepare, 5);
     assert_eq!(
         decision_prepare_json["actor"]["pubkey"],
         BUYER_PUBLIC_KEY_HEX
@@ -1629,17 +1960,37 @@ async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
     )
     .try_with_target_relays([RELAY, RELAY_B], SdkRelayUrlPolicy::Public)
     .expect("decision relays")
-    .try_with_idempotency_key("order-revision-decision-dto")
-    .expect("decision idempotency")
+    .with_idempotency_key(
+        SdkIdempotencyKey::new("order-revision-decision-dto").expect("decision idempotency"),
+    )
     .with_created_at(created_at);
     let decision_enqueue_json =
         serde_json::to_value(&decision_enqueue).expect("decision enqueue json");
+    assert_struct_serialize_error_paths(&decision_enqueue, 7);
     assert_eq!(
         decision_enqueue_json["idempotency_key"],
         serde_json::json!({ "value": "<redacted>", "len": 27 })
     );
     assert_eq!(decision_enqueue_json["created_at"], 1_700_000_654);
     assert!(!decision_enqueue_json.to_string().contains("decision-dto"));
+
+    let decision_try_key = OrderRevisionDecisionEnqueueRequest::new(
+        buyer_actor(),
+        root_event.clone(),
+        previous_event.clone(),
+        order_revision_decision(
+            &proposal,
+            &previous_event_id,
+            RadrootsOrderRevisionOutcome::Accepted,
+        ),
+        SdkRelayTargetPolicy::UseConfiguredRelays,
+    )
+    .try_with_idempotency_key("order-revision-decision-try")
+    .expect("decision try key");
+    assert_eq!(
+        serde_json::to_value(&decision_try_key).expect("decision try json")["idempotency_key"],
+        serde_json::json!({ "value": "<redacted>", "len": 27 })
+    );
 
     let cancellation_prepare = OrderCancellationPrepareRequest::new(
         buyer_actor(),
@@ -1650,6 +2001,7 @@ async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
     .with_created_at(created_at);
     let cancellation_prepare_json =
         serde_json::to_value(&cancellation_prepare).expect("cancellation prepare json");
+    assert_struct_serialize_error_paths(&cancellation_prepare, 5);
     assert_eq!(
         cancellation_prepare_json["cancellation"]["reason"],
         "buyer changed pickup plan"
@@ -1658,18 +2010,20 @@ async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
 
     let cancellation_enqueue = OrderCancellationEnqueueRequest::new(
         buyer_actor(),
-        root_event,
-        previous_event,
+        root_event.clone(),
+        previous_event.clone(),
         cancellation,
         SdkRelayTargetPolicy::UseConfiguredRelays,
     )
     .try_with_target_relays([RELAY, RELAY_B], SdkRelayUrlPolicy::Public)
     .expect("cancellation relays")
-    .try_with_idempotency_key("order-cancellation-dto")
-    .expect("cancellation idempotency")
+    .with_idempotency_key(
+        SdkIdempotencyKey::new("order-cancellation-dto").expect("cancellation idempotency"),
+    )
     .with_created_at(created_at);
     let cancellation_enqueue_json =
         serde_json::to_value(&cancellation_enqueue).expect("cancellation enqueue json");
+    assert_struct_serialize_error_paths(&cancellation_enqueue, 7);
     assert_eq!(
         cancellation_enqueue_json["idempotency_key"],
         serde_json::json!({ "value": "<redacted>", "len": 22 })
@@ -1681,17 +2035,33 @@ async fn order_revision_and_cancellation_dtos_serialize_deterministically() {
             .contains("cancellation-dto")
     );
 
+    let cancellation_try_key = OrderCancellationEnqueueRequest::new(
+        buyer_actor(),
+        root_event.clone(),
+        previous_event.clone(),
+        order_cancellation("order-revision-dto"),
+        SdkRelayTargetPolicy::UseConfiguredRelays,
+    )
+    .try_with_idempotency_key("order-cancellation-try")
+    .expect("cancellation try key");
+    assert_eq!(
+        serde_json::to_value(&cancellation_try_key).expect("cancellation try json")["idempotency_key"],
+        serde_json::json!({ "value": "<redacted>", "len": 22 })
+    );
+
     let event = signed_order_request_event("order-evidence-dto", 77);
     let request_evidence =
         OrderRequestEvidenceIngestRequest::new(event.clone()).with_observed_at(created_at);
     let request_evidence_json =
         serde_json::to_value(&request_evidence).expect("request evidence json");
+    assert_struct_serialize_error_paths(&request_evidence, 2);
     assert_eq!(request_evidence_json["event"]["id"], event.id.as_str());
     assert_eq!(request_evidence_json["observed_at"], 1_700_000_654);
 
     let order_evidence =
         OrderEvidenceIngestRequest::new(event.clone()).with_observed_at(created_at);
     let order_evidence_json = serde_json::to_value(&order_evidence).expect("order evidence json");
+    assert_struct_serialize_error_paths(&order_evidence, 2);
     assert_eq!(order_evidence_json["event"]["id"], event.id.as_str());
     assert_eq!(order_evidence_json["observed_at"], 1_700_000_654);
 }
@@ -2001,20 +2371,27 @@ async fn order_revision_lifecycle_accepts_proposal_and_finalizes_agreement() {
         &request_event_id,
         &request_event_id,
     );
+    let proposal_actor = seller_actor();
+    let proposal_plan = sdk
+        .orders()
+        .prepare_revision_proposal(OrderRevisionProposalPrepareRequest::new(
+            proposal_actor.clone(),
+            request_event_ptr(&request_event),
+            request_event_ptr(&request_event),
+            proposal.clone(),
+        ))
+        .expect("prepare revision proposal");
     let proposal_receipt = sdk
         .orders()
-        .enqueue_revision_proposal(
-            OrderRevisionProposalEnqueueRequest::new(
-                seller_actor(),
-                request_event_ptr(&request_event),
-                request_event_ptr(&request_event),
-                proposal.clone(),
-                SdkRelayTargetPolicy::UseConfiguredRelays,
-            )
-            .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
-            .expect("proposal target relays")
-            .try_with_idempotency_key("order-lifecycle-revision-proposal")
-            .expect("proposal idempotency"),
+        .enqueue_prepared_revision_proposal(
+            &proposal_actor,
+            proposal_plan,
+            SdkRelayTargetPolicy::try_explicit([RELAY], SdkRelayUrlPolicy::Public)
+                .expect("proposal target relays"),
+            Some(
+                SdkIdempotencyKey::new("order-lifecycle-revision-proposal")
+                    .expect("proposal idempotency"),
+            ),
             &FixtureSigner::new(SELLER_SECRET_KEY_HEX),
         )
         .await
@@ -2043,18 +2420,24 @@ async fn order_revision_lifecycle_accepts_proposal_and_finalizes_agreement() {
         &proposal_receipt.signed_event_id,
         RadrootsOrderRevisionOutcome::Accepted,
     );
+    let revision_decision_actor = buyer_actor();
+    let revision_decision_plan = sdk
+        .orders()
+        .prepare_revision_decision(OrderRevisionDecisionPrepareRequest::new(
+            revision_decision_actor.clone(),
+            request_event_ptr(&request_event),
+            order_event_ptr(&proposal_receipt.signed_event_id),
+            revision_decision,
+        ))
+        .expect("prepare revision decision");
     let revision_decision_receipt = sdk
         .orders()
-        .enqueue_revision_decision(
-            OrderRevisionDecisionEnqueueRequest::new(
-                buyer_actor(),
-                request_event_ptr(&request_event),
-                order_event_ptr(&proposal_receipt.signed_event_id),
-                revision_decision,
-                SdkRelayTargetPolicy::UseConfiguredRelays,
-            )
-            .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
-            .expect("revision decision target relays"),
+        .enqueue_prepared_revision_decision(
+            &revision_decision_actor,
+            revision_decision_plan,
+            SdkRelayTargetPolicy::try_explicit([RELAY], SdkRelayUrlPolicy::Public)
+                .expect("revision decision target relays"),
+            None,
             &FixtureSigner::new(BUYER_SECRET_KEY_HEX),
         )
         .await
@@ -2350,20 +2733,26 @@ async fn order_cancel_lifecycle_enqueue_updates_status() {
         .ingest_event(RadrootsEventIngest::new(request_event.clone(), 6_000))
         .await
         .expect("ingest request");
+    let cancellation_actor = buyer_actor();
+    let cancellation_plan = sdk
+        .orders()
+        .prepare_cancellation(OrderCancellationPrepareRequest::new(
+            cancellation_actor.clone(),
+            request_event_ptr(&request_event),
+            request_event_ptr(&request_event),
+            order_cancellation("order-lifecycle-cancel"),
+        ))
+        .expect("prepare cancellation");
     let cancellation = sdk
         .orders()
-        .enqueue_cancellation(
-            OrderCancellationEnqueueRequest::new(
-                buyer_actor(),
-                request_event_ptr(&request_event),
-                request_event_ptr(&request_event),
-                order_cancellation("order-lifecycle-cancel"),
-                SdkRelayTargetPolicy::UseConfiguredRelays,
-            )
-            .try_with_target_relays([RELAY], SdkRelayUrlPolicy::Public)
-            .expect("cancellation target relays")
-            .try_with_idempotency_key("order-lifecycle-cancel")
-            .expect("cancellation idempotency"),
+        .enqueue_prepared_cancellation(
+            &cancellation_actor,
+            cancellation_plan,
+            SdkRelayTargetPolicy::try_explicit([RELAY], SdkRelayUrlPolicy::Public)
+                .expect("cancellation target relays"),
+            Some(
+                SdkIdempotencyKey::new("order-lifecycle-cancel").expect("cancellation idempotency"),
+            ),
             &FixtureSigner::new(BUYER_SECRET_KEY_HEX),
         )
         .await
@@ -2619,6 +3008,7 @@ async fn order_status_contract_dtos_serialize_deterministically() {
     let (_tempdir, sdk, _store) = directory_sdk_and_store().await;
     let request = status_request("order-1").with_limit(25);
     let request_json = serde_json::to_value(&request).expect("request json");
+    assert_struct_serialize_error_paths(&request, 2);
 
     assert_eq!(
         request_json,
@@ -2651,6 +3041,7 @@ async fn order_status_contract_dtos_serialize_deterministically() {
         event_ids: vec![deterministic_event_id("issue-event")],
     };
     assert_eq!(issue.code(), "decision_payload_invalid");
+    assert_struct_serialize_error_paths(&issue, 3);
     assert_eq!(
         serde_json::to_value(issue).expect("issue json"),
         serde_json::json!({

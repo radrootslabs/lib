@@ -630,3 +630,7 @@ fn redact_query_or_fragment(value: &str) -> String {
     };
     format!("{}{}<redacted>", &value[..index], marker)
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/error_tests.rs"]
+mod tests;

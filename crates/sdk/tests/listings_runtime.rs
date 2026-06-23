@@ -25,6 +25,11 @@ use radroots_sdk::{
 };
 use radroots_trade::listing::RadrootsListingDraftDocumentV1;
 
+#[path = "support/serializer_failure.rs"]
+mod serializer_failure;
+
+use serializer_failure::assert_struct_serialize_error_paths;
+
 const SELLER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const OTHER: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const FARM_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAA";
@@ -403,6 +408,7 @@ async fn listing_runtime_dtos_serialize_deterministically() {
     )
     .with_created_at(created_at);
     let prepare_json = serde_json::to_value(&prepare_request).expect("prepare request json");
+    assert_struct_serialize_error_paths(&prepare_request, 3);
 
     assert_eq!(prepare_json["actor"]["pubkey"], SELLER);
     assert_eq!(
@@ -426,6 +432,7 @@ async fn listing_runtime_dtos_serialize_deterministically() {
     .with_idempotency_key(SdkIdempotencyKey::new("serialized-idempotency").expect("idempotency"))
     .with_created_at(created_at);
     let enqueue_json = serde_json::to_value(&enqueue_request).expect("enqueue request json");
+    assert_struct_serialize_error_paths(&enqueue_request, 5);
 
     assert_eq!(enqueue_json["target_relays"]["kind"], "explicit");
     assert_eq!(
@@ -441,6 +448,18 @@ async fn listing_runtime_dtos_serialize_deterministically() {
         serde_json::json!({ "value": "<redacted>", "len": 22 })
     );
     assert!(!enqueue_json.to_string().contains("serialized-idempotency"));
+
+    let try_key_request = ListingEnqueuePublishRequest::from_document(
+        actor(),
+        RadrootsListingDraftDocumentV1::new(listing(LISTING_C_D_TAG, "Queued Coffee")),
+        SdkRelayTargetPolicy::UseConfiguredRelays,
+    )
+    .try_with_idempotency_key("listing-serialized-try-key")
+    .expect("try idempotency key");
+    assert_eq!(
+        serde_json::to_value(&try_key_request).expect("try key request json")["idempotency_key"],
+        serde_json::json!({ "value": "<redacted>", "len": 26 })
+    );
 
     let receipt = sdk
         .listings()

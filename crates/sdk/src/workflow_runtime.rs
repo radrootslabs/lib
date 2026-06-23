@@ -29,14 +29,11 @@ pub(crate) struct SdkWorkflowEnqueueReceipt {
     pub(crate) idempotency_digest_prefix: String,
 }
 
-pub(crate) async fn enqueue_signed_workflow<S>(
+pub(crate) async fn enqueue_signed_workflow(
     sdk: &RadrootsSdk,
     request: SdkWorkflowEnqueueRequest<'_>,
-    signer: &S,
-) -> Result<SdkWorkflowEnqueueReceipt, RadrootsSdkError>
-where
-    S: RadrootsEventSigner + ?Sized,
-{
+    signer: &dyn RadrootsEventSigner,
+) -> Result<SdkWorkflowEnqueueReceipt, RadrootsSdkError> {
     let target_relays = resolved_target_relays(sdk, &request.target_relays)?;
     let signed_event = sign_authorized_draft(request.actor, signer, request.frozen_draft)?;
     let idempotency_key = match request.idempotency_key {
@@ -46,10 +43,11 @@ where
             request.frozen_draft.expected_event_id.as_str(),
             request.frozen_draft.expected_pubkey.as_str(),
             target_relays.canonical_relays(),
-        )?,
+        ),
     };
     let observed_at_ms = sdk_now_ms(sdk)?;
-    let signed_event_id = parse_event_id(signed_event.id.as_str(), "signed event id")?;
+    let signed_event_id = RadrootsEventId::parse(request.frozen_draft.expected_event_id.as_str())
+        .expect("frozen workflow draft has a valid expected event id");
     let event = event_from_signed(&signed_event);
     let ingest = RadrootsEventIngest::new(event, observed_at_ms)
         .with_raw_json(signed_event.raw_json.clone());
@@ -60,7 +58,7 @@ where
         request.operation_kind,
         request.frozen_draft,
         canonical_target_relays.as_slice(),
-    )?;
+    );
     let outbox_input = signed_outbox_input(
         request.operation_kind,
         request.frozen_draft,
@@ -127,23 +125,22 @@ fn outbox_idempotency_digest_prefix(
     operation_kind: &'static str,
     frozen_draft: &RadrootsFrozenEventDraft,
     target_relays: &[String],
-) -> Result<String, RadrootsSdkError> {
+) -> String {
     let input = SdkWorkflowOutboxDigestInput {
         operation_kind,
         expected_pubkey: frozen_draft.expected_pubkey.as_str(),
         draft: frozen_draft,
         target_relays,
     };
-    let bytes = serde_json::to_vec(&input).map_err(|error| RadrootsSdkError::InvalidRequest {
-        message: format!("workflow outbox idempotency digest failed: {error}"),
-    })?;
-    Ok(digest_prefix(hex::encode(Sha256::digest(bytes)).as_str()))
+    let bytes = serde_json::to_vec(&input).expect("workflow digest input serializes");
+    digest_prefix(hex::encode(Sha256::digest(bytes)).as_str())
 }
 
 fn digest_prefix(digest: &str) -> String {
     digest.chars().take(12).collect()
 }
 
+#[cfg(test)]
 fn parse_event_id(value: &str, field: &str) -> Result<RadrootsEventId, RadrootsSdkError> {
     RadrootsEventId::parse(value).map_err(|error| RadrootsSdkError::InvalidRequest {
         message: format!("{field} is invalid: {error}"),
@@ -182,3 +179,7 @@ fn event_from_signed(signed_event: &RadrootsSignedNostrEvent) -> RadrootsNostrEv
         sig: signed_event.sig.clone(),
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/workflow_runtime_tests.rs"]
+mod tests;

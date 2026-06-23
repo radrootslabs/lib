@@ -2,7 +2,6 @@
 use crate::{
     ListingsClient, RadrootsSdkError, RadrootsSdkTimestamp, SdkIdempotencyKey,
     SdkRelayTargetPolicy, SdkRelayUrlPolicy,
-    actor_json::SdkActorContextJson,
     workflow_runtime::{SdkWorkflowEnqueueRequest, enqueue_signed_workflow},
 };
 #[cfg(feature = "runtime")]
@@ -21,32 +20,16 @@ use radroots_trade::listing::{
     build_listing_mutation_draft, canonicalize_listing_draft,
 };
 #[cfg(feature = "runtime")]
-use serde::ser::SerializeStruct;
-
-#[cfg(feature = "runtime")]
 pub const LISTING_PUBLISH_OPERATION_KIND: &str = "listing.publish.v1";
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 #[non_exhaustive]
 pub struct ListingPreparePublishRequest {
+    #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
     pub actor: RadrootsActorContext,
     pub document: RadrootsListingDraftDocumentV1,
     pub created_at: Option<RadrootsSdkTimestamp>,
-}
-
-#[cfg(feature = "runtime")]
-impl serde::Serialize for ListingPreparePublishRequest {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let mut state = serializer.serialize_struct("ListingPreparePublishRequest", 3)?;
-        state.serialize_field("actor", &SdkActorContextJson(&self.actor))?;
-        state.serialize_field("document", &self.document)?;
-        state.serialize_field("created_at", &self.created_at)?;
-        state.end()
-    }
 }
 
 #[cfg(feature = "runtime")]
@@ -77,30 +60,15 @@ impl ListingPreparePublishRequest {
 }
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 #[non_exhaustive]
 pub struct ListingEnqueuePublishRequest {
+    #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
     pub actor: RadrootsActorContext,
     pub document: RadrootsListingDraftDocumentV1,
     pub target_relays: SdkRelayTargetPolicy,
     pub idempotency_key: Option<SdkIdempotencyKey>,
     pub created_at: Option<RadrootsSdkTimestamp>,
-}
-
-#[cfg(feature = "runtime")]
-impl serde::Serialize for ListingEnqueuePublishRequest {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let mut state = serializer.serialize_struct("ListingEnqueuePublishRequest", 5)?;
-        state.serialize_field("actor", &SdkActorContextJson(&self.actor))?;
-        state.serialize_field("document", &self.document)?;
-        state.serialize_field("target_relays", &self.target_relays)?;
-        state.serialize_field("idempotency_key", &self.idempotency_key)?;
-        state.serialize_field("created_at", &self.created_at)?;
-        state.end()
-    }
 }
 
 #[cfg(feature = "runtime")]
@@ -216,14 +184,11 @@ impl<'sdk> ListingsClient<'sdk> {
         listing_publish_plan(&request.actor, request.document, created_at)
     }
 
-    pub async fn enqueue_publish<S>(
+    pub async fn enqueue_publish(
         &self,
         request: ListingEnqueuePublishRequest,
-        signer: &S,
-    ) -> Result<ListingEnqueueReceipt, RadrootsSdkError>
-    where
-        S: RadrootsEventSigner + ?Sized,
-    {
+        signer: &dyn RadrootsEventSigner,
+    ) -> Result<ListingEnqueueReceipt, RadrootsSdkError> {
         let ListingEnqueuePublishRequest {
             actor,
             document,
@@ -241,17 +206,14 @@ impl<'sdk> ListingsClient<'sdk> {
             .await
     }
 
-    pub async fn enqueue_prepared_publish<S>(
+    pub async fn enqueue_prepared_publish(
         &self,
         actor: &RadrootsActorContext,
         plan: ListingPublishPlan,
         target_relays: SdkRelayTargetPolicy,
         idempotency_key: Option<SdkIdempotencyKey>,
-        signer: &S,
-    ) -> Result<ListingEnqueueReceipt, RadrootsSdkError>
-    where
-        S: RadrootsEventSigner + ?Sized,
-    {
+        signer: &dyn RadrootsEventSigner,
+    ) -> Result<ListingEnqueueReceipt, RadrootsSdkError> {
         let enqueue = enqueue_signed_workflow(
             self.sdk,
             SdkWorkflowEnqueueRequest {
@@ -309,9 +271,7 @@ fn listing_publish_plan(
     let mutation = RadrootsListingMutation::publish(canonical);
     let frozen_draft = build_listing_mutation_draft(&mutation, created_at_nostr)?;
     let expected_event_id = RadrootsEventId::parse(frozen_draft.expected_event_id.as_str())
-        .map_err(|error| RadrootsSdkError::InvalidRequest {
-            message: format!("listing publish draft produced invalid event id: {error}"),
-        })?;
+        .expect("frozen listing draft produces a valid event id");
     Ok(ListingPublishPlan {
         public_listing_addr,
         draft_listing_addr,
@@ -320,3 +280,7 @@ fn listing_publish_plan(
         created_at,
     })
 }
+
+#[cfg(all(test, feature = "runtime"))]
+#[path = "../tests/unit/listings_runtime_tests.rs"]
+mod tests;

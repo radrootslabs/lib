@@ -1,8 +1,18 @@
 use radroots_authority::{RadrootsActorContext, RadrootsActorSource};
 use radroots_events::contract::RadrootsActorRole;
-use serde::ser::SerializeStruct;
+use serde::{Serialize, ser::SerializeStruct};
 
 pub(crate) struct SdkActorContextJson<'a>(pub(crate) &'a RadrootsActorContext);
+
+pub(crate) fn serialize_actor_context<S>(
+    actor: &RadrootsActorContext,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    SdkActorContextJson(actor).serialize(serializer)
+}
 
 impl serde::Serialize for SdkActorContextJson<'_> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -48,3 +58,7 @@ fn actor_source_code(source: RadrootsActorSource) -> &'static str {
         RadrootsActorSource::Test => "test",
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/actor_json_tests.rs"]
+mod tests;

@@ -45,19 +45,17 @@ impl SdkIdempotencyKey {
         expected_event_id: &str,
         expected_pubkey: &str,
         target_relays: &[String],
-    ) -> Result<Self, RadrootsSdkError> {
+    ) -> Self {
         let input = SdkIdempotencyDerivationInput {
             operation_kind,
             expected_event_id,
             expected_pubkey,
             target_relays,
         };
-        let bytes =
-            serde_json::to_vec(&input).map_err(|error| RadrootsSdkError::InvalidRequest {
-                message: format!("idempotency derivation failed: {error}"),
-            })?;
+        let bytes = serde_json::to_vec(&input).expect("idempotency derivation input serializes");
         let digest = hex::encode(Sha256::digest(bytes));
         Self::new(format!("{operation_kind}:{digest}"))
+            .expect("derived idempotency key satisfies SDK validation")
     }
 }
 
@@ -95,3 +93,7 @@ fn invalid_request(message: impl Into<String>) -> RadrootsSdkError {
         message: message.into(),
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/idempotency_tests.rs"]
+mod tests;

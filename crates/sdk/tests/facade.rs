@@ -20,6 +20,7 @@ use radroots_events::order::{
     RadrootsOrderRevisionDecision, RadrootsOrderRevisionOutcome, RadrootsOrderRevisionProposal,
 };
 use radroots_events::profile::{RadrootsProfile, RadrootsProfileType};
+use radroots_events::resource_area::RadrootsResourceAreaRef;
 use radroots_sdk::protocol::events::{RadrootsNostrEvent, RadrootsNostrEventPtr};
 use radroots_sdk::protocol::wire::WireEventParts;
 use radroots_sdk::protocol::{farm, listing, order, profile};
@@ -126,6 +127,17 @@ fn listing_event(listing_value: &RadrootsListing) -> RadrootsNostrEvent {
         content: parts.as_wire_parts().content.clone(),
         sig: String::new(),
     }
+}
+
+#[test]
+fn listing_facade_rejects_malformed_resource_area_refs() {
+    let mut listing_value = sample_listing();
+    listing_value.resource_area = Some(RadrootsResourceAreaRef {
+        pubkey: "a".repeat(64),
+        d_tag: "bad d tag".to_owned(),
+    });
+
+    assert!(listing::build_draft(&listing_value).is_err());
 }
 
 fn listing_event_ptr() -> RadrootsNostrEventPtr {
@@ -317,6 +329,8 @@ fn listing_facade_wraps_build_parse_and_validate() {
     let listing_value = sample_listing();
     let tags = listing::build_tags(&listing_value).expect("listing tags");
     assert!(!tags.is_empty());
+    let parts = listing::build_draft(&listing_value).expect("listing draft");
+    assert_eq!(parts.clone().into_wire_parts().kind, KIND_LISTING);
 
     let event = listing_event(&listing_value);
     let parsed = listing::parse_event(&event).expect("parsed listing");

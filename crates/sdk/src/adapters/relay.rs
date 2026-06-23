@@ -70,27 +70,5 @@ pub async fn publish_signed_event(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{client_from_identity, signerless_client, signerless_client_with_options};
-    use crate::identity::RadrootsIdentity;
-    use tokio::runtime::Runtime;
-
-    #[test]
-    fn client_constructors_build_without_runtime_net() {
-        let identity = RadrootsIdentity::generate();
-        let _client = client_from_identity(&identity);
-        let _signerless = signerless_client();
-        let _signerless_with_options =
-            signerless_client_with_options(super::RelayClientOptions::new())
-                .expect("signerless client with options");
-    }
-
-    #[test]
-    fn signerless_client_has_no_signer() {
-        let runtime = Runtime::new().expect("tokio runtime");
-        runtime.block_on(async {
-            let client = signerless_client();
-            assert!(!client.has_signer().await);
-        });
-    }
-}
+#[path = "../../tests/unit/adapters_relay_tests.rs"]
+mod tests;

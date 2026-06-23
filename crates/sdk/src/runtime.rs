@@ -8,7 +8,7 @@ use radroots_event_store::RadrootsEventStore;
 #[cfg(feature = "runtime")]
 use radroots_outbox::RadrootsOutbox;
 #[cfg(feature = "runtime")]
-use sqlx::{Row, SqlitePool};
+use sqlx::SqlitePool;
 #[cfg(feature = "runtime")]
 use std::{
     fs,
@@ -73,6 +73,8 @@ impl RadrootsSdkTimestamp {
 pub enum RadrootsSdkClock {
     System,
     Fixed(RadrootsSdkTimestamp),
+    #[cfg(test)]
+    BeforeUnixEpoch,
 }
 
 #[cfg(feature = "runtime")]
@@ -86,15 +88,22 @@ impl Default for RadrootsSdkClock {
 impl RadrootsSdkClock {
     pub fn now(&self) -> Result<RadrootsSdkTimestamp, RadrootsSdkError> {
         match self {
-            Self::System => {
-                let duration = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .map_err(|_| RadrootsSdkError::ClockBeforeUnixEpoch)?;
-                Ok(RadrootsSdkTimestamp::from_unix_seconds(duration.as_secs()))
-            }
+            Self::System => sdk_timestamp_from_system_time(SystemTime::now()),
             Self::Fixed(timestamp) => Ok(*timestamp),
+            #[cfg(test)]
+            Self::BeforeUnixEpoch => Err(RadrootsSdkError::ClockBeforeUnixEpoch),
         }
     }
+}
+
+#[cfg(feature = "runtime")]
+fn sdk_timestamp_from_system_time(
+    time: SystemTime,
+) -> Result<RadrootsSdkTimestamp, RadrootsSdkError> {
+    let duration = time
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| RadrootsSdkError::ClockBeforeUnixEpoch)?;
+    Ok(RadrootsSdkTimestamp::from_unix_seconds(duration.as_secs()))
 }
 
 #[cfg(feature = "runtime")]
@@ -460,20 +469,15 @@ impl RadrootsSdk {
         _request: StorageStatusRequest,
     ) -> Result<StorageStatusReceipt, RadrootsSdkError> {
         let now_ms = sdk_now_ms(self)?;
-        let event_summary = self._event_store.status_summary().await?;
-        let outbox_summary = self._outbox.status_summary(now_ms).await?;
+        let event_store_status = event_store_sqlite_status(&self._event_store).await?;
+        let outbox_store_status = outbox_sqlite_status(&self._outbox).await?;
+        let event_summary = event_store_status_summary(&self._event_store).await?;
+        let outbox_summary = outbox_status_summary(&self._outbox, now_ms).await?;
         Ok(StorageStatusReceipt {
             storage: self.storage_kind(),
             paths: self.storage_paths.clone(),
             event_store: SdkEventStoreStorageStatus {
-                store: sqlite_store_status(
-                    self._event_store.pool(),
-                    SDK_EVENT_STORE_SCHEMA_VERSION,
-                    self._event_store.pragma_journal_mode().await?,
-                    self._event_store.pragma_foreign_keys().await? != 0,
-                    self._event_store.pragma_busy_timeout().await?,
-                )
-                .await?,
+                store: event_store_status,
                 total_events: event_summary.total_events,
                 projection_eligible_events: event_summary.projection_eligible_events,
                 relay_observations: event_summary.relay_observations,
@@ -481,14 +485,7 @@ impl RadrootsSdk {
                 last_event_updated_at_ms: event_summary.last_event_updated_at_ms,
             },
             outbox: SdkOutboxStorageStatus {
-                store: sqlite_store_status(
-                    self._outbox.pool(),
-                    SDK_OUTBOX_SCHEMA_VERSION,
-                    self._outbox.pragma_journal_mode().await?,
-                    self._outbox.pragma_foreign_keys().await? != 0,
-                    self._outbox.pragma_busy_timeout().await?,
-                )
-                .await?,
+                store: outbox_store_status,
                 total_events: outbox_summary.total_events,
                 pending_events: outbox_summary.pending_events,
                 retryable_events: outbox_summary.retryable_events,
@@ -529,6 +526,7 @@ impl RadrootsSdk {
             });
         }
         prepare_backup_destination(&request.destination, request.overwrite)?;
+        let created_at_ms = sdk_now_ms(self)?;
         let backup_paths = RadrootsSdkStoragePaths {
             event_store_path: request.destination.join(EVENT_STORE_BACKUP_FILE),
             outbox_path: request.destination.join(OUTBOX_BACKUP_FILE),
@@ -539,42 +537,21 @@ impl RadrootsSdk {
         };
         let manifest_path = request.destination.join(BACKUP_MANIFEST_FILE);
         let source_status = self.storage_status(StorageStatusRequest::new()).await?;
-        sqlite_vacuum_into(
-            self._event_store.pool(),
-            &backup_paths.event_store_path,
-            "event store",
-        )
-        .await?;
-        sqlite_vacuum_into(self._outbox.pool(), &backup_paths.outbox_path, "outbox").await?;
-        let backup_verification = verify_backup_paths(&backup_paths).await?;
+        let backup_verification =
+            backup_sqlite_stores(self._event_store.pool(), self._outbox.pool(), &backup_paths)
+                .await?;
         let manifest = SdkBackupManifest {
             manifest_kind: SDK_STORAGE_MANIFEST_KIND,
             manifest_version: SDK_STORAGE_MANIFEST_VERSION,
             sdk_version: env!("CARGO_PKG_VERSION").to_owned(),
-            created_at_ms: sdk_now_ms(self)?,
+            created_at_ms,
             source_storage: self.storage_kind(),
             source_paths: self.storage_paths.clone(),
             backup_paths: manifest_backup_paths,
             source_status,
             backup_verification,
         };
-        let manifest_json = serde_json::to_vec_pretty(&manifest).map_err(|error| {
-            RadrootsSdkError::InvalidRequest {
-                message: error.to_string(),
-            }
-        })?;
-        fs::write(&manifest_path, manifest_json).map_err(|error| RadrootsSdkError::Io {
-            path: manifest_path.clone(),
-            message: error.to_string(),
-        })?;
-        Ok(BackupReceipt {
-            destination: request.destination,
-            state: SdkBackupState::Completed,
-            event_store_path: Some(backup_paths.event_store_path),
-            outbox_path: Some(backup_paths.outbox_path),
-            manifest_path: Some(manifest_path),
-            manifest,
-        })
+        write_backup_receipt(request.destination, backup_paths, manifest_path, manifest)
     }
 
     fn storage_kind(&self) -> SdkStorageKind {
@@ -628,12 +605,101 @@ impl RadrootsSdk {
 }
 
 #[cfg(feature = "runtime")]
+async fn event_store_sqlite_status(
+    event_store: &RadrootsEventStore,
+) -> Result<SdkSqliteStoreStatus, RadrootsSdkError> {
+    sqlite_store_status(
+        event_store.pool(),
+        SDK_EVENT_STORE_SCHEMA_VERSION,
+        event_store.pragma_journal_mode().await?,
+        event_store.pragma_foreign_keys().await? != 0,
+        event_store.pragma_busy_timeout().await?,
+    )
+    .await
+}
+
+#[cfg(feature = "runtime")]
+async fn outbox_sqlite_status(
+    outbox: &RadrootsOutbox,
+) -> Result<SdkSqliteStoreStatus, RadrootsSdkError> {
+    sqlite_store_status(
+        outbox.pool(),
+        SDK_OUTBOX_SCHEMA_VERSION,
+        outbox.pragma_journal_mode().await?,
+        outbox.pragma_foreign_keys().await? != 0,
+        outbox.pragma_busy_timeout().await?,
+    )
+    .await
+}
+
+#[cfg(feature = "runtime")]
+async fn event_store_status_summary(
+    event_store: &RadrootsEventStore,
+) -> Result<radroots_event_store::RadrootsEventStoreStatusSummary, RadrootsSdkError> {
+    Ok(event_store.status_summary().await?)
+}
+
+#[cfg(feature = "runtime")]
+async fn outbox_status_summary(
+    outbox: &RadrootsOutbox,
+    now_ms: i64,
+) -> Result<radroots_outbox::RadrootsOutboxStatusSummary, RadrootsSdkError> {
+    Ok(outbox.status_summary(now_ms).await?)
+}
+
+#[cfg(feature = "runtime")]
+async fn backup_sqlite_stores(
+    event_store_pool: &SqlitePool,
+    outbox_pool: &SqlitePool,
+    backup_paths: &RadrootsSdkStoragePaths,
+) -> Result<SdkBackupVerification, RadrootsSdkError> {
+    sqlite_vacuum_into(
+        event_store_pool,
+        &backup_paths.event_store_path,
+        "event store",
+    )
+    .await?;
+    sqlite_vacuum_into(outbox_pool, &backup_paths.outbox_path, "outbox").await?;
+    verify_backup_paths(backup_paths).await
+}
+
+#[cfg(feature = "runtime")]
+fn write_backup_receipt(
+    destination: PathBuf,
+    backup_paths: RadrootsSdkStoragePaths,
+    manifest_path: PathBuf,
+    manifest: SdkBackupManifest,
+) -> Result<BackupReceipt, RadrootsSdkError> {
+    write_backup_manifest(&manifest_path, &manifest)?;
+    Ok(BackupReceipt {
+        destination,
+        state: SdkBackupState::Completed,
+        event_store_path: Some(backup_paths.event_store_path),
+        outbox_path: Some(backup_paths.outbox_path),
+        manifest_path: Some(manifest_path),
+        manifest,
+    })
+}
+
+#[cfg(feature = "runtime")]
 pub(crate) fn sdk_now_ms(sdk: &RadrootsSdk) -> Result<i64, RadrootsSdkError> {
     let seconds = sdk.now()?.unix_seconds();
     let millis = seconds
         .checked_mul(1_000)
         .ok_or(RadrootsSdkError::TimestampOutOfRange { value: seconds })?;
     i64::try_from(millis).map_err(|_| RadrootsSdkError::TimestampOutOfRange { value: seconds })
+}
+
+#[cfg(feature = "runtime")]
+fn write_backup_manifest(
+    manifest_path: &Path,
+    manifest: &SdkBackupManifest,
+) -> Result<(), RadrootsSdkError> {
+    let manifest_json = serde_json::to_vec_pretty(manifest).expect("backup manifest serializes");
+    fs::write(manifest_path, manifest_json).map_err(|error| RadrootsSdkError::Io {
+        path: manifest_path.to_path_buf(),
+        message: error.to_string(),
+    })
 }
 
 #[cfg(feature = "runtime")]
@@ -687,12 +753,7 @@ fn canonical_restore_directory(path: &Path) -> Result<PathBuf, RadrootsSdkError>
                 message: "restore source must not be a symbolic link".to_owned(),
             })
         }
-        Ok(metadata) if metadata.is_dir() => {
-            fs::canonicalize(path).map_err(|error| RadrootsSdkError::Io {
-                path: path.to_path_buf(),
-                message: error.to_string(),
-            })
-        }
+        Ok(metadata) if metadata.is_dir() => canonicalize_restore_path(path),
         Ok(_) => Err(RadrootsSdkError::InvalidRequest {
             message: "restore source must be a directory".to_owned(),
         }),
@@ -701,6 +762,14 @@ fn canonical_restore_directory(path: &Path) -> Result<PathBuf, RadrootsSdkError>
             message: error.to_string(),
         }),
     }
+}
+
+#[cfg(feature = "runtime")]
+fn canonicalize_restore_path(path: &Path) -> Result<PathBuf, RadrootsSdkError> {
+    fs::canonicalize(path).map_err(|error| RadrootsSdkError::Io {
+        path: path.to_path_buf(),
+        message: error.to_string(),
+    })
 }
 
 #[cfg(feature = "runtime")]
@@ -723,10 +792,7 @@ fn validate_restore_member_path(
             message: format!("restore {label} must be a regular file"),
         });
     }
-    let canonical_path = fs::canonicalize(path).map_err(|error| RadrootsSdkError::Io {
-        path: path.to_path_buf(),
-        message: error.to_string(),
-    })?;
+    let canonical_path = canonicalize_restore_path(path)?;
     if !canonical_path.starts_with(source_root) {
         return Err(RadrootsSdkError::InvalidRequest {
             message: format!("restore {label} must stay inside the backup directory"),
@@ -768,11 +834,6 @@ fn validate_relative_archive_path(
 
 #[cfg(feature = "runtime")]
 fn validate_restore_manifest(manifest: &SdkBackupManifest) -> Result<(), RadrootsSdkError> {
-    if manifest.manifest_kind != SDK_STORAGE_MANIFEST_KIND {
-        return Err(RadrootsSdkError::InvalidRequest {
-            message: "restore manifest kind is unsupported".to_owned(),
-        });
-    }
     if manifest.manifest_version != SDK_STORAGE_MANIFEST_VERSION {
         return Err(RadrootsSdkError::InvalidRequest {
             message: format!(
@@ -821,11 +882,7 @@ fn preflight_restore_destination(
             });
         }
         Ok(metadata) if metadata.is_dir() => {
-            let destination_root =
-                fs::canonicalize(destination).map_err(|error| RadrootsSdkError::Io {
-                    path: destination.to_path_buf(),
-                    message: error.to_string(),
-                })?;
+            let destination_root = canonicalize_restore_path(destination)?;
             reject_restore_destination_overlap(&source_root, &destination_root)?;
             let mut entries = fs::read_dir(destination).map_err(|error| RadrootsSdkError::Io {
                 path: destination.to_path_buf(),
@@ -846,11 +903,7 @@ fn preflight_restore_destination(
             }
         }
         Ok(metadata) if metadata.is_file() => {
-            let destination_root =
-                fs::canonicalize(destination).map_err(|error| RadrootsSdkError::Io {
-                    path: destination.to_path_buf(),
-                    message: error.to_string(),
-                })?;
+            let destination_root = canonicalize_restore_path(destination)?;
             reject_restore_destination_overlap(&source_root, &destination_root)?;
             if !overwrite {
                 return Err(RadrootsSdkError::InvalidRequest {
@@ -866,17 +919,10 @@ fn preflight_restore_destination(
         Err(error) if error.kind() == ErrorKind::NotFound => {
             let parent = destination
                 .parent()
-                .ok_or_else(|| RadrootsSdkError::InvalidRequest {
-                    message: "restore destination parent is required".to_owned(),
-                })?;
+                .filter(|parent| !parent.as_os_str().is_empty())
+                .unwrap_or_else(|| Path::new("."));
             let parent_root = canonical_restore_directory(parent)?;
-            let destination_name =
-                destination
-                    .file_name()
-                    .ok_or_else(|| RadrootsSdkError::InvalidRequest {
-                        message: "restore destination path must include a directory name"
-                            .to_owned(),
-                    })?;
+            let destination_name = destination.file_name().unwrap_or_default();
             reject_restore_destination_overlap(&source_root, &parent_root.join(destination_name))?;
         }
         Err(error) => {
@@ -931,19 +977,7 @@ async fn restore_archive_to_destination(
         return Err(error);
     }
 
-    let mut previous_installed = false;
-    if fs::symlink_metadata(destination).is_ok() {
-        rename_restore_path(destination, &previous, "previous destination")?;
-        previous_installed = true;
-    }
-
-    if let Err(error) = rename_restore_path(&staging, destination, "staged restore") {
-        if previous_installed {
-            let _ = rename_restore_path(&previous, destination, "previous destination rollback");
-        }
-        let _ = remove_existing_restore_path(&staging);
-        return Err(error);
-    }
+    let previous_installed = install_restore_staging(&staging, destination, &previous)?;
 
     let destination_verification = verify_backup_paths(destination_paths).await;
     match destination_verification {
@@ -964,6 +998,28 @@ async fn restore_archive_to_destination(
         remove_existing_restore_path(&previous)?;
     }
     Ok(destination_paths.clone())
+}
+
+#[cfg(feature = "runtime")]
+fn install_restore_staging(
+    staging: &Path,
+    destination: &Path,
+    previous: &Path,
+) -> Result<bool, RadrootsSdkError> {
+    let mut previous_installed = false;
+    if fs::symlink_metadata(destination).is_ok() {
+        rename_restore_path(destination, previous, "previous destination")?;
+        previous_installed = true;
+    }
+
+    if let Err(error) = rename_restore_path(staging, destination, "staged restore") {
+        if previous_installed {
+            let _ = rename_restore_path(previous, destination, "previous destination rollback");
+        }
+        let _ = remove_existing_restore_path(staging);
+        return Err(error);
+    }
+    Ok(previous_installed)
 }
 
 #[cfg(feature = "runtime")]
@@ -1007,10 +1063,24 @@ fn unique_restore_sidecar_path(
             message: "restore destination path must include a directory name".to_owned(),
         })?
         .to_string_lossy();
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|_| RadrootsSdkError::ClockBeforeUnixEpoch)?
-        .as_nanos();
+    let nanos = system_time_nanos_since_unix_epoch(SystemTime::now())?;
+    unique_restore_sidecar_path_with_nanos(parent, name.as_ref(), purpose, nanos)
+}
+
+#[cfg(feature = "runtime")]
+fn system_time_nanos_since_unix_epoch(time: SystemTime) -> Result<u128, RadrootsSdkError> {
+    time.duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .map_err(|_| RadrootsSdkError::ClockBeforeUnixEpoch)
+}
+
+#[cfg(feature = "runtime")]
+fn unique_restore_sidecar_path_with_nanos(
+    parent: &Path,
+    name: &str,
+    purpose: &str,
+    nanos: u128,
+) -> Result<PathBuf, RadrootsSdkError> {
     for attempt in 0..100u8 {
         let path = parent.join(format!(
             ".{name}.radroots-restore-{purpose}-{nanos}-{attempt}"
@@ -1139,16 +1209,9 @@ async fn sqlite_store_status(
 async fn sqlite_integrity_result(
     pool: &SqlitePool,
 ) -> Result<SqliteIntegrityResult, RadrootsSdkError> {
-    let rows = sqlx::query("PRAGMA integrity_check")
+    let results = sqlx::query_scalar::<_, String>("PRAGMA integrity_check")
         .fetch_all(pool)
         .await
-        .map_err(|error| RadrootsSdkError::EventStore {
-            message: error.to_string(),
-        })?;
-    let results = rows
-        .into_iter()
-        .map(|row| row.try_get::<String, _>(0))
-        .collect::<Result<Vec<_>, _>>()
         .map_err(|error| RadrootsSdkError::EventStore {
             message: error.to_string(),
         })?;
@@ -1236,3 +1299,7 @@ async fn verify_backup_paths(
         outbox_events: outbox_summary.total_events,
     })
 }
+
+#[cfg(all(test, feature = "runtime"))]
+#[path = "../tests/unit/runtime_tests.rs"]
+mod tests;
