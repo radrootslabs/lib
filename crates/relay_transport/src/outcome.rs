@@ -12,15 +12,23 @@ pub enum RadrootsRelayOutcomeKind {
     PowRequired,
     Restricted,
     AuthRequired,
+    Muted,
+    Unsupported,
+    PaymentRequired,
     Error,
     Timeout,
     ConnectionFailed,
+    RelayUrlRejected,
+    SkippedAlreadyAccepted,
     Unknown,
 }
 
 impl RadrootsRelayOutcomeKind {
     pub fn counts_toward_quorum(self) -> bool {
-        matches!(self, Self::Accepted | Self::DuplicateAccepted)
+        matches!(
+            self,
+            Self::Accepted | Self::DuplicateAccepted | Self::SkippedAlreadyAccepted
+        )
     }
 
     pub fn is_retryable(self) -> bool {
@@ -37,7 +45,16 @@ impl RadrootsRelayOutcomeKind {
     }
 
     pub fn is_terminal_failure(self) -> bool {
-        matches!(self, Self::Blocked | Self::Invalid | Self::Restricted)
+        matches!(
+            self,
+            Self::Blocked
+                | Self::Invalid
+                | Self::Restricted
+                | Self::Muted
+                | Self::Unsupported
+                | Self::PaymentRequired
+                | Self::RelayUrlRejected
+        )
     }
 }
 
@@ -76,6 +93,20 @@ impl RadrootsRelayOutcome {
         }
     }
 
+    pub fn relay_url_rejected(message: impl Into<String>) -> Self {
+        Self {
+            kind: RadrootsRelayOutcomeKind::RelayUrlRejected,
+            message: Some(message.into()),
+        }
+    }
+
+    pub fn skipped_already_accepted(message: impl Into<String>) -> Self {
+        Self {
+            kind: RadrootsRelayOutcomeKind::SkippedAlreadyAccepted,
+            message: Some(message.into()),
+        }
+    }
+
     pub fn classify(message: impl AsRef<str>) -> Self {
         let message = message.as_ref().trim();
         let lower = message.to_ascii_lowercase();
@@ -93,6 +124,12 @@ impl RadrootsRelayOutcome {
             RadrootsRelayOutcomeKind::Restricted
         } else if lower.starts_with("auth-required:") {
             RadrootsRelayOutcomeKind::AuthRequired
+        } else if lower.starts_with("mute:") {
+            RadrootsRelayOutcomeKind::Muted
+        } else if lower.starts_with("unsupported:") {
+            RadrootsRelayOutcomeKind::Unsupported
+        } else if lower.starts_with("payment-required:") {
+            RadrootsRelayOutcomeKind::PaymentRequired
         } else if lower.starts_with("error:") {
             RadrootsRelayOutcomeKind::Error
         } else if lower.starts_with("timeout:") {

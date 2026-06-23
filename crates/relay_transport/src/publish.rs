@@ -209,11 +209,7 @@ impl RadrootsRelayPublishAdapter for RadrootsNostrClientPublishAdapter {
         Box::pin(async move {
             let event = RadrootsNostrEvent::from_json(request.signed_event.raw_json.as_str())
                 .map_err(|error| RadrootsRelayTransportError::NostrEventJson(error.to_string()))?;
-            if event.id.to_hex() != request.signed_event.id {
-                return Err(RadrootsRelayTransportError::NostrEventJson(
-                    "raw event JSON ID does not match signed event ID".to_owned(),
-                ));
-            }
+            ensure_raw_event_matches_signed_event(&event, &request.signed_event)?;
             let target_strings = request.targets.relay_strings();
             for relay_url in &target_strings {
                 self.client
@@ -278,4 +274,49 @@ impl RadrootsRelayPublishAdapter for RadrootsNostrClientPublishAdapter {
             Ok(receipts)
         })
     }
+}
+
+#[cfg(feature = "client")]
+fn ensure_raw_event_matches_signed_event(
+    event: &RadrootsNostrEvent,
+    signed_event: &RadrootsSignedNostrEvent,
+) -> Result<(), RadrootsRelayTransportError> {
+    let mismatches = [
+        ("id", event.id.to_hex(), signed_event.id.clone()),
+        ("pubkey", event.pubkey.to_hex(), signed_event.pubkey.clone()),
+        (
+            "created_at",
+            event.created_at.as_secs().to_string(),
+            signed_event.created_at.to_string(),
+        ),
+        (
+            "kind",
+            (event.kind.as_u16() as u32).to_string(),
+            signed_event.kind.to_string(),
+        ),
+        (
+            "content",
+            event.content.clone(),
+            signed_event.content.clone(),
+        ),
+        ("sig", event.sig.to_string(), signed_event.sig.clone()),
+    ];
+    for (field, raw, wrapped) in mismatches {
+        if raw != wrapped {
+            return Err(RadrootsRelayTransportError::NostrEventJson(format!(
+                "raw event JSON {field} does not match signed event {field}"
+            )));
+        }
+    }
+    let raw_tags = event
+        .tags
+        .iter()
+        .map(|tag| tag.as_slice().to_vec())
+        .collect::<Vec<_>>();
+    if raw_tags != signed_event.tags {
+        return Err(RadrootsRelayTransportError::NostrEventJson(
+            "raw event JSON tags do not match signed event tags".to_owned(),
+        ));
+    }
+    Ok(())
 }

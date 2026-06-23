@@ -44,6 +44,7 @@ deferred_publication = [
   "radroots_authority",
   "radroots_event_store",
   "radroots_outbox",
+  "radroots_publish_proxy_protocol",
   "radroots_relay_transport",
   "radroots_net",
   "radroots_nostr_runtime",

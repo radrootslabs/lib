@@ -1,0 +1,23 @@
+[package]
+name = "radroots_publish_proxy_protocol"
+publish = false
+version.workspace = true
+edition.workspace = true
+authors = ["Tyson Lupul <tyson@radroots.org>"]
+rust-version.workspace = true
+license = "MIT OR Apache-2.0"
+description = "Publish proxy protocol for Radroots"
+repository.workspace = true
+homepage.workspace = true
+readme = "README"
+
+[features]
+default = ["std", "serde"]
+std = []
+serde = ["dep:serde"]
+
+[dependencies]
+serde = { workspace = true, optional = true, features = ["alloc", "derive"] }
+
+[dev-dependencies]
+serde_json = { workspace = true, features = ["std"] }

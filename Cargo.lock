@@ -4466,6 +4466,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "radroots_publish_proxy_protocol"
+version = "0.1.0-alpha.2"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "radroots_relay_transport"
 version = "0.1.0-alpha.2"
 dependencies = [

@@ -3,6 +3,7 @@
 use crate::RadrootsRelayTransportError;
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use url::Url;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -42,6 +43,7 @@ impl RadrootsRelayUrl {
                 url: original.to_owned(),
             });
         };
+        validate_host_destination(original, host, policy)?;
         if parsed.query().is_some() || parsed.fragment().is_some() {
             return Err(RadrootsRelayTransportError::RelayUrlQueryOrFragment {
                 url: original.to_owned(),
@@ -70,12 +72,114 @@ impl RadrootsRelayUrl {
         Ok(Self(normalized))
     }
 
+    pub fn validate_public_resolved_ip_addrs<I>(
+        &self,
+        addrs: I,
+    ) -> Result<(), RadrootsRelayTransportError>
+    where
+        I: IntoIterator<Item = IpAddr>,
+    {
+        for address in addrs {
+            if let Some(reason) = forbidden_public_ip_reason(address) {
+                return Err(
+                    RadrootsRelayTransportError::RelayUrlResolvedForbiddenDestination {
+                        url: self.0.clone(),
+                        address: address.to_string(),
+                        reason: reason.to_owned(),
+                    },
+                );
+            }
+        }
+        Ok(())
+    }
+
     pub fn as_str(&self) -> &str {
         self.0.as_str()
     }
 
     pub fn into_string(self) -> String {
         self.0
+    }
+}
+
+fn validate_host_destination(
+    original: &str,
+    host: &str,
+    policy: RadrootsRelayUrlPolicy,
+) -> Result<(), RadrootsRelayTransportError> {
+    let host = host
+        .strip_prefix('[')
+        .and_then(|value| value.strip_suffix(']'))
+        .unwrap_or(host);
+    if matches!(policy, RadrootsRelayUrlPolicy::Public)
+        && let Ok(address) = host.parse::<IpAddr>()
+        && let Some(reason) = forbidden_public_ip_reason(address)
+    {
+        return Err(RadrootsRelayTransportError::RelayUrlForbiddenDestination {
+            url: original.to_owned(),
+            reason: reason.to_owned(),
+        });
+    }
+    Ok(())
+}
+
+fn forbidden_public_ip_reason(address: IpAddr) -> Option<&'static str> {
+    match address {
+        IpAddr::V4(address) => forbidden_public_ipv4_reason(address),
+        IpAddr::V6(address) => forbidden_public_ipv6_reason(address),
+    }
+}
+
+fn forbidden_public_ipv4_reason(address: Ipv4Addr) -> Option<&'static str> {
+    let octets = address.octets();
+    if address.is_unspecified() || octets[0] == 0 {
+        Some("unspecified or this-network IPv4 address")
+    } else if address.is_loopback() {
+        Some("loopback IPv4 address")
+    } else if address.is_private() {
+        Some("private IPv4 address")
+    } else if address.is_link_local() {
+        Some("link-local IPv4 address")
+    } else if address.is_multicast() {
+        Some("multicast IPv4 address")
+    } else if address.is_broadcast() {
+        Some("broadcast IPv4 address")
+    } else if address.is_documentation() {
+        Some("documentation IPv4 address")
+    } else if octets[0] == 100 && (64..=127).contains(&octets[1]) {
+        Some("shared IPv4 address space")
+    } else if octets[0] == 192 && octets[1] == 0 && octets[2] == 0 {
+        Some("IETF protocol-assignment IPv4 address")
+    } else if octets[0] == 198 && matches!(octets[1], 18 | 19) {
+        Some("benchmark IPv4 address")
+    } else if octets[0] >= 240 {
+        Some("reserved IPv4 address")
+    } else {
+        None
+    }
+}
+
+fn forbidden_public_ipv6_reason(address: Ipv6Addr) -> Option<&'static str> {
+    let segments = address.segments();
+    if let Some(mapped) = address.to_ipv4_mapped() {
+        return forbidden_public_ipv4_reason(mapped);
+    }
+    if address.is_unspecified() {
+        Some("unspecified IPv6 address")
+    } else if address.is_loopback() {
+        Some("loopback IPv6 address")
+    } else if address.is_multicast() {
+        Some("multicast IPv6 address")
+    } else if (segments[0] & 0xfe00) == 0xfc00 {
+        Some("unique-local IPv6 address")
+    } else if (segments[0] & 0xffc0) == 0xfe80 {
+        Some("link-local IPv6 address")
+    } else if segments[0] == 0x2001 && segments[1] == 0x0db8 {
+        Some("documentation IPv6 address")
+    } else if segments[0] == 0x2001 && segments[1] < 0x0200 {
+        Some("IETF protocol-assignment IPv6 address")
+    } else {
+        None
     }
 }
 

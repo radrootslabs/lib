@@ -22,6 +22,16 @@ pub enum RadrootsRelayTransportError {
     #[error("Relay URL `{url}` must not include query or fragment")]
     RelayUrlQueryOrFragment { url: String },
 
+    #[error("Relay URL `{url}` targets forbidden destination: {reason}")]
+    RelayUrlForbiddenDestination { url: String, reason: String },
+
+    #[error("Relay URL `{url}` resolved to forbidden address `{address}`: {reason}")]
+    RelayUrlResolvedForbiddenDestination {
+        url: String,
+        address: String,
+        reason: String,
+    },
+
     #[error("Relay target set must not be empty")]
     EmptyTargetSet,
 

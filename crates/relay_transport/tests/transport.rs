@@ -19,6 +19,7 @@ use radroots_relay_transport::{
     RadrootsRelayTransportError, RadrootsRelayUrl, RadrootsRelayUrlPolicy,
     fetch_and_ingest_relay_events, publish_claimed_outbox_event, publish_signed_event,
 };
+use std::net::{IpAddr, Ipv4Addr};
 
 const FIXTURE_ALICE_SECRET_KEY_HEX: &str =
     "10c5304d6c9ae3a1a16f7860f1cc8f5e3a76225a2663b3a989a0d775919b7df5";
@@ -150,6 +151,33 @@ fn relay_url_validation_and_target_normalization() {
         RadrootsRelayUrl::parse("ws://192.168.1.10:7777", RadrootsRelayUrlPolicy::Localhost)
             .is_err()
     );
+    assert!(matches!(
+        RadrootsRelayUrl::parse("wss://127.0.0.1", RadrootsRelayUrlPolicy::Public),
+        Err(RadrootsRelayTransportError::RelayUrlForbiddenDestination { .. })
+    ));
+    assert!(matches!(
+        RadrootsRelayUrl::parse("wss://10.1.2.3", RadrootsRelayUrlPolicy::Public),
+        Err(RadrootsRelayTransportError::RelayUrlForbiddenDestination { .. })
+    ));
+    assert!(matches!(
+        RadrootsRelayUrl::parse("wss://[::1]", RadrootsRelayUrlPolicy::Public),
+        Err(RadrootsRelayTransportError::RelayUrlForbiddenDestination { .. })
+    ));
+    assert!(matches!(
+        RadrootsRelayUrl::parse("wss://[fd00::1]", RadrootsRelayUrlPolicy::Public),
+        Err(RadrootsRelayTransportError::RelayUrlForbiddenDestination { .. })
+    ));
+    let public_relay =
+        RadrootsRelayUrl::parse("wss://relay.example.com", RadrootsRelayUrlPolicy::Public)
+            .expect("public relay");
+    public_relay
+        .validate_public_resolved_ip_addrs([IpAddr::V4(Ipv4Addr::new(93, 184, 216, 34))])
+        .expect("public resolved ip");
+    assert!(matches!(
+        public_relay
+            .validate_public_resolved_ip_addrs([IpAddr::V4(Ipv4Addr::new(192, 168, 1, 10))]),
+        Err(RadrootsRelayTransportError::RelayUrlResolvedForbiddenDestination { .. })
+    ));
 
     assert!(
         RadrootsRelayUrl::parse("https://relay.example.com", RadrootsRelayUrlPolicy::Public)
@@ -268,6 +296,15 @@ fn outcome_prefix_classification_covers_required_kinds() {
             "auth-required: challenge",
             RadrootsRelayOutcomeKind::AuthRequired,
         ),
+        ("mute: pubkey muted", RadrootsRelayOutcomeKind::Muted),
+        (
+            "unsupported: event kind",
+            RadrootsRelayOutcomeKind::Unsupported,
+        ),
+        (
+            "payment-required: paid relay",
+            RadrootsRelayOutcomeKind::PaymentRequired,
+        ),
         (
             "duplicate: already have it",
             RadrootsRelayOutcomeKind::DuplicateAccepted,
@@ -283,8 +320,13 @@ fn outcome_prefix_classification_covers_required_kinds() {
     }
 
     assert!(RadrootsRelayOutcome::classify("duplicate: already have it").counts_toward_quorum());
+    assert!(
+        RadrootsRelayOutcome::skipped_already_accepted("already accepted").counts_toward_quorum()
+    );
     assert!(RadrootsRelayOutcome::classify("auth-required: challenge").is_retryable());
     assert!(RadrootsRelayOutcome::classify("restricted: denied").is_terminal_failure());
+    assert!(RadrootsRelayOutcome::relay_url_rejected("unsafe relay").is_terminal_failure());
+    assert!(RadrootsRelayOutcome::classify("mute: pubkey muted").is_terminal_failure());
 }
 
 #[tokio::test]
