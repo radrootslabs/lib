@@ -4628,6 +4628,7 @@ dependencies = [
 name = "radroots_simplex_app_store"
 version = "0.1.0-alpha.2"
 dependencies = [
+ "base64 0.22.1",
  "getrandom 0.2.17",
  "hex",
  "radroots_secret_vault",

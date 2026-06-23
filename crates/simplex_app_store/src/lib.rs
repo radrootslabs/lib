@@ -15,7 +15,8 @@ pub mod prelude {
     pub use crate::model::{
         RadrootsSimplexAppChatDirection, RadrootsSimplexAppChatItem, RadrootsSimplexAppConnection,
         RadrootsSimplexAppContact, RadrootsSimplexAppConversation, RadrootsSimplexAppDiagnostics,
-        RadrootsSimplexAppInboundMessageLogEntry, RadrootsSimplexAppOutboxMessage,
+        RadrootsSimplexAppInboundMessageLogEntry, RadrootsSimplexAppOutboundTextDraft,
+        RadrootsSimplexAppOutboundTextRequest, RadrootsSimplexAppOutboxMessage,
         RadrootsSimplexAppProfile, RadrootsSimplexAppQueueEndpoint,
         RadrootsSimplexAppUnsupportedProtocolEvent,
     };
@@ -27,7 +28,8 @@ pub use error::RadrootsSimplexAppStoreError;
 pub use model::{
     RadrootsSimplexAppChatDirection, RadrootsSimplexAppChatItem, RadrootsSimplexAppConnection,
     RadrootsSimplexAppContact, RadrootsSimplexAppConversation, RadrootsSimplexAppDiagnostics,
-    RadrootsSimplexAppInboundMessageLogEntry, RadrootsSimplexAppOutboxMessage,
+    RadrootsSimplexAppInboundMessageLogEntry, RadrootsSimplexAppOutboundTextDraft,
+    RadrootsSimplexAppOutboundTextRequest, RadrootsSimplexAppOutboxMessage,
     RadrootsSimplexAppProfile, RadrootsSimplexAppQueueEndpoint,
     RadrootsSimplexAppUnsupportedProtocolEvent,
 };

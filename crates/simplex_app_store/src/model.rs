@@ -80,6 +80,7 @@ pub struct RadrootsSimplexAppChatItem {
     pub conversation_id: String,
     pub logical_order: i64,
     pub direction: RadrootsSimplexAppChatDirection,
+    pub chat_msg_id: Option<String>,
     pub body: String,
     pub delivery_status: String,
     pub created_at_unix: i64,
@@ -99,12 +100,28 @@ pub struct RadrootsSimplexAppInboundMessageLogEntry {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RadrootsSimplexAppOutboxMessage {
     pub outbox_id: String,
+    pub chat_item_id: String,
     pub connection_id: String,
     pub conversation_id: Option<String>,
+    pub chat_msg_id: String,
     pub body: String,
     pub status: String,
     pub retry_after_unix: Option<i64>,
     pub created_at_unix: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RadrootsSimplexAppOutboundTextRequest {
+    pub connection_id: String,
+    pub conversation_id: String,
+    pub body: String,
+    pub created_at_unix: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RadrootsSimplexAppOutboundTextDraft {
+    pub chat_item: RadrootsSimplexAppChatItem,
+    pub outbox_message: RadrootsSimplexAppOutboxMessage,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

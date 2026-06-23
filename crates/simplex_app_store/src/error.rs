@@ -8,6 +8,7 @@ pub enum RadrootsSimplexAppStoreError {
     InvalidDatabaseKey(String),
     EncryptionUnavailable,
     EncryptionKeyRejected,
+    MessageLifecycle(String),
     Schema(String),
     Sqlite(String),
     Io(String),
@@ -33,6 +34,9 @@ impl fmt::Display for RadrootsSimplexAppStoreError {
             }
             Self::EncryptionKeyRejected => {
                 write!(formatter, "SimpleX app store encryption key was rejected")
+            }
+            Self::MessageLifecycle(message) => {
+                write!(formatter, "SimpleX app message lifecycle error: {message}")
             }
             Self::Schema(message) => write!(formatter, "SimpleX app store schema error: {message}"),
             Self::Sqlite(message) => write!(formatter, "SimpleX app sqlite error: {message}"),

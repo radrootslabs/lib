@@ -22,6 +22,7 @@ sqlcipher = ["std", "dep:rusqlite"]
 os-keyring = ["std", "radroots_secret_vault/os-keyring"]
 
 [dependencies]
+base64 = { workspace = true }
 getrandom = { workspace = true }
 hex = { workspace = true }
 radroots_secret_vault = { workspace = true, default-features = false }
