@@ -1,15 +1,14 @@
 #![forbid(unsafe_code)]
 
-use crate::{
-    RadrootsRelayOutcome, RadrootsRelayOutcomeKind, RadrootsRelayTargetSet,
-    RadrootsRelayTransportError,
-};
+use crate::{RadrootsRelayOutcome, RadrootsRelayTargetSet, RadrootsRelayTransportError};
 use futures::future::BoxFuture;
 use radroots_events::draft::RadrootsSignedNostrEvent;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, PoisonError};
 
+#[cfg(feature = "client")]
+use crate::RadrootsRelayOutcomeKind;
 #[cfg(feature = "client")]
 use nostr::JsonUtil;
 #[cfg(feature = "client")]
