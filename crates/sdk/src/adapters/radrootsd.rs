@@ -394,6 +394,8 @@ impl std::error::Error for RadrootsdError {}
 
 #[derive(Debug, Deserialize)]
 struct JsonRpcEnvelope<T> {
+    jsonrpc: Option<String>,
+    id: Option<Value>,
     result: Option<T>,
     error: Option<JsonRpcError>,
 }
@@ -445,20 +447,40 @@ pub fn bridge_listing_publish_request_json(
 }
 
 fn http_status_error(status: reqwest::StatusCode, body: &str) -> RadrootsdError {
+    let body_summary = if body.is_empty() {
+        "response body empty".to_owned()
+    } else {
+        format!("response body omitted ({} bytes)", body.len())
+    };
     RadrootsdError::Http(format!(
         "radrootsd returned http {}: {}",
         status.as_u16(),
-        body
+        body_summary
     ))
 }
 
-fn decode_jsonrpc_response<R>(method: &str, body: &str) -> Result<R, RadrootsdError>
+fn decode_jsonrpc_response<R>(
+    method: &str,
+    expected_id: &str,
+    body: &str,
+) -> Result<R, RadrootsdError>
 where
     R: DeserializeOwned,
 {
     let envelope: JsonRpcEnvelope<R> = serde_json::from_str(body).map_err(|err| {
         RadrootsdError::MalformedResponse(format!("decode radrootsd {method} response: {err}"))
     })?;
+    if envelope.jsonrpc.as_deref() != Some("2.0") {
+        return Err(RadrootsdError::MalformedResponse(format!(
+            "radrootsd {method} returned invalid jsonrpc version"
+        )));
+    }
+    let expected_id_value = Value::String(expected_id.to_owned());
+    if envelope.id.as_ref() != Some(&expected_id_value) {
+        return Err(RadrootsdError::MalformedResponse(format!(
+            "radrootsd {method} returned mismatched jsonrpc id"
+        )));
+    }
     match (envelope.result, envelope.error) {
         (Some(result), None) => Ok(result),
         (None, Some(error)) => Err(RadrootsdError::JsonRpc(format!(
@@ -517,7 +539,7 @@ where
         return Err(http_status_error(status, body.as_str()));
     }
 
-    decode_jsonrpc_response(method, body.as_str())
+    decode_jsonrpc_response(method, request_id, body.as_str())
 }
 
 #[cfg(test)]
@@ -532,6 +554,84 @@ mod tests {
         RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
         RadrootsCoreQuantityPrice, RadrootsCoreUnit,
     };
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::thread::JoinHandle;
+
+    struct RecordedHttpRequest {
+        request_line: String,
+        headers: Vec<(String, String)>,
+        body: String,
+    }
+
+    fn spawn_http_server(
+        status: &str,
+        response_body: &str,
+    ) -> (String, JoinHandle<RecordedHttpRequest>) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
+        let endpoint = format!("http://{}/rpc", listener.local_addr().expect("addr"));
+        let status = status.to_owned();
+        let response_body = response_body.to_owned();
+        let handle = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let mut request = Vec::new();
+            let mut buffer = [0u8; 1024];
+            loop {
+                let read = stream.read(&mut buffer).expect("read request");
+                if read == 0 {
+                    break;
+                }
+                request.extend_from_slice(&buffer[..read]);
+                if request.windows(4).any(|window| window == b"\r\n\r\n") {
+                    let headers_end = request
+                        .windows(4)
+                        .position(|window| window == b"\r\n\r\n")
+                        .expect("headers end")
+                        + 4;
+                    let header_text = String::from_utf8_lossy(&request[..headers_end]);
+                    let content_length = header_text
+                        .lines()
+                        .find_map(|line| {
+                            let (name, value) = line.split_once(':')?;
+                            name.eq_ignore_ascii_case("content-length")
+                                .then(|| value.trim().parse::<usize>().expect("content length"))
+                        })
+                        .unwrap_or(0);
+                    while request.len() < headers_end + content_length {
+                        let read = stream.read(&mut buffer).expect("read body");
+                        if read == 0 {
+                            break;
+                        }
+                        request.extend_from_slice(&buffer[..read]);
+                    }
+                    break;
+                }
+            }
+            let request_text = String::from_utf8_lossy(&request);
+            let (headers_text, body) = request_text.split_once("\r\n\r\n").expect("request body");
+            let mut header_lines = headers_text.lines();
+            let request_line = header_lines.next().expect("request line").to_owned();
+            let headers = header_lines
+                .filter_map(|line| {
+                    let (name, value) = line.split_once(':')?;
+                    Some((name.to_ascii_lowercase(), value.trim().to_owned()))
+                })
+                .collect::<Vec<_>>();
+            let response = format!(
+                "HTTP/1.1 {status}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{response_body}",
+                response_body.len()
+            );
+            stream
+                .write_all(response.as_bytes())
+                .expect("write response");
+            RecordedHttpRequest {
+                request_line,
+                headers,
+                body: body.to_owned(),
+            }
+        });
+        (endpoint, handle)
+    }
 
     fn sample_listing() -> RadrootsListing {
         RadrootsListing {
@@ -700,16 +800,20 @@ mod tests {
     }
 
     #[test]
-    fn http_status_error_reports_status_and_body() {
-        let error = http_status_error(reqwest::StatusCode::UNAUTHORIZED, "missing token");
+    fn http_status_error_omits_raw_body() {
+        let error = http_status_error(reqwest::StatusCode::UNAUTHORIZED, "missing secret token");
 
-        assert_message(error, "radrootsd returned http 401: missing token");
+        let message = error.to_string();
+        assert!(message.contains("radrootsd returned http 401"));
+        assert!(message.contains("response body omitted"));
+        assert!(!message.contains("missing secret token"));
     }
 
     #[test]
     fn decode_jsonrpc_response_returns_result() {
         let response: SdkRadrootsdBridgePublishResponse = decode_jsonrpc_response(
             "bridge.listing.publish",
+            "radroots-sdk-listing-publish",
             r#"{
                 "jsonrpc": "2.0",
                 "id": "radroots-sdk-listing-publish",
@@ -746,6 +850,7 @@ mod tests {
     fn decode_jsonrpc_response_returns_jsonrpc_error() {
         let error = decode_jsonrpc_response::<SdkRadrootsdBridgePublishResponse>(
             "bridge.listing.publish",
+            "radroots-sdk-listing-publish",
             r#"{
                 "jsonrpc": "2.0",
                 "id": "radroots-sdk-listing-publish",
@@ -765,7 +870,10 @@ mod tests {
     fn decode_jsonrpc_response_rejects_result_plus_error() {
         let error = decode_jsonrpc_response::<serde_json::Value>(
             "bridge.listing.publish",
+            "radroots-sdk-listing-publish",
             r#"{
+                "jsonrpc": "2.0",
+                "id": "radroots-sdk-listing-publish",
                 "result": { "ok": true },
                 "error": { "code": -32002, "message": "ambiguous response" }
             }"#,
@@ -783,6 +891,7 @@ mod tests {
     fn decode_jsonrpc_response_rejects_missing_result_and_error() {
         let error = decode_jsonrpc_response::<serde_json::Value>(
             "bridge.listing.publish",
+            "radroots-sdk-listing-publish",
             r#"{ "jsonrpc": "2.0", "id": "radroots-sdk-listing-publish" }"#,
         )
         .expect_err("error");
@@ -798,11 +907,180 @@ mod tests {
     fn decode_jsonrpc_response_rejects_malformed_json() {
         let error = decode_jsonrpc_response::<serde_json::Value>(
             "bridge.listing.publish",
+            "radroots-sdk-listing-publish",
             r#"{ "result": "#,
         )
         .expect_err("error");
 
         assert!(matches!(error, RadrootsdError::MalformedResponse(_)));
         assert_message(error, "decode radrootsd bridge.listing.publish response");
+    }
+
+    #[test]
+    fn decode_jsonrpc_response_rejects_invalid_version() {
+        let error = decode_jsonrpc_response::<serde_json::Value>(
+            "bridge.listing.publish",
+            "radroots-sdk-listing-publish",
+            r#"{
+                "jsonrpc": "1.0",
+                "id": "radroots-sdk-listing-publish",
+                "result": { "ok": true }
+            }"#,
+        )
+        .expect_err("error");
+
+        assert_message(error, "returned invalid jsonrpc version");
+    }
+
+    #[test]
+    fn decode_jsonrpc_response_rejects_mismatched_id() {
+        let error = decode_jsonrpc_response::<serde_json::Value>(
+            "bridge.listing.publish",
+            "radroots-sdk-listing-publish",
+            r#"{
+                "jsonrpc": "2.0",
+                "id": "other-id",
+                "result": { "ok": true }
+            }"#,
+        )
+        .expect_err("error");
+
+        assert_message(error, "returned mismatched jsonrpc id");
+    }
+
+    #[tokio::test]
+    async fn publish_listing_uses_http_jsonrpc_request_path() {
+        let (endpoint, handle) = spawn_http_server(
+            "200 OK",
+            r#"{
+                "jsonrpc": "2.0",
+                "id": "radroots-sdk-listing-publish",
+                "result": {
+                    "deduplicated": true,
+                    "job": {
+                        "job_id": "job-1",
+                        "command": "bridge.listing.publish",
+                        "status": "accepted",
+                        "terminal": false,
+                        "recovered_after_restart": false,
+                        "signer_mode": "bunker",
+                        "signer_session_id": "signer-session-secret",
+                        "event_kind": 30402,
+                        "event_id": "event-1",
+                        "event_addr": "30402:pubkey:d-tag",
+                        "relay_count": 2,
+                        "acknowledged_relay_count": 1
+                    }
+                }
+            }"#,
+        );
+
+        let response = publish_listing(
+            &endpoint,
+            &RadrootsdAuth::BearerToken("sdk-token".into()),
+            &sample_listing_publish_request(),
+            Duration::from_secs(5),
+        )
+        .await
+        .expect("publish response");
+        let request = handle.join().expect("request");
+        let body = serde_json::from_str::<Value>(&request.body).expect("body json");
+
+        assert!(response.deduplicated);
+        assert_eq!(request.request_line, "POST /rpc HTTP/1.1");
+        assert!(
+            request
+                .headers
+                .iter()
+                .any(|(name, value)| { name == "authorization" && value == "Bearer sdk-token" })
+        );
+        assert_eq!(body["jsonrpc"], "2.0");
+        assert_eq!(body["id"], "radroots-sdk-listing-publish");
+        assert_eq!(body["method"], "bridge.listing.publish");
+        assert_eq!(
+            body["params"]["signer_authority"]["provider_signer_session_id"],
+            "provider-session-secret"
+        );
+    }
+
+    #[tokio::test]
+    async fn publish_listing_returns_jsonrpc_errors_from_http_path() {
+        let (endpoint, handle) = spawn_http_server(
+            "200 OK",
+            r#"{
+                "jsonrpc": "2.0",
+                "id": "radroots-sdk-listing-publish",
+                "error": { "code": -32001, "message": "signer unavailable" }
+            }"#,
+        );
+
+        let error = publish_listing(
+            &endpoint,
+            &RadrootsdAuth::None,
+            &sample_listing_publish_request(),
+            Duration::from_secs(5),
+        )
+        .await
+        .expect_err("error");
+        handle.join().expect("request");
+
+        assert!(matches!(error, RadrootsdError::JsonRpc(_)));
+        assert_message(error, "signer unavailable");
+    }
+
+    #[tokio::test]
+    async fn publish_listing_sanitizes_http_status_body() {
+        let (endpoint, handle) = spawn_http_server("500 Internal Server Error", "secret body");
+
+        let error = publish_listing(
+            &endpoint,
+            &RadrootsdAuth::None,
+            &sample_listing_publish_request(),
+            Duration::from_secs(5),
+        )
+        .await
+        .expect_err("error");
+        handle.join().expect("request");
+
+        let message = error.to_string();
+        assert!(message.contains("radrootsd returned http 500"));
+        assert!(!message.contains("secret body"));
+    }
+
+    #[tokio::test]
+    async fn publish_listing_reports_malformed_http_response_body() {
+        let (endpoint, handle) = spawn_http_server("200 OK", r#"{ "result": "#);
+
+        let error = publish_listing(
+            &endpoint,
+            &RadrootsdAuth::None,
+            &sample_listing_publish_request(),
+            Duration::from_secs(5),
+        )
+        .await
+        .expect_err("error");
+        handle.join().expect("request");
+
+        assert!(matches!(error, RadrootsdError::MalformedResponse(_)));
+        assert_message(error, "decode radrootsd bridge.listing.publish response");
+    }
+
+    #[tokio::test]
+    async fn publish_listing_reports_transport_send_errors() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind unused port");
+        let endpoint = format!("http://{}/rpc", listener.local_addr().expect("addr"));
+        drop(listener);
+
+        let error = publish_listing(
+            &endpoint,
+            &RadrootsdAuth::None,
+            &sample_listing_publish_request(),
+            Duration::from_millis(250),
+        )
+        .await
+        .expect_err("error");
+
+        assert!(matches!(error, RadrootsdError::Http(_)));
+        assert_message(error, "send radrootsd bridge.listing.publish request");
     }
 }
