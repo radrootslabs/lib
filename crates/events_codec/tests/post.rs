@@ -1,6 +1,6 @@
 use radroots_events::{
     farm::RadrootsFarmRef,
-    kinds::{KIND_ARTICLE, KIND_COMMENT, KIND_POST},
+    kinds::{KIND_ARTICLE, KIND_COMMENT, KIND_FARM, KIND_POST},
     post::RadrootsPost,
     social::{
         RadrootsSocialFarmAnchor, RadrootsSocialLocation, RadrootsSocialMediaDimensions,
@@ -639,14 +639,20 @@ fn post_decode_rejects_more_invalid_imeta_shapes() {
 #[test]
 fn post_decode_handles_non_farm_address_refs_without_relays() {
     let article = format!("30023:article_author:{ARTICLE_D_TAG}");
+    let farm = format!("{KIND_FARM}:farm_pubkey:{FARM_D_TAG}");
     let decoded = post_from_event(
         KIND_POST,
-        &[vec![TAG_A.to_string(), article.clone()]],
+        &[
+            vec![TAG_A.to_string(), farm.clone()],
+            vec![TAG_A.to_string(), article.clone()],
+        ],
         "address only",
     )
     .unwrap();
 
-    assert!(decoded.farm.is_none());
+    let anchor = decoded.farm.expect("farm anchor");
+    assert_eq!(anchor.farm.d_tag, FARM_D_TAG);
+    assert_eq!(anchor.relays, None);
     let refs = decoded.address_refs.expect("address refs");
     assert_eq!(refs.len(), 1);
     match &refs[0] {

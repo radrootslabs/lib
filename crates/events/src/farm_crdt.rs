@@ -550,6 +550,8 @@ mod tests {
                 value: "FarmSoilTestCreate".to_string()
             }
         );
+        assert_eq!(document_kind.as_str(), "FarmSoilTest");
+        assert_eq!(semantic_kind.as_str(), "FarmSoilTestCreate");
         assert_eq!(
             serde_json::to_string(&document_kind).unwrap(),
             "\"FarmSoilTest\""

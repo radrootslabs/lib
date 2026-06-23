@@ -271,6 +271,8 @@ mod tests {
         for (key, value, expected) in [
             ("size", "not-a-number", "size"),
             ("dim", "bad", "dim"),
+            ("dim", "badx12", "dim"),
+            ("dim", "12xbad", "dim"),
             ("dim", "0x12", "dim"),
             ("dim", "12x0", "dim"),
             ("thumb", "", "thumb"),

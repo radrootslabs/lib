@@ -9,10 +9,9 @@ use alloc::{
 use radroots_events::{
     RadrootsNostrEvent,
     farm_workspace::{
-        KIND_FARM_WORKSPACE_MANIFEST, RADROOTS_FARM_WORKSPACE_SCHEMA, RADROOTS_FARM_WORKSPACE_TAG,
-        RadrootsFarmWorkspaceManifest,
+        KIND_FARM_WORKSPACE_MANIFEST, RADROOTS_FARM_WORKSPACE_TAG, RadrootsFarmWorkspaceManifest,
     },
-    kinds::{KIND_FARM, KIND_FARM_CRDT_CHANGE, KIND_FARM_FILE_METADATA},
+    kinds::KIND_FARM,
     tags::{TAG_A, TAG_D, TAG_H, TAG_P, TAG_T},
 };
 
@@ -21,7 +20,6 @@ use crate::error::EventParseError;
 use crate::farm_workspace::encode::validate_manifest;
 use crate::field_helpers::{
     optional_tag_value, parse_address_tag_with_kind, required_tag_value, tag_values,
-    validate_non_empty_tag_value,
 };
 use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 
@@ -46,7 +44,6 @@ pub fn farm_workspace_from_event(
     let farm_group_id = required_tag_value(tags, TAG_H)?;
     let manifest: RadrootsFarmWorkspaceManifest =
         serde_json::from_str(content).map_err(|_| EventParseError::InvalidJson("content"))?;
-    validate_manifest_content(&manifest)?;
     validate_manifest(&manifest).map_err(encode_error_to_parse_error)?;
 
     if manifest.d_tag != d_tag {
@@ -129,32 +126,6 @@ pub fn parsed_from_event(
     })
 }
 
-fn validate_manifest_content(
-    manifest: &RadrootsFarmWorkspaceManifest,
-) -> Result<(), EventParseError> {
-    if manifest.schema != RADROOTS_FARM_WORKSPACE_SCHEMA {
-        return Err(EventParseError::InvalidJson("schema"));
-    }
-    validate_non_empty_tag_value(&manifest.farm_group_id, TAG_H)?;
-    validate_non_empty_tag_value(&manifest.owner_pubkey, TAG_P)?;
-    if manifest.relays.is_empty() {
-        return Err(EventParseError::InvalidJson("relays"));
-    }
-    if !manifest
-        .supported_kinds
-        .contains(&KIND_FARM_WORKSPACE_MANIFEST)
-        || !manifest.supported_kinds.contains(&KIND_FARM_CRDT_CHANGE)
-    {
-        return Err(EventParseError::InvalidJson("supported_kinds"));
-    }
-    if !manifest.media_servers.is_empty()
-        && !manifest.supported_kinds.contains(&KIND_FARM_FILE_METADATA)
-    {
-        return Err(EventParseError::InvalidJson("supported_kinds"));
-    }
-    Ok(())
-}
-
 fn encode_error_to_parse_error(error: crate::error::EventEncodeError) -> EventParseError {
     match error {
         crate::error::EventEncodeError::InvalidKind(kind) => EventParseError::InvalidKind {
@@ -169,5 +140,26 @@ fn encode_error_to_parse_error(error: crate::error::EventEncodeError) -> EventPa
             _ => EventParseError::InvalidJson(field),
         },
         crate::error::EventEncodeError::Json => EventParseError::InvalidJson("content"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::error::EventEncodeError;
+
+    #[test]
+    fn encode_error_mapper_covers_kind_and_json_edges() {
+        assert!(matches!(
+            encode_error_to_parse_error(EventEncodeError::InvalidKind(1)),
+            EventParseError::InvalidKind {
+                expected: EXPECTED_KIND,
+                got: 1
+            }
+        ));
+        assert!(matches!(
+            encode_error_to_parse_error(EventEncodeError::Json),
+            EventParseError::InvalidJson("content")
+        ));
     }
 }

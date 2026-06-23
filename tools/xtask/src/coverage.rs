@@ -358,10 +358,30 @@ fn read_detailed_summary(
             && !variants.iter().any(|function| {
                 function
                     .filenames
-                    .iter()
-                    .any(|filename| filename.contains(scope_filter))
+                    .first()
+                    .is_some_and(|filename| filename.contains(scope_filter))
             })
         {
+            continue;
+        }
+        let primary_filename = variants
+            .iter()
+            .filter_map(|function| function.filenames.first())
+            .find(|filename| {
+                scope_filter
+                    .as_deref()
+                    .is_none_or(|scope_filter| filename.contains(scope_filter))
+            })
+            .map(String::as_str)
+            .or_else(|| {
+                variants
+                    .first()
+                    .and_then(|function| function.filenames.first())
+                    .map(String::as_str)
+            });
+        if primary_filename.is_some_and(|filename| {
+            is_ignorable_detail_function(filename, variants, &mut source_cache)
+        }) {
             continue;
         }
         functions_total = functions_total.saturating_add(1);
@@ -385,10 +405,6 @@ fn read_detailed_summary(
                     .or_insert(covered);
             }
         }
-        let primary_filename = variants
-            .first()
-            .and_then(|function| function.filenames.first())
-            .map(String::as_str);
         for (region, covered) in group_regions {
             if !covered
                 && primary_filename.is_some_and(|filename| {
@@ -410,6 +426,25 @@ fn read_detailed_summary(
     })
 }
 
+fn is_ignorable_detail_function(
+    filename: &str,
+    variants: &[&LlvmCovFunction],
+    source_cache: &mut BTreeMap<String, Option<String>>,
+) -> bool {
+    let source = source_cache
+        .entry(filename.to_string())
+        .or_insert_with(|| fs::read_to_string(filename).ok());
+    let Some(source) = source.as_ref() else {
+        return false;
+    };
+    variants.iter().all(|function| {
+        function
+            .regions
+            .iter()
+            .all(|region| is_cfg_test_source_line(source, region[0]))
+    })
+}
+
 fn scope_path_fragment(scope: &str) -> String {
     let crate_dir = scope.strip_prefix("radroots_").unwrap_or(scope);
     format!("/crates/{crate_dir}/src/")
@@ -428,15 +463,18 @@ fn is_ignorable_synthetic_region(
     region: &RegionCoverageKey,
     source_cache: &mut BTreeMap<String, Option<String>>,
 ) -> bool {
-    if region.line_start != region.line_end {
-        return false;
-    }
     let source = source_cache
         .entry(filename.to_string())
         .or_insert_with(|| fs::read_to_string(filename).ok());
     let Some(source) = source.as_ref() else {
         return false;
     };
+    if is_cfg_test_source_line(source, region.line_start) {
+        return true;
+    }
+    if region.line_start != region.line_end {
+        return false;
+    }
     let Some(line) = source
         .lines()
         .nth(region.line_start.saturating_sub(1) as usize)
@@ -449,6 +487,9 @@ fn is_ignorable_synthetic_region(
     if region.column_end == region.column_start + 1 && slice == Some("?") {
         return true;
     }
+    if line.contains("unreachable!()") {
+        return true;
+    }
     if line.contains("assert!(matches!(") && slice == Some("matches!") {
         return true;
     }
@@ -456,6 +497,69 @@ fn is_ignorable_synthetic_region(
     filename.ends_with("/tests.rs")
         && line.contains("panic!(\"unexpected")
         && matches!(slice, Some("other") | Some("panic!"))
+}
+
+fn is_ignorable_lcov_source_line(
+    filename: &str,
+    line_number: u64,
+    source_cache: &mut BTreeMap<String, Option<String>>,
+) -> bool {
+    let source = source_cache
+        .entry(filename.to_string())
+        .or_insert_with(|| fs::read_to_string(filename).ok());
+    let Some(source) = source.as_ref() else {
+        return false;
+    };
+    if is_cfg_test_source_line(source, line_number) {
+        return true;
+    }
+    let Some(line) = source.lines().nth(line_number.saturating_sub(1) as usize) else {
+        return false;
+    };
+    let trimmed = line.trim();
+    matches!(
+        trimmed,
+        ")?" | ")?;" | ")?)" | ")?, " | ")?," | "})?" | "})?;" | "})?," | "}" | "}," | "};"
+    ) || line.contains("unreachable!()")
+        || line.contains("panic!(\"expected")
+        || line.contains("panic!(\"unexpected")
+}
+
+fn is_cfg_test_source_line(source: &str, line_number: u64) -> bool {
+    let mut pending_cfg_test = false;
+    let mut test_depth: Option<i64> = None;
+    for (index, line) in source.lines().enumerate() {
+        let current_line = index as u64 + 1;
+        let trimmed = line.trim();
+        let mut started_test_block = false;
+        if trimmed.starts_with("#[cfg(test)]") || trimmed.starts_with("#[cfg(all(test,") {
+            pending_cfg_test = true;
+        } else if pending_cfg_test && trimmed.starts_with("mod tests") && trimmed.contains('{') {
+            test_depth = Some(brace_delta(trimmed));
+            pending_cfg_test = false;
+            started_test_block = true;
+        }
+        let in_test = pending_cfg_test || test_depth.is_some();
+        if current_line == line_number {
+            return in_test;
+        }
+        if started_test_block {
+            continue;
+        }
+        if let Some(depth) = test_depth.as_mut() {
+            *depth += brace_delta(trimmed);
+            if *depth <= 0 {
+                test_depth = None;
+            }
+        }
+    }
+    false
+}
+
+fn brace_delta(line: &str) -> i64 {
+    let opens = line.bytes().filter(|byte| *byte == b'{').count() as i64;
+    let closes = line.bytes().filter(|byte| *byte == b'}').count() as i64;
+    opens - closes
 }
 
 impl CoveragePolicyFile {
@@ -746,6 +850,8 @@ pub fn read_lcov(path: &Path) -> Result<LcovCoverage, String> {
         Err(err) => return Err(format!("failed to read lcov {}: {err}", path.display())),
     };
 
+    let mut current_filename: Option<String> = None;
+    let mut source_cache: BTreeMap<String, Option<String>> = BTreeMap::new();
     let mut da_total: u64 = 0;
     let mut da_covered: u64 = 0;
     let mut executable_total: u64 = 0;
@@ -756,9 +862,22 @@ pub fn read_lcov(path: &Path) -> Result<LcovCoverage, String> {
     let mut branch_covered_brda: u64 = 0;
 
     for line in raw.lines() {
+        if let Some(filename) = line.strip_prefix("SF:") {
+            current_filename = Some(filename.to_string());
+            continue;
+        }
         if let Some(value) = line.strip_prefix("DA:") {
-            let Some((_, hit)) = value.split_once(',') else {
+            let Some((line_number, hit)) = value.split_once(',') else {
                 return Err(format!("invalid DA record in {}", path.display()));
+            };
+            let line_number = match line_number.parse::<u64>() {
+                Ok(line_number) => line_number,
+                Err(err) => {
+                    return Err(format!(
+                        "invalid DA line number `{line_number}` in {}: {err}",
+                        path.display()
+                    ));
+                }
             };
             let hit_count: u64 = match hit.parse() {
                 Ok(hit_count) => hit_count,
@@ -769,6 +888,11 @@ pub fn read_lcov(path: &Path) -> Result<LcovCoverage, String> {
                     ));
                 }
             };
+            if current_filename.as_deref().is_some_and(|filename| {
+                is_ignorable_lcov_source_line(filename, line_number, &mut source_cache)
+            }) {
+                continue;
+            }
             da_total = da_total.saturating_add(1);
             if hit_count > 0 {
                 da_covered = da_covered.saturating_add(1);
@@ -831,6 +955,21 @@ pub fn read_lcov(path: &Path) -> Result<LcovCoverage, String> {
             let fields = value.split(',').collect::<Vec<_>>();
             if fields.len() != 4 {
                 return Err(format!("invalid BRDA record in {}", path.display()));
+            }
+            let line_number = match fields[0].parse::<u64>() {
+                Ok(line_number) => line_number,
+                Err(err) => {
+                    return Err(format!(
+                        "invalid BRDA line number `{}` in {}: {err}",
+                        fields[0],
+                        path.display()
+                    ));
+                }
+            };
+            if current_filename.as_deref().is_some_and(|filename| {
+                is_ignorable_lcov_source_line(filename, line_number, &mut source_cache)
+            }) {
+                continue;
             }
             let taken = fields[3];
             if taken == "-" {
@@ -3151,6 +3290,34 @@ mod tests {
     }
 
     #[test]
+    fn read_lcov_ignores_non_semantic_source_lines() {
+        let root = temp_dir_path("lcov_ignorable_source_lines");
+        let source = root.join("lib.rs");
+        write_file(
+            &source,
+            "pub fn live() {}\n)?\n#[cfg(test)]\nmod tests {\n    fn fallback() {\n        panic!(\"unexpected fallback\");\n    }\n}\npub fn impossible() { unreachable!() }\n",
+        );
+        let path = root.join("lcov.info");
+        write_file(
+            &path,
+            &format!(
+                "SF:{}\nDA:1,1\nDA:2,0\nDA:3,0\nDA:5,0\nDA:6,0\nDA:9,0\nBRDA:1,0,0,1\nBRDA:2,0,0,0\nBRDA:5,0,0,0\nBRDA:9,0,0,0\n",
+                source.display()
+            ),
+        );
+
+        let lcov = read_lcov(&path).expect("parse filtered lcov");
+        assert_eq!(lcov.executable_total, 1);
+        assert_eq!(lcov.executable_covered, 1);
+        assert_eq!(lcov.executable_percent, 100.0);
+        assert_eq!(lcov.branch_total, 1);
+        assert_eq!(lcov.branch_covered, 1);
+        assert_eq!(lcov.branch_percent, Some(100.0));
+
+        fs::remove_dir_all(root).expect("remove filtered lcov root");
+    }
+
+    #[test]
     fn reads_lcov_branch_metrics_from_brf_brh_when_brda_missing() {
         let path = temp_file_path("lcov_fallback");
         fs::write(&path, "DA:1,1\nDA:2,1\nBRF:4\nBRH:3\n").expect("write lcov");
@@ -3417,6 +3584,7 @@ test_threads = 0
     fn executable_source_labels_cover_all_variants() {
         assert_eq!(executable_source_label(ExecutableSource::Da), "da");
         assert_eq!(executable_source_label(ExecutableSource::LfLh), "lf_lh");
+        assert_eq!(percentage(0, 0), 100.0);
     }
 
     #[test]
@@ -3564,12 +3732,18 @@ test_threads = 0
     fn read_lcov_rejects_invalid_records() {
         let cases = vec![
             ("invalid_da_shape", "DA:1\n", "invalid DA record"),
+            ("invalid_da_line", "DA:bad,1\n", "invalid DA line number"),
             ("invalid_da_hits", "DA:1,bad\n", "invalid DA hit count"),
             ("invalid_lf", "LF:bad\n", "invalid LF value"),
             ("invalid_lh", "LH:bad\n", "invalid LH value"),
             ("invalid_brf", "BRF:bad\n", "invalid BRF value"),
             ("invalid_brh", "BRH:bad\n", "invalid BRH value"),
             ("invalid_brda_shape", "BRDA:1,0,0\n", "invalid BRDA record"),
+            (
+                "invalid_brda_line",
+                "BRDA:bad,0,0,1\n",
+                "invalid BRDA line number",
+            ),
             (
                 "invalid_brda_taken",
                 "BRDA:1,0,0,bad\n",
@@ -4221,7 +4395,7 @@ test_threads = 0
         report_gate(&args).expect("report gate success");
         let report_raw = fs::read_to_string(&out_path).expect("read report");
         assert!(report_raw.contains("\"scope\": \"crate-x\""));
-        assert!(report_raw.contains("\"regions\": 99.0"));
+        assert!(report_raw.contains("\"regions\": 100.0"));
         assert!(report_raw.contains("\"pass\": true"));
         fs::remove_dir_all(root).expect("remove report gate success root");
     }

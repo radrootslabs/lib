@@ -358,6 +358,18 @@ mod tests {
         let err =
             farm_crdt_change_from_event(parts.kind, &group_mismatch, &parts.content).unwrap_err();
         assert!(matches!(err, EventParseError::InvalidTag("h")));
+
+        let mut pubkey_mismatch = sample_change();
+        pubkey_mismatch.workspace.pubkey = "other_workspace_pubkey".to_string();
+        let content = serde_json::to_string(&pubkey_mismatch).expect("crdt content");
+        let err = farm_crdt_change_from_event(parts.kind, &parts.tags, &content).unwrap_err();
+        assert!(matches!(err, EventParseError::InvalidTag("a")));
+
+        let mut d_tag_mismatch = sample_change();
+        d_tag_mismatch.workspace.d_tag = DOCUMENT_ID.to_string();
+        let content = serde_json::to_string(&d_tag_mismatch).expect("crdt content");
+        let err = farm_crdt_change_from_event(parts.kind, &parts.tags, &content).unwrap_err();
+        assert!(matches!(err, EventParseError::InvalidTag("a")));
     }
 
     #[test]

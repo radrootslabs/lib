@@ -1744,7 +1744,7 @@ struct ProofEnvelopeDigestMaterial<'a> {
 mod tests {
     use super::{
         RadrootsSp1TradeHostError, RadrootsSp1TradeProofMode, generate_order_acceptance_proof,
-        validation_receipt_for_order_acceptance_proof,
+        validation_receipt_for_order_acceptance_proof, validation_receipt_result_label,
         verify_order_acceptance_proof_artifact_structure,
     };
     use base64::Engine;
@@ -2056,6 +2056,10 @@ mod tests {
                 assert_eq!(RadrootsSp1TradeProofMode::from_label(label), Some(mode));
             }
         }
+        assert_eq!(
+            RadrootsSp1TradeProofMode::from_label("none"),
+            Some(RadrootsSp1TradeProofMode::None)
+        );
         assert_eq!(RadrootsSp1TradeProofMode::from_label("legacy"), None);
 
         for backend in [
@@ -2526,6 +2530,7 @@ mod tests {
         let receipt =
             validation_receipt_for_order_acceptance_proof(&bundle).expect("validation receipt");
         assert_eq!(receipt.result, RadrootsValidationReceiptResult::Invalid);
+        assert_eq!(validation_receipt_result_label(receipt.result), "invalid");
     }
 
     #[test]

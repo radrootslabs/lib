@@ -2,7 +2,7 @@
 
 use radroots_events::{
     farm_crdt::RadrootsFarmCrdtDocumentKind,
-    farm_file::{RadrootsFarmFileDimensions, RadrootsFarmFileMetadata},
+    farm_file::{RadrootsFarmFileDimensions, RadrootsFarmFileMetadata, RadrootsFarmFileSource},
     farm_workspace::RadrootsFarmWorkspaceRef,
     file_metadata::RadrootsFileMetadata,
     kinds::{KIND_POST, KIND_PUBLIC_FILE_METADATA},
@@ -221,10 +221,34 @@ fn file_metadata_public_and_private_kind1063_contracts_do_not_cross_decode() {
         Err(EventParseError::MissingTag("d"))
     ));
 
-    let private = farm_file_to_wire_parts(&sample_farm_file_metadata()).unwrap();
+    let mut private_metadata = sample_farm_file_metadata();
+    private_metadata.thumb = Some(RadrootsFarmFileSource {
+        url: "https://media.example.test/private-thumb.jpg".to_string(),
+        mime_type: Some("image/jpeg".to_string()),
+        dimensions: Some(RadrootsFarmFileDimensions { w: 320, h: 240 }),
+    });
+    private_metadata.image = Some(RadrootsFarmFileSource {
+        url: "https://media.example.test/private-image.jpg".to_string(),
+        mime_type: Some("image/jpeg".to_string()),
+        dimensions: None,
+    });
+    let private = farm_file_to_wire_parts(&private_metadata).unwrap();
     let decoded_private =
         farm_file_metadata_from_event(private.kind, &private.tags, &private.content).unwrap();
     assert_eq!(decoded_private.owner_document_id, "CCCCCCCCCCCCCCCCCCCCCA");
+    assert_eq!(
+        decoded_private.thumb.and_then(|source| source.dimensions),
+        Some(RadrootsFarmFileDimensions { w: 320, h: 240 })
+    );
+    assert_eq!(
+        decoded_private
+            .image
+            .map(|source| (source.url, source.dimensions)),
+        Some((
+            "https://media.example.test/private-image.jpg".to_string(),
+            None
+        ))
+    );
     assert!(matches!(
         file_metadata_from_event(private.kind, &private.tags, &private.content),
         Err(EventParseError::InvalidTag("radroots:owner_document"))
@@ -289,6 +313,17 @@ fn file_metadata_codec_requires_kind_required_tags_and_hash_shape() {
     assert!(matches!(
         file_metadata_from_event(KIND_PUBLIC_FILE_METADATA, &tags, ""),
         Err(EventParseError::InvalidTag(TAG_SHA256))
+    ));
+
+    let mut tags = file_metadata_build_tags(&sample_metadata()).unwrap();
+    let size_tag = tags
+        .iter_mut()
+        .find(|tag| tag.first().map(|value| value.as_str()) == Some(TAG_SIZE))
+        .expect("size tag");
+    size_tag[1] = "not-a-number".to_string();
+    assert!(matches!(
+        file_metadata_from_event(KIND_PUBLIC_FILE_METADATA, &tags, ""),
+        Err(EventParseError::InvalidNumber(TAG_SIZE, _))
     ));
 }
 

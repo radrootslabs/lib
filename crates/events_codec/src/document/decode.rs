@@ -169,3 +169,40 @@ pub fn parsed_from_event(
         data,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use radroots_events::document::{RadrootsDocument, RadrootsDocumentSubject};
+
+    #[test]
+    fn document_decode_accepts_subject_without_address() {
+        let document = RadrootsDocument {
+            d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
+            doc_type: "policy".to_string(),
+            title: "Farm policy".to_string(),
+            version: "1.0.0".to_string(),
+            summary: None,
+            effective_at: None,
+            body_markdown: None,
+            subject: RadrootsDocumentSubject {
+                pubkey: "subject-pubkey".to_string(),
+                address: None,
+            },
+            tags: None,
+        };
+        let content = serde_json::to_string(&document).expect("document content");
+
+        let decoded = document_from_event(
+            DEFAULT_KIND,
+            &[
+                vec![TAG_D.to_string(), "AAAAAAAAAAAAAAAAAAAAAA".to_string()],
+                vec![TAG_P.to_string(), "subject-pubkey".to_string()],
+            ],
+            &content,
+        )
+        .expect("document");
+
+        assert_eq!(decoded.subject.address, None);
+    }
+}

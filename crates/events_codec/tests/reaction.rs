@@ -191,6 +191,22 @@ fn reaction_build_tags_covers_optional_target_branches() {
                 .iter()
                 .any(|value| value == "wss://address-relay.example.test")
     }));
+
+    let reaction = RadrootsReaction {
+        target: RadrootsSocialTarget::Address {
+            address: format!("{}:{AUTHOR}:{D_TAG}", KIND_ARTICLE),
+            author: None,
+            event_kind: None,
+            relays: None,
+        },
+        content: "+".to_string(),
+    };
+    let tags = reaction_build_tags(&reaction).unwrap();
+    let address_tag = tags
+        .iter()
+        .find(|tag| tag.first().map(String::as_str) == Some("a"))
+        .expect("address tag");
+    assert_eq!(address_tag.len(), 2);
 }
 
 #[test]

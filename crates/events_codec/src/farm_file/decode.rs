@@ -309,4 +309,22 @@ mod tests {
         let err = encode_error_to_parse_error(EventEncodeError::Json);
         assert!(matches!(err, EventParseError::InvalidTag("content")));
     }
+
+    #[test]
+    fn encode_error_mapper_covers_invalid_field_tags() {
+        for (field, expected_tag) in [
+            ("d_tag", TAG_D),
+            ("farm_group_id", TAG_H),
+            ("workspace.pubkey", TAG_A),
+            ("workspace.d_tag", TAG_A),
+            ("owner_document_id", TAG_OWNER_DOCUMENT),
+            ("url", TAG_URL),
+            ("mime_type", TAG_MIME),
+            ("sha256", TAG_SHA256),
+            ("original_sha256", TAG_ORIGINAL_SHA256),
+        ] {
+            let err = encode_error_to_parse_error(EventEncodeError::InvalidField(field));
+            assert!(matches!(err, EventParseError::InvalidTag(tag) if tag == expected_tag));
+        }
+    }
 }

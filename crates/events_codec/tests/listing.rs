@@ -420,6 +420,14 @@ fn listing_from_event_covers_bin_and_price_error_paths() {
     let mut tags = sample_listing_tags();
     tags.push(vec![
         "radroots:primary_bin".to_string(),
+        "bin-1".to_string(),
+    ]);
+    let decoded = listing_from_event(KIND_LISTING, &tags, "# Widget").unwrap();
+    assert_eq!(decoded.primary_bin_id.as_str(), "bin-1");
+
+    let mut tags = sample_listing_tags();
+    tags.push(vec![
+        "radroots:primary_bin".to_string(),
         "bin-2".to_string(),
     ]);
     assert_invalid_tag(tags, "radroots:primary_bin");
@@ -449,6 +457,14 @@ fn listing_from_event_covers_bin_and_price_error_paths() {
         &mut tags,
         "radroots:bin",
         vec!["radroots:bin", "bin-1", "1", "kg"],
+    );
+    assert_invalid_tag(tags, "radroots:bin");
+
+    let mut tags = sample_listing_tags();
+    replace_first_tag(
+        &mut tags,
+        "radroots:bin",
+        vec!["radroots:bin", "bin-1", "1", "not-a-unit"],
     );
     assert_invalid_tag(tags, "radroots:bin");
 
@@ -509,6 +525,14 @@ fn listing_from_event_covers_bin_and_price_error_paths() {
         &mut tags,
         "radroots:price",
         vec!["radroots:price", "bin-1", "10", "USD", "1", "kg"],
+    );
+    assert_invalid_tag(tags, "radroots:price");
+
+    let mut tags = sample_listing_tags();
+    replace_first_tag(
+        &mut tags,
+        "radroots:price",
+        vec!["radroots:price", "bin-1", "10", "not-currency", "1", "each"],
     );
     assert_invalid_tag(tags, "radroots:price");
 

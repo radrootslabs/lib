@@ -372,6 +372,12 @@ fn plot_decode_handles_success_fill_and_tag_error_paths() {
     assert_eq!(filled.d_tag, d_tag);
     assert_eq!(filled.farm.d_tag, farm_d_tag);
 
+    let partial_farm_content =
+        serde_json::to_string(&sample_plot(d_tag, TEST_PUBKEY_HEX, "")).expect("plot partial farm");
+    let partial_farm =
+        plot_from_event(KIND_PLOT, &tags, &partial_farm_content).expect("partial farm fill");
+    assert_eq!(partial_farm.farm.d_tag, farm_d_tag);
+
     let bad_a = plot_from_event(
         KIND_PLOT,
         &[

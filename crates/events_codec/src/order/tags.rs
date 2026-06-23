@@ -580,6 +580,14 @@ mod tests {
             ]]),
             Err(EventParseError::InvalidTag(TAG_LISTING_EVENT))
         ));
+        assert!(matches!(
+            parse_order_listing_event_tag(&[vec![
+                String::from(TAG_LISTING_EVENT),
+                event_id('f'),
+                String::from("relay\nid"),
+            ]]),
+            Err(EventParseError::InvalidTag(TAG_LISTING_EVENT))
+        ));
         assert_eq!(
             parse_order_listing_event_tag(&[vec![String::from(TAG_LISTING_EVENT), event_id('a'),]])
                 .expect("snapshot without relay"),

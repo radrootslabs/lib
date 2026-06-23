@@ -130,3 +130,100 @@ impl<E: SqlExecutor> ReplicaSql<E> {
             .and_then(|value| u64::try_from(value).ok()))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use radroots_sql_core::ExecOutcome;
+
+    struct QueryExecutor {
+        farm_rows: &'static str,
+        product_rows: &'static str,
+    }
+
+    impl SqlExecutor for QueryExecutor {
+        fn exec(&self, _sql: &str, _params_json: &str) -> Result<ExecOutcome, SqlError> {
+            Ok(ExecOutcome {
+                changes: 0,
+                last_insert_id: 0,
+            })
+        }
+
+        fn query_raw(&self, sql: &str, _params_json: &str) -> Result<String, SqlError> {
+            if sql.contains("FROM farm") {
+                Ok(self.farm_rows.to_string())
+            } else {
+                Ok(self.product_rows.to_string())
+            }
+        }
+
+        fn begin(&self) -> Result<(), SqlError> {
+            Ok(())
+        }
+
+        fn commit(&self) -> Result<(), SqlError> {
+            Ok(())
+        }
+
+        fn rollback(&self) -> Result<(), SqlError> {
+            Ok(())
+        }
+    }
+
+    fn product_rows() -> &'static str {
+        r#"[{
+            "id":"listing-1",
+            "key":"coffee",
+            "category":"produce",
+            "title":"Coffee",
+            "summary":"Washed coffee",
+            "qty_amt":1.0,
+            "qty_amt_exact":"1",
+            "qty_unit":"kg",
+            "qty_label":null,
+            "qty_avail":10,
+            "price_amt":12.0,
+            "price_amt_exact":"12",
+            "price_currency":"USD",
+            "price_qty_amt":1.0,
+            "price_qty_amt_exact":"1",
+            "price_qty_unit":"kg",
+            "listing_addr":"30402:pubkey:AAAAAAAAAAAAAAAAAAAAAA",
+            "primary_bin_id":"bin-1",
+            "verified_primary_bin_id":"bin-1",
+            "notes":null,
+            "location_primary":"Farm"
+        }]"#
+    }
+
+    #[test]
+    fn trade_product_queries_and_unique_farm_lookup_cover_empty_and_multiple_rows() {
+        let db = ReplicaSql::new(QueryExecutor {
+            farm_rows: r#"[{"d_tag":"farm-a"},{"d_tag":"farm-b"}]"#,
+            product_rows: product_rows(),
+        });
+
+        assert_eq!(
+            db.trade_product_search(&[]).expect("empty search"),
+            Vec::new()
+        );
+        let lookup = db.trade_product_lookup("coffee").expect("lookup");
+        assert_eq!(lookup[0].key, "coffee");
+        assert_eq!(
+            db.farm_unique_d_tag_by_pubkey("seller")
+                .expect("farm lookup"),
+            None
+        );
+
+        let unique_db = ReplicaSql::new(QueryExecutor {
+            farm_rows: r#"[{"d_tag":"farm-a"}]"#,
+            product_rows: product_rows(),
+        });
+        assert_eq!(
+            unique_db
+                .farm_unique_d_tag_by_pubkey("seller")
+                .expect("farm lookup"),
+            Some("farm-a".to_string())
+        );
+    }
+}

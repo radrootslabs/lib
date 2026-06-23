@@ -5,6 +5,8 @@ pub mod list_sets;
 #[cfg(test)]
 mod tests {
     use crate::error::EventEncodeError;
+    #[cfg(feature = "serde_json")]
+    use crate::farm::decode::farm_from_event;
     use crate::farm::encode::{farm_build_tags, farm_ref_tags};
     use crate::farm::list_sets::{
         farm_listings_list_set_from_listings, farm_members_list_set,
@@ -19,6 +21,8 @@ mod tests {
         RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon,
     };
     use radroots_events::ids::{RadrootsDTag, RadrootsInventoryBinId};
+    #[cfg(feature = "serde_json")]
+    use radroots_events::kinds::KIND_FARM;
     use radroots_events::listing::{RadrootsListing, RadrootsListingBin, RadrootsListingProduct};
     use radroots_events::plot::RadrootsPlot;
 
@@ -131,6 +135,44 @@ mod tests {
 
         let err = farm_build_tags(&farm).expect_err("expected invalid d_tag");
         assert!(matches!(err, EventEncodeError::InvalidField("d_tag")));
+    }
+
+    #[test]
+    #[cfg(feature = "serde_json")]
+    fn farm_decode_rejects_empty_d_tag_and_content() {
+        let farm = RadrootsFarm {
+            d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
+            name: "Test Farm".to_string(),
+            about: None,
+            website: None,
+            picture: None,
+            banner: None,
+            location: None,
+            tags: None,
+        };
+        let content = serde_json::to_string(&farm).expect("farm content");
+
+        let empty_d = farm_from_event(
+            KIND_FARM,
+            &[vec!["d".to_string(), " ".to_string()]],
+            &content,
+        )
+        .expect_err("empty d tag");
+        assert!(matches!(
+            empty_d,
+            crate::error::EventParseError::InvalidTag("d")
+        ));
+
+        let empty_content = farm_from_event(
+            KIND_FARM,
+            &[vec!["d".to_string(), "AAAAAAAAAAAAAAAAAAAAAA".to_string()]],
+            " ",
+        )
+        .expect_err("empty content");
+        assert!(matches!(
+            empty_content,
+            crate::error::EventParseError::InvalidJson("content")
+        ));
     }
 
     #[test]

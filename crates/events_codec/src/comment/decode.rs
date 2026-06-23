@@ -95,83 +95,80 @@ fn parse_comment_target(
     let target_count = usize::from(event_tag.is_some())
         + usize::from(address_tag.is_some())
         + usize::from(external_tag.is_some());
-    if target_count == 0 {
-        return Err(EventParseError::MissingTag(keys.event));
-    }
     if target_count > 1 {
         return Err(EventParseError::InvalidTag(keys.event));
     }
 
-    if let Some(tag) = event_tag {
-        let id = tag
-            .get(1)
-            .cloned()
-            .ok_or(EventParseError::InvalidTag(keys.event))?;
-        validate_lowercase_hex_64_tag(&id, keys.event)?;
-        let kind = required_numeric_kind(tags, keys.kind)?;
-        validate_comment_target_kind(kind, keys.kind)?;
-        let author = required_author(tags, keys.author)?;
-        let relays = if tag.len() > 2 {
-            Some(tag[2..].to_vec())
-        } else {
-            None
-        };
-        return Ok(RadrootsSocialTarget::Event {
-            id,
-            author: Some(author),
-            event_kind: Some(kind),
-            relays,
-        });
-    }
-
-    if let Some(tag) = address_tag {
-        let value = tag
-            .get(1)
-            .cloned()
-            .ok_or(EventParseError::InvalidTag(keys.address))?;
-        let address = parse_address_tag(&value, keys.address)?;
-        let kind = required_numeric_kind(tags, keys.kind)?;
-        validate_comment_target_kind(kind, keys.kind)?;
-        if kind != address.kind {
-            return Err(EventParseError::InvalidTag(keys.kind));
+    match (event_tag, address_tag, external_tag) {
+        (Some(tag), None, None) => {
+            let id = tag
+                .get(1)
+                .cloned()
+                .ok_or(EventParseError::InvalidTag(keys.event))?;
+            validate_lowercase_hex_64_tag(&id, keys.event)?;
+            let kind = required_numeric_kind(tags, keys.kind)?;
+            validate_comment_target_kind(kind, keys.kind)?;
+            let author = required_author(tags, keys.author)?;
+            let relays = if tag.len() > 2 {
+                Some(tag[2..].to_vec())
+            } else {
+                None
+            };
+            Ok(RadrootsSocialTarget::Event {
+                id,
+                author: Some(author),
+                event_kind: Some(kind),
+                relays,
+            })
         }
-        let author = required_author(tags, keys.author)?;
-        if author != address.pubkey {
-            return Err(EventParseError::InvalidTag(keys.author));
+        (None, Some(tag), None) => {
+            let value = tag
+                .get(1)
+                .cloned()
+                .ok_or(EventParseError::InvalidTag(keys.address))?;
+            let address = parse_address_tag(&value, keys.address)?;
+            let kind = required_numeric_kind(tags, keys.kind)?;
+            validate_comment_target_kind(kind, keys.kind)?;
+            if kind != address.kind {
+                return Err(EventParseError::InvalidTag(keys.kind));
+            }
+            let author = required_author(tags, keys.author)?;
+            if author != address.pubkey {
+                return Err(EventParseError::InvalidTag(keys.author));
+            }
+            let relays = if tag.len() > 2 {
+                Some(tag[2..].to_vec())
+            } else {
+                None
+            };
+            Ok(RadrootsSocialTarget::Address {
+                address: value,
+                author: Some(author),
+                event_kind: Some(kind),
+                relays,
+            })
         }
-        let relays = if tag.len() > 2 {
-            Some(tag[2..].to_vec())
-        } else {
-            None
-        };
-        return Ok(RadrootsSocialTarget::Address {
-            address: value,
-            author: Some(author),
-            event_kind: Some(kind),
-            relays,
-        });
+        (None, None, Some(tag)) => {
+            let id = tag
+                .get(1)
+                .cloned()
+                .ok_or(EventParseError::InvalidTag(keys.external))?;
+            if id.trim().is_empty() {
+                return Err(EventParseError::InvalidTag(keys.external));
+            }
+            let external_kind = required_kind_value(tags, keys.kind)?;
+            if external_kind == "1" {
+                return Err(EventParseError::InvalidTag(keys.kind));
+            }
+            let hint = tag.get(2).filter(|value| !value.trim().is_empty()).cloned();
+            Ok(RadrootsSocialTarget::External {
+                id,
+                external_kind,
+                hint,
+            })
+        }
+        _ => Err(EventParseError::MissingTag(keys.event)),
     }
-
-    let Some(tag) = external_tag else {
-        return Err(EventParseError::MissingTag(keys.external));
-    };
-    let id = tag
-        .get(1)
-        .cloned()
-        .ok_or(EventParseError::InvalidTag(keys.external))?;
-    if id.trim().is_empty() {
-        return Err(EventParseError::InvalidTag(keys.external));
-    }
-    let external_kind = required_kind_value(tags, keys.kind)?;
-    if external_kind == "1" {
-        return Err(EventParseError::InvalidTag(keys.kind));
-    }
-    let hint = tag.get(2).filter(|value| !value.trim().is_empty()).cloned();
-    Ok(RadrootsSocialTarget::External {
-        id,
-        external_kind,
-        hint,
-    })
 }
 
 fn validate_comment_target_kind(kind: u32, key: &'static str) -> Result<(), EventParseError> {
@@ -262,4 +259,27 @@ pub fn parsed_from_event(
         },
         data,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn comment_decode_rejects_non_numeric_target_kind() {
+        let err = comment_from_tags(
+            DEFAULT_KIND,
+            &[
+                vec!["E".to_string(), "a".repeat(64)],
+                vec!["P".to_string(), "b".repeat(64)],
+                vec!["K".to_string(), "kind".to_string()],
+                vec!["i".to_string(), "external-id".to_string()],
+                vec!["k".to_string(), "web".to_string()],
+            ],
+            "content",
+        )
+        .expect_err("non-numeric kind");
+
+        assert!(matches!(err, EventParseError::InvalidNumber("K", _)));
+    }
 }

@@ -844,8 +844,10 @@ fn reduce_listing_inventory_accounting_records(
         );
         match projection.status {
             RadrootsOrderStatus::Accepted => {
-                if let Some(agreement_event_id) = projection.agreement_event_id.as_ref()
-                    && let Some(economics) = projection.economics.as_ref()
+                for (agreement_event_id, economics) in projection
+                    .agreement_event_id
+                    .iter()
+                    .zip(projection.economics.iter())
                 {
                     add_accepted_inventory_reservations_from_economics(
                         &mut bins,
@@ -2745,6 +2747,22 @@ mod tests {
             super::projection_issue_event_ids(&projection.issues),
             vec![event_id(2), event_id(4), event_id(5)]
         );
+
+        let mut duplicate_request = request_record();
+        duplicate_request.payload.order_id = order_id("order-duplicate");
+        let mut duplicate_request_later = duplicate_request.clone();
+        duplicate_request_later.payload.buyer_pubkey = public_key(OTHER);
+        let deduped =
+            super::unique_request_records(vec![duplicate_request.clone(), duplicate_request_later]);
+        assert_eq!(deduped.len(), 1);
+        assert_eq!(
+            deduped[0].payload.order_id,
+            duplicate_request.payload.order_id
+        );
+        assert_eq!(
+            deduped[0].payload.buyer_pubkey,
+            duplicate_request.payload.buyer_pubkey
+        );
     }
 
     #[test]
@@ -2772,6 +2790,10 @@ mod tests {
             super::parse_public_listing_addr(format!(
                 "{KIND_LISTING_DRAFT}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg"
             )),
+            Err(super::RadrootsOrderCanonicalizationError::InvalidListingKind)
+        ));
+        assert!(matches!(
+            super::parse_public_listing_addr(format!("30023:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg")),
             Err(super::RadrootsOrderCanonicalizationError::InvalidListingKind)
         ));
 
@@ -4362,6 +4384,25 @@ mod tests {
 
     #[test]
     fn inventory_accounting_reserves_only_accepted_agreements() {
+        let requested_projection = reduce_listing_inventory_accounting(
+            &listing_addr(),
+            &event_id(8),
+            RadrootsListingInventoryAccountingInputs {
+                bins: vec![RadrootsListingInventoryBinAvailability {
+                    bin_id: bin_id("bin-1"),
+                    available_count: 3,
+                }],
+                requests: vec![request_record()],
+                decisions: Vec::<RadrootsOrderDecisionRecord>::new(),
+                revision_proposals: Vec::<RadrootsOrderRevisionProposalRecord>::new(),
+                revision_decisions: Vec::<RadrootsOrderRevisionDecisionRecord>::new(),
+                cancellations: Vec::<RadrootsOrderCancellationRecord>::new(),
+            },
+        );
+
+        assert_eq!(requested_projection.bins[0].accepted_reserved_count, 0);
+        assert_eq!(requested_projection.bins[0].remaining_count, 3);
+
         let projection = reduce_listing_inventory_accounting(
             &listing_addr(),
             &event_id(9),

@@ -1,14 +1,13 @@
 [gate]
-fail_under_exec_lines = 99.0
-fail_under_functions = 99.0
-fail_under_regions = 99.0
-fail_under_branches = 99.0
+fail_under_exec_lines = 100.0
+fail_under_functions = 100.0
+fail_under_regions = 100.0
+fail_under_branches = 100.0
 require_branches = true
 
-# Heavy-development baseline: required crates must hold at least 99%
-# coverage across executable lines, functions, regions, and branches. This is
-# not a requirement to reach 100% coverage. Temporary threshold overrides below
-# 99% are not part of the active gate.
+# Heavy-development baseline: required crates must hold 100% coverage across
+# executable lines, functions, regions, and branches. Temporary threshold
+# overrides below 100% are not part of the active gate.
 
 [overrides.radroots_log]
 require_branches = false

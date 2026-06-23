@@ -682,6 +682,8 @@ fn calendar_rsvp_codecs_cover_status_and_target_edges() {
     rsvp.status = RadrootsCalendarEventRsvpStatus::Tentative;
     let parts = rsvp_to_wire_parts(&rsvp).unwrap();
     assert!(has_tag(&parts.tags, TAG_STATUS, "tentative"));
+    let decoded = rsvp_from_event(parts.kind, &parts.tags, &parts.content).unwrap();
+    assert_eq!(decoded.status, RadrootsCalendarEventRsvpStatus::Tentative);
 
     let mut rsvp = sample_rsvp();
     rsvp.event_id = Some("not-a-lowercase-hex-id".to_string());

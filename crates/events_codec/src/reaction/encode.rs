@@ -108,3 +108,27 @@ fn push_reaction_target(
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reaction_event_target_encodes_without_relays() {
+        let reaction = RadrootsReaction {
+            target: RadrootsSocialTarget::Event {
+                id: "a".repeat(64),
+                author: Some("b".repeat(64)),
+                event_kind: Some(1),
+                relays: None,
+            },
+            content: "+".to_string(),
+        };
+
+        let tags = reaction_build_tags(&reaction).expect("reaction tags");
+        assert!(
+            tags.iter()
+                .any(|tag| tag == &vec!["e".to_string(), "a".repeat(64)])
+        );
+    }
+}

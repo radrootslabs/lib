@@ -6,6 +6,8 @@ pub mod list_sets;
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "serde_json")]
+    use crate::coop::decode::coop_from_event;
     use crate::coop::encode::{coop_build_tags, coop_ref_tags};
     use crate::coop::list_sets::{
         coop_items_list_set, coop_members_farms_list_set, coop_members_list_set,
@@ -16,6 +18,8 @@ mod tests {
     use radroots_events::farm::{
         RadrootsFarmRef, RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon,
     };
+    #[cfg(feature = "serde_json")]
+    use radroots_events::kinds::KIND_COOP;
 
     #[test]
     fn coop_tags_include_required_fields() {
@@ -113,6 +117,44 @@ mod tests {
 
         let err = coop_build_tags(&coop).expect_err("expected invalid d_tag");
         assert!(matches!(err, EventEncodeError::InvalidField("d_tag")));
+    }
+
+    #[test]
+    #[cfg(feature = "serde_json")]
+    fn coop_decode_rejects_empty_d_tag_and_content() {
+        let coop = RadrootsCoop {
+            d_tag: "BAAAAAAAAAAAAAAAAAAAAA".to_string(),
+            name: "Test Coop".to_string(),
+            about: None,
+            website: None,
+            picture: None,
+            banner: None,
+            location: None,
+            tags: None,
+        };
+        let content = serde_json::to_string(&coop).expect("coop content");
+
+        let empty_d = coop_from_event(
+            KIND_COOP,
+            &[vec!["d".to_string(), " ".to_string()]],
+            &content,
+        )
+        .expect_err("empty d tag");
+        assert!(matches!(
+            empty_d,
+            crate::error::EventParseError::InvalidTag("d")
+        ));
+
+        let empty_content = coop_from_event(
+            KIND_COOP,
+            &[vec!["d".to_string(), "BAAAAAAAAAAAAAAAAAAAAA".to_string()]],
+            " ",
+        )
+        .expect_err("empty content");
+        assert!(matches!(
+            empty_content,
+            crate::error::EventParseError::InvalidJson("content")
+        ));
     }
 
     #[test]

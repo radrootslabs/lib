@@ -820,8 +820,8 @@ mod tests {
     };
     use crate::model::{
         RadrootsNostrSignerApprovalRequirement, RadrootsNostrSignerAuthChallenge,
-        RadrootsNostrSignerAuthState, RadrootsNostrSignerConnectionRecord,
-        RadrootsNostrSignerPendingRequest,
+        RadrootsNostrSignerAuthState, RadrootsNostrSignerConnectionDraft,
+        RadrootsNostrSignerConnectionRecord, RadrootsNostrSignerPendingRequest,
     };
     use crate::test_support::{fixture_alice_identity, fixture_carol_public_key, primary_relay};
     use nostr::{Keys, Timestamp, UnsignedEvent};
@@ -1706,6 +1706,26 @@ mod tests {
             ),
             RadrootsNostrConnectResponse::Pong
         );
+        let mut denied_base_eval = backend
+            .evaluate_request(
+                &connection.connection_id,
+                request_message("req-eval-denied-ping", RadrootsNostrConnectRequest::Ping),
+            )
+            .expect("denied base evaluation");
+        denied_base_eval.action = RadrootsNostrSignerRequestAction::Denied {
+            reason: "blocked".to_owned(),
+        };
+        assert!(matches!(
+            response_from_outcome(
+                handler
+                    .handle_authorized_request_evaluation(
+                        request_message("req-eval-denied-ping", RadrootsNostrConnectRequest::Ping),
+                        denied_base_eval,
+                    )
+                    .expect("denied base authorized")
+            ),
+            RadrootsNostrConnectResponse::Error { .. }
+        ));
 
         let crypto = request_message(
             "req-eval-crypto",
@@ -1882,6 +1902,42 @@ mod tests {
             challenged,
             RadrootsNostrSignerHandledRequest::Respond { .. }
         ));
+    }
+
+    #[test]
+    fn handler_reports_ambiguous_client_sessions() {
+        let backend = embedded_backend();
+        let client_public_key = fixture_carol_public_key();
+        backend
+            .register_connection(RadrootsNostrSignerConnectionDraft::new(
+                client_public_key,
+                test_signer().user_identity.to_public(),
+            ))
+            .expect("first connection");
+        backend
+            .register_connection(RadrootsNostrSignerConnectionDraft::new(
+                client_public_key,
+                RadrootsIdentity::from_secret_key_str(
+                    "3333333333333333333333333333333333333333333333333333333333333333",
+                )
+                .expect("second user identity")
+                .to_public(),
+            ))
+            .expect("second connection");
+
+        let outcome = handler_with_backend(backend)
+            .handle_request(
+                client_public_key,
+                request_message("req-ambiguous", RadrootsNostrConnectRequest::Ping),
+            )
+            .expect("ambiguous request");
+        assert_eq!(
+            response_from_outcome(outcome),
+            RadrootsNostrConnectResponse::Error {
+                result: None,
+                error: "ambiguous client sessions".to_owned(),
+            }
+        );
     }
 
     #[test]

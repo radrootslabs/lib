@@ -138,6 +138,21 @@ fn comment_build_tags_requires_strict_nip22_target_fields() {
 
     let comment = RadrootsComment {
         root: RadrootsSocialTarget::Address {
+            address: "not-an-address".to_string(),
+            author: Some(AUTHOR.to_string()),
+            event_kind: Some(KIND_ARTICLE),
+            relays: None,
+        },
+        parent: event_target(PARENT_ID, PARENT_AUTHOR, KIND_ARTICLE),
+        content: "hello".to_string(),
+    };
+    assert!(matches!(
+        comment_build_tags(&comment),
+        Err(EventEncodeError::InvalidField("root"))
+    ));
+
+    let comment = RadrootsComment {
+        root: RadrootsSocialTarget::Address {
             address: format!("{KIND_ARTICLE}:{AUTHOR}:{D_TAG}"),
             author: Some(AUTHOR.to_string()),
             event_kind: Some(KIND_COMMENT),
@@ -342,6 +357,13 @@ fn comment_from_tags_covers_target_decode_edges() {
     assert!(matches!(
         comment_from_tags(KIND_COMMENT, &tags, "hello"),
         Err(EventParseError::InvalidTag("E"))
+    ));
+
+    let mut tags = event_comment_tags();
+    tags[0] = vec!["X".to_string(), ROOT_ID.to_string()];
+    assert!(matches!(
+        comment_from_tags(KIND_COMMENT, &tags, "hello"),
+        Err(EventParseError::MissingTag("E"))
     ));
 
     let mut tags = event_comment_tags();

@@ -2132,6 +2132,64 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn sign_retryable_update_succeeds_and_reports_ignored_update_with_current_token() {
+        let outbox = RadrootsOutbox::open_memory().await.expect("open");
+        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "retryable success");
+        let receipt = outbox
+            .enqueue_operation(operation_input(draft, 1_000))
+            .await
+            .expect("enqueue");
+        outbox
+            .claim_next_ready_event("worker-a", "claim-a", 2_000, 1_000)
+            .await
+            .expect("claim")
+            .expect("claim");
+
+        outbox
+            .mark_sign_retryable(receipt.outbox_event_id, "claim-a", "retry", 1_500, 1_100)
+            .await
+            .expect("mark retryable");
+        let event = outbox
+            .get_event(receipt.outbox_event_id)
+            .await
+            .expect("event")
+            .expect("event");
+        assert_eq!(event.state, RadrootsOutboxEventState::SignRetryable);
+
+        let ignored_outbox = RadrootsOutbox::open_memory().await.expect("ignored open");
+        let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "ignored retryable");
+        let ignored_receipt = ignored_outbox
+            .enqueue_operation(operation_input(draft, 2_000))
+            .await
+            .expect("enqueue ignored");
+        ignored_outbox
+            .claim_next_ready_event("worker-b", "claim-b", 3_000, 2_000)
+            .await
+            .expect("claim ignored")
+            .expect("claim ignored");
+        sqlx::query(
+            "CREATE TEMP TRIGGER ignore_sign_retry_update BEFORE UPDATE OF state ON outbox_event WHEN NEW.state = 'sign_retryable' BEGIN SELECT RAISE(IGNORE); END",
+        )
+        .execute(ignored_outbox.pool())
+        .await
+        .expect("retry trigger");
+        let ignored = ignored_outbox
+            .mark_sign_retryable(
+                ignored_receipt.outbox_event_id,
+                "claim-b",
+                "ignored retry",
+                2_500,
+                2_100,
+            )
+            .await
+            .expect_err("ignored retryable update");
+        assert!(matches!(
+            ignored,
+            RadrootsOutboxError::ClaimTokenMismatch { .. }
+        ));
+    }
+
+    #[tokio::test]
     async fn ignored_sqlite_updates_preserve_race_guards() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");
         let draft = post_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "ignored claim");

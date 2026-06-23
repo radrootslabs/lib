@@ -270,3 +270,40 @@ fn non_empty_vec<T>(values: Vec<T>) -> Option<Vec<T>> {
         Some(values)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn post_decode_accepts_address_ref_without_relays_and_unknown_imeta_keys() {
+        let author = "a".repeat(64);
+        let post = post_from_event(
+            DEFAULT_KIND,
+            &[
+                vec![
+                    TAG_A.to_string(),
+                    format!("30023:{author}:AAAAAAAAAAAAAAAAAAAAAA"),
+                ],
+                vec![
+                    TAG_IMETA.to_string(),
+                    "url https://media.example.invalid/a.jpg".to_string(),
+                    "custom value".to_string(),
+                ],
+            ],
+            "fresh carrots",
+        )
+        .expect("post");
+
+        let refs = post.address_refs.expect("address refs");
+        assert!(matches!(
+            &refs[0],
+            RadrootsSocialTarget::Address { relays: None, .. }
+        ));
+        let media = post.media.expect("media");
+        assert_eq!(
+            media[0].url.as_deref(),
+            Some("https://media.example.invalid/a.jpg")
+        );
+    }
+}

@@ -172,3 +172,38 @@ fn validate_comment_target_kind(kind: u32, field: &'static str) -> Result<(), Ev
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn comment_targets_encode_without_relays() {
+        let author = "a".repeat(64);
+        let comment = RadrootsComment {
+            root: RadrootsSocialTarget::Event {
+                id: "b".repeat(64),
+                author: Some(author.clone()),
+                event_kind: Some(KIND_COMMENT),
+                relays: None,
+            },
+            parent: RadrootsSocialTarget::Address {
+                address: format!("{KIND_COMMENT}:{author}:AAAAAAAAAAAAAAAAAAAAAA"),
+                author: Some(author),
+                event_kind: Some(KIND_COMMENT),
+                relays: None,
+            },
+            content: "looks good".to_string(),
+        };
+
+        let tags = comment_build_tags(&comment).expect("comment tags");
+        assert!(
+            tags.iter()
+                .any(|tag| tag == &vec!["E".to_string(), "b".repeat(64)])
+        );
+        assert!(
+            tags.iter()
+                .any(|tag| tag.first().map(String::as_str) == Some("a") && tag.len() == 2)
+        );
+    }
+}

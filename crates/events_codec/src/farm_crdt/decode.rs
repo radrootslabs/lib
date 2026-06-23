@@ -8,10 +8,7 @@ use alloc::{
 
 use radroots_events::{
     RadrootsNostrEvent,
-    farm_crdt::{
-        KIND_FARM_CRDT_CHANGE, RADROOTS_FARM_CRDT_CHANGE_SCHEMA, RADROOTS_FARM_CRDT_TAG,
-        RadrootsFarmCrdtChange,
-    },
+    farm_crdt::{KIND_FARM_CRDT_CHANGE, RADROOTS_FARM_CRDT_TAG, RadrootsFarmCrdtChange},
     farm_workspace::KIND_FARM_WORKSPACE_MANIFEST,
     tags::{TAG_A, TAG_D, TAG_H, TAG_P, TAG_T},
 };
@@ -20,8 +17,8 @@ use crate::d_tag::validate_d_tag_tag;
 use crate::error::EventParseError;
 use crate::farm_crdt::encode::validate_change;
 use crate::field_helpers::{
-    is_non_empty_base64url, optional_tag_value, parse_address_tag_with_kind, required_tag_value,
-    tag_values, validate_non_empty_tag_value,
+    optional_tag_value, parse_address_tag_with_kind, required_tag_value, tag_values,
+    validate_non_empty_tag_value,
 };
 use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 
@@ -132,7 +129,6 @@ fn farm_crdt_change_from_event_inner(
 
     let change: RadrootsFarmCrdtChange =
         serde_json::from_str(content).map_err(|_| EventParseError::InvalidJson("content"))?;
-    validate_change_content(&change)?;
     validate_change(&change).map_err(encode_error_to_parse_error)?;
     if change.farm_group_id != farm_group_id {
         return Err(EventParseError::InvalidTag(TAG_H));
@@ -144,26 +140,6 @@ fn farm_crdt_change_from_event_inner(
         return Err(EventParseError::InvalidTag(TAG_A));
     }
     Ok(change)
-}
-
-fn validate_change_content(change: &RadrootsFarmCrdtChange) -> Result<(), EventParseError> {
-    if change.schema != RADROOTS_FARM_CRDT_CHANGE_SCHEMA {
-        return Err(EventParseError::InvalidJson("schema"));
-    }
-    validate_non_empty_tag_value(&change.farm_group_id, TAG_H)?;
-    validate_d_tag_tag(&change.document_id, TAG_D)?;
-    validate_non_empty_tag_value(&change.workspace.pubkey, TAG_A)?;
-    validate_d_tag_tag(&change.workspace.d_tag, TAG_A)?;
-    if !is_non_empty_base64url(&change.encoded_change) {
-        return Err(EventParseError::InvalidJson("encoded_change"));
-    }
-    if change.change_hash.trim().is_empty() {
-        return Err(EventParseError::InvalidJson("change_hash"));
-    }
-    if change.business_time_ms == 0 {
-        return Err(EventParseError::InvalidJson("business_time_ms"));
-    }
-    Ok(())
 }
 
 fn encode_error_to_parse_error(error: crate::error::EventEncodeError) -> EventParseError {
@@ -180,5 +156,26 @@ fn encode_error_to_parse_error(error: crate::error::EventEncodeError) -> EventPa
             _ => EventParseError::InvalidJson(field),
         },
         crate::error::EventEncodeError::Json => EventParseError::InvalidJson("content"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::error::EventEncodeError;
+
+    #[test]
+    fn encode_error_mapper_covers_kind_and_json_edges() {
+        assert!(matches!(
+            encode_error_to_parse_error(EventEncodeError::InvalidKind(1)),
+            EventParseError::InvalidKind {
+                expected: EXPECTED_KIND,
+                got: 1
+            }
+        ));
+        assert!(matches!(
+            encode_error_to_parse_error(EventEncodeError::Json),
+            EventParseError::InvalidJson("content")
+        ));
     }
 }

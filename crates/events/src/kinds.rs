@@ -631,6 +631,8 @@ mod tests {
 
         assert!(is_public_social_kind(KIND_POST));
         assert!(is_public_social_kind(KIND_PUBLIC_FILE_METADATA));
+        assert!(is_public_file_metadata_kind(KIND_PUBLIC_FILE_METADATA));
+        assert!(!is_public_file_metadata_kind(KIND_POST));
         assert!(is_public_social_kind(KIND_COMMENT));
         assert!(is_public_social_kind(KIND_REACTION));
         assert!(is_public_social_kind(KIND_ARTICLE));

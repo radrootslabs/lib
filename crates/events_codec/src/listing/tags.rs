@@ -105,13 +105,7 @@ pub fn listing_tags_with_options(
     options: ListingTagOptions,
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
     let d_tag = listing.d_tag.as_str();
-    if d_tag.trim().is_empty() {
-        return Err(EventEncodeError::EmptyRequiredField("d"));
-    }
     validate_d_tag(d_tag, "d")?;
-    if listing.primary_bin_id.trim().is_empty() {
-        return Err(EventEncodeError::EmptyRequiredField("primary_bin_id"));
-    }
     if listing.bins.is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("bins"));
     }
@@ -327,9 +321,6 @@ fn tag_listing_plot(plot: &RadrootsPlotRef) -> Result<Vec<String>, EventEncodeEr
 }
 
 fn tag_listing_bin(bin: &RadrootsListingBin) -> Result<Vec<String>, EventEncodeError> {
-    if bin.bin_id.trim().is_empty() {
-        return Err(EventEncodeError::EmptyRequiredField("bin_id"));
-    }
     let unit = bin.quantity.unit;
     if unit != unit.canonical_unit() {
         return Err(EventEncodeError::EmptyRequiredField("bin.quantity"));
@@ -360,9 +351,6 @@ fn tag_listing_bin(bin: &RadrootsListingBin) -> Result<Vec<String>, EventEncodeE
 }
 
 fn tag_listing_price(bin: &RadrootsListingBin) -> Result<Vec<String>, EventEncodeError> {
-    if bin.bin_id.trim().is_empty() {
-        return Err(EventEncodeError::EmptyRequiredField("bin_id"));
-    }
     let price = &bin.price_per_canonical_unit;
     if !price.is_price_per_canonical_unit() {
         return Err(EventEncodeError::EmptyRequiredField(

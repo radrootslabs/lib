@@ -62,3 +62,83 @@ fn listing_markdown_content(listing: &RadrootsListing) -> String {
         (true, None) => String::new(),
     }
 }
+
+#[cfg(all(test, feature = "serde_json"))]
+mod tests {
+    use super::*;
+    use core::str::FromStr;
+    use radroots_core::{
+        RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
+        RadrootsCoreQuantityPrice, RadrootsCoreUnit,
+    };
+    use radroots_events::{
+        farm::RadrootsFarmRef,
+        ids::{RadrootsDTag, RadrootsInventoryBinId},
+        listing::{RadrootsListingBin, RadrootsListingProduct},
+    };
+
+    fn decimal(value: &str) -> RadrootsCoreDecimal {
+        RadrootsCoreDecimal::from_str(value).expect("decimal")
+    }
+
+    fn listing_with(title: &str, summary: Option<&str>) -> RadrootsListing {
+        RadrootsListing {
+            d_tag: RadrootsDTag::parse("AAAAAAAAAAAAAAAAAAAAAA").expect("d tag"),
+            published_at: None,
+            farm: RadrootsFarmRef {
+                pubkey: "a".repeat(64),
+                d_tag: "AAAAAAAAAAAAAAAAAAAAAQ".to_string(),
+            },
+            product: RadrootsListingProduct {
+                key: "coffee".to_string(),
+                title: title.to_string(),
+                category: "produce".to_string(),
+                summary: summary.map(ToOwned::to_owned),
+                process: None,
+                lot: None,
+                location: None,
+                profile: None,
+                year: None,
+            },
+            primary_bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
+            bins: vec![RadrootsListingBin {
+                bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
+                quantity: RadrootsCoreQuantity::new(decimal("1"), RadrootsCoreUnit::MassG),
+                price_per_canonical_unit: RadrootsCoreQuantityPrice::new(
+                    RadrootsCoreMoney::new(decimal("1"), RadrootsCoreCurrency::USD),
+                    RadrootsCoreQuantity::new(RadrootsCoreDecimal::ONE, RadrootsCoreUnit::MassG),
+                ),
+                display_amount: None,
+                display_unit: None,
+                display_label: None,
+                display_price: None,
+                display_price_unit: None,
+            }],
+            resource_area: None,
+            plot: None,
+            discounts: None,
+            inventory_available: None,
+            availability: None,
+            delivery_method: None,
+            location: None,
+            images: None,
+        }
+    }
+
+    #[test]
+    fn listing_markdown_content_covers_title_summary_combinations() {
+        assert_eq!(
+            listing_markdown_content(&listing_with("Coffee", Some("Washed"))),
+            "# Coffee\n\nWashed"
+        );
+        assert_eq!(
+            listing_markdown_content(&listing_with("Coffee", None)),
+            "# Coffee"
+        );
+        assert_eq!(
+            listing_markdown_content(&listing_with(" ", Some("Washed"))),
+            "Washed"
+        );
+        assert_eq!(listing_markdown_content(&listing_with(" ", None)), "");
+    }
+}
