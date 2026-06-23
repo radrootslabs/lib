@@ -4,6 +4,16 @@ use alloc::vec;
 use core::fmt;
 use radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpQueueUri;
 
+#[cfg(feature = "std")]
+pub const RADROOTS_SIMPLEX_INTEROP_REQUIRE_UPSTREAM_ENV: &str =
+    "RADROOTS_SIMPLEX_INTEROP_REQUIRE_UPSTREAM";
+#[cfg(feature = "std")]
+pub const RADROOTS_SIMPLEX_INTEROP_SMP_HOST_ENV: &str = "RADROOTS_SIMPLEX_INTEROP_SMP_HOST";
+#[cfg(feature = "std")]
+pub const RADROOTS_SIMPLEX_INTEROP_SMP_PORT_ENV: &str = "RADROOTS_SIMPLEX_INTEROP_SMP_PORT";
+#[cfg(feature = "std")]
+pub const RADROOTS_SIMPLEX_INTEROP_SMP_IDENTITY_ENV: &str = "RADROOTS_SIMPLEX_INTEROP_SMP_IDENTITY";
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RadrootsSimplexInteropFixturePolicy {
     pub namespace_prefix: &'static str,
@@ -54,17 +64,51 @@ pub struct RadrootsSimplexInteropLocalUpstream {
 #[cfg(feature = "std")]
 impl RadrootsSimplexInteropLocalUpstream {
     pub fn from_env() -> Option<Self> {
-        let host = std::env::var("RADROOTS_SIMPLEX_INTEROP_SMP_HOST").ok()?;
-        let port = std::env::var("RADROOTS_SIMPLEX_INTEROP_SMP_PORT")
-            .ok()?
-            .parse::<u16>()
-            .ok()?;
-        let server_identity = std::env::var("RADROOTS_SIMPLEX_INTEROP_SMP_IDENTITY").ok();
-        Some(Self {
-            host,
-            port,
+        Self::from_env_values(false).ok().flatten()
+    }
+
+    pub fn required_from_env() -> Result<Option<Self>, RadrootsSimplexInteropPolicyError> {
+        Self::from_env_values(required_upstream_enabled())
+    }
+
+    fn from_env_values(required: bool) -> Result<Option<Self>, RadrootsSimplexInteropPolicyError> {
+        let host = optional_env_value(RADROOTS_SIMPLEX_INTEROP_SMP_HOST_ENV);
+        let port = optional_env_value(RADROOTS_SIMPLEX_INTEROP_SMP_PORT_ENV);
+        let server_identity = optional_env_value(RADROOTS_SIMPLEX_INTEROP_SMP_IDENTITY_ENV);
+        Self::from_values(host, port, server_identity, required)
+    }
+
+    pub fn from_values(
+        host: Option<String>,
+        port: Option<String>,
+        server_identity: Option<String>,
+        required: bool,
+    ) -> Result<Option<Self>, RadrootsSimplexInteropPolicyError> {
+        let Some(host) =
+            required_or_optional(host, required, RADROOTS_SIMPLEX_INTEROP_SMP_HOST_ENV)?
+        else {
+            return Ok(None);
+        };
+        let Some(port) =
+            required_or_optional(port, required, RADROOTS_SIMPLEX_INTEROP_SMP_PORT_ENV)?
+        else {
+            return Ok(None);
+        };
+        let server_identity = match required_or_optional(
             server_identity,
-        })
+            required,
+            RADROOTS_SIMPLEX_INTEROP_SMP_IDENTITY_ENV,
+        )? {
+            Some(value) => Some(value),
+            None => None,
+        };
+        Ok(Some(Self {
+            host,
+            port: port.parse::<u16>().map_err(|_| {
+                RadrootsSimplexInteropPolicyError::InvalidLocalUpstreamPort(port.clone())
+            })?,
+            server_identity,
+        }))
     }
 
     pub fn server_address(
@@ -104,6 +148,8 @@ impl RadrootsSimplexInteropLocalUpstream {
 pub enum RadrootsSimplexInteropPolicyError {
     InvalidFixtureId(String),
     InvalidFixtureHost(String),
+    MissingLocalUpstreamEnv(&'static str),
+    InvalidLocalUpstreamPort(String),
     LocalUpstreamIo(String),
 }
 
@@ -122,6 +168,15 @@ impl fmt::Display for RadrootsSimplexInteropPolicyError {
                     "interop fixture host `{host}` is not in a synthetic domain"
                 )
             }
+            Self::MissingLocalUpstreamEnv(name) => {
+                write!(
+                    f,
+                    "required SimpleX upstream environment `{name}` is not set"
+                )
+            }
+            Self::InvalidLocalUpstreamPort(port) => {
+                write!(f, "invalid SimpleX upstream port `{port}`")
+            }
             Self::LocalUpstreamIo(message) => write!(f, "{message}"),
         }
     }
@@ -129,3 +184,95 @@ impl fmt::Display for RadrootsSimplexInteropPolicyError {
 
 #[cfg(feature = "std")]
 impl std::error::Error for RadrootsSimplexInteropPolicyError {}
+
+#[cfg(feature = "std")]
+fn optional_env_value(name: &str) -> Option<String> {
+    std::env::var(name)
+        .ok()
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+}
+
+#[cfg(feature = "std")]
+fn required_or_optional(
+    value: Option<String>,
+    required: bool,
+    name: &'static str,
+) -> Result<Option<String>, RadrootsSimplexInteropPolicyError> {
+    match value {
+        Some(value) => Ok(Some(value)),
+        None if required => Err(RadrootsSimplexInteropPolicyError::MissingLocalUpstreamEnv(
+            name,
+        )),
+        None => Ok(None),
+    }
+}
+
+#[cfg(feature = "std")]
+fn required_upstream_enabled() -> bool {
+    optional_env_value(RADROOTS_SIMPLEX_INTEROP_REQUIRE_UPSTREAM_ENV)
+        .map(|value| {
+            matches!(
+                value.as_str(),
+                "1" | "true" | "TRUE" | "required" | "REQUIRED"
+            )
+        })
+        .unwrap_or(false)
+}
+
+#[cfg(all(test, feature = "std"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn optional_upstream_config_returns_none_when_unset() {
+        assert_eq!(
+            RadrootsSimplexInteropLocalUpstream::from_values(None, None, None, false).unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn required_upstream_config_reports_first_missing_value() {
+        let error =
+            RadrootsSimplexInteropLocalUpstream::from_values(None, None, None, true).unwrap_err();
+        assert!(matches!(
+            error,
+            RadrootsSimplexInteropPolicyError::MissingLocalUpstreamEnv(
+                RADROOTS_SIMPLEX_INTEROP_SMP_HOST_ENV
+            )
+        ));
+    }
+
+    #[test]
+    fn required_upstream_config_requires_identity() {
+        let error = RadrootsSimplexInteropLocalUpstream::from_values(
+            Some("127.0.0.1".to_owned()),
+            Some("5223".to_owned()),
+            None,
+            true,
+        )
+        .unwrap_err();
+        assert!(matches!(
+            error,
+            RadrootsSimplexInteropPolicyError::MissingLocalUpstreamEnv(
+                RADROOTS_SIMPLEX_INTEROP_SMP_IDENTITY_ENV
+            )
+        ));
+    }
+
+    #[test]
+    fn required_upstream_config_rejects_invalid_port() {
+        let error = RadrootsSimplexInteropLocalUpstream::from_values(
+            Some("127.0.0.1".to_owned()),
+            Some("not-a-port".to_owned()),
+            Some("server-identity".to_owned()),
+            true,
+        )
+        .unwrap_err();
+        assert!(matches!(
+            error,
+            RadrootsSimplexInteropPolicyError::InvalidLocalUpstreamPort(_)
+        ));
+    }
+}

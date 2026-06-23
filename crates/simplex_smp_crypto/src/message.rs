@@ -3,10 +3,14 @@ use alloc::vec;
 use alloc::vec::Vec;
 use getrandom::getrandom;
 use hkdf::Hkdf;
+use poly1305::Poly1305;
+use poly1305::universal_hash::KeyInit as Poly1305KeyInit;
+use salsa20::cipher::consts::U10;
+use salsa20::cipher::{KeyIvInit, StreamCipher};
+use salsa20::{Salsa20, hsalsa};
 use sha2::{Digest, Sha256, Sha512};
+use subtle::ConstantTimeEq;
 use x25519_dalek::{PublicKey, StaticSecret};
-use xsalsa20poly1305::aead::{AeadInPlace, KeyInit};
-use xsalsa20poly1305::{Tag, XSalsa20Poly1305};
 
 pub const RADROOTS_SIMPLEX_SMP_NONCE_LENGTH: usize = 24;
 pub const RADROOTS_SIMPLEX_SMP_SHARED_SECRET_LENGTH: usize = 32;
@@ -163,7 +167,7 @@ pub fn encrypt_padded(
     let mut padded = Vec::with_capacity(padded_len);
     padded.extend_from_slice(&(plaintext.len() as u16).to_be_bytes());
     padded.extend_from_slice(plaintext);
-    padded.resize(padded_len, 0);
+    padded.resize(padded_len, b'#');
     encrypt_no_pad(shared_secret, nonce, &padded)
 }
 
@@ -192,14 +196,14 @@ pub fn encrypt_no_pad(
     nonce: &[u8],
     plaintext: &[u8],
 ) -> Result<Vec<u8>, RadrootsSimplexSmpCryptoError> {
-    let cipher = cipher(shared_secret)?;
-    let mut buffer = plaintext.to_vec();
-    let tag = cipher
-        .encrypt_in_place_detached(&nonce_array(nonce)?.into(), b"", &mut buffer)
-        .map_err(|_| RadrootsSimplexSmpCryptoError::InvalidCiphertextLength(plaintext.len()))?;
-    let mut encrypted = Vec::with_capacity(RADROOTS_SIMPLEX_SMP_AUTH_TAG_LENGTH + buffer.len());
+    let stream = simplex_secretbox_stream(shared_secret, nonce, plaintext.len())?;
+    let (mac_key, mask) = stream.split_at(RADROOTS_SIMPLEX_SMP_SHARED_SECRET_LENGTH);
+    let mut encrypted = Vec::with_capacity(RADROOTS_SIMPLEX_SMP_AUTH_TAG_LENGTH + plaintext.len());
+    let mut ciphertext = plaintext.to_vec();
+    xor_in_place(&mut ciphertext, mask);
+    let tag = Poly1305::new(mac_key.into()).compute_unpadded(&ciphertext);
     encrypted.extend_from_slice(&tag);
-    encrypted.extend_from_slice(&buffer);
+    encrypted.extend_from_slice(&ciphertext);
     Ok(encrypted)
 }
 
@@ -213,32 +217,45 @@ pub fn decrypt_no_pad(
             ciphertext.len(),
         ));
     }
-    let cipher = cipher(shared_secret)?;
     let (tag_bytes, encrypted) = ciphertext.split_at(RADROOTS_SIMPLEX_SMP_AUTH_TAG_LENGTH);
-    let tag = Tag::from_slice(tag_bytes);
+    let stream = simplex_secretbox_stream(shared_secret, nonce, encrypted.len())?;
+    let (mac_key, mask) = stream.split_at(RADROOTS_SIMPLEX_SMP_SHARED_SECRET_LENGTH);
+    let tag = Poly1305::new(mac_key.into()).compute_unpadded(encrypted);
+    if tag.as_slice().ct_eq(tag_bytes).unwrap_u8() != 1 {
+        return Err(RadrootsSimplexSmpCryptoError::InvalidCiphertextLength(
+            ciphertext.len(),
+        ));
+    }
     let mut buffer = encrypted.to_vec();
-    cipher
-        .decrypt_in_place_detached(&nonce_array(nonce)?.into(), b"", &mut buffer, tag)
-        .map_err(|_| RadrootsSimplexSmpCryptoError::InvalidCiphertextLength(ciphertext.len()))?;
+    xor_in_place(&mut buffer, mask);
     Ok(buffer)
 }
 
-fn cipher(shared_secret: &[u8]) -> Result<XSalsa20Poly1305, RadrootsSimplexSmpCryptoError> {
+fn simplex_secretbox_stream(
+    shared_secret: &[u8],
+    nonce: &[u8],
+    plaintext_len: usize,
+) -> Result<Vec<u8>, RadrootsSimplexSmpCryptoError> {
     if shared_secret.len() != RADROOTS_SIMPLEX_SMP_SHARED_SECRET_LENGTH {
         return Err(RadrootsSimplexSmpCryptoError::InvalidSharedSecretLength(
             shared_secret.len(),
         ));
     }
-    XSalsa20Poly1305::new_from_slice(shared_secret)
-        .map_err(|_| RadrootsSimplexSmpCryptoError::InvalidSharedSecretLength(shared_secret.len()))
+    let nonce: [u8; RADROOTS_SIMPLEX_SMP_NONCE_LENGTH] = nonce
+        .try_into()
+        .map_err(|_| RadrootsSimplexSmpCryptoError::InvalidNonceLength(nonce.len()))?;
+    let first_key = hsalsa::<U10>(shared_secret.into(), (&[0_u8; 16]).into());
+    let second_key = hsalsa::<U10>(&first_key, (&nonce[..16]).into());
+    let mut cipher = Salsa20::new(&second_key, (&nonce[16..]).into());
+    let mut stream = vec![0_u8; RADROOTS_SIMPLEX_SMP_SHARED_SECRET_LENGTH + plaintext_len];
+    cipher.apply_keystream(&mut stream);
+    Ok(stream)
 }
 
-fn nonce_array(
-    nonce: &[u8],
-) -> Result<[u8; RADROOTS_SIMPLEX_SMP_NONCE_LENGTH], RadrootsSimplexSmpCryptoError> {
-    nonce
-        .try_into()
-        .map_err(|_| RadrootsSimplexSmpCryptoError::InvalidNonceLength(nonce.len()))
+fn xor_in_place(value: &mut [u8], mask: &[u8]) {
+    for (byte, mask) in value.iter_mut().zip(mask.iter()) {
+        *byte ^= mask;
+    }
 }
 
 fn hkdf_expand(
@@ -277,6 +294,17 @@ mod tests {
         let ciphertext = encrypt_padded(&alice_secret, &nonce, b"hello", 32).unwrap();
         let plaintext = decrypt_padded(&bob_secret, &nonce, &ciphertext).unwrap();
         assert_eq!(plaintext, b"hello");
+    }
+
+    #[test]
+    fn encrypt_padded_uses_simplex_transport_padding() {
+        let key = [7_u8; RADROOTS_SIMPLEX_SMP_SHARED_SECRET_LENGTH];
+        let nonce = [11_u8; RADROOTS_SIMPLEX_SMP_NONCE_LENGTH];
+        let ciphertext = encrypt_padded(&key, &nonce, b"hello", 12).unwrap();
+        let padded = decrypt_no_pad(&key, &nonce, &ciphertext).unwrap();
+
+        assert_eq!(&padded[..7], &[0, 5, b'h', b'e', b'l', b'l', b'o']);
+        assert!(padded[7..].iter().all(|byte| *byte == b'#'));
     }
 
     #[test]

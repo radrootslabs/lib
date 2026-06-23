@@ -98,6 +98,11 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "std")]
+    fn local_upstream_target() -> Option<RadrootsSimplexInteropLocalUpstream> {
+        RadrootsSimplexInteropLocalUpstream::required_from_env().unwrap()
+    }
+
     #[derive(Default)]
     struct ScriptedTransport {
         responses: VecDeque<RadrootsSimplexSmpBrokerMessage>,
@@ -339,7 +344,7 @@ mod tests {
     #[cfg(feature = "std")]
     #[test]
     fn local_upstream_contract_is_opt_in() {
-        let Some(target) = RadrootsSimplexInteropLocalUpstream::from_env() else {
+        let Some(target) = local_upstream_target() else {
             return;
         };
         target.assert_reachable().unwrap();
@@ -347,10 +352,47 @@ mod tests {
 
     #[cfg(feature = "std")]
     #[test]
-    fn local_upstream_subscribe_receives_sent_message_when_identity_is_configured() {
-        let Some(target) = RadrootsSimplexInteropLocalUpstream::from_env() else {
+    fn required_local_upstream_contract_is_enforced() {
+        let Some(target) = local_upstream_target() else {
             return;
         };
+        target.assert_reachable().unwrap();
+        assert!(target.server_address().is_some());
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn local_upstream_ping_round_trips_when_configured() {
+        let Some(target) = local_upstream_target() else {
+            return;
+        };
+        target.assert_reachable().unwrap();
+        let Some(server) = target.server_address() else {
+            return;
+        };
+
+        let response = RadrootsSimplexSmpTlsCommandTransport::new()
+            .execute(live_transport_request(
+                server,
+                correlation_id(1),
+                Vec::new(),
+                RadrootsSimplexSmpCommand::Ping,
+                RadrootsSimplexSmpCommandAuthorization::None,
+            ))
+            .unwrap();
+        assert!(matches!(
+            response.transmission.message,
+            RadrootsSimplexSmpBrokerMessage::Pong
+        ));
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn local_upstream_create_subscribe_send_receive_ack_and_resubscribe_when_configured() {
+        let Some(target) = local_upstream_target() else {
+            return;
+        };
+        target.assert_reachable().unwrap();
         let Some(server) = target.server_address() else {
             return;
         };
@@ -390,20 +432,22 @@ mod tests {
                 correlation_id(2),
                 ids.recipient_id.clone(),
                 RadrootsSimplexSmpCommand::Sub,
-                RadrootsSimplexSmpCommandAuthorization::Ed25519(recipient_auth),
+                RadrootsSimplexSmpCommandAuthorization::Ed25519(recipient_auth.clone()),
             ))
             .unwrap();
-        assert!(matches!(
-            subscribe_response.transmission.message,
-            RadrootsSimplexSmpBrokerMessage::Ok | RadrootsSimplexSmpBrokerMessage::Msg(_)
-        ));
+        match subscribe_response.transmission.message {
+            RadrootsSimplexSmpBrokerMessage::Ok
+            | RadrootsSimplexSmpBrokerMessage::Sok(_)
+            | RadrootsSimplexSmpBrokerMessage::Msg(_) => {}
+            other => panic!("expected live SMP subscription readiness response, got {other:?}"),
+        }
 
         let mut sender_transport = RadrootsSimplexSmpTlsCommandTransport::new();
         let send_response = sender_transport
             .execute(live_transport_request(
                 server.clone(),
                 correlation_id(3),
-                ids.sender_id,
+                ids.sender_id.clone(),
                 RadrootsSimplexSmpCommand::Send(RadrootsSimplexSmpSendCommand {
                     flags: RadrootsSimplexSmpMessageFlags::notifications_enabled(),
                     message_body: b"rr-synth-live-subscribe-message".to_vec(),
@@ -417,7 +461,9 @@ mod tests {
         ));
 
         let subscription_response = recipient_transport
-            .receive_subscription(RadrootsSimplexSmpSubscriptionReceiveRequest { server })
+            .receive_subscription(RadrootsSimplexSmpSubscriptionReceiveRequest {
+                server: server.clone(),
+            })
             .unwrap()
             .expect("expected live SMP subscription message");
         let RadrootsSimplexSmpBrokerMessage::Msg(message) =
@@ -427,5 +473,36 @@ mod tests {
         };
         assert!(!message.message_id.is_empty());
         assert!(!message.encrypted_body.is_empty());
+
+        let ack_response = recipient_transport
+            .execute(live_transport_request(
+                server.clone(),
+                correlation_id(4),
+                ids.recipient_id.clone(),
+                RadrootsSimplexSmpCommand::Ack(message.message_id),
+                RadrootsSimplexSmpCommandAuthorization::Ed25519(recipient_auth.clone()),
+            ))
+            .unwrap();
+        match ack_response.transmission.message {
+            RadrootsSimplexSmpBrokerMessage::Ok => {}
+            other => panic!("expected live SMP ACK response, got {other:?}"),
+        }
+
+        let mut reconnect_transport = RadrootsSimplexSmpTlsCommandTransport::new();
+        let resubscribe_response = reconnect_transport
+            .execute(live_transport_request(
+                server,
+                correlation_id(5),
+                ids.recipient_id,
+                RadrootsSimplexSmpCommand::Sub,
+                RadrootsSimplexSmpCommandAuthorization::Ed25519(recipient_auth),
+            ))
+            .unwrap();
+        match resubscribe_response.transmission.message {
+            RadrootsSimplexSmpBrokerMessage::Ok
+            | RadrootsSimplexSmpBrokerMessage::Sok(_)
+            | RadrootsSimplexSmpBrokerMessage::Msg(_) => {}
+            other => panic!("expected live SMP resubscription readiness response, got {other:?}"),
+        }
     }
 }

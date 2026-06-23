@@ -147,7 +147,8 @@ fn session_kind_for_command(
         radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpCommand::Sub
         | radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpCommand::Subs
         | radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpCommand::NSub
-        | radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpCommand::NSubs => "subscription",
+        | radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpCommand::NSubs
+        | radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpCommand::Ack(_) => "subscription",
         radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpCommand::Get
         | radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpCommand::LGet => "poll",
         _ => "command",
@@ -257,19 +258,26 @@ fn encode_live_transport_block(
     block: &RadrootsSimplexSmpTransportBlock,
 ) -> Result<Vec<u8>, RadrootsSimplexSmpTransportError> {
     if session.transport_version >= RADROOTS_SIMPLEX_SMP_ENCRYPTED_BLOCK_TRANSPORT_VERSION
-        && let Some(chain_key) = session.send_chain_key.as_ref()
+        && let Some(chain_key) = session.send_chain_key.as_mut()
     {
-        let ((secretbox_key, nonce), next_chain_key) = advance_secretbox_chain(chain_key)?;
-        session.send_chain_key = Some(next_chain_key);
-        return encrypt_padded(
-            &secretbox_key,
-            &nonce,
-            &block.encode_payload()?,
-            RADROOTS_SIMPLEX_SMP_TRANSPORT_BLOCK_SIZE - 16,
-        )
-        .map_err(Into::into);
+        return encode_encrypted_transport_payload(chain_key, &block.encode_payload()?);
     }
     block.encode()
+}
+
+fn encode_encrypted_transport_payload(
+    chain_key: &mut RadrootsSimplexSmpSecretBoxChainKey,
+    payload: &[u8],
+) -> Result<Vec<u8>, RadrootsSimplexSmpTransportError> {
+    let ((secretbox_key, nonce), next_chain_key) = advance_secretbox_chain(chain_key)?;
+    *chain_key = next_chain_key;
+    encrypt_padded(
+        &secretbox_key,
+        &nonce,
+        payload,
+        RADROOTS_SIMPLEX_SMP_TRANSPORT_BLOCK_SIZE - 16,
+    )
+    .map_err(Into::into)
 }
 
 fn decode_live_transport_block(
@@ -277,14 +285,13 @@ fn decode_live_transport_block(
     bytes: &[u8],
 ) -> Result<RadrootsSimplexSmpTransportBlock, RadrootsSimplexSmpTransportError> {
     if session.transport_version >= RADROOTS_SIMPLEX_SMP_ENCRYPTED_BLOCK_TRANSPORT_VERSION
-        && let Some(chain_key) = session.receive_chain_key.as_ref()
+        && let Some(chain_key) = session.receive_chain_key.as_mut()
     {
-        let ((secretbox_key, nonce), next_chain_key) = advance_secretbox_chain(chain_key)?;
-        match radroots_simplex_smp_crypto::prelude::decrypt_padded(&secretbox_key, &nonce, bytes) {
-            Ok(payload) => {
-                session.receive_chain_key = Some(next_chain_key);
+        match decode_encrypted_transport_block(chain_key, bytes) {
+            Ok(block) => {
+                let payload = block.encode_payload()?;
                 debug_sha256_label("live-response-payload", &payload);
-                return RadrootsSimplexSmpTransportBlock::from_payload(&payload);
+                return Ok(block);
             }
             Err(error) => {
                 if transport_debug_enabled() {
@@ -292,15 +299,8 @@ fn decode_live_transport_block(
                     debug_sha256_label("live-response-ciphertext", bytes);
                 }
                 if let Some(send_chain_key) = session.send_chain_key.as_ref() {
-                    let ((alt_secretbox_key, alt_nonce), _) =
-                        advance_secretbox_chain(send_chain_key)?;
-                    if radroots_simplex_smp_crypto::prelude::decrypt_padded(
-                        &alt_secretbox_key,
-                        &alt_nonce,
-                        bytes,
-                    )
-                    .is_ok()
-                    {
+                    let mut alternate_chain_key = send_chain_key.clone();
+                    if decode_encrypted_transport_block(&mut alternate_chain_key, bytes).is_ok() {
                         return Err(RadrootsSimplexSmpTransportError::InvalidServerAddress(
                             "server response decrypted with the outbound chain key; live SMP block direction is assigned incorrectly".into(),
                         ));
@@ -320,6 +320,18 @@ fn decode_live_transport_block(
         }
     }
     RadrootsSimplexSmpTransportBlock::decode(bytes)
+}
+
+fn decode_encrypted_transport_block(
+    chain_key: &mut RadrootsSimplexSmpSecretBoxChainKey,
+    bytes: &[u8],
+) -> Result<RadrootsSimplexSmpTransportBlock, RadrootsSimplexSmpTransportError> {
+    let ((secretbox_key, nonce), next_chain_key) = advance_secretbox_chain(chain_key)?;
+    let payload =
+        radroots_simplex_smp_crypto::prelude::decrypt_padded(&secretbox_key, &nonce, bytes)?;
+    let block = RadrootsSimplexSmpTransportBlock::from_payload(&payload)?;
+    *chain_key = next_chain_key;
+    Ok(block)
 }
 
 fn debug_probe_transport_candidates(session: &mut RadrootsSimplexSmpLiveSession, bytes: &[u8]) {
@@ -502,7 +514,6 @@ fn connect_live_session_host(
                     debug_sha256_label("client-transport-public-key", &keypair.public_key);
                 }
                 debug_sha256_label("server-transport-public-key", &server_key);
-                debug_sha256_label("transport-shared-secret", &shared_secret);
             }
             debug_shared_secret = transport_debug_enabled().then_some(shared_secret.clone());
             let (receive_chain_key, send_chain_key) =
@@ -526,6 +537,14 @@ fn decode_server_transport_public_key(
     proof: &RadrootsSimplexSmpTransportServerProof,
 ) -> Result<Vec<u8>, RadrootsSimplexSmpTransportError> {
     let (signed_object, signature) = decode_signed_server_key_parts(&proof.signed_server_key)?;
+    if transport_debug_enabled() {
+        eprintln!(
+            "[simplex-smp-transport] signed-server-key: proof_len={} signed_object_len={} signature_len={}",
+            proof.signed_server_key.len(),
+            signed_object.len(),
+            signature.len()
+        );
+    }
     if !proof.certificate_payload.is_empty() {
         let verify_key = decode_server_certificate_verify_key(&proof.certificate_payload)?;
         verify_signature(signed_object, &verify_key, signature).map_err(|error| {
@@ -821,10 +840,19 @@ impl ServerCertVerifier for PermissiveSimplexServerVerifier {
 
 #[cfg(test)]
 mod tests {
-    use super::{canonical_server_identity, decode_server_transport_public_key};
+    use super::{
+        canonical_server_identity, decode_encrypted_transport_block,
+        decode_server_transport_public_key, encode_encrypted_transport_payload,
+    };
     use crate::handshake::RadrootsSimplexSmpTransportServerProof;
+    use crate::prelude::RadrootsSimplexSmpTransportBlock;
     use radroots_simplex_smp_crypto::prelude::{
-        RadrootsSimplexSmpX25519Keypair, encode_x25519_public_key_x509,
+        RadrootsSimplexSmpX25519Keypair, encode_x25519_public_key_x509, init_secretbox_chain,
+    };
+    use radroots_simplex_smp_proto::prelude::{
+        RADROOTS_SIMPLEX_SMP_CURRENT_TRANSPORT_VERSION, RadrootsSimplexSmpBrokerMessage,
+        RadrootsSimplexSmpBrokerTransmission, RadrootsSimplexSmpCommand,
+        RadrootsSimplexSmpCommandTransmission, RadrootsSimplexSmpCorrelationId,
     };
 
     #[test]
@@ -851,6 +879,92 @@ mod tests {
         assert_eq!(
             decode_server_transport_public_key(&proof).unwrap(),
             keypair.public_key
+        );
+    }
+
+    #[test]
+    fn encrypted_transport_blocks_use_upstream_client_chain_direction() {
+        let session_identifier = b"rr-synth-session-id";
+        let shared_secret = b"rr-synth-shared-secret";
+        let (mut server_send_chain, mut server_receive_chain) =
+            init_secretbox_chain(session_identifier, shared_secret).unwrap();
+        let (client_receive_chain, client_send_chain) =
+            init_secretbox_chain(session_identifier, shared_secret).unwrap();
+        let mut client_receive_chain_for_response = client_receive_chain.clone();
+        let mut client_send_chain_for_request = client_send_chain.clone();
+
+        let command_transmission = RadrootsSimplexSmpCommandTransmission {
+            authorization: Vec::new(),
+            correlation_id: Some(RadrootsSimplexSmpCorrelationId::new([3_u8; 24])),
+            entity_id: b"rr-synth-queue".to_vec(),
+            command: RadrootsSimplexSmpCommand::Ping,
+        };
+        let command_block = RadrootsSimplexSmpTransportBlock::from_command_transmissions(
+            &[command_transmission.clone()],
+            RADROOTS_SIMPLEX_SMP_CURRENT_TRANSPORT_VERSION,
+        )
+        .unwrap();
+        let encrypted_command = encode_encrypted_transport_payload(
+            &mut client_send_chain_for_request,
+            &command_block.encode_payload().unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            decode_encrypted_transport_block(&mut server_receive_chain, &encrypted_command)
+                .unwrap()
+                .decode_command_transmissions(RADROOTS_SIMPLEX_SMP_CURRENT_TRANSPORT_VERSION)
+                .unwrap(),
+            vec![command_transmission]
+        );
+
+        let broker_transmission = RadrootsSimplexSmpBrokerTransmission {
+            authorization: Vec::new(),
+            correlation_id: Some(RadrootsSimplexSmpCorrelationId::new([3_u8; 24])),
+            entity_id: b"rr-synth-queue".to_vec(),
+            message: RadrootsSimplexSmpBrokerMessage::Ok,
+        };
+        let broker_block = RadrootsSimplexSmpTransportBlock::from_broker_transmissions(
+            &[broker_transmission.clone()],
+            RADROOTS_SIMPLEX_SMP_CURRENT_TRANSPORT_VERSION,
+        )
+        .unwrap();
+        let encrypted_broker = encode_encrypted_transport_payload(
+            &mut server_send_chain,
+            &broker_block.encode_payload().unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            decode_encrypted_transport_block(
+                &mut client_receive_chain_for_response,
+                &encrypted_broker,
+            )
+            .unwrap()
+            .decode_broker_transmissions(RADROOTS_SIMPLEX_SMP_CURRENT_TRANSPORT_VERSION)
+            .unwrap(),
+            vec![broker_transmission]
+        );
+
+        let mut wrong_response_chain = client_send_chain;
+        let wrong_direction_broker = encode_encrypted_transport_payload(
+            &mut wrong_response_chain,
+            &broker_block.encode_payload().unwrap(),
+        )
+        .unwrap();
+        let mut fresh_client_receive_chain = client_receive_chain;
+        assert!(
+            decode_encrypted_transport_block(
+                &mut fresh_client_receive_chain,
+                &wrong_direction_broker
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn ack_uses_subscription_session_state() {
+        assert_eq!(
+            super::session_kind_for_command(&RadrootsSimplexSmpCommand::Ack(b"message".to_vec())),
+            "subscription"
         );
     }
 

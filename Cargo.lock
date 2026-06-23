@@ -4641,12 +4641,14 @@ dependencies = [
  "ed25519-dalek",
  "getrandom 0.2.17",
  "hkdf",
+ "poly1305",
  "radroots_simplex_smp_proto",
+ "salsa20",
  "sha2",
  "sntrup761",
+ "subtle",
  "x25519-dalek",
  "x448",
- "xsalsa20poly1305",
 ]
 
 [[package]]
@@ -8465,19 +8467,6 @@ checksum = "32e45ad4206f6d2479085147f02bc2ef834ac85886624a23575ae137c8aa8156"
 dependencies = [
  "libc",
  "rustix 1.1.4",
-]
-
-[[package]]
-name = "xsalsa20poly1305"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02a6dad357567f81cd78ee75f7c61f1b30bb2fe4390be8fb7c69e2ac8dffb6c7"
-dependencies = [
- "aead",
- "poly1305",
- "salsa20",
- "subtle",
- "zeroize",
 ]
 
 [[package]]

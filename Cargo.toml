@@ -131,7 +131,9 @@ nostr = { version = "0.44.2" }
 nostr-relay-pool = { version = "0.44.0" }
 nostr-sdk = { version = "0.44.1" }
 num_cpus = { version = "1.17.0" }
+poly1305 = { version = "0.8", default-features = false }
 secrecy = { version = "0.10.3" }
+salsa20 = { version = "0.10.2", default-features = false }
 serde = { version = "1", default-features = false, features = [
   "derive",
   "alloc",
@@ -143,6 +145,7 @@ sntrup761 = { version = "0.4.0", default-features = false, features = [
   "ecap",
   "kgen",
 ] }
+subtle = { version = "2.6", default-features = false }
 sqlx = { version = "0.8.6", default-features = false }
 sp1-build = { version = "6.2.3" }
 sp1-sdk = { version = "6.2.3", default-features = false }
@@ -154,7 +157,6 @@ rustls = { version = "0.23", default-features = false, features = [
 ] }
 rust_decimal = { version = "1", default-features = false }
 rust_decimal_macros = { version = "1" }
-xsalsa20poly1305 = { version = "0.9", default-features = false }
 x25519-dalek = { version = "2", default-features = false, features = [
   "static_secrets",
 ] }

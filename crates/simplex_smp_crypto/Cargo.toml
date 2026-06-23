@@ -19,7 +19,6 @@ std = [
   "getrandom/std",
   "radroots_simplex_smp_proto/std",
   "sha2/std",
-  "xsalsa20poly1305/std",
 ]
 
 [dependencies]
@@ -33,14 +32,16 @@ ed25519-dalek = { workspace = true, default-features = false, features = [
 ] }
 getrandom = { workspace = true, default-features = false }
 hkdf = { workspace = true, default-features = false }
+poly1305 = { workspace = true, default-features = false }
 radroots_simplex_smp_proto = { workspace = true, default-features = false }
+salsa20 = { workspace = true, default-features = false }
 sha2 = { workspace = true, default-features = false }
+subtle = { workspace = true, default-features = false }
 sntrup761 = { workspace = true, default-features = false, features = [
   "dcap",
   "ecap",
   "kgen",
 ] }
-xsalsa20poly1305 = { workspace = true, default-features = false }
 x25519-dalek = { workspace = true, default-features = false, features = [
   "static_secrets",
 ] }
