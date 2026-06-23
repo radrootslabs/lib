@@ -724,6 +724,12 @@ impl RadrootsSimplexAgentRuntime {
         receipt_info: Vec<u8>,
         now: u64,
     ) -> Result<(), RadrootsSimplexAgentRuntimeError> {
+        if self
+            .store
+            .has_pending_ack_message(connection_id, message_id, &message_hash)
+        {
+            return Ok(());
+        }
         let receive_queue = self
             .store
             .connection(connection_id)?
@@ -938,10 +944,19 @@ impl RadrootsSimplexAgentRuntime {
                         );
                     }
                     RadrootsSimplexAgentMessage::UserMessage(body) => {
+                        let broker_message_id_hash = self
+                            .store
+                            .connection(connection_id)?
+                            .last_received_broker_message_id
+                            .as_ref()
+                            .map(|broker_message_id| Sha256::digest(broker_message_id).to_vec())
+                            .unwrap_or_default();
                         self.events
                             .push_back(RadrootsSimplexAgentRuntimeEvent::MessageReceived {
                                 connection_id: connection_id.into(),
                                 message_id: frame.header.message_id,
+                                broker_message_id_hash,
+                                message_hash: transport_hash,
                                 body,
                             });
                     }
@@ -1533,6 +1548,15 @@ impl RadrootsSimplexAgentRuntime {
                     self.store
                         .mark_queue_tested(&command.connection_id, queue)?;
                 }
+            }
+            RadrootsSimplexAgentPendingCommandKind::AckInboxMessage { receipt, .. } => {
+                self.events.push_back(
+                    RadrootsSimplexAgentRuntimeEvent::InboundMessageAckDelivered {
+                        connection_id: command.connection_id.clone(),
+                        message_id: receipt.message_id,
+                        message_hash: receipt.message_hash.clone(),
+                    },
+                );
             }
             RadrootsSimplexAgentPendingCommandKind::SecureGetQueueLinkData {
                 invitation,

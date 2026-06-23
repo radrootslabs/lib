@@ -1130,6 +1130,22 @@ impl RadrootsSimplexAgentStore {
         Ok(command)
     }
 
+    pub fn has_pending_ack_message(
+        &self,
+        connection_id: &str,
+        message_id: RadrootsSimplexAgentMessageId,
+        message_hash: &[u8],
+    ) -> bool {
+        self.pending_commands.values().any(|command| {
+            command.connection_id == connection_id
+                && matches!(
+                    &command.kind,
+                    RadrootsSimplexAgentPendingCommandKind::AckInboxMessage { receipt, .. }
+                    if receipt.message_id == message_id && receipt.message_hash == message_hash
+                )
+        })
+    }
+
     pub fn take_ready_commands(
         &mut self,
         now: u64,

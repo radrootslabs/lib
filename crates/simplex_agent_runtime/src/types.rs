@@ -25,7 +25,14 @@ pub enum RadrootsSimplexAgentRuntimeEvent {
     MessageReceived {
         connection_id: String,
         message_id: u64,
+        broker_message_id_hash: Vec<u8>,
+        message_hash: Vec<u8>,
         body: Vec<u8>,
+    },
+    InboundMessageAckDelivered {
+        connection_id: String,
+        message_id: u64,
+        message_hash: Vec<u8>,
     },
     MessageAcknowledged {
         connection_id: String,

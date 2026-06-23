@@ -562,6 +562,50 @@ impl RadrootsSimplexAppStore {
         collect_rows(statement.query_map([], inbound_message_from_row)?)
     }
 
+    pub fn mark_inbound_ack_delivered(
+        &self,
+        connection_id: &str,
+        inbound_sequence: i64,
+        message_hash: &[u8],
+    ) -> Result<Option<RadrootsSimplexAppInboundMessageLogEntry>, RadrootsSimplexAppStoreError>
+    {
+        if connection_id.is_empty() {
+            return Err(RadrootsSimplexAppStoreError::MessageLifecycle(
+                "connection id must not be empty".into(),
+            ));
+        }
+        if inbound_sequence < 0 {
+            return Err(RadrootsSimplexAppStoreError::MessageLifecycle(
+                "inbound sequence must not be negative".into(),
+            ));
+        }
+        if message_hash.is_empty() {
+            return Err(RadrootsSimplexAppStoreError::MessageLifecycle(
+                "message hash must not be empty".into(),
+            ));
+        }
+        self.connection.execute(
+            "UPDATE inbound_message_log
+             SET ack_status = 'acked'
+             WHERE connection_id = ?1
+               AND inbound_sequence = ?2
+               AND message_hash = ?3
+               AND ack_status = 'pending_ack'",
+            params![connection_id, inbound_sequence, message_hash],
+        )?;
+        self.connection
+            .query_row(
+                "SELECT inbound_id, connection_id, broker_message_id_hash, inbound_sequence, message_hash, ack_status, app_record_kind, app_record_id, received_at_unix
+                 FROM inbound_message_log
+                 WHERE connection_id = ?1 AND inbound_sequence = ?2 AND message_hash = ?3
+                 LIMIT 1",
+                params![connection_id, inbound_sequence, message_hash],
+                inbound_message_from_row,
+            )
+            .optional()
+            .map_err(Into::into)
+    }
+
     pub fn enqueue_outbox_message(
         &self,
         message: &RadrootsSimplexAppOutboxMessage,
@@ -1904,6 +1948,41 @@ mod tests {
             vec![unsupported]
         );
         assert_eq!(store.pending_ack_messages().expect("pending").len(), 1);
+    }
+
+    #[test]
+    fn inbound_ack_delivery_marks_pending_row_acked() {
+        let temp = tempfile::tempdir().expect("temp");
+        let path = temp.path().join("simplex.sqlite");
+        let vault = Arc::new(RadrootsSecretVaultMemory::new());
+        let store = memory_store(&path, vault).expect("store");
+        seed_store(&store);
+
+        let commit = store
+            .commit_inbound_text(&inbound_text_request())
+            .expect("commit");
+        let acked = store
+            .mark_inbound_ack_delivered("connection-1", 21, b"agent-message-hash-1")
+            .expect("ack")
+            .expect("row");
+
+        assert_eq!(acked.inbound_id, commit.inbound.inbound_id);
+        assert_eq!(acked.ack_status, "acked");
+        assert!(store.pending_ack_messages().expect("pending").is_empty());
+        assert_eq!(
+            store
+                .mark_inbound_ack_delivered("connection-1", 21, b"agent-message-hash-1")
+                .expect("idempotent")
+                .expect("row")
+                .ack_status,
+            "acked"
+        );
+        assert!(
+            store
+                .mark_inbound_ack_delivered("connection-1", 21, b"wrong-hash")
+                .expect("missing")
+                .is_none()
+        );
     }
 
     #[test]
