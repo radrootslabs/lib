@@ -1,4 +1,6 @@
+use crate::codec::{decode_connection_link, encode_connection_link};
 use crate::error::{RadrootsSimplexAgentProtoError, RadrootsSimplexAgentUnsupportedLinkKind};
+use crate::model::RadrootsSimplexAgentConnectionLink;
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -10,6 +12,7 @@ use core::str::FromStr;
 pub const RADROOTS_SIMPLEX_AGENT_SHORT_LINK_ID_LENGTH: usize = 24;
 pub const RADROOTS_SIMPLEX_AGENT_SHORT_LINK_KEY_LENGTH: usize = 32;
 pub const RADROOTS_SIMPLEX_AGENT_SHORT_LINK_SERVER_KEY_HASH_LENGTH: usize = 32;
+const RADROOTS_SIMPLEX_AGENT_SHORT_INVITATION_FIXED_DATA_TAG: &[u8] = b"RRSIF1";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RadrootsSimplexAgentShortLinkScheme {
@@ -25,6 +28,12 @@ pub struct RadrootsSimplexAgentShortInvitationLink {
     pub server_key_hash: Option<Vec<u8>>,
     pub link_id: Vec<u8>,
     pub link_key: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RadrootsSimplexAgentShortInvitationFixedData {
+    pub root_public_signature_key: Vec<u8>,
+    pub invitation: RadrootsSimplexAgentConnectionLink,
 }
 
 impl RadrootsSimplexAgentShortInvitationLink {
@@ -85,6 +94,38 @@ impl RadrootsSimplexAgentShortInvitationLink {
         }
         Ok(output)
     }
+}
+
+pub fn encode_short_invitation_fixed_data(
+    root_public_signature_key: &[u8],
+    invitation: &RadrootsSimplexAgentConnectionLink,
+) -> Result<Vec<u8>, RadrootsSimplexAgentProtoError> {
+    let encoded_invitation = encode_connection_link(invitation)?;
+    let mut buffer = Vec::new();
+    buffer.extend_from_slice(RADROOTS_SIMPLEX_AGENT_SHORT_INVITATION_FIXED_DATA_TAG);
+    push_short_bytes(&mut buffer, root_public_signature_key)?;
+    push_large_bytes(&mut buffer, &encoded_invitation)?;
+    Ok(buffer)
+}
+
+pub fn decode_short_invitation_fixed_data(
+    bytes: &[u8],
+) -> Result<RadrootsSimplexAgentShortInvitationFixedData, RadrootsSimplexAgentProtoError> {
+    let mut cursor = ShortLinkDataCursor::new(bytes);
+    cursor.expect_tag(RADROOTS_SIMPLEX_AGENT_SHORT_INVITATION_FIXED_DATA_TAG)?;
+    let root_public_signature_key = cursor.read_short_bytes()?;
+    let invitation = decode_connection_link(&cursor.read_large_bytes()?)?;
+    cursor.finish()?;
+    Ok(RadrootsSimplexAgentShortInvitationFixedData {
+        root_public_signature_key,
+        invitation,
+    })
+}
+
+pub fn encode_short_invitation_user_data(
+    invitation: &RadrootsSimplexAgentConnectionLink,
+) -> Vec<u8> {
+    invitation.connection_id.clone()
 }
 
 impl fmt::Display for RadrootsSimplexAgentShortInvitationLink {
@@ -338,6 +379,104 @@ fn duplicate_param(key: &str) -> RadrootsSimplexAgentProtoError {
     }
 }
 
+fn push_short_bytes(
+    buffer: &mut Vec<u8>,
+    value: &[u8],
+) -> Result<(), RadrootsSimplexAgentProtoError> {
+    if value.len() > u8::MAX as usize {
+        return Err(RadrootsSimplexAgentProtoError::InvalidShortFieldLength(
+            value.len(),
+        ));
+    }
+    buffer.push(value.len() as u8);
+    buffer.extend_from_slice(value);
+    Ok(())
+}
+
+fn push_large_bytes(
+    buffer: &mut Vec<u8>,
+    value: &[u8],
+) -> Result<(), RadrootsSimplexAgentProtoError> {
+    if value.len() > u16::MAX as usize {
+        return Err(RadrootsSimplexAgentProtoError::InvalidLargeFieldLength(
+            value.len(),
+        ));
+    }
+    buffer.extend_from_slice(&(value.len() as u16).to_be_bytes());
+    buffer.extend_from_slice(value);
+    Ok(())
+}
+
+struct ShortLinkDataCursor<'a> {
+    bytes: &'a [u8],
+    offset: usize,
+}
+
+impl<'a> ShortLinkDataCursor<'a> {
+    const fn new(bytes: &'a [u8]) -> Self {
+        Self { bytes, offset: 0 }
+    }
+
+    fn expect_tag(&mut self, tag: &[u8]) -> Result<(), RadrootsSimplexAgentProtoError> {
+        if self.remaining().len() < tag.len() {
+            return Err(RadrootsSimplexAgentProtoError::UnexpectedEof);
+        }
+        let next = &self.remaining()[..tag.len()];
+        if next != tag {
+            return Err(RadrootsSimplexAgentProtoError::InvalidTag(
+                String::from_utf8_lossy(next).into_owned(),
+            ));
+        }
+        self.offset += tag.len();
+        Ok(())
+    }
+
+    fn read_short_bytes(&mut self) -> Result<Vec<u8>, RadrootsSimplexAgentProtoError> {
+        let len = self.read_byte()? as usize;
+        self.read_exact(len)
+    }
+
+    fn read_large_bytes(&mut self) -> Result<Vec<u8>, RadrootsSimplexAgentProtoError> {
+        if self.remaining().len() < 2 {
+            return Err(RadrootsSimplexAgentProtoError::UnexpectedEof);
+        }
+        let len =
+            u16::from_be_bytes([self.bytes[self.offset], self.bytes[self.offset + 1]]) as usize;
+        self.offset += 2;
+        self.read_exact(len)
+    }
+
+    fn read_byte(&mut self) -> Result<u8, RadrootsSimplexAgentProtoError> {
+        if self.offset >= self.bytes.len() {
+            return Err(RadrootsSimplexAgentProtoError::UnexpectedEof);
+        }
+        let value = self.bytes[self.offset];
+        self.offset += 1;
+        Ok(value)
+    }
+
+    fn read_exact(&mut self, len: usize) -> Result<Vec<u8>, RadrootsSimplexAgentProtoError> {
+        if self.remaining().len() < len {
+            return Err(RadrootsSimplexAgentProtoError::UnexpectedEof);
+        }
+        let value = self.remaining()[..len].to_vec();
+        self.offset += len;
+        Ok(value)
+    }
+
+    fn remaining(&self) -> &'a [u8] {
+        &self.bytes[self.offset..]
+    }
+
+    fn finish(&self) -> Result<(), RadrootsSimplexAgentProtoError> {
+        if self.offset == self.bytes.len() {
+            Ok(())
+        } else {
+            Err(RadrootsSimplexAgentProtoError::TrailingBytes)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -350,6 +489,36 @@ mod tests {
             server_key_hash: Some((0_u8..32).collect()),
             link_id: (32_u8..56).collect(),
             link_key: (64_u8..96).collect(),
+        }
+    }
+
+    fn sample_connection_link() -> RadrootsSimplexAgentConnectionLink {
+        let key_1 = radroots_simplex_smp_crypto::prelude::official_x448_keypair_from_seed(
+            b"rr-synth-short-link-x3dh-1",
+        );
+        let key_2 = radroots_simplex_smp_crypto::prelude::official_x448_keypair_from_seed(
+            b"rr-synth-short-link-x3dh-2",
+        );
+        RadrootsSimplexAgentConnectionLink {
+            invitation_queue:
+                radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpQueueUri::parse(
+                    "smp://c2VydmVyLWlk@relay.example/c2VuZGVy#/?v=4&dh=cmVjZWl2ZXI&q=m",
+                )
+                .expect("queue"),
+            connection_id: b"conn-synth-short-link".to_vec(),
+            e2e_ratchet_params:
+                radroots_simplex_smp_crypto::prelude::RadrootsSimplexOfficialX3dhParams {
+                    version_range:
+                        radroots_simplex_smp_proto::prelude::RadrootsSimplexSmpVersionRange::new(
+                            1, 2,
+                        )
+                        .expect("version range"),
+                    key_1: key_1.public_key,
+                    key_2: key_2.public_key,
+                    pq_public_key: None,
+                    pq_ciphertext: None,
+                },
+            contact_address: false,
         }
     }
 
@@ -471,6 +640,35 @@ mod tests {
         assert!(matches!(
             error,
             RadrootsSimplexAgentProtoError::InvalidLinkParameter { key, .. } if key == "z"
+        ));
+    }
+
+    #[test]
+    fn encodes_and_decodes_short_invitation_fixed_data() {
+        let invitation = sample_connection_link();
+        let root_public_key = vec![42_u8; 32];
+        let encoded =
+            encode_short_invitation_fixed_data(&root_public_key, &invitation).expect("encoded");
+        let decoded = decode_short_invitation_fixed_data(&encoded).expect("decoded");
+
+        assert_eq!(decoded.root_public_signature_key, root_public_key);
+        assert_eq!(decoded.invitation, invitation);
+        assert_eq!(
+            encode_short_invitation_user_data(&decoded.invitation),
+            b"conn-synth-short-link".to_vec()
+        );
+    }
+
+    #[test]
+    fn rejects_short_invitation_fixed_data_with_trailing_bytes() {
+        let mut encoded =
+            encode_short_invitation_fixed_data(&[42_u8; 32], &sample_connection_link())
+                .expect("encoded");
+        encoded.push(0);
+
+        assert!(matches!(
+            decode_short_invitation_fixed_data(&encoded),
+            Err(RadrootsSimplexAgentProtoError::TrailingBytes)
         ));
     }
 }

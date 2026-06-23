@@ -15,7 +15,8 @@ use radroots_simplex_agent_proto::prelude::{
     RadrootsSimplexAgentMessageHeader, RadrootsSimplexAgentMessageReceipt,
     RadrootsSimplexAgentQueueAddress, RadrootsSimplexAgentQueueDescriptor,
     RadrootsSimplexAgentShortLinkScheme, decode_decrypted_message, decode_envelope,
-    encode_connection_link, encode_decrypted_message, encode_envelope,
+    encode_decrypted_message, encode_envelope, encode_short_invitation_fixed_data,
+    encode_short_invitation_user_data,
 };
 use radroots_simplex_agent_store::prelude::{
     RadrootsSimplexAgentOutboundMessage, RadrootsSimplexAgentPendingCommand,
@@ -2079,8 +2080,8 @@ fn prepare_short_invitation_link_data(
 ) -> Result<SimplexPreparedShortInvitationLinkData, RadrootsSimplexAgentRuntimeError> {
     let root_keypair = RadrootsSimplexSmpEd25519Keypair::generate()
         .map_err(|error| RadrootsSimplexAgentRuntimeError::Runtime(error.to_string()))?;
-    let fixed_data = encode_connection_link(invitation)?;
-    let user_data = invitation.connection_id.clone();
+    let fixed_data = encode_short_invitation_fixed_data(&root_keypair.public_key, invitation)?;
+    let user_data = encode_short_invitation_user_data(invitation);
     let (link_key, signed_link_data) = sign_short_link_data(&root_keypair, &fixed_data, &user_data)
         .map_err(|error| RadrootsSimplexAgentRuntimeError::Runtime(error.to_string()))?;
     let link_data_key = derive_invitation_short_link_data_key(&link_key)
@@ -2635,10 +2636,18 @@ mod tests {
             },
         )
         .unwrap();
-        let decoded =
-            radroots_simplex_agent_proto::prelude::decode_connection_link(&verified.fixed_data)
-                .unwrap();
-        assert_eq!(decoded.connection_id, created.as_bytes().to_vec());
+        let decoded = radroots_simplex_agent_proto::prelude::decode_short_invitation_fixed_data(
+            &verified.fixed_data,
+        )
+        .unwrap();
+        assert_eq!(
+            decoded.root_public_signature_key,
+            short_link.link_public_signature_key
+        );
+        assert_eq!(
+            decoded.invitation.connection_id,
+            created.as_bytes().to_vec()
+        );
         assert_eq!(verified.user_data, created.as_bytes().to_vec());
         assert_eq!(
             runtime.store.connection(&joined).unwrap().status,
