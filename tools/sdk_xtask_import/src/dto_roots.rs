@@ -98,8 +98,8 @@ pub const SDK_LOCAL_WRAPPER_ALLOWANCES: &[SdkLocalWrapperAllowance] = &[
     },
     SdkLocalWrapperAllowance {
         package_key: "events_indexed",
-        shape_family: "index query result helpers",
-        reason: "indexed package helpers represent SDK query projections rather than source-owned wire events",
+        shape_family: "RadrootsEventsIndexedShardId package alias",
+        reason: "source descriptors correctly describe the shard id newtype as a string, while package roots still need a stable named TypeScript alias",
     },
 ];
 
@@ -247,6 +247,8 @@ mod tests {
 
     const EVENTS_BINDINGS_TYPES_TS: &str =
         include_str!("../../../packages/events-bindings/src/generated/types.ts");
+    const EVENTS_INDEXED_BINDINGS_TYPES_TS: &str =
+        include_str!("../../../packages/events-indexed-bindings/src/generated/types.ts");
     const EVENTS_TYPE_INVENTORY: &[&str] = &[
         "JobFeedbackStatus",
         "JobInputType",
@@ -349,6 +351,14 @@ mod tests {
         "RadrootsTradeQuestion",
         "RadrootsTradeTransportLane",
     ];
+    const EVENTS_INDEXED_TYPE_INVENTORY: &[&str] = &[
+        "RadrootsEventsIndexedShardId",
+        "RadrootsEventsIndexedIdRange",
+        "RadrootsEventsIndexedShardMetadata",
+        "RadrootsEventsIndexedManifest",
+        "RadrootsEventsIndexedShardCheckpoint",
+        "RadrootsEventsIndexedIndexCheckpoint",
+    ];
 
     #[test]
     fn approved_source_roots_build_registries() {
@@ -394,16 +404,32 @@ mod tests {
                 .iter()
                 .any(|allowance| allowance.shape_family.contains("IResult"))
         );
+        assert!(SDK_LOCAL_WRAPPER_ALLOWANCES.iter().any(|allowance| {
+            allowance
+                .shape_family
+                .contains("RadrootsEventsIndexedShardId")
+        }));
     }
 
     #[test]
     fn events_type_inventory_matches_current_package_surface() {
-        let actual = EVENTS_BINDINGS_TYPES_TS
+        let actual = type_inventory(EVENTS_BINDINGS_TYPES_TS);
+
+        assert_eq!(actual, EVENTS_TYPE_INVENTORY);
+    }
+
+    #[test]
+    fn events_indexed_type_inventory_matches_current_package_surface() {
+        let actual = type_inventory(EVENTS_INDEXED_BINDINGS_TYPES_TS);
+
+        assert_eq!(actual, EVENTS_INDEXED_TYPE_INVENTORY);
+    }
+
+    fn type_inventory(types_ts: &str) -> Vec<&str> {
+        types_ts
             .lines()
             .filter_map(|line| line.strip_prefix("export type "))
             .map(|rest| rest.split([' ', '<']).next().expect("type name"))
-            .collect::<Vec<_>>();
-
-        assert_eq!(actual, EVENTS_TYPE_INVENTORY);
+            .collect()
     }
 }
