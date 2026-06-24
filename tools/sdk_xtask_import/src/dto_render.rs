@@ -161,11 +161,55 @@ fn render_enum(
         EnumRepr::Adjacent { tag, content } => {
             render_tagged_enum(def, tag, Some(content.as_str()), registry, options, imports)
         }
-        EnumRepr::Untagged => Err(format!(
-            "unsupported enum representation for {}",
-            enum_type_name(def)
-        )),
+        EnumRepr::Untagged => render_untagged_enum(def, registry, options, imports),
     }
+}
+
+fn render_untagged_enum(
+    def: &EnumDef,
+    registry: &Registry,
+    options: &DtoRegistryRenderOptions,
+    imports: &mut BTreeMap<String, BTreeSet<String>>,
+) -> Result<String, String> {
+    let variants = def
+        .variants
+        .iter()
+        .map(|variant| render_untagged_variant(def, variant, registry, options, imports))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(format!(
+        "export type {} = {};",
+        enum_type_name(def),
+        render_union(variants)
+    ))
+}
+
+fn render_untagged_variant(
+    def: &EnumDef,
+    variant: &VariantDef,
+    registry: &Registry,
+    options: &DtoRegistryRenderOptions,
+    imports: &mut BTreeMap<String, BTreeSet<String>>,
+) -> Result<String, String> {
+    let rendered: Result<String, String> = match &variant.shape {
+        VariantShape::Unit => Ok("undefined".to_owned()),
+        VariantShape::Newtype(ty) => render_type_ref(ty, None, registry, options, imports),
+        VariantShape::Tuple(items) => {
+            let rendered = items
+                .iter()
+                .map(|item| render_type_ref(item, None, registry, options, imports))
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(format!("[{}]", rendered.join(", ")))
+        }
+        VariantShape::Struct(fields) => render_object_fields(fields, registry, options, imports),
+    };
+
+    rendered.map_err(|error| {
+        format!(
+            "{error} while rendering untagged enum {}.{}",
+            enum_type_name(def),
+            variant.rust_name
+        )
+    })
 }
 
 fn render_external_enum(
@@ -725,6 +769,70 @@ mod tests {
         assert_eq!(
             rendered.body_ts(),
             "export type SyntheticThing = { external: ExternalAlias, };"
+        );
+    }
+
+    #[test]
+    fn renders_untagged_object_unions() {
+        let mut registry = Registry::new();
+        registry.register_type(
+            RustTypeId::new("sdk", "Query"),
+            TypeDef::Enum(
+                EnumDef::new("Query", "Query", EnumRepr::Untagged, span())
+                    .with_variant(VariantDef::new(
+                        "ById",
+                        "byId",
+                        VariantShape::Struct(vec![field("id", "id", TypeRef::String)]),
+                        span(),
+                    ))
+                    .with_variant(VariantDef::new(
+                        "BySlug",
+                        "bySlug",
+                        VariantShape::Struct(vec![field("slug", "slug", TypeRef::String)]),
+                        span(),
+                    )),
+            ),
+        );
+
+        let rendered = render_registry_types(&registry, &DtoRegistryRenderOptions::default())
+            .expect("registry renders");
+
+        assert_eq!(
+            rendered.body_ts(),
+            "export type Query = { id: string, } | { slug: string, };"
+        );
+    }
+
+    #[test]
+    fn renders_untagged_newtype_aliases() {
+        let mut registry = Registry::new();
+        registry.register_type(
+            RustTypeId::new("sdk", "FindOneResolve"),
+            TypeDef::Enum(
+                EnumDef::new(
+                    "FindOneResolve",
+                    "FindOneResolve",
+                    EnumRepr::Untagged,
+                    span(),
+                )
+                .with_variant(VariantDef::new(
+                    "Alias",
+                    "alias",
+                    VariantShape::Newtype(TypeRef::Override(TargetOverride::new(
+                        BackendId::TypeScript,
+                        "IResult<Farm | null>",
+                    ))),
+                    span(),
+                )),
+            ),
+        );
+
+        let rendered = render_registry_types(&registry, &DtoRegistryRenderOptions::default())
+            .expect("registry renders");
+
+        assert_eq!(
+            rendered.body_ts(),
+            "export type FindOneResolve = IResult<Farm | null>;"
         );
     }
 

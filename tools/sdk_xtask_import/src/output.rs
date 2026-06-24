@@ -114,8 +114,8 @@ pub fn package_outputs() -> Result<Vec<PackageOutput>, String> {
         },
         PackageOutput {
             spec: spec_by_key("replica_db_schema"),
-            types_ts: Some(TsSource::Module(
-                radroots_replica_db_schema_bindings::types_module(),
+            types_ts: Some(TsSource::DtoRegistry(
+                dto_roots::replica_db_schema_types_module()?,
             )),
             types_imports_ts: Some(REPLICA_DB_SCHEMA_TYPES_IMPORTS_TS),
             constants_ts: None,
@@ -207,6 +207,8 @@ mod tests {
 
     const TRADE_BINDINGS_TYPES_TS: &str =
         include_str!("../../../packages/trade-bindings/src/generated/types.ts");
+    const REPLICA_DB_SCHEMA_BINDINGS_TYPES_TS: &str =
+        include_str!("../../../packages/replica-db-schema-bindings/src/generated/types.ts");
 
     #[test]
     fn renders_sdk_header() {
@@ -310,5 +312,28 @@ mod tests {
             .expect("types file");
 
         assert_eq!(types.contents, TRADE_BINDINGS_TYPES_TS);
+    }
+
+    #[test]
+    fn replica_db_schema_output_uses_dto_registry_and_matches_checked_in_types() {
+        let output = package_outputs()
+            .expect("package outputs")
+            .into_iter()
+            .find(|output| output.spec.key == "replica_db_schema")
+            .expect("replica_db_schema output");
+
+        assert!(matches!(output.types_ts, Some(TsSource::DtoRegistry(_))));
+        assert_eq!(
+            output.types_imports_ts,
+            Some(super::REPLICA_DB_SCHEMA_TYPES_IMPORTS_TS)
+        );
+
+        let types = output
+            .files()
+            .into_iter()
+            .find(|file| file.relative_path == "src/generated/types.ts")
+            .expect("types file");
+
+        assert_eq!(types.contents, REPLICA_DB_SCHEMA_BINDINGS_TYPES_TS);
     }
 }

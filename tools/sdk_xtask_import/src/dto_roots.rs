@@ -165,6 +165,13 @@ pub fn events_indexed_types_module() -> Result<DtoTypesModule, String> {
     ))
 }
 
+pub fn replica_db_schema_types_module() -> Result<DtoTypesModule, String> {
+    render_registry_types(
+        &radroots_replica_db_schema_bindings::dto_registry(),
+        &DtoRegistryRenderOptions::default(),
+    )
+}
+
 pub fn trade_types_module() -> Result<DtoTypesModule, String> {
     let root_set = package_root_set("trade").ok_or_else(|| "missing trade DTO roots".to_owned())?;
     let registry = root_set.registry();
@@ -330,6 +337,8 @@ mod tests {
         include_str!("../../../packages/events-bindings/src/generated/types.ts");
     const EVENTS_INDEXED_BINDINGS_TYPES_TS: &str =
         include_str!("../../../packages/events-indexed-bindings/src/generated/types.ts");
+    const REPLICA_DB_SCHEMA_BINDINGS_TYPES_TS: &str =
+        include_str!("../../../packages/replica-db-schema-bindings/src/generated/types.ts");
     const TRADE_BINDINGS_TYPES_TS: &str =
         include_str!("../../../packages/trade-bindings/src/generated/types.ts");
     const EVENTS_TYPE_INVENTORY: &[&str] = &[
@@ -556,6 +565,37 @@ mod tests {
     }
 
     #[test]
+    fn replica_db_schema_generated_types_preserve_source_schema_contracts() {
+        let actual = type_inventory(REPLICA_DB_SCHEMA_BINDINGS_TYPES_TS);
+        let trade_product_filter = type_declaration(
+            REPLICA_DB_SCHEMA_BINDINGS_TYPES_TS,
+            "ITradeProductFieldsFilter",
+        );
+        let trade_product_partial = type_declaration(
+            REPLICA_DB_SCHEMA_BINDINGS_TYPES_TS,
+            "ITradeProductFieldsPartial",
+        );
+
+        assert!(actual.contains(&"Farm"));
+        assert!(actual.contains(&"GcsLocation"));
+        assert!(actual.contains(&"NostrEventHead"));
+        assert!(actual.contains(&"ReplicaDbJsonValue"));
+        assert!(actual.contains(&"ITradeProductFieldsPartial"));
+        assert!(!actual.contains(&"NostrEventState"));
+        assert!(REPLICA_DB_SCHEMA_BINDINGS_TYPES_TS.contains(
+            "export type ReplicaDbJsonValue = null | boolean | number | string | Array<ReplicaDbJsonValue> | { [key: string]: ReplicaDbJsonValue };"
+        ));
+        assert!(
+            REPLICA_DB_SCHEMA_BINDINGS_TYPES_TS
+                .contains("export type IFarmFindOneResolve = IResult<Farm | null>;")
+        );
+        assert!(trade_product_filter.contains("year?: bigint"));
+        assert!(trade_product_filter.contains("qty_avail?: bigint"));
+        assert!(trade_product_partial.contains("year?: ReplicaDbJsonValue | null"));
+        assert!(trade_product_partial.contains("qty_avail?: ReplicaDbJsonValue | null"));
+    }
+
+    #[test]
     fn trade_package_imports_source_owned_support_types() {
         assert!(TRADE_BINDINGS_TYPES_TS.contains("from \"@radroots/core-bindings\""));
         assert!(TRADE_BINDINGS_TYPES_TS.contains("from \"@radroots/events-bindings\""));
@@ -576,5 +616,12 @@ mod tests {
             .filter_map(|line| line.strip_prefix("export type "))
             .map(|rest| rest.split([' ', '<']).next().expect("type name"))
             .collect()
+    }
+
+    fn type_declaration<'a>(types_ts: &'a str, name: &str) -> &'a str {
+        types_ts
+            .lines()
+            .find(|line| line.starts_with(&format!("export type {name} = ")))
+            .unwrap_or_else(|| panic!("missing type declaration for {name}"))
     }
 }
