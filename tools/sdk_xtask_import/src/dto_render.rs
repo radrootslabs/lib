@@ -191,7 +191,9 @@ fn render_untagged_variant(
     imports: &mut BTreeMap<String, BTreeSet<String>>,
 ) -> Result<String, String> {
     let rendered: Result<String, String> = match &variant.shape {
-        VariantShape::Unit => Ok("undefined".to_owned()),
+        VariantShape::Unit => {
+            Err("untagged unit variants are unsupported for JSON DTO output".to_owned())
+        }
         VariantShape::Newtype(ty) => render_type_ref(ty, None, registry, options, imports),
         VariantShape::Tuple(items) => {
             let rendered = items
@@ -833,6 +835,27 @@ mod tests {
         assert_eq!(
             rendered.body_ts(),
             "export type FindOneResolve = IResult<Farm | null>;"
+        );
+    }
+
+    #[test]
+    fn rejects_untagged_unit_variants() {
+        let mut registry = Registry::new();
+        registry.register_type(
+            RustTypeId::new("sdk", "MaybeReady"),
+            TypeDef::Enum(
+                EnumDef::new("MaybeReady", "MaybeReady", EnumRepr::Untagged, span()).with_variant(
+                    VariantDef::new("Ready", "ready", VariantShape::Unit, span()),
+                ),
+            ),
+        );
+
+        let error = render_registry_types(&registry, &DtoRegistryRenderOptions::default())
+            .expect_err("untagged unit variant blocks render");
+
+        assert_eq!(
+            error,
+            "untagged unit variants are unsupported for JSON DTO output while rendering untagged enum MaybeReady.Ready"
         );
     }
 

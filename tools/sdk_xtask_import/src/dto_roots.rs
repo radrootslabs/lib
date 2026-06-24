@@ -328,6 +328,8 @@ fn with_events_indexed_sdk_wrappers(body: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
+
     use super::{
         DTO_PACKAGE_ROOTS, MANUAL_DESCRIPTOR_FAMILIES, SDK_LOCAL_WRAPPER_ALLOWANCES,
         package_root_set,
@@ -341,6 +343,28 @@ mod tests {
         include_str!("../../../packages/replica-db-schema-bindings/src/generated/types.ts");
     const TRADE_BINDINGS_TYPES_TS: &str =
         include_str!("../../../packages/trade-bindings/src/generated/types.ts");
+    const REPLICA_SCHEMA_MODEL_SOURCES: &[&str] = &[
+        include_str!("../../../../lib/crates/replica_db_schema/src/models/farm.rs"),
+        include_str!("../../../../lib/crates/replica_db_schema/src/models/farm_gcs_location.rs"),
+        include_str!("../../../../lib/crates/replica_db_schema/src/models/farm_member.rs"),
+        include_str!("../../../../lib/crates/replica_db_schema/src/models/farm_member_claim.rs"),
+        include_str!("../../../../lib/crates/replica_db_schema/src/models/farm_tag.rs"),
+        include_str!("../../../../lib/crates/replica_db_schema/src/models/gcs_location.rs"),
+        include_str!("../../../../lib/crates/replica_db_schema/src/models/log_error.rs"),
+        include_str!("../../../../lib/crates/replica_db_schema/src/models/media_image.rs"),
+        include_str!("../../../../lib/crates/replica_db_schema/src/models/nostr_event_head.rs"),
+        include_str!("../../../../lib/crates/replica_db_schema/src/models/nostr_profile.rs"),
+        include_str!("../../../../lib/crates/replica_db_schema/src/models/nostr_profile_relay.rs"),
+        include_str!("../../../../lib/crates/replica_db_schema/src/models/nostr_relay.rs"),
+        include_str!("../../../../lib/crates/replica_db_schema/src/models/plot.rs"),
+        include_str!("../../../../lib/crates/replica_db_schema/src/models/plot_gcs_location.rs"),
+        include_str!("../../../../lib/crates/replica_db_schema/src/models/plot_tag.rs"),
+        include_str!("../../../../lib/crates/replica_db_schema/src/models/trade_product.rs"),
+        include_str!(
+            "../../../../lib/crates/replica_db_schema/src/models/trade_product_location.rs"
+        ),
+        include_str!("../../../../lib/crates/replica_db_schema/src/models/trade_product_media.rs"),
+    ];
     const EVENTS_TYPE_INVENTORY: &[&str] = &[
         "JobFeedbackStatus",
         "JobInputType",
@@ -596,6 +620,22 @@ mod tests {
     }
 
     #[test]
+    fn replica_db_schema_generated_types_match_source_public_inventory() {
+        let actual = type_inventory(REPLICA_DB_SCHEMA_BINDINGS_TYPES_TS)
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+        let missing = source_public_schema_type_inventory()
+            .into_iter()
+            .filter(|name| !actual.contains(name))
+            .collect::<Vec<_>>();
+
+        assert!(
+            missing.is_empty(),
+            "missing generated replica schema exports: {missing:?}"
+        );
+    }
+
+    #[test]
     fn trade_package_imports_source_owned_support_types() {
         assert!(TRADE_BINDINGS_TYPES_TS.contains("from \"@radroots/core-bindings\""));
         assert!(TRADE_BINDINGS_TYPES_TS.contains("from \"@radroots/events-bindings\""));
@@ -616,6 +656,36 @@ mod tests {
             .filter_map(|line| line.strip_prefix("export type "))
             .map(|rest| rest.split([' ', '<']).next().expect("type name"))
             .collect()
+    }
+
+    fn source_public_schema_type_inventory() -> Vec<&'static str> {
+        let mut names = BTreeSet::new();
+
+        for source in REPLICA_SCHEMA_MODEL_SOURCES {
+            for line in source.lines() {
+                if let Some(name) = public_rust_type_name(line)
+                    && !name.ends_with("Ts")
+                {
+                    names.insert(name);
+                }
+            }
+        }
+
+        names.into_iter().collect()
+    }
+
+    fn public_rust_type_name(line: &'static str) -> Option<&'static str> {
+        let line = line.trim_start();
+
+        ["pub struct ", "pub enum ", "pub type "]
+            .into_iter()
+            .find_map(|prefix| {
+                line.strip_prefix(prefix).map(|rest| {
+                    rest.split(|char: char| !(char == '_' || char.is_ascii_alphanumeric()))
+                        .next()
+                        .expect("type name")
+                })
+            })
     }
 
     fn type_declaration<'a>(types_ts: &'a str, name: &str) -> &'a str {
