@@ -647,4 +647,72 @@ mod tests {
             "large integer field requires explicit numeric policy"
         );
     }
+
+    #[test]
+    fn propagates_integer_policy_through_transparent_containers_only() {
+        let mut registry = Registry::new();
+        let counter_id = registry.register_type(
+            RustTypeId::new("sdk", "Counter"),
+            TypeDef::Struct(
+                StructDef::new("Counter", "Counter", span()).with_field(
+                    field("value", "value", TypeRef::Primitive(Primitive::U64))
+                        .with_int_repr(IntRepr::JsonNumberUnsafe),
+                ),
+            ),
+        );
+        registry.register_type(
+            RustTypeId::new("sdk", "TransparentCounters"),
+            TypeDef::Struct(
+                StructDef::new("TransparentCounters", "TransparentCounters", span())
+                    .with_field(
+                        field(
+                            "maybe_count",
+                            "maybeCount",
+                            TypeRef::option(TypeRef::Primitive(Primitive::U64)),
+                        )
+                        .with_presence(FieldPresence::optional_nullable())
+                        .with_int_repr(IntRepr::JsonString),
+                    )
+                    .with_field(
+                        field(
+                            "count_list",
+                            "countList",
+                            TypeRef::vec(TypeRef::Primitive(Primitive::U64)),
+                        )
+                        .with_int_repr(IntRepr::JsonString),
+                    )
+                    .with_field(
+                        field(
+                            "fixed_counts",
+                            "fixedCounts",
+                            TypeRef::array(TypeRef::Primitive(Primitive::U64), 2),
+                        )
+                        .with_int_repr(IntRepr::JsonString),
+                    )
+                    .with_field(
+                        field(
+                            "by_key",
+                            "byKey",
+                            TypeRef::Map {
+                                key: Box::new(TypeRef::String),
+                                value: Box::new(TypeRef::Primitive(Primitive::U64)),
+                            },
+                        )
+                        .with_int_repr(IntRepr::JsonString),
+                    )
+                    .with_field(
+                        field("named_counter", "namedCounter", TypeRef::Named(counter_id))
+                            .with_int_repr(IntRepr::JsonString),
+                    ),
+            ),
+        );
+
+        let rendered = render_registry_types(&registry, &DtoRegistryRenderOptions::default())
+            .expect("registry renders");
+
+        assert_eq!(
+            rendered.body_ts(),
+            "export type Counter = { value: number, };\n\nexport type TransparentCounters = { maybeCount?: string | null, countList: Array<string>, fixedCounts: [string, string], byKey: Record<string, string>, namedCounter: Counter, };"
+        );
+    }
 }

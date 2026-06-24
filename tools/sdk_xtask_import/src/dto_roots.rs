@@ -133,6 +133,111 @@ mod tests {
         package_root_set,
     };
 
+    const EVENTS_BINDINGS_TYPES_TS: &str =
+        include_str!("../../../packages/events-bindings/src/generated/types.ts");
+    const EVENTS_TYPE_INVENTORY: &[&str] = &[
+        "JobFeedbackStatus",
+        "JobInputType",
+        "JobPaymentRequest",
+        "RadrootsAccountClaim",
+        "RadrootsActiveTradeEnvelope",
+        "RadrootsActiveTradeMessageType",
+        "RadrootsAppData",
+        "RadrootsComment",
+        "RadrootsCoop",
+        "RadrootsCoopLocation",
+        "RadrootsCoopRef",
+        "RadrootsDocument",
+        "RadrootsDocumentSubject",
+        "RadrootsFarm",
+        "RadrootsFarmLocation",
+        "RadrootsFarmRef",
+        "RadrootsFollow",
+        "RadrootsFollowProfile",
+        "RadrootsGcsLocation",
+        "RadrootsGeoChat",
+        "RadrootsGeoJsonPoint",
+        "RadrootsGeoJsonPolygon",
+        "RadrootsGiftWrap",
+        "RadrootsGiftWrapRecipient",
+        "RadrootsJobFeedback",
+        "RadrootsJobInput",
+        "RadrootsJobParam",
+        "RadrootsJobRequest",
+        "RadrootsJobResult",
+        "RadrootsList",
+        "RadrootsListEntry",
+        "RadrootsListSet",
+        "RadrootsListing",
+        "RadrootsListingAvailability",
+        "RadrootsListingBin",
+        "RadrootsListingDeliveryMethod",
+        "RadrootsListingImage",
+        "RadrootsListingImageSize",
+        "RadrootsListingLocation",
+        "RadrootsListingProduct",
+        "RadrootsListingProductTagKeys",
+        "RadrootsListingStatus",
+        "RadrootsMessage",
+        "RadrootsMessageFile",
+        "RadrootsMessageFileDimensions",
+        "RadrootsMessageRecipient",
+        "RadrootsNostrEvent",
+        "RadrootsNostrEventPtr",
+        "RadrootsNostrEventRef",
+        "RadrootsPlot",
+        "RadrootsPlotLocation",
+        "RadrootsPlotRef",
+        "RadrootsPost",
+        "RadrootsProfile",
+        "RadrootsProfileType",
+        "RadrootsReaction",
+        "RadrootsRelayDocument",
+        "RadrootsResourceArea",
+        "RadrootsResourceAreaLocation",
+        "RadrootsResourceAreaRef",
+        "RadrootsResourceHarvestCap",
+        "RadrootsResourceHarvestProduct",
+        "RadrootsSeal",
+        "RadrootsTradeAnswer",
+        "RadrootsTradeDiscountDecision",
+        "RadrootsTradeDiscountOffer",
+        "RadrootsTradeDiscountRequest",
+        "RadrootsTradeDomain",
+        "RadrootsTradeEconomicActor",
+        "RadrootsTradeEconomicEffect",
+        "RadrootsTradeEconomicLineKind",
+        "RadrootsTradeEnvelope",
+        "RadrootsTradeInventoryCommitment",
+        "RadrootsTradeListingCancel",
+        "RadrootsTradeListingParseError",
+        "RadrootsTradeListingValidateRequest",
+        "RadrootsTradeListingValidateResult",
+        "RadrootsTradeListingValidationError",
+        "RadrootsTradeMessagePayload",
+        "RadrootsTradeMessageType",
+        "RadrootsTradeOrderCancelled",
+        "RadrootsTradeOrderChange",
+        "RadrootsTradeOrderDecision",
+        "RadrootsTradeOrderDecisionEvent",
+        "RadrootsTradeOrderEconomicItem",
+        "RadrootsTradeOrderEconomicLine",
+        "RadrootsTradeOrderEconomicTotals",
+        "RadrootsTradeOrderEconomics",
+        "RadrootsTradeOrderItem",
+        "RadrootsTradeOrderRequested",
+        "RadrootsTradeOrderResponse",
+        "RadrootsTradeOrderRevision",
+        "RadrootsTradeOrderRevisionDecision",
+        "RadrootsTradeOrderRevisionDecisionEvent",
+        "RadrootsTradeOrderRevisionProposed",
+        "RadrootsTradeOrderRevisionResponse",
+        "RadrootsTradeOrderStatus",
+        "RadrootsTradePricingBasis",
+        "RadrootsTradeQuestion",
+        "RadrootsTradeTransportLane",
+    ];
+
     #[test]
     fn approved_source_roots_build_registries() {
         for root_set in DTO_PACKAGE_ROOTS {
@@ -176,5 +281,16 @@ mod tests {
                 .iter()
                 .any(|allowance| allowance.shape_family.contains("IResult"))
         );
+    }
+
+    #[test]
+    fn events_type_inventory_matches_current_package_surface() {
+        let actual = EVENTS_BINDINGS_TYPES_TS
+            .lines()
+            .filter_map(|line| line.strip_prefix("export type "))
+            .map(|rest| rest.split([' ', '<']).next().expect("type name"))
+            .collect::<Vec<_>>();
+
+        assert_eq!(actual, EVENTS_TYPE_INVENTORY);
     }
 }
