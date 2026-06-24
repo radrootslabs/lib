@@ -49,6 +49,10 @@ pub const DTO_PACKAGE_ROOTS: &[DtoPackageRootSet] = &[
         package_key: "trade",
         roots: trade_roots,
     },
+    DtoPackageRootSet {
+        package_key: "types",
+        roots: types_roots,
+    },
 ];
 
 pub const MANUAL_DESCRIPTOR_FAMILIES: &[ManualDescriptorFamily] = &[
@@ -170,6 +174,11 @@ pub fn trade_types_module() -> Result<DtoTypesModule, String> {
     )
 }
 
+pub fn types_types_module() -> Result<DtoTypesModule, String> {
+    let root_set = package_root_set("types").ok_or_else(|| "missing types DTO roots".to_owned())?;
+    render_registry_types(&root_set.registry(), &DtoRegistryRenderOptions::default())
+}
+
 fn core_roots() -> Vec<RootDescriptor> {
     radroots_core::dto::dto_roots().into_iter().collect()
 }
@@ -186,6 +195,10 @@ fn events_indexed_roots() -> Vec<RootDescriptor> {
 
 fn trade_roots() -> Vec<RootDescriptor> {
     radroots_trade_bindings::dto_roots()
+}
+
+fn types_roots() -> Vec<RootDescriptor> {
+    radroots_types_bindings::dto_roots()
 }
 
 fn core_import_options(
@@ -484,6 +497,7 @@ mod tests {
         assert!(package_root_set("events").is_some());
         assert!(package_root_set("events_indexed").is_some());
         assert!(package_root_set("trade").is_some());
+        assert!(package_root_set("types").is_some());
     }
 
     #[test]

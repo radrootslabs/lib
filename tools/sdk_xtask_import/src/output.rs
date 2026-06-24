@@ -130,7 +130,7 @@ pub fn package_outputs() -> Result<Vec<PackageOutput>, String> {
         },
         PackageOutput {
             spec: spec_by_key("types"),
-            types_ts: Some(TsSource::Module(radroots_types_bindings::types_module())),
+            types_ts: Some(TsSource::DtoRegistry(dto_roots::types_types_module()?)),
             types_imports_ts: None,
             constants_ts: None,
             kinds_ts: None,
