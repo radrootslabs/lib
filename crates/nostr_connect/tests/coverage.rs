@@ -169,6 +169,53 @@ fn error_method_and_permission_surfaces_cover_public_paths() {
         RadrootsNostrConnectPermissions::from_str("sign_event:,ping"),
         Err(RadrootsNostrConnectError::InvalidPermission(value)) if value == "sign_event:"
     ));
+
+    let all_sign_events =
+        RadrootsNostrConnectPermission::new(RadrootsNostrConnectMethod::SignEvent);
+    assert!(all_sign_events.matches_sign_event_kind(30402));
+    assert!(all_sign_events.matches_request(&RadrootsNostrConnectMethod::SignEvent, None));
+    assert!(!all_sign_events.matches_request(&RadrootsNostrConnectMethod::Ping, None));
+
+    let numeric_sign_event = RadrootsNostrConnectPermission::with_parameter(
+        RadrootsNostrConnectMethod::SignEvent,
+        "30402",
+    );
+    let kind_prefixed_sign_event = RadrootsNostrConnectPermission::with_parameter(
+        RadrootsNostrConnectMethod::SignEvent,
+        "kind:30402",
+    );
+    assert!(numeric_sign_event.matches_sign_event_kind(30402));
+    assert!(kind_prefixed_sign_event.matches_sign_event_kind(30402));
+    assert!(
+        numeric_sign_event
+            .matches_request(&RadrootsNostrConnectMethod::SignEvent, Some("kind:30402"))
+    );
+    assert!(!numeric_sign_event.matches_sign_event_kind(3040));
+    assert!(
+        !RadrootsNostrConnectPermission::with_parameter(
+            RadrootsNostrConnectMethod::SignEvent,
+            "130402"
+        )
+        .matches_sign_event_kind(30402)
+    );
+    assert!(
+        !RadrootsNostrConnectPermission::with_parameter(
+            RadrootsNostrConnectMethod::SignEvent,
+            "not-a-kind"
+        )
+        .matches_request(
+            &RadrootsNostrConnectMethod::SignEvent,
+            Some("also-not-a-kind")
+        )
+    );
+
+    let typed_permissions = RadrootsNostrConnectPermissions::from(vec![
+        RadrootsNostrConnectPermission::new(RadrootsNostrConnectMethod::Ping),
+        kind_prefixed_sign_event,
+    ]);
+    assert!(typed_permissions.allows_request(&RadrootsNostrConnectMethod::Ping, None));
+    assert!(typed_permissions.allows_sign_event_kind(30402));
+    assert!(!typed_permissions.allows_sign_event_kind(0));
 }
 
 #[test]

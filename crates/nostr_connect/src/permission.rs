@@ -27,6 +27,39 @@ impl RadrootsNostrConnectPermission {
             parameter: Some(parameter.into()),
         }
     }
+
+    pub fn matches_request(
+        &self,
+        method: &RadrootsNostrConnectMethod,
+        parameter: Option<&str>,
+    ) -> bool {
+        if self.method != *method {
+            return false;
+        }
+        match (&self.method, self.parameter.as_deref(), parameter) {
+            (RadrootsNostrConnectMethod::SignEvent, None, _) => true,
+            (RadrootsNostrConnectMethod::SignEvent, Some(configured), Some(requested)) => {
+                match (
+                    sign_event_kind_parameter(configured),
+                    sign_event_kind_parameter(requested),
+                ) {
+                    (Some(configured), Some(requested)) => configured == requested,
+                    _ => false,
+                }
+            }
+            (_, None, None) => true,
+            (_, Some(configured), Some(requested)) => configured == requested,
+            _ => false,
+        }
+    }
+
+    pub fn matches_sign_event_kind(&self, event_kind: u32) -> bool {
+        let event_kind = event_kind.to_string();
+        self.matches_request(
+            &RadrootsNostrConnectMethod::SignEvent,
+            Some(event_kind.as_str()),
+        )
+    }
 }
 
 impl fmt::Display for RadrootsNostrConnectPermission {
@@ -85,6 +118,30 @@ impl RadrootsNostrConnectPermissions {
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
+
+    pub fn allows_request(
+        &self,
+        method: &RadrootsNostrConnectMethod,
+        parameter: Option<&str>,
+    ) -> bool {
+        self.0
+            .iter()
+            .any(|permission| permission.matches_request(method, parameter))
+    }
+
+    pub fn allows_sign_event_kind(&self, event_kind: u32) -> bool {
+        self.0
+            .iter()
+            .any(|permission| permission.matches_sign_event_kind(event_kind))
+    }
+}
+
+fn sign_event_kind_parameter(value: &str) -> Option<u32> {
+    let value = value.strip_prefix("kind:").unwrap_or(value);
+    if value.is_empty() || !value.chars().all(|character| character.is_ascii_digit()) {
+        return None;
+    }
+    value.parse().ok()
 }
 
 impl From<Vec<RadrootsNostrConnectPermission>> for RadrootsNostrConnectPermissions {
