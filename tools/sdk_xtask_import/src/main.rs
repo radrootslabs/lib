@@ -4,6 +4,8 @@ mod coverage;
 mod coverage_policy;
 #[allow(dead_code)]
 mod dto_render;
+#[allow(dead_code)]
+mod dto_roots;
 mod fs;
 mod generate;
 mod manifest;
