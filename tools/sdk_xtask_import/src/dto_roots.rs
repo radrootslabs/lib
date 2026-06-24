@@ -41,6 +41,10 @@ pub const DTO_PACKAGE_ROOTS: &[DtoPackageRootSet] = &[
         package_key: "events",
         roots: events_roots,
     },
+    DtoPackageRootSet {
+        package_key: "events_indexed",
+        roots: events_indexed_roots,
+    },
 ];
 
 pub const MANUAL_DESCRIPTOR_FAMILIES: &[ManualDescriptorFamily] = &[
@@ -132,12 +136,29 @@ pub fn events_types_module() -> Result<DtoTypesModule, String> {
     ))
 }
 
+pub fn events_indexed_types_module() -> Result<DtoTypesModule, String> {
+    let root_set = package_root_set("events_indexed")
+        .ok_or_else(|| "missing events-indexed DTO roots".to_owned())?;
+    let rendered =
+        render_registry_types(&root_set.registry(), &DtoRegistryRenderOptions::default())?;
+    Ok(DtoTypesModule::new(
+        rendered.imports_ts().unwrap_or_default(),
+        with_events_indexed_sdk_wrappers(rendered.body_ts()),
+    ))
+}
+
 fn core_roots() -> Vec<RootDescriptor> {
     radroots_core::dto::dto_roots().into_iter().collect()
 }
 
 fn events_roots() -> Vec<RootDescriptor> {
     radroots_events::dto::dto_roots().into_iter().collect()
+}
+
+fn events_indexed_roots() -> Vec<RootDescriptor> {
+    radroots_events_indexed::dto::dto_roots()
+        .into_iter()
+        .collect()
 }
 
 fn core_import_options(
@@ -191,6 +212,30 @@ fn declaration_name(declaration: &str) -> &str {
         .strip_prefix("export type ")
         .and_then(|rest| rest.split([' ', '<']).next())
         .unwrap_or(declaration)
+}
+
+fn with_events_indexed_sdk_wrappers(body: &str) -> String {
+    let mut declarations = body
+        .split("\n\n")
+        .filter(|declaration| !declaration.trim().is_empty())
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    declarations.push("export type RadrootsEventsIndexedShardId = string;".to_owned());
+    let order = [
+        "RadrootsEventsIndexedShardId",
+        "RadrootsEventsIndexedIdRange",
+        "RadrootsEventsIndexedShardMetadata",
+        "RadrootsEventsIndexedManifest",
+        "RadrootsEventsIndexedShardCheckpoint",
+        "RadrootsEventsIndexedIndexCheckpoint",
+    ];
+    declarations.sort_by_key(|declaration| {
+        order
+            .iter()
+            .position(|name| *name == declaration_name(declaration))
+            .unwrap_or(order.len())
+    });
+    declarations.join("\n\n")
 }
 
 #[cfg(test)]
@@ -323,6 +368,7 @@ mod tests {
     fn package_roots_are_explicit_not_discovered() {
         assert!(package_root_set("core").is_some());
         assert!(package_root_set("events").is_some());
+        assert!(package_root_set("events_indexed").is_some());
         assert!(package_root_set("trade").is_none());
     }
 

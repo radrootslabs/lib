@@ -98,8 +98,8 @@ pub fn package_outputs() -> Result<Vec<PackageOutput>, String> {
         },
         PackageOutput {
             spec: spec_by_key("events_indexed"),
-            types_ts: Some(TsSource::Module(
-                radroots_events_indexed_bindings::types_module(),
+            types_ts: Some(TsSource::DtoRegistry(
+                dto_roots::events_indexed_types_module()?,
             )),
             types_imports_ts: None,
             constants_ts: None,
