@@ -1,6 +1,7 @@
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
 
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsFarm {
@@ -14,6 +15,7 @@ pub struct RadrootsFarm {
     pub tags: Option<Vec<String>>,
 }
 
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, Default)]
 pub struct RadrootsFarmRef {
@@ -21,6 +23,7 @@ pub struct RadrootsFarmRef {
     pub d_tag: String,
 }
 
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsGeoJsonPoint {
@@ -29,6 +32,7 @@ pub struct RadrootsGeoJsonPoint {
     pub coordinates: [f64; 2],
 }
 
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsGeoJsonPolygon {
@@ -37,6 +41,7 @@ pub struct RadrootsGeoJsonPolygon {
     pub coordinates: Vec<Vec<[f64; 2]>>,
 }
 
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsGcsLocation {
@@ -61,6 +66,7 @@ pub struct RadrootsGcsLocation {
     pub gc_country_name: Option<String>,
 }
 
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsFarmLocation {

@@ -9,6 +9,8 @@ use radroots_core::{
 
 use crate::ids::{RadrootsInventoryBinId, RadrootsOrderQuoteId};
 
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+#[cfg_attr(feature = "dto-bindgen", dto(ts(name = "RadrootsTradeOrderItem")))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOrderItem {
@@ -16,35 +18,54 @@ pub struct RadrootsOrderItem {
     pub bin_count: u32,
 }
 
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+#[cfg_attr(feature = "dto-bindgen", dto(ts(name = "RadrootsTradePricingBasis")))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsOrderPricingBasis {
+    #[cfg_attr(feature = "serde", serde(rename = "listing_event"))]
     ListingEvent,
 }
 
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+#[cfg_attr(
+    feature = "dto-bindgen",
+    dto(ts(name = "RadrootsTradeEconomicLineKind"))
+)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsOrderEconomicLineKind {
+    #[cfg_attr(feature = "serde", serde(rename = "listing_discount"))]
     ListingDiscount,
+    #[cfg_attr(feature = "serde", serde(rename = "basket_adjustment"))]
     BasketAdjustment,
+    #[cfg_attr(feature = "serde", serde(rename = "revision_adjustment"))]
     RevisionAdjustment,
 }
 
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+#[cfg_attr(feature = "dto-bindgen", dto(ts(name = "RadrootsTradeEconomicActor")))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsOrderEconomicActor {
+    #[cfg_attr(feature = "serde", serde(rename = "buyer"))]
     Buyer,
+    #[cfg_attr(feature = "serde", serde(rename = "seller"))]
     Seller,
 }
 
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+#[cfg_attr(feature = "dto-bindgen", dto(ts(name = "RadrootsTradeEconomicEffect")))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsOrderEconomicEffect {
+    #[cfg_attr(feature = "serde", serde(rename = "increase"))]
     Increase,
+    #[cfg_attr(feature = "serde", serde(rename = "decrease"))]
     Decrease,
 }
 
@@ -60,6 +81,11 @@ pub struct RadrootsOrderEconomicItem {
     pub line_subtotal: RadrootsCoreMoney,
 }
 
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+#[cfg_attr(
+    feature = "dto-bindgen",
+    dto(ts(name = "RadrootsTradeOrderEconomicLine"))
+)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOrderEconomicLine {
@@ -71,6 +97,11 @@ pub struct RadrootsOrderEconomicLine {
     pub reason: String,
 }
 
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+#[cfg_attr(
+    feature = "dto-bindgen",
+    dto(ts(name = "RadrootsTradeOrderEconomicTotals"))
+)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOrderEconomicTotals {

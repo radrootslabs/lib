@@ -3,6 +3,7 @@
 #[cfg(not(feature = "std"))]
 use alloc::string::String;
 
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsGiftWrap {
@@ -11,6 +12,7 @@ pub struct RadrootsGiftWrap {
     pub expiration: Option<u32>,
 }
 
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsGiftWrapRecipient {

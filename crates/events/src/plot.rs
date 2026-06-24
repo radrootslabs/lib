@@ -3,6 +3,7 @@ use crate::farm::{RadrootsFarmRef, RadrootsGcsLocation};
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
 
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsPlotRef {
@@ -10,6 +11,7 @@ pub struct RadrootsPlotRef {
     pub d_tag: String,
 }
 
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsPlot {
@@ -21,6 +23,7 @@ pub struct RadrootsPlot {
     pub tags: Option<Vec<String>>,
 }
 
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsPlotLocation {

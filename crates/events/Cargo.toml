@@ -13,11 +13,12 @@ readme = "README"
 
 [features]
 default = ["std", "serde"]
-dto-bindgen = ["std", "serde", "dep:dto_bindgen_core", "radroots_core/dto-bindgen"]
+dto-bindgen = ["std", "serde", "dep:dto_bindgen", "dep:dto_bindgen_core", "radroots_core/dto-bindgen"]
 std = ["radroots_core/std"]
 serde = ["dep:serde", "radroots_core/serde"]
 
 [dependencies]
+dto_bindgen = { workspace = true, optional = true }
 dto_bindgen_core = { workspace = true, optional = true }
 radroots_core = { workspace = true, default-features = false }
 hex = { version = "0.4", default-features = false, features = ["alloc"] }

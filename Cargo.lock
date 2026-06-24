@@ -1500,6 +1500,34 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "75b325c5dbd37f80359721ad39aca5a29fb04c89279657cffdda8736d0c0b9d2"
 
 [[package]]
+name = "dto_bindgen"
+version = "0.1.0"
+source = "git+https://github.com/triesap/dto_bindgen?rev=96ed6c691aacab31860828d25da2e0167b13d92c#96ed6c691aacab31860828d25da2e0167b13d92c"
+dependencies = [
+ "dto_bindgen_backend_python",
+ "dto_bindgen_backend_ts",
+ "dto_bindgen_core",
+ "dto_bindgen_macros",
+ "sha2",
+]
+
+[[package]]
+name = "dto_bindgen_backend_python"
+version = "0.1.0"
+source = "git+https://github.com/triesap/dto_bindgen?rev=96ed6c691aacab31860828d25da2e0167b13d92c#96ed6c691aacab31860828d25da2e0167b13d92c"
+dependencies = [
+ "dto_bindgen_core",
+]
+
+[[package]]
+name = "dto_bindgen_backend_ts"
+version = "0.1.0"
+source = "git+https://github.com/triesap/dto_bindgen?rev=96ed6c691aacab31860828d25da2e0167b13d92c#96ed6c691aacab31860828d25da2e0167b13d92c"
+dependencies = [
+ "dto_bindgen_core",
+]
+
+[[package]]
 name = "dto_bindgen_core"
 version = "0.1.0"
 source = "git+https://github.com/triesap/dto_bindgen?rev=96ed6c691aacab31860828d25da2e0167b13d92c#96ed6c691aacab31860828d25da2e0167b13d92c"
@@ -1511,6 +1539,16 @@ dependencies = [
  "sha2",
  "syn 2.0.117",
  "toml",
+]
+
+[[package]]
+name = "dto_bindgen_macros"
+version = "0.1.0"
+source = "git+https://github.com/triesap/dto_bindgen?rev=96ed6c691aacab31860828d25da2e0167b13d92c#96ed6c691aacab31860828d25da2e0167b13d92c"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
 ]
 
 [[package]]
@@ -4261,6 +4299,7 @@ dependencies = [
 name = "radroots_events"
 version = "0.1.0-alpha.2"
 dependencies = [
+ "dto_bindgen",
  "dto_bindgen_core",
  "hex",
  "radroots_core",

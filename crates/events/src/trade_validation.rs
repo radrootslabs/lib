@@ -70,12 +70,22 @@ impl core::fmt::Display for RadrootsTradeValidationListingError {
 #[cfg(feature = "std")]
 impl std::error::Error for RadrootsTradeValidationListingError {}
 
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+#[cfg_attr(
+    feature = "dto-bindgen",
+    dto(ts(name = "RadrootsTradeListingValidateRequest"))
+)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeValidationListingRequest {
     pub listing_event: Option<RadrootsNostrEventPtr>,
 }
 
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+#[cfg_attr(
+    feature = "dto-bindgen",
+    dto(ts(name = "RadrootsTradeListingValidateResult"))
+)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeValidationListingResult {

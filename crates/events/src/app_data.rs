@@ -7,6 +7,7 @@ use alloc::string::String;
 
 pub const KIND_APP_DATA: u32 = KIND_APP_DATA_EVENT;
 
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsAppData {
