@@ -67,7 +67,7 @@ pub fn dto_roots() -> Vec<RootDescriptor> {
         RootDescriptor::new::<JobInputType>(),
         RootDescriptor::new::<JobPaymentRequest>(),
         RootDescriptor::new::<RadrootsAccountClaim>(),
-        RootDescriptor::new::<RadrootsActiveTradeEnvelopeDto>(),
+        RootDescriptor::new::<RadrootsOrderEnvelopeDto>(),
         RootDescriptor::new::<RadrootsAppData>(),
         RootDescriptor::new::<RadrootsComment>(),
         RootDescriptor::new::<RadrootsCoop>(),
@@ -123,25 +123,25 @@ pub fn dto_roots() -> Vec<RootDescriptor> {
         RootDescriptor::new::<RadrootsResourceHarvestCap>(),
         RootDescriptor::new::<RadrootsResourceHarvestProduct>(),
         RootDescriptor::new::<RadrootsSeal>(),
-        RootDescriptor::new::<RadrootsTradeAnswerDto>(),
-        RootDescriptor::new::<RadrootsTradeDiscountDecisionDto>(),
-        RootDescriptor::new::<RadrootsTradeDiscountOfferDto>(),
-        RootDescriptor::new::<RadrootsTradeDiscountRequestDto>(),
+        RootDescriptor::new::<RadrootsListingAnswerDto>(),
+        RootDescriptor::new::<RadrootsListingDiscountDecisionDto>(),
+        RootDescriptor::new::<RadrootsListingDiscountOfferDto>(),
+        RootDescriptor::new::<RadrootsListingDiscountRequestDto>(),
         RootDescriptor::new::<RadrootsCommercialDomain>(),
         RootDescriptor::new::<RadrootsOrderEconomicActor>(),
         RootDescriptor::new::<RadrootsOrderEconomicEffect>(),
         RootDescriptor::new::<RadrootsOrderEconomicLineKind>(),
-        RootDescriptor::new::<RadrootsTradeEnvelopeDto>(),
+        RootDescriptor::new::<RadrootsCommercialEnvelopeDto>(),
         RootDescriptor::new::<RadrootsOrderInventoryCommitment>(),
-        RootDescriptor::new::<RadrootsTradeListingCancelDto>(),
+        RootDescriptor::new::<RadrootsListingCancelDto>(),
         RootDescriptor::new::<RadrootsListingParseError>(),
         RootDescriptor::new::<RadrootsTradeValidationListingRequest>(),
         RootDescriptor::new::<RadrootsTradeValidationListingResult>(),
         RootDescriptor::new::<RadrootsTradeValidationListingError>(),
-        RootDescriptor::new::<RadrootsTradeMessagePayloadDto>(),
-        RootDescriptor::new::<RadrootsTradeMessageTypeDto>(),
+        RootDescriptor::new::<RadrootsCommercialMessagePayloadDto>(),
+        RootDescriptor::new::<RadrootsCommercialMessageTypeDto>(),
         RootDescriptor::new::<RadrootsOrderCancellation>(),
-        RootDescriptor::new::<RadrootsTradeOrderChangeDto>(),
+        RootDescriptor::new::<RadrootsOrderChangeDto>(),
         RootDescriptor::new::<RadrootsOrderDecisionOutcome>(),
         RootDescriptor::new::<RadrootsOrderDecision>(),
         RootDescriptor::new::<RadrootsOrderEconomicItem>(),
@@ -150,35 +150,35 @@ pub fn dto_roots() -> Vec<RootDescriptor> {
         RootDescriptor::new::<RadrootsOrderEconomics>(),
         RootDescriptor::new::<RadrootsOrderItem>(),
         RootDescriptor::new::<RadrootsOrderRequest>(),
-        RootDescriptor::new::<RadrootsTradeOrderResponseDto>(),
-        RootDescriptor::new::<RadrootsTradeOrderRevisionDto>(),
+        RootDescriptor::new::<RadrootsOrderResponseDto>(),
+        RootDescriptor::new::<RadrootsOrderRevisionDto>(),
         RootDescriptor::new::<RadrootsOrderRevisionOutcome>(),
         RootDescriptor::new::<RadrootsOrderRevisionDecision>(),
         RootDescriptor::new::<RadrootsOrderRevisionProposal>(),
-        RootDescriptor::new::<RadrootsTradeOrderRevisionResponseDto>(),
-        RootDescriptor::new::<RadrootsTradeOrderStatusDto>(),
+        RootDescriptor::new::<RadrootsOrderRevisionResponseDto>(),
+        RootDescriptor::new::<RadrootsOrderStatusDto>(),
         RootDescriptor::new::<RadrootsOrderPricingBasis>(),
-        RootDescriptor::new::<RadrootsTradeQuestionDto>(),
-        RootDescriptor::new::<RadrootsTradeTransportLaneDto>(),
+        RootDescriptor::new::<RadrootsListingQuestionDto>(),
+        RootDescriptor::new::<RadrootsCommercialTransportLaneDto>(),
     ]
 }
 
-pub struct RadrootsActiveTradeEnvelopeDto;
-pub struct RadrootsTradeAnswerDto;
-pub struct RadrootsTradeDiscountDecisionDto;
-pub struct RadrootsTradeDiscountOfferDto;
-pub struct RadrootsTradeDiscountRequestDto;
-pub struct RadrootsTradeEnvelopeDto;
-pub struct RadrootsTradeListingCancelDto;
-pub struct RadrootsTradeMessagePayloadDto;
-pub struct RadrootsTradeMessageTypeDto;
-pub struct RadrootsTradeOrderChangeDto;
-pub struct RadrootsTradeOrderResponseDto;
-pub struct RadrootsTradeOrderRevisionDto;
-pub struct RadrootsTradeOrderRevisionResponseDto;
-pub struct RadrootsTradeOrderStatusDto;
-pub struct RadrootsTradeQuestionDto;
-pub struct RadrootsTradeTransportLaneDto;
+pub struct RadrootsOrderEnvelopeDto;
+pub struct RadrootsListingAnswerDto;
+pub struct RadrootsListingDiscountDecisionDto;
+pub struct RadrootsListingDiscountOfferDto;
+pub struct RadrootsListingDiscountRequestDto;
+pub struct RadrootsCommercialEnvelopeDto;
+pub struct RadrootsListingCancelDto;
+pub struct RadrootsCommercialMessagePayloadDto;
+pub struct RadrootsCommercialMessageTypeDto;
+pub struct RadrootsOrderChangeDto;
+pub struct RadrootsOrderResponseDto;
+pub struct RadrootsOrderRevisionDto;
+pub struct RadrootsOrderRevisionResponseDto;
+pub struct RadrootsOrderStatusDto;
+pub struct RadrootsListingQuestionDto;
+pub struct RadrootsCommercialTransportLaneDto;
 
 macro_rules! string_dto {
     ($($ty:ty),+ $(,)?) => {
@@ -940,7 +940,7 @@ impl Dto for RadrootsListingParseError {
     fn describe(ctx: &mut DescribeCtx) -> TypeRef {
         let def = EnumDef::new(
             "RadrootsListingParseError",
-            "RadrootsTradeListingParseError",
+            "RadrootsListingParseError",
             EnumRepr::External,
             span("crates/events/src/order.rs", 26),
         )
@@ -1170,7 +1170,7 @@ impl Dto for RadrootsOrderEconomicItem {
     fn describe(ctx: &mut DescribeCtx) -> TypeRef {
         let def = StructDef::new(
             "RadrootsOrderEconomicItem",
-            "RadrootsTradeOrderEconomicItem",
+            "RadrootsOrderEconomicItem",
             span("crates/events/src/order_economics.rs", 70),
         )
         .with_field(field(
@@ -1230,7 +1230,7 @@ impl Dto for RadrootsOrderEconomics {
     fn describe(ctx: &mut DescribeCtx) -> TypeRef {
         let def = StructDef::new(
             "RadrootsOrderEconomics",
-            "RadrootsTradeOrderEconomics",
+            "RadrootsOrderEconomics",
             span("crates/events/src/order_economics.rs", 119),
         )
         .with_field(field(
@@ -1318,7 +1318,7 @@ impl Dto for RadrootsOrderRevisionOutcome {
     fn describe(ctx: &mut DescribeCtx) -> TypeRef {
         let def = EnumDef::new(
             "RadrootsOrderRevisionOutcome",
-            "RadrootsTradeOrderRevisionDecision",
+            "RadrootsOrderRevisionDecision",
             EnumRepr::Internal {
                 tag: "decision".to_owned(),
             },
@@ -1346,13 +1346,13 @@ impl Dto for RadrootsOrderRevisionOutcome {
     }
 }
 
-impl Dto for RadrootsActiveTradeEnvelopeDto {
+impl Dto for RadrootsOrderEnvelopeDto {
     fn describe(ctx: &mut DescribeCtx) -> TypeRef {
         let def = StructDef {
             generics: vec![GenericParam::new("T")],
             ..StructDef::new(
-                "RadrootsActiveTradeEnvelopeDto",
-                "RadrootsActiveTradeEnvelope",
+                "RadrootsOrderEnvelopeDto",
+                "RadrootsOrderEnvelope",
                 span("crates/events/src/order.rs", 408),
             )
         }
@@ -1398,17 +1398,17 @@ impl Dto for RadrootsActiveTradeEnvelopeDto {
             "crates/events/src/order.rs",
             415,
         ));
-        register(ctx, "RadrootsActiveTradeEnvelopeDto", TypeDef::Struct(def))
+        register(ctx, "RadrootsOrderEnvelopeDto", TypeDef::Struct(def))
     }
 }
 
-impl Dto for RadrootsTradeEnvelopeDto {
+impl Dto for RadrootsCommercialEnvelopeDto {
     fn describe(ctx: &mut DescribeCtx) -> TypeRef {
         let def = StructDef {
             generics: vec![GenericParam::new("T")],
             ..StructDef::new(
-                "RadrootsTradeEnvelopeDto",
-                "RadrootsTradeEnvelope",
+                "RadrootsCommercialEnvelopeDto",
+                "RadrootsCommercialEnvelope",
                 span("crates/events/src/order.rs", 408),
             )
         }
@@ -1429,7 +1429,7 @@ impl Dto for RadrootsTradeEnvelopeDto {
         .with_field(field(
             "message_type",
             "type",
-            RadrootsTradeMessageTypeDto::describe(ctx),
+            RadrootsCommercialMessageTypeDto::describe(ctx),
             "crates/events/src/order.rs",
             412,
         ))
@@ -1454,15 +1454,15 @@ impl Dto for RadrootsTradeEnvelopeDto {
             "crates/events/src/order.rs",
             415,
         ));
-        register(ctx, "RadrootsTradeEnvelopeDto", TypeDef::Struct(def))
+        register(ctx, "RadrootsCommercialEnvelopeDto", TypeDef::Struct(def))
     }
 }
 
-impl Dto for RadrootsTradeMessageTypeDto {
+impl Dto for RadrootsCommercialMessageTypeDto {
     fn describe(ctx: &mut DescribeCtx) -> TypeRef {
         let def = EnumDef::new(
-            "RadrootsTradeMessageTypeDto",
-            "RadrootsTradeMessageType",
+            "RadrootsCommercialMessageTypeDto",
+            "RadrootsCommercialMessageType",
             EnumRepr::External,
             span("crates/events/src/order.rs", 408),
         )
@@ -1550,15 +1550,15 @@ impl Dto for RadrootsTradeMessageTypeDto {
             "crates/events/src/order.rs",
             408,
         ));
-        register(ctx, "RadrootsTradeMessageTypeDto", TypeDef::Enum(def))
+        register(ctx, "RadrootsCommercialMessageTypeDto", TypeDef::Enum(def))
     }
 }
 
-impl Dto for RadrootsTradeTransportLaneDto {
+impl Dto for RadrootsCommercialTransportLaneDto {
     fn describe(ctx: &mut DescribeCtx) -> TypeRef {
         let def = EnumDef::new(
-            "RadrootsTradeTransportLaneDto",
-            "RadrootsTradeTransportLane",
+            "RadrootsCommercialTransportLaneDto",
+            "RadrootsCommercialTransportLane",
             EnumRepr::External,
             span("crates/events/src/order.rs", 408),
         )
@@ -1574,15 +1574,15 @@ impl Dto for RadrootsTradeTransportLaneDto {
             "crates/events/src/order.rs",
             408,
         ));
-        register(ctx, "RadrootsTradeTransportLaneDto", TypeDef::Enum(def))
+        register(ctx, "RadrootsCommercialTransportLaneDto", TypeDef::Enum(def))
     }
 }
 
-impl Dto for RadrootsTradeOrderStatusDto {
+impl Dto for RadrootsOrderStatusDto {
     fn describe(ctx: &mut DescribeCtx) -> TypeRef {
         let def = EnumDef::new(
-            "RadrootsTradeOrderStatusDto",
-            "RadrootsTradeOrderStatus",
+            "RadrootsOrderStatusDto",
+            "RadrootsOrderStatus",
             EnumRepr::External,
             span("crates/events/src/order.rs", 408),
         )
@@ -1634,15 +1634,15 @@ impl Dto for RadrootsTradeOrderStatusDto {
             "crates/events/src/order.rs",
             408,
         ));
-        register(ctx, "RadrootsTradeOrderStatusDto", TypeDef::Enum(def))
+        register(ctx, "RadrootsOrderStatusDto", TypeDef::Enum(def))
     }
 }
 
-impl Dto for RadrootsTradeQuestionDto {
+impl Dto for RadrootsListingQuestionDto {
     fn describe(ctx: &mut DescribeCtx) -> TypeRef {
         let def = StructDef::new(
-            "RadrootsTradeQuestionDto",
-            "RadrootsTradeQuestion",
+            "RadrootsListingQuestionDto",
+            "RadrootsListingQuestion",
             span("crates/events/src/order.rs", 408),
         )
         .with_field(field(
@@ -1652,15 +1652,15 @@ impl Dto for RadrootsTradeQuestionDto {
             "crates/events/src/order.rs",
             408,
         ));
-        register(ctx, "RadrootsTradeQuestionDto", TypeDef::Struct(def))
+        register(ctx, "RadrootsListingQuestionDto", TypeDef::Struct(def))
     }
 }
 
-impl Dto for RadrootsTradeAnswerDto {
+impl Dto for RadrootsListingAnswerDto {
     fn describe(ctx: &mut DescribeCtx) -> TypeRef {
         let def = StructDef::new(
-            "RadrootsTradeAnswerDto",
-            "RadrootsTradeAnswer",
+            "RadrootsListingAnswerDto",
+            "RadrootsListingAnswer",
             span("crates/events/src/order.rs", 408),
         )
         .with_field(field(
@@ -1670,40 +1670,15 @@ impl Dto for RadrootsTradeAnswerDto {
             "crates/events/src/order.rs",
             408,
         ));
-        register(ctx, "RadrootsTradeAnswerDto", TypeDef::Struct(def))
+        register(ctx, "RadrootsListingAnswerDto", TypeDef::Struct(def))
     }
 }
 
-impl Dto for RadrootsTradeDiscountRequestDto {
+impl Dto for RadrootsListingDiscountRequestDto {
     fn describe(ctx: &mut DescribeCtx) -> TypeRef {
         let def = StructDef::new(
-            "RadrootsTradeDiscountRequestDto",
-            "RadrootsTradeDiscountRequest",
-            span("crates/events/src/order.rs", 408),
-        )
-        .with_field(field(
-            "discount_id",
-            "discount_id",
-            String::describe(ctx),
-            "crates/events/src/order.rs",
-            408,
-        ))
-        .with_field(field(
-            "value",
-            "value",
-            RadrootsCoreDiscountValue::describe(ctx),
-            "crates/events/src/order.rs",
-            408,
-        ));
-        register(ctx, "RadrootsTradeDiscountRequestDto", TypeDef::Struct(def))
-    }
-}
-
-impl Dto for RadrootsTradeDiscountOfferDto {
-    fn describe(ctx: &mut DescribeCtx) -> TypeRef {
-        let def = StructDef::new(
-            "RadrootsTradeDiscountOfferDto",
-            "RadrootsTradeDiscountOffer",
+            "RadrootsListingDiscountRequestDto",
+            "RadrootsListingDiscountRequest",
             span("crates/events/src/order.rs", 408),
         )
         .with_field(field(
@@ -1720,15 +1695,40 @@ impl Dto for RadrootsTradeDiscountOfferDto {
             "crates/events/src/order.rs",
             408,
         ));
-        register(ctx, "RadrootsTradeDiscountOfferDto", TypeDef::Struct(def))
+        register(ctx, "RadrootsListingDiscountRequestDto", TypeDef::Struct(def))
     }
 }
 
-impl Dto for RadrootsTradeDiscountDecisionDto {
+impl Dto for RadrootsListingDiscountOfferDto {
+    fn describe(ctx: &mut DescribeCtx) -> TypeRef {
+        let def = StructDef::new(
+            "RadrootsListingDiscountOfferDto",
+            "RadrootsListingDiscountOffer",
+            span("crates/events/src/order.rs", 408),
+        )
+        .with_field(field(
+            "discount_id",
+            "discount_id",
+            String::describe(ctx),
+            "crates/events/src/order.rs",
+            408,
+        ))
+        .with_field(field(
+            "value",
+            "value",
+            RadrootsCoreDiscountValue::describe(ctx),
+            "crates/events/src/order.rs",
+            408,
+        ));
+        register(ctx, "RadrootsListingDiscountOfferDto", TypeDef::Struct(def))
+    }
+}
+
+impl Dto for RadrootsListingDiscountDecisionDto {
     fn describe(ctx: &mut DescribeCtx) -> TypeRef {
         let def = EnumDef::new(
-            "RadrootsTradeDiscountDecisionDto",
-            "RadrootsTradeDiscountDecision",
+            "RadrootsListingDiscountDecisionDto",
+            "RadrootsListingDiscountDecision",
             EnumRepr::Adjacent {
                 tag: "kind".to_owned(),
                 content: "amount".to_owned(),
@@ -1759,15 +1759,15 @@ impl Dto for RadrootsTradeDiscountDecisionDto {
             )]),
             span("crates/events/src/order.rs", 408),
         ));
-        register(ctx, "RadrootsTradeDiscountDecisionDto", TypeDef::Enum(def))
+        register(ctx, "RadrootsListingDiscountDecisionDto", TypeDef::Enum(def))
     }
 }
 
-impl Dto for RadrootsTradeListingCancelDto {
+impl Dto for RadrootsListingCancelDto {
     fn describe(ctx: &mut DescribeCtx) -> TypeRef {
         let def = StructDef::new(
-            "RadrootsTradeListingCancelDto",
-            "RadrootsTradeListingCancel",
+            "RadrootsListingCancelDto",
+            "RadrootsListingCancel",
             span("crates/events/src/order.rs", 408),
         )
         .with_field(optional_nullable_field(
@@ -1777,35 +1777,35 @@ impl Dto for RadrootsTradeListingCancelDto {
             "crates/events/src/order.rs",
             408,
         ));
-        register(ctx, "RadrootsTradeListingCancelDto", TypeDef::Struct(def))
+        register(ctx, "RadrootsListingCancelDto", TypeDef::Struct(def))
     }
 }
 
-impl Dto for RadrootsTradeOrderResponseDto {
+impl Dto for RadrootsOrderResponseDto {
     fn describe(ctx: &mut DescribeCtx) -> TypeRef {
         accepted_reason_struct(
             ctx,
-            "RadrootsTradeOrderResponseDto",
-            "RadrootsTradeOrderResponse",
+            "RadrootsOrderResponseDto",
+            "RadrootsOrderResponse",
         )
     }
 }
 
-impl Dto for RadrootsTradeOrderRevisionResponseDto {
+impl Dto for RadrootsOrderRevisionResponseDto {
     fn describe(ctx: &mut DescribeCtx) -> TypeRef {
         accepted_reason_struct(
             ctx,
-            "RadrootsTradeOrderRevisionResponseDto",
-            "RadrootsTradeOrderRevisionResponse",
+            "RadrootsOrderRevisionResponseDto",
+            "RadrootsOrderRevisionResponse",
         )
     }
 }
 
-impl Dto for RadrootsTradeOrderRevisionDto {
+impl Dto for RadrootsOrderRevisionDto {
     fn describe(ctx: &mut DescribeCtx) -> TypeRef {
         let def = StructDef::new(
-            "RadrootsTradeOrderRevisionDto",
-            "RadrootsTradeOrderRevision",
+            "RadrootsOrderRevisionDto",
+            "RadrootsOrderRevision",
             span("crates/events/src/order.rs", 408),
         )
         .with_field(field(
@@ -1818,19 +1818,19 @@ impl Dto for RadrootsTradeOrderRevisionDto {
         .with_field(field(
             "changes",
             "changes",
-            <Vec<RadrootsTradeOrderChangeDto> as Dto>::describe(ctx),
+            <Vec<RadrootsOrderChangeDto> as Dto>::describe(ctx),
             "crates/events/src/order.rs",
             408,
         ));
-        register(ctx, "RadrootsTradeOrderRevisionDto", TypeDef::Struct(def))
+        register(ctx, "RadrootsOrderRevisionDto", TypeDef::Struct(def))
     }
 }
 
-impl Dto for RadrootsTradeOrderChangeDto {
+impl Dto for RadrootsOrderChangeDto {
     fn describe(ctx: &mut DescribeCtx) -> TypeRef {
         let def = EnumDef::new(
-            "RadrootsTradeOrderChangeDto",
-            "RadrootsTradeOrderChange",
+            "RadrootsOrderChangeDto",
+            "RadrootsOrderChange",
             EnumRepr::Adjacent {
                 tag: "kind".to_owned(),
                 content: "amount".to_owned(),
@@ -1882,15 +1882,15 @@ impl Dto for RadrootsTradeOrderChangeDto {
             )]),
             span("crates/events/src/order.rs", 408),
         ));
-        register(ctx, "RadrootsTradeOrderChangeDto", TypeDef::Enum(def))
+        register(ctx, "RadrootsOrderChangeDto", TypeDef::Enum(def))
     }
 }
 
-impl Dto for RadrootsTradeMessagePayloadDto {
+impl Dto for RadrootsCommercialMessagePayloadDto {
     fn describe(ctx: &mut DescribeCtx) -> TypeRef {
         let def = EnumDef::new(
-            "RadrootsTradeMessagePayloadDto",
-            "RadrootsTradeMessagePayload",
+            "RadrootsCommercialMessagePayloadDto",
+            "RadrootsCommercialMessagePayload",
             EnumRepr::Adjacent {
                 tag: "kind".to_owned(),
                 content: "amount".to_owned(),
@@ -1915,59 +1915,59 @@ impl Dto for RadrootsTradeMessagePayloadDto {
         .with_variant(newtype_variant(
             "OrderResponse",
             "order_response",
-            RadrootsTradeOrderResponseDto::describe(ctx),
+            RadrootsOrderResponseDto::describe(ctx),
         ))
         .with_variant(newtype_variant(
             "OrderRevision",
             "order_revision",
-            RadrootsTradeOrderRevisionDto::describe(ctx),
+            RadrootsOrderRevisionDto::describe(ctx),
         ))
         .with_variant(newtype_variant(
             "OrderRevisionAccept",
             "order_revision_accept",
-            RadrootsTradeOrderRevisionResponseDto::describe(ctx),
+            RadrootsOrderRevisionResponseDto::describe(ctx),
         ))
         .with_variant(newtype_variant(
             "OrderRevisionDecline",
             "order_revision_decline",
-            RadrootsTradeOrderRevisionResponseDto::describe(ctx),
+            RadrootsOrderRevisionResponseDto::describe(ctx),
         ))
         .with_variant(newtype_variant(
             "Question",
             "question",
-            RadrootsTradeQuestionDto::describe(ctx),
+            RadrootsListingQuestionDto::describe(ctx),
         ))
         .with_variant(newtype_variant(
             "Answer",
             "answer",
-            RadrootsTradeAnswerDto::describe(ctx),
+            RadrootsListingAnswerDto::describe(ctx),
         ))
         .with_variant(newtype_variant(
             "DiscountRequest",
             "discount_request",
-            RadrootsTradeDiscountRequestDto::describe(ctx),
+            RadrootsListingDiscountRequestDto::describe(ctx),
         ))
         .with_variant(newtype_variant(
             "DiscountOffer",
             "discount_offer",
-            RadrootsTradeDiscountOfferDto::describe(ctx),
+            RadrootsListingDiscountOfferDto::describe(ctx),
         ))
         .with_variant(newtype_variant(
             "DiscountAccept",
             "discount_accept",
-            RadrootsTradeDiscountDecisionDto::describe(ctx),
+            RadrootsListingDiscountDecisionDto::describe(ctx),
         ))
         .with_variant(newtype_variant(
             "DiscountDecline",
             "discount_decline",
-            RadrootsTradeDiscountDecisionDto::describe(ctx),
+            RadrootsListingDiscountDecisionDto::describe(ctx),
         ))
         .with_variant(newtype_variant(
             "Cancel",
             "cancel",
-            RadrootsTradeListingCancelDto::describe(ctx),
+            RadrootsListingCancelDto::describe(ctx),
         ));
-        register(ctx, "RadrootsTradeMessagePayloadDto", TypeDef::Enum(def))
+        register(ctx, "RadrootsCommercialMessagePayloadDto", TypeDef::Enum(def))
     }
 }
 
