@@ -81,11 +81,15 @@ pub fn render_registry_types(
 ) -> Result<DtoTypesModule, String> {
     let mut imports = BTreeMap::<String, BTreeSet<String>>::new();
     let mut declarations = Vec::new();
+    let mut type_defs = registry
+        .types_by_id
+        .iter()
+        .filter(|(type_id, _)| !options.external_imports.contains_key(type_id))
+        .collect::<Vec<_>>();
 
-    for (type_id, type_def) in &registry.types_by_id {
-        if options.external_imports.contains_key(type_id) {
-            continue;
-        }
+    type_defs.sort_by(|(_, left), (_, right)| type_name(left).cmp(type_name(right)));
+
+    for (type_id, type_def) in type_defs {
         declarations.push(render_type_def(
             *type_id,
             type_def,
@@ -617,7 +621,7 @@ mod tests {
         );
         assert_eq!(
             rendered.body_ts(),
-            "export type Envelope<T> = { value: T, };\n\nexport type SyntheticThing = { external: ExternalThing, maybeCount?: string | null, point: [number, number], envelope: Envelope<ExternalThing>, };\n\nexport type SyntheticMode = \"ready\" | \"done\";\n\nexport type SyntheticEvent = { type: \"created\", payload: { id: string, }, } | { type: \"archived\", payload: { reason?: string | null, }, };"
+            "export type Envelope<T> = { value: T, };\n\nexport type SyntheticEvent = { type: \"created\", payload: { id: string, }, } | { type: \"archived\", payload: { reason?: string | null, }, };\n\nexport type SyntheticMode = \"ready\" | \"done\";\n\nexport type SyntheticThing = { external: ExternalThing, maybeCount?: string | null, point: [number, number], envelope: Envelope<ExternalThing>, };"
         );
     }
 
