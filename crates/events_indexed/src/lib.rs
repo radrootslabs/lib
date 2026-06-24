@@ -3,6 +3,8 @@
 extern crate alloc;
 
 pub mod checkpoint;
+#[cfg(feature = "dto-bindgen")]
+pub mod dto;
 pub mod manifest;
 pub mod serde_ext;
 pub mod types;
