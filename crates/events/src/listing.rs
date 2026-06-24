@@ -109,6 +109,7 @@ pub struct RadrootsListingBin {
     pub display_price_unit: Option<RadrootsCoreUnit>,
 }
 
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsListingLocation {

@@ -8,14 +8,20 @@ pub const RADROOTS_PROFILE_TYPE_TAG_COOP: &str = "radroots:type:coop";
 pub const RADROOTS_PROFILE_TYPE_TAG_ANY: &str = "radroots:type:any";
 pub const RADROOTS_PROFILE_TYPE_TAG_RADROOTSD: &str = "radroots:type:radrootsd";
 
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Debug, PartialEq, Eq, Copy)]
 pub enum RadrootsProfileType {
+    #[cfg_attr(feature = "serde", serde(rename = "individual"))]
     Individual,
+    #[cfg_attr(feature = "serde", serde(rename = "farm"))]
     Farm,
+    #[cfg_attr(feature = "serde", serde(rename = "coop"))]
     Coop,
+    #[cfg_attr(feature = "serde", serde(rename = "any"))]
     Any,
+    #[cfg_attr(feature = "serde", serde(rename = "radrootsd"))]
     Radrootsd,
 }
 
@@ -40,6 +46,7 @@ pub fn radroots_profile_type_from_tag_value(value: &str) -> Option<RadrootsProfi
     }
 }
 
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsProfile {

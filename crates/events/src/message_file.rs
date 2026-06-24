@@ -6,6 +6,7 @@ use crate::message::RadrootsMessageRecipient;
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
 
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsMessageFile {
@@ -19,6 +20,7 @@ pub struct RadrootsMessageFile {
     pub decryption_nonce: String,
     pub encrypted_hash: String,
     pub original_hash: Option<String>,
+    #[cfg_attr(feature = "dto-bindgen", dto(int_repr = "json_number_unsafe"))]
     pub size: Option<u64>,
     pub dimensions: Option<RadrootsMessageFileDimensions>,
     pub blurhash: Option<String>,
@@ -26,6 +28,7 @@ pub struct RadrootsMessageFile {
     pub fallbacks: Vec<String>,
 }
 
+#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RadrootsMessageFileDimensions {

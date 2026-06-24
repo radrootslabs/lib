@@ -13,6 +13,14 @@ readme = "README"
 
 [features]
 default = ["std", "serde", "serde_json"]
+dto-bindgen = [
+  "std",
+  "serde_json",
+  "dep:dto_bindgen",
+  "dep:dto_bindgen_core",
+  "radroots_core/dto-bindgen",
+  "radroots_events/dto-bindgen",
+]
 std = [
   "radroots_authority/std",
   "radroots_core/std",
@@ -48,6 +56,8 @@ radroots_events = { workspace = true, default-features = false }
 radroots_events_codec = { workspace = true, default-features = false }
 radroots_event_store = { workspace = true, optional = true, default-features = false }
 base64 = { workspace = true, optional = true }
+dto_bindgen = { workspace = true, optional = true }
+dto_bindgen_core = { workspace = true, optional = true }
 hex = { workspace = true, optional = true }
 serde = { workspace = true, default-features = false, features = [
   "alloc",

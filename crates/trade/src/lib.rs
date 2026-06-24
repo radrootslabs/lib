@@ -3,6 +3,8 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
+#[cfg(feature = "dto-bindgen")]
+pub mod dto;
 pub mod listing;
 pub mod order;
 pub mod prelude;
