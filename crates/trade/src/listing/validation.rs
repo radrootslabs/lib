@@ -20,7 +20,6 @@ use radroots_events::{
 
 use crate::listing::codec::listing_from_event_parts;
 
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsTradeListing {

@@ -1,4 +1,3 @@
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeListingSubtotal {
@@ -8,7 +7,6 @@ pub struct RadrootsTradeListingSubtotal {
     pub quantity_unit: radroots_core::RadrootsCoreUnit,
 }
 
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeListingTotal {
