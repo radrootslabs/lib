@@ -49,6 +49,7 @@ signer-adapters = [
   "std",
   "dep:radroots_nostr_connect",
   "dep:radroots_nostr_signer",
+  "dep:tokio",
   "radroots_nostr/events",
 ]
 runtime = [
@@ -128,6 +129,7 @@ sqlx = { workspace = true, optional = true, default-features = false, features =
   "runtime-tokio",
   "sqlite",
 ] }
+tokio = { workspace = true, optional = true, features = ["time"] }
 uuid = { workspace = true, optional = true }
 
 [[example]]

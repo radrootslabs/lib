@@ -20,10 +20,10 @@ use radroots_nostr_connect::prelude::{
     execute_request_with_transport,
 };
 use serde_json::json;
-use std::sync::{
-    Arc,
-    atomic::{AtomicU64, Ordering},
-};
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::time::timeout;
+use uuid::Uuid;
 
 pub type RadrootsSdkNip46TransportFuture<'a, T> = RadrootsNostrConnectClientTransportFuture<'a, T>;
 
@@ -36,6 +36,7 @@ pub const RADROOTS_SDK_MYC_NIP46_PRODUCT_SIGN_EVENT_KINDS: [u32; 7] = [
     KIND_ORDER_REVISION_DECISION,
     KIND_ORDER_CANCELLATION,
 ];
+pub const RADROOTS_SDK_MYC_NIP46_DEFAULT_REQUEST_TIMEOUT_MS: u64 = 30_000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -281,13 +282,45 @@ pub trait RadrootsSdkNip46Transport: Send + Sync {
     -> RadrootsSdkNip46TransportFuture<'a, RadrootsNostrEvent>;
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RadrootsSdkMycNip46RequestPolicy {
+    request_timeout: Duration,
+}
+
+impl RadrootsSdkMycNip46RequestPolicy {
+    pub fn new(request_timeout: Duration) -> Result<Self, RadrootsSdkError> {
+        if request_timeout.is_zero() {
+            return Err(RadrootsSdkError::SignerUnavailable {
+                mode: RadrootsSdkSignerMode::MycNip46.as_str().to_owned(),
+                reason: "myc_nip46 request timeout must be greater than zero".to_owned(),
+            });
+        }
+        Ok(Self { request_timeout })
+    }
+
+    pub fn request_timeout(self) -> Duration {
+        self.request_timeout
+    }
+}
+
+impl Default for RadrootsSdkMycNip46RequestPolicy {
+    fn default() -> Self {
+        Self {
+            request_timeout: Duration::from_millis(
+                RADROOTS_SDK_MYC_NIP46_DEFAULT_REQUEST_TIMEOUT_MS,
+            ),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct RadrootsSdkMycNip46Signer {
     client_keys: RadrootsNostrKeys,
     target: RadrootsNostrConnectClientTarget,
     user_pubkey: RadrootsPublicKey,
     transport: Arc<dyn RadrootsSdkNip46Transport>,
-    next_request_id: Arc<AtomicU64>,
+    request_policy: RadrootsSdkMycNip46RequestPolicy,
+    request_id_generator: Arc<dyn RadrootsSdkMycNip46RequestIdGenerator>,
 }
 
 impl RadrootsSdkMycNip46Signer {
@@ -297,6 +330,41 @@ impl RadrootsSdkMycNip46Signer {
         user_pubkey: impl AsRef<str>,
         transport: Arc<dyn RadrootsSdkNip46Transport>,
     ) -> Result<Self, RadrootsSdkError> {
+        Self::new_with_request_policy(
+            client_keys,
+            target,
+            user_pubkey,
+            transport,
+            RadrootsSdkMycNip46RequestPolicy::default(),
+        )
+    }
+
+    pub fn new_with_request_policy(
+        client_keys: RadrootsNostrKeys,
+        target: RadrootsNostrConnectClientTarget,
+        user_pubkey: impl AsRef<str>,
+        transport: Arc<dyn RadrootsSdkNip46Transport>,
+        request_policy: RadrootsSdkMycNip46RequestPolicy,
+    ) -> Result<Self, RadrootsSdkError> {
+        Self::new_with_request_id_generator(
+            client_keys,
+            target,
+            user_pubkey,
+            transport,
+            request_policy,
+            Arc::new(RadrootsSdkUuidNip46RequestIdGenerator),
+        )
+    }
+
+    fn new_with_request_id_generator(
+        client_keys: RadrootsNostrKeys,
+        target: RadrootsNostrConnectClientTarget,
+        user_pubkey: impl AsRef<str>,
+        transport: Arc<dyn RadrootsSdkNip46Transport>,
+        request_policy: RadrootsSdkMycNip46RequestPolicy,
+        request_id_generator: Arc<dyn RadrootsSdkMycNip46RequestIdGenerator>,
+    ) -> Result<Self, RadrootsSdkError> {
+        RadrootsSdkMycNip46RequestPolicy::new(request_policy.request_timeout())?;
         let user_pubkey = RadrootsPublicKey::parse(user_pubkey.as_ref()).map_err(|error| {
             RadrootsSdkError::InvalidRequest {
                 message: format!("myc_nip46 user pubkey is invalid: {error}"),
@@ -307,7 +375,8 @@ impl RadrootsSdkMycNip46Signer {
             target,
             user_pubkey,
             transport,
-            next_request_id: Arc::new(AtomicU64::new(1)),
+            request_policy,
+            request_id_generator,
         })
     }
 
@@ -350,13 +419,10 @@ impl RadrootsSdkMycNip46Signer {
             transport: self.transport.as_ref(),
         };
         let mut progress_error = None;
-        let response = execute_request_with_transport(
+        let request_future = execute_request_with_transport(
             &self.client_keys,
             &self.target,
-            RadrootsNostrConnectClientRequest::new(
-                request_id,
-                sign_event_request,
-            ),
+            RadrootsNostrConnectClientRequest::new(request_id, sign_event_request),
             &mut adapter,
             |progress| {
                 let sdk_progress = match progress {
@@ -375,8 +441,11 @@ impl RadrootsSdkMycNip46Signer {
                 }
                 Ok(())
             },
-        )
-        .await;
+        );
+        let response = timeout(self.request_policy.request_timeout(), request_future)
+            .await
+            .map_err(|_| RadrootsNostrConnectError::RequestTimedOut)
+            .and_then(|response| response);
         if let Some(error) = progress_error {
             return Err(error);
         }
@@ -401,8 +470,19 @@ impl RadrootsSdkMycNip46Signer {
     }
 
     fn next_request_id(&self) -> String {
-        let next = self.next_request_id.fetch_add(1, Ordering::Relaxed);
-        format!("radroots-sdk-myc-nip46-sign-{next}")
+        self.request_id_generator.next_request_id()
+    }
+}
+
+trait RadrootsSdkMycNip46RequestIdGenerator: Send + Sync {
+    fn next_request_id(&self) -> String;
+}
+
+struct RadrootsSdkUuidNip46RequestIdGenerator;
+
+impl RadrootsSdkMycNip46RequestIdGenerator for RadrootsSdkUuidNip46RequestIdGenerator {
+    fn next_request_id(&self) -> String {
+        format!("radroots-sdk-myc-nip46-sign-{}", Uuid::new_v4())
     }
 }
 

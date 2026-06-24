@@ -7,10 +7,13 @@ use radroots_events_codec::wire::{WireEventParts, to_frozen_draft};
 use radroots_nostr::prelude::{RadrootsNostrEvent, RadrootsNostrSecretKey};
 use radroots_nostr_connect::prelude::{
     RADROOTS_NOSTR_CONNECT_RPC_KIND, RadrootsNostrConnectClientTarget, RadrootsNostrConnectError,
-    RadrootsNostrConnectResponse,
+    RadrootsNostrConnectRequestMessage, RadrootsNostrConnectResponse,
 };
 use std::collections::VecDeque;
+use std::future;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
+use uuid::Uuid;
 
 const USER_SECRET_KEY_HEX: &str =
     "10c5304d6c9ae3a1a16f7860f1cc8f5e3a76225a2663b3a989a0d775919b7df5";
@@ -104,24 +107,93 @@ fn response_event(
 }
 
 struct MockNip46Transport {
+    remote_keys: RadrootsNostrKeys,
+    responses: Mutex<VecDeque<MockNip46Response>>,
     published: Mutex<Vec<RadrootsNostrEvent>>,
     inbound: Mutex<VecDeque<RadrootsNostrEvent>>,
 }
 
+enum MockNip46Response {
+    Respond(RadrootsNostrConnectResponse),
+}
+
 impl MockNip46Transport {
-    fn new(inbound: Vec<RadrootsNostrEvent>) -> Self {
+    fn new(remote_keys: RadrootsNostrKeys, responses: Vec<MockNip46Response>) -> Self {
         Self {
+            remote_keys,
+            responses: Mutex::new(responses.into()),
             published: Mutex::new(Vec::new()),
-            inbound: Mutex::new(inbound.into()),
+            inbound: Mutex::new(VecDeque::new()),
         }
     }
 
     fn published(&self) -> Vec<RadrootsNostrEvent> {
         self.published.lock().expect("published lock").clone()
     }
+
+    fn published_request_messages(&self) -> Vec<RadrootsNostrConnectRequestMessage> {
+        self.published()
+            .iter()
+            .map(|event| request_message_from_event(&self.remote_keys, event))
+            .collect()
+    }
+}
+
+fn request_message_from_event(
+    remote_keys: &RadrootsNostrKeys,
+    event: &RadrootsNostrEvent,
+) -> RadrootsNostrConnectRequestMessage {
+    let payload = nip44::decrypt(remote_keys.secret_key(), &event.pubkey, &event.content)
+        .expect("request payload");
+    serde_json::from_str(payload.as_str()).expect("request message")
 }
 
 impl RadrootsSdkNip46Transport for MockNip46Transport {
+    fn publish_request_event<'a>(
+        &'a self,
+        event: RadrootsNostrEvent,
+    ) -> RadrootsSdkNip46TransportFuture<'a, ()> {
+        self.published.lock().expect("published lock").push(event);
+        let response = self.responses.lock().expect("responses lock").pop_front();
+        if let Some(MockNip46Response::Respond(response)) = response {
+            let event = self
+                .published
+                .lock()
+                .expect("published lock")
+                .last()
+                .cloned();
+            let event = event.expect("published request event");
+            let request = request_message_from_event(&self.remote_keys, &event);
+            let response = response_event(&self.remote_keys, event.pubkey, &request.id, response);
+            self.inbound
+                .lock()
+                .expect("inbound lock")
+                .push_back(response);
+        }
+        Box::pin(async { Ok(()) })
+    }
+
+    fn next_response_event<'a>(
+        &'a self,
+    ) -> RadrootsSdkNip46TransportFuture<'a, RadrootsNostrEvent> {
+        let next = self.inbound.lock().expect("inbound lock").pop_front();
+        Box::pin(async move { next.ok_or(RadrootsNostrConnectError::RequestTimedOut) })
+    }
+}
+
+struct HangingNip46Transport {
+    published: Mutex<Vec<RadrootsNostrEvent>>,
+}
+
+impl HangingNip46Transport {
+    fn new() -> Self {
+        Self {
+            published: Mutex::new(Vec::new()),
+        }
+    }
+}
+
+impl RadrootsSdkNip46Transport for HangingNip46Transport {
     fn publish_request_event<'a>(
         &'a self,
         event: RadrootsNostrEvent,
@@ -133,8 +205,9 @@ impl RadrootsSdkNip46Transport for MockNip46Transport {
     fn next_response_event<'a>(
         &'a self,
     ) -> RadrootsSdkNip46TransportFuture<'a, RadrootsNostrEvent> {
-        let next = self.inbound.lock().expect("inbound lock").pop_front();
-        Box::pin(async move { next.ok_or(RadrootsNostrConnectError::RequestTimedOut) })
+        Box::pin(future::pending::<
+            Result<RadrootsNostrEvent, RadrootsNostrConnectError>,
+        >())
     }
 }
 
@@ -202,13 +275,12 @@ async fn myc_nip46_provider_signs_and_validates_remote_event() {
     let signed = radroots_nostr::prelude::radroots_nostr_sign_frozen_draft(&user_keys, &draft)
         .expect("signed");
     let signed_event = RadrootsNostrEvent::from_json(signed.raw_json.as_str()).expect("event");
-    let inbound = vec![response_event(
-        &remote_keys,
-        client_keys.public_key(),
-        "radroots-sdk-myc-nip46-sign-1",
-        RadrootsNostrConnectResponse::SignedEvent(signed_event),
-    )];
-    let transport = Arc::new(MockNip46Transport::new(inbound));
+    let transport = Arc::new(MockNip46Transport::new(
+        remote_keys.clone(),
+        vec![MockNip46Response::Respond(
+            RadrootsNostrConnectResponse::SignedEvent(signed_event),
+        )],
+    ));
     let target = RadrootsNostrConnectClientTarget::new(
         remote_keys.public_key(),
         vec![nostr::RelayUrl::parse("wss://relay.example.com").expect("relay")],
@@ -244,6 +316,12 @@ async fn myc_nip46_provider_signs_and_validates_remote_event() {
     );
     assert_eq!(receipt.signed_event, signed);
     assert_eq!(transport.published().len(), 1);
+    let request_messages = transport.published_request_messages();
+    let request_id = request_messages[0]
+        .id
+        .strip_prefix("radroots-sdk-myc-nip46-sign-")
+        .expect("request id prefix");
+    Uuid::parse_str(request_id).expect("uuid request id");
     assert_eq!(
         progress,
         vec![
@@ -261,13 +339,12 @@ async fn myc_nip46_provider_signs_and_validates_remote_event() {
 async fn myc_nip46_provider_reports_auth_challenge_progress_and_timeout() {
     let client_keys = client_keys();
     let remote_keys = remote_keys();
-    let auth = response_event(
-        &remote_keys,
-        client_keys.public_key(),
-        "radroots-sdk-myc-nip46-sign-1",
-        RadrootsNostrConnectResponse::AuthUrl("https://auth.example.com/challenge".to_owned()),
-    );
-    let transport = Arc::new(MockNip46Transport::new(vec![auth]));
+    let transport = Arc::new(MockNip46Transport::new(
+        remote_keys.clone(),
+        vec![MockNip46Response::Respond(
+            RadrootsNostrConnectResponse::AuthUrl("https://auth.example.com/challenge".to_owned()),
+        )],
+    ));
     let target = RadrootsNostrConnectClientTarget::new(remote_keys.public_key(), Vec::new());
     let signer =
         RadrootsSdkMycNip46Signer::new(client_keys, target, USER_PUBLIC_KEY_HEX, transport)
@@ -304,6 +381,46 @@ async fn myc_nip46_provider_reports_auth_challenge_progress_and_timeout() {
             }
         ]
     );
+}
+
+#[tokio::test]
+async fn myc_nip46_provider_rejects_zero_timeout_policy() {
+    let error = RadrootsSdkMycNip46RequestPolicy::new(Duration::ZERO).expect_err("zero timeout");
+
+    assert!(matches!(
+        error,
+        RadrootsSdkError::SignerUnavailable { ref mode, ref reason }
+            if mode == "myc_nip46" && reason.contains("timeout")
+    ));
+}
+
+#[tokio::test]
+async fn myc_nip46_provider_times_out_hanging_transport() {
+    let client_keys = client_keys();
+    let remote_keys = remote_keys();
+    let target = RadrootsNostrConnectClientTarget::new(remote_keys.public_key(), Vec::new());
+    let transport = Arc::new(HangingNip46Transport::new());
+    let policy = RadrootsSdkMycNip46RequestPolicy::new(Duration::from_millis(5)).expect("policy");
+    let signer = RadrootsSdkMycNip46Signer::new_with_request_policy(
+        client_keys,
+        target,
+        USER_PUBLIC_KEY_HEX,
+        transport,
+        policy,
+    )
+    .expect("signer");
+    let draft = frozen_draft();
+    let actor = actor();
+
+    let error = signer
+        .sign(RadrootsSdkSignRequest::new("farm.publish", &actor, &draft))
+        .await
+        .expect_err("timeout");
+
+    assert!(matches!(
+        error,
+        RadrootsSdkError::SignerRequestTimedOut { ref mode } if mode == "myc_nip46"
+    ));
 }
 
 #[tokio::test]
@@ -390,12 +507,12 @@ async fn myc_nip46_provider_rejects_returned_event_drift() {
         let client_keys = client_keys();
         let remote_keys = remote_keys();
         let signed_event = sign_event(&signing_keys, &drifted_draft);
-        let transport = Arc::new(MockNip46Transport::new(vec![response_event(
-            &remote_keys,
-            client_keys.public_key(),
-            "radroots-sdk-myc-nip46-sign-1",
-            RadrootsNostrConnectResponse::SignedEvent(signed_event),
-        )]));
+        let transport = Arc::new(MockNip46Transport::new(
+            remote_keys.clone(),
+            vec![MockNip46Response::Respond(
+                RadrootsNostrConnectResponse::SignedEvent(signed_event),
+            )],
+        ));
         let target = RadrootsNostrConnectClientTarget::new(remote_keys.public_key(), Vec::new());
         let signer =
             RadrootsSdkMycNip46Signer::new(client_keys, target, USER_PUBLIC_KEY_HEX, transport)
