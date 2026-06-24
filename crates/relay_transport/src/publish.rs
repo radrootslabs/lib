@@ -1,10 +1,12 @@
 #![forbid(unsafe_code)]
 
 use crate::{RadrootsRelayOutcome, RadrootsRelayTargetSet, RadrootsRelayTransportError};
+#[cfg(feature = "client")]
+use core::time::Duration;
 use futures::future::BoxFuture;
 use radroots_events::draft::RadrootsSignedNostrEvent;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex, PoisonError};
 
 #[cfg(feature = "client")]
@@ -13,6 +15,9 @@ use crate::RadrootsRelayOutcomeKind;
 use nostr::JsonUtil;
 #[cfg(feature = "client")]
 use radroots_nostr::prelude::{RadrootsNostrClient, RadrootsNostrEvent};
+
+#[cfg(feature = "client")]
+const RELAY_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsRelayPublishRequest {
@@ -216,11 +221,47 @@ impl RadrootsRelayPublishAdapter for RadrootsNostrClientPublishAdapter {
                     .await
                     .map_err(|error| RadrootsRelayTransportError::Transport(error.to_string()))?;
             }
-            let output = match self
+            let connection_output = self.client.try_connect(RELAY_CONNECT_TIMEOUT).await;
+            let target_url_set = target_strings
+                .iter()
+                .map(|relay_url| relay_url.trim_end_matches('/').to_owned())
+                .collect::<BTreeSet<_>>();
+            let connected_strings = self
                 .client
-                .send_event_to(target_strings.clone(), &event)
+                .relays()
                 .await
-            {
+                .into_values()
+                .filter(|relay| relay.is_connected())
+                .map(|relay| relay.url().to_string())
+                .filter(|relay_url| target_url_set.contains(relay_url.trim_end_matches('/')))
+                .collect::<Vec<_>>();
+            let connection_failures = connection_output
+                .failed
+                .iter()
+                .map(|(relay, reason)| {
+                    (
+                        relay.to_string().trim_end_matches('/').to_owned(),
+                        reason.clone(),
+                    )
+                })
+                .collect::<BTreeMap<_, _>>();
+            if connected_strings.is_empty() {
+                return Ok(target_strings
+                    .into_iter()
+                    .map(|relay_url| {
+                        let target_url = relay_url.trim_end_matches('/');
+                        let reason = connection_failures
+                            .get(target_url)
+                            .cloned()
+                            .unwrap_or_else(|| "relay did not connect".to_owned());
+                        RadrootsRelayPublishRelayReceipt::attempted(
+                            relay_url,
+                            RadrootsRelayOutcome::connection_failed(reason),
+                        )
+                    })
+                    .collect());
+            }
+            let output = match self.client.send_event_to(connected_strings, &event).await {
                 Ok(output) => output,
                 Err(error) => {
                     let message = error.to_string();
@@ -251,6 +292,13 @@ impl RadrootsRelayPublishAdapter for RadrootsNostrClientPublishAdapter {
                                 "nostr-relay-pool-success-ok-message-unavailable".to_owned(),
                             ),
                         },
+                    ));
+                    continue;
+                }
+                if let Some(reason) = connection_failures.get(target_url) {
+                    receipts.push(RadrootsRelayPublishRelayReceipt::attempted(
+                        relay_url,
+                        RadrootsRelayOutcome::connection_failed(reason.clone()),
                     ));
                     continue;
                 }
