@@ -106,14 +106,14 @@ impl Dto for RadrootsNostrEventRef {
             "crates/events/src/lib.rs",
             67,
         ))
-        .with_field(field(
+        .with_field(optional_nullable_field(
             "d_tag",
             "d_tag",
             <Option<String> as Dto>::describe(ctx),
             "crates/events/src/lib.rs",
             68,
         ))
-        .with_field(field(
+        .with_field(optional_nullable_field(
             "relays",
             "relays",
             <Option<Vec<String>> as Dto>::describe(ctx),
@@ -138,7 +138,7 @@ impl Dto for RadrootsNostrEventPtr {
             "crates/events/src/lib.rs",
             75,
         ))
-        .with_field(field(
+        .with_field(optional_nullable_field(
             "relays",
             "relays",
             <Option<String> as Dto>::describe(ctx),
@@ -177,42 +177,42 @@ impl Dto for RadrootsListingProduct {
             "crates/events/src/listing.rs",
             84,
         ))
-        .with_field(nullable_field(
+        .with_field(optional_nullable_field(
             "summary",
             "summary",
             <Option<String> as Dto>::describe(ctx),
             "crates/events/src/listing.rs",
             85,
         ))
-        .with_field(nullable_field(
+        .with_field(optional_nullable_field(
             "process",
             "process",
             <Option<String> as Dto>::describe(ctx),
             "crates/events/src/listing.rs",
             86,
         ))
-        .with_field(nullable_field(
+        .with_field(optional_nullable_field(
             "lot",
             "lot",
             <Option<String> as Dto>::describe(ctx),
             "crates/events/src/listing.rs",
             87,
         ))
-        .with_field(nullable_field(
+        .with_field(optional_nullable_field(
             "location",
             "location",
             <Option<String> as Dto>::describe(ctx),
             "crates/events/src/listing.rs",
             88,
         ))
-        .with_field(nullable_field(
+        .with_field(optional_nullable_field(
             "profile",
             "profile",
             <Option<String> as Dto>::describe(ctx),
             "crates/events/src/listing.rs",
             89,
         ))
-        .with_field(nullable_field(
+        .with_field(optional_nullable_field(
             "year",
             "year",
             <Option<String> as Dto>::describe(ctx),
@@ -263,7 +263,7 @@ impl Dto for RadrootsListingImage {
             "crates/events/src/listing.rs",
             127,
         ))
-        .with_field(nullable_field(
+        .with_field(optional_nullable_field(
             "size",
             "size",
             TypeRef::option(size),
@@ -278,14 +278,14 @@ fn register(ctx: &mut DescribeCtx, rust_ident: &str, type_def: TypeDef) -> TypeR
     ctx.register_type(RustTypeId::new("radroots_events", rust_ident), type_def)
 }
 
-fn nullable_field(
+fn optional_nullable_field(
     rust_name: &str,
     wire_name: &str,
     ty: TypeRef,
     file: &str,
     line: u32,
 ) -> FieldDef {
-    field(rust_name, wire_name, ty, file, line).with_presence(FieldPresence::nullable_required())
+    field(rust_name, wire_name, ty, file, line).with_presence(FieldPresence::optional_nullable())
 }
 
 fn field(rust_name: &str, wire_name: &str, ty: TypeRef, file: &str, line: u32) -> FieldDef {
@@ -323,5 +323,42 @@ mod tests {
                 .values()
                 .any(|def| matches!(def, TypeDef::Struct(def) if def.export_name == "RadrootsListingImageSize"))
         );
+    }
+
+    #[test]
+    fn option_fields_are_optional_nullable() {
+        let registry = build_registry(dto_roots());
+
+        let product = registry
+            .types_by_id
+            .values()
+            .find_map(|def| match def {
+                TypeDef::Struct(def) if def.export_name == "RadrootsListingProduct" => Some(def),
+                _ => None,
+            })
+            .expect("listing product descriptor exists");
+        let summary = product
+            .fields
+            .iter()
+            .find(|field| field.rust_name.as_str() == "summary")
+            .expect("summary field exists");
+        assert!(!summary.presence.required_on_deserialize);
+        assert!(summary.presence.nullable);
+
+        let event_ref = registry
+            .types_by_id
+            .values()
+            .find_map(|def| match def {
+                TypeDef::Struct(def) if def.export_name == "RadrootsNostrEventRef" => Some(def),
+                _ => None,
+            })
+            .expect("event ref descriptor exists");
+        let d_tag = event_ref
+            .fields
+            .iter()
+            .find(|field| field.rust_name.as_str() == "d_tag")
+            .expect("d_tag field exists");
+        assert!(!d_tag.presence.required_on_deserialize);
+        assert!(d_tag.presence.nullable);
     }
 }
