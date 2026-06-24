@@ -13,10 +13,12 @@ readme = "README"
 
 [features]
 default = ["std", "serde"]
+dto-bindgen = ["std", "serde", "dep:dto_bindgen_core"]
 std = []
 serde = ["dep:serde", "rust_decimal/serde"]
 
 [dependencies]
+dto_bindgen_core = { workspace = true, optional = true }
 rust_decimal = { workspace = true, default-features = false }
 rust_decimal_macros = { workspace = true }
 serde = { workspace = true, default-features = false, features = [

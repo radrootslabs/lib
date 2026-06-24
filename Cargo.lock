@@ -1500,6 +1500,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "75b325c5dbd37f80359721ad39aca5a29fb04c89279657cffdda8736d0c0b9d2"
 
 [[package]]
+name = "dto_bindgen_core"
+version = "0.1.0"
+source = "git+https://github.com/triesap/dto_bindgen?rev=96ed6c691aacab31860828d25da2e0167b13d92c#96ed6c691aacab31860828d25da2e0167b13d92c"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "serde",
+ "serde_json",
+ "sha2",
+ "syn 2.0.117",
+ "toml",
+]
+
+[[package]]
 name = "dynasm"
 version = "3.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4222,6 +4236,7 @@ dependencies = [
 name = "radroots_core"
 version = "0.1.0-alpha.2"
 dependencies = [
+ "dto_bindgen_core",
  "rust_decimal",
  "rust_decimal_macros",
  "serde",
@@ -4246,6 +4261,7 @@ dependencies = [
 name = "radroots_events"
 version = "0.1.0-alpha.2"
 dependencies = [
+ "dto_bindgen_core",
  "hex",
  "radroots_core",
  "serde",

@@ -6,6 +6,8 @@ extern crate alloc;
 pub mod currency;
 pub mod decimal;
 pub mod discount;
+#[cfg(feature = "dto-bindgen")]
+pub mod dto;
 pub mod money;
 pub mod percent;
 pub mod quantity;

@@ -15,6 +15,8 @@ pub mod contract;
 pub mod coop;
 pub mod document;
 pub mod draft;
+#[cfg(feature = "dto-bindgen")]
+pub mod dto;
 pub mod event_head;
 pub mod farm;
 pub mod farm_crdt;
