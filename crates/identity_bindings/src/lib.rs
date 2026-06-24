@@ -1,28 +1,30 @@
 pub use radroots_identity as upstream;
 
-use radroots_sdk_binding_model::{self as ts, TsValue};
+use radroots_identity::{
+    RADROOTS_USERNAME_MAX_LEN, RADROOTS_USERNAME_MIN_LEN, RADROOTS_USERNAME_REGEX,
+};
 
-pub fn constants_module() -> ts::TsModule {
-    ts::module(vec![
-        ts::const_number("RADROOTS_USERNAME_MIN_LEN", 3),
-        ts::const_number("RADROOTS_USERNAME_MAX_LEN", 30),
-        ts::const_decl(
-            "RADROOTS_USERNAME_REGEX",
-            None,
-            TsValue::String(r#"^(?!.*\.\.)(?!\.)(?!.*\.$)[a-z0-9._-]{3,30}$"#.to_owned()),
-        ),
-    ])
+pub fn constants_module() -> String {
+    format!(
+        "export const RADROOTS_USERNAME_MIN_LEN = {RADROOTS_USERNAME_MIN_LEN};\nexport const RADROOTS_USERNAME_MAX_LEN = {RADROOTS_USERNAME_MAX_LEN};\nexport const RADROOTS_USERNAME_REGEX = {RADROOTS_USERNAME_REGEX:?};"
+    )
 }
 
 #[cfg(test)]
 mod tests {
-    use super::constants_module;
+    use super::{
+        RADROOTS_USERNAME_MAX_LEN, RADROOTS_USERNAME_MIN_LEN, RADROOTS_USERNAME_REGEX,
+        constants_module,
+    };
 
     #[test]
     fn preserves_username_constant_exports() {
-        let rendered = constants_module().render();
+        let rendered = constants_module();
         assert!(rendered.contains("RADROOTS_USERNAME_MIN_LEN"));
+        assert!(rendered.contains(&RADROOTS_USERNAME_MIN_LEN.to_string()));
         assert!(rendered.contains("RADROOTS_USERNAME_MAX_LEN"));
+        assert!(rendered.contains(&RADROOTS_USERNAME_MAX_LEN.to_string()));
         assert!(rendered.contains("RADROOTS_USERNAME_REGEX"));
+        assert!(rendered.contains(&format!("{RADROOTS_USERNAME_REGEX:?}")));
     }
 }

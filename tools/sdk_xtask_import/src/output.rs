@@ -25,6 +25,7 @@ pub struct GeneratedFile {
 pub enum TsSource {
     DtoRegistry(DtoTypesModule),
     Module(TsModule),
+    Raw(String),
 }
 
 impl TsSource {
@@ -32,6 +33,7 @@ impl TsSource {
         match self {
             Self::DtoRegistry(module) => module.body_ts().to_owned(),
             Self::Module(module) => module.render(),
+            Self::Raw(body) => body.clone(),
         }
     }
 
@@ -39,6 +41,7 @@ impl TsSource {
         match self {
             Self::DtoRegistry(module) => module.imports_ts(),
             Self::Module(_) => None,
+            Self::Raw(_) => None,
         }
     }
 }
@@ -90,10 +93,8 @@ pub fn package_outputs() -> Result<Vec<PackageOutput>, String> {
             spec: spec_by_key("events"),
             types_ts: Some(TsSource::DtoRegistry(dto_roots::events_types_module()?)),
             types_imports_ts: None,
-            constants_ts: Some(TsSource::Module(
-                radroots_events_bindings::constants_module(),
-            )),
-            kinds_ts: Some(TsSource::Module(radroots_events_bindings::kinds_module())),
+            constants_ts: Some(TsSource::Raw(radroots_events_bindings::constants_module())),
+            kinds_ts: Some(TsSource::Raw(radroots_events_bindings::kinds_module())),
         },
         PackageOutput {
             spec: spec_by_key("events_indexed"),
@@ -108,9 +109,7 @@ pub fn package_outputs() -> Result<Vec<PackageOutput>, String> {
             spec: spec_by_key("identity"),
             types_ts: None,
             types_imports_ts: None,
-            constants_ts: Some(TsSource::Module(
-                radroots_identity_bindings::constants_module(),
-            )),
+            constants_ts: Some(TsSource::Raw(radroots_identity_bindings::constants_module())),
             kinds_ts: None,
         },
         PackageOutput {
