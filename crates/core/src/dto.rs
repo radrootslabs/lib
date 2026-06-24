@@ -11,7 +11,7 @@ use crate::{
     RadrootsCoreUnitDimension,
 };
 
-pub fn dto_roots() -> [RootDescriptor; 9] {
+pub fn dto_roots() -> [RootDescriptor; 10] {
     [
         RootDescriptor::new::<RadrootsCoreDiscount>(),
         RootDescriptor::new::<RadrootsCoreDiscountScope>(),
@@ -22,6 +22,7 @@ pub fn dto_roots() -> [RootDescriptor; 9] {
         RootDescriptor::new::<RadrootsCoreQuantity>(),
         RootDescriptor::new::<RadrootsCoreQuantityPrice>(),
         RootDescriptor::new::<RadrootsCoreUnit>(),
+        RootDescriptor::new::<RadrootsCoreUnitDimension>(),
     ]
 }
 
