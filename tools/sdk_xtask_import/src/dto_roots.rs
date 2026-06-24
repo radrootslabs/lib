@@ -1,4 +1,4 @@
-use dto_bindgen_core::{Registry, RootDescriptor, build_registry};
+use dto_bindgen_core::{Registry, RootDescriptor, RustTypeId, TypeId, build_registry};
 
 use crate::dto_render::{DtoRegistryRenderOptions, DtoTypesModule, render_registry_types};
 
@@ -118,12 +118,79 @@ pub fn core_types_module() -> Result<DtoTypesModule, String> {
     ))
 }
 
+pub fn events_types_module() -> Result<DtoTypesModule, String> {
+    let root_set =
+        package_root_set("events").ok_or_else(|| "missing events DTO roots".to_owned())?;
+    let registry = root_set.registry();
+    let rendered = render_registry_types(
+        &registry,
+        &core_import_options(&registry, DtoRegistryRenderOptions::default()),
+    )?;
+    Ok(DtoTypesModule::new(
+        rendered.imports_ts().unwrap_or_default(),
+        with_events_sdk_wrappers(rendered.body_ts()),
+    ))
+}
+
 fn core_roots() -> Vec<RootDescriptor> {
     radroots_core::dto::dto_roots().into_iter().collect()
 }
 
 fn events_roots() -> Vec<RootDescriptor> {
     radroots_events::dto::dto_roots().into_iter().collect()
+}
+
+fn core_import_options(
+    registry: &Registry,
+    mut options: DtoRegistryRenderOptions,
+) -> DtoRegistryRenderOptions {
+    for export_name in [
+        "RadrootsCoreCurrency",
+        "RadrootsCoreDecimal",
+        "RadrootsCoreDiscount",
+        "RadrootsCoreDiscountScope",
+        "RadrootsCoreDiscountThreshold",
+        "RadrootsCoreDiscountValue",
+        "RadrootsCoreMoney",
+        "RadrootsCorePercent",
+        "RadrootsCoreQuantity",
+        "RadrootsCoreQuantityPrice",
+        "RadrootsCoreUnit",
+        "RadrootsCoreUnitDimension",
+    ] {
+        if let Some(type_id) = core_type_id(registry, export_name) {
+            options = options.with_external_type(type_id, export_name, "@radroots/core-bindings");
+        }
+    }
+    options
+}
+
+fn core_type_id(registry: &Registry, rust_ident: &str) -> Option<TypeId> {
+    registry
+        .rust_id_to_type_id
+        .get(&RustTypeId::new("radroots_core", rust_ident))
+        .copied()
+}
+
+fn with_events_sdk_wrappers(body: &str) -> String {
+    let mut declarations = body
+        .split("\n\n")
+        .filter(|declaration| !declaration.trim().is_empty())
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    declarations.push(
+        "export type RadrootsListingProductTagKeys = readonly [\"key\", \"title\", \"category\", \"summary\", \"process\", \"lot\", \"location\", \"profile\", \"year\"];"
+            .to_owned(),
+    );
+    declarations.sort_by(|left, right| declaration_name(left).cmp(declaration_name(right)));
+    declarations.join("\n\n")
+}
+
+fn declaration_name(declaration: &str) -> &str {
+    declaration
+        .strip_prefix("export type ")
+        .and_then(|rest| rest.split([' ', '<']).next())
+        .unwrap_or(declaration)
 }
 
 #[cfg(test)]

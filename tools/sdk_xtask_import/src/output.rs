@@ -88,8 +88,8 @@ pub fn package_outputs() -> Result<Vec<PackageOutput>, String> {
         },
         PackageOutput {
             spec: spec_by_key("events"),
-            types_ts: Some(TsSource::Module(radroots_events_bindings::types_module())),
-            types_imports_ts: Some(EVENTS_TYPES_IMPORTS_TS),
+            types_ts: Some(TsSource::DtoRegistry(dto_roots::events_types_module()?)),
+            types_imports_ts: None,
             constants_ts: Some(TsSource::Module(
                 radroots_events_bindings::constants_module(),
             )),
@@ -165,19 +165,6 @@ fn combined_imports(first: Option<&str>, second: Option<&str>) -> Option<String>
         (None, None) => None,
     }
 }
-
-const EVENTS_TYPES_IMPORTS_TS: &str = r#"import type {
-    RadrootsCoreCurrency,
-    RadrootsCoreDecimal,
-    RadrootsCoreDiscount,
-    RadrootsCoreDiscountValue,
-    RadrootsCoreMoney,
-    RadrootsCoreQuantity,
-    RadrootsCoreQuantityPrice,
-    RadrootsCoreUnit,
-} from "@radroots/core-bindings";
-
-"#;
 
 const REPLICA_DB_SCHEMA_TYPES_IMPORTS_TS: &str = r#"import type {
     IResult,

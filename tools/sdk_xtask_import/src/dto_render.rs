@@ -141,34 +141,77 @@ fn render_enum(
     imports: &mut BTreeMap<String, BTreeSet<String>>,
 ) -> Result<String, String> {
     match &def.repr {
-        EnumRepr::External
-            if def
-                .variants
-                .iter()
-                .all(|variant| matches!(variant.shape, VariantShape::Unit)) =>
-        {
-            let variants = def
-                .variants
-                .iter()
-                .map(|variant| quote_string(&variant.wire_name))
-                .collect::<Vec<_>>();
-            Ok(format!(
-                "export type {} = {};",
-                enum_type_name(def),
-                render_union(variants)
-            ))
-        }
+        EnumRepr::External => render_external_enum(def, registry, options, imports),
         EnumRepr::Internal { tag } => {
             render_tagged_enum(def, tag, None, registry, options, imports)
         }
         EnumRepr::Adjacent { tag, content } => {
             render_tagged_enum(def, tag, Some(content.as_str()), registry, options, imports)
         }
-        EnumRepr::External | EnumRepr::Untagged => Err(format!(
+        EnumRepr::Untagged => Err(format!(
             "unsupported enum representation for {}",
             enum_type_name(def)
         )),
     }
+}
+
+fn render_external_enum(
+    def: &EnumDef,
+    registry: &Registry,
+    options: &DtoRegistryRenderOptions,
+    imports: &mut BTreeMap<String, BTreeSet<String>>,
+) -> Result<String, String> {
+    let variants = def
+        .variants
+        .iter()
+        .map(|variant| render_external_variant(def, variant, registry, options, imports))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(format!(
+        "export type {} = {};",
+        enum_type_name(def),
+        render_union(variants)
+    ))
+}
+
+fn render_external_variant(
+    def: &EnumDef,
+    variant: &VariantDef,
+    registry: &Registry,
+    options: &DtoRegistryRenderOptions,
+    imports: &mut BTreeMap<String, BTreeSet<String>>,
+) -> Result<String, String> {
+    let rendered: Result<String, String> = match &variant.shape {
+        VariantShape::Unit => Ok(quote_string(&variant.wire_name)),
+        VariantShape::Newtype(ty) => Ok(format!(
+            "{{ {}: {}, }}",
+            render_property_name(&variant.wire_name),
+            render_type_ref(ty, None, registry, options, imports)?
+        )),
+        VariantShape::Tuple(items) => {
+            let rendered = items
+                .iter()
+                .map(|item| render_type_ref(item, None, registry, options, imports))
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(format!(
+                "{{ {}: [{}], }}",
+                render_property_name(&variant.wire_name),
+                rendered.join(", ")
+            ))
+        }
+        VariantShape::Struct(fields) => Ok(format!(
+            "{{ {}: {}, }}",
+            render_property_name(&variant.wire_name),
+            render_object_fields(fields, registry, options, imports)?
+        )),
+    };
+
+    rendered.map_err(|error| {
+        format!(
+            "{error} while rendering external enum {}.{}",
+            enum_type_name(def),
+            variant.rust_name
+        )
+    })
 }
 
 fn render_tagged_enum(
@@ -292,7 +335,13 @@ fn render_object_field(
     } else {
         "?"
     };
-    let mut value = render_type_ref(&field.ty, field.int_repr, registry, options, imports)?;
+    let mut value = render_type_ref(&field.ty, field.int_repr, registry, options, imports)
+        .map_err(|error| {
+            format!(
+                "{error} while rendering field {} at {}",
+                field.target.typescript, field.source
+            )
+        })?;
     if field.presence.nullable {
         value = render_nullable(value);
     }
@@ -644,7 +693,7 @@ mod tests {
 
         assert_eq!(
             error,
-            "large integer field requires explicit numeric policy"
+            "large integer field requires explicit numeric policy while rendering field value at src/dto.rs:1:1"
         );
     }
 
@@ -713,6 +762,37 @@ mod tests {
         assert_eq!(
             rendered.body_ts(),
             "export type Counter = { value: number, };\n\nexport type TransparentCounters = { maybeCount?: string | null, countList: Array<string>, fixedCounts: [string, string], byKey: Record<string, string>, namedCounter: Counter, };"
+        );
+    }
+
+    #[test]
+    fn renders_external_data_enums() {
+        let mut registry = Registry::new();
+        registry.register_type(
+            RustTypeId::new("sdk", "ParseError"),
+            TypeDef::Enum(
+                EnumDef::new("ParseError", "ParseError", EnumRepr::External, span())
+                    .with_variant(VariantDef::new(
+                        "InvalidKind",
+                        "InvalidKind",
+                        VariantShape::Newtype(TypeRef::Primitive(Primitive::U32)),
+                        span(),
+                    ))
+                    .with_variant(VariantDef::new(
+                        "InvalidUnit",
+                        "InvalidUnit",
+                        VariantShape::Unit,
+                        span(),
+                    )),
+            ),
+        );
+
+        let rendered = render_registry_types(&registry, &DtoRegistryRenderOptions::default())
+            .expect("registry renders");
+
+        assert_eq!(
+            rendered.body_ts(),
+            "export type ParseError = { InvalidKind: number, } | \"InvalidUnit\";"
         );
     }
 }
