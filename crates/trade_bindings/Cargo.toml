@@ -10,5 +10,6 @@ homepage.workspace = true
 publish = false
 
 [dependencies]
-radroots_sdk_binding_model = { path = "../binding_model" }
-radroots_trade = { workspace = true }
+dto_bindgen = { workspace = true }
+dto_bindgen_core = { workspace = true }
+radroots_trade = { workspace = true, features = ["dto-bindgen"] }

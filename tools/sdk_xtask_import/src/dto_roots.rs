@@ -45,6 +45,10 @@ pub const DTO_PACKAGE_ROOTS: &[DtoPackageRootSet] = &[
         package_key: "events_indexed",
         roots: events_indexed_roots,
     },
+    DtoPackageRootSet {
+        package_key: "trade",
+        roots: trade_roots,
+    },
 ];
 
 pub const MANUAL_DESCRIPTOR_FAMILIES: &[ManualDescriptorFamily] = &[
@@ -67,6 +71,11 @@ pub const MANUAL_DESCRIPTOR_FAMILIES: &[ManualDescriptorFamily] = &[
         package_key: "events_indexed",
         source_family: "checkpoint and index cursor fields",
         reason: "custom deserialization and large integers require manual descriptor policy",
+    },
+    ManualDescriptorFamily {
+        package_key: "trade",
+        source_family: "trade listing roots and package projection count fields",
+        reason: "core aliases, source-owned event imports, and count-family numeric policy require explicit descriptors",
     },
     ManualDescriptorFamily {
         package_key: "replica_db_schema",
@@ -100,6 +109,11 @@ pub const SDK_LOCAL_WRAPPER_ALLOWANCES: &[SdkLocalWrapperAllowance] = &[
         package_key: "events_indexed",
         shape_family: "RadrootsEventsIndexedShardId package alias",
         reason: "source descriptors correctly describe the shard id newtype as a string, while package roots still need a stable named TypeScript alias",
+    },
+    SdkLocalWrapperAllowance {
+        package_key: "trade",
+        shape_family: "marketplace, query, projection, sort, review, and backoffice DTO shapes",
+        reason: "these are SDK package contract shapes layered over source-owned trade, events, and core DTOs",
     },
 ];
 
@@ -147,6 +161,15 @@ pub fn events_indexed_types_module() -> Result<DtoTypesModule, String> {
     ))
 }
 
+pub fn trade_types_module() -> Result<DtoTypesModule, String> {
+    let root_set = package_root_set("trade").ok_or_else(|| "missing trade DTO roots".to_owned())?;
+    let registry = root_set.registry();
+    render_registry_types(
+        &registry,
+        &trade_import_options(DtoRegistryRenderOptions::default()),
+    )
+}
+
 fn core_roots() -> Vec<RootDescriptor> {
     radroots_core::dto::dto_roots().into_iter().collect()
 }
@@ -159,6 +182,10 @@ fn events_indexed_roots() -> Vec<RootDescriptor> {
     radroots_events_indexed::dto::dto_roots()
         .into_iter()
         .collect()
+}
+
+fn trade_roots() -> Vec<RootDescriptor> {
+    radroots_trade_bindings::dto_roots()
 }
 
 fn core_import_options(
@@ -191,6 +218,47 @@ fn core_type_id(registry: &Registry, rust_ident: &str) -> Option<TypeId> {
         .rust_id_to_type_id
         .get(&RustTypeId::new("radroots_core", rust_ident))
         .copied()
+}
+
+fn trade_import_options(mut options: DtoRegistryRenderOptions) -> DtoRegistryRenderOptions {
+    for export_name in [
+        "RadrootsCoreCurrency",
+        "RadrootsCoreDecimal",
+        "RadrootsCoreDiscount",
+        "RadrootsCoreDiscountValue",
+        "RadrootsCoreMoney",
+        "RadrootsCoreQuantity",
+        "RadrootsCoreQuantityPrice",
+        "RadrootsCoreUnit",
+    ] {
+        options =
+            options.with_external_override(export_name, export_name, "@radroots/core-bindings");
+    }
+
+    for export_name in [
+        "RadrootsFarmRef",
+        "RadrootsListing",
+        "RadrootsListingAvailability",
+        "RadrootsListingBin",
+        "RadrootsListingDeliveryMethod",
+        "RadrootsListingImage",
+        "RadrootsListingLocation",
+        "RadrootsListingProduct",
+        "RadrootsListingStatus",
+        "RadrootsNostrEventPtr",
+        "RadrootsPlotRef",
+        "RadrootsResourceAreaRef",
+        "RadrootsTradeMessagePayload",
+        "RadrootsTradeMessageType",
+        "RadrootsTradeOrderEconomicLine",
+        "RadrootsTradeOrderItem",
+        "RadrootsTradeOrderStatus",
+    ] {
+        options =
+            options.with_external_override(export_name, export_name, "@radroots/events-bindings");
+    }
+
+    options
 }
 
 fn with_events_sdk_wrappers(body: &str) -> String {
@@ -249,6 +317,8 @@ mod tests {
         include_str!("../../../packages/events-bindings/src/generated/types.ts");
     const EVENTS_INDEXED_BINDINGS_TYPES_TS: &str =
         include_str!("../../../packages/events-indexed-bindings/src/generated/types.ts");
+    const TRADE_BINDINGS_TYPES_TS: &str =
+        include_str!("../../../packages/trade-bindings/src/generated/types.ts");
     const EVENTS_TYPE_INVENTORY: &[&str] = &[
         "JobFeedbackStatus",
         "JobInputType",
@@ -359,6 +429,40 @@ mod tests {
         "RadrootsEventsIndexedShardCheckpoint",
         "RadrootsEventsIndexedIndexCheckpoint",
     ];
+    const TRADE_TYPE_INVENTORY: &[&str] = &[
+        "RadrootsTradeFacetCount",
+        "RadrootsTradeListing",
+        "RadrootsTradeListingBackofficeOverlay",
+        "RadrootsTradeListingBackofficeQuery",
+        "RadrootsTradeListingBackofficeView",
+        "RadrootsTradeListingBinProjection",
+        "RadrootsTradeListingFacets",
+        "RadrootsTradeListingMarketStatus",
+        "RadrootsTradeListingProjection",
+        "RadrootsTradeListingQuery",
+        "RadrootsTradeListingSort",
+        "RadrootsTradeListingSortField",
+        "RadrootsTradeListingSubtotal",
+        "RadrootsTradeListingTotal",
+        "RadrootsTradeMarketplaceListingSummary",
+        "RadrootsTradeMarketplaceOrderSummary",
+        "RadrootsTradeModerationFlag",
+        "RadrootsTradeModerationSeverity",
+        "RadrootsTradeModerationStatus",
+        "RadrootsTradeOrderBackofficeOverlay",
+        "RadrootsTradeOrderBackofficeQuery",
+        "RadrootsTradeOrderBackofficeView",
+        "RadrootsTradeOrderFacets",
+        "RadrootsTradeOrderQuery",
+        "RadrootsTradeOrderSort",
+        "RadrootsTradeOrderSortField",
+        "RadrootsTradeOrderWorkflowMessage",
+        "RadrootsTradeOrderWorkflowProjection",
+        "RadrootsTradeReviewPriority",
+        "RadrootsTradeReviewQueueEntry",
+        "RadrootsTradeReviewStatus",
+        "RadrootsTradeSortDirection",
+    ];
 
     #[test]
     fn approved_source_roots_build_registries() {
@@ -379,7 +483,7 @@ mod tests {
         assert!(package_root_set("core").is_some());
         assert!(package_root_set("events").is_some());
         assert!(package_root_set("events_indexed").is_some());
-        assert!(package_root_set("trade").is_none());
+        assert!(package_root_set("trade").is_some());
     }
 
     #[test]
@@ -409,6 +513,11 @@ mod tests {
                 .shape_family
                 .contains("RadrootsEventsIndexedShardId")
         }));
+        assert!(SDK_LOCAL_WRAPPER_ALLOWANCES.iter().any(|allowance| {
+            allowance
+                .shape_family
+                .contains("marketplace, query, projection")
+        }));
     }
 
     #[test]
@@ -423,6 +532,28 @@ mod tests {
         let actual = type_inventory(EVENTS_INDEXED_BINDINGS_TYPES_TS);
 
         assert_eq!(actual, EVENTS_INDEXED_TYPE_INVENTORY);
+    }
+
+    #[test]
+    fn trade_type_inventory_matches_current_package_surface() {
+        let actual = type_inventory(TRADE_BINDINGS_TYPES_TS);
+
+        assert_eq!(actual, TRADE_TYPE_INVENTORY);
+    }
+
+    #[test]
+    fn trade_package_imports_source_owned_support_types() {
+        assert!(TRADE_BINDINGS_TYPES_TS.contains("from \"@radroots/core-bindings\""));
+        assert!(TRADE_BINDINGS_TYPES_TS.contains("from \"@radroots/events-bindings\""));
+
+        for duplicate in [
+            "export type RadrootsListing = ",
+            "export type RadrootsFarmRef = ",
+            "export type RadrootsTradeMessageType = ",
+            "export type RadrootsTradeOrderStatus = ",
+        ] {
+            assert!(!TRADE_BINDINGS_TYPES_TS.contains(duplicate));
+        }
     }
 
     fn type_inventory(types_ts: &str) -> Vec<&str> {

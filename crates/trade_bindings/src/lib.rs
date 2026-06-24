@@ -1,8 +1,8 @@
 pub use radroots_trade as upstream;
 
-mod model;
+pub mod dto;
 
-pub use model::types_module;
+pub use dto::dto_roots;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TradeTypeDisposition {
@@ -152,29 +152,74 @@ const fn json_number_safe_count(
 #[cfg(test)]
 mod tests {
     use super::{
-        TRADE_LARGE_INTEGER_POLICIES, TRADE_TYPE_INVENTORY, TradeTypeDisposition, types_module,
+        TRADE_LARGE_INTEGER_POLICIES, TRADE_TYPE_INVENTORY, TradeTypeDisposition, dto_roots,
     };
 
-    const TRADE_BINDINGS_TYPES_TS: &str =
-        include_str!("../../../packages/trade-bindings/src/generated/types.ts");
-
     #[test]
-    fn preserves_trade_type_exports() {
-        let rendered = types_module().render();
-        assert!(rendered.contains("export type RadrootsTradeListingTotal"));
-        assert!(rendered.contains("export type RadrootsTradeOrderWorkflowProjection"));
-        assert!(rendered.contains("export type RadrootsTradeMarketplaceOrderSummary"));
+    fn trade_dto_roots_build_registry() {
+        let registry = dto_bindgen_core::build_registry(dto_roots());
+
+        assert!(
+            !registry.has_errors(),
+            "trade binding registry has diagnostics: {:?}",
+            registry.diagnostics
+        );
     }
 
     #[test]
-    fn trade_type_inventory_matches_current_package_surface() {
-        let actual = type_inventory(TRADE_BINDINGS_TYPES_TS);
+    fn trade_type_inventory_is_deterministic() {
         let expected = TRADE_TYPE_INVENTORY
             .iter()
             .map(|entry| entry.export_name)
             .collect::<Vec<_>>();
 
-        assert_eq!(actual, expected);
+        assert_eq!(
+            expected,
+            [
+                "RadrootsFarmRef",
+                "RadrootsListing",
+                "RadrootsListingAvailability",
+                "RadrootsListingBin",
+                "RadrootsListingDeliveryMethod",
+                "RadrootsListingLocation",
+                "RadrootsListingProduct",
+                "RadrootsListingStatus",
+                "RadrootsTradeFacetCount",
+                "RadrootsTradeListing",
+                "RadrootsTradeListingBackofficeOverlay",
+                "RadrootsTradeListingBackofficeQuery",
+                "RadrootsTradeListingBackofficeView",
+                "RadrootsTradeListingBinProjection",
+                "RadrootsTradeListingFacets",
+                "RadrootsTradeListingMarketStatus",
+                "RadrootsTradeListingProjection",
+                "RadrootsTradeListingQuery",
+                "RadrootsTradeListingSort",
+                "RadrootsTradeListingSortField",
+                "RadrootsTradeListingSubtotal",
+                "RadrootsTradeListingTotal",
+                "RadrootsTradeMarketplaceListingSummary",
+                "RadrootsTradeMarketplaceOrderSummary",
+                "RadrootsTradeMessageType",
+                "RadrootsTradeModerationFlag",
+                "RadrootsTradeModerationSeverity",
+                "RadrootsTradeModerationStatus",
+                "RadrootsTradeOrderBackofficeOverlay",
+                "RadrootsTradeOrderBackofficeQuery",
+                "RadrootsTradeOrderBackofficeView",
+                "RadrootsTradeOrderFacets",
+                "RadrootsTradeOrderQuery",
+                "RadrootsTradeOrderSort",
+                "RadrootsTradeOrderSortField",
+                "RadrootsTradeOrderStatus",
+                "RadrootsTradeOrderWorkflowMessage",
+                "RadrootsTradeOrderWorkflowProjection",
+                "RadrootsTradeReviewPriority",
+                "RadrootsTradeReviewQueueEntry",
+                "RadrootsTradeReviewStatus",
+                "RadrootsTradeSortDirection"
+            ]
+        );
     }
 
     #[test]
@@ -331,13 +376,5 @@ mod tests {
             .find(|entry| entry.export_name == export_name)
             .map(|entry| entry.disposition)
             .expect("inventory entry")
-    }
-
-    fn type_inventory(types_ts: &str) -> Vec<&str> {
-        types_ts
-            .lines()
-            .filter_map(|line| line.strip_prefix("export type "))
-            .map(|rest| rest.split([' ', '<']).next().expect("type name"))
-            .collect()
     }
 }

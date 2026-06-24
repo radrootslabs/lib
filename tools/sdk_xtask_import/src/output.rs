@@ -123,8 +123,8 @@ pub fn package_outputs() -> Result<Vec<PackageOutput>, String> {
         },
         PackageOutput {
             spec: spec_by_key("trade"),
-            types_ts: Some(TsSource::Module(radroots_trade_bindings::types_module())),
-            types_imports_ts: Some(TRADE_TYPES_IMPORTS_TS),
+            types_ts: Some(TsSource::DtoRegistry(dto_roots::trade_types_module()?)),
+            types_imports_ts: None,
             constants_ts: None,
             kinds_ts: None,
         },
@@ -173,28 +173,6 @@ const REPLICA_DB_SCHEMA_TYPES_IMPORTS_TS: &str = r#"import type {
 
 "#;
 
-const TRADE_TYPES_IMPORTS_TS: &str = r#"import type {
-    RadrootsCoreCurrency,
-    RadrootsCoreDecimal,
-    RadrootsCoreDiscount,
-    RadrootsCoreDiscountValue,
-    RadrootsCoreMoney,
-    RadrootsCoreQuantity,
-    RadrootsCoreQuantityPrice,
-    RadrootsCoreUnit,
-} from "@radroots/core-bindings";
-import type {
-    RadrootsListingImage,
-    RadrootsNostrEventPtr,
-    RadrootsPlotRef,
-    RadrootsResourceAreaRef,
-    RadrootsTradeMessagePayload,
-    RadrootsTradeOrderEconomicLine,
-    RadrootsTradeOrderItem,
-} from "@radroots/events-bindings";
-
-"#;
-
 fn render_manifest(spec: PackageSpec) -> String {
     let mut value = package_manifest(spec);
     value["generated"] = serde_json::Value::Bool(true);
@@ -226,6 +204,9 @@ mod tests {
     use super::{PackageOutput, TsSource, package_outputs, render_ts};
     use crate::{dto_render::DtoTypesModule, package_matrix::package_specs};
     use radroots_sdk_binding_model::{module, string, type_alias};
+
+    const TRADE_BINDINGS_TYPES_TS: &str =
+        include_str!("../../../packages/trade-bindings/src/generated/types.ts");
 
     #[test]
     fn renders_sdk_header() {
@@ -309,5 +290,25 @@ mod tests {
         );
         assert!(manifest.contents.contains("\"generated\": true"));
         assert_eq!(index.contents, "export * from \"./generated/types.js\";\n");
+    }
+
+    #[test]
+    fn trade_output_uses_dto_registry_and_matches_checked_in_types() {
+        let output = package_outputs()
+            .expect("package outputs")
+            .into_iter()
+            .find(|output| output.spec.key == "trade")
+            .expect("trade output");
+
+        assert!(matches!(output.types_ts, Some(TsSource::DtoRegistry(_))));
+        assert!(output.types_imports_ts.is_none());
+
+        let types = output
+            .files()
+            .into_iter()
+            .find(|file| file.relative_path == "src/generated/types.ts")
+            .expect("types file");
+
+        assert_eq!(types.contents, TRADE_BINDINGS_TYPES_TS);
     }
 }

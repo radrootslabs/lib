@@ -47,6 +47,7 @@ impl DtoTypeImport {
 pub struct DtoRegistryRenderOptions {
     config: Config,
     external_imports: BTreeMap<TypeId, DtoTypeImport>,
+    external_overrides: BTreeMap<String, DtoTypeImport>,
 }
 
 impl DtoRegistryRenderOptions {
@@ -54,6 +55,7 @@ impl DtoRegistryRenderOptions {
         Self {
             config,
             external_imports: BTreeMap::new(),
+            external_overrides: BTreeMap::new(),
         }
     }
 
@@ -65,6 +67,17 @@ impl DtoRegistryRenderOptions {
     ) -> Self {
         self.external_imports
             .insert(type_id, DtoTypeImport::new(import_name, from));
+        self
+    }
+
+    pub fn with_external_override(
+        mut self,
+        target_type: impl Into<String>,
+        import_name: impl Into<String>,
+        from: impl Into<String>,
+    ) -> Self {
+        self.external_overrides
+            .insert(target_type.into(), DtoTypeImport::new(import_name, from));
         self
     }
 }
@@ -387,6 +400,13 @@ fn render_type_ref(
         TypeRef::Named(type_id) => render_named_type(*type_id, registry, options, imports),
         TypeRef::GenericParam(name) => Ok(name.clone()),
         TypeRef::Override(target) if target.backend == BackendId::TypeScript => {
+            if let Some(import) = options.external_overrides.get(&target.target_type) {
+                imports
+                    .entry(import.from.clone())
+                    .or_default()
+                    .insert(import.import_name.clone());
+                return Ok(import.import_name.clone());
+            }
             Ok(target.target_type.clone())
         }
         TypeRef::Override(_) => Err("target override is for a different backend".to_owned()),
@@ -671,6 +691,40 @@ mod tests {
         assert_eq!(
             rendered.body_ts(),
             "export type Envelope<T> = { value: T, };\n\nexport type SyntheticEvent = { type: \"created\", payload: { id: string, }, } | { type: \"archived\", payload: { reason?: string | null, }, };\n\nexport type SyntheticMode = \"ready\" | \"done\";\n\nexport type SyntheticThing = { external: ExternalThing, maybeCount?: string | null, point: [number, number], envelope: Envelope<ExternalThing>, };"
+        );
+    }
+
+    #[test]
+    fn imports_typescript_overrides_when_configured() {
+        let mut registry = Registry::new();
+        registry.register_type(
+            RustTypeId::new("sdk", "SyntheticThing"),
+            TypeDef::Struct(
+                StructDef::new("SyntheticThing", "SyntheticThing", span()).with_field(field(
+                    "external",
+                    "external",
+                    TypeRef::Override(TargetOverride::new(BackendId::TypeScript, "ExternalAlias")),
+                )),
+            ),
+        );
+
+        let rendered = render_registry_types(
+            &registry,
+            &DtoRegistryRenderOptions::default().with_external_override(
+                "ExternalAlias",
+                "ExternalAlias",
+                "@radroots/external-bindings",
+            ),
+        )
+        .expect("registry renders");
+
+        assert_eq!(
+            rendered.imports_ts(),
+            Some("import type { ExternalAlias } from \"@radroots/external-bindings\";\n\n")
+        );
+        assert_eq!(
+            rendered.body_ts(),
+            "export type SyntheticThing = { external: ExternalAlias, };"
         );
     }
 
