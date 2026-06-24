@@ -1,5 +1,7 @@
 use dto_bindgen_core::{Registry, RootDescriptor, build_registry};
 
+use crate::dto_render::{DtoRegistryRenderOptions, DtoTypesModule, render_registry_types};
+
 #[derive(Clone, Copy, Debug)]
 pub struct DtoPackageRootSet {
     pub package_key: &'static str,
@@ -101,6 +103,19 @@ pub fn package_root_set(package_key: &str) -> Option<&'static DtoPackageRootSet>
     DTO_PACKAGE_ROOTS
         .iter()
         .find(|root_set| root_set.package_key == package_key)
+}
+
+pub fn core_types_module() -> Result<DtoTypesModule, String> {
+    let root_set = package_root_set("core").ok_or_else(|| "missing core DTO roots".to_owned())?;
+    let rendered =
+        render_registry_types(&root_set.registry(), &DtoRegistryRenderOptions::default())?;
+    Ok(DtoTypesModule::new(
+        rendered.imports_ts().unwrap_or_default(),
+        format!(
+            "export type RadrootsCoreCurrency = string;\n\nexport type RadrootsCoreDecimal = string;\n\n{}",
+            rendered.body_ts()
+        ),
+    ))
 }
 
 fn core_roots() -> Vec<RootDescriptor> {

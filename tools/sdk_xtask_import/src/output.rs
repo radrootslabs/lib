@@ -1,5 +1,6 @@
 use crate::{
     dto_render::DtoTypesModule,
+    dto_roots,
     manifest::manifest_file_name,
     manifest::package_manifest,
     package_matrix::{PackageSpec, package_specs},
@@ -76,11 +77,11 @@ impl PackageOutput {
     }
 }
 
-pub fn package_outputs() -> Vec<PackageOutput> {
-    vec![
+pub fn package_outputs() -> Result<Vec<PackageOutput>, String> {
+    Ok(vec![
         PackageOutput {
             spec: spec_by_key("core"),
-            types_ts: Some(TsSource::Module(radroots_core_bindings::types_module())),
+            types_ts: Some(TsSource::DtoRegistry(dto_roots::core_types_module()?)),
             types_imports_ts: None,
             constants_ts: None,
             kinds_ts: None,
@@ -135,7 +136,7 @@ pub fn package_outputs() -> Vec<PackageOutput> {
             constants_ts: None,
             kinds_ts: None,
         },
-    ]
+    ])
 }
 
 fn spec_by_key(key: &str) -> PackageSpec {
@@ -277,6 +278,7 @@ mod tests {
     #[test]
     fn includes_core_and_types_outputs() {
         let package_names = package_outputs()
+            .expect("package outputs")
             .into_iter()
             .map(|output| output.spec.package_name)
             .collect::<Vec<_>>();

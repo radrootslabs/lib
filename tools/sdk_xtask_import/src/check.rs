@@ -28,7 +28,7 @@ pub fn check() -> Result<(), String> {
     for spec in wasm_package_specs() {
         check_wasm_package_surface(&root, *spec)?;
     }
-    for output in package_outputs() {
+    for output in package_outputs()? {
         for expected in output.files() {
             let path = root
                 .join(output.spec.package_dir)
