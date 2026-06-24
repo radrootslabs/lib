@@ -15,7 +15,6 @@ path = "src/main.rs"
 
 [dependencies]
 dto_bindgen_core = { workspace = true }
-radroots_sdk_binding_model = { path = "../../crates/binding_model" }
 radroots_core = { workspace = true, features = ["dto-bindgen"] }
 radroots_events = { workspace = true, features = ["dto-bindgen"] }
 radroots_events_bindings = { path = "../../crates/events_bindings" }
