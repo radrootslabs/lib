@@ -14,6 +14,7 @@ name = "radroots_sdk_xtask"
 path = "src/main.rs"
 
 [dependencies]
+dto_bindgen_core = { workspace = true }
 radroots_sdk_binding_model = { path = "../../crates/binding_model" }
 radroots_core_bindings = { path = "../../crates/core_bindings" }
 radroots_events_bindings = { path = "../../crates/events_bindings" }

@@ -2,6 +2,8 @@ mod check;
 mod contracts;
 mod coverage;
 mod coverage_policy;
+#[allow(dead_code)]
+mod dto_render;
 mod fs;
 mod generate;
 mod manifest;
