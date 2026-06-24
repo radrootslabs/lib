@@ -871,6 +871,13 @@ const TYPE_SPECS: &[TypeSpec] = &[
             FieldSpec::optional_nullable("gc_country_name", "ReplicaDbJsonValue"),
         ],
     },
+    TypeSpec::Union {
+        name: "IGcsLocationFindMany",
+        variants: &[
+            VariantSpec::Object(&[FieldSpec::nullable("filter", "IGcsLocationFieldsFilter")]),
+            VariantSpec::Object(&[FieldSpec::required("rel", "GcsLocationFindManyRel")]),
+        ],
+    },
     TypeSpec::Alias {
         name: "IGcsLocationFindManyResolve",
         target: "IResultList<GcsLocation>",
@@ -1056,6 +1063,13 @@ const TYPE_SPECS: &[TypeSpec] = &[
             FieldSpec::optional_nullable("res_path", "ReplicaDbJsonValue"),
             FieldSpec::optional_nullable("label", "ReplicaDbJsonValue"),
             FieldSpec::optional_nullable("description", "ReplicaDbJsonValue"),
+        ],
+    },
+    TypeSpec::Union {
+        name: "IMediaImageFindMany",
+        variants: &[
+            VariantSpec::Object(&[FieldSpec::nullable("filter", "IMediaImageFieldsFilter")]),
+            VariantSpec::Object(&[FieldSpec::required("rel", "MediaImageFindManyRel")]),
         ],
     },
     TypeSpec::Alias {
@@ -1257,6 +1271,13 @@ const TYPE_SPECS: &[TypeSpec] = &[
             FieldSpec::optional_nullable("lud16", "ReplicaDbJsonValue"),
         ],
     },
+    TypeSpec::Union {
+        name: "INostrProfileFindMany",
+        variants: &[
+            VariantSpec::Object(&[FieldSpec::nullable("filter", "INostrProfileFieldsFilter")]),
+            VariantSpec::Object(&[FieldSpec::required("rel", "NostrProfileFindManyRel")]),
+        ],
+    },
     TypeSpec::Alias {
         name: "INostrProfileFindManyResolve",
         target: "IResultList<NostrProfile>",
@@ -1368,6 +1389,13 @@ const TYPE_SPECS: &[TypeSpec] = &[
             FieldSpec::optional_nullable("software", "ReplicaDbJsonValue"),
             FieldSpec::optional_nullable("version", "ReplicaDbJsonValue"),
             FieldSpec::optional_nullable("data", "ReplicaDbJsonValue"),
+        ],
+    },
+    TypeSpec::Union {
+        name: "INostrRelayFindMany",
+        variants: &[
+            VariantSpec::Object(&[FieldSpec::nullable("filter", "INostrRelayFieldsFilter")]),
+            VariantSpec::Object(&[FieldSpec::required("rel", "NostrRelayFindManyRel")]),
         ],
     },
     TypeSpec::Alias {
@@ -2093,7 +2121,7 @@ const TYPE_SPECS: &[TypeSpec] = &[
 
 #[cfg(test)]
 mod tests {
-    use super::{TYPE_SPECS, TypeSpec, dto_registry, type_inventory};
+    use super::{FieldSpec, TYPE_SPECS, TypeSpec, VariantSpec, dto_registry, type_inventory};
 
     #[test]
     fn registry_exports_known_schema_types() {
@@ -2113,6 +2141,41 @@ mod tests {
                 target: "IResult<Farm | null>"
             }
         )));
+    }
+
+    #[test]
+    fn relation_find_many_inputs_preserve_filter_and_rel_variants() {
+        for (name, filter, rel) in [
+            (
+                "IGcsLocationFindMany",
+                "IGcsLocationFieldsFilter",
+                "GcsLocationFindManyRel",
+            ),
+            (
+                "IMediaImageFindMany",
+                "IMediaImageFieldsFilter",
+                "MediaImageFindManyRel",
+            ),
+            (
+                "INostrProfileFindMany",
+                "INostrProfileFieldsFilter",
+                "NostrProfileFindManyRel",
+            ),
+            (
+                "INostrRelayFindMany",
+                "INostrRelayFieldsFilter",
+                "NostrRelayFindManyRel",
+            ),
+        ] {
+            assert!(TYPE_SPECS.iter().any(|spec| matches!(
+                spec,
+                TypeSpec::Union { name: actual_name, variants }
+                    if *actual_name == name
+                        && variants.len() == 2
+                        && matches!(variants[0], VariantSpec::Object(fields) if fields.len() == 1 && fields[0] == FieldSpec::nullable("filter", filter))
+                        && matches!(variants[1], VariantSpec::Object(fields) if fields.len() == 1 && fields[0] == FieldSpec::required("rel", rel))
+            )));
+        }
     }
 
     #[test]
