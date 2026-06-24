@@ -16,8 +16,10 @@ crate-type = ["rlib"]
 
 [features]
 default = []
+dto-bindgen = ["dep:dto_bindgen_core"]
 
 [dependencies]
+dto_bindgen_core = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 radroots_types = { workspace = true }
