@@ -4820,6 +4820,8 @@ name = "radroots_trade"
 version = "0.1.0-alpha.2"
 dependencies = [
  "base64 0.22.1",
+ "dto_bindgen",
+ "dto_bindgen_core",
  "hex",
  "radroots_authority",
  "radroots_core",
