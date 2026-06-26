@@ -1362,7 +1362,6 @@ fn revision_decision_projection(
             );
             projection.economics = Some(proposal.payload.economics.clone());
             projection.agreement_event_id = Some(decision.event_id.clone());
-            projection.pending_revision_event_id = Some(proposal.event_id.clone());
             projection.pending_inventory_reservations =
                 inventory_commitments_from_items(&proposal.payload.items);
             projection.last_event_id = Some(decision.event_id.clone());
