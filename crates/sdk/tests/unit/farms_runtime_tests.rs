@@ -546,10 +546,10 @@ async fn farm_private_location_default_client_and_lookup_report_store_edges() {
         })
     ));
 
-    let farm_addr = farm_addr(&actor, FARM_A_D_TAG).expect("farm addr");
+    let farm_a_addr = farm_addr(&actor, FARM_A_D_TAG).expect("farm addr");
     assert_eq!(
         sdk.farms()
-            .private_location(&farm_addr)
+            .private_location(&farm_a_addr)
             .await
             .expect("missing location"),
         None
@@ -568,16 +568,69 @@ async fn farm_private_location_default_client_and_lookup_report_store_edges() {
         )
         .await
         .expect("stored location");
-    assert_eq!(stored.farm_addr, farm_addr);
+    assert_eq!(stored.farm_addr, farm_a_addr);
     assert_eq!(stored.public_locality.primary, "Fixture Town");
     assert_eq!(
         sdk.farms()
-            .private_location(&farm_addr)
+            .private_location(&farm_a_addr)
             .await
             .expect("stored lookup")
             .expect("stored location")
             .updated_at_ms,
         1_700_000_501_000
+    );
+
+    let missing_clear = sdk
+        .farms()
+        .clear_private_location(FarmPrivateLocationClearRequest::new(
+            actor.clone(),
+            FARM_B_D_TAG,
+        ))
+        .await
+        .expect("clear missing location");
+    assert!(!missing_clear.cleared);
+    assert_eq!(
+        missing_clear.farm_addr,
+        farm_addr(&actor, FARM_B_D_TAG).expect("farm b addr")
+    );
+
+    let non_farmer_actor =
+        RadrootsActorContext::test(FARMER, [RadrootsActorRole::Buyer]).expect("buyer actor");
+    assert!(matches!(
+        sdk.farms()
+            .clear_private_location(FarmPrivateLocationClearRequest::new(
+                non_farmer_actor,
+                FARM_A_D_TAG,
+            ))
+            .await,
+        Err(RadrootsSdkError::UnauthorizedActor { .. })
+    ));
+    assert!(matches!(
+        sdk.farms()
+            .clear_private_location(FarmPrivateLocationClearRequest::new(
+                actor.clone(),
+                "bad d tag",
+            ))
+            .await,
+        Err(RadrootsSdkError::InvalidRequest { .. })
+    ));
+
+    let cleared = sdk
+        .farms()
+        .clear_private_location(FarmPrivateLocationClearRequest::new(
+            actor.clone(),
+            FARM_A_D_TAG,
+        ))
+        .await
+        .expect("clear stored location");
+    assert!(cleared.cleared);
+    assert_eq!(cleared.farm_addr, farm_a_addr);
+    assert_eq!(
+        sdk.farms()
+            .private_location(&farm_a_addr)
+            .await
+            .expect("location cleared"),
+        None
     );
 
     assert!(matches!(
@@ -674,7 +727,13 @@ async fn farm_private_location_default_client_and_lookup_report_store_edges() {
         Err(RadrootsSdkError::PrivateStore { .. })
     ));
     assert!(matches!(
-        sdk.farms().private_location(&farm_addr).await,
+        sdk.farms().private_location(&farm_a_addr).await,
+        Err(RadrootsSdkError::PrivateStore { .. })
+    ));
+    assert!(matches!(
+        sdk.farms()
+            .clear_private_location(FarmPrivateLocationClearRequest::new(actor, FARM_A_D_TAG))
+            .await,
         Err(RadrootsSdkError::PrivateStore { .. })
     ));
 }

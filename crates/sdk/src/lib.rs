@@ -69,8 +69,9 @@ pub use crate::error::{
 #[cfg(feature = "runtime")]
 pub use crate::farms_runtime::{
     FARM_PUBLISH_OPERATION_KIND, FarmEnqueuePublishRequest, FarmEnqueueReceipt,
-    FarmPreparePublishRequest, FarmPrivateLocationReceipt, FarmPrivateLocationUpsertRequest,
-    FarmPublishPlan, SdkExactLocation, SdkPublicLocality,
+    FarmPreparePublishRequest, FarmPrivateLocationClearReceipt, FarmPrivateLocationClearRequest,
+    FarmPrivateLocationReceipt, FarmPrivateLocationUpsertRequest, FarmPublishPlan,
+    SdkExactLocation, SdkPublicLocality,
 };
 #[cfg(feature = "runtime")]
 pub use crate::geonames::{

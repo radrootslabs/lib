@@ -197,6 +197,23 @@ impl SdkPrivateStore {
         row.map(|row| private_farm_location_from_row(farm_addr.clone(), row))
             .transpose()
     }
+
+    pub async fn delete_farm_location(
+        &self,
+        farm_addr: &RadrootsAddressableCoordinate,
+    ) -> Result<bool, RadrootsSdkError> {
+        sqlx::query(
+            r#"
+            DELETE FROM sdk_private_farm_location
+            WHERE farm_addr = ?1
+            "#,
+        )
+        .bind(farm_addr.as_str())
+        .execute(&self.pool)
+        .await
+        .map(|receipt| receipt.rows_affected() > 0)
+        .map_err(private_store_error)
+    }
 }
 
 async fn configure_connection(

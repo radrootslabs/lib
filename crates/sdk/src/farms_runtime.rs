@@ -224,6 +224,32 @@ impl FarmPrivateLocationUpsertRequest {
 }
 
 #[cfg(feature = "runtime")]
+#[derive(Clone, Debug, serde::Serialize)]
+#[non_exhaustive]
+pub struct FarmPrivateLocationClearRequest {
+    #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
+    pub actor: RadrootsActorContext,
+    pub farm_d_tag: String,
+}
+
+#[cfg(feature = "runtime")]
+impl FarmPrivateLocationClearRequest {
+    pub fn new(actor: RadrootsActorContext, farm_d_tag: impl Into<String>) -> Self {
+        Self {
+            actor,
+            farm_d_tag: farm_d_tag.into(),
+        }
+    }
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct FarmPrivateLocationClearReceipt {
+    pub farm_addr: RadrootsAddressableCoordinate,
+    pub cleared: bool,
+}
+
+#[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct FarmPrivateLocationReceipt {
     pub farm_addr: RadrootsAddressableCoordinate,
@@ -397,6 +423,20 @@ impl<'sdk> FarmsClient<'sdk> {
             .map(private_location_receipt_from_record)
             .map(Ok)
             .transpose()
+    }
+
+    pub async fn clear_private_location(
+        &self,
+        request: FarmPrivateLocationClearRequest,
+    ) -> Result<FarmPrivateLocationClearReceipt, RadrootsSdkError> {
+        require_farmer_actor(&request.actor, FARM_PRIVATE_LOCATION_OPERATION)?;
+        let farm_addr = farm_addr(&request.actor, request.farm_d_tag.as_str())?;
+        let cleared = self
+            .sdk
+            ._private_store
+            .delete_farm_location(&farm_addr)
+            .await?;
+        Ok(FarmPrivateLocationClearReceipt { farm_addr, cleared })
     }
 
     fn resolved_created_at(
